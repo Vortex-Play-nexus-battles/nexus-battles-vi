@@ -174,8 +174,13 @@ public class ClienteInventario implements InventarioDeHeroes {
         return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
+    /**
+     * Solo lo que misiones lee. En Jackson 3 un primitivo ausente no se
+     * rellena con su valor por omision (es un error), asi que lo que el
+     * contrato no garantiza va en tipos con nulo.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Detalle(String elementoId, String productoId, String propietarioUid, boolean enUso, boolean disponible,
+    record Detalle(String elementoId, String productoId, String propietarioUid, boolean disponible,
                    String subastaId, String tipo, String nombrePropio, Integer nivel, Double experiencia,
                    String ejecucionMisionId) {
     }

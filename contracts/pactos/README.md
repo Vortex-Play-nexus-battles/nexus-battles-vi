@@ -11,11 +11,13 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 |---|---|---|---|
 | `ms-subastas-ms-finanzas.json` | ms-subastas (HU-SUB-004) | ms-finanzas | `CreditosPactoTest` |
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
+| `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
 
 ## Regenerarlos
 
 ```bash
 ./gradlew :services:cuentas:ms-subastas:test --tests '*PactoTest'
+./gradlew :services:contenido:misiones:test --tests '*InventarioPactoTest'
 ```
 
 Si un pacto cambia en un commit que no tocaba el cliente, eso **es** la señal:
@@ -49,12 +51,32 @@ Los estados que hay que poder montar hoy:
 - el elemento está bloqueado por esa subasta y va a adjudicarse
 - ese elemento ya se transfirió con esa misma clave de idempotencia
 
-Los dos pactos se verifican:
+**ms-inventario, para misiones** (B9, inventario.yaml 1.6.0)
+- el héroe es del jugador y está libre
+- el héroe no existe
+- el héroe está en otra misión
+- el héroe está en esa misión
+- el héroe ya volvió de esa misión
+- el jugador puede recibir productos del catálogo
+
+Los pactos se verifican:
 
 | Pacto | Verificación | Cómo |
 |---|---|---|
 | ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
-| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| ms-inventario (ms-subastas) | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` (`@Consumer("ms-subastas")`) | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes |
+
+Un proveedor con varios consumidores tiene una clase de verificación por
+consumidor, cada una con `@Consumer`: sin él, la clase de un consumidor
+intentaría montar los estados del otro. El guardián empareja cada pacto con la
+clase de su consumidor (o con la del proveedor sin `@Consumer`, si solo hay una).
+
+**Pendiente de fusión con B4:** la interacción de misiones «el jugador puede
+recibir productos del catálogo» es de `POST /api/v1/inventario/entregas`, que
+implementa la fase B4 en otra rama. `VerificacionDelPactoDeMisionesTest` la
+deja fuera con `@PactFilter("el heroe .*")` mientras tanto; al fusionar con B4
+hay que quitar el filtro.
 
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.
