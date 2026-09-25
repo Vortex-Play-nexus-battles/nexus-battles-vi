@@ -531,6 +531,14 @@ services:
       DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
       DIRECTORIO_ACTIVO_CLIENT_ID: torneos
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-torneos
+      # B10: premio (epica por inventario, creditos por el libro) y avisos de
+      # los hitos. El spec afirma los creditos del premio (valor PROVISIONAL de
+      # application.yml, D-24); la epica depende de /inventario/entregas (B4).
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      # La tarea que reintenta cobros y premios pendientes, mas seguida que en
+      # dev para que el banco no espere 15 s.
+      TORNEOS_OPERACIONES_INTERVALO_MS: "3000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }

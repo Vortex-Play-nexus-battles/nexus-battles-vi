@@ -191,6 +191,15 @@ services:
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: torneos
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_TORNEOS:-}
+      # B10 (torneos.yaml 1.2.0): la epica del premio va a inventario (host de
+      # contenido, misma IP que usa salas-partidas) y los avisos de los hitos a
+      # la bandeja de notificaciones (este host), con la credencial de arriba.
+      # El premio usa sus valores PROVISIONALES de application.yml (D-24) salvo
+      # que el .env fije TORNEOS_PREMIO_*. Correo de torneo: sin
+      # TORNEOS_CORREO_URL / TORNEOS_IDENTIDAD_URL (correo.yaml 1.5.0 lo declara
+      # pendiente), asi que por ahora solo bandeja.
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
 
   srv-salas-partidas:
     <<: *servicio-plataforma
