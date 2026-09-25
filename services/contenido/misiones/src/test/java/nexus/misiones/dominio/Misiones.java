@@ -16,6 +16,10 @@ public final class Misiones {
                     + "envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
             null);
 
+    /** Un heroe de nivel 1 con las estadisticas de la Tabla 6 (Guerrero Armas). */
+    public static final HeroeEnMision HEROE =
+            new HeroeEnMision("h-1", "Vorn", "Guerrero Armas", "p-1", 1, 0, 8, 44, 11);
+
     public static final MasterDeMision SOMBRA_DEL_OLVIDO =
             new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 0.15, VELO_DE_SOMBRAS);
 

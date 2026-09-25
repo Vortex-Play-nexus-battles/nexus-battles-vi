@@ -19,8 +19,7 @@ import org.junit.jupiter.api.Test;
 class EjecucionTest {
 
     static final Instant INICIO = Instant.parse("2026-09-25T10:00:00Z");
-    static final HeroeEnMision HEROE =
-            new HeroeEnMision("h-1", "Vorn", "Guerrero Armas", "p-1", 1, 0, 8, 44, 11);
+    static final HeroeEnMision HEROE = Misiones.HEROE;
 
     static Ejecucion enCurso() {
         return Ejecucion.nueva(UUID.randomUUID(), "templo-olvidado", "uid-1", HEROE, List.of(),

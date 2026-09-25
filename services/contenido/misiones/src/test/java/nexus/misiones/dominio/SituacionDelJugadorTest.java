@@ -24,7 +24,7 @@ class SituacionDelJugadorTest {
             "prologo", "Prólogo");
 
     private static Ejecucion ejecucion(String mision, Escalon escalon, Instant inicio) {
-        return Ejecucion.nueva(UUID.randomUUID(), mision, "uid-1", EjecucionTest.HEROE, List.of(), escalon,
+        return Ejecucion.nueva(UUID.randomUUID(), mision, "uid-1", Misiones.HEROE, List.of(), escalon,
                 inicio, Duration.ofHours(1), 1L, null);
     }
 
