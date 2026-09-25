@@ -1207,6 +1207,141 @@ function abrirConversacion(apodo = 'Bruma') {
   };
 }
 
+
+/* ---------------------------------------------------------------------------
+   UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
+   productos.yaml (ProductoCreado, PaginaDeProductos, ResumenCatalogo) y de
+   moderacion-sanciones-admin.yaml (Sancion).
+   ------------------------------------------------------------------------- */
+
+const SESION_ADMIN_CATALOGO = () => sesionDe('qa_admin_catalogo', 'ADMINISTRADOR');
+
+function productoDelCatalogo(id, cambios = {}) {
+  return {
+    id: `cccccc${id}-7777-4777-8777-000000000001`,
+    nombre: 'Yelmo del Alba',
+    imagen: 'productos/yelmo-del-alba.png',
+    descripcion: 'Acero claro, forjado al amanecer.',
+    tipo: 'ARMADURA',
+    tiraje: 40,
+    premium: false,
+    precioCreditos: 1200,
+    defensa: 4,
+    parte: 'CASCO',
+    tasaDeCaida: 12.5,
+    estado: 'ACTIVO',
+    version: 3,
+    creadoEn: '2026-09-01T10:00:00Z',
+    modificadoEn: '2026-09-20T10:00:00Z',
+    ...cambios,
+  };
+}
+
+const PRODUCTOS_DEL_CATALOGO = [
+  productoDelCatalogo('01'),
+  productoDelCatalogo('02', {
+    nombre: 'Guerrero Tanque',
+    tipo: 'HEROE',
+    prototipo: 'Guerrero Tanque',
+    tiraje: -1,
+    precioCreditos: 3000,
+    defensa: undefined,
+    parte: undefined,
+    tasaDeCaida: undefined,
+    version: 1,
+  }),
+  productoDelCatalogo('03', {
+    nombre: 'Hacha de Obsidiana',
+    tipo: 'ARMA',
+    poderDeAtaque: 7,
+    tasaDeCaida: 4,
+    defensa: undefined,
+    parte: undefined,
+    estado: 'UNICO',
+    tiraje: 1,
+    precioCreditos: 5400,
+  }),
+  productoDelCatalogo('04', {
+    nombre: 'Pack del Guardián',
+    tipo: 'ITEM',
+    efecto: 'Recupera 20 de vida al inicio del combate.',
+    defensa: undefined,
+    parte: undefined,
+    premium: true,
+    precioCreditos: undefined,
+    precioMonedaReal: 18500,
+    tiraje: 200,
+  }),
+];
+
+function rutasDelCatalogo() {
+  return [
+    [
+      '**/api/v1/productos/estadisticas',
+      json({
+        total: 5,
+        porTipo: { HEROE: 1, HABILIDAD: 0, ARMA: 1, ARMADURA: 1, ITEM: 1, EPICA: 1 },
+        porEstado: { ACTIVO: 3, UNICO: 1, SUSPENDIDO: 1 },
+      }),
+    ],
+    [
+      /\/api\/v1\/productos\?/,
+      json({
+        content: PRODUCTOS_DEL_CATALOGO,
+        page: 0,
+        size: 16,
+        totalElements: PRODUCTOS_DEL_CATALOGO.length,
+        totalPages: 1,
+      }),
+    ],
+  ];
+}
+
+const UID_SANCIONADO = 'dddddddd-7777-4777-8777-000000000001';
+
+function sancionDeLaboratorio(cambios = {}) {
+  return {
+    id: 'eeeeeee1-7777-4777-8777-000000000001',
+    usuarioId: UID_SANCIONADO,
+    tipo: 'SUSPENSION',
+    motivo: 'Lenguaje ofensivo reiterado en el chat de sala.',
+    politica: 'Normas de convivencia §3',
+    comentarioId: null,
+    emitidaPor: 'eeeeeee1-7777-4777-8777-0000000000aa',
+    rolEmisor: 'MODERADOR',
+    emitidaEn: new Date(Date.now() - 20 * 3_600_000).toISOString(),
+    vigenteHasta: new Date(Date.now() + 2 * 86_400_000 + 5 * 3_600_000).toISOString(),
+    revertidaEn: null,
+    motivoReversion: null,
+    vigente: true,
+    ...cambios,
+  };
+}
+
+function historialDeSanciones() {
+  return [
+    sancionDeLaboratorio(),
+    sancionDeLaboratorio({
+      id: 'eeeeeee1-7777-4777-8777-000000000002',
+      tipo: 'ADVERTENCIA',
+      motivo: 'Spam en el chat general.',
+      politica: null,
+      vigenteHasta: null,
+      emitidaEn: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+      revertidaEn: new Date(Date.now() - 8 * 86_400_000).toISOString(),
+      motivoReversion: 'Apelación aceptada: el mensaje era de otra cuenta.',
+      vigente: false,
+    }),
+  ];
+}
+
+const LIMITES_DE_SANCION = {
+  suspensionMinimaHoras: 1,
+  suspensionMaximaHoras: 720,
+  suspensionMaximaDias: 30,
+  apelacionPlazoDias: 30,
+};
+
 export const ESCENARIOS = [
   {
     // UXC-1 — «Mi inventario», pestana Heroes: los ocho prototipos de la Tabla
@@ -2271,7 +2406,118 @@ export const ESCENARIOS = [
     interaccion: abrirConversacion('Nyra'),
     exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
   },
+  {
+    // UXC-7 — el catálogo en la consola: cifras, lista y la acción de cada fila.
+    id: 'catalogo-admin',
+    titulo: 'consola: los productos del catálogo, con estado y gestión por fila',
+    ruta: 'contenido/productos/panel-catalogo.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    exige: ['.catalogo-admin__tabla tbody tr', '[data-accion="gestionar"]'],
+  },
+  {
+    id: 'catalogo-admin-ficha',
+    titulo: 'consola: la ficha de gestión de un producto (ProductAdminSheet)',
+    ruta: 'contenido/productos/panel-catalogo.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="gestionar"]').first().click({ timeout: 10_000 });
+      await pagina.locator('.dialogo--hoja').waitFor({ timeout: 10_000 });
+    },
+    exige: ['.dialogo--hoja .hoja-producto__formulario', '[data-accion="suspender"]'],
+  },
+  {
+    id: 'mis-sanciones-suspendida',
+    titulo: 'mis sanciones: la suspensión activa con su cuenta atrás',
+    ruta: 'plataforma/moderacion-sanciones/mis-sanciones.html',
+    sesion: () => sesionDe('qa_sancionado', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/apelaciones*', json([])],
+      ['**/api/v1/sanciones/limites', json(LIMITES_DE_SANCION)],
+    ],
+    exige: ['[data-estado-cuenta="suspendida"] time.cuenta-atras', '[data-accion="apelar"]'],
+  },
+  {
+    id: 'sanciones-admin-linea-de-tiempo',
+    titulo: 'consola de sanciones: estado de la cuenta y su historial en línea de tiempo',
+    ruta: 'plataforma/moderacion-sanciones/sanciones-admin.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/apelaciones*', json([])],
+      ['**/api/v1/sanciones/limites', json(LIMITES_DE_SANCION)],
+    ],
+    interaccion: async (pagina) => {
+      const buscar = pagina.locator('[data-zona="buscar"]');
+      await buscar.locator('input').first().fill(UID_SANCIONADO);
+      await buscar.locator('[type="submit"]').click();
+      await pagina.locator('.linea-tiempo__hecho').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['[data-estado-cuenta="suspendida"]', '.linea-tiempo__hecho--futuro', '.linea-tiempo__hecho--exito'],
+  },
+  {
+    id: 'perfil-estado-de-cuenta',
+    titulo: 'mi cuenta: el estado de la cuenta antes que el saldo',
+    ruta: 'cuentas/perfil.html',
+    sesion: () => sesionDe('qa_sancionado', 'JUGADOR'),
+    rutas: [
+      [
+        '**/api/v1/perfiles/*',
+        json({ apodo: 'qa_sancionado', email: 'qa@nexus.test', nombres: 'Quinn', apellidos: 'Arias' }),
+      ],
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 1250, saldoReservado: 100 })],
+      ['**/api/v1/creditos/*/movimientos*', json({ content: [], totalPages: 0 })],
+    ],
+    exige: ['[data-estado-cuenta="suspendida"]', '[data-zona="resumen-saldo"] .metrica'],
+  },
+  {
+    id: 'gestion-usuarios-baneo-critico',
+    titulo: 'gestión de usuarios: el baneo pide escribir el apodo (§7.3.9)',
+    ruta: 'cuentas/gestion-usuarios.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/rbac/matrix',
+        json({
+          version: '1.1.0',
+          matrix: {
+            SUPER_ADMINISTRADOR: {
+              GESTIONAR_CUENTAS: 'GRANTED',
+              SUSPENDER_USUARIOS: 'GRANTED',
+              BANEAR_DEFINITIVAMENTE: 'GRANTED',
+              ASIGNAR_ROL: 'GRANTED',
+            },
+          },
+        }),
+      ],
+      [
+        '**/api/v1/admin/usuarios/15',
+        json({
+          id: 15,
+          apodo: 'nyx_valiente',
+          email: 'nyx@nexus.test',
+          estado: 'ACTIVO',
+          rolNombre: 'JUGADOR',
+          nombres: 'Nyx',
+          apellidos: 'Valiente',
+          preferencias: '',
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('#usuario-id').fill('15');
+      await pagina.locator('#btn-buscar').click();
+      await pagina.locator('#panel-usuario:not([hidden])').waitFor({ timeout: 10_000 });
+      await pagina.locator('#btn-banear').click();
+      await pagina.locator('.confirmacion-critica').waitFor({ timeout: 10_000 });
+    },
+    exige: ['.confirmacion-critica__consecuencias', '[role="dialog"] [data-accion="confirmar"][disabled]'],
+  },
 ];
+
 
 function sala(cambios = {}) {
   return {
