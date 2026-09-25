@@ -9,7 +9,7 @@
 import { test, expect } from '@playwright/test';
 import { prepararPagina } from './entorno-de-prueba.js';
 
-const PAGINA = '/contenido/inventario/inventario.html?jugador=jugador-de-prueba';
+const PAGINA = '/contenido/inventario/inventario.html?jugador=jugador-de-prueba#objetos';
 
 const PRODUCTO = {
   id: 'producto-0',

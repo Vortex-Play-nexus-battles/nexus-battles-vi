@@ -18,6 +18,7 @@
 
 import { montarPanelVidas } from './panel-vidas.js';
 import { pintarCampo } from './campo.js';
+import { pintarEstadoDelCanal } from '../../comun/ui/reconexion.js';
 import { mostrarPresentacion } from '../../comun/ui/juego/presentacion.js';
 
 /**
@@ -129,11 +130,14 @@ function pintarConexion(zona, hayCanal) {
   if (!zona) {
     return;
   }
-
-  zona.className = hayCanal ? 'conexion conexion--estable' : 'conexion conexion--sin-conexion';
-  zona.textContent = hayCanal
-    ? 'Canal en tiempo real conectado'
-    : 'Canal en tiempo real no conectado';
+  // UXC-2 — la misma pildora que usa la reconexion (`comun/ui/reconexion.js`):
+  // una sola forma de decir en que estado esta el canal. Si la reconexion ya
+  // la dejo diciendo otra cosa (reconectando, sin conexion), no se pisa.
+  const actual = zona.dataset.estadoCanal;
+  if (hayCanal && (actual === 'reconectando' || actual === 'sin-conexion')) {
+    return;
+  }
+  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion' });
 }
 
 /**
@@ -234,6 +238,17 @@ export function montarSalaBatalla(
   const marco = raiz.querySelector?.('[data-zona="combate"]') ?? raiz.closest?.('.combate');
   if (marco?.dataset) {
     marco.dataset.sinPartida = hayPartida ? 'no' : 'si';
+    // UXC-2 — con la partida en marcha, modo combate: el campo ocupa la
+    // pantalla entera y la barra de la aplicacion se retira (§7.6: area de
+    // juego > 80 %). La salida vive en el HUD. En la sala de espera, no.
+    const cuerpo = marco.ownerDocument?.body;
+    if (cuerpo?.dataset) {
+      if (hayPartida) {
+        cuerpo.dataset.modo = 'combate';
+      } else {
+        delete cuerpo.dataset.modo;
+      }
+    }
   }
 
   if (!hayPartida) {
