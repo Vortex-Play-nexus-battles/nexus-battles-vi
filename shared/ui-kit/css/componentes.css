@@ -1080,6 +1080,28 @@
   gap: var(--e-3);
 }
 
+/* UXC-7 — ConfirmCritical (§7.3.9): lo que va a pasar, en una lista, y la
+   palabra que hay que escribir para poder confirmar. */
+.confirmacion-critica {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.confirmacion-critica p {
+  margin: 0;
+}
+
+.confirmacion-critica__consecuencias {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: var(--e-3) var(--e-3) var(--e-3) var(--e-6);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radio-chico);
+  background: var(--error-insignia);
+  color: var(--texto);
+}
+
 /* =======================================================================
    Paginación — RNF-USA-001, dieciséis por página
    ======================================================================= */
@@ -8385,4 +8407,181 @@ body:not([data-modo='combate']) .registro-combate {
   .redactor-mensaje {
     padding: var(--e-3);
   }
+}
+
+/* =======================================================================
+   UXC-7 — Estado de la cuenta (SanctionCountdown) y línea de tiempo
+   (AdminTimeline)
+   §7.3.8 (línea de tiempo de actividad del usuario) · RF-USR-004/005
+   -----------------------------------------------------------------------
+   El estado se dice con palabra e icono además del color del borde; en la
+   línea de tiempo el tono va también en la forma del marcador (círculo,
+   rombo, cuadrado) para que no dependa del color.
+   ======================================================================= */
+
+.estado-cuenta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3) var(--e-4);
+  border-left: 4px solid var(--exito);
+}
+
+/* Dentro de otra tarjeta (la consola de sanciones) no se levanta: sin sombra. */
+.tarjeta .estado-cuenta {
+  box-shadow: none;
+}
+
+.estado-cuenta--suspendida {
+  border-left-color: var(--advertencia);
+}
+
+.estado-cuenta--baneada {
+  border-left-color: var(--error);
+}
+
+.estado-cuenta__icono {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  color: var(--exito);
+}
+
+.estado-cuenta--suspendida .estado-cuenta__icono {
+  color: var(--advertencia);
+}
+
+.estado-cuenta--baneada .estado-cuenta__icono {
+  color: var(--error);
+}
+
+.estado-cuenta__cuerpo {
+  display: grid;
+  gap: var(--e-1);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.estado-cuenta__titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.estado-cuenta__detalle {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.estado-cuenta__cuenta {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.linea-tiempo {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linea-tiempo__hecho {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--e-3);
+  padding-bottom: var(--e-4);
+}
+
+/* El hilo que une los hechos; el último no lo lleva. */
+.linea-tiempo__hecho::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  left: 9px;
+  width: 2px;
+  background: var(--borde);
+}
+
+.linea-tiempo__hecho:last-child {
+  padding-bottom: 0;
+}
+
+.linea-tiempo__hecho:last-child::before {
+  display: none;
+}
+
+.linea-tiempo__marca {
+  width: 14px;
+  height: 14px;
+  margin: 4px 3px;
+  border: 2px solid var(--texto-3);
+  border-radius: 50%;
+  background: var(--superficie);
+}
+
+.linea-tiempo__hecho--info .linea-tiempo__marca {
+  border-color: var(--info);
+  background: var(--info-insignia);
+}
+
+/* Advertencia: rombo. */
+.linea-tiempo__hecho--advertencia .linea-tiempo__marca {
+  border-color: var(--advertencia);
+  border-radius: 2px;
+  background: var(--advertencia-insignia);
+  transform: rotate(45deg);
+}
+
+/* Error (un baneo): cuadrado relleno. */
+.linea-tiempo__hecho--error .linea-tiempo__marca {
+  border-color: var(--error);
+  border-radius: 2px;
+  background: var(--error);
+}
+
+/* Éxito (revertida): círculo relleno. */
+.linea-tiempo__hecho--exito .linea-tiempo__marca {
+  border-color: var(--exito);
+  background: var(--exito);
+}
+
+/* Lo que todavía no ha pasado (termina el…): contorno discontinuo. */
+.linea-tiempo__hecho--futuro .linea-tiempo__marca {
+  border-style: dashed;
+  background: var(--superficie);
+}
+
+.linea-tiempo__cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.linea-tiempo__cuando {
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.linea-tiempo__titulo {
+  margin: 0;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.linea-tiempo__detalle,
+.linea-tiempo__actor {
+  margin: 0;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+.linea-tiempo__actor {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
 }

@@ -48,8 +48,16 @@ let avatarRecortado = null;
  * @param {string} texto
  * @param {'carga'|'error'|'exito'|'vacio'} tipo
  */
-function setEstado(texto, tipo) {
+/**
+ * @param {string} texto
+ * @param {string} tipo
+ * @param {Array<{texto: string, href: string}>} [enlaces] qué hacer, al lado del motivo
+ */
+function setEstado(texto, tipo, enlaces = []) {
   estadoRegistro.textContent = texto;
+  for (const enlace of enlaces) {
+    estadoRegistro.append(' ', h('a', { texto: enlace.texto, atributos: { href: enlace.href } }));
+  }
   estadoRegistro.className = `estado ${tipo}`;
   estadoRegistro.hidden = false;
 }
@@ -317,7 +325,17 @@ form.addEventListener('submit', async (evento) => {
   }
 
   if (resultado.resultado === 'rechazada') {
-    setEstado(resultado.mensaje, 'error');
+    // UXC-7 — si el correo ya tiene cuenta, lo útil es entrar o recuperarla.
+    setEstado(
+      resultado.mensaje,
+      'error',
+      resultado.motivo === 'correo-en-uso'
+        ? [
+            { texto: 'Entrar', href: './login.html' },
+            { texto: 'Recuperar mi contraseña', href: './restablecer-solicitar.html' },
+          ]
+        : [],
+    );
     const control = resultado.campo ? form.elements.namedItem(resultado.campo) : null;
     if (control instanceof HTMLElement && control.type !== 'file') {
       marcarErrorDe(control, resultado.mensaje);

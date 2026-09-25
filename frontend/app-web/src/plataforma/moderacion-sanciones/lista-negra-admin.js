@@ -5,6 +5,7 @@
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { vaciar } from '../../comun/ui/dom.js';
+import { confirmar, pedirTexto } from '../../comun/ui/dialogo.js';
 
 const BASE_URL = '/api/v1/lista-negra/terminos';
 
@@ -169,8 +170,15 @@ async function agregarTermino(evento) {
  */
 async function editarTermino(terminoActual) {
   ocultarExito();
-  const terminoNuevo = window.prompt('Editar término:', terminoActual);
-  if (!terminoNuevo || !terminoNuevo.trim() || terminoNuevo.trim() === terminoActual) {
+  // UXC-7 — un diálogo del kit con su etiqueta, no `window.prompt()`.
+  const terminoNuevo = await pedirTexto({
+    titulo: `Editar «${terminoActual}»`,
+    etiqueta: 'Término',
+    valor: terminoActual,
+    pista: 'La lista negra filtra apodos, comentarios y mensajes del chat.',
+    textoConfirmar: 'Guardar término',
+  });
+  if (!terminoNuevo || terminoNuevo === terminoActual) {
     return;
   }
 
@@ -201,7 +209,13 @@ async function editarTermino(terminoActual) {
  */
 async function eliminarTermino(termino) {
   ocultarExito();
-  const confirmado = window.confirm(`¿Eliminar el término "${termino}" de la lista negra?`);
+  // UXC-7 — el diálogo del kit, no `window.confirm()`: se lee con lector de
+  // pantalla, devuelve el foco al botón y nombra lo que se va a quitar.
+  const confirmado = await confirmar({
+    titulo: `¿Quitar «${termino}» de la lista negra?`,
+    mensaje: 'Dejará de filtrarse desde este momento. Puedes volver a añadirlo cuando quieras.',
+    textoConfirmar: 'Quitar término',
+  });
   if (!confirmado) {
     return;
   }

@@ -74,16 +74,20 @@ describe('presentacion', () => {
     expect(tiempoRestante('2026-09-21T09:00:00Z', AHORA)).toBe('vencida');
   });
 
-  test('descripcionDe: advertencia no restringe, suspension con contador, baneo sin fin, revertida', () => {
+  test('descripcionDe: advertencia no restringe, suspensión activa o vencida (según el servidor), baneo sin fin, revertida', () => {
     expect(descripcionDe(sancion({ tipo: 'ADVERTENCIA', vigenteHasta: null }), AHORA)).toBe(
       'Advertencia · no restringe tu acceso',
     );
-    expect(descripcionDe(sancion(), AHORA)).toBe('Suspension · quedan 24 h 0 min');
+    // UXC-7 — el tiempo que falta va en su cuenta atrás viva (tarjetaDeSancion);
+    // la línea dice el estado, y el estado lo decide `vigente` del servidor.
+    expect(descripcionDe(sancion(), AHORA)).toBe('Suspensión · activa');
+    expect(descripcionDe(sancion({ vigente: false }), AHORA)).toBe('Suspensión · vencida');
+    expect(descripcionDe(sancion({ vigente: undefined }), AHORA)).toBe('Suspensión · activa');
     expect(descripcionDe(sancion({ tipo: 'BANEO', vigenteHasta: null }), AHORA)).toBe(
       'Baneo definitivo · sin fecha fin',
     );
     expect(descripcionDe(sancion({ revertidaEn: '2026-09-21T09:30:00Z' }), AHORA)).toBe(
-      'Suspension · revertida',
+      'Suspensión · revertida',
     );
   });
 
@@ -250,7 +254,15 @@ describe('panel de moderacion', () => {
       motivo: 'Lenguaje ofensivo',
     });
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Sanción emitida/);
-    expect(document.querySelectorAll('[data-zona="historial"] article')).toHaveLength(1);
+    // UXC-7 — AdminTimeline: el estado de la cuenta y la línea de tiempo.
+    const historial = document.querySelector('[data-zona="historial"]');
+    expect(historial.querySelector('[data-estado-cuenta="en-regla"]').textContent).toContain(
+      'Tiene una advertencia: no le impide jugar.',
+    );
+    const hechos = historial.querySelectorAll('.linea-tiempo__hecho');
+    expect(hechos).toHaveLength(1);
+    expect(hechos[0].textContent).toContain('Advertencia emitida');
+    expect(hechos[0].textContent).toContain('Por moderación');
   });
 
   test('el baneo sin confirmación no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
@@ -432,7 +444,12 @@ describe('mis sanciones', () => {
 
     const tarjetas = document.querySelectorAll('[data-zona="sanciones"] article');
     expect(tarjetas).toHaveLength(2);
-    expect(tarjetas[0].textContent).toMatch(/quedan 24 h 0 min/);
+    // UXC-7 — SanctionCountdown: la cuenta atrás hasta la fecha del servidor.
+    expect(tarjetas[0].textContent).toMatch(/Suspensión · activa/);
+    expect(tarjetas[0].querySelector('time.cuenta-atras').getAttribute('datetime')).toBe(
+      '2026-09-22T10:00:00Z',
+    );
+    expect(tarjetas[0].textContent).toMatch(/hasta el martes,? 22 de septiembre/);
     expect(tarjetas[0].querySelector('[data-accion="apelar"]')).not.toBeNull();
     expect(tarjetas[1].querySelector('[data-accion="apelar"]')).toBeNull();
 
