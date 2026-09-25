@@ -13,6 +13,8 @@
  * tenga que importar otro spec.
  */
 
+import { join, resolve } from 'node:path';
+
 import { sesionSintetica } from './identidad.js';
 
 /**
@@ -197,8 +199,20 @@ function rutasDeInventario(equipamiento) {
       }),
     ],
     ['**/api/v1/inventario/heroes/*/equipamiento', json(equipamiento)],
+    // UXC-3 — la ficha trae las opiniones del producto: un hilo vacío, que es
+    // el estado normal de un producto que nadie ha comentado.
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
   ];
 }
+
+/** Un producto sin opiniones (comentarios.yaml: 200 con la lista vacía). */
+const HILO_VACIO = {
+  productoId: 'sin-opiniones',
+  comentarios: [],
+  total: 0,
+  totalCalificaciones: 0,
+  calificacionPromedio: null,
+};
 
 /* ---------------------------------------------------------------------------
    UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
@@ -208,17 +222,64 @@ function rutasDeInventario(equipamiento) {
    equipo (no puede combatir), uno bloqueado por subasta.
    ------------------------------------------------------------------------- */
 const f = (base, cantidadDados, caras) =>
-  base === null ? null : { base, cantidadDados, caras, formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}` };
+  base === null
+    ? null
+    : {
+        base,
+        cantidadDados,
+        caras,
+        formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}`,
+      };
 
 const OCHO_HEROES = [
-  ['Aquiles de la Ceniza', 'Guerrero Tanque', { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null }, 4],
-  ['Vorn el Filo', 'Guerrero Armas', { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null }, 2],
-  ['Ignis', 'Mago Fuego', { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null }, 0],
-  ['Nieve de Arel', 'Mago Hielo', { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null }, 1],
-  ['Sombra Verde', 'Pícaro Veneno', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null }, 2],
-  ['Kael', 'Pícaro Machete', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null }, 3],
-  ['Oyá', 'Chamán', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) }, 2],
-  ['Doctora Lumen', 'Médico', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) }, 1],
+  [
+    'Aquiles de la Ceniza',
+    'Guerrero Tanque',
+    { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null },
+    4,
+  ],
+  [
+    'Vorn el Filo',
+    'Guerrero Armas',
+    { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Ignis',
+    'Mago Fuego',
+    { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null },
+    0,
+  ],
+  [
+    'Nieve de Arel',
+    'Mago Hielo',
+    { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null },
+    1,
+  ],
+  [
+    'Sombra Verde',
+    'Pícaro Veneno',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Kael',
+    'Pícaro Machete',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null },
+    3,
+  ],
+  [
+    'Oyá',
+    'Chamán',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) },
+    2,
+  ],
+  [
+    'Doctora Lumen',
+    'Médico',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) },
+    1,
+  ],
 ].map(([nombrePropio, prototipo, estadisticas, ranuras], i) => ({
   elemento: {
     id: `he00000${i + 1}-1111-4111-8111-111111111111`,
@@ -350,6 +411,8 @@ function rutasDeOchoHeroes() {
         });
       },
     ],
+    // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
   ];
 }
 
@@ -485,13 +548,20 @@ const RUTAS_DEL_HEROE_EN_COMBATE = [
   ],
 ];
 
-function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige, canal = {}, interaccion }) {
+function escenarioDeCombate(
+  id,
+  titulo,
+  { partida, mensajes = [], exige, canal = {}, interaccion },
+) {
   return {
     id,
     titulo,
     ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
     sesion: () => SESION_COMBATE,
-    rutas: [[`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)], ...RUTAS_DEL_HEROE_EN_COMBATE],
+    rutas: [
+      [`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)],
+      ...RUTAS_DEL_HEROE_EN_COMBATE,
+    ],
     canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
     ...(interaccion ? { interaccion } : {}),
     exige,
@@ -519,7 +589,15 @@ function partidaDeSeis() {
     ['cccccc06-6666-4666-8666-666666666666', 'Kael', 36, 36, 2, true],
   ].map(([jugador, nombre, vidaActual, vidaMaxima, equipo, esIA]) => ({
     jugador,
-    heroe: { id: `h-${jugador}`, nombre, retratoUrl: null, nivel: null, vidaActual, vidaMaxima, efectosActivos: [] },
+    heroe: {
+      id: `h-${jugador}`,
+      nombre,
+      retratoUrl: null,
+      nivel: null,
+      vidaActual,
+      vidaMaxima,
+      efectosActivos: [],
+    },
     esIA,
     listo: true,
     equipo,
@@ -674,6 +752,351 @@ function comentarioReportado(i, cambios = {}) {
     primerReporte: new Date(Date.now() - i * 7_000_000).toISOString(),
     ...cambios,
   };
+}
+
+/* ---------------------------------------------------------------------------
+   UXC-3/UXC-4 — la tienda, su detalle con opiniones y la portada. DATOS DE
+   LABORATORIO: nombres, textos, precios y opiniones inventados para la
+   captura, con la forma exacta de ecommerce-carrito.yaml 1.2.0 y
+   comentarios.yaml 1.3.0. En produccion todo sale de la vitrina, del
+   catalogo y del servicio de comentarios.
+   ------------------------------------------------------------------------- */
+const SESION_TIENDA = sesionDe('qa_tienda', 'JUGADOR');
+
+const PRODUCTOS_DE_TIENDA = [
+  producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000002',
+    nombre: 'Amuleto de Brasa',
+    tipo: 'ITEM',
+    habilidades: 'Fuego +2 durante tres turnos',
+    precioOriginal: 20000,
+    precioFinal: 16000,
+    enPromocion: true,
+    porcentajeDescuento: 20,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000003',
+    nombre: 'Pocion sin precio',
+    tipo: 'ITEM',
+    precioFinal: null,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000004',
+    nombre: 'Guerrero de Obsidiana',
+    tipo: 'HEROE',
+    imagenUrl: '/frontend/app-web/src/cuentas/avatares/guerrero-tanque.jpg',
+    descripcion: 'Un tanque que aguanta la primera oleada.',
+    habilidades: null,
+    precioFinal: 45000,
+    precioOriginal: 45000,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000005',
+    nombre: 'Espada de Vorn',
+    tipo: 'ARMA',
+    descripcion: 'Filo largo, templado en la niebla.',
+    habilidades: 'Ataque +6',
+    precioFinal: 32000,
+    precioOriginal: 32000,
+  }),
+];
+
+/** El hilo de un producto: tres opiniones, una con imagen y una propia. */
+function hiloDeLaboratorio({ propio = null } = {}) {
+  const comentarios = [
+    {
+      id: 'c0000000-0000-4000-8000-000000000001',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000001',
+      apodoAutor: 'thar_vex',
+      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
+      imagenes: ['yelmo-en-combate.png'],
+      estrellas: 5,
+      fechaPublicacion: '2026-09-18T20:15:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000002',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000002',
+      apodoAutor: 'kira_del_sur',
+      texto: 'Buen objeto, aunque la descripción exagera un poco.\nA mí me sirvió en duelos.',
+      imagenes: [],
+      estrellas: 3,
+      fechaPublicacion: '2026-09-20T11:40:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000003',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
+      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
+      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
+      imagenes: [],
+      fechaPublicacion: '2026-09-22T08:05:00Z',
+      estado: 'PUBLICADO',
+    },
+  ];
+  return {
+    productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+    comentarios,
+    total: comentarios.length,
+    totalCalificaciones: 2,
+    calificacionPromedio: 4,
+  };
+}
+
+/** El detalle del catalogo de cualquier producto de la tienda de laboratorio. */
+function detalleDelCatalogo(peticion) {
+  const id = new URL(peticion.request().url()).pathname.split('/').pop();
+  const deVitrina = PRODUCTOS_DE_TIENDA.find((p) => p.id === id) ?? PRODUCTOS_DE_TIENDA[0];
+  return json({
+    id,
+    nombre: deVitrina.nombre,
+    tipo: deVitrina.tipo,
+    descripcion: deVitrina.descripcion,
+    imagen: deVitrina.imagenUrl,
+    prototipo: deVitrina.tipo === 'HEROE' ? 'Guerrero Tanque' : null,
+    defensa: deVitrina.tipo === 'ARMADURA' ? 4 : null,
+    parte: deVitrina.tipo === 'ARMADURA' ? 'CASCO' : null,
+    tasaDeCaida: deVitrina.tipo === 'HEROE' ? null : 12,
+    estado: 'ACTIVO',
+    tiraje: -1,
+  });
+}
+
+const CARRITO_DE_LABORATORIO = {
+  id: 9,
+  usuarioId: 'qa',
+  total: 52000,
+  moneda: 'COP',
+  items: [
+    {
+      id: 1,
+      cantidad: 2,
+      precioUnitario: 18000,
+      subtotal: 36000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000001',
+        nombre: 'Yelmo del Alba',
+        moneda: 'COP',
+      },
+    },
+    {
+      id: 2,
+      cantidad: 1,
+      precioUnitario: 16000,
+      subtotal: 16000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000002',
+        nombre: 'Amuleto de Brasa',
+        moneda: 'COP',
+      },
+    },
+  ],
+};
+
+function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
+  return [
+    // R16 — la vitrina se mudó a /api/v1/vitrina y sus ids son UUID del
+    // catálogo maestro. UXC-4 — se pide entera (`?size=50`).
+    ['**/api/v1/vitrina*', json({ content: PRODUCTOS_DE_TIENDA, last: true, totalPages: 1 })],
+    ['**/api/v1/carrito', json(CARRITO_DE_LABORATORIO)],
+    // Lo que ya tiene el jugador: un yelmo (la tarjeta dice «Ya lo tienes»).
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos: [
+          {
+            id: 'e0000000-0000-4000-8000-000000000001',
+            productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+            tipo: 'ARMADURA',
+            nombrePropio: 'Yelmo del Alba',
+            disponible: true,
+          },
+        ],
+        numero: 0,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
+    ['**/api/v1/productos/*', detalleDelCatalogo],
+    ['**/api/v1/products/*/comments', json(hilo)],
+  ];
+}
+
+/* ---------------------------------------------------------------------------
+   UXC-5 — misiones.
+
+   La vista de misiones pide sus datos a un PUERTO (`contenido/misiones/
+   fuente-misiones.js`) y no a una ruta HTTP, porque el servicio de misiones no
+   existe todavía y no se inventa su dirección. Para fotografiar los estados
+   que tendrá, el laboratorio sirve en lugar de ese módulo el de
+   `laboratorio/fuente-misiones.js`: misiones de ejemplo, marcadas como tales
+   en el propio archivo y con un aviso visible en cada captura. Sin esta
+   sustitución la vista pinta lo que ve un jugador hoy: el estado honesto.
+
+   El configurador de estrategia sí habla con servicios que existen
+   (inventario, productos y héroes): esos se simulan como los demás, con la
+   forma de su contrato.
+   ------------------------------------------------------------------------- */
+
+// Playwright transpila a CommonJS (hay `__dirname`); la herramienta de
+// capturas corre como módulo desde `frontend/app-web` (no lo hay).
+const AQUI_LABORATORIO =
+  typeof __dirname === 'undefined' ? resolve(process.cwd(), '../../tests/visual') : __dirname;
+
+/** La ruta que cambia la fuente de misiones por la del laboratorio. */
+const MISIONES_DE_LABORATORIO = [
+  '**/contenido/misiones/fuente-misiones.js',
+  {
+    status: 200,
+    contentType: 'text/javascript; charset=utf-8',
+    path: join(AQUI_LABORATORIO, 'laboratorio', 'fuente-misiones.js'),
+  },
+];
+
+/**
+ * Tabla 7 del documento, como la publica el catálogo de héroes
+ * (`PrototiposIniciales`): las tres acciones de cada prototipo, en orden de
+ * desbloqueo (niveles 1, 4 y 8).
+ */
+const TABLA_7 = {
+  'Guerrero Tanque': [
+    ['Golpe con escudo', 2, '+2 al ataque'],
+    ['Mano de piedra', 4, '+12 a la defensa'],
+    ['Defensa feroz', 6, 'Inmune al daño físico y (3d6) al daño mágico'],
+  ],
+  'Guerrero Armas': [
+    ['Embate sangriento', 4, '+2 al ataque, +1 de daño'],
+    ['Lanza de los dioses', 4, '+2 al daño'],
+    ['Golpe de tormenta', 6, '+(3d6) al ataque, +2 al daño'],
+  ],
+  'Mago Fuego': [
+    ['Misiles de magma', 2, '+1 al ataque, +2 de daño'],
+    ['Vulcano', 6, '+3 al ataque, +(3d9) al daño'],
+    ['Pare de fuego', 4, '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior'],
+  ],
+  'Mago Hielo': [
+    ['Lluvia de hielo', 2, '+2 al ataque, +2 de daño'],
+    ['Cono de hielo', 6, '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes'],
+    ['Bola de hielo', 4, '+2 al ataque y afecta en (0d4) al daño causado por el oponente'],
+  ],
+  'Pícaro Veneno': [
+    ['Flor de loto', 2, '+(4d8) al daño'],
+    ['Agonía', 4, '+(2d9) de daño'],
+    ['Piquete', 4, '+1 al ataque por dos turnos, +2 al daño por 1 turno'],
+  ],
+  'Pícaro Machete': [
+    ['Cortada', 2, '+2 al daño por dos turnos'],
+    ['Machetazo', 4, '+(2d8) al daño, +1 al ataque'],
+    ['Planazo', 4, '+(2d8) al ataque, +1 al daño'],
+  ],
+  Chamán: [
+    ['Toque de la Vida', 2, '+2 de sanación'],
+    ['Vínculo Natural', 4, '+2 de sanación por dos turnos'],
+    ['Canto del Bosque', 6, 'Sana a todo el grupo +(2d6) durante dos turnos'],
+  ],
+  Médico: [
+    ['Curación Directa', 2, '+2 de sanación'],
+    ['Neutralización de Efectos', 4, '+2 y +(2d4) de sanación'],
+    ['Reanimación', null, 'Sana el 100% de la vida del compañero'],
+  ],
+};
+
+/** RC-01: una acción en el nivel 1, dos desde el 4, tres desde el 8. */
+function accionesEnNivel(prototipo, nivel) {
+  let cuantas = 1;
+  if (nivel >= 8) {
+    cuantas = 3;
+  } else if (nivel >= 4) {
+    cuantas = 2;
+  }
+  return (TABLA_7[prototipo] ?? []).slice(0, cuantas);
+}
+
+/**
+ * El servicio de héroes, de mentira pero con su regla (`EstrategiaDeCombate`):
+ * las habilidades válidas son las desbloqueadas más el ataque básico; una
+ * rotación que usa otra se rechaza con el motivo, en 200.
+ */
+function veredictoDeEstrategia(ruta) {
+  const { heroe, nivel = 1, rotaciones = [] } = ruta.request().postDataJSON() ?? {};
+  const validas = [...accionesEnNivel(heroe, nivel).map(([nombre]) => nombre), 'Ataque básico'];
+  const base = { heroe, nivel, habilidadesValidas: validas, comportamientoPorDefecto: 'Ataque básico' };
+  for (const [indice, rotacion] of rotaciones.entries()) {
+    const ajena = (rotacion.pasos ?? []).find((paso) => !validas.includes(paso));
+    if (ajena) {
+      return json({
+        ...base,
+        valida: false,
+        porDefecto: false,
+        motivo: `La rotación ${indice + 1} usa una habilidad que ${heroe} no posee en nivel ${nivel}: ${ajena}.`,
+      });
+    }
+  }
+  return json({
+    ...base,
+    valida: true,
+    porDefecto: rotaciones.length === 0,
+    rotaciones: rotaciones.map((r, i) => ({ prioridad: ['Alta', 'Media', 'Baja'][i], pasos: r.pasos })),
+  });
+}
+
+/** `GET /heroes/{nombre}/niveles/{nivel}` con las cifras de nivel 1 de la Tabla 6. */
+function vistaDeHeroeEnNivel(ruta) {
+  const partes = new URL(ruta.request().url()).pathname.split('/');
+  const nivel = Number(partes.pop());
+  partes.pop();
+  const nombre = decodeURIComponent(partes.pop());
+  const heroe = OCHO_HEROES.find((h) => h.prototipo === nombre);
+  const cifras = heroe?.estadisticas ?? {};
+  const formula = (x) => (x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null);
+  return json({
+    nombre,
+    tipo: nombre.split(' ')[0],
+    esSanador: ['Chamán', 'Médico'].includes(nombre),
+    nivel,
+    estadisticas: {
+      poder: cifras.poder,
+      vida: cifras.vida,
+      defensa: cifras.defensa,
+      ataque: formula(cifras.ataque),
+      dano: formula(cifras.dano),
+      sanar: formula(cifras.sanar),
+    },
+    accionesDisponibles: accionesEnNivel(nombre, nivel).map(([accion, costo, efecto]) => ({
+      nombre: accion,
+      costo: costo === null ? 'Sin costo de poder' : `${costo} puntos de poder`,
+      efecto,
+    })),
+    multiplicadorDeEfecto: nivel,
+  });
+}
+
+/** Inventario, catálogo y héroes para el configurador de estrategia. */
+function rutasDeEstrategia() {
+  return [
+    ...rutasDeOchoHeroes(),
+    ['**/api/v1/estrategias/validacion', veredictoDeEstrategia],
+    ['**/api/v1/heroes/*/niveles/*', vistaDeHeroeEnNivel],
+  ];
+}
+
+/** Elige una habilidad en un paso del configurador y deja que la vista reaccione. */
+async function elegirPaso(pagina, indice, habilidad) {
+  await pagina.locator('.estrategia__paso select').nth(indice).selectOption(habilidad);
+}
+
+/** Configura dos pasos y comprueba la estrategia contra el servicio de mentira. */
+async function prepararEstrategia(pagina) {
+  await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
+  await elegirPaso(pagina, 0, 'Golpe con escudo');
+  await pagina.locator('[data-accion="anadir-paso"]').first().click();
+  await elegirPaso(pagina, 1, 'Ataque básico');
+  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
 }
 
 export const ESCENARIOS = [
@@ -1322,57 +1745,270 @@ export const ESCENARIOS = [
   },
   {
     id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja y carrito con importes',
+    titulo: 'tienda con precios, rebaja, lo que ya tienes y carrito con importes',
     ruta: 'cuentas/tienda.html',
-    sesion: () => sesionDe('qa_tienda', 'JUGADOR'),
-    rutas: [
-      [
-        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
-        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
-        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
-        // es justo para lo que está. La rebaja y el precio ausente ya no los
-        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
-        // su accesibilidad se sigue auditando.
-        '**/api/v1/vitrina*',
-        json({
-          content: [
-            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000002',
-              nombre: 'Amuleto de Brasa',
-              precioOriginal: 20000,
-              precioFinal: 16000,
-              enPromocion: true,
-              porcentajeDescuento: 20,
-            }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000003',
-              nombre: 'Pocion sin precio',
-              precioFinal: null,
-            }),
-          ],
-        }),
-      ],
-      [
-        '**/api/v1/carrito',
-        json({
-          id: 9,
-          usuarioId: 'qa',
-          total: 36000,
-          items: [
-            {
-              id: 1,
-              cantidad: 2,
-              precioUnitario: 18000,
-              subtotal: 36000,
-              producto: { nombre: 'Yelmo del Alba', moneda: 'COP' },
-            },
-          ],
-        }),
-      ],
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    // El descuento y el precio ausente son los dos estados que FI-R2 anadio;
+    // UXC-4 anade la marca de «propio», la insignia del carrito y los filtros.
+    exige: [
+      '.product-card',
+      '.badge-descuento',
+      '.precio-ausente',
+      '.cart-item',
+      '.producto-propio',
+      '.insignia-carrito__cuenta',
+      '.filtros-tienda',
     ],
-    // El descuento y el precio ausente son los dos estados que FI-R2 anadio.
-    exige: ['.product-card', '.badge-descuento', '.precio-ausente', '.cart-item'],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle del producto desde la tienda: ficha del
+    // catalogo, compra y opiniones (promedio, hilo con imagen y una propia).
+    id: 'tienda-detalle-con-opiniones',
+    titulo: 'detalle de producto con compra, calificación promedio e hilo de opiniones',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda({ hilo: hiloDeLaboratorio({ propio: SESION_TIENDA.uid }) }),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.compra-producto',
+      '.deseos[aria-disabled="true"]',
+      '.hilo-comentarios .comentario',
+      '.comentario__adjunto',
+      '.comentario--propio',
+      '.redactor-comentario',
+      '.selector-estrellas',
+    ],
+  },
+  {
+    // UXC-4 — buscar algo que no hay: se dice y se ofrece limpiar.
+    id: 'tienda-sin-coincidencias',
+    titulo: 'búsqueda sin resultados, con «Limpiar filtros»',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.product-card').first().waitFor();
+      await pagina.locator('#busqueda-tienda').fill('dragón de cristal');
+      await pagina.locator('[data-accion="limpiar-filtros"]').waitFor();
+    },
+    exige: ['#productos-grid [data-estado="vacio"]', '[data-accion="limpiar-filtros"]'],
+  },
+  {
+    // UXC-4 — el carrito minimizado: la vitrina a todo el ancho y la
+    // insignia con las unidades.
+    id: 'tienda-carrito-minimizado',
+    titulo: 'carrito minimizado: vitrina a todo el ancho e insignia con unidades',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.cart-item').first().waitFor();
+      await pagina.locator('#minimizar-carrito').click();
+    },
+    exige: ['.main-container[data-carrito="minimizado"]', '.insignia-carrito__cuenta'],
+  },
+  {
+    // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
+    // sesion, productos reales a la vista.
+    id: 'portada-con-tienda',
+    titulo: 'portada pública con la tienda: productos, rebaja e imagen',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    exige: ['.vitrina-publica .product-card', '.vitrina-publica .badge-descuento'],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle desde la portada: se leen las opiniones; para
+    // comprar u opinar, entrar.
+    id: 'portada-detalle-publico',
+    titulo: 'detalle público: opiniones de solo lectura y «Entra para comprar»',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.vitrina-publica [data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '[data-accion="entrar-para-comprar"]',
+      '.hilo-comentarios .comentario',
+      '[data-accion="entrar-para-opinar"]',
+    ],
+  },
+  {
+    // UXC-3 — la ficha de un objeto del inventario con sus opiniones.
+    id: 'inventario-ficha-con-opiniones',
+    titulo: 'ficha de un objeto del inventario con valoración e hilo',
+    ruta: 'contenido/inventario/inventario.html#objetos',
+    sesion: () => sesionDe('qa_opiniones', 'JUGADOR'),
+    rutas: [
+      ...rutasDeInventario({
+        heroeId: 'ddddddd1-1111-4111-8111-111111111111',
+        armas: ['ddddddd2-2222-4222-8222-222222222222'],
+        armaduras: {},
+        items: [],
+      }),
+      ['**/api/v1/products/*/comments', json(hiloDeLaboratorio())],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-objetos').click();
+      await pagina.locator('.vitrina__detalle').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.hilo-comentarios .comentario',
+      '.redactor-comentario',
+    ],
+  },
+  // UXC-5 — misiones. Sin la fuente del laboratorio, la vista pinta el estado
+  // honesto de hoy; con ella, los estados que tendrá. Ver arriba.
+  {
+    id: 'misiones-sin-abrir',
+    titulo: 'misiones hoy: qué pasa, por qué y qué se puede hacer, sin tarjetas de mentira',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [],
+    exige: [
+      '.misiones-estado[data-estado="sin-abrir"]',
+      '.misiones-sin-abrir__categoria',
+      '.misiones-estado [data-accion="preparar-estrategia"]',
+    ],
+  },
+  {
+    id: 'misiones-estrategia',
+    titulo: 'misiones sin abrir: el estado honesto y la estrategia comprobada de verdad',
+    ruta: 'contenido/misiones/misiones.html#estrategia',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: rutasDeEstrategia(),
+    interaccion: prepararEstrategia,
+    exige: [
+      '.misiones-estado[data-estado="sin-abrir"]',
+      '.estrategia__heroe',
+      '.estrategia__vista-previa .stat-block',
+      '.estrategia__rotacion',
+      '.estrategia__veredicto .aviso--exito',
+    ],
+  },
+  {
+    id: 'misiones-tablon',
+    titulo: 'tablón de misiones: banner rotativo y la historia (completada, disponible, bloqueada)',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.banner-misiones__diapositiva',
+      '.mision-card[data-estado="disponible"]',
+      '.mision-card[data-estado="bloqueada"]',
+      '.mision-card[data-estado="completada"]',
+      '[data-laboratorio="misiones"]',
+    ],
+  },
+  {
+    id: 'misiones-desafio',
+    titulo: 'tablón de misiones: desafíos en progreso y fallido',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-pestana="categoria-desafio"]').click();
+    },
+    exige: [
+      '.mision-card[data-estado="en_progreso"] [role="progressbar"]',
+      '.mision-card[data-estado="fallida"]',
+    ],
+  },
+  {
+    id: 'misiones-exploracion',
+    titulo: 'tablón de misiones: exploraciones completada y abandonada',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-pestana="categoria-exploracion"]').click();
+    },
+    exige: [
+      '.mision-card[data-estado="completada"]',
+      '.mision-card[data-estado="abandonada"]',
+    ],
+  },
+  {
+    id: 'misiones-detalle',
+    titulo: 'detalle de «El Templo Olvidado» (§7.8.14) con su configurador',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-detalle__cabecera',
+      '.mision-enemigo',
+      '.mision-jefe',
+      '.mision-master',
+      '.mision-recompensas',
+      '#configurar .estrategia__heroe',
+      '[data-accion="iniciar-mision"][aria-disabled="true"]',
+    ],
+  },
+  {
+    id: 'misiones-matricula',
+    titulo: 'iniciar misión: estrategia comprobada y confirmación con lo que queda bloqueado',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await prepararEstrategia(pagina);
+      await pagina.locator('[data-accion="iniciar-mision"][aria-disabled="false"]').click();
+    },
+    exige: ['[role="dialog"] .misiones-confirmacion', '.misiones-confirmacion__advertencia'],
+  },
+  {
+    id: 'misiones-en-curso',
+    titulo: 'misiones en curso: tiempo restante, avance, héroe y cancelar',
+    ruta: 'contenido/misiones/misiones.html#en-curso',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-activa time.cuenta-atras',
+      '.mision-activa [role="progressbar"]',
+      '[data-accion="cancelar-mision"]',
+    ],
+  },
+  {
+    id: 'misiones-historial',
+    titulo: 'historial de misiones: por categoría, terminadas, tiempos y épicas',
+    ruta: 'contenido/misiones/misiones.html#historial',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: ['.mision-historial__tabla', '.mision-historial .mision-master', '.metrica'],
+  },
+  {
+    id: 'misiones-reporte',
+    titulo: 'reporte de una misión completada (§7.8.8)',
+    ruta: 'contenido/misiones/misiones.html?reporte=ejecucion-bosque',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-reporte__resumen',
+      '[data-bloque="combate"] .metrica',
+      '[data-bloque="enemigos"]',
+      '[data-bloque="recompensas"]',
+      '[data-bloque="objetivos"] li[data-cumplido="false"]',
+    ],
+  },
+  {
+    id: 'inventario-banner-misiones',
+    titulo: 'mi inventario con el banner de misiones disponibles (RF-INV-003)',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_banner', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeOchoHeroes()],
+    exige: ['.inventario__banner-misiones .banner-misiones__diapositiva', '.hero-card'],
   },
 ];
 

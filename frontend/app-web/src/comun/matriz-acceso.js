@@ -205,6 +205,14 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
+  // UXC-5 — el módulo de misiones (§7.8). Pide sesión: el tablón muestra «las
+  // misiones aplicables al jugador» (RF-MIS-001) y la estrategia se prepara
+  // para uno de SUS héroes. Sin dirección limpia: el borde no la sirve.
+  misiones: {
+    ruta: 'contenido/misiones/misiones.html',
+    acceso: ACCESO.SESION,
+    armazon: 'jugador',
+  },
   tienda: { ruta: 'cuentas/tienda.html', acceso: ACCESO.SESION, armazon: 'jugador' },
   'publicar-subasta': {
     ruta: 'cuentas/publicar-subasta.html',
