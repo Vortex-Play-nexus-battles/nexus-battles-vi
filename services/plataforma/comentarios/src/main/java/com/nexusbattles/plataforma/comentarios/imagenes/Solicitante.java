@@ -1,12 +1,15 @@
 package com.nexusbattles.plataforma.comentarios.imagenes;
 
+import java.util.Arrays;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import com.nexusbattles.plataforma.comentarios.seguridad.SecurityConfig;
 
 /**
  * Quien pide una imagen, en lo unico que importa para decidir si la ve: si
@@ -29,9 +32,13 @@ public record Solicitante(String uid, boolean modera) {
     /** Sin token, o con uno que no es de usuario. */
     public static final Solicitante ANONIMO = new Solicitante(null, false);
 
-    /** Los mismos roles que pueden entrar a la cola de moderacion (SecurityConfig). */
-    static final Set<String> AUTORIDADES_DE_MODERACION =
-            Set.of("ROLE_MODERADOR", "ROLE_ADMINISTRADOR", "ROLE_SUPER_ADMINISTRADOR");
+    /**
+     * Los mismos roles que pueden entrar a la cola de moderacion: se leen de
+     * {@link SecurityConfig} y no se copian, para que no se separen.
+     */
+    static final Set<String> AUTORIDADES_DE_MODERACION = Arrays.stream(SecurityConfig.ROLES_DE_MODERACION)
+            .map(rol -> "ROLE_" + rol)
+            .collect(Collectors.toUnmodifiableSet());
 
     /** Lee la autenticacion que dejo la cadena de seguridad (nula si no hubo token). */
     public static Solicitante de(Authentication autenticacion) {

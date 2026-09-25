@@ -15,6 +15,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
@@ -83,6 +84,7 @@ public class ServicioDePublicacionDeComentarios {
     private final CatalogoDeProductos catalogo;
     private final ServicioDeCalificaciones calificaciones;
     private final ServicioDeImagenes imagenes;
+    private final TransactionOperations transaccion;
     private final Clock reloj;
 
     public ServicioDePublicacionDeComentarios(
@@ -92,6 +94,7 @@ public class ServicioDePublicacionDeComentarios {
             CatalogoDeProductos catalogo,
             ServicioDeCalificaciones calificaciones,
             ServicioDeImagenes imagenes,
+            TransactionOperations transaccion,
             Clock reloj) {
         this.repositorio = repositorio;
         this.filtro = filtro;
@@ -99,11 +102,19 @@ public class ServicioDePublicacionDeComentarios {
         this.catalogo = catalogo;
         this.calificaciones = calificaciones;
         this.imagenes = imagenes;
+        this.transaccion = transaccion;
         this.reloj = reloj;
     }
 
     /**
      * Publica un comentario sobre un producto.
+     *
+     * <p>Las preguntas a otros servicios (catalogo, sanciones, lista negra) se
+     * hacen ANTES de abrir la transaccion, y solo las escrituras van dentro. Al
+     * reves, cada publicacion retendria una conexion del pool mientras espera a
+     * otro host —hasta varios segundos con los tiempos de los clientes—, y
+     * bastarian unas cuantas publicaciones con una dependencia lenta para dejar
+     * sin conexiones al resto del servicio, lecturas del hilo incluidas.
      *
      * @return el comentario tal como quedo guardado —en revision si el filtro
      *     lo senalo—, las estrellas de su autor sobre el producto y si las que
@@ -111,7 +122,6 @@ public class ServicioDePublicacionDeComentarios {
      * @throws HiloDeComentarios.PublicacionRechazada si el autor esta silenciado
      * @throws HiloDeComentarios.ImagenesNoValidas    si alguna imagen no se puede adjuntar
      */
-    @Transactional
     public Publicado publicar(
             String productoId,
             String autorId,
@@ -129,13 +139,15 @@ public class ServicioDePublicacionDeComentarios {
         Comentario comentario = HiloDeComentarios.publicar(
                 productoId, solicitud, sanciones.estadoDe(autorId), () -> filtro.verificar(texto));
 
-        repositorio.saveAndFlush(RegistroDeComentario.desde(comentario));
-        imagenes.asociar(solicitud.imagenes(), autorId, comentario.id());
+        return transaccion.execute(estado -> {
+            repositorio.saveAndFlush(RegistroDeComentario.desde(comentario));
+            imagenes.asociar(solicitud.imagenes(), autorId, comentario.id());
 
-        boolean descartada = estrellas != null
-                && !calificaciones.registrarDesdeComentario(productoId, autorId, estrellas);
-        Integer estrellasDelAutor = calificaciones.estrellasDe(productoId, Set.of(autorId)).get(autorId);
-        return new Publicado(comentario, estrellasDelAutor, descartada);
+            boolean descartada = estrellas != null
+                    && !calificaciones.registrarDesdeComentario(productoId, autorId, estrellas);
+            Integer estrellasDelAutor = calificaciones.estrellasDe(productoId, Set.of(autorId)).get(autorId);
+            return new Publicado(comentario, estrellasDelAutor, descartada);
+        });
     }
 
     /**

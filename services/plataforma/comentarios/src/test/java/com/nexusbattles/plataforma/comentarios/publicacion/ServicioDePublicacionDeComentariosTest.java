@@ -42,6 +42,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
@@ -90,8 +91,11 @@ class ServicioDePublicacionDeComentariosTest {
 
     @BeforeEach
     void crearServicio() {
+        // Sin transaccion real: aqui se prueba el orden y lo que se guarda; que
+        // las escrituras vayan juntas y las llamadas remotas fuera lo cubre la IT.
         servicio = new ServicioDePublicacionDeComentarios(repositorio, filtro, sanciones, catalogo,
-                calificaciones, imagenes, Clock.fixed(AHORA, ZoneOffset.UTC));
+                calificaciones, imagenes, TransactionOperations.withoutTransaction(),
+                Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
     @Nested

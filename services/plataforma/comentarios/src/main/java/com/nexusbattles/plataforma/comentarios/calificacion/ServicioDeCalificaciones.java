@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Calificacion;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
@@ -53,21 +54,29 @@ public class ServicioDeCalificaciones {
     private final RepositorioDeCalificaciones repositorio;
     private final CatalogoDeProductos catalogo;
     private final ConsultaDeSanciones sanciones;
+    private final TransactionOperations transaccion;
     private final Clock reloj;
 
     public ServicioDeCalificaciones(
             RepositorioDeCalificaciones repositorio,
             CatalogoDeProductos catalogo,
             ConsultaDeSanciones sanciones,
+            TransactionOperations transaccion,
             Clock reloj) {
         this.repositorio = repositorio;
         this.catalogo = catalogo;
         this.sanciones = sanciones;
+        this.transaccion = transaccion;
         this.reloj = reloj;
     }
 
     /**
      * {@code POST /products/{productId}/rating}.
+     *
+     * <p>El catalogo y las sanciones se preguntan antes de abrir la
+     * transaccion, que solo envuelve la insercion y el resumen: esperar a otro
+     * host con una conexion del pool tomada es la forma de que una dependencia
+     * lenta deje sin base al servicio entero.
      *
      * @param autorId el {@code uid} del token, nunca un campo del cuerpo
      * @return la calificacion registrada y el resumen ya actualizado
@@ -76,7 +85,6 @@ public class ServicioDeCalificaciones {
      * @throws HiloDeComentarios.PublicacionRechazada    autor sancionado (403)
      * @throws YaCalificado                              ya habia calificado (409)
      */
-    @Transactional
     public Calificado calificar(String productoId, String autorId, Integer estrellas) {
         int valor = Calificacion.exigirEstrellas(estrellas);
         catalogo.exigirExistente(productoId);
@@ -87,12 +95,15 @@ public class ServicioDeCalificaciones {
         }
         Calificacion nueva = new Calificacion(
                 UUID.randomUUID().toString(), productoId, autorId, valor, Instant.now(reloj));
-        if (!insertar(nueva)) {
-            throw new YaCalificado(productoId);
-        }
+        Calificado calificado = transaccion.execute(estado -> {
+            if (!insertar(nueva)) {
+                throw new YaCalificado(productoId);
+            }
+            return new Calificado(nueva, resumen(productoId));
+        });
         BITACORA.info("Calificacion registrada: producto={} autor={} estrellas={}",
                 productoId, autorId, valor);
-        return new Calificado(nueva, resumen(productoId));
+        return calificado;
     }
 
     /**

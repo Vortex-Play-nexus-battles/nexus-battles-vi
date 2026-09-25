@@ -42,7 +42,7 @@ public class SecurityConfig {
      * hace que reportar sirva para algo. Si quien marca pudiera tambien
      * decidir, el reporte no seria una peticion de revision sino una orden.
      */
-    static final String[] ROLES_DE_MODERACION = {"MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR"};
+    public static final String[] ROLES_DE_MODERACION = {"MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR"};
 
     @Bean
     public ConversorRolesJwt conversorRolesJwt() {

@@ -30,6 +30,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Calificacion;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
@@ -67,7 +68,8 @@ class ServicioDeCalificacionesTest {
 
     @BeforeEach
     void crear() {
-        servicio = new ServicioDeCalificaciones(repositorio, catalogo, sanciones, Clock.fixed(AHORA, ZoneOffset.UTC));
+        servicio = new ServicioDeCalificaciones(repositorio, catalogo, sanciones,
+                TransactionOperations.withoutTransaction(), Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
     private static RepositorioDeCalificaciones.ConteoPorEstrellas conteo(int estrellas, long cantidad) {
