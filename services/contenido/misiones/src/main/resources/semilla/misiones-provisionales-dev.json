@@ -1,0 +1,50 @@
+{
+  "version": "1.0.0",
+  "notas": [
+    "SEMILLA PROVISIONAL DE DEV. No es contenido del juego ni del documento: es una mision tecnica para recorrer el ciclo completo (matricula, simulacion, experiencia, creditos y reporte) en minutos en el banco E2E y en desarrollo local.",
+    "Solo se carga con MISIONES_SEMILLA_PROVISIONAL=true. En produccion la variable no existe y esta mision no aparece.",
+    "Su nombre empieza por «[PROVISIONAL DE DEV]» y su origen es PROVISIONAL_DEV, que el contrato publica: la interfaz nunca la confunde con una mision de verdad."
+  ],
+  "tabla20": [],
+  "misiones": [
+    {
+      "id": "dev-prueba-de-humo",
+      "origen": "PROVISIONAL_DEV",
+      "nombre": "[PROVISIONAL DE DEV] Prueba de humo",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Misión técnica de desarrollo para probar el ciclo completo. No es contenido del juego.",
+      "imagen": null,
+      "dificultad": "FACIL",
+      "duracionHoras": 1,
+      "nivelRecomendado": null,
+      "requisitosPrevios": [],
+      "narrativa": "Misión técnica de desarrollo: un enemigo y un jefe de un punto de vida para comprobar la matrícula, la simulación, la experiencia y las recompensas. No forma parte de la historia del juego.",
+      "escenario": null,
+      "objetivos": [
+        { "texto": "Derrotar al jefe de prueba.", "principal": true, "tipo": "DERROTAR_JEFE", "valor": null, "botin": null }
+      ],
+      "enemigos": [
+        { "nombre": "Enemigo de prueba", "cantidad": 1, "descripcion": "Enemigo técnico de desarrollo.", "prototipo": "Guerrero Armas", "vida": 1, "defensa": 0, "rotaciones": [] }
+      ],
+      "jefe": {
+        "nombre": "Jefe de prueba",
+        "prototipo": "Guerrero Tanque",
+        "vida": 1,
+        "defensa": 0,
+        "descripcion": "Jefe técnico de desarrollo.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 5,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": { "creditos": 0, "otras": [] }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
+}
