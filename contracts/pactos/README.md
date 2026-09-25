@@ -11,11 +11,15 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 |---|---|---|---|
 | `ms-subastas-ms-finanzas.json` | ms-subastas (HU-SUB-004) | ms-finanzas | `CreditosPactoTest` |
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
+| `ms-ecommerce-productos.json` | ms-ecommerce (compra, B5) | productos | `contratos/ProductosPactoTest` |
+| `ms-ecommerce-inventario.json` | ms-ecommerce (compra, B5) | inventario | `contratos/InventarioPactoTest` |
 
 ## Regenerarlos
 
 ```bash
 ./gradlew :services:cuentas:ms-subastas:test --tests '*PactoTest'
+# ms-ecommerce es Maven: desde services/cuentas/ms-ecommerce
+./mvnw -B test -Dtest='*PactoTest'
 ```
 
 Si un pacto cambia en un commit que no tocaba el cliente, eso **es** la señal:
@@ -58,6 +62,34 @@ Los dos pactos se verifican:
 
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.
+
+### Pactos de la compra de ms-ecommerce (B5): verificación pendiente de B4
+
+La compra reserva tiraje (`POST /api/v1/productos/{id}/adquisiciones`,
+productos 1.4.0) y entrega lo comprado (`POST /api/v1/inventario/entregas`,
+inventario 1.5.0). Las dos operaciones las implementa B4 en su propia rama, así
+que **todavía no hay verificación de proveedor** y `pactos-verificados.py` las
+lista como BRECHA (no falla). Cuando B4 esté fusionado, el integrador añade en
+cada servicio su clase de verificación con estos estados:
+
+**productos** (proveedor `productos`)
+- el producto existe y le quedan unidades
+- el producto existe y esta agotado
+- el producto existe y esta suspendido
+- el producto no existe
+
+**inventario** (proveedor `inventario`)
+- los productos de la entrega existen y no estan suspendidos
+- la entrega con esa clave ya se hizo con el mismo cuerpo
+- un producto de la entrega esta suspendido
+- un producto de la entrega no existe en el catalogo
+
+El proveedor se llama `inventario` y no `ms-inventario` a propósito: la
+verificación de inventario que ya existe carga todos los pactos de
+`ms-inventario` y se pondría roja con cuatro estados que no sabe montar. Las
+claves de idempotencia se fijan por forma (`orden-{uuid}` y
+`orden-{uuid}-l{linea}-u{unidad}`); el cuerpo de la respuesta de inventario no
+se pide porque la compra solo lee el código.
 
 La verificación de inventario usa los casos de uso de verdad a propósito, y eso
 destapó dos defectos **del pacto**, no del servicio:
