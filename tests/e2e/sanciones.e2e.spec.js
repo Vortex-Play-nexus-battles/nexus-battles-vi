@@ -76,7 +76,9 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   let advertencia;
   let suspension;
   let apelacion;
-  const producto = `producto-sanciones-${Date.now()}`;
+  // B3 — comentar exige un producto del catalogo: lo da de alta el
+  // administrador en beforeAll (igual que la tienda), no se inventa.
+  let producto;
 
   async function activa() {
     const r = await api.get(`/api/v1/sanciones/usuarios/${jugadora.claims.uid}/activa`);
@@ -138,6 +140,23 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     expect(moderadora.claims.rol, 'sembrar.sh deja a la moderadora con su rol').toBe('MODERADOR');
     expect(admin.claims.rol, 'sembrar.sh deja al administrador con su rol').toBe('ADMINISTRADOR');
     expect(jugadora.claims.rol).toBe('JUGADOR');
+
+    const alta = await api.post('/api/v1/productos', {
+      headers: conToken(admin.token),
+      data: {
+        nombre: `Producto de sanciones E2E ${Date.now()}`,
+        imagen: '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg',
+        descripcion: 'Producto de prueba del E2E de sanciones: sobre el se comenta.',
+        tipo: 'ARMA',
+        tiraje: -1,
+        premium: false,
+        precioCreditos: 10,
+        poderDeAtaque: 5,
+        tasaDeCaida: 10,
+      },
+    });
+    expect(alta.status(), await alta.text()).toBe(201);
+    producto = (await alta.json()).id;
   });
 
   test.afterAll(async () => {

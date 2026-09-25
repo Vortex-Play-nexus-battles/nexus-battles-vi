@@ -24,13 +24,18 @@
  *   8. el autor se entera     -> el aviso esta en su bandeja de notificaciones
  *   9. otra decision igual    -> 409 TRANSICION_INVALIDA (otro se adelanto)
  *  10. la moderadora restaura -> PUBLICADO y VUELVE a verse en el hilo
+ *  11. (B3, 7.3.3) la moderadora lo MARCA -> sale en la lista de seguimiento
+ *      (cola con marcado=true) aunque este publicado; DESMARCAR lo saca
+ *  12. (B3, 7.3.3) la moderadora lo EDITA -> el hilo ensena el texto nuevo,
+ *      marcado como editado, y el asiento guarda el anterior
  *
  * El paso 10 es el que cierra el defecto: sin el, todo lo anterior seria un
  * camino de ida a otro agujero.
  *
  * La moderadora y el administrador los deja sembrar.sh con su rol en la base
  * de identidad (crear un MODERADOR exige ser administrador, y ahi se rompe el
- * huevo-gallina insertando directo).
+ * huevo-gallina insertando directo). Desde B3 el producto tiene que existir en
+ * el catalogo: lo da de alta el administrador en cada corrida.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -39,6 +44,7 @@ const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
+const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 
 function cuerpoDelToken(jwt) {
@@ -62,6 +68,26 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/** B3 — solo se comenta un producto del catalogo: cada corrida da de alta el suyo. */
+async function productoNuevo(api, admin) {
+  const r = await api.post('/api/v1/productos', {
+    headers: conToken(admin.token),
+    data: {
+      nombre: `Producto de moderacion E2E ${Date.now()}`,
+      imagen: '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg',
+      descripcion: 'Producto de prueba del E2E de moderacion de comentarios.',
+      tipo: 'ARMA',
+      tiraje: -1,
+      premium: false,
+      precioCreditos: 10,
+      poderDeAtaque: 5,
+      tasaDeCaida: 10,
+    },
+  });
+  expect(r.status(), await r.text()).toBe(201);
+  return (await r.json()).id;
+}
+
 test.describe('Moderacion de comentarios: el comentario en revision tiene salida (RF-COM-005/006/008)', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -71,7 +97,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
   let invitado;
   let moderadora;
 
-  const producto = `producto-moderacion-${Date.now()}`;
+  let producto;
   const hiloDe = () => `/api/v1/products/${producto}/comments`;
   const COLA = '/api/v1/comentarios/moderacion';
 
@@ -103,6 +129,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     moderadora = await sesionDe(api, MODERADORA);
     expect(moderadora.claims.rol, 'sembrar.sh deja a la moderadora con su rol').toBe('MODERADOR');
     expect(invitado.claims.rol).toBe('JUGADOR');
+    producto = await productoNuevo(api, await sesionDe(api, ADMIN));
   });
 
   test.afterAll(async () => {
@@ -245,5 +272,67 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     const d = await detalle();
     expect(d.historial, 'las dos decisiones, en orden').toHaveLength(2);
     expect(d.historial.map((a) => a.accion)).toEqual(['OCULTAR', 'RESTAURAR']);
+  });
+
+  test('11: marcarlo lo pone en seguimiento aunque este publicado; desmarcarlo lo saca (7.3.3)', async () => {
+    const marcado = await decidir(moderadora, 'MARCAR', 'Seguimiento especial de este autor');
+    expect(marcado.status(), await marcado.text()).toBe(200);
+    const resuelto = await marcado.json();
+    expect(resuelto.comentario.estado, 'marcar no cambia el estado').toBe('PUBLICADO');
+    expect(resuelto.comentario.marcado).toBe(true);
+    expect(resuelto.autorNotificado, 'es una nota interna: el autor no se entera').toBe(false);
+
+    const seguimiento = await api.get(`${COLA}?marcado=true&productoId=${producto}`, {
+      headers: conToken(moderadora.token),
+    });
+    expect(seguimiento.status()).toBe(200);
+    expect((await seguimiento.json()).entradas.map((e) => e.comentario.id)).toContain(comentario.id);
+
+    const h = await hilo();
+    expect(
+      h.comentarios.find((c) => c.id === comentario.id).marcado,
+      'la marca no se le ensena a los jugadores',
+    ).toBeUndefined();
+
+    const otraVez = await decidir(moderadora, 'MARCAR', 'Otra vez');
+    expect(otraVez.status(), 'ya estaba marcado').toBe(409);
+
+    const desmarcado = await decidir(moderadora, 'DESMARCAR', 'Ya no hace falta vigilarlo');
+    expect(desmarcado.status()).toBe(200);
+    const despues = await api.get(`${COLA}?marcado=true&productoId=${producto}`, {
+      headers: conToken(moderadora.token),
+    });
+    expect((await despues.json()).entradas.map((e) => e.comentario.id)).not.toContain(comentario.id);
+  });
+
+  test('12: editarlo cambia el texto visible, lo marca como editado y guarda el anterior (7.3.3)', async () => {
+    const sinTexto = await decidir(moderadora, 'EDITAR', 'Falta el texto nuevo');
+    expect(sinTexto.status(), 'EDITAR exige textoNuevo').toBe(400);
+
+    const editado = await api.post(`${COLA}/${comentario.id}/decision`, {
+      headers: conToken(moderadora.token),
+      data: {
+        accion: 'EDITAR',
+        motivo: 'Se quita una afirmacion no verificable',
+        textoNuevo: 'Esta espada no me convencio',
+      },
+    });
+    expect(editado.status(), await editado.text()).toBe(200);
+    const resuelto = await editado.json();
+    expect(resuelto.asiento.textoAnterior).toBe('Esta espada esta claramente rota, es injugable');
+    expect(resuelto.asiento.textoNuevo).toBe('Esta espada no me convencio');
+
+    const enElHilo = (await hilo()).comentarios.find((c) => c.id === comentario.id);
+    expect(enElHilo.texto).toBe('Esta espada no me convencio');
+    expect(enElHilo.editado, 'quien lo lee sabe que moderacion lo cambio').toBe(true);
+
+    const d = await detalle();
+    expect(d.historial.map((a) => a.accion)).toEqual([
+      'OCULTAR',
+      'RESTAURAR',
+      'MARCAR',
+      'DESMARCAR',
+      'EDITAR',
+    ]);
   });
 });
