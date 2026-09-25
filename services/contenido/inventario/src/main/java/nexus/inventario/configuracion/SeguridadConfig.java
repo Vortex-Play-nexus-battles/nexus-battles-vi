@@ -57,7 +57,8 @@ public class SeguridadConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             ConversorRolesJwt conversor,
-            @Value("${integraciones.subastas.client-id}") String subastasClientId) throws Exception {
+            @Value("${integraciones.subastas.client-id}") String subastasClientId,
+            @Value("${integraciones.misiones.client-id:misiones}") String misionesClientId) throws Exception {
         CadenaDeSeguridad.aplicarBase(http, conversor);
         // La cadena base deja el 401 de Spring (cuerpo vacio). El contrato de
         // inventario promete el problem detail "Identidad requerida" tambien
@@ -71,8 +72,20 @@ public class SeguridadConfig {
             }
             return new AuthorizationDecision(false);
         };
+        // 1.6.0 (B9): el heroe en mision lo bloquea y lo libera SOLO el servicio
+        // de misiones, con su credencial de servicio (rol SERVICIO y su azp).
+        AuthorizationManager<RequestAuthorizationContext> soloMisiones = (authentication, context) ->
+                new AuthorizationDecision(esServicioConAzp(authentication.get(), misionesClientId));
+        // La consulta interna por id la usan subastas (HU-INV-010) y misiones.
+        AuthorizationManager<RequestAuthorizationContext> subastasOMisiones = (authentication, context) ->
+                new AuthorizationDecision(soloSubastas.authorize(authentication, context).isGranted()
+                        || esServicioConAzp(authentication.get(), misionesClientId));
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/inventario/elementos/*/bloqueo-mision")
+                .access(soloMisiones)
+                .requestMatchers(HttpMethod.POST, "/api/v1/inventario/elementos/*/bloqueo-mision/*/liberacion")
+                .access(soloMisiones)
                 // Subastas (HU-INV-010): por azp, antes que el comodin de elementos.
                 .requestMatchers(HttpMethod.PUT, "/api/v1/inventario/elementos/*/bloqueo-subasta")
                 .access(soloSubastas)
@@ -87,11 +100,22 @@ public class SeguridadConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/busqueda")
                 .hasAnyRole(ROLES_DEL_INVENTARIO)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/*")
-                .access(soloSubastas)
+                .access(subastasOMisiones)
                 // Todo lo demas del inventario: jugadores y servicios autenticados.
                 .requestMatchers("/api/v1/inventario/**").hasAnyRole(ROLES_DEL_INVENTARIO)
                 .anyRequest().authenticated());
         return http.build();
+    }
+
+    /** Un token de servicio (rol SERVICIO) cuyo {@code azp} es {@code clientId}. */
+    static boolean esServicioConAzp(org.springframework.security.core.Authentication autenticacion,
+                                    String clientId) {
+        if (!(autenticacion instanceof JwtAuthenticationToken jwt)) {
+            return false;
+        }
+        boolean servicio = jwt.getAuthorities().stream()
+                .anyMatch(autoridad -> "ROLE_SERVICIO".equals(autoridad.getAuthority()));
+        return servicio && clientId.equals(jwt.getToken().getClaimAsString("azp"));
     }
 
     static void responderIdentidadRequerida(

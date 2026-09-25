@@ -55,6 +55,22 @@ class InventarioDocumentoTest {
     }
 
     @Test
+    @DisplayName("1.6.0 (B9): el documento conserva la mision del heroe y su progresion")
+    void conservaMisionYProgresion() {
+        ElementoInventario heroe = new ElementoInventario(
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Vorn", null, null, 3, 12.5, null);
+        Inventario enMision = new Inventario("inventario-1", "jugador-A", List.of(heroe))
+                .bloquearEnMision("heroe-1", "ejecucion-1");
+
+        Inventario restaurado = InventarioDocumento.de(enMision).aDominio();
+
+        assertEquals(enMision, restaurado);
+        assertEquals("ejecucion-1", restaurado.elemento("heroe-1").ejecucionMisionId());
+        assertEquals(3, restaurado.elemento("heroe-1").nivel());
+        assertFalse(restaurado.elemento("heroe-1").disponible());
+    }
+
+    @Test
     @DisplayName("un documento anterior sin bloqueo mantiene el producto disponible")
     void documentoAnteriorSinBloqueo() {
         ElementoDocumento anterior = new ElementoDocumento(

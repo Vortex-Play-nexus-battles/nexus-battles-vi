@@ -90,6 +90,25 @@ public record Inventario(
         return new Inventario(id, propietarioId, actualizados, equipamientos);
     }
 
+    /** 1.6.0 (B9): el heroe sale a la mision {@code ejecucionId}. */
+    public Inventario bloquearEnMision(String heroeId, String ejecucionId) {
+        ElementoInventario heroe = elemento(heroeId);
+        return reemplazarElemento(heroe.bloquearEnMision(ejecucionId));
+    }
+
+    /** 1.6.0 (B9): el heroe vuelve de la mision {@code ejecucionId} con su nueva progresion. */
+    public Inventario liberarDeMision(String heroeId, String ejecucionId, int nivel, double experiencia) {
+        ElementoInventario heroe = elemento(heroeId);
+        return reemplazarElemento(heroe.liberarDeMision(ejecucionId, nivel, experiencia));
+    }
+
+    private Inventario reemplazarElemento(ElementoInventario actualizado) {
+        List<ElementoInventario> actualizados = elementos.stream()
+                .map(actual -> actual.id().equals(actualizado.id()) ? actualizado : actual)
+                .toList();
+        return new Inventario(id, propietarioId, actualizados, equipamientos);
+    }
+
     public boolean estaEnUso(String elementoId) {
         return equipamientos.stream().anyMatch(equipamiento -> equipamiento.contiene(elementoId));
     }
@@ -111,6 +130,7 @@ public record Inventario(
 
     public Inventario equipar(String heroeId, String elementoId) {
         validarHeroe(heroeId);
+        exigirHeroeEnCasa(heroeId);
         ElementoInventario elemento = elemento(elementoId);
         elemento.exigirDisponible();
         boolean equipadoEnOtroHeroe = equipamientos.stream()
@@ -124,7 +144,18 @@ public record Inventario(
 
     public Inventario desequipar(String heroeId, String elementoId) {
         validarHeroe(heroeId);
+        exigirHeroeEnCasa(heroeId);
         return reemplazarEquipamiento(equipamiento(heroeId).desequipar(elementoId));
+    }
+
+    /**
+     * 1.6.0 (B9), seccion 7.8.10: un heroe en mision «no puede ser modificado
+     * su equipamiento»; conserva el equipo con el que salio hasta que vuelva.
+     */
+    private void exigirHeroeEnCasa(String heroeId) {
+        if (elemento(heroeId).enMision()) {
+            throw new HeroeEnMisionException("Heroe en mision: conserva su equipamiento hasta que vuelva.");
+        }
     }
 
     private void validarHeroe(String heroeId) {

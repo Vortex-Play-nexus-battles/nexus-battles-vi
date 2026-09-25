@@ -57,13 +57,21 @@ record InventarioDocumento(
     }
 }
 
+/**
+ * 1.6.0 (B9): {@code nivel}, {@code experiencia} y {@code ejecucionMisionId}
+ * del heroe. Aditivo: los documentos anteriores no los traen y se leen como
+ * nulos (nivel 1, sin experiencia, sin mision).
+ */
 record ElementoDocumento(
         String id,
         @TextIndexed String productoId,
         @TextIndexed TipoElementoInventario tipo,
         @TextIndexed(weight = 2) String nombrePropio,
         @TextIndexed ParteArmadura parteArmadura,
-        String subastaId) {
+        String subastaId,
+        Integer nivel,
+        Double experiencia,
+        String ejecucionMisionId) {
 
     @PersistenceCreator
     ElementoDocumento {
@@ -78,15 +86,26 @@ record ElementoDocumento(
         this(id, productoId, tipo, nombrePropio, parteArmadura, null);
     }
 
+    ElementoDocumento(
+            String id,
+            String productoId,
+            TipoElementoInventario tipo,
+            String nombrePropio,
+            ParteArmadura parteArmadura,
+            String subastaId) {
+        this(id, productoId, tipo, nombrePropio, parteArmadura, subastaId, null, null, null);
+    }
+
     static ElementoDocumento de(ElementoInventario elemento) {
         return new ElementoDocumento(
                 elemento.id(), elemento.productoId(), elemento.tipo(),
-                elemento.nombrePropio(), elemento.parteArmadura(), elemento.subastaId());
+                elemento.nombrePropio(), elemento.parteArmadura(), elemento.subastaId(),
+                elemento.nivel(), elemento.experiencia(), elemento.ejecucionMisionId());
     }
 
     ElementoInventario aDominio() {
         return new ElementoInventario(
-                id, productoId, tipo, nombrePropio, parteArmadura, subastaId);
+                id, productoId, tipo, nombrePropio, parteArmadura, subastaId, nivel, experiencia, ejecucionMisionId);
     }
 }
 
