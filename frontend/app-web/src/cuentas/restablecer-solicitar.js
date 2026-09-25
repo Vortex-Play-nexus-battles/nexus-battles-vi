@@ -7,6 +7,7 @@
 // del formulario es solo una capa delgada que la llama y actualiza el DOM.
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const URL_SOLICITAR = '/api/v1/auth/restablecer/solicitar';
 
@@ -55,8 +56,7 @@ export async function solicitarRestablecimiento(
   const { body } = await cuerpoDe(respuesta);
 
   if (!respuesta.ok) {
-    const mensajeServidor = typeof body === 'string' ? body : body?.detail;
-    throw new Error(mensajeServidor || 'No se pudo procesar la solicitud.');
+    throw new Error(textoDelServidor(body, respuesta.status, 'No se pudo procesar la solicitud.'));
   }
 
   return typeof body === 'string'
@@ -105,7 +105,7 @@ form?.addEventListener('submit', async (evento) => {
     setEstado(mensaje, 'exito');
     form.reset();
   } catch (error) {
-    setEstado(error.message, 'error');
+    setEstado(textoDeError(error, 'No se pudo procesar la solicitud.'), 'error');
   } finally {
     botonEnviar.disabled = false;
   }

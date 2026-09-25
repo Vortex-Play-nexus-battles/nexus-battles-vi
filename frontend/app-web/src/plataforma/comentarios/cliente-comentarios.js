@@ -24,6 +24,11 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import {
+  respaldoPorEstado,
+  textoDelServidor,
+  tituloDelServidor,
+} from '../../comun/ui/texto-de-fallo.js';
 
 /** Motivos de rechazo que enumera el contrato en `ProblemDetail.motivo`. */
 export const MOTIVO = Object.freeze({
@@ -70,10 +75,12 @@ export class ErrorDeApi extends Error {
    * @param {number} estado codigo HTTP real de la respuesta
    */
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operación.');
+    // UXC-9 — el texto del servidor solo si está escrito para quien juega:
+    // nunca la página de un proxy, un «Error 502» ni una excepción.
+    super(textoDelServidor(problema, estado, respaldoPorEstado(estado)));
     this.name = 'ErrorDeApi';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'El servicio no pudo completar la operación';
+    this.titulo = tituloDelServidor(problema, 'No se pudo completar');
     this.detalle = this.message;
     this.estado = problema?.status ?? estado;
     /** Solo en 403 y 422, segun el contrato. */

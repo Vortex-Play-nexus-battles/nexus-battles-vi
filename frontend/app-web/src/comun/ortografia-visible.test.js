@@ -196,6 +196,26 @@ const PARES = Object.freeze({
   validacion: 'validación',
   verificacion: 'verificación',
   version: 'versión',
+  // UXC-9 — las que se escaparon hasta aquí (torneos, subastas, perfiles).
+  automatica: 'automática',
+  automaticas: 'automáticas',
+  automaticamente: 'automáticamente',
+  cancelacion: 'cancelación',
+  caida: 'caída',
+  categoria: 'categoría',
+  categorias: 'categorías',
+  energia: 'energía',
+  estadistica: 'estadística',
+  estadisticas: 'estadísticas',
+  garantia: 'garantía',
+  pestana: 'pestaña',
+  pestanas: 'pestañas',
+  proxima: 'próxima',
+  proximas: 'próximas',
+  proximos: 'próximos',
+  ultima: 'última',
+  ultimas: 'últimas',
+  ultimos: 'últimos',
 });
 
 const PATRON = new RegExp(
@@ -292,12 +312,21 @@ function sinDiagnostico(js) {
   return DIAGNOSTICO.reduce((texto, patron) => texto.replace(patron, ' '), js);
 }
 
-/** Las cadenas de un trozo de JavaScript, sin sus comentarios. */
+/**
+ * Las cadenas de un trozo de JavaScript, sin sus comentarios.
+ *
+ * UXC-9 — antes se buscaban solo las de seis caracteres o más, y eso
+ * desemparejaba las comillas: en `nodo('h3', undefined, 'Arbol del torneo')`
+ * la cadena corta `'h3'` no se consumía, la comilla de cierre de `'h3'` se
+ * tomaba por apertura y lo que salía era `, undefined, `. «Arbol del torneo»
+ * y «Intentalo de nuevo» se pintaron sin tilde con este guardián en verde.
+ * Ahora se consumen todas (con sus escapes) y se filtran después.
+ */
 function cadenasDe(js) {
   const limpio = js.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ');
-  return [...limpio.matchAll(/'([^'\n]{6,})'|"([^"\n]{6,})"|`([^`\n]{6,})`/g)].flatMap((m) =>
-    m.slice(1).filter(Boolean),
-  );
+  return [...limpio.matchAll(/'((?:[^'\\\n]|\\.)*)'|"((?:[^"\\\n]|\\.)*)"|`((?:[^`\\]|\\.)*)`/g)]
+    .flatMap((m) => m.slice(1).filter((c) => c !== undefined))
+    .filter((c) => c.length >= 6);
 }
 
 /** Cadenas del módulo, sin comentarios. */
@@ -331,6 +360,12 @@ describe('el texto que se ve está escrito en castellano', () => {
         'Revisa tu conexion e intentalo de nuevo.',
       ]),
     ).toHaveLength(2);
+  });
+
+  test('una cadena corta no desempareja las comillas de la frase que sigue', () => {
+    expect(
+      hallazgos('x', cadenasDe("arbol.appendChild(nodo('h3', undefined, 'Arbol del torneo'));")),
+    ).toHaveLength(1);
   });
 
   test('no confunde una lista de clases del kit con una frase', () => {

@@ -12,6 +12,7 @@
 import { destinoDeCuentaNueva, destinoTrasEntrar } from './alta.js';
 import { rutaDeApi } from './base-api.js';
 import { MOTIVOS, guardarSesion, urlDeLogin } from './sesion.js';
+import { textoDelServidor } from './ui/texto-de-fallo.js';
 
 /**
  * Correo que deja el registro cuando no pudo entrar solo, para que el login
@@ -46,10 +47,9 @@ export async function cuerpoDe(respuesta) {
  * @returns {string|undefined}
  */
 export function mensajeDelServidor(body) {
-  if (typeof body === 'string') {
-    return body || undefined;
-  }
-  return body?.detail ?? body?.mensaje ?? undefined;
+  // UXC-9 — una página de proxy («502 Bad Gateway · nginx») llegaba aquí como
+  // texto plano y el login la pintaba entera. Solo pasa lo que se lee.
+  return textoDelServidor(body, undefined, '') || undefined;
 }
 
 /**

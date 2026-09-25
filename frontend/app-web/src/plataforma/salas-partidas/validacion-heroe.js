@@ -25,6 +25,7 @@ import {
 } from '../../comun/degradacion/aviso-degradacion.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 /** Resultados del esquema `VerificacionHeroe` del contrato OpenAPI. */
 export const RESULTADOS = {
@@ -457,7 +458,7 @@ function avisoDeError(doc, error) {
   const dentro = doc.createElement('div');
   dentro.append(
     texto(doc, 'p', 'aviso__titulo', error?.titulo ?? 'No se pudo verificar tu héroe'),
-    texto(doc, 'p', '', error?.detalle ?? error?.message ?? 'Intentalo de nuevo en un momento.'),
+    texto(doc, 'p', '', textoDeError(error, 'Inténtalo de nuevo en un momento.')),
   );
   aviso.append(dentro);
   return aviso;

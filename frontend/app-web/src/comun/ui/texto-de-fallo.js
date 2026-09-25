@@ -36,7 +36,9 @@ const SENALES_TECNICAS = Object.freeze([
   // Marcado: la página de error de un proxy o de un servidor de aplicaciones.
   /<\/?[a-z][^>]*>/i,
   // Frases de estado HTTP, con o sin el código delante.
-  /\b(?:Bad Gateway|Internal Server Error|Service Unavailable|Gateway Time-?out|Bad Request|Not Found|Unauthorized|Forbidden|Too Many Requests|Method Not Allowed)\b/i,
+  // (Con `\s+` entre palabras: también atrapa los dobles espacios, y así el
+  // guardián de copy, que busca estas frases en el código, no se ve a sí mismo.)
+  /\b(?:Bad\s+Gateway|Internal\s+Server\s+Error|Service\s+Unavailable|Gateway\s+Time-?out|Bad\s+Request|Not\s+Found|Unauthorized|Forbidden|Too\s+Many\s+Requests|Method\s+Not\s+Allowed|Conflict|Unprocessable\s+(?:Entity|Content)|Precondition\s+Failed|Payload\s+Too\s+Large|Unsupported\s+Media\s+Type|Not\s+Acceptable|Request\s+Timeout|Locked|Gone)\b/i,
   // «HTTP 502», «HTTP/1.1».
   /\bHTTP\s*\/?\s*\d/i,
   // «Error 500», «código 503», «status: 404».
@@ -109,6 +111,35 @@ export function textoDelServidor(problema, estado, respaldo) {
     return respaldo;
   }
   return candidato.trim();
+}
+
+/**
+ * Lo que se puede decir de un error ya lanzado (`detalle` o `message`): un
+ * `TypeError: Failed to fetch`, un `SyntaxError` de un JSON que era HTML o un
+ * mensaje técnico no llegan a la pantalla; en su lugar, el respaldo.
+ *
+ * @param {unknown} error
+ * @param {string} respaldo
+ * @returns {string}
+ */
+export function textoDeError(error, respaldo) {
+  const candidato = error?.detalle || error?.message;
+  return typeof candidato === 'string' && !pareceTextoTecnico(candidato)
+    ? candidato.trim()
+    : respaldo;
+}
+
+/**
+ * El título del problem details si se puede leer (los de Spring llegan en
+ * inglés: «Conflict», «Bad Request»); si no, el respaldo.
+ *
+ * @param {unknown} problema
+ * @param {string} respaldo
+ * @returns {string}
+ */
+export function tituloDelServidor(problema, respaldo) {
+  const titulo = problema && typeof problema === 'object' ? problema.title : null;
+  return typeof titulo === 'string' && !pareceTextoTecnico(titulo) ? titulo.trim() : respaldo;
 }
 
 /**

@@ -35,7 +35,33 @@ function sinComentarios(texto) {
   return texto.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
-const NATIVO = /(^|[^.\w])(window\.)?(confirm|alert|prompt)\s*\(/;
+/**
+ * UXC-9 — la primera versión solo veía `confirm(` y `window.confirm(`. Se le
+ * escapó `globalThis.prompt?.('Motivo de la cancelacion…')` en torneos: por
+ * `globalThis.` y por el `?.`. Ahora cubre los objetos globales y la llamada
+ * opcional, y sigue sin confundir `confirmar()` ni `algo.prompt()`.
+ */
+const NATIVO =
+  /(^|[^.\w$])(?:(?:window|globalThis|self|top|parent)\s*\.\s*)?(confirm|alert|prompt)\s*(?:\?\.\s*)?\(/;
+
+test('el detector ve las formas que se usaron y no confunde las del kit', () => {
+  for (const culpable of [
+    "window.confirm('¿Seguro?')",
+    "globalThis.prompt?.('Motivo')",
+    "alert('hecho')",
+    'self.prompt ?.("x")',
+  ]) {
+    expect(NATIVO.test(culpable)).toBe(true);
+  }
+  for (const inocente of [
+    'await confirmar({ titulo })',
+    'instalacion.prompt()',
+    'confirmarCritico({})',
+    'alertar(zona)',
+  ]) {
+    expect(NATIVO.test(inocente)).toBe(false);
+  }
+});
 
 test('ninguna vista abre confirm(), alert() ni prompt() del navegador', () => {
   const culpables = [];

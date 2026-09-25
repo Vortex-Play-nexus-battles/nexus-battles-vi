@@ -156,7 +156,7 @@ export function prefijarEncuentro(formulario, encuentro) {
     nota.hidden = false;
     nota.textContent =
       `Esta sala es el encuentro ${encuentro.numeroEncuentro} del torneo. ` +
-      'Al terminar la partida, el resultado se informa al torneo automaticamente.';
+      'Al terminar la partida, el resultado se informa al torneo automáticamente.';
   }
   const hastaSeis = formulario.querySelector('[name="modalidad"][value="HASTA_SEIS"]');
   if (hastaSeis) {

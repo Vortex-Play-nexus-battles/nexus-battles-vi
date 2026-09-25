@@ -1,5 +1,6 @@
 /** HU-PRD-001 y HU-PRD-008 - Cliente HTTP del catálogo de productos. */
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 const RUTA_PRODUCTOS = '/api/v1/productos';
 const RUTA_ESTADISTICAS = `${RUTA_PRODUCTOS}/estadisticas`;
@@ -18,9 +19,14 @@ async function cuerpoDe(respuesta) {
 }
 
 function errorDe(cuerpo, status, mensajePredeterminado) {
-  const detalle =
-    typeof cuerpo === 'object' && cuerpo !== null ? cuerpo.detail || cuerpo.title : null;
-  const fallo = new Error(detalle || mensajePredeterminado);
+  // UXC-9 — el texto del servicio solo si se puede leer; nunca un 5xx crudo.
+  const fallo = new Error(
+    textoDelServidor(
+      typeof cuerpo === 'object' && cuerpo !== null ? cuerpo : null,
+      status,
+      mensajePredeterminado,
+    ),
+  );
   fallo.status = status;
   fallo.problem = cuerpo;
   return fallo;

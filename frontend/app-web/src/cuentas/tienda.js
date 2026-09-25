@@ -89,6 +89,7 @@ import {
   textoDeUnidades,
   unidadesDelCarrito,
 } from './tienda-carrito.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
 const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
@@ -819,8 +820,7 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   } else {
     // Un rechazo que el contrato no declara. El `detail`, si llega, esta
     // escrito para el jugador (MAPEO-ERRORES §3); si no, una pauta propia.
-    const delServidor =
-      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    const delServidor = textoDelServidor(problema, estado, '') || null;
     mensaje = {
       titulo: 'No se pudo añadir el producto al carrito',
       detalle:

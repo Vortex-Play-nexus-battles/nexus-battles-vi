@@ -9,6 +9,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { confirmar, confirmarCritico } from '../comun/ui/dialogo.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
+import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const BASE_API = '/api/v1/admin/usuarios';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
@@ -426,7 +427,7 @@ async function cambiarRolUsuarioSeleccionado() {
   } catch (error) {
     console.error('Error cambiando rol:', error);
 
-    mostrarMensajeCambioRol(error.message || 'No fue posible cambiar el rol del usuario.');
+    mostrarMensajeCambioRol(textoDeError(error, 'No fue posible cambiar el rol del usuario.'));
   } finally {
     cambiarEstadoBoton(boton, false, 'Cambiar rol');
   }
@@ -521,7 +522,7 @@ async function guardarPerfil(evento) {
   } catch (error) {
     console.error('Error actualizando perfil:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible actualizar el perfil.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible actualizar el perfil.'));
   } finally {
     cambiarEstadoBoton(boton, false, 'Guardar cambios');
   }
@@ -641,7 +642,7 @@ async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
   } catch (error) {
     console.error('Error modificando estado:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible modificar el estado de la cuenta.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible modificar el estado de la cuenta.'));
   }
 }
 
@@ -683,7 +684,7 @@ async function restablecerPassword() {
   } catch (error) {
     console.error('Error restableciendo contraseña:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible restablecer la contraseña.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible restablecer la contraseña.'));
   }
 }
 
@@ -830,24 +831,18 @@ function limpiarMensajeCambioRol() {
 async function obtenerMensajeError(respuesta) {
   try {
     const datos = await respuesta.clone().json();
-
-    if (typeof datos === 'string') {
-      return datos;
-    }
-
-    return datos.detail || datos.message || datos.title || `Error HTTP ${respuesta.status}`;
+    // UXC-9 — nunca «Error HTTP 502» ni la página de un proxy: el texto del
+    // servidor solo si se puede leer (comun/ui/texto-de-fallo.js).
+    return textoDelServidor(datos, respuesta.status, respaldoPorEstado(respuesta.status));
   } catch {
     try {
       const texto = await respuesta.clone().text();
-
-      if (texto) {
-        return texto;
-      }
+      return textoDelServidor(texto, respuesta.status, respaldoPorEstado(respuesta.status));
     } catch {
       // Se utiliza el mensaje genérico.
     }
 
-    return `Error HTTP ${respuesta.status}`;
+    return respaldoPorEstado(respuesta.status);
   }
 }
 

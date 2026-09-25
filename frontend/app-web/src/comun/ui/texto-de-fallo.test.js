@@ -9,7 +9,9 @@ import {
   TEXTO_SIN_SERVICIO,
   pareceTextoTecnico,
   respaldoPorEstado,
+  textoDeError,
   textoDelServidor,
+  tituloDelServidor,
 } from './texto-de-fallo.js';
 
 const RESPALDO = 'No pudimos cargar los torneos. Vuelve a intentarlo en un momento.';
@@ -73,9 +75,9 @@ describe('textoDelServidor', () => {
   });
 
   test('un detalle técnico en un 4xx tampoco pasa', () => {
-    expect(
-      textoDelServidor({ detail: 'IllegalStateException: equipo nulo' }, 409, RESPALDO),
-    ).toBe(RESPALDO);
+    expect(textoDelServidor({ detail: 'IllegalStateException: equipo nulo' }, 409, RESPALDO)).toBe(
+      RESPALDO,
+    );
     expect(textoDelServidor({ title: 'Bad Request' }, 400, RESPALDO)).toBe(RESPALDO);
   });
 
@@ -93,5 +95,29 @@ describe('respaldoPorEstado', () => {
     for (const estado of [401, 403, 404, 409, 422, 502]) {
       expect(respaldoPorEstado(estado)).not.toMatch(/\d{3}/);
     }
+  });
+});
+
+describe('tituloDelServidor', () => {
+  test('los títulos de estado en inglés no se leen; uno escrito para el jugador sí', () => {
+    expect(tituloDelServidor({ title: 'Conflict' }, 'No se pudo completar')).toBe(
+      'No se pudo completar',
+    );
+    expect(tituloDelServidor({ title: 'Unprocessable Entity' }, 'R')).toBe('R');
+    expect(tituloDelServidor({ title: 'Sala llena' }, 'R')).toBe('Sala llena');
+    expect(tituloDelServidor(null, 'R')).toBe('R');
+  });
+});
+
+describe('textoDeError', () => {
+  test('un error de red o de JSON no se lee; uno de negocio sí', () => {
+    expect(textoDeError(new TypeError('Failed to fetch'), 'R')).toBe('R');
+    expect(textoDeError(new SyntaxError('Unexpected token < in JSON at position 0'), 'R')).toBe(
+      'R',
+    );
+    expect(textoDeError({ detalle: '', message: 'Esa sala ya empezó.' }, 'R')).toBe(
+      'Esa sala ya empezó.',
+    );
+    expect(textoDeError(null, 'R')).toBe('R');
   });
 });

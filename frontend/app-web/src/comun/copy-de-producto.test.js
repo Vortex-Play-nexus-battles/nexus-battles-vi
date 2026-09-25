@@ -53,6 +53,16 @@ const PROHIBIDO = Object.freeze([
   { patron: /\bmicroservicio/i, motivo: 'detalle de arquitectura interna' },
   { patron: /\bms-[a-z]+/, motivo: 'nombre de un microservicio' },
   { patron: /proyecto\s+acad[eé]mico/i, motivo: 'marco del curso' },
+  // UXC-9 — lo que un jugador no debe leer nunca, ni en un fallo.
+  { patron: /\bsrv-[a-z]+/, motivo: 'nombre de un servidor interno' },
+  { patron: /\bRN-[A-Z]{2,}-[0-9]+/, motivo: 'identificador de regla de negocio' },
+  { patron: /\bHTTP\s?[1-5][0-9]{2}\b/, motivo: 'código HTTP' },
+  { patron: /\bError\s+(?:HTTP\s+)?[1-5][0-9]{2}\b/, motivo: 'código HTTP' },
+  {
+    patron: /\b(?:Bad Gateway|Internal Server Error|Service Unavailable|Gateway Time-?out)\b/,
+    motivo: 'frase de estado HTTP',
+  },
+  { patron: /\b[A-Z][A-Za-z]+Exception\b/, motivo: 'nombre de una excepción' },
 ]);
 
 /**
@@ -133,4 +143,10 @@ test('la prueba detecta lo que dice detectar', () => {
   expect(hallazgos('x', "title = 'Todavía no publicada: HU-MIS (grupo-2)'")).toHaveLength(2);
   // Y el espacio de nombres de los errores no salta, porque no se lee.
   expect(hallazgos('x', "'https://nexusbattles.upb.edu.co/errors/cuenta-bloqueada'")).toEqual([]);
+  // UXC-9 — los que llegaban por los fallos: códigos, excepciones, reglas y
+  // nombres internos.
+  expect(hallazgos('x', "detalle: `Error ${estado}` + 'Error 503'")).toHaveLength(1);
+  expect(hallazgos('x', "'HTTP 502 · Bad Gateway'")).toHaveLength(2);
+  expect(hallazgos('x', "'srv-inventario: NullPointerException'")).toHaveLength(2);
+  expect(hallazgos('x', "'(RN-INV-004)'")).toHaveLength(1);
 });

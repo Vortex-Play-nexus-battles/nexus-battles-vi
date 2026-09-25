@@ -43,6 +43,7 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const PERFILES = '/api/v1/perfiles';
 
@@ -427,8 +428,14 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
         }
         pintarAviso(zonaAviso, {
           tono: tonoPorEstado(respuesta.status),
-          titulo: problema?.title ?? 'No pudimos guardar los cambios',
-          detalle: problema?.detail ?? 'Revisa los datos e inténtalo otra vez.',
+          titulo: 'No pudimos guardar los cambios',
+          detalle: textoDelServidor(
+            problema,
+            respuesta.status,
+            respuesta.status >= 500
+              ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
+              : 'Revisa los datos e inténtalo otra vez.',
+          ),
         });
         return;
       }

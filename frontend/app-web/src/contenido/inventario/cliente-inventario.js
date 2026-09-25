@@ -13,6 +13,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 const RUTA = '/api/v1/inventario/elementos';
 const RUTA_BUSQUEDA = `${RUTA}/busqueda`;
@@ -57,9 +58,8 @@ async function escribir(ruta, metodo, identidad, cuerpo, fetchImpl) {
 async function detalleDelProblema(respuesta) {
   try {
     const problema = await respuesta.json();
-    return typeof problema?.detail === 'string' && problema.detail.trim() !== ''
-      ? problema.detail
-      : undefined;
+    // UXC-9 — el detalle solo si está escrito para quien juega.
+    return textoDelServidor(problema, respuesta.status, '') || undefined;
   } catch {
     return undefined;
   }

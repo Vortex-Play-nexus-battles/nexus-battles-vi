@@ -26,6 +26,7 @@ import { esc } from '../comun/ui/escapar.js';
 import { nombreDelTipo } from '../comun/ui/formato.js';
 import { urlDeLogin } from '../comun/sesion.js';
 import { acusar } from '../comun/ui/acuse.js';
+import { textoDeError } from '../comun/ui/texto-de-fallo.js';
 
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
@@ -922,7 +923,7 @@ export class ControladorSubastas {
       }
     } catch (fallo) {
       this.estadoDatos = 'error';
-      this.mensajeError = fallo?.message || 'No se pudo cargar el listado de subastas.';
+      this.mensajeError = textoDeError(fallo, 'No se pudo cargar el listado de subastas.');
     }
     this.iniciarTemporizador();
     this.render();
@@ -1202,7 +1203,7 @@ export class ControladorSubastas {
       }
       return true;
     } catch (fallo) {
-      const mensaje = fallo?.message || 'No se pudo completar la operación.';
+      const mensaje = textoDeError(fallo, 'No se pudo completar la operación.');
       await this.recargar();
       this.mostrarError(mensaje);
       return false;
@@ -2839,7 +2840,7 @@ export class ControladorSubastas {
                 comp.nivelInsuficiente
                   ? `
                 <div class="alerta alerta-advertencia" role="alert">
-                  <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto (RN-INV-004).
+                  <strong>${iconoHtml('alerta', { clase: 'icono icono--menudo' })} Nivel insuficiente:</strong> ${esc(hero.nombre)} es nivel ${esc(hero.nivel)}. Le faltan ${comp.deltaNivel} niveles para poder equipar este objeto.
                 </div>
               `
                   : `

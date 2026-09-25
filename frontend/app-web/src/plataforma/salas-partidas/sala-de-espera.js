@@ -21,6 +21,8 @@
  * @module sala-de-espera
  */
 
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+
 /** Clave de sessionStorage con la que el listado se entera de por que se volvio. */
 export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
 
@@ -34,7 +36,7 @@ export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
 export function textoDeConfirmacion(sala) {
   const otros = Math.max(0, Number(sala?.ocupacion ?? 1) - 1);
   if (otros === 0) {
-    return '¿Cancelar la sala? Todavía no ha entrado nadie mas.';
+    return '¿Cancelar la sala? Todavía no ha entrado nadie más.';
   }
   const gente = otros === 1 ? '1 participante' : `${otros} participantes`;
   return `¿Cancelar la sala? Se expulsará a ${gente}.`;
@@ -220,7 +222,8 @@ export function montarInvitacion(raiz, { sala, origen = '', copiar } = {}) {
  * @param {string|null} opciones.yo identificador (uid) de quien mira
  * @param {(idSala: string) => Promise<void>} opciones.abandonar
  * @param {(idSala: string) => Promise<void>} opciones.cancelar
- * @param {(texto: string) => boolean} [opciones.confirmar] dialogo de confirmacion (CA-05)
+ * @param {(texto: string) => boolean|Promise<boolean>} [opciones.confirmar] dialogo de
+ *   confirmacion (CA-05); puede ser el del kit, que devuelve una promesa
  * @param {(salida: {motivo: 'abandono'|'cancelada'}) => void} [opciones.alSalir]
  * @returns {{actualizar: (estado: {ocupacion: {actual: number, maximo: number}}) => void,
  *            ocultar: () => void, esAnfitrion: boolean}}
@@ -282,16 +285,17 @@ export function montarSalaDeEspera(
     } catch (error) {
       // 409 ya empezo · 403 no eres el anfitrion · 404 no existe. El texto lo
       // redacta el servicio, que es quien sabe el motivo.
-      decir(error?.detalle ?? error?.message ?? 'No se pudo completar la operación.');
+      decir(textoDeError(error, 'No se pudo completar la operación.'));
       boton.disabled = false;
     }
   };
 
   botonSalir?.addEventListener('click', () => ejecutar(botonSalir, abandonar, 'abandono'));
 
-  botonCancelar?.addEventListener('click', () => {
+  botonCancelar?.addEventListener('click', async () => {
     // CA-05: cancelar expulsa a los demas, asi que se pregunta. Salir no.
-    if (!confirmar(textoDeConfirmacion({ ocupacion: ocupacionActual.actual }))) {
+    // UXC-9 — con el diálogo del kit (una promesa), no con confirm().
+    if (!(await confirmar(textoDeConfirmacion({ ocupacion: ocupacionActual.actual })))) {
       return;
     }
     ejecutar(botonCancelar, cancelar, 'cancelada');

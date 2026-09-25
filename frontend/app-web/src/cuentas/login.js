@@ -39,6 +39,12 @@ export { identificadorDeSesion };
  * @param {string} [mensajeServidor]
  */
 export function mensajeDeError(status, mensajeServidor) {
+  // UXC-9 — sin respuesta o con el servidor caído, nunca su texto.
+  if (!status || status >= 500) {
+    return status
+      ? 'No pudimos iniciar sesión ahora mismo. Inténtalo de nuevo en unos minutos.'
+      : 'No pudimos conectar. Revisa tu conexión e inténtalo otra vez.';
+  }
   switch (status) {
     case 401:
       return 'Acceso rechazado. El correo o la contraseña son incorrectos, o estas credenciales no están registradas en este ambiente.';

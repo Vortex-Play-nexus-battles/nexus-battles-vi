@@ -26,6 +26,7 @@ import {
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 import { puntosDePoder } from '../../comun/heroe-propio.js';
 import { narrarAccion, narrarTurno } from './narracion.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /**
  * Por que las acciones especiales estan deshabilitadas — UXC-2.
@@ -744,7 +745,11 @@ export function montarControlesDeCombate(
       if (!zonaRechazo) {
         return false;
       }
-      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La acción fue rechazada.';
+      zonaRechazo.textContent = textoDelServidor(
+        problema,
+        problema?.status,
+        'La acción fue rechazada.',
+      );
       zonaRechazo.hidden = false;
       return true;
     },
