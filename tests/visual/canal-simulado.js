@@ -15,12 +15,29 @@
  * es lo que la vista pinta con lo que el servidor le mandaría; la lógica del
  * turno sigue siendo del servidor.
  *
+ * UXC-2 — tambien sabe CAERSE, para fotografiar la reconexion: con
+ * `cerrarTrasMs` cierra la primera conexion pasado ese tiempo, y con
+ * `rechazarReconexion` las siguientes se cierran sin aceptar el CONNECT.
+ *
  * @param {import('@playwright/test').Page} pagina
- * @param {{mensajes?: Record<string, object[]>}} [opciones] mensajes por
- *   destino, tal como los publica `contracts/websocket/salas-partidas.yaml`.
+ * @param {{mensajes?: Record<string, object[]>, cerrarTrasMs?: number,
+ *   rechazarReconexion?: boolean}} [opciones] mensajes por destino, tal como
+ *   los publica `contracts/websocket/salas-partidas.yaml`.
  */
-export async function simularCanal(pagina, { mensajes = {} } = {}) {
+export async function simularCanal(
+  pagina,
+  { mensajes = {}, cerrarTrasMs = null, rechazarReconexion = false } = {},
+) {
+  let conexiones = 0;
   await pagina.routeWebSocket(/\/ws(\?.*)?$/, (ws) => {
+    conexiones += 1;
+    if (conexiones > 1 && rechazarReconexion) {
+      ws.close();
+      return;
+    }
+    if (conexiones === 1 && Number.isFinite(cerrarTrasMs)) {
+      setTimeout(() => ws.close(), cerrarTrasMs);
+    }
     ws.onMessage((crudo) => {
       const texto = typeof crudo === 'string' ? crudo : String(crudo);
       const frame = leerFrame(texto);

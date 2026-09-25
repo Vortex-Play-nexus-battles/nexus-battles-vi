@@ -108,6 +108,23 @@ for (const escenario of ESCENARIOS) {
           ).toBeAttached({ timeout: 15_000 });
         }
 
+        // UXC — axe mide el contraste con la opacidad del momento: un panel
+        // que entra con animacion (el desenlace del combate, la cifra de un
+        // golpe) da un falso positivo si se mide a mitad. Se espera a que las
+        // animaciones finitas terminen (las infinitas, como el latido del
+        // turno, no cuentan).
+        await pagina
+          .waitForFunction(
+            () =>
+              document
+                .getAnimations()
+                .filter((a) => a.effect?.getTiming?.().iterations !== Infinity)
+                .every((a) => a.playState !== 'running'),
+            null,
+            { timeout: 3_000 },
+          )
+          .catch(() => {});
+
         const resultado = await new AxeBuilder({ page: pagina }).withTags(NORMAS).analyze();
         const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
 

@@ -201,6 +201,159 @@ function rutasDeInventario(equipamiento) {
 }
 
 /* ---------------------------------------------------------------------------
+   UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
+   LABORATORIO: los nombres propios son inventados para la captura y las
+   cifras son las de nivel 1 de la Tabla 6 del documento; en produccion todo
+   sale del inventario y del catalogo. Estados reales del contrato: uno sin
+   equipo (no puede combatir), uno bloqueado por subasta.
+   ------------------------------------------------------------------------- */
+const f = (base, cantidadDados, caras) =>
+  base === null ? null : { base, cantidadDados, caras, formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}` };
+
+const OCHO_HEROES = [
+  ['Aquiles de la Ceniza', 'Guerrero Tanque', { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null }, 4],
+  ['Vorn el Filo', 'Guerrero Armas', { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null }, 2],
+  ['Ignis', 'Mago Fuego', { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null }, 0],
+  ['Nieve de Arel', 'Mago Hielo', { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null }, 1],
+  ['Sombra Verde', 'Pícaro Veneno', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null }, 2],
+  ['Kael', 'Pícaro Machete', { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null }, 3],
+  ['Oyá', 'Chamán', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) }, 2],
+  ['Doctora Lumen', 'Médico', { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) }, 1],
+].map(([nombrePropio, prototipo, estadisticas, ranuras], i) => ({
+  elemento: {
+    id: `he00000${i + 1}-1111-4111-8111-111111111111`,
+    productoId: `pe00000${i + 1}-0000-4000-8000-000000000000`,
+    tipo: 'HEROE',
+    nombrePropio,
+    parteArmadura: null,
+    // El Picaro Veneno esta publicado en subasta: bloqueado (HU-INV-010).
+    disponible: i !== 4,
+    subastaId: i === 4 ? 'aaaaaaa2-2222-4222-8222-222222222222' : null,
+  },
+  prototipo,
+  estadisticas,
+  ranuras,
+}));
+
+const OBJETOS_DE_LABORATORIO = [
+  ['ob000001', 'ARMA', 'Hacha de Obsidiana', null],
+  ['ob000002', 'ARMA', 'Espada del Alba', null],
+  ['ob000003', 'ARMADURA', 'Yelmo del Alba', 'CASCO'],
+  ['ob000004', 'ARMADURA', 'Coraza del Centinela', 'PECHO'],
+  ['ob000005', 'ITEM', 'Poción de brasa', null],
+  ['ob000006', 'HABILIDAD', 'Grito de guerra', null],
+  ['ob000007', 'EPICA', 'Reliquia del Nexo', null],
+  ['ob000008', 'ARMA', 'Arco en subasta', null],
+].map(([id, tipo, nombrePropio, parteArmadura], i) => ({
+  id: `${id}-1111-4111-8111-111111111111`,
+  productoId: `po00000${i + 1}-0000-4000-8000-000000000000`,
+  tipo,
+  nombrePropio,
+  parteArmadura,
+  disponible: i !== 7,
+  subastaId: i === 7 ? 'aaaaaaa1-1111-4111-8111-111111111111' : null,
+}));
+
+/** El equipo de cada heroe: sus primeras `ranuras` piezas del laboratorio. */
+function equipoDeLaboratorio(heroeId) {
+  const heroe = OCHO_HEROES.find((h) => h.elemento.id === heroeId);
+  const ranuras = heroe?.ranuras ?? 0;
+  const armas = [];
+  const armaduras = {};
+  const items = [];
+  // El Tanque lleva el hacha, el yelmo, la coraza y la pocion; el resto, lo que
+  // le toque del mismo lote (el laboratorio no valida exclusividad).
+  // El Tanque lleva el hacha, el yelmo, la coraza y la pocion; el Armas, la
+  // espada. Los demas llevan piezas que no estan en este lote (identificadores
+  // propios): cuentan como ranuras ocupadas y no se repiten entre heroes.
+  const lotes = {
+    'Guerrero Tanque': [0, 2, 3, 4].map((i) => OBJETOS_DE_LABORATORIO[i]),
+    'Guerrero Armas': [OBJETOS_DE_LABORATORIO[1]],
+  };
+  const lote = lotes[heroe?.prototipo] ?? [];
+  for (const pieza of lote) {
+    if (pieza.tipo === 'ARMA') armas.push(pieza.id);
+    else if (pieza.tipo === 'ARMADURA') armaduras[pieza.parteArmadura] = pieza.id;
+    else items.push(pieza.id);
+  }
+  for (let i = lote.length; i < ranuras; i += 1) {
+    items.length < 2 ? items.push(`${heroeId}-item-${i}`) : armas.push(`${heroeId}-arma-${i}`);
+  }
+  return { heroeId, armas, armaduras, items };
+}
+
+function rutasDeOchoHeroes() {
+  const elementos = [...OCHO_HEROES.map((h) => h.elemento), ...OBJETOS_DE_LABORATORIO];
+  const idDe = (ruta, desdeFinal = 0) =>
+    new URL(ruta.request().url()).pathname.split('/').slice(-1 - desdeFinal)[0];
+  return [
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos,
+        numero: 0,
+        tamanio: 16,
+        totalElementos: elementos.length,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
+    [
+      '**/api/v1/productos/*',
+      (ruta) => {
+        const id = idDe(ruta);
+        const heroe = OCHO_HEROES.find((h) => h.elemento.productoId === id);
+        const objeto = OBJETOS_DE_LABORATORIO.find((o) => o.productoId === id);
+        return json({
+          id,
+          nombre: heroe ? heroe.prototipo : (objeto?.nombrePropio ?? 'Producto'),
+          tipo: heroe ? 'HEROE' : (objeto?.tipo ?? 'ARMA'),
+          prototipo: heroe ? heroe.prototipo : null,
+          descripcion: heroe ? `Prototipo ${heroe.prototipo} del catálogo.` : 'Forjado en el Nexo.',
+          imagen: null,
+          estado: 'ACTIVO',
+          tiraje: -1,
+        });
+      },
+    ],
+    [
+      '**/api/v1/inventario/heroes/*/estadisticas',
+      (ruta) => {
+        const id = idDe(ruta, 1);
+        const heroe = OCHO_HEROES.find((h) => h.elemento.id === id);
+        return json({ heroeId: id, ...(heroe?.estadisticas ?? {}) });
+      },
+    ],
+    [
+      '**/api/v1/inventario/heroes/*/equipamiento',
+      (ruta) => json(equipoDeLaboratorio(idDe(ruta, 1))),
+    ],
+    [
+      '**/api/v1/heroes/*',
+      (ruta) => {
+        const nombre = decodeURIComponent(idDe(ruta));
+        return json({
+          nombre,
+          tipo: nombre.split(' ')[0],
+          descripcion: `Ficha del prototipo ${nombre} (laboratorio).`,
+          esSanador: ['Chamán', 'Médico'].includes(nombre),
+          estadisticasNivel1: OCHO_HEROES.find((h) => h.prototipo === nombre)?.estadisticas ?? {},
+          acciones: [
+            { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+            { nombre: 'Mano de piedra', costo: '4 puntos de poder', efecto: '+12 a la defensa' },
+            {
+              nombre: 'Defensa feroz',
+              costo: '6 puntos de poder',
+              efecto: 'Inmune al daño físico y (3d6) al daño mágico',
+            },
+          ],
+        });
+      },
+    ],
+  ];
+}
+
+/* ---------------------------------------------------------------------------
    Combate — UX-GAME-4. La partida sale de `GET /partidas/{id}` (Partida de
    salas-partidas.yaml; `jugador` viaja como uid, tal como lo emite el
    servicio) y los avisos por el canal simulado (`canal-simulado.js`).
@@ -267,16 +420,115 @@ function finalizada({ ganadores, reparto, recompensa }) {
   };
 }
 
-function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige }) {
+/**
+ * UXC-2 — lo que la vista de combate pide para la barra de accion del heroe
+ * propio (`comun/heroe-propio.js`): su elemento en el inventario, el producto
+ * (prototipo), la ficha del prototipo (Tabla 7) y sus cifras con el equipo.
+ * DATOS DE LABORATORIO con los valores de la Tabla 7 para Guerrero Tanque.
+ */
+const RUTAS_DEL_HEROE_EN_COMBATE = [
+  [
+    '**/api/v1/inventario/elementos?*',
+    json({
+      elementos: [
+        {
+          id: 'ddddddd1-1111-4111-8111-111111111111',
+          productoId: 'aaaaaaa1-0000-4000-8000-000000000009',
+          tipo: 'HEROE',
+          nombrePropio: 'Aquiles de la Ceniza',
+          parteArmadura: null,
+          disponible: true,
+          subastaId: null,
+        },
+      ],
+      numero: 0,
+      tamanio: 16,
+      totalElementos: 1,
+      totalPaginas: 1,
+      ultima: true,
+    }),
+  ],
+  [
+    '**/api/v1/productos/*',
+    json({
+      id: 'aaaaaaa1-0000-4000-8000-000000000009',
+      nombre: 'Guerrero Tanque',
+      tipo: 'HEROE',
+      prototipo: 'Guerrero Tanque',
+      imagen: null,
+      estado: 'ACTIVO',
+      tiraje: -1,
+    }),
+  ],
+  [
+    '**/api/v1/heroes/*',
+    json({
+      nombre: 'Guerrero Tanque',
+      tipo: 'Guerrero',
+      descripcion: 'Aguanta lo que otros no.',
+      esSanador: false,
+      estadisticasNivel1: { poder: 10, vida: 44, defensa: 11, ataque: '10 + 1d6', dano: '1d4' },
+      acciones: [
+        { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+        { nombre: 'Mano de piedra', costo: '4 puntos de poder', efecto: '+12 a la defensa' },
+        {
+          nombre: 'Defensa feroz',
+          costo: '6 puntos de poder',
+          efecto: 'Inmune al daño físico y (3d6) al daño mágico',
+        },
+      ],
+    }),
+  ],
+  [
+    '**/api/v1/inventario/heroes/*/estadisticas',
+    json({ heroeId: 'ddddddd1-1111-4111-8111-111111111111', poder: 10, vida: 52, defensa: 13 }),
+  ],
+];
+
+function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige, canal = {}, interaccion }) {
   return {
     id,
     titulo,
     ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
     sesion: () => SESION_COMBATE,
-    rutas: [[`**/api/v1/partidas/${ID_PARTIDA}`, json(partida)]],
-    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes } },
+    rutas: [[`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)], ...RUTAS_DEL_HEROE_EN_COMBATE],
+    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
+    ...(interaccion ? { interaccion } : {}),
     exige,
   };
+}
+
+/** Un aviso `partida.accion.resuelta` con la forma del contrato. */
+function accionResuelta(idEjecutor, categoria, afectados) {
+  return {
+    tipo: 'partida.accion.resuelta',
+    idPartida: ID_PARTIDA,
+    idEjecutor,
+    accion: { codigo: 'ATAQUE_BASICO', nombre: categoria, icono: null },
+    afectados,
+  };
+}
+
+/** Seis participantes, tres contra tres (HU-SAL-004), para medir el HUD lleno. */
+function partidaDeSeis() {
+  const base = partidaEnCurso();
+  const extra = [
+    ['cccccc03-3333-4333-8333-333333333333', 'Nieve de Arel', 40, 40, 1, false],
+    ['cccccc04-4444-4444-8444-444444444444', 'Doctora Lumen', 28, 28, 1, false],
+    ['cccccc05-5555-4555-8555-555555555555', 'Sombra Verde', 20, 36, 2, true],
+    ['cccccc06-6666-4666-8666-666666666666', 'Kael', 36, 36, 2, true],
+  ].map(([jugador, nombre, vidaActual, vidaMaxima, equipo, esIA]) => ({
+    jugador,
+    heroe: { id: `h-${jugador}`, nombre, retratoUrl: null, nivel: null, vidaActual, vidaMaxima, efectosActivos: [] },
+    esIA,
+    listo: true,
+    equipo,
+    creditosApostados: 0,
+  }));
+  base.participantes[0].equipo = 1;
+  base.participantes[1].equipo = 2;
+  base.participantes.push(...extra);
+  return base;
 }
 
 /* ---------------------------------------------------------------------------
@@ -425,6 +677,50 @@ function comentarioReportado(i, cambios = {}) {
 }
 
 export const ESCENARIOS = [
+  {
+    // UXC-1 — «Mi inventario», pestana Heroes: los ocho prototipos de la Tabla
+    // 6, reconocibles por simbolo y nombre, con estado (uno sin equipo, uno
+    // bloqueado por subasta) y ranuras ocupadas.
+    id: 'inventario-ocho-heroes',
+    titulo: 'mi inventario: los ocho prototipos con su estado',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_heroes8', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    exige: [
+      '.hero-card',
+      '.hero-card[data-prototipo="picaro-machete"]',
+      '.hero-card[data-estado="NO_ELEGIBLE"]',
+      '.hero-card[data-estado="BLOQUEADO"]',
+      '.stat-block',
+    ],
+  },
+  {
+    // UXC-1 — pestana Objetos: sin heroes, y cada objeto dice si esta
+    // equipado (y en quien), libre o bloqueado.
+    id: 'inventario-objetos-con-estado',
+    titulo: 'mi inventario: objetos equipados, libres y bloqueados',
+    ruta: 'contenido/inventario/inventario.html#objetos',
+    sesion: () => sesionDe('qa_objetos', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    exige: [
+      '.inventario__contenido .vitrina__producto',
+      '.vitrina__estado[data-estado="EQUIPADO"]',
+      '.vitrina__estado[data-estado="BLOQUEADO"]',
+    ],
+  },
+  {
+    // UXC-1 — la ficha de un heroe desde su carta: cifras (StatBlock) y las
+    // tres acciones con coste, carga y efecto.
+    id: 'inventario-ficha-de-heroe-uxc',
+    titulo: 'ficha de héroe con cifras y acciones como cartas',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_ficha', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="ver-ficha"]').first().click();
+    },
+    exige: ['.ficha', '.ficha .stat-block', '.ficha__accion', '.ficha__accion-carga'],
+  },
   {
     id: 'auditoria-con-registros',
     titulo: 'registro de auditoría con cinco entradas y paginación',
@@ -621,7 +917,63 @@ export const ESCENARIOS = [
   },
   escenarioDeCombate('combate-mi-turno', 'combate 1 contra la máquina, en mi turno', {
     partida: partidaEnCurso(),
-    exige: ['.combate__vidas .barra-vida', '[data-atacar]:not(:disabled)', '[data-zona="turno"]'],
+    exige: [
+      '.combate__vidas .barra-vida',
+      '[data-atacar]:not(:disabled)',
+      '[data-zona="turno"]',
+      // UXC-2 — las tres especiales, deshabilitadas con su motivo, y el poder.
+      '[data-zona="especiales"] .accion-combate--especial:disabled',
+      '.medidor-poder',
+      '.registro-combate__linea',
+    ],
+  }),
+  // UXC-2 — lo que pasa, narrado: un critico propio, una evasion del rival,
+  // una curacion, un efecto activo y el cambio de turno. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-narrado', 'combate con crítico, evasión, curación y efecto', {
+    partida: partidaEnCurso({ vidaMia: 38, vidaRival: 14 }),
+    mensajes: [
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO_CRITICO', [
+        {
+          idJugador: RIVAL_IA,
+          vidaActual: 14,
+          vidaMaxima: 60,
+          diferencia: -9,
+          efectosActivos: [{ codigo: 'VENENO', nombre: 'Veneno', icono: null, turnosRestantes: 2 }],
+        },
+      ]),
+      accionResuelta(RIVAL_IA, 'EVADIR_EL_GOLPE', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 35, vidaMaxima: 52, diferencia: -3 },
+      ]),
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 41, vidaMaxima: 52, diferencia: 6 },
+      ]),
+      {
+        tipo: 'partida.turno.cambiado',
+        idPartida: ID_PARTIDA,
+        idJugador: SESION_COMBATE.uid,
+        numeroTurno: 8,
+        segundosParaJugar: null,
+      },
+    ],
+    exige: [
+      '.registro-combate__linea--critico',
+      '.registro-combate__linea--mitigado',
+      '.registro-combate__linea--curacion',
+      '.efecto',
+      '.impacto',
+    ],
+  }),
+  // UXC-2 — seis participantes, tres contra tres: el HUD con seis barras.
+  escenarioDeCombate('combate-seis', 'combate de seis, tres contra tres', {
+    partida: partidaDeSeis(),
+    exige: ['.combate__vidas .barra-vida:nth-child(6)', '[data-atacar]'],
+  }),
+  // UXC-2 — el canal se cae y no vuelve: la pildora lo dice y ofrece
+  // «Reintentar»; los botones se cierran.
+  escenarioDeCombate('combate-sin-canal', 'combate con el canal caído y sin reconexión', {
+    partida: partidaEnCurso(),
+    canal: { cerrarTrasMs: 400, rechazarReconexion: true },
+    exige: ['.conexion--reconectando, .conexion--sin-conexion', '[data-atacar]:disabled'],
   }),
   escenarioDeCombate('combate-turno-rival', 'combate 1 contra la máquina, turno del rival', {
     partida: partidaEnCurso({ turnoDe: RIVAL_IA }),
@@ -678,7 +1030,8 @@ export const ESCENARIOS = [
     // subasta y el acento lateral por tipo.
     id: 'inventario-vitrina',
     titulo: 'vitrina del inventario con los cinco tipos y un objeto en subasta',
-    ruta: 'contenido/inventario/inventario.html',
+    // UXC-1 — la vitrina es la pestana «Objetos»; los heroes tienen la suya.
+    ruta: 'contenido/inventario/inventario.html#objetos',
     sesion: () => sesionDe('qa_inventario', 'JUGADOR'),
     rutas: rutasDeInventario({
       heroeId: 'ddddddd1-1111-4111-8111-111111111111',
@@ -686,7 +1039,12 @@ export const ESCENARIOS = [
       armaduras: { CASCO: 'ddddddd3-3333-4333-8333-333333333333' },
       items: [],
     }),
-    exige: ['.vitrina__producto', '.vitrina__producto--no-disponible', "[data-tipo='HEROE']"],
+    exige: [
+      '.vitrina__producto',
+      '.vitrina__producto--no-disponible',
+      "[data-tipo='EPICA']",
+      '.hero-card',
+    ],
   },
   {
     // UX-GAME-3 — el panel de equipamiento: heroe, diez ranuras (dos armas,
@@ -702,7 +1060,8 @@ export const ESCENARIOS = [
       items: [],
     }),
     interaccion: async (pagina) => {
-      await pagina.locator('.vitrina__equipo').first().click();
+      // UXC-1 — el equipo se abre desde la carta del heroe.
+      await pagina.locator('[data-accion="equipar"]').first().click();
     },
     exige: ['.ranura', '.ranura--vacia', '.equipamiento__resumen'],
   },
@@ -954,9 +1313,10 @@ export const ESCENARIOS = [
         }),
       ],
     ],
-    // La ficha es un dialogo: hay que abrirlo para auditarlo.
+    // La ficha es un dialogo: hay que abrirlo para auditarlo. UXC-1 — desde
+    // la carta del heroe, que es donde estan los heroes.
     interaccion: async (pagina) => {
-      await pagina.locator('.vitrina__detalle').first().click();
+      await pagina.locator('[data-accion="ver-ficha"]').first().click();
     },
     exige: ['.ficha', '.ficha__seccion', '.ficha__acciones', '.ficha__seccion-nota'],
   },

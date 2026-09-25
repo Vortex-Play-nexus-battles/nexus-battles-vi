@@ -72,12 +72,96 @@
 }
 
 .inventario-cabecera {
-  display: grid;
-  grid-template-columns: auto minmax(280px, 520px) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: var(--vitrina-separacion);
+}
+
+/* UXC-1 — tres pestanas: Heroes, Objetos, Equipamiento. Van directamente
+   sobre la atmosfera (tinta clara del kit). */
+.inventario__pestanas {
+  display: grid;
+  gap: var(--vitrina-separacion);
+}
+
+.inventario__panel {
+  display: grid;
+  gap: 16px;
+  align-content: start;
+}
+
+.inventario__panel[hidden] {
+  display: none;
+}
+
+.inventario__intro {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--tinta-2);
+}
+
+.inventario__aviso {
+  margin: 0 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+/* La busqueda vive en «Objetos», encima de la vitrina que filtra. */
+.inventario__panel--objetos .inventario-busqueda {
+  max-width: 640px;
+}
+
+/* El selector de heroe de la pestana de equipamiento: una fila de botones
+   con `aria-pressed`; el elegido se marca con relleno Y con el borde. */
+.inventario-equipo__selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventario-equipo__selector:empty {
+  display: none;
+}
+
+.inventario-equipo__opcion {
+  min-height: var(--objetivo-tactil);
+  padding: 7px 14px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.inventario-equipo__opcion:hover:not(:disabled) {
+  border-color: var(--borde-int);
+}
+
+.inventario-equipo__opcion[aria-pressed='true'] {
+  border-color: var(--primaria-relleno);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.inventario-equipo__opcion:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.inventario-equipo__sin-heroe[hidden] {
+  display: none;
+}
+
+/* El sello de estado de cada tarjeta de la vitrina de objetos. */
+.vitrina__estado {
+  margin-top: 4px;
 }
 
 .inventario__nuevo,
