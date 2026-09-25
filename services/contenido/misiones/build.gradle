@@ -26,11 +26,13 @@ dependencies {
     // en Boot 4.1 sirve para la semilla y para los clientes REST; no se anade
     // un segundo Jackson.
 
+    // Testcontainers con la version que fija el BOM de Spring Boot 4 (la 2.x,
+    // artefactos testcontainers-*), como productos: sin un segundo BOM que la
+    // contradiga.
     testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
     testImplementation 'org.springframework.boot:spring-boot-testcontainers'
-    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:mongodb'
+    testImplementation 'org.testcontainers:testcontainers-mongodb'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
 
     // Pruebas de contrato (11.4.2): las respuestas reales se validan contra
     // contracts/openapi/misiones.yaml, como en heroes.
@@ -48,6 +50,14 @@ tasks.named('check') {
 
 // El pacto generado se versiona: es un artefacto de contrato, no de build. Su
 // sitio es contracts/pactos/, que es donde el proveedor lo va a buscar.
+//
+// Las pruebas de contrato leen contracts/openapi/misiones.yaml, fuera de este
+// modulo: se declara como entrada para que un cambio del contrato las vuelva a
+// ejecutar (mismo motivo que los pactos en inventario).
 tasks.named('test') {
     systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
+    systemProperty 'misiones.contrato', rootProject.file('contracts/openapi/misiones.yaml').absolutePath
+    inputs.file(rootProject.file('contracts/openapi/misiones.yaml'))
+            .withPropertyName('contratoDeMisiones')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
