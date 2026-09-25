@@ -226,6 +226,12 @@ export async function montarMensajes(
   let sondeo = null;
   let marcaDiferida = null;
   let cerrada = false;
+  /**
+   * La última carga de la lista falló. Mientras sea así, su aviso con
+   * «Reintentar» se queda a la vista aunque se pinten conversaciones (la de
+   * `?con=`, una que llega por el canal): si no, la lista parecería completa.
+   */
+  let listaConError = false;
 
   // ------------------------------------------------------------ utilidades
 
@@ -255,7 +261,9 @@ export async function montarMensajes(
         }),
       );
     }
-    if (lista.length === 0) {
+    if (listaConError) {
+      // El aviso de error ya está pintado, con su «Reintentar»: no se toca.
+    } else if (lista.length === 0) {
       pintarEstado(
         zonas.estadoLista,
         estadoVacio({
@@ -327,6 +335,14 @@ export async function montarMensajes(
 
   // ----------------------------------------------------------- leer / abrir
 
+  function marcarListaConError() {
+    listaConError = true;
+  }
+
+  function marcarListaCargada() {
+    listaConError = false;
+  }
+
   async function cargarConversaciones() {
     pintarEstado(
       zonas.estadoLista,
@@ -341,9 +357,11 @@ export async function montarMensajes(
       if (abierta && !conversaciones.has(abierta.uid)) {
         resumenDe(abierta.uid, abierta.apodo);
       }
+      marcarListaCargada();
       pintarLista();
       return true;
     } catch {
+      marcarListaConError();
       pintarEstado(
         zonas.estadoLista,
         estadoDeError({
@@ -365,6 +383,7 @@ export async function montarMensajes(
         const sinLeer = resumen.uidOtro === abierta?.uid ? 0 : resumen.noLeidos;
         conversaciones.set(resumen.uidOtro, { ...previo, ...resumen, noLeidos: sinLeer });
       }
+      marcarListaCargada();
       pintarLista();
     } catch {
       // El sondeo vuelve a intentarlo; el estado del canal ya dice lo que pasa.

@@ -303,6 +303,35 @@ describe('carga y estados', () => {
     expect(api.listarConversaciones).toHaveBeenCalledTimes(2);
   });
 
+  test('abrir ?con= no tapa el error de la lista: sigue a la vista hasta que cargue', async () => {
+    // Si no, la lista enseñaría solo la conversación de ?con= y parecería que
+    // no hay más: un fallo en silencio (riesgo #7).
+    const api = apiFalsa();
+    api.listarConversaciones.mockRejectedValueOnce(new Error('caida'));
+    await montar({ api, busqueda: `?con=${BRUNO}` });
+
+    const estado = $('[data-zona="estado-conversaciones"]');
+    expect($('[data-zona="titulo-hilo"]').textContent).toBe('Nueva conversación');
+    expect(estado.hidden).toBe(false);
+    expect(estado.textContent).toContain('No pudimos cargar tus conversaciones');
+
+    api.listarConversaciones.mockResolvedValueOnce([
+      {
+        uidOtro: CARLA,
+        apodoOtro: 'carla',
+        noLeidos: 1,
+        ultimoMensaje: mensaje({ id: 'c1', de: CARLA, a: YO, texto: 'hola', fecha: 'f' }),
+      },
+    ]);
+    estado.querySelector('[data-accion="reintentar"]').click();
+    await esperar();
+
+    expect(estado.hidden).toBe(true);
+    expect(estado.textContent).toBe('');
+    const filas = [...document.querySelectorAll('[data-zona="conversaciones"] button')];
+    expect(filas.map((b) => b.dataset.uid).sort()).toEqual([BRUNO, CARLA].sort());
+  });
+
   test('si no carga el historial se dice y se puede reintentar', async () => {
     const api = apiFalsa();
     api.historial.mockRejectedValueOnce(new Error('caida'));
