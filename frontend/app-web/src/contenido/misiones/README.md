@@ -7,15 +7,15 @@ es un README vacío y `contracts/openapi/` no trae `misiones.yaml`.
 
 ## Qué hay
 
-| Pieza | Archivo | Requisito |
-|---|---|---|
-| Tablón (MissionBoard): pestañas Historia/Desafío/Exploración, filtros de dificultad, estado y duración, 16 por página | `tablon-misiones.js` | RF-MIS-001, RF-MIS-002 |
-| Tarjeta (MissionCard) con los seis estados de §7.8.7 | `tablon-misiones.js` | RF-MIS-001, RF-MIS-009 |
-| Banner rotativo (MissionBanner), también en Mi inventario | `banner-misiones.js` (+ kit) | RF-MIS-001, RF-INV-003 |
-| Detalle (MissionDetail): narrativa, objetivos, enemigos, jefe, Máster y épica, recompensas | `detalle-mision.js` | RF-MIS-003, RF-MIS-008 |
-| Configurador de estrategia (RotationBuilder) | `constructor-estrategia.js` | RF-MIS-004, RF-MIS-005 |
-| Misiones en curso (ActiveMissionPanel) | `en-curso.js` | RF-MIS-009, RF-MIS-012 |
-| Reporte e historial (MissionReport, MissionHistory) | `reporte-mision.js` | RF-MIS-010, RF-MIS-011 |
+| Pieza                                                                                                                 | Archivo                      | Requisito              |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------- | ---------------------- |
+| Tablón (MissionBoard): pestañas Historia/Desafío/Exploración, filtros de dificultad, estado y duración, 16 por página | `tablon-misiones.js`         | RF-MIS-001, RF-MIS-002 |
+| Tarjeta (MissionCard) con los seis estados de §7.8.7                                                                  | `tablon-misiones.js`         | RF-MIS-001, RF-MIS-009 |
+| Banner rotativo (MissionBanner), también en Mi inventario                                                             | `banner-misiones.js` (+ kit) | RF-MIS-001, RF-INV-003 |
+| Detalle (MissionDetail): narrativa, objetivos, enemigos, jefe, Máster y épica, recompensas                            | `detalle-mision.js`          | RF-MIS-003, RF-MIS-008 |
+| Configurador de estrategia (RotationBuilder)                                                                          | `constructor-estrategia.js`  | RF-MIS-004, RF-MIS-005 |
+| Misiones en curso (ActiveMissionPanel)                                                                                | `en-curso.js`                | RF-MIS-009, RF-MIS-012 |
+| Reporte e historial (MissionReport, MissionHistory)                                                                   | `reporte-mision.js`          | RF-MIS-010, RF-MIS-011 |
 
 ## Qué funciona hoy y qué no
 
