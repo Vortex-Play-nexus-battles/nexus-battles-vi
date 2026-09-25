@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_cumplimiento.auditoria.controller;
 
 import com.nexusbattles.ms_cumplimiento.auditoria.exception.AuditWriteException;
+import com.nexusbattles.ms_cumplimiento.auditoria.exception.ExportacionExcedeMaximoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.security.access.AccessDeniedException;
@@ -37,6 +38,16 @@ public class ManejadorDeErrores {
     public ProblemDetail bitacoraNoDisponible(AuditWriteException error) {
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, error.getMessage());
         problema.setTitle("Bitacora de auditoria no disponible");
+        return problema;
+    }
+
+    @ExceptionHandler(ExportacionExcedeMaximoException.class)
+    public ProblemDetail exportacionExcedeMaximo(ExportacionExcedeMaximoException error) {
+        // Mismo 422: Spring 7 dejó obsoleto UNPROCESSABLE_ENTITY
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.UNPROCESSABLE_CONTENT, error.getMessage());
+        problema.setTitle("La exportación excede el máximo por operación");
+        problema.setProperty("totalEncontrado", error.getTotalEncontrado());
+        problema.setProperty("maximoPermitido", error.getMaximoPermitido());
         return problema;
     }
 }

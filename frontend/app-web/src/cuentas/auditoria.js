@@ -1,4 +1,4 @@
-// Registro de auditoría — HU-AUD-002
+// Registro de auditoría (consulta y exportación a PDF)
 // JS vanilla, siguiendo el patrón .estado[hidden] ya usado en el equipo
 // (visto en tema-cuentas.css: .estado.carga / .estado.error / .estado.vacio).
 
@@ -20,6 +20,7 @@
     filtroHasta: document.getElementById('filtro-hasta'),
     btnFiltrar: document.getElementById('btn-filtrar'),
     btnLimpiar: document.getElementById('btn-limpiar'),
+    btnExportar: document.getElementById('btn-exportar'),
     btnAnterior: document.getElementById('btn-anterior'),
     btnSiguiente: document.getElementById('btn-siguiente'),
     paginaActual: document.getElementById('auditoria-pagina-actual'),
@@ -66,7 +67,6 @@
     return valor.length > maxLargo ? `${valor.slice(0, maxLargo)}…` : valor;
   }
 
-  // Sigue el mismo patrón que .estado.carga/.error/.vacio de tema-cuentas.css
   function mostrarEstado(texto, tipo) {
     el.estado.hidden = false;
     el.estado.textContent = texto;
@@ -81,7 +81,9 @@
     el.estado.textContent = '';
   }
 
-  function construirUrl() {
+  // Filtros comunes a la consulta paginada y a la exportación: mismos
+  // criterios, para que "exportar lo que estoy viendo" sea literal.
+  function parametrosFiltro() {
     const params = new URLSearchParams();
 
     const administradorId = el.filtroAdministrador.value.trim();
@@ -102,10 +104,19 @@
       params.set('hasta', `${hasta}T23:59:59Z`);
     }
 
+    return params;
+  }
+
+  function construirUrl() {
+    const params = parametrosFiltro();
     params.set('page', String(estado.pagina));
     params.set('size', String(TAMANO_PAGINA));
-
     return `${API_BASE}?${params.toString()}`;
+  }
+
+  function construirUrlExportacion() {
+    const params = parametrosFiltro();
+    return `${API_BASE}/exportar?${params.toString()}`;
   }
 
   function renderFilas(registros) {
@@ -114,12 +125,6 @@
     registros.forEach((registro) => {
       const tr = document.createElement('tr');
 
-      // UX-R2.8 — esto era una plantilla con nueve interpolaciones dentro de
-      // `innerHTML`. `motivo`, `valorAnterior` y `valorNuevo` son texto que
-      // escribio una persona, y ademas iban tambien dentro de `title="..."`,
-      // donde una comilla cierra el atributo. Un registro de auditoria es el
-      // ultimo sitio donde uno quiere marcado inyectado: lo lee un
-      // administrador, con sesion de administrador.
       const celda = (texto, clase, titulo) => {
         const td = document.createElement('td');
         if (clase) {
@@ -161,15 +166,16 @@
     el.btnSiguiente.disabled = estado.pagina >= estado.totalPaginas - 1;
   }
 
+  function tokenDeSesion() {
+    return sessionStorage.getItem('nexus.token');
+  }
+
   async function cargar() {
     el.tbody.innerHTML = '';
     mostrarEstado('Cargando...', 'carga');
 
     try {
-      // El JWT de la sesion, el mismo que lleva el resto de la API: la
-      // bitacora la consulta un SUPER_ADMINISTRADOR con su token (ADR-002).
-      // Antes iba `credentials: 'include'`, y ms-cumplimiento no tiene cookies.
-      const token = sessionStorage.getItem('nexus.token');
+      const token = tokenDeSesion();
       const respuesta = await fetch(construirUrl(), {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
@@ -201,7 +207,6 @@
 
       const datos = await respuesta.json();
 
-      // Soporta tanto Page<T> de Spring Data como un arreglo simple.
       const registros = datos.content ?? datos;
       const totalPaginas = datos.totalPages ?? 1;
       const paginaActual = datos.number ?? estado.pagina;
@@ -214,11 +219,92 @@
       }
 
       actualizarPaginacion(paginaActual, totalPaginas);
-      // OJO: este bloque atrapa cualquier excepcion, no solo las de red, y
-      // siempre muestra el mismo mensaje. Ver la nota del PR de saneamiento.
     } catch {
       mostrarEstado('Error de red al consultar la auditoría.', 'error');
     }
+  }
+
+  /**
+   * Exporta el registro filtrado a PDF y dispara la descarga en el
+   * navegador. Reusa exactamente los mismos filtros que la consulta en
+   * pantalla.
+   *
+   * Si el backend responde 422, significa que el filtro actual trae más
+   * registros de los que se pueden exportar en una operación: se muestra
+   * el detalle del error (que pide acotar el rango) en vez de intentar
+   * descargar algo.
+   */
+  async function exportar() {
+    const boton = el.btnExportar;
+    const textoOriginalBoton = boton.textContent;
+    boton.disabled = true;
+    boton.textContent = 'Exportando…';
+
+    try {
+      const token = tokenDeSesion();
+      const respuesta = await fetch(construirUrlExportacion(), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (respuesta.status === 401) {
+        mostrarEstado('Inicia sesión como Super Administrador para exportar.', 'error');
+        return;
+      }
+
+      if (respuesta.status === 403) {
+        mostrarEstado('No tienes permisos de Super Administrador para exportar.', 'error');
+        return;
+      }
+
+      if (respuesta.status === 422) {
+        let detalle =
+          'El filtro actual tiene demasiados registros para exportar. Acota el rango de fechas.';
+        try {
+          const problema = await respuesta.json();
+          if (problema && problema.detail) {
+            detalle = problema.detail;
+          }
+        } catch {
+          // Si el cuerpo no es JSON, se queda el mensaje por defecto.
+        }
+        mostrarEstado(detalle, 'error');
+        return;
+      }
+
+      if (!respuesta.ok) {
+        mostrarEstado('No se pudo exportar el registro de auditoría.', 'error');
+        return;
+      }
+
+      const blob = await respuesta.blob();
+      const nombreArchivo =
+        nombreDesdeContentDisposition(respuesta.headers.get('Content-Disposition')) ??
+        `auditoria-${Date.now()}.pdf`;
+
+      const url = URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = url;
+      enlace.download = nombreArchivo;
+      document.body.appendChild(enlace);
+      enlace.click();
+      document.body.removeChild(enlace);
+      URL.revokeObjectURL(url);
+
+      mostrarEstado('Exportación descargada.', 'exito');
+    } catch {
+      mostrarEstado('Error de red al exportar la auditoría.', 'error');
+    } finally {
+      boton.disabled = false;
+      boton.textContent = textoOriginalBoton;
+    }
+  }
+
+  function nombreDesdeContentDisposition(valorCabecera) {
+    if (!valorCabecera) {
+      return null;
+    }
+    const coincidencia = /filename="?([^"]+)"?/.exec(valorCabecera);
+    return coincidencia ? coincidencia[1] : null;
   }
 
   el.btnFiltrar.addEventListener('click', () => {
@@ -233,6 +319,10 @@
     el.filtroHasta.value = '';
     estado.pagina = 0;
     cargar();
+  });
+
+  el.btnExportar.addEventListener('click', () => {
+    exportar();
   });
 
   el.btnAnterior.addEventListener('click', () => {

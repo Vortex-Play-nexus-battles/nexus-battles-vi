@@ -31,7 +31,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Bitacora de auditoria (ms-cumplimiento)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Consulta y registro de la bitacora de acciones administrativas
     (HU-AUD-001). Cada entrada dice quien hizo que, sobre quien, con que
@@ -327,6 +327,109 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+                /api/v1/admin/auditoria/exportar:
+                  get:
+                    tags: [ auditoria ]
+                    operationId: exportarAuditoria
+                    summary: Exporta a PDF la bitacora filtrada (HU-AUD-004)
+                    description: |
+                      Genera un PDF con las entradas de la bitacora que cumplan los
+                      filtros -- los mismos tres que admite la consulta paginada, sin
+                      `page`/`size`/`sort`: aqui no hay paginacion, se exporta todo lo que
+                      cumpla el filtro en una sola operacion.
+
+                      **Limite de volumen.** Si el total de entradas que cumplen el filtro
+                      supera `cumplimiento.auditoria.exportacion.maximo-registros`
+                      (10000 por omision, configurable; el PO todavia no fija el valor
+                      real), la operacion responde 422 en vez de generar un archivo
+                      incompleto o truncado. Quien exporta debe acotar el rango de fechas
+                      u otro filtro y reintentar.
+
+                      **Cada exportacion queda registrada como un acceso.** Tanto si el
+                      PDF se genera como si se rechaza por exceder el maximo, el propio
+                      llamado a esta operacion crea una nueva entrada en la bitacora, de
+                      tipo `EXPORTACION`, con el administrador y la IP tomados del propio
+                      request -- nunca de un cuerpo, que aqui no existe -- para que ese
+                      dato no se pueda falsear.
+
+                      **Quien puede llamar.** Misma regla que la consulta:
+                      `ROLE_SUPER_ADMINISTRADOR`, exigido tanto por la cadena de seguridad
+                      como por `RequireSuperAdmin2FAAspect` (con la misma exigencia
+                      condicional de segundo factor que la operacion de consulta).
+                    security:
+                      - tokenDeUsuario: [ ]
+                    parameters:
+                      - name: administradorId
+                        in: query
+                        required: false
+                        description: |
+                          Filtra por el administrador que ejecuto la accion. Un valor en
+                          blanco se trata como ausente.
+                        schema:
+                          type: string
+                      - name: tipoAccion
+                        in: query
+                        required: false
+                        description: |
+                          Filtra por tipo de accion. Un valor fuera del enumerado responde
+                          400.
+                        schema:
+                          $ref: '#/components/schemas/TipoAccion'
+                      - name: desde
+                        in: query
+                        required: false
+                        description: Extremo inferior del rango de `fechaHora`, en ISO-8601.
+                        schema:
+                          type: string
+                          format: date-time
+                      - name: hasta
+                        in: query
+                        required: false
+                        description: Extremo superior del rango de `fechaHora`, en ISO-8601.
+                        schema:
+                          type: string
+                          format: date-time
+                    responses:
+                      '200':
+                        description: PDF con las entradas de la bitacora que cumplen los filtros
+                        content:
+                          application/pdf:
+                            schema:
+                              type: string
+                              format: binary
+                      '400':
+                        description: |
+                          `tipoAccion` no esta en el enumerado. `type` sale como
+                          `about:blank` (aviso 1).
+                        content:
+                          application/problem+json:
+                            schema:
+                              $ref: '#/components/schemas/ProblemDetail'
+                      '401':
+                        $ref: '#/components/responses/SinCredencial'
+                      '403':
+                        $ref: '#/components/responses/NoAutorizado'
+                      '422':
+                        description: |
+                          El filtro trae mas entradas de las que se pueden exportar en una
+                          sola operacion (ver el limite de volumen en la descripcion). El
+                          cuerpo es un problem detail con dos propiedades adicionales,
+                          `totalEncontrado` y `maximoPermitido`. `type` sale como
+                          `about:blank` (aviso 1), igual que el resto de errores de este
+                          servicio.
+                        content:
+                          application/problem+json:
+                            schema:
+                              $ref: '#/components/schemas/ProblemDetail'
+                            example:
+                              type: about:blank
+                              title: La exportacion excede el maximo por operacion
+                              status: 422
+                              detail: La exportacion tiene 15000 registros, que supera el maximo de 10000 por operacion. Acota el rango de fechas u otros filtros e intentalo de nuevo.
+                              totalEncontrado: 15000
+                              maximoPermitido: 10000
+
+
 
 components:
   securitySchemes:
