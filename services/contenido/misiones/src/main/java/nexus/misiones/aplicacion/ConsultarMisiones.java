@@ -92,6 +92,21 @@ public class ConsultarMisiones {
         return vista.de(mision);
     }
 
+    /**
+     * Intentos que le quedan al jugador en el periodo vigente (7.8.2, «limite
+     * de intentos diarios o semanales»). Un intento se consume al matricular.
+     *
+     * @return nulo si la mision no limita intentos (no es un desafio)
+     */
+    public Integer intentosRestantes(String jugadorUid, Mision mision) {
+        if (mision.intentos() == null) {
+            return null;
+        }
+        long usados = ejecuciones.iniciadasDesde(jugadorUid, mision.id(),
+                mision.intentos().periodo().inicio(reloj.instant()));
+        return (int) Math.max(0, mision.intentos().maximo() - usados);
+    }
+
     private Vista vista(String jugadorUid) {
         List<Ejecucion> suyas = ejecuciones.delJugador(jugadorUid);
         return new Vista(reloj.instant(),

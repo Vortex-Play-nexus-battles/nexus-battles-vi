@@ -36,6 +36,27 @@ public final class TiradaDeMasters {
         return Math.max(1, (int) Math.floor(mision.duracionHoras() / HORAS_POR_TIRADA_EN_EXPLORACION));
     }
 
+    /**
+     * Probabilidad de que aparezca al menos uno de los Master PROPIOS de la
+     * mision, con todas sus tiradas: 1 - producto de (1 - p) por candidato y
+     * tirada. Es lo que ensena el detalle («probabilidad de aparicion», 7.8.4);
+     * el Master afin al heroe depende del heroe que se envie y va aparte.
+     *
+     * @return nula si la mision no tiene Master propios
+     */
+    public static Double probabilidadDeAlguno(Mision mision) {
+        if (mision.masters().isEmpty()) {
+            return null;
+        }
+        double ninguno = 1.0;
+        for (int tirada = 0; tirada < tiradas(mision); tirada++) {
+            for (MasterDeMision master : mision.masters()) {
+                ninguno *= 1.0 - master.probabilidad();
+            }
+        }
+        return 1.0 - ninguno;
+    }
+
     public static List<MasterDeMision> quienesAparecen(
             Mision mision, String prototipoDelHeroe, List<EpicaDeTabla20> tabla20, Azar azar) {
         List<MasterDeMision> candidatos = new ArrayList<>(mision.masters());

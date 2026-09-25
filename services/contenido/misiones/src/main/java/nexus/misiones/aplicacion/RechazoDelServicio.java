@@ -7,11 +7,17 @@ package nexus.misiones.aplicacion;
  */
 public class RechazoDelServicio extends RuntimeException {
 
+    private final String servicio;
     private final int estado;
 
     public RechazoDelServicio(String servicio, int estado, String detalle) {
         super(servicio + " respondio " + estado + (detalle == null || detalle.isBlank() ? "" : ": " + detalle));
+        this.servicio = servicio;
         this.estado = estado;
+    }
+
+    public String servicio() {
+        return servicio;
     }
 
     public int estado() {

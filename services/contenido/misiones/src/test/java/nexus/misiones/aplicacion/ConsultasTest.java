@@ -169,6 +169,42 @@ class ConsultasTest {
     }
 
     @Test
+    @DisplayName("una mision que ya no se publica no se pinta; sus epicas siguen en la coleccion")
+    void misionRetiradaDeLaSemilla() {
+        Ejecucion enCurso = ejecuciones.guardar(Ejecucion.nueva(UUID.randomUUID(), "retirada", JUGADOR,
+                Misiones.HEROE, List.of(), Escalon.NORMAL, AHORA.minus(Duration.ofHours(1)),
+                Duration.ofHours(12), 1L, null));
+        Ejecucion terminada = terminada("retirada", true, AHORA.minus(Duration.ofDays(1)),
+                List.of(new RecompensasDeEjecucion.EpicaGanada("Velo de Sombras", "Sombra del Olvido", null)));
+
+        assertThat(ejecucionesDe().enCurso(JUGADOR)).isEmpty();
+        assertThatThrownBy(() -> ejecucionesDe().reporte(JUGADOR, terminada.id()))
+                .isInstanceOf(MisionNoEncontrada.class);
+        Historial historial = ejecucionesDe().historial(JUGADOR);
+        assertThat(historial.terminadas()).isEmpty();
+        assertThat(historial.epicas()).extracting(Historial.EpicaObtenida::nombre).containsExactly("Velo de Sombras");
+        assertThat(enCurso.estado()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("los intentos que quedan de un desafio en su periodo; nulo si la mision no los limita")
+    void intentosRestantes() {
+        Mision desafio = Misiones.desafio("desafio-diario",
+                new nexus.misiones.dominio.Intentos(2, nexus.misiones.dominio.Periodo.DIARIO));
+        catalogo = new Dobles.Catalogo(List.of(Misiones.templo(), desafio), List.of());
+        ejecuciones.guardar(Ejecucion.nueva(UUID.randomUUID(), "desafio-diario", JUGADOR, Misiones.HEROE, List.of(),
+                Escalon.NORMAL, AHORA.minus(Duration.ofHours(1)), Duration.ofHours(2), 1L, null));
+        Ejecucion deAnteayer = Ejecucion.nueva(UUID.randomUUID(), "desafio-diario", JUGADOR, Misiones.HEROE,
+                List.of(), Escalon.NORMAL, AHORA.minus(Duration.ofDays(2)), Duration.ofHours(2), 1L, null);
+        deAnteayer.cancelar(AHORA.minus(Duration.ofDays(2)).plusSeconds(60));
+        ejecuciones.guardar(deAnteayer);
+
+        assertThat(consultar().intentosRestantes(JUGADOR, desafio)).as("ayer no cuenta hoy").isEqualTo(1);
+        assertThat(consultar().intentosRestantes(OTRO, desafio)).isEqualTo(2);
+        assertThat(consultar().intentosRestantes(JUGADOR, Misiones.templo())).isNull();
+    }
+
+    @Test
     @DisplayName("favoritas: marcar y desmarcar, idempotentes; una mision inexistente es 404")
     void favoritas() {
         GestionarFavoritas gestion = new GestionarFavoritas(catalogo, favoritas, reloj);

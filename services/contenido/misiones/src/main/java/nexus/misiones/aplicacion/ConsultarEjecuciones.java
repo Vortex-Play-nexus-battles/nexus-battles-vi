@@ -14,11 +14,20 @@ import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionNoEncontrada;
 import nexus.misiones.dominio.EstadoEjecucion;
 import nexus.misiones.dominio.Mision;
+import nexus.misiones.dominio.MisionNoEncontrada;
 import nexus.misiones.dominio.RecompensasDeEjecucion;
 import nexus.misiones.dominio.RepositorioDeEjecuciones;
 import nexus.misiones.dominio.SinReporteTodavia;
 
-/** Las ejecuciones de un jugador: en curso (7.8.9), el reporte y el historial (7.8.8). */
+/**
+ * Las ejecuciones de un jugador: en curso (7.8.9), el reporte y el historial (7.8.8).
+ *
+ * <p>Una ejecucion de una mision que la semilla ya no publica no se ensena en
+ * las listas: no hay nombre ni categoria con que pintarla, y el trabajo en
+ * segundo plano ya la cierra y libera al heroe. Su reporte responde que la
+ * mision no esta publicada. Las epicas que gano, en cambio, siguen en la
+ * coleccion del jugador: son suyas aunque la mision desaparezca.
+ */
 public class ConsultarEjecuciones {
 
     /** La historia es una narrativa lineal (7.8.2): una sola cadena con todas sus misiones. */
@@ -36,12 +45,14 @@ public class ConsultarEjecuciones {
         return ejecuciones.enCursoDelJugador(jugadorUid).stream()
                 .sorted(Comparator.comparing(Ejecucion::terminaEn))
                 .map(this::conMision)
+                .filter(t -> t.mision() != null)
                 .toList();
     }
 
     /**
      * @throws EjecucionNoEncontrada si no existe o es de otro jugador
      * @throws SinReporteTodavia     si sigue en curso o se abandono
+     * @throws MisionNoEncontrada    si su mision ya no esta publicada
      */
     public EjecucionConMision reporte(String jugadorUid, UUID ejecucionId) {
         Ejecucion ejecucion = ejecuciones.buscar(ejecucionId)
@@ -50,15 +61,20 @@ public class ConsultarEjecuciones {
         if (!ejecucion.estado().tieneReporte()) {
             throw new SinReporteTodavia(ejecucion.estado());
         }
-        return conMision(ejecucion);
+        EjecucionConMision reporte = conMision(ejecucion);
+        if (reporte.mision() == null) {
+            throw new MisionNoEncontrada(ejecucion.misionId());
+        }
+        return reporte;
     }
 
     public Historial historial(String jugadorUid) {
-        List<EjecucionConMision> terminadas = ejecuciones.delJugador(jugadorUid).stream()
+        List<EjecucionConMision> conReporte = ejecuciones.delJugador(jugadorUid).stream()
                 .filter(e -> e.estado().tieneReporte())
                 .sorted(Comparator.comparing(Ejecucion::terminadaEn).reversed())
                 .map(this::conMision)
                 .toList();
+        List<EjecucionConMision> terminadas = conReporte.stream().filter(t -> t.mision() != null).toList();
 
         List<Historial.PorCategoria> porCategoria = new ArrayList<>();
         for (Categoria categoria : Categoria.values()) {
@@ -91,7 +107,7 @@ public class ConsultarEjecuciones {
         }
 
         List<Historial.EpicaObtenida> epicas = new ArrayList<>();
-        for (EjecucionConMision t : terminadas) {
+        for (EjecucionConMision t : conReporte) {
             RecompensasDeEjecucion recompensas = t.ejecucion().recompensas();
             if (recompensas == null) {
                 continue;

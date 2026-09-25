@@ -1,6 +1,7 @@
 package nexus.misiones.dominio.simulacion;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 import java.util.stream.IntStream;
@@ -85,6 +86,18 @@ class TiradaDeMastersTest {
         assertThat(TiradaDeMasters.tiradas(Misiones.exploracion("mision-e", 72))).isEqualTo(3);
         assertThat(TiradaDeMasters.quienesAparecen(Misiones.exploracion("mision-e", 48, seguro), "Mago Fuego",
                 List.of(), new AzarConSemilla(3))).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("la probabilidad que ensena el detalle: la del Master propio, acumulada por tiradas")
+    void probabilidadDeAlguno() {
+        MasterDeMision sombra = new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 0.15,
+                new Epica("Velo de Sombras", null, null, null));
+
+        assertThat(TiradaDeMasters.probabilidadDeAlguno(Misiones.templo())).isEqualTo(0.15, within(1e-12));
+        assertThat(TiradaDeMasters.probabilidadDeAlguno(Misiones.exploracion("mision-e", 48, sombra)))
+                .as("dos tiradas: 1 - 0,85^2").isEqualTo(1 - 0.85 * 0.85, within(1e-12));
+        assertThat(TiradaDeMasters.probabilidadDeAlguno(Misiones.historia("mision-h", List.of()))).isNull();
     }
 
     @Test
