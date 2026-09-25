@@ -265,23 +265,44 @@ class EnviarMensajeDirectoTest {
     class AvisoEnLaBandeja {
 
         @Test
-        @DisplayName("si no escucha, se le avisa del primer no leido de ese remitente, y solo de ese")
+        @DisplayName("cada mensaje sin escuchar avisa con el id de la racha: el primer no leido de ese remitente")
         void unaVezPorRacha() {
             MensajeDirecto primero = enviar.enviar(REMITENTE, BRUNO, "uno", null);
-            enviar.enviar(REMITENTE, BRUNO, "dos", null);
+            MensajeDirecto segundo = enviar.enviar(REMITENTE, BRUNO, "dos", null);
 
-            assertEquals(List.of(primero), aviso.avisados);
+            // Los dos avisos llevan el mismo id: notificaciones descarta el
+            // repetido (409) y a la bandeja llega uno por racha.
+            assertAll(
+                    () -> assertEquals(List.of(primero, segundo), aviso.avisados),
+                    () -> assertEquals(List.of(primero.id(), primero.id()), aviso.rachas));
         }
 
         @Test
-        @DisplayName("tras leerlos, el siguiente vuelve a avisar")
+        @DisplayName("tras leerlos, empieza otra racha y el aviso lleva otro id")
         void trasLeer() {
             enviar.enviar(REMITENTE, BRUNO, "uno", null);
             repositorio.marcarLeidos(BRUNO, ANA, AHORA);
 
             MensajeDirecto otro = enviar.enviar(REMITENTE, BRUNO, "otra vez", null);
 
-            assertEquals(otro, aviso.avisados.get(1));
+            assertEquals(otro.id(), aviso.rachas.get(1));
+        }
+
+        @Test
+        @DisplayName("si el primer no leido llego mientras escuchaba y se fue sin leerlo, el siguiente avisa igual")
+        void rachaEmpezadaEscuchando() {
+            // Lo vio llegar (contador, anuncio) pero cerro sin abrir la
+            // conversacion: con «solo el primero avisa», nada de lo que siguiera
+            // llegaria nunca a su bandeja.
+            entrega.escuchando = true;
+            MensajeDirecto visto = enviar.enviar(REMITENTE, BRUNO, "uno", null);
+            entrega.escuchando = false;
+
+            MensajeDirecto sinEscuchar = enviar.enviar(REMITENTE, BRUNO, "dos", null);
+
+            assertAll(
+                    () -> assertEquals(List.of(sinEscuchar), aviso.avisados),
+                    () -> assertEquals(List.of(visto.id()), aviso.rachas));
         }
 
         @Test
@@ -401,10 +422,12 @@ class EnviarMensajeDirectoTest {
 
     static final class Aviso implements AvisoDeMensajeDirecto {
         final List<MensajeDirecto> avisados = new ArrayList<>();
+        final List<UUID> rachas = new ArrayList<>();
 
         @Override
-        public void avisar(MensajeDirecto mensaje) {
+        public void avisar(MensajeDirecto mensaje, UUID primerNoLeido) {
             avisados.add(mensaje);
+            rachas.add(primerNoLeido);
         }
     }
 }

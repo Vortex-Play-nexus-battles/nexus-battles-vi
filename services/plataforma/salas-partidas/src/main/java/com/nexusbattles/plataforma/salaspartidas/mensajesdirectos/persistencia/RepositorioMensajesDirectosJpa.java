@@ -104,6 +104,13 @@ class RepositorioMensajesDirectosJpa implements RepositorioDeMensajesDirectos {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Optional<MensajeDirecto> primerNoLeido(UUID destinatario, UUID remitente) {
+        return almacen.findFirstByIdDestinatarioAndIdRemitenteAndLeidoEnIsNullOrderByEnviadoEnAscIdAsc(
+                destinatario, remitente).map(RepositorioMensajesDirectosJpa::aDominio);
+    }
+
+    @Override
     @Transactional
     public int marcarLeidos(UUID destinatario, UUID remitente, Instant cuando) {
         return almacen.marcarLeidos(destinatario, remitente, cuando);

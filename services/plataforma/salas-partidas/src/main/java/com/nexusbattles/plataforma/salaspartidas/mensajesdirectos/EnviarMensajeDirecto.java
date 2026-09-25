@@ -53,7 +53,11 @@ import java.util.UUID;
  * <p>Solo lo que pasa todo se guarda, se entrega al destinatario y al
  * remitente (sus otras pestanas) y, si el destinatario no esta escuchando, se
  * le avisa en su bandeja: una vez por racha de no leidos del mismo remitente,
- * para que diez mensajes seguidos no sean diez avisos.
+ * para que diez mensajes seguidos no sean diez avisos. La racha se identifica
+ * por su primer no leido, no por «este es el primero»: si ese primero llego
+ * mientras escuchaba y se fue sin leerlo, lo que siguiera no avisaria nunca.
+ * Cada mensaje sin escuchar pide el aviso con el id de la racha y
+ * notificaciones descarta los repetidos (409).
  */
 public class EnviarMensajeDirecto {
 
@@ -222,17 +226,19 @@ public class EnviarMensajeDirecto {
     }
 
     /**
-     * Aviso en la bandeja solo si no esta escuchando y solo con el primer no
-     * leido de este remitente: a partir de ahi ya sabe que tiene mensajes suyos.
+     * Aviso en la bandeja solo si no esta escuchando, con el id de la racha
+     * de no leidos de este remitente: uno por racha, aunque la racha la haya
+     * abierto un mensaje que llego mientras escuchaba.
      */
     private void avisarSiNoEscucha(MensajeDirecto mensaje) {
         try {
             if (entrega.estaEscuchando(mensaje.destinatario())) {
                 return;
             }
-            if (repositorio.noLeidos(mensaje.destinatario(), mensaje.remitente()) == 1) {
-                aviso.avisar(mensaje);
-            }
+            UUID racha = repositorio.primerNoLeido(mensaje.destinatario(), mensaje.remitente())
+                    .map(MensajeDirecto::id)
+                    .orElse(mensaje.id());
+            aviso.avisar(mensaje, racha);
         } catch (RuntimeException fallo) {
             log.warn("No se pudo decidir el aviso del mensaje privado {}: {}", mensaje.id(), fallo.getMessage());
         }

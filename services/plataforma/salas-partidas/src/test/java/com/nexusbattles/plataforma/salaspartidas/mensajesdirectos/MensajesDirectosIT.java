@@ -50,6 +50,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -104,6 +106,8 @@ class MensajesDirectosIT {
     private static HttpServer modulosAjenos;
     private static final List<String> VERIFICACIONES = new CopyOnWriteArrayList<>();
     private static final List<String> AVISOS = new CopyOnWriteArrayList<>();
+    private static final List<String> INTENTOS_DE_AVISO = new CopyOnWriteArrayList<>();
+    private static final Set<String> IDS_DE_AVISO = ConcurrentHashMap.newKeySet();
     private static final Map<String, String> AUTORIZACIONES = new ConcurrentHashMap<>();
 
     @BeforeAll
@@ -139,9 +143,17 @@ class MensajesDirectosIT {
                     ? "{\"sancionActiva\":true,\"motivo\":\"Lenguaje ofensivo\",\"tipo\":\"SUSPENSION\"}"
                     : "{\"sancionActiva\":false}");
         });
-        // notificaciones.yaml 1.1.0: POST /api/v1/internal/notifications
+        // notificaciones.yaml 1.1.0: POST /api/v1/internal/notifications. Como
+        // el servicio de verdad: un id repetido en la bandeja de ese usuario
+        // es 409 y no se guarda otra vez.
         modulosAjenos.createContext("/api/v1/internal/notifications", intercambio -> {
-            AVISOS.add(new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            String cuerpo = new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            INTENTOS_DE_AVISO.add(cuerpo);
+            if (!IDS_DE_AVISO.add(campo(cuerpo, "usuarioId") + "|" + campo(cuerpo, "id"))) {
+                responder(intercambio, 409, "{\"status\":409}");
+                return;
+            }
+            AVISOS.add(cuerpo);
             responder(intercambio, 201, "{}");
         });
         modulosAjenos.start();
@@ -316,7 +328,7 @@ class MensajesDirectosIT {
 
     /** Los no leidos de la conversacion con {@code uidOtro} en la respuesta de «mis conversaciones». */
     private static int noLeidosCon(String cuerpo, UUID uidOtro) {
-        java.util.regex.Matcher fila = java.util.regex.Pattern
+        Matcher fila = Pattern
                 .compile("\\{\"uidOtro\":\"" + uidOtro + "\".*?\"noLeidos\":(\\d+)}")
                 .matcher(cuerpo);
         assertTrue(fila.find(), "no hay conversacion con " + uidOtro + ": " + cuerpo);
@@ -525,7 +537,7 @@ class MensajesDirectosIT {
                 () -> assertNull(colaDeHugo.poll(1, TimeUnit.SECONDS), "y no se entrega dos veces"));
 
         // Julia no se conecta nunca: el mensaje la espera en el historial y a
-        // su bandeja le llega UN aviso, sin el texto; el segundo no avisa.
+        // su bandeja le llega UN aviso, sin el texto.
         String paraJulia = "\"usuarioId\":\"" + JUGADORES.get("julia") + "\"";
         String aJulia = conversaciones() + "/" + JUGADORES.get("julia") + "/mensajes";
         assertEquals(201, rest("POST", aJulia, "ines", "{\"texto\":\"secreto para julia\"}").statusCode());
@@ -541,12 +553,32 @@ class MensajesDirectosIT {
                 () -> assertTrue(aviso.contains("ines te escribi"), aviso),
                 () -> assertFalse(aviso.contains("secreto para julia"), "el aviso no lleva el texto"));
 
+        // El segundo vuelve a avisar, con el MISMO id (el del primer no leido):
+        // notificaciones lo descarta con 409 y a la bandeja llega uno por racha.
         assertEquals(201, rest("POST", aJulia, "ines", "{\"texto\":\"otro\"}").statusCode());
-        Thread.sleep(500);
-        assertEquals(1, avisosPara(paraJulia).size(), "un aviso por racha de no leidos, no uno por mensaje");
+        long hasta = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (intentosPara(paraJulia).size() < 2 && System.nanoTime() < hasta) {
+            Thread.sleep(50);
+        }
+        List<String> intentos = intentosPara(paraJulia);
+        assertAll(
+                () -> assertEquals(2, intentos.size(), "cada mensaje sin escuchar intenta el aviso"),
+                () -> assertEquals(campo(intentos.get(0), "id"), campo(intentos.get(1), "id"),
+                        "los dos llevan el id de la racha"),
+                () -> assertEquals(1, avisosPara(paraJulia).size(), "un aviso por racha de no leidos"));
     }
 
     private static List<String> avisosPara(String destinatario) {
         return AVISOS.stream().filter(aviso -> aviso.contains(destinatario)).toList();
+    }
+
+    private static List<String> intentosPara(String destinatario) {
+        return INTENTOS_DE_AVISO.stream().filter(aviso -> aviso.contains(destinatario)).toList();
+    }
+
+    /** Un campo de texto de un JSON plano, sin parsear entero. */
+    private static String campo(String json, String nombre) {
+        Matcher m = Pattern.compile("\"" + nombre + "\":\"([^\"]*)\"").matcher(json);
+        return m.find() ? m.group(1) : "";
     }
 }

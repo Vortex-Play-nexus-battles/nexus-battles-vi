@@ -43,8 +43,10 @@ info:
     remitente o directorio de cuentas de ms-identidad): fallo cerrado, D-14;
     el limite de frecuencia por remitente es provisional (5 cada 10 s,
     configurable) a la espera del PO; y el aviso en la bandeja de quien no
-    esta escuchando su cola sale con el primer no leido de cada remitente y
-    no lleva el texto.
+    esta escuchando su cola es uno por racha de no leidos de cada remitente
+    (id `mensaje-directo-{id del primer no leido}`: cada mensaje sin escuchar
+    lo pide con ese mismo id y notificaciones descarta los repetidos con 409)
+    y no lleva el texto.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 

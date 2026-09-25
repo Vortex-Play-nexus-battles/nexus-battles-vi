@@ -35,6 +35,9 @@ class ClienteNotificacionesDeMensajesTest {
             UUID.fromString("99999999-9999-9999-9999-999999999999"), Conversacion.entre(ANA, BRUNO), ANA, "ana",
             BRUNO, "bruno", "el texto es privado", Instant.parse("2026-09-25T18:00:00Z"), null, "cli-1");
 
+    /** El primer no leido de la racha: otro mensaje, anterior a este. */
+    private static final UUID RACHA = UUID.fromString("88888888-8888-8888-8888-888888888888");
+
     private RestClient.Builder constructor;
     private MockRestServiceServer servidor;
 
@@ -49,21 +52,23 @@ class ClienteNotificacionesDeMensajesTest {
     }
 
     @Test
-    @DisplayName("manda el EmitirNotificacionRequest del contrato: al destinatario, con id estable y sin el texto")
+    @DisplayName("manda el EmitirNotificacionRequest del contrato: al destinatario, con el id de la racha y sin el texto")
     void cuerpoDelContrato() {
         servidor.expect(requestTo(DESTINO))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(jsonPath("$.usuarioId").value(BRUNO.toString()))
-                .andExpect(jsonPath("$.id").value("mensaje-directo-99999999-9999-9999-9999-999999999999"))
+                // El id es el de la racha, no el de este mensaje: todos los de
+                // la misma racha repiten id y notificaciones deja uno (409).
+                .andExpect(jsonPath("$.id").value("mensaje-directo-88888888-8888-8888-8888-888888888888"))
                 .andExpect(jsonPath("$.tipo").value("MENSAJE_PRIVADO"))
                 .andExpect(jsonPath("$.titulo").value("Nuevo mensaje privado"))
                 .andExpect(jsonPath("$.cuerpo").value("ana te escribió un mensaje privado."))
-                .andExpect(jsonPath("$.creadaEn").exists())
+                .andExpect(jsonPath("$.creadaEn").value("2026-09-25T18:00:00Z"))
                 .andExpect(content().string(org.hamcrest.Matchers.not(
                         org.hamcrest.Matchers.containsString("el texto es privado"))))
                 .andRespond(withStatus(HttpStatus.CREATED));
 
-        cliente(BASE).avisar(mensaje);
+        cliente(BASE).avisar(mensaje, RACHA);
         servidor.verify();
     }
 
@@ -74,8 +79,8 @@ class ClienteNotificacionesDeMensajesTest {
         servidor.expect(requestTo(DESTINO)).andRespond(withServerError());
         ClienteNotificacionesDeMensajes cliente = cliente(BASE);
 
-        assertDoesNotThrow(() -> cliente.avisar(mensaje));
-        assertDoesNotThrow(() -> cliente.avisar(mensaje));
+        assertDoesNotThrow(() -> cliente.avisar(mensaje, RACHA));
+        assertDoesNotThrow(() -> cliente.avisar(mensaje, RACHA));
         servidor.verify();
     }
 
@@ -83,8 +88,8 @@ class ClienteNotificacionesDeMensajesTest {
     @DisplayName("sin URL de notificaciones no se manda nada")
     void sinUrl() {
         servidor.expect(never(), requestTo(DESTINO));
-        cliente("  ").avisar(mensaje);
-        cliente(null).avisar(mensaje);
+        cliente("  ").avisar(mensaje, RACHA);
+        cliente(null).avisar(mensaje, RACHA);
         servidor.verify();
     }
 
@@ -95,6 +100,6 @@ class ClienteNotificacionesDeMensajesTest {
                 tarea -> {
                     throw new RejectedExecutionException("apagando");
                 });
-        assertDoesNotThrow(() -> sinEjecutor.avisar(mensaje));
+        assertDoesNotThrow(() -> sinEjecutor.avisar(mensaje, RACHA));
     }
 }

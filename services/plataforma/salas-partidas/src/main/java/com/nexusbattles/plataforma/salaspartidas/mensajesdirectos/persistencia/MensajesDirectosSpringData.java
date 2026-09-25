@@ -49,6 +49,10 @@ interface MensajesDirectosSpringData extends JpaRepository<MensajeDirectoEntidad
 
     long countByIdDestinatarioAndIdRemitenteAndLeidoEnIsNull(UUID idDestinatario, UUID idRemitente);
 
+    /** El que abre la racha de no leidos; a igual instante desempata el id, siempre igual. */
+    Optional<MensajeDirectoEntidad> findFirstByIdDestinatarioAndIdRemitenteAndLeidoEnIsNullOrderByEnviadoEnAscIdAsc(
+            UUID idDestinatario, UUID idRemitente);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             UPDATE MensajeDirectoEntidad m SET m.leidoEn = :cuando

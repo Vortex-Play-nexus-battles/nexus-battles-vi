@@ -161,6 +161,26 @@ class RepositorioMensajesDirectosJpaIT {
     }
 
     @Test
+    @DisplayName("el primer no leido de ese remitente abre la racha; al leerlos no queda ninguno")
+    void primerNoLeido() {
+        repositorio.guardar(mensaje(BRUNO, ANA, "ya leido", 1, null));
+        repositorio.marcarLeidos(ANA, BRUNO, T0.plusSeconds(2));
+        MensajeDirecto abre = mensaje(BRUNO, ANA, "abre la racha", 3, null);
+        repositorio.guardar(abre);
+        repositorio.guardar(mensaje(BRUNO, ANA, "sigue", 4, null));
+        repositorio.guardar(mensaje(CARLA, ANA, "de otra", 0, null));
+        repositorio.guardar(mensaje(ANA, BRUNO, "al reves", 0, null));
+
+        MensajeDirecto primero = repositorio.primerNoLeido(ANA, BRUNO).orElseThrow();
+        repositorio.marcarLeidos(ANA, BRUNO, T0.plusSeconds(5));
+
+        assertAll(
+                () -> assertEquals(abre, primero),
+                () -> assertTrue(repositorio.primerNoLeido(ANA, BRUNO).isEmpty()),
+                () -> assertEquals("de otra", repositorio.primerNoLeido(ANA, CARLA).orElseThrow().texto()));
+    }
+
+    @Test
     @DisplayName("el mismo idCliente del mismo remitente no se guarda dos veces: devuelve el primero")
     void idempotenciaPorIdCliente() {
         MensajeDirecto primero = mensaje(ANA, BRUNO, "hola", 1, "cli-9");

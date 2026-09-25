@@ -86,6 +86,19 @@ class RepositorioDeMensajesDirectosEnMemoria implements RepositorioDeMensajesDir
                 .count();
     }
 
+    /**
+     * A igual fecha gana el que se guardo antes (con el reloj fijo de las
+     * pruebas todos comparten fecha); PostgreSQL desempata por id. En los dos
+     * casos, todos los mensajes de una racha ven el mismo.
+     */
+    @Override
+    public Optional<MensajeDirecto> primerNoLeido(UUID destinatario, UUID remitente) {
+        return guardados.stream()
+                .filter(m -> m.destinatario().equals(destinatario) && m.remitente().equals(remitente))
+                .filter(m -> m.leidoEn() == null)
+                .min(Comparator.comparing(MensajeDirecto::enviadoEn));
+    }
+
     @Override
     public int marcarLeidos(UUID destinatario, UUID remitente, Instant cuando) {
         int cambiados = 0;

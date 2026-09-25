@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -25,8 +26,12 @@ import java.util.concurrent.RejectedExecutionException;
  *
  * <p><b>No bloquea el envio.</b> Va en otro hilo: quien escribe no espera a que
  * notificaciones conteste, y si no contesta, se pierde el aviso (queda en la
- * bitacora) y el mensaje sigue en el historial. El {@code id} del aviso es el
- * del mensaje, asi que un reintento no duplica (409 = ya estaba).
+ * bitacora) y el mensaje sigue en el historial.
+ *
+ * <p><b>Uno por racha.</b> El {@code id} del aviso es el del primer no leido de
+ * la racha, no el de cada mensaje: los siguientes de la misma racha repiten id
+ * y notificaciones los descarta (409 = ya estaba, que tambien cubre un
+ * reintento).
  */
 public class ClienteNotificacionesDeMensajes implements AvisoDeMensajeDirecto {
 
@@ -51,23 +56,23 @@ public class ClienteNotificacionesDeMensajes implements AvisoDeMensajeDirecto {
     }
 
     @Override
-    public void avisar(MensajeDirecto mensaje) {
+    public void avisar(MensajeDirecto mensaje, UUID primerNoLeido) {
         if (base.isEmpty()) {
             log.info("Sin NOTIFICACIONES_URL: el aviso del mensaje privado {} no sale", mensaje.id());
             return;
         }
         try {
-            ejecutor.execute(() -> mandar(mensaje));
+            ejecutor.execute(() -> mandar(mensaje, primerNoLeido));
         } catch (RejectedExecutionException sinHilo) {
             log.warn("El aviso del mensaje privado {} no se pudo programar: {}", mensaje.id(), sinHilo.getMessage());
         }
     }
 
-    private void mandar(MensajeDirecto mensaje) {
+    private void mandar(MensajeDirecto mensaje, UUID primerNoLeido) {
         try {
             http.post()
                     .uri(base + RUTA)
-                    .body(new Peticion(mensaje.destinatario().toString(), "mensaje-directo-" + mensaje.id(), TIPO,
+                    .body(new Peticion(mensaje.destinatario().toString(), "mensaje-directo-" + primerNoLeido, TIPO,
                             TITULO, mensaje.apodoRemitente() + " te escribió un mensaje privado.",
                             mensaje.enviadoEn()))
                     .retrieve()

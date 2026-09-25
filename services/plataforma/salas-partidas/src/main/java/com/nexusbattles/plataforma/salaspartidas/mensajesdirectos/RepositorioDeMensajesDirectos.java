@@ -42,6 +42,12 @@ public interface RepositorioDeMensajesDirectos {
     long noLeidos(UUID destinatario, UUID remitente);
 
     /**
+     * El mas antiguo de ese remitente que ese destinatario no ha leido: el que
+     * abre la racha de no leidos. Vacio si los ha leido todos.
+     */
+    Optional<MensajeDirecto> primerNoLeido(UUID destinatario, UUID remitente);
+
+    /**
      * Marca como leidos los de ese remitente a ese destinatario.
      *
      * @return cuantos cambiaron; 0 si ya estaban leidos (idempotente)
