@@ -1,12 +1,20 @@
 package com.nexusbattles.ms_chatbot.chat.api;
 
+import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
+import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionesAnonimas;
+import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.model.Calificacion;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
+import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionNoDisponible;
 import com.nexusbattles.ms_chatbot.chat.service.CalificacionService;
 import com.nexusbattles.ms_chatbot.chat.service.ChatService;
 import com.nexusbattles.ms_chatbot.config.SecurityConfig;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -15,10 +23,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,14 +42,20 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+// B11: la identidad la resuelve ResolutorDeIdentidad (real aqui); las sesiones
+// de visitante y los servicios van simulados. El ataque completo contra la
+// base real esta en SeguridadDelHistorialIT.
 @WebMvcTest(ChatController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, ResolutorDeIdentidad.class, ManejadorErroresDelChat.class})
 class ChatControllerTest {
 
     private static final String CABECERA = "X-Id-Sesion-Anonima";
+    private static final String SESION = "anon_" + "A".repeat(43);
+    private static final UUID UID = UUID.fromString("11111111-2222-4333-8444-555555555555");
 
     @Autowired
     private MockMvc mockMvc;
@@ -49,70 +66,214 @@ class ChatControllerTest {
     @MockitoBean
     private CalificacionService calificacionService;
 
+    @MockitoBean
+    private SesionesAnonimas sesiones;
+
+    private static SesionAnonima sesion() {
+        return new SesionAnonima("huella", Instant.parse("2026-10-01T10:00:00Z"), Duration.ofHours(24));
+    }
+
     @Test
-    void enviarMensaje_conCabeceraAnonima_devuelveElMensajeDelBot() throws Exception {
+    void enviarMensaje_conSesionValida_usaLaConversacionDelVisitante() throws Exception {
+        SesionAnonima sesion = sesion();
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion));
         Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
-        when(chatService.enviarMensaje(anyString(), eq(false), anyString(), any(), any()))
-            .thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
-                .header(CABECERA, "visitante-001")
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"contenido\":\"Hola\"}"))
             .andExpect(status().isOk())
+            .andExpect(header().doesNotExist(CABECERA))
             .andExpect(jsonPath("$.remitente").value("BOT"))
             .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
+
+        ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        assertThat(identidad.getValue().autenticado()).isFalse();
+        assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
     }
 
+    // 2.0.0: sin sesion valida, el servidor emite una y la devuelve en la
+    // cabecera; el mensaje abre una conversacion nueva de visitante.
     @Test
-    void enviarMensaje_sinCabeceraNiJwt_devuelve400() throws Exception {
+    void enviarMensaje_sinSesion_emiteUnaNuevaYLaDevuelveEnLaCabecera() throws Exception {
+        SesionAnonima sesion = sesion();
+        String emitida = "anon_" + "B".repeat(43);
+        when(sesiones.validar(any())).thenReturn(Optional.empty());
+        when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida(emitida, sesion));
+        Mensaje respuestaBot = crearMensajeBot("Hola visitante");
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+
         mockMvc.perform(post("/chat/mensajes")
+                .header("X-Real-IP", "203.0.113.7")
                 .contentType("application/json")
                 .content("{\"contenido\":\"Hola\"}"))
-            .andExpect(status().isBadRequest());
+            .andExpect(status().isOk())
+            .andExpect(header().string(CABECERA, emitida));
+
+        verify(sesiones).emitir("203.0.113.7");
     }
 
+    // El token manda: la cabecera se ignora aunque traiga la sesion de otro.
     @Test
-    void enviarMensaje_conJwtAutenticado_usaElUidDelTokenComoIdentificador() throws Exception {
-        Mensaje respuestaBot = crearMensajeBot("Hola usuario autenticado");
-        when(chatService.enviarMensaje(eq("uid-123"), eq(true), anyString(), any(), any()))
-            .thenReturn(respuestaBot);
+    void enviarMensaje_conJwt_usaSoloElUidDelTokenEIgnoraLaCabecera() throws Exception {
+        Mensaje respuestaBot = crearMensajeBot("Hola jugador");
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
-                .with(jwt().jwt(j -> j.claim("uid", "uid-123")))
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"contenido\":\"Hola\"}"))
-            .andExpect(status().isOk());
+            .andExpect(status().isOk())
+            .andExpect(header().doesNotExist(CABECERA));
+
+        ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        assertThat(identidad.getValue().autenticado()).isTrue();
+        assertThat(identidad.getValue().claveDeConversacion()).isEqualTo(UID.toString());
+        verifyNoInteractions(sesiones);
+    }
+
+    // Un token que no identifica a una persona (sin uid UUID) degrada a visitante.
+    @Test
+    void enviarMensaje_conTokenSinUid_seTrataComoVisitante() throws Exception {
+        when(sesiones.validar(any())).thenReturn(Optional.empty());
+        when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida("anon_" + "C".repeat(43), sesion()));
+        Mensaje respuestaBot = crearMensajeBot("Hola");
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+
+        mockMvc.perform(post("/chat/mensajes")
+                .with(jwt().jwt(j -> j.subject("torneos").claim("rol", "SERVICIO")))
+                .contentType("application/json")
+                .content("{\"contenido\":\"Hola\"}"))
+            .andExpect(status().isOk())
+            .andExpect(header().exists(CABECERA));
+    }
+
+    // El ataque de la auditoria, del lado HTTP: el uid de un jugador en la
+    // cabecera no es una sesion emitida, asi que no identifica a nadie.
+    @Test
+    void historial_conUnUidEnLaCabecera_devuelveVacioYNoConsultaNada() throws Exception {
+        when(sesiones.validar(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/chat/historial").header(CABECERA, UID.toString()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$").isEmpty());
+
+        verifyNoInteractions(chatService);
     }
 
     @Test
-    void obtenerHistorial_devuelveLosMensajesDeLaSesion() throws Exception {
+    void limpiarHistorial_conUnUidEnLaCabecera_noBorraNada() throws Exception {
+        when(sesiones.validar(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(delete("/chat/historial").header(CABECERA, UID.toString()))
+            .andExpect(status().isNoContent());
+
+        verifyNoInteractions(chatService);
+    }
+
+    @Test
+    void calificar_sinIdentidadValida_devuelve404SinRevelarNada() throws Exception {
+        when(sesiones.validar(any())).thenReturn(Optional.empty());
+
+        mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", UUID.randomUUID())
+                .header(CABECERA, UID.toString())
+                .contentType("application/json")
+                .content("{\"util\":true}"))
+            .andExpect(status().isNotFound());
+
+        verifyNoInteractions(calificacionService);
+    }
+
+    @Test
+    void obtenerHistorial_conSesionValida_devuelveLosMensajesDeLaSesion() throws Exception {
+        SesionAnonima sesion = sesion();
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion));
         Mensaje mensaje = crearMensajeBot("Historial");
-        when(chatService.obtenerHistorial("visitante-002"))
-            .thenReturn(List.of(mensaje));
+        when(chatService.obtenerHistorial(any())).thenReturn(List.of(mensaje));
 
-        mockMvc.perform(get("/chat/historial").header(CABECERA, "visitante-002"))
+        mockMvc.perform(get("/chat/historial").header(CABECERA, SESION))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$[0].contenido").value("Historial"));
     }
 
     @Test
-    void limpiarHistorial_devuelve204() throws Exception {
-        mockMvc.perform(delete("/chat/historial").header(CABECERA, "visitante-003"))
+    void limpiarHistorial_conJwt_borraLaConversacionDelUsuario() throws Exception {
+        mockMvc.perform(delete("/chat/historial").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
             .andExpect(status().isNoContent());
+
+        ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
+        verify(chatService).limpiarHistorial(identidad.capture());
+        assertThat(identidad.getValue().claveDeConversacion()).isEqualTo(UID.toString());
+    }
+
+    @Test
+    void crearSesion_devuelve201ConElIdentificadorEnElCuerpoYEnLaCabecera() throws Exception {
+        String emitida = "anon_" + "D".repeat(43);
+        SesionAnonima sesion = sesion();
+        when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida(emitida, sesion));
+
+        mockMvc.perform(post("/chat/sesiones"))
+            .andExpect(status().isCreated())
+            .andExpect(header().string(CABECERA, emitida))
+            .andExpect(jsonPath("$.idSesionAnonima").value(emitida))
+            .andExpect(jsonPath("$.expiraEn").exists());
+    }
+
+    // 7.4.8: limite de frecuencia -> 429 con Retry-After y motivo.
+    @Test
+    void crearSesion_porEncimaDelLimite_devuelve429ConRetryAfter() throws Exception {
+        when(sesiones.emitir(anyString())).thenThrow(new LimiteDeFrecuenciaExcedido("Demasiadas", 42));
+
+        mockMvc.perform(post("/chat/sesiones"))
+            .andExpect(status().isTooManyRequests())
+            .andExpect(header().string("Retry-After", "42"))
+            .andExpect(jsonPath("$.motivo").value("LIMITE_DE_FRECUENCIA"));
+    }
+
+    @Test
+    void enviarMensaje_bloqueadoPorLaListaNegra_devuelve422() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenThrow(new ContenidoBloqueado());
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"algo feo\"}"))
+            .andExpect(status().is(422))
+            .andExpect(jsonPath("$.motivo").value("CONTENIDO_BLOQUEADO"));
+    }
+
+    @Test
+    void enviarMensaje_sinListaNegra_devuelve503() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenThrow(new ModeracionNoDisponible());
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"hola\"}"))
+            .andExpect(status().isServiceUnavailable())
+            .andExpect(jsonPath("$.motivo").value("MODERACION_NO_DISPONIBLE"));
     }
 
     // HU-CHA-011: un visitante califica una respuesta y recibe 201 con la
     // calificacion creada.
     @Test
     void calificarMensaje_visitante_devuelve201ConLaCalificacion() throws Exception {
+        SesionAnonima sesion = sesion();
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion));
         UUID mensajeId = UUID.randomUUID();
         Calificacion calificacion = crearCalificacion(mensajeId, true, "Muy clara");
-        when(calificacionService.calificar(mensajeId, "visitante-010", true, "Muy clara"))
+        when(calificacionService.calificar(mensajeId, "anonimo:" + sesion.getId(), true, "Muy clara"))
             .thenReturn(calificacion);
 
         mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", mensajeId)
-                .header(CABECERA, "visitante-010")
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"util\":true,\"comentario\":\"Muy clara\"}"))
             .andExpect(status().isCreated())
@@ -127,16 +288,16 @@ class ChatControllerTest {
     void calificarMensaje_conJwt_usaElUidDelTokenComoIdentificador() throws Exception {
         UUID mensajeId = UUID.randomUUID();
         Calificacion calificacion = crearCalificacion(mensajeId, false, null);
-        when(calificacionService.calificar(eq(mensajeId), eq("uid-123"), eq(false), any()))
+        when(calificacionService.calificar(eq(mensajeId), eq(UID.toString()), eq(false), any()))
             .thenReturn(calificacion);
 
         mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", mensajeId)
-                .with(jwt().jwt(j -> j.claim("uid", "uid-123")))
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
                 .contentType("application/json")
                 .content("{\"util\":false}"))
             .andExpect(status().isCreated());
 
-        verify(calificacionService).calificar(eq(mensajeId), eq("uid-123"), eq(false), any());
+        verify(calificacionService).calificar(eq(mensajeId), eq(UID.toString()), eq(false), any());
     }
 
     // Sin 'util' no se sabe que califico el usuario: 400 en vez de asumir
@@ -144,7 +305,7 @@ class ChatControllerTest {
     @Test
     void calificarMensaje_sinCampoUtil_devuelve400YNoLlamaAlServicio() throws Exception {
         mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", UUID.randomUUID())
-                .header(CABECERA, "visitante-011")
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"comentario\":\"sin calificacion\"}"))
             .andExpect(status().isBadRequest());
@@ -157,7 +318,7 @@ class ChatControllerTest {
         String comentarioLargo = "a".repeat(1001);
 
         mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", UUID.randomUUID())
-                .header(CABECERA, "visitante-012")
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"util\":true,\"comentario\":\"" + comentarioLargo + "\"}"))
             .andExpect(status().isBadRequest());
@@ -169,12 +330,13 @@ class ChatControllerTest {
     // una calificacion duplicada, el endpoint responde 409.
     @Test
     void calificarMensaje_yaCalificado_devuelve409() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
         UUID mensajeId = UUID.randomUUID();
-        when(calificacionService.calificar(eq(mensajeId), eq("visitante-013"), anyBoolean(), any()))
+        when(calificacionService.calificar(eq(mensajeId), anyString(), anyBoolean(), any()))
             .thenThrow(new ResponseStatusException(HttpStatus.CONFLICT, "Esta respuesta ya fue calificada."));
 
         mockMvc.perform(post("/chat/mensajes/{mensajeId}/calificacion", mensajeId)
-                .header(CABECERA, "visitante-013")
+                .header(CABECERA, SESION)
                 .contentType("application/json")
                 .content("{\"util\":true}"))
             .andExpect(status().isConflict());
