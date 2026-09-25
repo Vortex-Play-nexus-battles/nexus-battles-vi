@@ -13,8 +13,9 @@
             Hola, <span th:text="${apodo}">Jugador</span>. Tu pago quedó aprobado.
           </div>
 
-          <!-- 7.5: «el detalle de los productos adquiridos y el total pagado».
-               Solo si ms-finanzas envio las lineas (contrato 1.4.0, opcionales). -->
+          <!--/* 7.5: «el detalle de los productos adquiridos y el total pagado».
+               Solo si ms-finanzas envio las lineas (contrato 1.4.0, opcionales).
+               Comentario de Thymeleaf: no llega al correo. */-->
           <table th:if="${lineas != null and !#lists.isEmpty(lineas)}"
                  border="0" cellpadding="0" cellspacing="0" role="presentation"
                  style="width:100%;margin-bottom:16px;border-collapse:collapse;">

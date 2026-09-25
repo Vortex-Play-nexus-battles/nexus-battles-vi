@@ -356,7 +356,19 @@ class PlantillaCorreoServiceTest {
                 .as("sin precio unitario se pinta una raya, no un hueco")
                 .contains("Poción").contains(">—<").contains("50.00 COP")
                 .contains("Orden: <strong>ORD-2026-0042</strong>")
-                .contains("Total pagado: <strong>250.00 COP</strong>");
+                .contains("Total pagado: <strong>250.00 COP</strong>")
+                .as("los comentarios internos de la plantilla no viajan en el correo")
+                .doesNotContain("ms-finanzas");
+    }
+
+    @Test
+    void ningunaPlantillaDeB1FiltraSusComentariosInternos() {
+        assertThat(service.renderizar("email/sancion",
+                        Map.of("apodo", "Ana", "tipo", "BANEO", "motivo", "Fraude")))
+                .doesNotContain("7.3.7").doesNotContain("Comentario de Thymeleaf");
+        assertThat(service.renderizar("email/confirmacion-cuenta",
+                        Map.of("apodo", "Ana", "codigo", "1", "minutosVigencia", 1)))
+                .doesNotContain("contrato 1.4.0").doesNotContain("Comentario de Thymeleaf");
     }
 
     @Test

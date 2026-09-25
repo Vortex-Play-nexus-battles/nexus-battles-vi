@@ -4,15 +4,15 @@
 <body>
   <table>
     <tbody>
-      <!--
+      <!--/*
         Dos propositos con el mismo correo base (contrato 1.4.0):
           VERIFICACION: un jugador se acaba de registrar y tiene que probar que
                         el buzon es suyo; el enlace lleva a /verificar.
           ACTIVACION:   un Super Administrador le creo la cuenta y le falta
                         elegir su contrasena; el enlace lleva a /restablecer.
         Sin proposito se pinta la activacion, que es lo que ms-identidad ya
-        enviaba antes de la 1.4.0.
-      -->
+        enviaba antes de la 1.4.0. Comentario de Thymeleaf: no llega al correo.
+      */-->
       <tr layout:fragment="contenido">
         <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;"
             th:with="verificacion=${proposito} == 'VERIFICACION'">
