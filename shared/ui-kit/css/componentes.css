@@ -8585,3 +8585,113 @@ body:not([data-modo='combate']) .registro-combate {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
 }
+
+/* =======================================================================
+   UXC-8 — El torneo del jugador
+   -----------------------------------------------------------------------
+   «Tu torneo» (Mi equipo, Próximo encuentro, Mi camino), el encuentro de tu
+   equipo marcado en el árbol —con texto, «Tu equipo», además del borde— y la
+   transmisión en su variante sin señal: el marco del kit, sin prometer vídeo.
+   ======================================================================= */
+
+.torneo__tarjeta-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.torneo-mio {
+  border-left: 4px solid var(--acento-relleno);
+}
+
+.torneo-mio__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--e-4);
+}
+
+.torneo-mio__bloque {
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.torneo-mio__equipo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+}
+
+.torneo-mio__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+}
+
+.torneo-mio__camino {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.torneo-mio__paso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.torneo-mio__paso--victoria .icono {
+  color: var(--exito);
+}
+
+.torneo-mio__paso--derrota .icono {
+  color: var(--error);
+}
+
+.encuentro--mio {
+  border-color: var(--acento-relleno);
+  box-shadow: var(--sombra-1), inset 0 0 0 1px var(--acento-relleno);
+}
+
+.encuentro__tuyo {
+  margin-left: auto;
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+}
+
+.transmision--sin-senal .transmision__lienzo {
+  aspect-ratio: auto;
+  min-height: 140px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-3);
+  color: var(--texto-sobre-color);
+}
+
+.transmision--sin-senal .transmision__etiqueta {
+  align-self: center;
+}
+
+.transmision__simbolo {
+  width: 40px;
+  height: 40px;
+}
