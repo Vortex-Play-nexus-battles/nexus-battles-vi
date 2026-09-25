@@ -56,6 +56,18 @@ public class SecurityConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/*/comments").permitAll()
+                // B3 — el resumen de calificaciones es publico (la vitrina y
+                // la ficha lo ensenan sin sesion); calificar y leer la propia
+                // es de personas, como comentar.
+                .requestMatchers(HttpMethod.GET, "/api/v1/products/*/rating").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/products/*/rating/mia").hasAnyRole(ROLES_DE_USUARIO)
+                .requestMatchers(HttpMethod.POST, "/api/v1/products/*/rating").hasAnyRole(ROLES_DE_USUARIO)
+                // B3 — una imagen se pinta con un <img> sin cabeceras, asi que
+                // leerla es publico en la cadena; si NO es de un comentario
+                // publicado, el servicio solo se la da a su autor o a
+                // moderacion (y al resto le dice 404). Subirla, con sesion.
+                .requestMatchers(HttpMethod.GET, "/api/v1/comentarios/imagenes/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/comentarios/imagenes").hasAnyRole(ROLES_DE_USUARIO)
                 .requestMatchers(HttpMethod.POST, "/api/v1/products/*/comments").hasAnyRole(ROLES_DE_USUARIO)
                 .requestMatchers(HttpMethod.DELETE, "/api/v1/products/*/comments/*").hasAnyRole(ROLES_DE_USUARIO)
                 // R10.1 — reportar lo hace cualquier persona autenticada

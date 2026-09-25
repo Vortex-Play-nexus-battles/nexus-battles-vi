@@ -3,30 +3,40 @@ package com.nexusbattles.plataforma.comentarios;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 /**
  * Opinion publicada por un jugador sobre un producto. HU-COM-001, requisito RF-COM-001.
  *
  * <p>La regla RN-CMT-001 fija que el comentario lleva texto e imagenes, y ademas el
  * apodo de quien lo escribio, su calificacion en estrellas y la fecha de publicacion.
- * Los tres ultimos se guardan aqui y no se calculan despues, porque el apodo puede
+ * El apodo y la fecha se guardan aqui y no se calculan despues, porque el apodo puede
  * cambiar con el tiempo y el comentario debe conservar el que tenia ese dia.
  *
- * <p>La calificacion es opcional a proposito. Un jugador puede comentar un producto
- * cuantas veces quiera pero solo puede calificarlo una vez, asi que del segundo
- * comentario en adelante va sin estrellas. Eso no es un error, es el comportamiento
- * que describe la historia.
+ * <h2>Las estrellas ya no son del comentario (B3, contrato 1.5.0)</h2>
+ *
+ * Hasta B3 este registro llevaba sus propias estrellas, y de ahi salian tres
+ * defectos que la auditoria de septiembre dejo escritos: no se podia calificar
+ * sin escribir, el promedio se calculaba trayendo el hilo entero a memoria, y
+ * un comentario ocultado o eliminado por moderacion conservaba las estrellas
+ * sin que contaran, bloqueando a su autor para siempre. El 7.1 del documento
+ * del curso separa las dos cosas: «solo pueden calificar un producto una vez,
+ * pero podran agregar o retirar tantos comentarios como sea de su agrado». La
+ * calificacion vive ahora en {@link Calificacion}; las estrellas que se pintan
+ * junto a un comentario son las de la calificacion de su autor sobre ese
+ * producto, y se buscan al leer, no se copian al escribir.
  *
  * @param id identificador unico del comentario
  * @param productoId producto sobre el que se opina
  * @param autorId jugador que lo escribe
  * @param apodoAutor apodo del jugador en el momento de publicar
  * @param texto contenido escrito
- * @param imagenes adjuntos, puede venir vacia
- * @param estrellas calificacion de 1 a 5, o vacia si el jugador ya habia calificado
+ * @param imagenes identificadores de las imagenes adjuntas (B3), puede venir vacia.
+ *     Los comentarios anteriores a B3 conservan aqui los nombres de archivo que
+ *     se guardaban entonces, sin imagen detras.
  * @param fechaPublicacion momento en que quedo registrado
- * @param estado si quedo publicado o retenido por el filtro
+ * @param estado si quedo publicado, retenido, oculto o retirado
+ * @param editado si un moderador cambio su texto (EDITAR, 7.3.3)
+ * @param marcado si un moderador lo senalo para seguimiento especial (MARCAR, 7.3.3)
  */
 public record Comentario(
         String id,
@@ -35,9 +45,10 @@ public record Comentario(
         String apodoAutor,
         String texto,
         List<String> imagenes,
-        Integer estrellas,
         Instant fechaPublicacion,
-        Comentario.Estado estado) {
+        Comentario.Estado estado,
+        boolean editado,
+        boolean marcado) {
 
     /** Situacion del comentario despues de pasar por el filtro automatico. */
     public enum Estado {
@@ -69,15 +80,13 @@ public record Comentario(
         Objects.requireNonNull(fechaPublicacion, "la fecha de publicacion es obligatoria");
         Objects.requireNonNull(estado, "el estado del comentario es obligatorio");
         imagenes = imagenes == null ? List.of() : List.copyOf(imagenes);
-        if (estrellas != null && (estrellas < 1 || estrellas > 5)) {
-            throw new IllegalArgumentException(
-                    "la calificacion va de 1 a 5 estrellas, llego " + estrellas);
-        }
     }
 
-    /** Calificacion asociada, vacia cuando el jugador ya habia calificado el producto. */
-    public Optional<Integer> calificacion() {
-        return Optional.ofNullable(estrellas);
+    /** Un comentario recien escrito: sin editar y sin marcar. */
+    public Comentario(String id, String productoId, String autorId, String apodoAutor,
+            String texto, List<String> imagenes, Instant fechaPublicacion, Estado estado) {
+        this(id, productoId, autorId, apodoAutor, texto, imagenes, fechaPublicacion, estado,
+                false, false);
     }
 
     /** Si el comentario es visible en el hilo. */
@@ -104,7 +113,27 @@ public record Comentario(
     /** El mismo comentario en otro estado. El dominio es inmutable. */
     public Comentario con(Estado nuevo) {
         return new Comentario(id, productoId, autorId, apodoAutor, texto, imagenes,
-                estrellas, fechaPublicacion, nuevo);
+                fechaPublicacion, nuevo, editado, marcado);
+    }
+
+    /**
+     * El mismo comentario con el texto que dejo un moderador — EDITAR (7.3.3:
+     * «modificar contenido inapropiado manteniendo el contexto del comentario
+     * (con registro de la edicion)»).
+     *
+     * <p>Queda {@code editado} para siempre: quien lo lea tiene que saber que
+     * ese texto no es exactamente el que escribio su autor. El texto anterior
+     * no se pierde, lo guarda el asiento de moderacion.
+     */
+    public Comentario editadoCon(String textoNuevo) {
+        return new Comentario(id, productoId, autorId, apodoAutor, textoNuevo, imagenes,
+                fechaPublicacion, estado, true, marcado);
+    }
+
+    /** El mismo comentario con o sin la marca de seguimiento (MARCAR / DESMARCAR, 7.3.3). */
+    public Comentario conMarca(boolean marca) {
+        return new Comentario(id, productoId, autorId, apodoAutor, texto, imagenes,
+                fechaPublicacion, estado, editado, marca);
     }
 
     /** Si es de ese jugador. */
@@ -115,13 +144,13 @@ public record Comentario(
     /**
      * El mismo comentario, retirado por su autor — HU-COM-004.
      *
-     * <p>Se le retira tambien la calificacion: deja de contar en el promedio
-     * (CA-01) y libera la unica calificacion del autor sobre el producto, que
-     * asi puede volver a calificar en un comentario nuevo (decision D-19).
+     * <p>Desde B3 retirar un comentario ya no toca la calificacion del autor:
+     * el 7.1 dice que se califica una sola vez y que los comentarios se
+     * agregan o retiran cuantas veces se quiera. La decision D-19, que al
+     * retirar liberaba la calificacion, queda sustituida por esa lectura.
      */
     public Comentario eliminado() {
-        return new Comentario(id, productoId, autorId, apodoAutor, texto, imagenes, null,
-                fechaPublicacion, Estado.ELIMINADO);
+        return con(Estado.ELIMINADO);
     }
 
     private static void exigirTexto(String valor, String campo) {
