@@ -12,11 +12,10 @@ import java.math.BigDecimal;
  * para que el endpoint legado {@code GET /api/v1/productos} siga devolviendo
  * exactamente lo mismo que antes.
  *
- * <p>Lo que la tienda todavia no calcula se dice tal cual, sin inventar:
- * no hay promociones ({@code precioOriginal} = {@code precioFinal},
- * {@code enPromocion} false, {@code porcentajeDescuento} nulo), no hay
- * conversion de moneda (siempre COP) y ni la propiedad ni la lista de deseos
- * se cruzan todavia (false).
+ * <p>B5 (contrato 1.4.0): los precios estan en la moneda pedida y con la
+ * promocion vigente ya aplicada, calculados por el servidor
+ * ({@code CalculadoraDePrecios}); {@code esPropio} y {@code enListaDeseos} se
+ * calculan cuando hay sesion de usuario y son false sin ella.
  */
 public record ProductoEnVentaDto(
         String id,
