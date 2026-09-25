@@ -33,6 +33,16 @@ services:
       - "8081:8081"
     env_file:
       - .env
+    environment:
+      # B3: comentar y calificar comprueban el producto en el catalogo
+      # (GET {PRODUCTOS_URL}/api/v1/productos/{id}). En local productos vive en
+      # el compose de contenido, publicado en el 8103 del host; dentro de este
+      # contenedor localhost es el propio servicio, asi que se sale por el host
+      # de Docker. Se sobreescribe con PRODUCTOS_URL en el .env.
+      PRODUCTOS_URL: ${PRODUCTOS_URL:-http://host.docker.internal:8103}
+    # host.docker.internal existe solo en Docker Desktop; en Linux lo da esto.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - plataforma-db
 

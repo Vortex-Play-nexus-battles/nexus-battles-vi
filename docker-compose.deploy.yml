@@ -149,6 +149,19 @@ services:
       # moderacion-sanciones, que corre en este host (misma nota que en
       # srv-salas-partidas: sin esto localhost seria el propio contenedor).
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-COM-001 / RF-COM-007: la lista negra tambien esta en este host.
+      # Hasta B3 este bloque no la declaraba y dependia de que el CD pusiera
+      # LISTA_NEGRA_VERIFICAR_URL en el .env; sin ella el valor por omision era
+      # localhost —el propio contenedor— y TODO comentario quedaba retenido en
+      # revision (el filtro falla cerrado). Si el CD la pone, manda la suya.
+      LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      # B3: comentar y calificar comprueban que el producto exista en el
+      # catalogo (GET {PRODUCTOS_URL}/api/v1/productos/{id}). Productos no
+      # vive en este host sino en el de contenido: misma variable de host y
+      # mismo valor por omision que srv-salas-partidas (PRODUCTOS_BASE_URL, la
+      # IP elastica del host de contenido, la misma que usa el borde para
+      # /api/v1/productos), para que las dos se muevan juntas si el host cambia.
+      PRODUCTOS_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
       # R10.1 / RF-COM-008: al resolver la moderacion de un comentario se
       # avisa a su autor. El destino exige ROLE_SERVICIO, asi que va con la
       # credencial de comentarios (ADR-005) que desplegar.sh ya genera y
