@@ -5238,6 +5238,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
   font-weight: 400;
 }
 
+/* UXC-6 — «Termina en 2d»: el rótulo a la vista, en el tono de la meta. */
+.cuenta-atras-rotulada {
+  color: var(--texto-2);
+}
+
 /* =====================================================================
    Mercado — encabezado y rejilla de subastas (UX-R2.8b)
    ===================================================================== */
@@ -7648,5 +7653,736 @@ body:not([data-modo='combate']) .registro-combate {
 
   .banner-misiones .banner-misiones__nombre {
     font-size: var(--t-subtitulo-tam);
+  }
+}
+
+/* =======================================================================
+   UXC-6 — Conversación: globos, hilo, redactor y mensajes privados
+   RF-JUE-015 (chat de la sala y de la vista general) · retroalimentación
+   del docente (mensajes privados)
+   -----------------------------------------------------------------------
+   Vive en el kit porque la pintan tres sitios: el chat general, el de una
+   sala y los mensajes privados (`comun/ui/conversacion/`).
+
+   Quién habla nunca es solo color (WCAG 1.4.1): el globo lleva la palabra
+   («Tú», el apodo o «Sistema»), la posición (derecha, izquierda, centro) y
+   la forma (la inicial del otro jugador; el borde discontinuo del sistema).
+   ======================================================================= */
+
+.tarjeta.conversacion {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.conversacion__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--borde);
+}
+
+.conversacion__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  color: var(--texto);
+}
+
+/* El hilo y su estado comparten el hueco: posicion relativa para el aviso de
+   «Hay mensajes nuevos», que flota sobre el final de la lista. */
+.conversacion__cuerpo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.conversacion__mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  margin: 0;
+  padding: var(--e-4);
+  list-style: none;
+  height: clamp(300px, 52vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Sin mensajes, el hueco es del estado (cargando, en silencio, sin canal). */
+.conversacion__mensajes:empty {
+  display: none;
+}
+
+.conversacion__estado > .estado-vista {
+  min-height: 300px;
+  border: 0;
+  border-radius: 0;
+}
+
+.conversacion__nuevos {
+  position: absolute;
+  bottom: var(--e-3);
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: var(--sombra-2);
+  z-index: 1;
+}
+
+/* Separador de día: «Hoy», «Ayer», «Lunes 21 de septiembre». */
+.conversacion__dia {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.conversacion__dia::before,
+.conversacion__dia::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--borde);
+}
+
+/* --- El globo ---------------------------------------------------------- */
+
+.mensaje {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  max-width: min(72ch, 86%);
+  align-self: flex-start;
+}
+
+.mensaje--yo {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.mensaje--sistema {
+  align-self: center;
+  align-items: center;
+  max-width: min(64ch, 94%);
+  text-align: center;
+}
+
+.mensaje__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.mensaje__autor {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.mensaje__hora {
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mensaje__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mensaje__icono {
+  flex: none;
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.mensaje__globo {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.mensaje--yo .mensaje__globo {
+  border-color: color-mix(in srgb, var(--primaria) 38%, transparent);
+  border-radius: 14px 4px 14px 14px;
+  background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
+}
+
+.mensaje--sistema .mensaje__globo {
+  border: 1px dashed var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+}
+
+.mensaje--sistema .mensaje__cabecera {
+  justify-content: center;
+  color: var(--info);
+}
+
+.mensaje--advertencia .mensaje__globo {
+  border-color: var(--advertencia);
+  background: var(--advertencia-insignia);
+}
+
+.mensaje--advertencia .mensaje__cabecera {
+  color: var(--advertencia);
+}
+
+.mensaje--exito .mensaje__globo {
+  border-color: var(--exito);
+  background: var(--exito-insignia);
+}
+
+.mensaje--exito .mensaje__cabecera {
+  color: var(--exito);
+}
+
+.mensaje__texto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mensaje__logro {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--rareza-legendaria-insignia);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+}
+
+.mensaje__logro .icono {
+  color: var(--rareza-legendaria);
+}
+
+/* Entrega de lo tuyo: con palabra e icono; «No se envió» en rojo y con su
+   «Reintentar» al lado. */
+.mensaje__entrega {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mensaje__entrega--leido {
+  color: var(--info);
+}
+
+.mensaje__entrega--fallido {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.mensaje__reintentar {
+  min-height: 32px;
+}
+
+/* --- El redactor ------------------------------------------------------- */
+
+.redactor-mensaje {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4) var(--e-4);
+  border-top: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.redactor-mensaje__fila {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-2);
+}
+
+.redactor-mensaje__campo {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.redactor-mensaje__texto {
+  display: block;
+  width: 100%;
+  min-height: var(--boton-grande);
+  max-height: 160px;
+  padding: var(--e-2) var(--e-3);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.redactor-mensaje__enviar {
+  flex: none;
+  min-height: var(--boton-grande);
+}
+
+.redactor-mensaje__pista {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--e-1) var(--e-3);
+  margin: 0;
+  color: var(--texto-3);
+}
+
+.redactor-mensaje__cuenta {
+  font-variant-numeric: tabular-nums;
+}
+
+.redactor-mensaje__cuenta--cerca {
+  color: var(--advertencia);
+  font-weight: 600;
+}
+
+.redactor-mensaje__espera {
+  flex-basis: 100%;
+  color: var(--advertencia);
+  font-weight: 600;
+}
+
+/* `list-item` (el de siempre) para no perder el triángulo que dice que se
+   despliega; el alto mínimo lo da el relleno. */
+.redactor-mensaje__logro summary {
+  width: fit-content;
+  padding: var(--e-1) 0;
+  cursor: pointer;
+}
+
+/* El asistente flotante (RNF-DIS-002) vive abajo a la derecha: el final de la
+   conversación no puede quedar debajo de él. */
+.pagina[data-vista='chat'] {
+  padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
+}
+
+.redactor-mensaje__logro .fila {
+  margin-top: var(--e-2);
+}
+
+/* Bloqueado (silencio, conversación bloqueada, sin sesión): el campo se
+   sustituye por el motivo y lo que se puede hacer. */
+.redactor-mensaje__bloqueo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.redactor-mensaje--bloqueado .redactor-mensaje__fila,
+.redactor-mensaje--bloqueado .redactor-mensaje__pista,
+.redactor-mensaje--bloqueado .redactor-mensaje__logro {
+  display: none;
+}
+
+.redactor-mensaje__bloqueo-icono {
+  flex: none;
+  width: var(--icono);
+  height: var(--icono);
+  color: var(--texto-2);
+}
+
+.redactor-mensaje__bloqueo-cuerpo {
+  display: grid;
+  gap: var(--e-1);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.redactor-mensaje__bloqueo-titulo {
+  margin: 0;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.redactor-mensaje__bloqueo-detalle {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.redactor-mensaje__bloqueo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  align-self: center;
+}
+
+/* --- La página del chat ------------------------------------------------ */
+
+.chat__titulo-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.chat__titulo-fila h1 {
+  margin: 0;
+}
+
+.chat__pestanas {
+  display: grid;
+  gap: var(--e-4);
+}
+
+.chat__pestanas:empty {
+  display: none;
+}
+
+.chat__general {
+  min-width: 0;
+}
+
+.chat__privados {
+  min-width: 0;
+}
+
+/* --- Mensajes privados -------------------------------------------------- */
+
+.mensajes-privados {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: var(--e-4);
+  align-items: start;
+}
+
+.mensajes-privados__lateral {
+  display: grid;
+  gap: var(--e-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.mensajes-privados__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+}
+
+.mensajes-privados__restriccion .aviso {
+  flex-wrap: wrap;
+}
+
+.tarjeta.mensajes-privados__hilo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 480px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mensajes-privados__hilo > .estado-vista {
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.mensajes-privados__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--borde);
+}
+
+.mensajes-privados__con {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  overflow-wrap: anywhere;
+}
+
+/* Solo en pantalla estrecha, donde la lista y la conversación se turnan. */
+.mensajes-privados__volver {
+  display: none;
+}
+
+/* El mismo chevron que apunta a la derecha, girado: «atrás». */
+.mensajes-privados__volver-icono {
+  transform: rotate(180deg);
+}
+
+.mensajes-privados__conversacion {
+  flex: 1 1 auto;
+  border: 0;
+}
+
+.mensajes-privados__sin-abrir {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: start;
+  max-width: 68ch;
+}
+
+.mensajes-privados__sin-abrir h2,
+.mensajes-privados__sin-abrir p {
+  margin: 0;
+}
+
+.mensajes-privados__sin-abrir-icono {
+  width: 40px;
+  height: 40px;
+  color: var(--primaria);
+}
+
+/* Lista de conversaciones: la activa se marca con fondo, borde y la barra
+   de la izquierda, no solo con color. */
+.conversaciones {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversaciones__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transicion);
+}
+
+.conversaciones__item:hover {
+  background: var(--superficie-2);
+}
+
+.conversaciones__item[aria-current='true'] {
+  border-color: color-mix(in srgb, var(--primaria) 40%, transparent);
+  background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
+  box-shadow: inset 3px 0 0 var(--primaria);
+}
+
+.conversaciones__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: 700;
+}
+
+.conversaciones__cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.conversaciones__apodo {
+  max-width: 100%;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversaciones__item--sin-leer .conversaciones__apodo {
+  font-weight: 700;
+}
+
+.conversaciones__vista {
+  max-width: 100%;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversaciones__lado {
+  display: grid;
+  justify-items: end;
+  gap: var(--e-1);
+}
+
+.conversaciones__cuando {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.conversaciones__no-leidos {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radio-pildora);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buscar jugador */
+.buscador-jugador {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.buscador-jugador .campo {
+  margin: 0;
+}
+
+.buscador-jugador__resultados {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.buscador-jugador__lista {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: var(--e-1);
+  list-style: none;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.buscador-jugador__resultado {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-1) var(--e-2);
+  border: 0;
+  border-radius: var(--radio-chico);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.buscador-jugador__resultado:hover {
+  background: var(--superficie-2);
+}
+
+.buscador-jugador__apodo {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.buscador-jugador__accion {
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--primaria);
+}
+
+.buscador-jugador__estado {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.buscador-jugador__estado--error {
+  color: var(--error);
+}
+
+@media (max-width: 899px) {
+  .mensajes-privados {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mensajes-privados[data-vista-movil='lista'] .mensajes-privados__hilo,
+  .mensajes-privados[data-vista-movil='hilo'] .mensajes-privados__lateral {
+    display: none;
+  }
+
+  .mensajes-privados__volver {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 599px) {
+  /* En la cabecera estrecha de una conversación privada, la píldora dice solo
+     el estado; «Canal en tiempo real:» se sigue leyendo. Mismo patrón que el
+     combate a pantalla completa. */
+  .mensajes-privados__cabecera .conexion__prefijo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .conversacion__mensajes {
+    padding: var(--e-3);
+    height: clamp(280px, 58vh, 520px);
+  }
+
+  .mensaje {
+    max-width: 92%;
+  }
+
+  .redactor-mensaje {
+    padding: var(--e-3);
   }
 }

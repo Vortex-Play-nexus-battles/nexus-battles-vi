@@ -63,6 +63,27 @@ export function cuentaAtras(fechaFinIso, { clase = '', prefijo = 'Termina en' } 
 }
 
 /**
+ * La cuenta atrás con su rótulo a la vista: «Termina en 2d».
+ *
+ * UXC-6 — suelta, «2d» no dice qué termina. El rótulo visible va oculto para
+ * el lector de pantalla porque el `<time>` ya lleva la frase entera en su
+ * etiqueta («Termina en 2 días»): así no se lee dos veces.
+ *
+ * @param {string} fechaFinIso
+ * @param {{clase?: string, prefijo?: string}} [opciones]
+ * @returns {HTMLElement}
+ */
+export function cuentaAtrasRotulada(fechaFinIso, { clase = '', prefijo = 'Termina en' } = {}) {
+  return h('span', {
+    clase: `cuenta-atras-rotulada ${clase}`.trim(),
+    hijos: [
+      h('span', { texto: `${prefijo} `, atributos: { 'aria-hidden': 'true' } }),
+      cuentaAtras(fechaFinIso, { prefijo }),
+    ],
+  });
+}
+
+/**
  * Marca un elemento que ya existe para que el latido lo mantenga al dia.
  *
  * Existe para las vitrinas que construye un modulo que no se puede tocar

@@ -77,6 +77,14 @@ export const ACCESOS = Object.freeze([
     detalle: 'Opiniones de productos',
     destino: '../plataforma/comentarios/publicar-comentario.html',
   },
+  // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
+  // vista dice ella misma que los mensajes privados aún no están abiertos.
+  {
+    id: 'chat',
+    titulo: 'Chat',
+    detalle: 'General y mensajes privados',
+    destino: '../plataforma/salas-partidas/chat.html',
+  },
 ]);
 
 /**

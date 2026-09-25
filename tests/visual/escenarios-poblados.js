@@ -1099,6 +1099,114 @@ async function prepararEstrategia(pagina) {
   await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
 }
 
+
+/* ---------------------------------------------------------------------------
+   UXC-6 — chat y mensajes privados. DATOS DE LABORATORIO: apodos y textos
+   inventados para la captura, con la forma exacta de `MensajeDeChat`
+   (contracts/websocket/salas-partidas.yaml 1.4.0). El chat general y el de la
+   sala van por el canal simulado; los mensajes privados, por la fuente del
+   laboratorio (`laboratorio/fuente-mensajes.js`), porque no tienen servicio.
+   ------------------------------------------------------------------------- */
+
+/** El `uid` de quien mira en las capturas del chat: firma «sus» mensajes. */
+const UID_CHAT = 'cccccccc-6666-4666-8666-000000000001';
+
+/**
+ * Sesión sintética con un `uid` fijo. `sesionSintetica` inventa uno cada vez,
+ * y el canal simulado necesita saberlo de antemano para que «Tú» salga en la
+ * captura.
+ */
+function sesionDelChat() {
+  const b64 = (objeto) => Buffer.from(JSON.stringify(objeto)).toString('base64url');
+  const cuerpo = {
+    sub: 'qa_chat',
+    preferred_username: 'qa_chat',
+    uid: UID_CHAT,
+    rol: 'JUGADOR',
+    exp: Math.floor(Date.now() / 1000) + 8 * 3600,
+  };
+  return {
+    token: `${b64({ alg: 'none', typ: 'JWT' })}.${b64(cuerpo)}.sin-firma`,
+    uid: UID_CHAT,
+    apodo: 'qa_chat',
+    rol: 'JUGADOR',
+  };
+}
+
+function mensajeDeChat(id, autor, texto, minutosAtras, cambios = {}) {
+  return {
+    id,
+    tipo: 'chat.mensaje',
+    idSala: null,
+    autor,
+    texto,
+    logro: null,
+    enviadoEn: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
+    ...cambios,
+  };
+}
+
+const EN_EL_CHAT = {
+  yo: { id: UID_CHAT, apodo: 'qa_chat' },
+  bruma: { id: 'cccccccc-6666-4666-8666-000000000002', apodo: 'Bruma' },
+  kael: { id: 'cccccccc-6666-4666-8666-000000000003', apodo: 'Kael_77' },
+  nyra: { id: 'cccccccc-6666-4666-8666-000000000004', apodo: 'Nyra' },
+};
+
+function historialDelChat(idSala = null) {
+  const { yo, bruma, kael, nyra } = EN_EL_CHAT;
+  return [
+    mensajeDeChat('ch-1', bruma, '¿Alguien para un 1v1 con apuesta pequeña?', 60 * 26, { idSala }),
+    mensajeDeChat('ch-2', yo, 'Yo voy. Abro sala en cinco minutos.', 60 * 25 + 50, { idSala }),
+    mensajeDeChat('ch-3', kael, 'Por fin cayó el guardián.', 14, {
+      idSala,
+      tipo: 'chat.logro',
+      logro: { mision: 'El Templo Olvidado', titulo: 'Guardián derrotado' },
+    }),
+    mensajeDeChat('ch-4', nyra, 'Buscamos cuarto para el torneo del sábado. ¿Quién se apunta?', 9, {
+      idSala,
+    }),
+    mensajeDeChat('ch-5', yo, 'Me apunto si es por la tarde.', 4, { idSala }),
+  ];
+}
+
+/** El canal simulado del chat general: el historial y un mensaje en vivo. */
+function canalDelChatGeneral(extra = {}) {
+  return {
+    mensajes: {
+      '/app/chat/general/historial': [historialDelChat()],
+      '/tema/chat/general': [
+        mensajeDeChat('ch-6', EN_EL_CHAT.bruma, 'Sala creada: «Duelo al atardecer». Os espero.', 0),
+      ],
+      ...extra,
+    },
+  };
+}
+
+const ID_SALA_DEL_CHAT = 'bbbbbbb1-6666-4666-8666-111111111111';
+
+/** La ruta que cambia la fuente de mensajes privados por la del laboratorio. */
+const MENSAJES_DE_LABORATORIO = [
+  '**/plataforma/salas-partidas/fuente-mensajes.js',
+  {
+    status: 200,
+    contentType: 'text/javascript; charset=utf-8',
+    path: join(AQUI_LABORATORIO, 'laboratorio', 'fuente-mensajes.js'),
+  },
+];
+
+/** Abre la conversación con Bruma (o la que se pida) en la pestaña de privados. */
+function abrirConversacion(apodo = 'Bruma') {
+  return async (pagina) => {
+    await pagina
+      .locator('.conversaciones__item', { hasText: apodo })
+      .first()
+      .click({ timeout: 10_000 });
+    await pagina.locator('.mensajes-privados__con').waitFor({ timeout: 10_000 });
+    await pagina.waitForTimeout(400);
+  };
+}
+
 export const ESCENARIOS = [
   {
     // UXC-1 — «Mi inventario», pestana Heroes: los ocho prototipos de la Tabla
@@ -2009,6 +2117,159 @@ export const ESCENARIOS = [
     sesion: () => sesionDe('qa_banner', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeOchoHeroes()],
     exige: ['.inventario__banner-misiones .banner-misiones__diapositiva', '.hero-card'],
+  },
+  {
+    // UXC-6 — el chat general con conversación: «Tú», los demás con su
+    // inicial, un logro compartido y separadores de día.
+    id: 'chat-general',
+    titulo: 'chat general: tú, los demás y el sistema, con palabras y no solo color',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral(),
+    exige: [
+      '[data-zona="mensajes"] li.mensaje--yo',
+      '[data-zona="mensajes"] li.mensaje--otro .mensaje__inicial',
+      '.mensaje__logro',
+      '.conversacion__dia',
+      '.conexion--estable',
+    ],
+  },
+  {
+    id: 'chat-sala',
+    titulo: 'chat de una sala, con su vuelta a la sala y sin pestañas',
+    ruta: `plataforma/salas-partidas/chat.html?sala=${ID_SALA_DEL_CHAT}`,
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: {
+      mensajes: {
+        [`/app/salas/${ID_SALA_DEL_CHAT}/chat/historial`]: [historialDelChat(ID_SALA_DEL_CHAT)],
+      },
+    },
+    exige: ['[data-zona="volver-a-la-sala"]:not([hidden])', 'li.mensaje--yo'],
+  },
+  {
+    id: 'chat-reconectando',
+    titulo: 'chat: se cae el canal, se reintenta solo y el hilo lo cuenta',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: { ...canalDelChatGeneral(), cerrarTrasMs: 500, rechazarReconexion: true },
+    interaccion: async (pagina) => {
+      await pagina.locator('.mensaje--sistema').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['.mensaje--sistema', '[data-zona="conexion"][data-estado-canal="reconectando"]'],
+  },
+  {
+    id: 'chat-silenciado',
+    titulo: 'chat: silencio por sanción, el campo dice por qué y dónde verlo',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral({
+      '/usuario/cola/salas': [
+        {
+          type: 'https://nexusbattles.local/errores/jugador-silenciado',
+          title: 'No puedes escribir en el chat',
+          status: 403,
+          detail: 'Tienes una sancion activa de silencio.',
+        },
+      ],
+    }),
+    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] a'],
+  },
+  {
+    // Lo que ve hoy un jugador: no hay servicio de mensajes privados.
+    id: 'chat-privados-sin-abrir',
+    titulo: 'mensajes privados hoy: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
+    ruta: 'plataforma/salas-partidas/chat.html#privados',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-estado="sin-abrir"]', '[data-accion="ir-al-chat-general"]'],
+  },
+  {
+    id: 'chat-privados-conversacion',
+    titulo: 'mensajes privados (laboratorio): lista, no leídos y una conversación abierta',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Bruma'),
+    exige: [
+      '[data-laboratorio="mensajes"]',
+      '.conversaciones__item[aria-current="true"]',
+      'li.mensaje--yo .mensaje__entrega',
+      'li.mensaje--otro',
+      '.conversaciones__no-leidos, .conversaciones__item',
+    ],
+  },
+  {
+    id: 'chat-privados-buscar',
+    titulo: 'mensajes privados (laboratorio): buscar a un jugador por su apodo',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: async (pagina) => {
+      await pagina.locator('#buscar-jugador').fill('ra');
+      await pagina.locator('.buscador-jugador__resultado').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['.buscador-jugador__resultado'],
+  },
+  {
+    id: 'chat-privados-vacia',
+    titulo: 'mensajes privados (laboratorio): todavía sin conversaciones',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=vacia#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-zona="conversaciones"] .estado-vista--vacio'],
+  },
+  {
+    id: 'chat-privados-error',
+    titulo: 'mensajes privados (laboratorio): las conversaciones no cargan',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=error#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-zona="conversaciones"] .estado-vista--error'],
+  },
+  {
+    id: 'chat-privados-silencio',
+    titulo: 'mensajes privados (laboratorio): tu silencio, con su cuenta atrás',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=silencio#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Bruma'),
+    exige: ['[data-zona="restriccion"] .cuenta-atras', '[data-zona="bloqueo"]:not([hidden])'],
+  },
+  {
+    id: 'chat-privados-reconectando',
+    titulo: 'mensajes privados (laboratorio): reconectando, sin perder el borrador',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=reconectando#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: async (pagina) => {
+      await abrirConversacion('Bruma')(pagina);
+      await pagina.locator('.mensajes-privados__hilo .mensaje--sistema').waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '[data-zona="conexion-privados"][data-estado-canal="reconectando"]',
+      '.mensajes-privados__hilo .mensaje--sistema',
+    ],
+  },
+  {
+    id: 'chat-privados-bloqueada',
+    titulo: 'mensajes privados (laboratorio): una conversación que bloqueaste',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Nyra'),
+    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
   },
 ];
 
