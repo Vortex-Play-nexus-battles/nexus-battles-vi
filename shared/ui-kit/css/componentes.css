@@ -2767,9 +2767,13 @@ button.tarjeta--partida:disabled {
   background: var(--info-insignia);
   color: var(--info);
 }
+/* UXC-5 — estos dos pintaban `--texto-3` sobre `--pista`: 4,11:1, por debajo
+   del 4,5:1 que pide un texto de 13 px. Nadie los usaba hasta las misiones
+   (Bloqueada, Abandonada) y axe lo cantó en su primer escenario. Con
+   `--texto-2`, 5,18:1. */
 .distintivo--no-disponible {
   background: var(--pista);
-  color: var(--texto-3);
+  color: var(--texto-2);
 }
 .distintivo--activo {
   background: var(--exito-insignia);
@@ -2781,7 +2785,7 @@ button.tarjeta--partida:disabled {
 }
 .distintivo--bloqueada {
   background: var(--pista);
-  color: var(--texto-3);
+  color: var(--texto-2);
 }
 .distintivo--en-progreso {
   background: var(--info-insignia);
@@ -6984,4 +6988,665 @@ body:not([data-modo='combate']) .registro-combate {
 
 .combate__registro-cuerpo {
   min-width: 0;
+}
+
+/* =======================================================================
+   UXC-3 — Comunidad: estrellas, resumen, comentarios y opiniones
+   §7.1 (calificación promedio en cinco estrellas e hilo de comentarios en
+   el detalle del producto) · RF-COM-002 · RF-COM-004 · RF-COM-006
+   -----------------------------------------------------------------------
+   Los componentes de `comun/ui/comunidad/` y `plataforma/comentarios/`
+   (hilo, redactor, reporte). Se usan dentro de la ficha del inventario, del
+   detalle de la tienda y del de la portada pública: superficies claras, así
+   que la tinta es la oscura del kit.
+   ======================================================================= */
+
+/* Superficies claras: la tinta vuelve a oscuro (ver «Tinta contextual» en
+   base.css). El hilo puede caer dentro de una ficha, de un dialogo o de una
+   vista sobre la atmosfera; asi sale legible en los tres sitios. */
+.hilo-comentarios,
+.comentario,
+.redactor-comentario {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+}
+
+/* --- Selector de estrellas (calificar) --------------------------------- */
+
+.selector-estrellas {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.selector-estrellas__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+}
+
+.selector-estrellas__opcion {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radio-chico);
+  cursor: pointer;
+}
+
+.selector-estrellas__opcion .estrellas__estrella {
+  width: 24px;
+  height: 24px;
+}
+
+.selector-estrellas__opcion:hover .estrellas__estrella {
+  color: var(--rareza-legendaria);
+}
+
+.selector-estrellas__cifra {
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.selector-estrellas:disabled .selector-estrellas__opcion {
+  cursor: not-allowed;
+}
+
+.selector-estrellas:disabled .estrellas__estrella {
+  opacity: 0.45;
+}
+
+.selector-estrellas:disabled .selector-estrellas__opcion:hover .estrellas__estrella {
+  color: var(--pista);
+}
+
+/* --- Resumen de la calificación ---------------------------------------- */
+
+.resumen-calificacion {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.resumen-calificacion--compacto {
+  gap: var(--e-2);
+}
+
+.resumen-calificacion__cifra {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto);
+}
+
+.resumen-calificacion__cuerpo {
+  display: grid;
+  gap: 2px;
+}
+
+.resumen-calificacion__detalle {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* --- Un comentario ------------------------------------------------------ */
+
+.comentario {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.comentario:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* Lo propio se reconoce sin leer el apodo: filo en la primaria, como la
+   sala en la que se puede entrar. El «Tú» escrito es el canal principal. */
+.comentario--propio {
+  border-left: 3px solid var(--primaria);
+}
+
+.comentario[data-estado='REPORTADO'] {
+  background: var(--superficie-2);
+}
+
+.comentario__cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+}
+
+.comentario__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+}
+
+.comentario__firma {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.comentario__autor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.comentario__apodo {
+  overflow-wrap: anywhere;
+}
+
+.comentario__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-3);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__estrellas .estrellas__estrella {
+  width: 14px;
+  height: 14px;
+}
+
+.comentario__texto {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.comentario__adjuntos {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.comentario__adjuntos-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comentario__adjunto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  max-width: 100%;
+  padding: var(--e-1) var(--e-2);
+  border: 1px dashed var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__adjunto-icono {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+}
+
+.comentario__adjunto-nombre {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comentario__adjuntos-nota {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__estado-icono,
+.comentario__accion-icono {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.comentario__acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e-2);
+}
+
+.comentario__accion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+}
+
+/* --- El hilo (RatingThread) --------------------------------------------- */
+
+.hilo-comentarios {
+  display: grid;
+  gap: var(--e-4);
+  margin-top: var(--e-5);
+  padding-top: var(--e-5);
+  border-top: 1px solid var(--borde);
+  color: var(--texto);
+}
+
+.hilo-comentarios__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.hilo-comentarios__titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.hilo-comentarios__cuerpo {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.hilo-comentarios__lista {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hilo-comentarios__mas {
+  justify-self: start;
+}
+
+.hilo-comentarios__entrada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.hilo-comentarios__entrada p {
+  margin: 0;
+  max-width: 46ch;
+}
+
+/* --- El redactor (CommentComposer) --------------------------------------- */
+
+.redactor-comentario {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.redactor-comentario__imagenes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.redactor-comentario__imagenes .campo__pista {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.redactor-comentario__adjuntar {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-2);
+  cursor: pointer;
+}
+
+.redactor-comentario__archivo:focus-visible + .redactor-comentario__adjuntar {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.redactor-comentario__miniaturas {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.redactor-comentario__miniatura {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  max-width: 100%;
+  padding: var(--e-1) var(--e-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+}
+
+.redactor-comentario__miniatura img {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radio-chico);
+  object-fit: cover;
+}
+
+.redactor-comentario__nombre {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta-tam);
+}
+
+.redactor-comentario__pie {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* --- Reportar un comentario (ReportComment) ------------------------------- */
+
+.reporte-comentario__categorias {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.reporte-comentario__opcion {
+  display: flex;
+  /* Explícito: alguna hoja de vista pone `label` en columna (tema-cuentas). */
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: 36px;
+  cursor: pointer;
+}
+
+@media (max-width: 767px) {
+  /* 44×44 al dedo (WCAG 2.5.5): lo que se pulsa es la etiqueta. */
+  .selector-estrellas__opcion {
+    width: var(--objetivo-tactil);
+    height: var(--objetivo-tactil);
+  }
+
+  .reporte-comentario__opcion {
+    min-height: var(--objetivo-tactil);
+  }
+
+  .comentario {
+    padding: var(--e-3);
+  }
+}
+
+/* =======================================================================
+   UXC-5 — Banner de misiones (MissionBanner)
+   RF-MIS-001 (banner rotativo del tablón) · RF-INV-003 (banner del inventario)
+   -----------------------------------------------------------------------
+   Vive en el kit porque lo pintan dos vistas: el tablón de misiones y Mi
+   inventario. Es un panel oscuro como la portada de la home: la tinta es
+   clara dentro y se declara aquí, no se hereda por casualidad de la
+   atmósfera. Sin servicio de misiones el inventario no lo pinta (RF-INV-003,
+   Excepciones), así que en producción hoy solo se ve en el laboratorio.
+   ======================================================================= */
+
+.banner-misiones {
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  --tinta-enlace: var(--enlace-sobre-cromo);
+  --tinta-enlace-hover: var(--texto-sobre-color);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  padding: var(--e-6);
+  border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      90% 120% at 100% 0%,
+      color-mix(in srgb, var(--acento-relleno) 42%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(110deg, var(--cromo), var(--cromo-elevado) 65%);
+  box-shadow: var(--sombra-atmosfera);
+  color: var(--tinta);
+  overflow: hidden;
+}
+
+/* El filo de energía de las tarjetas del Nexo, arriba. */
+.banner-misiones::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--energia);
+}
+
+.banner-misiones__pista {
+  min-width: 0;
+}
+
+.banner-misiones__diapositiva,
+.banner-misiones--promocion {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--e-5);
+  align-items: center;
+}
+
+.banner-misiones__arte {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primaria) 35%, var(--cromo));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+  overflow: hidden;
+}
+
+.banner-misiones__imagen {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.banner-misiones__emblema {
+  width: 48px;
+  height: 48px;
+  color: var(--enlace-sobre-cromo);
+}
+
+.banner-misiones__cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.banner-misiones__sello {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--credito-oro-sobre-cromo);
+}
+
+.banner-misiones .banner-misiones__nombre {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  color: var(--texto-sobre-color);
+  overflow-wrap: anywhere;
+}
+
+.banner-misiones__texto {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--pista);
+}
+
+.banner-misiones__datos {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-sobre-color);
+}
+
+.banner-misiones__accion {
+  margin-top: var(--e-2);
+}
+
+.banner-misiones__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.banner-misiones__controles {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+/* Anterior apunta a la izquierda: es el mismo chevron, girado. */
+.banner-misiones__anterior .icono {
+  transform: rotate(180deg);
+}
+
+.banner-misiones__puntos {
+  display: flex;
+  align-items: center;
+}
+
+/* El punto se ve de 10 px, pero el objetivo es el botón entero (24×44). */
+.banner-misiones__punto {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: var(--objetivo-tactil);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.banner-misiones__punto::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--pista);
+  background: transparent;
+}
+
+/* La actual va rellena Y más ancha: no se distingue solo por el color. */
+.banner-misiones__punto[aria-current='true']::before {
+  width: 20px;
+  border-radius: var(--radio-pildora);
+  border-color: var(--texto-sobre-color);
+  background: var(--texto-sobre-color);
+}
+
+.banner-misiones__punto:focus-visible {
+  outline: var(--foco-grosor) solid var(--enlace-sobre-cromo);
+  outline-offset: -2px;
+  border-radius: var(--radio-chico);
+}
+
+.banner-misiones__tablon {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+@media (max-width: 599px) {
+  .banner-misiones {
+    padding: var(--e-5) var(--e-4);
+  }
+
+  .banner-misiones__diapositiva,
+  .banner-misiones--promocion {
+    grid-template-columns: 1fr;
+    gap: var(--e-3);
+  }
+
+  .banner-misiones__arte {
+    width: 64px;
+    height: 64px;
+  }
+
+  .banner-misiones__emblema {
+    width: 32px;
+    height: 32px;
+  }
+
+  .banner-misiones .banner-misiones__nombre {
+    font-size: var(--t-subtitulo-tam);
+  }
 }

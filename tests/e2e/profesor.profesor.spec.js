@@ -23,8 +23,9 @@
  *     ella: su valor aparecería en el informe) y la configuración apaga la
  *     traza y el vídeo, que la guardarían.
  *   - **Lo que no existe se dice.** Subastas puede no estar desplegado (falta
- *     de capacidad en AWS) y Misiones no tiene módulo: la prueba exige que la
- *     pantalla lo diga con honestidad, no que el módulo exista.
+ *     de capacidad en AWS) y Misiones no tiene servicio: la prueba exige que la
+ *     pantalla lo diga con honestidad, no que el módulo exista. En Misiones,
+ *     además, que lo que sí funciona (la estrategia del héroe) funcione.
  *
  * En escritorio (1440) se recorren los veinte pasos. En móvil (375) y tableta
  * (768) solo la vertical de entrada —registro, alta, sesión y vuelta—, que es
@@ -49,6 +50,7 @@ const EN = {
   jugar: /\/jugar(?:[?#]|$)/,
   torneos: /\/torneos(?:[?#]|$)/,
   subastas: /\/subastas(?:[?#]|$)/,
+  misiones: /misiones\.html(?:[?#]|$)/,
   sala: /sala-batalla\.html\?sala=/,
 };
 
@@ -742,11 +744,37 @@ test.describe('R17 · la prueba del profesor', () => {
           estado.subastas = 'FUNCIONAL';
         }
 
-        // Misiones: sin módulo. La barra lo anuncia en vez de llevar a nada.
-        const misiones = page.locator('header[data-cabecera-app] a[data-seccion="misiones"]');
-        await expect(misiones).toHaveAttribute('aria-disabled', 'true');
-        await expect(misiones).not.toHaveAttribute('href', /.+/);
-        estado.misiones = `NO IMPLEMENTADO — «${await misiones.getAttribute('title')}»`;
+        // Misiones (UXC-5): hasta aquí la barra lo marcaba deshabilitado con un
+        // «llegará en una próxima actualización». Ahora lleva a su vista, que
+        // tiene que decir la verdad: sin servicio de misiones, que no están
+        // abiertas y cuál es el siguiente paso real —preparar la estrategia,
+        // que el servicio de héroes valida de verdad—; con servicio, el tablón.
+        await irA(page, 'misiones');
+        await expect(page).toHaveURL(EN.misiones);
+        const sinAbrir = page.locator('.misiones-estado[data-estado="sin-abrir"]');
+        const tablon = page.locator('.mision-card, .misiones-categoria .estado-vista--vacio');
+        await expect(sinAbrir.or(tablon).first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('body')).not.toContainText(/próxima actualización/i);
+        if (await sinAbrir.isVisible()) {
+          await sinAbrir.locator('[data-accion="preparar-estrategia"]').click();
+          // El héroe es el de la cuenta recién creada; las habilidades y el
+          // veredicto, los del servicio de héroes.
+          const paso = page.locator('.estrategia__paso select').first();
+          await expect(paso).toBeVisible({ timeout: 30_000 });
+          const habilidad = await paso
+            .locator('option:not([value=""])')
+            .first()
+            .getAttribute('value');
+          await paso.selectOption(habilidad);
+          await page.locator('[data-accion="comprobar-estrategia"]').click();
+          await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
+            timeout: 30_000,
+          });
+          await sinBarrerasGraves(page, 'misiones');
+          estado.misiones = `SIN SERVICIO — la vista lo dice; estrategia validada («${habilidad}»)`;
+        } else {
+          estado.misiones = 'FUNCIONAL';
+        }
 
         await capturar(page, testInfo, '20-subastas');
         return Object.entries(estado)

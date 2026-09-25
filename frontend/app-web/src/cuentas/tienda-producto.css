@@ -1,0 +1,433 @@
+/* El producto en la tienda y en la portada — UXC-4.
+ *
+ * Los estilos de `tienda-producto.js` (ProductCard, PriceTag, OwnedBadge,
+ * WishlistToggle y el bloque de compra del detalle). Viven aparte de
+ * `tienda.css` porque los usan dos vistas: la tienda y la portada publica
+ * (`login.html`), que no carga la hoja de la tienda.
+ *
+ * Las reglas de `.product-card`, el precio y «Añadir» vienen de `tienda.css`
+ * tal cual estaban (UX-R2.8d, FI-R2, UX-GAME-5), con sus comentarios.
+ */
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  padding: var(--e-4);
+}
+
+.product-image {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 120px;
+  border-radius: var(--radio-chico);
+  margin-bottom: var(--e-2);
+  /* El color de la caja se interpolaba dentro de un `innerHTML`
+     (`background-color: ${colorCaja}`). Ahora viaja en `data-tipo` y lo
+     elige el CSS, con fichas en vez de dos hex sueltos (UX-R2.8a).
+     UX-GAME-5: sin imagen, la caja es una ranura oscura con un halo del
+     color del tipo (violeta armadura, azul arma), como la ficha del
+     inventario, y no un bloque de color plano. */
+  --tienda-halo: var(--acento-relleno);
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--tienda-halo) 55%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tienda-halo) 35%, transparent);
+}
+
+.product-card[data-tipo='ARMA'] .product-image {
+  --tienda-halo: var(--primaria);
+}
+
+/* UXC-4 — el nombre es un h3 (la vitrina tiene su h2 para lectores): la
+   jerarquia de titulos ya no salta de h1 a h4. */
+.product-card__nombre {
+  margin: 0;
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  overflow-wrap: anywhere;
+}
+
+.product-card__descripcion {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  /* Altura fija para que las tarjetas de la fila queden alineadas; con dos
+     lineas y elipsis en vez de recortar a la mitad de un renglon. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.5em;
+}
+
+.product-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--e-2);
+  /* El pie baja al fondo de la tarjeta: los botones de una fila quedan a la
+     misma altura aunque una descripcion sea mas corta. */
+  margin-top: auto;
+  padding-top: var(--e-2);
+}
+
+.price {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* FI-R2 — el precio, lo que costaba antes y el porcentaje viven juntos: el
+   pie de la tarjeta es un `flex` de dos columnas y sin envolverlos el
+   distintivo se iba al otro lado del boton. */
+.precio-bloque {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--e-2);
+}
+
+.price-antes {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.badge-descuento {
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--exito-insignia);
+  color: var(--exito);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* «Precio no disponible» no es una cifra: se dice en el tono de un dato que
+   falta, no en el del importe que se va a cobrar. */
+.precio-ausente {
+  font-weight: normal;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.habilidades {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* RF-CAR-001 pide la imagen del producto. La caja de color sigue estando
+   debajo como respaldo cuando el catalogo no trae `imagenUrl`. */
+/* Con imagen, la caja es un bloque de alto fijo que recorta: dentro de la
+   rejilla de centrado la imagen tomaba su alto natural y tapaba el tipo y el
+   nombre de la tarjeta. */
+.product-image.con-imagen {
+  display: block;
+  overflow: hidden;
+  background-color: var(--cromo);
+}
+
+.product-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: var(--radio-chico);
+  display: block;
+}
+
+/* RF-CAR-005 — distincion de lo que ya es tuyo y de lo que esta en la lista de
+   deseos. `ProductoVitrinaDto` trae los dos campos, pero hoy `VitrinaService`
+   los escribe siempre en `false`: el realce existe y no se activara hasta que
+   el servicio los calcule de verdad (deuda de Grupo de Santiago). */
+.product-card[data-propio='si'] {
+  border-color: var(--exito);
+}
+
+.product-card[data-deseado='si'] {
+  border-color: var(--acento-relleno);
+}
+
+.btn-add {
+  min-height: var(--boton-pequeno);
+  padding: var(--e-2) var(--e-5);
+  border: none;
+  border-radius: var(--radio-chico);
+  background-color: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font: inherit;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  cursor: pointer;
+}
+
+.btn-add:hover {
+  background-color: var(--interaccion-foco-anillo);
+}
+
+.btn-add:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* --- UXC-4: tarjeta, precio, propio, deseos ---------------------------- */
+
+/* Sin imagen, el simbolo del tipo sobre la ranura oscura: dice que es antes
+   de leerlo, en vez de una caja de color vacia. */
+.product-image__simbolo {
+  width: 40px;
+  height: 40px;
+  color: var(--texto-sobre-color);
+  opacity: 0.85;
+}
+
+.product-card__tipo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.product-card__tipo-icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.product-card__distintivos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1);
+}
+
+.producto-propio__icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.product-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin-left: auto;
+}
+
+.product-card__ver {
+  white-space: nowrap;
+}
+
+.precio-bloque--grande .price {
+  font-family: var(--t-titulo-familia);
+  font-size: 1.6rem;
+}
+
+/* El bloque de compra de la ficha (tienda y portada). */
+.compra-producto {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.compra-producto__precio {
+  display: grid;
+  gap: 2px;
+}
+
+.compra-producto__etiqueta {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.compra-producto__propio,
+.compra-producto__nota {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.compra-producto__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.compra-producto__acciones .boton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.compra-producto__resultado {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.compra-producto__resultado[data-tono='exito'] {
+  color: var(--exito);
+}
+
+.compra-producto__resultado[data-tono='advertencia'] {
+  color: var(--advertencia);
+}
+
+/* La lista de deseos, sin servicio que la guarde: se ve, no se usa, y dice
+   por que al lado (no solo en un `title`). */
+.deseos__caja {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+}
+
+.deseos {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.deseos[aria-disabled='true'] {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.deseos__icono {
+  width: 16px;
+  height: 16px;
+}
+
+.deseos__motivo {
+  margin: 0;
+  flex: 1 1 220px;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+@media (max-width: 599px) {
+  .product-card__acciones {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .product-card__acciones > * {
+    flex: 1 1 auto;
+  }
+
+  .product-card__acciones .boton,
+  .product-card__acciones .btn-add {
+    min-height: var(--objetivo-tactil);
+  }
+}
+
+/* Superficies claras (ver «Tinta contextual» en base.css): devuelven la tinta
+   a oscuro sobre la atmosfera del Nexo. */
+.product-card,
+.compra-producto {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
+/* El salto desde la columna de identidad de la entrada hasta la tienda. */
+.entrada__enlace-tienda {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+  width: fit-content;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* =======================================================================
+   La tienda en la portada — UXC-4 (retroalimentacion del profesor)
+   -----------------------------------------------------------------------
+   Debajo de la entrada, sobre la atmosfera del portal: las tarjetas son la
+   superficie clara; el titulo y el lema van en la tinta clara del portal.
+   ======================================================================= */
+
+.vitrina-publica {
+  display: grid;
+  gap: var(--e-5);
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: var(--e-8) var(--e-6) var(--e-16);
+  color: var(--texto-sobre-color);
+}
+
+.vitrina-publica__cabecera {
+  display: grid;
+  gap: var(--e-2);
+  max-width: 64ch;
+}
+
+.vitrina-publica__titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+}
+
+.vitrina-publica__lema {
+  margin: 0;
+  color: var(--pista);
+}
+
+.vitrina-publica__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--e-5);
+}
+
+.vitrina-publica__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3);
+  margin: 0;
+}
+
+/* Los estados del kit (cargando, vacio, error) ocupan la fila entera y van
+   sobre una superficie clara, como las tarjetas. */
+.vitrina-publica__rejilla > .estado-vista {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  grid-column: 1 / -1;
+  padding: var(--e-5);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+@media (max-width: 599px) {
+  .vitrina-publica {
+    padding: var(--e-6) var(--e-4) var(--e-8);
+  }
+
+  .vitrina-publica__rejilla {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--e-4);
+  }
+}
