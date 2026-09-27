@@ -264,7 +264,7 @@ describe('registrarCuenta', () => {
         }),
       login: () => respuesta(200, LOGIN_OK),
     });
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+    const resultado = await registrarCuenta(new FormData(), credenciales, {
       fetchImpl,
       almacen: sessionStorage,
     });
@@ -284,7 +284,7 @@ describe('registrarCuenta', () => {
         }),
       login: () => respuesta(200, LOGIN_OK),
     });
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+    const resultado = await registrarCuenta(new FormData(), credenciales, {
       fetchImpl,
       almacen: sessionStorage,
     });
