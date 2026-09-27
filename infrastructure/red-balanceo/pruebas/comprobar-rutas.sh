@@ -474,16 +474,24 @@ echo "Limite de frecuencia (B12) — lo que un bot haria en bucle, desde interne
 # una ejecucion y la siguiente: si la ruta cuenta, aparece el 429.
 
 # rafagaFuera <metodo> <ruta> <n>: n peticiones seguidas desde internet.
-# Imprime "codigo NNN" por peticion y, de la ultima, tambien sus cabeceras y
-# su cuerpo, para mirar la forma del 429.
+# Imprime "codigo NNN" por peticion y, al final, las cabeceras y el cuerpo del
+# ULTIMO 429 de la rafaga, para mirar su forma. No los de la ultima peticion:
+# el cubo se vacia a su ritmo (escritura, uno cada 500 ms) y a veces el hueco
+# cae justo en la ultima, que entonces es un 200 del eco y no dice nada del
+# 429 (develop 06a26164: rafaga de imagenes con su unico 200 al final).
 rafagaFuera() {
     (cd "$PRUEBAS" && MSYS_NO_PATHCONV=1 docker compose exec -T cliente-publico sh -c '
-        i=1
+        : > /tmp/ultimo-429
+        i=0
         while [ "$i" -lt "$3" ]; do
-            curl -s -o /dev/null -w "codigo %{http_code}\n" -X "$1" "$2"
+            codigo="$(curl -s -D /tmp/cabeceras -o /tmp/cuerpo -w "%{http_code}" -X "$1" "$2")"
+            echo "codigo $codigo"
+            if [ "$codigo" = 429 ]; then
+                { cat /tmp/cabeceras /tmp/cuerpo; echo; } > /tmp/ultimo-429
+            fi
             i=$((i + 1))
         done
-        curl -s -D - -w "\ncodigo %{http_code}\n" -X "$1" "$2"' _ "$1" "$BORDE_PUBLICO$2" "$3")
+        cat /tmp/ultimo-429' _ "$1" "$BORDE_PUBLICO$2" "$3")
 }
 # cuantos <codigo> <salida de una rafaga>
 cuantos() { printf '%s\n' "$2" | grep -c "^codigo $1\$"; }
@@ -546,6 +554,9 @@ limitada  POST /api/v1/products/p-1/rating                    25  0 1
 limitada  POST /api/v1/products/p-1/comments/c-1/reportes     25  0 1
 limitada  POST /api/v1/comentarios/imagenes                   25  0 1
 limitada  POST /api/v1/subastas/s-1/pujas                     25  0 1
+limitada  POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes 25 0 1
+# La compra (B5) se cuenta sobre la ruta ya reescrita, /ecommerce/api/v1/...
+limitada  POST /api/v1/checkout                               25  0 1
 
 # Desde el anfitrion (origen privado, como el banco E2E) el login no se
 # limita: 40 seguidas, las 40 llegan a identidad.
