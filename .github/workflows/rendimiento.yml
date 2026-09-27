@@ -61,6 +61,11 @@ on:
         required: false
         default: "95"
         type: string
+      escenarios:
+        description: "Escenarios separados por comas (vacío = todos). Contra DEV, sin `login`: el borde limita el login a 30/min por dirección (B12)"
+        required: false
+        default: ""
+        type: string
 
   pull_request:
     branches: [develop]
@@ -122,11 +127,23 @@ jobs:
             :services:plataforma:metricas-plataforma:bootJar \
             :services:plataforma:admin-parametros:bootJar \
             :services:plataforma:comentarios:bootJar \
+            :services:plataforma:correo:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
         working-directory: services/cuentas/ms-identidad
         run: ./mvnw -B -DskipTests package
+
+      # B12 — el banco E2E ya levanta correo (B1) y ms-ecommerce (R16), y este
+      # job no construia sus jars: `docker compose up --build` se paraba en el
+      # COPY del jar que faltaba. Mismos pasos que e2e.yml. ms-ecommerce es
+      # ademas lo que mide el escenario `tienda`. Su mvnw esta en git sin bit
+      # de ejecucion: de ahi el chmod.
+      - name: Construir el jar de ms-ecommerce (Maven)
+        working-directory: services/cuentas/ms-ecommerce
+        run: |
+          chmod +x ./mvnw
+          ./mvnw -B -DskipTests package
 
       - name: Levantar el banco
         run: docker compose -f tests/e2e/compose.yml up -d --build --wait
@@ -165,7 +182,7 @@ jobs:
       - name: Logs de los servicios si algo falló
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-inventario srv-salas-partidas srv-borde; do
+          for s in srv-ms-identidad srv-inventario srv-salas-partidas srv-ms-ecommerce srv-comentarios srv-borde; do
             echo "=============== $s ==============="
             docker compose -f tests/e2e/compose.yml logs "$s" 2>&1 \
               | grep -E "ERROR|WARN|Exception|Caused by" | tail -25 || true
@@ -242,6 +259,7 @@ jobs:
           BASE_URL: ${{ inputs.base_url }}
           PERCENTIL: ${{ inputs.percentil }}
           OBJETIVO_MS: ${{ inputs.objetivo_ms }}
+          ESCENARIOS: ${{ inputs.escenarios }}
           ACTOR: ${{ github.actor }}
         run: |
           {
@@ -252,6 +270,7 @@ jobs:
             echo "| Perfil | $PERFIL |"
             echo "| Entorno | $BASE_URL |"
             echo "| Objetivo | p$PERCENTIL <= $OBJETIVO_MS ms |"
+            echo "| Escenarios | ${ESCENARIOS:-todos} |"
             echo "| Disparado por | @$ACTOR |"
             echo ""
             echo "La medición corre desde un runner de GitHub: el número incluye la red"
@@ -270,6 +289,7 @@ jobs:
           PERFIL: ${{ inputs.perfil }}
           OBJETIVO_MS: ${{ inputs.objetivo_ms }}
           PERCENTIL: ${{ inputs.percentil }}
+          ESCENARIOS: ${{ inputs.escenarios }}
         run: k6 run ../k6/rendimiento.js
 
       # `always()`: cuando el umbral se rompe, k6 sale con 99 y el informe es

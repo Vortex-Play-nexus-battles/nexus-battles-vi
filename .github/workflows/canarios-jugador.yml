@@ -69,17 +69,25 @@ jobs:
           echo "::error::El borde no respondio en 400 s."
           exit 1
 
+      # B12 — Mailpit ya no es publico: el borde solo sirve /mailpit/ a
+      # origenes internos. Se alcanza por un tunel SSH al propio host con la
+      # llave de despliegue (.github/actions/tunel-mailpit), en
+      # http://localhost:18025/mailpit. Secretos del entorno `dev` (arriba).
+      - name: Tunel SSH a Mailpit
+        uses: ./.github/actions/tunel-mailpit
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          usuario: ${{ secrets.SSH_USER_DEV }}
+          llave: ${{ secrets.SSH_KEY_DEV }}
+
       # B1 — el canario registra un jugador nuevo y tiene que verificar su
-      # correo: lee el codigo en el Mailpit de DEV (/mailpit/ del borde).
-      # Credenciales solo si el borde lo protege (B12), desde secretos.
+      # correo: lee el codigo en el Mailpit de DEV por el tunel de arriba.
       - name: Canarios
         id: canarios
         working-directory: frontend/app-web
         env:
           E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
-          MAILPIT_URL: http://${{ secrets.DEPLOY_HOST_DEV }}/mailpit
-          MAILPIT_USUARIO: ${{ secrets.MAILPIT_USUARIO }}
-          MAILPIT_CLAVE: ${{ secrets.MAILPIT_CLAVE }}
+          MAILPIT_URL: http://localhost:18025/mailpit
         run: |
           set -o pipefail
           npx playwright test --config=playwright.canarios.config.js 2>&1 | tee canarios.log

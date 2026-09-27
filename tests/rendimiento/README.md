@@ -22,6 +22,8 @@ tests/rendimiento/
     escenarios/autenticacion.js   login
     escenarios/salas.js           listado y creación de sala
     escenarios/inventario.js      búsqueda en inventario
+    escenarios/tienda.js          vitrina de la tienda, sin sesión (B12)
+    escenarios/comentarios.js     hilo de comentarios de un producto, sin sesión (B12)
 ```
 
 ---
@@ -34,10 +36,14 @@ tests/rendimiento/
 | `listar_salas` | `GET /api/v1/salas?pagina&tamano` | RNF-REN-001 (RF-JUE-002) | La lectura más frecuente y la primera pantalla del flujo de juego. Consulta paginada. |
 | `crear_sala` | `POST /api/v1/salas` | RNF-REN-001 (RF-JUE-001) | La escritura de referencia: no es un *insert* suelto sino la cadena completa —comprobar sanción, preguntar al inventario por el héroe equipado, persistir—. |
 | `busqueda_inventario` | `GET /api/v1/inventario/elementos/busqueda?criterio&pagina` | HU-REN-003 CA-01 | La búsqueda indexada que CA-01 exige dentro del objetivo de latencia. Cruza además la red entre el host de plataforma y el de contenido. |
+| `tienda` | `GET /api/v1/vitrina?page&size`, **sin sesión** | RNF-REN-001 | La lectura pública de la tienda desde la portada: borde, ms-ecommerce (reescrito a `/ecommerce`) y el catálogo maestro del otro host. No exige productos: una vitrina vacía es una respuesta válida. |
+| `comentarios` | `GET /api/v1/products/{id}/comments?pagina&tamano=10`, **sin sesión** | RNF-REN-001 | La lectura pública de la ficha de producto: su hilo paginado. El producto sale de `PRODUCTO_COMENTARIOS` (por omisión `p-heroe-e2e`, sembrado por `tests/e2e/sembrar.sh`). |
 
-Los cuatro se miden **por el borde** (nginx), no contra el servicio suelto:
+Todos se miden **por el borde** (nginx), no contra el servicio suelto:
 RNF-REN-001 habla de latencia *extremo a extremo*, y lo que sufre el jugador
-incluye el proxy.
+incluye el proxy. Los dos de lectura pública van sin token a propósito: son lo
+que ve un visitante que todavía no ha entrado. Con los mismos umbrales que los
+demás (p95 y tasa de errores por escenario).
 
 ---
 
@@ -97,8 +103,9 @@ handshake WebSocket + `CONNECT` + `SUBSCRIBE` a `/tema/partidas/{id}`. Eso sí
 tiene tasa de llegada controlable, no muta estado, no necesita partida ni
 `motor-combate`, y es parte real de lo que espera el jugador antes de ver la
 pantalla de batalla viva. **No se ha implementado**: sería un escenario nuevo, y
-esta suite tiene los cuatro que el documento de gobierno declaró justificados.
-Discutirlo en refinamiento antes de escribirlo.
+esta suite tiene los cuatro que el documento de gobierno declaró justificados
+más las dos lecturas públicas que añadió B12 (tienda y comentarios). Discutirlo
+en refinamiento antes de escribirlo.
 
 ---
 
@@ -163,6 +170,23 @@ PERFIL=baseline \
 Desde GitHub: **Actions → «Rendimiento (k6)» → Run workflow**, eligiendo perfil
 y URL base. Es la única vía por la que esta suite toca AWS.
 
+> **El borde limita el login desde B12** (30 por minuto y dirección, ráfaga de
+> 20; ver `infrastructure/red-balanceo/README.md`). El banco E2E no lo nota: se
+> entra por la pasarela de Docker, que es un origen privado. Pero una medición
+> contra DEV desde un runner o un portátil es **una sola dirección pública**, y
+> el escenario `login` mediría los 429 del borde en vez del login. Contra DEV,
+> sin ese escenario:
+>
+> ```bash
+> ESCENARIOS=listar_salas,crear_sala,busqueda_inventario,tienda,comentarios \
+> PRODUCTO_COMENTARIOS=<id-de-un-producto-de-dev> \
+>   k6 run ../k6/rendimiento.js
+> ```
+>
+> En el workflow, el campo `escenarios`. La latencia del login se mide en el
+> banco. El `setup()` sigue haciendo UN login para conseguir la sesión: eso cabe
+> de sobra en el límite.
+
 ---
 
 ## Variables de entorno
@@ -190,8 +214,9 @@ banco local eso lo garantiza `sembrar.sh`.
 | Variable | Por omisión | Qué hace |
 |---|---|---|
 | `PERFIL` | `smoke` | `smoke`, `baseline` o `load` |
+| `ESCENARIOS` | todos | Los que corren, separados por comas (`tienda,comentarios`). Un nombre que no existe aborta la corrida con la lista buena |
 | `VUS` | según perfil | Usuarios virtuales. Limitado por `TECHO_VUS` |
-| `DURACION` | según perfil | Segundos **por escenario** (la corrida entera son 4 × esto) |
+| `DURACION` | según perfil | Segundos **por escenario** (la corrida entera son tantas veces esto como escenarios haya: seis por omisión) |
 | `PAUSA_MS` | según perfil | Pausa de reflexión entre iteraciones de un mismo VU |
 | `TECHO_VUS` | `25` | Techo de seguridad. Superarlo aborta la corrida con un mensaje |
 | `OBJETIVO_MS` | `500` | Umbral de latencia (RNF-REN-001) |
@@ -199,7 +224,8 @@ banco local eso lo garantiza `sembrar.sh`.
 | `TASA_ERROR_MAXIMA` | `0.01` | Tasa de error tolerada, en tanto por uno |
 | `TAMANO_PAGINA` | `16` | Elementos por página en el listado (valor de diseño, RNF-USA-001) |
 | `PAGINAS` | `3` | Cuántas páginas se rotan, para no medir siempre la misma consulta caliente |
-| `CRITERIO_BUSQUEDA` | `a` | Término de la búsqueda de inventario |
+| `CRITERIO_BUSQUEDA` | `prueba` | Término de la búsqueda de inventario (mínimo 4 caracteres; casa con lo que siembra `sembrar.sh`) |
+| `PRODUCTO_COMENTARIOS` | `p-heroe-e2e` | Producto cuyo hilo lee `comentarios`. Contra otro entorno, uno que exista allí |
 | `LIMPIAR_SALAS` | `true` | Cancelar cada sala creada justo después de medirla |
 | `RESUMEN_TXT` | `resumen.txt` | Ruta del informe de texto |
 | `RESUMEN_JSON` | `resumen.json` | Ruta del informe en JSON |
@@ -215,11 +241,11 @@ nada.
 
 | Perfil | VUs | Duración por escenario | Pausa | Corrida completa | Para qué |
 |---|---|---|---|---|---|
-| `smoke` | 1 | 20 s | 0 ms | ~1 min 40 s | Comprobar que la suite y el entorno funcionan |
-| `baseline` | 5 | 60 s | 500 ms | ~4 min 20 s | **La medición de referencia de RNF-REN-001** |
-| `load` | 20 | 120 s | 200 ms | ~8 min 20 s | Concurrencia alta dentro de lo que aguanta DEV |
+| `smoke` | 1 | 20 s | 0 ms | ~2 min 30 s | Comprobar que la suite y el entorno funcionan |
+| `baseline` | 5 | 60 s | 500 ms | ~6 min 30 s | **La medición de referencia de RNF-REN-001** |
+| `load` | 20 | 120 s | 200 ms | ~12 min 30 s | Concurrencia alta dentro de lo que aguanta DEV |
 
-(La corrida completa incluye 5 s de margen entre escenarios.)
+(Con los seis escenarios, e incluyendo 5 s de margen entre uno y otro.)
 
 `smoke` **no es una medición publicable**: con 1 VU no hay muestras suficientes
 para un p95 que signifique algo, y el propio informe lo avisa. Para evidencia de
@@ -303,7 +329,7 @@ Explícito, porque un informe de rendimiento leído de más es peor que no tener
   local, no. No son comparables entre sí.
 - **Perfil de tráfico realista.** Los escenarios corren en serie y aislados: cada
   número describe su operación sin contención de las otras. Un día real tiene
-  las cuatro cosas a la vez, y eso no está medido.
+  todas a la vez, y eso no está medido.
 - **El punto de rotura.** Buscarlo necesita un entorno desechable y un perfil que
   esta suite se prohíbe. No se hace contra DEV.
 - **Latencia de peticiones que nunca llegaron.** Un fallo de transporte (conexión
@@ -324,12 +350,12 @@ Explícito, porque un informe de rendimiento leído de más es peor que no tener
 **Un solo guion con `scenarios` de k6, no un archivo por escenario.** El informe
 tiene que dar percentiles, tasa de error y throughput *por escenario y en
 total*, y `handleSummary` corre una vez por proceso de k6. Con un archivo por
-escenario habría cuatro resúmenes sueltos y el total habría que calcularlo a
-mano fuera de k6 —o sea, un sitio más donde equivocarse—. Con un solo proceso,
-una corrida produce un `resumen.json` con las cinco filas ya hechas. De paso, la
-sesión se consigue una sola vez en `setup()` en lugar de cuatro veces. Los
-escenarios siguen viviendo en archivos separados bajo `escenarios/`; lo que se
-comparte es el proceso, no el archivo.
+escenario habría un resumen suelto por escenario y el total habría que
+calcularlo a mano fuera de k6 —o sea, un sitio más donde equivocarse—. Con un
+solo proceso, una corrida produce un `resumen.json` con una fila por escenario
+y el total ya hechos. De paso, la sesión se consigue una sola vez en `setup()`.
+Los escenarios siguen viviendo en archivos separados bajo `escenarios/`; lo que
+se comparte es el proceso, no el archivo.
 
 **Métricas propias en vez de `http_req_duration`.** La suite hace tres cosas que
 no son la medición: el login de comprobación de `setup()` y la cancelación de

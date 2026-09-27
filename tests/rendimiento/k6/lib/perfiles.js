@@ -12,7 +12,7 @@
  *
  * `duracionSegundos` es POR ESCENARIO, y los escenarios corren EN SERIE (ver
  * `rendimiento.js`). Una corrida completa dura, como minimo,
- * `duracionSegundos x 4`.
+ * `duracionSegundos x` el numero de escenarios (seis desde B12).
  *
  * @module lib/perfiles
  */

@@ -31,6 +31,23 @@
 # si una `location =` o una regex se la sigue quitando al catalogo. Solo lo
 # dice una peticion.
 services:
+  # B12 — un cliente "de internet". Desde el anfitrion (localhost:8099) el borde
+  # ve llegar las peticiones desde la pasarela de Docker, una direccion privada:
+  # justo lo que el borde trata como origen interno (Mailpit abierto, sin
+  # limite de frecuencia). Para ver lo que ve un visitante cualquiera hace falta
+  # un origen publico, y este contenedor lo es: vive SOLO en la red `publico`
+  # (203.0.113.0/24, TEST-NET-3, reservada para documentacion y no enrutable) y
+  # habla con el borde por ella. Es la misma imagen del borde porque trae curl:
+  # no se descarga nada nuevo. `comprobar-rutas.sh` lo usa con
+  # `docker compose exec`.
+  cliente-publico:
+    image: nginx:1.27-alpine
+    command: ["sleep", "86400"]
+    # Con init, `docker compose down` lo para en el acto: `sleep` como PID 1 no
+    # atiende SIGTERM y Compose esperaria diez segundos para matarlo.
+    init: true
+    networks: [publico]
+
   srv-comentarios:
     image: nginx:1.27-alpine
     hostname: COMENTARIOS
@@ -178,7 +195,8 @@ services:
       - ../../../shared:/srv/nexus/shared:ro
     ports:
       - '8099:80'
-    networks: [borde]
+    # B12 — tambien en `publico`, para que el cliente de internet llegue a el.
+    networks: [borde, publico]
     depends_on:
       borde-conf: { condition: service_completed_successfully }
       srv-comentarios: { condition: service_started }
@@ -200,6 +218,16 @@ services:
 networks:
   borde:
     driver: bridge
+  # B12 — la red "de internet" del banco. `internal`: ni sale a ninguna parte
+  # ni da la ruta por defecto del borde, que sigue siendo `borde`. Por eso el
+  # puerto publicado 8099 entra por `borde` y el anfitrion sigue siendo un
+  # origen privado; comprobar-rutas.sh lo comprueba en cada corrida.
+  publico:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
 
 # Efimero: `docker compose down -v` lo borra y la siguiente corrida deriva la
 # configuracion otra vez del `borde-dev.conf` actual.
