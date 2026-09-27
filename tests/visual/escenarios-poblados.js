@@ -13,6 +13,8 @@
  * tenga que importar otro spec.
  */
 
+import { join, resolve } from 'node:path';
+
 import { sesionSintetica } from './identidad.js';
 
 /**
@@ -197,6 +199,220 @@ function rutasDeInventario(equipamiento) {
       }),
     ],
     ['**/api/v1/inventario/heroes/*/equipamiento', json(equipamiento)],
+    // UXC-3 — la ficha trae las opiniones del producto: un hilo vacío, que es
+    // el estado normal de un producto que nadie ha comentado.
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
+  ];
+}
+
+/** Un producto sin opiniones (comentarios.yaml: 200 con la lista vacía). */
+const HILO_VACIO = {
+  productoId: 'sin-opiniones',
+  comentarios: [],
+  total: 0,
+  totalCalificaciones: 0,
+  calificacionPromedio: null,
+};
+
+/* ---------------------------------------------------------------------------
+   UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
+   LABORATORIO: los nombres propios son inventados para la captura y las
+   cifras son las de nivel 1 de la Tabla 6 del documento; en produccion todo
+   sale del inventario y del catalogo. Estados reales del contrato: uno sin
+   equipo (no puede combatir), uno bloqueado por subasta.
+   ------------------------------------------------------------------------- */
+const f = (base, cantidadDados, caras) =>
+  base === null
+    ? null
+    : {
+        base,
+        cantidadDados,
+        caras,
+        formula: `${base ? `${base} + ` : ''}${cantidadDados}d${caras}`,
+      };
+
+const OCHO_HEROES = [
+  [
+    'Aquiles de la Ceniza',
+    'Guerrero Tanque',
+    { poder: 10, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 4), sanar: null },
+    4,
+  ],
+  [
+    'Vorn el Filo',
+    'Guerrero Armas',
+    { poder: 8, vida: 44, defensa: 11, ataque: f(10, 1, 6), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Ignis',
+    'Mago Fuego',
+    { poder: 8, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 8), sanar: null },
+    0,
+  ],
+  [
+    'Nieve de Arel',
+    'Mago Hielo',
+    { poder: 10, vida: 40, defensa: 10, ataque: f(10, 1, 8), dano: f(0, 1, 6), sanar: null },
+    1,
+  ],
+  [
+    'Sombra Verde',
+    'Pícaro Veneno',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 6), sanar: null },
+    2,
+  ],
+  [
+    'Kael',
+    'Pícaro Machete',
+    { poder: 8, vida: 36, defensa: 8, ataque: f(10, 1, 10), dano: f(0, 1, 8), sanar: null },
+    3,
+  ],
+  [
+    'Oyá',
+    'Chamán',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(6, 1, 6) },
+    2,
+  ],
+  [
+    'Doctora Lumen',
+    'Médico',
+    { poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: f(4, 1, 8) },
+    1,
+  ],
+].map(([nombrePropio, prototipo, estadisticas, ranuras], i) => ({
+  elemento: {
+    id: `he00000${i + 1}-1111-4111-8111-111111111111`,
+    productoId: `pe00000${i + 1}-0000-4000-8000-000000000000`,
+    tipo: 'HEROE',
+    nombrePropio,
+    parteArmadura: null,
+    // El Picaro Veneno esta publicado en subasta: bloqueado (HU-INV-010).
+    disponible: i !== 4,
+    subastaId: i === 4 ? 'aaaaaaa2-2222-4222-8222-222222222222' : null,
+  },
+  prototipo,
+  estadisticas,
+  ranuras,
+}));
+
+const OBJETOS_DE_LABORATORIO = [
+  ['ob000001', 'ARMA', 'Hacha de Obsidiana', null],
+  ['ob000002', 'ARMA', 'Espada del Alba', null],
+  ['ob000003', 'ARMADURA', 'Yelmo del Alba', 'CASCO'],
+  ['ob000004', 'ARMADURA', 'Coraza del Centinela', 'PECHO'],
+  ['ob000005', 'ITEM', 'Poción de brasa', null],
+  ['ob000006', 'HABILIDAD', 'Grito de guerra', null],
+  ['ob000007', 'EPICA', 'Reliquia del Nexo', null],
+  ['ob000008', 'ARMA', 'Arco en subasta', null],
+].map(([id, tipo, nombrePropio, parteArmadura], i) => ({
+  id: `${id}-1111-4111-8111-111111111111`,
+  productoId: `po00000${i + 1}-0000-4000-8000-000000000000`,
+  tipo,
+  nombrePropio,
+  parteArmadura,
+  disponible: i !== 7,
+  subastaId: i === 7 ? 'aaaaaaa1-1111-4111-8111-111111111111' : null,
+}));
+
+/** El equipo de cada heroe: sus primeras `ranuras` piezas del laboratorio. */
+function equipoDeLaboratorio(heroeId) {
+  const heroe = OCHO_HEROES.find((h) => h.elemento.id === heroeId);
+  const ranuras = heroe?.ranuras ?? 0;
+  const armas = [];
+  const armaduras = {};
+  const items = [];
+  // El Tanque lleva el hacha, el yelmo, la coraza y la pocion; el resto, lo que
+  // le toque del mismo lote (el laboratorio no valida exclusividad).
+  // El Tanque lleva el hacha, el yelmo, la coraza y la pocion; el Armas, la
+  // espada. Los demas llevan piezas que no estan en este lote (identificadores
+  // propios): cuentan como ranuras ocupadas y no se repiten entre heroes.
+  const lotes = {
+    'Guerrero Tanque': [0, 2, 3, 4].map((i) => OBJETOS_DE_LABORATORIO[i]),
+    'Guerrero Armas': [OBJETOS_DE_LABORATORIO[1]],
+  };
+  const lote = lotes[heroe?.prototipo] ?? [];
+  for (const pieza of lote) {
+    if (pieza.tipo === 'ARMA') armas.push(pieza.id);
+    else if (pieza.tipo === 'ARMADURA') armaduras[pieza.parteArmadura] = pieza.id;
+    else items.push(pieza.id);
+  }
+  for (let i = lote.length; i < ranuras; i += 1) {
+    items.length < 2 ? items.push(`${heroeId}-item-${i}`) : armas.push(`${heroeId}-arma-${i}`);
+  }
+  return { heroeId, armas, armaduras, items };
+}
+
+function rutasDeOchoHeroes() {
+  const elementos = [...OCHO_HEROES.map((h) => h.elemento), ...OBJETOS_DE_LABORATORIO];
+  const idDe = (ruta, desdeFinal = 0) =>
+    new URL(ruta.request().url()).pathname.split('/').slice(-1 - desdeFinal)[0];
+  return [
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos,
+        numero: 0,
+        tamanio: 16,
+        totalElementos: elementos.length,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
+    [
+      '**/api/v1/productos/*',
+      (ruta) => {
+        const id = idDe(ruta);
+        const heroe = OCHO_HEROES.find((h) => h.elemento.productoId === id);
+        const objeto = OBJETOS_DE_LABORATORIO.find((o) => o.productoId === id);
+        return json({
+          id,
+          nombre: heroe ? heroe.prototipo : (objeto?.nombrePropio ?? 'Producto'),
+          tipo: heroe ? 'HEROE' : (objeto?.tipo ?? 'ARMA'),
+          prototipo: heroe ? heroe.prototipo : null,
+          descripcion: heroe ? `Prototipo ${heroe.prototipo} del catálogo.` : 'Forjado en el Nexo.',
+          imagen: null,
+          estado: 'ACTIVO',
+          tiraje: -1,
+        });
+      },
+    ],
+    [
+      '**/api/v1/inventario/heroes/*/estadisticas',
+      (ruta) => {
+        const id = idDe(ruta, 1);
+        const heroe = OCHO_HEROES.find((h) => h.elemento.id === id);
+        return json({ heroeId: id, ...(heroe?.estadisticas ?? {}) });
+      },
+    ],
+    [
+      '**/api/v1/inventario/heroes/*/equipamiento',
+      (ruta) => json(equipoDeLaboratorio(idDe(ruta, 1))),
+    ],
+    [
+      '**/api/v1/heroes/*',
+      (ruta) => {
+        const nombre = decodeURIComponent(idDe(ruta));
+        return json({
+          nombre,
+          tipo: nombre.split(' ')[0],
+          descripcion: `Ficha del prototipo ${nombre} (laboratorio).`,
+          esSanador: ['Chamán', 'Médico'].includes(nombre),
+          estadisticasNivel1: OCHO_HEROES.find((h) => h.prototipo === nombre)?.estadisticas ?? {},
+          acciones: [
+            { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+            { nombre: 'Mano de piedra', costo: '4 puntos de poder', efecto: '+12 a la defensa' },
+            {
+              nombre: 'Defensa feroz',
+              costo: '6 puntos de poder',
+              efecto: 'Inmune al daño físico y (3d6) al daño mágico',
+            },
+          ],
+        });
+      },
+    ],
+    // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
+    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
   ];
 }
 
@@ -267,16 +483,130 @@ function finalizada({ ganadores, reparto, recompensa }) {
   };
 }
 
-function escenarioDeCombate(id, titulo, { partida, mensajes = [], exige }) {
+/**
+ * UXC-2 — lo que la vista de combate pide para la barra de accion del heroe
+ * propio (`comun/heroe-propio.js`): su elemento en el inventario, el producto
+ * (prototipo), la ficha del prototipo (Tabla 7) y sus cifras con el equipo.
+ * DATOS DE LABORATORIO con los valores de la Tabla 7 para Guerrero Tanque.
+ */
+const RUTAS_DEL_HEROE_EN_COMBATE = [
+  [
+    '**/api/v1/inventario/elementos?*',
+    json({
+      elementos: [
+        {
+          id: 'ddddddd1-1111-4111-8111-111111111111',
+          productoId: 'aaaaaaa1-0000-4000-8000-000000000009',
+          tipo: 'HEROE',
+          nombrePropio: 'Aquiles de la Ceniza',
+          parteArmadura: null,
+          disponible: true,
+          subastaId: null,
+        },
+      ],
+      numero: 0,
+      tamanio: 16,
+      totalElementos: 1,
+      totalPaginas: 1,
+      ultima: true,
+    }),
+  ],
+  [
+    '**/api/v1/productos/*',
+    json({
+      id: 'aaaaaaa1-0000-4000-8000-000000000009',
+      nombre: 'Guerrero Tanque',
+      tipo: 'HEROE',
+      prototipo: 'Guerrero Tanque',
+      imagen: null,
+      estado: 'ACTIVO',
+      tiraje: -1,
+    }),
+  ],
+  [
+    '**/api/v1/heroes/*',
+    json({
+      nombre: 'Guerrero Tanque',
+      tipo: 'Guerrero',
+      descripcion: 'Aguanta lo que otros no.',
+      esSanador: false,
+      estadisticasNivel1: { poder: 10, vida: 44, defensa: 11, ataque: '10 + 1d6', dano: '1d4' },
+      acciones: [
+        { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+        { nombre: 'Mano de piedra', costo: '4 puntos de poder', efecto: '+12 a la defensa' },
+        {
+          nombre: 'Defensa feroz',
+          costo: '6 puntos de poder',
+          efecto: 'Inmune al daño físico y (3d6) al daño mágico',
+        },
+      ],
+    }),
+  ],
+  [
+    '**/api/v1/inventario/heroes/*/estadisticas',
+    json({ heroeId: 'ddddddd1-1111-4111-8111-111111111111', poder: 10, vida: 52, defensa: 13 }),
+  ],
+];
+
+function escenarioDeCombate(
+  id,
+  titulo,
+  { partida, mensajes = [], exige, canal = {}, interaccion },
+) {
   return {
     id,
     titulo,
     ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
     sesion: () => SESION_COMBATE,
-    rutas: [[`**/api/v1/partidas/${ID_PARTIDA}`, json(partida)]],
-    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes } },
+    rutas: [
+      [`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)],
+      ...RUTAS_DEL_HEROE_EN_COMBATE,
+    ],
+    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
+    ...(interaccion ? { interaccion } : {}),
     exige,
   };
+}
+
+/** Un aviso `partida.accion.resuelta` con la forma del contrato. */
+function accionResuelta(idEjecutor, categoria, afectados) {
+  return {
+    tipo: 'partida.accion.resuelta',
+    idPartida: ID_PARTIDA,
+    idEjecutor,
+    accion: { codigo: 'ATAQUE_BASICO', nombre: categoria, icono: null },
+    afectados,
+  };
+}
+
+/** Seis participantes, tres contra tres (HU-SAL-004), para medir el HUD lleno. */
+function partidaDeSeis() {
+  const base = partidaEnCurso();
+  const extra = [
+    ['cccccc03-3333-4333-8333-333333333333', 'Nieve de Arel', 40, 40, 1, false],
+    ['cccccc04-4444-4444-8444-444444444444', 'Doctora Lumen', 28, 28, 1, false],
+    ['cccccc05-5555-4555-8555-555555555555', 'Sombra Verde', 20, 36, 2, true],
+    ['cccccc06-6666-4666-8666-666666666666', 'Kael', 36, 36, 2, true],
+  ].map(([jugador, nombre, vidaActual, vidaMaxima, equipo, esIA]) => ({
+    jugador,
+    heroe: {
+      id: `h-${jugador}`,
+      nombre,
+      retratoUrl: null,
+      nivel: null,
+      vidaActual,
+      vidaMaxima,
+      efectosActivos: [],
+    },
+    esIA,
+    listo: true,
+    equipo,
+    creditosApostados: 0,
+  }));
+  base.participantes[0].equipo = 1;
+  base.participantes[1].equipo = 2;
+  base.participantes.push(...extra);
+  return base;
 }
 
 /* ---------------------------------------------------------------------------
@@ -440,7 +770,639 @@ function comentarioReportado(i, cambios = {}) {
   };
 }
 
+/* ---------------------------------------------------------------------------
+   UXC-3/UXC-4 — la tienda, su detalle con opiniones y la portada. DATOS DE
+   LABORATORIO: nombres, textos, precios y opiniones inventados para la
+   captura, con la forma exacta de ecommerce-carrito.yaml 1.2.0 y
+   comentarios.yaml 1.3.0. En produccion todo sale de la vitrina, del
+   catalogo y del servicio de comentarios.
+   ------------------------------------------------------------------------- */
+const SESION_TIENDA = sesionDe('qa_tienda', 'JUGADOR');
+
+const PRODUCTOS_DE_TIENDA = [
+  producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000002',
+    nombre: 'Amuleto de Brasa',
+    tipo: 'ITEM',
+    habilidades: 'Fuego +2 durante tres turnos',
+    precioOriginal: 20000,
+    precioFinal: 16000,
+    enPromocion: true,
+    porcentajeDescuento: 20,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000003',
+    nombre: 'Pocion sin precio',
+    tipo: 'ITEM',
+    precioFinal: null,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000004',
+    nombre: 'Guerrero de Obsidiana',
+    tipo: 'HEROE',
+    imagenUrl: '/frontend/app-web/src/cuentas/avatares/guerrero-tanque.jpg',
+    descripcion: 'Un tanque que aguanta la primera oleada.',
+    habilidades: null,
+    precioFinal: 45000,
+    precioOriginal: 45000,
+  }),
+  producto({
+    id: 'aaaaaaa1-0000-4000-8000-000000000005',
+    nombre: 'Espada de Vorn',
+    tipo: 'ARMA',
+    descripcion: 'Filo largo, templado en la niebla.',
+    habilidades: 'Ataque +6',
+    precioFinal: 32000,
+    precioOriginal: 32000,
+  }),
+];
+
+/** El hilo de un producto: tres opiniones, una con imagen y una propia. */
+function hiloDeLaboratorio({ propio = null } = {}) {
+  const comentarios = [
+    {
+      id: 'c0000000-0000-4000-8000-000000000001',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000001',
+      apodoAutor: 'thar_vex',
+      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
+      imagenes: ['yelmo-en-combate.png'],
+      estrellas: 5,
+      fechaPublicacion: '2026-09-18T20:15:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000002',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: 'c1111111-0000-4000-8000-000000000002',
+      apodoAutor: 'kira_del_sur',
+      texto: 'Buen objeto, aunque la descripción exagera un poco.\nA mí me sirvió en duelos.',
+      imagenes: [],
+      estrellas: 3,
+      fechaPublicacion: '2026-09-20T11:40:00Z',
+      estado: 'PUBLICADO',
+    },
+    {
+      id: 'c0000000-0000-4000-8000-000000000003',
+      productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
+      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
+      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
+      imagenes: [],
+      fechaPublicacion: '2026-09-22T08:05:00Z',
+      estado: 'PUBLICADO',
+    },
+  ];
+  return {
+    productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+    comentarios,
+    total: comentarios.length,
+    totalCalificaciones: 2,
+    calificacionPromedio: 4,
+  };
+}
+
+/** El detalle del catalogo de cualquier producto de la tienda de laboratorio. */
+function detalleDelCatalogo(peticion) {
+  const id = new URL(peticion.request().url()).pathname.split('/').pop();
+  const deVitrina = PRODUCTOS_DE_TIENDA.find((p) => p.id === id) ?? PRODUCTOS_DE_TIENDA[0];
+  return json({
+    id,
+    nombre: deVitrina.nombre,
+    tipo: deVitrina.tipo,
+    descripcion: deVitrina.descripcion,
+    imagen: deVitrina.imagenUrl,
+    prototipo: deVitrina.tipo === 'HEROE' ? 'Guerrero Tanque' : null,
+    defensa: deVitrina.tipo === 'ARMADURA' ? 4 : null,
+    parte: deVitrina.tipo === 'ARMADURA' ? 'CASCO' : null,
+    tasaDeCaida: deVitrina.tipo === 'HEROE' ? null : 12,
+    estado: 'ACTIVO',
+    tiraje: -1,
+  });
+}
+
+const CARRITO_DE_LABORATORIO = {
+  id: 9,
+  usuarioId: 'qa',
+  total: 52000,
+  moneda: 'COP',
+  items: [
+    {
+      id: 1,
+      cantidad: 2,
+      precioUnitario: 18000,
+      subtotal: 36000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000001',
+        nombre: 'Yelmo del Alba',
+        moneda: 'COP',
+      },
+    },
+    {
+      id: 2,
+      cantidad: 1,
+      precioUnitario: 16000,
+      subtotal: 16000,
+      producto: {
+        id: 'aaaaaaa1-0000-4000-8000-000000000002',
+        nombre: 'Amuleto de Brasa',
+        moneda: 'COP',
+      },
+    },
+  ],
+};
+
+function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
+  return [
+    // R16 — la vitrina se mudó a /api/v1/vitrina y sus ids son UUID del
+    // catálogo maestro. UXC-4 — se pide entera (`?size=50`).
+    ['**/api/v1/vitrina*', json({ content: PRODUCTOS_DE_TIENDA, last: true, totalPages: 1 })],
+    ['**/api/v1/carrito', json(CARRITO_DE_LABORATORIO)],
+    // Lo que ya tiene el jugador: un yelmo (la tarjeta dice «Ya lo tienes»).
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos: [
+          {
+            id: 'e0000000-0000-4000-8000-000000000001',
+            productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+            tipo: 'ARMADURA',
+            nombrePropio: 'Yelmo del Alba',
+            disponible: true,
+          },
+        ],
+        numero: 0,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
+    ['**/api/v1/productos/*', detalleDelCatalogo],
+    ['**/api/v1/products/*/comments', json(hilo)],
+  ];
+}
+
+/* ---------------------------------------------------------------------------
+   UXC-5 — misiones.
+
+   La vista de misiones pide sus datos a un PUERTO (`contenido/misiones/
+   fuente-misiones.js`) y no a una ruta HTTP, porque el servicio de misiones no
+   existe todavía y no se inventa su dirección. Para fotografiar los estados
+   que tendrá, el laboratorio sirve en lugar de ese módulo el de
+   `laboratorio/fuente-misiones.js`: misiones de ejemplo, marcadas como tales
+   en el propio archivo y con un aviso visible en cada captura. Sin esta
+   sustitución la vista pinta lo que ve un jugador hoy: el estado honesto.
+
+   El configurador de estrategia sí habla con servicios que existen
+   (inventario, productos y héroes): esos se simulan como los demás, con la
+   forma de su contrato.
+   ------------------------------------------------------------------------- */
+
+// Playwright transpila a CommonJS (hay `__dirname`); la herramienta de
+// capturas corre como módulo desde `frontend/app-web` (no lo hay).
+const AQUI_LABORATORIO =
+  typeof __dirname === 'undefined' ? resolve(process.cwd(), '../../tests/visual') : __dirname;
+
+/** La ruta que cambia la fuente de misiones por la del laboratorio. */
+const MISIONES_DE_LABORATORIO = [
+  '**/contenido/misiones/fuente-misiones.js',
+  {
+    status: 200,
+    contentType: 'text/javascript; charset=utf-8',
+    path: join(AQUI_LABORATORIO, 'laboratorio', 'fuente-misiones.js'),
+  },
+];
+
+/**
+ * Tabla 7 del documento, como la publica el catálogo de héroes
+ * (`PrototiposIniciales`): las tres acciones de cada prototipo, en orden de
+ * desbloqueo (niveles 1, 4 y 8).
+ */
+const TABLA_7 = {
+  'Guerrero Tanque': [
+    ['Golpe con escudo', 2, '+2 al ataque'],
+    ['Mano de piedra', 4, '+12 a la defensa'],
+    ['Defensa feroz', 6, 'Inmune al daño físico y (3d6) al daño mágico'],
+  ],
+  'Guerrero Armas': [
+    ['Embate sangriento', 4, '+2 al ataque, +1 de daño'],
+    ['Lanza de los dioses', 4, '+2 al daño'],
+    ['Golpe de tormenta', 6, '+(3d6) al ataque, +2 al daño'],
+  ],
+  'Mago Fuego': [
+    ['Misiles de magma', 2, '+1 al ataque, +2 de daño'],
+    ['Vulcano', 6, '+3 al ataque, +(3d9) al daño'],
+    ['Pare de fuego', 4, '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior'],
+  ],
+  'Mago Hielo': [
+    ['Lluvia de hielo', 2, '+2 al ataque, +2 de daño'],
+    ['Cono de hielo', 6, '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes'],
+    ['Bola de hielo', 4, '+2 al ataque y afecta en (0d4) al daño causado por el oponente'],
+  ],
+  'Pícaro Veneno': [
+    ['Flor de loto', 2, '+(4d8) al daño'],
+    ['Agonía', 4, '+(2d9) de daño'],
+    ['Piquete', 4, '+1 al ataque por dos turnos, +2 al daño por 1 turno'],
+  ],
+  'Pícaro Machete': [
+    ['Cortada', 2, '+2 al daño por dos turnos'],
+    ['Machetazo', 4, '+(2d8) al daño, +1 al ataque'],
+    ['Planazo', 4, '+(2d8) al ataque, +1 al daño'],
+  ],
+  Chamán: [
+    ['Toque de la Vida', 2, '+2 de sanación'],
+    ['Vínculo Natural', 4, '+2 de sanación por dos turnos'],
+    ['Canto del Bosque', 6, 'Sana a todo el grupo +(2d6) durante dos turnos'],
+  ],
+  Médico: [
+    ['Curación Directa', 2, '+2 de sanación'],
+    ['Neutralización de Efectos', 4, '+2 y +(2d4) de sanación'],
+    ['Reanimación', null, 'Sana el 100% de la vida del compañero'],
+  ],
+};
+
+/** RC-01: una acción en el nivel 1, dos desde el 4, tres desde el 8. */
+function accionesEnNivel(prototipo, nivel) {
+  let cuantas = 1;
+  if (nivel >= 8) {
+    cuantas = 3;
+  } else if (nivel >= 4) {
+    cuantas = 2;
+  }
+  return (TABLA_7[prototipo] ?? []).slice(0, cuantas);
+}
+
+/**
+ * El servicio de héroes, de mentira pero con su regla (`EstrategiaDeCombate`):
+ * las habilidades válidas son las desbloqueadas más el ataque básico; una
+ * rotación que usa otra se rechaza con el motivo, en 200.
+ */
+function veredictoDeEstrategia(ruta) {
+  const { heroe, nivel = 1, rotaciones = [] } = ruta.request().postDataJSON() ?? {};
+  const validas = [...accionesEnNivel(heroe, nivel).map(([nombre]) => nombre), 'Ataque básico'];
+  const base = { heroe, nivel, habilidadesValidas: validas, comportamientoPorDefecto: 'Ataque básico' };
+  for (const [indice, rotacion] of rotaciones.entries()) {
+    const ajena = (rotacion.pasos ?? []).find((paso) => !validas.includes(paso));
+    if (ajena) {
+      return json({
+        ...base,
+        valida: false,
+        porDefecto: false,
+        motivo: `La rotación ${indice + 1} usa una habilidad que ${heroe} no posee en nivel ${nivel}: ${ajena}.`,
+      });
+    }
+  }
+  return json({
+    ...base,
+    valida: true,
+    porDefecto: rotaciones.length === 0,
+    rotaciones: rotaciones.map((r, i) => ({ prioridad: ['Alta', 'Media', 'Baja'][i], pasos: r.pasos })),
+  });
+}
+
+/** `GET /heroes/{nombre}/niveles/{nivel}` con las cifras de nivel 1 de la Tabla 6. */
+function vistaDeHeroeEnNivel(ruta) {
+  const partes = new URL(ruta.request().url()).pathname.split('/');
+  const nivel = Number(partes.pop());
+  partes.pop();
+  const nombre = decodeURIComponent(partes.pop());
+  const heroe = OCHO_HEROES.find((h) => h.prototipo === nombre);
+  const cifras = heroe?.estadisticas ?? {};
+  const formula = (x) => (x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null);
+  return json({
+    nombre,
+    tipo: nombre.split(' ')[0],
+    esSanador: ['Chamán', 'Médico'].includes(nombre),
+    nivel,
+    estadisticas: {
+      poder: cifras.poder,
+      vida: cifras.vida,
+      defensa: cifras.defensa,
+      ataque: formula(cifras.ataque),
+      dano: formula(cifras.dano),
+      sanar: formula(cifras.sanar),
+    },
+    accionesDisponibles: accionesEnNivel(nombre, nivel).map(([accion, costo, efecto]) => ({
+      nombre: accion,
+      costo: costo === null ? 'Sin costo de poder' : `${costo} puntos de poder`,
+      efecto,
+    })),
+    multiplicadorDeEfecto: nivel,
+  });
+}
+
+/** Inventario, catálogo y héroes para el configurador de estrategia. */
+function rutasDeEstrategia() {
+  return [
+    ...rutasDeOchoHeroes(),
+    ['**/api/v1/estrategias/validacion', veredictoDeEstrategia],
+    ['**/api/v1/heroes/*/niveles/*', vistaDeHeroeEnNivel],
+  ];
+}
+
+/** Elige una habilidad en un paso del configurador y deja que la vista reaccione. */
+async function elegirPaso(pagina, indice, habilidad) {
+  await pagina.locator('.estrategia__paso select').nth(indice).selectOption(habilidad);
+}
+
+/** Configura dos pasos y comprueba la estrategia contra el servicio de mentira. */
+async function prepararEstrategia(pagina) {
+  await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
+  await elegirPaso(pagina, 0, 'Golpe con escudo');
+  await pagina.locator('[data-accion="anadir-paso"]').first().click();
+  await elegirPaso(pagina, 1, 'Ataque básico');
+  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+}
+
+
+/* ---------------------------------------------------------------------------
+   UXC-6 — chat y mensajes privados. DATOS DE LABORATORIO: apodos y textos
+   inventados para la captura, con la forma exacta de `MensajeDeChat`
+   (contracts/websocket/salas-partidas.yaml 1.4.0). El chat general y el de la
+   sala van por el canal simulado; los mensajes privados, por la fuente del
+   laboratorio (`laboratorio/fuente-mensajes.js`), porque no tienen servicio.
+   ------------------------------------------------------------------------- */
+
+/** El `uid` de quien mira en las capturas del chat: firma «sus» mensajes. */
+const UID_CHAT = 'cccccccc-6666-4666-8666-000000000001';
+
+/**
+ * Sesión sintética con un `uid` fijo. `sesionSintetica` inventa uno cada vez,
+ * y el canal simulado necesita saberlo de antemano para que «Tú» salga en la
+ * captura.
+ */
+function sesionDelChat() {
+  const b64 = (objeto) => Buffer.from(JSON.stringify(objeto)).toString('base64url');
+  const cuerpo = {
+    sub: 'qa_chat',
+    preferred_username: 'qa_chat',
+    uid: UID_CHAT,
+    rol: 'JUGADOR',
+    exp: Math.floor(Date.now() / 1000) + 8 * 3600,
+  };
+  return {
+    token: `${b64({ alg: 'none', typ: 'JWT' })}.${b64(cuerpo)}.sin-firma`,
+    uid: UID_CHAT,
+    apodo: 'qa_chat',
+    rol: 'JUGADOR',
+  };
+}
+
+function mensajeDeChat(id, autor, texto, minutosAtras, cambios = {}) {
+  return {
+    id,
+    tipo: 'chat.mensaje',
+    idSala: null,
+    autor,
+    texto,
+    logro: null,
+    enviadoEn: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
+    ...cambios,
+  };
+}
+
+const EN_EL_CHAT = {
+  yo: { id: UID_CHAT, apodo: 'qa_chat' },
+  bruma: { id: 'cccccccc-6666-4666-8666-000000000002', apodo: 'Bruma' },
+  kael: { id: 'cccccccc-6666-4666-8666-000000000003', apodo: 'Kael_77' },
+  nyra: { id: 'cccccccc-6666-4666-8666-000000000004', apodo: 'Nyra' },
+};
+
+function historialDelChat(idSala = null) {
+  const { yo, bruma, kael, nyra } = EN_EL_CHAT;
+  return [
+    mensajeDeChat('ch-1', bruma, '¿Alguien para un 1v1 con apuesta pequeña?', 60 * 26, { idSala }),
+    mensajeDeChat('ch-2', yo, 'Yo voy. Abro sala en cinco minutos.', 60 * 25 + 50, { idSala }),
+    mensajeDeChat('ch-3', kael, 'Por fin cayó el guardián.', 14, {
+      idSala,
+      tipo: 'chat.logro',
+      logro: { mision: 'El Templo Olvidado', titulo: 'Guardián derrotado' },
+    }),
+    mensajeDeChat('ch-4', nyra, 'Buscamos cuarto para el torneo del sábado. ¿Quién se apunta?', 9, {
+      idSala,
+    }),
+    mensajeDeChat('ch-5', yo, 'Me apunto si es por la tarde.', 4, { idSala }),
+  ];
+}
+
+/** El canal simulado del chat general: el historial y un mensaje en vivo. */
+function canalDelChatGeneral(extra = {}) {
+  return {
+    mensajes: {
+      '/app/chat/general/historial': [historialDelChat()],
+      '/tema/chat/general': [
+        mensajeDeChat('ch-6', EN_EL_CHAT.bruma, 'Sala creada: «Duelo al atardecer». Os espero.', 0),
+      ],
+      ...extra,
+    },
+  };
+}
+
+const ID_SALA_DEL_CHAT = 'bbbbbbb1-6666-4666-8666-111111111111';
+
+/** La ruta que cambia la fuente de mensajes privados por la del laboratorio. */
+const MENSAJES_DE_LABORATORIO = [
+  '**/plataforma/salas-partidas/fuente-mensajes.js',
+  {
+    status: 200,
+    contentType: 'text/javascript; charset=utf-8',
+    path: join(AQUI_LABORATORIO, 'laboratorio', 'fuente-mensajes.js'),
+  },
+];
+
+/** Abre la conversación con Bruma (o la que se pida) en la pestaña de privados. */
+function abrirConversacion(apodo = 'Bruma') {
+  return async (pagina) => {
+    await pagina
+      .locator('.conversaciones__item', { hasText: apodo })
+      .first()
+      .click({ timeout: 10_000 });
+    await pagina.locator('.mensajes-privados__con').waitFor({ timeout: 10_000 });
+    await pagina.waitForTimeout(400);
+  };
+}
+
+
+/* ---------------------------------------------------------------------------
+   UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
+   productos.yaml (ProductoCreado, PaginaDeProductos, ResumenCatalogo) y de
+   moderacion-sanciones-admin.yaml (Sancion).
+   ------------------------------------------------------------------------- */
+
+const SESION_ADMIN_CATALOGO = () => sesionDe('qa_admin_catalogo', 'ADMINISTRADOR');
+
+function productoDelCatalogo(id, cambios = {}) {
+  return {
+    id: `cccccc${id}-7777-4777-8777-000000000001`,
+    nombre: 'Yelmo del Alba',
+    imagen: 'productos/yelmo-del-alba.png',
+    descripcion: 'Acero claro, forjado al amanecer.',
+    tipo: 'ARMADURA',
+    tiraje: 40,
+    premium: false,
+    precioCreditos: 1200,
+    defensa: 4,
+    parte: 'CASCO',
+    tasaDeCaida: 12.5,
+    estado: 'ACTIVO',
+    version: 3,
+    creadoEn: '2026-09-01T10:00:00Z',
+    modificadoEn: '2026-09-20T10:00:00Z',
+    ...cambios,
+  };
+}
+
+const PRODUCTOS_DEL_CATALOGO = [
+  productoDelCatalogo('01'),
+  productoDelCatalogo('02', {
+    nombre: 'Guerrero Tanque',
+    tipo: 'HEROE',
+    prototipo: 'Guerrero Tanque',
+    tiraje: -1,
+    precioCreditos: 3000,
+    defensa: undefined,
+    parte: undefined,
+    tasaDeCaida: undefined,
+    version: 1,
+  }),
+  productoDelCatalogo('03', {
+    nombre: 'Hacha de Obsidiana',
+    tipo: 'ARMA',
+    poderDeAtaque: 7,
+    tasaDeCaida: 4,
+    defensa: undefined,
+    parte: undefined,
+    estado: 'UNICO',
+    tiraje: 1,
+    precioCreditos: 5400,
+  }),
+  productoDelCatalogo('04', {
+    nombre: 'Pack del Guardián',
+    tipo: 'ITEM',
+    efecto: 'Recupera 20 de vida al inicio del combate.',
+    defensa: undefined,
+    parte: undefined,
+    premium: true,
+    precioCreditos: undefined,
+    precioMonedaReal: 18500,
+    tiraje: 200,
+  }),
+];
+
+function rutasDelCatalogo() {
+  return [
+    [
+      '**/api/v1/productos/estadisticas',
+      json({
+        total: 5,
+        porTipo: { HEROE: 1, HABILIDAD: 0, ARMA: 1, ARMADURA: 1, ITEM: 1, EPICA: 1 },
+        porEstado: { ACTIVO: 3, UNICO: 1, SUSPENDIDO: 1 },
+      }),
+    ],
+    [
+      /\/api\/v1\/productos\?/,
+      json({
+        content: PRODUCTOS_DEL_CATALOGO,
+        page: 0,
+        size: 16,
+        totalElements: PRODUCTOS_DEL_CATALOGO.length,
+        totalPages: 1,
+      }),
+    ],
+  ];
+}
+
+const UID_SANCIONADO = 'dddddddd-7777-4777-8777-000000000001';
+
+function sancionDeLaboratorio(cambios = {}) {
+  return {
+    id: 'eeeeeee1-7777-4777-8777-000000000001',
+    usuarioId: UID_SANCIONADO,
+    tipo: 'SUSPENSION',
+    motivo: 'Lenguaje ofensivo reiterado en el chat de sala.',
+    politica: 'Normas de convivencia §3',
+    comentarioId: null,
+    emitidaPor: 'eeeeeee1-7777-4777-8777-0000000000aa',
+    rolEmisor: 'MODERADOR',
+    emitidaEn: new Date(Date.now() - 20 * 3_600_000).toISOString(),
+    vigenteHasta: new Date(Date.now() + 2 * 86_400_000 + 5 * 3_600_000).toISOString(),
+    revertidaEn: null,
+    motivoReversion: null,
+    vigente: true,
+    ...cambios,
+  };
+}
+
+function historialDeSanciones() {
+  return [
+    sancionDeLaboratorio(),
+    sancionDeLaboratorio({
+      id: 'eeeeeee1-7777-4777-8777-000000000002',
+      tipo: 'ADVERTENCIA',
+      motivo: 'Spam en el chat general.',
+      politica: null,
+      vigenteHasta: null,
+      emitidaEn: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+      revertidaEn: new Date(Date.now() - 8 * 86_400_000).toISOString(),
+      motivoReversion: 'Apelación aceptada: el mensaje era de otra cuenta.',
+      vigente: false,
+    }),
+  ];
+}
+
+const LIMITES_DE_SANCION = {
+  suspensionMinimaHoras: 1,
+  suspensionMaximaHoras: 720,
+  suspensionMaximaDias: 30,
+  apelacionPlazoDias: 30,
+};
+
 export const ESCENARIOS = [
+  {
+    // UXC-1 — «Mi inventario», pestana Heroes: los ocho prototipos de la Tabla
+    // 6, reconocibles por simbolo y nombre, con estado (uno sin equipo, uno
+    // bloqueado por subasta) y ranuras ocupadas.
+    id: 'inventario-ocho-heroes',
+    titulo: 'mi inventario: los ocho prototipos con su estado',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_heroes8', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    exige: [
+      '.hero-card',
+      '.hero-card[data-prototipo="picaro-machete"]',
+      '.hero-card[data-estado="NO_ELEGIBLE"]',
+      '.hero-card[data-estado="BLOQUEADO"]',
+      '.stat-block',
+    ],
+  },
+  {
+    // UXC-1 — pestana Objetos: sin heroes, y cada objeto dice si esta
+    // equipado (y en quien), libre o bloqueado.
+    id: 'inventario-objetos-con-estado',
+    titulo: 'mi inventario: objetos equipados, libres y bloqueados',
+    ruta: 'contenido/inventario/inventario.html#objetos',
+    sesion: () => sesionDe('qa_objetos', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    exige: [
+      '.inventario__contenido .vitrina__producto',
+      '.vitrina__estado[data-estado="EQUIPADO"]',
+      '.vitrina__estado[data-estado="BLOQUEADO"]',
+    ],
+  },
+  {
+    // UXC-1 — la ficha de un heroe desde su carta: cifras (StatBlock) y las
+    // tres acciones con coste, carga y efecto.
+    id: 'inventario-ficha-de-heroe-uxc',
+    titulo: 'ficha de héroe con cifras y acciones como cartas',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_ficha', 'JUGADOR'),
+    rutas: rutasDeOchoHeroes(),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="ver-ficha"]').first().click();
+    },
+    exige: ['.ficha', '.ficha .stat-block', '.ficha__accion', '.ficha__accion-carga'],
+  },
   {
     id: 'auditoria-con-registros',
     titulo: 'registro de auditoría con cinco entradas y paginación',
@@ -649,7 +1611,63 @@ export const ESCENARIOS = [
   },
   escenarioDeCombate('combate-mi-turno', 'combate 1 contra la máquina, en mi turno', {
     partida: partidaEnCurso(),
-    exige: ['.combate__vidas .barra-vida', '[data-atacar]:not(:disabled)', '[data-zona="turno"]'],
+    exige: [
+      '.combate__vidas .barra-vida',
+      '[data-atacar]:not(:disabled)',
+      '[data-zona="turno"]',
+      // UXC-2 — las tres especiales, deshabilitadas con su motivo, y el poder.
+      '[data-zona="especiales"] .accion-combate--especial:disabled',
+      '.medidor-poder',
+      '.registro-combate__linea',
+    ],
+  }),
+  // UXC-2 — lo que pasa, narrado: un critico propio, una evasion del rival,
+  // una curacion, un efecto activo y el cambio de turno. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-narrado', 'combate con crítico, evasión, curación y efecto', {
+    partida: partidaEnCurso({ vidaMia: 38, vidaRival: 14 }),
+    mensajes: [
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO_CRITICO', [
+        {
+          idJugador: RIVAL_IA,
+          vidaActual: 14,
+          vidaMaxima: 60,
+          diferencia: -9,
+          efectosActivos: [{ codigo: 'VENENO', nombre: 'Veneno', icono: null, turnosRestantes: 2 }],
+        },
+      ]),
+      accionResuelta(RIVAL_IA, 'EVADIR_EL_GOLPE', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 35, vidaMaxima: 52, diferencia: -3 },
+      ]),
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 41, vidaMaxima: 52, diferencia: 6 },
+      ]),
+      {
+        tipo: 'partida.turno.cambiado',
+        idPartida: ID_PARTIDA,
+        idJugador: SESION_COMBATE.uid,
+        numeroTurno: 8,
+        segundosParaJugar: null,
+      },
+    ],
+    exige: [
+      '.registro-combate__linea--critico',
+      '.registro-combate__linea--mitigado',
+      '.registro-combate__linea--curacion',
+      '.efecto',
+      '.impacto',
+    ],
+  }),
+  // UXC-2 — seis participantes, tres contra tres: el HUD con seis barras.
+  escenarioDeCombate('combate-seis', 'combate de seis, tres contra tres', {
+    partida: partidaDeSeis(),
+    exige: ['.combate__vidas .barra-vida:nth-child(6)', '[data-atacar]'],
+  }),
+  // UXC-2 — el canal se cae y no vuelve: la pildora lo dice y ofrece
+  // «Reintentar»; los botones se cierran.
+  escenarioDeCombate('combate-sin-canal', 'combate con el canal caído y sin reconexión', {
+    partida: partidaEnCurso(),
+    canal: { cerrarTrasMs: 400, rechazarReconexion: true },
+    exige: ['.conexion--reconectando, .conexion--sin-conexion', '[data-atacar]:disabled'],
   }),
   escenarioDeCombate('combate-turno-rival', 'combate 1 contra la máquina, turno del rival', {
     partida: partidaEnCurso({ turnoDe: RIVAL_IA }),
@@ -706,7 +1724,8 @@ export const ESCENARIOS = [
     // subasta y el acento lateral por tipo.
     id: 'inventario-vitrina',
     titulo: 'vitrina del inventario con los cinco tipos y un objeto en subasta',
-    ruta: 'contenido/inventario/inventario.html',
+    // UXC-1 — la vitrina es la pestana «Objetos»; los heroes tienen la suya.
+    ruta: 'contenido/inventario/inventario.html#objetos',
     sesion: () => sesionDe('qa_inventario', 'JUGADOR'),
     rutas: rutasDeInventario({
       heroeId: 'ddddddd1-1111-4111-8111-111111111111',
@@ -714,7 +1733,12 @@ export const ESCENARIOS = [
       armaduras: { CASCO: 'ddddddd3-3333-4333-8333-333333333333' },
       items: [],
     }),
-    exige: ['.vitrina__producto', '.vitrina__producto--no-disponible', "[data-tipo='HEROE']"],
+    exige: [
+      '.vitrina__producto',
+      '.vitrina__producto--no-disponible',
+      "[data-tipo='EPICA']",
+      '.hero-card',
+    ],
   },
   {
     // UX-GAME-3 — el panel de equipamiento: heroe, diez ranuras (dos armas,
@@ -730,7 +1754,8 @@ export const ESCENARIOS = [
       items: [],
     }),
     interaccion: async (pagina) => {
-      await pagina.locator('.vitrina__equipo').first().click();
+      // UXC-1 — el equipo se abre desde la carta del heroe.
+      await pagina.locator('[data-accion="equipar"]').first().click();
     },
     exige: ['.ranura', '.ranura--vacia', '.equipamiento__resumen'],
   },
@@ -982,67 +2007,545 @@ export const ESCENARIOS = [
         }),
       ],
     ],
-    // La ficha es un dialogo: hay que abrirlo para auditarlo.
+    // La ficha es un dialogo: hay que abrirlo para auditarlo. UXC-1 — desde
+    // la carta del heroe, que es donde estan los heroes.
     interaccion: async (pagina) => {
-      await pagina.locator('.vitrina__detalle').first().click();
+      await pagina.locator('[data-accion="ver-ficha"]').first().click();
     },
     exige: ['.ficha', '.ficha__seccion', '.ficha__acciones', '.ficha__seccion-nota'],
   },
   {
     id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja y carrito con importes',
+    titulo: 'tienda con precios, rebaja, lo que ya tienes y carrito con importes',
     ruta: 'cuentas/tienda.html',
-    sesion: () => sesionDe('qa_tienda', 'JUGADOR'),
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    // El descuento y el precio ausente son los dos estados que FI-R2 anadio;
+    // UXC-4 anade la marca de «propio», la insignia del carrito y los filtros.
+    exige: [
+      '.product-card',
+      '.badge-descuento',
+      '.precio-ausente',
+      '.cart-item',
+      '.producto-propio',
+      '.insignia-carrito__cuenta',
+      '.filtros-tienda',
+    ],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle del producto desde la tienda: ficha del
+    // catalogo, compra y opiniones (promedio, hilo con imagen y una propia).
+    id: 'tienda-detalle-con-opiniones',
+    titulo: 'detalle de producto con compra, calificación promedio e hilo de opiniones',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda({ hilo: hiloDeLaboratorio({ propio: SESION_TIENDA.uid }) }),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.compra-producto',
+      '.deseos[aria-disabled="true"]',
+      '.hilo-comentarios .comentario',
+      '.comentario__adjunto',
+      '.comentario--propio',
+      '.redactor-comentario',
+      '.selector-estrellas',
+    ],
+  },
+  {
+    // UXC-4 — buscar algo que no hay: se dice y se ofrece limpiar.
+    id: 'tienda-sin-coincidencias',
+    titulo: 'búsqueda sin resultados, con «Limpiar filtros»',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.product-card').first().waitFor();
+      await pagina.locator('#busqueda-tienda').fill('dragón de cristal');
+      await pagina.locator('[data-accion="limpiar-filtros"]').waitFor();
+    },
+    exige: ['#productos-grid [data-estado="vacio"]', '[data-accion="limpiar-filtros"]'],
+  },
+  {
+    // UXC-4 — el carrito minimizado: la vitrina a todo el ancho y la
+    // insignia con las unidades.
+    id: 'tienda-carrito-minimizado',
+    titulo: 'carrito minimizado: vitrina a todo el ancho e insignia con unidades',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.cart-item').first().waitFor();
+      await pagina.locator('#minimizar-carrito').click();
+    },
+    exige: ['.main-container[data-carrito="minimizado"]', '.insignia-carrito__cuenta'],
+  },
+  {
+    // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
+    // sesion, productos reales a la vista.
+    id: 'portada-con-tienda',
+    titulo: 'portada pública con la tienda: productos, rebaja e imagen',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    exige: ['.vitrina-publica .product-card', '.vitrina-publica .badge-descuento'],
+  },
+  {
+    // UXC-3/UXC-4 — el detalle desde la portada: se leen las opiniones; para
+    // comprar u opinar, entrar.
+    id: 'portada-detalle-publico',
+    titulo: 'detalle público: opiniones de solo lectura y «Entra para comprar»',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('.vitrina-publica [data-ver-producto]').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '[data-accion="entrar-para-comprar"]',
+      '.hilo-comentarios .comentario',
+      '[data-accion="entrar-para-opinar"]',
+    ],
+  },
+  {
+    // UXC-3 — la ficha de un objeto del inventario con sus opiniones.
+    id: 'inventario-ficha-con-opiniones',
+    titulo: 'ficha de un objeto del inventario con valoración e hilo',
+    ruta: 'contenido/inventario/inventario.html#objetos',
+    sesion: () => sesionDe('qa_opiniones', 'JUGADOR'),
+    rutas: [
+      ...rutasDeInventario({
+        heroeId: 'ddddddd1-1111-4111-8111-111111111111',
+        armas: ['ddddddd2-2222-4222-8222-222222222222'],
+        armaduras: {},
+        items: [],
+      }),
+      ['**/api/v1/products/*/comments', json(hiloDeLaboratorio())],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('#pestana-objetos').click();
+      await pagina.locator('.vitrina__detalle').first().click();
+      await pagina.locator('.hilo-comentarios .comentario').first().waitFor();
+    },
+    exige: [
+      '.ficha',
+      '.ficha__valoracion',
+      '.hilo-comentarios .comentario',
+      '.redactor-comentario',
+    ],
+  },
+  // UXC-5 — misiones. Sin la fuente del laboratorio, la vista pinta el estado
+  // honesto de hoy; con ella, los estados que tendrá. Ver arriba.
+  {
+    id: 'misiones-sin-abrir',
+    titulo: 'misiones hoy: qué pasa, por qué y qué se puede hacer, sin tarjetas de mentira',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [],
+    exige: [
+      '.misiones-estado[data-estado="sin-abrir"]',
+      '.misiones-sin-abrir__categoria',
+      '.misiones-estado [data-accion="preparar-estrategia"]',
+    ],
+  },
+  {
+    id: 'misiones-estrategia',
+    titulo: 'misiones sin abrir: el estado honesto y la estrategia comprobada de verdad',
+    ruta: 'contenido/misiones/misiones.html#estrategia',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: rutasDeEstrategia(),
+    interaccion: prepararEstrategia,
+    exige: [
+      '.misiones-estado[data-estado="sin-abrir"]',
+      '.estrategia__heroe',
+      '.estrategia__vista-previa .stat-block',
+      '.estrategia__rotacion',
+      '.estrategia__veredicto .aviso--exito',
+    ],
+  },
+  {
+    id: 'misiones-tablon',
+    titulo: 'tablón de misiones: banner rotativo y la historia (completada, disponible, bloqueada)',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.banner-misiones__diapositiva',
+      '.mision-card[data-estado="disponible"]',
+      '.mision-card[data-estado="bloqueada"]',
+      '.mision-card[data-estado="completada"]',
+      '[data-laboratorio="misiones"]',
+    ],
+  },
+  {
+    id: 'misiones-desafio',
+    titulo: 'tablón de misiones: desafíos en progreso y fallido',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-pestana="categoria-desafio"]').click();
+    },
+    exige: [
+      '.mision-card[data-estado="en_progreso"] [role="progressbar"]',
+      '.mision-card[data-estado="fallida"]',
+    ],
+  },
+  {
+    id: 'misiones-exploracion',
+    titulo: 'tablón de misiones: exploraciones completada y abandonada',
+    ruta: 'contenido/misiones/misiones.html',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-pestana="categoria-exploracion"]').click();
+    },
+    exige: [
+      '.mision-card[data-estado="completada"]',
+      '.mision-card[data-estado="abandonada"]',
+    ],
+  },
+  {
+    id: 'misiones-detalle',
+    titulo: 'detalle de «El Templo Olvidado» (§7.8.14) con su configurador',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-detalle__cabecera',
+      '.mision-enemigo',
+      '.mision-jefe',
+      '.mision-master',
+      '.mision-recompensas',
+      '#configurar .estrategia__heroe',
+      '[data-accion="iniciar-mision"][aria-disabled="true"]',
+    ],
+  },
+  {
+    id: 'misiones-matricula',
+    titulo: 'iniciar misión: estrategia comprobada y confirmación con lo que queda bloqueado',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await prepararEstrategia(pagina);
+      await pagina.locator('[data-accion="iniciar-mision"][aria-disabled="false"]').click();
+    },
+    exige: ['[role="dialog"] .misiones-confirmacion', '.misiones-confirmacion__advertencia'],
+  },
+  {
+    id: 'misiones-en-curso',
+    titulo: 'misiones en curso: tiempo restante, avance, héroe y cancelar',
+    ruta: 'contenido/misiones/misiones.html#en-curso',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-activa time.cuenta-atras',
+      '.mision-activa [role="progressbar"]',
+      '[data-accion="cancelar-mision"]',
+    ],
+  },
+  {
+    id: 'misiones-historial',
+    titulo: 'historial de misiones: por categoría, terminadas, tiempos y épicas',
+    ruta: 'contenido/misiones/misiones.html#historial',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: ['.mision-historial__tabla', '.mision-historial .mision-master', '.metrica'],
+  },
+  {
+    id: 'misiones-reporte',
+    titulo: 'reporte de una misión completada (§7.8.8)',
+    ruta: 'contenido/misiones/misiones.html?reporte=ejecucion-bosque',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-reporte__resumen',
+      '[data-bloque="combate"] .metrica',
+      '[data-bloque="enemigos"]',
+      '[data-bloque="recompensas"]',
+      '[data-bloque="objetivos"] li[data-cumplido="false"]',
+    ],
+  },
+  {
+    id: 'inventario-banner-misiones',
+    titulo: 'mi inventario con el banner de misiones disponibles (RF-INV-003)',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_banner', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeOchoHeroes()],
+    exige: ['.inventario__banner-misiones .banner-misiones__diapositiva', '.hero-card'],
+  },
+  {
+    // UXC-6 — el chat general con conversación: «Tú», los demás con su
+    // inicial, un logro compartido y separadores de día.
+    id: 'chat-general',
+    titulo: 'chat general: tú, los demás y el sistema, con palabras y no solo color',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral(),
+    exige: [
+      '[data-zona="mensajes"] li.mensaje--yo',
+      '[data-zona="mensajes"] li.mensaje--otro .mensaje__inicial',
+      '.mensaje__logro',
+      '.conversacion__dia',
+      '.conexion--estable',
+    ],
+  },
+  {
+    id: 'chat-sala',
+    titulo: 'chat de una sala, con su vuelta a la sala y sin pestañas',
+    ruta: `plataforma/salas-partidas/chat.html?sala=${ID_SALA_DEL_CHAT}`,
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: {
+      mensajes: {
+        [`/app/salas/${ID_SALA_DEL_CHAT}/chat/historial`]: [historialDelChat(ID_SALA_DEL_CHAT)],
+      },
+    },
+    exige: ['[data-zona="volver-a-la-sala"]:not([hidden])', 'li.mensaje--yo'],
+  },
+  {
+    id: 'chat-reconectando',
+    titulo: 'chat: se cae el canal, se reintenta solo y el hilo lo cuenta',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: { ...canalDelChatGeneral(), cerrarTrasMs: 500, rechazarReconexion: true },
+    interaccion: async (pagina) => {
+      await pagina.locator('.mensaje--sistema').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['.mensaje--sistema', '[data-zona="conexion"][data-estado-canal="reconectando"]'],
+  },
+  {
+    id: 'chat-silenciado',
+    titulo: 'chat: silencio por sanción, el campo dice por qué y dónde verlo',
+    ruta: 'plataforma/salas-partidas/chat.html',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral({
+      '/usuario/cola/salas': [
+        {
+          type: 'https://nexusbattles.local/errores/jugador-silenciado',
+          title: 'No puedes escribir en el chat',
+          status: 403,
+          detail: 'Tienes una sancion activa de silencio.',
+        },
+      ],
+    }),
+    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] a'],
+  },
+  {
+    // Lo que ve hoy un jugador: no hay servicio de mensajes privados.
+    id: 'chat-privados-sin-abrir',
+    titulo: 'mensajes privados hoy: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
+    ruta: 'plataforma/salas-partidas/chat.html#privados',
+    sesion: sesionDelChat,
+    rutas: [],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-estado="sin-abrir"]', '[data-accion="ir-al-chat-general"]'],
+  },
+  {
+    id: 'chat-privados-conversacion',
+    titulo: 'mensajes privados (laboratorio): lista, no leídos y una conversación abierta',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Bruma'),
+    exige: [
+      '[data-laboratorio="mensajes"]',
+      '.conversaciones__item[aria-current="true"]',
+      'li.mensaje--yo .mensaje__entrega',
+      'li.mensaje--otro',
+      '.conversaciones__no-leidos, .conversaciones__item',
+    ],
+  },
+  {
+    id: 'chat-privados-buscar',
+    titulo: 'mensajes privados (laboratorio): buscar a un jugador por su apodo',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: async (pagina) => {
+      await pagina.locator('#buscar-jugador').fill('ra');
+      await pagina.locator('.buscador-jugador__resultado').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['.buscador-jugador__resultado'],
+  },
+  {
+    id: 'chat-privados-vacia',
+    titulo: 'mensajes privados (laboratorio): todavía sin conversaciones',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=vacia#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-zona="conversaciones"] .estado-vista--vacio'],
+  },
+  {
+    id: 'chat-privados-error',
+    titulo: 'mensajes privados (laboratorio): las conversaciones no cargan',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=error#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    exige: ['[data-zona="conversaciones"] .estado-vista--error'],
+  },
+  {
+    id: 'chat-privados-silencio',
+    titulo: 'mensajes privados (laboratorio): tu silencio, con su cuenta atrás',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=silencio#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Bruma'),
+    exige: ['[data-zona="restriccion"] .cuenta-atras', '[data-zona="bloqueo"]:not([hidden])'],
+  },
+  {
+    id: 'chat-privados-reconectando',
+    titulo: 'mensajes privados (laboratorio): reconectando, sin perder el borrador',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=reconectando#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: async (pagina) => {
+      await abrirConversacion('Bruma')(pagina);
+      await pagina.locator('.mensajes-privados__hilo .mensaje--sistema').waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '[data-zona="conexion-privados"][data-estado-canal="reconectando"]',
+      '.mensajes-privados__hilo .mensaje--sistema',
+    ],
+  },
+  {
+    id: 'chat-privados-bloqueada',
+    titulo: 'mensajes privados (laboratorio): una conversación que bloqueaste',
+    ruta: 'plataforma/salas-partidas/chat.html?laboratorio=bandeja#privados',
+    sesion: sesionDelChat,
+    rutas: [MENSAJES_DE_LABORATORIO],
+    canal: canalDelChatGeneral(),
+    interaccion: abrirConversacion('Nyra'),
+    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
+  },
+  {
+    // UXC-7 — el catálogo en la consola: cifras, lista y la acción de cada fila.
+    id: 'catalogo-admin',
+    titulo: 'consola: los productos del catálogo, con estado y gestión por fila',
+    ruta: 'contenido/productos/panel-catalogo.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    exige: ['.catalogo-admin__tabla tbody tr', '[data-accion="gestionar"]'],
+  },
+  {
+    id: 'catalogo-admin-ficha',
+    titulo: 'consola: la ficha de gestión de un producto (ProductAdminSheet)',
+    ruta: 'contenido/productos/panel-catalogo.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: rutasDelCatalogo(),
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="gestionar"]').first().click({ timeout: 10_000 });
+      await pagina.locator('.dialogo--hoja').waitFor({ timeout: 10_000 });
+    },
+    exige: ['.dialogo--hoja .hoja-producto__formulario', '[data-accion="suspender"]'],
+  },
+  {
+    id: 'mis-sanciones-suspendida',
+    titulo: 'mis sanciones: la suspensión activa con su cuenta atrás',
+    ruta: 'plataforma/moderacion-sanciones/mis-sanciones.html',
+    sesion: () => sesionDe('qa_sancionado', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/apelaciones*', json([])],
+      ['**/api/v1/sanciones/limites', json(LIMITES_DE_SANCION)],
+    ],
+    exige: ['[data-estado-cuenta="suspendida"] time.cuenta-atras', '[data-accion="apelar"]'],
+  },
+  {
+    id: 'sanciones-admin-linea-de-tiempo',
+    titulo: 'consola de sanciones: estado de la cuenta y su historial en línea de tiempo',
+    ruta: 'plataforma/moderacion-sanciones/sanciones-admin.html',
+    sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
+    rutas: [
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/apelaciones*', json([])],
+      ['**/api/v1/sanciones/limites', json(LIMITES_DE_SANCION)],
+    ],
+    interaccion: async (pagina) => {
+      const buscar = pagina.locator('[data-zona="buscar"]');
+      await buscar.locator('input').first().fill(UID_SANCIONADO);
+      await buscar.locator('[type="submit"]').click();
+      await pagina.locator('.linea-tiempo__hecho').first().waitFor({ timeout: 10_000 });
+    },
+    exige: ['[data-estado-cuenta="suspendida"]', '.linea-tiempo__hecho--futuro', '.linea-tiempo__hecho--exito'],
+  },
+  {
+    id: 'perfil-estado-de-cuenta',
+    titulo: 'mi cuenta: el estado de la cuenta antes que el saldo',
+    ruta: 'cuentas/perfil.html',
+    sesion: () => sesionDe('qa_sancionado', 'JUGADOR'),
     rutas: [
       [
-        // R16 — la vitrina se mudó a /api/v1/vitrina (ecommerce-carrito.yaml
-        // 1.2.0) y sus ids son los UUID del catálogo maestro. Con la ruta vieja
-        // la vista no pintaba nada y el escenario se ponía rojo en `exige`, que
-        // es justo para lo que está. La rebaja y el precio ausente ya no los
-        // manda la vitrina 1.2.0, pero la tarjeta los sigue sabiendo pintar y
-        // su accesibilidad se sigue auditando.
-        '**/api/v1/vitrina*',
+        '**/api/v1/perfiles/*',
+        json({ apodo: 'qa_sancionado', email: 'qa@nexus.test', nombres: 'Quinn', apellidos: 'Arias' }),
+      ],
+      ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
+      ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 1250, saldoReservado: 100 })],
+      ['**/api/v1/creditos/*/movimientos*', json({ content: [], totalPages: 0 })],
+    ],
+    exige: ['[data-estado-cuenta="suspendida"]', '[data-zona="resumen-saldo"] .metrica'],
+  },
+  {
+    id: 'gestion-usuarios-baneo-critico',
+    titulo: 'gestión de usuarios: el baneo pide escribir el apodo (§7.3.9)',
+    ruta: 'cuentas/gestion-usuarios.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/rbac/matrix',
         json({
-          content: [
-            producto({ id: 'aaaaaaa1-0000-4000-8000-000000000001', nombre: 'Yelmo del Alba' }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000002',
-              nombre: 'Amuleto de Brasa',
-              precioOriginal: 20000,
-              precioFinal: 16000,
-              enPromocion: true,
-              porcentajeDescuento: 20,
-            }),
-            producto({
-              id: 'aaaaaaa1-0000-4000-8000-000000000003',
-              nombre: 'Pocion sin precio',
-              precioFinal: null,
-            }),
-          ],
+          version: '1.1.0',
+          matrix: {
+            SUPER_ADMINISTRADOR: {
+              GESTIONAR_CUENTAS: 'GRANTED',
+              SUSPENDER_USUARIOS: 'GRANTED',
+              BANEAR_DEFINITIVAMENTE: 'GRANTED',
+              ASIGNAR_ROL: 'GRANTED',
+            },
+          },
         }),
       ],
       [
-        '**/api/v1/carrito',
+        '**/api/v1/admin/usuarios/15',
         json({
-          id: 9,
-          usuarioId: 'qa',
-          total: 36000,
-          items: [
-            {
-              id: 1,
-              cantidad: 2,
-              precioUnitario: 18000,
-              subtotal: 36000,
-              producto: { nombre: 'Yelmo del Alba', moneda: 'COP' },
-            },
-          ],
+          id: 15,
+          apodo: 'nyx_valiente',
+          email: 'nyx@nexus.test',
+          estado: 'ACTIVO',
+          rolNombre: 'JUGADOR',
+          nombres: 'Nyx',
+          apellidos: 'Valiente',
+          preferencias: '',
         }),
       ],
     ],
-    // El descuento y el precio ausente son los dos estados que FI-R2 anadio.
-    exige: ['.product-card', '.badge-descuento', '.precio-ausente', '.cart-item'],
+    interaccion: async (pagina) => {
+      await pagina.locator('#usuario-id').fill('15');
+      await pagina.locator('#btn-buscar').click();
+      await pagina.locator('#panel-usuario:not([hidden])').waitFor({ timeout: 10_000 });
+      await pagina.locator('#btn-banear').click();
+      await pagina.locator('.confirmacion-critica').waitFor({ timeout: 10_000 });
+    },
+    exige: ['.confirmacion-critica__consecuencias', '[role="dialog"] [data-accion="confirmar"][disabled]'],
   },
 ];
+
 
 function sala(cambios = {}) {
   return {

@@ -54,6 +54,14 @@ services:
       # correo.buzon-de-pruebas en el application.yml del servicio.
       CORREO_BUZON_PRUEBAS_HOST: mailpit
       CORREO_BUZON_PRUEBAS_PUERTO: "1025"
+      # B1 — correo durable: cada correo aceptado se guarda en el esquema
+      # `correo` de plataforma-db antes de responder 202, asi que sin base no
+      # hay correo (503). Remitente y base de los enlaces por entorno; por
+      # omision un remitente del dominio reservado .test, que nunca sale a
+      # Internet, y los enlaces a la maquina local.
+      DB_RELACIONAL_URL: ${DB_RELACIONAL_URL:-jdbc:postgresql://plataforma-db:5432/plataformadb}
+      MAIL_FROM: ${MAIL_FROM:-The Nexus Battles VI <no-reply@nexusbattles.test>}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
     depends_on:
       - plataforma-db
       - mailpit

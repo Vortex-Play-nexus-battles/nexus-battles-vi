@@ -434,8 +434,22 @@ components:
             type: object
             required: [codigo, nombre]
             properties:
-              codigo: { type: string }
-              nombre: { type: string }
+              codigo:
+                type: string
+                description: |
+                  La accion que pidio el jugador (`EjecutarAccion.codigoAccion`),
+                  o `ATAQUE_BASICO` si no pidio ninguna.
+              nombre:
+                type: string
+                description: |
+                  Aclaracion de 1.4.x, sin cambio de forma: mientras el motor de
+                  combate resuelva solo el ataque basico, salas-partidas pone
+                  aqui la categoria que sorteo el motor (`CategoriaEfecto` de
+                  motor-combate.yaml: CAUSAR_DANO, CAUSAR_DANO_CRITICO,
+                  EVADIR_EL_GOLPE, RESISTIR_EL_GOLPE, ESCAPAR_AL_GOLPE,
+                  SIN_EFECTO). La interfaz la reconoce por su valor y la narra
+                  (UXC-2); cualquier otro valor lo muestra como nombre de la
+                  accion.
               icono:
                 type: [string, 'null']
                 description: Todos los efectos y controles se representan con icono (RF-JUE-017).

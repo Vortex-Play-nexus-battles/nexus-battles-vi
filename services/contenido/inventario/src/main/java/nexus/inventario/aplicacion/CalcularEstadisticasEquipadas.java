@@ -17,7 +17,8 @@ import org.springframework.stereotype.Service;
  * heroeId (id de ElementoInventario, tipo HEROE)
  *   -> Inventario.elemento(heroeId).productoId()             -> productoId del heroe
  *   -> ResolutorDeProducto.resolver(productoId del heroe)    -> prototipo
- *   -> ResolutorDeEstadisticasHeroe.resolver(prototipo)      -> estadisticas base
+ *   -> ResolutorDeEstadisticasHeroe.resolver(prototipo, nivel del elemento)
+ *                                                           -> estadisticas base de su nivel (B4)
  *
  * cada elementoId equipado (arma/armadura/item)
  *   -> Inventario.elemento(elementoId).productoId()          -> productoId del elemento
@@ -46,10 +47,14 @@ public class CalcularEstadisticasEquipadas {
      * @param heroeId     id del ElementoInventario de tipo HEROE
      */
     public EstadisticasHeroe calcular(Inventario inventario, String heroeId) {
-        String productoIdDelHeroe = productoIdDe(inventario, heroeId);
-        ResolutorDeProducto.DetalleProducto heroeProducto = productos.resolver(productoIdDelHeroe);
+        ElementoInventario heroe = inventario.elemento(heroeId);
+        ResolutorDeProducto.DetalleProducto heroeProducto = productos.resolver(heroe.productoId());
 
-        EstadisticasHeroe base = heroes.resolver(heroeProducto.prototipo());
+        // B4: el nivel es el del heroe del jugador, no siempre el 1. Un heroe
+        // que no es HEROE no llega aqui (equipamiento() ya lo rechaza abajo),
+        // y uno anterior a B4 se lee en nivel 1.
+        int nivel = heroe.nivel() == null ? ElementoInventario.NIVEL_INICIAL : heroe.nivel();
+        EstadisticasHeroe base = heroes.resolver(heroeProducto.prototipo(), nivel);
 
         EquipamientoHeroe equipamiento = inventario.equipamiento(heroeId);
         ModificadorEstadisticas total = ModificadorEstadisticas.NULO;

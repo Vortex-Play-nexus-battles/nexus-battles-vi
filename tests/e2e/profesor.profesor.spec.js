@@ -23,8 +23,9 @@
  *     ella: su valor aparecería en el informe) y la configuración apaga la
  *     traza y el vídeo, que la guardarían.
  *   - **Lo que no existe se dice.** Subastas puede no estar desplegado (falta
- *     de capacidad en AWS) y Misiones no tiene módulo: la prueba exige que la
- *     pantalla lo diga con honestidad, no que el módulo exista.
+ *     de capacidad en AWS) y Misiones no tiene servicio: la prueba exige que la
+ *     pantalla lo diga con honestidad, no que el módulo exista. En Misiones,
+ *     además, que lo que sí funciona (la estrategia del héroe) funcione.
  *
  * En escritorio (1440) se recorren los veinte pasos. En móvil (375) y tableta
  * (768) solo la vertical de entrada —registro, alta, sesión y vuelta—, que es
@@ -49,6 +50,7 @@ const EN = {
   jugar: /\/jugar(?:[?#]|$)/,
   torneos: /\/torneos(?:[?#]|$)/,
   subastas: /\/subastas(?:[?#]|$)/,
+  misiones: /misiones\.html(?:[?#]|$)/,
   sala: /sala-batalla\.html\?sala=/,
 };
 
@@ -432,10 +434,12 @@ test.describe('R17 · la prueba del profesor', () => {
       await paso(9, 'Comprobar el héroe inicial (ficha con estadísticas)', async () => {
         await irA(page, 'inventario');
         await expect(page).toHaveURL(EN.inventario);
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
+        // UXC-1 — «Mi inventario» separa héroes y objetos: el héroe inicial es
+        // una carta de la pestaña «Héroes», con su prototipo y su estado.
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
-        nombreDelHeroe = ((await heroe.locator('.vitrina__nombre').textContent()) ?? '').trim();
-        await heroe.getByRole('button', { name: /^Ver el detalle de / }).click();
+        nombreDelHeroe = ((await heroe.locator('.hero-card__nombre').textContent()) ?? '').trim();
+        await heroe.getByRole('button', { name: /^Ver la ficha de / }).click();
         const ficha = page.locator('[role="dialog"].ficha');
         await expect(ficha).toBeVisible();
         await expect(ficha.locator('.ficha__nombre')).not.toBeEmpty();
@@ -452,13 +456,19 @@ test.describe('R17 · la prueba del profesor', () => {
       });
 
       await paso(10, 'Comprobar el inventario', async () => {
-        const elementos = page.locator('li.vitrina__producto');
+        // UXC-1 — un héroe en «Héroes» y el kit en «Objetos», cada uno con su
+        // estado (equipado, libre o bloqueado).
+        const heroes = await page.locator('.inventario-heroes [data-heroe]').count();
+        await page.locator('#pestana-objetos').click();
+        const elementos = page.locator('.inventario__contenido li.vitrina__producto');
+        await expect(elementos.first()).toBeVisible({ timeout: 30_000 });
         const total = await elementos.count();
         const tipos = await elementos.evaluateAll((lis) => lis.map((li) => li.dataset.tipo));
+        expect(heroes).toBe(1);
         expect(total).toBeGreaterThan(0);
-        expect(tipos.filter((t) => t === 'HEROE')).toHaveLength(1);
+        expect(tipos.filter((t) => t === 'HEROE')).toHaveLength(0);
         await capturar(page, testInfo, '10-inventario');
-        return `${total} elementos (${tipos.join(', ')})`;
+        return `1 héroe y ${total} objetos (${tipos.join(', ')})`;
       });
 
       await paso(11, 'Entrar a «Jugar online»', async () => {
@@ -474,12 +484,14 @@ test.describe('R17 · la prueba del profesor', () => {
         // El héroe que juega es el equipado (RF-JUE-001, HU-SAL-003); se elige
         // y se equipa en «Mi inventario → Equipo». El alta lo deja listo.
         await irA(page, 'inventario');
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
-        await heroe.getByRole('button', { name: /^Gestionar equipo de / }).click();
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
+        await heroe.getByRole('button', { name: /^Gestionar el equipamiento de / }).click();
         await expect(page.locator('.inventario-equipo__estadisticas')).toBeVisible({
           timeout: 30_000,
         });
-        const estadisticas = await page.locator('.inventario-equipo__estadistica').allInnerTexts();
+        const estadisticas = await page
+          .locator('.inventario-equipo__estadisticas .stat-block__cifra')
+          .allInnerTexts();
         await capturar(page, testInfo, '12-heroe-seleccionado');
         await irA(page, 'jugar');
         await expect(page).toHaveURL(EN.jugar);
@@ -667,9 +679,10 @@ test.describe('R17 · la prueba del profesor', () => {
         const movimientos = await movimientosEnMiCuenta(page);
         expect(movimientos.some((fila) => /Créditos de bienvenida/.test(fila))).toBe(true);
         await irA(page, 'inventario');
-        const heroe = page.locator('li.vitrina__producto[data-tipo="HEROE"]');
+        // UXC-1 — el héroe vive en la pestaña «Héroes», como en el paso 9.
+        const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
-        await expect(heroe.locator('.vitrina__nombre')).toHaveText(nombreDelHeroe);
+        await expect(heroe.locator('.hero-card__nombre')).toHaveText(nombreDelHeroe);
         // Y una pestaña nueva usa la misma sesión, sin pedir la contraseña.
         const otra = await context.newPage();
         await otra.goto('/cuenta');
@@ -731,11 +744,37 @@ test.describe('R17 · la prueba del profesor', () => {
           estado.subastas = 'FUNCIONAL';
         }
 
-        // Misiones: sin módulo. La barra lo anuncia en vez de llevar a nada.
-        const misiones = page.locator('header[data-cabecera-app] a[data-seccion="misiones"]');
-        await expect(misiones).toHaveAttribute('aria-disabled', 'true');
-        await expect(misiones).not.toHaveAttribute('href', /.+/);
-        estado.misiones = `NO IMPLEMENTADO — «${await misiones.getAttribute('title')}»`;
+        // Misiones (UXC-5): hasta aquí la barra lo marcaba deshabilitado con un
+        // «llegará en una próxima actualización». Ahora lleva a su vista, que
+        // tiene que decir la verdad: sin servicio de misiones, que no están
+        // abiertas y cuál es el siguiente paso real —preparar la estrategia,
+        // que el servicio de héroes valida de verdad—; con servicio, el tablón.
+        await irA(page, 'misiones');
+        await expect(page).toHaveURL(EN.misiones);
+        const sinAbrir = page.locator('.misiones-estado[data-estado="sin-abrir"]');
+        const tablon = page.locator('.mision-card, .misiones-categoria .estado-vista--vacio');
+        await expect(sinAbrir.or(tablon).first()).toBeVisible({ timeout: 30_000 });
+        await expect(page.locator('body')).not.toContainText(/próxima actualización/i);
+        if (await sinAbrir.isVisible()) {
+          await sinAbrir.locator('[data-accion="preparar-estrategia"]').click();
+          // El héroe es el de la cuenta recién creada; las habilidades y el
+          // veredicto, los del servicio de héroes.
+          const paso = page.locator('.estrategia__paso select').first();
+          await expect(paso).toBeVisible({ timeout: 30_000 });
+          const habilidad = await paso
+            .locator('option:not([value=""])')
+            .first()
+            .getAttribute('value');
+          await paso.selectOption(habilidad);
+          await page.locator('[data-accion="comprobar-estrategia"]').click();
+          await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
+            timeout: 30_000,
+          });
+          await sinBarrerasGraves(page, 'misiones');
+          estado.misiones = `SIN SERVICIO — la vista lo dice; estrategia validada («${habilidad}»)`;
+        } else {
+          estado.misiones = 'FUNCIONAL';
+        }
 
         await capturar(page, testInfo, '20-subastas');
         return Object.entries(estado)

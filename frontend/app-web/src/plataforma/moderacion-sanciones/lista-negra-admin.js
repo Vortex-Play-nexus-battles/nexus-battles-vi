@@ -18,6 +18,7 @@
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../../comun/ui/aviso.js';
+import { confirmar as confirmarConDialogo, pedirTexto } from '../../comun/ui/dialogo.js';
 import { h, nodo, vaciar } from '../../comun/ui/dom.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
 import {
@@ -252,17 +253,35 @@ export function filaDeTermino(termino, { editar, alternar, eliminar } = {}) {
  * Monta la vista sobre un documento con las zonas `[data-zona=...]` de
  * `lista-negra-admin.html`.
  *
+ * UXC-7 — confirmar y preguntar son los diálogos del kit (con su etiqueta, se
+ * leen con lector de pantalla y devuelven el foco), no `window.confirm()` ni
+ * `window.prompt()`. Se pueden inyectar; lo que devuelvan se espera con
+ * `await`, así que sirven tanto una función síncrona como una promesa.
+ *
  * @param {ParentNode} raiz
- * @param {{fetchImpl?: Function, confirmar?: (texto: string) => boolean,
- *          preguntar?: (texto: string, valor: string) => string|null}} [opciones]
+ * @param {{fetchImpl?: Function,
+ *          confirmar?: (texto: string) => boolean|Promise<boolean>,
+ *          preguntar?: (texto: string, valor: string) => string|null|Promise<string|null>}} [opciones]
  * @returns {{cargar: (pagina?: number) => Promise<void>}}
  */
 export function montarListaNegra(
   raiz,
   {
     fetchImpl,
-    confirmar = (texto) => window.confirm(texto),
-    preguntar = (texto, valor) => window.prompt(texto, valor),
+    confirmar = (texto) =>
+      confirmarConDialogo({
+        titulo: texto,
+        mensaje: 'Dejará de filtrarse desde este momento. Puedes volver a añadirlo cuando quieras.',
+        textoConfirmar: 'Quitar término',
+      }),
+    preguntar = (texto, valor) =>
+      pedirTexto({
+        titulo: texto,
+        etiqueta: 'Término',
+        valor,
+        pista: 'La lista negra filtra apodos, comentarios, chat y mensajes privados.',
+        textoConfirmar: 'Guardar término',
+      }),
   } = {},
 ) {
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
@@ -342,7 +361,7 @@ export function montarListaNegra(
 
   async function editar(termino) {
     limpiarAviso(zonaAviso);
-    const nuevo = preguntar('Editar término:', termino.termino);
+    const nuevo = await preguntar(`Editar «${termino.termino}»`, termino.termino);
     if (!nuevo || !nuevo.trim() || nuevo.trim() === termino.termino) {
       return;
     }
@@ -377,7 +396,7 @@ export function montarListaNegra(
 
   async function eliminar(termino) {
     limpiarAviso(zonaAviso);
-    if (!confirmar(`¿Eliminar el término «${termino.termino}» de la lista negra?`)) {
+    if (!(await confirmar(`¿Quitar «${termino.termino}» de la lista negra?`))) {
       return;
     }
     try {

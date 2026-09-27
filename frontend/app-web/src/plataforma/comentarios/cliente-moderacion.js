@@ -29,9 +29,9 @@ export const CATEGORIAS = Object.freeze([
   { valor: 'CONTENIDO_OFENSIVO', etiqueta: 'Contenido ofensivo' },
   { valor: 'ACOSO', etiqueta: 'Acoso a otra persona' },
   { valor: 'SPAM', etiqueta: 'Spam o publicidad' },
-  { valor: 'INFORMACION_FALSA', etiqueta: 'Informacion falsa' },
+  { valor: 'INFORMACION_FALSA', etiqueta: 'Información falsa' },
   { valor: 'CONTENIDO_INAPROPIADO', etiqueta: 'Contenido inapropiado' },
-  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violacion de derechos' },
+  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violación de derechos' },
 ]);
 
 /**

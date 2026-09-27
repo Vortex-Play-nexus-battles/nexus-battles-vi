@@ -50,8 +50,9 @@ class ModificarProductoApiTest {
 
         @BeforeEach
         void simularPersistencia() {
+                // Como el guardado real con @Version (B4): devuelve la version siguiente.
                 when(productoRepository.save(any(Producto.class)))
-                        .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+                        .thenAnswer(invocacion -> versionSiguiente(invocacion.getArgument(0, Producto.class)));
                 when(respaldoProductoRepository.save(any(RespaldoProducto.class)))
                         .thenAnswer(invocacion -> invocacion.getArgument(0, RespaldoProducto.class));
         }
@@ -136,11 +137,87 @@ class ModificarProductoApiTest {
                                 .value("urn:nexus:problema:solicitud-invalida"));
         }
 
+        // --- B4 ---
+
+        @Test
+        @DisplayName("B4: si otro escribio el producto mientras se editaba, 409 con Problem Details")
+        void conflictoDeVersionEs409() throws Exception {
+                Producto existente = productoArma();
+                when(productoRepository.findById(existente.id())).thenReturn(Optional.of(existente));
+                when(productoRepository.save(any(Producto.class)))
+                        .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("otra version"));
+
+                modificarComo("ROLE_ADMINISTRADOR", existente.id(), "{\"nombre\": \"Espada solar+1\"}")
+                        .andExpect(status().isConflict())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type").value("urn:nexus:problema:conflicto-de-version"));
+        }
+
+        @Test
+        @DisplayName("B4: el autor del cambio es el uid del token y queda en el producto y en el respaldo")
+        void elAutorEsElDelToken() throws Exception {
+                Producto existente = productoArma();
+                when(productoRepository.findById(existente.id())).thenReturn(Optional.of(existente));
+
+                mvc.perform(patch("/api/v1/productos/" + existente.id())
+                                .with(jwt().jwt(token -> token.subject("lyra").claim("uid", "uid-de-lyra"))
+                                        .authorities(new SimpleGrantedAuthority("ROLE_ADMINISTRADOR")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"nombre\": \"Espada solar+1\"}"))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.modificadoPor").exists());
+
+                org.mockito.ArgumentCaptor<RespaldoProducto> respaldo =
+                        org.mockito.ArgumentCaptor.forClass(RespaldoProducto.class);
+                org.mockito.Mockito.verify(respaldoProductoRepository).save(respaldo.capture());
+                org.junit.jupiter.api.Assertions.assertNotNull(respaldo.getValue().autor());
+        }
+
+        @Test
+        @DisplayName("B4: una promocion con porcentaje fuera de 1..90 o fechas al reves se rechaza con 400")
+        void promocionInvalida() throws Exception {
+                Producto existente = productoArma();
+                when(productoRepository.findById(existente.id())).thenReturn(Optional.of(existente));
+
+                modificarComo("ROLE_ADMINISTRADOR", existente.id(), """
+                                {"promocion": {"porcentaje": 95, "desde": "2026-10-01T00:00:00Z", "hasta": "2026-10-08T00:00:00Z"}}
+                                """)
+                        .andExpect(status().isBadRequest());
+                modificarComo("ROLE_ADMINISTRADOR", existente.id(), """
+                                {"promocion": {"porcentaje": 20, "desde": "2026-10-08T00:00:00Z", "hasta": "2026-10-01T00:00:00Z"}}
+                                """)
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("B4: una promocion valida se guarda y la respuesta dice si esta vigente")
+        void promocionValida() throws Exception {
+                Producto existente = productoArma();
+                when(productoRepository.findById(existente.id())).thenReturn(Optional.of(existente));
+
+                modificarComo("ROLE_ADMINISTRADOR", existente.id(), """
+                                {"promocion": {"porcentaje": 25, "desde": "2020-01-01T00:00:00Z", "hasta": "2999-01-01T00:00:00Z"}}
+                                """)
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.promocion.porcentaje").value(25))
+                        .andExpect(jsonPath("$.promocion.vigente").value(true));
+        }
+
         private ResultActions modificarComo(String autoridad, String id, String cuerpo) throws Exception {
                 return mvc.perform(patch("/api/v1/productos/" + id)
                         .with(jwt().authorities(new SimpleGrantedAuthority(autoridad)))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(cuerpo));
+        }
+
+        private static Producto versionSiguiente(Producto p) {
+                return new Producto(p.id(), p.nombre(), p.imagen(), p.descripcion(), p.tipo(), p.tiraje(),
+                        p.precioCreditos(), p.precioMonedaReal(), p.premium(), p.prototipo(), p.heroe(),
+                        p.costoPoder(), p.multiplicadorNivel(), p.turnosCarga(), p.turnosRecarga(),
+                        p.efectoGeneral(), p.efectoPotenciado(), p.defensa(), p.parte(), p.efecto(),
+                        p.poderDeAtaque(), p.tasaDeCaida(), p.estado(), p.version() + 1, p.creadoEn(),
+                        p.modificadoEn(), p.promocion(), p.origen(), p.semillaVersion(), p.modificadoPor(),
+                        p.estadoAnteriorSuspension(), p.reservasRecientes());
         }
 
         private static Producto productoArma() {

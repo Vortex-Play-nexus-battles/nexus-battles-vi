@@ -79,7 +79,8 @@ beforeEach(() => {
 
 async function abrirEquipo(opciones) {
   await montarInventario(raiz, 'jugador-A', 0, { consultar: async () => pagina(), ...opciones });
-  raiz.querySelector('.vitrina__equipo').click();
+  // UXC-1 — el equipo se abre desde la carta del heroe (pestana «Heroes»).
+  raiz.querySelector('[data-accion="equipar"]').click();
   await esperarHasta(() => !raiz.querySelector('.inventario-equipo').hidden);
 }
 
@@ -93,14 +94,14 @@ test('abre el equipo del heroe y pinta sus diez ranuras', async () => {
   expect(raiz.querySelectorAll('.ranura')).toHaveLength(10);
   expect(raiz.querySelectorAll('.grupo-ranuras')).toHaveLength(3);
 
-  // FI-R7 — las diez quedan como «vacía, elige algo». Antes siete salían
-  // «bloqueada, no tienes la pieza», y esa frase se decía tras mirar los
-  // dieciséis elementos de UNA página: con cincuenta piezas en el inventario
-  // era una afirmación sobre lo que no se había leído. Ahora el selector
-  // recorre el inventario entero en tandas, y es el diálogo —después de
-  // buscar— el que puede decir que no hay nada.
-  expect(raiz.querySelectorAll('.ranura--vacia')).toHaveLength(10);
-  expect(raiz.querySelectorAll('.ranura--bloqueada')).toHaveLength(0);
+  // FI-R7 prohibia que una ranura dijera «no tienes la pieza» sin haber leido
+  // el inventario entero. UXC-1 lo lee entero antes de pintar (ver
+  // `coleccion-inventario.js`), asi que ahora SI lo sabe: las tres ranuras con
+  // candidato (dos de arma para la Espada, el casco) quedan vacias y las siete
+  // sin nada que ponerles lo dicen ya, con su motivo. El caso en que la vista
+  // NO lo tiene todo sigue cubierto mas abajo (FI-R7, `maxPaginas: 1`).
+  expect(raiz.querySelectorAll('.ranura--vacia')).toHaveLength(3);
+  expect(raiz.querySelectorAll('.ranura--bloqueada')).toHaveLength(7);
 });
 
 test('el recuento sigue escrito para quien usa lector de pantalla', async () => {
@@ -121,20 +122,52 @@ test('cada parte de la armadura tiene su propia ranura, con su nombre', async ()
 });
 
 test('una ranura sin nada que ponerle lo dice DESPUES de mirar el inventario', async () => {
-  // FI-R7 — el «no tienes» se movio de la ranura al dialogo, y con ello dejo de
-  // ser una suposicion: la ranura ya no afirma nada sobre un inventario que no
-  // ha leido, y el dialogo lo afirma cuando el servicio le ha dicho que no hay
-  // mas paginas.
+  // FI-R7 — el «no tienes» solo se afirma despues de leer el inventario
+  // entero. Con UXC-1 la vista lo lee entero al montarse, asi que la ranura del
+  // pecho ya puede decirlo, con su motivo y sin boton que no lleve a nada.
   await abrirEquipo({ consultarEquipo: async () => vacio() });
+
+  const pecho = ranuraPorEtiqueta(raiz, 'Pecho');
+  expect(pecho.className).toContain('ranura--bloqueada');
+  expect(pecho.textContent + (pecho.querySelector('[title]')?.title ?? '')).toMatch(
+    /No tienes ninguna pieza para pecho/,
+  );
+});
+
+test('sin el inventario entero, la ranura no afirma nada hasta que el dialogo lo mira', async () => {
+  // FI-R7, el caso original: la vista solo tiene una parte (tope de paginas).
+  const paginas = [
+    {
+      elementos: [elementos[0]],
+      numero: 0,
+      tamanio: 16,
+      totalElementos: 2,
+      totalPaginas: 2,
+      ultima: false,
+    },
+    {
+      elementos: [elementos[1]],
+      numero: 1,
+      tamanio: 16,
+      totalElementos: 2,
+      totalPaginas: 2,
+      ultima: true,
+    },
+  ];
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async (_, numero) => paginas[numero],
+    consultarEquipo: async () => vacio(),
+    maxPaginas: 1,
+  });
+  raiz.querySelector('[data-accion="equipar"]').click();
+  await esperarHasta(() => !raiz.querySelector('.inventario-equipo').hidden);
 
   const pecho = ranuraPorEtiqueta(raiz, 'Pecho');
   expect(pecho.className).not.toContain('ranura--bloqueada');
 
   pecho.querySelector('.ranura__caja').click();
   await esperarHasta(() => document.body.textContent.includes('No tienes nada en el inventario'));
-
   expect(document.querySelector('[data-elegir]')).toBeNull();
-  // Y no ofrece «Ver mas» cuando el servicio ya dijo que era la ultima pagina.
   expect(document.querySelector('[data-accion="ver-mas-candidatos"]')).toBeNull();
 });
 
@@ -301,9 +334,14 @@ describe('FI-R7 - el selector alcanza todo el inventario, no solo la pagina visi
       consultar,
       consultarEquipo: async () => vacio(),
       equipar: async () => ({ ...vacio(), armas: ['arma-lejana'] }),
+      // UXC-1 — la vista reune el inventario entero; con un tope de una pagina
+      // se reproduce el caso que FI-R7 protege: la vista NO lo tiene todo y el
+      // selector tiene que recorrer el servidor por tandas.
+      maxPaginas: 1,
       ...extra,
     });
-    raiz.querySelector('.vitrina__equipo').click();
+    // UXC-1 — el equipo se abre desde la carta del heroe (pestana «Heroes»).
+    raiz.querySelector('[data-accion="equipar"]').click();
     await esperarHasta(() => !raiz.querySelector('.inventario-equipo').hidden);
     return { consultar };
   }
@@ -385,8 +423,10 @@ describe('FI-R7 - el selector alcanza todo el inventario, no solo la pagina visi
     await montarInventario(raiz, 'jugadora', 0, {
       consultar,
       consultarEquipo: async () => vacio(),
+      maxPaginas: 1,
     });
-    raiz.querySelector('.vitrina__equipo').click();
+    // UXC-1 — el equipo se abre desde la carta del heroe (pestana «Heroes»).
+    raiz.querySelector('[data-accion="equipar"]').click();
     await esperarHasta(() => !raiz.querySelector('.inventario-equipo').hidden);
 
     ranuraPorEtiqueta(raiz, 'Arma 1').querySelector('.ranura__caja').click();
