@@ -29,7 +29,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/inventario` | **`34.193.90.11:8102`** (host de contenido) |
 | `/ws/notificaciones` | `srv-notificaciones:8085` |
 | `/ws` | `srv-salas-partidas:8084` |
-| `/mailpit/` | bandeja del SMTP de pruebas |
+| `/mailpit/` | bandeja del SMTP de pruebas — **solo orígenes internos** desde B12; desde internet, 403 (ver abajo) |
 | `/salud-borde` | `UP` (lo comprueba `desplegar.sh`) |
 | otro `/api/…` | 404 problem details "ruta sin servicio en el borde" |
 
@@ -41,6 +41,49 @@ ese prefijo.
 
 **Registrar un prefijo nuevo:** añadir la `location` aquí, el puerto en
 `puerto_de()` de `cd.yml` y el servicio en `docker-compose.deploy.yml`.
+
+### Mailpit no es público (B12)
+
+La bandeja de pruebas guarda los códigos de verificación y de recuperación de
+todas las cuentas `@nexus.test`. Hasta B12, `http://35.168.124.119/mailpit/`
+respondía 200 a cualquiera: con eso bastaba para activar una cuenta ajena o
+quedarse con ella. Ahora `location /mailpit/` solo admite orígenes internos y
+responde **403** al resto:
+
+| Origen admitido | Quién llega así |
+|---|---|
+| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | la pasarela de Docker: todo lo que entra por el `localhost:80` del propio host (un túnel SSH o de Session Manager) y los bancos, que entran por el puerto publicado de su anfitrión |
+| `127.0.0.0/8` | el propio contenedor del borde |
+
+`$remote_addr` es el par real porque el borde no usa `real_ip`. Si algún día se
+pone un proxy o CloudFront delante, todo llegaría desde la dirección del proxy y
+esta regla (y el límite de frecuencia) habría que revisarla **antes**.
+
+**Las pruebas contra DEV** (`smoke-dev.yml`, `canarios-jugador.yml`,
+`prueba-del-profesor.yml`) abren un túnel con la llave de despliegue
+(`.github/actions/tunel-mailpit`) y leen el buzón en
+`MAILPIT_URL=http://localhost:18025/mailpit`; el resto de su tráfico sigue
+yendo al borde público, como el de un jugador. El smoke afirma además que
+`/mailpit/` responde 403 desde internet.
+
+**Una persona que necesite la bandeja de DEV** (una demo con cuentas
+`@nexus.test`, depurar un correo):
+
+```bash
+# con la llave de despliegue
+ssh -N -L 18025:localhost:80 ubuntu@35.168.124.119
+# o sin ella, con Session Manager (usuario IAM con permiso)
+aws ssm start-session --target <id-de-la-instancia> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters portNumber=80,localPortNumber=18025
+# y en el navegador: http://localhost:18025/mailpit/
+```
+
+Solo las direcciones reservadas para pruebas (`.test`, `.example`,
+`.invalid`, `.localhost`, `.local`) van a Mailpit; una dirección real va al
+servidor SMTP que tenga configurado el entorno (`SMTP_HOST`, ver
+`services/plataforma/correo/src/main/resources/application.yml`), no a esta
+bandeja.
 
 ### Cómo se comprueba el reparto — `pruebas/`
 

@@ -397,6 +397,14 @@ fi
 comprobarFuera GET  /api/v1/salas          "salas GET /api/v1/salas"
 comprobarFuera POST /api/v1/auth/login     "identidad POST /api/v1/auth/login"
 codigoFuera    GET  /salud-borde           200
+# Mailpit (B12): la bandeja con los codigos de verificacion y de recuperacion
+# no se sirve a internet; al anfitrion, que es privado, si. Las dos lineas de
+# la seccion «Mailpit» de mas arriba salen tambien del anfitrion y siguen
+# llegando al eco: los bancos y los tuneles de DEV no pierden la bandeja.
+codigoFuera    GET  /mailpit/              403
+codigoFuera    GET  "/mailpit/api/v1/search?query=to:ana@nexus.test" 403
+codigoFuera    GET  /mailpit/api/v1/message/abc 403
+codigo         GET  /mailpit/              200
 
 echo
 echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"

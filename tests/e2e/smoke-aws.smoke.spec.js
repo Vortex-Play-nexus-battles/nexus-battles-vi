@@ -22,6 +22,7 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { correosPara } from './ayudantes/correo.js';
 import { sesionDe } from './ayudantes/cuentas.js';
 
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
@@ -313,14 +314,24 @@ test.describe('Smoke del entorno desplegado', () => {
     });
     expect(desdeFuera.status(), 'correo no debe ser alcanzable desde el borde').toBe(404);
 
+    // B12: la bandeja tampoco. Guarda los codigos de verificacion y de
+    // recuperacion de todas las cuentas @nexus.test, y el borde solo la sirve
+    // a origenes internos. Este runner llega desde internet: 403.
+    const bandejaDesdeFuera = await api.get('/mailpit/api/v1/search', {
+      params: { query: `to:${destinatario}` },
+    });
+    expect(bandejaDesdeFuera.status(), 'Mailpit no debe ser publico (B12)').toBe(403);
+
+    // El correo se busca donde lo buscan las demas pruebas: MAILPIT_URL, que
+    // en smoke-dev.yml es el tunel SSH al propio host.
     await expect
       .poll(
         async () => {
-          const bandeja = await api.get('/mailpit/api/v1/search', {
-            params: { query: `to:${destinatario}` },
-          });
-          if (!bandeja.ok()) return 0;
-          return (await bandeja.json()).messages_count ?? 0;
+          try {
+            return (await correosPara(destinatario, { base: AWS })).length;
+          } catch {
+            return 0;
+          }
         },
         { timeout: 30000, message: 'el correo del registro no llego a Mailpit' },
       )
