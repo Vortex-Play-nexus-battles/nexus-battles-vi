@@ -211,6 +211,21 @@ jobs:
             done
 
             echo
+            echo "===================== RED ENTRE HOSTS ======================="
+            # B12 — los puertos directos de plataforma solo admiten al host de
+            # contenido (SG, cidr_servicios). Desde contenido, el JWKS de
+            # ms-identidad (:8089) y el libro de creditos (:8093) tienen que
+            # contestar; desde cualquier otro sitio, no. Solo codigos HTTP.
+            if ! sudo docker ps --format '{{.Names}}' | grep -q '^srv-ms-identidad$'; then
+              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health"; do
+                r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$destino" || echo "---")
+                printf '    %-55s %s\n' "$destino" "$r"
+              done
+            else
+              echo "    (host de plataforma: la comprobacion se hace desde el de contenido)"
+            fi
+
+            echo
             echo "===================== CORREO: ENTREGAS DE 7 DIAS ============"
             # B13 — evidencia de que el correo sale de verdad: por el
             # proveedor SMTP (destino PROVEEDOR) para las direcciones reales y
