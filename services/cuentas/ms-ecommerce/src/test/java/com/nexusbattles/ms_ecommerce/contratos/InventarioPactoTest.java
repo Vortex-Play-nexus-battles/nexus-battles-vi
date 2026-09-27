@@ -38,16 +38,16 @@ import static org.assertj.core.api.Assertions.assertThat;
  * <p>No graba {@code Authorization}: la firma el verificador del proveedor con
  * un token de servicio.
  *
- * <p><b>Proveedor «inventario» sin verificador todavia:</b> las entregas las
- * implementa B4 en paralelo. Es un nombre de proveedor distinto de
- * «ms-inventario» (el del pacto de ms-subastas) a proposito: la verificacion
- * que ya existe carga todos los pactos de su proveedor y fallaria con estados
- * que no sabe montar. El integrador anade en inventario la clase de
- * verificacion del proveedor «inventario» (con un {@code @State} por cada uno
- * de estos cuatro estados) cuando B4 este fusionado; hasta entonces
- * {@code pactos-verificados.py} lo reporta como brecha conocida. Ojo: este
- * comentario no escribe la anotacion literal a proposito, porque el guardian
- * busca ese texto y tomaria esta clase por la verificadora.
+ * <p><b>Lo verifica inventario</b>: {@code VerificacionDelPactoDeEcommerceTest}
+ * en {@code services/contenido/inventario}, con el caso de uso real de la
+ * entrega (almacenes en memoria) y un estado montado por cada {@code given} de
+ * aqui. Es un nombre de proveedor distinto de
+ * «ms-inventario» (el del pacto de ms-subastas) a proposito: la verificacion de
+ * ese pacto carga todos los de su proveedor y fallaria con estados que no sabe
+ * montar. Un {@code given} nuevo o renombrado exige su estado alli; si falta,
+ * {@code pactos-verificados.py} se pone rojo. Ojo: este comentario no escribe
+ * la anotacion literal a proposito, porque el guardian busca ese texto y
+ * tomaria esta clase por la verificadora.
  */
 @ExtendWith(PactConsumerTestExt.class)
 @PactTestFor(providerName = "inventario", pactVersion = PactSpecVersion.V3)

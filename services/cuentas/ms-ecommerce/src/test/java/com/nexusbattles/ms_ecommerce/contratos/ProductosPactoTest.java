@@ -34,13 +34,13 @@ import static org.assertj.core.api.Assertions.assertThat;
  * verificador del proveedor firma cada peticion con un token de servicio del
  * emisor de prueba.
  *
- * <p><b>Proveedor «productos» sin verificador todavia:</b> la reserva la
- * implementa B4 en paralelo. El guardian {@code pactos-verificados.py} lo
- * reporta como brecha conocida hasta que el integrador anada en productos la
- * clase de verificacion del proveedor «productos», con un {@code @State} por
- * cada uno de estos cuatro estados. (La anotacion no se escribe aqui
- * literalmente: el guardian busca ese texto y tomaria esta clase por la
- * verificadora.)
+ * <p><b>Lo verifica productos</b>: {@code VerificacionDelPactoDeEcommerceTest}
+ * en {@code services/contenido/productos}, con el caso de uso real de la
+ * reserva (tiraje y claves en memoria) y un estado montado por cada
+ * {@code given} de aqui. Un {@code given} nuevo o renombrado exige su estado
+ * alli; si falta, el guardian {@code pactos-verificados.py} se pone rojo. (La
+ * anotacion del proveedor no se escribe aqui literalmente: el guardian busca
+ * ese texto y tomaria esta clase por la verificadora.)
  */
 @ExtendWith(PactConsumerTestExt.class)
 @PactTestFor(providerName = "productos", pactVersion = PactSpecVersion.V3)
