@@ -43,12 +43,14 @@
  *   (`contracts/openapi/ms-identidad-perfiles.yaml`), para el caso 8: lo
  *   implementa la rama de identidad de B6. Sin él, el buscador de la pestaña
  *   dice «No pudimos buscar ahora» y el caso lo explica.
- * - Registro: la cuenta queda ACTIVA sin verificar el correo. Si se exige la
- *   verificación antes del login, `sesionDe` tendrá que hacerla como la haga el
- *   resto del banco.
+ * - Registro (B1): la cuenta nace pendiente de verificar su correo; `sesionDe`
+ *   usa el ayudante del banco (`ayudantes/cuentas.js`), que lee el código del
+ *   buzón de pruebas y lo confirma antes de entrar.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
+
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
@@ -78,21 +80,13 @@ const LIMITE = 5;
 const SUFIJO = Date.now().toString(36);
 const SALUDO = `hola bruno, soy ana ${SUFIJO}`;
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — una cuenta nueva nace pendiente de verificar su correo: la sesión la
+ * da el ayudante del banco, que registra, lee el código del buzón de pruebas,
+ * lo confirma y entra (el mismo camino que el resto de specs).
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -261,6 +255,9 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
   let admin;
 
   test.beforeAll(async () => {
+    // Seis cuentas y, en la primera corrida del banco, cinco de ellas esperan
+    // su código de verificación en el buzón de pruebas (B1).
+    test.setTimeout(240_000);
     api = await apiRequest.newContext({ baseURL: BORDE });
     ana = await sesionDe(api, ANA);
     bruno = await sesionDe(api, BRUNO);
