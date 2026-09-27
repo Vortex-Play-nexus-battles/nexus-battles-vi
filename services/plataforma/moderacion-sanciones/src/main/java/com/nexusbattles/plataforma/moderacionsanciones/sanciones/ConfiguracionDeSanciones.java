@@ -42,14 +42,28 @@ public class ConfiguracionDeSanciones {
      * este cableado tenia el {@code if} aqui y devolvia otro objeto distinto
      * segun el entorno, con lo que el camino «sin catalogo» no pasaba por el
      * mismo codigo que el de produccion y no lo cubria ninguna prueba.
+     *
+     * <p>B12 — con tiempos de conexion y de lectura. El lector nunca lanza (si
+     * el catalogo no contesta, sirve el respaldo), pero sin tiempo de lectura
+     * «no contesta» no llegaba nunca: con admin-parametros aceptando la conexion
+     * y callado, emitir una sancion se quedaba colgado hasta que el borde
+     * cortaba a los 60 s.
      */
     @Bean
     public LectorDeParametros lectorDeParametros(
             @Value("${sanciones.parametros.url:}") String urlDeParametros,
             @Value("${sanciones.parametros.cache-segundos:30}") long cacheSegundos,
+            @Value("${sanciones.parametros.timeout-conexion-ms:1000}") long conexionMs,
+            @Value("${sanciones.parametros.timeout-lectura-ms:2000}") long lecturaMs,
             Clock reloj) {
-        return LectorDeParametros.desde(RestClient.builder().build(), urlDeParametros, reloj,
-                Duration.ofSeconds(cacheSegundos));
+        SimpleClientHttpRequestFactory fabrica = new SimpleClientHttpRequestFactory();
+        fabrica.setConnectTimeout(Duration.ofMillis(conexionMs));
+        fabrica.setReadTimeout(Duration.ofMillis(lecturaMs));
+        RestClient cliente = RestClient.builder()
+                .requestFactory(fabrica)
+                .requestInterceptor(new InterceptorDeTraza())
+                .build();
+        return LectorDeParametros.desde(cliente, urlDeParametros, reloj, Duration.ofSeconds(cacheSegundos));
     }
 
     /**
