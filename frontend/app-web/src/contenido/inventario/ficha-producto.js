@@ -34,16 +34,16 @@ export const ATRIBUTOS_POR_TIPO = Object.freeze({
   ],
   ARMA: [
     ['poderDeAtaque', 'Poder de ataque'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   ARMADURA: [
     ['defensa', 'Defensa'],
     ['parte', 'Parte'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   ITEM: [
     ['efecto', 'Efecto'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   EPICA: [
     ['turnosRecarga', 'Turnos de recarga'],
@@ -52,15 +52,15 @@ export const ATRIBUTOS_POR_TIPO = Object.freeze({
   ],
 });
 
-/** Etiqueta legible de cada tipo del catalogo. */
-const NOMBRE_DEL_TIPO = {
+/** Etiqueta legible de cada tipo del catalogo (la usan tambien la tienda y la portada). */
+export const NOMBRE_DEL_TIPO = Object.freeze({
   HEROE: 'Héroe',
   HABILIDAD: 'Habilidad',
   ARMA: 'Arma',
   ARMADURA: 'Armadura',
   ITEM: 'Ítem',
   EPICA: 'Épica',
-};
+});
 
 let secuencia = 0;
 
@@ -70,7 +70,7 @@ let secuencia = 0;
  * @param {object} producto tal como lo devuelve el servicio de productos.
  * @returns {HTMLElement} dialogo listo para insertar en el documento.
  */
-export function construirFicha(producto, { nombrePropio = null } = {}) {
+export function construirFicha(producto, { nombrePropio = null, contexto = 'inventario' } = {}) {
   if (!producto || typeof producto !== 'object') {
     throw new TypeError('La ficha necesita un producto del catálogo');
   }
@@ -138,7 +138,7 @@ export function construirFicha(producto, { nombrePropio = null } = {}) {
   // poseen**. El flujo alternativo de la ficha pide mostrarla con el
   // indicador de no disponible, no ocultarla ni responder que no existe.
   if (producto.estado === 'SUSPENDIDO') {
-    ficha.appendChild(construirNoDisponible());
+    ficha.appendChild(construirNoDisponible(contexto));
   }
 
   ficha.append(descripcion, construirAtributos(producto));
@@ -163,14 +163,17 @@ export function construirFicha(producto, { nombrePropio = null } = {}) {
  * adquirir, y que el suyo no desaparece. Sin la segunda, el aviso se lee
  * como una perdida.
  */
-function construirNoDisponible() {
+function construirNoDisponible(contexto = 'inventario') {
   const aviso = document.createElement('p');
   aviso.className = 'ficha__no-disponible';
   // Se anuncia a los lectores de pantalla sin interrumpir (RNF-ACC-002).
   aviso.setAttribute('role', 'status');
+  // UXC-4 — desde la tienda o la portada no se habla de «tu inventario»: quien
+  // mira quizá no lo tiene. Lo que importa ahí es que ahora no se vende.
   aviso.textContent =
-    'No disponible para nuevas adquisiciones. Sigue en tu inventario ' +
-    'y puedes seguir usandolo.';
+    contexto === 'inventario'
+      ? 'No disponible para nuevas adquisiciones. Sigue en tu inventario y puedes seguir usándolo.'
+      : 'Este producto no está a la venta ahora mismo.';
   return aviso;
 }
 
@@ -238,6 +241,13 @@ export async function abrirFicha(
     identidad = null,
     nombrePropio = null,
     detalleDeHeroe = construirDetalleDeHeroe,
+    // UXC-3/UXC-4 — lo que cada vista añade al final de la ficha: las
+    // opiniones de la comunidad, el bloque de compra de la tienda. Cada uno es
+    // `(producto, {ficha}) => Node|null`; uno que falle no tumba la ficha.
+    complementos = [],
+    // «inventario» (por omision), «tienda» o «portada»: cambia solo las frases
+    // que hablan de lo que el jugador tiene.
+    contexto = 'inventario',
   } = {},
 ) {
   cerrarFicha();
@@ -276,7 +286,9 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa) {
     return; // Se cerro mientras se consultaba.
   }
-  reemplazarContenido(capa, construirFicha(producto, { nombrePropio }));
+  const ficha = construirFicha(producto, { nombrePropio, contexto });
+  reemplazarContenido(capa, ficha);
+  const zonaDeComplementos = anadirComplementos(ficha, producto, complementos);
 
   // Y despues, sin hacer esperar a la ficha: son dos servicios mas y el detalle
   // del producto ya es util sin ellos. Mismo criterio que los retratos de la
@@ -298,7 +310,41 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa || bloques.length === 0) {
     return; // Se cerro mientras se consultaba, o no llego nada que pintar.
   }
-  capa.querySelector('.ficha')?.append(...bloques);
+  // Las cifras y las acciones del heroe van antes que los complementos (la
+  // compra, las opiniones): primero que es, despues que opinan de el.
+  if (zonaDeComplementos) {
+    zonaDeComplementos.before(...bloques);
+  } else {
+    ficha.append(...bloques);
+  }
+}
+
+/**
+ * Pinta los complementos al final de la ficha, dentro de una zona propia.
+ *
+ * @param {HTMLElement} ficha
+ * @param {object} producto
+ * @param {Array<(producto: object, contexto: {ficha: HTMLElement}) => Node|null>} complementos
+ * @returns {HTMLElement|null} la zona, o `null` si no hay ninguno
+ */
+function anadirComplementos(ficha, producto, complementos) {
+  if (!Array.isArray(complementos) || complementos.length === 0) {
+    return null;
+  }
+  const zona = document.createElement('div');
+  zona.className = 'ficha__complementos';
+  ficha.append(zona);
+  for (const complemento of complementos) {
+    try {
+      const nodo = complemento(producto, { ficha });
+      if (nodo) {
+        zona.append(nodo);
+      }
+    } catch (fallo) {
+      console.error('No se pudo completar la ficha', fallo);
+    }
+  }
+  return zona;
 }
 
 /** Cierra la ficha abierta y devuelve el foco a donde estaba. */
