@@ -57,8 +57,9 @@ class InventarioDocumentoTest {
     @Test
     @DisplayName("1.6.0 (B9): el documento conserva la mision del heroe y su progresion")
     void conservaMisionYProgresion() {
+        // Forma de B4 (sin subasta, sin origen ni referencia) con nivel 3 y 12,5 de experiencia.
         ElementoInventario heroe = new ElementoInventario(
-                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Vorn", null, null, 3, 12.5, null);
+                "heroe-1", "producto-heroe", TipoElementoInventario.HEROE, "Vorn", null, null, null, null, 3, 12.5);
         Inventario enMision = new Inventario("inventario-1", "jugador-A", List.of(heroe))
                 .bloquearEnMision("heroe-1", "ejecucion-1");
 

@@ -59,8 +59,9 @@ public class GestionarBloqueoMision {
             // Idempotente por estado: la liberacion (y su experiencia) ya se aplico.
             return actual;
         }
-        int nivel = actual.nivelActual();
-        double acumulada = actual.experienciaActual();
+        // Un heroe siempre trae nivel y experiencia (B4: 1 y 0 por omision).
+        int nivel = actual.nivel();
+        double acumulada = actual.experiencia();
         if (experiencia > 0) {
             TablaDeNiveles.Progresion progresion = niveles.tabla().sumar(nivel, acumulada, experiencia);
             nivel = progresion.nivel();

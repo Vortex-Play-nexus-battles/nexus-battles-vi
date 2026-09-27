@@ -87,18 +87,50 @@ class HeroeEnMisionTest {
     }
 
     @Test
+    @DisplayName("bloquear y liberar conservan la version y las entregas del documento (B4)")
+    void conservaVersionYEntregas() {
+        // Sin la version leida el guardado dejaria de ser condicional (@Version) y
+        // sin las entregas anotadas una entrega ya aplicada se volveria a aplicar.
+        Inventario leido = new Inventario("inventario-1", "jugador-A", inventario().elementos(), List.of(),
+                List.of("entrega-1"), 7L);
+
+        Inventario enMision = leido.bloquearEnMision("heroe-1", EJECUCION);
+        Inventario liberado = enMision.liberarDeMision("heroe-1", EJECUCION, 2, 15.5);
+
+        assertThat(enMision.version()).isEqualTo(7L);
+        assertThat(enMision.entregas()).containsExactly("entrega-1");
+        assertThat(liberado.version()).isEqualTo(7L);
+        assertThat(liberado.entregas()).containsExactly("entrega-1");
+    }
+
+    @Test
+    @DisplayName("un heroe en una subasta sigue sin equiparse: el 409 es el de la subasta")
+    void enSubastaNoSeEquipa() {
+        Inventario enSubasta = inventario().bloquearEnSubasta("heroe-1", "subasta-1");
+
+        assertThatThrownBy(() -> enSubasta.equipar("heroe-1", "espada-1"))
+                .isInstanceOf(ElementoNoDisponibleException.class)
+                .isNotInstanceOf(HeroeEnMisionException.class)
+                .hasMessageContaining("subasta");
+    }
+
+    @Test
     @DisplayName("solo un heroe lleva nivel, experiencia o mision, y en sus limites")
     void invariantes() {
+        // Los nulos del medio son origen y referencia (B4): la mision no los toca.
         assertThatThrownBy(() -> new ElementoInventario("x", "p", TipoElementoInventario.ARMA, "Arma", null, null,
-                2, null, null)).isInstanceOf(IllegalArgumentException.class);
+                null, null, 2, null, null)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new ElementoInventario("x", "p", TipoElementoInventario.ARMA, "Arma", null, null,
+                null, null, null, null, EJECUCION)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ElementoInventario("x", "p", TipoElementoInventario.HEROE, "H", null, null,
-                9, null, null)).isInstanceOf(IllegalArgumentException.class);
+                null, null, 9, null, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ElementoInventario("x", "p", TipoElementoInventario.HEROE, "H", null, null,
-                1, -1.0, null)).isInstanceOf(IllegalArgumentException.class);
+                null, null, 1, -1.0, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new ElementoInventario("x", "p", TipoElementoInventario.HEROE, "H", null, null,
-                1, 0.0, " ")).isInstanceOf(IllegalArgumentException.class);
+                null, null, 1, 0.0, " ")).isInstanceOf(IllegalArgumentException.class);
+        // El heroe que aun no ha progresado es el de B4: nivel 1 con 0 de experiencia.
         ElementoInventario nuevo = new ElementoInventario("x", "p", TipoElementoInventario.HEROE, "H");
-        assertThat(nuevo.nivelActual()).isEqualTo(1);
-        assertThat(nuevo.experienciaActual()).isZero();
+        assertThat(nuevo.nivel()).isEqualTo(ElementoInventario.NIVEL_INICIAL);
+        assertThat(nuevo.experiencia()).isZero();
     }
 }

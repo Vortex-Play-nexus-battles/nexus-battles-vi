@@ -100,7 +100,7 @@ class GestionarBloqueoMisionTest {
         ElementoInventario liberado = gestion.liberar(PROPIETARIO, "heroe-1", EJECUCION, 0, "l");
 
         assertThat(liberado.disponible()).isTrue();
-        assertThat(liberado.nivelActual()).isEqualTo(1);
+        assertThat(liberado.nivel()).isEqualTo(1);
         assertThat(consultasDeTabla).hasValue(0);
     }
 
@@ -113,7 +113,7 @@ class GestionarBloqueoMisionTest {
         assertThatThrownBy(() -> gestion.liberar(PROPIETARIO, "heroe-1", EJECUCION, 50, "l"))
                 .isInstanceOf(ProgresionNoDisponibleException.class);
         assertThat(guardado().enMision()).isTrue();
-        assertThat(guardado().experienciaActual()).isZero();
+        assertThat(guardado().experiencia()).isZero();
     }
 
     @Test

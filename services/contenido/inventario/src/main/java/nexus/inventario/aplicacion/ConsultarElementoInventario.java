@@ -6,7 +6,6 @@ import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
-import nexus.inventario.dominio.TipoElementoInventario;
 import org.springframework.stereotype.Service;
 
 /** Consulta una unidad concreta para las integraciones con Subastas y, desde 1.6.0, Misiones. */
@@ -27,7 +26,6 @@ public class ConsultarElementoInventario {
                 .orElseThrow(ElementoNoEncontradoException::new);
         ElementoInventario elemento = inventario.elemento(elementoId.trim());
 
-        boolean heroe = elemento.tipo() == TipoElementoInventario.HEROE;
         return new DetalleElementoInventario(
                 elemento.id(),
                 comoUuid(elemento.productoId()),
@@ -35,11 +33,12 @@ public class ConsultarElementoInventario {
                 inventario.estaEnUso(elemento.id()),
                 elemento.disponible(),
                 elemento.subastaId() == null ? null : comoUuid(elemento.subastaId()),
-                // 1.6.0 (B9): lo que misiones comprueba antes de matricular.
+                // 1.6.0 (B9): lo que misiones comprueba antes de matricular. El
+                // nivel y la experiencia son los de B4: presentes solo en un heroe.
                 elemento.tipo(),
                 elemento.nombrePropio(),
-                heroe ? elemento.nivelActual() : null,
-                heroe ? elemento.experienciaActual() : null,
+                elemento.nivel(),
+                elemento.experiencia(),
                 elemento.ejecucionMisionId() == null ? null : comoUuid(elemento.ejecucionMisionId()));
     }
 

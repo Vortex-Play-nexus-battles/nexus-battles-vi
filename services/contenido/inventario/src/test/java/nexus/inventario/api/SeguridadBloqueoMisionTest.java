@@ -55,8 +55,9 @@ class SeguridadBloqueoMisionTest {
     }
 
     private static ElementoInventario heroe(String ejecucion, Integer nivel, Double experiencia) {
+        // Sin subasta, sin origen ni referencia (B4): solo la progresion y la mision.
         return new ElementoInventario("heroe-1", UUID.randomUUID().toString(), TipoElementoInventario.HEROE, "Vorn",
-                null, null, nivel, experiencia, ejecucion);
+                null, null, null, null, nivel, experiencia, ejecucion);
     }
 
     @Test
