@@ -133,9 +133,63 @@ test('precio obligatorio, compra inmediata opcional y resumen confirmado', async
   cambiar('#inmediata', '9');
   marcar('#aceptar');
   expect($('[type="submit"]').disabled).toBe(true);
+  // B8 — 7.7.2: la compra inmediata tiene que SUPERAR el precio minimo; igual ya no vale.
   cambiar('#inmediata', '10');
   marcar('#aceptar');
-  expect($('[data-resumen-inmediata]').textContent).toBe('10 créditos');
+  expect($('[type="submit"]').disabled).toBe(true);
+  cambiar('#inmediata', '11');
+  marcar('#aceptar');
+  expect($('[data-resumen-inmediata]').textContent).toBe('11 créditos');
+  expect($('[type="submit"]').disabled).toBe(false);
+});
+
+test('B8: la compra inmediata igual al precio inicial se rechaza con el motivo del documento', () => {
+  expect(validarCondiciones(elemento, '24H', '10', '10').inmediata).toMatch(
+    /superior al precio inicial/,
+  );
+  expect(validarCondiciones(elemento, '24H', '10', '10.5').inmediata).toBeUndefined();
+});
+
+test('B8: las comisiones salen de las reglas del servidor, no de la pantalla', async () => {
+  const consultarReglas = jest.fn().mockResolvedValue({
+    duraciones: [
+      { codigo: '24H', horas: 24, comision: '2' },
+      { codigo: '48H', horas: 48, comision: '5' },
+    ],
+    incrementoMinimoConfigurado: true,
+    incrementoMinimo: '5',
+  });
+  await montar({ consultarReglas });
+  expect(consultarReglas).toHaveBeenCalled();
+  expect($('[data-comision="24H"]').textContent).toBe('Comisión: 2 créditos');
+  marcar('[value="48H"]');
+  expect($('[data-resumen-comision]').textContent).toBe('5 créditos');
+  expect($('[data-decision-po]').hidden).toBe(true);
+});
+
+test('B8: sin incremento configurado (DECISIÓN PO) se dice antes y no se deja publicar', async () => {
+  const consultarReglas = jest.fn().mockResolvedValue({
+    duraciones: [
+      { codigo: '24H', horas: 24, comision: '1' },
+      { codigo: '48H', horas: 48, comision: '3' },
+    ],
+    incrementoMinimoConfigurado: false,
+    incrementoMinimo: null,
+  });
+  const { publicar } = await montar({ consultarReglas });
+  expect($('[data-decision-po]').hidden).toBe(false);
+  expect($('[data-decision-po]').textContent).toMatch(/DECISIÓN PO pendiente/);
+  completar();
+  expect($('[type="submit"]').disabled).toBe(true);
+  submit();
+  await vaciar();
+  expect(publicar).not.toHaveBeenCalled();
+});
+
+test('B8: si las reglas no llegan se sigue con el respaldo de la Tabla 25', async () => {
+  await montar({ consultarReglas: jest.fn().mockResolvedValue(null) });
+  expect($('[data-comision="48H"]').textContent).toBe('Comisión: 3 créditos');
+  completar();
   expect($('[type="submit"]').disabled).toBe(false);
 });
 
