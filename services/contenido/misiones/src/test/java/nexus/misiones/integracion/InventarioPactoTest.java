@@ -51,6 +51,8 @@ class InventarioPactoTest {
     static final String HEROE = "heroe-vorn-01";
     static final UUID JUGADOR = UUID.fromString("5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b");
     static final UUID PRODUCTO = UUID.fromString("2239ecfa-3fc4-3f02-9d87-df52cf06665b");
+    /** Un producto del inventario historico, con id que no es UUID (como el kit del banco E2E). */
+    static final String PRODUCTO_HISTORICO = "p-heroe-historico";
     static final UUID EJECUCION = UUID.fromString("0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11");
     static final String EPICA = "4481eb34-384a-3fa0-ba9a-1aac9562c38f";
 
@@ -91,10 +93,65 @@ class InventarioPactoTest {
     @Test
     @PactTestFor(pactMethod = "consultaDelHeroe")
     void laConsultaDiceDeQuienEsQueEsYSiEstaLibre(MockServer servidor) {
-        InventarioDeHeroes.HeroeDelInventario heroe = clienteContra(servidor).consultar(HEROE);
+        InventarioDeHeroes.HeroeDelInventario heroe = clienteContra(servidor).consultar(JUGADOR.toString(), HEROE);
 
         assertThat(heroe.propietarioUid()).isEqualTo(JUGADOR.toString());
         assertThat(heroe.productoId()).isEqualTo(PRODUCTO.toString());
+        assertThat(heroe.esHeroe()).isTrue();
+        assertThat(heroe.disponible()).isTrue();
+        assertThat(heroe.nivel()).isEqualTo(1);
+    }
+
+    /**
+     * El inventario historico: su producto no tiene id UUID, asi que la consulta
+     * interna responde 409 («debe migrarse a UUID», inventario.yaml). No es
+     * que el heroe no exista: la vitrina del jugador (X-User-Name, credencial
+     * de servicio) si lo describe, y de ella sale lo que misiones necesita. Lo
+     * encontro el banco E2E, cuyo kit usa productos con id historico.
+     */
+    @Pact(consumer = CONSUMIDOR)
+    public RequestResponsePact consultaDeUnHeroeConProductoHistorico(PactDslWithProvider constructor) {
+        return constructor
+                .given("el heroe es del jugador y su producto conserva un id historico")
+                .uponReceiving("la consulta interna de un heroe cuyo producto no tiene id UUID")
+                .path("/api/v1/inventario/elementos/" + HEROE)
+                .method("GET")
+                .willRespondWith()
+                .status(409)
+                .given("el heroe es del jugador y su producto conserva un id historico")
+                .uponReceiving("la vitrina del jugador, leida por misiones con su credencial")
+                .path("/api/v1/inventario/elementos")
+                .query("pagina=0")
+                .method("GET")
+                .matchHeader(ClienteInventario.CABECERA_JUGADOR, ".+", JUGADOR.toString())
+                .willRespondWith()
+                .status(200)
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        .integerType("totalPaginas", 1)
+                        .booleanType("ultima", true)
+                        .minArrayLike("elementos", 1)
+                        .stringValue("id", HEROE)
+                        .stringType("productoId", PRODUCTO_HISTORICO)
+                        .stringValue("tipo", "HEROE")
+                        .stringType("nombrePropio", "Vorn")
+                        .booleanValue("disponible", true)
+                        .integerType("nivel", 1)
+                        .numberType("experiencia", 0)
+                        .closeObject()
+                        .closeArray())
+                .toPact();
+    }
+
+    @Test
+    @PactTestFor(pactMethod = "consultaDeUnHeroeConProductoHistorico")
+    void conProductoHistoricoElHeroeSaleDeLaVitrinaDelJugador(MockServer servidor) {
+        InventarioDeHeroes.HeroeDelInventario heroe = clienteContra(servidor).consultar(JUGADOR.toString(), HEROE);
+
+        assertThat(heroe.id()).isEqualTo(HEROE);
+        // Esta en SU vitrina: es suyo.
+        assertThat(heroe.propietarioUid()).isEqualTo(JUGADOR.toString());
+        assertThat(heroe.productoId()).isEqualTo(PRODUCTO_HISTORICO);
         assertThat(heroe.esHeroe()).isTrue();
         assertThat(heroe.disponible()).isTrue();
         assertThat(heroe.nivel()).isEqualTo(1);
@@ -115,7 +172,8 @@ class InventarioPactoTest {
     @Test
     @PactTestFor(pactMethod = "consultaDeUnHeroeInexistente")
     void unHeroeQueNoExisteEsHeroeNoEncontrado(MockServer servidor) {
-        assertThatThrownBy(() -> clienteContra(servidor).consultar(HEROE)).isInstanceOf(HeroeNoEncontrado.class);
+        assertThatThrownBy(() -> clienteContra(servidor).consultar(JUGADOR.toString(), HEROE))
+                .isInstanceOf(HeroeNoEncontrado.class);
     }
 
     // ------------------------------------------------------------- bloqueo

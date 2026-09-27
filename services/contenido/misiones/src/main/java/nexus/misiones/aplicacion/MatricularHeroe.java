@@ -88,7 +88,7 @@ public class MatricularHeroe {
         exigirMisionDisponible(jugadorUid, mision, escalon, ahora);
 
         // 2. El heroe es suyo, es un heroe y esta libre.
-        InventarioDeHeroes.HeroeDelInventario heroe = inventario.consultar(solicitud.heroeId());
+        InventarioDeHeroes.HeroeDelInventario heroe = inventario.consultar(jugadorUid, solicitud.heroeId());
         if (!jugadorUid.equals(heroe.propietarioUid())) {
             throw new HeroeNoEncontrado();
         }

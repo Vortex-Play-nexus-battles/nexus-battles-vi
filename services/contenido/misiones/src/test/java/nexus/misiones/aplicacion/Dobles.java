@@ -235,7 +235,7 @@ public final class Dobles {
         }
 
         @Override
-        public HeroeDelInventario consultar(String heroeId) {
+        public HeroeDelInventario consultar(String jugadorUid, String heroeId) {
             llamadas.add("consultar " + heroeId);
             HeroeDelInventario heroe = heroes.get(heroeId);
             if (heroe == null) {

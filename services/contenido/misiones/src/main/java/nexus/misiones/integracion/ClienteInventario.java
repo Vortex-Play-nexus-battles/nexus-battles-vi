@@ -31,6 +31,9 @@ public class ClienteInventario implements InventarioDeHeroes {
     /** Cabecera con la que un servicio dice a inventario de que jugador habla. */
     static final String CABECERA_JUGADOR = "X-User-Name";
 
+    /** Tope de paginas de la vitrina (16 elementos cada una) al buscar un heroe historico. */
+    static final int PAGINAS_DE_VITRINA = 50;
+
     private final RestClient http;
     private final String base;
     private final CortaCircuitos corta;
@@ -44,15 +47,21 @@ public class ClienteInventario implements InventarioDeHeroes {
     }
 
     @Override
-    public HeroeDelInventario consultar(String heroeId) {
+    public HeroeDelInventario consultar(String jugadorUid, String heroeId) {
         Contestacion<Detalle> c = Contestacion.protegida(corta, () -> http.get()
                 .uri(base + "/api/v1/inventario/elementos/{id}", heroeId)
                 .retrieve()
                 .body(Detalle.class));
         if (c.rechazada()) {
-            // 409: el inventario historico no usa UUID; para misiones es lo
-            // mismo que no encontrarlo.
-            if (c.estado() == 404 || c.estado() == 409 || c.estado() == 400) {
+            if (c.estado() == 409) {
+                // Inventario historico (inventario.yaml: «aun no usa
+                // identificadores UUID»): el heroe existe, pero la consulta
+                // interna, hecha para subastas, exige que su producto tenga id
+                // UUID. Darlo por inexistente dejaba sin misiones a quien tuviera
+                // un heroe asi (el banco E2E lo encontro con su kit).
+                return buscarEnLaVitrina(jugadorUid, heroeId);
+            }
+            if (c.estado() == 404 || c.estado() == 400) {
                 throw new HeroeNoEncontrado();
             }
             throw c.comoRechazo(DEPENDENCIA);
@@ -60,6 +69,42 @@ public class ClienteInventario implements InventarioDeHeroes {
         Detalle d = c.cuerpo();
         return new HeroeDelInventario(d.elementoId(), d.productoId(), d.propietarioUid(), d.tipo(), d.nombrePropio(),
                 d.disponible(), d.subastaId(), d.ejecucionMisionId(), d.nivel(), d.experiencia());
+    }
+
+    /**
+     * El heroe en la vitrina del jugador ({@code GET /api/v1/inventario/elementos},
+     * paginas de dieciseis), leida con la credencial de misiones y el jugador en
+     * {@code X-User-Name}. Esta en SU vitrina, asi que es suyo: el dueno es el
+     * jugador. Se recorre como mucho {@link #PAGINAS_DE_VITRINA} paginas.
+     */
+    private HeroeDelInventario buscarEnLaVitrina(String jugadorUid, String heroeId) {
+        for (int pagina = 0; pagina < PAGINAS_DE_VITRINA; pagina++) {
+            int numero = pagina;
+            Contestacion<PaginaDeVitrina> c = Contestacion.protegida(corta, () -> http.get()
+                    .uri(base + "/api/v1/inventario/elementos?pagina={pagina}", numero)
+                    .header(CABECERA_JUGADOR, jugadorUid)
+                    .retrieve()
+                    .body(PaginaDeVitrina.class));
+            if (c.rechazada()) {
+                throw noEncontradoOAjeno(c);
+            }
+            PaginaDeVitrina vitrina = c.cuerpo();
+            List<ElementoDeVitrina> elementos = vitrina.elementos() == null ? List.of() : vitrina.elementos();
+            for (ElementoDeVitrina e : elementos) {
+                if (heroeId.equals(e.id())) {
+                    return new HeroeDelInventario(e.id(), e.productoId(), jugadorUid, e.tipo(), e.nombrePropio(),
+                            Boolean.TRUE.equals(e.disponible()), e.subastaId(), e.ejecucionMisionId(), e.nivel(),
+                            e.experiencia());
+                }
+            }
+            boolean ultima = Boolean.TRUE.equals(vitrina.ultima())
+                    || elementos.isEmpty()
+                    || (vitrina.totalPaginas() != null && numero + 1 >= vitrina.totalPaginas());
+            if (ultima) {
+                break;
+            }
+        }
+        throw new HeroeNoEncontrado();
     }
 
     @Override
@@ -195,6 +240,17 @@ public class ClienteInventario implements InventarioDeHeroes {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Elemento(String id, String tipo, Integer nivel, Double experiencia, String ejecucionMisionId) {
+    }
+
+    /** {@code PaginaInventario} del contrato: solo lo que se lee para buscar un heroe. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record PaginaDeVitrina(List<ElementoDeVitrina> elementos, Integer totalPaginas, Boolean ultima) {
+    }
+
+    /** {@code ElementoInventario} del contrato (1.6.0). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record ElementoDeVitrina(String id, String productoId, String tipo, String nombrePropio, Boolean disponible,
+                             String subastaId, Integer nivel, Double experiencia, String ejecucionMisionId) {
     }
 
     record BloquearEnMision(String propietarioUid, String ejecucionId) {

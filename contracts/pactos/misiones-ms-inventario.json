@@ -142,6 +142,136 @@
       }
     },
     {
+      "description": "la consulta interna de un heroe cuyo producto no tiene id UUID",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y su producto conserva un id historico"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01"
+      },
+      "response": {
+        "status": 409
+      }
+    },
+    {
+      "description": "la vitrina del jugador, leida por misiones con su credencial",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y su producto conserva un id historico"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-User-Name": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "matchingRules": {
+          "header": {
+            "X-User-Name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos",
+        "query": {
+          "pagina": [
+            "0"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "elementos": [
+            {
+              "disponible": true,
+              "experiencia": 0,
+              "id": "heroe-vorn-01",
+              "nivel": 1,
+              "nombrePropio": "Vorn",
+              "productoId": "p-heroe-historico",
+              "tipo": "HEROE"
+            }
+          ],
+          "totalPaginas": 1,
+          "ultima": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.elementos[*].experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.elementos[*].nivel": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.elementos[*].nombrePropio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.elementos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.totalPaginas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.ultima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "la liberacion del heroe sumandole la experiencia de la mision",
       "providerStates": [
         {

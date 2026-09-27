@@ -62,6 +62,7 @@ class VerificacionDelPactoDeMisionesTest {
     private static final String HEROE = "heroe-vorn-01";
     private static final String JUGADOR = "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b";
     private static final String PRODUCTO = "2239ecfa-3fc4-3f02-9d87-df52cf06665b";
+    private static final String PRODUCTO_HISTORICO = "p-heroe-historico";
     private static final String EJECUCION = "0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11";
     private static final String OTRA_EJECUCION = "5e2b8c1a-7d3f-4c11-8a2e-9b0c4d5e6f70";
 
@@ -99,6 +100,15 @@ class VerificacionDelPactoDeMisionesTest {
     @State("el heroe no existe")
     void noExiste() {
         repositorio.reiniciar();
+    }
+
+    @State("el heroe es del jugador y su producto conserva un id historico")
+    void productoHistorico() {
+        // Inventario historico: el producto no tiene id UUID, asi que la
+        // consulta interna responde 409 y misiones lo busca en la vitrina del
+        // jugador (con su credencial y X-User-Name).
+        repositorio.reiniciar().guardar(Inventario.vacio(JUGADOR)
+                .agregar(new ElementoInventario(HEROE, PRODUCTO_HISTORICO, TipoElementoInventario.HEROE, "Vorn")));
     }
 
     @State("el heroe esta en otra mision")

@@ -37,7 +37,7 @@ REST síncrono con la credencial de servicio de misiones (`client_credentials`, 
 
 | Dependencia | Variable | Para qué |
 |---|---|---|
-| inventario (1.6.0) | `INVENTARIO_BASE_URL` | dueño del héroe, bloqueo, liberación con experiencia, entregas |
+| inventario (1.6.0) | `INVENTARIO_BASE_URL` | dueño del héroe, bloqueo, liberación con experiencia, entregas. Si la consulta interna del héroe responde 409 (inventario histórico: su producto no tiene id UUID), el héroe se lee de la vitrina del jugador (`GET /api/v1/inventario/elementos` con `X-User-Name`) |
 | productos | `PRODUCTOS_BASE_URL` | prototipo del producto HÉROE |
 | heroes (1.1.0) | `HEROES_BASE_URL` | validaciones, IA de cada turno, vista por nivel, experiencia por enemigo |
 | motor de combate (1.1.0) | `MOTOR_COMBATE_URL` | cada golpe |
@@ -88,7 +88,7 @@ En el catálogo va con **`desplegableDev: false`**: el despliegue automático a 
 4. Inventario tiene que estar desplegado con el bloqueo por misión (inventario.yaml 1.6.0); sin él, matricular responde 503.
 5. Poner `desplegableDev: true` en el catálogo.
 
-En el banco E2E (`tests/e2e/compose.yml`) corre entero: credencial propia, reloj acelerado (una hora de misión = 2 s) y la semilla provisional de desarrollo.
+En el banco E2E (`tests/e2e/compose.yml`) corre entero: credencial propia, reloj acelerado (una hora de misión = 2 s) y la semilla provisional de desarrollo. `tests/e2e/misiones.e2e.spec.js` recorre el ciclo desde la vista: tablón, matrícula con héroe y estrategia, simulación en segundo plano, reporte con experiencia y créditos, progresión persistida en el inventario y en ms-finanzas, estrategia guardada, misión en curso y cancelación. Su jar entra en la imagen del banco por `tests/e2e/Dockerfile.servicio.dockerignore`.
 
 ## Cómo correr
 

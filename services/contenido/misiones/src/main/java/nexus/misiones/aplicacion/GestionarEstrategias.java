@@ -40,7 +40,7 @@ public class GestionarEstrategias {
      * @throws EstrategiaInvalida si heroes la rechaza
      */
     public EstrategiaGuardada guardar(String jugadorUid, String heroeId, List<List<String>> rotaciones) {
-        InventarioDeHeroes.HeroeDelInventario heroe = inventario.consultar(heroeId);
+        InventarioDeHeroes.HeroeDelInventario heroe = inventario.consultar(jugadorUid, heroeId);
         if (!jugadorUid.equals(heroe.propietarioUid()) || !heroe.esHeroe()) {
             throw new HeroeNoEncontrado();
         }

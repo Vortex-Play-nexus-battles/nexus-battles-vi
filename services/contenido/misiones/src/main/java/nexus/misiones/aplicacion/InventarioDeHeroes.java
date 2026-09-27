@@ -12,11 +12,14 @@ public interface InventarioDeHeroes {
 
     /**
      * {@code GET /api/v1/inventario/elementos/{id}} con la credencial de
-     * misiones.
+     * misiones. Si el inventario responde 409 (inventario historico: el
+     * producto no tiene id UUID y la consulta interna no lo describe), el heroe
+     * se busca en la vitrina del jugador ({@code GET /api/v1/inventario/elementos}
+     * con {@code X-User-Name}); por eso hace falta el jugador.
      *
-     * @throws HeroeNoEncontrado si no existe
+     * @throws HeroeNoEncontrado si no existe (o no esta en la vitrina del jugador)
      */
-    HeroeDelInventario consultar(String heroeId);
+    HeroeDelInventario consultar(String jugadorUid, String heroeId);
 
     /** Si lleva algo equipado ({@code GET .../heroes/{id}/equipamiento}). */
     boolean equipado(String jugadorUid, String heroeId);
