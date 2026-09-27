@@ -416,7 +416,10 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     );
 
     // El segundo intento no se ofrece: al volver a abrir, la suya, sin estrellas.
-    await ficha.locator('.ficha__cerrar').click();
+    // El botón de cerrar vive en la capa de la ficha, no dentro del diálogo
+    // (`ficha-producto.js`): se busca por su nombre accesible.
+    await page.getByRole('button', { name: 'Cerrar la ficha del producto' }).click();
+    await expect(ficha).toHaveCount(0);
     await page.locator(`[data-ver-producto="${idEnDineroReal}"]`).click();
     await expect(control).toHaveAttribute('data-estado', 'calificado', { timeout: 20_000 });
     await expect(control).toContainText('Tu calificación: 4 de 5');
