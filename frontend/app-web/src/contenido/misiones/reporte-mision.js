@@ -98,6 +98,15 @@ export function reporteDeMision(reporte, { hrefTablon, hrefHistorial, hrefDe }) 
               .filter(Boolean)
               .join(' · '),
           ],
+          // Lo devuelve el inventario al liberarlo con la experiencia ya sumada.
+          [
+            'Subió al',
+            Number.isFinite(heroe.nivelAlcanzado) &&
+            Number.isFinite(heroe.nivel) &&
+            heroe.nivelAlcanzado > heroe.nivel
+              ? `nivel ${heroe.nivelAlcanzado}`
+              : null,
+          ],
         ]
           .filter(([, valor]) => valor)
           .map(([etiqueta, valor]) =>
@@ -228,6 +237,9 @@ export function reporteDeMision(reporte, { hrefTablon, hrefHistorial, hrefDe }) 
 
   const productos = Array.isArray(recompensas.productos) ? recompensas.productos : [];
   const epicas = Array.isArray(recompensas.epicas) ? recompensas.epicas : [];
+  // Lo que el documento promete y no existe en ningún catálogo (el Cofre de
+  // Bronce o el título del ejemplo §7.8.14): se dice, no se inventa.
+  const sinEntregar = Array.isArray(recompensas.sinEntregar) ? recompensas.sinEntregar : [];
   const bloqueRecompensas = bloque('Recompensas obtenidas', 'recompensas', [
     h('div', {
       clase: 'mision-reporte__cifras',
@@ -261,6 +273,38 @@ export function reporteDeMision(reporte, { hrefTablon, hrefHistorial, hrefDe }) 
           hijos: [
             icono('estrella', { etiqueta: null }),
             h('span', { texto: `Épicas: ${epicas.join(', ')}` }),
+          ],
+        })
+      : null,
+    recompensas.entregaPendiente === true
+      ? h('p', {
+          clase: 'mision-reporte__pendiente',
+          datos: { estado: 'entrega-pendiente' },
+          hijos: [
+            icono('reloj', { etiqueta: null }),
+            h('span', {
+              texto:
+                'Parte de lo ganado todavía se está entregando: llegará sola a tu inventario, no tienes que hacer nada.',
+            }),
+          ],
+        })
+      : null,
+    sinEntregar.length > 0
+      ? h('div', {
+          clase: 'mision-reporte__sin-entregar',
+          hijos: [
+            h('h3', { clase: 'mision-objetivos__titulo', texto: 'No se pudieron entregar' }),
+            h('ul', {
+              clase: 'mision-objetivos__lista',
+              hijos: sinEntregar.map((recompensa) =>
+                h('li', {
+                  hijos: [
+                    icono('alerta', { etiqueta: null }),
+                    h('span', { texto: `${recompensa.nombre}: ${recompensa.motivo}` }),
+                  ],
+                }),
+              ),
+            }),
           ],
         })
       : null,
