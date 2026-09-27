@@ -1,23 +1,20 @@
 package com.nexusbattles.ms_identidad.auth.controller;
 
-import com.nexusbattles.ms_identidad.auth.dto.CanjearTokenRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
-import com.nexusbattles.ms_identidad.auth.dto.SolicitarRestablecimientoRequest;
 import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaNoVerificadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
-import com.nexusbattles.ms_identidad.auth.exception.TokenInvalidoException;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
-import com.nexusbattles.ms_identidad.auth.service.TokenCredencialService;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
@@ -33,7 +30,13 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.util.Locale;
+import java.util.Map;
 
+/**
+ * Registro, inicio y cierre de sesion. La recuperacion de contrasena vive
+ * desde B1 en {@code RecuperacionController} y la verificacion del correo en
+ * {@code VerificacionController}.
+ */
 @RestController
 @RequestMapping("/api/v1/auth")
 public class AuthController {
@@ -42,7 +45,6 @@ public class AuthController {
 
     private final RegistroService registroService;
     private final LoginService loginService;
-    private final TokenCredencialService tokenCredencialService;
     private final UsuarioRepository usuarioRepository;
     private final AuditoriaDeCuenta auditoriaDeCuenta;
 
@@ -50,12 +52,10 @@ public class AuthController {
     // @Autowired, y cada dependencia nueva sumaba un aviso.
     public AuthController(RegistroService registroService,
                           LoginService loginService,
-                          TokenCredencialService tokenCredencialService,
                           UsuarioRepository usuarioRepository,
                           AuditoriaDeCuenta auditoriaDeCuenta) {
         this.registroService = registroService;
         this.loginService = loginService;
-        this.tokenCredencialService = tokenCredencialService;
         this.usuarioRepository = usuarioRepository;
         this.auditoriaDeCuenta = auditoriaDeCuenta;
     }
@@ -70,12 +70,15 @@ public class AuthController {
     // cual: un error de base de datos le ensenaba el SQL a quien se
     // registraba. Ahora solo los rechazos de negocio son 400; lo inesperado
     // es un 500 sin detalles internos.
+    //
+    // B1 — la cuenta nace PENDIENTE_VERIFICACION y el codigo va al correo.
+    // B2 — si la lista negra no responde, 503 moderacion-no-disponible
+    // (ModeracionNoDisponibleAdvice): el apodo no se da por bueno.
     @PostMapping(value = "/registro", consumes = "multipart/form-data")
     public ResponseEntity<?> registrarUsuario(@Valid @ModelAttribute RegistroRequest datos,
                                               HttpServletRequest request) {
         try {
-            Usuario usuarioRegistrado = registroService.registrarUsuario(
-                datos, request.getHeader("traceparent"), obtenerIpCliente(request));
+            Usuario usuarioRegistrado = registroService.registrarUsuario(datos, obtenerIpCliente(request));
             return ResponseEntity.status(HttpStatus.CREATED).body(usuarioRegistrado);
         } catch (RegistroRechazadoException rechazo) {
             return rechazo(request, HttpStatus.BAD_REQUEST, rechazo.getMotivo().tipo(),
@@ -103,12 +106,17 @@ public class AuthController {
         } catch (CredencialesInvalidasException e) {
             return rechazo(request, HttpStatus.UNAUTHORIZED, URI.create(TIPOS + "credenciales-invalidas"),
                 "Credenciales inválidas", e.getMessage(), null);
+        } catch (CuentaNoVerificadaException e) {
+            return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-no-verificada"),
+                "Correo sin verificar", e.getMessage(), null);
         } catch (CuentaBaneadaException e) {
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-baneada"),
                 "Cuenta baneada", e.getMessage(), null);
         } catch (CuentaSuspendidaException e) {
+            // 7.3.2: el fin de la suspension viaja aparte para el contador visible.
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-suspendida"),
-                "Cuenta suspendida", e.getMessage(), null);
+                "Cuenta suspendida", e.getMessage(), null,
+                e.getHasta() == null ? Map.of() : Map.of("suspendidoHasta", e.getHasta().toInstant().toString()));
         } catch (CuentaInactivaException e) {
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-inactiva"),
                 "Cuenta inactiva", e.getMessage(), null);
@@ -137,30 +145,6 @@ public class AuthController {
         return ResponseEntity.noContent().build();
     }
 
-    // HU-COR-003. Punto de entrada publico de auto-servicio ("olvide mi
-    // contraseña") que faltaba por completo -- solo existia la via
-    // administrativa (AdminGestionUsuarioController). Responde siempre el
-    // mismo mensaje generico, exista o no la cuenta con ese email: evita
-    // que este endpoint sirva para enumerar correos registrados (mismo
-    // principio que el mensaje generico del login).
-    @PostMapping("/restablecer/solicitar")
-    public ResponseEntity<?> solicitarRestablecimiento(@Valid @RequestBody SolicitarRestablecimientoRequest datos) {
-        tokenCredencialService.solicitarRestablecimiento(datos.getEmail());
-        return ResponseEntity.ok("Si el correo está registrado, recibirás un mensaje con instrucciones para restablecer tu contraseña.");
-    }
-
-    @PostMapping("/restablecer/confirmar")
-    public ResponseEntity<?> canjearToken(@Valid @RequestBody CanjearTokenRequest datos) {
-        try {
-            tokenCredencialService.canjearToken(datos.getToken(), datos.getNuevaPassword());
-            return ResponseEntity.ok("Contraseña actualizada correctamente. Ya puedes iniciar sesión.");
-        } catch (TokenInvalidoException | IllegalArgumentException e) {
-            // IllegalArgumentException: la nueva contraseña no cumple la
-            // politica (RF-AUT-002); el mensaje dice que regla falla.
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
-        }
-    }
-
     private RegistroRechazadoException duplicadoDe(RegistroRequest datos) {
         String email = datos.getEmail() == null ? "" : datos.getEmail().trim().toLowerCase(Locale.ROOT);
         if (usuarioRepository.existsByEmailIgnoreCase(email)) {
@@ -175,12 +159,18 @@ public class AuthController {
             rechazo.getMessage(), rechazo.getCampo());
     }
 
+    static ResponseEntity<Object> rechazo(HttpServletRequest request, HttpStatus estado, URI tipo,
+                                          String titulo, String detalle, String campo) {
+        return rechazo(request, estado, tipo, titulo, detalle, campo, Map.of());
+    }
+
     /**
      * El rechazo en el formato que pida el cliente: problem details si lo
      * declara en {@code Accept}, el texto plano de siempre si no.
      */
     static ResponseEntity<Object> rechazo(HttpServletRequest request, HttpStatus estado, URI tipo,
-                                          String titulo, String detalle, String campo) {
+                                          String titulo, String detalle, String campo,
+                                          Map<String, Object> extras) {
         if (!pideProblemDetails(request)) {
             return ResponseEntity.status(estado).body(detalle);
         }
@@ -191,6 +181,7 @@ public class AuthController {
         if (campo != null) {
             problema.setProperty("campo", campo);
         }
+        extras.forEach(problema::setProperty);
         return ResponseEntity.status(estado).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(problema);
     }
 

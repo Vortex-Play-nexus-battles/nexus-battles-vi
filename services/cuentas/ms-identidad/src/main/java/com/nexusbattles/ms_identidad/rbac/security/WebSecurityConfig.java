@@ -11,6 +11,9 @@ public class WebSecurityConfig implements WebMvcConfigurer {
 
     private final SecurityInterceptor securityInterceptor;
 
+    /** B2 — credenciales de servicio, solo sobre /api/v1/internal/**. */
+    private final InterceptorDeServicio interceptorDeServicio;
+
     /**
      * Origenes que pueden llamar a la API desde un navegador.
      *
@@ -36,8 +39,10 @@ public class WebSecurityConfig implements WebMvcConfigurer {
 
     public WebSecurityConfig(
             SecurityInterceptor securityInterceptor,
+            InterceptorDeServicio interceptorDeServicio,
             @Value("${app.seguridad.cors-origenes:}") String[] origenesConfigurados) {
         this.securityInterceptor = securityInterceptor;
+        this.interceptorDeServicio = interceptorDeServicio;
         this.origenesPermitidos = normalizar(origenesConfigurados);
     }
 
@@ -61,7 +66,13 @@ public class WebSecurityConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(securityInterceptor);
+        // Solo las rutas entre servicios: fuera de este prefijo el interceptor
+        // de servicio no existe y no puede abrir nada.
+        registry.addInterceptor(interceptorDeServicio).addPathPatterns(RUTAS_INTERNAS);
     }
+
+    /** Rutas que solo atienden a otros servicios (ms-identidad-admin.yaml, tag «interno»). */
+    static final String RUTAS_INTERNAS = "/api/v1/internal/**";
 
     /**
      * CORS para la demo HTML/JS servida desde un origen distinto al del

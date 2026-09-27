@@ -1,0 +1,49 @@
+package com.nexusbattles.ms_identidad.auth.model;
+
+/**
+ * Los estados de una cuenta ({@code usuarios.estado}) con el nombre que
+ * publica el contrato (ms-identidad-admin.yaml, directorio y proyeccion).
+ *
+ * <p>Dos familias en la misma columna: el ciclo de vida de la cuenta
+ * ({@link #PENDIENTE_VERIFICACION}, {@link #INACTIVO}, {@link #ACTIVO}) y la
+ * proyeccion de la sancion vigente ({@link #SUSPENDIDO}, {@link #BANEADO}).
+ * El panel anterior a B2 escribia la sancion en femenino (SUSPENDIDA,
+ * BANEADA); V3 las normaliza y aqui se siguen reconociendo por si una fila
+ * vieja se cuela, porque confundir un baneo con una cuenta activa no es un
+ * riesgo aceptable.
+ */
+public final class EstadoCuenta {
+
+    public static final String ACTIVO = "ACTIVO";
+    /** Autorregistro sin confirmar el correo (B1): no puede iniciar sesion. */
+    public static final String PENDIENTE_VERIFICACION = "PENDIENTE_VERIFICACION";
+    /** Cuenta administrativa creada por un Super Administrador y aun sin activar. */
+    public static final String INACTIVO = "INACTIVO";
+    public static final String SUSPENDIDO = "SUSPENDIDO";
+    public static final String BANEADO = "BANEADO";
+
+    static final String SUSPENDIDA_ANTERIOR = "SUSPENDIDA";
+    static final String BANEADA_ANTERIOR = "BANEADA";
+
+    private EstadoCuenta() {
+    }
+
+    public static boolean esBaneado(String estado) {
+        return BANEADO.equals(estado) || BANEADA_ANTERIOR.equals(estado);
+    }
+
+    public static boolean esSuspendido(String estado) {
+        return SUSPENDIDO.equals(estado) || SUSPENDIDA_ANTERIOR.equals(estado);
+    }
+
+    /** El estado con el nombre del contrato (las formas anteriores a B2 se traducen). */
+    public static String normalizado(String estado) {
+        if (esBaneado(estado)) {
+            return BANEADO;
+        }
+        if (esSuspendido(estado)) {
+            return SUSPENDIDO;
+        }
+        return estado;
+    }
+}
