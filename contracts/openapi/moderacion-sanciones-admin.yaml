@@ -23,7 +23,20 @@ info:
     credencial de servicio de este modulo (CA-06 de HU-NOT-005), con reintento
     (CA-04). Ninguna sancion se borra: revertir o reducir actualiza (CA-04 de
     HU-USR-006). Todo cambio incompatible abre version nueva (regla 2).
-  version: 1.0.0
+
+    1.1.0 (B0/B2, aditivo — sanciones unificadas). Esta es la UNICA fuente de
+    verdad de las sanciones. Cada emision, reversion, reduccion o
+    levantamiento que cambia el acceso se proyecta sobre la cuenta en
+    ms-identidad (`PUT /api/v1/internal/usuarios/{uid}/estado-sancion`, con
+    reintento hasta confirmarse), que es lo que niega el login a una cuenta
+    suspendida o baneada y revoca sus sesiones. La suspension y el baneo se
+    notifican al correo (`POST /correos/sancion`; 7.3.2), con la direccion
+    que ms-identidad da por `GET /api/v1/internal/usuarios/{uid}/contacto`.
+    Nuevo `POST /sanciones/{sancionId}/levantamiento`: un Administrador o
+    Super Administrador levanta una sancion vigente sin pasar por apelacion
+    (el «reactivar» del panel de usuarios). Los roles se comparan con
+    jerarquia: SUPER_ADMINISTRADOR puede todo lo de ADMINISTRADOR.
+  version: 1.1.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -127,6 +140,41 @@ paths:
         '422':
           description: No procede — no es tuya, ya no esta vigente, fuera de los 30 dias, o ya hay una abierta (`apelacion-no-procede`)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /sanciones/{sancionId}/levantamiento:
+    post:
+      summary: Levanta una sancion vigente (1.1.0)
+      operationId: levantarSancion
+      x-implementacion: pendiente
+      x-fase: B2
+      description: |
+        Solo ADMINISTRADOR o SUPER_ADMINISTRADOR. La sancion queda revertida
+        con el motivo y el autor (no se borra), se proyecta `ACTIVO` sobre la
+        cuenta y se avisa al jugador. Levantar una sancion ya no vigente
+        responde 409.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/SancionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo]
+              properties:
+                motivo: { type: string, minLength: 3, maxLength: 1000 }
+      responses:
+        '200':
+          description: Sancion levantada.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Sancion' } } }
+        '403':
+          description: Rol insuficiente.
+        '404':
+          description: No existe (`no-encontrada`).
+        '409':
+          description: La sancion ya no esta vigente.
 
   /apelaciones:
     get:

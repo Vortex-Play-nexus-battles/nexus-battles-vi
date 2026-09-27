@@ -85,7 +85,14 @@ export function montarPestanas(
     if (hash) {
       // `replaceState` y no `location.hash`: cambiar de pestaña no debe
       // llenar el historial del navegador.
-      window.history.replaceState(null, '', `#${id}`);
+      //
+      // R17 — con la ruta entera y no solo `#id`: una URL relativa se
+      // resuelve contra la base del documento, y detrás del borde las
+      // direcciones limpias (`/cuenta`) llevan un `<base>` que apunta a la
+      // carpeta del fichero. Con `#id` a secas la barra de direcciones saltaba
+      // de `/cuenta#perfil` a `/frontend/app-web/src/cuentas/#perfil`.
+      const { pathname, search } = window.location;
+      window.history.replaceState(null, '', `${pathname}${search}#${id}`);
     }
     if (alCambiar) {
       alCambiar(id);

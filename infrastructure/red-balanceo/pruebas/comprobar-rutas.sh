@@ -86,6 +86,17 @@ fueraDeConfiguracion() {
 
 echo "Cuentas — identidad, cumplimiento, finanzas y subastas"
 comprobar POST /api/v1/auth/login          "identidad POST /api/v1/auth/login"
+# B1 — verificacion del correo, recuperacion con preguntas y preguntas de
+# seguridad (identidad 2.0.0): las cuatro son de ms-identidad por la regex de
+# /auth, y la interfaz las llama por el borde.
+comprobar POST /api/v1/auth/verificacion/confirmacion \
+                                           "identidad POST /api/v1/auth/verificacion/confirmacion"
+comprobar POST /api/v1/auth/verificacion/reenvio \
+                                           "identidad POST /api/v1/auth/verificacion/reenvio"
+comprobar POST /api/v1/auth/restablecer/preguntas \
+                                           "identidad POST /api/v1/auth/restablecer/preguntas"
+comprobar PUT  /api/v1/auth/preguntas-seguridad \
+                                           "identidad PUT /api/v1/auth/preguntas-seguridad"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
@@ -169,6 +180,16 @@ comprobar GET  /api/v1/comentarios/moderacion \
                                            "comentarios GET /api/v1/comentarios/moderacion"
 
 echo
+echo "Mailpit — la bandeja de pruebas que leen el banco E2E y los canarios (B1)"
+# Desde B1 las cuentas nuevas se verifican con un codigo que llega por correo,
+# y las pruebas lo leen de la API de Mailpit por el borde, igual en el banco
+# E2E que en DEV (tests/e2e/ayudantes/correo.js). La ruta viaja entera, con
+# su consulta: sin ella, la busqueda devolveria todos los correos.
+comprobar GET  "/mailpit/api/v1/search?query=to:ana@nexus.test" \
+                                           "mailpit GET /mailpit/api/v1/search?query=to:ana@nexus.test"
+comprobar GET  /mailpit/api/v1/message/abc "mailpit GET /mailpit/api/v1/message/abc"
+
+echo
 echo "Lo que el borde contesta el mismo"
 codigo GET /salud-borde   200
 # correo es servicio-entre-servicios (ADR-005): desde fuera NO se expone.
@@ -176,6 +197,137 @@ codigo GET /api/v1/correos          404
 # prefijo inventado: tiene que caer en el 404 de "prefijo sin servicio", no
 # colarse en ningun upstream.
 codigo GET /api/v1/no-existe-esto   404
+
+echo
+echo "Direcciones limpias (R17) — se sirven, se anuncian y las antiguas redirigen"
+
+# redirige <ruta> <location esperada>
+redirige() {
+    local ruta="$1" esperado="$2"
+    local cabeceras codigoHttp destino
+    cabeceras="$(curl -s -o /dev/null -D - "$BORDE$ruta" | tr -d '\r')"
+    codigoHttp="$(printf '%s\n' "$cabeceras" | head -1 | awk '{print $2}')"
+    destino="$(printf '%s\n' "$cabeceras" | grep -i '^location:' | sed 's/^[Ll]ocation: *//')"
+    destino="${destino#"$BORDE"}"
+    if [ "$codigoHttp" = "302" ] && [ "$destino" = "$esperado" ]; then
+        printf '  ok    GET    %-40s -> 302 %s\n' "$ruta" "$destino"
+    else
+        printf '  FALLA GET    %-40s\n        esperado: 302 %s\n        obtenido: %s %s\n' \
+            "$ruta" "$esperado" "$codigoHttp" "$destino"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# sirve <ruta> <descripcion> <patron grep -E que debe aparecer en el cuerpo>
+sirve() {
+    local ruta="$1" descripcion="$2" patron="$3"
+    local cuerpo estado
+    estado="$(curl -s -o /dev/null -w '%{http_code}' "$BORDE$ruta")"
+    cuerpo="$(curl -s "$BORDE$ruta")"
+    if [ "$estado" = "200" ] && printf '%s' "$cuerpo" | grep -Eq "$patron"; then
+        printf '  ok    GET    %-40s -> 200, %s\n' "$ruta" "$descripcion"
+    else
+        printf '  FALLA GET    %-40s -> %s, sin %s\n' "$ruta" "$estado" "$descripcion"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# cabecera <ruta> <nombre> <patron grep -E del valor>; con patron vacio, que NO este
+cabecera() {
+    local ruta="$1" nombre="$2" patron="$3"
+    local valor
+    valor="$(curl -s -o /dev/null -D - "$BORDE$ruta" | tr -d '\r' | grep -i "^$nombre:" | sed "s/^[^:]*: *//")"
+    if [ -z "$patron" ]; then
+        if [ -z "$valor" ]; then
+            printf '  ok    %-44s sin %s\n' "$ruta" "$nombre"
+        else
+            printf '  FALLA %-44s no deberia llevar %s: %s\n' "$ruta" "$nombre" "$valor"
+            fallos=$((fallos + 1))
+        fi
+    elif printf '%s' "$valor" | grep -Eq "$patron"; then
+        printf '  ok    %-44s %s: %s\n' "$ruta" "$nombre" "$(printf '%s' "$valor" | cut -c1-60)"
+    else
+        printf '  FALLA %-44s %s\n        esperado: %s\n        obtenido: %s\n' \
+            "$ruta" "$nombre" "$patron" "$valor"
+        fallos=$((fallos + 1))
+    fi
+}
+
+redirige /                                            "/login"
+for par in \
+    login:cuentas/login.html registro:cuentas/registro.html \
+    preparando:cuentas/preparando.html inicio:cuentas/index.html \
+    cuenta:cuentas/perfil.html subastas:cuentas/subastas.html \
+    inventario:contenido/inventario/inventario.html \
+    jugar:plataforma/salas-partidas/batallas.html \
+    torneos:plataforma/torneos/torneos.html \
+    verificar:cuentas/verificar-cuenta.html \
+    restablecer:cuentas/restablecer-confirmar.html; do
+    limpia="/${par%%:*}"
+    fichero="${par#*:}"
+    carpeta="/frontend/app-web/src/${fichero%/*}/"
+    sirve "$limpia" "base $carpeta y marca de rutas limpias" \
+        "<head><base href=\"$carpeta\"><meta name=\"nexus-rutas\" content=\"limpias\">"
+    redirige "/frontend/app-web/src/$fichero"        "$limpia"
+done
+# La consulta viaja con la redireccion: la vuelta al login no se pierde.
+redirige "/frontend/app-web/src/cuentas/login.html?volver=%2Fjugar&motivo=caducada" \
+                                                      "/login?volver=%2Fjugar&motivo=caducada"
+redirige /jugar/                                      "/jugar"
+# B1 — la verificacion conserva su motivo al pasar a la direccion limpia (el
+# fragmento del enlace del correo lo conserva el navegador: no llega al borde).
+redirige "/frontend/app-web/src/cuentas/verificar-cuenta.html?motivo=registro" \
+                                                      "/verificar?motivo=registro"
+redirige /restablecer/                                "/restablecer"
+# Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
+sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
+    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# Pedir el codigo de recuperacion no tiene direccion limpia: /restablecer es
+# la del canje, y la regex de /restablecer no se la puede llevar.
+sirve /frontend/app-web/src/cuentas/restablecer-solicitar.html \
+    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+
+echo
+echo "Cabeceras de seguridad y cache (R17)"
+cabecera /login                   Content-Security-Policy "script-src 'self' 'nonce-[0-9a-f]{32}'"
+cabecera /login                   Content-Security-Policy "frame-ancestors 'none'"
+cabecera /login                   Cache-Control           '^no-store$'
+cabecera /login                   X-Content-Type-Options  '^nosniff$'
+cabecera /login                   X-Frame-Options         '^DENY$'
+cabecera /login                   Referrer-Policy         'strict-origin-when-cross-origin'
+cabecera /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
+                                  Content-Security-Policy "nonce-[0-9a-f]{32}"
+cabecera /frontend/app-web/src/cuentas/login.js \
+                                  Cache-Control           '^no-cache$'
+cabecera /shared/ui-kit/css/tokens.css \
+                                  X-Content-Type-Options  '^nosniff$'
+# La API no lleva politica de contenido ni cache del borde: la pone cada servicio.
+cabecera /api/v1/salas            Content-Security-Policy ''
+cabecera /api/v1/salas            Cache-Control           ''
+cabecera /api/v1/salas            X-Content-Type-Options  '^nosniff$'
+# Sin HTTPS no hay HSTS (ver borde-dev.conf).
+cabecera /login                   Strict-Transport-Security ''
+
+echo
+echo "Nonce (R17) — cada <script> de la vista lleva el de su propia respuesta"
+respuesta="$(curl -s -D - "$BORDE/login" | tr -d '\r')"
+nonce="$(printf '%s\n' "$respuesta" | grep -i '^content-security-policy:' | grep -oE "nonce-[0-9a-f]{32}" | head -1 | sed 's/^nonce-//')"
+scripts="$(printf '%s\n' "$respuesta" | grep -o '<script[^>]*>' || true)"
+sinNonce="$(printf '%s\n' "$scripts" | grep -v "nonce=\"$nonce\"" | grep -c '<script' || true)"
+if [ -n "$nonce" ] && [ -n "$scripts" ] && [ "$sinNonce" = "0" ]; then
+    printf '  ok    los %s <script> de /login llevan el nonce de su cabecera\n' \
+        "$(printf '%s\n' "$scripts" | grep -c '<script')"
+else
+    printf '  FALLA nonce de la cabecera: "%s"; <script> sin el: %s\n' "$nonce" "$sinNonce"
+    fallos=$((fallos + 1))
+fi
+otro="$(curl -s -D - -o /dev/null "$BORDE/login" | tr -d '\r' | grep -i '^content-security-policy:' | grep -oE "nonce-[0-9a-f]{32}" | head -1)"
+if [ -n "$otro" ] && [ "$otro" != "nonce-$nonce" ]; then
+    printf '  ok    el nonce cambia en cada respuesta\n'
+else
+    printf '  FALLA el nonce se repite entre respuestas: %s\n' "$otro"
+    fallos=$((fallos + 1))
+fi
 
 echo
 echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"

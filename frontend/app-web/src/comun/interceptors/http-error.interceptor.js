@@ -11,10 +11,51 @@
  * que hacerlo manualmente. Si no hay token guardado (por ejemplo, antes de
  * iniciar sesión), la petición sale exactamente igual que antes, sin ese
  * header.
+ *
+ * R17 — si un servicio rechaza (401/403) una petición que llevaba el token de
+ * la sesión, se avisa con el evento `nexus:credencial-rechazada`. No decide
+ * nada: el vigilante de la sesión (`comun/vigilante-sesion.js`) pregunta al
+ * emisor si el token sigue valiendo y solo entonces lleva al login.
  * ==========================================================================
  */
 
+import { EVENTO_RECHAZO } from '../vigilante-sesion.js';
+
 const CLAVE_TOKEN = 'nexus.token';
+
+/**
+ * Las llamadas de entrada (login, registro, recuperación, cierre) no hablan
+ * de la sesión en curso: un 401 del login es una contraseña mal escrita.
+ */
+const RUTAS_DE_ENTRADA = /\/api\/v1\/auth\/(?:login|registro|restablecer|logout)(?:[/?#]|$)/;
+
+/**
+ * ¿Esta petición salió con el token de la sesión de esta pestaña?
+ * @param {RequestInit} opciones las que se enviaron de verdad
+ * @param {string|null} token
+ */
+function llevabaElTokenDeLaSesion(opciones, token) {
+  if (!token) {
+    return false;
+  }
+  const cabeceras = opciones?.headers;
+  const valor = esHeaders(cabeceras) ? cabeceras.get('Authorization') : cabeceras?.Authorization;
+  return valor === `Bearer ${token}`;
+}
+
+/** `instanceof Headers` sin romper donde `Headers` no existe (jsdom). */
+function esHeaders(valor) {
+  return typeof Headers !== 'undefined' && valor instanceof Headers;
+}
+
+/**
+ * Avisa de que un servicio rechazó el token, para que el vigilante lo compruebe.
+ * @param {number} estado
+ * @param {string} url
+ */
+function avisarRechazoDeCredencial(estado, url) {
+  window.dispatchEvent(new CustomEvent(EVENTO_RECHAZO, { detail: { estado, url } }));
+}
 
 /**
  * Si hay un token de sesión guardado, devuelve una copia de las opciones
@@ -32,7 +73,7 @@ function conAuthorizationSiHayToken(options) {
   const headersOriginales = options.headers;
 
   // Caso: el llamador ya pasó una instancia real de Headers.
-  if (headersOriginales instanceof Headers) {
+  if (esHeaders(headersOriginales)) {
     const headers = new Headers(headersOriginales);
     if (!headers.has('Authorization')) {
       headers.set('Authorization', `Bearer ${token}`);
@@ -57,8 +98,17 @@ function conAuthorizationSiHayToken(options) {
  */
 export async function fetchWithHttpErrorInterceptor(url, options = {}) {
   try {
+    const token = sessionStorage.getItem(CLAVE_TOKEN);
     const opcionesConAuth = conAuthorizationSiHayToken(options);
     const response = await fetch(url, opcionesConAuth);
+
+    if (
+      (response.status === 401 || response.status === 403) &&
+      llevabaElTokenDeLaSesion(opcionesConAuth, token) &&
+      !RUTAS_DE_ENTRADA.test(String(url))
+    ) {
+      avisarRechazoDeCredencial(response.status, String(url));
+    }
 
     if (response.status === 403) {
       // Capturar respuesta RFC 7807 (Problem Details)

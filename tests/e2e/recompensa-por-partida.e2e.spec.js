@@ -21,6 +21,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
@@ -30,21 +32,13 @@ const BANCO = { id: 'e2e-banco', secreto: 'e2e-secreto-del-banco-de-pruebas' };
 
 const VISTA = '/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -140,10 +134,29 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
 
     let golpes = 0;
     while (partida.estado === 'EN_CURSO' && golpes < 30) {
+      // Se espera el turno propio segun el SERVICIO, no segun el boton: entre
+      // que el boton se ve habilitado y el clic, la maquina puede jugar y hasta
+      // terminar la partida, y el clic se quedaba esperando a un boton ya
+      // oculto hasta agotar la prueba (mismo arreglo que torneos.e2e.spec.js).
+      await expect
+        .poll(
+          async () => {
+            partida = await partidaDe(api, anfitriona, partida.id);
+            return (
+              partida.estado !== 'EN_CURSO' ||
+              partida.turnoActual.idJugador === anfitriona.claims.uid
+            );
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
+        )
+        .toBe(true);
+      if (partida.estado !== 'EN_CURSO') {
+        break;
+      }
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
       await expect(boton).toBeEnabled({ timeout: 20000 });
       const turnoPrevio = partida.turnoActual.numeroTurno;
-      await boton.click();
+      await boton.click({ timeout: 5000 }).catch(() => {});
       await expect
         .poll(
           async () => {

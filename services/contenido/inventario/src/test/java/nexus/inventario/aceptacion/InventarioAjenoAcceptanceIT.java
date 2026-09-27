@@ -71,7 +71,7 @@ class InventarioAjenoAcceptanceIT {
     }
 
     @Test
-    @DisplayName("crear siempre persiste en el inventario del jugador autenticado")
+    @DisplayName("crear persiste solo en el inventario del jugador por el que actua el servicio")
     void crearSoloEnInventarioPropio() throws Exception {
         crear("jugador-creacion-B", "producto-B", "Elemento de B");
         Inventario inventarioBAntes = inventarioDe("jugador-creacion-B");
@@ -101,9 +101,31 @@ class InventarioAjenoAcceptanceIT {
         assertEquals(inventarioBAntes, inventarioDe("jugador-modificacion-B"));
     }
 
+    @Test
+    @DisplayName("B4: un jugador ya no se crea elementos, ni en su inventario ni en el de otro: 403 y nada guardado")
+    void unJugadorNoSeCreaElementos() throws Exception {
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .header("Authorization", ComoLlamador.portadorDeJugador("jugador-gratis", uidDe("jugador-gratis")))
+                        .header("X-User-Name", uidDe("jugador-gratis").toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-gratis","tipo":"ITEM","nombrePropio":"Gratis"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Acceso denegado"));
+
+        assertEquals(java.util.Optional.empty(), repositorio.buscarPorPropietario(uidDe("jugador-gratis").toString()));
+    }
+
+    /**
+     * Desde B4 crear un elemento es de un servicio (el paquete inicial de
+     * ms-identidad lo hace asi) o de un administrador: la prueba crea como
+     * servicio, declarando al jugador en X-User-Name.
+     */
     private String crear(String jugador, String producto, String nombre) throws Exception {
         MvcResult resultado = mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("Authorization", ComoLlamador.portadorDeJugador(jugador, uidDe(jugador)))
+                        .header("Authorization", ComoLlamador.portadorDeServicio("ms-identidad"))
+                        .header("X-User-Name", uidDe(jugador).toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"%s","tipo":"ITEM","nombrePropio":"%s"}

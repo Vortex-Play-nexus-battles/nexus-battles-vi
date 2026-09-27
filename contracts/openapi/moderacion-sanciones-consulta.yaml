@@ -20,7 +20,15 @@ info:
     «Apelar» que el servicio rechazaba. Este recurso publica los que el
     servicio aplica AHORA, que es la unica fuente que no se puede desincronizar.
     Aditivo: no cambia nada de 1.2.0.
-  version: 1.3.0
+
+    1.4.0 (B0/B2): `GET /sanciones/usuarios/{usuarioId}/activa` deja de ser
+    publico. La auditoria contractual encontro que cualquiera, sin sesion,
+    podia leer el motivo y la vigencia de la sancion de cualquier jugador (y
+    los uid son publicos en los torneos). Ahora exige token: un JUGADOR solo
+    consulta la suya (el contador de tiempo restante del 7.3.2); un token de
+    servicio o de MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR, la de
+    cualquiera. La forma de la respuesta no cambia.
+  version: 1.4.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -30,6 +38,8 @@ paths:
     get:
       summary: Consultar si un usuario tiene una sancion activa
       operationId: consultarSancionActiva
+      security:
+        - bearerAuth: []
       parameters:
         - name: usuarioId
           in: path
@@ -49,6 +59,18 @@ paths:
                 $ref: '#/components/schemas/SancionActivaResponse'
         '400':
           description: usuarioId no tiene formato de UUID valido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          description: 1.4.0 — sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: 1.4.0 — un jugador consultando la sancion de otro.
           content:
             application/problem+json:
               schema:
@@ -143,6 +165,11 @@ components:
           nullable: true
           enum: [SUSPENSION, BANEO, null]
           description: (1.1.0) Que sancion restringe. Solo presente si sancionActiva es true.
+        sancionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: (1.4.0) La sancion que restringe, para levantarla o apelarla. Solo presente si sancionActiva es true.
       examples:
         - sancionActiva: false
           motivo: null

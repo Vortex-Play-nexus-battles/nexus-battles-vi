@@ -47,7 +47,8 @@ function conSesion(rol = 'JUGADOR') {
 function montar(opciones = {}) {
   const raiz = document.createElement('div');
   document.body.appendChild(raiz);
-  return montarCabecera(raiz, { base: BASE, navegar: jest.fn(), ...opciones });
+  // `vigilar` falso: aquí se prueba qué armazón se monta, no el vigilante.
+  return montarCabecera(raiz, { base: BASE, navegar: jest.fn(), vigilar: jest.fn(), ...opciones });
 }
 
 beforeEach(() => {

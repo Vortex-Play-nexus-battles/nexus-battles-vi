@@ -25,8 +25,8 @@
   min-height: 100vh;
   margin: 0;
   padding: 0;
-  background: var(--fondo);
-  color: var(--texto);
+  /* UX-GAME-1: el fondo y el color de la pagina los pone el kit (base.css):
+     la atmosfera del Nexo es una sola para las 35 vistas. */
   font-family: var(--fuente-texto);
 }
 
@@ -294,3 +294,18 @@
    componente compartido existiera. Existe: `.estado-vista` en
    `componentes.css`, con estado de carga con esqueletos y boton de
    reintentar, que es justo lo que a esta pantalla le faltaba. */
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.subastas__producto {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}

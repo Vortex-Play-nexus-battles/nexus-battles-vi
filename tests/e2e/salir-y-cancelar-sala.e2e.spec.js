@@ -11,28 +11,25 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 const VISTA = '/frontend/app-web/src/plataforma/salas-partidas/sala-batalla.html';
 const LISTADO = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
+// R17.3 — detrás del borde el listado vive en /jugar; la ruta antigua redirige
+// allí. Se acepta cualquiera de las dos para no atar la prueba al borde.
+const EN_EL_LISTADO = /\/jugar(?:[?#]|$)|batallas\.html/;
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -108,7 +105,7 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
 
     await salir.click();
 
-    await page.waitForURL(`**${LISTADO}`, { timeout: 20000 });
+    await page.waitForURL(EN_EL_LISTADO, { timeout: 20000 });
     await expect(page.locator('[data-zona="aviso-sala"]')).toBeVisible();
     await expect(page.locator('[data-zona="aviso-sala-titulo"]')).toHaveText('Saliste de la sala.');
     // Y en el servidor ya no esta.
@@ -157,14 +154,14 @@ test.describe('Salir y cancelar una sala (HU-SAL-006)', () => {
     });
     await cancelar.click();
 
-    await paginaAnfitriona.waitForURL(`**${LISTADO}`, { timeout: 20000 });
+    await paginaAnfitriona.waitForURL(EN_EL_LISTADO, { timeout: 20000 });
     expect(pregunta).toBe('¿Cancelar la sala? Se expulsará a 1 participante.');
     await expect(paginaAnfitriona.locator('[data-zona="aviso-sala-titulo"]')).toHaveText(
       'Cancelaste la sala.',
     );
 
     // CA-02: al invitado lo devuelve el aviso `sala.cancelada` del canal.
-    await paginaInvitado.waitForURL(`**${LISTADO}`, { timeout: 20000 });
+    await paginaInvitado.waitForURL(EN_EL_LISTADO, { timeout: 20000 });
     await expect(paginaInvitado.locator('[data-zona="aviso-sala-titulo"]')).toHaveText(
       'La sala se cerró',
     );

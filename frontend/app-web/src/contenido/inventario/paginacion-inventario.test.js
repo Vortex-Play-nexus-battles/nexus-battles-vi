@@ -2,9 +2,17 @@
  * HU-INV-011 - La paginacion montada dentro de la vista de inventario.
  *
  * El control en si se prueba en `src/comun/paginacion.test.js`. Aqui se
- * verifica lo que solo se ve al integrarlo: que cambiar de pagina vuelve a
- * consultar el servicio con los mismos criterios y solo la pagina distinta
- * (criterio 3), y que el control refleja el total que devuelve el servicio.
+ * verifica lo que solo se ve al integrarlo: que cambiar de pagina conserva
+ * los criterios (criterio 3: «esos criterios se conservan») y que el control
+ * refleja el total de lo que se esta paginando.
+ *
+ * UXC-1 — desde que «Mi inventario» separa heroes y objetos, la vista reune el
+ * inventario al montarse (`coleccion-inventario.js`) y la pestana «Objetos»
+ * pagina esa coleccion de dieciseis en dieciseis. Cambiar de pagina ya no
+ * vuelve al servicio sin busqueda: el criterio que se conserva es «solo
+ * objetos». Con una busqueda activa si se consulta el indice del servicio por
+ * pagina, y ahi viven las pruebas de carrera y de fallo que antes estaban
+ * aqui (el orden de llegada solo importa cuando hay red por medio).
  */
 import { montarInventario } from './inventario.js';
 
@@ -71,7 +79,7 @@ describe('Paginacion integrada en la vista de inventario', () => {
     expect(control(raiz).hidden).toBe(false);
   });
 
-  test('pulsar una casilla consulta esa pagina y repinta la vitrina', async () => {
+  test('pulsar una casilla muestra esa pagina de objetos', async () => {
     const pedidas = [];
     await montarInventario(raiz, 'jugador-A', 0, {
       ...SIN_ESCRITURA,
@@ -80,15 +88,19 @@ describe('Paginacion integrada en la vista de inventario', () => {
         return paginaDe(numero, 80);
       },
     });
+    // Al montar se reunen las cinco paginas, una vez.
+    expect(pedidas).toEqual([0, 1, 2, 3, 4]);
 
     casillas(raiz)[2].click();
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(pedidas).toEqual([0, 2]);
     expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(16);
+    expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Espada 32');
+    // Sin busqueda no hace falta volver al servicio: ya estaba todo.
+    expect(pedidas).toEqual([0, 1, 2, 3, 4]);
   });
 
-  test('al cambiar de pagina conserva la identidad del jugador y solo cambia la pagina', async () => {
+  test('reune el inventario con la identidad del jugador, pagina a pagina', async () => {
     const consultas = [];
     await montarInventario(raiz, 'jugador-A', 0, {
       ...SIN_ESCRITURA,
@@ -101,10 +113,32 @@ describe('Paginacion integrada en la vista de inventario', () => {
     casillas(raiz)[3].click();
     await new Promise((r) => setTimeout(r, 0));
 
-    expect(consultas).toEqual([
-      { identidad: 'jugador-A', numero: 0 },
-      { identidad: 'jugador-A', numero: 3 },
-    ]);
+    expect(consultas).toEqual(
+      [0, 1, 2, 3, 4].map((numero) => ({ identidad: 'jugador-A', numero })),
+    );
+    expect(control(raiz).querySelector('[aria-current="page"]').textContent).toBe('4');
+  });
+
+  test('los heroes no ocupan casillas de la vitrina de objetos', async () => {
+    const conHeroe = (numero) => {
+      const pagina = paginaDe(numero, 20);
+      if (numero === 0) {
+        pagina.elementos[0] = { id: 'h1', productoId: 'ph', tipo: 'HEROE', nombrePropio: 'Ayla' };
+      }
+      return pagina;
+    };
+    await montarInventario(raiz, 'jugador-A', 0, {
+      ...SIN_ESCRITURA,
+      consultar: async (_id, numero) => conHeroe(numero),
+    });
+
+    const objetos = raiz.querySelector('.inventario__contenido');
+    // 20 elementos, uno es heroe: 19 objetos, 16 en la primera pagina.
+    expect(objetos.querySelectorAll('.vitrina__producto')).toHaveLength(16);
+    expect(objetos.querySelector('[data-tipo="HEROE"]')).toBeNull();
+    expect(casillas(raiz).map((c) => c.textContent)).toEqual(['1', '2']);
+    // Y el heroe esta en su pestana.
+    expect(raiz.querySelector('.inventario-heroes [data-heroe]')).not.toBeNull();
   });
 
   test('la casilla activa sigue a la pagina que se esta mostrando', async () => {
@@ -150,17 +184,31 @@ describe('Paginacion integrada en la vista de inventario', () => {
     expect(document.activeElement.textContent).toBe('4');
   });
 
+  /** Monta con una busqueda activa: la unica paginacion que va a la red. */
+  async function conBusqueda(buscar) {
+    await montarInventario(raiz, 'jugador-A', 0, {
+      ...SIN_ESCRITURA,
+      consultar: async (_id, numero) => paginaDe(numero, 16),
+      buscar,
+    });
+    raiz.querySelector('.inventario-busqueda__control').value = 'Espada';
+    raiz
+      .querySelector('.inventario-busqueda')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    for (let i = 0; i < 5; i += 1) {
+      await new Promise((r) => setTimeout(r, 0));
+    }
+  }
+
   test('dos clics seguidos no dejan la vitrina en la pagina equivocada', async () => {
     // El servicio responde fuera de orden: la pagina 2 tarda mas que la 6.
     // Sin proteccion, la respuesta lenta llega la ultima y pisa a la rapida.
     const enEspera = new Map();
-    await montarInventario(raiz, 'jugador-A', 0, {
-      ...SIN_ESCRITURA,
-      consultar: (_id, numero) =>
-        numero === 0
-          ? Promise.resolve(paginaDe(0, 160))
-          : new Promise((resolver) => enEspera.set(numero, resolver)),
-    });
+    await conBusqueda((_id, _criterio, numero) =>
+      numero === 0
+        ? Promise.resolve(paginaDe(0, 160))
+        : new Promise((resolver) => enEspera.set(numero, resolver)),
+    );
 
     casillas(raiz)[1].click();
     casillas(raiz)[5].click();
@@ -178,14 +226,11 @@ describe('Paginacion integrada en la vista de inventario', () => {
 
   test('si la consulta falla el control no queda con la pagina equivocada', async () => {
     let fallar = false;
-    await montarInventario(raiz, 'jugador-A', 0, {
-      ...SIN_ESCRITURA,
-      consultar: async (_id, numero) => {
-        if (fallar) {
-          throw new Error('servicio caido');
-        }
-        return paginaDe(numero, 80);
-      },
+    await conBusqueda(async (_id, _criterio, numero) => {
+      if (fallar) {
+        throw new Error('servicio caido');
+      }
+      return paginaDe(numero, 80);
     });
 
     fallar = true;

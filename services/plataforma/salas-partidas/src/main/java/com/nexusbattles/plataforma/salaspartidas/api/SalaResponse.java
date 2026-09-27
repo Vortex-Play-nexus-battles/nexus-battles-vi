@@ -75,10 +75,22 @@ public record SalaResponse(
 
     /** El codigo solo si quien pregunta es el anfitrion; si no, la sala pelada. */
     static SalaResponse segunQuienPregunta(Sala sala, UUID idJugador) {
-        return sala.esAnfitrion(idJugador) ? paraElAnfitrion(sala) : desde(sala);
+        return segunQuienPregunta(sala, idJugador, null);
+    }
+
+    /**
+     * Como {@link #segunQuienPregunta(Sala, UUID)}, con la partida de la sala si
+     * ya arranco (R18): es lo que deja volver al combate tras recargar.
+     */
+    static SalaResponse segunQuienPregunta(Sala sala, UUID idJugador, UUID idPartida) {
+        return construir(sala, sala.esAnfitrion(idJugador) ? sala.codigoInvitacion() : null, idPartida);
     }
 
     private static SalaResponse construir(Sala sala, String codigoInvitacion) {
+        return construir(sala, codigoInvitacion, null);
+    }
+
+    private static SalaResponse construir(Sala sala, String codigoInvitacion, UUID idPartida) {
         return new SalaResponse(
                 sala.id(),
                 sala.estado(),
@@ -92,7 +104,9 @@ public record SalaResponse(
                 sala.tamanoEquipo(),
                 sala.idAnfitrion(),
                 List.copyOf(sala.participantes()),
-                null, // la partida no existe hasta que la sala arranca (HU-SAL-004)
+                // Nula hasta que la sala arranca (HU-SAL-004). Despues solo la
+                // rellena quien la busca: la consulta de una sala concreta.
+                idPartida,
                 sala.creadaEn(),
                 codigoInvitacion);
     }

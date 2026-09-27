@@ -1,0 +1,86 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI — Subastas en tiempo real (ms-subastas) — B0/B8
+#
+# Hasta B0 este canal no tenia contrato (la auditoria lo encontro: «sin
+# AsyncAPI y no enrutado por el borde»). Se documenta lo que el codigo hace
+# hoy —`SubastaRealtimePublisher` publica cada cambio de una subasta en el
+# listado publico— y lo que B8 anade.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Subastas en tiempo real (ms-subastas)
+  version: 1.0.0
+  description: |
+    WebSocket + STOMP de ms-subastas, en `/api/v1/ws-subastas` (el servicio
+    tiene `context-path` `/api/v1`; el borde lo publica en la misma ruta desde
+    B8).
+
+    - **Solo el servidor publica.** ms-subastas no tiene ningun
+      `@MessageMapping`: `PoliticaDelCanalDeSubastas` rechaza todo SEND del
+      cliente. Pujar, comprar ya y publicar van por REST.
+    - **Listado publico**: `/topic/subastas/listado` admite visitantes sin
+      token (ver el listado de subastas no exige sesion); cualquier otro
+      destino exige token en el CONNECT.
+    - Cada mensaje del listado es el mismo resumen que devuelve
+      `GET /api/v1/subastas` (`ms-subastas-listado.yaml`).
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8092
+    protocol: ws
+    pathname: /api/v1/ws-subastas
+
+channels:
+  listado:
+    address: '/topic/subastas/listado'
+    description: Una subasta cambio (nueva puja, compra inmediata, cierre, publicacion).
+    messages:
+      subastaActualizada:
+        $ref: '#/components/messages/SubastaActualizada'
+
+  subasta:
+    address: '/topic/subastas/{subastaId}'
+    x-implementacion: pendiente
+    x-fase: B8
+    description: |
+      B8 — pujas de UNA subasta en vivo (la ficha de la subasta), con el
+      mismo resumen. Exige token en el CONNECT.
+    parameters:
+      subastaId:
+        description: Id de la subasta.
+    messages:
+      subastaActualizada:
+        $ref: '#/components/messages/SubastaActualizada'
+
+operations:
+  recibirListado:
+    action: receive
+    channel:
+      $ref: '#/channels/listado'
+  recibirSubasta:
+    action: receive
+    channel:
+      $ref: '#/channels/subasta'
+
+components:
+  messages:
+    SubastaActualizada:
+      payload:
+        type: object
+        additionalProperties: true
+        description: '`SubastaResumenResponse`, igual que un elemento de `GET /api/v1/subastas`.'
+        required: [id, estado]
+        properties:
+          id:
+            type: string
+          estado:
+            type: string
+          precioActual:
+            type: [number, 'null']
+          finalizaEn:
+            type: string
+            format: date-time

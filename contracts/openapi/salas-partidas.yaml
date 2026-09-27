@@ -73,7 +73,16 @@ info:
     administrador con motivo; la partida termina igual. Un encuentro fuera de
     rango o sin torneo es `400` `parametros-invalidos` con el campo
     (`torneo.numeroEncuentro` / `torneo.torneoId`) y la sala no se crea.
-  version: 1.5.0
+
+    Cambios 1.6.0 (B0/B6, aditivo — FEEDBACK DEL PROFESOR, no requisito del
+    documento): mensajes privados entre jugadores sobre el mismo chat.
+    Historial y conversaciones por REST (`/mensajes-directos/**`); el envio en
+    tiempo real por STOMP (`contracts/websocket/mensajes-directos.yaml`).
+    `POST .../mensajes` es la via de respaldo cuando el WebSocket no esta
+    disponible (degradacion controlada a consulta periodica, riesgo #7 del
+    Project Charter): mismo control de lista negra, sancion y frecuencia.
+    Solo los dos participantes ven una conversacion.
+  version: 1.6.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -90,6 +99,8 @@ tags:
     description: Ciclo de vida de la sala de batalla
   - name: Partidas
     description: Estado de la partida en curso
+  - name: Mensajes
+    description: Mensajes privados entre jugadores (feedback del profesor, 1.6.0)
 
 paths:
 
@@ -523,9 +534,150 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
 
+  /mensajes-directos/conversaciones:
+    get:
+      tags: [Mensajes]
+      operationId: misConversaciones
+      summary: Conversaciones privadas del jugador (1.6.0)
+      x-implementacion: pendiente
+      x-fase: B6
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Conversaciones, la de actividad mas reciente primero.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ResumenDeConversacion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /mensajes-directos/conversaciones/{uidOtro}/mensajes:
+    parameters:
+      - $ref: '#/components/parameters/UidOtro'
+    get:
+      tags: [Mensajes]
+      operationId: mensajesDeConversacion
+      summary: Historial de la conversacion con otro jugador (1.6.0)
+      x-implementacion: pendiente
+      x-fase: B6
+      description: |
+        Solo la conversacion entre el dueno del token y `uidOtro`: no hay forma
+        de pedir la de otros dos. Paginado hacia atras con `antesDe`.
+      security:
+        - keycloak: []
+      parameters:
+        - name: antesDe
+          in: query
+          required: false
+          schema: { type: string, format: date-time }
+        - name: limite
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Mensajes, del mas antiguo al mas reciente dentro de la pagina.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MensajeDirecto'
+        '400':
+          description: '`uidOtro` es el propio jugador o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+    post:
+      tags: [Mensajes]
+      operationId: enviarMensajeDirecto
+      summary: Envia un mensaje privado (respaldo del WebSocket) (1.6.0)
+      x-implementacion: pendiente
+      x-fase: B6
+      security:
+        - keycloak: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [texto]
+              properties:
+                texto: { type: string, minLength: 1, maxLength: 500 }
+                idCliente: { type: string, maxLength: 64 }
+      responses:
+        '201':
+          description: Mensaje guardado y entregado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MensajeDirecto'
+        '400':
+          description: Texto vacio o demasiado largo, o destinatario propio.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: Remitente sancionado.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: El destinatario no existe o no esta activo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '422':
+          description: El texto contiene terminos de la lista negra (no se entrega).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '429':
+          description: Demasiados mensajes seguidos.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: La moderacion no responde; el mensaje no se entrega sin revisar.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /mensajes-directos/conversaciones/{uidOtro}/leido:
+    parameters:
+      - $ref: '#/components/parameters/UidOtro'
+    post:
+      tags: [Mensajes]
+      operationId: marcarConversacionLeida
+      summary: Marca como leidos los mensajes recibidos de ese jugador (1.6.0)
+      x-implementacion: pendiente
+      x-fase: B6
+      security:
+        - keycloak: []
+      responses:
+        '204':
+          description: Hecho (idempotente).
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
 components:
 
   parameters:
+    UidOtro:
+      name: uidOtro
+      in: path
+      required: true
+      description: '`uid` del otro jugador de la conversacion.'
+      schema: { type: string, format: uuid }
     IdSala:
       name: idSala
       in: path
@@ -658,6 +810,29 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
 
   schemas:
+    MensajeDirecto:
+      type: object
+      required: [id, conversacion, remitente, destinatario, texto, fecha, leido]
+      properties:
+        id: { type: string, format: uuid }
+        conversacion: { type: string, description: '`dm:{uidMenor}:{uidMayor}`' }
+        remitente: { type: string, format: uuid }
+        apodoRemitente: { type: string }
+        destinatario: { type: string, format: uuid }
+        texto: { type: string }
+        fecha: { type: string, format: date-time }
+        leido: { type: boolean }
+        idCliente: { type: [string, 'null'] }
+
+    ResumenDeConversacion:
+      type: object
+      required: [uidOtro, ultimoMensaje, noLeidos]
+      properties:
+        uidOtro: { type: string, format: uuid }
+        apodoOtro: { type: [string, 'null'] }
+        ultimoMensaje: { $ref: '#/components/schemas/MensajeDirecto' }
+        noLeidos: { type: integer, minimum: 0 }
+
 
     # -- Formato de error comun a los 20 modulos (regla 4) --------------------
     ProblemDetail:

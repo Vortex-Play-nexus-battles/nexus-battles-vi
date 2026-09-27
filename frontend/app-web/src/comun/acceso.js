@@ -39,7 +39,7 @@
  */
 
 import { ACCESO, MATRIZ, VEREDICTO, puedeVer, rutaDeVista } from './matriz-acceso.js';
-import { leerSesion, olvidarSesion, resolver, RUTAS } from './sesion.js';
+import { MOTIVOS, leerSesion, olvidarSesion, resolver, RUTAS, urlDeLogin } from './sesion.js';
 import { h } from './ui/dom.js';
 
 /** Base de resolución de rutas: este módulo vive en `src/comun/`, igual que `sesion.js`. */
@@ -115,12 +115,7 @@ export function exigirSesion({
     olvidarSesion(almacen);
   }
   const volver = `${ubicacion.pathname}${ubicacion.search}`;
-  const login = new URL(resolver(RUTAS.login, base));
-  login.searchParams.set('volver', volver);
-  if (sesion.caducada) {
-    login.searchParams.set('motivo', 'caducada');
-  }
-  navegar(login.href);
+  navegar(urlDeLogin({ volver, motivo: sesion.caducada ? MOTIVOS.CADUCADA : null }, base));
   return null;
 }
 

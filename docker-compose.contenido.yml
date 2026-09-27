@@ -77,6 +77,13 @@ services:
     ports:
       - "8101:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       PUERTO_HEROES: 8080
       SPRING_PROFILES_ACTIVE: mongo
       MONGODB_URI: mongodb://contenido-mongo:27017/heroes
@@ -112,6 +119,13 @@ services:
     ports:
       - "8102:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       # Boot 4 lee spring.mongodb.uri (SPRING_MONGODB_URI); el nombre de Boot 3
       # se conserva porque el README y el LEEME de inventario lo documentan.
       SPRING_MONGODB_URI: mongodb://contenido-mongo:27017/inventario
@@ -158,6 +172,13 @@ services:
     ports:
       - "8103:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       MONGODB_URI: mongodb://contenido-mongo:27017/productos
       # R9.7 — el emisor es ms-identidad (ADR-002 / ADR-005). El JWKS se consulta
       # solo al validar el primer token, asi que el contenedor arranca y
@@ -190,6 +211,13 @@ services:
     ports:
       - "8104:8080"
     environment:
+      # Monton acotado, igual que en el host de plataforma (#690). Los
+      # Dockerfiles fijan MaxRAMPercentage=75, y con eso una JVM ociosa se
+      # expande hasta llenar su limite sin motivo para recolectar: medido el
+      # 24-sep en este host, inventario 217/320, productos 225/384 y heroes
+      # 170/320 MiB en reposo. En plataforma el mismo cambio dejo a los
+      # servicios en 30-60 MiB. JAVA_TOOL_OPTIONS aqui gana al del Dockerfile.
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
       HEROES_URL: http://srv-heroes:8080
       # R8.1 — POST /api/v1/combate/ataques exige ROLE_SERVICIO. El token lo
       # firma ms-identidad en el host de plataforma y lo presenta

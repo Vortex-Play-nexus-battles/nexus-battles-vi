@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <!-- UXC-4 — la tienda en la portada: tarjetas de producto y su detalle
+         (la ficha del catalogo, con la compra y las opiniones). -->
+    <link rel="stylesheet" href="../contenido/inventario/ficha-producto.css" />
+    <link rel="stylesheet" href="./tienda-producto.css" />
   </head>
   <body class="portal">
     <div data-cabecera-app></div>
@@ -16,8 +20,29 @@
            debajo del formulario (`order` en el kit), porque nadie se registra
            para leer una presentación. -->
       <section class="entrada__identidad">
-        <p class="entrada__sobretitulo">Return of the Warriors</p>
-        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <!-- El logotipo oficial ocupa el sitio del texto grande. Sigue siendo el
+             h1 de la pagina: el nombre va en el `alt`, asi que un lector de
+             pantalla oye lo mismo que antes. El lema «Return of the Warriors»
+             viene dentro del propio logotipo y por eso deja de repetirse
+             encima como sobretitulo. WebP primero; el PNG es el mismo logotipo
+             para quien no lo entienda. -->
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
         <p class="entrada__lema">
           Equipa a tu héroe, entra a una sala y decide el combate turno a turno. Lo que apuestas es
           real dentro del Nexo.
@@ -42,6 +67,11 @@
             <span>Torneos de ocho equipos con árbol de doble eliminación</span>
           </li>
         </ul>
+        <!-- UXC-4 — lo que se vende, a un salto: en el telefono la tienda
+             queda muy abajo, despues del formulario y de esta columna. -->
+        <a class="entrada__enlace-tienda" href="#titulo-vitrina-publica">
+          Mira lo que se vende en el Nexo
+        </a>
       </section>
 
       <!-- Columna del formulario -->
@@ -51,8 +81,16 @@
           <p class="t-meta">Usa el correo con el que creaste tu cuenta.</p>
         </div>
 
-        <!-- Estado global de la operación: cargando, rechazo del servicio. -->
+        <!-- Por qué se llega aquí (sesión terminada, cerrada, cuenta recién
+             creada). Lo rellena `login.js` a partir de `?motivo=`. -->
+        <p class="aviso" id="avisoMotivo" hidden role="status"></p>
+
+        <!-- Estado global de la operación: cargando, sin conexión. -->
         <p class="estado" id="estadoLogin" hidden role="status"></p>
+        <!-- B1 — el rechazo del servidor, explicado por su `type`: credenciales,
+             correo sin confirmar (con sus dos salidas), suspensión con el tiempo
+             restante, baneo. Enfocable para llevar ahí el foco. -->
+        <div data-zona="rechazo" tabindex="-1" hidden></div>
         <div id="avisoDispositivo" hidden></div>
 
         <form id="formLogin" class="pila" novalidate>
@@ -95,7 +133,33 @@
       </section>
     </main>
 
+    <!-- UXC-4 — lo que el Nexo vende, a la vista antes de tener cuenta
+         (retroalimentacion del profesor). La vitrina y las opiniones son
+         publicas; comprar, calificar y opinar piden entrar. Lo pinta
+         portada-tienda.js; sin el, la seccion dice que esta cargando. -->
+    <section
+      class="vitrina-publica"
+      aria-labelledby="titulo-vitrina-publica"
+      data-zona="vitrina-publica"
+    >
+      <div class="vitrina-publica__cabecera">
+        <h2 id="titulo-vitrina-publica" class="vitrina-publica__titulo">A la venta en el Nexo</h2>
+        <p class="vitrina-publica__lema">
+          Héroes, armas y objetos que se pueden comprar hoy. Abre cualquiera para ver su detalle y
+          lo que opina la comunidad; para comprarlo, calificarlo o comentarlo, entra con tu cuenta.
+        </p>
+      </div>
+      <div class="vitrina-publica__rejilla" data-zona="productos-publicos"></div>
+      <p class="vitrina-publica__pie">
+        <button type="button" class="boton boton--secundario" data-accion="ver-tienda-completa">
+          Entra para ver la tienda completa
+        </button>
+        <a href="./registro.html">¿Aún no tienes cuenta? Crea una</a>
+      </p>
+    </section>
+
     <script type="module" src="./login.js"></script>
+    <script type="module" src="./portada-tienda.js"></script>
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
       import { mejorarContrasena } from '../comun/ui/campo.js';

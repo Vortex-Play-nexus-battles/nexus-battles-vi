@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.codigos.CodigosDeCorreo;
+import com.nexusbattles.ms_identidad.auth.codigos.TipoCodigo;
+import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
@@ -18,22 +21,24 @@ public class AuthAdminServiceImpl implements AuthAdminService {
     private final UsuarioRepository usuarioRepository;
     private final ApodoBlacklistValidator apodoBlacklistValidator;
     private final RolService rolService;
-    private final TokenCredencialService tokenCredencialService;
+    private final CodigosDeCorreo codigos;
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
-    // Corregido: "ACTIVO" (no "ACTIVA") — coincide con el valor real que usa
-    // Usuario.estado por defecto en el auto-registro (RegistroService).
-    // Antes había una inconsistencia de ortografía entre los 2 flujos.
-    private static final List<String> ESTADOS_VALIDOS = List.of("ACTIVO", "SUSPENDIDA", "BANEADA");
+    // B2 — los estados de sancion con el nombre del contrato
+    // (ms-identidad-admin.yaml): SUSPENDIDO y BANEADO, ya no en femenino.
+    // Solo los usa la via local (cuentas sin uid, que moderacion-sanciones no
+    // conoce); las demas proyectan la sancion desde moderacion.
+    private static final List<String> ESTADOS_VALIDOS =
+            List.of(EstadoCuenta.ACTIVO, EstadoCuenta.SUSPENDIDO, EstadoCuenta.BANEADO);
 
     public AuthAdminServiceImpl(UsuarioRepository usuarioRepository,
                                 ApodoBlacklistValidator apodoBlacklistValidator,
                                 RolService rolService,
-                                TokenCredencialService tokenCredencialService) {
+                                CodigosDeCorreo codigos) {
         this.usuarioRepository = usuarioRepository;
         this.apodoBlacklistValidator = apodoBlacklistValidator;
         this.rolService = rolService;
-        this.tokenCredencialService = tokenCredencialService;
+        this.codigos = codigos;
     }
 
     // ---------- Para Edwin (HU-RBAC-003) ----------
@@ -80,7 +85,7 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         Usuario nuevoUsuario = new Usuario();
         nuevoUsuario.setApodo(apodo);
         nuevoUsuario.setEmail(email);
-        nuevoUsuario.setEstado("INACTIVO");
+        nuevoUsuario.setEstado(EstadoCuenta.INACTIVO);
         nuevoUsuario.setRol(rolService.obtenerRolPorNombre(rol.name()));
 
         // Password de relleno: nadie la conoce ni la necesita conocer. Es
@@ -92,8 +97,10 @@ public class AuthAdminServiceImpl implements AuthAdminService {
 
         // Corregido (hallazgo de Sanabria, punto 1): antes esta contraseña
         // se perdía sin ninguna forma de que el usuario accediera a su
-        // cuenta. Ahora se genera un token de activación de un solo uso.
-        tokenCredencialService.generarYRegistrarToken(guardado, "ACTIVACION");
+        // cuenta. Ahora se genera un codigo de activación de un solo uso.
+        // B1: guardado como resumen BCrypt; el correo (proposito ACTIVACION)
+        // sale al confirmarse la transaccion del alta.
+        codigos.emitir(guardado, TipoCodigo.ACTIVACION);
 
         return guardado;
     }
@@ -109,10 +116,15 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         Usuario usuario = buscarOFallar(usuarioId);
         usuario.setEstado(nuevoEstado);
 
-        if ("SUSPENDIDA".equals(nuevoEstado)) {
+        if (EstadoCuenta.SUSPENDIDO.equals(nuevoEstado)) {
             usuario.setSuspendidoHasta(suspendidoHasta);
         } else {
             usuario.setSuspendidoHasta(null);
+        }
+        // B2: suspender o banear cierra las sesiones abiertas (antes el token
+        // seguia valido hasta caducar, 24 h, aunque el login ya se negara).
+        if (!EstadoCuenta.ACTIVO.equals(nuevoEstado)) {
+            usuario.setVersionToken(usuario.getVersionToken() + 1);
         }
 
         usuarioRepository.save(usuario);
@@ -123,13 +135,16 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         Usuario usuario = buscarOFallar(usuarioId);
 
         // Mismo motivo que en crearCuentaConRol: password de relleno,
-        // inservible, hasta que se canjee el token.
+        // inservible, hasta que se canjee el codigo. Y como la contraseña
+        // anterior deja de valer, tambien las sesiones abiertas con ella (B1).
         usuario.setPassword(passwordEncoder.encode(generarValorAleatorio()));
+        usuario.setVersionToken(usuario.getVersionToken() + 1);
         usuarioRepository.save(usuario);
 
         // Corregido (hallazgo de Sanabria, punto 1): antes esta contraseña
-        // también se perdía. Ahora se genera un token de restablecimiento.
-        tokenCredencialService.generarYRegistrarToken(usuario, "RESTABLECIMIENTO");
+        // también se perdía. B1: la misma emision que «olvide mi contraseña»
+        // (resumen BCrypt, anula los anteriores, correo tras el commit).
+        codigos.emitir(usuario, TipoCodigo.RESTABLECIMIENTO);
     }
 
     @Override

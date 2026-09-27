@@ -76,6 +76,19 @@ estable y esta regla seguirá valiendo sin tocar código.
 - Mientras `JWT_CLAVE_PRIVADA` no esté definida en el host, reiniciar
   `ms-identidad` obliga a iniciar sesión de nuevo. Aceptable en desarrollo y
   avisado por bitácora; en cuanto haya más de una instancia, deja de serlo.
+- **Actualización R18.5 (24-sep-2026).** En dev resultó no ser aceptable, y
+  no por las sesiones: los demás servicios guardan su credencial de servicio
+  hasta 15 min, así que tras cada despliegue de `ms-identidad`
+  `salas-partidas` seguía presentando a inventario un token firmado con la
+  clave anterior, inventario respondía 401 y crear una sala daba 503 hasta que
+  caducaba (smoke de dev rojo tres veces el mismo día). Desde R18.5
+  `desplegar.sh` genera la clave **una vez** en el host
+  (`/opt/nexus/secretos-firma.env`, 600), la reutiliza en cada despliegue y
+  en `revertir.sh`, y la exporta solo para la interpolación de
+  `docker-compose.cuentas.yml`: **nunca al `.env`**, que cargan los ocho
+  servicios de plataforma y con el que cualquiera de ellos podría fabricar
+  tokens. Un secret de GitHub `JWT_CLAVE_PRIVADA`, si existe, manda. Prueba:
+  `scripts/cd/pruebas/clave-de-firma.sh`.
 
 ## Pendiente, no bloqueante
 

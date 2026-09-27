@@ -39,6 +39,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -49,21 +51,13 @@ const IMAGEN = '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRECIO_EN_DINERO_REAL = 45000;
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -242,6 +236,15 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     );
     await page.goto(`${BORDE}${VISTA}`);
 
+    // UXC-4 — la tienda pagina de dieciséis en dieciséis y ya se puede buscar:
+    // en un banco que se reutiliza, los productos de esta corrida pueden no
+    // estar en la primera página. Se buscan por su sufijo, que es irrepetible
+    // y comparten los dos, como lo haría una persona.
+    await expect(page.locator('#productos-grid .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.locator('#busqueda-tienda').fill(`E2E ${sufijo}`);
+
     const tarjeta = page.locator('.product-card', { hasText: enDineroReal.nombre });
     await expect(tarjeta).toBeVisible({ timeout: 20_000 });
     await expect(tarjeta.locator('.price')).toHaveText(/45\.000 COP/);
@@ -274,5 +277,84 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     await expect(page.locator('#cart-total')).toHaveText(/45\.000 COP/);
     // Salió bien: ningún aviso de fallo en el carrito.
     await expect(page.locator('#aviso-carrito')).toBeHidden();
+  });
+  test('el detalle del producto trae su calificación y sus opiniones, del servicio real (UXC-3)', async ({
+    page,
+  }) => {
+    // Una opinión con estrellas publicada por la API, como la dejaría otra
+    // jugadora desde su propia ficha.
+    const opinion = await api.post(`/api/v1/products/${idEnDineroReal}/comments`, {
+      headers: conToken(compradora.token),
+      data: { texto: `Filo excelente, la recomiendo ${sufijo}`, estrellas: 4 },
+    });
+    expect(opinion.status(), await opinion.text()).toBe(201);
+
+    const lectora = await sesionDe(api, `tienda_lee_${sufijo}`);
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'JUGADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [lectora.token, lectora.apodo, lectora.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}`);
+    await page.locator('#busqueda-tienda').fill(`E2E ${sufijo}`);
+    await page.locator(`[data-ver-producto="${idEnDineroReal}"]`).click();
+
+    const ficha = page.locator('[role="dialog"].ficha');
+    await expect(ficha.locator('.ficha__nombre')).toHaveText(enDineroReal.nombre);
+    // El promedio lo calcula el servicio; la ficha lo pinta bajo el tipo.
+    await expect(ficha.locator('.ficha__valoracion')).toContainText('1 valoración', {
+      timeout: 20_000,
+    });
+    const ajena = ficha.locator('.hilo-comentarios .comentario', {
+      hasText: `Filo excelente, la recomiendo ${sufijo}`,
+    });
+    await expect(ajena).toBeVisible();
+    await expect(ajena.locator('[data-accion="reportar-comentario"]')).toBeVisible();
+    await expect(ficha.locator('.compra-producto')).toContainText('45.000 COP');
+
+    // Y se opina desde el mismo detalle: entra en el hilo, marcada como propia.
+    await ficha.locator('.redactor-comentario textarea').fill(`Llegó rápido ${sufijo}`);
+    const publicada = page.waitForResponse(
+      (r) => r.url().includes('/comments') && r.request().method() === 'POST',
+    );
+    await ficha.locator('[data-accion="publicar-opinion"]').click();
+    expect((await publicada).status()).toBe(201);
+    const propia = ficha.locator('.hilo-comentarios .comentario', {
+      hasText: `Llegó rápido ${sufijo}`,
+    });
+    await expect(propia).toBeVisible({ timeout: 20_000 });
+    await expect(propia.locator('.comentario__propio')).toHaveText('Tú');
+  });
+
+  test('la portada pública enseña la tienda, su detalle y lleva a entrar para comprar (UXC-4)', async ({
+    browser,
+  }) => {
+    // Sin sesión: la vitrina y las opiniones son públicas.
+    const contexto = await browser.newContext();
+    const page = await contexto.newPage();
+    try {
+      await page.goto(`${BORDE}/login`);
+      const tarjetas = page.locator('.vitrina-publica .product-card');
+      await expect(tarjetas.first()).toBeVisible({ timeout: 20_000 });
+      // Sin carrito que llenar: la portada no ofrece «Añadir».
+      await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+
+      await tarjetas.first().locator('[data-ver-producto]').click();
+      const ficha = page.locator('[role="dialog"].ficha');
+      await expect(ficha.locator('.hilo-comentarios')).toBeVisible({ timeout: 20_000 });
+      await expect(ficha.locator('.redactor-comentario')).toHaveCount(0);
+      await expect(ficha.locator('[data-accion="entrar-para-opinar"]')).toBeVisible();
+
+      await ficha.locator('[data-accion="entrar-para-comprar"]').click();
+      await expect(page.locator('#email')).toBeFocused();
+      // La vuelta queda escrita: al entrar, la tienda.
+      expect(new URL(page.url()).searchParams.get('volver')).toMatch(/tienda\.html$/);
+    } finally {
+      await contexto.close();
+    }
   });
 });

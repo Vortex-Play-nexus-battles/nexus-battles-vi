@@ -44,12 +44,14 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
   );
 
   await prepararPagina(page, { apodo: 'jugador-A' });
-  await page.goto('/contenido/inventario/inventario.html?jugador=jugador-A');
+  // UXC-1 — los objetos viven en la pestaña «Objetos»; el héroe, en «Héroes».
+  await page.goto('/contenido/inventario/inventario.html?jugador=jugador-A#objetos');
 
   const tarjeta = page.locator('[data-elemento-id="arma-1"]');
   await expect(tarjeta.getByText('No disponible')).toBeVisible();
   await expect(tarjeta.getByRole('button', { name: 'Editar Espada de Bruma' })).toBeDisabled();
 
-  await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+  await page.locator('#pestana-heroes').click();
+  await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
   await expect(page.getByRole('button', { name: 'No disponible' })).toBeDisabled();
 });

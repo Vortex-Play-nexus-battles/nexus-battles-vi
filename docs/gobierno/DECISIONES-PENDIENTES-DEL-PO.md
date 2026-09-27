@@ -76,6 +76,27 @@ Estas dos no las puede decidir el equipo sin inventar producto:
 |---|---|---|---|
 | **D-27** | **Tope de reportes de comentarios por usuario y día (HU-COM-006).** Ninguna ficha da la cifra. | **20 reportes/día**, valor elegido por el equipo y hasta hoy sin registrar en ninguna parte — que es justo lo que el riesgo #6 del Charter prohíbe. Queda anotado para que sea revisable en vez de invisible. | `comentarios.reportes.maximo-por-usuario-por-dia` en `ServicioDeModeracion` |
 
+### R17 — alta del jugador (24 de septiembre de 2026)
+
+Regla de producto fijada por el responsable del proyecto en R17: **todo
+jugador nuevo empieza con créditos y con un héroe equipado**, para poder
+jugar su primera partida sin que nadie le prepare la cuenta a mano. El *qué*
+está decidido; el *cuánto* y el *cuál* no, y no los decide el equipo:
+
+| # | Qué falta decidir | Qué hace hoy el sistema | Dónde se cambia |
+|---|---|---|---|
+| **D-28** · PO | **Cuántos créditos iniciales.** PEN-04 pide saldo inicial y no da cifra; ningún otro documento la da. | El parámetro `jugador.creditos-iniciales` nace **sin valor** (pendiente del PO). Mientras siga vacío, ms-identidad aplica el respaldo **PROVISIONAL de DEV** `JUGADOR_CREDITOS_INICIALES` = **500** (la misma cifra que el banco E2E sembraba a mano desde R0), y el alta anota `fuente=RESPALDO_DEV` en su paso y en la auditoría. Se acredita en ms-finanzas con concepto `bono-registro`, clave `bono-registro-v1-{uid}`: aparece en el historial del jugador. | Panel **Parámetros** (admin): al fijar el valor manda el parámetro, sin desplegar. Las cuentas ya creadas no se recalculan. |
+| **D-29** · PO | **Qué kit inicial.** Qué héroe y qué equipo recibe un jugador nuevo. HU-SAL-003 exige héroe **con equipo** para entrar a una partida, así que el mínimo jugable es un héroe y un arma. | `jugador.kit-inicial` nace **sin valor**. Respaldo **PROVISIONAL de DEV** `JUGADOR_KIT_INICIAL`: en AWS, *Guerrero Tanque* (héroe de combate; los de soporte no pueden combatir uno contra uno) + *Espada de una mano*, del catálogo real; en el banco E2E, `p-heroe-e2e,p-arma-e2e`. Tipo, nombre y parte los dice el catálogo; el kit solo lista ids. **No se regalan ítems** fuera del mínimo jugable. | Panel **Parámetros**: ids de producto separados por comas (un héroe y al menos un arma, armadura o ítem). |
+| **D-30** · PO | **¿La cuenta nace activa o espera la confirmación por correo?** HU-COR-002 (#49) describe un correo de confirmación con código de vigencia, pero RF-AUT-001 y la demo tratan la cuenta como activa al registrarse, y la HU está marcada *criterio-pendiente*. Condicionar el acceso a la confirmación cambia el primer minuto de todo jugador. | **Sin cambios en R17**: la cuenta nace `ACTIVO` y el correo de bienvenida sigue siendo *fail-open*. No se implementó la puerta de confirmación: sería decidir producto. | `RegistroService` (estado inicial) y `LoginService` (estado `INACTIVO` ya se rechaza). |
+| **D-31** · equipo | **Cierre de sesión con tokens sin estado.** | `POST /auth/logout` audita el cierre (`CIERRE_SESION`) y la interfaz olvida el token en todas las pestañas; el JWT sigue siendo válido hasta que caduca (24 h, `app.jwt.horas-expiracion`) en los servicios que no consultan la versión de token. Revocar en todos haría falta tokens de vida corta con renovación: más piezas que un MVP de un solo host no necesita hoy. **Convención técnica, revisable**; no es decisión de producto. | `app.jwt.horas-expiracion`; `AuthController.cerrarSesion` |
+
+Lo que el alta **no** hace, a propósito: no crea misiones (no hay servicio de
+misiones ni HU implementable), no inventa nivel ni experiencia (no hay modelo de
+progresión), no escribe en la base de datos de otro servicio (todo por API con
+la credencial de servicio de ADR-005) y no depende de SQL manual: si un
+servicio está caído, el alta queda `ERROR_REINTENTABLE` y se completa sola al
+volver, al iniciar sesión o con el botón «Reintentar».
+
 ---
 
 Cuando el PO decida una de las dos que quedan, se aplica el cambio en el sitio

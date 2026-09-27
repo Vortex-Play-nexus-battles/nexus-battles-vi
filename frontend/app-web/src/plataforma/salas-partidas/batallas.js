@@ -131,29 +131,49 @@ export function textoDePaginacion(pagina) {
  * @param {Document} doc
  * @returns {HTMLButtonElement}
  */
+/** Nombre legible de la modalidad (`Modalidad` del contrato, RF-JUE-004). */
+const NOMBRE_DE_MODALIDAD = {
+  UNO_CONTRA_UNO: '1 contra 1',
+  CONTRA_IA: 'Contra la IA',
+  HASTA_SEIS: 'Hasta seis',
+};
+
 function tarjetaDeSala(sala, doc) {
   const pulsable = sala.estado !== 'LLENA';
 
   const tarjeta = doc.createElement('button');
   tarjeta.type = 'button';
   tarjeta.className = pulsable
-    ? 'tarjeta tarjeta--pulsable pila pila--compacta'
-    : 'tarjeta tarjeta--bloqueada pila pila--compacta';
+    ? 'tarjeta tarjeta--partida tarjeta--pulsable pila pila--compacta'
+    : 'tarjeta tarjeta--partida tarjeta--bloqueada pila pila--compacta';
   tarjeta.dataset.sala = sala.id;
   tarjeta.dataset.estado = sala.estado;
+  tarjeta.dataset.modalidad = sala.modalidad ?? '';
   if (!pulsable) {
     tarjeta.disabled = true;
   }
 
+  // UX-GAME-4 — la tarjeta de sala sigue la gramatica de tarjeta del kit:
+  // cabecera con titulo (la modalidad) y distintivo de estado, y debajo la
+  // linea con jugadores, creditos y maquina. Antes era el distintivo
+  // estirado a lo ancho y una linea de texto.
+  const cabecera = doc.createElement('span');
+  cabecera.className = 'tarjeta__cabecera';
+
+  const titulo = doc.createElement('span');
+  titulo.className = 'tarjeta__titulo';
+  titulo.textContent = NOMBRE_DE_MODALIDAD[sala.modalidad] ?? 'Sala de batalla';
+
   const insignia = doc.createElement('span');
   insignia.className = `distintivo distintivo--${CLASE_DE_ESTADO[sala.estado] ?? 'abierta'}`;
   insignia.textContent = ETIQUETA_DE_ESTADO[sala.estado] ?? sala.estado;
+  cabecera.append(titulo, insignia);
 
   const meta = doc.createElement('span');
   meta.className = 'tarjeta__meta';
   meta.textContent = metaDeLaSala(sala);
 
-  tarjeta.append(insignia, meta);
+  tarjeta.append(cabecera, meta);
   return tarjeta;
 }
 

@@ -9,7 +9,7 @@
 import { test, expect } from '@playwright/test';
 import { prepararPagina } from './entorno-de-prueba.js';
 
-const PAGINA = '/contenido/inventario/inventario.html?jugador=jugador-de-prueba';
+const PAGINA = '/contenido/inventario/inventario.html?jugador=jugador-de-prueba#objetos';
 
 const PRODUCTO = {
   id: 'producto-0',
@@ -77,7 +77,7 @@ test.describe('Ficha de detalle del producto', () => {
       'Forjada en la niebla de los pantanos del norte.',
     );
     await expect(page.locator('.ficha__imagen')).toHaveAttribute('alt', 'Hacha de Vorn');
-    await expect(page.locator('.ficha__etiqueta')).toHaveText(['Poder de ataque', 'Tasa de caida']);
+    await expect(page.locator('.ficha__etiqueta')).toHaveText(['Poder de ataque', 'Tasa de caída']);
   });
 
   test('La ficha se superpone a la vitrina y no la empuja hacia abajo', async ({ page }) => {

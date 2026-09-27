@@ -9,7 +9,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 
@@ -53,7 +55,56 @@ class ListarProductosServicioTest {
                 repositorio = mock(ProductoRepository.class);
                 servicio = new ListarProductosServicio(
                         repositorio,
-                        Mappers.getMapper(ProductoMapper.class));
+                        new ProyeccionDeProductos(
+                                Mappers.getMapper(ProductoMapper.class),
+                                Clock.fixed(Instant.parse("2026-09-25T12:00:00Z"), ZoneOffset.UTC)));
+        }
+
+        // --- B4: que ve cada quien (contrato 1.4.0) ---
+
+        @Test
+        @DisplayName("sin token, pedir SUSPENDIDO devuelve una pagina vacia y no consulta la base")
+        void elPublicoNoListaSuspendidos() {
+                PaginaDeProductos pagina = servicio.listar(0, 20, null, EstadoProducto.SUSPENDIDO, Visibilidad.PUBLICA);
+
+                assertTrue(pagina.content().isEmpty());
+                assertEquals(0L, pagina.totalElements());
+                assertEquals(0, pagina.page());
+                assertEquals(20, pagina.size());
+                verify(repositorio, never()).findByEstadoIn(any(), any());
+        }
+
+        @Test
+        @DisplayName("un jugador tampoco lista los suspendidos: eso es de administracion")
+        void elJugadorNoListaSuspendidos() {
+                PaginaDeProductos pagina = servicio.listar(0, 20, TipoProducto.ARMA, EstadoProducto.SUSPENDIDO,
+                        Visibilidad.AUTENTICADA);
+
+                assertTrue(pagina.content().isEmpty());
+                verify(repositorio, never()).findByTipoAndEstadoIn(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("la proyeccion publica deja fuera version, tasaDeCaida y las marcas de la semilla")
+        void laProyeccionPublicaQuitaLoInterno() {
+                when(repositorio.findByEstadoIn(any(), any()))
+                        .thenReturn(new PageImpl<>(
+                                List.of(producto("p-1", TipoProducto.ARMA, EstadoProducto.ACTIVO)),
+                                PRIMERA_PAGINA,
+                                1));
+
+                ProductoCreado publico = servicio.listar(0, 20, null, null, Visibilidad.PUBLICA).content().get(0);
+                ProductoCreado completo = servicio.listar(0, 20, null, null, Visibilidad.PRIVILEGIADA).content().get(0);
+
+                assertEquals("p-1", publico.id());
+                assertEquals(null, publico.version());
+                assertEquals(null, publico.tasaDeCaida());
+                assertEquals(1, completo.version());
+                assertEquals(new BigDecimal("12.5"), completo.tasaDeCaida());
+                // Lo que la tienda necesita sigue ahi.
+                assertEquals(100, publico.tiraje());
+                assertEquals(500, publico.precioCreditos());
+                assertEquals(40, publico.poderDeAtaque());
         }
 
         @Test

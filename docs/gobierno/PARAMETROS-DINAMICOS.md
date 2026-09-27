@@ -10,16 +10,16 @@ que ningún código lee.
 
 | Grupo | Claves |
 |---|---|
-| A · PRODUCTO — consumida por API | **5** |
+| A · PRODUCTO — consumida por API | **7** |
 | B · PRODUCTO — sin consumidor todavía | **3** |
 | C · TÉCNICA — variable de entorno, y está bien así | **2** |
 | D · INALTERABLE DEL CHARTER — quemada a propósito | **8** |
 | E · DE OTRO EQUIPO | **4** |
-| **Total** | **22** |
+| **Total** | **24** |
 
 ---
 
-## A · PRODUCTO — consumida por API (5)
+## A · PRODUCTO — consumida por API (7)
 
 El servicio pregunta al catálogo por HTTP en cada uso, con caché corta y el valor de su variable
 de entorno como **respaldo**. Cambiar el valor desde el panel de Parámetros cambia el
@@ -32,6 +32,8 @@ comportamiento sin reiniciar nada.
 | `sanciones.apelacion.plazo-dias` | `moderacion-sanciones` · `sanciones/LimitesDesdeParametros.java` | `SANCIONES_APELACION_PLAZO_DIAS` (30) | HU-USR-007 |
 | `salas.apuestas.si-gana-la-maquina` | `salas-partidas` · `aplicacion/LiquidarApuesta.java` | `APUESTAS_SI_GANA_LA_MAQUINA` (`LIBERAR`) | D-02 / HU-JUE-014 |
 | `chat.historial.tamano` | `salas-partidas` · `chat/canal/ChatController.java` | `CHAT_HISTORIAL_TAMANO` (50) | D-16 / HU-JUE-015 |
+| `jugador.creditos-iniciales` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_CREDITOS_INICIALES` — **provisional de DEV** (500 en AWS y en el banco E2E); sin él, el paso queda pendiente y lo dice | D-28 / PEN-04 |
+| `jugador.kit-inicial` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_KIT_INICIAL` — **provisional de DEV** (un héroe de combate y un arma del catálogo real en AWS; `p-heroe-e2e,p-arma-e2e` en el banco) | D-29 / HU-SAL-003 |
 
 Las tres de sanciones se consumen desde el Sprint 3 (#580). Las dos de `salas-partidas` se
 añadieron en R12: hasta entonces estaban en el catálogo **y** en una variable de entorno, con el
