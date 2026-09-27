@@ -688,6 +688,24 @@ describe('en vivo', () => {
     expect(soloDe(eventos, 'leido')).toEqual([]);
   });
 
+  test('una fecha que llega como número (segundos desde 1970) se entiende igual, en ISO-8601', async () => {
+    const { fuente, broker } = adaptador();
+    const { eventos } = await escuchando(fuente);
+
+    broker.actual.entregar({
+      tipo: 'MENSAJE',
+      ...mensaje('m1', BRUMA, YO, 'con segundos', 1790000000.5),
+    });
+    broker.actual.entregar({
+      tipo: 'MENSAJE',
+      ...mensaje('m2', BRUMA, YO, 'sin fecha que valga', 'ayer'),
+    });
+
+    expect(soloDe(eventos, 'mensaje').map((e) => e.mensaje.enviadoEn)).toEqual([
+      new Date(1790000000500).toISOString(),
+    ]);
+  });
+
   test('tras suscribirse se pone al día: lo que llegó entre la primera bandeja y la cola no se pierde', async () => {
     const viejo = mensaje('m1', BRUMA, YO, 'viejo', '2026-09-22T15:00:00Z');
     const nuevo = mensaje('m2', BRUMA, YO, 'nuevo', '2026-09-22T15:01:00Z');

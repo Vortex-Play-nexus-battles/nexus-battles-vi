@@ -362,6 +362,27 @@ function uidDe(valor) {
 }
 
 /**
+ * La `fecha` de un mensaje como ISO-8601, o null. El contrato la da en
+ * texto (`date-time`); si un conversor de mensajes la mandara como número
+ * (segundos, o milisegundos, desde 1970), se entiende igual en vez de perder
+ * el mensaje.
+ *
+ * @param {unknown} valor
+ * @returns {{fecha: string, momento: number}|null}
+ */
+function fechaDe(valor) {
+  if (typeof valor === 'string') {
+    const momento = Date.parse(valor);
+    return Number.isFinite(momento) ? { fecha: valor, momento } : null;
+  }
+  if (typeof valor === 'number' && Number.isFinite(valor)) {
+    const momento = Math.round(valor < 1e11 ? valor * 1000 : valor);
+    return { fecha: new Date(momento).toISOString(), momento };
+  }
+  return null;
+}
+
+/**
  * Un mensaje del servicio (`MensajeDirecto` por REST, `MensajeEntregado` por
  * la cola) en una forma interna comparable, o null si no trae lo que el
  * contrato exige: un cuerpo raro no rompe la vista, se descarta.
@@ -374,16 +395,16 @@ function leerMensaje(crudo) {
   }
   const remitente = uidDe(crudo.remitente);
   const destinatario = uidDe(crudo.destinatario);
+  const cuando = fechaDe(crudo.fecha);
   if (
     typeof crudo.id !== 'string' ||
     !remitente ||
     !destinatario ||
     typeof crudo.texto !== 'string' ||
-    typeof crudo.fecha !== 'string'
+    !cuando
   ) {
     return null;
   }
-  const momento = Date.parse(crudo.fecha);
   return {
     id: crudo.id,
     remitente,
@@ -393,8 +414,8 @@ function leerMensaje(crudo) {
         ? crudo.apodoRemitente
         : null,
     texto: crudo.texto,
-    fecha: crudo.fecha,
-    momento: Number.isFinite(momento) ? momento : 0,
+    fecha: cuando.fecha,
+    momento: cuando.momento,
     idCliente: typeof crudo.idCliente === 'string' ? crudo.idCliente : null,
   };
 }
