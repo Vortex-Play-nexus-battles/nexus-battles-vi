@@ -1208,6 +1208,61 @@ function abrirConversacion(apodo = 'Bruma') {
   };
 }
 
+/*
+ * B6 — la fuente REAL de mensajes privados (`fuente-mensajes.js`, el
+ * adaptador del servicio), sin sustituir: el banco le contesta con cuerpos
+ * con la forma de `salas-partidas.yaml` 1.6.1 (`ResumenDeConversacion`,
+ * `MensajeDirecto`) y el canal simulado le entrega por la cola de usuario un
+ * `MensajeEntregado` de `mensajes-directos.yaml` 1.0.1. DATOS DE LABORATORIO.
+ */
+const TALA_EN_EL_CHAT = { id: 'cccccccc-6666-4666-8666-000000000005', apodo: 'Tala' };
+
+function mensajeDirecto(id, de, a, texto, minutosAtras) {
+  return {
+    id,
+    conversacion: `dm:${[de.id, a.id].sort().join(':')}`,
+    remitente: de.id,
+    apodoRemitente: de.apodo,
+    destinatario: a.id,
+    texto,
+    fecha: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
+    leido: true,
+    idCliente: null,
+  };
+}
+
+function rutasDeMensajesDelServicio() {
+  const { yo, bruma, kael } = EN_EL_CHAT;
+  const conBruma = [
+    mensajeDirecto('dm-1', yo, bruma, 'Claro. Llevo el Guerrero Tanque.', 60),
+    mensajeDirecto('dm-2', bruma, yo, 'Si ganas, la revancha la elijo yo.', 3),
+  ];
+  const json = (cuerpo) => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(cuerpo),
+  });
+  return [
+    [
+      '**/api/v1/mensajes-directos/conversaciones',
+      json([
+        { uidOtro: bruma.id, apodoOtro: bruma.apodo, ultimoMensaje: conBruma[1], noLeidos: 1 },
+        {
+          uidOtro: kael.id,
+          apodoOtro: kael.apodo,
+          ultimoMensaje: mensajeDirecto('dm-3', yo, kael, 'Te paso el código de la sala.', 300),
+          noLeidos: 0,
+        },
+      ]),
+    ],
+    [
+      '**/api/v1/mensajes-directos/conversaciones/*/mensajes*',
+      (ruta) => json(ruta.request().url().includes(bruma.id) ? conBruma : []),
+    ],
+    ['**/api/v1/mensajes-directos/conversaciones/*/leido', { status: 204 }],
+  ];
+}
+
 
 /* ---------------------------------------------------------------------------
    UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
@@ -2350,7 +2405,8 @@ export const ESCENARIOS = [
     rutas: [MENSAJES_DE_LABORATORIO],
     canal: canalDelChatGeneral(),
     interaccion: async (pagina) => {
-      await pagina.locator('#buscar-jugador').fill('ra');
+      // Tres letras: el mínimo de la búsqueda por apodo (B6, contrato de perfiles).
+      await pagina.locator('#buscar-jugador').fill('bra');
       await pagina.locator('.buscador-jugador__resultado').first().waitFor({ timeout: 10_000 });
     },
     exige: ['.buscador-jugador__resultado'],
@@ -2408,6 +2464,31 @@ export const ESCENARIOS = [
     canal: canalDelChatGeneral(),
     interaccion: abrirConversacion('Nyra'),
     exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
+  },
+  {
+    // B6 — la pestaña con su fuente de verdad: la bandeja y el hilo del
+    // contrato, lo tuyo «Enviado» (nunca un «Leído» que el servicio no dice)
+    // y quien escribe por primera vez entrando en la lista en vivo.
+    id: 'chat-privados-servicio',
+    titulo:
+      'mensajes privados con la fuente del servicio: bandeja, hilo y quien escribe por primera vez',
+    ruta: 'plataforma/salas-partidas/chat.html#privados',
+    sesion: sesionDelChat,
+    rutas: rutasDeMensajesDelServicio(),
+    canal: canalDelChatGeneral({
+      '/usuario/cola/mensajes-directos': [
+        {
+          tipo: 'MENSAJE',
+          ...mensajeDirecto('dm-9', TALA_EN_EL_CHAT, EN_EL_CHAT.yo, '¿Te apuntas al torneo?', 0),
+        },
+      ],
+    }),
+    interaccion: abrirConversacion('Bruma'),
+    exige: [
+      `.conversaciones__item[data-conversacion="${TALA_EN_EL_CHAT.id}"] .conversaciones__no-leidos`,
+      '.mensajes-privados__hilo li.mensaje--otro',
+      '.mensajes-privados__hilo li.mensaje--yo .mensaje__entrega[data-entrega="ENVIADO"]',
+    ],
   },
   {
     // UXC-7 — el catálogo en la consola: cifras, lista y la acción de cada fila.
