@@ -48,21 +48,72 @@ class ModificarProductoServicioTest {
                 Producto existente = productoArma();
                 when(repositorio.findById(existente.id())).thenReturn(Optional.of(existente));
                 when(repositorio.save(any(Producto.class)))
-                        .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+                        .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
 
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
                         repositorio, respaldoRepositorio, mapper, validator);
 
                 SolicitudModificarProducto cambios = solicitudConNombre("Espada solar+1");
 
-                Producto resultado = servicio.modificar(existente.id(), cambios);
+                Producto resultado = servicio.modificar(existente.id(), cambios, AUTOR);
 
                 assertEquals("Espada solar+1", resultado.nombre());
                 assertEquals(existente.id(), resultado.id());
                 assertEquals(existente.version() + 1, resultado.version());
+                // B4: quien edita queda en el producto, y eso le dice a la
+                // semilla versionada que ya no lo pone al dia.
+                assertEquals(AUTOR, resultado.modificadoPor());
 
                 verify(respaldoRepositorio).save(any(RespaldoProducto.class));
-                verify(repositorio).save(any(Producto.class));
+                // Se guarda con la version LEIDA: la sube el guardado versionado.
+                org.mockito.ArgumentCaptor<Producto> guardado =
+                        org.mockito.ArgumentCaptor.forClass(Producto.class);
+                verify(repositorio).save(guardado.capture());
+                assertEquals(existente.version(), guardado.getValue().version());
+        }
+
+        @Test
+        @DisplayName("B4: si otro escribio entre la lectura y el guardado, el conflicto sale y el respaldo se revierte")
+        void conflictoDeVersionRevierteElRespaldo() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+
+                Producto existente = productoArma();
+                when(repositorio.findById(existente.id())).thenReturn(Optional.of(existente));
+                when(repositorio.save(any(Producto.class)))
+                        .thenThrow(new org.springframework.dao.OptimisticLockingFailureException("version 1 ya no existe"));
+
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                assertThrows(
+                        org.springframework.dao.OptimisticLockingFailureException.class,
+                        () -> servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"), AUTOR));
+
+                verify(respaldoRepositorio).deleteById(org.mockito.ArgumentMatchers.anyString());
+        }
+
+        @Test
+        @DisplayName("B4: un producto anterior a @Version (version 0) se normaliza y se relee antes de editarlo")
+        void productoSinVersionSeNormalizaAntes() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+
+                Producto conVersion = productoArma();
+                Producto sinVersion = conVersion(conVersion, 0);
+                when(repositorio.findById(conVersion.id()))
+                        .thenReturn(Optional.of(sinVersion), Optional.of(conVersion));
+                when(repositorio.save(any(Producto.class)))
+                        .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
+
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                Producto resultado = servicio.modificar(
+                        conVersion.id(), solicitudConNombre("Espada solar+1"), AUTOR);
+
+                verify(repositorio).normalizarVersion(conVersion.id());
+                assertEquals(2, resultado.version());
         }
 
         @Test
@@ -79,7 +130,7 @@ class ModificarProductoServicioTest {
                 ModificarProductoServicio servicio = new ModificarProductoServicio(
                         repositorio, respaldoRepositorio, mapper, validator);
 
-                servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"));
+                servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"), AUTOR);
 
                 org.mockito.ArgumentCaptor<RespaldoProducto> captor =
                         org.mockito.ArgumentCaptor.forClass(RespaldoProducto.class);
@@ -89,6 +140,8 @@ class ModificarProductoServicioTest {
                 assertEquals(existente.id(), respaldo.productoId());
                 assertEquals(existente, respaldo.estadoAnterior());
                 assertEquals("Espada solar", respaldo.estadoAnterior().nombre());
+                // B4: el respaldo dice quien hizo el cambio.
+                assertEquals(AUTOR, respaldo.autor());
         }
 
         @Test
@@ -110,7 +163,7 @@ class ModificarProductoServicioTest {
 
                 assertThrows(
                         ModificacionProductoInvalidaException.class,
-                        () -> servicio.modificar(existente.id(), cambios));
+                        () -> servicio.modificar(existente.id(), cambios, AUTOR));
 
                 verify(respaldoRepositorio, never()).save(any(RespaldoProducto.class));
                 verify(repositorio, never()).save(any(Producto.class));
@@ -130,7 +183,7 @@ class ModificarProductoServicioTest {
 
                 assertThrows(
                         ProductoNoEncontradoException.class,
-                        () -> servicio.modificar(id, solicitudConNombre("Nuevo nombre")));
+                        () -> servicio.modificar(id, solicitudConNombre("Nuevo nombre"), AUTOR));
 
                 verify(respaldoRepositorio, never()).save(any(RespaldoProducto.class));
         }
@@ -151,7 +204,7 @@ class ModificarProductoServicioTest {
 
                 assertThrows(
                         org.springframework.dao.DataAccessResourceFailureException.class,
-                        () -> servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1")));
+                        () -> servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"), AUTOR));
 
                 verify(repositorio, never()).save(any(Producto.class));
         }
@@ -172,10 +225,28 @@ class ModificarProductoServicioTest {
 
                 assertThrows(
                         org.springframework.dao.DataAccessResourceFailureException.class,
-                        () -> servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1")));
+                        () -> servicio.modificar(existente.id(), solicitudConNombre("Espada solar+1"), AUTOR));
 
                 verify(respaldoRepositorio, times(1)).save(any(RespaldoProducto.class));
                 verify(respaldoRepositorio, times(1)).deleteById(org.mockito.ArgumentMatchers.anyString());
+        }
+
+        /** El uid del administrador que edita (claim uid del token). */
+        private static final String AUTOR = "5a0c3e1e-7b8d-4f60-9d8e-2c4b1a6f9e10";
+
+        /** Lo que hace el guardado real con @Version: devuelve el producto con la version siguiente. */
+        private static Producto guardadoVersionado(Producto producto) {
+                return conVersion(producto, producto.version() + 1);
+        }
+
+        private static Producto conVersion(Producto p, int version) {
+                return new Producto(p.id(), p.nombre(), p.imagen(), p.descripcion(), p.tipo(), p.tiraje(),
+                        p.precioCreditos(), p.precioMonedaReal(), p.premium(), p.prototipo(), p.heroe(),
+                        p.costoPoder(), p.multiplicadorNivel(), p.turnosCarga(), p.turnosRecarga(),
+                        p.efectoGeneral(), p.efectoPotenciado(), p.defensa(), p.parte(), p.efecto(),
+                        p.poderDeAtaque(), p.tasaDeCaida(), p.estado(), version, p.creadoEn(),
+                        p.modificadoEn(), p.promocion(), p.origen(), p.semillaVersion(), p.modificadoPor(),
+                        p.estadoAnteriorSuspension(), p.reservasRecientes());
         }
 
         private static SolicitudModificarProducto solicitudConNombre(String nombre) {

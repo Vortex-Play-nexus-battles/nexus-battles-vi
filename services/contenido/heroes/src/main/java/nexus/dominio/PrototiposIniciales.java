@@ -10,6 +10,15 @@ import java.util.List;
  */
 public final class PrototiposIniciales {
 
+    /**
+     * Version del contenido de esta lista — B4. Quien cambie un prototipo o una
+     * accion la sube: al arrancar, {@code CatalogoEnMongo} pone al dia los
+     * prototipos sembrados con una version menor que nadie edito. El guardian
+     * {@code tests/contratos/catalogo-oficial.py} compara la lista con el
+     * documento (Tablas 5, 6 y 7).
+     */
+    public static final int VERSION = 1;
+
     private PrototiposIniciales() {
     }
 
