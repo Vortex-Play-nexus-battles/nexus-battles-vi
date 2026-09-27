@@ -376,7 +376,7 @@ describe('armazón de consola', () => {
     expect(elemento.querySelector('[data-zona="creditos"]')).toBeNull();
   });
 
-  test('el super administrador ve las ocho herramientas', () => {
+  test('el super administrador ve todas las herramientas', () => {
     expect(etiquetas(consolaDe('SUPER_ADMINISTRADOR'))).toEqual(
       SECCIONES_CONSOLA.map((s) => s.etiqueta),
     );
@@ -386,7 +386,28 @@ describe('armazón de consola', () => {
     expect(etiquetas(consolaDe('ADMINISTRADOR'))).not.toContain('Auditoría');
 
     document.body.innerHTML = '';
-    expect(etiquetas(consolaDe('MODERADOR'))).toEqual(['Resumen', 'Sanciones', 'Lista negra']);
+    expect(etiquetas(consolaDe('MODERADOR'))).toEqual([
+      'Resumen',
+      'Comentarios',
+      'Sanciones',
+      'Lista negra',
+    ]);
+  });
+
+  test('B3: «Comentarios» lleva a la cola de comentarios reportados y se marca activa allí', () => {
+    conSesion({ rol: 'MODERADOR' });
+    const raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    const { elemento } = montarArmazonAdmin(raiz, {
+      sesion: leerSesion(sessionStorage),
+      base: BASE,
+      navegar: jest.fn(),
+      seccionActiva: 'comentarios',
+    });
+
+    const destino = elemento.querySelector('[data-seccion="comentarios"]');
+    expect(destino.href).toMatch(/plataforma\/comentarios\/moderar-comentarios\.html$/);
+    expect(destino.getAttribute('aria-current')).toBe('page');
   });
 
   test('enseña el rol, para que «esa opción no me aparece» tenga respuesta', () => {
