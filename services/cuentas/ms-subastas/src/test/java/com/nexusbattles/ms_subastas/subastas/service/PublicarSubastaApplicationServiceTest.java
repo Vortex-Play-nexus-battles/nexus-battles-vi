@@ -1,6 +1,12 @@
 package com.nexusbattles.ms_subastas.subastas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.pujas.service.ParametrosPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.dto.PublicarSubastaRequest;
+import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
+import com.nexusbattles.ms_subastas.subastas.realtime.SubastaActualizadaEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import com.nexusbattles.ms_subastas.subastas.dto.PublicarSubastaResponse;
 import com.nexusbattles.ms_subastas.subastas.model.DuracionSubasta;
 import com.nexusbattles.ms_subastas.subastas.port.*;
@@ -69,6 +75,8 @@ class PublicarSubastaApplicationServiceTest {
     private final IdentidadClient identidad = mock(IdentidadClient.class);
     private final SancionesClient sanciones = mock(SancionesClient.class);
     private final IdempotenciaPublicacionEnMemoria idempotencia = new IdempotenciaPublicacionEnMemoria();
+    private final AvisosDeSubasta avisos = mock(AvisosDeSubasta.class);
+    private final ApplicationEventPublisher eventos = mock(ApplicationEventPublisher.class);
     private PublicarSubastaApplicationService servicio;
     private final UUID jugador = UUID.randomUUID();
     private final UUID productoId = UUID.randomUUID();
@@ -76,9 +84,8 @@ class PublicarSubastaApplicationServiceTest {
 
     @BeforeEach
     void preparar() {
-        servicio = new PublicarSubastaApplicationService(subastas, inventario, catalogo, finanzas, identidad,
-                sanciones, idempotencia, new CalculadorComisionPublicacion(), reloj, "2.50");
-        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugador, false));
+        servicio = servicioConIncremento(new BigDecimal("2.50"));
+        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugador, false, "vendedor_1"));
         when(sanciones.tieneSancionActiva(jugador)).thenReturn(false);
         when(inventario.buscar("elemento-1")).thenReturn(Optional.of(new InventarioClient.ElementoInventario("elemento-1", productoId, jugador, false)));
         when(catalogo.buscar(productoId)).thenReturn(Optional.of(new CatalogoProductosClient.Producto(productoId, "Espada", null, "Rara", null, "", "", true)));
@@ -115,6 +122,12 @@ class PublicarSubastaApplicationServiceTest {
         verify(inventario).liberarReserva("elemento-1", id.getValue(), "k-3");
     }
 
+    private PublicarSubastaApplicationService servicioConIncremento(BigDecimal incremento) {
+        return new PublicarSubastaApplicationService(subastas, inventario, catalogo, finanzas, identidad,
+                sanciones, idempotencia, new CalculadorComisionPublicacion(), reloj,
+                FuenteDeReglas.fijas(new ParametrosPuja(), incremento), avisos, eventos);
+    }
+
     private PublicarSubastaRequest solicitud() {
         return new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H24, BigDecimal.TEN, null);
     }
@@ -144,7 +157,8 @@ class PublicarSubastaApplicationServiceTest {
         assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "saldo"));
         verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("saldo"));
         verify(finanzas, never()).compensarDebito(any(), any());
-        verifyNoInteractions(subastas);
+        verify(subastas, never()).saveAndFlush(any());
+        verifyNoInteractions(avisos, eventos);
     }
 
     @Test
@@ -235,13 +249,109 @@ class PublicarSubastaApplicationServiceTest {
         verify(inventario).liberarReserva(eq("elemento-1"), any(), eq("otro"));
     }
 
+    /**
+     * DECISION PO (RF-SUB-002): sin incremento en admin-parametros no se
+     * publica, y se dice por que con un codigo que el frontend reconoce.
+     */
     @Test
     void incrementoSinDefinirImpidePublicar() {
-        servicio = new PublicarSubastaApplicationService(subastas, inventario, catalogo, finanzas, identidad,
-                sanciones, idempotencia, new CalculadorComisionPublicacion(), reloj, "");
-        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE,
-                assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "x")).getMotivo());
+        servicio = servicioConIncremento(null);
+        var error = assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "x"));
+        assertEquals(PublicacionSubastaException.Motivo.DEPENDENCIA_NO_DISPONIBLE, error.getMotivo());
+        assertEquals(PublicacionSubastaException.INCREMENTO_MINIMO_NO_CONFIGURADO, error.getCodigo());
+        assertTrue(error.getMessage().contains("subastas.incremento-minimo"));
+        verifyNoInteractions(inventario, finanzas, subastas, avisos, eventos);
+        // No se hizo nada: la clave queda libre para reintentar cuando se configure.
+        servicio = servicioConIncremento(BigDecimal.ONE);
+        assertEquals("ACTIVA", servicio.publicar(solicitud(), "x").estado());
+    }
+
+    /**
+     * Un reintento de algo que ya se publico devuelve su resultado aunque
+     * despues alguien haya vaciado el incremento: la respuesta perdida de una
+     * publicacion cobrada no puede convertirse en un 503.
+     */
+    @Test
+    void laReproduccionNoDependeDeLasReglasDeHoy() {
+        var primera = servicio.publicar(solicitud(), "ya-publicada");
+
+        servicio = servicioConIncremento(null);
+        var reintento = servicio.publicar(solicitud(), "ya-publicada");
+
+        assertEquals(primera, reintento);
+        verify(finanzas, times(1)).debitarComision(any(), any(), any(), any());
+    }
+
+    @Test
+    void laSubastaGuardaElIncrementoLaComisionYElApodoYAvisa() {
+        var captura = org.mockito.ArgumentCaptor.forClass(com.nexusbattles.ms_subastas.subastas.model.Subasta.class);
+        var r = servicio.publicar(new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H48,
+                BigDecimal.TEN, null), "guardada");
+        verify(subastas).saveAndFlush(captura.capture());
+        var guardada = captura.getValue();
+        assertEquals(0, new BigDecimal("2.50").compareTo(guardada.getIncrementoMinimo()));
+        assertEquals(0, new BigDecimal("3").compareTo(guardada.getComisionCobrada()));
+        assertEquals("vendedor_1", guardada.getApodoVendedor());
+        assertEquals(r.id(), guardada.getId());
+        verify(avisos).publicada(guardada);
+        verify(eventos).publishEvent(any(SubastaActualizadaEvent.class));
+    }
+
+    // --- 7.7.10: maximo de 10 subastas activas por jugador -----------------
+
+    @Test
+    void conDiezActivasNoSePublicaNiSeCobraNadaYSeDiceElLimite() {
+        when(subastas.countByVendedorIdAndEstado(jugador, EstadoSubasta.ACTIVA)).thenReturn(10L);
+        var error = assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud(), "limite"));
+        assertEquals(PublicacionSubastaException.Motivo.REGLA_NEGOCIO, error.getMotivo());
+        assertEquals(PublicacionSubastaException.LIMITE_PUBLICACIONES_ACTIVAS, error.getCodigo());
+        verify(subastas).bloquearPublicacionesDe(anyLong());
+        verify(inventario, never()).reservar(any(), any(), any(), any());
+        verifyNoInteractions(finanzas, avisos, eventos);
+        verify(subastas, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void conNueveActivasSePublicaLaDecima() {
+        when(subastas.countByVendedorIdAndEstado(jugador, EstadoSubasta.ACTIVA)).thenReturn(9L);
+        assertEquals("ACTIVA", servicio.publicar(solicitud(), "decima").estado());
+    }
+
+    @Test
+    void elCupoSeCuentaConElCandadoDelVendedorTomado() {
+        when(subastas.countByVendedorIdAndEstado(jugador, EstadoSubasta.ACTIVA)).thenReturn(3L);
+        servicio.publicar(solicitud(), "orden");
+        var orden = inOrder(subastas, inventario);
+        orden.verify(subastas).bloquearPublicacionesDe(jugador.getMostSignificantBits() ^ jugador.getLeastSignificantBits());
+        orden.verify(subastas).countByVendedorIdAndEstado(jugador, EstadoSubasta.ACTIVA);
+        orden.verify(inventario).reservar(any(), any(), any(), any());
+    }
+
+    /** 7.7.4: el Maestro de Juego publica «sin restricciones». */
+    @Test
+    void elMaestroDeJuegoNoTieneLimiteDePublicaciones() {
+        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugador, true));
+        when(subastas.countByVendedorIdAndEstado(jugador, EstadoSubasta.ACTIVA)).thenReturn(50L);
+        assertEquals("ACTIVA", servicio.publicar(solicitud(), "mdj-sin-limite").estado());
+        verify(subastas, never()).bloquearPublicacionesDe(anyLong());
+    }
+
+    // --- 7.7.5: compra inmediata superior al precio minimo ------------------
+
+    @Test
+    void compraInmediataIgualAlPrecioMinimoSeRechaza() {
+        var solicitud = new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H24,
+                BigDecimal.TEN, BigDecimal.TEN);
+        var error = assertThrows(PublicacionSubastaException.class, () -> servicio.publicar(solicitud, "igual"));
+        assertEquals(PublicacionSubastaException.COMPRA_INMEDIATA_NO_SUPERIOR, error.getCodigo());
         verifyNoInteractions(inventario, finanzas, subastas);
+    }
+
+    @Test
+    void compraInmediataSuperiorAlPrecioMinimoSePublica() {
+        var solicitud = new PublicarSubastaRequest("elemento-1", productoId, DuracionSubasta.H24,
+                BigDecimal.TEN, new BigDecimal("10.01"));
+        assertEquals(0, new BigDecimal("10.01").compareTo(servicio.publicar(solicitud, "superior").precioCompraInmediata()));
     }
 
     @Test

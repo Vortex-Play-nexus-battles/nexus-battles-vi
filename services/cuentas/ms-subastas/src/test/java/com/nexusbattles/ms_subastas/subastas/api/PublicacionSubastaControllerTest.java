@@ -63,7 +63,8 @@ class PublicacionSubastaControllerTest {
         var respuesta = new com.nexusbattles.ms_subastas.subastas.dto.PublicarSubastaResponse(
                 id, producto, "unidad", vendedor, java.math.BigDecimal.TEN, java.math.BigDecimal.TEN,
                 new java.math.BigDecimal("20"), "ACTIVA", inicio, fin, comision,
-                "Espada", "ARMA", "RARA", "https://catalogo/espada.png", "Espada de hielo", "Congelar");
+                "Espada", "ARMA", "RARA", "https://catalogo/espada.png", "Espada de hielo", "Congelar",
+                java.math.BigDecimal.ONE);
         when(servicio.publicar(any(), eq("k"))).thenReturn(respuesta);
         autenticadoCon(vendedor.toString());
         String esperado = """
@@ -71,7 +72,7 @@ class PublicacionSubastaControllerTest {
                  "precioInicial":10,"ofertaVigente":10,"precioCompraInmediata":20,"comisionCobrado":%s,
                  "estado":"ACTIVA","fechaPublicacion":"%s","fechaFin":"%s","nombreProducto":"Espada",
                  "tipoProducto":"ARMA","rareza":"RARA","miniaturaUrl":"https://catalogo/espada.png",
-                 "descripcionCorta":"Espada de hielo","habilidades":"Congelar"}
+                 "descripcionCorta":"Espada de hielo","habilidades":"Congelar","incrementoMinimo":1}
                 """.formatted(id, producto, vendedor, comision, inicio, fin);
         mvc.perform(post("/subastas").header("Idempotency-Key", "k").contentType("application/json")
                 .content("""

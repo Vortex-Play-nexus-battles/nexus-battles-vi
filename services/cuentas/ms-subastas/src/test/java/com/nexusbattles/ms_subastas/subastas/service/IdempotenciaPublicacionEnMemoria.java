@@ -5,10 +5,14 @@ import com.nexusbattles.ms_subastas.subastas.port.IdempotenciaPublicacion;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import org.springframework.stereotype.Component;
 import static com.nexusbattles.ms_subastas.subastas.service.PublicacionSubastaException.Motivo.*;
 
-@Component
+/**
+ * Doble en memoria de {@link IdempotenciaPublicacion} para las pruebas
+ * unitarias. Hasta B8 era la implementacion de produccion: un reinicio o una
+ * segunda replica olvidaban las claves y una publicacion repetida cobraba dos
+ * veces. En produccion la sustituye {@code IdempotenciaPublicacionEnBase}.
+ */
 public class IdempotenciaPublicacionEnMemoria implements IdempotenciaPublicacion {
     private enum Estado { EN_CURSO, CONFIRMADA, INCIERTA }
     private record Entrada(UUID titular, String huella, Estado estado, Resultado resultado) { }

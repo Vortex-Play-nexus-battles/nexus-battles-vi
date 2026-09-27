@@ -96,12 +96,16 @@ class PujaConcurrenciaPostgresTest {
     @Autowired
     private CreditoClient creditoClientInyectado;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private Subasta subasta;
 
     @BeforeEach
     void sembrarSubasta() {
-        pujaRepository.deleteAll();
-        subastaRepository.deleteAll();
+        // Desde B8 cada puja encola avisos (7.7.8) que referencian la subasta:
+        // se vacia todo lo que cuelga de subastas de una vez.
+        jdbc.execute("TRUNCATE TABLE subastas CASCADE");
 
         // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
         // @GeneratedValue, porque publicar necesita el identificador ANTES de

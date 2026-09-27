@@ -149,13 +149,32 @@ class MotorPujaAutomaticaServiceTest {
         assertEquals(jugador, auto.getJugadorId());
     }
 
+    /**
+     * Con una oferta vigente de 100 de otro postor, la siguiente puja valida es
+     * 110: un limite de 105 no puja nunca.
+     */
     @Test
     void rechazaUnLimiteQueNuncaPodriaPujar() {
-        Subasta subasta = nuevaSubasta(new BigDecimal("100"), null);
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), UUID.randomUUID());
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
                 () -> motor.configurar(subasta, UUID.randomUUID(), new BigDecimal("105"), new BigDecimal("1000")));
 
+        assertEquals(PujaRechazadaException.Motivo.LIMITE_AUTOMATICO_INALCANZABLE, ex.getMotivo());
+    }
+
+    /**
+     * B8 (7.7.6): sin pujas, la primera puja valida es el precio minimo, asi
+     * que un limite igual al precio minimo si puede pujar; uno menor, no.
+     */
+    @Test
+    void sinPujasElLimiteMinimoEsElPrecioMinimo() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), null);
+
+        assertTrue(motor.configurar(subasta, UUID.randomUUID(), new BigDecimal("100"), new BigDecimal("1000"))
+                .isActiva());
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.configurar(subasta, UUID.randomUUID(), new BigDecimal("99.99"), new BigDecimal("1000")));
         assertEquals(PujaRechazadaException.Motivo.LIMITE_AUTOMATICO_INALCANZABLE, ex.getMotivo());
     }
 

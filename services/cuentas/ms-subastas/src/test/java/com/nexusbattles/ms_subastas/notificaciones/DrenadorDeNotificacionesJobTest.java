@@ -57,7 +57,7 @@ class DrenadorDeNotificacionesJobTest {
     @Test
     void entregaElAvisoYMarcaLaFilaComoEnviada() {
         NotificacionPendiente aviso = pendiente(TipoNotificacion.LIMITE_AUTOMATICO_ALCANZADO, "llegaste al limite");
-        when(repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(aviso));
+        when(repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(aviso));
 
         drenador.drenar();
 
@@ -69,7 +69,7 @@ class DrenadorDeNotificacionesJobTest {
                 "el id del outbox viaja como eventoId: es lo que evita duplicados al reintentar");
         assertEquals(aviso.getDestinatarioId(), enviado.getValue().destinatarioId());
         assertEquals("llegaste al limite", enviado.getValue().cuerpo());
-        assertEquals("Tu puja automatica se detuvo", enviado.getValue().titulo());
+        assertEquals("Tu puja automática se detuvo", enviado.getValue().titulo());
 
         assertEquals(AHORA, aviso.getEnviadaEn());
         verify(repositorio).save(aviso);
@@ -82,7 +82,7 @@ class DrenadorDeNotificacionesJobTest {
     @Test
     void elAvisoLlevaLaHoraDelHechoNoLaDeLaEntrega() {
         NotificacionPendiente aviso = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "cerrada");
-        when(repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(aviso));
+        when(repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(aviso));
 
         drenador.drenar();
 
@@ -102,7 +102,7 @@ class DrenadorDeNotificacionesJobTest {
         NotificacionPendiente primero = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "uno");
         NotificacionPendiente segundo = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "dos");
         NotificacionPendiente tercero = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "tres");
-        when(repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc())
+        when(repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc())
                 .thenReturn(List.of(primero, segundo, tercero));
         // Un unico stub que cubre las tres llamadas y decide dentro. Stubbing
         // por matcher solo para la tercera hace que Mockito, en modo estricto,
@@ -135,7 +135,7 @@ class DrenadorDeNotificacionesJobTest {
     void alPrimerFalloSeCortaElLoteEnVezDeSeguirIntentando() {
         NotificacionPendiente primero = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "uno");
         NotificacionPendiente segundo = pendiente(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "dos");
-        when(repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(primero, segundo));
+        when(repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of(primero, segundo));
         doThrow(new NotificacionesClientException("el modulo no responde"))
                 .when(notificaciones).entregar(any());
 
@@ -147,7 +147,7 @@ class DrenadorDeNotificacionesJobTest {
 
     @Test
     void sinAvisosPendientesNoLlamaAlModuloDeNotificaciones() {
-        when(repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of());
+        when(repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc()).thenReturn(List.of());
 
         drenador.drenar();
 

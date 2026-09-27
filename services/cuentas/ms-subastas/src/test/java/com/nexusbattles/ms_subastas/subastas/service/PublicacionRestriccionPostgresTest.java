@@ -1,6 +1,10 @@
 package com.nexusbattles.ms_subastas.subastas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.pujas.service.ParametrosPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.dto.PublicarSubastaRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import com.nexusbattles.ms_subastas.subastas.model.*;
 import com.nexusbattles.ms_subastas.subastas.port.*;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -67,7 +71,9 @@ class PublicacionRestriccionPostgresTest {
         when(catalogo.buscar(producto)).thenReturn(Optional.of(new CatalogoProductosClient.Producto(producto, "Espada", null, null, null, null, null, true)));
         var servicio = new PublicarSubastaApplicationService(repositorio, inventario, catalogo,
                 mock(FinanzasPublicacionClient.class), () -> new IdentidadClient.Identidad(jugador, false),
-                mock(SancionesClient.class), new IdempotenciaPublicacionEnMemoria(), new CalculadorComisionPublicacion(), Clock.systemUTC(), "1");
+                mock(SancionesClient.class), new IdempotenciaPublicacionEnMemoria(), new CalculadorComisionPublicacion(), Clock.systemUTC(),
+                FuenteDeReglas.fijas(new ParametrosPuja(), BigDecimal.ONE), mock(AvisosDeSubasta.class),
+                mock(ApplicationEventPublisher.class));
         servicio.publicar(new PublicarSubastaRequest("unidad", producto, DuracionSubasta.H24, BigDecimal.TEN, null), "k");
     }
 

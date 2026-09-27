@@ -45,16 +45,29 @@ public class PujaAutomaticaApplicationService {
 
     @Transactional
     public PujaAutomatica configurar(UUID subastaId, UUID jugadorId, BigDecimal limite) {
+        return configurar(subastaId, jugadorId, null, limite);
+    }
+
+    /**
+     * @param apodo el del token al configurarla (B8). Las pujas que emita el
+     *              motor no traen token, y es lo que dira quien pujo (7.7.9).
+     */
+    @Transactional
+    public PujaAutomatica configurar(UUID subastaId, UUID jugadorId, String apodo, BigDecimal limite) {
         Subasta subasta = subastaRepository.findById(subastaId)
                 .orElseThrow(() -> new SubastaNoEncontradaException(subastaId));
 
         BigDecimal saldoDisponible = creditoClient.saldoDisponible(jugadorId);
         PujaAutomatica validada = motorAutomatico.configurar(subasta, jugadorId, limite, saldoDisponible);
+        validada.setApodoJugador(apodo);
 
         return pujaAutomaticaRepository.findBySubastaIdAndJugadorId(subastaId, jugadorId)
                 .map(existente -> {
                     existente.setLimite(validada.getLimite());
                     existente.setActiva(true);
+                    if (apodo != null) {
+                        existente.setApodoJugador(apodo);
+                    }
                     return pujaAutomaticaRepository.save(existente);
                 })
                 .orElseGet(() -> pujaAutomaticaRepository.save(validada));
