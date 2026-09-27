@@ -117,7 +117,9 @@ class CambioDePasswordServiceTest {
         CambioDePasswordResponse respuesta = servicio.cambiar("ana", peticion(ACTUAL, NUEVA, NUEVA), "10.0.0.1");
 
         ArgumentCaptor<CorreoCambioClaveRequest> correo = ArgumentCaptor.forClass(CorreoCambioClaveRequest.class);
-        verify(correoClient).enviarCambioClave(correo.capture());
+        // B1: con Idempotency-Key; la version ya subio, asi que es unica por cambio.
+        verify(correoClient).enviarCambioClave(correo.capture(),
+                eq("cambio-clave-" + ana.getPublicId() + "-v" + ana.getVersionToken()));
         assertAll(
                 () -> assertTrue(encoder.matches(NUEVA, ana.getPassword()), "la nueva queda con bcrypt"),
                 () -> assertFalse(encoder.matches(ACTUAL, ana.getPassword()), "la anterior deja de valer"),
@@ -165,7 +167,7 @@ class CambioDePasswordServiceTest {
                 () -> assertEquals(3, ana.getVersionToken()));
         verify(intentosFallidos).registrarIntentoFallido(7L);
         verify(usuarioRepository, never()).save(any());
-        verify(correoClient, never()).enviarCambioClave(any());
+        verify(correoClient, never()).enviarCambioClave(any(), any());
     }
 
     @Test
