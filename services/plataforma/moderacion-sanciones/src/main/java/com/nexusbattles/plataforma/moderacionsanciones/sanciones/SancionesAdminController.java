@@ -64,11 +64,21 @@ public class SancionesAdminController {
         return ApelacionResponse.desde(servicio.apelar(actorDe(actor), sancionId, request.argumento()));
     }
 
+    /** 1.1.0: un administrador levanta una sancion vigente sin apelacion. */
+    @PostMapping("/{sancionId}/levantamiento")
+    public SancionResponse levantar(@AuthenticationPrincipal Jwt actor, @PathVariable UUID sancionId,
+                                    @RequestBody LevantamientoRequest request) {
+        return SancionResponse.desde(servicio.levantar(actorDe(actor), sancionId, request.motivo()));
+    }
+
     public record EmitirSancionRequest(UUID usuarioId, Sancion.Tipo tipo, String motivo, String politica,
                                        String comentarioId, Long duracionHoras, Boolean confirmacion) {
     }
 
     public record ApelarRequest(String argumento) {
+    }
+
+    public record LevantamientoRequest(String motivo) {
     }
 
     public record SancionResponse(UUID id, UUID usuarioId, Sancion.Tipo tipo, String motivo, String politica,

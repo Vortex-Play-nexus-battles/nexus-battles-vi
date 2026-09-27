@@ -317,6 +317,13 @@ services:
       # HU-ADM-001 (CA-04): rango de la suspension y plazo de apelacion desde
       # admin-parametros, con las variables de entorno como respaldo.
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      # 7.3.2 (B2, sanciones unificadas): la sancion se proyecta sobre la
+      # cuenta (PUT /api/v1/internal/usuarios/{uid}/estado-sancion, lo que
+      # niega el login) y se avisa al correo (POST /api/v1/correos/sancion, con
+      # la direccion de /contacto). Los dos corren en este host y exigen la
+      # credencial de servicio de abajo. Sin /api/v1: la ruta ya lo lleva.
+      IDENTIDAD_URL: ${IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      CORREO_URL: ${CORREO_URL:-http://srv-correo:8082}
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: moderacion-sanciones
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MODERACION_SANCIONES:-}
