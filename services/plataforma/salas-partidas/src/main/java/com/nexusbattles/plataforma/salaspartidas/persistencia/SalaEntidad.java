@@ -163,6 +163,14 @@ class SalaEntidad {
         @Column(name = "id_reserva_creditos")
         private UUID idReservaCreditos;
 
+        /**
+         * Lo que el heroe lleva al combate (V14, B7): nivel, estadisticas con el
+         * equipo, nombres del equipamiento y epicas, en JSON. Nulo en fichas
+         * anteriores.
+         */
+        @Column(name = "heroe_perfil", columnDefinition = "text")
+        private String heroePerfil;
+
         protected FichaEmbebida() {
             // JPA.
         }
@@ -199,6 +207,7 @@ class SalaEntidad {
             fila.heroeVidaActual = heroe.vidaActual();
             fila.heroeVidaMaxima = heroe.vidaMaxima();
             fila.idReservaCreditos = ficha.idReservaCreditos();
+            fila.heroePerfil = JsonDeCombate.escribir(heroe.perfil());
             return fila;
         }
 
@@ -231,14 +240,15 @@ class SalaEntidad {
                     && java.util.Objects.equals(heroeNivel, ficha.heroeNivel)
                     && java.util.Objects.equals(heroeVidaActual, ficha.heroeVidaActual)
                     && java.util.Objects.equals(heroeVidaMaxima, ficha.heroeVidaMaxima)
-                    && java.util.Objects.equals(idReservaCreditos, ficha.idReservaCreditos);
+                    && java.util.Objects.equals(idReservaCreditos, ficha.idReservaCreditos)
+                    && java.util.Objects.equals(heroePerfil, ficha.heroePerfil);
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(conFicha, apodo, heroeId, heroeNombre, heroePrototipo, heroeDefensa,
                     heroeRetratoUrl,
-                    heroeNivel, heroeVidaActual, heroeVidaMaxima, idReservaCreditos);
+                    heroeNivel, heroeVidaActual, heroeVidaMaxima, idReservaCreditos, heroePerfil);
         }
 
         /** {@code null} cuando la fila no trae ficha: no se inventa una vacia. */
@@ -248,7 +258,8 @@ class SalaEntidad {
             }
             return new FichaDeParticipante(apodo, new HeroeDeCombate(
                     heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl, heroeNivel,
-                    heroeVidaActual, heroeVidaMaxima, heroeDefensa), idReservaCreditos);
+                    heroeVidaActual, heroeVidaMaxima, heroeDefensa, JsonDeCombate.perfil(heroePerfil)),
+                    idReservaCreditos);
         }
     }
 

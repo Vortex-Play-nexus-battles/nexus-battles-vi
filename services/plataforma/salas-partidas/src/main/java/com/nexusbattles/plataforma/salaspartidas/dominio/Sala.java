@@ -598,6 +598,24 @@ public final class Sala {
     }
 
     /**
+     * La partida de esta sala termino: la sala pasa a
+     * {@link EstadoSala#FINALIZADA} (B7, salas-partidas.yaml 1.7.0).
+     *
+     * <p>Idempotente, y solo desde {@link EstadoSala#EN_JUEGO}: repetir el aviso
+     * de fin no es un error, y una sala que nunca llego a jugarse (abierta,
+     * cancelada) no se da por terminada por una partida que no es suya.
+     *
+     * @return true si la sala cambio de estado
+     */
+    public boolean terminarPartida() {
+        if (estado != EstadoSala.EN_JUEGO) {
+            return false;
+        }
+        estado = EstadoSala.FINALIZADA;
+        return true;
+    }
+
+    /**
      * Anota la reserva de creditos que quedo ligada a esta sala.
      *
      * <p>Lo llama el caso de uso de creacion en cuanto el modulo de creditos

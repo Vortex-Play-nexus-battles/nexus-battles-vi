@@ -79,11 +79,21 @@ public class ConfiguracionDelServicio {
         return new VerificarHeroe(repositorio, heroes);
     }
 
-    /** HU-SAL-004 · RF-JUE-017: arranque del combate. */
+    /**
+     * HU-SAL-004 · RF-JUE-017: arranque del combate. Desde B7 con el orden
+     * sorteado (semillas de {@code SecureRandom}), el heroe aleatorio de la
+     * maquina (D-B7-11), el combate preparado por el motor y, si abre la
+     * maquina, su primer turno.
+     */
     @Bean
     public IniciarPartida iniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas,
-                                         CanalDePartida canal, HeroeDelJugador heroes) {
-        return new IniciarPartida(salas, partidas, canal, heroes, Clock.systemUTC());
+                                         CanalDePartida canal, HeroeDelJugador heroes,
+                                         com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
+                                         com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroesDeLaMaquina maquina,
+                                         ConfiguracionDelCombate.TiempoPorTurno tiempoPorTurno,
+                                         com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion) {
+        return new IniciarPartida(salas, partidas, canal, heroes, Clock.systemUTC(), motor, maquina,
+                new java.security.SecureRandom()::nextLong, tiempoPorTurno, ejecutarAccion::jugarLaMaquinaSiLeToca);
     }
 
     /** RF-JUE-017: el turno pasa de manos cuando el jugador juega. */
@@ -93,16 +103,21 @@ public class ConfiguracionDelServicio {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.AvanzarTurno(partidas, canal);
     }
 
-    /** RF-JUE-006 · RF-JUE-017: la accion se resuelve en el motor y mueve la vida. */
+    /**
+     * RF-JUE-006 · RF-JUE-017 · §6: la accion se resuelve en el motor con el
+     * heroe real (B7), la partida guarda el estado de todos y, al terminar, la
+     * sala queda FINALIZADA.
+     */
     @Bean
     public com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion(
-            RepositorioDePartidas partidas, CanalDePartida canal,
+            RepositorioDePartidas partidas, RepositorioDeSalas salas, CanalDePartida canal,
             com.nexusbattles.plataforma.salaspartidas.dominio.MotorDeCombate motor,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta,
             com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditarRecompensa recompensa,
-            com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo torneo) {
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo torneo,
+            ConfiguracionDelCombate.TiempoPorTurno tiempoPorTurno) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion(
-                partidas, canal, motor, apuesta, recompensa, torneo);
+                partidas, salas, canal, motor, apuesta, recompensa, torneo, Clock.systemUTC(), tiempoPorTurno);
     }
 
     /**
@@ -264,8 +279,8 @@ public class ConfiguracionDelServicio {
      * <b>unico</b> cliente HTTP del servicio que se construia con un
      * {@code RestClient.builder()} pelado, sin el interceptor de portador: no
      * hacia falta, porque {@code motor-combate} no tenia seguridad ninguna y
-     * aceptaba peticiones anonimas. Ahora {@code POST /api/v1/combate/ataques}
-     * exige {@code ROLE_SERVICIO}, asi que la credencial de
+     * aceptaba peticiones anonimas. Ahora {@code /api/v1/combate/acciones} y
+     * {@code /turnos} (B7) exigen {@code ROLE_SERVICIO}, asi que la credencial de
      * {@code salas-partidas} (ADR-001 via el emisor de ADR-005) viaja tambien
      * aqui. Sin credencial configurada el cliente sale sin {@code Authorization}
      * y el motor responde 401, que el corta circuitos traduce a la degradacion

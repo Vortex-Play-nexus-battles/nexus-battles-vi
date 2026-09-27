@@ -1,38 +1,51 @@
 package com.nexusbattles.plataforma.salaspartidas.dominio;
 
+import java.util.UUID;
+
 /**
- * Puerto de salida hacia el motor de combate — RF-JUE-006, RF-JUE-017.
+ * Puerto hacia el motor de combate — {@code motor-combate.yaml} 1.2.0 (B7).
  *
- * <p>Una sola pregunta: <i>este heroe ataca a este otro, ¿cuanto dano hace?</i>
- * La respuesta la da el motor, que es su dueno. Este servicio no sabe de dados,
- * ni de tablas de efectos, ni de criticos, y no debe saberlo: el Project Charter
- * excluye el motor de combate de este bloque, y lo que aqui se hace es
- * consumirlo.
+ * <p>El motor es el dueno de las reglas de la seccion 6: tiradas, tabla de
+ * efectos, poder, cargas, acciones de la Tabla 7, epicas y equipo. No guarda
+ * nada: recibe el estado de todos los combatientes de la partida y devuelve el
+ * nuevo. Este servicio lleva ese estado entre llamadas y decide solo lo que es
+ * suyo: de quien es el turno y cuando termina la partida.
  *
- * <p>Por eso el puerto devuelve un veredicto y no datos crudos. Si devolviera la
- * formula de ataque o la fila de la tabla, la regla de «cuanto dano hace esto»
- * acabaria escrita en este servicio, que es justo donde no debe estar.
- *
- * <p>Quien lleva la partida —el turno, la vida, quien gana— sigue siendo este
- * servicio: el motor no guarda nada entre llamadas.
+ * <p>Los combatientes que se le mandan salen de la {@link Partida}: todos los
+ * participantes con heroe y prototipo conocidos.
  */
 public interface MotorDeCombate {
 
+    /** Accion con la que la maquina juega su turno: decide el motor (D-B7-12). */
+    String DECISION_DE_LA_MAQUINA = "DECISION_DE_LA_MAQUINA";
+
+    /** La accion basica de un heroe que ataca. */
+    String ATAQUE_BASICO = "ATAQUE_BASICO";
+
+    /** La accion basica de un sanador (Tabla 6, «Sanar»). */
+    String SANACION_BASICA = "SANACION_BASICA";
+
     /**
-     * Resuelve un ataque.
+     * {@code POST /api/v1/combate/acciones}: el ejecutor juega su accion.
      *
-     * @param atacante heroe que ataca, tal como lo conoce el catalogo
-     * @param objetivo heroe que recibe
-     * @return cuanto dano aplicar y por que
-     * @throws MotorNoDisponible si el motor contesta algo que no se puede
-     *                           interpretar. No se inventa un resultado: un
-     *                           combate decidido con numeros falsos es peor
-     *                           que un combate que no avanza.
-     * @throws com.nexusbattles.plataforma.resiliencia.DependenciaDegradada
-     *                           si el motor no responde: la seccion de
-     *                           combate queda degradada (HU-DIS-003) y quien
-     *                           llama decide si pasa el turno o se lo dice
-     *                           al jugador.
+     * @param accion   codigo de la accion ({@code ATAQUE_BASICO}, una de la Tabla 7,
+     *                 una epica o {@link #DECISION_DE_LA_MAQUINA})
+     * @param ejecutor quien actua
+     * @param objetivo a quien, o {@code null} si solo hay uno posible
+     * @param partida  el estado de todos
+     * @throws AccionNoPermitida  si el motor rechaza la accion (409)
+     * @throws MotorNoDisponible  si el motor respondio algo que no sirve
      */
-    ResolucionDelMotor resolver(HeroeDeCombate atacante, HeroeDeCombate objetivo);
+    ResolucionDeAccion resolverAccion(String accion, UUID ejecutor, UUID objetivo, Partida partida);
+
+    /**
+     * {@code POST /api/v1/combate/turnos}: empieza el turno de un combatiente.
+     *
+     * @param combatiente   quien empieza
+     * @param partida       el estado de todos
+     * @param aVidaCompleta al empezar la partida: todos a su vida maxima en su
+     *                      nivel, que calcula el motor
+     * @throws MotorNoDisponible si el motor respondio algo que no sirve
+     */
+    InicioDeTurno iniciarTurno(UUID combatiente, Partida partida, boolean aVidaCompleta);
 }

@@ -53,7 +53,13 @@ class CanalDePartidaStomp implements CanalDePartida {
 
     @Override
     public void anunciarTurno(Partida partida) {
-        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeTurno.de(partida));
+        anunciarTurno(partida, null);
+    }
+
+    /** Con el motivo del cambio y la cuenta atras del turno, si la hay (canal 1.5.0). */
+    @Override
+    public void anunciarTurno(Partida partida, String motivo) {
+        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeTurno.de(partida, motivo, java.time.Instant.now()));
     }
 
     @Override
