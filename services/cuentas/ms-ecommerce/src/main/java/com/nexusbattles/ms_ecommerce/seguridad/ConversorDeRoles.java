@@ -2,15 +2,19 @@ package com.nexusbattles.ms_ecommerce.seguridad;
 
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +40,10 @@ public class ConversorDeRoles implements Converter<Jwt, AbstractAuthenticationTo
     public static final String CLAIM_ROL = "rol";
     public static final String CLAIM_REALM_ACCESS = "realm_access";
 
+    /** Las autoridades de los roles de usuario (SeguridadConfig.ROLES_DE_USUARIO con su prefijo). */
+    private static final Set<String> ROLES_DE_USUARIO = Set.of(
+            "ROLE_JUGADOR", "ROLE_MODERADOR", "ROLE_ADMINISTRADOR", "ROLE_SUPER_ADMINISTRADOR");
+
     private final JwtGrantedAuthoritiesConverter conversorPorDefecto = new JwtGrantedAuthoritiesConverter();
 
     @Override
@@ -50,6 +58,21 @@ public class ConversorDeRoles implements Converter<Jwt, AbstractAuthenticationTo
     public static String identificadorDe(Jwt jwt) {
         String uid = jwt.getClaimAsString(CLAIM_UID);
         return uid != null && !uid.isBlank() ? uid : jwt.getSubject();
+    }
+
+    /**
+     * B5 — el jugador de una peticion a una ruta publica (la vitrina): su
+     * identificador si trae el token de un USUARIO; vacio si no trae token o si
+     * es de un servicio, que no tiene lista de deseos ni inventario propio.
+     */
+    public static Optional<String> usuarioDe(Authentication autenticacion) {
+        if (!(autenticacion instanceof JwtAuthenticationToken token) || !autenticacion.isAuthenticated()) {
+            return Optional.empty();
+        }
+        boolean esUsuario = token.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(ROLES_DE_USUARIO::contains);
+        return esUsuario ? Optional.ofNullable(identificadorDe(token.getToken())) : Optional.empty();
     }
 
     @SuppressWarnings("unchecked")

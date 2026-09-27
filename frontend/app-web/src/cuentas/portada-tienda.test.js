@@ -59,6 +59,53 @@ describe('pedir la vitrina pública', () => {
 
     await expect(pedirVitrinaPublica({ fetchImpl })).rejects.toThrow();
   });
+
+  // B5 — la moneda del visitante (§7.5), solo si el servidor la ofrece.
+  test('la preferida sin tasa todavía: una sola petición, en COP', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ content: [dto(1)], monedasDisponibles: ['COP'] }),
+    });
+
+    const { moneda } = await pedirVitrinaPublica({ fetchImpl, preferida: 'USD' });
+
+    expect(moneda).toBe('COP');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('la preferida disponible: se vuelve a pedir en ella', async () => {
+    const enDolares = { ...dto(1), precioFinal: 0.25, moneda: 'USD' };
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: [dto(1)], monedasDisponibles: ['COP', 'USD'] }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ content: [enDolares] }) });
+
+    const { productos, moneda } = await pedirVitrinaPublica({ fetchImpl, preferida: 'USD' });
+
+    expect(fetchImpl.mock.calls[1][0]).toBe(
+      `/api/v1/vitrina?size=${PRODUCTOS_EN_PORTADA}&moneda=USD`,
+    );
+    expect(moneda).toBe('USD');
+    expect(productos[0].moneda).toBe('USD');
+  });
+
+  test('si la segunda petición falla, se enseña lo que llegó en pesos', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: [dto(1)], monedasDisponibles: ['COP', 'EUR'] }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 422, json: async () => ({}) });
+
+    const { productos, moneda } = await pedirVitrinaPublica({ fetchImpl, preferida: 'EUR' });
+
+    expect(moneda).toBe('COP');
+    expect(productos[0].moneda).toBe('COP');
+  });
 });
 
 describe('pintar la vitrina pública', () => {

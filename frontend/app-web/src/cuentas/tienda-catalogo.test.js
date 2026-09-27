@@ -73,6 +73,36 @@ describe('reunir la vitrina', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(MAX_LOTES);
   });
 
+  // B5 — la moneda: en COP la ruta no cambia; en otra, cada lote la lleva.
+  test('en otra moneda cada lote la pide, y la primera página dice cuáles hay', async () => {
+    const lote = (n, desde) => Array.from({ length: n }, (_, i) => dto(desde + i));
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValueOnce(
+        respuesta({
+          content: lote(50, 0),
+          last: false,
+          monedasDisponibles: ['COP', 'USD'],
+        }),
+      )
+      .mockResolvedValueOnce(respuesta({ content: lote(1, 50), last: true }));
+
+    const { monedasDisponibles } = await reunirVitrina({ fetchImpl, moneda: 'USD' });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/vitrina?size=50&moneda=USD');
+    expect(fetchImpl.mock.calls[1][0]).toBe('/api/v1/vitrina?page=1&size=50&moneda=USD');
+    expect(monedasDisponibles).toEqual(['COP', 'USD']);
+  });
+
+  test('sin monedasDisponibles (un servicio anterior a 1.4.0), solo COP', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ content: [dto(1)] }));
+
+    const { monedasDisponibles } = await reunirVitrina({ fetchImpl });
+
+    expect(monedasDisponibles).toEqual(['COP']);
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/vitrina?size=50');
+  });
+
   test('un rechazo sale con su estado y su problem detail', async () => {
     const fetchImpl = jest
       .fn()

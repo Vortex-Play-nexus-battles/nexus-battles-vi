@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_ecommerce.controller;
 
+import com.nexusbattles.ms_ecommerce.precios.Moneda;
 import com.nexusbattles.ms_ecommerce.dto.AgregarItemRequest;
 import com.nexusbattles.ms_ecommerce.dto.CarritoDto;
 import com.nexusbattles.ms_ecommerce.dto.ItemCarritoDto;
@@ -89,7 +90,7 @@ class CarritoControllerTest {
     @Test
     @DisplayName("el carrito que se obtiene es el del uid del token, aunque la cabecera diga otro")
     void elCarritoEsDelUidDelToken() throws Exception {
-        when(carritoService.obtenerOCrearCarrito(UID.toString())).thenReturn(carritoDe(UID.toString()));
+        when(carritoService.obtener(UID.toString(), Moneda.COP)).thenReturn(carritoDe(UID.toString()));
 
         mvc.perform(get("/api/v1/carrito")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + TokensDePrueba.deJugador("lyra", UID))
@@ -97,15 +98,15 @@ class CarritoControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.usuarioId").value(UID.toString()));
 
-        verify(carritoService).obtenerOCrearCarrito(UID.toString());
+        verify(carritoService).obtener(UID.toString(), Moneda.COP);
     }
 
     @Test
     @DisplayName("agregar y eliminar items operan sobre el carrito del uid del token")
     void agregarYEliminarSobreElPropio() throws Exception {
-        when(carritoService.agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class)))
+        when(carritoService.agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class), eq(Moneda.COP)))
                 .thenReturn(carritoDe(UID.toString()));
-        when(carritoService.eliminarItem(UID.toString(), 7L)).thenReturn(carritoDe(UID.toString()));
+        when(carritoService.eliminarItem(UID.toString(), 7L, Moneda.COP)).thenReturn(carritoDe(UID.toString()));
         String token = "Bearer " + TokensDePrueba.deJugador("lyra", UID);
 
         mvc.perform(post("/api/v1/carrito/items").header(HttpHeaders.AUTHORIZATION, token)
@@ -116,8 +117,8 @@ class CarritoControllerTest {
         mvc.perform(delete("/api/v1/carrito/items/7").header(HttpHeaders.AUTHORIZATION, token))
                 .andExpect(status().isOk());
 
-        verify(carritoService).agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class));
-        verify(carritoService).eliminarItem(UID.toString(), 7L);
+        verify(carritoService).agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class), eq(Moneda.COP));
+        verify(carritoService).eliminarItem(UID.toString(), 7L, Moneda.COP);
     }
 
     @Test
@@ -125,7 +126,7 @@ class CarritoControllerTest {
     void formaDelJson() throws Exception {
         ItemCarritoDto item = new ItemCarritoDto(10L, new ProductoDelItemDto(PRODUCTO, "Espada de fuego", "COP"),
                 1, new BigDecimal("6000.00"), new BigDecimal("6000.00"));
-        when(carritoService.obtenerOCrearCarrito(UID.toString()))
+        when(carritoService.obtener(UID.toString(), Moneda.COP))
                 .thenReturn(new CarritoDto(1L, UID.toString(), List.of(item), new BigDecimal("6000.00"), "COP"));
 
         mvc.perform(get("/api/v1/carrito")
@@ -196,7 +197,7 @@ class CarritoControllerTest {
     @DisplayName("con la forma de Keycloak el carrito es del sujeto estable")
     void tokenDeKeycloak() throws Exception {
         UUID sujeto = UUID.randomUUID();
-        when(carritoService.obtenerOCrearCarrito(sujeto.toString())).thenReturn(carritoDe(sujeto.toString()));
+        when(carritoService.obtener(sujeto.toString(), Moneda.COP)).thenReturn(carritoDe(sujeto.toString()));
 
         mvc.perform(get("/api/v1/carrito")
                         .header(HttpHeaders.AUTHORIZATION,

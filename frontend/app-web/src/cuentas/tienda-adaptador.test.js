@@ -127,4 +127,43 @@ describe('aFilaDeCarrito', () => {
     expect(fila.subtotalTexto).toBeNull();
     expect(fila.unitarioTexto).toBeNull();
   });
+
+  // B5 — la linea dice si se puede pagar, cuantas admite y su imagen (1.4.0).
+  test('el máximo lo dice el servidor, con el tope de 20; cero es agotado, no «sin dato»', () => {
+    expect(aFilaDeCarrito({ maximo: 3 }).maximo).toBe(3);
+    expect(aFilaDeCarrito({ maximo: 50 }).maximo).toBe(20);
+    expect(aFilaDeCarrito({ maximo: 0 }).maximo).toBe(0);
+    expect(aFilaDeCarrito({}).maximo).toBe(20);
+    expect(aFilaDeCarrito({ maximo: null }).maximo).toBe(20);
+  });
+
+  test('una línea que no se puede pagar trae su motivo, dicho para el jugador', () => {
+    const agotada = aFilaDeCarrito({ disponible: false, motivo: 'AGOTADO' });
+    expect(agotada.disponible).toBe(false);
+    expect(agotada.motivo).toBe('AGOTADO');
+    expect(agotada.motivoTexto).toBe('Se agotó. Quítalo para pagar.');
+
+    expect(
+      aFilaDeCarrito({ disponible: false, motivo: 'TIRAJE_INSUFICIENTE' }).motivoTexto,
+    ).toMatch(/Baja la cantidad/);
+    expect(aFilaDeCarrito({ disponible: false, motivo: 'NUEVO' }).motivoTexto).toMatch(
+      /Quítalo del carrito/,
+    );
+    const buena = aFilaDeCarrito({ disponible: true, motivo: 'AGOTADO' });
+    expect(buena.motivo).toBeNull();
+    expect(buena.motivoTexto).toBeNull();
+    // Un carrito anterior a 1.4.0 no dice nada: se puede pagar.
+    expect(aFilaDeCarrito({}).disponible).toBe(true);
+  });
+
+  test('la imagen del producto, si la trae; el id de la línea y del producto', () => {
+    const fila = aFilaDeCarrito({
+      id: 7,
+      producto: { id: 'p-1', nombre: 'Yelmo', imagen: '/img/yelmo.png' },
+    });
+    expect(fila.imagen).toBe('/img/yelmo.png');
+    expect(fila.id).toBe(7);
+    expect(fila.productoId).toBe('p-1');
+    expect(aFilaDeCarrito({ producto: { imagen: '  ' } }).imagen).toBeNull();
+  });
 });

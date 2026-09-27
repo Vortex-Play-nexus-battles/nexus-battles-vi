@@ -4,16 +4,18 @@ import java.util.List;
 
 /**
  * Una pagina de la vitrina: {@code {"content":[...],"number":0,"size":16,
- * "totalElements":N,"totalPages":M,"last":true}}.
+ * "totalElements":N,"totalPages":M,"last":true,"moneda":"COP","monedasDisponibles":["COP"]}}.
  *
  * <p>Son los mismos nombres que tenia el {@code Page} de Spring Data que
  * devolvia la vitrina legada, que es lo que el frontend lee; pero es un
  * registro propio porque la forma serializada de {@code Page} no es estable
  * entre versiones y un contrato no puede depender de ella.
  *
- * @param number pagina actual, desde 0
- * @param last   true si no hay pagina despues de esta (tambien si la pedida
- *               ya cae fuera del total)
+ * @param number             pagina actual, desde 0
+ * @param last               true si no hay pagina despues de esta (tambien si la pedida
+ *                           ya cae fuera del total)
+ * @param moneda             (1.4.0) la de todos los precios de la pagina
+ * @param monedasDisponibles (1.4.0) las que se pueden pedir ahora mismo
  */
 public record PaginaDeVitrina(
         List<ProductoEnVentaDto> content,
@@ -21,10 +23,15 @@ public record PaginaDeVitrina(
         int size,
         long totalElements,
         int totalPages,
-        boolean last) {
+        boolean last,
+        String moneda,
+        List<String> monedasDisponibles) {
+
+    private static final String MONEDA_DEL_CATALOGO = "COP";
 
     public PaginaDeVitrina {
         content = List.copyOf(content);
+        monedasDisponibles = List.copyOf(monedasDisponibles);
     }
 
     /**
@@ -35,7 +42,8 @@ public record PaginaDeVitrina(
      * @throws IllegalArgumentException si la pagina es negativa o el tamano
      *         no es positivo; el controlador ya los filtra con un 400
      */
-    public static PaginaDeVitrina de(List<ProductoEnVentaDto> todos, int numero, int tamano) {
+    public static PaginaDeVitrina de(List<ProductoEnVentaDto> todos, int numero, int tamano, String moneda,
+                                     List<String> monedasDisponibles) {
         if (numero < 0 || tamano < 1) {
             throw new IllegalArgumentException("Pagina " + numero + " de tamano " + tamano + " no es una pagina valida");
         }
@@ -45,6 +53,12 @@ public record PaginaDeVitrina(
         List<ProductoEnVentaDto> contenido = desde >= total
                 ? List.of()
                 : todos.subList((int) desde, (int) Math.min(desde + tamano, total));
-        return new PaginaDeVitrina(contenido, numero, tamano, total, totalDePaginas, numero >= totalDePaginas - 1);
+        return new PaginaDeVitrina(contenido, numero, tamano, total, totalDePaginas, numero >= totalDePaginas - 1,
+                moneda, monedasDisponibles);
+    }
+
+    /** Una pagina en la moneda del catalogo, la unica que no depende de ninguna tasa. */
+    public static PaginaDeVitrina de(List<ProductoEnVentaDto> todos, int numero, int tamano) {
+        return de(todos, numero, tamano, MONEDA_DEL_CATALOGO, List.of(MONEDA_DEL_CATALOGO));
     }
 }

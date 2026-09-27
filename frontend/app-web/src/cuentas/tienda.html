@@ -52,6 +52,23 @@
               moneda.
             </p>
           </div>
+          <!-- B5 — la moneda (§7.5: COP, dólar o euro según la ubicación).
+               Empieza por la del idioma del navegador; las que el servidor
+               todavía no ofrece salen desactivadas (tienda-moneda.js). -->
+          <div class="campo selector-moneda">
+            <label class="campo__etiqueta" for="moneda-tienda">Moneda</label>
+            <select
+              class="campo__control"
+              id="moneda-tienda"
+              name="moneda"
+              aria-describedby="nota-moneda"
+            >
+              <option value="COP">COP · peso colombiano</option>
+              <option value="USD">USD · dólar estadounidense</option>
+              <option value="EUR">EUR · euro</option>
+            </select>
+            <p id="nota-moneda" class="selector-moneda__nota" aria-live="polite"></p>
+          </div>
           <!-- UXC-4 — el carrito minimizado: icono y unidades (§7.5). Despliega
                o recoge el panel sin mover la vitrina. -->
           <div class="store-header__carrito">
@@ -173,6 +190,8 @@
         </form>
 
         <p id="resultado-tienda" class="resultado-tienda" role="status" aria-live="polite"></p>
+        <!-- B5 — lo que pasó al pulsar el corazón de una tarjeta (lista de deseos). -->
+        <p id="aviso-deseos" class="aviso-deseos" role="status" aria-live="polite"></p>
 
         <h2 class="solo-lectores">Productos a la venta</h2>
         <!-- El contenedor donde JS inyectará las tarjetas -->
@@ -235,18 +254,20 @@
           </div>
 
           <!--
-            FI-R2 — el boton nace deshabilitado y se queda asi, con el motivo
-            escrito al lado. RF-CAR-010 y RF-PAG-001 estan confirmados, pero su
-            implementacion es de Grupo de Santiago y todavia no existe:
-            `CarritoController` no tiene ninguna ruta de pago. Antes el boton se
-            encendia en cuanto el carrito tenia algo y no tenia manejador
-            ninguno — pulsarlo no hacia nada.
+            B5 — «Pagar» abre el resumen de la compra con el formulario de pago
+            (§7.5) contra la pasarela simulada (POST /checkout, 1.4.0). Nace
+            deshabilitado hasta que el carrito carga; si no se puede pagar, el
+            motivo va escrito al lado (#aviso-pago) y enlazado al botón.
           -->
-          <button id="btn-pagar" class="btn-pagar" disabled>Pagar</button>
-          <p id="aviso-pago-pendiente" class="aviso-pago">
-            El pago todavía no está disponible. Tu carrito queda guardado y podrás terminar la
-            compra cuando se habilite.
-          </p>
+          <button id="btn-pagar" class="btn-pagar" type="button" disabled>Pagar</button>
+          <p id="aviso-pago" class="aviso-pago" aria-live="polite">Cargando tu carrito…</p>
+          <button
+            id="btn-mis-compras"
+            class="boton boton--secundario boton--pequeno mis-compras"
+            type="button"
+          >
+            Mis compras
+          </button>
         </div>
       </aside>
     </main>

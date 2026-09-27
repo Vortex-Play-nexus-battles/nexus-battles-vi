@@ -2,9 +2,16 @@ package com.nexusbattles.ms_ecommerce.service;
 
 import com.nexusbattles.ms_ecommerce.catalogo.CatalogoMaestro;
 import com.nexusbattles.ms_ecommerce.catalogo.CatalogoNoDisponibleException;
+import com.nexusbattles.ms_ecommerce.catalogo.CopiaDelCatalogo;
+import com.nexusbattles.ms_ecommerce.catalogo.PromocionDelCatalogo;
+import com.nexusbattles.ms_ecommerce.dto.ConsultaDeVitrina;
 import com.nexusbattles.ms_ecommerce.catalogo.ProductoDelCatalogo;
 import com.nexusbattles.ms_ecommerce.dto.PaginaDeVitrina;
 import com.nexusbattles.ms_ecommerce.dto.ProductoEnVentaDto;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
+import com.nexusbattles.ms_ecommerce.precios.Moneda;
+import com.nexusbattles.ms_ecommerce.precios.Tarifa;
+import com.nexusbattles.ms_ecommerce.precios.TasasDeCambio;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conEstado;
@@ -40,13 +48,21 @@ class VitrinaDelCatalogoServiceTest {
 
     private CatalogoMaestro catalogo;
     private RelojAjustable reloj;
+    private TasasDeCambio tasas;
+    private ListaDeDeseosService deseos;
+    private ProductosPropios propios;
     private VitrinaDelCatalogoService vitrina;
 
     @BeforeEach
     void preparar() {
         catalogo = mock(CatalogoMaestro.class);
         reloj = new RelojAjustable(Instant.parse("2026-09-24T12:00:00Z"));
-        vitrina = new VitrinaDelCatalogoService(catalogo, reloj);
+        tasas = mock(TasasDeCambio.class);
+        deseos = mock(ListaDeDeseosService.class);
+        propios = mock(ProductosPropios.class);
+        when(tasas.tarifa(Moneda.COP)).thenReturn(Tarifa.enPesos());
+        when(tasas.disponibles()).thenReturn(Set.of(Moneda.COP));
+        vitrina = new VitrinaDelCatalogoService(new CopiaDelCatalogo(catalogo, reloj), tasas, deseos, propios, reloj);
     }
 
     private void catalogoCon(ProductoDelCatalogo... productos) {
@@ -379,5 +395,155 @@ class VitrinaDelCatalogoServiceTest {
             assertThatThrownBy(() -> vitrina.pagina(0, 16, null)).isInstanceOf(CatalogoNoDisponibleException.class);
             assertThat(idsDe(vitrina.pagina(0, 16, null))).containsExactly("a");
         }
+    }
+
+    @Nested
+    @DisplayName("B5: precio del servidor, moneda, filtros, busqueda y marcas")
+    class PrecioFiltrosYMarcas {
+
+        private ProductoDelCatalogo conPromocion(String id, String precio, int porcentaje, String desde, String hasta) {
+            return new ProductoDelCatalogo(id, "Producto " + id, null, "Descripcion de " + id, "ARMA", -1, null,
+                    new BigDecimal(precio), true, "ACTIVO", null,
+                    new PromocionDelCatalogo(porcentaje, Instant.parse(desde), Instant.parse(hasta), true));
+        }
+
+        private ConsultaDeVitrina consulta(Moneda moneda, BigDecimal minimo, BigDecimal maximo, boolean promo,
+                                           String busqueda) {
+            return new ConsultaDeVitrina(0, 16, null, moneda, minimo, maximo, promo, busqueda);
+        }
+
+        @Test
+        @DisplayName("una promocion vigente rebaja el precio final y se marca con su porcentaje")
+        void promocionVigente() {
+            catalogoCon(conPromocion("rebajado", "10000", 20, "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"));
+
+            ProductoEnVentaDto tarjeta = vitrina.pagina(0, 16, null).content().get(0);
+
+            assertThat(tarjeta.precioFinal()).isEqualByComparingTo("8000");
+            assertThat(tarjeta.precioOriginal()).isEqualByComparingTo("10000");
+            assertThat(tarjeta.enPromocion()).isTrue();
+            assertThat(tarjeta.porcentajeDescuento()).isEqualTo(20);
+        }
+
+        @Test
+        @DisplayName("una promocion vencida o futura no rebaja nada, aunque el catalogo aun la traiga")
+        void promocionFueraDeVigencia() {
+            catalogoCon(
+                    conPromocion("vencida", "10000", 20, "2026-08-01T00:00:00Z", "2026-09-24T12:00:00Z"),
+                    conPromocion("futura", "10000", 20, "2026-09-24T12:00:01Z", "2026-10-01T00:00:00Z"));
+
+            assertThat(vitrina.pagina(0, 16, null).content()).allSatisfy(tarjeta -> {
+                assertThat(tarjeta.precioFinal()).isEqualByComparingTo("10000");
+                assertThat(tarjeta.enPromocion()).isFalse();
+                assertThat(tarjeta.porcentajeDescuento()).isNull();
+            });
+        }
+
+        @Test
+        @DisplayName("en USD convierte con la tasa (pesos por dolar) a centavos, y la pagina dice su moneda")
+        void conversionAUsd() {
+            when(tasas.tarifa(Moneda.USD)).thenReturn(new Tarifa(Moneda.USD, new BigDecimal("4000")));
+            when(tasas.disponibles()).thenReturn(Set.of(Moneda.COP, Moneda.USD));
+            catalogoCon(enVenta("a", "ARMA", "45000"),
+                    conPromocion("b", "10000", 15, "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"));
+
+            PaginaDeVitrina pagina = vitrina.pagina(consulta(Moneda.USD, null, null, false, null), null);
+
+            assertThat(pagina.moneda()).isEqualTo("USD");
+            assertThat(pagina.monedasDisponibles()).containsExactly("COP", "USD");
+            assertThat(pagina.content().get(0).precioFinal()).isEqualByComparingTo("11.25");
+            assertThat(pagina.content().get(0).moneda()).isEqualTo("USD");
+            // 10000 COP - 15 % = 8500 COP = 2.125 USD -> 2.13 (mitad hacia arriba)
+            assertThat(pagina.content().get(1).precioFinal()).isEqualByComparingTo("2.13");
+            assertThat(pagina.content().get(1).precioOriginal()).isEqualByComparingTo("2.50");
+        }
+
+        @Test
+        @DisplayName("filtra por rango de precio en la moneda pedida y solo en promocion")
+        void filtrosDePrecioYPromocion() {
+            catalogoCon(enVenta("barato", "ARMA", "3000"), enVenta("medio", "ARMA", "6000"),
+                    enVenta("caro", "ARMA", "20000"),
+                    conPromocion("rebajado", "10000", 50, "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"));
+
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, new BigDecimal("4000"), new BigDecimal("10000"), false,
+                    null), null))).containsExactly("medio", "rebajado");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, true, null), null)))
+                    .containsExactly("rebajado");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, new BigDecimal("9000"), new BigDecimal("1000"), false,
+                    null), null))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("busca sin tildes ni mayusculas en nombre, tipo, descripcion y habilidades, con todas las palabras")
+        void busquedaPorTexto() {
+            catalogoCon(
+                    conHabilidades(conNombreYTipo(enVenta("espada", "ARMA", "6000"), "Espada de Fuego", "ARMA"),
+                            List.of("Golpe ardiente")),
+                    conNombreYTipo(enVenta("escudo", "ARMADURA", "4000"), "Escudo de roble", "ARMADURA"),
+                    conNombreYTipo(enVenta("pocion", "ITEM", "3000"), "Poción de vida", "ITEM"));
+
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "ESPADA"), null)))
+                    .containsExactly("espada");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "pocion"), null)))
+                    .containsExactly("pocion");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "ardiente"), null)))
+                    .containsExactly("espada");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "armadura"), null)))
+                    .containsExactly("escudo");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "esp fuego"), null)))
+                    .containsExactly("espada");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "espada roble"), null))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("una palabra de cifras busca en el precio; con letras, no")
+        void busquedaPorPrecio() {
+            catalogoCon(enVenta("a", "ARMA", "45000"), enVenta("b", "ARMA", "6000"));
+
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "45.000"), null)))
+                    .containsExactly("a");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "$6 000"), null)))
+                    .containsExactly("b");
+            assertThat(idsDe(vitrina.pagina(consulta(Moneda.COP, null, null, false, "a4"), null))).isEmpty();
+        }
+
+        @Test
+        @DisplayName("con sesion marca lo de la lista de deseos y lo que el jugador ya tiene")
+        void marcasConSesion() {
+            catalogoCon(enVenta("deseado"), enVenta("propio"), enVenta("nada"));
+            when(deseos.productosDe("uid-1")).thenReturn(Set.of("deseado"));
+            when(propios.de("uid-1")).thenReturn(Set.of("propio"));
+
+            List<ProductoEnVentaDto> tarjetas = vitrina.pagina(ConsultaDeVitrina.de(0, 16, null), "uid-1").content();
+
+            assertThat(tarjetas).extracting(ProductoEnVentaDto::enListaDeseos).containsExactly(true, false, false);
+            assertThat(tarjetas).extracting(ProductoEnVentaDto::esPropio).containsExactly(false, true, false);
+        }
+
+        @Test
+        @DisplayName("sin sesion no pregunta ni a la lista de deseos ni al inventario")
+        void sinSesionSinMarcas() {
+            catalogoCon(enVenta("a"));
+
+            vitrina.pagina(0, 16, null);
+
+            org.mockito.Mockito.verifyNoInteractions(deseos, propios);
+        }
+
+        @Test
+        @DisplayName("un porcentaje fuera de 1..99 no rebaja ni tumba la vitrina")
+        void promocionRara() {
+            catalogoCon(conPromocion("raro", "10000", 100, "2026-09-01T00:00:00Z", "2026-10-01T00:00:00Z"));
+
+            ProductoEnVentaDto tarjeta = vitrina.pagina(0, 16, null).content().get(0);
+
+            assertThat(tarjeta.precioFinal()).isEqualByComparingTo("10000");
+            assertThat(tarjeta.enPromocion()).isFalse();
+        }
+    }
+
+    private static ProductoDelCatalogo conNombreYTipo(ProductoDelCatalogo p, String nombre, String tipo) {
+        return new ProductoDelCatalogo(p.id(), nombre, p.imagen(), p.descripcion(), tipo, p.tiraje(),
+                p.precioCreditos(), p.precioMonedaReal(), p.premium(), p.estado(), p.habilidades());
     }
 }

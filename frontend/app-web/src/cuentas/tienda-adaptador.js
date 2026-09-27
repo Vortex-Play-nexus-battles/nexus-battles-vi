@@ -17,13 +17,13 @@
  *
  * ## Lo que este modulo NO hace
  *
- * No calcula descuentos. La vitrina pone hoy `precioFinal = precioOriginal`
- * (desde R16 los dos salen del `precioMonedaReal` del catalogo maestro, que no
- * publica promociones), asi que el porcentaje nunca llega al precio. Aplicarlo
- * aqui seria calcular en el navegador lo que cobra el servidor, que es peor que
- * no ensenarlo. Por eso el distintivo de promocion solo sale cuando los dos
- * precios **de verdad** difieren: un «-20%» junto a un precio sin descuento es
- * una promesa que el carrito no va a cumplir.
+ * No calcula descuentos ni convierte monedas. Desde B5 (contrato 1.4.0) el
+ * servidor aplica la promocion vigente del catalogo y la tasa de cambio, y
+ * devuelve `precioFinal` ya rebajado junto al `precioOriginal`. Calcularlo
+ * aqui seria calcular en el navegador lo que cobra el servidor. Por eso el
+ * distintivo de promocion solo sale cuando los dos precios **de verdad**
+ * difieren: un «-20%» junto a un precio sin descuento es una promesa que el
+ * carrito no va a cumplir.
  *
  * @module tienda-adaptador
  */
@@ -122,12 +122,27 @@ export function aProductoDeVitrina(dto = {}) {
   };
 }
 
+/** Unidades por linea que admite el carrito (ecommerce-carrito.yaml 1.4.0). */
+export const MAXIMO_POR_LINEA = 20;
+
+/**
+ * Por que una linea no se puede pagar, dicho para el jugador. La clave es el
+ * `motivo` de `LineaDeCarrito` (1.4.0).
+ */
+const MOTIVOS_DE_LINEA = Object.freeze({
+  NO_DISPONIBLE: 'Ya no está a la venta. Quítalo para pagar.',
+  AGOTADO: 'Se agotó. Quítalo para pagar.',
+  SIN_PRECIO_EN_MONEDA_REAL: 'Ya no se vende con dinero real. Quítalo para pagar.',
+  TIRAJE_INSUFICIENTE: 'No quedan tantas unidades. Baja la cantidad para pagar.',
+});
+
 /**
  * Un item del carrito -> lo que pinta la fila.
  *
- * El carrito si trae los importes buenos: `ItemCarrito` persiste
- * `precioUnitario` y `subtotal`, y `Carrito` su `total`. Lo unico que hacia
- * falta era formatearlos y no escribir «undefined COP» cuando falta alguno.
+ * El carrito trae los importes del servidor: `precioUnitario`, `subtotal` y
+ * el `total` del carrito. Desde 1.4.0 ademas dice si la linea se puede pagar
+ * (`disponible`, con su `motivo`) y cuantas unidades admite (`maximo`: 20, o
+ * lo que quede del tiraje).
  *
  * @param {object} item
  * @param {string|null} moneda
@@ -135,9 +150,29 @@ export function aProductoDeVitrina(dto = {}) {
 export function aFilaDeCarrito(item = {}, moneda = null) {
   const subtotal = aImporte(item.subtotal);
   const unitario = aImporte(item.precioUnitario);
+  const cantidad = Number.isFinite(item.cantidad) ? item.cantidad : 1;
+  // Cero es un maximo (agotado); sin el campo, el tope del contrato.
+  const maximo =
+    Number.isInteger(item.maximo) && item.maximo >= 0
+      ? Math.min(item.maximo, MAXIMO_POR_LINEA)
+      : MAXIMO_POR_LINEA;
+  const disponible = item.disponible !== false;
+  const imagen =
+    typeof item.producto?.imagen === 'string' && item.producto.imagen.trim()
+      ? item.producto.imagen
+      : null;
   return {
+    id: item.id ?? null,
+    productoId: item.producto?.id ?? null,
     nombre: item.producto?.nombre || 'Producto',
-    cantidad: Number.isFinite(item.cantidad) ? item.cantidad : 1,
+    imagen,
+    cantidad,
+    maximo,
+    disponible,
+    motivo: disponible ? null : (item.motivo ?? null),
+    motivoTexto: disponible
+      ? null
+      : (MOTIVOS_DE_LINEA[item.motivo] ?? 'No se puede pagar ahora. Quítalo del carrito.'),
     subtotal,
     subtotalTexto: textoDePrecio(subtotal, moneda),
     unitario,
