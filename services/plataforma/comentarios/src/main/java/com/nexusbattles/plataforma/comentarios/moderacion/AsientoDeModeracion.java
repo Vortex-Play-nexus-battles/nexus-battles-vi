@@ -12,12 +12,18 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
 /**
- * Lo que quedo escrito de una decision de moderacion — RF-COM-008.
+ * Lo que quedo escrito de una decision de moderacion — RF-COM-008, 7.3.3.
  *
  * <p>La ficha pide cinco cosas concretas: "el usuario que la realizo, la fecha
  * y hora, el motivo y los estados anterior y nuevo del comentario". Las cinco
  * son columnas, no un texto libre: un historico que hay que interpretar
  * leyendo frases no es trazabilidad, es prosa.
+ *
+ * <p>Desde B3 (V5) guarda ademas, en EDITAR, el texto anterior y el nuevo
+ * —«con registro de la edicion»—, y en toda accion la IP de origen de la
+ * peticion. La IP es para auditoria: se guarda pero no se devuelve por la
+ * API, porque el historial lo leen otros moderadores y la IP de un companero
+ * no es algo que necesiten ver para moderar.
  *
  * <p>El moderador sale del token. Un asiento que dijera quien actuo a partir
  * de un campo del cuerpo no valdria para nada: cualquiera podria firmar una
@@ -59,12 +65,30 @@ public class AsientoDeModeracion {
     @Column(nullable = false)
     private Instant fecha;
 
+    @Column(name = "texto_anterior")
+    private String textoAnterior;
+
+    @Column(name = "texto_nuevo")
+    private String textoNuevo;
+
+    @Column(name = "ip_origen", length = 45)
+    private String ipOrigen;
+
     protected AsientoDeModeracion() {
+    }
+
+    /** Un asiento sin edicion de texto ni IP registrada (asientos anteriores a V5). */
+    public AsientoDeModeracion(String id, String comentarioId, String moderadorId,
+            String apodoModerador, AccionDeModeracion accion, String motivo,
+            Comentario.Estado estadoAnterior, Comentario.Estado estadoNuevo, Instant fecha) {
+        this(id, comentarioId, moderadorId, apodoModerador, accion, motivo, estadoAnterior,
+                estadoNuevo, fecha, null, null, null);
     }
 
     public AsientoDeModeracion(String id, String comentarioId, String moderadorId,
             String apodoModerador, AccionDeModeracion accion, String motivo,
-            Comentario.Estado estadoAnterior, Comentario.Estado estadoNuevo, Instant fecha) {
+            Comentario.Estado estadoAnterior, Comentario.Estado estadoNuevo, Instant fecha,
+            String textoAnterior, String textoNuevo, String ipOrigen) {
         this.id = id;
         this.comentarioId = comentarioId;
         this.moderadorId = moderadorId;
@@ -74,6 +98,9 @@ public class AsientoDeModeracion {
         this.estadoAnterior = estadoAnterior;
         this.estadoNuevo = estadoNuevo;
         this.fecha = fecha;
+        this.textoAnterior = textoAnterior;
+        this.textoNuevo = textoNuevo;
+        this.ipOrigen = ipOrigen;
     }
 
     public String id() {
@@ -110,5 +137,20 @@ public class AsientoDeModeracion {
 
     public Instant fecha() {
         return fecha;
+    }
+
+    /** Solo en EDITAR. */
+    public String textoAnterior() {
+        return textoAnterior;
+    }
+
+    /** Solo en EDITAR. */
+    public String textoNuevo() {
+        return textoNuevo;
+    }
+
+    /** IP de origen de la peticion; nula en los asientos anteriores a V5. */
+    public String ipOrigen() {
+        return ipOrigen;
     }
 }

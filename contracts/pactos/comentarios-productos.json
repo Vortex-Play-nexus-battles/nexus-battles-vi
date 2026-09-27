@@ -1,0 +1,54 @@
+{
+  "consumer": {
+    "name": "comentarios"
+  },
+  "interactions": [
+    {
+      "description": "la consulta de un producto antes de comentarlo o calificarlo",
+      "providerStates": [
+        {
+          "name": "el producto existe en el catalogo"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/productos/1647b2ea-096d-37e7-b580-0172e4c62313"
+      },
+      "response": {
+        "body": {
+          "id": "1647b2ea-096d-37e7-b580-0172e4c62313"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la consulta de un producto que no esta en el catalogo",
+      "providerStates": [
+        {
+          "name": "el producto no existe en el catalogo"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/productos/00000000-0000-4000-8000-00000000dead"
+      },
+      "response": {
+        "status": 404
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "productos"
+  }
+}

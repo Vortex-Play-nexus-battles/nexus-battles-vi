@@ -1,10 +1,13 @@
 /**
- * La cola de moderacion — RF-COM-005 y RF-COM-008 (R10.1).
+ * La cola de moderacion — RF-COM-005 y RF-COM-008 (R10.1), y desde B3 lo que
+ * 7.3.3 anade (comentarios.yaml 1.5.0): EDITAR con el texto nuevo, MARCAR y
+ * DESMARCAR para el seguimiento especial, la lista de marcados y las imagenes
+ * privadas del comentario en revision.
  *
  * Lo que se prueba aqui es lo que distingue esta pantalla de una lista:
  * que una cola vacia NO es un error, que el motivo es obligatorio antes de
- * pulsar y no despues, que las acciones ofrecidas dependen del estado, y que
- * el resultado dice la verdad sobre si el autor se entero.
+ * pulsar y no despues, que las acciones ofrecidas dependen del estado y de la
+ * marca, y que el resultado dice la verdad sobre si el autor se entero.
  */
 
 import { jest } from '@jest/globals';
@@ -13,6 +16,7 @@ import { montarModeracion, panelDeDetalle, tarjetaDeEntrada } from './moderar-co
 import { accionesDesde } from './cliente-moderacion.js';
 
 const AHORA = '2026-09-23T10:00:00Z';
+const IMAGEN = '3f1c2b4a-1111-4222-8333-944455566677';
 
 function entrada(sobrescribir = {}) {
   return {
@@ -42,6 +46,11 @@ function vista() {
   document.body.innerHTML = `
     <main data-vista="moderar-comentarios">
       <div data-zona="aviso" hidden></div>
+      <select data-zona="filtro">
+        <option value="en-revision">En revisión</option>
+        <option value="marcados">Marcados para seguimiento</option>
+        <option value="sin-marcar">En revisión sin marcar</option>
+      </select>
       <div data-zona="cola"></div>
       <div data-zona="detalle-contenedor"></div>
     </main>`;
@@ -98,25 +107,184 @@ describe('la cola', () => {
     tarjeta.querySelector('[data-accion="revisar"]').click();
     expect(alAbrir).toHaveBeenCalledWith('com-1');
   });
+
+  test('1.5.0: la tarjeta dice si está marcado, si fue editado y, fuera de revisión, su estado', () => {
+    const tarjeta = tarjetaDeEntrada(
+      entrada({
+        comentario: { ...entrada().comentario, estado: 'PUBLICADO', marcado: true, editado: true },
+        reportes: 0,
+        porCategoria: {},
+      }),
+      () => {},
+    );
+
+    expect(tarjeta.querySelector('[data-campo="estado"]').textContent).toBe('Publicado');
+    expect(tarjeta.querySelector('[data-campo="marcado"]').textContent).toBe(
+      'Marcado para seguimiento',
+    );
+    expect(tarjeta.querySelector('[data-campo="editado"]').textContent).toBe(
+      'Editado por moderación',
+    );
+    // Sin reportes, «esperando desde» no dice nada: se da la fecha del comentario.
+    expect(tarjeta.textContent).toMatch(/Publicado el/);
+    expect(tarjeta.textContent).not.toMatch(/Esperando desde/);
+  });
+
+  test('en revisión y sin marca, la tarjeta no repite el estado de la cola', () => {
+    const tarjeta = tarjetaDeEntrada(entrada(), () => {});
+    expect(tarjeta.querySelector('[data-campo="estado"]')).toBeNull();
+    expect(tarjeta.querySelector('[data-campo="marcado"]')).toBeNull();
+    expect(tarjeta.textContent).toMatch(/Esperando desde/);
+  });
+
+  test('el filtro pide la lista de seguimiento o los sin marcar, y su vacío dice lo suyo', async () => {
+    const consultarCola = jest.fn().mockResolvedValue({ entradas: [], total: 0 });
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola } });
+    await asentar();
+
+    expect(consultarCola).toHaveBeenLastCalledWith(expect.objectContaining({ marcado: null }));
+
+    const filtro = raiz.querySelector('[data-zona="filtro"]');
+    filtro.value = 'marcados';
+    filtro.dispatchEvent(new Event('change'));
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith(expect.objectContaining({ marcado: true }));
+    expect(raiz.querySelector('[data-zona="cola"]').textContent).toContain(
+      'No hay comentarios marcados para seguimiento',
+    );
+
+    filtro.value = 'sin-marcar';
+    filtro.dispatchEvent(new Event('change'));
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith(expect.objectContaining({ marcado: false }));
+  });
 });
 
 describe('el detalle y la decision', () => {
-  test('solo ofrece las acciones que valen desde el estado actual', () => {
+  test('solo ofrece las acciones que valen desde el estado actual y la marca', () => {
     const enRevision = panelDeDetalle(detalle(), () => {});
     const ofrecidas = [...enRevision.querySelectorAll('option')].map((o) => o.value);
-    expect(ofrecidas).toEqual(['APROBAR', 'OCULTAR', 'ELIMINAR']);
-    // No se pinta «Restaurar» sobre algo que no esta oculto: seria un boton
-    // que el servicio contesta con 409.
+    expect(ofrecidas).toEqual(['APROBAR', 'OCULTAR', 'ELIMINAR', 'EDITAR', 'MARCAR']);
+    // No se pinta «Restaurar» sobre algo que no esta oculto, ni «Quitar la
+    // marca» sobre algo sin marca: serian botones que el servicio contesta
+    // con 409.
     expect(ofrecidas).not.toContain('RESTAURAR');
+    expect(ofrecidas).not.toContain('DESMARCAR');
 
     const oculto = panelDeDetalle(
-      detalle({ comentario: { ...detalle().comentario, estado: 'OCULTO' } }),
+      detalle({ comentario: { ...detalle().comentario, estado: 'OCULTO', marcado: true } }),
       () => {},
     );
     expect([...oculto.querySelectorAll('option')].map((o) => o.value)).toEqual([
       'ELIMINAR',
       'RESTAURAR',
+      'EDITAR',
+      'DESMARCAR',
     ]);
+  });
+
+  test('1.5.0: el detalle enseña el estado, la marca y si fue editado', () => {
+    const panel = panelDeDetalle(
+      detalle({
+        comentario: { ...detalle().comentario, estado: 'PUBLICADO', marcado: true, editado: true },
+      }),
+      () => {},
+    );
+
+    expect(panel.querySelector('[data-campo="estado"]').textContent).toBe('Publicado');
+    expect(panel.querySelector('[data-campo="marcado"]')).not.toBeNull();
+    expect(panel.querySelector('[data-campo="editado"]')).not.toBeNull();
+  });
+
+  test('EDITAR pide el texto nuevo, que empieza siendo el actual y viaja con la decisión', () => {
+    const alDecidir = jest.fn();
+    const panel = panelDeDetalle(detalle(), alDecidir);
+    document.body.append(panel);
+
+    const accion = panel.querySelector('#accion');
+    const campo = panel.querySelector('[data-zona="texto-nuevo"]');
+    expect(campo.hidden).toBe(true);
+
+    accion.value = 'EDITAR';
+    accion.dispatchEvent(new Event('change'));
+    expect(campo.hidden).toBe(false);
+    const texto = panel.querySelector('#texto-nuevo');
+    expect(texto.value).toBe('Un texto reportado');
+    expect(panel.querySelector('label[for="texto-nuevo"]').textContent).toBe('Texto nuevo');
+
+    const motivo = panel.querySelector('#motivo');
+    motivo.value = 'Se quita un insulto';
+    motivo.dispatchEvent(new Event('input'));
+    const boton = panel.querySelector('[data-accion="decidir"]');
+    expect(boton.disabled).toBe(false);
+
+    // Sin texto nuevo no hay edición posible.
+    texto.value = '   ';
+    texto.dispatchEvent(new Event('input'));
+    expect(boton.disabled).toBe(true);
+
+    texto.value = '  Un texto sin insultos  ';
+    texto.dispatchEvent(new Event('input'));
+    panel
+      .querySelector('[data-zona="decision"]')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    expect(alDecidir).toHaveBeenCalledWith({
+      accion: 'EDITAR',
+      motivo: 'Se quita un insulto',
+      textoNuevo: 'Un texto sin insultos',
+    });
+  });
+
+  test('MARCAR dice que es una nota interna: el autor no recibe aviso', () => {
+    const panel = panelDeDetalle(detalle(), () => {});
+    const accion = panel.querySelector('#accion');
+    const pista = panel.querySelector('#motivo-pista');
+    expect(pista.textContent).toMatch(/el autor lo recibe/);
+
+    accion.value = 'MARCAR';
+    accion.dispatchEvent(new Event('change'));
+    expect(pista.textContent).toMatch(/nota interna: el autor no recibe aviso/);
+  });
+
+  test('el motivo tiene de 3 a 500 caracteres, como el contrato', () => {
+    const panel = panelDeDetalle(detalle(), () => {});
+    const motivo = panel.querySelector('#motivo');
+    const boton = panel.querySelector('[data-accion="decidir"]');
+
+    expect(motivo.getAttribute('maxlength')).toBe('500');
+    motivo.value = 'no';
+    motivo.dispatchEvent(new Event('input'));
+    expect(boton.disabled).toBe(true);
+    motivo.value = 'spam';
+    motivo.dispatchEvent(new Event('input'));
+    expect(boton.disabled).toBe(false);
+  });
+
+  test('las imágenes del comentario se piden con la sesión y se pintan desde un blob', async () => {
+    const blob = new Blob(['png'], { type: 'image/png' });
+    const cargarImagen = jest.fn().mockResolvedValueOnce(blob).mockResolvedValueOnce(null);
+    const panel = panelDeDetalle(
+      detalle({
+        comentario: {
+          ...detalle().comentario,
+          imagenes: [IMAGEN, '3f1c2b4a-2222-4222-8333-944455566677', 'antigua.png'],
+        },
+      }),
+      () => {},
+      { cargarImagen, crearUrl: () => 'blob:prueba' },
+    );
+    await asentar();
+
+    expect(cargarImagen).toHaveBeenCalledWith(IMAGEN);
+    const zona = panel.querySelector('[data-zona="imagenes"]');
+    const imagen = zona.querySelector('img');
+    expect(imagen.getAttribute('src')).toBe('blob:prueba');
+    expect(imagen.getAttribute('alt')).toBe('Imagen 1 de 3 que adjuntó LyraRoja');
+    // La que ya no está lo dice; el nombre antiguo se enseña como texto.
+    expect(zona.textContent).toContain('Imagen no disponible');
+    expect(zona.textContent).toContain('antigua.png');
+    expect(cargarImagen).toHaveBeenCalledTimes(2);
   });
 
   test('un comentario ELIMINADO no ofrece formulario: ya no admite decisiones', () => {
@@ -179,6 +347,30 @@ describe('el detalle y la decision', () => {
     expect(entradas[0].textContent).toContain('OCULTAR por AdaLaJusta');
     expect(entradas[0].textContent).toContain('EN_REVISION → OCULTO');
   });
+
+  test('una edición en el historial dice qué texto había y cuál quedó', () => {
+    const panel = panelDeDetalle(
+      detalle({
+        historial: [
+          {
+            accion: 'EDITAR',
+            apodoModerador: 'AdaLaJusta',
+            estadoAnterior: 'EN_REVISION',
+            estadoNuevo: 'EN_REVISION',
+            motivo: 'Insulto',
+            fecha: AHORA,
+            textoAnterior: 'Eres un inútil',
+            textoNuevo: 'No me gustó',
+          },
+        ],
+      }),
+      () => {},
+    );
+
+    const linea = panel.querySelector('[data-zona="historial"] li').textContent;
+    expect(linea).toContain('Antes: «Eres un inútil»');
+    expect(linea).toContain('Ahora: «No me gustó»');
+  });
 });
 
 describe('resolver desde la vista', () => {
@@ -208,7 +400,7 @@ describe('resolver desde la vista', () => {
 
   test('dice que el autor se entero cuando el aviso salio', async () => {
     const api = apiQueResuelve({
-      comentario: { ...entrada().comentario, estado: 'OCULTO' },
+      comentario: { ...entrada().comentario, estado: 'PUBLICADO' },
       asiento: { id: 'a-1' },
       autorNotificado: true,
     });
@@ -218,7 +410,47 @@ describe('resolver desde la vista', () => {
       accion: 'APROBAR',
       motivo: 'Acoso a otro jugador',
     });
-    expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain('Se aviso al autor');
+    const aviso = raiz.querySelector('[data-zona="aviso"]');
+    expect(aviso.textContent).toContain('Comentario aprobado');
+    expect(aviso.textContent).toContain('Se avisó al autor');
+  });
+
+  test('marcar: se dice que es interno y el detalle vuelve a abrirse para seguir', async () => {
+    const api = apiQueResuelve({
+      comentario: { ...entrada().comentario, marcado: true },
+      asiento: { id: 'a-2' },
+      autorNotificado: false,
+    });
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    const accion = raiz.querySelector('#accion');
+    accion.value = 'MARCAR';
+    accion.dispatchEvent(new Event('change'));
+    const motivo = raiz.querySelector('#motivo');
+    motivo.value = 'Seguimiento de este autor';
+    motivo.dispatchEvent(new Event('input'));
+    raiz
+      .querySelector('[data-zona="decision"]')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await asentar();
+    await asentar();
+
+    expect(api.resolverComentario).toHaveBeenCalledWith('com-1', {
+      accion: 'MARCAR',
+      motivo: 'Seguimiento de este autor',
+    });
+    const aviso = raiz.querySelector('[data-zona="aviso"]');
+    expect(aviso.textContent).toContain('Comentario marcado para seguimiento');
+    expect(aviso.textContent).toContain('nota interna');
+    // No dice «el aviso no salió»: no tenía que salir.
+    expect(aviso.textContent).not.toMatch(/no salió/);
+    // El mismo comentario sigue delante, con la decisión ya en su detalle.
+    expect(api.consultarDetalle).toHaveBeenCalledTimes(2);
+    expect(raiz.querySelector('[data-zona="detalle"]').dataset.comentarioId).toBe('com-1');
   });
 
   test('y dice que NO se entero cuando el aviso no salio: el aviso es fail-open', async () => {
@@ -249,7 +481,7 @@ describe('resolver desde la vista', () => {
     const raiz = await decidir(api);
 
     expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
-      'Otro moderador se adelanto',
+      'Otro moderador se adelantó',
     );
     // Dos veces: la del montaje y la de despues del conflicto. Dejar la
     // pantalla vieja seria invitar al segundo intento contra el mismo estado.
