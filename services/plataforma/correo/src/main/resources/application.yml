@@ -2,6 +2,8 @@ server:
   port: 8082
 
 spring:
+  application:
+    name: correo
   mail:
     host: ${SMTP_HOST:localhost}
     port: ${SMTP_PORT:1025}
@@ -24,13 +26,45 @@ spring:
       # en claro sin que nadie se entere.
       mail.smtp.starttls.enable: ${SMTP_TLS:false}
       mail.smtp.starttls.required: ${SMTP_TLS:false}
-      # Sin timeout, un proveedor que no responde deja el hilo de la peticion
-      # colgado hasta que el sistema operativo se rinde. Diez segundos es mas
-      # de lo que tarda cualquier SMTP sano y menos de lo que aguanta quien
-      # esta esperando a registrarse.
+      # Sin timeout, un proveedor que no responde deja colgado al trabajador
+      # de entrega hasta que el sistema operativo se rinde, y con el a toda la
+      # cola. Diez segundos es mas de lo que tarda cualquier SMTP sano.
       mail.smtp.connectiontimeout: ${SMTP_TIMEOUT_MS:10000}
       mail.smtp.timeout: ${SMTP_TIMEOUT_MS:10000}
       mail.smtp.writetimeout: ${SMTP_TIMEOUT_MS:10000}
+
+  # B1 — la cola persistente vive en el esquema `correo` de la PostgreSQL de
+  # la plataforma (regla 7: esquema propio, misma instancia que el resto del
+  # bloque). Mismas variables que los demas servicios de plataforma (regla
+  # 10); lo de detras de los dos puntos es el entorno local del compose.
+  datasource:
+    url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
+    username: ${DB_USER:usuario_nexus}
+    password: ${DB_PASS:password_secreta_123}
+    hikari:
+      # Tres conexiones: la peticion que encola, el trabajador de entrega y la
+      # consulta de la evidencia pueden coincidir, y nada mas. La instancia
+      # compartida (256 MB) agradece cada conexion que no se abre.
+      maximum-pool-size: 3
+      minimum-idle: 1
+      # Si la base no responde, la peticion recibe un 503 en tres segundos en
+      # vez de quedarse colgada los treinta de Hikari por omision: quien pide
+      # el correo (ms-identidad) corta mucho antes y reintenta.
+      connection-timeout: ${CORREO_DB_ESPERA_MS:3000}
+
+  flyway:
+    schemas: correo
+    default-schema: correo
+
+  # Al detener el contenedor, la ronda de entrega en curso termina su correo
+  # en vez de cortarse a mitad del SMTP. Lo que quede reclamado sin empezar
+  # lo recupera el siguiente arranque (correo.entrega.atascado-tras).
+  task:
+    scheduling:
+      shutdown:
+        await-termination: true
+        await-termination-period: ${CORREO_ESPERA_AL_DETENER:10s}
+
   mvc:
     problemdetails:
       enabled: true
@@ -61,6 +95,16 @@ management:
     web:
       exposure:
         include: health,info,metrics,prometheus
+  health:
+    # Con la cola persistente, un SMTP caido ya no impide aceptar correos:
+    # se guardan y se reintentan. Que la salud del servicio siga la del
+    # proveedor lo daria por muerto justo cuando mas falta hace que acepte,
+    # y ademas abria una conexion SMTP en cada sondeo del healthcheck. Lo
+    # que si sigue en la salud es la base (sin ella no hay 202 posible). El
+    # estado del proveedor se ve en GET /correos/envios y en
+    # correo_pendientes.
+    mail:
+      enabled: false
 
 # Identidad del remitente y enlaces publicos.
 #
@@ -68,15 +112,40 @@ management:
 # rechaza el mensaje si el From no es una direccion que la cuenta tenga
 # autorizada, y ese rechazo es la causa mas comun de "el correo no llega".
 correo:
-  remitente: ${CORREO_REMITENTE:The Nexus Battles VI <no-reply@nexusbattles.local>}
+  # MAIL_FROM en cada entorno. Por omision una direccion del dominio
+  # reservado .test (RFC 2606), que no existe en Internet: sirve para
+  # Mailpit y obliga a configurar la de verdad antes de hablar con un
+  # proveedor. Vacia en el .env cuenta como no configurada
+  # (ConfiguracionDeCorreo).
+  remitente: ${MAIL_FROM:The Nexus Battles VI <no-reply@nexusbattles.test>}
   responder-a: ${CORREO_RESPONDER_A:}
   # Base publica de la aplicacion para los enlaces de los correos. Nunca una
   # IP escrita en el codigo: cuando el entorno cambie de direccion, los
   # correos ya enviados seguirian apuntando a la anterior.
-  base-publica: ${PUBLIC_BASE_URL:http://localhost:8080}
-  # Cuantos envios recientes se recuerdan para poder demostrar la entrega.
-  # Es memoria, no un historial: se pierde al reiniciar, a proposito.
-  envios-recordados: ${CORREO_ENVIOS_RECORDADOS:200}
+  base-publica: ${PUBLIC_BASE_URL:http://localhost}
+  # B1 — el trabajador que vacia la cola (TrabajadorDeEntrega).
+  entrega:
+    # false = no se programa ninguna ronda (las pruebas la mueven a mano).
+    activa: ${CORREO_ENTREGA_ACTIVA:true}
+    # Cada cuanto mira si hay correos por entregar. Entre ronda y ronda, no
+    # durante: una ronda lenta nunca se solapa con la siguiente.
+    intervalo-ms: ${CORREO_ENTREGA_INTERVALO_MS:2000}
+    # Cuantos correos reclama en cada ronda.
+    lote: ${CORREO_ENTREGA_LOTE:10}
+    # Al agotar estos intentos el correo queda FALLIDO y no se reintenta mas.
+    max-intentos: ${CORREO_MAX_INTENTOS:8}
+    # Espera tras el 1.er, 2.o, 3.er... fallo transitorio; pasado el ultimo
+    # valor se repite el ultimo. Con los valores por omision, un correo se
+    # reintenta durante casi dos horas antes de darse por fallido.
+    esperas: ${CORREO_REINTENTOS_ESPERAS:30s,1m,2m,5m,15m,30m,1h}
+    # Un correo que lleva mas de esto en ENVIANDO se da por interrumpido (el
+    # servicio cayo a mitad de envio) y vuelve a la cola.
+    atascado-tras: ${CORREO_ATASCADO_TRAS:5m}
+    # Los envios terminados (enviados, desviados, omitidos o fallidos) se
+    # borran pasados estos dias: la tabla es una cola y una evidencia de
+    # entrega reciente, no un archivo de correos de los jugadores.
+    retencion-dias: ${CORREO_RETENCION_DIAS:30}
+    purga-intervalo-ms: ${CORREO_PURGA_INTERVALO_MS:3600000}
   # A donde van las direcciones reservadas para pruebas (RFC 2606: .test,
   # .example, .invalid, .localhost, y .local por RFC 6762). Con un proveedor
   # real no pueden ir alli: las aceptaria, no podria entregarlas y las
@@ -86,7 +155,7 @@ correo:
   #
   # Vacio = no hay buzon propio. Entonces van al servidor principal solo si
   # este ya es un buzon de pruebas (Mailpit en local); si es un proveedor
-  # real, no salen y el registro de envios las anota como OMITIDO.
+  # real, no salen y la cola las deja como OMITIDO.
   buzon-de-pruebas:
     host: ${CORREO_BUZON_PRUEBAS_HOST:}
     puerto: ${CORREO_BUZON_PRUEBAS_PUERTO:1025}
