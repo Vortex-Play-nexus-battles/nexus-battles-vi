@@ -129,8 +129,9 @@ dos por segundo sostenidas es más de lo que escribe nadie a mano.
 **Consecuencias conocidas:**
 
 - La medición k6 **a demanda contra DEV** desde un runner es una sola dirección
-  pública: el escenario `login` mediría 429 del borde, no el login. Ese
-  escenario se mide en el banco E2E (origen privado).
+  pública: el escenario `login` mediría 429 del borde, no el login. Contra DEV
+  se deja fuera con `ESCENARIOS` (campo `escenarios` del workflow, ver
+  `tests/rendimiento/README.md`) y se mide en el banco E2E (origen privado).
 - Si algún día hay un proxy o CloudFront delante, todos los clientes llegarían
   desde la dirección del proxy: compartirían cupo (o, si es privada, nadie
   tendría límite). Hay que configurar `real_ip` **antes**.
