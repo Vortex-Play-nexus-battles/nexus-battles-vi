@@ -7587,6 +7587,30 @@ body:not([data-modo='combate']) .registro-combate {
   cursor: pointer;
 }
 
+/* --- Imágenes de un comentario en moderación (B3) -------------------------
+   Las de un comentario en revisión no son públicas: se piden con la sesión
+   del moderador. Más grandes que en el hilo, enteras (sin recorte), porque
+   aquí se juzga lo que enseñan. */
+
+.moderacion-imagenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moderacion-imagenes__imagen {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  object-fit: contain;
+}
+
 @media (max-width: 767px) {
   /* 44×44 al dedo (WCAG 2.5.5): lo que se pulsa es la etiqueta. */
   .selector-estrellas__opcion {
