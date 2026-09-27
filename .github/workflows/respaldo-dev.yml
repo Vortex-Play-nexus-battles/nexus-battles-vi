@@ -1,0 +1,150 @@
+# Respaldo diario de las bases de DEV, en los dos hosts (B12).
+#
+# ## Que hace
+#
+# Copia infrastructure/respaldo-dr/ a /opt/nexus de cada host por scp y, por
+# ssh, ejecuta alli:
+#
+#   respaldar.sh --host <plataforma|contenido>
+#       pg_dump -Fc de cada base de cada PostgreSQL en marcha (plataforma) y
+#       mongodump --archive --gzip de cada MongoDB (contenido), a
+#       /opt/nexus/respaldos/<host>/<AAAAMMDD-HHMM>/, retencion de 7 dias.
+#   simulacro-restauracion.sh --host <plataforma|contenido>
+#       restaura el ultimo respaldo en bases temporales simulacro_* del mismo
+#       servidor, cuenta tablas/filas o colecciones/documentos y las borra.
+#       Un respaldo que nunca se ha restaurado no es un respaldo.
+#
+# Mismo canal que cd.yml (appleboy/scp-action y appleboy/ssh-action, las
+# unicas acciones de terceros que admite la organizacion) y mismos secretos del
+# entorno `dev`. Detalle, RPO/RTO y como restaurar a mano:
+# infrastructure/respaldo-dr/README.md.
+#
+# ## Sin coste nuevo
+#
+# Los respaldos se quedan en el disco de cada host (el gp3 que ya se paga).
+# Este workflow NO enciende un host apagado: apagado no cambia nada que
+# respaldar, y encenderlo costaria horas de instancia. Si el host no contesta,
+# el job lo dice y termina en verde. Copiar los respaldos fuera (S3) queda
+# como opcion que necesita autorizacion de coste: ver el README.
+#
+# ## Cuando
+#
+# 02:30 UTC = 21:30 en Colombia, antes del apagado nocturno de las 23:00; los
+# fines de semana los hosts estan apagados y el job solo lo anota. Los cron de
+# GitHub solo corren desde la rama por defecto y pueden llegar con retraso.
+name: Respaldo de DEV
+
+on:
+  schedule:
+    - cron: "30 2 * * *"
+  workflow_dispatch:
+    inputs:
+      simulacro:
+        description: "Despues de respaldar, restaurar el respaldo en bases temporales simulacro_* y borrarlas"
+        type: boolean
+        default: true
+
+# Nunca dos respaldos del mismo host a la vez, y nunca se corta uno a medias.
+concurrency:
+  group: respaldo-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  respaldar:
+    name: Respaldar ${{ matrix.host }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # Los secretos SSH de los dos hosts son del entorno `dev`, como en cd.yml.
+    environment: dev
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [plataforma, contenido]
+    steps:
+      - uses: actions/checkout@v4
+
+      # Los secretos de cada host, elegidos por la matriz. Van por `env` y no
+      # interpolados en el script.
+      - name: Comprobar que el host contesta (sin encenderlo)
+        id: host
+        env:
+          HOST_PLATAFORMA: ${{ secrets.DEPLOY_HOST_DEV }}
+          HOST_CONTENIDO: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          HOST_LOGICO: ${{ matrix.host }}
+        run: |
+          if [ "$HOST_LOGICO" = "plataforma" ]; then destino="$HOST_PLATAFORMA"; else destino="$HOST_CONTENIDO"; fi
+          if [ -z "$destino" ]; then
+            echo "::error::Falta el secreto del host de $HOST_LOGICO en el entorno dev."
+            exit 1
+          fi
+          if timeout 10 bash -c "exec 3<>/dev/tcp/$destino/22" 2>/dev/null; then
+            echo "encendido=true" >> "$GITHUB_OUTPUT"
+            echo "El host de $HOST_LOGICO contesta en el 22."
+          else
+            echo "encendido=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::El host de $HOST_LOGICO no contesta (apagado por la noche o el fin de semana): nada que respaldar; sus datos no cambian mientras esta apagado."
+          fi
+
+      - name: Copiar los scripts de respaldo (plataforma)
+        if: steps.host.outputs.encendido == 'true' && matrix.host == 'plataforma'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "infrastructure/respaldo-dr/respaldar.sh,infrastructure/respaldo-dr/simulacro-restauracion.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Copiar los scripts de respaldo (contenido)
+        if: steps.host.outputs.encendido == 'true' && matrix.host == 'contenido'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          source: "infrastructure/respaldo-dr/respaldar.sh,infrastructure/respaldo-dr/simulacro-restauracion.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      # En un cron, `inputs.simulacro` no existe: el simulacro corre tambien.
+      - name: Respaldar y ensayar la restauracion (plataforma)
+        if: steps.host.outputs.encendido == 'true' && matrix.host == 'plataforma'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SIMULACRO: ${{ github.event_name == 'schedule' || inputs.simulacro }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          envs: SIMULACRO
+          command_timeout: 15m
+          script: |
+            set -e
+            chmod +x /opt/nexus/infrastructure/respaldo-dr/*.sh
+            /opt/nexus/infrastructure/respaldo-dr/respaldar.sh --host plataforma
+            if [ "$SIMULACRO" = "true" ]; then
+              /opt/nexus/infrastructure/respaldo-dr/simulacro-restauracion.sh --host plataforma
+            fi
+
+      - name: Respaldar y ensayar la restauracion (contenido)
+        if: steps.host.outputs.encendido == 'true' && matrix.host == 'contenido'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          SIMULACRO: ${{ github.event_name == 'schedule' || inputs.simulacro }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_CONTENIDO_DEV }}
+          username: ${{ secrets.SSH_USER_CONTENIDO_DEV }}
+          key: ${{ secrets.SSH_KEY_CONTENIDO_DEV }}
+          envs: SIMULACRO
+          command_timeout: 15m
+          script: |
+            set -e
+            chmod +x /opt/nexus/infrastructure/respaldo-dr/*.sh
+            /opt/nexus/infrastructure/respaldo-dr/respaldar.sh --host contenido
+            if [ "$SIMULACRO" = "true" ]; then
+              /opt/nexus/infrastructure/respaldo-dr/simulacro-restauracion.sh --host contenido
+            fi

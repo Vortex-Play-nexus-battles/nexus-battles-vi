@@ -385,6 +385,201 @@ else
 fi
 
 echo
+echo "Trafico publico (B12) — el mismo borde, visto desde una red de internet"
+# Todo lo de arriba sale del anfitrion por localhost:8099, y el borde lo ve
+# llegar desde la pasarela de Docker: una direccion PRIVADA, la misma clase de
+# origen que el banco E2E y que un tunel SSH al host. Desde B12 el borde trata
+# distinto a un origen privado y a uno publico (Mailpit, limite de
+# frecuencia), asi que el banco necesita los dos. El publico es
+# `cliente-publico` (docker-compose.yml): vive solo en 203.0.113.0/24
+# (TEST-NET-3) y entra al borde por esa red.
+PRUEBAS="$(cd "$(dirname "$0")" && pwd)"
+BORDE_PUBLICO="${BORDE_PUBLICO:-http://borde}"
+
+# desdeFuera <argumentos de curl>: la peticion, hecha desde internet.
+# MSYS_NO_PATHCONV: en el bash de Git para Windows, sin esto un argumento como
+# /dev/null le llegaria a docker convertido en una ruta de Windows.
+desdeFuera() {
+    (cd "$PRUEBAS" && MSYS_NO_PATHCONV=1 docker compose exec -T cliente-publico curl -s "$@")
+}
+
+# comprobarFuera / codigoFuera: `comprobar` y `codigo`, desde internet.
+comprobarFuera() {
+    local metodo="$1" ruta="$2" esperado="$3"
+    local obtenido
+    obtenido="$(desdeFuera -X "$metodo" "$BORDE_PUBLICO$ruta")"
+    if [ "$obtenido" = "$esperado" ]; then
+        printf '  ok    fuera %-6s %-34s -> %s\n' "$metodo" "$ruta" "$obtenido"
+    else
+        printf '  FALLA fuera %-6s %-34s\n        esperado: %s\n        obtenido: %s\n' \
+            "$metodo" "$ruta" "$esperado" "$obtenido"
+        fallos=$((fallos + 1))
+    fi
+}
+codigoFuera() {
+    local metodo="$1" ruta="$2" esperado="$3"
+    local obtenido
+    obtenido="$(desdeFuera -o /dev/null -w '%{http_code}' -X "$metodo" "$BORDE_PUBLICO$ruta")"
+    if [ "$obtenido" = "$esperado" ]; then
+        printf '  ok    fuera %-6s %-34s -> %s\n' "$metodo" "$ruta" "$obtenido"
+    else
+        printf '  FALLA fuera %-6s %-34s  esperado %s, obtenido %s\n' \
+            "$metodo" "$ruta" "$esperado" "$obtenido"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# El eco devuelve en X-Eco-Origen el $remote_addr que el borde le reenvia
+# (X-Real-IP). Si Docker cambiara la red por la que publica el 8099, el
+# anfitrion dejaria de ser privado y todo este bloque probaria otra cosa: por
+# eso se comprueba en cada corrida, y no se da por hecho.
+origenVisto() { printf '%s\n' "$1" | tr -d '\r' | grep -i '^x-eco-origen:' | sed 's/^[^:]*: *//'; }
+origenAnfitrion="$(origenVisto "$(curl -s -o /dev/null -D - "$BORDE/api/v1/salas")")"
+origenPublico="$(origenVisto "$(desdeFuera -o /dev/null -D - "$BORDE_PUBLICO/api/v1/salas")")"
+if printf '%s' "$origenAnfitrion" | grep -Eq '^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'; then
+    printf '  ok    el anfitrion llega al borde como origen privado (%s)\n' "$origenAnfitrion"
+else
+    printf '  FALLA el anfitrion deberia llegar como origen privado y llega como "%s"\n' "$origenAnfitrion"
+    fallos=$((fallos + 1))
+fi
+if printf '%s' "$origenPublico" | grep -Eq '^203\.0\.113\.'; then
+    printf '  ok    el cliente de internet llega como origen publico (%s)\n' "$origenPublico"
+else
+    printf '  FALLA el cliente de internet deberia llegar desde 203.0.113.0/24 y llega como "%s"\n' "$origenPublico"
+    fallos=$((fallos + 1))
+fi
+# El reparto es el mismo para todo el mundo.
+comprobarFuera GET  /api/v1/salas          "salas GET /api/v1/salas"
+comprobarFuera POST /api/v1/auth/login     "identidad POST /api/v1/auth/login"
+codigoFuera    GET  /salud-borde           200
+# Mailpit (B12): la bandeja con los codigos de verificacion y de recuperacion
+# no se sirve a internet; al anfitrion, que es privado, si. Las dos lineas de
+# la seccion «Mailpit» de mas arriba salen tambien del anfitrion y siguen
+# llegando al eco: los bancos y los tuneles de DEV no pierden la bandeja.
+codigoFuera    GET  /mailpit/              403
+codigoFuera    GET  "/mailpit/api/v1/search?query=to:ana@nexus.test" 403
+codigoFuera    GET  /mailpit/api/v1/message/abc 403
+codigo         GET  /mailpit/              200
+
+echo
+echo "Limite de frecuencia (B12) — lo que un bot haria en bucle, desde internet"
+# Rafagas de verdad, una ejecucion por rafaga dentro del cliente publico para
+# que las peticiones salgan seguidas. Los numeros del borde: acceso 30/min con
+# rafaga de 20, escritura 120/min con rafaga de 60, ambos sin espera. Cada
+# rafaga pasa de largo el cupo, asi que da igual lo que se haya liberado entre
+# una ejecucion y la siguiente: si la ruta cuenta, aparece el 429.
+
+# rafagaFuera <metodo> <ruta> <n>: n peticiones seguidas desde internet.
+# Imprime "codigo NNN" por peticion y, de la ultima, tambien sus cabeceras y
+# su cuerpo, para mirar la forma del 429.
+rafagaFuera() {
+    (cd "$PRUEBAS" && MSYS_NO_PATHCONV=1 docker compose exec -T cliente-publico sh -c '
+        i=1
+        while [ "$i" -lt "$3" ]; do
+            curl -s -o /dev/null -w "codigo %{http_code}\n" -X "$1" "$2"
+            i=$((i + 1))
+        done
+        curl -s -D - -w "\ncodigo %{http_code}\n" -X "$1" "$2"' _ "$1" "$BORDE_PUBLICO$2" "$3")
+}
+# cuantos <codigo> <salida de una rafaga>
+cuantos() { printf '%s\n' "$2" | grep -c "^codigo $1\$"; }
+
+# limitada <metodo> <ruta> <n> <minimo de 2xx> <Retry-After esperado>
+# La rafaga deja pasar al menos el cupo y rechaza el resto con el 429 del
+# borde: problem details, su `type`, Retry-After y las cabeceras de seguridad
+# heredadas del server (la location con nombre no las pierde).
+limitada() {
+    local metodo="$1" ruta="$2" n="$3" minimo="$4" reintento="$5"
+    local salida bien mal tipo tras nosniff cuerpo
+    salida="$(rafagaFuera "$metodo" "$ruta" "$n" | tr -d '\r')"
+    bien="$(cuantos 200 "$salida")"
+    mal="$(cuantos 429 "$salida")"
+    tipo="$(printf '%s\n' "$salida" | grep -i '^content-type:' | tail -1 | sed 's/^[^:]*: *//')"
+    tras="$(printf '%s\n' "$salida" | grep -i '^retry-after:' | tail -1 | sed 's/^[^:]*: *//')"
+    nosniff="$(printf '%s\n' "$salida" | grep -ic '^x-content-type-options: nosniff')"
+    cuerpo="$(printf '%s\n' "$salida" | grep -c '"type":"https://nexusbattles.upb.edu.co/errors/demasiadas-peticiones".*"status":429')"
+    if [ "$mal" -gt 0 ] && [ "$bien" -ge "$minimo" ] \
+       && printf '%s' "$tipo" | grep -q '^application/problem+json' \
+       && [ "$tras" = "$reintento" ] && [ "$nosniff" -ge 1 ] && [ "$cuerpo" -ge 1 ]; then
+        printf '  ok    fuera %-6s %-40s %s x200, %s x429 (problem+json, Retry-After: %s)\n' \
+            "$metodo" "$ruta" "$bien" "$mal" "$tras"
+    else
+        printf '  FALLA fuera %-6s %-40s\n        %s x200 (minimo %s), %s x429; Content-Type "%s"; Retry-After "%s" (esperado %s); nosniff %s; cuerpo problem details %s\n' \
+            "$metodo" "$ruta" "$bien" "$minimo" "$mal" "$tipo" "$tras" "$reintento" "$nosniff" "$cuerpo"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# libre <metodo> <ruta> <n>: n peticiones seguidas desde internet, ni un 429.
+libre() {
+    local metodo="$1" ruta="$2" n="$3"
+    local salida bien
+    salida="$(rafagaFuera "$metodo" "$ruta" "$n" | tr -d '\r')"
+    bien="$(cuantos 200 "$salida")"
+    if [ "$bien" -eq "$n" ]; then
+        printf '  ok    fuera %-6s %-40s %s x200, sin limite\n' "$metodo" "$ruta" "$bien"
+    else
+        printf '  FALLA fuera %-6s %-40s solo %s de %s con 200 (%s x429)\n' \
+            "$metodo" "$ruta" "$bien" "$n" "$(cuantos 429 "$salida")"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# La lectura no se limita, ni siquiera en la misma ruta que si se limita al
+# escribir; tampoco una escritura que no esta en la lista.
+libre     GET  /api/v1/products/p-1/comments                  40
+libre     GET  "/api/v1/vitrina?page=0"                       40
+libre     POST /api/v1/salas                                  30
+# acceso: la primera rafaga llena el cupo; las demas rutas de la clase
+# comparten cupo (misma direccion, misma zona) y tienen que dar 429 igual.
+limitada  POST /api/v1/auth/login                             30 20 2
+limitada  POST /api/v1/auth/registro                          25  0 2
+limitada  POST /api/v1/auth/verificacion/confirmacion         25  0 2
+limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
+# escritura: zona propia, asi que el login agotado no la toca.
+limitada  POST /api/v1/products/p-1/comments                  80 60 1
+limitada  POST /api/v1/products/p-1/rating                    25  0 1
+limitada  POST /api/v1/products/p-1/comments/c-1/reportes     25  0 1
+limitada  POST /api/v1/comentarios/imagenes                   25  0 1
+limitada  POST /api/v1/subastas/s-1/pujas                     25  0 1
+
+# Desde el anfitrion (origen privado, como el banco E2E) el login no se
+# limita: 40 seguidas, las 40 llegan a identidad.
+privadas="$(for _ in $(seq 1 40); do
+    curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BORDE/api/v1/auth/login"
+done | grep -c '^200$')"
+if [ "$privadas" -eq 40 ]; then
+    printf '  ok    anfitrion POST /api/v1/auth/login x40: 40 x200, un origen privado no se limita\n'
+else
+    printf '  FALLA anfitrion POST /api/v1/auth/login x40: solo %s x200\n' "$privadas"
+    fallos=$((fallos + 1))
+fi
+
+echo
+echo "Trazas (regla 5, B12) — el borde no se come traceparent ni X-Trace-Id"
+# nginx reenvia las cabeceras de la peticion salvo las que tienen guion bajo
+# (underscores_in_headers off) y las que pisa un proxy_set_header; y devuelve
+# las de la respuesta salvo unas pocas suyas. Ninguna de las de traza cae en
+# esos casos, pero eso se comprueba, no se supone: en una location normal, en
+# una que reescribe la ruta (vitrina) y en una de WebSocket, que declara sus
+# propios proxy_set_header. El eco devuelve lo que le llego y pone su propio
+# traceparent en la respuesta, como FiltroDeTraza en cada servicio.
+TRAZA='00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+for ruta in /api/v1/salas "/api/v1/vitrina?page=0" /ws/notificaciones; do
+    cab="$(curl -s -o /dev/null -D - -H "traceparent: $TRAZA" -H 'X-Trace-Id: traza-del-banco' "$BORDE$ruta" | tr -d '\r')"
+    ida="$(printf '%s\n' "$cab" | grep -i '^x-eco-traceparent:' | sed 's/^[^:]*: *//')"
+    idaId="$(printf '%s\n' "$cab" | grep -i '^x-eco-trace-id:' | sed 's/^[^:]*: *//')"
+    vuelta="$(printf '%s\n' "$cab" | grep -i '^traceparent:' | sed 's/^[^:]*: *//')"
+    if [ "$ida" = "$TRAZA" ] && [ "$idaId" = "traza-del-banco" ] && [ -n "$vuelta" ]; then
+        printf '  ok    %-26s traceparent y X-Trace-Id llegan al servicio; su traceparent vuelve\n' "$ruta"
+    else
+        printf '  FALLA %-26s ida traceparent "%s", X-Trace-Id "%s"; vuelta traceparent "%s"\n' \
+            "$ruta" "$ida" "$idaId" "$vuelta"
+        fallos=$((fallos + 1))
+    fi
+done
+
+echo
 echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
@@ -397,7 +592,143 @@ echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"
 # en R16 por decision de los duenos del prefijo: que nginx no decida la
 # semantica de una ruta. Si vuelve a aparecer un reparto por metodo, es que
 # alguien reabrio la colision sin pasar por un contrato.
-fueraDeConfiguracion "ninguna ruta se reparte por metodo" '\$request_method'
+#
+# B12 — desde el limite de frecuencia el fichero SI lee $request_method: un
+# POST de login cuenta y un GET no. Pero solo para decidir la clave con la que
+# se cuenta. Lo prohibido sigue siendo lo mismo, ahora dicho con precision:
+# ninguna variable que dependa del metodo -directamente o a traves de otros
+# `map`- puede llegar a un set, proxy_pass, return, rewrite, if, try_files,
+# alias o root, que es donde se decide a quien va una peticion.
+destinosPorMetodo() {
+    awk '
+        /^[[:space:]]*#/ { next }
+        { lineas[NR] = $0 }
+        /^[[:space:]]*map[[:space:]]/ {
+            cabecera = $0
+            sub(/^[[:space:]]*map[[:space:]]+/, "", cabecera)
+            salida = cabecera; sub(/[[:space:]]*\{.*$/, "", salida); sub(/^.*\$/, "", salida)
+            fuente = cabecera; sub(/[[:space:]]+\$[A-Za-z0-9_]+[[:space:]]*\{.*$/, "", fuente)
+            mapas++; fuentes[mapas] = fuente; salidas[mapas] = salida; esMapa[NR] = 1
+        }
+        END {
+            tocadas["request_method"] = 1
+            do {
+                cambio = 0
+                for (i = 1; i <= mapas; i++) {
+                    if (salidas[i] in tocadas) continue
+                    for (t in tocadas)
+                        if (index(fuentes[i], "$" t) > 0) { tocadas[salidas[i]] = 1; cambio = 1; break }
+                }
+            } while (cambio)
+            for (n in lineas) {
+                if (n in esMapa) continue
+                l = lineas[n]
+                if (l !~ /(^|[{;])[[:space:]]*(set|proxy_pass|return|rewrite|if|try_files|alias|root)[[:space:](]/) continue
+                for (t in tocadas)
+                    if (match(l, "\\$\\{?" t "([^A-Za-z0-9_]|$)")) { printf "%d: %s\n", n, l; break }
+            }
+        }' "$1"
+}
+metodoEnDestino="$(destinosPorMetodo "$CONF")"
+if [ -z "$metodoEnDestino" ]; then
+    printf '  ok    ninguna ruta se reparte por metodo (el metodo solo elige la clave del limite)\n'
+else
+    printf '  FALLA el metodo decide un destino en %s:\n%s\n' "$CONF" "$metodoEnDestino"
+    fallos=$((fallos + 1))
+fi
+# Un guardian que no sabe ponerse rojo no guarda nada: el reparto de #421,
+# reconstruido en un fichero aparte, tiene que saltar.
+reparto="$(mktemp)"
+cat > "$reparto" <<'CONF_DE_PRUEBA'
+map $request_method $destino_productos {
+    GET     srv-ms-ecommerce:8090;
+    default 34.193.90.11:8103;
+}
+server {
+    location = /api/v1/productos { set $destino $destino_productos; proxy_pass http://$destino; }
+}
+CONF_DE_PRUEBA
+if [ -n "$(destinosPorMetodo "$reparto")" ]; then
+    printf '  ok    el guardian del metodo se pone rojo con el reparto de #421 (autoprueba)\n'
+else
+    printf '  FALLA el guardian del metodo NO detecta el reparto de #421 (autoprueba)\n'
+    fallos=$((fallos + 1))
+fi
+rm -f "$reparto"
+
+echo
+echo "Limite de frecuencia (B12) — que ninguna location se salga de la herencia"
+# limit_req, limit_req_status y error_page se heredan del server SOLO si la
+# location no declara los suyos (como add_header). Una que los declarara se
+# quedaria sin limite, o con un 429 en HTML en vez de problem details. Se
+# recorre el fichero caracter a caracter contando llaves, despues de quitar lo
+# que va entre comillas (hay llaves dentro de regex y de cuerpos JSON), y cada
+# directiva se mira al llegar a su `;`: tambien las de una location escrita
+# en una sola linea.
+fueraDelServer() {
+    awk '
+        /^[[:space:]]*#/ { next }
+        {
+            linea = $0
+            gsub(/\047[^\047]*\047/, "", linea)
+            gsub(/"[^"]*"/, "", linea)
+            sub(/#.*$/, "", linea)
+            for (i = 1; i <= length(linea); i++) {
+                c = substr(linea, i, 1)
+                if (c == "{") { nivel++; texto = "" }
+                else if (c == "}") { nivel--; texto = "" }
+                else if (c == ";") {
+                    directiva = texto
+                    sub(/^[[:space:]]+/, "", directiva)
+                    split(directiva, partes, /[[:space:]]+/)
+                    if ((partes[1] == "limit_req" || partes[1] == "limit_req_status" \
+                         || partes[1] == "error_page") && nivel != 1)
+                        printf "%d: %s\n", NR, $0
+                    texto = ""
+                }
+                else texto = texto c
+            }
+            texto = texto " "
+        }' "$1"
+}
+enLocations="$(fueraDelServer "$CONF")"
+if [ -z "$enLocations" ] && [ "$(grep -c '^[[:space:]]*limit_req zone=' "$CONF")" -eq 2 ] \
+   && grep -q '^[[:space:]]*error_page 429 = @demasiadas_peticiones;' "$CONF"; then
+    printf '  ok    limit_req (acceso y escritura), limit_req_status y error_page 429 solo en el server\n'
+else
+    printf '  FALLA limite de frecuencia fuera del server o incompleto:\n%s\n' "${enLocations:-        (faltan los dos limit_req zone= o el error_page 429)}"
+    fallos=$((fallos + 1))
+fi
+herencia="$(mktemp)"
+cat > "$herencia" <<'CONF_DE_PRUEBA'
+server {
+    limit_req zone=acceso burst=20 nodelay;
+    location /api/v1/auth { error_page 404 /404.html; proxy_pass http://x; }
+    location /api/v1/x {
+        limit_req zone=escritura;
+    }
+}
+CONF_DE_PRUEBA
+if [ "$(fueraDelServer "$herencia" | grep -c .)" -eq 2 ]; then
+    printf '  ok    el guardian de la herencia se pone rojo con un error_page y un limit_req en location (autoprueba)\n'
+else
+    printf '  FALLA el guardian de la herencia no detecta error_page/limit_req en una location (autoprueba)\n'
+    fallos=$((fallos + 1))
+fi
+rm -f "$herencia"
+# Los origenes internos son los mismos para el limite (geo) y para Mailpit
+# (allow): dos listas que dicen lo mismo, y que no se pueden separar sin que
+# esto lo diga.
+internosGeo="$(awk '/^[[:space:]]*geo[[:space:]]+\$origen_interno/ {g = 1; next}
+                    g && /\}/ {g = 0} g && $2 == "1;" {print $1}' "$CONF" | sort | tr '\n' ' ')"
+internosMailpit="$(awk '/location \/mailpit\/ \{/ {m = 1; next}
+                        m && /\}/ {m = 0} m && $1 == "allow" {sub(/;$/, "", $2); print $2}' "$CONF" | sort | tr '\n' ' ')"
+if [ -n "$internosGeo" ] && [ "$internosGeo" = "$internosMailpit" ]; then
+    printf '  ok    los mismos origenes internos en la geo del limite y en /mailpit/: %s\n' "$internosGeo"
+else
+    printf '  FALLA origenes internos distintos\n        geo:     %s\n        mailpit: %s\n' "$internosGeo" "$internosMailpit"
+    fallos=$((fallos + 1))
+fi
 
 echo
 echo "Que promete el borde que dev hoy no puede dar (inventario de 502)"

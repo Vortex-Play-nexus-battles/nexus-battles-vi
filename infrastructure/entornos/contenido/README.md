@@ -99,6 +99,47 @@ Lo que sí cambia de sitio son las colecciones de Postman de inventario y produc
 
 Para depurar contra el puerto directo desde un portátil se añade la IP propia a `cidr_servicios`, a propósito y temporalmente. No se deja puesta.
 
+## Acción humana pendiente (B12) — no se puede hacer desde este repositorio
+
+Lo de arriba es lo que **declara** `main.tf`. Pero esta carpeta no gobierna el host real (vive en la cuenta del grupo 2, ver «ANTES DE NADA»), y la realidad del 27-sep-2026 es otra: **desde internet se llega a `34.193.90.11:8102` y `:8103`**. Desde este repositorio no se toca nada de esa cuenta, a propósito: ni `tofu apply`, ni consola, ni credenciales. Quedan dos acciones para el dueño de la cuenta del grupo 2, con el equipo de infraestructura (Grupo 6) acompañando.
+
+### 1. Cerrar 8101-8104 al mundo (15 minutos, sin ventana)
+
+**Qué:** en el grupo de seguridad de `nexus-contenido-dev`, las reglas de entrada de 8101-8104 pasan de `0.0.0.0/0` a **`35.168.124.119/32`** (la IP elástica del host de plataforma). El 22 se queda como está (solo llave, lo usa `cd.yml`). Cuando misiones (B9) se despliegue en 8105, la misma regla.
+
+**Por qué:** hoy cualquiera llega a cada servicio de contenido sin pasar por el borde: `/actuator`, rutas de escritura sin el límite de frecuencia del borde y sin sus cabeceras. Los únicos clientes legítimos de esos puertos salen del host de plataforma: el borde (`/api/v1/{heroes,equipos,estrategias,progresion,inventario,productos}`) y `salas-partidas` (inventario, héroes, productos y el motor). El navegador entra por el 80 de plataforma. Es el mismo cierre que B12 hizo en plataforma (`../plataforma/README.md`, «Red»).
+
+**Cómo** (una de las dos):
+
+- **Consola** (lo directo): EC2 → *Security Groups* → el grupo de `nexus-contenido-dev` → *Inbound rules* → *Edit* → en las reglas de 8101-8104 (o 8101-8105) cambiar *Source* a `35.168.124.119/32` → *Save*. Es un cambio en sitio: no reinicia nada ni corta conexiones abiertas.
+- **OpenTofu desde la cuenta del grupo 2**: `cidr_servicios` ya vale `["35.168.124.119/32"]` en `main.tf`, pero antes hace falta la importación descrita arriba (o el `plan` propondrá crear un host nuevo). Solo si se elige la opción 1 de «¿cómo se despliega hoy?».
+
+**Comprobar** antes y después:
+
+```bash
+# desde un portatil: antes 200, despues se agota el tiempo
+curl -m 5 -s -o /dev/null -w '%{http_code}\n' http://34.193.90.11:8102/actuator/health
+# desde el host de plataforma (diagnostico-dev.yml o SSH): 200 antes y despues
+curl -m 5 -s -o /dev/null -w '%{http_code}\n' http://34.193.90.11:8102/actuator/health
+```
+
+Y el smoke de DEV (`smoke-dev.yml`) en verde: pasa por el borde y por `salas-partidas`, que son justo los dos clientes que se mantienen.
+
+### 2. Autenticación en el MongoDB de contenido (ventana de ~30 minutos)
+
+**Situación:** `contenido-mongo` corre **sin autenticación**. No publica puerto en el host (solo se llega desde la red de su compose), así que hoy no está expuesto a internet; pero cualquier contenedor de esa red, o cualquiera con una shell en el host, lee y escribe todas las bases, y un `ports:` añadido por error lo dejaría abierto al mundo. Tampoco hay aislamiento entre servicios: inventario podría escribir en la base de héroes (regla 7 de plataforma).
+
+**Plan** (lo ejecuta el grupo 2 con Grupo 6, fuera de horario de demo):
+
+1. **Respaldo** justo antes: `respaldo-dev.yml` a demanda (o `respaldar.sh --host contenido` en el host) y comprobar su simulacro en verde (`../../respaldo-dr/README.md`).
+2. **Usuarios, con la autenticación todavía apagada** (se pueden crear antes de activarla): un administrador (`root` en `admin`) y **un usuario por servicio que usa Mongo** con `readWrite` solo sobre su base: `heroes`, `inventario`, `productos` y, cuando se despliegue, `misiones` (el motor de combate no tiene base). Las claves se generan en ese momento y van **solo** a secretos del entorno `dev` de GitHub (p. ej. `MONGO_ROOT_PASSWORD`, `MONGO_HEROES_PASSWORD`…); nunca al repositorio ni a una bitácora.
+3. **Servicios con credenciales:** cada `SPRING_MONGODB_URI`/`MONGODB_URI` de `docker-compose.contenido.yml` pasa a `mongodb://<servicio>:${CLAVE}@contenido-mongo:27017/<base>?authSource=<base>`, con la clave por variable que reparte `desplegar.sh` (como hoy los secretos de plataforma). Se despliegan: con la autenticación apagada, las credenciales se aceptan igual, así que este paso no rompe nada.
+4. **Activar la autenticación:** `command: ["mongod", "--auth"]` en `contenido-mongo` y reinicio. `MONGO_INITDB_ROOT_USERNAME/PASSWORD` **no** activan nada sobre un volumen que ya tiene datos (solo actúan al inicializar uno vacío), así que el usuario administrador se crea a mano en el paso 2; esas dos variables se ponen igualmente en el contenedor, porque son las que leen `respaldar.sh` y `simulacro-restauracion.sh` para autenticarse (ya lo soportan: probado con Mongo 8.0 con autenticación).
+5. **Comprobar:** salud de los servicios de contenido, `smoke-dev.yml` en verde, un respaldo con su simulacro en verde, y que `mongosh` sin credenciales ya no lista las bases.
+6. **Marcha atrás** si algo falla: quitar `--auth` y reiniciar el contenedor. Los usuarios creados no estorban.
+
+Sin coste nuevo: es configuración del mismo contenedor, en el mismo host.
+
 ## Cómo se levantó (histórico)
 
 ```bash
