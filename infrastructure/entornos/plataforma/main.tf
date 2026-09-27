@@ -79,6 +79,8 @@ resource "aws_security_group" "plataforma" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # B12 — los dos bloques de servicios admiten solo var.cidr_servicios (el
+  # host de contenido); el publico entra por el borde del puerto 80.
   ingress {
     description = "Servicios de plataforma: comentarios 8081 ... admin-parametros 8088"
     from_port   = local.puerto_inicio
