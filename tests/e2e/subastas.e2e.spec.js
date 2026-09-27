@@ -26,6 +26,19 @@
  * una publicacion). Su sitio es R16.4, junto a los demas degradados con
  * backend real, y la inyeccion de fallos ya tiene patron en
  * degradacion.e2e.spec.js.
+ *
+ * El tercer corte (B8) es el ultimo bloque: las reglas de 7.7 dichas por el
+ * servidor, la ficha, la compra inmediata que tiene que superar el precio
+ * minimo, la lista de seguimiento, la cancelacion con su penalizacion, el
+ * canal STOMP por el borde (/api/v1/ws-subastas), que hasta B8 no tenia
+ * location y caia en el 404 generico, y el cierre por compra inmediata
+ * anunciado por ese canal.
+ *
+ * Desde B8 el incremento minimo sale de admin-parametros
+ * (`subastas.incremento-minimo`, sin valor hasta que decida el PO): antes de
+ * publicar, la administradora del banco lo fija. Es una FIJACION DE PRUEBA, no
+ * una decision de producto; hasta B8 la hacia una variable de entorno del
+ * compose (SUBASTAS_INCREMENTO_MINIMO: "1").
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -45,6 +58,9 @@ const PRODUCTO_SUBASTABLE = 'dddddddd-0000-0000-0000-00000000000a';
 // salas, y una subasta que falla por saldo no dice nada sobre la transferencia.
 const VENDEDORA = process.env.E2E_VENDEDORA ?? 'vendedora_e2e';
 const COMPRADORA = process.env.E2E_COMPRADORA ?? 'compradora_e2e';
+// B8 — la administradora que sembrar.sh deja como ADMINISTRADOR.
+const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
+const INCREMENTO_DE_PRUEBA = '1';
 
 function cuerpoDelToken(jwt) {
   const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -152,6 +168,33 @@ test.describe('Subastas por el borde (HU-SUB-011 / HU-SUB-001 / HU-SUB-004)', ()
 
 // ------------------------------------------------- ayudantes del segundo corte
 
+/**
+ * B8 — fija `subastas.incremento-minimo` como ADMINISTRADOR, igual que lo hara
+ * el PO. Sin esto publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Cache
+ * de 1 s en el banco (SUBASTAS_PARAMETROS_CACHE_SEGUNDOS), asi que se espera a
+ * que GET /subastas/reglas lo diga antes de seguir.
+ */
+async function fijarIncrementoMinimo(api) {
+  const admin = await sesionDe(api, ADMIN);
+  const r = await api.put('/api/v1/parametros/subastas.incremento-minimo', {
+    headers: conToken(admin.token),
+    data: {
+      valor: INCREMENTO_DE_PRUEBA,
+      motivo: 'Fijacion de prueba del banco E2E (no es decision del PO)',
+    },
+  });
+  expect(r.status(), `fijar el incremento: ${await r.text()}`).toBe(200);
+  await expect
+    .poll(
+      async () =>
+        (await (await api.get('/api/v1/subastas/reglas')).json()).incrementoMinimoConfigurado,
+      {
+        timeout: 15_000,
+      },
+    )
+    .toBe(true);
+}
+
 async function tokenDeServicio(api) {
   const r = await api.post('/api/v1/auth/token', {
     headers: {
@@ -209,6 +252,7 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
+    await fijarIncrementoMinimo(api);
     vendedora = await sesionDe(api, VENDEDORA);
     compradora = await sesionDe(api, COMPRADORA);
     const servicio = await tokenDeServicio(api);
@@ -276,8 +320,10 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
     // Sale del inventario de la vendedora. Antes de FI-TRANSFER-1 se quedaba
     // ahi: se cobraba y no se entregaba.
     const yaNoEsSuyo = buscar(await vitrinaDe(api, vendedora), elementoId);
-    expect(yaNoEsSuyo, 'el objeto vendido no puede seguir en la vitrina de quien lo vendio')
-      .toBeUndefined();
+    expect(
+      yaNoEsSuyo,
+      'el objeto vendido no puede seguir en la vitrina de quien lo vendio',
+    ).toBeUndefined();
 
     // Y entra en el de la compradora, USABLE: el bloqueo viaja con el elemento
     // y lo suelta el motor de pujas cuando la venta ya es definitiva. Si
@@ -309,8 +355,9 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
     });
     expect([201, 409, 422]).toContain(repetida.status());
 
-    const deLaCompradora = (await vitrinaDe(api, compradora))
-      .filter((elemento) => elemento.id === elementoId);
+    const deLaCompradora = (await vitrinaDe(api, compradora)).filter(
+      (elemento) => elemento.id === elementoId,
+    );
     expect(deLaCompradora).toHaveLength(1);
     expect(buscar(await vitrinaDe(api, vendedora), elementoId)).toBeUndefined();
   });
@@ -335,5 +382,283 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
     expect(respuesta.status()).toBe(200);
     const cuerpo = await respuesta.json();
     expect(cuerpo.elementos.some((elemento) => elemento.id === elementoId)).toBe(true);
+  });
+});
+
+// ----------------------------------------------------------------- tercer corte (B8)
+
+/**
+ * Abre el canal STOMP de subastas DESDE EL NAVEGADOR, por el borde, como lo hace
+ * la vista. Devuelve la primera linea del primer frame (CONNECTED o ERROR).
+ */
+async function conectarCanal(page, token, destinos = []) {
+  return page.evaluate(
+    async ({ url, token, destinos }) =>
+      new Promise((resolver) => {
+        const ws = new WebSocket(url);
+        window.__mensajesSubastas = [];
+        const plazo = setTimeout(() => resolver('SIN RESPUESTA'), 10_000);
+        ws.onopen = () => {
+          const cabeceras = ['accept-version:1.2', 'heart-beat:0,0'];
+          if (token) {
+            cabeceras.push(`Authorization:Bearer ${token}`);
+          }
+          ws.send(`CONNECT\n${cabeceras.join('\n')}\n\n\0`);
+        };
+        ws.onmessage = (evento) => {
+          const texto = String(evento.data);
+          const comando = texto.split('\n')[0];
+          if (comando === 'CONNECTED') {
+            destinos.forEach((destino, i) => {
+              ws.send(`SUBSCRIBE\nid:sub-${i}\ndestination:${destino}\n\n\0`);
+            });
+            window.__canalSubastas = ws;
+            clearTimeout(plazo);
+            resolver('CONNECTED');
+          } else if (comando === 'MESSAGE') {
+            window.__mensajesSubastas.push(texto);
+          } else {
+            clearTimeout(plazo);
+            resolver(comando);
+          }
+        };
+        ws.onerror = () => {
+          clearTimeout(plazo);
+          resolver('ERROR DE TRANSPORTE');
+        };
+        ws.onclose = () => {
+          clearTimeout(plazo);
+          resolver('CERRADO');
+        };
+      }),
+    { url: `${BORDE.replace(/^http/, 'ws')}/api/v1/ws-subastas`, token, destinos },
+  );
+}
+
+test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  /** @type {import('@playwright/test').APIRequestContext} */
+  let api;
+  let vendedora;
+  let compradora;
+  let subastaId;
+  let elementoId;
+
+  test.beforeAll(async () => {
+    api = await apiRequest.newContext({ baseURL: BORDE });
+    await fijarIncrementoMinimo(api);
+    vendedora = await sesionDe(api, VENDEDORA);
+    compradora = await sesionDe(api, COMPRADORA);
+    const servicio = await tokenDeServicio(api);
+    await acreditar(api, servicio, compradora, 500, `semilla-subasta-b8-${COMPRADORA}`);
+    await acreditar(api, servicio, vendedora, 100, `semilla-subasta-b8-${VENDEDORA}`);
+  });
+
+  test.afterAll(async () => {
+    await api.dispose();
+  });
+
+  test('las reglas vigentes son publicas y vienen del servidor (Tabla 25 y admin-parametros)', async () => {
+    const r = await api.get('/api/v1/subastas/reglas');
+    expect(r.status(), await r.text()).toBe(200);
+    const reglas = await r.json();
+    expect(reglas.duraciones.map((d) => [d.codigo, Number(d.comision)])).toEqual([
+      ['24H', 1],
+      ['48H', 3],
+    ]);
+    expect(reglas.incrementoMinimoConfigurado).toBe(true);
+    expect(Number(reglas.incrementoMinimo)).toBe(Number(INCREMENTO_DE_PRUEBA));
+    expect(reglas.penalizacionCancelacionPorcentaje).toBe(50);
+    expect(reglas.cancelacionProhibidaUltimasHoras).toBe(6);
+    expect(reglas.diasParaRecoger).toBe(7);
+  });
+
+  test('la compra inmediata tiene que superar el precio minimo (7.7.2)', async () => {
+    const creado = await api.post('/api/v1/inventario/elementos', {
+      headers: conToken(vendedora.token),
+      data: {
+        productoId: PRODUCTO_SUBASTABLE,
+        tipo: 'ARMA',
+        nombrePropio: `Lanza B8 ${Date.now()}`,
+      },
+    });
+    expect(creado.status(), await creado.text()).toBe(201);
+    elementoId = (await creado.json()).id;
+
+    const igual = await api.post('/api/v1/subastas', {
+      headers: { ...conToken(vendedora.token), 'Idempotency-Key': `e2e-b8-igual-${Date.now()}` },
+      data: {
+        elementoInventarioId: elementoId,
+        productoId: PRODUCTO_SUBASTABLE,
+        duracion: '24H',
+        precioInicial: 10,
+        precioCompraInmediata: 10,
+      },
+    });
+    expect(igual.status(), await igual.text()).toBe(422);
+    expect((await igual.json()).motivo).toBe('COMPRA_INMEDIATA_NO_SUPERIOR');
+  });
+
+  test('publicada, su ficha es publica y la primera puja minima es el precio minimo', async () => {
+    const publicar = await api.post('/api/v1/subastas', {
+      headers: { ...conToken(vendedora.token), 'Idempotency-Key': `e2e-b8-publicar-${Date.now()}` },
+      data: {
+        elementoInventarioId: elementoId,
+        productoId: PRODUCTO_SUBASTABLE,
+        duracion: '24H',
+        precioInicial: 10,
+        precioCompraInmediata: 40,
+      },
+    });
+    expect(publicar.status(), await publicar.text()).toBe(201);
+    const publicada = await publicar.json();
+    subastaId = publicada.id;
+    expect(Number(publicada.incrementoMinimo)).toBe(Number(INCREMENTO_DE_PRUEBA));
+
+    const ficha = await api.get(`/api/v1/subastas/${subastaId}`);
+    expect(ficha.status(), await ficha.text()).toBe(200);
+    const detalle = await ficha.json();
+    expect(detalle.estado).toBe('ACTIVA');
+    expect(Number(detalle.pujaMinimaSiguiente)).toBe(10);
+    expect(detalle.compraInmediataDisponible).toBe(true);
+    expect(detalle.reputacionVendedor).toBeTruthy();
+  });
+
+  test('seguirla la pone en la lista de seguimiento de la compradora', async () => {
+    const seguir = await api.put(`/api/v1/subastas/${subastaId}/seguimiento`, {
+      headers: conToken(compradora.token),
+    });
+    expect(seguir.status(), await seguir.text()).toBe(204);
+    const lista = await api.get('/api/v1/mis-subastas/seguimiento', {
+      headers: conToken(compradora.token),
+    });
+    expect(lista.status()).toBe(200);
+    expect((await lista.json()).some((s) => s.subastaId === subastaId)).toBe(true);
+  });
+
+  test('el canal de la subasta se abre por el borde y trae la puja al instante', async ({
+    page,
+  }) => {
+    await page.goto(`${BORDE}/salud-borde`);
+    // Un token roto no es un visitante: el CONNECT se rechaza.
+    expect(await conectarCanal(page, 'no-es-un-jwt')).not.toBe('CONNECTED');
+    // Con la sesion de la compradora: el listado y el canal de ESTA subasta.
+    expect(
+      await conectarCanal(page, compradora.token, [
+        '/topic/subastas/listado',
+        `/topic/subastas/${subastaId}`,
+      ]),
+    ).toBe('CONNECTED');
+    await page.waitForFunction(() => window.__canalSubastas?.bufferedAmount === 0);
+
+    const puja = await api.post(`/api/v1/subastas/${subastaId}/pujas`, {
+      headers: { ...conToken(compradora.token), 'Idempotency-Key': `e2e-b8-puja-${Date.now()}` },
+      data: { monto: '10' },
+    });
+    expect(puja.status(), await puja.text()).toBe(201);
+
+    await page.waitForFunction(
+      (id) =>
+        window.__mensajesSubastas.filter((m) => m.includes(id)).length >= 2 &&
+        window.__mensajesSubastas.some((m) => m.includes(`destination:/topic/subastas/${id}`)),
+      subastaId,
+      { timeout: 20_000 },
+    );
+  });
+
+  test('con una puja ya no se puede cancelar; sin pujas, cancelar cobra la mitad de la comision', async () => {
+    const conPuja = await api.post(`/api/v1/subastas/${subastaId}/cancelacion`, {
+      headers: conToken(vendedora.token),
+    });
+    expect(conPuja.status(), await conPuja.text()).toBe(409);
+    expect((await conPuja.json()).motivo).toBe('CANCELACION_CON_PUJAS');
+
+    // Otra subasta, sin pujas, para cancelar de verdad.
+    const creado = await api.post('/api/v1/inventario/elementos', {
+      headers: conToken(vendedora.token),
+      data: {
+        productoId: PRODUCTO_SUBASTABLE,
+        tipo: 'ARMA',
+        nombrePropio: `Escudo B8 ${Date.now()}`,
+      },
+    });
+    expect(creado.status(), await creado.text()).toBe(201);
+    const otroElemento = (await creado.json()).id;
+    const publicar = await api.post('/api/v1/subastas', {
+      headers: {
+        ...conToken(vendedora.token),
+        'Idempotency-Key': `e2e-b8-cancelable-${Date.now()}`,
+      },
+      data: {
+        elementoInventarioId: otroElemento,
+        productoId: PRODUCTO_SUBASTABLE,
+        duracion: '24H',
+        precioInicial: 10,
+      },
+    });
+    expect(publicar.status(), await publicar.text()).toBe(201);
+    const cancelable = (await publicar.json()).id;
+
+    const ajena = await api.post(`/api/v1/subastas/${cancelable}/cancelacion`, {
+      headers: conToken(compradora.token),
+    });
+    expect(ajena.status()).toBe(403);
+
+    const cancelar = await api.post(`/api/v1/subastas/${cancelable}/cancelacion`, {
+      headers: conToken(vendedora.token),
+    });
+    expect(cancelar.status(), await cancelar.text()).toBe(200);
+    const cancelacion = await cancelar.json();
+    expect(cancelacion.estado).toBe('CANCELADA');
+    expect(Number(cancelacion.penalizacionCobrada)).toBe(0.5);
+
+    // El objeto vuelve a estar disponible en su inventario.
+    const suyo = buscar(await vitrinaDe(api, vendedora), otroElemento);
+    expect(suyo, 'el objeto de la subasta cancelada vuelve a la vitrina').toBeTruthy();
+    expect(suyo.disponible).toBe(true);
+
+    // Y la penalizacion queda en su historial de subastas.
+    const historial = await api.get('/api/v1/mis-subastas/historial', {
+      headers: conToken(vendedora.token),
+    });
+    expect(historial.status()).toBe(200);
+    const movimientos = (await historial.json()).movimientos;
+    expect(
+      movimientos.some(
+        (m) => m.tipo === 'PENALIZACION' && m.subastaId === cancelable && Number(m.monto) === 0.5,
+      ),
+    ).toBe(true);
+  });
+
+  test('la compra inmediata cierra la subasta al instante y el canal lo anuncia (7.7.6)', async ({
+    page,
+  }) => {
+    // Cierra ademas la subasta de este bloque: sin esto, cada corrida contra el
+    // mismo banco dejaria una subasta ACTIVA mas de la vendedora, y a la
+    // decima el tope de 10 publicaciones (7.7.10) rechazaria la siguiente.
+    await page.goto(`${BORDE}/salud-borde`);
+    expect(await conectarCanal(page, vendedora.token, [`/topic/subastas/${subastaId}`])).toBe(
+      'CONNECTED',
+    );
+    await page.waitForFunction(() => window.__canalSubastas?.bufferedAmount === 0);
+
+    const compra = await api.post(`/api/v1/subastas/${subastaId}/compra-inmediata`, {
+      headers: { ...conToken(compradora.token), 'Idempotency-Key': `e2e-b8-compra-${Date.now()}` },
+      data: { confirmado: true },
+    });
+    expect(compra.status(), await compra.text()).toBe(201);
+
+    await page.waitForFunction(
+      (id) =>
+        window.__mensajesSubastas.some(
+          (m) => m.includes(id) && m.includes('"estado":"ADJUDICADA"'),
+        ),
+      subastaId,
+      { timeout: 20_000 },
+    );
+    const ficha = await (await api.get(`/api/v1/subastas/${subastaId}`)).json();
+    expect(ficha.estado).toBe('ADJUDICADA');
+    expect(ficha.compraInmediataDisponible).toBe(false);
   });
 });
