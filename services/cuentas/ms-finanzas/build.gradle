@@ -43,6 +43,7 @@ dependencies {
     testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
 
     compileOnly 'org.projectlombok:lombok'
+    implementation 'org.springframework.boot:spring-boot-restclient'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'

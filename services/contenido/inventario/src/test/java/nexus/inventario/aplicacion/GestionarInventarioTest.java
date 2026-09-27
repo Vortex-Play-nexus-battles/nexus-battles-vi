@@ -1,6 +1,7 @@
 package nexus.inventario.aplicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -155,6 +156,46 @@ class GestionarInventarioTest {
                 "jugador-A", "producto-1", TipoElementoInventario.ITEM, "Amuleto"));
 
         assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("B4: sin parte en la peticion, la armadura toma la del catalogo")
+    void armaduraTomaLaParteDelCatalogo() {
+        catalogo.registrarArmadura("peto-catalogo", ParteArmadura.PECHO);
+
+        ElementoInventario creado = gestion.crear("jugador-A",
+                "peto-catalogo", TipoElementoInventario.ARMADURA, "Peto", null);
+
+        assertEquals(ParteArmadura.PECHO, creado.parteArmadura());
+    }
+
+    @Test
+    @DisplayName("B4: la misma parte que el catalogo se acepta")
+    void armaduraConLaParteDelCatalogo() {
+        catalogo.registrarArmadura("peto-catalogo", ParteArmadura.PECHO);
+
+        assertEquals(ParteArmadura.PECHO, gestion.crear("jugador-A",
+                "peto-catalogo", TipoElementoInventario.ARMADURA, "Peto", ParteArmadura.PECHO).parteArmadura());
+    }
+
+    @Test
+    @DisplayName("B4: una parte distinta a la del catalogo se rechaza y no se guarda nada")
+    void armaduraConOtraParteSeRechaza() {
+        catalogo.registrarArmadura("peto-catalogo", ParteArmadura.PECHO);
+
+        assertThrows(ParteNoCoincideException.class, () -> gestion.crear("jugador-A",
+                "peto-catalogo", TipoElementoInventario.ARMADURA, "Peto", ParteArmadura.CASCO));
+
+        assertTrue(repositorio.buscarPorPropietario("jugador-A").isEmpty());
+    }
+
+    @Test
+    @DisplayName("B4: fuera de las armaduras la parte no se consulta")
+    void unArmaNoTieneParte() {
+        catalogo.registrar("espada", TipoElementoInventario.ARMA);
+
+        assertNull(gestion.crear("jugador-A", "espada", TipoElementoInventario.ARMA, "Espada", null)
+                .parteArmadura());
     }
 
     @Test

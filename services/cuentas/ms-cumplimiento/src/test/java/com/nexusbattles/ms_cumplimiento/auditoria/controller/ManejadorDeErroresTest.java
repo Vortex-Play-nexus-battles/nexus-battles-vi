@@ -1,46 +1,35 @@
 package com.nexusbattles.ms_cumplimiento.auditoria.controller;
 
-import com.nexusbattles.ms_cumplimiento.auditoria.exception.AuditWriteException;
+import com.nexusbattles.ms_cumplimiento.auditoria.exception.ExportacionExcedeMaximoException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
-import org.springframework.security.access.AccessDeniedException;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Cada excepcion del dominio sale con el estado y el titulo que fija la regla 4. */
+/**
+ * Test unitario del manejador, sin contexto de Spring (HU-AUD-004, pedido
+ * por Simon en la revision de #498): confirma que
+ * ExportacionExcedeMaximoException se traduce al ProblemDetail exacto que
+ * el equipo acordo (422/UNPROCESSABLE_CONTENT, titulo con tilde, las dos
+ * cifras como propiedades).
+ */
 class ManejadorDeErroresTest {
 
     private final ManejadorDeErrores manejador = new ManejadorDeErrores();
 
     @Test
-    @DisplayName("Argumento invalido -> 400 con el detalle del error")
-    void argumentoInvalido() {
-        ProblemDetail problema = manejador.solicitudInvalida(new IllegalArgumentException("tipoAccion desconocido"));
+    @DisplayName("exportacionExcedeMaximo: 422, titulo con tilde y las dos cifras en la raiz")
+    void exportacionExcedeMaximo_devuelveProblemDetailConLasCifras() {
+        ExportacionExcedeMaximoException error = new ExportacionExcedeMaximoException(15000, 10000);
 
-        assertThat(problema.getStatus()).isEqualTo(400);
-        assertThat(problema.getTitle()).isEqualTo("Solicitud invalida");
-        assertThat(problema.getDetail()).isEqualTo("tipoAccion desconocido");
-    }
+        ProblemDetail problema = manejador.exportacionExcedeMaximo(error);
 
-    @Test
-    @DisplayName("Acceso denegado -> 403")
-    void accesoDenegado() {
-        ProblemDetail problema = manejador.accesoDenegado(new AccessDeniedException("Requiere rol Super Administrador"));
-
-        assertThat(problema.getStatus()).isEqualTo(403);
-        assertThat(problema.getTitle()).isEqualTo("Acceso denegado");
-        assertThat(problema.getDetail()).isEqualTo("Requiere rol Super Administrador");
-    }
-
-    @Test
-    @DisplayName("La bitacora no pudo escribir -> 503, nunca un 500 mudo")
-    void bitacoraNoDisponible() {
-        ProblemDetail problema = manejador.bitacoraNoDisponible(
-                new AuditWriteException("No se pudo registrar el evento", new IllegalStateException("db")));
-
-        assertThat(problema.getStatus()).isEqualTo(503);
-        assertThat(problema.getTitle()).isEqualTo("Bitacora de auditoria no disponible");
-        assertThat(problema.getDetail()).isEqualTo("No se pudo registrar el evento");
+        assertEquals(HttpStatus.UNPROCESSABLE_CONTENT.value(), problema.getStatus());
+        assertEquals("La exportación excede el máximo por operación", problema.getTitle());
+        assertEquals(error.getMessage(), problema.getDetail());
+        assertEquals(15000L, problema.getProperties().get("totalEncontrado"));
+        assertEquals(10000, problema.getProperties().get("maximoPermitido"));
     }
 }

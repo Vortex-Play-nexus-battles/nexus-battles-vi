@@ -28,7 +28,7 @@ class CrearProductoServicioTest {
         void creaYGuardaProducto() {
                 ProductoRepository repositorio = mock(ProductoRepository.class);
 
-                when(repositorio.save(any(Producto.class)))
+                when(repositorio.insert(any(Producto.class)))
                         .thenAnswer(invocacion ->
                                 invocacion.getArgument(0, Producto.class));
 
@@ -80,6 +80,9 @@ class CrearProductoServicioTest {
                 assertEquals(producto.creadoEn(), producto.modificadoEn());
                 assertTrue(producto.creadoEn().toEpochMilli() > 0);
 
-                verify(repositorio).save(producto);
+                // B4: insert y no save: con @Version, un save de un documento nuevo
+                // con version 1 se leeria como la edicion de uno que no existe.
+                verify(repositorio).insert(producto);
+                assertEquals(nexus.dominio.OrigenProducto.ADMINISTRACION, producto.origen());
         }
 }

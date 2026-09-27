@@ -20,11 +20,17 @@ public class CrearProductoServicio {
                 this.mapper = mapper;
         }
 
+        /**
+         * Da de alta el producto con {@code insert}, no con {@code save}: desde
+         * B4 {@code Producto.version} es {@code @Version}, y un {@code save} de
+         * un documento con version 1 se leeria como la modificacion de uno que
+         * no existe. {@code insert} ademas nunca pisa un identificador ocupado.
+         */
         public Producto crear(SolicitudCrearProducto solicitud) {
                 Instant ahora = Instant.now();
 
                 Producto producto = mapper.aProducto(solicitud, ahora);
 
-                return repositorio.save(producto);
+                return repositorio.insert(producto);
         }
 }

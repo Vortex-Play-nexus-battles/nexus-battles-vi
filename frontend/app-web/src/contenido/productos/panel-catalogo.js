@@ -1,5 +1,6 @@
 /** HU-PRD-008 - Panel de estado del catálogo. */
 import { consultarEstadisticasCatalogo } from './cliente-productos.js';
+import { montarCatalogoAdmin } from './catalogo-admin.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 
 const TIPOS = [
@@ -147,7 +148,14 @@ function crearVista() {
     hijos: [encabezado, mensaje, resumen, distribucion],
   });
 
-  return [cabecera, panel];
+  // UXC-7 — debajo de las cifras, los productos: verlos, modificarlos,
+  // suspenderlos y reactivarlos (la ficha de gestión de cada uno).
+  const catalogo = h('section', {
+    clase: 'panel-catalogo catalogo-admin',
+    datos: { zona: 'catalogo-admin' },
+  });
+
+  return [cabecera, panel, catalogo];
 }
 
 function mostrarMensaje(raiz, texto, tipo) {
@@ -191,7 +199,10 @@ function mensajeDeError(fallo) {
  * @param {HTMLElement} raiz contenedor de la vista.
  * @param {{consultar?: Function}} dependencias inyectables para pruebas.
  */
-export function montarPanelCatalogo(raiz, { consultar = consultarEstadisticasCatalogo } = {}) {
+export function montarPanelCatalogo(
+  raiz,
+  { consultar = consultarEstadisticasCatalogo, fetchImpl, conCatalogo = true } = {},
+) {
   vaciar(raiz).append(...crearVista());
   const botonActualizar = raiz.querySelector('[data-actualizar-panel]');
 
@@ -219,5 +230,15 @@ export function montarPanelCatalogo(raiz, { consultar = consultarEstadisticasCat
 
   const cargaInicial = actualizar();
 
-  return { actualizar, cargaInicial };
+  const zonaCatalogo = raiz.querySelector('[data-zona="catalogo-admin"]');
+  const catalogo =
+    conCatalogo && zonaCatalogo
+      ? montarCatalogoAdmin(zonaCatalogo, {
+          fetchImpl,
+          // Suspender o modificar cambia las cifras de arriba.
+          alCambiarCatalogo: () => void actualizar(),
+        })
+      : null;
+
+  return { actualizar, cargaInicial, catalogo };
 }

@@ -5,78 +5,102 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Chat · The Nexus Battles VI</title>
 
-    <!-- Sistema de diseno compartido, sin estilos propios. Mismas rutas que crear-sala.html. -->
+    <!-- Sistema de diseno compartido, sin estilos propios. Mismas rutas que crear-sala.html.
+         UXC-6: la conversacion (globos, redactor, lista de conversaciones) es del
+         kit porque la pintan el chat general, el de la sala y los mensajes privados. -->
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
   </head>
 
   <body>
-    <!--
-      Misma cabecera que las demas vistas de salas-partidas mientras no haya
-      fragmentos compartidos: los destinos que existen enlazan de verdad y los
-      que no, quedan marcados como pendientes en vez de apuntar a "#".
-    -->
     <div data-cabecera-app></div>
 
-    <main id="chat" class="pagina pila">
+    <main id="chat" class="pagina pila" data-vista="chat">
       <div class="pila pila--compacta">
-        <h1 data-zona="titulo">Chat</h1>
-        <p class="t-cuerpo">
-          Lo que escribes pasa por el filtro de contenido antes de salir. El historial queda para
-          quien entra después.
-          <span class="conexion conexion--reconectando" data-zona="conexion">Conectando</span>
+        <div class="chat__titulo-fila">
+          <h1 data-zona="titulo">Chat</h1>
+          <!-- Solo en el chat de una sala (`?sala=`): chat.js le pone su destino. -->
+          <a
+            class="boton boton--secundario boton--pequeno"
+            data-zona="volver-a-la-sala"
+            href="./batallas.html"
+            hidden
+            >Volver a la sala</a
+          >
+        </div>
+        <p class="t-cuerpo" data-zona="intro">
+          Habla con otros jugadores para armar partidas. Lo que escribes pasa por el filtro de
+          contenido antes de salir, y el historial queda para quien entra después.
         </p>
       </div>
 
-      <section class="tarjeta pila" aria-label="Conversación">
-        <ol class="pila pila--compacta" data-zona="mensajes" aria-live="polite"></ol>
-        <!--
-          Sin esto la tarjeta salia vacia: un rectangulo blanco sin nada dentro
-          encima del formulario. Un canal en silencio es un estado del producto
-          y se cuenta como tal; lo pinta `chat.js` y desaparece con el primer
-          mensaje.
-        -->
-        <div data-zona="sin-mensajes"></div>
-      </section>
+      <!-- Pestañas «Chat general» y «Mensajes privados». En el chat de una sala no hay. -->
+      <div class="chat__pestanas" data-zona="pestanas-chat"></div>
 
-      <form id="formulario-chat" class="tarjeta pila" novalidate>
-        <div data-zona="aviso" hidden></div>
+      <section
+        class="tarjeta conversacion chat__general"
+        data-panel-chat="general"
+        aria-labelledby="titulo-conversacion"
+      >
+        <header class="conversacion__barra">
+          <h2 class="conversacion__titulo" id="titulo-conversacion" data-zona="titulo-conversacion">
+            Conversación general
+          </h2>
+          <!-- Dice lo que hay de verdad: conectando, conectado, reconectando (con el
+               intento) o sin conexión con su «Reintentar». -->
+          <span class="conexion conexion--reconectando" data-zona="conexion" role="status"
+            >Conectando…</span
+          >
+        </header>
 
-        <div class="campo campo--area">
-          <label class="campo__etiqueta" for="texto">Mensaje</label>
-          <textarea
-            class="campo__control"
-            id="texto"
-            name="texto"
-            rows="2"
-            maxlength="500"
-            required
-          ></textarea>
-          <p class="campo__pista">Hasta 500 caracteres.</p>
+        <div class="conversacion__cuerpo">
+          <ol data-zona="mensajes"></ol>
+          <!-- Cargando, en silencio o sin canal: lo pinta chat.js y desaparece con
+               el primer mensaje. -->
+          <div class="conversacion__estado" data-zona="sin-mensajes"></div>
         </div>
 
-        <!-- CA-02: compartir un logro de mision. Opcional, plegado por defecto. -->
-        <details class="pila pila--compacta">
-          <summary class="t-etiqueta">Compartir un logro de misión</summary>
-          <div class="fila">
-            <div class="campo">
-              <label class="campo__etiqueta" for="logroMision">Misión</label>
-              <input class="campo__control" id="logroMision" name="logroMision" type="text" />
+        <form id="formulario-chat" class="redactor-mensaje" novalidate>
+          <div data-zona="aviso" hidden></div>
+
+          <div class="redactor-mensaje__fila">
+            <div class="campo redactor-mensaje__campo">
+              <label class="campo__etiqueta solo-lectores" for="texto">Mensaje</label>
+              <textarea
+                class="campo__control redactor-mensaje__texto"
+                id="texto"
+                name="texto"
+                rows="2"
+                maxlength="500"
+                placeholder="Escribe un mensaje…"
+                required
+              ></textarea>
             </div>
-            <div class="campo">
-              <label class="campo__etiqueta" for="logroTitulo">Logro</label>
-              <input class="campo__control" id="logroTitulo" name="logroTitulo" type="text" />
-            </div>
+            <button class="boton boton--primario redactor-mensaje__enviar" type="submit">
+              Enviar
+            </button>
           </div>
-        </details>
+          <p class="campo__pista redactor-mensaje__pista" id="pista-mensaje">
+            Hasta 500 caracteres.
+          </p>
 
-        <!-- `.fila--acciones` para que el boton mida lo que mide su texto: suelto
-             dentro de la `.pila` se estiraba a lo ancho de toda la tarjeta. -->
-        <div class="fila fila--acciones">
-          <button class="boton boton--primario" type="submit">Enviar</button>
-        </div>
-      </form>
+          <!-- CA-02: compartir un logro de mision. Opcional, plegado por defecto. -->
+          <details class="redactor-mensaje__logro">
+            <summary class="t-etiqueta">Compartir un logro de misión</summary>
+            <div class="fila">
+              <div class="campo">
+                <label class="campo__etiqueta" for="logroMision">Misión</label>
+                <input class="campo__control" id="logroMision" name="logroMision" type="text" />
+              </div>
+              <div class="campo">
+                <label class="campo__etiqueta" for="logroTitulo">Logro</label>
+                <input class="campo__control" id="logroTitulo" name="logroTitulo" type="text" />
+              </div>
+            </div>
+          </details>
+        </form>
+      </section>
     </main>
 
     <!--
@@ -87,7 +111,7 @@
 
     <script type="module">
       import { montarAsistente } from '../../comun/ui/asistente.js';
-      import { montarChat, canalDesdeUrl, CLAVE_TOKEN } from './chat.js';
+      import { montarVistaDeChat } from './chat.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
 
@@ -101,15 +125,9 @@
         seccionActiva: 'jugar',
       });
 
-      const canal = canalDesdeUrl(window.location.search);
-      document.querySelector('[data-zona="titulo"]').textContent = canal.idSala
-        ? 'Chat de la sala'
-        : 'Chat general';
-
-      montarChat(document.getElementById('chat'), {
-        canal,
-        token: sessionStorage.getItem(CLAVE_TOKEN),
-      });
+      // UXC-6 — el chat general o el de la sala, y la pestaña de mensajes
+      // privados (con su estado honesto mientras no haya servicio).
+      montarVistaDeChat(document);
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
       montarAsistente(document);

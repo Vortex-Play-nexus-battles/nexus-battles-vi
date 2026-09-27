@@ -200,6 +200,15 @@ services:
       # servicio vuelve a preferir KEYCLOAK_JWK_SET_URI, aqui no hay ningun
       # JWKS que servir y el banco se pone rojo en vez de pasar por suerte.
       KEYCLOAK_JWK_SET_URI: http://emisor-que-no-existe:9/jwks
+      # B4 — la semilla del catalogo oficial esta encendida por omision en
+      # todos los entornos. Aqui se apaga a proposito: el banco tiene su propio
+      # catalogo determinista (sembrar.sh), y la vista de la tienda pinta solo
+      # la primera pagina de la vitrina (16, por fecha de alta). Los 80
+      # productos oficiales, con los precios en COP de la demo, dejarian fuera
+      # de esa pagina el producto que crea tienda.e2e.spec.js. La semilla la
+      # prueba CatalogoContraMongoIT (productos) contra un Mongo real. Cuando
+      # la tienda pagine, esta linea puede irse.
+      CATALOGO_SEMILLA: "false"
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
@@ -643,6 +652,58 @@ services:
       srv-moderacion-sanciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # Correo durable (M15, B1) con su buzon de pruebas. En el PERFIL `correo` y
+  # no en el banco por omision, a proposito: metricas-tecnicas.e2e.spec.js
+  # (HU-MET-004, CA-03) necesita un servicio del bloque FUERA del banco para
+  # demostrar que el tablero senala la brecha, y ese servicio es correo. Para
+  # probar correos (verificacion de cuenta, recuperacion, sancion):
+  #
+  #   ./gradlew :services:plataforma:correo:bootJar
+  #   docker compose -f tests/e2e/compose.yml --profile correo up -d --build --wait
+  #
+  # y leer la bandeja por el borde (/mailpit/api/v1/...), igual que
+  # activacion-del-jugador.smoke.spec.js en dev. Se llama `mailpit`, como en el
+  # despliegue, para que la ruta /mailpit/ del borde-dev.conf real funcione.
+  # ms-identidad no apunta aqui todavia (sus CORREO_*_URL van a localhost y su
+  # cliente falla hacia el lado abierto): cablearlo es del carril de identidad.
+  mailpit:
+    image: axllent/mailpit
+    profiles: ["correo"]
+    environment:
+      MP_WEBROOT: /mailpit
+
+  srv-correo:
+    profiles: ["correo"]
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/correo/build/libs/*.jar
+        PUERTO: "8082"
+    environment:
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      # Valores del BANCO DE PRUEBAS, no de ningun entorno: remitente del
+      # dominio reservado .test y enlaces al borde del banco.
+      MAIL_FROM: The Nexus Battles VI <no-reply@nexusbattles.test>
+      PUBLIC_BASE_URL: http://localhost:8099
+      # Una ronda por segundo: el spec lee la bandeja justo despues de pedir
+      # el correo, y el banco no espera los dos segundos de DEV.
+      CORREO_ENTREGA_INTERVALO_MS: "1000"
+    depends_on:
+      e2e-plataforma-db: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      mailpit: { condition: service_started }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40

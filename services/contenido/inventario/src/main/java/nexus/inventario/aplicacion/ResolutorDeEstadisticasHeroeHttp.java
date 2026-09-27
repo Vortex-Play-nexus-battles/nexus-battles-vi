@@ -17,8 +17,12 @@ import org.springframework.stereotype.Component;
 
 /**
  * Adaptador HTTP real de {@link ResolutorDeEstadisticasHeroe}: consume
- * {@code GET /api/v1/heroes/{nombre}} (heroes.yaml, ya mergeado en develop
- * via PR #177). Mismo patron que ClienteHeroesHttp en motor-combate:
+ * {@code GET /api/v1/heroes/{nombre}/niveles/{nivel}} (heroes.yaml) y lee sus
+ * {@code estadisticas}, ya escaladas al nivel del heroe. Hasta B4 leia la
+ * ficha ({@code GET /api/v1/heroes/{nombre}}, {@code estadisticasNivel1}) y
+ * todo heroe salia en nivel 1: el inventario no guardaba nivel. Ahora cada
+ * heroe tiene el suyo y el escalado lo hace quien es dueno de la regla.
+ * Mismo patron que ClienteHeroesHttp en motor-combate:
  * HttpClient plano con timeout, URI armada con el constructor de 5
  * argumentos (nunca URLEncoder, que rompe con espacios en el nombre del
  * prototipo) y deserializacion con records privados
@@ -54,8 +58,8 @@ public class ResolutorDeEstadisticasHeroeHttp implements ResolutorDeEstadisticas
     }
 
     @Override
-    public EstadisticasHeroe resolver(String prototipo) {
-        URI uri = construirUriDeHeroe(prototipo);
+    public EstadisticasHeroe resolver(String prototipo, int nivel) {
+        URI uri = construirUriDeHeroe(prototipo, nivel);
 
         HttpRequest peticion = HttpRequest.newBuilder(uri)
                 .GET()
@@ -87,12 +91,12 @@ public class ResolutorDeEstadisticasHeroeHttp implements ResolutorDeEstadisticas
         return parsearFicha(respuesta.body());
     }
 
-    private URI construirUriDeHeroe(String prototipo) {
+    private URI construirUriDeHeroe(String prototipo, int nivel) {
         try {
             return new URI(
                     baseUri.getScheme(),
                     baseUri.getAuthority(),
-                    "/api/v1/heroes/" + prototipo,
+                    "/api/v1/heroes/" + prototipo + "/niveles/" + nivel,
                     null,
                     null);
         } catch (URISyntaxException e) {
@@ -103,8 +107,11 @@ public class ResolutorDeEstadisticasHeroeHttp implements ResolutorDeEstadisticas
 
     private EstadisticasHeroe parsearFicha(String cuerpoJson) {
         try {
-            FichaHeroeJson ficha = objectMapper.readValue(cuerpoJson, FichaHeroeJson.class);
-            EstadisticasJson estadisticas = ficha.estadisticasNivel1();
+            VistaPorNivelJson vista = objectMapper.readValue(cuerpoJson, VistaPorNivelJson.class);
+            EstadisticasJson estadisticas = vista.estadisticas();
+            if (estadisticas == null) {
+                throw new ResolutorDeEstadisticasHeroeException("La vista por nivel de heroes no trae estadisticas");
+            }
 
             return new EstadisticasHeroe(
                     estadisticas.poder(),
@@ -131,8 +138,9 @@ public class ResolutorDeEstadisticasHeroeHttp implements ResolutorDeEstadisticas
         }
     }
 
+    /** {@code VistaPorNivel} de heroes.yaml: solo interesan las estadisticas ya escaladas. */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record FichaHeroeJson(EstadisticasJson estadisticasNivel1) {
+    private record VistaPorNivelJson(EstadisticasJson estadisticas) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

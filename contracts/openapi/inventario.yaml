@@ -9,15 +9,33 @@ info:
   # 1.3.0 (Grupo 2, #685): crear un elemento exige que el producto exista y
   # este activo en el catalogo (422 inexistente, 409 suspendido, 400 tipo que
   # no coincide, 503 catalogo no disponible). Aditivo: solo agrega respuestas.
+  # 1.5.0 (B4, BACKEND-06): se implementa lo que la 1.4.0 anuncio.
+  #   - POST /entregas deja de estar pendiente (fuera x-implementacion/x-fase):
+  #     indice unico de la clave en la coleccion `entregas`, 201 nueva o
+  #     retomada, 200 repeticion, 409 otro cuerpo o producto suspendido, 422
+  #     producto inexistente o armadura sin parte ("Producto incompleto").
+  #   - POST /elementos: solo SERVICIO, ADMINISTRADOR o SUPER_ADMINISTRADOR
+  #     (JUGADOR 403, problem detail "Acceso denegado"); la 1.4.0 ya lo
+  #     anunciaba. parteArmadura pasa a decidirla el catalogo: sigue siendo
+  #     opcional en la peticion, si llega y no coincide es 400 "Parte no
+  #     coincide", y si no llega se toma la del producto.
+  #   - ElementoInventario gana cuatro propiedades opcionales (origen,
+  #     referencia, nivel, experiencia) y EstadisticasEquipadas gana nivel: las
+  #     estadisticas salen del nivel del heroe, no siempre del 1.
+  #   - Equipar una armadura usa la parte del catalogo (503 si no responde) y
+  #     un heroe bloqueado por una subasta no cambia de equipo (409).
+  #   Menor: nada desaparece ni se vuelve obligatorio en una peticion, y la
+  #   restriccion de POST /elementos ya estaba declarada en la 1.4.0.
   # 1.6.0 (B9, BACKEND-11 — misiones): bloqueo del heroe mientras esta en una
   # mision (PUT .../bloqueo-mision) y su liberacion sumando la experiencia
   # ganada (POST .../bloqueo-mision/{ejecucionId}/liberacion); la consulta
-  # interna por id la puede usar tambien misiones. Aditivo: operaciones nuevas
-  # y propiedades opcionales; menor. NOTA DE FUSION: la 1.5.0 es de la rama de
-  # B4 (entregas implementadas, `nivel` y `experiencia` del heroe); las dos
-  # ramas avanzan en paralelo, asi que esta salta a 1.6.0 y declara `nivel` y
-  # `experiencia` con los mismos nombres, tipos y limites que B4. Al fusionar
-  # se conservan las dos entradas y queda 1.6.0.
+  # interna por id la puede usar tambien misiones, y su detalle anade,
+  # opcionales, tipo, nombrePropio, nivel, experiencia y ejecucionMisionId;
+  # ElementoInventario gana `ejecucionMisionId`. `nivel` y `experiencia` son
+  # los de la 1.5.0 (B4): mismo campo, mismos limites y mismos valores por
+  # omision (1 y 0); la mision solo los hace avanzar. Equipar o desequipar un
+  # heroe en mision responde 409. Aditivo: operaciones nuevas, propiedades
+  # opcionales y una respuesta 409 mas; menor.
   version: 1.6.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
@@ -58,6 +76,17 @@ info:
     Al equipar una armadura, la parte del cuerpo la decide el catalogo, no
     el cliente.
 
+    1.5.0 (B4) — implementado. Los heroes guardan su progresion (nivel de 1
+    a 8 y experiencia; los anteriores se leen en nivel 1 con 0) y sus
+    estadisticas se calculan en su nivel con la vista por nivel del servicio
+    de heroes. Como se gana experiencia no se decide aqui (B9, misiones).
+    Cada escritura del inventario es condicional a la version leida: dos
+    escrituras concurrentes ya no se pisan (la que llega tarde responde 503
+    "Inventario no disponible" sin cambios, y la entrega reintenta sola).
+    Las consultas al catalogo llevan la credencial de quien llamo, porque sin
+    ella el catalogo (productos 1.4.0) ya no muestra los productos
+    suspendidos que un jugador conserva.
+
     1.6.0 (B9) — el heroe en mision. Mientras un heroe esta en una mision
     (seccion 7.8.10 del documento) no puede usarse en batallas JcJ ni en
     torneos, no se le cambia el equipamiento y aparece «En mision» en el
@@ -68,12 +97,13 @@ info:
     ms-subastas; equipar o desequipar un heroe en mision responde 409. Al
     terminar o cancelar la mision, `POST .../bloqueo-mision/{ejecucionId}/liberacion`
     lo libera y le suma la experiencia ganada EN LA MISMA ESCRITURA: el nivel
-    sube con la tabla del servicio de heroes (`GET /api/v1/progresion/niveles`,
-    100 x 1,2^(n-1), tope 8, el sobrante se conserva). Es idempotente por
-    estado: si el heroe ya no esta bloqueado por esa ejecucion, la experiencia
-    ya se sumo y se devuelve el heroe tal cual. Las dos operaciones son
-    exclusivas del servicio de misiones (credencial de servicio con
-    azp = misiones).
+    y la experiencia son los que la 1.5.0 ya guarda para cada heroe, y el
+    nivel sube con la tabla del servicio de heroes
+    (`GET /api/v1/progresion/niveles`, 100 x 1,2^(n-1), tope 8, el sobrante
+    se conserva). Es idempotente por estado: si el heroe ya no esta bloqueado
+    por esa ejecucion, la experiencia ya se sumo y se devuelve el heroe tal
+    cual. Las dos operaciones son exclusivas del servicio de misiones
+    (credencial de servicio con azp = misiones).
 servers:
   - url: http://localhost:8080
     description: Entorno local de desarrollo
@@ -114,12 +144,19 @@ paths:
         "401":
           $ref: "#/components/responses/IdentidadRequerida"
     post:
-      summary: Crea un elemento en el inventario del jugador autenticado
+      summary: Alta manual de un elemento (servicio o administrador)
       description: >
         El elemento es una instancia de un producto del catalogo. Antes de
         guardar, el servidor consulta productoId en el servicio de productos
         y exige que exista, que no este suspendido y que su tipo sea el que
         trae la peticion.
+
+        Desde 1.5.0 (B4) solo la usan un servicio (rol SERVICIO, con el
+        jugador afectado en X-User-Name; por ejemplo el paquete inicial de
+        ms-identidad) o un ADMINISTRADOR/SUPER_ADMINISTRADOR, que crea en su
+        propio inventario. Un JUGADOR recibe 403: su propiedad llega por
+        `POST /api/v1/inventario/entregas` (compra, cofre, premio...). La
+        parte de una armadura la decide el catalogo.
       operationId: crearElementoPropio
       requestBody:
         required: true
@@ -136,15 +173,18 @@ paths:
                 $ref: "#/components/schemas/ElementoInventario"
         "400":
           description: >
-            Datos invalidos ("Solicitud invalida") o tipo distinto al del
+            Datos invalidos ("Solicitud invalida"), tipo distinto al del
             producto del catalogo ("Tipo no coincide": "El tipo no coincide
-            con el producto del catalogo.").
+            con el producto del catalogo."), o una parteArmadura distinta a la
+            del producto ("Parte no coincide", 1.5.0).
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/AccesoDenegado"
         "409":
           $ref: "#/components/responses/ProductoSuspendido"
         "422":
@@ -584,6 +624,16 @@ paths:
     put:
       summary: Equipa un arma, armadura o item propio en un heroe propio
       description: >
+        Dos armas, dos items y una armadura por parte del cuerpo (6.1.2). Desde
+        1.5.0 (B4) la ranura de una armadura es la parte que declara su
+        producto en el catalogo, no la que guardo el elemento (si difieren, la
+        guardada se corrige en la misma escritura); si el catalogo no la
+        declara vale la guardada. Un heroe o un elemento bloqueados por una
+        subasta vigente no cambian de equipo (409). No se comprueba que el
+        objeto sea "del" tipo de heroe: el documento asocia objetos y heroes
+        en sus tablas pero no enuncia esa restriccion (decision del PO
+        pendiente; la asociacion esta en contracts/esquemas/catalogo-oficial.yaml).
+
         Desde 1.6.0 (B9) un heroe en mision no cambia de equipamiento: 409
         «Heroe en mision» (seccion 7.8.10, «no puede ser modificado su
         equipamiento»; conserva el equipo con el que salio).
@@ -606,7 +656,14 @@ paths:
         "409":
           $ref: "#/components/responses/LimiteEquipamiento"
         "503":
-          $ref: "#/components/responses/PersistenciaNoDisponible"
+          description: >
+            La escritura no pudo completarse ("Inventario no disponible") o, al
+            equipar una armadura, el catalogo no respondio y no se pudo saber
+            su parte ("Catalogo no disponible"). No se aplica nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
     delete:
       summary: Desequipa un elemento de un heroe propio
       description: >
@@ -642,7 +699,10 @@ paths:
         daño y sanacion del heroe indicado sumando los modificadores de cada
         elemento que tiene equipado actualmente. La identidad viaja en la
         cabecera y nunca en la ruta: un jugador no puede consultar las
-        estadisticas del heroe de otro.
+        estadisticas del heroe de otro. Desde 1.5.0 (B4) la base es la del
+        nivel que el inventario guarda para ese heroe (vista por nivel del
+        servicio de heroes, GET /api/v1/heroes/{nombre}/niveles/{nivel}), y la
+        respuesta dice cual (nivel).
       operationId: consultarEstadisticasEquipadas
       parameters:
         - $ref: "#/components/parameters/HeroeId"
@@ -661,19 +721,35 @@ paths:
           $ref: "#/components/responses/ElementoNoEncontrado"
   /api/v1/inventario/entregas:
     post:
-      summary: Entrega productos del catalogo al inventario de un jugador (1.4.0)
+      summary: Entrega productos del catalogo al inventario de un jugador
       operationId: entregarProductos
-      x-implementacion: pendiente
-      x-fase: B4
       description: >
         Unica via por la que un servicio da propiedad de un producto a un
         jugador (compra, cofre, premio de torneo, recompensa de mision,
         paquete inicial). Idempotente por `Idempotency-Key`: la misma clave
         con el mismo cuerpo devuelve 200 con la entrega original; con otro
-        cuerpo, 409. Comprueba que cada producto exista y no este suspendido
-        (sin consumir tiraje: el tiraje lo reserva quien vende, con
+        cuerpo, 409. El orden de las lineas de `productos` no cuenta. Comprueba
+        que cada producto exista y no este suspendido (sin consumir tiraje: el
+        tiraje lo reserva quien vende, con
         `POST /api/v1/productos/{id}/adquisiciones`). Solo token de servicio
-        (rol SERVICIO) o ADMINISTRADOR/SUPER_ADMINISTRADOR.
+        (rol SERVICIO) o ADMINISTRADOR/SUPER_ADMINISTRADOR; el jugador que
+        recibe va en el cuerpo (`uid`), y quien la pidio (azp del servicio o
+        uid del administrador) queda registrado con la entrega.
+
+        El tipo, el nombre y la parte de armadura de cada elemento los decide
+        el catalogo; cada unidad es un elemento propio con su `origen` y su
+        `referencia`. Los heroes entregados empiezan en nivel 1 con 0 de
+        experiencia.
+
+        Todo o nada, sin transacciones multi-documento: primero se valida todo
+        contra el catalogo (si algo falla no se guarda nada); despues se
+        registra la entrega PENDIENTE con sus elementos ya planeados (indice
+        unico de la clave en la coleccion `entregas`); despues se aplican al
+        inventario en una sola escritura del documento del jugador, junto con
+        la anotacion de la entrega; y por ultimo se marca COMPLETADA. Si algo
+        falla a medias la respuesta es 503 y la entrega queda PENDIENTE: el
+        reintento con la misma clave la termina con los MISMOS elementos y
+        nunca duplica, aunque el jugador ya haya movido lo recibido.
       security:
         - BearerInterno: []
         - TokenDeAcceso: []
@@ -687,7 +763,9 @@ paths:
               $ref: "#/components/schemas/SolicitudDeEntrega"
       responses:
         "201":
-          description: Entrega realizada.
+          description: >
+            Entrega realizada por esta peticion: nueva, o una PENDIENTE que un
+            intento anterior dejo a medias y esta peticion termino.
           content:
             application/json:
               schema:
@@ -699,25 +777,46 @@ paths:
               schema:
                 $ref: "#/components/schemas/Entrega"
         "400":
-          $ref: "#/components/responses/SolicitudInvalida"
-        "401":
-          $ref: "#/components/responses/IdentidadRequerida"
-        "403":
-          description: El llamador no es un servicio ni un administrador.
+          description: >
+            Cuerpo fuera del esquema, o `Idempotency-Key` ausente, vacia o de
+            mas de 100 caracteres ("Solicitud invalida"). No se procesa nada.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/AccesoDenegado"
         "409":
-          description: La clave ya se uso con otro cuerpo, o un producto esta suspendido.
+          description: >
+            La clave ya se uso con otro cuerpo ("Clave de idempotencia
+            reutilizada"), o un producto esta suspendido ("Producto
+            suspendido"). No se guarda nada.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
         "422":
-          $ref: "#/components/responses/ProductoInexistente"
+          description: >
+            Un producto no existe en el catalogo, o no es de un tipo que el
+            inventario guarde ("Producto inexistente"), o es una armadura sin
+            parte del cuerpo en el catalogo ("Producto incompleto"). No se
+            guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "503":
-          $ref: "#/components/responses/PersistenciaNoDisponible"
+          description: >
+            El catalogo no respondio ("Catalogo no disponible"; no se guarda
+            nada) o la escritura no pudo completarse ("Inventario no
+            disponible"; la entrega queda PENDIENTE y se reintenta con la
+            misma clave).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 
 components:
   securitySchemes:
@@ -756,18 +855,23 @@ components:
           $ref: "#/components/schemas/OrigenDeEntrega"
         referencia:
           type: string
+          minLength: 1
           maxLength: 120
           description: Id del hecho que causa la entrega (orden, cofre, torneo, mision...).
         productos:
           type: array
           minItems: 1
           maxItems: 50
+          description: >
+            El orden no cuenta para la idempotencia. Un mismo producto puede
+            venir en varias lineas; cada unidad es un elemento propio.
           items:
             type: object
             required: [productoId, cantidad]
             properties:
               productoId:
                 type: string
+                minLength: 1
               cantidad:
                 type: integer
                 minimum: 1
@@ -801,8 +905,11 @@ components:
         productoId debe existir en el catalogo del servicio de productos y no
         estar suspendido. El tipo lo manda el producto: el campo se conserva
         por compatibilidad, pero debe coincidir con el tipo del producto o la
-        peticion se rechaza con 400. parteArmadura sigue viniendo de la
-        peticion (obligatoria si el tipo es ARMADURA).
+        peticion se rechaza con 400. Desde 1.5.0 la parte de una armadura
+        tambien la manda el producto: parteArmadura es opcional, si llega debe
+        coincidir con la del catalogo (400 "Parte no coincide") y si no llega
+        se toma del catalogo; solo cuando el producto no declara parte se usa
+        la de la peticion, y una armadura sin parte en ningun lado es 400.
       required: [productoId, tipo, nombrePropio]
       properties:
         productoId:
@@ -909,19 +1016,29 @@ components:
             - type: string
               format: uuid
             - type: "null"
+        origen:
+          $ref: "#/components/schemas/OrigenDeEntrega"
+          description: >
+            1.5.0: canal por el que llego (solo en lo recibido por
+            POST /entregas; ausente en lo anterior o creado a mano).
+        referencia:
+          type: string
+          description: 1.5.0, junto a origen, el hecho que causo la entrega (orden, cofre, torneo...).
         nivel:
           type: integer
           minimum: 1
           maximum: 8
           description: >
-            Solo en HEROE: su nivel (seccion 6.1.1: empieza en 1 y llega hasta
-            8). Mismo nombre y limites que la 1.5.0 de B4.
+            1.5.0, solo en HEROE: su nivel (seccion 6.1.1: empieza en 1 y llega
+            hasta 8). Un heroe anterior a B4 sale en 1. Desde 1.6.0 lo sube la
+            liberacion de una mision.
         experiencia:
           type: number
           minimum: 0
           description: >
-            Solo en HEROE: la experiencia acumulada dentro de su nivel. La suma
-            la liberacion de una mision (1.6.0).
+            1.5.0, solo en HEROE; como se gana la decide B9 (misiones). Desde
+            1.6.0 es la acumulada dentro de su nivel y la suma la liberacion de
+            una mision.
         ejecucionMisionId:
           oneOf:
             - type: string
@@ -1037,6 +1154,11 @@ components:
       properties:
         heroeId:
           type: string
+        nivel:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: 1.5.0, el nivel del heroe en que se calcularon (siempre presente desde esa version).
         poder:
           type: integer
         vida:
@@ -1087,6 +1209,15 @@ components:
             $ref: "#/components/schemas/DetalleDeProblema"
     IdentidadRequerida:
       description: No se recibio la identidad autenticada del jugador
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    AccesoDenegado:
+      description: >
+        1.5.0: la credencial es valida pero no permite la operacion ("Acceso
+        denegado"); por ejemplo un JUGADOR que intenta crearse o entregarse
+        elementos.
       content:
         application/problem+json:
           schema:

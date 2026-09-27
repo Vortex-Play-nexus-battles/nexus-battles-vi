@@ -23,8 +23,7 @@ import java.util.Optional;
  *       En dev es el Mailpit del mismo compose.</li>
  *   <li>Si no, y el servidor principal ya es un buzon de pruebas (desarrollo
  *       local contra Mailpit), van al principal, como hasta ahora.</li>
- *   <li>Si no, no salen: el registro los anota como
- *       {@link EnvioRegistrado#OMITIDO}.</li>
+ *   <li>Si no, no salen: la cola los deja como OMITIDO.</li>
  * </ol>
  */
 @Component
@@ -76,7 +75,7 @@ public class BuzonDePruebas {
      * marcador no se aplica; y una cadena vacia en un {@code int} de
      * {@code @Value} impide que el servicio arranque.
      */
-    static int puertoDe(String texto, int siFalta) {
+    public static int puertoDe(String texto, int siFalta) {
         if (texto == null || texto.isBlank()) {
             return siFalta;
         }
@@ -88,7 +87,7 @@ public class BuzonDePruebas {
     }
 
     /** True si el puerto es el de un recogedor de desarrollo, que no reenvia a nadie. */
-    static boolean esPuertoDeBuzon(int puerto) {
+    public static boolean esPuertoDeBuzon(int puerto) {
         return PUERTOS_DE_BUZON.contains(puerto);
     }
 

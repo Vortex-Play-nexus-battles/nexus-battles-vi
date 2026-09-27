@@ -109,6 +109,9 @@ class SeguridadConEmisorRealTest {
     void simularPersistencia() {
         when(repositorio.save(any(Producto.class)))
                 .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+        // B4: el alta usa insert (Producto.version es @Version).
+        when(repositorio.insert(any(Producto.class)))
+                .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
     }
 
     @Nested

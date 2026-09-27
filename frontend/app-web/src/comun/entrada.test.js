@@ -194,15 +194,57 @@ describe('registrarYEntrar', () => {
       almacen: sessionStorage,
     });
 
+    // UXC-7 — por el `type` estable, con palabras del producto y qué hacer.
     expect(resultado).toEqual({
       resultado: 'rechazada',
-      mensaje: 'El apodo ya está en uso.',
+      mensaje:
+        'Ese apodo ya lo usa otro jugador. Prueba con otro: es el nombre con el que te verán en las partidas.',
       campo: 'apodo',
       estado: 400,
+      motivo: 'apodo-en-uso',
     });
     // No se intenta entrar con una cuenta que no se creó.
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+  });
+
+  test('UXC-7 — apodo no permitido: se explica sin decir qué palabra ni resolver la lista negra aquí', async () => {
+    const fetchImpl = servidor({
+      registro: () =>
+        respuesta(400, {
+          type: 'https://nexusbattles.upb.edu.co/errors/apodo-no-permitido',
+          title: 'Apodo no permitido',
+          status: 400,
+          detail: 'El apodo contiene terminos prohibidos.',
+          campo: 'apodo',
+        }),
+      login: () => respuesta(200, LOGIN_OK),
+    });
+    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+      fetchImpl,
+      almacen: sessionStorage,
+    });
+    expect(resultado.motivo).toBe('apodo-no-permitido');
+    expect(resultado.mensaje).toMatch(/^Ese apodo no está permitido/);
+    expect(resultado.campo).toBe('apodo');
+  });
+
+  test('UXC-7 — un motivo que la vista no conoce se dice con el texto del servidor', async () => {
+    const fetchImpl = servidor({
+      registro: () =>
+        respuesta(400, {
+          type: 'https://nexusbattles.upb.edu.co/errors/datos-de-registro-invalidos',
+          status: 400,
+          detail: 'Los nombres no pueden superar 80 caracteres.',
+          campo: 'nombres',
+        }),
+      login: () => respuesta(200, LOGIN_OK),
+    });
+    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+      fetchImpl,
+      almacen: sessionStorage,
+    });
+    expect(resultado.mensaje).toBe('Los nombres no pueden superar 80 caracteres.');
   });
 
   test('el texto plano de siempre también sirve (servidor sin problem details)', async () => {

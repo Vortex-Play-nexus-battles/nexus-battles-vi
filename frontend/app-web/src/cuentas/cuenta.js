@@ -18,6 +18,7 @@
  * | Historial | `GET /api/v1/creditos/{uid}/movimientos`    | ms-finanzas   |
  * | Historial | `GET /api/v1/transacciones/mi-historial`    | ms-finanzas   |
  * | Resumen   | `GET /api/v1/creditos/{uid}/saldo`          | ms-finanzas   |
+ * | Resumen   | `GET /api/v1/sanciones/usuarios/{uid}`      | moderación    |
  *
  * Nada de eso se inventa: si el servicio no está en el entorno, la zona lo
  * dice con su nombre y ofrece reintentar.
@@ -33,6 +34,9 @@ import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { confirmar } from '../comun/ui/dialogo.js';
+import { estadoDeCuenta } from '../comun/ui/sancion.js';
+import { vigilarCuentasAtras } from '../comun/ui/cuenta-atras.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
 import {
   estadoDeCarga,
   estadoDeError,
@@ -131,6 +135,12 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   }
   zona.append(identidad);
 
+  // UXC-7 — el estado de la cuenta, con la cuenta atrás si una sanción la
+  // restringe. Va antes que el saldo: si no puedes jugar, es lo primero.
+  const zonaEstado = h('div', { datos: { zona: 'resumen-estado' } });
+  zona.append(zonaEstado);
+  pintarEstadoDeLaCuenta(zonaEstado, { sesion, fetchImpl });
+
   const zonaSaldo = h('div', { datos: { zona: 'resumen-saldo' } });
   zona.append(zonaSaldo);
   pintarEstado(zonaSaldo, estadoDeCarga({ filas: 2 }));
@@ -158,6 +168,37 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
     }),
   );
   vaciar(zonaSaldo).append(rejilla);
+}
+
+/**
+ * «Estado de tu cuenta» en el resumen (SanctionCountdown).
+ *
+ * @param {HTMLElement} zona
+ * @param {{sesion: object, fetchImpl: Function}} opciones
+ */
+async function pintarEstadoDeLaCuenta(zona, { sesion, fetchImpl }) {
+  pintarEstado(zona, estadoDeCarga({ filas: 1, etiqueta: 'Consultando el estado de tu cuenta…' }));
+  const historial = await leer(
+    `/api/v1/sanciones/usuarios/${encodeURIComponent(sesion.uid)}`,
+    fetchImpl,
+  );
+  if (!historial.ok) {
+    vaciar(zona).append(
+      estadoDeError({
+        titulo: 'No pudimos consultar el estado de tu cuenta',
+        detalle: 'No significa que tengas una sanción: significa que no lo sabemos ahora mismo.',
+        alReintentar: () => pintarEstadoDeLaCuenta(zona, { sesion, fetchImpl }),
+      }),
+    );
+    return;
+  }
+  vaciar(zona).append(
+    estadoDeCuenta(Array.isArray(historial.datos) ? historial.datos : [], {
+      hrefSanciones: resolver(RUTAS.misSanciones),
+      titulo: 'Estado de tu cuenta',
+    }),
+  );
+  vigilarCuentasAtras(zona);
 }
 
 // ---------------------------------------------------------------- historial
