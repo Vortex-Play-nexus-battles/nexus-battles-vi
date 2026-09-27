@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -31,6 +32,14 @@ import java.util.UUID;
  * {@link SancionesNoDisponibles} y quien llamo bloquea la accion. Reemplaza a
  * {@code SancionesSinIntegrar}, que devolvia {@code false} para todo el mundo
  * con el contrato ya publicado (#441).
+ *
+ * <p><b>B6 — con credencial de servicio.</b> Desde la 1.4.0 del contrato
+ * {@code /activa} exige token: un jugador solo consulta la suya y un servicio
+ * la de cualquiera. Este cliente usaba el {@code RestClient} del chat, sin
+ * credencial ni tiempos de espera; con el contrato nuevo, cada consulta daria
+ * 401 y, con el fallo cerrado de arriba, nadie podria chatear, escribir un
+ * mensaje privado ni entrar a una sala. Ahora va por
+ * {@code restClientServicios}.
  */
 @Component
 public class ClienteSanciones implements SancionesDelJugador {
@@ -43,8 +52,9 @@ public class ClienteSanciones implements SancionesDelJugador {
     private final RestClient restClient;
     private final String base;
 
-    ClienteSanciones(RestClient restClientChat, @Value("${salas.sanciones.url}") String base) {
-        this.restClient = restClientChat;
+    ClienteSanciones(@Qualifier("restClientServicios") RestClient restClient,
+                     @Value("${salas.sanciones.url}") String base) {
+        this.restClient = restClient;
         this.base = base.replaceAll("/+$", "");
     }
 

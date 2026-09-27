@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.tiemporeal;
 
 import com.nexusbattles.comun.seguridad.ConversorRolesJwt;
 import com.nexusbattles.comun.seguridad.tiemporeal.AutenticacionStomp;
+import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
@@ -35,9 +36,11 @@ import java.util.Set;
  * conexion se cierra antes de poder suscribirse a nada.
  *
  * <p><b>Como se autoriza.</b> Autenticado no significa dentro:
- * {@link AutorizacionDeDestinos} deja suscribirse al canal de una sala solo a
- * sus participantes. Va despues de la autenticacion porque necesita la
- * identidad que aquella deja en la sesion.
+ * {@link AutorizacionDeDestinos} decide sobre todo el broker (B6): un cliente
+ * solo envia a {@code /app/**}, solo se suscribe a lo que el servicio publica,
+ * y los canales de una sala privada y de una partida son de sus
+ * participantes. Va despues de la autenticacion porque necesita la identidad
+ * que aquella deja en la sesion.
  *
  * <p>Broker simple en memoria: el docker-compose no levanta ninguno todavia y
  * elegirlo es decision de equipo. Cuando exista, se cambia aqui y el contrato
@@ -52,6 +55,7 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
     private final JwtDecoder decodificador;
     private final ConversorRolesJwt conversor;
     private final RepositorioDeSalas salas;
+    private final RepositorioDePartidas partidas;
 
     ConfiguracionWebSocket(
             @Value("${salas.websocket.endpoint}") String endpoint,
@@ -62,7 +66,8 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
             @Value("${chat.ws.origenes:}") String[] origenesDelChat,
             JwtDecoder decodificador,
             ConversorRolesJwt conversor,
-            RepositorioDeSalas salas) {
+            RepositorioDeSalas salas,
+            RepositorioDePartidas partidas) {
         this.endpoint = endpoint;
         for (String origen : origenesDeSalas) {
             if (!origen.isBlank()) {
@@ -77,6 +82,7 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
         this.decodificador = decodificador;
         this.conversor = conversor;
         this.salas = salas;
+        this.partidas = partidas;
     }
 
     @Override
@@ -99,6 +105,6 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
         // llama por su uid y trae sus roles (plataforma-seguridad, ADR-002).
         registro.interceptors(
                 new AutenticacionStomp(decodificador, conversor),
-                new AutorizacionDeDestinos(salas));
+                new AutorizacionDeDestinos(salas, partidas));
     }
 }
