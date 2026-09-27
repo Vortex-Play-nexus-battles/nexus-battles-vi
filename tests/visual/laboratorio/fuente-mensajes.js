@@ -9,9 +9,12 @@
  * entrega (enviado y leído), reconexión, bloqueo, cuenta sancionada y el
  * silencio propio con su cuenta atrás.
  *
- * En producción esa fuente dice `disponible: false` (no hay servicio ni
- * contrato de mensajes privados) y la pestaña lo cuenta. Todos los apodos y
- * textos de aquí son DATOS DE LABORATORIO.
+ * En producción esa fuente es, desde B6, el adaptador del servicio de
+ * mensajes privados (salas-partidas); si el servicio no responde dice
+ * `disponible: false` y la pestaña lo cuenta. Algunos estados de aquí la vista
+ * los sabe pintar pero el servicio de hoy no los produce —bloquear, «Leído»,
+ * tu silencio, la cuenta del otro sancionada—: ver `fuente-mensajes.js`.
+ * Todos los apodos y textos de aquí son DATOS DE LABORATORIO.
  *
  * El escenario elige la variante con `?laboratorio=` en la URL de la vista:
  * `bandeja` (por omisión), `vacia`, `error`, `silencio`, `reconectando`.
@@ -25,7 +28,7 @@ if (typeof document !== 'undefined' && document.body) {
   aviso.setAttribute('role', 'note');
   aviso.dataset.laboratorio = 'mensajes';
   aviso.textContent =
-    'Laboratorio visual: conversaciones de ejemplo. En producción la pestaña «Mensajes privados» dice que todavía no están abiertos, porque no existe su servicio.';
+    'Laboratorio visual: conversaciones de ejemplo. En producción la pestaña «Mensajes privados» enseña las conversaciones reales del servicio de mensajes privados.';
   aviso.style.cssText =
     'margin:0;padding:8px 16px;background:#FBF0DE;color:#5C3100;font:600 13px/1.4 Inter,system-ui,sans-serif;text-align:center;border-bottom:2px solid #8A4A00';
   document.body.prepend(aviso);

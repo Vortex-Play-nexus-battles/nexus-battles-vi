@@ -31,6 +31,30 @@ info:
       entera, para no rechazar palabras legitimas que contienen el termino
       por azar (el problema «Scunthorpe»).
 
+    2.0.1 (B2) precisa, sin cambiar la forma de nada:
+
+    - `PALABRA` casa si una palabra del texto es el termino, entera o sin
+      las cifras de sus bordes (`Messi10` es la palabra `messi`); si las
+      palabras de un termino de varias (`coca cola`) aparecen seguidas; o si
+      el texto compacto entero es el termino (`p.u.t.a`).
+    - La forma compacta junta palabras vecinas, asi que un termino en
+      `SUBCADENA` puede aparecer entre dos palabras legitimas («esta linea»
+      contiene `stalin`): esos terminos se dan de alta en `PALABRA`.
+    - Limites conocidos: homoglifos de otros alfabetos (una «а» cirilica),
+      leetspeak fuera de la tabla, letras intercaladas y traducciones no se
+      detectan.
+    - Con varias coincidencias, `categoria` es la del termino mas largo (el
+      mas especifico) y `coincidencias` las trae todas, ordenadas.
+    - En `PUT /terminos/{termino}` lo que no llega se conserva (`categoria`,
+      `modo`, `activo`); si cambia la forma normalizada y no llega `modo`, se
+      recalcula el de omision.
+    - Un termino corto se da de alta en `PALABRA` por omision; la semilla de
+      desarrollo (V7, provisional hasta que el PO fije el contenido) se
+      administra en caliente con estas mismas rutas.
+    - Un token presente pero invalido en `POST /verificar` responde 401: no
+      se trata como anonimo. Los 401 y 403 son problem details con `type`
+      `.../no-autenticado` y `.../permiso-insuficiente`.
+
     ### Contexto y accion
 
     `contexto` dice donde va el texto; la respuesta trae la `accion` que la
@@ -55,7 +79,7 @@ info:
     detalle. El resto exige rol MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR
     (jerarquia de roles: el Super Administrador puede todo lo del
     Administrador).
-  version: 2.0.0
+  version: 2.0.1
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -132,6 +156,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginaDeTerminos'
+        '400':
+          description: Pagina negativa, tamano fuera de 1..200 o categoria desconocida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':

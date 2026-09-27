@@ -18,7 +18,7 @@ public class ManejadorErroresSanciones {
         HttpStatus estado = switch (ex.motivo()) {
             case PERMISO_INSUFICIENTE -> HttpStatus.FORBIDDEN;
             case NO_ENCONTRADA -> HttpStatus.NOT_FOUND;
-            case USUARIO_BANEADO, APELACION_RESUELTA -> HttpStatus.CONFLICT;
+            case USUARIO_BANEADO, APELACION_RESUELTA, SANCION_NO_VIGENTE -> HttpStatus.CONFLICT;
             case APELACION_NO_PROCEDE -> HttpStatus.UNPROCESSABLE_ENTITY;
             case SOLICITUD_INVALIDA -> HttpStatus.BAD_REQUEST;
         };
@@ -31,6 +31,7 @@ public class ManejadorErroresSanciones {
             case APELACION_RESUELTA -> "La apelacion ya esta resuelta";
             case APELACION_NO_PROCEDE -> "La apelacion no procede";
             case SOLICITUD_INVALIDA -> "Solicitud invalida";
+            case SANCION_NO_VIGENTE -> "La sancion ya no esta vigente";
         });
         problema.setProperty("motivo", ex.motivo().name());
         return problema;

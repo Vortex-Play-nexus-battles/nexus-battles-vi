@@ -236,14 +236,114 @@ class SancionesControllerTest {
     }
 
     @Test
-    @DisplayName("la consulta de sancion activa sigue abierta entre servicios y ahora dice el tipo (1.1.0)")
-    void consultaConTipo() throws Exception {
-        when(consulta.consultar(JUGADOR)).thenReturn(new ConsultaSancionActivaService.ResultadoSancion(
-                true, "Lenguaje ofensivo", AHORA.plusHours(24), "SUSPENSION"));
+    @DisplayName("1.4.0: la consulta de sancion activa exige token; sin el, 401 con problem details")
+    void consultaExigeToken() throws Exception {
         mvc.perform(get("/api/v1/sanciones/usuarios/{id}/activa", JUGADOR))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/no-autenticado"));
+        verifyNoInteractions(consulta);
+    }
+
+    @Test
+    @DisplayName("1.4.0: con token de servicio dice el tipo y el id de la sancion; quien pregunta sale del token")
+    void consultaDeServicio() throws Exception {
+        UUID sancionId = UUID.randomUUID();
+        when(consulta.consultar(any(), eq(JUGADOR))).thenReturn(new ConsultaSancionActivaService.ResultadoSancion(
+                true, "Lenguaje ofensivo", AHORA.plusHours(24), "SUSPENSION", sancionId));
+
+        mvc.perform(get("/api/v1/sanciones/usuarios/{id}/activa", JUGADOR)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeServicio("salas-partidas")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sancionActiva").value(true))
                 .andExpect(jsonPath("$.tipo").value("SUSPENSION"))
+                .andExpect(jsonPath("$.sancionId").value(sancionId.toString()))
                 .andExpect(jsonPath("$.vigenteHasta").exists());
+
+        ArgumentCaptor<ConsultaSancionActivaService.Consultante> quien =
+                ArgumentCaptor.forClass(ConsultaSancionActivaService.Consultante.class);
+        org.mockito.Mockito.verify(consulta).consultar(quien.capture(), eq(JUGADOR));
+        assertThat(quien.getValue().esServicio()).isTrue();
+        assertThat(quien.getValue().uid()).as("un token de servicio no lleva uid").isNull();
+    }
+
+    @Test
+    @DisplayName("1.4.0: un jugador pregunta con su uid; el de otro sale 403 con el motivo")
+    void consultaDeJugador() throws Exception {
+        when(consulta.consultar(any(), eq(MODERADORA))).thenThrow(new SancionRechazada(
+                SancionRechazada.Motivo.PERMISO_INSUFICIENTE, "un jugador solo consulta su propia sancion"));
+        when(consulta.consultar(any(), eq(JUGADOR)))
+                .thenReturn(new ConsultaSancionActivaService.ResultadoSancion(false, null, null, null, null));
+        String token = "Bearer " + emisor.tokenDeJugador("lyra", JUGADOR);
+
+        mvc.perform(get("/api/v1/sanciones/usuarios/{id}/activa", JUGADOR).header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sancionActiva").value(false));
+        mvc.perform(get("/api/v1/sanciones/usuarios/{id}/activa", MODERADORA).header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.motivo").value("PERMISO_INSUFICIENTE"));
+
+        ArgumentCaptor<ConsultaSancionActivaService.Consultante> quien =
+                ArgumentCaptor.forClass(ConsultaSancionActivaService.Consultante.class);
+        org.mockito.Mockito.verify(consulta).consultar(quien.capture(), eq(JUGADOR));
+        assertThat(quien.getValue()).isEqualTo(new ConsultaSancionActivaService.Consultante(JUGADOR, false, false));
+    }
+
+    @Test
+    @DisplayName("1.4.0: el super administrador modera por jerarquia")
+    void consultaDeSuperAdministrador() throws Exception {
+        when(consulta.consultar(any(), eq(JUGADOR)))
+                .thenReturn(new ConsultaSancionActivaService.ResultadoSancion(false, null, null, null, null));
+
+        mvc.perform(get("/api/v1/sanciones/usuarios/{id}/activa", JUGADOR).header(HttpHeaders.AUTHORIZATION,
+                        "Bearer " + emisor.tokenDeUsuario("root", MODERADORA, "SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<ConsultaSancionActivaService.Consultante> quien =
+                ArgumentCaptor.forClass(ConsultaSancionActivaService.Consultante.class);
+        org.mockito.Mockito.verify(consulta).consultar(quien.capture(), eq(JUGADOR));
+        assertThat(quien.getValue().modera()).isTrue();
+        assertThat(quien.getValue().uid()).isEqualTo(MODERADORA);
+    }
+
+    @Test
+    @DisplayName("1.1.0: levantamiento con el actor del token; 200 con la sancion revertida")
+    void levantamiento() throws Exception {
+        Sancion s = advertencia();
+        s.revertir(MODERADORA, "Error de moderacion", AHORA);
+        when(servicio.levantar(any(), eq(s.id()), eq("Error de moderacion"))).thenReturn(s);
+
+        mvc.perform(post("/api/v1/sanciones/{id}/levantamiento", s.id())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", MODERADORA,
+                                "SUPER_ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"motivo\":\"Error de moderacion\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.vigente").value(false))
+                .andExpect(jsonPath("$.motivoReversion").value("Error de moderacion"));
+
+        ArgumentCaptor<Actor> actor = ArgumentCaptor.forClass(Actor.class);
+        org.mockito.Mockito.verify(servicio).levantar(actor.capture(), eq(s.id()), eq("Error de moderacion"));
+        assertThat(actor.getValue()).isEqualTo(new Actor(MODERADORA, "SUPER_ADMINISTRADOR"));
+    }
+
+    @Test
+    @DisplayName("1.1.0: levantar una sancion no vigente es 409 con su motivo; sin rol, 403")
+    void levantamientoRechazado() throws Exception {
+        when(servicio.levantar(any(), any(), any()))
+                .thenThrow(new SancionRechazada(SancionRechazada.Motivo.SANCION_NO_VIGENTE, "ya no esta vigente"))
+                .thenThrow(new SancionRechazada(SancionRechazada.Motivo.PERMISO_INSUFICIENTE, "solo administradores"));
+        String cuerpo = "{\"motivo\":\"Ya cumplio\"}";
+
+        mvc.perform(post("/api/v1/sanciones/{id}/levantamiento", UUID.randomUUID())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", MODERADORA,
+                                "ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/sancion-no-vigente"))
+                .andExpect(jsonPath("$.motivo").value("SANCION_NO_VIGENTE"));
+        mvc.perform(post("/api/v1/sanciones/{id}/levantamiento", UUID.randomUUID())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod", MODERADORA,
+                                "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isForbidden());
     }
 }

@@ -17,9 +17,19 @@ spring:
           jwk-set-uri: ${IDENTIDAD_JWKS_URL:http://localhost:8089/api/v1/auth/jwks}
   cache:
     type: redis
+    redis:
+      # La lista negra se cachea con caducidad (antes no caducaba nunca): cada
+      # escritura del panel la vacia, y la caducidad cubre lo que la
+      # invalidacion no ve (un INSERT a mano, una carrera). 5 min por omision.
+      time-to-live: ${LISTA_NEGRA_CACHE_TTL:5m}
   data:
     redis:
       url: ${DB_MEMORIA_URL:redis://localhost:6379}
+      # Si Redis no esta, la verificacion sigue contra PostgreSQL
+      # (ErroresDeCacheTolerados); estos tiempos acotan cuanto cuesta
+      # descubrirlo en cada peticion.
+      timeout: ${DB_MEMORIA_TIMEOUT:500ms}
+      connect-timeout: ${DB_MEMORIA_TIMEOUT_CONEXION:500ms}
   datasource:
     url: ${DB_RELACIONAL_URL:jdbc:postgresql://localhost:5432/plataformadb}
     username: ${DB_USER:usuario_nexus}
@@ -53,13 +63,44 @@ sanciones:
     # Bandeja del jugador (contracts/openapi/notificaciones.yaml, /internal
     # exige la credencial de servicio de ADR-005: DIRECTORIO_ACTIVO_*).
     url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
+  identidad:
+    # 7.3.2 (B2): proyeccion del estado de la cuenta y contacto para el correo
+    # (ms-identidad-admin.yaml, /api/v1/internal/usuarios/**; token de servicio).
+    # Sin /api/v1: la ruta ya lo lleva.
+    url: ${IDENTIDAD_URL:http://localhost:8089}
+  correo:
+    # 7.3.2 (B2): correo de la sancion (correo.yaml, POST /api/v1/correos/sancion).
+    # Sin /api/v1: la ruta ya lo lleva.
+    url: ${CORREO_URL:http://localhost:8082}
   avisos:
-    # Cada cuanto se reintentan los avisos que no entraron (CA-04 de HU-NOT-005).
+    # Cada cuanto se intentan las salidas pendientes (avisos, proyecciones y
+    # correos; CA-04 de HU-NOT-005). Es tambien la primera espera tras un fallo.
     reintento-ms: ${SANCIONES_AVISOS_REINTENTO_MS:15000}
+  salidas:
+    # La espera entre reintentos se duplica con cada fallo hasta este tope.
+    espera-maxima-ms: ${SANCIONES_SALIDAS_ESPERA_MAXIMA_MS:900000}
+    timeout-conexion-ms: ${SANCIONES_SALIDAS_TIMEOUT_CONEXION_MS:2000}
+    timeout-lectura-ms: ${SANCIONES_SALIDAS_TIMEOUT_LECTURA_MS:5000}
+
+# --- Lista negra (HU-ADM-002; moderacion-lista-negra.yaml 2.0.x) ------------
+lista-negra:
+  # Que hace la politica de moderacion cuando un texto coincide, segun donde
+  # se va a usar. Los valores por omision son la tabla del contrato; cada uno
+  # se cambia por su variable. Solo RECHAZAR, REVISION o BLOQUEAR.
+  accion:
+    apodo: ${LISTA_NEGRA_ACCION_APODO:RECHAZAR}
+    nombre-equipo: ${LISTA_NEGRA_ACCION_NOMBRE_EQUIPO:RECHAZAR}
+    nombre-torneo: ${LISTA_NEGRA_ACCION_NOMBRE_TORNEO:RECHAZAR}
+    nombre-sala: ${LISTA_NEGRA_ACCION_NOMBRE_SALA:RECHAZAR}
+    comentario: ${LISTA_NEGRA_ACCION_COMENTARIO:REVISION}
+    chat-general: ${LISTA_NEGRA_ACCION_CHAT_GENERAL:BLOQUEAR}
+    chat-sala: ${LISTA_NEGRA_ACCION_CHAT_SALA:BLOQUEAR}
+    mensaje-privado: ${LISTA_NEGRA_ACCION_MENSAJE_PRIVADO:BLOQUEAR}
+    generico: ${LISTA_NEGRA_ACCION_GENERICO:RECHAZAR}
 
 # Credencial de servicio (ADR-005) con la que este servicio habla a
-# notificaciones. Sin client-id no se crea ninguna: en local los avisos
-# quedan pendientes y en la bitacora.
+# notificaciones, ms-identidad y correo. Sin client-id no se crea ninguna: las
+# salidas quedan pendientes y en la bitacora.
 seguridad:
   servicio:
     url: ${DIRECTORIO_ACTIVO_URL:}
