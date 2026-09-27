@@ -241,16 +241,6 @@ export const MATRIZ = Object.freeze({
     armazon: 'jugador',
   },
   chat: { ruta: 'plataforma/salas-partidas/chat.html', acceso: ACCESO.SESION, armazon: 'jugador' },
-  // B6 — mensajes privados entre jugadores (feedback del profesor, no requisito
-  // del documento). Pide sesión: cada uno lee solo lo suyo, y el servidor lo
-  // comprueba con el uid del token. Dirección limpia como /jugar, porque se
-  // comparte (el botón «Mensaje privado» lleva `?con=<uid>`).
-  mensajes: {
-    ruta: 'plataforma/salas-partidas/mensajes.html',
-    limpia: '/mensajes',
-    acceso: ACCESO.SESION,
-    armazon: 'jugador',
-  },
   'publicar-comentario': {
     ruta: 'plataforma/comentarios/publicar-comentario.html',
     acceso: ACCESO.SESION,

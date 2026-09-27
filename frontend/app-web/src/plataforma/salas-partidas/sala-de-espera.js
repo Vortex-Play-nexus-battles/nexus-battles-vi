@@ -21,84 +21,8 @@
  * @module sala-de-espera
  */
 
-import { urlDeMensajesCon } from './cliente-mensajes.js';
-
 /** Clave de sessionStorage con la que el listado se entera de por que se volvio. */
 export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
-
-/**
- * B6 — Quién está en la sala, con «Mensaje privado» para cada uno de los
- * demás (feedback del profesor, no requisito del documento).
- *
- * La sala solo conoce identificadores: el apodo pertenece a cuentas y
- * `GET /salas/{id}` no lo trae (regla 7), así que cada persona se nombra por
- * su papel —«Tú», «Anfitrión»— o por su orden de llegada. El enlace lleva a la
- * vista de mensajes con `?con=<uid>`, el identificador público que la sala ya
- * enseña; allí la conversación toma el apodo en cuanto hay un mensaje.
- *
- * Se pinta dentro de la zona de espera, en una lista propia que se crea si la
- * vista no la trae: así no hace falta tocar el marcado de la sala.
- *
- * @param {HTMLElement} zona `[data-zona="espera"]`
- * @param {{participantes?: string[], idAnfitrion?: string|null, yo?: string|null,
- *          enlace?: (uid: string) => string}} datos
- * @returns {HTMLElement|null} la lista pintada
- */
-export function pintarParticipantesDeEspera(
-  zona,
-  { participantes = [], idAnfitrion = null, yo = null, enlace = urlDeMensajesCon } = {},
-) {
-  if (!zona) {
-    return null;
-  }
-  let lista = zona.querySelector('[data-zona="participantes-espera"]');
-  if (!lista) {
-    lista = document.createElement('div');
-    lista.className = 'pila pila--compacta';
-    lista.dataset.zona = 'participantes-espera';
-    // `role="list"` en un div: una lista sin viñetas del navegador, que el kit
-    // no reinicia, y que un lector de pantalla sigue anunciando como lista.
-    lista.setAttribute('role', 'list');
-    lista.setAttribute('aria-label', 'Quién está en la sala');
-    zona.prepend(lista);
-  }
-  lista.replaceChildren();
-
-  let orden = 1;
-  for (const uid of participantes ?? []) {
-    const esYo = Boolean(yo) && uid === yo;
-    const esAnfitrion = uid === idAnfitrion;
-    if (!esAnfitrion) {
-      orden += 1;
-    }
-    let nombre = `Jugador ${orden}`;
-    if (esYo) {
-      nombre = 'Tú';
-    } else if (esAnfitrion) {
-      nombre = 'Anfitrión';
-    }
-    const fila = document.createElement('div');
-    fila.className = 'fila';
-    fila.setAttribute('role', 'listitem');
-    fila.dataset.jugador = uid;
-    const etiqueta = document.createElement('span');
-    etiqueta.className = 't-meta';
-    etiqueta.textContent = nombre;
-    fila.append(etiqueta);
-    if (!esYo) {
-      const privado = document.createElement('a');
-      privado.className = 'boton boton--secundario boton--pequeno';
-      privado.href = enlace(uid);
-      privado.dataset.accion = 'mensaje-privado';
-      privado.textContent = 'Mensaje privado';
-      privado.setAttribute('aria-label', `Enviar un mensaje privado a ${nombre}`);
-      fila.append(privado);
-    }
-    lista.append(fila);
-  }
-  lista.hidden = lista.children.length === 0;
-  return lista;
-}
 
 /**
  * Texto de la confirmacion de cancelar (CA-05). Cuenta a los demas, no al
@@ -348,14 +272,6 @@ export function montarSalaDeEspera(
     zona.hidden = !admiteSalir;
   }
   pintarOcupacion();
-  let participantesActuales = Array.isArray(sala?.participantes) ? [...sala.participantes] : [];
-  const pintarParticipantes = () =>
-    pintarParticipantesDeEspera(zona, {
-      participantes: participantesActuales,
-      idAnfitrion: sala?.idAnfitrion ?? null,
-      yo,
-    });
-  pintarParticipantes();
 
   const ejecutar = async (boton, accion, motivo) => {
     boton.disabled = true;
@@ -386,11 +302,6 @@ export function montarSalaDeEspera(
       if (estado?.ocupacion) {
         ocupacionActual = { ...estado.ocupacion };
         pintarOcupacion();
-      }
-      // B6 — quien entra o sale tambien cambia a quien se puede escribir.
-      if (Array.isArray(estado?.participantes)) {
-        participantesActuales = [...estado.participantes];
-        pintarParticipantes();
       }
     },
     ocultar,

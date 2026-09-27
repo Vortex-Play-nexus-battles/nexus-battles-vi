@@ -89,7 +89,6 @@ sí exige sesión, y eso lo comprueba cada acción, no la pantalla.
 | sala-batalla | `plataforma/salas-partidas/sala-batalla.html` | → | V | V | V | V |
 | validacion-heroe | `plataforma/salas-partidas/validacion-heroe.html` | → | V | V | V | V |
 | chat | `plataforma/salas-partidas/chat.html` | → | V | V | V | V |
-| mensajes | `plataforma/salas-partidas/mensajes.html` | → | V | V | V | V |
 | publicar-comentario | `plataforma/comentarios/publicar-comentario.html` | → | V | V | V | V |
 | notificaciones | `plataforma/notificaciones/notificaciones.html` | → | V | V | V | V |
 | mis-sanciones | `plataforma/moderacion-sanciones/mis-sanciones.html` | → | V | V | V | V |

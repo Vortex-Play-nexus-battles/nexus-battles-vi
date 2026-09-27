@@ -506,7 +506,6 @@ export function montarArmazonJugador(
     acciones.append(
       indicadorDeCreditos(base),
       campana(base),
-      enlaceDeMensajes(base, almacen),
       menuDeCuenta({
         sesion,
         base,
@@ -551,81 +550,6 @@ function campana(base) {
   contador.hidden = true;
   enlaceCampana.append(contador);
   return enlaceCampana;
-}
-
-/**
- * Clave de `sessionStorage` con los mensajes privados sin leer que contó la
- * vista de mensajes la última vez. La cabecera no pide nada al servidor (como
- * la campana, que solo se mueve en su vista): lee lo último que se supo.
- */
-export const CLAVE_MENSAJES_SIN_LEER = 'nexus.mensajes.noLeidos';
-
-/**
- * B6 — Mensajes privados (feedback del profesor), en el HUD del jugador junto a
- * la campana. NO es un séptimo destino de la navegación: los seis de
- * RF-INV-008 son literales y no se tocan. Va detrás de la campana a propósito:
- * quien busca «la campana» con `.cabecera__campana` la sigue encontrando
- * primero; esta clase se reutiliza por su forma (icono con contador), no por
- * lo que significa.
- */
-function enlaceDeMensajes(base, almacen) {
-  const vinculo = h('a', {
-    clase: 'cabecera__campana',
-    atributos: { 'aria-label': 'Mensajes privados' },
-    datos: { zona: 'mensajes' },
-  });
-  vinculo.href = resolver(RUTAS.mensajes, base);
-  vinculo.append(icono('sobre', base));
-  const contador = h('span', {
-    clase: 'cabecera__contador',
-    texto: '0',
-    atributos: { 'aria-hidden': 'true' },
-    datos: { zona: 'contador-mensajes' },
-  });
-  contador.hidden = true;
-  vinculo.append(contador);
-  let guardado = 0;
-  try {
-    guardado = Number(almacen?.getItem?.(CLAVE_MENSAJES_SIN_LEER) ?? 0);
-  } catch {
-    guardado = 0;
-  }
-  pintarEnlaceDeMensajes(vinculo, guardado);
-  return vinculo;
-}
-
-function pintarEnlaceDeMensajes(vinculo, sinLeer) {
-  const cuenta = Number.isFinite(sinLeer) && sinLeer > 0 ? Math.floor(sinLeer) : 0;
-  const contador = vinculo.querySelector('[data-zona="contador-mensajes"]');
-  if (contador) {
-    contador.textContent = cuenta > 99 ? '99+' : String(cuenta);
-    contador.hidden = cuenta === 0;
-  }
-  // El número va en el nombre accesible: el contador visible es `aria-hidden`.
-  vinculo.setAttribute(
-    'aria-label',
-    cuenta === 0 ? 'Mensajes privados' : `Mensajes privados: ${cuenta} sin leer`,
-  );
-}
-
-/**
- * Pone al día el contador de mensajes privados de la cabecera y lo recuerda
- * para las demás vistas de esta pestaña. Lo llama la vista de mensajes.
- *
- * @param {ParentNode} documento
- * @param {number} sinLeer
- * @param {Storage} [almacen]
- */
-export function pintarContadorDeMensajes(documento, sinLeer, almacen = globalThis.sessionStorage) {
-  try {
-    almacen?.setItem?.(CLAVE_MENSAJES_SIN_LEER, String(Math.max(0, Number(sinLeer) || 0)));
-  } catch {
-    // Sin almacenamiento, el contador vale para esta página y nada más.
-  }
-  const vinculo = documento?.querySelector?.('[data-cabecera-app] [data-zona="mensajes"]');
-  if (vinculo) {
-    pintarEnlaceDeMensajes(vinculo, Number(sinLeer) || 0);
-  }
 }
 
 function construirBuscador(buscador, base) {
