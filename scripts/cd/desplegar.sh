@@ -609,6 +609,49 @@ export ARRANQUE_CREADO_EN="$(date +%s)"
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
+# B5 — el emisor de credenciales de servicio (ms-identidad, ADR-005) lee
+# AUTH_CLIENTES_SERVICIO SOLO al arrancar. Cuando una corrida trae un cliente
+# nuevo (ms-ecommerce en B5, misiones despues) y ms-identidad no viene en ella,
+# `up -d` no lo toca y el emisor sigue rechazando al cliente nuevo: su token
+# responde 401 y todo lo que hace con el (reservar tiraje, entregar al
+# inventario) falla. Se compara la lista que tiene el contenedor con la de este
+# .env y, si difieren, se recrea SOLO srv-ms-identidad, con la imagen que ya
+# corre (no con el TAG de esta corrida, que no la construyo) y sin tocar su
+# base. Nada se imprime: las dos listas llevan secretos.
+if [ "$INCLUYE_CONTENIDO" -eq 0 ] && docker inspect srv-ms-identidad >/dev/null 2>&1; then
+  case " $SERVICIOS_COMPOSE " in
+    *" srv-ms-identidad "*) : ;;  # ya se recreo en esta corrida con la lista nueva
+    *)
+      clientes_vigentes=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' srv-ms-identidad \
+        | sed -n 's/^AUTH_CLIENTES_SERVICIO=//p')
+      if [ "$clientes_vigentes" != "$AUTH_CLIENTES_SERVICIO" ]; then
+        imagen_emisor=$(docker inspect --format '{{.Config.Image}}' srv-ms-identidad)
+        tag_emisor="${imagen_emisor##*:}"
+        echo "== 3d) Cambio la lista de credenciales de servicio: se recrea srv-ms-identidad con su imagen de siempre (${tag_emisor}) =="
+        ARCHIVOS_EMISOR=("${ARCHIVOS_COMPOSE[@]}")
+        case " ${ARCHIVOS_COMPOSE[*]} " in
+          *"docker-compose.cuentas.yml"*) : ;;
+          *) ARCHIVOS_EMISOR+=(-f "$DIRECTORIO/docker-compose.cuentas.yml") ;;
+        esac
+        TAG="$tag_emisor" docker compose "${ARCHIVOS_EMISOR[@]}" up -d --no-deps srv-ms-identidad
+        emisor_sano=0
+        for _ in $(seq 1 36); do
+          if curl -fsS --max-time 5 "http://localhost:8089/actuator/health" 2>/dev/null | grep -q '"UP"'; then
+            emisor_sano=1
+            break
+          fi
+          sleep 5
+        done
+        if [ "$emisor_sano" -ne 1 ]; then
+          echo "srv-ms-identidad no volvio sano tras recrearlo con la lista nueva de clientes de servicio"
+          exit 1
+        fi
+        echo "  srv-ms-identidad: saludable y con la lista nueva de clientes de servicio"
+      fi
+      ;;
+  esac
+fi
+
 if [ "$INCLUYE_BORDE" -eq 1 ]; then
   echo "== 3c) Recargando el borde con la configuracion copiada en esta corrida =="
   # up -d no reinicia un contenedor cuya definicion no cambio, pero el
