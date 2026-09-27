@@ -41,7 +41,7 @@ class SancionesPersistenciaIT {
     private ConsultaSancionActivaService consulta;
 
     @Autowired
-    private AvisoPendienteRepository avisos;
+    private SalidaPendienteRepository salidas;
 
     @Autowired
     private ApelacionRepository apelaciones;
@@ -72,9 +72,15 @@ class SancionesPersistenciaIT {
         assertThat(consulta.consultar(jugador).sancionActiva()).isFalse();
         assertThat(servicio.historialDe(admin, jugador)).hasSize(2);
         assertThat(apelaciones.findById(apelacion.id()).orElseThrow().estado()).isEqualTo(Apelacion.Estado.REVERTIDA);
-        assertThat(avisos.findByEntregadoEnIsNullOrderByCreadoEnAsc(org.springframework.data.domain.PageRequest.of(0, 10)))
-                .extracting(AvisoPendiente::tipo)
+        assertThat(salidas.findByEntregadoEnIsNullOrderByCreadoEnAsc(org.springframework.data.domain.PageRequest.of(0, 50)))
+                .filteredOn(salida -> salida.canal() == CanalDeSalida.AVISO)
+                .extracting(SalidaPendiente::tipo)
                 .contains("SANCION_ADVERTENCIA", "SANCION_SUSPENSION", "APELACION_REVERTIDA");
+        // 7.3.2: la suspension y su reversion tambien dejaron su proyeccion y
+        // su correo en la cola, en la misma transaccion (V8, ddl validate).
+        assertThat(salidas.findBySancionIdOrderByCreadoEnAsc(suspension.id()))
+                .extracting(SalidaPendiente::canal)
+                .contains(CanalDeSalida.AVISO, CanalDeSalida.PROYECCION, CanalDeSalida.CORREO);
 
         // HU-MET-001: los agregados del periodo salen de lo mismo que se guardo.
         java.time.OffsetDateTime ahora = java.time.OffsetDateTime.now();

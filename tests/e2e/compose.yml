@@ -558,6 +558,13 @@ services:
       # cache de 1 s para que el spec vea el cambio sin esperar.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SANCIONES_PARAMETROS_CACHE_SEGUNDOS: "1"
+      # 7.3.2 (B2): la sancion se proyecta sobre la cuenta en ms-identidad
+      # (lo que niega el login a quien esta suspendido o baneado) con la
+      # credencial de arriba. correo NO esta en este banco (ver srv-ms-identidad):
+      # sus salidas se quedan en la cola, con reintento y espera creciente, sin
+      # afectar a la sancion ni al aviso en la bandeja.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      CORREO_URL: http://srv-correo:8082
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
@@ -783,6 +790,13 @@ services:
       # degrada al respaldo si el catalogo no esta, y ese es justamente el
       # comportamiento que se quiere en el banco.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      # B6 — mensajes privados: el destinatario existe y esta ACTIVO
+      # (GET /api/v1/internal/usuarios/{uid}/contacto, sin /api/v1 en la base)
+      # y, si no esta escuchando, aviso en su bandeja. Las dos con la
+      # credencial de arriba. El limite de frecuencia queda en su valor por
+      # omision (5 cada 10 s): mensajes-privados.e2e.spec.js lo comprueba.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }

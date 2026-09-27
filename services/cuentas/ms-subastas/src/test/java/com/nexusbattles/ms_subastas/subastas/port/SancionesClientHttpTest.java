@@ -30,7 +30,11 @@ class SancionesClientHttpTest {
         });
         server.start();
         try {
-            var client = new SancionesClientHttp("http://localhost:" + server.getAddress().getPort(), 2000, new ObjectMapper());
+            @SuppressWarnings("unchecked")
+            org.springframework.beans.factory.ObjectProvider<com.nexusbattles.comun.seguridad.servicio.TokenDeServicio> sinCredencial =
+                    mock(org.springframework.beans.factory.ObjectProvider.class);
+            var client = new SancionesClientHttp("http://localhost:" + server.getAddress().getPort(), 2000, new ObjectMapper(),
+                    sinCredencial);
             assertEquals(activa, client.tieneSancionActiva(uid));
             assertThrows(SancionesClientException.class, () -> client.tieneSancionActiva(null));
         } finally { server.stop(0); }
