@@ -97,6 +97,16 @@ export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
+  // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
+  // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
+  // su dirección. Mismo nivel que Sanciones y Lista negra (la matriz dice
+  // quién la ve).
+  {
+    id: 'comentarios',
+    etiqueta: 'Comentarios',
+    vista: 'moderar-comentarios',
+    icono: 'bandera',
+  },
   { id: 'sanciones', etiqueta: 'Sanciones', vista: 'sanciones-admin', icono: 'escudo' },
   { id: 'lista-negra', etiqueta: 'Lista negra', vista: 'lista-negra-admin', icono: 'prohibido' },
   { id: 'parametros', etiqueta: 'Parámetros', vista: 'parametros-admin', icono: 'ajustes' },
