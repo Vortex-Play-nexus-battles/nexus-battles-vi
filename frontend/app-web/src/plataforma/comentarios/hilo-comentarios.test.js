@@ -1,10 +1,12 @@
 /**
- * UXC-3 — el hilo de opiniones dentro del detalle del producto.
+ * UXC-3 y B3 — el hilo de opiniones dentro del detalle del producto.
  *
- * Se prueba contra dobles de los tres clientes (consultar, publicar, eliminar,
- * reportar), con la forma exacta de `comentarios.yaml` 1.3.0. Los estados que
- * pide el bloque: cargando, vacío, uno, muchos, con imágenes, reportado,
- * error y sin sesión; y los caminos de publicar, retirar y reportar.
+ * Se prueba contra dobles de los clientes con la forma exacta de
+ * `comentarios.yaml` 1.5.0: el hilo lo pagina el servidor (del más reciente al
+ * más antiguo, con `total`), el resumen sale de `GET /rating`, la calificación
+ * propia de `GET /rating/mia` y las imágenes se sirven por su `id`. Los estados
+ * que pide el bloque: cargando, vacío, uno, muchos, con imágenes, reportado,
+ * error y sin sesión; y los caminos de calificar, publicar, retirar y reportar.
  */
 
 import { jest } from '@jest/globals';
@@ -12,17 +14,18 @@ import { jest } from '@jest/globals';
 import { ErrorDeApi } from './cliente-comentarios.js';
 import {
   complementoDeOpiniones,
-  masRecientesPrimero,
   montarHiloDeComentarios,
   OPINIONES_POR_TANDA,
-  yaCalifico,
+  TAMANO_MAXIMO_DE_PAGINA,
+  tamanoParaRecargar,
+  textoDeVerMas,
 } from './hilo-comentarios.js';
-import { mensajeDePublicacion } from './redactor-comentario.js';
 import { mensajeDelRechazo, RESULTADO_REPORTE } from './reportar-comentario.js';
 
 const YO = 'uid-yo';
 const SESION = { yo: YO, apodo: 'yo' };
 const SIN_SESION = { yo: null, apodo: null };
+const IMAGEN = '3f1c2b4a-1111-4222-8333-944455566677';
 
 const esperar = () => new Promise((r) => setTimeout(r, 0));
 
@@ -34,47 +37,70 @@ function comentario(i, cambios = {}) {
     apodoAutor: `Jugador ${i}`,
     texto: `Opinión ${i}`,
     imagenes: [],
-    fechaPublicacion: `2026-09-${String(10 + i).padStart(2, '0')}T10:00:00Z`,
+    estrellas: null,
+    fechaPublicacion: `2026-09-${String(10 + (i % 18)).padStart(2, '0')}T10:00:00Z`,
     estado: 'PUBLICADO',
+    editado: false,
     ...cambios,
   };
 }
 
-function hilo(comentarios, extra = {}) {
-  const conEstrellas = comentarios.filter((c) => Number.isInteger(c.estrellas));
-  return {
-    productoId: 'p-1',
-    comentarios,
-    total: comentarios.length,
-    totalCalificaciones: conEstrellas.length,
-    calificacionPromedio: conEstrellas.length
-      ? conEstrellas.reduce((s, c) => s + c.estrellas, 0) / conEstrellas.length
-      : null,
-    ...extra,
-  };
+function resumen(promedio = null, total = 0) {
+  return { productoId: 'p-1', promedio, total, distribucion: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 } };
+}
+
+/**
+ * Un servicio falso que pagina como el de verdad: la lista ya viene del más
+ * reciente al más antiguo y cada página es un corte por posición.
+ */
+function servidor(lista) {
+  return jest.fn(async (_productoId, { pagina = 0, tamano = 16 } = {}) => {
+    const aplicado = Math.min(tamano, TAMANO_MAXIMO_DE_PAGINA);
+    const desde = pagina * aplicado;
+    return {
+      productoId: 'p-1',
+      comentarios: lista.slice(desde, desde + aplicado),
+      pagina,
+      tamano: aplicado,
+      total: lista.length,
+      totalPaginas: Math.ceil(lista.length / aplicado),
+      calificacionPromedio: null,
+      totalCalificaciones: 0,
+    };
+  });
 }
 
 function montar(opciones = {}) {
   const zona = document.createElement('div');
   document.body.replaceChildren(zona);
-  const consultarImpl = opciones.consultarImpl ?? jest.fn().mockResolvedValue(hilo([]));
+  const consultarImpl = opciones.consultarImpl ?? servidor([]);
+  const resumenImpl = opciones.resumenImpl ?? jest.fn().mockResolvedValue(resumen());
+  const miCalificacionImpl = opciones.miCalificacionImpl ?? jest.fn().mockResolvedValue(null);
   const api = montarHiloDeComentarios(zona, {
     productoId: 'p-1',
     sesion: SESION,
     consultarImpl,
+    resumenImpl,
+    miCalificacionImpl,
+    calificarImpl: jest.fn(),
     publicarImpl: jest.fn(),
+    subirImagenImpl: jest.fn(),
     eliminarImpl: jest.fn(),
     reportarImpl: jest.fn(),
+    urlDeImagenImpl: (id) => `/api/v1/comentarios/imagenes/${id}`,
     ...opciones,
   });
-  return { zona, consultarImpl, ...api };
+  return { zona, consultarImpl, resumenImpl, miCalificacionImpl, ...api };
 }
+
+const apodos = (zona) =>
+  Array.from(zona.querySelectorAll('.comentario__apodo')).map((n) => n.textContent);
 
 beforeEach(() => {
   document.body.replaceChildren();
 });
 
-describe('lectura', () => {
+describe('lectura del hilo, paginada por el servidor', () => {
   test('mientras carga se ve el esqueleto con su nombre', () => {
     const { zona } = montar({ consultarImpl: () => new Promise(() => {}) });
 
@@ -94,53 +120,119 @@ describe('lectura', () => {
     expect(zona.querySelector('.resumen-calificacion').dataset.estado).toBe('sin-valoraciones');
   });
 
-  test('uno: su tarjeta, y el resumen del servicio', async () => {
-    const { zona } = montar({
-      consultarImpl: jest.fn().mockResolvedValue(hilo([comentario(1, { estrellas: 5 })])),
-    });
+  test('la primera lectura pide la primera página de cinco al servidor', async () => {
+    const { consultarImpl } = montar();
+    await esperar();
+
+    expect(consultarImpl).toHaveBeenCalledWith('p-1', { pagina: 0, tamano: OPINIONES_POR_TANDA });
+  });
+
+  test('uno: su tarjeta, sin conteo ni «Ver más»', async () => {
+    const { zona } = montar({ consultarImpl: servidor([comentario(1)]) });
     await esperar();
 
     expect(zona.querySelectorAll('.comentario')).toHaveLength(1);
-    expect(zona.querySelector('.resumen-calificacion').textContent).toMatch(/1 valoración/);
-  });
-
-  test('muchos: del más reciente al más antiguo, de cinco en cinco', async () => {
-    const lista = Array.from({ length: 12 }, (_, i) => comentario(i + 1));
-    const { zona } = montar({ consultarImpl: jest.fn().mockResolvedValue(hilo(lista)) });
-    await esperar();
-
-    const apodos = () =>
-      Array.from(zona.querySelectorAll('.comentario__apodo')).map((n) => n.textContent);
-    expect(apodos()).toHaveLength(OPINIONES_POR_TANDA);
-    expect(apodos()[0]).toBe('Jugador 12');
-
-    const mas = zona.querySelector('[data-accion="ver-mas-opiniones"]');
-    expect(mas.textContent).toBe('Ver 5 opiniones más (quedan 7)');
-    mas.click();
-    expect(apodos()).toHaveLength(10);
-    // El foco va a la primera opinión nueva, no al principio.
-    expect(document.activeElement).toBe(zona.querySelectorAll('.comentario')[5]);
-    zona.querySelector('[data-accion="ver-mas-opiniones"]').click();
-    expect(apodos()).toHaveLength(12);
+    expect(zona.querySelector('[data-zona="conteo"]')).toBeNull();
     expect(zona.querySelector('[data-accion="ver-mas-opiniones"]')).toBeNull();
   });
 
-  test('con imágenes: el adjunto con su nombre', async () => {
+  test('muchos: en el orden del servidor, de cinco en cinco, pidiendo cada página', async () => {
+    // El servidor ya da del más reciente al más antiguo: la vista no reordena.
+    const lista = Array.from({ length: 12 }, (_, i) => comentario(12 - i));
+    const consultarImpl = servidor(lista);
+    const { zona } = montar({ consultarImpl });
+    await esperar();
+
+    expect(apodos(zona)).toEqual([
+      'Jugador 12',
+      'Jugador 11',
+      'Jugador 10',
+      'Jugador 9',
+      'Jugador 8',
+    ]);
+    expect(zona.querySelector('[data-zona="conteo"]').textContent).toBe(
+      'Mostrando 5 de 12 opiniones, de la más reciente a la más antigua.',
+    );
+    const mas = zona.querySelector('[data-accion="ver-mas-opiniones"]');
+    expect(mas.textContent).toBe('Ver 5 opiniones más (quedan 7)');
+
+    mas.click();
+    await esperar();
+
+    expect(consultarImpl).toHaveBeenLastCalledWith('p-1', { pagina: 1, tamano: 5 });
+    expect(apodos(zona)).toHaveLength(10);
+    expect(apodos(zona)[5]).toBe('Jugador 7');
+    // El foco va a la primera opinión nueva, no al principio.
+    expect(document.activeElement).toBe(zona.querySelectorAll('.comentario')[5]);
+    expect(zona.querySelector('[data-zona="conteo"]').textContent).toMatch(/Mostrando 10 de 12/);
+
+    zona.querySelector('[data-accion="ver-mas-opiniones"]').click();
+    await esperar();
+
+    expect(consultarImpl).toHaveBeenLastCalledWith('p-1', { pagina: 2, tamano: 5 });
+    expect(apodos(zona)).toHaveLength(12);
+    expect(zona.querySelector('[data-accion="ver-mas-opiniones"]')).toBeNull();
+    expect(zona.querySelector('[data-zona="conteo"]').textContent).toBe(
+      '12 opiniones, de la más reciente a la más antigua.',
+    );
+  });
+
+  test('si alguien publica entre dos páginas, la repetida se descarta por su id', async () => {
+    const lista = Array.from({ length: 8 }, (_, i) => comentario(8 - i));
+    const consultarImpl = servidor(lista);
+    const { zona } = montar({ consultarImpl });
+    await esperar();
+
+    // Llega una nueva arriba: todo se corre una posición.
+    lista.unshift(comentario(99));
+    zona.querySelector('[data-accion="ver-mas-opiniones"]').click();
+    await esperar();
+
+    const ids = Array.from(zona.querySelectorAll('.comentario')).map((c) => c.dataset.comentarioId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(8);
+  });
+
+  test('si la página siguiente falla, lo ya leído se queda y se dice', async () => {
+    const lista = Array.from({ length: 7 }, (_, i) => comentario(7 - i));
+    const consultarImpl = servidor(lista);
+    const { zona } = montar({ consultarImpl });
+    await esperar();
+
+    consultarImpl.mockRejectedValueOnce(new ErrorDeApi({ status: 503 }, 503));
+    zona.querySelector('[data-accion="ver-mas-opiniones"]').click();
+    await esperar();
+
+    expect(apodos(zona)).toHaveLength(5);
+    expect(zona.querySelector('.hilo-comentarios__aviso .aviso--error').textContent).toMatch(
+      /No pudimos cargar más opiniones/,
+    );
+    expect(zona.querySelector('[data-accion="ver-mas-opiniones"]').disabled).toBe(false);
+  });
+
+  test('con imágenes: miniaturas reales con la dirección del servicio', async () => {
     const { zona } = montar({
-      consultarImpl: jest
-        .fn()
-        .mockResolvedValue(hilo([comentario(1, { imagenes: ['captura.png'] })])),
+      consultarImpl: servidor([comentario(1, { imagenes: [IMAGEN] })]),
     });
     await esperar();
 
-    expect(zona.querySelector('.comentario__adjunto').textContent).toContain('captura.png');
+    const imagen = zona.querySelector('.comentario img.comentario__imagen');
+    expect(imagen.getAttribute('src')).toBe(`/api/v1/comentarios/imagenes/${IMAGEN}`);
+    expect(imagen.getAttribute('alt')).toBe('Imagen que adjuntó Jugador 1');
   });
 
-  test('error: se dice, se reintenta, y publicar sigue disponible', async () => {
+  test('editado por moderación: la tarjeta lo dice', async () => {
+    const { zona } = montar({ consultarImpl: servidor([comentario(1, { editado: true })]) });
+    await esperar();
+
+    expect(zona.querySelector('.comentario__editado').textContent).toBe('Editado por moderación');
+  });
+
+  test('error: se dice, se reintenta, y calificar y publicar siguen disponibles', async () => {
     const consultarImpl = jest
       .fn()
       .mockRejectedValueOnce(new ErrorDeApi({ title: 'x' }, 503))
-      .mockResolvedValue(hilo([comentario(1)]));
+      .mockImplementation(servidor([comentario(1)]));
     const { zona } = montar({ consultarImpl });
     await esperar();
 
@@ -148,26 +240,30 @@ describe('lectura', () => {
     expect(error.textContent).toMatch(/No pudimos cargar las opiniones/);
     expect(error.textContent).not.toMatch(/503/);
     expect(zona.querySelector('form.redactor-comentario')).not.toBeNull();
+    expect(zona.querySelector('.calificar-producto')).not.toBeNull();
 
     error.querySelector('[data-accion="reintentar"]').click();
     await esperar();
     expect(zona.querySelectorAll('.comentario')).toHaveLength(1);
   });
 
-  test('sin sesión: se lee todo; opinar lleva a entrar, con la vuelta aquí', async () => {
-    const { zona } = montar({
+  test('sin sesión: se lee todo; ni estrellas ni formulario, y opinar lleva a entrar', async () => {
+    const { zona, miCalificacionImpl } = montar({
       sesion: SIN_SESION,
-      consultarImpl: jest.fn().mockResolvedValue(hilo([comentario(1)])),
+      consultarImpl: servidor([comentario(1)]),
     });
     await esperar();
 
     expect(zona.querySelectorAll('.comentario')).toHaveLength(1);
     expect(zona.querySelector('button[data-accion="reportar-comentario"]')).toBeNull();
     expect(zona.querySelector('form.redactor-comentario')).toBeNull();
+    expect(zona.querySelector('.calificar-producto')).toBeNull();
+    expect(miCalificacionImpl).not.toHaveBeenCalled();
     const entrar = zona.querySelector('[data-accion="entrar-para-opinar"]');
     expect(entrar.tagName).toBe('A');
     expect(entrar.getAttribute('href')).toMatch(/login/);
     expect(entrar.getAttribute('href')).toMatch(/volver=/);
+    expect(zona.textContent).toMatch(/Para calificar, opinar o reportar/);
   });
 
   test('sin sesión en la portada: «Entrar para opinar» lleva al formulario de al lado', async () => {
@@ -181,64 +277,154 @@ describe('lectura', () => {
     expect(alPedirEntrada).toHaveBeenCalled();
   });
 
-  test('ayudantes: orden del hilo y calificación propia', () => {
-    const lista = [comentario(1), comentario(2, { autorId: YO, estrellas: 3 })];
-    expect(masRecientesPrimero(hilo(lista)).map((c) => c.id)).toEqual(['c-2', 'c-1']);
-    expect(yaCalifico(lista, YO)).toBe(true);
-    expect(yaCalifico(lista, 'otro')).toBe(false);
-    expect(yaCalifico(lista, null)).toBe(false);
+  test('ayudantes: tamaño al recargar y texto de «Ver más»', () => {
+    expect(tamanoParaRecargar(0)).toBe(5);
+    expect(tamanoParaRecargar(5)).toBe(5);
+    expect(tamanoParaRecargar(9)).toBe(10);
+    expect(tamanoParaRecargar(400)).toBe(TAMANO_MAXIMO_DE_PAGINA);
+    expect(textoDeVerMas(7)).toBe('Ver 5 opiniones más (quedan 7)');
+    expect(textoDeVerMas(1)).toBe('Ver 1 opinión más (queda 1)');
+  });
+});
+
+describe('el resumen de la calificación sale de GET /rating', () => {
+  test('se pinta el del servicio, con las opiniones del hilo al lado', async () => {
+    const { zona, resumenImpl } = montar({
+      resumenImpl: jest.fn().mockResolvedValue(resumen(4.3, 12)),
+      consultarImpl: servidor([comentario(1), comentario(2)]),
+    });
+    await esperar();
+
+    expect(resumenImpl).toHaveBeenCalledWith('p-1');
+    const bloque = zona.querySelector('.hilo-comentarios__cabecera .resumen-calificacion');
+    expect(bloque.querySelector('.resumen-calificacion__cifra').textContent).toBe('4,3');
+    expect(bloque.querySelector('.resumen-calificacion__detalle').textContent).toBe(
+      '12 valoraciones · 2 opiniones',
+    );
+  });
+
+  test('aunque el hilo traiga otro promedio, manda el de /rating', async () => {
+    const consultarImpl = jest.fn().mockResolvedValue({
+      productoId: 'p-1',
+      comentarios: [comentario(1)],
+      pagina: 0,
+      tamano: 5,
+      total: 1,
+      totalPaginas: 1,
+      calificacionPromedio: 1,
+      totalCalificaciones: 99,
+    });
+    const { zona } = montar({
+      consultarImpl,
+      resumenImpl: jest.fn().mockResolvedValue(resumen(4, 3)),
+    });
+    await esperar();
+
+    expect(zona.querySelector('.resumen-calificacion').textContent).toMatch(/3 valoraciones/);
+    expect(zona.querySelector('.resumen-calificacion').textContent).not.toMatch(/99/);
+  });
+
+  test('si no se puede leer, se dice y se reintenta; nunca se inventa un cero', async () => {
+    const resumenImpl = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi({ status: 503 }, 503))
+      .mockResolvedValue(resumen(5, 1));
+    const { zona } = montar({ resumenImpl });
+    await esperar();
+
+    const bloque = zona.querySelector('.resumen-calificacion');
+    expect(bloque.dataset.estado).toBe('error');
+    expect(bloque.textContent).toMatch(/No pudimos cargar la valoración/);
+    expect(bloque.textContent).not.toMatch(/\b0\b/);
+
+    bloque.querySelector('[data-accion="reintentar-resumen"]').click();
+    await esperar();
+    expect(zona.querySelector('.resumen-calificacion').dataset.estado).toBe('con-valoraciones');
+  });
+});
+
+describe('calificar sin comentar', () => {
+  test('con sesión y sin calificación: estrellas para calificar, aparte del redactor', async () => {
+    const { zona, miCalificacionImpl } = montar();
+    await esperar();
+
+    expect(miCalificacionImpl).toHaveBeenCalledWith('p-1');
+    const control = zona.querySelector('[data-zona="calificacion"] .calificar-producto');
+    expect(control.dataset.estado).toBe('pendiente');
+    expect(control.querySelectorAll('input[type="radio"]')).toHaveLength(5);
+    // El redactor ya no lleva estrellas.
+    expect(zona.querySelector('form.redactor-comentario input[type="radio"]')).toBeNull();
+  });
+
+  test('ya calificado: «Tu calificación: N de 5» sin opción de cambiarla', async () => {
+    const { zona } = montar({
+      miCalificacionImpl: jest
+        .fn()
+        .mockResolvedValue({ productoId: 'p-1', estrellas: 3, fecha: 'x' }),
+    });
+    await esperar();
+
+    const control = zona.querySelector('.calificar-producto');
+    expect(control.textContent).toContain('Tu calificación: 3 de 5');
+    expect(control.querySelector('input, button')).toBeNull();
+  });
+
+  test('al calificar, el resumen se repinta con el que devolvió el servicio y el hilo se relee', async () => {
+    const consultarImpl = servidor([comentario(1, { autorId: YO })]);
+    const resumenImpl = jest.fn().mockResolvedValue(resumen());
+    const calificarImpl = jest
+      .fn()
+      .mockResolvedValue({ productoId: 'p-1', estrellas: 5, fecha: 'x', resumen: resumen(5, 1) });
+    const { zona } = montar({ consultarImpl, resumenImpl, calificarImpl });
+    await esperar();
+
+    const radio = zona.querySelectorAll('.calificar-producto input[type="radio"]')[4];
+    radio.checked = true;
+    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    zona.querySelector('.calificar-producto form').requestSubmit();
+    await esperar();
+    await esperar();
+
+    expect(calificarImpl).toHaveBeenCalledWith('p-1', 5);
+    expect(zona.querySelector('.hilo-comentarios__cabecera').textContent).toMatch(/1 valoración/);
+    // El resumen vino en la respuesta: no hizo falta pedirlo otra vez.
+    expect(resumenImpl).toHaveBeenCalledTimes(1);
+    // El hilo se relee: las estrellas de mis opiniones son las de mi calificación.
+    expect(consultarImpl).toHaveBeenCalledTimes(2);
   });
 });
 
 describe('publicar', () => {
-  test('texto, estrellas y el nombre de las imágenes; 201 vuelve a leer el hilo', async () => {
-    const consultarImpl = jest
-      .fn()
-      .mockResolvedValueOnce(hilo([]))
-      .mockResolvedValue(hilo([comentario(9, { autorId: YO, estrellas: 5 })]));
-    const publicarImpl = jest.fn().mockResolvedValue({
-      comentario: comentario(9, { autorId: YO, estrellas: 5 }),
-      estado: 'PUBLICADO',
+  test('201 vuelve a leer el hilo, sin estrellas en el cuerpo y sin perder lo desplegado', async () => {
+    const lista = Array.from({ length: 12 }, (_, i) => comentario(12 - i));
+    const consultarImpl = servidor(lista);
+    const publicarImpl = jest.fn(async () => {
+      lista.unshift(comentario(50, { autorId: YO, apodoAutor: 'yo' }));
+      return { comentario: lista[0], estado: 'PUBLICADO' };
     });
     const { zona } = montar({ consultarImpl, publicarImpl });
+    await esperar();
+    zona.querySelector('[data-accion="ver-mas-opiniones"]').click();
     await esperar();
 
     const formulario = zona.querySelector('form.redactor-comentario');
     formulario.querySelector('textarea').value = '  Muy bueno  ';
-    const radio = formulario.querySelectorAll('input[type="radio"]')[4];
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
     formulario.requestSubmit();
     await esperar();
     await esperar();
 
-    expect(publicarImpl).toHaveBeenCalledWith('p-1', { texto: 'Muy bueno', estrellas: 5 });
-    expect(consultarImpl).toHaveBeenCalledTimes(2);
-    expect(zona.querySelectorAll('.comentario')).toHaveLength(1);
+    expect(publicarImpl).toHaveBeenCalledWith('p-1', { texto: 'Muy bueno' });
+    // Se relee desde el principio con lo que ya estaba desplegado (10).
+    expect(consultarImpl).toHaveBeenLastCalledWith('p-1', { pagina: 0, tamano: 10 });
+    expect(apodos(zona)[0]).toBe('yo');
+    expect(apodos(zona)).toHaveLength(10);
     expect(zona.querySelector('.redactor-comentario .aviso--exito').textContent).toMatch(
       /Opinión publicada/,
     );
-    // Ya calificó: el mismo formulario deja de ofrecer estrellas.
-    expect(zona.querySelector('.selector-estrellas').disabled).toBe(true);
-  });
-
-  test('vacío no se envía: se marca el campo y se enfoca', async () => {
-    const publicarImpl = jest.fn();
-    const { zona } = montar({ publicarImpl });
-    await esperar();
-
-    const formulario = zona.querySelector('form.redactor-comentario');
-    formulario.requestSubmit();
-    await esperar();
-
-    expect(publicarImpl).not.toHaveBeenCalled();
-    const texto = formulario.querySelector('textarea');
-    expect(texto.getAttribute('aria-invalid')).toBe('true');
-    expect(document.activeElement).toBe(texto);
   });
 
   test('202: en revisión, dicho, sin volver a leer (no está en el hilo)', async () => {
-    const consultarImpl = jest.fn().mockResolvedValue(hilo([]));
+    const consultarImpl = servidor([]);
     const publicarImpl = jest
       .fn()
       .mockResolvedValue({ comentario: comentario(9), estado: 'EN_REVISION' });
@@ -256,104 +442,43 @@ describe('publicar', () => {
     expect(consultarImpl).toHaveBeenCalledTimes(1);
   });
 
-  test('con calificación previa en el hilo, las estrellas llegan deshabilitadas y dicen por qué', async () => {
-    const { zona } = montar({
-      consultarImpl: jest
-        .fn()
-        .mockResolvedValue(hilo([comentario(1, { autorId: YO, estrellas: 4 })])),
-    });
-    await esperar();
-
-    const selector = zona.querySelector('.selector-estrellas');
-    expect(selector.disabled).toBe(true);
-    expect(selector.textContent).toMatch(/Ya calificaste este producto/);
-  });
-
-  test('los rechazos del contrato tienen cada uno su frase y su salida', () => {
-    expect(
-      mensajeDePublicacion(new ErrorDeApi({ motivo: 'AUTOR_SILENCIADO', status: 403 }, 403)),
-    ).toEqual(
-      expect.objectContaining({
-        tono: 'advertencia',
-        enlace: expect.objectContaining({ texto: 'Ver mis sanciones' }),
-      }),
-    );
-    expect(
-      mensajeDePublicacion(
-        new ErrorDeApi({ motivo: 'FORMATO_DE_IMAGEN_NO_ADMITIDO', status: 422 }, 422),
-      ).campo,
-    ).toBe('imagenes');
-    expect(mensajeDePublicacion(new ErrorDeApi({ status: 409 }, 409)).sinCalificar).toBe(true);
-    expect(mensajeDePublicacion(new ErrorDeApi({ status: 401 }, 401)).sesion).toBe(true);
-    expect(mensajeDePublicacion(new ErrorDeApi({ status: 503 }, 503)).reintentar).toBe(true);
-    expect(mensajeDePublicacion(new TypeError('sin red')).reintentar).toBe(true);
-    // Nunca el código HTTP ni el nombre de un servicio en la frase.
-    for (const estado of [401, 403, 409, 422, 503]) {
-      const { titulo, detalle } = mensajeDePublicacion(new ErrorDeApi({ status: estado }, estado));
-      expect(`${titulo} ${detalle}`).not.toMatch(/\b\d{3}\b|ms-|comentarios\.yaml/);
-    }
-  });
-
-  test('409: «Publicar sin estrellas» reenvía sin la calificación', async () => {
+  test('si relee y falla, lo que había se queda y se ofrece reintentar', async () => {
+    const consultarImpl = servidor([comentario(1)]);
     const publicarImpl = jest
       .fn()
-      .mockRejectedValueOnce(new ErrorDeApi({ status: 409, title: 'Choque' }, 409))
-      .mockResolvedValue({ comentario: comentario(9), estado: 'PUBLICADO' });
-    const { zona } = montar({ publicarImpl });
+      .mockResolvedValue({ comentario: comentario(2), estado: 'PUBLICADO' });
+    const { zona } = montar({ consultarImpl, publicarImpl });
     await esperar();
 
+    consultarImpl.mockRejectedValueOnce(new ErrorDeApi({ status: 503 }, 503));
     const formulario = zona.querySelector('form.redactor-comentario');
-    formulario.querySelector('textarea').value = 'Hola';
-    const radio = formulario.querySelectorAll('input[type="radio"]')[2];
-    radio.checked = true;
-    radio.dispatchEvent(new Event('change', { bubbles: true }));
+    formulario.querySelector('textarea').value = 'Otra';
     formulario.requestSubmit();
     await esperar();
-
-    formulario.querySelector('[data-accion="publicar-sin-estrellas"]').click();
     await esperar();
 
-    expect(publicarImpl).toHaveBeenLastCalledWith('p-1', { texto: 'Hola' });
-  });
-
-  test('las imágenes elegidas viajan por su nombre y se pueden quitar antes', async () => {
-    const publicarImpl = jest
-      .fn()
-      .mockResolvedValue({ comentario: comentario(9), estado: 'PUBLICADO' });
-    const { zona } = montar({ publicarImpl });
-    await esperar();
-
-    const formulario = zona.querySelector('form.redactor-comentario');
-    const archivo = formulario.querySelector('input[type="file"]');
-    Object.defineProperty(archivo, 'files', {
-      configurable: true,
-      value: [new File(['a'], 'uno.png'), new File(['b'], 'dos.png')],
-    });
-    archivo.dispatchEvent(new Event('change'));
-    expect(formulario.querySelectorAll('.redactor-comentario__miniatura')).toHaveLength(2);
-
-    formulario.querySelector('[aria-label="Quitar uno.png"]').click();
-    formulario.querySelector('textarea').value = 'Con foto';
-    formulario.requestSubmit();
-    await esperar();
-
-    expect(publicarImpl).toHaveBeenCalledWith('p-1', { texto: 'Con foto', imagenes: ['dos.png'] });
+    expect(zona.querySelectorAll('.comentario')).toHaveLength(1);
+    const aviso = zona.querySelector('.hilo-comentarios__aviso .aviso--error');
+    expect(aviso.textContent).toMatch(/No pudimos actualizar las opiniones/);
+    expect(aviso.querySelector('[data-accion="reintentar-hilo"]')).not.toBeNull();
   });
 });
 
 describe('retirar lo propio', () => {
-  test('con confirmación; al aceptar, se elimina y se vuelve a leer', async () => {
-    const consultarImpl = jest
-      .fn()
-      .mockResolvedValueOnce(hilo([comentario(1, { autorId: YO, estrellas: 4 })]))
-      .mockResolvedValue(hilo([]));
-    const eliminarImpl = jest.fn().mockResolvedValue(undefined);
+  test('con confirmación que no promete lo que ya no pasa; al aceptar, se elimina y se relee', async () => {
+    const lista = [comentario(1, { autorId: YO, estrellas: 4 })];
+    const consultarImpl = servidor(lista);
+    const eliminarImpl = jest.fn(async () => {
+      lista.splice(0, 1);
+    });
     const { zona } = montar({ consultarImpl, eliminarImpl });
     await esperar();
 
     zona.querySelector('[data-accion="eliminar-comentario"]').click();
     const dialogo = document.querySelector('[role="dialog"]');
-    expect(dialogo.textContent).toMatch(/tus estrellas dejan de contar/);
+    // 7.1: retirar el comentario NO retira la calificación.
+    expect(dialogo.textContent).toMatch(/Tu calificación del producto se mantiene/);
+    expect(dialogo.textContent).not.toMatch(/volver a calificar|dejan de contar/);
     dialogo.querySelector('[data-accion="confirmar"]').click();
     await esperar();
     await esperar();
@@ -366,7 +491,7 @@ describe('retirar lo propio', () => {
   test('«Conservar» no elimina nada', async () => {
     const eliminarImpl = jest.fn();
     const { zona } = montar({
-      consultarImpl: jest.fn().mockResolvedValue(hilo([comentario(1, { autorId: YO })])),
+      consultarImpl: servidor([comentario(1, { autorId: YO })]),
       eliminarImpl,
     });
     await esperar();
@@ -383,7 +508,7 @@ describe('retirar lo propio', () => {
 describe('reportar lo ajeno', () => {
   async function abrirReporte(reportarImpl) {
     const { zona } = montar({
-      consultarImpl: jest.fn().mockResolvedValue(hilo([comentario(1)])),
+      consultarImpl: servidor([comentario(1)]),
       reportarImpl,
     });
     await esperar();
@@ -480,16 +605,20 @@ describe('reportar lo ajeno', () => {
 });
 
 describe('como complemento de la ficha', () => {
-  test('pinta el hilo al final y la valoración compacta bajo el tipo', async () => {
+  function fichaCon(tipo = document.createElement('p')) {
     const ficha = document.createElement('article');
-    const tipo = document.createElement('p');
     tipo.className = 'ficha__tipo';
     ficha.append(tipo);
     document.body.replaceChildren(ficha);
+    return { ficha, tipo };
+  }
 
+  test('pinta el hilo al final y la valoración compacta (de /rating) bajo el tipo', async () => {
+    const { ficha, tipo } = fichaCon();
     const complemento = complementoDeOpiniones({
       sesion: SIN_SESION,
-      consultarImpl: jest.fn().mockResolvedValue(hilo([comentario(1, { estrellas: 4 })])),
+      consultarImpl: servidor([comentario(1), comentario(2)]),
+      resumenImpl: jest.fn().mockResolvedValue(resumen(4, 1)),
     });
     ficha.append(complemento({ id: 'p-1' }, { ficha }));
     await esperar();
@@ -497,7 +626,21 @@ describe('como complemento de la ficha', () => {
     expect(ficha.querySelector('.hilo-comentarios')).not.toBeNull();
     const valoracion = tipo.nextElementSibling;
     expect(valoracion.classList.contains('ficha__valoracion')).toBe(true);
-    expect(valoracion.textContent).toMatch(/1 valoración/);
+    expect(valoracion.textContent).toMatch(/1 valoración · 2 opiniones/);
+    expect(valoracion.querySelector('.resumen-calificacion--compacto')).not.toBeNull();
+  });
+
+  test('si el resumen no se puede leer, la cabecera no enseña una valoración inventada', async () => {
+    const { ficha } = fichaCon();
+    const complemento = complementoDeOpiniones({
+      sesion: SIN_SESION,
+      consultarImpl: servidor([]),
+      resumenImpl: jest.fn().mockRejectedValue(new ErrorDeApi({ status: 503 }, 503)),
+    });
+    ficha.append(complemento({ id: 'p-1' }, { ficha }));
+    await esperar();
+
+    expect(ficha.querySelector('.ficha__valoracion')).toBeNull();
   });
 
   test('sin id de producto no pinta nada', () => {
