@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
@@ -16,62 +17,58 @@ import com.nexusbattles.plataforma.comentarios.Comentario;
  *
  * El dominio es inmutable y valida sus reglas; la entidad solo sabe guardarse y
  * volver. Lo que se verifica es que el viaje de ida y vuelta no pierda nada,
- * porque de esa conversion depende que el hilo se reconstruya igual al que se
- * guardo y que la regla de la calificacion unica siga funcionando.
+ * porque de esa conversion depende que la moderacion actualice un comentario
+ * sin perder su texto, sus imagenes, la edicion o la marca.
  */
 class RegistroDeComentarioTest {
 
     private static final Instant AYER = Instant.parse("2026-08-30T15:00:00Z");
 
-    private static Comentario comentario(Integer estrellas, Comentario.Estado estado) {
+    private static Comentario comentario(Comentario.Estado estado) {
         return new Comentario("com-1", "espada-del-alba", "jugador-1", "LyraRoja",
                 "La use toda la temporada y aguanta bien.",
-                List.of("captura.jpg", "detalle.png"), estrellas, AYER, estado);
+                List.of("3f1c2b4a-1111-4222-8333-944455566677"), AYER, estado);
     }
 
     @Test
     @DisplayName("el viaje de ida y vuelta conserva todos los datos del comentario")
     void laConversionNoPierdeNada() {
-        Comentario original = comentario(4, Comentario.Estado.PUBLICADO);
+        Comentario original = comentario(Comentario.Estado.PUBLICADO);
 
         Comentario recuperado = RegistroDeComentario.desde(original).aDominio();
 
-        assertEquals(original.id(), recuperado.id());
-        assertEquals(original.productoId(), recuperado.productoId());
-        assertEquals(original.autorId(), recuperado.autorId());
-        assertEquals(original.apodoAutor(), recuperado.apodoAutor());
-        assertEquals(original.texto(), recuperado.texto());
-        assertEquals(original.imagenes(), recuperado.imagenes());
-        assertEquals(4, recuperado.calificacion().orElseThrow());
-        assertEquals(original.fechaPublicacion(), recuperado.fechaPublicacion());
-        assertEquals(original.estado(), recuperado.estado());
+        assertEquals(original, recuperado);
+        assertFalse(recuperado.editado());
+        assertFalse(recuperado.marcado());
     }
 
     @Test
-    @DisplayName("un comentario sin calificacion vuelve sin calificacion")
-    void elComentarioSinEstrellasVuelveIgual() {
-        Comentario recuperado =
-                RegistroDeComentario.desde(comentario(null, Comentario.Estado.PUBLICADO)).aDominio();
+    @DisplayName("la edicion y la marca de moderacion vuelven tal cual")
+    void edicionYMarca() {
+        Comentario moderado = comentario(Comentario.Estado.OCULTO).editadoCon("texto moderado").conMarca(true);
 
-        assertTrue(recuperado.calificacion().isEmpty());
-        assertTrue(recuperado.estaPublicado());
+        Comentario recuperado = RegistroDeComentario.desde(moderado).aDominio();
+
+        assertEquals("texto moderado", recuperado.texto());
+        assertTrue(recuperado.editado());
+        assertTrue(recuperado.marcado());
+        assertEquals(Comentario.Estado.OCULTO, recuperado.estado());
     }
 
     @Test
     @DisplayName("un comentario retenido vuelve retenido, no publicado")
     void elComentarioRetenidoVuelveRetenido() {
         Comentario recuperado =
-                RegistroDeComentario.desde(comentario(3, Comentario.Estado.EN_REVISION)).aDominio();
+                RegistroDeComentario.desde(comentario(Comentario.Estado.EN_REVISION)).aDominio();
 
         assertEquals(Comentario.Estado.EN_REVISION, recuperado.estado());
-        assertTrue(!recuperado.estaPublicado());
+        assertFalse(recuperado.estaPublicado());
     }
 
     @Test
-    @DisplayName("la entidad expone el producto para poder agrupar el hilo")
+    @DisplayName("la entidad expone el producto para poder comprobar a que hilo pertenece")
     void laEntidadExponeSuProducto() {
-        RegistroDeComentario registro =
-                RegistroDeComentario.desde(comentario(5, Comentario.Estado.PUBLICADO));
+        RegistroDeComentario registro = RegistroDeComentario.desde(comentario(Comentario.Estado.PUBLICADO));
 
         assertEquals("espada-del-alba", registro.getProductoId());
         assertEquals("com-1", registro.getId());

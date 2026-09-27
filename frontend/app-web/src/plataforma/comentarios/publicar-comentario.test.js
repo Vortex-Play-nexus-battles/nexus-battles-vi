@@ -7,10 +7,15 @@
  *          apodo, calificacion y fecha
  *   CA-02  segundo comentario sin estrellas -> se acepta y se explica
  *   CA-03  retenido por el filtro (202), silenciado (403) e imagen no admitida
- *          (422) -> cada uno con su tratamiento, sin comparar textos
+ *          (415 al subirla) -> cada uno con su tratamiento, sin comparar textos
  *
  * Mas lo administrativo: sin sesion no se publica, el 409 tiene salida, y
  * los errores de campo van en el campo.
+ *
+ * B3 (comentarios.yaml 1.5.0): las imagenes se suben antes de publicar y el
+ * comentario lleva sus `id` (un nombre de archivo es 400), como mucho tres; el
+ * hilo llega del mas reciente al mas antiguo; retirar un comentario no retira
+ * la calificacion.
  */
 
 import { jest } from '@jest/globals';
@@ -20,6 +25,7 @@ import {
   leerFormulario,
   leerSesion,
   nombresDeImagenes,
+  archivosElegidos,
   pintarEstrellas,
   agregarAlHilo,
   quitarDelHilo,
@@ -28,7 +34,10 @@ import {
   fechaLegible,
   tonoPara,
 } from './publicar-comentario.js';
-import { ErrorDeApi, ESTADO } from './cliente-comentarios.js';
+import { ErrorDeApi, ESTADO, MOTIVO, TIPO } from './cliente-comentarios.js';
+
+const ID_1 = '3f1c2b4a-1111-4222-8333-944455566677';
+const ID_2 = '3f1c2b4a-2222-4222-8333-944455566677';
 
 const ESTRELLA = (n) =>
   `<input class="estrellas__entrada" type="radio" name="estrellas" value="${n}" id="e-${n}" />` +
@@ -162,7 +171,7 @@ describe('leerSesion', () => {
 });
 
 describe('leerFormulario', () => {
-  test('arma PublicacionComentarioRequest con autor, apodo, texto, imágenes y estrellas', () => {
+  test('arma PublicacionComentarioRequest con autor, apodo, texto, id de imágenes y estrellas', () => {
     const formulario = preparar();
     montarPublicarComentario(formulario, {
       sesion: SESION,
@@ -173,13 +182,19 @@ describe('leerFormulario', () => {
     adjuntar(formulario, ['espada.png', 'detalle.jpg']);
     calificar(formulario, 4);
 
-    expect(leerFormulario(formulario, SESION)).toEqual({
+    expect(leerFormulario(formulario, SESION, { imagenes: [ID_1, ID_2] })).toEqual({
       autorId: 'jugador-7',
       apodoAutor: 'Simon_P',
       texto: 'Buena espada',
-      imagenes: ['espada.png', 'detalle.jpg'],
+      imagenes: [ID_1, ID_2],
       estrellas: 4,
     });
+    // B3: los nombres de archivo ya no viajan (el servicio responde 400).
+    expect(leerFormulario(formulario, SESION).imagenes).toEqual([]);
+    expect(archivosElegidos(formulario).map((archivo) => archivo.name)).toEqual([
+      'espada.png',
+      'detalle.jpg',
+    ]);
   });
 
   test('sin calificar, estrellas se omite del cuerpo (no viaja null)', () => {
@@ -213,6 +228,25 @@ describe('zona de carga', () => {
 
     formulario.querySelector('[data-nombre="b.png"] .zona-carga__quitar').click();
     expect(nombresDeImagenes(formulario)).toEqual(['a.png', 'c.png']);
+    expect(archivosElegidos(formulario).map((archivo) => archivo.name)).toEqual(['a.png', 'c.png']);
+  });
+
+  test('B3: como mucho tres imágenes; las demás se quedan fuera y se dice', () => {
+    const formulario = preparar();
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(),
+      consultarImpl: consultarVacio(),
+    });
+
+    adjuntar(formulario, ['1.png', '2.png', '3.png', '4.png']);
+
+    expect(nombresDeImagenes(formulario)).toEqual(['1.png', '2.png', '3.png']);
+    const zona = formulario.querySelector('[data-zona="carga"]');
+    expect(zona.classList.contains('zona-carga--error')).toBe(true);
+    expect(zona.querySelector('.zona-carga__ayuda').textContent).toMatch(
+      /Caben 3 imágenes por comentario: una se quedó fuera/,
+    );
   });
 
   test('la zona abre el selector con teclado y clic', () => {
@@ -307,12 +341,15 @@ describe('montarPublicarComentario', () => {
 
   test('CA-01: publica con texto, imagen y estrellas; exito y entra al hilo con apodo, estrellas y fecha', async () => {
     const formulario = preparar();
-    const comentario = publicado({ imagenes: ['espada.png'], estrellas: 4 });
+    const comentario = publicado({ imagenes: [ID_1], estrellas: 4 });
     const publicarImpl = jest.fn(async () => ({ comentario, estado: ESTADO.PUBLICADO }));
+    // B3: la imagen se sube antes y el comentario lleva su id.
+    const subirImagenImpl = jest.fn(async () => ({ id: ID_1, tipo: 'image/png', tamano: 1 }));
     const alPublicar = jest.fn();
     montarPublicarComentario(formulario, {
       sesion: SESION,
       publicarImpl,
+      subirImagenImpl,
       alPublicar,
       consultarImpl: consultarVacio(),
     });
@@ -322,11 +359,13 @@ describe('montarPublicarComentario', () => {
     calificar(formulario, 4);
     await enviar(formulario);
 
+    expect(subirImagenImpl).toHaveBeenCalledTimes(1);
+    expect(subirImagenImpl.mock.calls[0][0].name).toBe('espada.png');
     expect(publicarImpl).toHaveBeenCalledWith('prod-1', {
       autorId: 'jugador-7',
       apodoAutor: 'Simon_P',
       texto: 'Buena espada',
-      imagenes: ['espada.png'],
+      imagenes: [ID_1],
       estrellas: 4,
     });
     expect(formulario.querySelector('.aviso--exito .aviso__titulo').textContent).toBe(
@@ -339,7 +378,10 @@ describe('montarPublicarComentario', () => {
     expect(articulo.querySelector('.estrellas__detalle').textContent).toBe('4 de 5');
     expect(articulo.querySelector('time').dateTime).toBe('2026-09-09T10:00:00Z');
     expect(articulo.querySelector('[data-campo="texto"]').textContent).toBe('Buena espada');
-    expect(articulo.querySelector('[data-nombre="espada.png"]')).not.toBeNull();
+    // La imagen se ve de verdad, servida por su id.
+    expect(articulo.querySelector('img.comentario__imagen').getAttribute('src')).toBe(
+      `/api/v1/comentarios/imagenes/${ID_1}`,
+    );
     expect(document.querySelector('[data-zona="hilo-vacio"]').hidden).toBe(true);
 
     // El formulario queda listo para el siguiente comentario.
@@ -421,18 +463,23 @@ describe('montarPublicarComentario', () => {
     expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
   });
 
-  test('CA-03: imagen no admitida (422) -> la zona de carga en error con el motivo escrito', async () => {
+  test('CA-03: imagen no admitida (415 al subirla) -> la zona de carga en error y no se publica', async () => {
     const formulario = preparar();
-    const publicarImpl = jest.fn(async () => {
-      throw problema(422, {
+    const publicarImpl = jest.fn(async () => ({
+      comentario: publicado(),
+      estado: ESTADO.PUBLICADO,
+    }));
+    const subirImagenImpl = jest.fn(async () => {
+      throw problema(415, {
+        type: TIPO.IMAGEN_NO_ADMITIDA,
         title: 'Imagen no admitida',
-        detail: 'Solo se admiten png y jpg.',
-        motivo: 'FORMATO_DE_IMAGEN_NO_ADMITIDO',
+        motivo: MOTIVO.FORMATO_DE_IMAGEN_NO_ADMITIDO,
       });
     });
     montarPublicarComentario(formulario, {
       sesion: SESION,
       publicarImpl,
+      subirImagenImpl,
       consultarImpl: consultarVacio(),
     });
 
@@ -440,21 +487,67 @@ describe('montarPublicarComentario', () => {
     adjuntar(formulario, ['captura.bmp']);
     await enviar(formulario);
 
+    expect(publicarImpl).not.toHaveBeenCalled();
     const zona = formulario.querySelector('[data-zona="carga"]');
     expect(zona.classList.contains('zona-carga--error')).toBe(true);
-    expect(zona.querySelector('.zona-carga__ayuda').textContent).toBe('Solo se admiten png y jpg.');
+    expect(zona.querySelector('.zona-carga__ayuda').textContent).toBe(
+      'No es una imagen JPEG, PNG o WebP válida.',
+    );
     expect(formulario.querySelector('[data-zona="aviso"]').hidden).toBe(true);
     // Lo elegido no se pierde: la persona quita la imagen mala y reintenta.
     expect(nombresDeImagenes(formulario)).toEqual(['captura.bmp']);
+    expect(formulario.querySelector('[type="submit"]').disabled).toBe(false);
 
-    // Al reintentar, el error se limpia y la ayuda vuelve a su texto.
-    publicarImpl.mockImplementation(async () => ({
-      comentario: publicado(),
-      estado: ESTADO.PUBLICADO,
-    }));
+    // Al reintentar con una que sí pasa, el error se limpia y la ayuda vuelve a su texto.
+    subirImagenImpl.mockImplementation(async () => ({ id: ID_2 }));
     await enviar(formulario);
     expect(zona.classList.contains('zona-carga--error')).toBe(false);
     expect(zona.querySelector('.zona-carga__ayuda').textContent).toBe('Opcional.');
+    expect(publicarImpl.mock.calls[0][1].imagenes).toEqual([ID_2]);
+  });
+
+  test('B3: una imagen de más de 2 MB (413) se dice en la zona de carga', async () => {
+    const formulario = preparar();
+    const publicarImpl = jest.fn();
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl,
+      subirImagenImpl: jest.fn(async () => {
+        throw problema(413, { type: TIPO.IMAGEN_DEMASIADO_GRANDE });
+      }),
+      consultarImpl: consultarVacio(),
+    });
+
+    escribir(formulario, 'hola');
+    adjuntar(formulario, ['enorme.png']);
+    await enviar(formulario);
+
+    expect(publicarImpl).not.toHaveBeenCalled();
+    expect(formulario.querySelector('.zona-carga__ayuda').textContent).toBe(
+      'Pesa más de 2 MB o mide más de 4096 píxeles de lado.',
+    );
+  });
+
+  test('B3: 400 imagenes-no-validas al publicar -> la zona de carga dice qué hacer', async () => {
+    const formulario = preparar();
+    montarPublicarComentario(formulario, {
+      sesion: SESION,
+      publicarImpl: jest.fn(async () => {
+        throw problema(400, { type: TIPO.IMAGENES_NO_VALIDAS });
+      }),
+      subirImagenImpl: jest.fn(async () => ({ id: ID_1 })),
+      consultarImpl: consultarVacio(),
+    });
+
+    escribir(formulario, 'hola');
+    adjuntar(formulario, ['vieja.png']);
+    await enviar(formulario);
+
+    const zona = formulario.querySelector('[data-zona="carga"]');
+    expect(zona.classList.contains('zona-carga--error')).toBe(true);
+    expect(zona.querySelector('.zona-carga__ayuda').textContent).toMatch(
+      /Alguna imagen ya no se puede adjuntar/,
+    );
   });
 
   test('409 (calificacion simultanea) -> aviso con salida: publicar sin calificacion', async () => {
@@ -635,11 +728,13 @@ describe('HU-COM-003 · promedio', () => {
 
   test('al montar se carga el hilo del servicio: promedio arriba y comentarios del mas nuevo al mas viejo', async () => {
     const formulario = preparar();
+    // Desde la 1.4.0 el servicio ya los da del mas reciente al mas antiguo:
+    // la vista los pinta en ese orden, sin darles la vuelta.
     const consultarImpl = jest.fn(async () => ({
       productoId: 'prod-1',
       comentarios: [
-        publicado({ id: 'c-1', texto: 'viejo', autorId: 'otro', apodoAutor: 'Otro', estrellas: 3 }),
         publicado({ id: 'c-2', texto: 'nuevo', autorId: 'jugador-7', estrellas: 5 }),
+        publicado({ id: 'c-1', texto: 'viejo', autorId: 'otro', apodoAutor: 'Otro', estrellas: 3 }),
       ],
       total: 2,
       calificacionPromedio: 4,
@@ -751,6 +846,11 @@ describe('HU-COM-004 · eliminar comentarios propios', () => {
     expect(formulario.querySelector('.aviso--exito .aviso__titulo').textContent).toBe(
       'Comentario eliminado',
     );
+    // 7.1: retirar el comentario no retira la calificación.
+    expect(formulario.querySelector('.aviso--exito').textContent).toMatch(
+      /Tu calificación del producto se mantiene/,
+    );
+    expect(formulario.querySelector('.aviso--exito').textContent).not.toMatch(/dej[oó] de contar/);
   });
 
   test('si el servicio rechaza (403 ajeno), el comentario se queda y se avisa', async () => {

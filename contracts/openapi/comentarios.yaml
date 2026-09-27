@@ -50,7 +50,24 @@ info:
     MARCAR/DESMARCAR (7.3.3). `estrellas` en el cuerpo del comentario sigue
     aceptandose por compatibilidad: si el jugador aun no califico, se registra
     como su calificacion; si ya lo hizo, se descarta como hasta ahora.
-  version: 1.4.0
+
+    1.5.0 (B3, BACKEND-05): implementadas las cinco operaciones que la 1.4.0
+    dejaba pendientes (`rating` GET y POST, `rating/mia`, subida y descarga de
+    imagenes), la paginacion del hilo, la validacion del producto y EDITAR,
+    MARCAR y DESMARCAR. Es menor y no parche porque, al implementarlas, el
+    contrato gana piezas compatibles que la 1.4.0 no declaraba: en el hilo
+    `pagina`, `tamano` y `totalPaginas` (y `total` pasa a contar todas las
+    paginas); en el comentario `editado` y, solo en las respuestas de
+    moderacion, `marcado`; en la cola el filtro `marcado`; y las respuestas 404
+    y 503 de publicar y calificar. Se aclara ademas lo que ya decia la 1.4.0
+    y el texto de algunas operaciones contradecia: las estrellas de cada
+    comentario son las de la calificacion de su autor; retirar u ocultar un
+    comentario ya no toca esa calificacion (sustituye a la decision D-19); el
+    promedio del hilo y el de `GET /rating` son el mismo numero, con un
+    decimal; y una segunda calificacion al comentar no es 409 sino
+    `calificacionDescartada`. Publicar con nombres de archivo en `imagenes`
+    ya no responde 422 sino 400, como fijaba la 1.4.0.
+  version: 1.5.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -60,20 +77,22 @@ paths:
       summary: Leer el hilo de comentarios de un producto
       operationId: consultarHilo
       description: >
-        Devuelve los comentarios PUBLICADOS de un producto, del mas antiguo al
-        mas reciente, junto con el promedio de calificacion en cinco estrellas.
-        Es el lado proveedor de HU-INV-014 (la ficha de producto pinta este
-        hilo) y cierra el criterio CA-01 de HU-COM-001: un comentario "se suma
-        al hilo", y el hilo tiene que poder leerse.
+        Devuelve una pagina de los comentarios PUBLICADOS de un producto, del
+        mas reciente al mas antiguo (y, a igual fecha, por id, para que el orden
+        sea estable entre paginas), junto con el resumen de su calificacion en
+        cinco estrellas. Es el lado proveedor de HU-INV-014 (la ficha de
+        producto pinta este hilo) y cierra el criterio CA-01 de HU-COM-001: un
+        comentario "se suma al hilo", y el hilo tiene que poder leerse.
 
-        Los comentarios EN_REVISION no salen: estan a la espera de un
-        moderador y no son publicos. No mueven el promedio.
+        Los comentarios EN_REVISION, OCULTO y ELIMINADO no salen. El promedio
+        no depende de ellos (1.5.0): sale de la tabla de calificaciones, la
+        misma fuente que `GET /products/{productId}/rating`.
 
-        Un producto sin comentarios responde 200 con la lista vacia y sin
-        promedio, nunca 404: no tener comentarios es un estado normal de un
-        producto, no un error, y la ficha lo pinta como estado vacio. La
-        existencia del producto no se verifica contra el catalogo, igual que
-        en la publicacion.
+        Un producto sin comentarios, o una pagina mas alla de la ultima,
+        responde 200 con la lista vacia, nunca 404: no tener comentarios es un
+        estado normal de un producto, no un error, y la ficha lo pinta como
+        estado vacio. Leer el hilo no pregunta al catalogo: sigue funcionando
+        aunque el servicio de productos no responda.
       parameters:
         - name: productId
           in: path
@@ -83,7 +102,7 @@ paths:
         - name: pagina
           in: query
           required: false
-          description: 1.4.0 — pagina (desde 0) de comentarios, del mas reciente al mas antiguo.
+          description: 1.4.0 — pagina (desde 0) de comentarios, del mas reciente al mas antiguo. Negativa, 400.
           schema:
             type: integer
             minimum: 0
@@ -91,7 +110,10 @@ paths:
         - name: tamano
           in: query
           required: false
-          description: 1.4.0 — comentarios por pagina (16 por omision, como la vitrina).
+          description: >
+            1.4.0 — comentarios por pagina (16 por omision, como la vitrina).
+            Menor que 1, 400; mas de 50 se recorta a 50 (la respuesta dice el
+            tamano que se aplico).
           schema:
             type: integer
             minimum: 1
@@ -104,6 +126,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HiloDeComentariosResponse"
+        "400":
+          description: pagina negativa, tamano menor que 1 o alguno que no es un numero.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
     post:
       summary: Publicar un comentario sobre un producto
       operationId: publicarComentario
@@ -115,13 +143,22 @@ paths:
         403.
 
 
-        La retencion y el rechazo no son lo mismo. Si el filtro senala el texto,
-        el comentario si se guarda pero queda esperando a un moderador y la
-        respuesta es 202, no 201. Si el autor esta silenciado (403) o alguna
-        imagen viene en formato no admitido (422), el comentario no se guarda.
-        Un jugador comenta cuantas veces quiera pero califica una sola vez.
-        Si el jugador envía una calificación para un producto que ya calificó,
-        el sistema rechaza la solicitud con un error 409 (CALIFICACION_DUPLICADA).
+        La retencion y el rechazo no son lo mismo. Si el filtro senala el texto
+        (la lista negra se consulta con `contexto: COMENTARIO` y su accion
+        `REVISION` retiene, igual que si la lista negra no responde), el
+        comentario si se guarda pero queda esperando a un moderador y la
+        respuesta es 202, no 201. Si el autor esta silenciado (403), el
+        producto no existe (404) o alguna imagen no se puede adjuntar (400), el
+        comentario no se guarda. Si el catalogo o sanciones no responden, 503:
+        no se publica a ciegas.
+
+
+        Un jugador comenta cuantas veces quiera pero califica una sola vez
+        (7.1). Si trae `estrellas` y aun no habia calificado el producto, pasan
+        a ser su calificacion (la misma de `POST /products/{productId}/rating`);
+        si ya lo habia hecho, el comentario entra igual y la respuesta lo dice
+        con `calificacionDescartada: true` (1.2.0, D-07), tambien si otra
+        peticion simultanea suya califico primero.
       parameters:
         - name: productId
           in: path
@@ -129,10 +166,9 @@ paths:
           schema:
             type: string
           description: >
-            Identificador del producto comentado. La verificacion de que el
-            producto exista contra el catalogo queda pendiente de integrar
-            cuando el catalogo publique su contrato; mientras tanto el
-            identificador se acepta tal cual.
+            Identificador del producto comentado. Desde la 1.5.0 se comprueba
+            contra el catalogo (`GET /api/v1/productos/{id}`, productos.yaml):
+            uno que no existe responde 404.
       requestBody:
         required: true
         content:
@@ -156,7 +192,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ComentarioResponse"
         "400":
-          description: Datos de la solicitud invalidos o incompletos
+          description: >
+            Datos de la solicitud invalidos o incompletos: sin texto, estrellas
+            fuera de 1..5, o imagenes que no se pueden adjuntar (`type`
+            `https://nexusbattles.local/errores/imagenes-no-validas`): mas de
+            tres, repetidas, un nombre de archivo en vez de un id, o el id de
+            una imagen ajena, ya usada o inexistente.
           content:
             application/problem+json:
               schema:
@@ -166,29 +207,27 @@ paths:
         "403":
           description: >
             El autor tiene una sancion activa de silencio y no puede publicar
-            (problem detail con motivo AUTOR_SILENCIADO), o el token no es de
-            un usuario (por ejemplo, un token de servicio; sin cuerpo)
+            (`type` `https://nexusbattles.local/errores/autor-silenciado`,
+            motivo AUTOR_SILENCIADO), o el token no es de un usuario (por
+            ejemplo, un token de servicio; sin cuerpo)
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          $ref: "#/components/responses/ProductoInexistente"
         "409":
           description: >
-            Colisión concurrente: dos solicitudes del mismo jugador intentaron
-            calificar el mismo producto a la vez y la segunda chocó con el
-            índice único. Reintentar sin calificación. (Desde 1.2.0 la segunda
-            calificación en secuencia no es 409: entra sin estrellas con
-            `calificacionDescartada: true`.)
+            Otra solicitud simultanea choco con una restriccion de la base.
+            Reintentar. Desde la 1.5.0 la calificacion unica ya no llega aqui:
+            una segunda calificacion, en secuencia o a la vez, entra como
+            `calificacionDescartada: true`.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
-        "422":
-          description: Al menos una imagen viene en un formato que no se admite
-          content:
-            application/problem+json:
-              schema:
-                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          $ref: "#/components/responses/DependenciaNoDisponible"
 
   /products/{productId}/comments/{commentId}:
     delete:
@@ -196,11 +235,15 @@ paths:
       summary: Retira un comentario propio (HU-COM-004, RF-COM-004)
       description: >
         Solo el autor retira su comentario; quién es sale del `uid` del token,
-        nunca del cuerpo. Un comentario retirado desaparece del hilo y su
-        calificación deja de contar en el promedio (y libera la única
-        calificación del autor sobre el producto: puede volver a calificar en
-        un comentario nuevo, decisión D-19). Idempotente: retirar uno ya
-        retirado responde 204.
+        nunca del cuerpo. Un comentario retirado desaparece del hilo.
+        Idempotente: retirar uno ya retirado responde 204.
+
+
+        Desde la 1.5.0 retirar un comentario NO toca la calificación de su
+        autor: la calificación vive aparte, se da una sola vez y no se retira
+        (7.1: «solo pueden calificar un producto una vez, pero podrán agregar o
+        retirar tantos comentarios como sea de su agrado»). Sustituye a la
+        decisión D-19, que al retirar el comentario liberaba la calificación.
       security:
         - bearerAuth: []
       parameters:
@@ -321,6 +364,14 @@ paths:
 
         Una cola vacia es `200` con lista vacia y `total: 0`, no un 404: no
         tener trabajo pendiente es una respuesta correcta (CA-03).
+
+
+        1.5.0 — con `marcado=true` es la lista de seguimiento especial (7.3.3,
+        «Marcar: senalar comentarios para seguimiento especial»): los marcados
+        en cualquier estado salvo ELIMINADO, tambien los ya publicados, con la
+        misma prioridad. Con `marcado=false`, los EN_REVISION sin marcar. Sin el
+        parametro, la cola de siempre. En estas respuestas cada comentario trae
+        `marcado`.
       security:
         - bearerAuth: []
       parameters:
@@ -330,6 +381,12 @@ paths:
           schema:
             type: string
           description: Acota la cola a un producto.
+        - name: marcado
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: 1.5.0 — `true` lista de seguimiento; `false` solo los en revision sin marcar.
         - name: pagina
           in: query
           required: false
@@ -420,6 +477,18 @@ paths:
         El motivo es obligatorio en todas las acciones, incluida APROBAR: "por
         que se dejo pasar" es tan parte de la trazabilidad como "por que se
         retiro".
+
+
+        1.4.0/1.5.0 — EDITAR, MARCAR y DESMARCAR no cambian el estado del
+        comentario y valen desde PUBLICADO, EN_REVISION u OCULTO (ELIMINADO
+        sigue siendo terminal). EDITAR exige `textoNuevo`, deja el comentario
+        `editado` y guarda en el asiento el texto anterior y el nuevo; editar
+        no aprueba: si estaba en revision, sigue en revision hasta que alguien
+        decida. MARCAR sobre uno ya marcado, o DESMARCAR sobre uno sin marca, es
+        409 TRANSICION_INVALIDA. MARCAR y DESMARCAR no se avisan al autor (son
+        una nota interna: `autorNotificado: false`); EDITAR si. Cada asiento
+        guarda ademas la IP de origen de la peticion (el primer valor de
+        `X-Forwarded-For`, o la del socket), que no se devuelve por la API.
       security:
         - bearerAuth: []
       parameters:
@@ -437,6 +506,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DecisionResponse"
+        "400":
+          description: >
+            Falta la accion, el motivo no tiene de 3 a 500 caracteres, o EDITAR
+            llega sin `textoNuevo` de 1 a 2000 caracteres.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -459,7 +536,8 @@ paths:
           description: >
             La transicion no es valida desde el estado actual (`motivo:
             TRANSICION_INVALIDA`). Cubre el caso de CA-03: otro moderador ya lo
-            resolvio mientras este miraba la pantalla, y nada cambia.
+            resolvio mientras este miraba la pantalla, y nada cambia. Tambien
+            MARCAR un comentario ya marcado o DESMARCAR uno sin marca.
           content:
             application/problem+json:
               schema:
@@ -469,14 +547,13 @@ paths:
     get:
       summary: Resumen de la calificacion de un producto (1.4.0)
       operationId: resumenDeCalificaciones
-      x-implementacion: pendiente
-      x-fase: B3
       description: >
         Promedio, total y distribucion por estrellas, calculados por el
         servidor (la unica fuente de verdad del promedio). Publico: la vitrina
         y la ficha lo muestran sin sesion. Producto sin calificaciones:
         promedio nulo y total 0, nunca 404; producto que no existe en el
-        catalogo: 404.
+        catalogo: 404. Si el catalogo no responde, es una lectura y se degrada
+        (HU-DIS-003): se sirve lo que hay en la tabla en vez de fallar.
       parameters:
         - $ref: "#/components/parameters/ProductId"
       responses:
@@ -491,13 +568,15 @@ paths:
     post:
       summary: Calificar un producto de 1 a 5 estrellas, una sola vez (1.4.0)
       operationId: calificarProducto
-      x-implementacion: pendiente
-      x-fase: B3
       description: >
         El autor sale del token. Una sola calificacion por jugador y producto,
         sin edicion ni retirada (7.1: «solo pueden calificar un producto una
         vez»): la segunda responde 409 `ya-calificado`. No exige escribir un
         comentario. Un jugador sancionado (suspension o baneo) recibe 403.
+        La unicidad la decide una restriccion unica de la base: dos peticiones
+        simultaneas del mismo jugador dejan una calificacion (201) y la otra
+        recibe 409. Si el catalogo o sanciones no responden, 503 y nada
+        guardado.
       security:
         - bearerAuth: []
       parameters:
@@ -528,7 +607,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "403":
-          description: Jugador sancionado.
+          description: >
+            Jugador sancionado (`type`
+            `https://nexusbattles.local/errores/autor-silenciado`, motivo
+            AUTOR_SILENCIADO), o un token que no es de usuario.
           content:
             application/problem+json:
               schema:
@@ -536,18 +618,21 @@ paths:
         "404":
           $ref: "#/components/responses/ProductoInexistente"
         "409":
-          description: El jugador ya califico este producto.
+          description: >
+            El jugador ya califico este producto (`type`
+            `https://nexusbattles.local/errores/ya-calificado`, motivo
+            CALIFICACION_DUPLICADA).
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          $ref: "#/components/responses/DependenciaNoDisponible"
 
   /products/{productId}/rating/mia:
     get:
       summary: La calificacion del propio jugador sobre un producto (1.4.0)
       operationId: miCalificacion
-      x-implementacion: pendiente
-      x-fase: B3
       security:
         - bearerAuth: []
       parameters:
@@ -566,7 +651,10 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
-          description: El jugador todavia no califico este producto.
+          description: >
+            El jugador todavia no califico este producto (`type`
+            `https://nexusbattles.local/errores/calificacion-no-encontrada`).
+            Es el estado normal de quien aun no ha opinado.
           content:
             application/problem+json:
               schema:
@@ -576,8 +664,6 @@ paths:
     post:
       summary: Sube una imagen para adjuntarla a un comentario (1.4.0)
       operationId: subirImagenDeComentario
-      x-implementacion: pendiente
-      x-fase: B3
       description: >
         `multipart/form-data` con el campo `archivo`. Se acepta solo si la
         firma de bytes es JPEG, PNG o WebP y su cabecera describe una imagen
@@ -585,6 +671,17 @@ paths:
         descarta: la imagen recibe un UUID y se guarda fuera de cualquier
         carpeta publica. Queda asociada al autor y pendiente hasta que un
         comentario suyo la use; las no usadas en 24 h se borran.
+
+
+        1.5.0 — ni la extension ni el `Content-Type` que declara el cliente
+        cuentan: el tipo lo dice la firma de bytes. Ademas de la firma se
+        comprueba, sin decodificar la imagen, que el archivo termine donde su
+        formato dice que termina (PNG en su bloque `IEND` con los CRC en orden,
+        JPEG en su marcador de fin, WebP en el tamano de su cabecera RIFF): un
+        archivo cortado o con otro documento pegado detras (un poliglota) es
+        415. La imagen se guarda en la base del servicio, asi que viaja con sus
+        respaldos. `COMENTARIOS_FORMATOS_IMAGEN` puede acotar los formatos a un
+        subconjunto de los tres.
       security:
         - bearerAuth: []
       requestBody:
@@ -606,7 +703,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/ImagenSubida"
         "400":
-          description: Archivo ausente o vacio.
+          description: >
+            Archivo ausente o vacio (`type`
+            `https://nexusbattles.local/errores/imagen-ausente`).
           content:
             application/problem+json:
               schema:
@@ -618,13 +717,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "413":
-          description: Mas de 2 MB.
+          description: >
+            Mas de 2 MB, o una cabecera que describe mas de 4096 pixeles en
+            algun lado (`type`
+            `https://nexusbattles.local/errores/imagen-demasiado-grande`). El
+            borde corta antes los cuerpos de mas de 3 MB con su propio 413.
           content:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
         "415":
-          description: No es una imagen JPEG, PNG o WebP valida.
+          description: >
+            No es una imagen JPEG, PNG o WebP valida (`type`
+            `https://nexusbattles.local/errores/imagen-no-admitida`, motivo
+            FORMATO_DE_IMAGEN_NO_ADMITIDO), o la peticion no es multipart.
           content:
             application/problem+json:
               schema:
@@ -634,14 +740,23 @@ paths:
     get:
       summary: Descarga una imagen de comentario (1.4.0)
       operationId: obtenerImagenDeComentario
-      x-implementacion: pendiente
-      x-fase: B3
       description: >
         Publica si pertenece a un comentario PUBLICADO; si no, solo para su
         autor y para moderacion. Se sirve con el tipo detectado,
         `X-Content-Type-Options: nosniff`, `Content-Security-Policy:
         default-src 'none'` y `Cache-Control` de larga duracion (el id es
         inmutable).
+
+
+        1.5.0 — la cache larga (`public, max-age=31536000, immutable`) solo va
+        en las publicas; las demas salen con `private, no-store`. Sin token se
+        ven solo las publicas (se pintan con un `<img>` normal); con el token
+        del autor o de MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR, tambien
+        las privadas. Para cualquier otro, una imagen que no puede ver es 404,
+        igual que una que no existe: no se dice que existe.
+      security:
+        - {}
+        - bearerAuth: []
       parameters:
         - name: imagenId
           in: path
@@ -666,7 +781,9 @@ paths:
                 type: string
                 format: binary
         "404":
-          description: No existe o no es visible para quien la pide.
+          description: >
+            No existe o no es visible para quien la pide (`type`
+            `https://nexusbattles.local/errores/imagen-no-encontrada`).
           content:
             application/problem+json:
               schema:
@@ -691,8 +808,20 @@ components:
   responses:
     ProductoInexistente:
       description: >
-        1.4.0 — `type` `.../errors/producto-inexistente`: el producto no existe
-        en el catalogo (se comprueba contra `GET /api/v1/productos/{id}`).
+        1.4.0 — `type` `https://nexusbattles.local/errores/producto-inexistente`:
+        el producto no existe en el catalogo (se comprueba contra `GET
+        /api/v1/productos/{id}`; solo su 404 lo afirma).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetail"
+    DependenciaNoDisponible:
+      description: >
+        1.5.0 — una escritura que necesita a otro servicio y no obtuvo
+        respuesta: el catalogo de productos (`type`
+        `https://nexusbattles.local/errores/catalogo-no-disponible`) o el de
+        sanciones (`.../sanciones-no-disponibles`). No se guarda nada a ciegas;
+        el cliente reintenta en un momento.
       content:
         application/problem+json:
           schema:
@@ -771,9 +900,22 @@ components:
           type: array
           items:
             type: string
+          description: >
+            1.5.0 — los `id` de sus imagenes, que se descargan en
+            `GET /comentarios/imagenes/{id}`. Los comentarios anteriores a la
+            1.4.0 pueden traer aqui los nombres de archivo que se guardaban
+            entonces, sin imagen detras.
         estrellas:
-          type: integer
-          description: Ausente cuando el jugador ya habia calificado el producto
+          type:
+            - integer
+            - "null"
+          minimum: 1
+          maximum: 5
+          description: >
+            1.5.0 — las estrellas de la calificacion de su autor sobre el
+            producto (el comentario ya no guarda estrellas propias); nulo si el
+            autor no ha calificado. En las respuestas de moderacion va nulo: la
+            calificacion no es contenido que se modere.
         fechaPublicacion:
           type: string
           format: date-time
@@ -787,6 +929,18 @@ components:
             venían se descartaron porque el jugador ya había calificado el
             producto (RF-COM-002, D-07). El comentario entró igual. En el hilo
             siempre `false`.
+        editado:
+          type: boolean
+          default: false
+          description: >
+            1.5.0 — un moderador cambio su texto (EDITAR, 7.3.3). Publico: quien
+            lo lee tiene que saber que ese texto no es exactamente el que
+            escribio su autor.
+        marcado:
+          type: boolean
+          description: >
+            1.5.0 — marcado para seguimiento especial (MARCAR, 7.3.3). Solo en
+            las respuestas de moderacion; el hilo publico no lo trae.
 
     HiloDeComentariosResponse:
       type: object
@@ -800,12 +954,25 @@ components:
           type: string
         comentarios:
           type: array
-          description: Solo los PUBLICADOS, del mas antiguo al mas reciente.
+          description: >
+            Solo los PUBLICADOS de la pagina pedida, del mas reciente al mas
+            antiguo (1.4.0; hasta la 1.3.0, todos y al reves).
           items:
             $ref: "#/components/schemas/ComentarioResponse"
+        pagina:
+          type: integer
+          description: 1.5.0 — la pagina servida, desde 0.
+        tamano:
+          type: integer
+          description: 1.5.0 — el tamano de pagina que se aplico (el pedido, recortado a 50).
         total:
           type: integer
-          description: Cuantos comentarios trae la lista.
+          description: >
+            Cuantos comentarios publicados tiene el producto en todas las
+            paginas (1.5.0; con una sola pagina, lo mismo que antes).
+        totalPaginas:
+          type: integer
+          description: 1.5.0 — cuantas paginas hay con ese tamano; 0 si no hay comentarios.
         calificacionPromedio:
           type:
             - number
@@ -813,12 +980,13 @@ components:
           minimum: 1
           maximum: 5
           description: >
-            Promedio de las estrellas de los comentarios publicados que
-            calificaron, con dos decimales. Nulo si nadie ha calificado: la
-            ficha debe mostrar "sin valoraciones", no un cero.
+            1.5.0 — el promedio de todas las calificaciones del producto, con un
+            decimal: el mismo numero que `promedio` en `GET
+            /products/{productId}/rating`, de la misma tabla. Nulo si nadie ha
+            calificado: la ficha debe mostrar "sin valoraciones", no un cero.
         totalCalificaciones:
           type: integer
-          description: Cuantos de los comentarios publicados traen estrellas.
+          description: 1.5.0 — cuantas calificaciones tiene el producto (el `total` del resumen).
 
     ReporteRequest:
       type: object
@@ -922,10 +1090,17 @@ components:
           type: string
           minLength: 1
           maxLength: 2000
-          description: 1.4.0 — obligatorio con EDITAR; el texto que queda visible.
+          description: >
+            1.4.0 — obligatorio con EDITAR; el texto que queda visible. En las
+            demas acciones se ignora.
 
     AsientoDeModeracion:
       type: object
+      description: >
+        Lo que queda escrito de cada accion (7.3.3: usuario, fecha, motivo,
+        estado anterior y nuevo). Desde la 1.5.0 el servicio guarda ademas la IP
+        de origen de la peticion, para auditoria; no se devuelve aqui, porque
+        el historial lo leen otros moderadores.
       required:
         - id
         - accion
@@ -1137,7 +1312,10 @@ components:
             - LIMITE_DE_REPORTES
             - TRANSICION_INVALIDA
           description: >
-            Presente en los rechazos de publicación (403 y 422), para que el
-            cliente distinga el motivo sin interpretar el texto del detalle.
-            `CALIFICACION_DUPLICADA` ya no rechaza desde 1.2.0; se conserva
-            por compatibilidad con clientes 1.1.0.
+            Presente en los rechazos que el cliente tiene que distinguir sin
+            interpretar el texto del detalle. `AUTOR_SILENCIADO` en el 403 de
+            publicar y calificar; `CALIFICACION_DUPLICADA` en el 409
+            `ya-calificado` de `POST /products/{productId}/rating` (1.5.0;
+            publicar un comentario ya no lo usa desde la 1.2.0);
+            `FORMATO_DE_IMAGEN_NO_ADMITIDO` en el 415 de la subida de imagenes
+            (1.5.0; publicar ya no responde 422).

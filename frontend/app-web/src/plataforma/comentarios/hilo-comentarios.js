@@ -8,9 +8,22 @@
  * que no llevaba ninguna ficha: el requisito estaba construido y no se veía.
  *
  * Este componente lo pone donde el jugador mira el producto: la ficha del
- * inventario, el detalle de la tienda y el de la portada pública. Lee
- * `GET /products/{id}/comments` (público) y, con sesión, deja publicar,
- * retirar lo propio y reportar lo ajeno.
+ * inventario, el detalle de la tienda y el de la portada pública.
+ *
+ * ## De dónde sale cada cosa (comentarios.yaml 1.5.0, B3)
+ *
+ *   - El resumen (promedio, cuántas valoraciones): `GET /products/{id}/rating`,
+ *     la única fuente del promedio. Ya no se lee del hilo ni se calcula aquí.
+ *   - Calificar: su propio control (`calificar-producto.js`), una sola vez y
+ *     sin escribir nada. Con sesión, `GET .../rating/mia` decide si se ofrecen
+ *     las estrellas o se enseña «Tu calificación: N de 5».
+ *   - El hilo: `GET /products/{id}/comments`, paginado por el servidor y ya
+ *     ordenado del más reciente al más antiguo. Se conserva la experiencia de
+ *     la ficha —de cinco en cinco—, pero cada «Ver más» pide la página
+ *     siguiente al servidor (`pagina`, `tamano`) en vez de recortar una lista
+ *     que ya estaba entera en el navegador. `total` (el de todas las páginas)
+ *     dice cuántas hay y cuántas quedan.
+ *   - Las imágenes de cada opinión: `GET /comentarios/imagenes/{id}`.
  *
  * ## Estados
  *
@@ -18,16 +31,24 @@
  *   - vacío: nadie ha opinado todavía, y qué hacer (opinar, o entrar para
  *     opinar);
  *   - uno, muchos: los más recientes primero; de cinco en cinco;
- *   - con imágenes: el adjunto con su nombre (ver `comentario.js`);
+ *   - con imágenes: miniaturas reales (ver `comentario.js`);
  *   - reportado: el que quien mira acaba de reportar queda marcado «en
  *     revisión» en su sitio, en vez de desaparecer sin explicación;
- *   - error: la lista no cargó, se dice y se reintenta; publicar sigue
- *     disponible, porque no depende de la lista;
+ *   - error: la lista no cargó, se dice y se reintenta; calificar y publicar
+ *     siguen disponibles, porque no dependen de la lista;
  *   - sin sesión: se lee todo; para calificar, opinar o reportar se ofrece
  *     entrar.
  *
- * El promedio y la lista los da el servicio: tras publicar o retirar se
- * vuelven a leer, no se recalculan aquí (regla 7).
+ * El promedio y la lista los da el servicio: tras calificar, publicar o
+ * retirar se vuelven a leer, no se recalculan aquí (regla 7).
+ *
+ * ## Si el hilo cambia mientras se lee
+ *
+ * La paginación es por posición: si alguien publica entre dos «Ver más», la
+ * página siguiente trae repetido el último que ya se veía, y se descarta por
+ * su `id`. Si alguien retira uno, el siguiente puede saltarse hasta la próxima
+ * lectura del hilo. Es el precio de no guardar el hilo entero en el navegador,
+ * y se paga una opinión, no la pantalla.
  *
  * @module plataforma/comentarios/hilo-comentarios
  */
@@ -36,16 +57,30 @@ import { h } from '../../comun/ui/dom.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
 import { confirmar } from '../../comun/ui/dialogo.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
-import { resumenDeCalificacion } from '../../comun/ui/comunidad/resumen.js';
+import { conCarga } from '../../comun/ui/boton.js';
+import { conCuenta, resumenDeCalificacion } from '../../comun/ui/comunidad/resumen.js';
 import { ESTADO_LOCAL, tarjetaDeComentario } from '../../comun/ui/comunidad/comentario.js';
 import { leerSesion, urlDeLogin } from '../../comun/sesion.js';
-import { consultarHilo, eliminarComentario, publicarComentario } from './cliente-comentarios.js';
+import {
+  calificar,
+  consultarHilo,
+  eliminarComentario,
+  miCalificacion,
+  publicarComentario,
+  resumenDeCalificaciones,
+  subirImagen,
+  urlDeImagen,
+} from './cliente-comentarios.js';
 import { reportarComentario } from './cliente-moderacion.js';
+import { controlDeCalificacion } from './calificar-producto.js';
 import { redactorDeComentario } from './redactor-comentario.js';
 import { abrirReporteDeComentario, RESULTADO_REPORTE } from './reportar-comentario.js';
 
-/** Cuántas opiniones se enseñan de entrada y cuántas más en cada «Ver más». */
+/** Cuántas opiniones se piden de entrada y cuántas más en cada «Ver más». */
 export const OPINIONES_POR_TANDA = 5;
+
+/** El servicio no sirve más de 50 por página (comentarios.yaml 1.4.0). */
+export const TAMANO_MAXIMO_DE_PAGINA = 50;
 
 let secuencia = 0;
 
@@ -62,30 +97,27 @@ export function quienMira() {
 }
 
 /**
- * Los comentarios, del más reciente al más antiguo. El servicio los da al
- * revés (del más antiguo al más reciente) y un hilo se lee desde lo último.
+ * Cuántas opiniones pedir al volver a leer el hilo sin perder lo que ya estaba
+ * desplegado: las que había, redondeadas a tandas enteras (así la siguiente
+ * página sigue cayendo en su sitio) y sin pasar del máximo del servicio.
  *
- * @param {object} hilo `HiloDeComentariosResponse`
- * @returns {object[]}
+ * @param {number} cargadas
+ * @returns {number}
  */
-export function masRecientesPrimero(hilo) {
-  const lista = Array.isArray(hilo?.comentarios) ? [...hilo.comentarios] : [];
-  return lista.reverse();
+export function tamanoParaRecargar(cargadas) {
+  const tandas = Math.max(1, Math.ceil((Number(cargadas) || 0) / OPINIONES_POR_TANDA));
+  return Math.min(TAMANO_MAXIMO_DE_PAGINA, tandas * OPINIONES_POR_TANDA);
 }
 
 /**
- * ¿Calificó ya quien mira este producto? Se deduce del hilo: un comentario
- * suyo con estrellas. Solo sirve para avisar antes de publicar; quien decide
- * es el servicio (D-07).
+ * El texto del botón «Ver más».
  *
- * @param {object[]} comentarios
- * @param {string|null} yo
- * @returns {boolean}
+ * @param {number} quedan
+ * @returns {string}
  */
-export function yaCalifico(comentarios, yo) {
-  return (
-    Boolean(yo) && comentarios.some((c) => c?.autorId === yo && Number.isInteger(c?.estrellas))
-  );
+export function textoDeVerMas(quedan) {
+  const siguientes = Math.min(quedan, OPINIONES_POR_TANDA);
+  return `Ver ${conCuenta(siguientes, 'opinión', 'opiniones')} más (${quedan === 1 ? 'queda' : 'quedan'} ${quedan})`;
 }
 
 /**
@@ -101,7 +133,11 @@ export function yaCalifico(comentarios, yo) {
  *   «Entrar para opinar». Por omisión, el enlace al login con vuelta aquí; la
  *   portada, que ya ES el login, lleva al formulario.
  * @param {(hilo: object) => void} [opciones.alCargar] tras cada lectura
- *   correcta (la ficha pinta el resumen compacto en su cabecera)
+ *   correcta del hilo
+ * @param {(datos: {resumen: object|null, opiniones: number|null}) => void} [opciones.alResumen]
+ *   cada vez que cambia el resumen de la calificación o el número de opiniones
+ *   (la ficha pinta el resumen compacto en su cabecera); `resumen` es `null`
+ *   si no se pudo leer
  * @returns {{elemento: HTMLElement, recargar: () => Promise<object|null>}}
  */
 export function montarHiloDeComentarios(
@@ -113,10 +149,16 @@ export function montarHiloDeComentarios(
     nivel = 3,
     alPedirEntrada = null,
     alCargar = () => {},
+    alResumen = () => {},
     consultarImpl = consultarHilo,
+    resumenImpl = resumenDeCalificaciones,
+    miCalificacionImpl = miCalificacion,
+    calificarImpl = calificar,
     publicarImpl = publicarComentario,
+    subirImagenImpl = subirImagen,
     eliminarImpl = eliminarComentario,
     reportarImpl = reportarComentario,
+    urlDeImagenImpl = urlDeImagen,
   },
 ) {
   secuencia += 1;
@@ -124,6 +166,11 @@ export function montarHiloDeComentarios(
   const yo = sesion?.yo ?? null;
 
   const zonaResumen = h('div', { clase: 'hilo-comentarios__resumen', datos: { zona: 'resumen' } });
+  const zonaCalificacion = h('div', {
+    clase: 'hilo-comentarios__calificacion',
+    datos: { zona: 'calificacion' },
+  });
+  zonaCalificacion.hidden = !yo;
   const zonaAviso = h('div', { clase: 'hilo-comentarios__aviso', datos: { zona: 'aviso-hilo' } });
   zonaAviso.hidden = true;
   const zonaLista = h('div', {
@@ -152,6 +199,7 @@ export function montarHiloDeComentarios(
           zonaResumen,
         ],
       }),
+      zonaCalificacion,
       zonaAviso,
       zonaLista,
       zonaRedactor,
@@ -161,10 +209,10 @@ export function montarHiloDeComentarios(
 
   /** Comentarios que quien mira reportó en esta visita: se quedan marcados. */
   const reportados = new Set();
-  let visibles = OPINIONES_POR_TANDA;
-  let ultimo = null;
-  /** El formulario montado, para avisarle de que ya calificó sin rehacerlo. */
-  let redactorActual = null;
+  /** Lo leído del hilo: las opiniones cargadas, más reciente primero. */
+  const hilo = { comentarios: [], total: null, cubiertas: 0, cargado: false };
+  /** El resumen de la calificación: `undefined` mientras no se sabe. */
+  const calificacion = { resumen: undefined, error: false };
 
   /** La tarjeta de un comentario ya pintada, por su id. */
   const tarjetaDe = (id) =>
@@ -172,11 +220,63 @@ export function montarHiloDeComentarios(
       (tarjeta) => tarjeta.dataset.comentarioId === String(id),
     ) ?? null;
 
+  // ---------------------------------------------------------------- resumen
+
+  function pintarResumen() {
+    const opiniones = hilo.cargado ? hilo.total : null;
+    if (calificacion.error) {
+      const reintentar = h('button', {
+        clase: 'boton boton--secundario boton--pequeno',
+        texto: 'Reintentar',
+        datos: { accion: 'reintentar-resumen' },
+        atributos: { type: 'button' },
+      });
+      reintentar.addEventListener('click', () => cargarResumen());
+      zonaResumen.replaceChildren(
+        h('div', {
+          clase: 'resumen-calificacion',
+          datos: { estado: 'error' },
+          hijos: [
+            h('p', {
+              clase: 'resumen-calificacion__detalle',
+              texto: 'No pudimos cargar la valoración.',
+            }),
+            reintentar,
+          ],
+        }),
+      );
+      alResumen({ resumen: null, opiniones });
+      return;
+    }
+    if (calificacion.resumen === undefined) {
+      return;
+    }
+    zonaResumen.replaceChildren(resumenDeCalificacion(calificacion.resumen, { opiniones }));
+    alResumen({ resumen: calificacion.resumen, opiniones });
+  }
+
+  function guardarResumen(resumen) {
+    calificacion.resumen = resumen;
+    calificacion.error = false;
+    pintarResumen();
+  }
+
+  async function cargarResumen() {
+    try {
+      guardarResumen(await resumenImpl(productoId));
+    } catch {
+      calificacion.error = true;
+      pintarResumen();
+    }
+  }
+
+  // ------------------------------------------------------------------ lista
+
   const alEliminar = async (comentario) => {
     const seguro = await confirmar({
       titulo: 'Eliminar tu comentario',
       mensaje: Number.isInteger(comentario.estrellas)
-        ? 'Desaparece del hilo y tus estrellas dejan de contar en el promedio. Podrás volver a calificar en una opinión nueva.'
+        ? 'Desaparece del hilo y no se puede deshacer. Tu calificación del producto se mantiene: va aparte del comentario.'
         : 'Desaparece del hilo. No se puede deshacer.',
       textoConfirmar: 'Eliminar',
       textoCancelar: 'Conservar',
@@ -188,7 +288,7 @@ export function montarHiloDeComentarios(
     try {
       await eliminarImpl(productoId, comentario.id);
       pintarAviso(zonaAviso, { tono: 'exito', titulo: 'Tu comentario se eliminó' });
-      await recargar();
+      await cargarHilo();
     } catch (error) {
       pintarAviso(zonaAviso, {
         tono: error?.estado === 404 ? 'info' : 'error',
@@ -200,7 +300,7 @@ export function montarHiloDeComentarios(
           error?.estado === 404 ? null : 'Sigue publicado. Vuelve a intentarlo en un momento.',
       });
       if (error?.estado === 404) {
-        await recargar();
+        await cargarHilo();
       }
     }
   };
@@ -218,13 +318,57 @@ export function montarHiloDeComentarios(
       // foco va a la tarjeta, que ahora dice que está en revisión.
       tarjetaDe(comentario.id)?.focus();
     } else if (resultado === RESULTADO_REPORTE.RETIRADO) {
-      await recargar();
+      await cargarHilo();
     }
   };
 
+  const elementoDeLista = (comentario) =>
+    h('li', {
+      clase: 'hilo-comentarios__elemento',
+      hijos: [
+        tarjetaDeComentario(comentario, {
+          yo,
+          estadoLocal: reportados.has(comentario.id) ? ESTADO_LOCAL.REPORTADO : null,
+          alEliminar,
+          alReportar,
+          urlDeImagen: urlDeImagenImpl,
+        }),
+      ],
+    });
+
+  /** El `total` del servidor, a la vista: «Mostrando 5 de 12 opiniones…». */
+  const totalDelHilo = () => hilo.total ?? hilo.comentarios.length;
+  const textoDelConteo = () => {
+    const total = totalDelHilo();
+    const cuantas = conCuenta(total, 'opinión', 'opiniones');
+    return hilo.comentarios.length < total
+      ? `Mostrando ${hilo.comentarios.length} de ${cuantas}, de la más reciente a la más antigua.`
+      : `${cuantas}, de la más reciente a la más antigua.`;
+  };
+
+  /** Cuántas quedan por pedir, si quedan. */
+  const quedan = () => {
+    const total = hilo.total ?? 0;
+    return hilo.cubiertas < total ? Math.max(total - hilo.comentarios.length, 0) : 0;
+  };
+
+  function botonVerMas() {
+    const restantes = quedan();
+    if (restantes === 0) {
+      return null;
+    }
+    const mas = h('button', {
+      clase: 'boton boton--secundario boton--pequeno hilo-comentarios__mas',
+      texto: textoDeVerMas(restantes),
+      datos: { accion: 'ver-mas-opiniones' },
+      atributos: { type: 'button' },
+    });
+    mas.addEventListener('click', () => verMas(mas));
+    return mas;
+  }
+
   function pintarLista() {
-    const comentarios = masRecientesPrimero(ultimo);
-    if (comentarios.length === 0) {
+    if (hilo.comentarios.length === 0) {
       zonaLista.replaceChildren(
         estadoVacio({
           titulo: 'Todavía nadie opina sobre este producto',
@@ -236,45 +380,166 @@ export function montarHiloDeComentarios(
       );
       return;
     }
-    const lista = h('ol', {
-      clase: 'hilo-comentarios__lista',
-      hijos: comentarios.slice(0, visibles).map((comentario) =>
-        h('li', {
-          clase: 'hilo-comentarios__elemento',
-          hijos: [
-            tarjetaDeComentario(comentario, {
-              yo,
-              estadoLocal: reportados.has(comentario.id) ? ESTADO_LOCAL.REPORTADO : null,
-              alEliminar,
-              alReportar,
-            }),
-          ],
-        }),
-      ),
-    });
-    const quedan = comentarios.length - visibles;
-    const hijos = [lista];
-    if (quedan > 0) {
-      const mas = h('button', {
-        clase: 'boton boton--secundario boton--pequeno hilo-comentarios__mas',
-        texto: `Ver ${Math.min(quedan, OPINIONES_POR_TANDA)} opiniones más (quedan ${quedan})`,
-        datos: { accion: 'ver-mas-opiniones' },
-        atributos: { type: 'button' },
-      });
-      mas.addEventListener('click', () => {
-        const primeraNueva = visibles;
-        visibles += OPINIONES_POR_TANDA;
-        pintarLista();
-        // El foco va a la primera opinión que acaba de aparecer, no al
-        // principio de la lista.
-        zonaLista.querySelectorAll('.comentario')[primeraNueva]?.focus();
-      });
-      hijos.push(mas);
-    }
-    zonaLista.replaceChildren(...hijos);
+    const hijos = [
+      // Con una sola opinión no hay nada que contar ni que ordenar.
+      totalDelHilo() > 1
+        ? h('p', {
+            clase: 'hilo-comentarios__conteo',
+            texto: textoDelConteo(),
+            datos: { zona: 'conteo' },
+          })
+        : null,
+      h('ol', {
+        clase: 'hilo-comentarios__lista',
+        hijos: hilo.comentarios.map(elementoDeLista),
+      }),
+      botonVerMas(),
+    ];
+    // `replaceChildren` convertiría un `null` en el texto «null».
+    zonaLista.replaceChildren(...hijos.filter(Boolean));
   }
 
-  function pintarRedactor(comentarios) {
+  /**
+   * La página siguiente, pedida al servidor. Las nuevas se añaden al final
+   * sin volver a pintar las que ya estaban, y el foco va a la primera nueva.
+   */
+  async function verMas(boton) {
+    const pagina = Math.floor(hilo.cubiertas / OPINIONES_POR_TANDA);
+    conCarga(boton, true, 'Cargando opiniones…');
+    let respuesta;
+    try {
+      respuesta = await consultarImpl(productoId, { pagina, tamano: OPINIONES_POR_TANDA });
+    } catch {
+      conCarga(boton, false);
+      pintarAviso(zonaAviso, {
+        tono: 'error',
+        titulo: 'No pudimos cargar más opiniones',
+        detalle: 'Las que ya ves siguen aquí. Vuelve a intentarlo en un momento.',
+      });
+      return;
+    }
+    limpiarAviso(zonaAviso);
+    const nuevas = anadirPagina(respuesta, pagina);
+    const lista = zonaLista.querySelector('.hilo-comentarios__lista');
+    if (!lista) {
+      pintarLista();
+      return;
+    }
+    lista.append(...nuevas.map(elementoDeLista));
+    const conteo = zonaLista.querySelector('[data-zona="conteo"]');
+    if (conteo) {
+      conteo.textContent = textoDelConteo();
+    }
+    const siguiente = botonVerMas();
+    if (siguiente) {
+      boton.replaceWith(siguiente);
+    } else {
+      boton.remove();
+    }
+    pintarResumen();
+    // El foco va a la primera opinión que acaba de aparecer, no al principio
+    // de la lista (ni a `body`, que es donde cae si el botón desaparece).
+    const primera = nuevas[0] ? tarjetaDe(nuevas[0].id) : null;
+    (primera ?? siguiente)?.focus();
+  }
+
+  /**
+   * Suma una página a lo leído, descartando las que ya estaban.
+   *
+   * @returns {object[]} las nuevas
+   */
+  function anadirPagina(respuesta, pagina) {
+    const vistas = new Set(hilo.comentarios.map((comentario) => comentario.id));
+    const nuevas = (Array.isArray(respuesta?.comentarios) ? respuesta.comentarios : []).filter(
+      (comentario) => !vistas.has(comentario.id),
+    );
+    const aplicado = Number.isInteger(respuesta?.tamano) ? respuesta.tamano : OPINIONES_POR_TANDA;
+    hilo.comentarios = [...hilo.comentarios, ...nuevas];
+    hilo.total = Number.isInteger(respuesta?.total) ? respuesta.total : hilo.comentarios.length;
+    hilo.cubiertas = Math.max(hilo.cubiertas, (pagina + 1) * aplicado);
+    return nuevas;
+  }
+
+  /** Guarda una lectura del hilo desde el principio. */
+  function guardarHilo(respuesta, tamano) {
+    const comentarios = Array.isArray(respuesta?.comentarios) ? respuesta.comentarios : [];
+    const aplicado = Number.isInteger(respuesta?.tamano) ? respuesta.tamano : tamano;
+    hilo.comentarios = comentarios;
+    hilo.total = Number.isInteger(respuesta?.total) ? respuesta.total : comentarios.length;
+    hilo.cubiertas = aplicado;
+    hilo.cargado = true;
+  }
+
+  /**
+   * Lee el hilo desde el principio, conservando lo que ya estaba desplegado
+   * (tras publicar, retirar o calificar, la persona no vuelve a las cinco
+   * primeras).
+   *
+   * @returns {Promise<object|null>} la respuesta del servicio, o `null` si falló
+   */
+  async function cargarHilo() {
+    if (!hilo.cargado) {
+      zonaLista.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Cargando opiniones…' }));
+    }
+    const tamano = tamanoParaRecargar(hilo.comentarios.length);
+    let respuesta;
+    try {
+      respuesta = await consultarImpl(productoId, { pagina: 0, tamano });
+    } catch {
+      if (hilo.cargado) {
+        // Ya había una lista: se queda, y se dice que puede no estar al día.
+        pintarAviso(zonaAviso, {
+          tono: 'error',
+          titulo: 'No pudimos actualizar las opiniones',
+          detalle: 'Las que ves pueden no estar al día. Vuelve a intentarlo en un momento.',
+          accion: { texto: 'Reintentar', nombre: 'reintentar-hilo', alPulsar: () => cargarHilo() },
+        });
+        return null;
+      }
+      zonaLista.replaceChildren(
+        estadoDeError({
+          titulo: 'No pudimos cargar las opiniones',
+          detalle: yo
+            ? 'Puedes calificar y publicar la tuya igualmente. Vuelve a intentarlo para ver las demás.'
+            : 'El producto sigue disponible. Vuelve a intentarlo en un momento.',
+          alReintentar: () => cargarHilo(),
+        }),
+      );
+      return null;
+    }
+    guardarHilo(respuesta, tamano);
+    pintarLista();
+    pintarResumen();
+    alCargar(respuesta);
+    return respuesta;
+  }
+
+  // ----------------------------------------------------- calificar y opinar
+
+  function montarCalificacion() {
+    if (!yo) {
+      return;
+    }
+    const control = controlDeCalificacion({
+      productoId,
+      miCalificacionImpl,
+      calificarImpl,
+      alCalificar: ({ resumen }) => {
+        if (resumen) {
+          guardarResumen(resumen);
+        } else {
+          cargarResumen();
+        }
+        // Las estrellas de cada opinión son las de la calificación de su
+        // autor: las propias ya las llevan.
+        cargarHilo();
+      },
+    });
+    zonaCalificacion.replaceChildren(control.elemento);
+    control.cargar();
+  }
+
+  function montarRedactor() {
     if (!yo) {
       const entrar = alPedirEntrada
         ? h('button', {
@@ -310,67 +575,32 @@ export function montarHiloDeComentarios(
       );
       return;
     }
-    redactorActual = redactorDeComentario({
+    // Se monta una vez: volver a leer el hilo no borra lo que se está escribiendo.
+    const redactor = redactorDeComentario({
       productoId,
-      yaCalificado: yaCalifico(comentarios, yo),
       publicarImpl,
+      subirImagenImpl,
       alPublicar: ({ estado }) => {
         if (estado !== 'EN_REVISION') {
-          recargar({ conservarRedactor: true });
+          cargarHilo();
         }
       },
     });
-    zonaRedactor.replaceChildren(redactorActual.elemento);
+    zonaRedactor.replaceChildren(redactor.elemento);
   }
 
-  /** La última lectura buena del hilo. */
-  function guardarHilo(hilo) {
-    ultimo = hilo ?? {
-      comentarios: [],
-      total: 0,
-      totalCalificaciones: 0,
-      calificacionPromedio: null,
-    };
-  }
+  montarCalificacion();
+  montarRedactor();
+  cargarResumen();
+  cargarHilo();
 
-  async function recargar({ conservarRedactor = false } = {}) {
-    if (!ultimo) {
-      zonaLista.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Cargando opiniones…' }));
-    }
-    try {
-      guardarHilo(await consultarImpl(productoId));
-      zonaResumen.replaceChildren(resumenDeCalificacion(ultimo));
-      pintarLista();
-      const comentarios = masRecientesPrimero(ultimo);
-      if (!conservarRedactor || !redactorActual) {
-        pintarRedactor(comentarios);
-      } else if (yaCalifico(comentarios, yo)) {
-        // Acaba de calificar: el mismo formulario (con su aviso de «publicada»)
-        // deja de ofrecer estrellas, que ya no contarían.
-        redactorActual.marcarCalificado();
-      }
-      alCargar(ultimo);
-      return ultimo;
-    } catch {
-      zonaResumen.replaceChildren();
-      zonaLista.replaceChildren(
-        estadoDeError({
-          titulo: 'No pudimos cargar las opiniones',
-          detalle: yo
-            ? 'Puedes publicar la tuya igualmente. Vuelve a intentarlo para ver las demás.'
-            : 'El producto sigue disponible. Vuelve a intentarlo en un momento.',
-          alReintentar: () => recargar(),
-        }),
-      );
-      if (!redactorActual && !zonaRedactor.firstChild) {
-        pintarRedactor([]);
-      }
-      return null;
-    }
-  }
-
-  recargar();
-  return { elemento, recargar };
+  return {
+    elemento,
+    recargar: async () => {
+      const [respuesta] = await Promise.all([cargarHilo(), cargarResumen()]);
+      return respuesta;
+    },
+  };
 }
 
 /**
@@ -394,9 +624,9 @@ export function complementoDeOpiniones(opciones = {}) {
     montarHiloDeComentarios(zona, {
       ...opciones,
       productoId: String(productoId),
-      alCargar: (hilo) => {
-        opciones.alCargar?.(hilo);
-        pintarValoracionEnLaFicha(ficha, hilo);
+      alResumen: (datos) => {
+        opciones.alResumen?.(datos);
+        pintarValoracionEnLaFicha(ficha, datos);
       },
     });
     return zona;
@@ -404,20 +634,26 @@ export function complementoDeOpiniones(opciones = {}) {
 }
 
 /**
- * El resumen compacto bajo el tipo del producto, reemplazando el anterior.
+ * El resumen compacto bajo el tipo del producto, reemplazando el anterior. Si
+ * el resumen no se pudo leer, se quita: una valoración vieja o inventada en la
+ * cabecera diría algo que no se sabe.
  *
  * @param {HTMLElement|null} ficha
- * @param {object} hilo
+ * @param {{resumen: object|null, opiniones: number|null}} datos
  */
-function pintarValoracionEnLaFicha(ficha, hilo) {
+function pintarValoracionEnLaFicha(ficha, { resumen, opiniones }) {
   if (!ficha) {
+    return;
+  }
+  const anterior = ficha.querySelector('.ficha__valoracion');
+  if (!resumen) {
+    anterior?.remove();
     return;
   }
   const nuevo = h('div', {
     clase: 'ficha__valoracion',
-    hijos: [resumenDeCalificacion(hilo, { compacto: true })],
+    hijos: [resumenDeCalificacion(resumen, { compacto: true, opiniones })],
   });
-  const anterior = ficha.querySelector('.ficha__valoracion');
   if (anterior) {
     anterior.replaceWith(nuevo);
   } else {

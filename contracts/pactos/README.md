@@ -12,12 +12,14 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 | `ms-subastas-ms-finanzas.json` | ms-subastas (HU-SUB-004) | ms-finanzas | `CreditosPactoTest` |
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
 | `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
+| `comentarios-productos.json` | comentarios (B3: comentar y calificar solo productos que existen) | productos | `CatalogoPactoTest` |
 
 ## Regenerarlos
 
 ```bash
 ./gradlew :services:cuentas:ms-subastas:test --tests '*PactoTest'
 ./gradlew :services:contenido:misiones:test --tests '*InventarioPactoTest'
+./gradlew :services:plataforma:comentarios:test --tests '*PactoTest'
 ```
 
 Si un pacto cambia en un commit que no tocaba el cliente, eso **es** la señal:
@@ -58,6 +60,9 @@ Los estados que hay que poder montar hoy:
 - el héroe está en esa misión
 - el héroe ya volvió de esa misión
 - el jugador puede recibir productos del catálogo
+**productos** (B3; lo consume comentarios)
+- el producto existe en el catalogo
+- el producto no existe en el catalogo
 
 Los pactos se verifican:
 
@@ -79,6 +84,18 @@ B9 no la tenía, `VerificacionDelPactoDeMisionesTest` la dejaba fuera con un
 nueve interacciones, la entrega con el caso de uso real (`EntregarProductos`) y
 un catálogo en memoria que solo conoce la épica que misiones entrega («Segundo
 impulso», del catálogo oficial).
+| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| productos | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
+
+Lo que fija `comentarios-productos.json`, y por qué es tan poco: comentarios
+pregunta al catálogo si un producto existe antes de dejar comentarlo o
+calificarlo. Pacta que `GET /api/v1/productos/{id}` sea **público** (no manda
+token), que un producto que no existe sea **404** —la única respuesta que
+comentarios cree como «no existe»; cualquier otra cosa la trata como «el
+catálogo no contestó» y no escribe a ciegas— y que uno que existe responda 200
+con su `id`, que el cliente compara con el pedido. Ni nombre, ni tipo, ni
+precio: nadie los lee. Se comprobó que muerde cambiando el 404 del pacto por un
+400: la verificación se puso roja en esa interacción y en ninguna otra.
 
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.
