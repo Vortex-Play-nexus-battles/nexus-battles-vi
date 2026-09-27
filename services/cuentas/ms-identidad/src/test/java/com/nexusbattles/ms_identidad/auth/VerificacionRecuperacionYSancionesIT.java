@@ -110,11 +110,6 @@ class VerificacionRecuperacionYSancionesIT {
 
     private org.springframework.transaction.support.TransactionTemplate transacciones;
 
-    @BeforeEach
-    void prepararTransacciones() {
-        transacciones = new org.springframework.transaction.support.TransactionTemplate(gestorDeTransacciones);
-    }
-
     @AfterAll
     static void apagar() {
         PLATAFORMA.close();
@@ -123,6 +118,7 @@ class VerificacionRecuperacionYSancionesIT {
 
     @BeforeEach
     void serviciosSanos() {
+        transacciones = new org.springframework.transaction.support.TransactionTemplate(gestorDeTransacciones);
         PLATAFORMA.responder("POST", "/api/v1/correos/.*", 202, "")
                 .responder("POST", "/api/v1/internal/notifications", 202, "{}")
                 .responder("POST", "/api/v1/admin/auditoria/eventos", 201, "{}");

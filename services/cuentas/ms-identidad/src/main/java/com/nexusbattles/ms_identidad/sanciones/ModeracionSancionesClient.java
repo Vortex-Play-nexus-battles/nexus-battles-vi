@@ -166,8 +166,13 @@ public class ModeracionSancionesClient {
         return "moderacion-sanciones rechazo la operacion (" + rechazo.getStatusCode().value() + ").";
     }
 
-    /** El {@code detail} de un problem details, si el cuerpo no se pudo convertir entero. */
-    private static final Pattern DETALLE = Pattern.compile("\"detail\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*)\"");
+    /**
+     * El {@code detail} de un problem details, si el cuerpo no se pudo convertir
+     * entero. Cuantificador posesivo: las dos alternativas no se solapan, asi
+     * que no hace falta retroceder, y sin retroceso un cuerpo enorme no agota la
+     * pila del motor de expresiones.
+     */
+    private static final Pattern DETALLE = Pattern.compile("\"detail\"\\s*:\\s*\"((?:[^\"\\\\]|\\\\.)*+)\"");
 
     private static String sinBarraFinal(String url) {
         String limpia = url == null ? "" : url.trim();

@@ -26,6 +26,11 @@ import java.util.HexFormat;
 public class IgualadorDeTiempo {
 
     private final PasswordEncoder resumidor;
+    /**
+     * Valor al azar de cada arranque: el relleno no es ningun secreto, pero
+     * tampoco un literal del codigo que alguien pudiera tomar por una clave.
+     */
+    private final String valorDeRelleno;
     private final String resumenDeRelleno;
 
     @Autowired
@@ -37,7 +42,8 @@ public class IgualadorDeTiempo {
         this.resumidor = resumidor;
         byte[] azar = new byte[16];
         new SecureRandom().nextBytes(azar);
-        this.resumenDeRelleno = resumidor.encode(HexFormat.of().formatHex(azar));
+        this.valorDeRelleno = HexFormat.of().formatHex(azar);
+        this.resumenDeRelleno = resumidor.encode(valorDeRelleno);
     }
 
     /** Lo que cuesta comprobar un codigo o una contrasena que existiera. */
@@ -47,6 +53,6 @@ public class IgualadorDeTiempo {
 
     /** Lo que cuesta emitir un codigo (resumirlo) cuando no se emite ninguno. */
     public void resumir() {
-        resumidor.encode("relleno-de-tiempo");
+        resumidor.encode(valorDeRelleno);
     }
 }

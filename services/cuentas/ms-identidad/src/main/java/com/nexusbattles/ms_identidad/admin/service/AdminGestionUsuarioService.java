@@ -281,7 +281,10 @@ public class AdminGestionUsuarioService {
         if (hasta == null) {
             throw new IllegalArgumentException("Falta la fecha de fin de la suspensión.");
         }
-        long minutos = Duration.between(LocalDateTime.now(reloj), hasta).toMinutes();
+        // Instantes, no horas de pared: el fin se lee en la zona del reloj
+        // (la misma con la que se guardo) y un cambio de horario no altera
+        // cuanto dura la suspension.
+        long minutos = Duration.between(reloj.instant(), hasta.atZone(reloj.getZone()).toInstant()).toMinutes();
         if (minutos <= 0) {
             throw new IllegalArgumentException("La fecha de fin de la suspensión debe ser futura.");
         }

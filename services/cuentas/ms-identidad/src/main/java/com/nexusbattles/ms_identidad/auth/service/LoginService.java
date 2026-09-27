@@ -29,6 +29,7 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
@@ -203,13 +204,19 @@ public class LoginService {
             throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
         }
         if (EstadoCuenta.esSuspendido(estado)) {
-            LocalDateTime hasta = usuario.getSuspendidoHasta();
-            if (hasta != null && LocalDateTime.now().isBefore(hasta)) {
-                long minutosRestantes = ChronoUnit.MINUTES.between(LocalDateTime.now(), hasta);
+            // El fin se guarda como hora local del servidor; se compara como
+            // instante en esa zona para que un cambio de horario no mueva cuanto
+            // falta.
+            ZonedDateTime hasta = usuario.getSuspendidoHasta() == null
+                ? null
+                : usuario.getSuspendidoHasta().atZone(ZoneId.systemDefault());
+            ZonedDateTime ahora = ZonedDateTime.now(ZoneId.systemDefault());
+            if (hasta != null && ahora.isBefore(hasta)) {
+                long minutosRestantes = ChronoUnit.MINUTES.between(ahora, hasta);
                 rechazo(usuario, direccionIp, "SUSPENDIDA");
                 throw new CuentaSuspendidaException(
                     "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.",
-                    hasta.atZone(ZoneId.systemDefault()).toOffsetDateTime());
+                    hasta.toOffsetDateTime());
             }
             estado = proyecciones.levantarSiVencida(usuario);
         }
@@ -259,7 +266,7 @@ public class LoginService {
 
         auditLog.info(
             "LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS_ENTORNO",
-            email,
+            correoParaBitacora(email),
             ip
         );
 
@@ -268,5 +275,22 @@ public class LoginService {
         return new CredencialesInvalidasException(
             "Correo o contraseña incorrectos."
         );
+    }
+
+    /**
+     * El correo tal como lo escribio quien intenta entrar va a la bitacora solo
+     * si parece un correo: sin saltos de linea ni caracteres de control con los
+     * que falsear otra linea de auditoria (inyeccion en bitacora). Y enmascarado:
+     * la bitacora no necesita el buzon entero para seguir un ataque a una cuenta.
+     */
+    static String correoParaBitacora(String email) {
+        if (email == null || !email.matches("[A-Za-z0-9._%+@-]{1,254}")) {
+            return "<no-imprimible>";
+        }
+        int arroba = email.indexOf('@');
+        if (arroba <= 0) {
+            return "***";
+        }
+        return email.charAt(0) + "***" + email.substring(arroba);
     }
 }

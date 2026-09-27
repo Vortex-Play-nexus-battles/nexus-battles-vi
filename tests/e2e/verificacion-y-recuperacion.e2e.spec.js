@@ -46,6 +46,15 @@ const EN_LOGIN = /\/login(?:[?#]|$)/;
 const EN_RESTABLECER = /\/restablecer(?:[?#]|$)/;
 const EN_PREPARANDO_O_INICIO = /\/(?:preparando|inicio)(?:[?#]|$)/;
 
+/**
+ * ms-identidad espacia las solicitudes de recuperación de una misma cuenta
+ * (`identidad.recuperacion.segundos-entre-solicitudes`, 60 s en DEV y en este
+ * banco) y dentro de esa ventana responde lo mismo pero no envía nada. La
+ * prueba 10 pide la segunda recuperación de la cuenta: espera a que pase la
+ * ventana en vez de relajar la regla en el banco. Un segundo de margen.
+ */
+const VENTANA_ENTRE_SOLICITUDES_MS = 61_000;
+
 const PREGUNTAS = [
   { texto: '¿Cómo se llamaba el primer héroe que equipaste?', respuesta: 'Guerrero Tanque' },
   { texto: '¿En qué ciudad jugaste tu primer torneo?', respuesta: 'Bucaramanga' },
@@ -65,6 +74,7 @@ test.describe('B1 · verificación del correo y recuperación', () => {
   let api;
   let codigoDeVerificacion;
   let codigoDeRecuperacion;
+  let ultimaSolicitudDeRecuperacion = 0;
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
@@ -185,6 +195,7 @@ test.describe('B1 · verificación del correo y recuperación', () => {
     };
 
     const conCuenta = await solicitar(cuenta.email);
+    ultimaSolicitudDeRecuperacion = Date.now();
     // La interfaz dice exactamente lo mismo para un correo que no existe.
     const sinCuenta = await solicitar(`nadie.${Date.now()}@nexus.test`);
     expect(sinCuenta).toBe(conCuenta);
@@ -276,6 +287,11 @@ test.describe('B1 · verificación del correo y recuperación', () => {
   test('10 · con preguntas, la recuperación las exige: mal contestadas no cambia nada; bien, sí', async ({
     page,
   }) => {
+    // Segunda recuperación de la cuenta: fuera de la ventana de la prueba 6.
+    const espera = ultimaSolicitudDeRecuperacion + VENTANA_ENTRE_SOLICITUDES_MS - Date.now();
+    if (espera > 0) {
+      await new Promise((resolver) => setTimeout(resolver, espera));
+    }
     const vistos = await correosVistos(cuenta.email, { base: BORDE });
     const solicitud = await api.post('/api/v1/auth/restablecer/solicitar', {
       headers: { Accept: ACEPTA },
