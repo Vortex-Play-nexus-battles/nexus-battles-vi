@@ -121,6 +121,39 @@ class InventarioApiTest {
     }
 
     @Test
+    @DisplayName("B4: POST rechaza con 400 una parte distinta a la del producto en el catalogo")
+    void rechazarParteQueNoEsLaDelCatalogo() throws Exception {
+        catalogo.registrarArmadura("producto-peto", nexus.inventario.dominio.ParteArmadura.PECHO);
+
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-peto","tipo":"ARMADURA",
+                                 "nombrePropio":"Peto","parteArmadura":"CASCO"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.title").value("Parte no coincide"));
+
+        assertEquals(0, repositorio.buscarPorPropietario("jugador-A").stream().count());
+    }
+
+    @Test
+    @DisplayName("B4: POST sin parte toma la del catalogo")
+    void crearArmaduraConLaParteDelCatalogo() throws Exception {
+        catalogo.registrarArmadura("producto-peto", nexus.inventario.dominio.ParteArmadura.PECHO);
+
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-peto","tipo":"ARMADURA","nombrePropio":"Peto"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.parteArmadura").value("PECHO"));
+    }
+
+    @Test
     @DisplayName("POST rechaza una armadura sin parte mientras productos no resuelve la ranura")
     void rechazarArmaduraSinParte() throws Exception {
         mvc.perform(post("/api/v1/inventario/elementos")

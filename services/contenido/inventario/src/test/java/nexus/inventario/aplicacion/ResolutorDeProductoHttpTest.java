@@ -28,14 +28,25 @@ class ResolutorDeProductoHttpTest {
 
     private HttpServer servidor;
     private final AtomicReference<String> ultimaRutaRecibida = new AtomicReference<>();
+    private final java.util.List<String> autorizacionesRecibidas =
+            java.util.Collections.synchronizedList(new java.util.ArrayList<>());
     private volatile int estadoRespuesta = 200;
     private volatile String cuerpoRespuesta = "";
+    /** B4: el catalogo rechaza (401) las consultas que llevan credencial. */
+    private volatile boolean rechazarConCredencial;
 
     @BeforeEach
     void levantarServidor() throws IOException {
         servidor = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
         servidor.createContext("/", exchange -> {
             ultimaRutaRecibida.set(exchange.getRequestURI().toString());
+            String autorizacion = exchange.getRequestHeaders().getFirst("Authorization");
+            autorizacionesRecibidas.add(autorizacion == null ? "(sin cabecera)" : autorizacion);
+            if (rechazarConCredencial && autorizacion != null) {
+                exchange.sendResponseHeaders(401, -1);
+                exchange.close();
+                return;
+            }
             byte[] cuerpo = cuerpoRespuesta.getBytes(StandardCharsets.UTF_8);
             exchange.sendResponseHeaders(estadoRespuesta, cuerpo.length);
             try (OutputStream salida = exchange.getResponseBody()) {
@@ -144,6 +155,9 @@ class ResolutorDeProductoHttpTest {
         assertThat(resultado.tipo()).isEqualTo("ARMADURA");
         assertThat(resultado.nombre()).isEqualTo("Magma Ardiente");
         assertThat(resultado.prototipo()).isNull();
+        // B4: la parte del cuerpo la decide el catalogo.
+        assertThat(resultado.parte()).isEqualTo("CASCO");
+        assertThat(resultado.parteArmadura()).isEqualTo(nexus.inventario.dominio.ParteArmadura.CASCO);
     }
 
     @Test
@@ -248,5 +262,67 @@ class ResolutorDeProductoHttpTest {
         assertThatThrownBy(() -> apagado.resolver("producto-1"))
                 .isInstanceOf(ResolutorDeProductoException.class)
                 .isNotInstanceOf(ProductoNoEncontradoException.class);
+    }
+
+    private static final String ITEM_ACTIVO = """
+            {"id": "item-1", "nombre": "Pocion", "tipo": "ITEM", "estado": "ACTIVO"}
+            """;
+
+    private ResolutorDeProductoHttp resolutorConCredencial(String token) {
+        URI baseUri = URI.create("http://localhost:" + servidor.getAddress().getPort());
+        HttpClient cliente = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+        return new ResolutorDeProductoHttp(baseUri, cliente, () -> java.util.Optional.ofNullable(token));
+    }
+
+    @Test
+    void b4_reenviaLaCredencialDeQuienLlamoAlInventario() {
+        cuerpoRespuesta = ITEM_ACTIVO;
+
+        resolutorConCredencial("token-del-llamador").resolver("item-1");
+
+        assertThat(autorizacionesRecibidas).containsExactly("Bearer token-del-llamador");
+    }
+
+    @Test
+    void b4_sinCredencialLaConsultaSaleSinCabecera() {
+        cuerpoRespuesta = ITEM_ACTIVO;
+
+        resolutor().resolver("item-1");
+
+        assertThat(autorizacionesRecibidas).containsExactly("(sin cabecera)");
+    }
+
+    @Test
+    void b4_siElCatalogoRechazaLaCredencialSeRepiteSinElla() {
+        cuerpoRespuesta = ITEM_ACTIVO;
+        rechazarConCredencial = true;
+
+        ResolutorDeProducto.DetalleProducto resultado = resolutorConCredencial("token-vencido").resolver("item-1");
+
+        assertThat(resultado.tipo()).isEqualTo("ITEM");
+        assertThat(autorizacionesRecibidas).containsExactly("Bearer token-vencido", "(sin cabecera)");
+    }
+
+    @Test
+    void b4_unFalloQueNoEs401NoSeRepite() {
+        estadoRespuesta = 503;
+        cuerpoRespuesta = "";
+
+        assertThatThrownBy(() -> resolutorConCredencial("token-del-llamador").resolver("item-1"))
+                .isInstanceOf(ResolutorDeProductoException.class)
+                .hasMessageContaining("503");
+        assertThat(autorizacionesRecibidas).hasSize(1);
+    }
+
+    @Test
+    void b4_unaParteDesconocidaOAusenteNoEsUnaRanura() {
+        assertThat(new ResolutorDeProducto.DetalleProducto("x", "ARMADURA", null, "ACTIVO", "ALAS").parteArmadura())
+                .isNull();
+        assertThat(new ResolutorDeProducto.DetalleProducto("x", "ARMADURA", null, "ACTIVO", " ").parteArmadura())
+                .isNull();
+        assertThat(new ResolutorDeProducto.DetalleProducto("x", "ARMADURA", null, "ACTIVO").parteArmadura())
+                .isNull();
+        assertThat(new ResolutorDeProducto.DetalleProducto("x", "ARMADURA", null, "ACTIVO", " PECHO ").parteArmadura())
+                .isEqualTo(nexus.inventario.dominio.ParteArmadura.PECHO);
     }
 }

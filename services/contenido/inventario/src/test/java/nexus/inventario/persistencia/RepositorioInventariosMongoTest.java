@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.List;
 import java.util.Optional;
+import nexus.inventario.dominio.ConflictoDeEscrituraException;
 import nexus.inventario.dominio.FalloPersistenciaInventarioException;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -19,8 +20,11 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.core.MongoOperations;
 import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 
 class RepositorioInventariosMongoTest {
 
@@ -95,5 +99,49 @@ class RepositorioInventariosMongoTest {
         verify(mongo).findOne(consulta.capture(), eq(InventarioDocumento.class));
         assertEquals("jugador-A", consulta.getValue().getQueryObject().getString("propietarioId"));
         assertTrue(consulta.getValue().getQueryObject().containsKey("$text"));
+    }
+
+    @Test
+    @DisplayName("B4: otra escritura que llego antes (version) es un conflicto, no un fallo generico")
+    void versionDesactualizadaEsConflicto() {
+        when(documentos.save(any())).thenThrow(new OptimisticLockingFailureException("version 3 != 4"));
+
+        assertThrows(ConflictoDeEscrituraException.class, () -> repositorio.guardar(
+                new Inventario("inventario-1", "jugador-A", List.of(), List.of(), List.of(), 3L)));
+    }
+
+    @Test
+    @DisplayName("B4: dos inventarios nuevos del mismo jugador a la vez tambien son un conflicto (se relee y reintenta)")
+    void propietarioDuplicadoEsConflicto() {
+        when(documentos.save(any())).thenThrow(new DuplicateKeyException("propietarioId"));
+
+        assertThrows(ConflictoDeEscrituraException.class, () -> repositorio.guardar(Inventario.vacio("jugador-A")));
+    }
+
+    @Test
+    @DisplayName("B4: un documento anterior sin version recibe la 0 antes de su primer guardado versionado")
+    void documentoAnteriorRecibeVersion() {
+        when(documentos.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+        when(mongo.getCollectionName(InventarioDocumento.class)).thenReturn("inventarios");
+
+        Inventario guardado = repositorio.guardar(
+                new Inventario("inventario-1", "jugador-A", List.of(), List.of(), List.of(), null));
+
+        assertEquals(0L, guardado.version());
+        ArgumentCaptor<Query> consulta = ArgumentCaptor.forClass(Query.class);
+        verify(mongo).updateFirst(consulta.capture(), any(Update.class), eq("inventarios"));
+        assertEquals("inventario-1", consulta.getValue().getQueryObject().getString("_id"));
+        assertTrue(consulta.getValue().getQueryObject().containsKey("version"));
+    }
+
+    @Test
+    @DisplayName("B4: un inventario nuevo o ya versionado se guarda sin tocar la version a mano")
+    void sinParcheDeVersion() {
+        when(documentos.save(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        repositorio.guardar(Inventario.vacio("jugador-A"));
+        repositorio.guardar(new Inventario("inventario-1", "jugador-A", List.of(), List.of(), List.of(), 7L));
+
+        org.mockito.Mockito.verifyNoInteractions(mongo);
     }
 }

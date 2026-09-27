@@ -20,7 +20,11 @@ import org.junit.jupiter.api.Test;
 /**
  * HU-INV-006: valida el mapeo real del esquema Estadisticas completo de
  * heroes.yaml (poder, vida, defensa, ataqueDetalle, danoDetalle,
- * sanarDetalle), sin depender de Docker ni de un contenedor real de heroes
+ * sanarDetalle), sin depender de Docker ni de un contenedor real de heroes.
+ * Desde B4 la fuente es la vista por nivel
+ * ({@code GET /api/v1/heroes/{nombre}/niveles/{nivel}}, campo
+ * {@code estadisticas}): el inventario guarda el nivel de cada heroe y el
+ * escalado es del servicio de heroes
  * — a diferencia de ClienteHeroesHttpIntegracionTest en motor-combate, aqui
  * basta un servidor HTTP embebido del JDK (com.sun.net.httpserver) para
  * cubrir la logica real de parseo, construccion de URI y manejo de errores,
@@ -64,7 +68,7 @@ class ResolutorDeEstadisticasHeroeHttpTest {
         cuerpoRespuesta = """
                 {
                   "nombre": "Guerrero Armas",
-                  "estadisticasNivel1": {
+                  "estadisticas": {
                     "poder": 9, "vida": 40, "defensa": 8,
                     "ataqueDetalle": {"base": 12, "cantidadDados": 1, "caras": 6},
                     "danoDetalle": {"base": 2, "cantidadDados": 1, "caras": 4},
@@ -73,7 +77,7 @@ class ResolutorDeEstadisticasHeroeHttpTest {
                 }
                 """;
 
-        EstadisticasHeroe resultado = resolutor().resolver("Guerrero Armas");
+        EstadisticasHeroe resultado = resolutor().resolver("Guerrero Armas", 1);
 
         assertThat(resultado.poder()).isEqualTo(9);
         assertThat(resultado.vida()).isEqualTo(40);
@@ -91,14 +95,14 @@ class ResolutorDeEstadisticasHeroeHttpTest {
         cuerpoRespuesta = """
                 {
                   "nombre": "Chaman",
-                  "estadisticasNivel1": {
+                  "estadisticas": {
                     "poder": 7, "vida": 38, "defensa": 6,
                     "sanarDetalle": {"base": 0, "cantidadDados": 1, "caras": 4}
                   }
                 }
                 """;
 
-        EstadisticasHeroe resultado = resolutor().resolver("Chaman");
+        EstadisticasHeroe resultado = resolutor().resolver("Chaman", 1);
 
         assertThat(resultado.ataqueDetalle()).isNull();
         assertThat(resultado.danoDetalle()).isNull();
@@ -109,13 +113,13 @@ class ResolutorDeEstadisticasHeroeHttpTest {
     void construyeLaUriConElConstructorDeCincoArgumentos_nombreConEspacios() {
         estadoRespuesta = 200;
         cuerpoRespuesta = """
-                {"nombre": "Guerrero Tanque", "estadisticasNivel1": {"poder": 10, "vida": 44, "defensa": 11}}
+                {"nombre": "Guerrero Tanque", "estadisticas": {"poder": 10, "vida": 44, "defensa": 11}}
                 """;
 
-        resolutor().resolver("Guerrero Tanque");
+        resolutor().resolver("Guerrero Tanque", 1);
 
         // Un espacio real en la ruta (%20), nunca "+" (lo que produciria URLEncoder).
-        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Guerrero%20Tanque");
+        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Guerrero%20Tanque/niveles/1");
     }
 
     @Test
@@ -128,16 +132,16 @@ class ResolutorDeEstadisticasHeroeHttpTest {
         cuerpoRespuesta = """
                 {
                   "nombre": "Chamán",
-                  "estadisticasNivel1": {
+                  "estadisticas": {
                     "poder": 7, "vida": 38, "defensa": 6,
                     "sanarDetalle": {"base": 0, "cantidadDados": 1, "caras": 4}
                   }
                 }
                 """;
 
-        EstadisticasHeroe resultado = resolutor().resolver("Chamán");
+        EstadisticasHeroe resultado = resolutor().resolver("Chamán", 1);
 
-        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Cham%C3%A1n");
+        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Cham%C3%A1n/niveles/1");
         assertThat(resultado.poder()).isEqualTo(7);
         assertThat(resultado.sanarDetalle()).isNotNull();
     }
@@ -149,7 +153,7 @@ class ResolutorDeEstadisticasHeroeHttpTest {
                 {"detail": "No existe el prototipo solicitado"}
                 """;
 
-        assertThatThrownBy(() -> resolutor().resolver("Prototipo Fantasma"))
+        assertThatThrownBy(() -> resolutor().resolver("Prototipo Fantasma", 1))
                 .isInstanceOf(PrototipoDeHeroeNoEncontradoException.class)
                 .hasMessageContaining("Prototipo Fantasma")
                 .hasMessageContaining("No existe el prototipo solicitado");
@@ -160,8 +164,61 @@ class ResolutorDeEstadisticasHeroeHttpTest {
         estadoRespuesta = 500;
         cuerpoRespuesta = "";
 
-        assertThatThrownBy(() -> resolutor().resolver("Guerrero Tanque"))
+        assertThatThrownBy(() -> resolutor().resolver("Guerrero Tanque", 1))
                 .isInstanceOf(ResolutorDeEstadisticasHeroeException.class)
                 .hasMessageContaining("500");
+    }
+
+    @Test
+    void b4_pideLasEstadisticasDelNivelDelHeroe() {
+        estadoRespuesta = 200;
+        cuerpoRespuesta = """
+                {
+                  "nombre": "Mago Fuego", "tipo": "Mago", "esSanador": false, "nivel": 3,
+                  "estadisticas": {"poder": 8, "vida": 50, "defensa": 9,
+                                   "ataqueDetalle": {"base": 14, "cantidadDados": 1, "caras": 6}},
+                  "accionesDisponibles": [], "multiplicadorDeEfecto": 3
+                }
+                """;
+
+        EstadisticasHeroe resultado = resolutor().resolver("Mago Fuego", 3);
+
+        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Mago%20Fuego/niveles/3");
+        assertThat(resultado.vida()).isEqualTo(50);
+        assertThat(resultado.ataqueDetalle().base()).isEqualTo(14);
+    }
+
+    @Test
+    void b4_sinNivelSePideElNivel1() {
+        estadoRespuesta = 200;
+        cuerpoRespuesta = """
+                {"nombre": "Guerrero Tanque", "nivel": 1, "estadisticas": {"poder": 10, "vida": 44, "defensa": 11}}
+                """;
+
+        resolutor().resolver("Guerrero Tanque");
+
+        assertThat(ultimaRutaRecibida.get()).isEqualTo("/api/v1/heroes/Guerrero%20Tanque/niveles/1");
+    }
+
+    @Test
+    void b4_unaVistaSinEstadisticasEsUnaRespuestaQueNoSeEntiende() {
+        estadoRespuesta = 200;
+        cuerpoRespuesta = """
+                {"nombre": "Guerrero Tanque", "nivel": 2}
+                """;
+
+        assertThatThrownBy(() -> resolutor().resolver("Guerrero Tanque", 2))
+                .isInstanceOf(ResolutorDeEstadisticasHeroeException.class)
+                .hasMessageContaining("no trae estadisticas");
+    }
+
+    @Test
+    void b4_unCuerpoQueNoEsJsonEsUnaRespuestaQueNoSeEntiende() {
+        estadoRespuesta = 200;
+        cuerpoRespuesta = "<html>no soy json</html>";
+
+        assertThatThrownBy(() -> resolutor().resolver("Guerrero Tanque", 2))
+                .isInstanceOf(ResolutorDeEstadisticasHeroeException.class)
+                .hasMessageContaining("no se pudo interpretar");
     }
 }
