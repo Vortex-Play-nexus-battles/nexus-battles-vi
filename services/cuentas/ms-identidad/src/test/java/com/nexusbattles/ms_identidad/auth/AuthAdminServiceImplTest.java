@@ -3,7 +3,8 @@ package com.nexusbattles.ms_identidad.auth;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.AuthAdminServiceImpl;
-import com.nexusbattles.ms_identidad.auth.service.TokenCredencialService;
+import com.nexusbattles.ms_identidad.auth.codigos.CodigosDeCorreo;
+import com.nexusbattles.ms_identidad.auth.codigos.TipoCodigo;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
@@ -33,13 +34,13 @@ class AuthAdminServiceImplTest {
     private RolService rolService;
 
     @Mock
-    private TokenCredencialService tokenCredencialService;
+    private CodigosDeCorreo codigos;
 
     private AuthAdminServiceImpl authAdminService;
 
     private AuthAdminServiceImpl construir() {
         return new AuthAdminServiceImpl(
-            usuarioRepository, apodoBlacklistValidator, rolService, tokenCredencialService
+            usuarioRepository, apodoBlacklistValidator, rolService, codigos
         );
     }
 
@@ -67,7 +68,7 @@ class AuthAdminServiceImplTest {
 
         assertEquals("INACTIVO", resultado.getEstado());
         assertNotNull(resultado.getPassword());
-        verify(tokenCredencialService).generarYRegistrarToken(resultado, "ACTIVACION");
+        verify(codigos).emitir(resultado, TipoCodigo.ACTIVACION);
     }
 
     @Test
@@ -87,13 +88,17 @@ class AuthAdminServiceImplTest {
         );
 
         assertEquals("El correo electrónico ya está registrado.", exception.getMessage());
-        verify(tokenCredencialService, never()).generarYRegistrarToken(any(), anyString());
+        verify(codigos, never()).emitir(any(), any());
     }
 
     @Test
     void debeRechazarEstadoInvalidoAlActualizar() {
 
         authAdminService = construir();
+
+        // B2: las formas en femenino anteriores al contrato ya no se escriben.
+        assertThrows(IllegalArgumentException.class,
+            () -> authAdminService.actualizarEstadoCuenta(1L, "SUSPENDIDA", null));
 
         IllegalArgumentException exception = assertThrows(
             IllegalArgumentException.class,
@@ -113,10 +118,11 @@ class AuthAdminServiceImplTest {
 
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
 
-        authAdminService.actualizarEstadoCuenta(1L, "SUSPENDIDA", hasta);
+        authAdminService.actualizarEstadoCuenta(1L, "SUSPENDIDO", hasta);
 
-        assertEquals("SUSPENDIDA", usuario.getEstado());
+        assertEquals("SUSPENDIDO", usuario.getEstado());
         assertEquals(hasta, usuario.getSuspendidoHasta());
+        assertEquals(1, usuario.getVersionToken(), "B2: suspender cierra las sesiones abiertas");
         verify(usuarioRepository).save(usuario);
     }
 
@@ -125,7 +131,7 @@ class AuthAdminServiceImplTest {
 
         authAdminService = construir();
         Usuario usuario = usuarioConId(1L);
-        usuario.setEstado("SUSPENDIDA");
+        usuario.setEstado("SUSPENDIDO");
         usuario.setSuspendidoHasta(LocalDateTime.now().plusDays(1));
 
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
@@ -134,6 +140,7 @@ class AuthAdminServiceImplTest {
 
         assertEquals("ACTIVO", usuario.getEstado());
         assertNull(usuario.getSuspendidoHasta());
+        assertEquals(0, usuario.getVersionToken(), "reactivar no revoca nada");
     }
 
     @Test
@@ -147,8 +154,24 @@ class AuthAdminServiceImplTest {
         authAdminService.restablecerContrasena(1L);
 
         assertNotNull(usuario.getPassword());
+        assertEquals(1, usuario.getVersionToken(), "la contraseña anterior deja de valer, y sus sesiones tambien");
         verify(usuarioRepository).save(usuario);
-        verify(tokenCredencialService).generarYRegistrarToken(usuario, "RESTABLECIMIENTO");
+        verify(codigos).emitir(usuario, TipoCodigo.RESTABLECIMIENTO);
+    }
+
+    @Test
+    void debeBanearYCerrarLasSesiones() {
+
+        authAdminService = construir();
+        Usuario usuario = usuarioConId(1L);
+        usuario.setSuspendidoHasta(LocalDateTime.now().plusDays(1));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        authAdminService.actualizarEstadoCuenta(1L, "BANEADO", null);
+
+        assertEquals("BANEADO", usuario.getEstado());
+        assertNull(usuario.getSuspendidoHasta());
+        assertEquals(1, usuario.getVersionToken());
     }
 
     @Test

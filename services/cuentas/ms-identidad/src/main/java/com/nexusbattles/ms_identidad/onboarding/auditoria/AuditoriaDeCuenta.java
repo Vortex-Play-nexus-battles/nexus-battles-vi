@@ -76,6 +76,30 @@ public class AuditoriaDeCuenta {
         enviar(new Evento("OTRO", quien, quien, null, null, "CIERRE_SESION", ip));
     }
 
+    /** B1 — la cuenta confirmo su correo con el codigo y paso a ACTIVO. */
+    public void correoVerificado(UUID uid, String ip) {
+        enviar(new Evento("ACTUALIZACION", texto(uid), texto(uid), "PENDIENTE_VERIFICACION", "ACTIVO",
+                "CORREO_VERIFICADO", ip));
+    }
+
+    /**
+     * B1 — se canjeo un codigo de restablecimiento (o de activacion): la cuenta
+     * tiene contrasena nueva y sus sesiones abiertas se cerraron. Nunca lleva
+     * la contrasena ni el codigo.
+     *
+     * @param afectado uid de la cuenta, o su clave interna si no tiene uid
+     * @param motivo   {@code RESTABLECIMIENTO_CONTRASENA} o {@code ACTIVACION_CUENTA}
+     */
+    public void contrasenaRestablecida(String afectado, String motivo, String ip) {
+        enviar(new Evento("ACTUALIZACION", afectado, afectado, null, "sesiones-cerradas", motivo, ip));
+    }
+
+    /** B1 — la persona configuro (o reemplazo) sus preguntas de seguridad. Solo cuantas, nunca cuales. */
+    public void preguntasConfiguradas(String afectado, int cantidad, String ip) {
+        enviar(new Evento("ACTUALIZACION", afectado, afectado, null, "preguntas=" + cantidad,
+                "PREGUNTAS_SEGURIDAD", ip));
+    }
+
     public void altaCompletada(UUID uid, String resumen) {
         enviar(new Evento("CREACION", SISTEMA, texto(uid), null, resumen, "ONBOARDING_COMPLETADO", null));
     }
