@@ -65,18 +65,20 @@ Los pactos se verifican:
 |---|---|---|
 | ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
 | ms-inventario (ms-subastas) | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` (`@Consumer("ms-subastas")`) | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
-| ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes |
+| ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes, y la colección `entregas` y el catálogo en memoria para `POST /entregas` |
 
 Un proveedor con varios consumidores tiene una clase de verificación por
 consumidor, cada una con `@Consumer`: sin él, la clase de un consumidor
 intentaría montar los estados del otro. El guardián empareja cada pacto con la
 clase de su consumidor (o con la del proveedor sin `@Consumer`, si solo hay una).
 
-**Pendiente de fusión con B4:** la interacción de misiones «el jugador puede
-recibir productos del catálogo» es de `POST /api/v1/inventario/entregas`, que
-implementa la fase B4 en otra rama. `VerificacionDelPactoDeMisionesTest` la
-deja fuera con `@PactFilter("el heroe .*")` mientras tanto; al fusionar con B4
-hay que quitar el filtro.
+**Fusionado con B4:** la interacción de misiones «el jugador puede recibir
+productos del catálogo» es de `POST /api/v1/inventario/entregas` (B4). Mientras
+B9 no la tenía, `VerificacionDelPactoDeMisionesTest` la dejaba fuera con un
+`@PactFilter`; al fusionar con develop se quitó el filtro y hoy se verifican las
+nueve interacciones, la entrega con el caso de uso real (`EntregarProductos`) y
+un catálogo en memoria que solo conoce la épica que misiones entrega («Segundo
+impulso», del catálogo oficial).
 
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.

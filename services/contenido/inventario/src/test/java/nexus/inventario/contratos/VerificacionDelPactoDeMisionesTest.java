@@ -6,14 +6,20 @@ import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvide
 import au.com.dius.pact.provider.junitsupport.Consumer;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
-import au.com.dius.pact.provider.junitsupport.loader.PactFilter;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import nexus.inventario.aplicacion.CatalogoDeProductosEnMemoria;
 import nexus.inventario.aplicacion.FuenteDeTablaDeNiveles;
+import nexus.inventario.aplicacion.RepositorioDeEntregasEnMemoria;
+import nexus.inventario.aplicacion.ResolutorDeProducto;
 import nexus.inventario.dominio.ElementoInventario;
+import nexus.inventario.dominio.Entrega;
 import nexus.inventario.dominio.Inventario;
+import nexus.inventario.dominio.RepositorioDeEntregas;
 import nexus.inventario.dominio.TablaDeNiveles;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.apache.hc.core5.http.HttpRequest;
@@ -41,17 +47,19 @@ import org.springframework.test.context.DynamicPropertySource;
  * ninguna maquina. Cada peticion lleva una credencial de servicio real de
  * misiones (rol SERVICIO, azp = misiones).
  *
- * <p><b>La entrega de la epica todavia no se verifica aqui.</b> La interaccion
- * con el estado «el jugador puede recibir productos del catalogo» es de
- * {@code POST /api/v1/inventario/entregas}, que implementa la fase B4 en otra
- * rama. {@link PactFilter} la deja fuera mientras esta rama no la trae; el
- * estado ya sabe montarse. <b>Al fusionar con B4 hay que quitar el filtro</b>
- * para que la entrega tambien quede verificada.
+ * <p><b>Todas las interacciones, tambien la entrega de la epica.</b> Mientras
+ * {@code POST /api/v1/inventario/entregas} no existia en esta rama, un filtro
+ * dejaba fuera el estado «el jugador puede recibir productos del catalogo».
+ * Con B4 fusionado la entrega es la real ({@code EntregarProductos}: valida
+ * contra el catalogo, registra la entrega y la aplica en una escritura), asi
+ * que el filtro sobra: aqui se sustituyen tambien sus dos puertos, la
+ * coleccion {@code entregas} por la de memoria y el catalogo por un doble que
+ * solo conoce la epica que misiones entrega, «Segundo impulso» del catalogo
+ * oficial (contracts/esquemas/catalogo-oficial.yaml).
  */
 @Provider("ms-inventario")
 @Consumer("misiones")
 @PactFolder("../../../contracts/pactos")
-@PactFilter("el heroe .*")
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "spring.data.mongodb.auto-index-creation=false")
@@ -65,6 +73,12 @@ class VerificacionDelPactoDeMisionesTest {
     private static final String PRODUCTO_HISTORICO = "p-heroe-historico";
     private static final String EJECUCION = "0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11";
     private static final String OTRA_EJECUCION = "5e2b8c1a-7d3f-4c11-8a2e-9b0c4d5e6f70";
+    /**
+     * La epica que misiones entrega en el pacto: «Segundo impulso»
+     * ({@code epica-guerrero-armas-segundo-impulso} en
+     * services/contenido/productos/docs/catalogo-inicial-identificadores.md).
+     */
+    private static final String EPICA = "4481eb34-384a-3fa0-ba9a-1aac9562c38f";
 
     @DynamicPropertySource
     static void identidad(DynamicPropertyRegistry registro) {
@@ -76,6 +90,9 @@ class VerificacionDelPactoDeMisionesTest {
 
     @Autowired
     private VerificacionDelPactoDeSubastasTest.RepositorioReiniciable repositorio;
+
+    @Autowired
+    private EntregasReiniciables entregas;
 
     @BeforeEach
     void apuntarAlServicioArrancado(PactVerificationContext contexto) {
@@ -135,8 +152,10 @@ class VerificacionDelPactoDeMisionesTest {
 
     @State("el jugador puede recibir productos del catalogo")
     void puedeRecibir() {
-        // Para POST /entregas (fase B4): el jugador ya tiene inventario.
+        // POST /entregas (B4): el jugador ya tiene inventario, la clave de la
+        // entrega no se ha usado y el catalogo conoce la epica (ver Dobles).
         repositorio.reiniciar().guardar(Inventario.vacio(JUGADOR).agregar(vorn()));
+        entregas.reiniciar();
     }
 
     private static ElementoInventario vorn() {
@@ -145,6 +164,35 @@ class VerificacionDelPactoDeMisionesTest {
 
     // ------------------------------------------------------------- dobles
 
+    /**
+     * La coleccion {@code entregas} en memoria (el doble de las pruebas de
+     * aplicacion de B4), reiniciable entre estados como el repositorio de
+     * inventarios: el contexto de Spring es uno para todas las interacciones.
+     */
+    static final class EntregasReiniciables implements RepositorioDeEntregas {
+
+        private RepositorioDeEntregasEnMemoria actual = new RepositorioDeEntregasEnMemoria();
+
+        void reiniciar() {
+            actual = new RepositorioDeEntregasEnMemoria();
+        }
+
+        @Override
+        public Optional<Entrega> buscarPorClave(String clave) {
+            return actual.buscarPorClave(clave);
+        }
+
+        @Override
+        public void registrar(Entrega entrega) {
+            actual.registrar(entrega);
+        }
+
+        @Override
+        public void completar(String entregaId, Instant entregadaEn) {
+            actual.completar(entregaId, entregadaEn);
+        }
+    }
+
     @TestConfiguration
     static class Dobles {
 
@@ -152,6 +200,20 @@ class VerificacionDelPactoDeMisionesTest {
         @Primary
         VerificacionDelPactoDeSubastasTest.RepositorioReiniciable repositorioReiniciable() {
             return new VerificacionDelPactoDeSubastasTest.RepositorioReiniciable();
+        }
+
+        @Bean
+        @Primary
+        EntregasReiniciables entregasReiniciables() {
+            return new EntregasReiniciables();
+        }
+
+        /** El catalogo, solo con la epica que misiones entrega: activa, como en el catalogo oficial. */
+        @Bean
+        @Primary
+        ResolutorDeProducto catalogoConLaEpica() {
+            return new CatalogoDeProductosEnMemoria().registrar(EPICA,
+                    new ResolutorDeProducto.DetalleProducto("Segundo impulso", "EPICA", null, "ACTIVO"));
         }
 
         /** La tabla que publica heroes: 100 x 1,2^(n-1) para los niveles 1 a 7. */
