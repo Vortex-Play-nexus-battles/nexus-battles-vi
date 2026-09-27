@@ -1,7 +1,7 @@
 # Mapa contrato -> servicio que lo implementa (B0, BACKEND-01).
 #
-# Lo lee `rutas-contrato-codigo.py`. Es la unica fuente de verdad de «que
-# servicio es dueno de que contrato»: un contrato que no aparece aqui hace
+# Lo lee `rutas-contrato-codigo.py`. Es la unica fuente de verdad de Â«que
+# servicio es dueno de que contratoÂ»: un contrato que no aparece aqui hace
 # fallar el guardian, porque una ruta sin dueno es exactamente como nacio la
 # transferencia de subasta inventada (#660/#669).
 #
@@ -32,6 +32,7 @@ openapi:
   ms-subastas-publicar.yaml: services/cuentas/ms-subastas
   ms-subastas-pujas.yaml: services/cuentas/ms-subastas
   notificaciones.yaml: services/plataforma/notificaciones
+  pagos.yaml: services/cuentas/ms-finanzas
   productos.yaml: services/contenido/productos
   salas-partidas.yaml: services/plataforma/salas-partidas
   torneos.yaml: services/plataforma/torneos
