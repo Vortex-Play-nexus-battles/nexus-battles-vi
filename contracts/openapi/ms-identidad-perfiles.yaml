@@ -25,9 +25,19 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Perfil del jugador (ms-identidad)
-  version: 1.1.0
+  version: 1.2.1
   description: |
     Consulta y edicion del perfil propio (HU-USR-001).
+
+    **1.2.1 (B6):** implementada `GET /api/v1/perfiles/publicos` (sin
+    cambios de forma): prefijo del apodo sin distinguir mayusculas, `%` y `_`
+    literales, solo cuentas `ACTIVO`, orden por apodo, tope de 10, permiso
+    `MODIFICAR_PERFIL_PROPIO` (los cuatro roles) e indice en V4.
+
+    **1.2.0 (B2, BACKEND-02):** `PUT /api/v1/perfiles/{usuario}` puede
+    responder `503 moderacion-no-disponible` (con `Retry-After`): la lista
+    negra del apodo es fail-closed y, si moderacion-sanciones no responde, el
+    apodo nuevo no se da por bueno (antes se aceptaba cualquiera). Aditivo.
 
     **1.1.0 (B0/B6):** `GET /api/v1/perfiles/publicos?apodo=` — busqueda de
     jugadores por apodo para escribirles un mensaje privado (feedback del
@@ -146,19 +156,36 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            1.2.0 — la lista negra no respondio al cambiar el apodo (fail-closed,
+            B2). `type` `.../errors/moderacion-no-disponible`; nada se guardo.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar (30).
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/perfiles/publicos:
     get:
       tags: [perfil]
       operationId: buscarPerfilesPublicos
       summary: Busca jugadores por apodo (datos publicos) — 1.1.0
-      x-implementacion: pendiente
-      x-fase: B6
       description: |
         Para elegir destinatario de un mensaje privado. Exige sesion (no es un
         directorio publico), minimo 3 caracteres, maximo 10 resultados, solo
         cuentas `ACTIVO`. Coincidencia por prefijo del apodo sin distinguir
         mayusculas.
+
+        El texto se recorta (espacios alrededor) y se busca literalmente: `%`
+        y `_` no son comodines. Los resultados salen ordenados por apodo sin
+        distinguir mayusculas. Una cuenta sin perfil (las administrativas)
+        sale con `avatar` null. La lista puede incluir a quien busca si su
+        apodo coincide.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -180,13 +207,19 @@ paths:
                 items:
                   $ref: '#/components/schemas/PerfilPublico'
         '400':
-          description: Apodo demasiado corto.
+          description: |
+            Apodo demasiado corto: ausente o de menos de 3 caracteres sin los
+            espacios de alrededor (o de mas de 50, lo que mide un apodo).
+            `type` `.../errors/datos-invalidos`.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
         '403':
-          description: Sin sesion valida.
+          description: |
+            Sin sesion valida: sin token, token invalido o revocado. Lo responde
+            el interceptor (`type` `.../errors/forbidden`) con el permiso
+            `MODIFICAR_PERFIL_PROPIO`, que tienen los cuatro roles.
           content:
             application/problem+json:
               schema:

@@ -1,24 +1,42 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
-import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
-import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
+import com.nexusbattles.ms_identidad.auth.codigos.CodigosDeCorreo;
+import com.nexusbattles.ms_identidad.auth.codigos.CuentaRegistrada;
+import com.nexusbattles.ms_identidad.auth.codigos.TipoCodigo;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
+import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
 import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
-import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
-import com.nexusbattles.ms_identidad.onboarding.traza.Traza;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.service.RolService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Locale;
 
+/**
+ * Autorregistro de un jugador (HU-AUT-001).
+ *
+ * <p><b>B1 — la cuenta nace sin verificar.</b> Feedback del profesor tras la
+ * demo: «se puede registrar un correo que no existe y seguir usando la
+ * cuenta». Desde B1 el alta deja la cuenta en {@code PENDIENTE_VERIFICACION}
+ * y envia al correo un codigo de un solo uso; hasta que se confirma
+ * ({@code POST /auth/verificacion/confirmacion}) el login responde 403
+ * {@code cuenta-no-verificada}. La propiedad del buzon se prueba con ese
+ * codigo, <b>nunca</b> preguntando si el buzon existe (sin SMTP VRFY, sin
+ * heuristicas): eso no prueba nada y ademas filtra informacion.
+ *
+ * <p>Por lo mismo, <b>el alta del jugador</b> (creditos de bienvenida, heroe
+ * inicial y equipo) y el correo de bienvenida ya no ocurren aqui: ocurren al
+ * confirmar el correo, una sola vez. Una cuenta con un correo que nadie lee
+ * no recibe nada.
+ */
 @Service
 public class RegistroService {
 
@@ -32,9 +50,9 @@ public class RegistroService {
     private final PasswordPolicyValidator passwordPolicyValidator;
     private final RolService rolService;
     private final PerfilUsuarioService perfilUsuarioService;
-    private final CorreoClient correoClient;
     private final AvatarStorageService avatarStorageService;
-    private final OnboardingService onboardingService;
+    private final CodigosDeCorreo codigos;
+    private final ApplicationEventPublisher eventos;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -45,38 +63,40 @@ public class RegistroService {
                            PasswordPolicyValidator passwordPolicyValidator,
                            RolService rolService,
                            PerfilUsuarioService perfilUsuarioService,
-                           CorreoClient correoClient,
                            AvatarStorageService avatarStorageService,
-                           OnboardingService onboardingService) {
+                           CodigosDeCorreo codigos,
+                           ApplicationEventPublisher eventos) {
         this.usuarioRepository = usuarioRepository;
         this.apodoBlacklistValidator = apodoBlacklistValidator;
         this.passwordPolicyValidator = passwordPolicyValidator;
         this.rolService = rolService;
         this.perfilUsuarioService = perfilUsuarioService;
-        this.correoClient = correoClient;
         this.avatarStorageService = avatarStorageService;
-        this.onboardingService = onboardingService;
+        this.codigos = codigos;
+        this.eventos = eventos;
     }
 
     @Transactional
     public Usuario registrarUsuario(RegistroRequest datos) {
-        return registrarUsuario(datos, null, null);
+        return registrarUsuario(datos, null);
     }
 
     /**
-     * Alta de un jugador (HU-AUT-001) y arranque de su bootstrap (R17).
+     * Alta de una cuenta pendiente de verificar.
      *
-     * <p>La cuenta, su perfil y el registro de su alta se guardan en esta
-     * transaccion; los creditos y el heroe iniciales se piden a sus duenos
-     * cuando se confirma ({@code AlRegistrarJugador}). Si algo de aqui falla,
-     * no queda nada: ni cuenta a medias ni alta huerfana.
+     * <p>La cuenta, su perfil y su codigo de verificacion se guardan en esta
+     * transaccion; el correo con el codigo y la auditoria del alta salen
+     * cuando se confirma ({@code CorreosDeCuenta}). Si algo de aqui falla, no
+     * queda nada: ni cuenta a medias ni un codigo enviado a nadie.
      *
-     * @param traceparent cabecera W3C de la peticion, si vino; el alta la
-     *                    conserva para que todos sus intentos compartan traza
-     * @param ip          para la auditoria del alta
+     * <p>La lista negra es <b>fail-closed</b> (B2): si moderacion no responde,
+     * {@code ModeracionNoDisponibleException} deshace todo y la ruta responde
+     * 503; un apodo sin comprobar no se da por bueno.
+     *
+     * @param ip para la auditoria del alta
      */
     @Transactional
-    public Usuario registrarUsuario(RegistroRequest datos, String traceparent, String ip) {
+    public Usuario registrarUsuario(RegistroRequest datos, String ip) {
 
         String email = normalizarCorreo(datos.getEmail());
         String apodo = datos.getApodo() == null ? "" : datos.getApodo().trim();
@@ -112,7 +132,7 @@ public class RegistroService {
         nuevoUsuario.setApodo(apodo);
         nuevoUsuario.setEmail(email);
         nuevoUsuario.setPassword(passwordEncoder.encode(datos.getPassword()));
-        nuevoUsuario.setEstado("ACTIVO");
+        nuevoUsuario.setEstado(EstadoCuenta.PENDIENTE_VERIFICACION);
         nuevoUsuario.setRol(rolService.obtenerRolPorNombre("JUGADOR"));
 
         Usuario usuarioGuardado = usuarioRepository.save(nuevoUsuario);
@@ -132,20 +152,10 @@ public class RegistroService {
             usuarioGuardado, datos.getNombres(), datos.getApellidos(), urlAvatar
         );
 
-        // R17 — el alta del jugador nace con la cuenta. Todo jugador nuevo
-        // empieza con creditos y un heroe equipado; eso lo hacen sus duenos
-        // (ms-finanzas, inventario) por API cuando esta transaccion se confirme.
-        onboardingService.iniciar(
-            usuarioGuardado.getPublicId(), apodo,
-            Traza.traceIdDe(traceparent).orElseGet(Traza::nuevoTraceId), ip
-        );
-
-        // Integración real con el módulo de correo de Santiago Anaya
-        // (contracts/openapi/correo.yaml). Protegida con Resilience4j: si el
-        // servicio de correo falla, el registro se completa igual (fail-open).
-        correoClient.enviarBienvenida(new CorreoBienvenidaRequest(
-            email, apodo, datos.getNombres(), datos.getApellidos()
-        ));
+        // B1 — el codigo que prueba que el correo es de quien se registra. Sale
+        // al correo (proposito VERIFICACION) cuando esta transaccion se confirma.
+        codigos.emitir(usuarioGuardado, TipoCodigo.VERIFICACION);
+        eventos.publishEvent(new CuentaRegistrada(usuarioGuardado.getPublicId(), apodo, ip));
 
         return usuarioGuardado;
     }

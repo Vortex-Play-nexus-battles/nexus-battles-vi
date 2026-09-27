@@ -81,7 +81,7 @@ public class AdministradoresIniciales implements CommandLineRunner {
      *
      * El cifrador se construye aqui, no se inyecta. Este servicio NO publica
      * un bean de {@code PasswordEncoder}: RegistroService, LoginService y
-     * TokenCredencialService crean cada uno el suyo con
+     * CodigosDeCorreo crean cada uno el suyo con
      * {@code new BCryptPasswordEncoder()}. Pedirlo por constructor compilaba,
      * pasaba CI -- porque sin {@code ADMINS_INICIALES} este componente ni se
      * construye -- y tumbaba el arranque en el primer entorno que SI define

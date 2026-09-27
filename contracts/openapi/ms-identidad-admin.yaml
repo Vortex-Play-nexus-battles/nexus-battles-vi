@@ -19,8 +19,22 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.0.0
+  version: 1.1.0
   description: |
+    ### Cambios en 1.1.0 (B2, BACKEND-02 — implementado)
+
+    - 1.1.0 (B2): implementadas `PUT /internal/usuarios/{uid}/estado-sancion`
+      y `GET /internal/usuarios/{uid}/contacto` (fuera las marcas
+      `x-implementacion`), y la delegacion de suspender, banear y reactivar en
+      moderacion-sanciones. Menor y no parche porque se documentan respuestas
+      nuevas que la delegacion y la lista negra fail-closed producen, todas
+      aditivas: `503 moderacion-no-disponible` (con `Retry-After`) en
+      suspender, banear, reactivar, la edicion de perfil y el alta de cuentas
+      administrativas; `409` en suspender y banear (moderacion responde que el
+      usuario ya esta baneado); y un cuerpo OPCIONAL `{motivo}` en banear, para
+      que la causal quede en el historial de moderacion como ya pasaba en
+      suspender.
+
     Gestion de usuarios desde el panel de administracion (7.3.2 y 7.3.4 del
     documento del curso) y la proyeccion del estado de sancion.
 
@@ -38,6 +52,24 @@ info:
     proyeccion (estado, vigencia) para que el login pueda negarse sin llamar a
     otro servicio, y sube la version de token para revocar las sesiones
     abiertas.
+
+    Como delega el panel (1.1.0): la peticion a moderacion lleva el
+    `Authorization` del administrador que actua —moderacion aplica su regla de
+    roles y lo anota como autor—; con su respuesta se aplica aqui la misma
+    proyeccion que moderacion enviara despues (que entonces no cambia nada).
+    Si moderacion no responde, 503 y aqui no se aplica nada: nunca se diverge
+    en silencio. Si moderacion dice que no, se reenvia su respuesta (403 si el
+    rol no alcanza, 409 si el usuario ya esta baneado, 400 si la duracion no
+    cabe). El aviso al jugador (bandeja y correo) lo envia moderacion. La
+    auditoria de ms-cumplimiento se intenta despues y, si falla, no deshace la
+    sancion (su registro de autor y motivo ya esta en moderacion). Una cuenta
+    sin `uid` (anterior al identificador publico) no existe para moderacion:
+    se opera solo aqui, como antes de B2, con auditoria fail-closed.
+
+    Estados que publica este contrato: `ACTIVO`, `PENDIENTE_VERIFICACION`
+    (autorregistro sin confirmar, B1), `INACTIVO` (cuenta administrativa sin
+    activar), `SUSPENDIDO` y `BANEADO`. Las filas del panel anterior a B2
+    (`SUSPENDIDA`, `BANEADA`) se migraron a esta forma (V3).
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -154,6 +186,8 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+        '503':
+          $ref: '#/components/responses/ModeracionNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/suspender:
     put:
@@ -165,6 +199,11 @@ paths:
         (tipo SUSPENSION): la sancion queda registrada con motivo y autor, el
         usuario recibe correo y la cuenta proyecta el estado. Un Moderador
         solo puede suspender de forma temporal (Tabla 24).
+
+        1.1.0: la duracion que se pide a moderacion son las horas enteras
+        hasta `suspendidoHasta`, redondeadas hacia arriba (minimo 1); el fin
+        que queda es el que devuelve moderacion. Sin `motivo`, «Suspensión
+        desde el panel de administración».
       security:
         - tokenDeUsuario: []
       parameters:
@@ -193,16 +232,36 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+        '409':
+          $ref: '#/components/responses/ConflictoTexto'
+        '503':
+          $ref: '#/components/responses/ModeracionNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/banear:
     put:
       tags: [administracion]
       operationId: banearCuenta
       summary: Baneo definitivo de una cuenta (7.3.2, sancion 3)
+      description: |
+        Desde B2 delega en `POST /api/v1/sanciones` de moderacion-sanciones
+        (tipo BANEO, `confirmacion: true`); solo Administrador o Super
+        Administrador. 1.1.0: cuerpo OPCIONAL con la causal; sin el, «Baneo
+        definitivo desde el panel de administración».
       security:
         - tokenDeUsuario: []
       parameters:
         - $ref: '#/components/parameters/UsuarioId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motivo:
+                  type: string
+                  maxLength: 1000
+                  description: Causal documentada (7.3.2 «Causales de sancion»).
       responses:
         '204':
           description: Cuenta baneada.
@@ -212,12 +271,23 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+        '409':
+          $ref: '#/components/responses/ConflictoTexto'
+        '503':
+          $ref: '#/components/responses/ModeracionNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/reactivar:
     put:
       tags: [administracion]
       operationId: reactivarCuenta
       summary: Levanta la suspension o el baneo de una cuenta
+      description: |
+        Desde B2: consulta a moderacion-sanciones la sancion activa de la
+        cuenta (credencial de servicio) y, si la hay, la levanta con
+        `POST /sanciones/{sancionId}/levantamiento` y el token de quien actua
+        (solo Administrador o Super Administrador); despues limpia la
+        proyeccion local. Un baneo no se levanta desde aqui (7.3.2: «inhabilita
+        permanentemente»; solo lo revierte una apelacion): 400.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -231,6 +301,8 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+        '503':
+          $ref: '#/components/responses/ModeracionNoDisponible'
 
   /api/v1/admin/usuarios/{usuarioId}/restablecer-password:
     post:
@@ -294,14 +366,14 @@ paths:
           $ref: '#/components/responses/InvalidoTexto'
         '403':
           $ref: '#/components/responses/Prohibido'
+        '503':
+          $ref: '#/components/responses/ModeracionNoDisponible'
 
   /api/v1/internal/usuarios/{uid}/estado-sancion:
     put:
       tags: [interno]
       operationId: proyectarEstadoDeSancion
       summary: moderacion-sanciones fija el estado de acceso de la cuenta (B2)
-      x-implementacion: pendiente
-      x-fase: B2
       description: |
         Lo llama **solo** moderacion-sanciones (token de servicio con `azp`
         `moderacion-sanciones`) cada vez que una sancion que afecta al acceso
@@ -318,6 +390,24 @@ paths:
 
         Suspender o banear sube `versionToken`: los tokens emitidos caducan
         en ms-identidad en el acto.
+
+        Reglas de 1.1.0, para que el orden de llegada y los reintentos no
+        deshagan lo que no toca:
+        - la misma `sancionId` en SUSPENDIDO con otro `hasta` actualiza el fin
+          sin revocar otra vez (apelacion REDUCIDA);
+        - una suspension cuyo `hasta` ya paso se guarda pero no revoca;
+        - una SUSPENSION de otra sancion no rebaja un BANEADO;
+        - `ACTIVO` solo levanta la restriccion si la produjo esa misma
+          `sancionId` (el levantamiento de una sancion vieja no borra otra
+          vigente);
+        - al levantar, una cuenta que nunca confirmo su correo vuelve a
+          `PENDIENTE_VERIFICACION`, nunca a ACTIVO: una sancion no es un atajo
+          para saltarse la verificacion.
+
+        Credencial: token de servicio firmado por ms-identidad (su JWKS), con
+        `rol=SERVICIO` y `azp=moderacion-sanciones`. Cualquier otra —otro
+        servicio, una persona aunque sea Super Administrador, un token de otro
+        emisor— recibe 403. El borde no publica `/api/v1/internal/**`.
       security:
         - tokenDeServicio: []
       parameters:
@@ -345,7 +435,9 @@ paths:
         '403':
           $ref: '#/components/responses/Prohibido'
         '404':
-          description: No existe una cuenta con ese uid.
+          description: |
+            No existe una cuenta con ese uid (o el uid no es un UUID).
+            `type` `.../errors/cuenta-no-encontrada`.
           content:
             application/problem+json:
               schema:
@@ -356,8 +448,6 @@ paths:
       tags: [interno]
       operationId: contactoDeUsuario
       summary: Correo y apodo de una cuenta, para enviarle un correo (B1/B2)
-      x-implementacion: pendiente
-      x-fase: B2
       description: |
         Solo token de servicio. Lo usan los productores de correo que conocen
         al jugador por su `uid` (moderacion-sanciones, ms-ecommerce,
@@ -396,7 +486,9 @@ paths:
         '403':
           $ref: '#/components/responses/Prohibido'
         '404':
-          description: No existe una cuenta con ese uid.
+          description: |
+            No existe una cuenta con ese uid (o el uid no es un UUID).
+            `type` `.../errors/cuenta-no-encontrada`.
           content:
             application/problem+json:
               schema:
@@ -444,7 +536,33 @@ components:
           schema:
             type: string
     InvalidoProblema:
-      description: Datos invalidos.
+      description: |
+        Datos invalidos. `type` `.../errors/datos-invalidos` (sin `sancionId`,
+        estado desconocido, SUSPENDIDO sin `hasta`, JSON ilegible).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ConflictoTexto:
+      description: |
+        1.1.0 — moderacion-sanciones respondio 409 (p. ej. el usuario ya esta
+        baneado y no procede ninguna sancion mas). Texto plano con su detalle,
+        como el resto de rechazos de estas rutas.
+      content:
+        text/plain:
+          schema:
+            type: string
+    ModeracionNoDisponible:
+      description: |
+        1.1.0 — moderacion-sanciones no respondio (error, tiempo agotado,
+        circuito abierto). `type` `.../errors/moderacion-no-disponible`. Nada
+        se aplico: ni la sancion delegada ni un apodo sin comprobar en la
+        lista negra.
+      headers:
+        Retry-After:
+          description: Segundos sugeridos antes de reintentar (30).
+          schema:
+            type: integer
       content:
         application/problem+json:
           schema:
@@ -482,7 +600,7 @@ components:
           type: string
         estado:
           type: string
-          description: ACTIVO, PENDIENTE_VERIFICACION (B1), SUSPENDIDO o BANEADO.
+          description: ACTIVO, PENDIENTE_VERIFICACION (B1), INACTIVO (cuenta administrativa sin activar), SUSPENDIDO o BANEADO.
         rol:
           type: [string, 'null']
         creadoEn:

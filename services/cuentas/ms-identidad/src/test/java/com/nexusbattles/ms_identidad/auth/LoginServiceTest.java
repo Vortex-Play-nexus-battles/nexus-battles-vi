@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth;
 
+import com.nexusbattles.ms_identidad.auth.codigos.IgualadorDeTiempo;
 import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
@@ -7,6 +8,7 @@ import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasExcepti
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaNoVerificadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -19,6 +21,7 @@ import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
+import com.nexusbattles.ms_identidad.sanciones.ProyeccionDeSancionService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -61,6 +64,12 @@ class LoginServiceTest {
 
     @Mock
     private OnboardingService onboardingService;
+
+    @Mock
+    private IgualadorDeTiempo igualador;
+
+    @Mock
+    private ProyeccionDeSancionService proyecciones;
 
     @InjectMocks
     private LoginService loginService;
@@ -114,6 +123,8 @@ class LoginServiceTest {
             "cristian@test.com",
             "127.0.0.1"
         );
+        // B1: un correo que no existe cuesta lo mismo que uno que si (un BCrypt).
+        verify(igualador).comparar(PASSWORD_PLANA);
         verifyNoInteractions(onboardingService, auditoriaDeCuenta);
     }
 
@@ -185,24 +196,74 @@ class LoginServiceTest {
         );
 
         assertTrue(exception.getMessage().contains("Tiempo restante"));
+        // 7.3.2: el fin viaja aparte para el contador visible.
+        assertEquals(usuario.getSuspendidoHasta(), exception.getHasta().toLocalDateTime());
+        verifyNoInteractions(proyecciones);
     }
 
     @Test
     void debePermitirLoginSiSuspensionYaVencio() {
-        // Comportamiento actual documentado: al vencer suspendidoHasta, el
-        // login no queda bloqueado, aunque el campo "estado" siga en
-        // SUSPENDIDA (nadie lo revierte a ACTIVO automáticamente aquí).
+        // B2: al vencer suspendidoHasta la persona entra y la proyeccion se
+        // limpia (ProyeccionDeSancionService.levantarSiVencida).
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("SUSPENDIDA");
         usuario.setSuspendidoHasta(LocalDateTime.now().minusMinutes(1));
         when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(proyecciones.levantarSiVencida(usuario)).thenReturn("ACTIVO");
         dispositivoConocido(usuario);
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
         assertNotNull(respuesta);
         assertEquals("cristianc", respuesta.getApodo());
+        verify(proyecciones).levantarSiVencida(usuario);
+    }
+
+    @Test
+    @DisplayName("B1: cuenta sin verificar con la contraseña correcta: 403 cuenta-no-verificada, y el alta no arranca")
+    void cuentaNoVerificada() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("PENDIENTE_VERIFICACION");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+
+        assertThrows(CuentaNoVerificadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+
+        verify(intentosFallidosService, never()).registrarIntentoFallido(anyLong());
+        verify(jwtService, never()).generarToken(anyString(), anyString(), anyInt(), any());
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
+    }
+
+    @Test
+    @DisplayName("B1: con la contraseña INCORRECTA el estado no se revela: 401 generico y cuenta el intento")
+    void elEstadoNoSeRevelaSinLaContrasena() {
+        for (String estado : new String[] {"PENDIENTE_VERIFICACION", "BANEADO", "BANEADA", "SUSPENDIDO", "INACTIVO"}) {
+            Usuario usuario = usuarioActivo();
+            usuario.setEstado(estado);
+            usuario.setSuspendidoHasta(LocalDateTime.now().plusDays(1));
+            when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+            LoginRequest datos = datosValidos();
+            datos.setPassword("Otra.Clave-9");
+
+            assertThrows(CredencialesInvalidasException.class,
+                () -> loginService.iniciarSesion(datos, "127.0.0.1", "agente"), estado);
+        }
+        verify(intentosFallidosService, times(5)).registrarIntentoFallido(1L);
+        verifyNoInteractions(proyecciones);
+    }
+
+    @Test
+    @DisplayName("B2: una suspension vencida de una cuenta que nunca verifico su correo la deja pendiente otra vez")
+    void suspensionVencidaSinVerificar() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("SUSPENDIDO");
+        usuario.setSuspendidoHasta(LocalDateTime.now().minusMinutes(1));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(proyecciones.levantarSiVencida(usuario)).thenReturn("PENDIENTE_VERIFICACION");
+
+        assertThrows(CuentaNoVerificadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
     }
 
     @Test

@@ -84,6 +84,7 @@ jobs:
             :services:plataforma:metricas-plataforma:bootJar \
             :services:plataforma:admin-parametros:bootJar \
             :services:plataforma:comentarios:bootJar \
+            :services:plataforma:correo:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
@@ -104,7 +105,13 @@ jobs:
       - name: Levantar el entorno
         run: docker compose -f tests/e2e/compose.yml up -d --build --wait
 
+      # B1 — las cuentas nuevas nacen pendientes de verificar su correo: la
+      # semilla y las pruebas leen el codigo en el Mailpit del banco, que el
+      # borde sirve en /mailpit/ (la misma ruta que en DEV). Sin credenciales:
+      # el buzon del banco no las pide.
       - name: Sembrar el inventario y comprobar el camino de la verificacion
+        env:
+          MAILPIT_URL: http://localhost:8099/mailpit
         run: |
           chmod +x tests/e2e/sembrar.sh
           ./tests/e2e/sembrar.sh
@@ -134,6 +141,7 @@ jobs:
         working-directory: frontend/app-web
         env:
           E2E_BORDE: http://localhost:8099
+          MAILPIT_URL: http://localhost:8099/mailpit
         run: npx playwright test --config=playwright.e2e.config.js
 
       # R17 — la prueba del profesor, en el banco: el mismo recorrido que se
@@ -145,6 +153,7 @@ jobs:
         working-directory: frontend/app-web
         env:
           PROFESOR_URL: http://localhost:8099
+          MAILPIT_URL: http://localhost:8099/mailpit
         run: npx playwright test --config=playwright.profesor.config.js
 
       # Cuando esto falla, lo que hace falta es el log del servicio que fallo,
@@ -152,7 +161,7 @@ jobs:
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
+          for s in srv-ms-identidad srv-correo mailpit srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se
