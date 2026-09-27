@@ -4,9 +4,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
-import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController.ComentarioResponse;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -21,12 +23,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * La cola y las acciones del moderador — RF-COM-005 y RF-COM-008, contrato 1.3.0.
+ * La cola y las acciones del moderador — RF-COM-005 y RF-COM-008, contrato 1.3.0;
+ * EDITAR, MARCAR, DESMARCAR y el filtro {@code marcado} desde B3 (7.3.3).
  *
  * <p>El moderador sale SIEMPRE del token. Ni la cola ni la decision leen un
  * identificador del cuerpo: un asiento de moderacion que dijera quien actuo a
  * partir de un campo enviado por el cliente no serviria para nada, porque
- * cualquiera podria firmar una decision con el nombre de otro.
+ * cualquiera podria firmar una decision con el nombre de otro. La IP de origen
+ * del asiento sale de la peticion ({@link OrigenDeLaPeticion}).
  *
  * <p>Quien puede entrar lo decide {@code SecurityConfig} por rol. Aqui no hay
  * ni un {@code if (rol == ...)}: la autorizacion se declara en un sitio.
@@ -56,13 +60,17 @@ public class ModeracionController {
         this.servicio = servicio;
     }
 
-    /** La cola priorizada. Vacia es 200 con lista vacia, no 404 (CA-03). */
+    /**
+     * La cola priorizada. Vacia es 200 con lista vacia, no 404 (CA-03).
+     * {@code marcado=true} es la lista de seguimiento especial (7.3.3).
+     */
     @GetMapping
     public ColaResponse cola(
             @RequestParam(required = false) String productoId,
+            @RequestParam(required = false) Boolean marcado,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
-        return ColaResponse.desde(servicio.cola(productoId, pagina, Math.min(tamano, 100)));
+        return ColaResponse.desde(servicio.cola(productoId, marcado, pagina, Math.min(tamano, 100)));
     }
 
     /** El comentario con sus reportes y su historial: todo lo que hace falta para decidir. */
@@ -71,36 +79,47 @@ public class ModeracionController {
         return DetalleResponse.desde(servicio.detalle(commentId));
     }
 
-    /** La decision. El motivo es obligatorio, incluida APROBAR. */
+    /** La decision. El motivo es obligatorio, incluida APROBAR; EDITAR exige textoNuevo. */
     @PostMapping("/{commentId}/decision")
     public ResponseEntity<DecisionResponse> resolver(
             @PathVariable String commentId,
             @AuthenticationPrincipal Jwt moderador,
-            @RequestBody DecisionRequest peticion) {
+            @RequestBody DecisionRequest peticion,
+            HttpServletRequest origen) {
 
         ServicioDeModeracion.Resuelto resuelto = servicio.resolver(
                 commentId,
                 IdentidadDelToken.idDe(moderador).toString(),
                 IdentidadDelToken.apodoDe(moderador),
                 peticion.accion(),
-                peticion.motivo());
+                peticion.motivo(),
+                peticion.textoNuevo(),
+                OrigenDeLaPeticion.ipDe(origen));
 
         return ResponseEntity.status(HttpStatus.OK).body(DecisionResponse.desde(resuelto));
     }
 
     // ------------------------------------------------------------------ DTOs
 
-    public record DecisionRequest(AccionDeModeracion accion, String motivo) {
+    /** {@code DecisionRequest}; {@code textoNuevo} solo cuenta con EDITAR (1.4.0). */
+    public record DecisionRequest(AccionDeModeracion accion, String motivo, String textoNuevo) {
     }
 
+    /**
+     * {@code AsientoDeModeracion} del contrato. {@code textoAnterior} y
+     * {@code textoNuevo} solo en EDITAR (nulos en el resto). La IP de origen
+     * se guarda pero no sale por aqui.
+     */
     public record AsientoResponse(String id, AccionDeModeracion accion, String moderadorId,
             String apodoModerador, String motivo, String estadoAnterior, String estadoNuevo,
-            String fecha) {
+            String fecha,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String textoAnterior,
+            @JsonInclude(JsonInclude.Include.ALWAYS) String textoNuevo) {
 
         static AsientoResponse desde(AsientoDeModeracion a) {
             return new AsientoResponse(a.id(), a.accion(), a.moderadorId(), a.apodoModerador(),
                     a.motivo(), a.estadoAnterior().name(), a.estadoNuevo().name(),
-                    a.fecha().toString());
+                    a.fecha().toString(), a.textoAnterior(), a.textoNuevo());
         }
     }
 
@@ -118,7 +137,7 @@ public class ModeracionController {
 
         static EntradaResponse desde(ServicioDeModeracion.Entrada e) {
             return new EntradaResponse(
-                    ComentarioResponse.desde(e.comentario(), false),
+                    ComentarioResponse.paraModeracion(e.comentario()),
                     e.reportes(),
                     e.porCategoria().entrySet().stream()
                             .collect(Collectors.toMap(x -> x.getKey().name(), Map.Entry::getValue)),
@@ -140,7 +159,7 @@ public class ModeracionController {
 
         static DetalleResponse desde(ServicioDeModeracion.Detalle d) {
             return new DetalleResponse(
-                    ComentarioResponse.desde(d.comentario(), false),
+                    ComentarioResponse.paraModeracion(d.comentario()),
                     d.reportes().stream().map(ReporteResponse::desde).toList(),
                     d.historial().stream().map(AsientoResponse::desde).toList());
         }
@@ -150,9 +169,8 @@ public class ModeracionController {
             boolean autorNotificado) {
 
         static DecisionResponse desde(ServicioDeModeracion.Resuelto r) {
-            Comentario c = r.comentario();
             return new DecisionResponse(
-                    ComentarioResponse.desde(c, false),
+                    ComentarioResponse.paraModeracion(r.comentario()),
                     AsientoResponse.desde(r.asiento()),
                     r.autorNotificado());
         }

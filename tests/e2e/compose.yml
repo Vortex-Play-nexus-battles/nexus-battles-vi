@@ -575,6 +575,9 @@ services:
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # B3 — comentar y calificar comprueban el producto en el catalogo del
+      # propio banco (el mismo contenedor al que el borde manda /api/v1/productos).
+      PRODUCTOS_URL: http://srv-productos:8080
       # R10.1 — el aviso al autor cuando se resuelve la moderacion de su
       # comentario (RF-COM-008). Con la credencial de ADR-005, porque
       # /internal/notifications exige ROLE_SERVICIO. Sin esto el E2E veria
@@ -591,6 +594,7 @@ services:
       srv-moderacion-sanciones: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
       interval: 5s
