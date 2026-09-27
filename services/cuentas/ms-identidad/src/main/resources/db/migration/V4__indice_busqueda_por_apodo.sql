@@ -1,0 +1,17 @@
+-- B6 — busqueda de jugadores por el principio del apodo, sin distinguir
+-- mayusculas, para elegir a quien escribir un mensaje privado
+-- (GET /api/v1/perfiles/publicos, ms-identidad-perfiles.yaml 1.2.1).
+--
+-- Migracion ADITIVA (regla 8): un indice nuevo, nada mas. No toca datos.
+--
+-- La consulta es `lower(apodo) LIKE lower(:patron) ESCAPE '!'` con el patron
+-- «texto%». El UNIQUE (apodo) que ya existe no le sirve por dos motivos: es
+-- sobre `apodo` y no sobre `lower(apodo)`, y con una intercalacion que no sea
+-- «C» PostgreSQL no usa un indice normal para un LIKE. Con `text_pattern_ops`
+-- (comparacion caracter a caracter) si: el LIKE 'texto%' se convierte en un
+-- rango del indice en vez de recorrer toda la tabla de usuarios en cada
+-- tecla que alguien pulsa en el buscador.
+--
+-- Sin CONCURRENTLY: Flyway ejecuta cada migracion dentro de una transaccion y
+-- la tabla es pequena; el bloqueo de escritura dura lo que tarda en crearse.
+CREATE INDEX ix_usuarios_apodo_prefijo ON usuarios (lower(apodo) text_pattern_ops);

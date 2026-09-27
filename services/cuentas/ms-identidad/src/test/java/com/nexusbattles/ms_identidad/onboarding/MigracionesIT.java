@@ -122,8 +122,14 @@ class MigracionesIT {
         return jdbc.queryForList("SELECT version, type, success FROM flyway_schema_history ORDER BY installed_rank");
     }
 
+    /** B6 — V4 crea el indice de la busqueda de jugadores por prefijo del apodo. */
+    private static int indicesDePrefijo(JdbcTemplate jdbc) {
+        return jdbc.queryForObject("SELECT count(*) FROM pg_indexes WHERE tablename = 'usuarios'"
+                + " AND indexname = 'ix_usuarios_apodo_prefijo'", Integer.class);
+    }
+
     @Test
-    @DisplayName("base vacia: V1, V2 y V3 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V4 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -133,7 +139,9 @@ class MigracionesIT {
                     .containsExactly(
                             org.assertj.core.groups.Tuple.tuple("1", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("3", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("3", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+            assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
                     Integer.class)).isEqualTo(1);
@@ -146,7 +154,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 y V3 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V4 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -158,7 +166,10 @@ class MigracionesIT {
                     .containsExactly(
                             org.assertj.core.groups.Tuple.tuple("1", "BASELINE"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("3", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("3", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+            // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.
+            assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
                     .isEqualTo("veterana");
             // V3: la cuenta existente NO pasa a pendiente de verificar...
@@ -214,7 +225,7 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            assertThat(historial(jdbc)).hasSize(3);
+            assertThat(historial(jdbc)).hasSize(4);
         }
     }
 }
