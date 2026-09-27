@@ -1,5 +1,6 @@
 /**
- * UXC-5 — el vocabulario de las misiones y la fuente de hoy (sin servicio).
+ * UXC-5 — el vocabulario de las misiones y la fuente cuando el servicio no
+ * responde. El adaptador HTTP tiene sus pruebas en `fuente-misiones.test.js`.
  */
 
 import { jest } from '@jest/globals';
@@ -18,7 +19,7 @@ import {
   textoDeProbabilidad,
   textoDeTiempo,
 } from './modelo-misiones.js';
-import { FUENTE_SIN_SERVICIO, MisionesSinAbrir, fuenteDeMisiones } from './fuente-misiones.js';
+import { FUENTE_SIN_SERVICIO, MisionesSinAbrir } from './fuente-misiones.js';
 
 describe('vocabulario de §7.8', () => {
   test('tres categorías en el orden de las pestañas, cada una con su regla', () => {
@@ -91,14 +92,13 @@ describe('cifras', () => {
   });
 });
 
-describe('la fuente de misiones de este despliegue', () => {
-  test('dice que no hay servicio y no toca la red', async () => {
+describe('la fuente cuando el servicio de misiones no responde', () => {
+  test('dice que no hay servicio y ninguna operación toca la red', async () => {
     const buscar = jest.fn();
     globalThis.fetch = buscar;
 
-    const fuente = fuenteDeMisiones();
+    const fuente = FUENTE_SIN_SERVICIO;
 
-    expect(fuente).toBe(FUENTE_SIN_SERVICIO);
     expect(fuente.disponible).toBe(false);
     for (const operacion of [
       'tablero',
@@ -110,9 +110,12 @@ describe('la fuente de misiones de este despliegue', () => {
       'matricular',
       'cancelar',
       'marcarFavorita',
+      'estrategiaGuardada',
+      'guardarEstrategia',
     ]) {
       await expect(fuente[operacion]()).rejects.toBeInstanceOf(MisionesSinAbrir);
     }
     expect(buscar).not.toHaveBeenCalled();
+    delete globalThis.fetch;
   });
 });

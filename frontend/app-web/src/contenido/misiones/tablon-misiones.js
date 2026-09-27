@@ -551,8 +551,8 @@ export function montarTablon(
 }
 
 /**
- * El tablón cuando las misiones todavía no existen: qué es cada categoría,
- * sin fingir tarjetas.
+ * El tablón cuando el servicio de misiones no responde: qué es cada
+ * categoría, sin fingir tarjetas.
  *
  * @returns {HTMLElement}
  */
@@ -563,7 +563,7 @@ export function tablonSinAbrir() {
     hijos: [
       h('h2', {
         clase: 'misiones-sin-abrir__titulo',
-        texto: 'Así serán las misiones',
+        texto: 'Así son las misiones',
         atributos: { id: 'misiones-sin-abrir-titulo' },
       }),
       h('p', {
