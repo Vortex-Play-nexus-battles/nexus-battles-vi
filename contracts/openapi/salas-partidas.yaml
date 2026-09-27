@@ -102,6 +102,17 @@ info:
       `403` `partida-ajena`.
     - `GET /partidas/mias`: historial de partidas del jugador, de la mas
       reciente a la mas antigua, con su resultado.
+
+    Cambios 1.6.1 (B6): implementadas las cuatro operaciones de
+    `/mensajes-directos/**` (sin cambio de forma). Aclaraciones: `leido` se
+    lee desde quien consulta (lo que uno escribio cuenta como leido para el:
+    el acuse de lectura del otro no se publica); `idCliente` solo viaja a su
+    autor; un reintento del `POST` con el mismo `idCliente` devuelve el
+    mensaje ya guardado, tambien con `201`; cada rechazo del `POST` lleva el
+    `type` de su motivo (`mensaje-invalido`, `destinatario-propio`,
+    `jugador-sancionado`, `destinatario-inexistente`, `contenido-bloqueado`,
+    `demasiados-mensajes` con `Retry-After`, `moderacion-no-disponible`),
+    los mismos motivos que `EnvioRechazado` del AsyncAPI.
   version: 1.7.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
@@ -608,8 +619,6 @@ paths:
       tags: [Mensajes]
       operationId: misConversaciones
       summary: Conversaciones privadas del jugador (1.6.0)
-      x-implementacion: pendiente
-      x-fase: B6
       security:
         - keycloak: []
       responses:
@@ -631,8 +640,6 @@ paths:
       tags: [Mensajes]
       operationId: mensajesDeConversacion
       summary: Historial de la conversacion con otro jugador (1.6.0)
-      x-implementacion: pendiente
-      x-fase: B6
       description: |
         Solo la conversacion entre el dueno del token y `uidOtro`: no hay forma
         de pedir la de otros dos. Paginado hacia atras con `antesDe`.
@@ -667,8 +674,6 @@ paths:
       tags: [Mensajes]
       operationId: enviarMensajeDirecto
       summary: Envia un mensaje privado (respaldo del WebSocket) (1.6.0)
-      x-implementacion: pendiente
-      x-fase: B6
       security:
         - keycloak: []
       requestBody:
@@ -712,6 +717,10 @@ paths:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '429':
           description: Demasiados mensajes seguidos.
+          headers:
+            Retry-After:
+              description: Segundos que faltan para que el limite deje pasar otro (1.6.1).
+              schema: { type: integer, minimum: 1 }
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -728,13 +737,16 @@ paths:
       tags: [Mensajes]
       operationId: marcarConversacionLeida
       summary: Marca como leidos los mensajes recibidos de ese jugador (1.6.0)
-      x-implementacion: pendiente
-      x-fase: B6
       security:
         - keycloak: []
       responses:
         '204':
-          description: Hecho (idempotente).
+          description: Hecho (idempotente). Con el propio `uid`, no hay nada que marcar.
+        '400':
+          description: '`uidOtro` no es un UUID (1.6.1).'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
         '401':
           $ref: '#/components/responses/NoAutenticado'
 

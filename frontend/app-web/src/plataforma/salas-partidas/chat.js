@@ -402,9 +402,14 @@ export async function montarChat(
  * Monta la página entera: título, pestañas (general y privados) o, con
  * `?sala=`, el chat de esa sala con su vuelta.
  *
+ * B6 — la fuente de los mensajes privados se pide al abrir su pestaña, no al
+ * cargar el chat: pregunta al servicio, y el chat de una sala o quien no abre
+ * la pestaña no tienen por qué hacerlo.
+ *
  * @param {Document} documento
  * @param {{busqueda?: string, token?: string|null, miId?: string|null,
- *   fuenteMensajes?: import('./fuente-mensajes.js').FuenteDeMensajes,
+ *   fuenteMensajes?: import('./fuente-mensajes.js').FuenteDeMensajes
+ *     |Promise<import('./fuente-mensajes.js').FuenteDeMensajes>|null,
  *   conectar?: Function}} [opciones]
  */
 export function montarVistaDeChat(
@@ -413,7 +418,7 @@ export function montarVistaDeChat(
     busqueda = globalThis.location?.search ?? '',
     token = globalThis.sessionStorage?.getItem(CLAVE_TOKEN) ?? null,
     miId = usuarioIdDeSesion(),
-    fuenteMensajes = fuenteDeMensajes(),
+    fuenteMensajes = null,
     conectar = conectarChat,
   } = {},
 ) {
@@ -453,7 +458,7 @@ export function montarVistaDeChat(
       alCambiar: (id) => {
         if (id === 'privados' && !privados) {
           privados = montarMensajesPrivados(panelPrivados, {
-            fuente: fuenteMensajes,
+            fuente: fuenteMensajes ?? fuenteDeMensajes(),
             miId,
             alIrAlChatGeneral: () => {
               pestanas.mostrar('general');

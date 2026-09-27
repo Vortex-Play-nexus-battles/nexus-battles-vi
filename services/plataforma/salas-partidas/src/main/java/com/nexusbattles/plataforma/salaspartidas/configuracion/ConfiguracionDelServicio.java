@@ -335,6 +335,35 @@ public class ConfiguracionDelServicio {
     }
 
     /**
+     * Cliente hacia los servicios de plataforma que exigen credencial de
+     * servicio — B6.
+     *
+     * <p>Lo usan la consulta de sancion activa (que dejo de ser publica en
+     * {@code moderacion-sanciones-consulta.yaml} 1.4.0: sin token responde 401
+     * y, con fallo cerrado, eso bloqueaba el chat y las puertas de sala), y los
+     * tres clientes de los mensajes privados: el contacto de ms-identidad
+     * ({@code /api/v1/internal/**}, solo servicios), la lista negra con
+     * contexto y el aviso en la bandeja de notificaciones
+     * ({@code /internal/notifications}, solo servicios).
+     *
+     * <p>Con la traza (regla 5), los tiempos de espera acotados (HU-DIS-003:
+     * la consulta de sancion no los tenia y un moderacion colgado dejaba el
+     * mensaje del chat esperando dos minutos) y la credencial cuando esta
+     * configurada. Sin credencial sale sin {@code Authorization} y el otro
+     * servicio responde 401/403, que cada cliente trata como «no se pudo
+     * comprobar»: nunca como un si.
+     */
+    @Bean
+    public RestClient restClientServicios(
+            org.springframework.beans.factory.ObjectProvider<
+                    com.nexusbattles.comun.seguridad.servicio.InterceptorDePortadorDeServicio> credencial,
+            ClientHttpRequestFactory fabricaConTiempos) {
+        RestClient.Builder constructor = constructorConTraza(fabricaConTiempos);
+        credencial.ifAvailable(constructor::requestInterceptor);
+        return constructor.build();
+    }
+
+    /**
      * Constructor de clientes HTTP con la traza puesta — regla 5, R11.
      *
      * <p>Existe para que <b>no se pueda olvidar</b>. Este archivo arma seis

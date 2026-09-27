@@ -62,6 +62,17 @@ info:
     Los errores que viajan por el canal usan el mismo formato problem details
     que la API HTTP (regla 4), para que la interfaz los pinte con el mismo
     componente `Aviso`. Ver `shared/ui-kit/MAPEO-ERRORES.md`.
+
+    1.4.1 (B6, autorizacion del broker; ningun destino ni mensaje cambia): el
+    servidor solo acepta `SEND` a destinos `/app/**` (un `SEND` directo a
+    `/tema/**`, `/cola/**` o `/usuario/**` se rechaza con un frame `ERROR`:
+    antes el broker lo reenviaba sin pasar por lista negra, sancion ni
+    historial) y solo admite `SUBSCRIBE` a los destinos de este documento, a
+    `/usuario/cola/**` y a los de `mensajes-directos.yaml`, en forma canonica
+    (sin comodines `*`/`**`, sin `//` ni `..`). La regla de sala privada de
+    `salaEstado` se aplica tambien al `SEND` de `enviarChat` y a la
+    suscripcion de `historialDeSala`; las salas publicas no cambian.
+    `partidaEstado` solo lo siguen los participantes de la partida.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -118,6 +129,10 @@ channels:
     description: |
       Estado del combate turno a turno. Es el canal que pinta la vista de
       batalla: vida, turno en curso y efectos activos.
+
+      Desde 1.4.1 solo se suscriben los participantes de la partida; a
+      cualquier otro, o a una partida que no existe, el servidor le responde
+      con un frame `ERROR` y la suscripcion no se registra.
     parameters:
       idPartida:
         description: Identificador de la partida

@@ -85,6 +85,26 @@ class CanalDePartidaIT {
     @Autowired
     private SimpMessagingTemplate mensajeria;
 
+    /**
+     * Desde B6 solo los participantes siguen {@code /tema/partidas/{id}}
+     * ({@code AutorizacionDeDestinos}). Esta IT prueba el anuncio por el canal,
+     * no el arranque de la partida, asi que el almacen se sustituye por un
+     * doble que conoce la partida y sabe que quien la sigue la juega.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas partidas;
+
+    /** La partida existe y ANA (el token {@code visitante}) combate en ella. */
+    private void laJuegaAna(UUID idPartida) {
+        org.mockito.Mockito.when(partidas.buscarPorId(idPartida)).thenReturn(java.util.Optional.of(
+                com.nexusbattles.plataforma.salaspartidas.dominio.Partida.rehidratar(idPartida, UUID.randomUUID(),
+                        com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida.EN_CURSO,
+                        List.of(com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida.humano(ANA, 0),
+                                com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida.humano(BRUNO, 0)),
+                        com.nexusbattles.plataforma.salaspartidas.dominio.Turno.primero(ANA), 0,
+                        java.time.Instant.now())));
+    }
+
     private StompSession conectar(String token) throws Exception {
         StompHeaders connect = new StompHeaders();
         connect.add("Authorization", "Bearer " + token);
@@ -137,6 +157,7 @@ class CanalDePartidaIT {
     @DisplayName("quien sigue la partida recibe la accion resuelta con el payload del contrato")
     void laAccionResueltaLlegaAQuienSigueLaPartida() throws Exception {
         UUID idPartida = UUID.randomUUID();
+        laJuegaAna(idPartida);
         BlockingQueue<String> recibidos = suscribirseA(conectar(VISITANTE), idPartida);
 
         canalDePartida.anunciarAccionResuelta(flechaDoble(idPartida));
@@ -175,6 +196,7 @@ class CanalDePartidaIT {
     void otraPartidaNoSeMezcla() throws Exception {
         UUID propia = UUID.randomUUID();
         UUID ajena = UUID.randomUUID();
+        laJuegaAna(propia);
         BlockingQueue<String> recibidos = suscribirseA(conectar(VISITANTE), propia);
 
         canalDePartida.anunciarAccionResuelta(flechaDoble(ajena));

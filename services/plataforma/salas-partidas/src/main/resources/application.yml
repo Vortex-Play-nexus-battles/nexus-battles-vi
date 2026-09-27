@@ -181,6 +181,25 @@ chat:
     # no esta configurado o no responde.
     tamano: ${CHAT_HISTORIAL_TAMANO:50}
 
+# B6 — Mensajes privados entre jugadores (FEEDBACK DEL PROFESOR, no requisito
+# del documento: el 7.6 pide chat en las salas y en la vista general). Van sobre
+# el mismo broker que el chat; la lista negra es la de arriba, con contexto
+# MENSAJE_PRIVADO. Todas las llamadas salen con la credencial de servicio.
+mensajes-directos:
+  limite:
+    # PROVISIONAL, decision del PO pendiente: cuantos mensajes privados puede
+    # mandar un jugador en la ventana. Ningun requisito lo fija.
+    mensajes: ${MENSAJES_DIRECTOS_LIMITE_MENSAJES:5}
+    ventana-segundos: ${MENSAJES_DIRECTOS_LIMITE_VENTANA_SEGUNDOS:10}
+  identidad:
+    # ms-identidad SIN /api/v1 (la ruta del contrato ya lo lleva). Comprueba
+    # que el destinatario existe y esta ACTIVO (GET /internal/usuarios/{uid}/contacto).
+    url: ${IDENTIDAD_URL:http://localhost:8089}
+    cache-segundos: ${MENSAJES_DIRECTOS_IDENTIDAD_CACHE_SEGUNDOS:30}
+  notificaciones:
+    # Con su /api/v1. Aviso en la bandeja de quien recibe sin estar conectado.
+    url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
+
 # Regla 3: todo servicio expone salud y metricas.
 management:
   endpoints:
