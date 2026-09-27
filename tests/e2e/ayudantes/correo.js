@@ -16,12 +16,15 @@
  *
  * ## Dónde está el buzón
  *
- * `MAILPIT_URL` manda. Sin ella, `<base>/mailpit`: el borde lo sirve ahí tanto
- * en el banco E2E (`tests/e2e/compose.yml`) como en AWS DEV
+ * `MAILPIT_URL` manda. Sin ella, `<base>/mailpit`: el borde lo sirve ahí
  * (`MP_WEBROOT=/mailpit`, `borde-dev.conf`), con la API en
- * `<base>/mailpit/api/v1/...`. Si el borde le pone autenticación básica (B12),
- * `MAILPIT_USUARIO` y `MAILPIT_CLAVE`, que en CI salen de secretos y nunca del
- * repositorio.
+ * `<base>/mailpit/api/v1/...`, pero desde B12 SOLO a orígenes internos. En el
+ * banco E2E eso es lo que se es (se entra por la pasarela de Docker) y no hace
+ * falta nada. Contra AWS DEV, desde internet, `/mailpit/` responde 403: los
+ * workflows abren un túnel SSH al host (`.github/actions/tunel-mailpit`) y
+ * pasan `MAILPIT_URL=http://localhost:18025/mailpit`. `MAILPIT_USUARIO` y
+ * `MAILPIT_CLAVE` (autenticación básica) siguen admitiéndose por si algún
+ * entorno la pone, pero DEV no la usa.
  *
  * ## Cómo se encuentra el código
  *
