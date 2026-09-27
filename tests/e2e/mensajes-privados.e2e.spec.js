@@ -75,6 +75,8 @@ const COLA = '/usuario/cola/mensajes-directos';
  * cada 10 s. El banco no fija MENSAJES_DIRECTOS_LIMITE_*, así que vale este.
  */
 const LIMITE = 5;
+/** La ventana de ese límite (10 s) y medio segundo de margen. */
+const VENTANA_DEL_LIMITE_MS = 10_500;
 
 /** Distingue los textos de esta corrida de los de otras sobre el mismo banco. */
 const SUFIJO = Date.now().toString(36);
@@ -550,6 +552,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     let a = null;
     try {
       const porRest = await enviar(api, ana, bruno, `esto lleva ${termino} dentro`);
+      const ultimoEnvio = Date.now();
       const cuerpo = await porRest.text();
       expect(porRest.status(), cuerpo).toBe(422);
       expect(JSON.parse(cuerpo).type).toMatch(/\/contenido-bloqueado$/);
@@ -558,6 +561,14 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
       await conServicio(a);
       await escuchando(a);
       await abrirConversacion(a, BRUNO);
+      // A lleva varios envíos seguidos entre esta prueba y las anteriores: si
+      // el siguiente cayera dentro de la ventana del límite (LIMITE cada 10 s),
+      // el rechazo sería «vas demasiado rápido» y no el de la lista negra, que
+      // es lo que se prueba aquí. Se deja pasar la ventana entera.
+      const esperaDelLimite = ultimoEnvio + VENTANA_DEL_LIMITE_MS - Date.now();
+      if (esperaDelLimite > 0) {
+        await new Promise((resolver) => setTimeout(resolver, esperaDelLimite));
+      }
       const desdeLaVista = `desde la pestaña: ${termino}`;
       await escribir(a, desdeLaVista);
 
