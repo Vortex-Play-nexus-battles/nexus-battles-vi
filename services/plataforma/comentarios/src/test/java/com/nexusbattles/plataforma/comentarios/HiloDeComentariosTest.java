@@ -6,15 +6,17 @@ import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.Resultad
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.SENALADO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -22,150 +24,197 @@ import org.junit.jupiter.api.Test;
  *
  * Fuente: Proyecto Integrador II, seccion 7.1, p. 34 y seccion 7.7.9, p. 55.
  * Regla RN-CMT-001: el comentario lleva texto e imagenes, mas el apodo del
- * jugador,
- * la calificacion en estrellas y la fecha de publicacion. Un jugador comenta
- * cuantas
- * veces quiera pero califica una sola vez.
+ * jugador, la calificacion en estrellas y la fecha de publicacion.
+ *
+ * <p>Desde B3 las reglas no necesitan el hilo entero: la calificacion unica la
+ * guarda su tabla (ver {@code ServicioDeCalificacionesTest} y la IT), y aqui
+ * queda lo que se decide sobre una sola solicitud.
  */
 class HiloDeComentariosTest {
 
-    private static final Set<String> FORMATOS = Set.of("jpg", "png", "webp");
     private static final Instant AHORA = Instant.parse("2026-08-26T15:00:00Z");
+    private static final String IMAGEN = "3f1c2b4a-1111-4222-8333-944455566677";
 
-    private HiloDeComentarios hilo;
-
-    @BeforeEach
-    void abrirHilo() {
-        hilo = HiloDeComentarios.de("espada-del-alba", FORMATOS);
-    }
-
-    private static SolicitudDePublicacion solicitud(
-            String id, String autor, List<String> imagenes, Integer estrellas) {
+    private static SolicitudDePublicacion solicitud(List<String> imagenes, Integer estrellas) {
         return new SolicitudDePublicacion(
-                id, autor, "LyraRoja", "La use toda la temporada y aguanta bien.",
+                "com-1", "jugador-1", "LyraRoja", "La use toda la temporada y aguanta bien.",
                 imagenes, estrellas, AHORA);
     }
 
-    @Test
-    @DisplayName("el comentario queda con apodo, estrellas y fecha, y entra al promedio")
-    void publicaConTextoImagenYCalificacion() {
-        Comentario comentario = hilo.publicar(
-                solicitud("com-1", "jugador-1", List.of("captura.jpg"), 4), HABILITADO, LIMPIO);
+    @Nested
+    @DisplayName("publicar")
+    class Publicar {
 
-        assertEquals("LyraRoja", comentario.apodoAutor());
-        assertEquals(4, comentario.calificacion().orElseThrow());
-        assertEquals(AHORA, comentario.fechaPublicacion());
-        assertEquals(List.of("captura.jpg"), comentario.imagenes());
-        assertTrue(comentario.estaPublicado());
+        @Test
+        @DisplayName("el comentario queda con apodo, texto, imagenes y fecha, publicado y sin editar ni marcar")
+        void publicaConTextoEImagen() {
+            Comentario comentario = HiloDeComentarios.publicar(
+                    "espada-del-alba", solicitud(List.of(IMAGEN), 4), HABILITADO, () -> LIMPIO);
 
-        assertEquals(4.0, hilo.promedio().orElseThrow());
-        assertEquals(1, hilo.visibles().size());
-    }
-
-    @Test
-    @DisplayName("la segunda calificación entra sin estrellas y se dice (RF-COM-002, D-07); los comentarios no tienen tope")
-    void laSegundaCalificacionEntraSinEstrellas() {
-        hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
-        assertTrue(hilo.yaCalifico("jugador-1"));
-        assertFalse(hilo.ultimaCalificacionDescartada());
-
-        Comentario segundo = hilo.publicar(solicitud("com-2", "jugador-1", List.of(), 5), HABILITADO, LIMPIO);
-
-        assertTrue(segundo.calificacion().isEmpty(), "entra sin estrellas");
-        assertTrue(hilo.ultimaCalificacionDescartada(), "y se dice");
-        assertEquals(Comentario.Estado.PUBLICADO, segundo.estado());
-
-        for (int i = 3; i <= 7; i++) {
-            hilo.publicar(solicitud("com-" + i, "jugador-1", List.of(), null), HABILITADO, LIMPIO);
+            assertEquals("espada-del-alba", comentario.productoId());
+            assertEquals("LyraRoja", comentario.apodoAutor());
+            assertEquals(AHORA, comentario.fechaPublicacion());
+            assertEquals(List.of(IMAGEN), comentario.imagenes());
+            assertTrue(comentario.estaPublicado());
+            assertFalse(comentario.editado());
+            assertFalse(comentario.marcado());
         }
-        assertFalse(hilo.ultimaCalificacionDescartada(), "sin estrellas no hay nada que descartar");
-        assertEquals(7, hilo.visibles().size());
-        assertEquals(4.0, hilo.promedio().orElseThrow(), "solo cuenta la primera");
+
+        @Test
+        @DisplayName("el silencio rechaza y el filtro ni se consulta: no se gasta una llamada en quien no va a publicar")
+        void elSilencioRechazaSinConsultarElFiltro() {
+            AtomicInteger consultas = new AtomicInteger();
+
+            HiloDeComentarios.PublicacionRechazada rechazo = assertThrows(
+                    HiloDeComentarios.PublicacionRechazada.class,
+                    () -> HiloDeComentarios.publicar("espada-del-alba", solicitud(List.of(), null), SILENCIADO,
+                            () -> {
+                                consultas.incrementAndGet();
+                                return LIMPIO;
+                            }));
+
+            assertEquals(HiloDeComentarios.MotivoDeRechazo.AUTOR_SILENCIADO, rechazo.motivo());
+            assertEquals(0, consultas.get());
+        }
+
+        @Test
+        @DisplayName("lo que el filtro senala se guarda en revision, no se rechaza")
+        void elFiltroSoloRetiene() {
+            Comentario retenido = HiloDeComentarios.publicar(
+                    "espada-del-alba", solicitud(List.of(), 3), HABILITADO, () -> SENALADO);
+
+            assertEquals(Comentario.Estado.EN_REVISION, retenido.estado());
+            assertTrue(retenido.estaEnRevision());
+            assertFalse(retenido.estaPublicado());
+        }
+
+        @Test
+        @DisplayName("un filtro sin veredicto es un fallo de programacion, no un comentario limpio")
+        void filtroSinVeredicto() {
+            assertThrows(NullPointerException.class, () -> HiloDeComentarios.publicar(
+                    "espada-del-alba", solicitud(List.of(), null), HABILITADO, () -> null));
+        }
     }
 
-    @Test
-    @DisplayName("retirar el propio comentario lo saca del hilo, del promedio y libera la calificación (HU-COM-004, D-19)")
-    void retirarElPropio() {
-        hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
-        hilo.publicar(solicitud("com-2", "jugador-2", List.of(), 2), HABILITADO, LIMPIO);
-        assertEquals(3.0, hilo.promedio().orElseThrow());
+    @Nested
+    @DisplayName("la solicitud se valida antes de llamar a nadie")
+    class Solicitud {
 
-        Comentario retirado = hilo.eliminar("com-1", "jugador-1");
+        @Test
+        @DisplayName("sin texto no hay comentario (RN-CMT-001)")
+        void sinTexto() {
+            assertThrows(IllegalArgumentException.class, () -> new SolicitudDePublicacion(
+                    "c", "a", "Apodo", "   ", List.of(), null, AHORA));
+            assertThrows(IllegalArgumentException.class, () -> new SolicitudDePublicacion(
+                    "c", "a", "Apodo", null, List.of(), null, AHORA));
+        }
 
-        assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
-        assertTrue(retirado.calificacion().isEmpty());
-        assertEquals(List.of("com-2"), hilo.visibles().stream().map(Comentario::id).toList());
-        assertEquals(2.0, hilo.promedio().orElseThrow(), "la calificación retirada no cuenta");
-        assertFalse(hilo.yaCalifico("jugador-1"), "puede volver a calificar");
+        @Test
+        @DisplayName("las estrellas, si vienen, van de 1 a 5")
+        void estrellasFueraDeRango() {
+            assertThrows(IllegalArgumentException.class, () -> solicitud(List.of(), 0));
+            assertThrows(IllegalArgumentException.class, () -> solicitud(List.of(), 6));
+            assertEquals(5, solicitud(List.of(), 5).estrellas());
+            assertEquals(null, solicitud(List.of(), null).estrellas());
+        }
 
-        // Idempotente: retirar de nuevo devuelve el mismo, sin error.
-        assertEquals(retirado, hilo.eliminar("com-1", "jugador-1"));
+        @Test
+        @DisplayName("un nombre de archivo ya no es una imagen: 400, el servidor no la tiene (1.4.0)")
+        void nombreDeArchivo() {
+            HiloDeComentarios.ImagenesNoValidas error = assertThrows(HiloDeComentarios.ImagenesNoValidas.class,
+                    () -> solicitud(List.of("captura.jpg"), null));
+            assertTrue(error.getMessage().contains("no un nombre de archivo"));
+        }
+
+        @Test
+        @DisplayName("como mucho tres imagenes, sin repetir, y en la forma exacta en que las emite el servicio")
+        void limitesDeImagenes() {
+            List<String> cuatro = List.of(UUID.randomUUID().toString(), UUID.randomUUID().toString(),
+                    UUID.randomUUID().toString(), UUID.randomUUID().toString());
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class, () -> solicitud(cuatro, null));
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class, () -> solicitud(List.of(IMAGEN, IMAGEN), null));
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class,
+                    () -> solicitud(List.of(IMAGEN.toUpperCase()), null));
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class, () -> solicitud(List.of("1-1-1-1-1"), null));
+            assertEquals(3, solicitud(cuatro.subList(0, 3), null).imagenes().size());
+        }
+
+        @Test
+        @DisplayName("imagenes nulas es lo mismo que ninguna")
+        void imagenesNulas() {
+            assertTrue(solicitud(null, null).imagenes().isEmpty());
+            assertFalse(SolicitudDePublicacion.esIdentificador(null));
+        }
     }
 
-    @Test
-    @DisplayName("solo el autor retira: ajeno es ComentarioAjeno, inexistente es ComentarioNoEncontrado")
-    void soloElAutorRetira() {
-        hilo.publicar(solicitud("com-1", "jugador-1", List.of(), 4), HABILITADO, LIMPIO);
+    @Nested
+    @DisplayName("retirar (HU-COM-004)")
+    class Retirar {
 
-        assertThrows(HiloDeComentarios.ComentarioAjeno.class, () -> hilo.eliminar("com-1", "jugador-2"));
-        assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class, () -> hilo.eliminar("no-existe", "jugador-1"));
-        assertEquals(1, hilo.visibles().size(), "nada cambio");
+        private final Comentario mio = new Comentario("com-1", "espada-del-alba", "jugador-1", "Lyra",
+                "texto", List.of(), AHORA, Comentario.Estado.PUBLICADO);
+
+        @Test
+        @DisplayName("el autor lo retira y queda ELIMINADO")
+        void elPropio() {
+            Comentario retirado = HiloDeComentarios.retirar(mio, "jugador-1");
+            assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
+            assertTrue(retirado.estaEliminado());
+        }
+
+        @Test
+        @DisplayName("idempotente: retirar uno ya retirado devuelve el mismo, sin error (CA-03)")
+        void idempotente() {
+            Comentario retirado = HiloDeComentarios.retirar(mio, "jugador-1");
+            assertSame(retirado, HiloDeComentarios.retirar(retirado, "jugador-1"));
+        }
+
+        @Test
+        @DisplayName("el de otro jugador es ComentarioAjeno (CA-02)")
+        void ajeno() {
+            assertThrows(HiloDeComentarios.ComentarioAjeno.class, () -> HiloDeComentarios.retirar(mio, "jugador-2"));
+        }
     }
 
-    @Test
-    @DisplayName("un comentario retirado cargado de la base no reserva la calificación de su autor")
-    void elRetiradoNoReservaCalificacion() {
-        Comentario retirado = new Comentario("com-0", "espada-del-alba", "jugador-1", "Lyra", "viejo",
-                List.of(), null, Instant.parse("2026-08-30T00:00:00Z"), Comentario.Estado.ELIMINADO);
-        HiloDeComentarios cargado = HiloDeComentarios.reconstituir("espada-del-alba", Set.of("jpg"),
-                List.of(retirado));
+    @Nested
+    @DisplayName("el comentario del dominio")
+    class ElComentario {
 
-        assertFalse(cargado.yaCalifico("jugador-1"));
-        assertTrue(cargado.visibles().isEmpty());
-        assertTrue(cargado.promedio().isEmpty());
-    }
+        private final Comentario base = new Comentario("com-1", "espada-del-alba", "jugador-1", "Lyra",
+                "texto original", List.of(), AHORA, Comentario.Estado.EN_REVISION);
 
-    @Test
-    @DisplayName("el silencio y la imagen invalida rechazan, el filtro solo retiene")
-    void distingueElRechazoDeLaRetencion() {
-        HiloDeComentarios.PublicacionRechazada porSancion = assertThrows(
-                HiloDeComentarios.PublicacionRechazada.class,
-                () -> hilo.publicar(solicitud("com-1", "jugador-2", List.of(), 3), SILENCIADO, LIMPIO));
-        assertEquals(HiloDeComentarios.MotivoDeRechazo.AUTOR_SILENCIADO, porSancion.motivo());
+        @Test
+        @DisplayName("EDITAR cambia el texto, lo deja editado y no toca el estado ni la marca")
+        void editar() {
+            Comentario editado = base.conMarca(true).editadoCon("texto moderado");
+            assertEquals("texto moderado", editado.texto());
+            assertTrue(editado.editado());
+            assertTrue(editado.marcado());
+            assertEquals(Comentario.Estado.EN_REVISION, editado.estado());
+        }
 
-        HiloDeComentarios.PublicacionRechazada porImagen = assertThrows(
-                HiloDeComentarios.PublicacionRechazada.class,
-                () -> hilo.publicar(
-                        solicitud("com-2", "jugador-2", List.of("virus.exe"), 3), HABILITADO, LIMPIO));
-        assertEquals(
-                HiloDeComentarios.MotivoDeRechazo.FORMATO_DE_IMAGEN_NO_ADMITIDO, porImagen.motivo());
+        @Test
+        @DisplayName("cambiar de estado conserva la edicion y la marca")
+        void cambiarDeEstado() {
+            Comentario aprobado = base.editadoCon("otro").conMarca(true).con(Comentario.Estado.PUBLICADO);
+            assertTrue(aprobado.editado());
+            assertTrue(aprobado.marcado());
+            assertTrue(aprobado.estaPublicado());
+        }
 
-        assertTrue(hilo.comentarios().isEmpty());
-
-        Comentario retenido = hilo.publicar(
-                solicitud("com-3", "jugador-2", List.of(), 3), HABILITADO, SENALADO);
-
-        assertEquals(Comentario.Estado.EN_REVISION, retenido.estado());
-        assertFalse(retenido.estaPublicado());
-        assertTrue(hilo.visibles().isEmpty());
-        assertTrue(hilo.promedio().isEmpty());
-        assertTrue(hilo.yaCalifico("jugador-2"));
-    }
-
-    @Test
-    @DisplayName("el hilo rechaza productos, formatos y calificaciones invalidos")
-    void rechazaEntradasInvalidas() {
-        assertThrows(IllegalArgumentException.class,
-                () -> HiloDeComentarios.de(" ", FORMATOS));
-        assertThrows(IllegalArgumentException.class,
-                () -> HiloDeComentarios.de("producto", Set.of()));
-        assertThrows(IllegalArgumentException.class,
-                () -> hilo.publicar(solicitud("com-1", "jugador-3", List.of(), 9), HABILITADO, LIMPIO));
-        assertThrows(HiloDeComentarios.PublicacionRechazada.class,
-                () -> hilo.publicar(solicitud("com-2", "jugador-3", List.of("sinextension"), 3),
-                        HABILITADO, LIMPIO));
-        assertThrows(UnsupportedOperationException.class,
-                () -> hilo.comentarios().add(null));
-        assertTrue(hilo.promedio().isEmpty());
+        @Test
+        @DisplayName("no hay comentario sin texto, autor, producto, fecha o estado")
+        void obligatorios() {
+            assertThrows(IllegalArgumentException.class, () -> new Comentario(" ", "p", "a", "ap", "t",
+                    List.of(), AHORA, Comentario.Estado.PUBLICADO));
+            assertThrows(IllegalArgumentException.class, () -> new Comentario("c", "p", "a", "ap", "",
+                    List.of(), AHORA, Comentario.Estado.PUBLICADO));
+            assertThrows(NullPointerException.class, () -> new Comentario("c", "p", "a", "ap", "t",
+                    List.of(), null, Comentario.Estado.PUBLICADO));
+            assertThrows(NullPointerException.class, () -> new Comentario("c", "p", "a", "ap", "t",
+                    List.of(), AHORA, null));
+            assertTrue(new Comentario("c", "p", "a", "ap", "t", null, AHORA, Comentario.Estado.PUBLICADO)
+                    .imagenes().isEmpty());
+        }
     }
 }

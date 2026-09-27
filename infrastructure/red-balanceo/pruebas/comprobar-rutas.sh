@@ -184,6 +184,40 @@ comprobar GET  /api/v1/tecnicas            "metricas GET /api/v1/tecnicas"
 comprobar GET  /api/v1/moderacion          "metricas GET /api/v1/moderacion"
 comprobar GET  /api/v1/comentarios/moderacion \
                                            "comentarios GET /api/v1/comentarios/moderacion"
+# B3 — calificaciones e imagenes de comentarios, en los prefijos que ya eran de
+# comentarios. Las imagenes tienen location propia (limite de cuerpo): si se
+# perdiera, seguirian llegando por /api/v1/comentarios, pero sin su limite.
+comprobar GET  /api/v1/products/p-1/rating "comentarios GET /api/v1/products/p-1/rating"
+comprobar GET  /api/v1/products/p-1/rating/mia \
+                                           "comentarios GET /api/v1/products/p-1/rating/mia"
+comprobar POST /api/v1/comentarios/imagenes \
+                                           "comentarios POST /api/v1/comentarios/imagenes"
+comprobar GET  /api/v1/comentarios/imagenes/i-1 \
+                                           "comentarios GET /api/v1/comentarios/imagenes/i-1"
+
+echo
+echo "Limites de cuerpo (B3) — las imagenes de comentarios cortan a 3m en el borde"
+
+# cuerpo <ruta> <bytes> <codigo esperado>
+cuerpo() {
+    local ruta="$1" tamano="$2" esperado="$3"
+    local obtenido
+    obtenido="$(head -c "$tamano" /dev/zero | curl -s -o /dev/null -w '%{http_code}' \
+        -X POST -H 'Content-Type: application/octet-stream' --data-binary @- "$BORDE$ruta")"
+    if [ "$obtenido" = "$esperado" ]; then
+        printf '  ok    POST   %-40s %8s bytes -> %s\n' "$ruta" "$tamano" "$obtenido"
+    else
+        printf '  FALLA POST   %-40s %8s bytes  esperado %s, obtenido %s\n' \
+            "$ruta" "$tamano" "$esperado" "$obtenido"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# 2,5 MB pasa (el servicio corta a los 2 MB con su problem detail); 3,5 MB lo
+# corta el borde. El techo general de 10m sigue valiendo para el resto.
+cuerpo /api/v1/comentarios/imagenes 2621440 200
+cuerpo /api/v1/comentarios/imagenes 3670016 413
+cuerpo /api/v1/perfiles/yo          3670016 200
 
 echo
 echo "Mailpit — la bandeja de pruebas que leen el banco E2E y los canarios (B1)"

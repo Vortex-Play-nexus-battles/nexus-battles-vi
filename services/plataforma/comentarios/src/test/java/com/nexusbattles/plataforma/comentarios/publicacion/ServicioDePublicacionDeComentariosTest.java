@@ -6,39 +6,68 @@ import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.Resultad
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.SENALADO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
+import com.nexusbattles.plataforma.comentarios.ResumenDeCalificaciones;
+import com.nexusbattles.plataforma.comentarios.calificacion.ServicioDeCalificaciones;
+import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoDeProductos;
+import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoNoDisponible;
+import com.nexusbattles.plataforma.comentarios.catalogo.ProductoInexistente;
+import com.nexusbattles.plataforma.comentarios.imagenes.ServicioDeImagenes;
 
 /**
- * Pruebas de la orquestacion de HU-COM-001 sobre el dominio ya probado.
+ * Pruebas de la orquestacion de la publicacion sobre el dominio ya probado —
+ * HU-COM-001..004, B3.
  *
- * Las reglas del hilo tienen sus propias pruebas desde el PR 163; aqui se
- * verifica lo que agrega esta capa: que la historia del producto se carga de
- * la base antes de decidir, que lo decidido se guarda, y que un rechazo no
- * deja rastro en la base.
+ * <p>Lo que se verifica aqui es lo que agrega esta capa: el orden de las
+ * comprobaciones (lo local antes que lo remoto), que un rechazo no deja rastro,
+ * que las estrellas del comentario pasan a la calificacion una sola vez, y que
+ * leer el hilo es una pagina de la base y no el producto entero en memoria.
  */
 @ExtendWith(MockitoExtension.class)
 class ServicioDePublicacionDeComentariosTest {
 
-    private static final Instant AYER = Instant.parse("2026-08-29T15:00:00Z");
+    private static final Instant AHORA = Instant.parse("2026-09-25T15:00:00Z");
+    private static final String PRODUCTO = "espada-del-alba";
+    private static final String IMAGEN = "3f1c2b4a-1111-4222-8333-944455566677";
 
     @Mock
     private ComentarioRepository repositorio;
@@ -49,172 +78,283 @@ class ServicioDePublicacionDeComentariosTest {
     @Mock
     private ConsultaDeSanciones sanciones;
 
+    @Mock
+    private CatalogoDeProductos catalogo;
+
+    @Mock
+    private ServicioDeCalificaciones calificaciones;
+
+    @Mock
+    private ServicioDeImagenes imagenes;
+
     private ServicioDePublicacionDeComentarios servicio;
 
     @BeforeEach
     void crearServicio() {
-        servicio = new ServicioDePublicacionDeComentarios(
-                repositorio, filtro, sanciones, List.of("jpg", "png", "webp"));
+        // Sin transaccion real: aqui se prueba el orden y lo que se guarda; que
+        // las escrituras vayan juntas y las llamadas remotas fuera lo cubre la IT.
+        servicio = new ServicioDePublicacionDeComentarios(repositorio, filtro, sanciones, catalogo,
+                calificaciones, imagenes, TransactionOperations.withoutTransaction(),
+                Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
-    private static RegistroDeComentario guardado(String autorId, Integer estrellas) {
-        return RegistroDeComentario.desde(new Comentario(
-                "com-previo", "espada-del-alba", autorId, "LyraRoja",
-                "La use toda la temporada y aguanta bien.",
-                List.of(), estrellas, AYER, Comentario.Estado.PUBLICADO));
+    @Nested
+    @DisplayName("publicar")
+    class Publicar {
+
+        @Test
+        @DisplayName("un comentario limpio se guarda publicado, sin estrellas propias, con sus imagenes y su calificacion")
+        void publicaLimpio() {
+            when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
+            when(filtro.verificar("Muy buena espada")).thenReturn(LIMPIO);
+            when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-1", 4)).thenReturn(true);
+            when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of("jugador-1", 4));
+
+            ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
+                    PRODUCTO, "jugador-1", "LyraRoja", "Muy buena espada", List.of(IMAGEN), 4);
+
+            assertTrue(publicado.comentario().estaPublicado());
+            assertEquals(AHORA, publicado.comentario().fechaPublicacion());
+            assertEquals(4, publicado.estrellas());
+            assertFalse(publicado.calificacionDescartada());
+
+            ArgumentCaptor<RegistroDeComentario> guardado = ArgumentCaptor.forClass(RegistroDeComentario.class);
+            verify(repositorio).saveAndFlush(guardado.capture());
+            assertEquals(PRODUCTO, guardado.getValue().getProductoId());
+            assertEquals(List.of(IMAGEN), guardado.getValue().aDominio().imagenes());
+            verify(imagenes).asociar(List.of(IMAGEN), "jugador-1", publicado.comentario().id());
+        }
+
+        @Test
+        @DisplayName("lo local va antes que lo remoto: imagenes, luego catalogo, luego sancion y filtro")
+        void ordenDeLasComprobaciones() {
+            when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
+            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+
+            servicio.publicar(PRODUCTO, "jugador-1", "LyraRoja", "texto", List.of(IMAGEN), null);
+
+            InOrder orden = inOrder(imagenes, catalogo, sanciones, filtro, repositorio);
+            orden.verify(imagenes).exigirDisponibles(List.of(IMAGEN), "jugador-1");
+            orden.verify(catalogo).exigirExistente(PRODUCTO);
+            orden.verify(sanciones).estadoDe("jugador-1");
+            orden.verify(filtro).verificar("texto");
+            orden.verify(repositorio).saveAndFlush(any(RegistroDeComentario.class));
+            orden.verify(imagenes).asociar(any(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("si ya habia calificado, el comentario entra igual y la respuesta lo dice con sus estrellas de antes (D-07)")
+        void segundaCalificacionDescartada() {
+            when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
+            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+            when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-1", 2)).thenReturn(false);
+            when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of("jugador-1", 5));
+
+            ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
+                    PRODUCTO, "jugador-1", "LyraRoja", "Sigue siendo buena", List.of(), 2);
+
+            assertTrue(publicado.calificacionDescartada());
+            assertEquals(5, publicado.estrellas(), "las estrellas que se ensenan son las de su calificacion");
+            verify(repositorio).saveAndFlush(any(RegistroDeComentario.class));
+        }
+
+        @Test
+        @DisplayName("sin estrellas no se toca la calificacion y no hay nada que descartar")
+        void sinEstrellas() {
+            when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
+            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+            when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of());
+
+            ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
+                    PRODUCTO, "jugador-1", "LyraRoja", "solo opino", null, null);
+
+            assertFalse(publicado.calificacionDescartada());
+            assertNull(publicado.estrellas());
+            verify(calificaciones, never()).registrarDesdeComentario(anyString(), anyString(), anyInt());
+        }
+
+        @Test
+        @DisplayName("lo senalado por el filtro se guarda en revision; su calificacion cuenta igual (no es contenido)")
+        void senaladoEnRevision() {
+            when(sanciones.estadoDe("jugador-2")).thenReturn(HABILITADO);
+            when(filtro.verificar("texto senalado")).thenReturn(SENALADO);
+            when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-2", 3)).thenReturn(true);
+
+            Comentario comentario = servicio.publicar(
+                    PRODUCTO, "jugador-2", "Korrigan", "texto senalado", List.of(), 3).comentario();
+
+            assertEquals(Comentario.Estado.EN_REVISION, comentario.estado());
+            verify(calificaciones).registrarDesdeComentario(PRODUCTO, "jugador-2", 3);
+        }
+
+        @Test
+        @DisplayName("el rechazo por sancion no guarda nada y ni consulta el filtro")
+        void rechazoPorSancion() {
+            when(sanciones.estadoDe("jugador-3")).thenReturn(SILENCIADO);
+
+            assertThrows(HiloDeComentarios.PublicacionRechazada.class, () -> servicio.publicar(
+                    PRODUCTO, "jugador-3", "Umbra", "da igual", List.of(), 2));
+
+            verifyNoInteractions(filtro, calificaciones);
+            verify(repositorio, never()).saveAndFlush(any(RegistroDeComentario.class));
+        }
+
+        @Test
+        @DisplayName("un producto que no existe es 404 y no se pregunta a nadie mas")
+        void productoInexistente() {
+            doThrow(new ProductoInexistente(PRODUCTO)).when(catalogo).exigirExistente(PRODUCTO);
+
+            assertThrows(ProductoInexistente.class, () -> servicio.publicar(
+                    PRODUCTO, "jugador-1", "Lyra", "texto", List.of(), 5));
+
+            verifyNoInteractions(sanciones, filtro, calificaciones);
+            verify(repositorio, never()).saveAndFlush(any(RegistroDeComentario.class));
+        }
+
+        @Test
+        @DisplayName("sin catalogo no se publica a ciegas: 503 y nada guardado")
+        void catalogoCaido() {
+            doThrow(new CatalogoNoDisponible("caido")).when(catalogo).exigirExistente(PRODUCTO);
+
+            assertThrows(CatalogoNoDisponible.class, () -> servicio.publicar(
+                    PRODUCTO, "jugador-1", "Lyra", "texto", List.of(), null));
+
+            verify(repositorio, never()).saveAndFlush(any(RegistroDeComentario.class));
+        }
+
+        @Test
+        @DisplayName("una imagen ajena o usada corta antes de preguntar al catalogo")
+        void imagenAjena() {
+            doThrow(new HiloDeComentarios.ImagenesNoValidas("ajena"))
+                    .when(imagenes).exigirDisponibles(List.of(IMAGEN), "jugador-1");
+
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class, () -> servicio.publicar(
+                    PRODUCTO, "jugador-1", "Lyra", "texto", List.of(IMAGEN), null));
+
+            verifyNoInteractions(catalogo, sanciones, filtro);
+        }
+
+        @Test
+        @DisplayName("un nombre de archivo corta aun antes: ni imagenes ni catalogo se enteran")
+        void nombreDeArchivo() {
+            assertThrows(HiloDeComentarios.ImagenesNoValidas.class, () -> servicio.publicar(
+                    PRODUCTO, "jugador-1", "Lyra", "texto", List.of("captura.jpg"), null));
+
+            verifyNoInteractions(imagenes, catalogo, sanciones, filtro, repositorio);
+        }
     }
 
-    @Test
-    @DisplayName("un comentario limpio se publica y queda guardado con sus datos")
-    void publicaYPersisteUnComentarioLimpio() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of());
-        when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-        when(filtro.verificar("Muy buena espada")).thenReturn(LIMPIO);
+    @Nested
+    @DisplayName("retirar (HU-COM-004)")
+    class Retirar {
 
-        ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
-                "espada-del-alba", "jugador-1", "LyraRoja",
-                "Muy buena espada", List.of("captura.jpg"), 4);
-        Comentario comentario = publicado.comentario();
+        private RegistroDeComentario guardado(String autorId, Comentario.Estado estado) {
+            return RegistroDeComentario.desde(new Comentario("com-1", PRODUCTO, autorId, "Lyra",
+                    "texto", List.of(), AHORA, estado));
+        }
 
-        assertTrue(comentario.estaPublicado());
-        assertFalse(publicado.calificacionDescartada());
-        assertEquals(4, comentario.calificacion().orElseThrow());
+        @Test
+        @DisplayName("el propio se guarda ELIMINADO y la calificacion no se toca (7.1)")
+        void retiraElPropio() {
+            when(repositorio.findById("com-1")).thenReturn(Optional.of(guardado("jugador-1", Comentario.Estado.PUBLICADO)));
 
-        ArgumentCaptor<RegistroDeComentario> captor = ArgumentCaptor.forClass(RegistroDeComentario.class);
-        verify(repositorio).save(captor.capture());
-        assertEquals("espada-del-alba", captor.getValue().getProductoId());
+            Comentario retirado = servicio.eliminar(PRODUCTO, "com-1", "jugador-1");
+
+            assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
+            ArgumentCaptor<RegistroDeComentario> captor = ArgumentCaptor.forClass(RegistroDeComentario.class);
+            verify(repositorio).save(captor.capture());
+            assertEquals(Comentario.Estado.ELIMINADO, captor.getValue().aDominio().estado());
+            verifyNoInteractions(calificaciones);
+        }
+
+        @Test
+        @DisplayName("retirar uno ya retirado no escribe nada (idempotente)")
+        void yaRetirado() {
+            when(repositorio.findById("com-1")).thenReturn(Optional.of(guardado("jugador-1", Comentario.Estado.ELIMINADO)));
+
+            Comentario retirado = servicio.eliminar(PRODUCTO, "com-1", "jugador-1");
+
+            assertTrue(retirado.estaEliminado());
+            verify(repositorio, never()).save(any(RegistroDeComentario.class));
+        }
+
+        @Test
+        @DisplayName("el de otro, el de otro producto o uno inexistente no tocan la base")
+        void noRetiraLoAjenoNiLoInexistente() {
+            when(repositorio.findById("com-1")).thenReturn(Optional.of(guardado("jugador-2", Comentario.Estado.PUBLICADO)));
+            when(repositorio.findById("no-existe")).thenReturn(Optional.empty());
+
+            assertThrows(HiloDeComentarios.ComentarioAjeno.class,
+                    () -> servicio.eliminar(PRODUCTO, "com-1", "jugador-1"));
+            assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class,
+                    () -> servicio.eliminar("otro-producto", "com-1", "jugador-2"));
+            assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class,
+                    () -> servicio.eliminar(PRODUCTO, "no-existe", "jugador-1"));
+            verify(repositorio, never()).save(any(RegistroDeComentario.class));
+        }
     }
 
-    @Test
-    @DisplayName("la calificación previa cargada de la base descarta la segunda: el comentario se guarda sin estrellas y se dice")
-    void descartaLaSegundaCalificacionDelMismoAutor() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of(guardado("jugador-1", 5)));
-        when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-        when(filtro.verificar("Sigue siendo buena")).thenReturn(LIMPIO);
+    @Nested
+    @DisplayName("leer el hilo, paginado")
+    class Leer {
 
-        ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
-                "espada-del-alba", "jugador-1", "LyraRoja",
-                "Sigue siendo buena", List.of(), 3);
+        private RegistroDeComentario guardado(String id, String autor, Instant fecha) {
+            return RegistroDeComentario.desde(new Comentario(id, PRODUCTO, autor, "Apodo-" + autor,
+                    "texto", List.of(), fecha, Comentario.Estado.PUBLICADO));
+        }
 
-        assertTrue(publicado.calificacionDescartada());
-        assertTrue(publicado.comentario().calificacion().isEmpty());
-        verify(repositorio).save(any(RegistroDeComentario.class));
-    }
+        @Test
+        @DisplayName("pide a la base una pagina de PUBLICADOS, del mas reciente al mas antiguo y luego por id")
+        void pideLaPaginaOrdenada() {
+            ResumenDeCalificaciones resumen = ResumenDeCalificaciones.de(PRODUCTO, Map.of(4, 1L, 5, 1L));
+            List<RegistroDeComentario> pagina = List.of(
+                    guardado("c3", "jugador-3", AHORA),
+                    guardado("c2", "jugador-1", AHORA.minusSeconds(60)));
+            when(repositorio.findByProductoIdAndEstado(eq(PRODUCTO), eq(Comentario.Estado.PUBLICADO), any(Pageable.class)))
+                    .thenAnswer(inv -> new PageImpl<>(pagina, inv.getArgument(2), 5));
+            when(calificaciones.estrellasDe(eq(PRODUCTO), any())).thenReturn(Map.of("jugador-1", 4));
+            when(calificaciones.resumen(PRODUCTO)).thenReturn(resumen);
 
-    @Test
-    @DisplayName("retirar un comentario propio lo guarda como ELIMINADO sin estrellas (HU-COM-004)")
-    void retiraElPropio() {
-        RegistroDeComentario mio = guardado("jugador-1", 5);
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of(mio));
+            ServicioDePublicacionDeComentarios.HiloConsultado hilo = servicio.consultarHilo(PRODUCTO, 1, 2);
 
-        Comentario retirado = servicio.eliminar("espada-del-alba", mio.getId(), "jugador-1");
+            ArgumentCaptor<Pageable> pedido = ArgumentCaptor.forClass(Pageable.class);
+            verify(repositorio).findByProductoIdAndEstado(eq(PRODUCTO), eq(Comentario.Estado.PUBLICADO), pedido.capture());
+            assertEquals(PageRequest.of(1, 2,
+                    Sort.by(Sort.Order.desc("fechaPublicacion"), Sort.Order.desc("id"))), pedido.getValue());
 
-        assertEquals(Comentario.Estado.ELIMINADO, retirado.estado());
-        assertTrue(retirado.calificacion().isEmpty());
-        org.mockito.ArgumentCaptor<RegistroDeComentario> guardadoCaptor =
-                org.mockito.ArgumentCaptor.forClass(RegistroDeComentario.class);
-        verify(repositorio).save(guardadoCaptor.capture());
-        assertEquals(Comentario.Estado.ELIMINADO, guardadoCaptor.getValue().aDominio().estado());
-    }
+            assertEquals(List.of("c3", "c2"), hilo.comentarios().stream().map(Comentario::id).toList());
+            assertEquals(1, hilo.pagina());
+            assertEquals(2, hilo.tamano());
+            assertEquals(5, hilo.total());
+            assertEquals(3, hilo.totalPaginas());
+            assertEquals(Map.of("jugador-1", 4), hilo.estrellasPorAutor());
+            assertSame(resumen, hilo.resumen());
+            verify(calificaciones).estrellasDe(PRODUCTO, Set.of("jugador-3", "jugador-1"));
+            verifyNoInteractions(catalogo);
+        }
 
-    @Test
-    @DisplayName("retirar el de otro o uno inexistente no toca la base")
-    void noRetiraLoAjenoNiLoInexistente() {
-        RegistroDeComentario deOtro = guardado("jugador-2", 4);
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of(deOtro));
+        @Test
+        @DisplayName("un tamano de mas de 50 se recorta: el cliente no decide cuanto carga el servidor")
+        void tamanoRecortado() {
+            when(repositorio.findByProductoIdAndEstado(eq(PRODUCTO), eq(Comentario.Estado.PUBLICADO), any(Pageable.class)))
+                    .thenAnswer(inv -> new PageImpl<>(List.of(), inv.getArgument(2), 0));
+            when(calificaciones.estrellasDe(eq(PRODUCTO), any())).thenReturn(Map.of());
+            when(calificaciones.resumen(PRODUCTO)).thenReturn(ResumenDeCalificaciones.vacio(PRODUCTO));
 
-        assertThrows(HiloDeComentarios.ComentarioAjeno.class,
-                () -> servicio.eliminar("espada-del-alba", deOtro.getId(), "jugador-1"));
-        assertThrows(HiloDeComentarios.ComentarioNoEncontrado.class,
-                () -> servicio.eliminar("espada-del-alba", "no-existe", "jugador-1"));
-        verify(repositorio, never()).save(any(RegistroDeComentario.class));
-    }
+            ServicioDePublicacionDeComentarios.HiloConsultado hilo = servicio.consultarHilo(PRODUCTO, 0, 5000);
 
-    @Test
-    @DisplayName("lo senalado por el filtro se guarda retenido en revision")
-    void guardaEnRevisionLoQueElFiltroSenala() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of());
-        when(sanciones.estadoDe("jugador-2")).thenReturn(HABILITADO);
-        when(filtro.verificar("texto senalado")).thenReturn(SENALADO);
+            assertEquals(50, hilo.tamano());
+            assertTrue(hilo.comentarios().isEmpty());
+            assertEquals(0, hilo.totalPaginas());
+            assertNull(hilo.resumen().promedio());
+        }
 
-        Comentario comentario = servicio.publicar(
-                "espada-del-alba", "jugador-2", "Korrigan",
-                "texto senalado", List.of(), 3).comentario();
-
-        assertEquals(Comentario.Estado.EN_REVISION, comentario.estado());
-        verify(repositorio).save(any(RegistroDeComentario.class));
-    }
-
-    @Test
-    @DisplayName("el rechazo por sancion no guarda nada en la base")
-    void elRechazoPorSancionNoDejaRastro() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of());
-        when(sanciones.estadoDe("jugador-3")).thenReturn(SILENCIADO);
-        when(filtro.verificar("da igual")).thenReturn(LIMPIO);
-
-        assertThrows(
-                HiloDeComentarios.PublicacionRechazada.class,
-                () -> servicio.publicar(
-                        "espada-del-alba", "jugador-3", "Umbra",
-                        "da igual", List.of(), 2));
-
-        verify(repositorio, never()).save(any(RegistroDeComentario.class));
-    }
-
-    // ------------------------------------------------------------------
-    // Lectura del hilo (#438): el lado proveedor de HU-INV-014 y el CA-01 de
-    // HU-COM-001 -"se suma al hilo"-, que solo se puede afirmar si el hilo
-    // se puede leer. El dominio ya sabia hacerlo (visibles, promedio); esto
-    // solo lo expone.
-    // ------------------------------------------------------------------
-
-    private static RegistroDeComentario guardadoCon(
-            String id, String autorId, Integer estrellas, Comentario.Estado estado) {
-        return RegistroDeComentario.desde(new Comentario(
-                id, "espada-del-alba", autorId, "Apodo-" + autorId,
-                "texto", List.of(), estrellas, AYER, estado));
-    }
-
-    @Test
-    @DisplayName("un producto sin comentarios responde un hilo vacio, no un error")
-    void hiloVacio() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of());
-
-        ServicioDePublicacionDeComentarios.HiloConsultado hilo =
-                servicio.consultarHilo("espada-del-alba");
-
-        assertEquals("espada-del-alba", hilo.productoId());
-        assertTrue(hilo.comentarios().isEmpty());
-        assertTrue(hilo.calificacionPromedio().isEmpty());
-        assertEquals(0, hilo.totalCalificaciones());
-    }
-
-    @Test
-    @DisplayName("el hilo trae solo lo publicado, en orden, y promedia solo esas estrellas")
-    void hiloConPublicadosYRetenidos() {
-        when(repositorio.findByProductoIdOrderByFechaPublicacionAsc("espada-del-alba"))
-                .thenReturn(List.of(
-                        guardadoCon("c1", "jugador-1", 4, Comentario.Estado.PUBLICADO),
-                        // Retenido: reserva la calificacion de su autor pero NO
-                        // es publico ni mueve el promedio.
-                        guardadoCon("c2", "jugador-2", 1, Comentario.Estado.EN_REVISION),
-                        guardadoCon("c3", "jugador-3", 5, Comentario.Estado.PUBLICADO),
-                        // Segundo comentario de jugador-1: sin estrellas.
-                        guardadoCon("c4", "jugador-1", null, Comentario.Estado.PUBLICADO)));
-
-        ServicioDePublicacionDeComentarios.HiloConsultado hilo =
-                servicio.consultarHilo("espada-del-alba");
-
-        assertEquals(List.of("c1", "c3", "c4"),
-                hilo.comentarios().stream().map(Comentario::id).toList());
-        assertEquals(4.5, hilo.calificacionPromedio().orElseThrow(), 0.0001);
-        assertEquals(2, hilo.totalCalificaciones());
+        @Test
+        @DisplayName("una pagina negativa o un tamano menor que 1 es 400")
+        void parametrosInvalidos() {
+            assertThrows(IllegalArgumentException.class, () -> servicio.consultarHilo(PRODUCTO, -1, 16));
+            assertThrows(IllegalArgumentException.class, () -> servicio.consultarHilo(PRODUCTO, 0, 0));
+            verifyNoInteractions(repositorio);
+        }
     }
 }

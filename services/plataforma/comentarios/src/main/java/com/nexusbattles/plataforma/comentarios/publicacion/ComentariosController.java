@@ -13,8 +13,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import com.nexusbattles.plataforma.comentarios.Comentario;
 
@@ -48,15 +50,19 @@ public class ComentariosController {
     }
 
     /**
-     * El hilo publico del producto (#438; proveedor de HU-INV-014).
+     * Una pagina del hilo publico del producto (#438; proveedor de HU-INV-014;
+     * paginado desde B3).
      *
      * <p>Siempre 200: un producto sin comentarios es un hilo vacio, no un
      * recurso inexistente. El promedio va nulo cuando nadie califico, para que
      * la ficha diga «sin valoraciones» en vez de pintar un cero.
      */
     @GetMapping
-    public HiloDeComentariosResponse consultar(@PathVariable String productId) {
-        return HiloDeComentariosResponse.desde(servicio.consultarHilo(productId));
+    public HiloDeComentariosResponse consultar(
+            @PathVariable String productId,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "" + ServicioDePublicacionDeComentarios.TAMANO_POR_OMISION) int tamano) {
+        return HiloDeComentariosResponse.desde(servicio.consultarHilo(productId, pagina, tamano));
     }
 
     @PostMapping
@@ -76,7 +82,8 @@ public class ComentariosController {
         Comentario comentario = publicado.comentario();
         HttpStatus estado = comentario.estaPublicado() ? HttpStatus.CREATED : HttpStatus.ACCEPTED;
         return ResponseEntity.status(estado)
-                .body(ComentarioResponse.desde(comentario, publicado.calificacionDescartada()));
+                .body(ComentarioResponse.publicado(
+                        comentario, publicado.estrellas(), publicado.calificacionDescartada()));
     }
 
     /**
@@ -104,7 +111,8 @@ public class ComentariosController {
      *
      * <p>{@code autorId} y {@code apodoAutor} siguen en el esquema, marcados
      * como obsoletos, para que un cliente de la 1.0.0 no reciba 400 por
-     * mandarlos; el servicio no los lee.
+     * mandarlos; el servicio no los lee. {@code imagenes} son, desde la 1.4.0,
+     * los {@code id} de imagenes subidas antes.
      */
     public record PublicacionComentarioRequest(
             @Deprecated String autorId,
@@ -115,12 +123,19 @@ public class ComentariosController {
     }
 
     /**
-     * Respuesta del contrato, con las estrellas ausentes si ya habia calificado.
+     * {@code ComentarioResponse} del contrato.
      *
-     * <p>{@code calificacionDescartada} (1.2.0, RF-COM-002 / D-07) dice que
-     * las estrellas que venian se descartaron porque el autor ya habia
-     * calificado el producto: el comentario entro igual. Va a {@code false}
-     * en el hilo, donde no hay solicitud que descartar.
+     * <p>{@code estrellas} son las de la calificacion de su autor sobre el
+     * producto (B3): el comentario ya no las guarda. {@code
+     * calificacionDescartada} (1.2.0, RF-COM-002 / D-07) dice que las
+     * estrellas que traia la publicacion se descartaron porque el autor ya
+     * habia calificado: el comentario entro igual. Va a {@code false} fuera de
+     * la respuesta de publicar.
+     *
+     * <p>{@code marcado} es de moderacion (7.3.3, «seguimiento especial») y
+     * solo viaja en sus respuestas: en el hilo publico va nulo y no se
+     * serializa. {@code editado} si es publico: quien lee tiene que saber que
+     * un moderador cambio el texto.
      */
     public record ComentarioResponse(
             String id,
@@ -132,19 +147,36 @@ public class ComentariosController {
             Integer estrellas,
             Instant fechaPublicacion,
             String estado,
-            boolean calificacionDescartada) {
+            boolean calificacionDescartada,
+            boolean editado,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean marcado) {
 
-        static ComentarioResponse desde(Comentario comentario) {
-            return desde(comentario, false);
+        /** Como se ve en el hilo publico. */
+        public static ComentarioResponse publico(Comentario comentario, Integer estrellas) {
+            return construir(comentario, estrellas, false, null);
+        }
+
+        /** La respuesta de publicar. */
+        public static ComentarioResponse publicado(
+                Comentario comentario, Integer estrellas, boolean calificacionDescartada) {
+            return construir(comentario, estrellas, calificacionDescartada, null);
         }
 
         /**
          * R10.1 — publico para que la cola de moderacion pinte el comentario
          * con el MISMO cuerpo que el hilo. Dos representaciones del mismo
          * comentario acabarian divergiendo, y el moderador veria algo distinto
-         * de lo que ve el jugador justo cuando mas importa que coincidan.
+         * de lo que ve el jugador justo cuando mas importa que coincidan. Lo
+         * unico que anade es la marca de seguimiento, que es suya. Las
+         * estrellas no: son la calificacion del producto, no el contenido que
+         * se modera.
          */
-        public static ComentarioResponse desde(Comentario comentario, boolean calificacionDescartada) {
+        public static ComentarioResponse paraModeracion(Comentario comentario) {
+            return construir(comentario, null, false, comentario.marcado());
+        }
+
+        private static ComentarioResponse construir(
+                Comentario comentario, Integer estrellas, boolean calificacionDescartada, Boolean marcado) {
             return new ComentarioResponse(
                     comentario.id(),
                     comentario.productoId(),
@@ -152,34 +184,40 @@ public class ComentariosController {
                     comentario.apodoAutor(),
                     comentario.texto(),
                     comentario.imagenes(),
-                    comentario.calificacion().orElse(null),
+                    estrellas,
                     comentario.fechaPublicacion(),
                     comentario.estado().name(),
-                    calificacionDescartada);
+                    calificacionDescartada,
+                    comentario.editado(),
+                    marcado);
         }
     }
 
-    /** Esquema {@code HiloDeComentariosResponse} del contrato. */
+    /**
+     * Esquema {@code HiloDeComentariosResponse} del contrato (paginado desde
+     * 1.5.0). {@code total} son los publicados de todas las paginas;
+     * {@code calificacionPromedio} y {@code totalCalificaciones}, los de la
+     * tabla de calificaciones, los mismos que {@code GET /rating}.
+     */
     public record HiloDeComentariosResponse(
             String productoId,
             List<ComentarioResponse> comentarios,
-            int total,
+            int pagina,
+            int tamano,
+            long total,
+            int totalPaginas,
             Double calificacionPromedio,
-            int totalCalificaciones) {
+            long totalCalificaciones) {
 
-        static HiloDeComentariosResponse desde(
-                ServicioDePublicacionDeComentarios.HiloConsultado hilo) {
+        static HiloDeComentariosResponse desde(ServicioDePublicacionDeComentarios.HiloConsultado hilo) {
             List<ComentarioResponse> comentarios = hilo.comentarios().stream()
-                    .map(ComentarioResponse::desde)
+                    .map(comentario -> ComentarioResponse.publico(
+                            comentario, hilo.estrellasPorAutor().get(comentario.autorId())))
                     .toList();
-            // Dos decimales, como declara el contrato: 4.333... seria ruido en
-            // una ficha de cinco estrellas.
-            Double promedio = hilo.calificacionPromedio().isPresent()
-                    ? Math.round(hilo.calificacionPromedio().getAsDouble() * 100.0) / 100.0
-                    : null;
             return new HiloDeComentariosResponse(
-                    hilo.productoId(), comentarios, comentarios.size(),
-                    promedio, hilo.totalCalificaciones());
+                    hilo.productoId(), comentarios, hilo.pagina(), hilo.tamano(),
+                    hilo.total(), hilo.totalPaginas(),
+                    hilo.resumen().promedio(), hilo.resumen().total());
         }
     }
 }
