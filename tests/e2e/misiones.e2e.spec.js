@@ -35,8 +35,11 @@
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
+import { AxeBuilder } from '@axe-core/playwright';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
+const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
+const GRAVES = new Set(['serious', 'critical']);
 // El libro de créditos no está detrás del borde en el banco: puerto publicado.
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -80,6 +83,20 @@ async function conSesion(page, jugadora) {
     },
     [jugadora.token, jugadora.apodo, jugadora.claims.uid],
   );
+}
+
+/** axe sobre lo que se ve ahora mismo: sin hallazgos graves. */
+async function sinBarrerasGraves(page, donde) {
+  const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
+  const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
+  expect(
+    graves.map(
+      (v) =>
+        `${v.id} [${v.impact}] ${v.nodes.length}× — ${v.help} — ` +
+        v.nodes.map((n) => `${n.target.join(' ')} ${n.html.slice(0, 160)}`).join(' | '),
+    ),
+    `axe en ${donde}`,
+  ).toEqual([]);
 }
 
 /** El héroe de la jugadora, tal como lo devuelve su inventario. */
@@ -201,6 +218,7 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(page.locator(`.mision-card[data-mision="${PRUEBA.id}"]`)).toBeVisible();
     // Hay servicio: ni rastro del estado «no disponible».
     await expect(page.locator('.misiones-estado[data-estado="sin-abrir"]')).toHaveCount(0);
+    await sinBarrerasGraves(page, 'tablón con servicio');
   });
 
   test('2 · iniciar desde la vista: héroe, estrategia comprobada, confirmación y matrícula 201', async ({
@@ -311,6 +329,7 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
       String(Math.round(reporte.recompensas.experiencia)),
     );
     await expect(page.locator('.mision-reporte')).toContainText('Derrotó al jefe final.');
+    await sinBarrerasGraves(page, 'reporte de la misión');
 
     // Y el historial la enlaza.
     await page.goto(`${BORDE}${VISTA}#historial`);
@@ -397,6 +416,7 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(page.locator('[data-zona="guardado"] .aviso--exito')).toContainText(
       'Estrategia guardada',
     );
+    await sinBarrerasGraves(page, 'estrategia guardada');
   });
 
   test('6 · en curso y cancelación: el héroe queda bloqueado y cancelar lo libera sin recompensas', async ({
