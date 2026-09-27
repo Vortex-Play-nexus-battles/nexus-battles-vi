@@ -8,13 +8,16 @@
  *
  * Porque el informe tiene que dar los percentiles, la tasa de error y el
  * throughput POR ESCENARIO Y EN TOTAL, y `handleSummary` corre una vez por
- * proceso de k6. Con un archivo por escenario habria cuatro resumenes sueltos
- * y el total habria que calcularlo a mano fuera de k6 —o sea, un sitio mas
- * donde equivocarse—. Con un solo proceso, una corrida produce un `resumen.json`
- * que ya trae las cinco filas y se adjunta tal cual como evidencia de Sprint.
+ * proceso de k6. Con un archivo por escenario habria un resumen suelto por
+ * escenario y el total habria que calcularlo a mano fuera de k6 —o sea, un
+ * sitio mas donde equivocarse—. Con un solo proceso, una corrida produce un
+ * `resumen.json` que ya trae una fila por escenario mas el total y se adjunta
+ * tal cual como evidencia de Sprint.
  *
- * De paso, la sesion se consigue una sola vez en `setup()` y los cuatro
- * escenarios la comparten, en vez de repetir el login cuatro veces.
+ * De paso, la sesion se consigue una sola vez en `setup()` y los escenarios que
+ * la necesitan la comparten, en vez de repetir el login en cada uno. Desde B12
+ * hay dos de lectura publica (`tienda`, `comentarios`) que no la usan, y
+ * `ESCENARIOS` elige cuales corren (ver lib/entorno.js).
  *
  * Los escenarios corren EN SERIE, escalonados con `startTime`. Si corrieran a
  * la vez, el p95 del listado incluiria la contencion que provoca la creacion de
@@ -36,8 +39,10 @@ import { CLAVE_TOTAL } from './lib/medicion.js';
 import { prepararSesion } from './lib/sesion.js';
 
 import { medirLogin } from './escenarios/autenticacion.js';
+import { medirHiloDeComentarios } from './escenarios/comentarios.js';
 import { medirBusquedaDeInventario } from './escenarios/inventario.js';
 import { medirCreacionDeSala, medirListadoDeSalas } from './escenarios/salas.js';
+import { medirVitrina } from './escenarios/tienda.js';
 
 // ---------------------------------------------------------------------------
 // Funciones que ejecuta k6, una por escenario.
@@ -67,12 +72,24 @@ export function escenarioBusquedaInventario(sesion) {
   medirBusquedaDeInventario(sesion);
 }
 
+/** Lectura publica: la sesion de setup() no se usa. */
+export function escenarioTienda() {
+  medirVitrina();
+}
+
+/** Lectura publica: la sesion de setup() no se usa. */
+export function escenarioComentarios() {
+  medirHiloDeComentarios();
+}
+
 /** Que funcion ejecuta cada escenario, en el orden en que corren. */
 const EJECUTORES = {
   login: 'escenarioLogin',
   listar_salas: 'escenarioListarSalas',
   crear_sala: 'escenarioCrearSala',
   busqueda_inventario: 'escenarioBusquedaInventario',
+  tienda: 'escenarioTienda',
+  comentarios: 'escenarioComentarios',
 };
 
 /**
