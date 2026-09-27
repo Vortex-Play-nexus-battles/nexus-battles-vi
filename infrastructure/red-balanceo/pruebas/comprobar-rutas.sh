@@ -330,6 +330,75 @@ else
 fi
 
 echo
+echo "Trafico publico (B12) — el mismo borde, visto desde una red de internet"
+# Todo lo de arriba sale del anfitrion por localhost:8099, y el borde lo ve
+# llegar desde la pasarela de Docker: una direccion PRIVADA, la misma clase de
+# origen que el banco E2E y que un tunel SSH al host. Desde B12 el borde trata
+# distinto a un origen privado y a uno publico (Mailpit, limite de
+# frecuencia), asi que el banco necesita los dos. El publico es
+# `cliente-publico` (docker-compose.yml): vive solo en 203.0.113.0/24
+# (TEST-NET-3) y entra al borde por esa red.
+PRUEBAS="$(cd "$(dirname "$0")" && pwd)"
+BORDE_PUBLICO="${BORDE_PUBLICO:-http://borde}"
+
+# desdeFuera <argumentos de curl>: la peticion, hecha desde internet.
+# MSYS_NO_PATHCONV: en el bash de Git para Windows, sin esto un argumento como
+# /dev/null le llegaria a docker convertido en una ruta de Windows.
+desdeFuera() {
+    (cd "$PRUEBAS" && MSYS_NO_PATHCONV=1 docker compose exec -T cliente-publico curl -s "$@")
+}
+
+# comprobarFuera / codigoFuera: `comprobar` y `codigo`, desde internet.
+comprobarFuera() {
+    local metodo="$1" ruta="$2" esperado="$3"
+    local obtenido
+    obtenido="$(desdeFuera -X "$metodo" "$BORDE_PUBLICO$ruta")"
+    if [ "$obtenido" = "$esperado" ]; then
+        printf '  ok    fuera %-6s %-34s -> %s\n' "$metodo" "$ruta" "$obtenido"
+    else
+        printf '  FALLA fuera %-6s %-34s\n        esperado: %s\n        obtenido: %s\n' \
+            "$metodo" "$ruta" "$esperado" "$obtenido"
+        fallos=$((fallos + 1))
+    fi
+}
+codigoFuera() {
+    local metodo="$1" ruta="$2" esperado="$3"
+    local obtenido
+    obtenido="$(desdeFuera -o /dev/null -w '%{http_code}' -X "$metodo" "$BORDE_PUBLICO$ruta")"
+    if [ "$obtenido" = "$esperado" ]; then
+        printf '  ok    fuera %-6s %-34s -> %s\n' "$metodo" "$ruta" "$obtenido"
+    else
+        printf '  FALLA fuera %-6s %-34s  esperado %s, obtenido %s\n' \
+            "$metodo" "$ruta" "$esperado" "$obtenido"
+        fallos=$((fallos + 1))
+    fi
+}
+
+# El eco devuelve en X-Eco-Origen el $remote_addr que el borde le reenvia
+# (X-Real-IP). Si Docker cambiara la red por la que publica el 8099, el
+# anfitrion dejaria de ser privado y todo este bloque probaria otra cosa: por
+# eso se comprueba en cada corrida, y no se da por hecho.
+origenVisto() { printf '%s\n' "$1" | tr -d '\r' | grep -i '^x-eco-origen:' | sed 's/^[^:]*: *//'; }
+origenAnfitrion="$(origenVisto "$(curl -s -o /dev/null -D - "$BORDE/api/v1/salas")")"
+origenPublico="$(origenVisto "$(desdeFuera -o /dev/null -D - "$BORDE_PUBLICO/api/v1/salas")")"
+if printf '%s' "$origenAnfitrion" | grep -Eq '^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)'; then
+    printf '  ok    el anfitrion llega al borde como origen privado (%s)\n' "$origenAnfitrion"
+else
+    printf '  FALLA el anfitrion deberia llegar como origen privado y llega como "%s"\n' "$origenAnfitrion"
+    fallos=$((fallos + 1))
+fi
+if printf '%s' "$origenPublico" | grep -Eq '^203\.0\.113\.'; then
+    printf '  ok    el cliente de internet llega como origen publico (%s)\n' "$origenPublico"
+else
+    printf '  FALLA el cliente de internet deberia llegar desde 203.0.113.0/24 y llega como "%s"\n' "$origenPublico"
+    fallos=$((fallos + 1))
+fi
+# El reparto es el mismo para todo el mundo.
+comprobarFuera GET  /api/v1/salas          "salas GET /api/v1/salas"
+comprobarFuera POST /api/v1/auth/login     "identidad POST /api/v1/auth/login"
+codigoFuera    GET  /salud-borde           200
+
+echo
 echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
