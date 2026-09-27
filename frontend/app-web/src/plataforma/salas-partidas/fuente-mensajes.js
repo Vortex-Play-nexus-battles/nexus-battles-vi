@@ -514,6 +514,7 @@ export function fuenteHttpDeMensajes({
     primera: Array.isArray(primeraBandeja) ? primeraBandeja : null,
     lineaBase: false,
     canal: null,
+    abriendo: false,
     cerrado: true,
     caido: false,
     intentoDeApertura: 0,
@@ -930,7 +931,8 @@ export function fuenteHttpDeMensajes({
   }
 
   function adoptarCanal(nuevo) {
-    if (control.cerrado) {
+    // Cerrado mientras abría, o ya hay otro: este sobra.
+    if (control.cerrado || (control.canal && control.canal !== nuevo)) {
       nuevo.cerrar();
       return;
     }
@@ -965,10 +967,16 @@ export function fuenteHttpDeMensajes({
     }, espera);
   }
 
+  function marcarAbriendo(abriendo) {
+    control.abriendo = abriendo;
+  }
+
   async function abrirCanal() {
-    if (control.cerrado || control.canal) {
+    // Un solo intento a la vez: dos canales abiertos contarían todo dos veces.
+    if (control.cerrado || control.canal || control.abriendo) {
       return;
     }
+    marcarAbriendo(true);
     let nuevo = null;
     try {
       nuevo = await canalReconectable({
@@ -977,8 +985,10 @@ export function fuenteHttpDeMensajes({
         esperas,
         reloj,
       });
+      marcarAbriendo(false);
       adoptarCanal(nuevo);
     } catch {
+      marcarAbriendo(false);
       if (nuevo && control.canal !== nuevo) {
         nuevo.cerrar();
       }

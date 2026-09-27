@@ -12,11 +12,12 @@
  * qué pasa, por qué y qué se puede hacer ya (el chat general y las salas
  * privadas con invitación). No finge ni una conversación.
  *
- * B6 — tres retoques para que lo del servicio llegue a la vista: la fuente
- * puede llegar como promesa (pregunta al servicio antes de pintar), un envío
- * rechazado dice por qué (el `detalle` de la fuente) y, si repetirlo no
- * cambiaría nada, devuelve el texto al campo en vez de ofrecer «Reintentar»,
- * y quien te escribe por primera vez aparece en la lista en ese momento.
+ * B6 — retoques para que lo del servicio llegue a la vista: la fuente puede
+ * llegar como promesa (pregunta al servicio antes de pintar); la búsqueda
+ * pide las tres letras del contrato; un envío rechazado dice por qué (el
+ * `detalle` de la fuente) y, si repetirlo no cambiaría nada, devuelve el
+ * texto al campo en vez de ofrecer «Reintentar»; y quien te escribe por
+ * primera vez aparece en la lista en ese momento.
  *
  * Estados que cubre, por la retroalimentación del docente: lista, vacío,
  * cargando, error con reintento, buscar jugador (sin resultados y con fallo),
