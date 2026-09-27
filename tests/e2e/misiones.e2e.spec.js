@@ -443,7 +443,15 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     expect(bloqueado.disponible).toBe(false);
     expect(bloqueado.ejecucionMisionId).toBe(activa.ejecucionId);
 
+    // Y «En misión» en Mi inventario, sin poder cambiarle el equipo.
     await conSesion(page, jugadora);
+    await page.goto(`${BORDE}/frontend/app-web/src/contenido/inventario/inventario.html`);
+    await expect(page.locator('.sello-estado-heroe[data-estado="EN_MISION"]')).toHaveText(
+      'En misión',
+      { timeout: 20_000 },
+    );
+    await expect(page.locator('[data-accion="equipar"]')).toBeDisabled();
+
     await page.goto(`${BORDE}${VISTA}#en-curso`);
     const tarjeta = page.locator(`.mision-activa[data-ejecucion="${activa.ejecucionId}"]`);
     await expect(tarjeta).toBeVisible({ timeout: 20_000 });
