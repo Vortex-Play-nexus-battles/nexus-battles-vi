@@ -100,6 +100,17 @@ comprobar GET  /api/v1/transacciones       "finanzas GET /api/v1/transacciones"
 comprobar GET  /api/v1/cofres/mios         "finanzas GET /api/v1/cofres/mios"
 comprobar GET  /api/v1/subastas            "subastas GET /api/v1/subastas"
 comprobar GET  /api/v1/mis-pujas           "subastas GET /api/v1/mis-pujas"
+# B8 — el panel personal (ms-subastas-panel.yaml), las reglas vigentes y el
+# canal STOMP. /api/v1/ws-subastas no tenia location: el listado en vivo caia en
+# el 404 generico de /api/ y la vista degradaba al sondeo sin decirlo.
+comprobar GET  /api/v1/subastas/reglas     "subastas GET /api/v1/subastas/reglas"
+comprobar GET  /api/v1/mis-subastas/publicadas \
+                                           "subastas GET /api/v1/mis-subastas/publicadas"
+comprobar POST /api/v1/mis-subastas/pendientes/recogida \
+                                           "subastas POST /api/v1/mis-subastas/pendientes/recogida"
+comprobar GET  /api/v1/ws-subastas         "subastas GET /api/v1/ws-subastas"
+enConfiguracion "ws-subastas tiene su location de prefijo (^~), con Upgrade como /ws" \
+    'location \^~ /api/v1/ws-subastas'
 # R16.22 — ms-chatbot no tenia location: caia en el 404 generico.
 comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
 comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
@@ -176,6 +187,8 @@ codigo GET /api/v1/correos          404
 # prefijo inventado: tiene que caer en el 404 de "prefijo sin servicio", no
 # colarse en ningun upstream.
 codigo GET /api/v1/no-existe-esto   404
+# B8 — un prefijo que solo empieza como el de subastas no es de subastas.
+codigo GET /api/v1/subastasx        404
 
 echo
 echo "Direcciones limpias (R17) — se sirven, se anuncian y las antiguas redirigen"

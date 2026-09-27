@@ -56,10 +56,10 @@ import org.springframework.security.oauth2.jwt.JwtException;
  *       que la cadena HTTP. El {@code sub} sigue siendo el apodo y nadie lo
  *       interpreta como UUID.</li>
  *   <li><b>Suscribirse a cualquier destino que no sea el listado publico exige
- *       estar identificado.</b> Hoy no existe ningun otro destino; la regla
- *       esta puesta para que el dia que alguien anada
- *       {@code /user/**} o un topico por subasta, el destino nazca cerrado en
- *       vez de abierto.</li>
+ *       estar identificado.</b> La regla se puso para que el dia que alguien
+ *       anadiera un topico por subasta naciera cerrado, y asi nacio: B8 anadio
+ *       {@code /topic/subastas/{subastaId}} y exige sesion. Cualquier destino
+ *       que el AsyncAPI no declare se rechaza, tambien con sesion.</li>
  *   <li><b>Ningun SEND del cliente se acepta.</b> No hay {@code @MessageMapping}
  *       que lo atienda, asi que un SEND solo puede ser un intento de encontrar
  *       uno. Rechazarlo de plano es la garantia anti-suplantacion mas fuerte
@@ -135,7 +135,12 @@ public class PoliticaDelCanalDeSubastas implements ChannelInterceptor {
         return mensaje;
     }
 
-    /** El listado, para todos. Cualquier otro destino, solo identificado. */
+    /**
+     * El listado, para todos. El canal de una subasta (B8,
+     * {@code /topic/subastas/{subastaId}}), solo identificado. Cualquier otro
+     * destino, para nadie: el AsyncAPI declara esos dos canales y ninguno mas,
+     * asi que un destino inventado nace cerrado.
+     */
     private Message<?> comprobarSuscripcion(Message<?> mensaje, StompHeaderAccessor cabeceras) {
         String destino = cabeceras.getDestination();
         if (destinoPublico.equals(destino)) {
@@ -145,7 +150,23 @@ public class PoliticaDelCanalDeSubastas implements ChannelInterceptor {
             throw new AccessDeniedException(
                     "Ese canal necesita una sesion; el listado publico es " + destinoPublico + ".");
         }
+        if (!esCanalDeUnaSubasta(destino)) {
+            throw new AccessDeniedException("Ese canal no existe en ms-subastas.");
+        }
         return mensaje;
+    }
+
+    /** {@code /topic/subastas/} seguido de un UUID, y nada mas. */
+    static boolean esCanalDeUnaSubasta(String destino) {
+        if (destino == null || !destino.startsWith(SubastaRealtimePublisher.PREFIJO_CANAL_SUBASTA)) {
+            return false;
+        }
+        String id = destino.substring(SubastaRealtimePublisher.PREFIJO_CANAL_SUBASTA.length());
+        try {
+            return java.util.UUID.fromString(id).toString().equalsIgnoreCase(id);
+        } catch (IllegalArgumentException noEsUnId) {
+            return false;
+        }
     }
 
     /**
