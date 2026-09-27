@@ -37,6 +37,8 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const GRAVES = new Set(['serious', 'critical']);
@@ -52,21 +54,12 @@ const TEMPLO = { id: 'templo-olvidado', nombre: 'El Templo Olvidado' };
 /** Créditos de la misión técnica (`recompensas.creditos` de su semilla). */
 const CREDITOS_DE_PRUEBA = 5;
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo: el ayudante del banco
+ * registra, lee el código del buzón de pruebas, lo confirma y entra.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -157,6 +150,8 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
   let reporte;
 
   test.beforeAll(async () => {
+    // B1: la cuenta espera su código de verificación antes del alta.
+    test.setTimeout(180_000);
     api = await apiRequest.newContext({ baseURL: BORDE });
     jugadora = await sesionDe(api, `misiones_${Date.now()}`);
     // R17: el héroe con su arma equipada y los créditos iniciales los pone el
