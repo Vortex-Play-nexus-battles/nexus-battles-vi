@@ -74,8 +74,14 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   // administrador en beforeAll (igual que la tienda), no se inventa.
   let producto;
 
+  /**
+   * Consulta 1.4.0 (B2): la sancion activa ya no es publica. La jugadora
+   * pregunta por la suya con su token; sin token seria 401.
+   */
   async function activa() {
-    const r = await api.get(`/api/v1/sanciones/usuarios/${jugadora.claims.uid}/activa`);
+    const r = await api.get(`/api/v1/sanciones/usuarios/${jugadora.claims.uid}/activa`, {
+      headers: conToken(jugadora.token),
+    });
     expect(r.status(), await r.text()).toBe(200);
     return r.json();
   }

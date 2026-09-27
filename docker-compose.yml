@@ -122,6 +122,14 @@ services:
       - "8086:8086"
     env_file:
       - .env
+    environment:
+      # 7.3.2 (B2): cada sancion se proyecta sobre la cuenta en ms-identidad
+      # (estado-sancion) y se avisa por correo, con la credencial de servicio
+      # DIRECTORIO_ACTIVO_* del .env. Sin /api/v1: la ruta ya lo lleva. Si el
+      # destino no esta levantado, las salidas esperan en la cola y se
+      # reintentan; la sancion se registra igual.
+      IDENTIDAD_URL: ${IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      CORREO_URL: ${CORREO_URL:-http://srv-correo:8082}
     depends_on:
       - plataforma-db
       - plataforma-cache

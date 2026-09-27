@@ -36,7 +36,21 @@ info:
     Super Administrador levanta una sancion vigente sin pasar por apelacion
     (el «reactivar» del panel de usuarios). Los roles se comparan con
     jerarquia: SUPER_ADMINISTRADOR puede todo lo de ADMINISTRADOR.
-  version: 1.1.0
+
+    1.2.0 (B2, aditivo): implementado `POST /sanciones/{sancionId}/levantamiento`
+    y las salidas de 1.1.0. Cada emision, resolucion de apelacion y
+    levantamiento deja en la misma transaccion sus salidas en una cola
+    persistente con reintento (aviso en la app, proyeccion en ms-identidad y
+    correo), asi que la sancion queda registrada aunque identidad o correo
+    esten caidos. La proyeccion lleva el estado de acceso VIGENTE del jugador
+    en el momento de entregarse, no el del evento. El correo sale con
+    `Idempotency-Key` estable (`sancion-<id>-emision`,
+    `apelacion-<id>-resolucion`); la advertencia tambien se avisa por correo y
+    no proyecta nada; el levantamiento no se envia por correo porque
+    `correo.yaml` 1.4.0 no tiene tipo para el. Menor y no parche porque el
+    levantamiento documenta su 400 y su 409, y el 409 trae un motivo nuevo en
+    `ProblemDetail.motivo`: `SANCION_NO_VIGENTE`.
+  version: 1.2.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -145,13 +159,14 @@ paths:
     post:
       summary: Levanta una sancion vigente (1.1.0)
       operationId: levantarSancion
-      x-implementacion: pendiente
-      x-fase: B2
       description: |
         Solo ADMINISTRADOR o SUPER_ADMINISTRADOR. La sancion queda revertida
-        con el motivo y el autor (no se borra), se proyecta `ACTIVO` sobre la
-        cuenta y se avisa al jugador. Levantar una sancion ya no vigente
-        responde 409.
+        con el motivo y el autor (no se borra), se proyecta sobre la cuenta el
+        estado de acceso que le quede al jugador (`ACTIVO` si no tiene otra
+        sancion que lo restrinja) y se avisa al jugador en la app. Levantar
+        una sancion ya no vigente (revertida, o suspension vencida) responde
+        409. Una apelacion abierta sobre la sancion no se toca: la resuelve el
+        panel.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -169,12 +184,18 @@ paths:
         '200':
           description: Sancion levantada.
           content: { application/json: { schema: { $ref: '#/components/schemas/Sancion' } } }
+        '400':
+          description: Motivo vacio, de menos de 3 o de mas de 1000 caracteres (`solicitud-invalida`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '403':
-          description: Rol insuficiente.
+          description: Rol insuficiente (`permiso-insuficiente`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '404':
           description: No existe (`no-encontrada`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '409':
-          description: La sancion ya no esta vigente.
+          description: La sancion ya no esta vigente (`sancion-no-vigente`).
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
 
   /apelaciones:
     get:
@@ -323,4 +344,4 @@ components:
         detail: { type: string }
         motivo:
           type: string
-          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, USUARIO_BANEADO, NO_ENCONTRADA, APELACION_NO_PROCEDE, APELACION_RESUELTA]
+          enum: [PERMISO_INSUFICIENTE, SOLICITUD_INVALIDA, USUARIO_BANEADO, NO_ENCONTRADA, APELACION_NO_PROCEDE, APELACION_RESUELTA, SANCION_NO_VIGENTE]

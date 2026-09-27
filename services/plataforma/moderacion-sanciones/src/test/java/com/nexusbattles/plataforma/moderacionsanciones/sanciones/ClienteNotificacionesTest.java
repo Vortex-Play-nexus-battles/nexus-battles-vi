@@ -29,10 +29,16 @@ class ClienteNotificacionesTest {
     private final MockRestServiceServer modulo = MockRestServiceServer.bindTo(constructor).build();
     private final ClienteNotificaciones cliente = new ClienteNotificaciones(constructor.build(), BASE + "/");
 
-    private static AvisoPendiente aviso() {
-        return new AvisoPendiente(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+    private static SalidaPendiente aviso() {
+        return SalidaPendiente.aviso(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                 UUID.fromString("11111111-1111-1111-1111-111111111111"), "SANCION_ADVERTENCIA",
                 "Has recibido una advertencia", "Motivo: x.", OffsetDateTime.of(2026, 9, 21, 10, 0, 0, 0, ZoneOffset.UTC));
+    }
+
+    @Test
+    @DisplayName("atiende el canal AVISO")
+    void canal() {
+        assertThat(cliente.canal()).isEqualTo(CanalDeSalida.AVISO);
     }
 
     @Test
@@ -46,7 +52,7 @@ class ClienteNotificacionesTest {
                 .andExpect(jsonPath("$.creadaEn").value("2026-09-21T10:00:00Z"))
                 .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON).body("{}"));
 
-        assertThat(cliente.entregar(aviso())).isEqualTo(EmisorDeAvisos.Resultado.ENTREGADO);
+        assertThat(cliente.entregar(aviso())).isEqualTo(DestinoDeSalidas.Resultado.ENTREGADO);
         modulo.verify();
     }
 
@@ -54,14 +60,14 @@ class ClienteNotificacionesTest {
     @DisplayName("409 = el modulo ya lo tenia: entregado, no se reintenta para siempre")
     void yaLoTenia() {
         modulo.expect(requestTo(BASE + "/internal/notifications")).andRespond(withStatus(HttpStatus.CONFLICT));
-        assertThat(cliente.entregar(aviso())).isEqualTo(EmisorDeAvisos.Resultado.ENTREGADO);
+        assertThat(cliente.entregar(aviso())).isEqualTo(DestinoDeSalidas.Resultado.ENTREGADO);
     }
 
     @Test
     @DisplayName("400 es un rechazo: se deja a la vista, no se reintenta a ciegas")
     void rechazo() {
         modulo.expect(requestTo(BASE + "/internal/notifications")).andRespond(withStatus(HttpStatus.BAD_REQUEST));
-        assertThat(cliente.entregar(aviso())).isEqualTo(EmisorDeAvisos.Resultado.RECHAZADO);
+        assertThat(cliente.entregar(aviso())).isEqualTo(DestinoDeSalidas.Resultado.RECHAZADO);
     }
 
     @Test
