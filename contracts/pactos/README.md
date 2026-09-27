@@ -11,6 +11,8 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 |---|---|---|---|
 | `ms-subastas-ms-finanzas.json` | ms-subastas (HU-SUB-004) | ms-finanzas | `CreditosPactoTest` |
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
+| `ms-ecommerce-productos.json` | ms-ecommerce (compra, B5) | productos | `contratos/ProductosPactoTest` |
+| `ms-ecommerce-inventario.json` | ms-ecommerce (compra, B5) | inventario | `contratos/InventarioPactoTest` |
 | `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
 | `comentarios-productos.json` | comentarios (B3: comentar y calificar solo productos que existen) | productos | `CatalogoPactoTest` |
 
@@ -20,6 +22,8 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 ./gradlew :services:cuentas:ms-subastas:test --tests '*PactoTest'
 ./gradlew :services:contenido:misiones:test --tests '*InventarioPactoTest'
 ./gradlew :services:plataforma:comentarios:test --tests '*PactoTest'
+# ms-ecommerce es Maven: desde services/cuentas/ms-ecommerce
+./mvnw -B test -Dtest='*PactoTest'
 ```
 
 Si un pacto cambia en un commit que no tocaba el cliente, eso **es** la señal:
@@ -53,6 +57,18 @@ Los estados que hay que poder montar hoy:
 - el elemento está bloqueado por esa subasta y va a adjudicarse
 - ese elemento ya se transfirió con esa misma clave de idempotencia
 
+**productos** (pacto de ms-ecommerce, B5)
+- el producto existe y le quedan unidades
+- el producto existe y esta agotado
+- el producto existe y esta suspendido
+- el producto no existe
+
+**inventario** (pacto de ms-ecommerce, B5)
+- los productos de la entrega existen y no estan suspendidos
+- la entrega con esa clave ya se hizo con el mismo cuerpo
+- un producto de la entrega esta suspendido
+- un producto de la entrega no existe en el catalogo
+
 **ms-inventario, para misiones** (B9, inventario.yaml 1.6.0)
 - el héroe es del jugador y está libre
 - el héroe no existe
@@ -60,6 +76,7 @@ Los estados que hay que poder montar hoy:
 - el héroe está en esa misión
 - el héroe ya volvió de esa misión
 - el jugador puede recibir productos del catálogo
+
 **productos** (B3; lo consume comentarios)
 - el producto existe en el catalogo
 - el producto no existe en el catalogo
@@ -71,6 +88,9 @@ Los pactos se verifican:
 | ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
 | ms-inventario (ms-subastas) | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` (`@Consumer("ms-subastas")`) | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
 | ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes, y la colección `entregas` y el catálogo en memoria para `POST /entregas` |
+| productos (ms-ecommerce) | `productos/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `AdquirirProductoServicio` y `CatalogoProductos` **reales** sobre el tiraje y el registro de claves en memoria, sin Mongo |
+| inventario (ms-ecommerce) | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
+| productos (comentarios) | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
 
 Un proveedor con varios consumidores tiene una clase de verificación por
 consumidor, cada una con `@Consumer`: sin él, la clase de un consumidor
@@ -84,8 +104,6 @@ B9 no la tenía, `VerificacionDelPactoDeMisionesTest` la dejaba fuera con un
 nueve interacciones, la entrega con el caso de uso real (`EntregarProductos`) y
 un catálogo en memoria que solo conoce la épica que misiones entrega («Segundo
 impulso», del catálogo oficial).
-| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
-| productos | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
 
 Lo que fija `comentarios-productos.json`, y por qué es tan poco: comentarios
 pregunta al catálogo si un producto existe antes de dejar comentarlo o
@@ -100,8 +118,8 @@ precio: nadie los lee. Se comprobó que muerde cambiando el 404 del pacto por un
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.
 
-La verificación de inventario usa los casos de uso de verdad a propósito, y eso
-destapó dos defectos **del pacto**, no del servicio:
+La verificación del pacto de ms-subastas en inventario usa los casos de uso de
+verdad a propósito, y eso destapó dos defectos **del pacto**, no del servicio:
 
 - La transferencia exigía `{"elementoId", "propietarioUid"}` en la respuesta.
   Inventario devuelve `id` y no dice de quién es el elemento, y ms-subastas no
@@ -132,6 +150,42 @@ Lo que el pacto fija de ese endpoint, y por qué:
   no guardando la clave: si el elemento ya es del nuevo dueño, termina bien sin
   moverlo.
 - Un reintento ya aplicado responde **200**, no un error.
+
+### Pactos de la compra de ms-ecommerce (B5)
+
+La compra reserva tiraje (`POST /api/v1/productos/{id}/adquisiciones`,
+productos 1.4.0) y entrega lo comprado (`POST /api/v1/inventario/entregas`,
+inventario 1.5.0). B4 implementó las dos operaciones; con B4 ya fusionado, cada
+proveedor verifica su pacto en una clase propia,
+`VerificacionDelPactoDeEcommerceTest`, acotada con `@Consumer("ms-ecommerce")`.
+Las verificaciones del pacto de ms-subastas no se tocan.
+
+Cada estado se monta por las operaciones del dominio, nunca escribiendo el
+resultado a mano, y reinicia los dobles: el contexto de Spring es uno solo para
+las cuatro interacciones.
+
+- **productos**: con unidades, tiraje limitado y ACTIVO; agotado, tiraje 1 y
+  otra compra se lleva la última unidad por `AdquirirProductoServicio`;
+  suspendido, con unidades y `CatalogoProductos.suspender` (el 409 sale de la
+  suspensión, no del tiraje); inexistente, almacén vacío. Las cuatro
+  interacciones usan la misma `Idempotency-Key`, así que cada estado vacía
+  también el registro de claves.
+- **inventario**: el doble del servicio de productos responde el identificador
+  del pacto como «Kit de urgencias», un arma del catálogo oficial
+  (`contracts/esquemas/catalogo-oficial.yaml`), ACTIVO o SUSPENDIDO, o no lo
+  conoce; la entrega repetida la hace antes el propio `EntregarProductos` con la
+  misma clave y el mismo cuerpo, y la petición del pacto es su reintento.
+
+Las dos se comprobaron rompiendo a propósito un estado (el suspendido montado
+sin suspender): se puso roja esa interacción, con el código y el cuerpo que
+esperaba el pacto, y ninguna más.
+
+El proveedor se llama `inventario` y no `ms-inventario` a propósito: la
+verificación del pacto de ms-subastas carga todos los pactos de
+`ms-inventario` y se pondría roja con cuatro estados que no sabe montar. Las
+claves de idempotencia se fijan por forma (`orden-{uuid}` y
+`orden-{uuid}-l{linea}-u{unidad}`); el cuerpo de la respuesta de inventario no
+se pide porque la compra solo lee el código.
 
 ## Por qué esto y no un documento
 
