@@ -5788,6 +5788,45 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
+/* B3 — «Comentarios» (la cola de comentarios reportados) entra en la consola:
+   el administrador pasa a diez destinos y el super administrador a once. Por
+   encima de la banda de portátil ya no cabían en una fila en mayúsculas: con
+   diez la barra se partía en dos entre 1541 y ~1740 px (medido antes de este
+   cambio), y con once hasta ~1900. En esa franja, las consolas con muchos
+   destinos (nueve o más) usan la caja normal y las separaciones cortas de la
+   banda de portátil; las que tienen pocos —el moderador ve cuatro— siguen en
+   mayúsculas, porque les sobra sitio. Medido con el laboratorio (super
+   administrador, administrador y moderador) a 1366, 1440, 1540, 1541, 1560,
+   1580, 1599, 1600, 1620, 1700, 1800, 1919 y 1920 px: una fila de 64 px en
+   todos. */
+@media (min-width: 1541px) and (max-width: 1919px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__grupo-marca {
+    gap: var(--e-4);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__nav--consola {
+    gap: var(--e-2);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__destino {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
+/* Y justo por encima de la banda de portátil (1541–1599) los once destinos
+   del super administrador todavía no caben con la marca larga: ahí llevan la
+   corta, como en la banda de portátil. El nombre accesible no cambia. */
+@media (min-width: 1541px) and (max-width: 1599px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-corta {
+    display: inline;
+  }
+}
+
 /* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
    sitio. Marca el modo sin gastar un color nuevo. */
