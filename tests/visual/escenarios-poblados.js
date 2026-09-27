@@ -1105,7 +1105,8 @@ async function prepararEstrategia(pagina) {
    inventados para la captura, con la forma exacta de `MensajeDeChat`
    (contracts/websocket/salas-partidas.yaml 1.4.0). El chat general y el de la
    sala van por el canal simulado; los mensajes privados, por la fuente del
-   laboratorio (`laboratorio/fuente-mensajes.js`), porque no tienen servicio.
+   laboratorio (`laboratorio/fuente-mensajes.js`), porque el banco visual no
+   tiene su servicio (B6: el de salas-partidas).
    ------------------------------------------------------------------------- */
 
 /** El `uid` de quien mira en las capturas del chat: firma «sus» mensajes. */
@@ -2314,9 +2315,11 @@ export const ESCENARIOS = [
     exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] a'],
   },
   {
-    // Lo que ve hoy un jugador: no hay servicio de mensajes privados.
+    // Lo que ve un jugador si el servicio de mensajes privados no responde:
+    // aquí no hay servicio, así que la fuente real dice `disponible: false`.
     id: 'chat-privados-sin-abrir',
-    titulo: 'mensajes privados hoy: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
+    titulo:
+      'mensajes privados sin servicio que responda: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
     ruta: 'plataforma/salas-partidas/chat.html#privados',
     sesion: sesionDelChat,
     rutas: [],

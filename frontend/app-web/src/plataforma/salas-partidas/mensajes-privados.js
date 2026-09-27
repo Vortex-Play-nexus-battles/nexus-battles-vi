@@ -6,10 +6,17 @@
  * mismo redactor que el chat general (`comun/ui/conversacion/`): quien lee un
  * chat ya sabe leer el otro.
  *
- * Todo sale de la fuente (`fuente-mensajes.js`). Hoy la fuente dice
- * `disponible: false` —no hay servicio ni contrato de mensajes privados— y la
- * vista lo cuenta: qué pasa, por qué y qué se puede hacer ya (el chat general
- * y las salas privadas con invitación). No finge ni una conversación.
+ * Todo sale de la fuente (`fuente-mensajes.js`), que desde B6 es el
+ * adaptador del servicio de mensajes privados. Si el servicio no responde al
+ * abrir la pestaña, la fuente dice `disponible: false` y la vista lo cuenta:
+ * qué pasa, por qué y qué se puede hacer ya (el chat general y las salas
+ * privadas con invitación). No finge ni una conversación.
+ *
+ * B6 — tres retoques para que lo del servicio llegue a la vista: la fuente
+ * puede llegar como promesa (pregunta al servicio antes de pintar), un envío
+ * rechazado dice por qué (el `detalle` de la fuente) y, si repetirlo no
+ * cambiaría nada, devuelve el texto al campo en vez de ofrecer «Reintentar»,
+ * y quien te escribe por primera vez aparece en la lista en ese momento.
  *
  * Estados que cubre, por la retroalimentación del docente: lista, vacío,
  * cargando, error con reintento, buscar jugador (sin resultados y con fallo),
@@ -38,8 +45,12 @@ import { hiloDeConversacion } from '../../comun/ui/conversacion/hilo.js';
 import { prepararRedactor, redactorDeMensaje } from '../../comun/ui/conversacion/redactor.js';
 import { fuenteDeMensajes } from './fuente-mensajes.js';
 
-/** Letras mínimas para buscar un jugador. */
-export const MINIMO_DE_BUSQUEDA = 2;
+/**
+ * Letras mínimas para buscar un jugador: las que pide la búsqueda por apodo
+ * (`apodo.minLength` en `ms-identidad-perfiles.yaml` 1.1.0). Con menos, el
+ * servicio no busca, y decir «ningún jugador» sería mentir.
+ */
+export const MINIMO_DE_BUSQUEDA = 3;
 
 /** Lo que dice una conversación que no admite mensajes, por su estado. */
 export function motivoDeBloqueo(estado, apodo) {
@@ -70,7 +81,7 @@ export function motivoDeBloqueo(estado, apodo) {
 }
 
 /**
- * El estado honesto de hoy: no hay servicio de mensajes privados.
+ * El estado honesto cuando el servicio de mensajes privados no responde.
  *
  * @param {{alIrAlChatGeneral?: (() => void)|null, hrefCrearSala: string}} opciones
  * @returns {HTMLElement}
@@ -101,12 +112,12 @@ export function avisoSinMensajesPrivados({ alIrAlChatGeneral = null, hrefCrearSa
     hijos: [
       icono('sobre', { etiqueta: null, clase: 'icono mensajes-privados__sin-abrir-icono' }),
       h('h2', {
-        texto: 'Los mensajes privados todavía no están abiertos',
+        texto: 'Los mensajes privados no están disponibles ahora',
         atributos: { id: 'mensajes-privados-sin-abrir' },
       }),
       h('p', {
         texto:
-          'Aún no hay un servicio que guarde y entregue mensajes entre dos jugadores. Nadie recibiría lo que escribieras aquí, así que no te dejamos escribir.',
+          'El servicio de mensajes privados no responde, así que no podemos enseñarte tus conversaciones ni entregar lo que escribas. Nadie lo recibiría, así que no te dejamos escribir.',
       }),
       h('p', {
         texto:
@@ -196,16 +207,18 @@ function detalleDeFallo(error) {
  * Monta la pestaña de mensajes privados.
  *
  * @param {HTMLElement} zona el panel de la pestaña
- * @param {{fuente?: import('./fuente-mensajes.js').FuenteDeMensajes, miId?: string|null,
+ * @param {{fuente?: import('./fuente-mensajes.js').FuenteDeMensajes
+ *   |Promise<import('./fuente-mensajes.js').FuenteDeMensajes>, miId?: string|null,
  *   alIrAlChatGeneral?: (() => void)|null, hrefCrearSala?: string, hrefSanciones?: string,
  *   confirmarBloqueo?: typeof confirmar, demoraDeBusqueda?: number,
  *   ahora?: () => Date}} [opciones]
+ *   la fuente de `fuenteDeMensajes()` llega como promesa: antes pregunta al servicio
  * @returns {Promise<{estado: 'sin-abrir'|'bandeja'|'error', detener: () => void}>}
  */
 export async function montarMensajesPrivados(
   zona,
   {
-    fuente = fuenteDeMensajes(),
+    fuente: fuentePedida = fuenteDeMensajes(),
     miId = null,
     alIrAlChatGeneral = null,
     hrefCrearSala = './crear-sala.html',
@@ -215,6 +228,10 @@ export async function montarMensajesPrivados(
     ahora = () => new Date(),
   } = {},
 ) {
+  // Mientras se pregunta al servicio, la pestaña dice que carga en vez de
+  // quedarse en blanco.
+  zona.replaceChildren(estadoDeCarga({ filas: 4, etiqueta: 'Cargando tus mensajes privados…' }));
+  const fuente = await fuentePedida;
   if (!fuente?.disponible) {
     zona.replaceChildren(avisoSinMensajesPrivados({ alIrAlChatGeneral, hrefCrearSala }));
     return { estado: 'sin-abrir', detener: () => {} };
@@ -678,6 +695,7 @@ export async function montarMensajesPrivados(
       return false;
     }
     const { id, hilo } = abierta;
+    limpiarAviso(abierta.redactor.zonaAviso);
     pendientes += 1;
     const clave = claveAnterior ?? `pendiente-${pendientes}`;
     const borrador = {
@@ -694,15 +712,24 @@ export async function montarMensajesPrivados(
     let confirmado;
     try {
       confirmado = await fuente.enviar(id, texto);
-    } catch {
+    } catch (error) {
+      // B6 — el porqué lo dice la fuente (lista negra, sanción, límite…). Si
+      // repetirlo daría el mismo rechazo, no se ofrece «Reintentar»: el texto
+      // se queda en el campo (`false`) para cambiarlo.
+      const reintentable = error?.reintentable !== false;
       if (abierta?.id === id) {
         hilo.actualizar(clave, borrador, {
           entrega: 'FALLIDO',
-          alReintentar: () => enviar(texto, { claveAnterior: clave }),
+          alReintentar: reintentable ? () => enviar(texto, { claveAnterior: clave }) : undefined,
         });
-        anunciar('Tu mensaje no se envió. Puedes reintentarlo.');
+        pintarAviso(abierta.redactor.zonaAviso, {
+          tono: reintentable ? 'error' : 'advertencia',
+          titulo: 'Tu mensaje no se envió',
+          detalle: detalleDeFallo(error),
+        });
+        anunciar(`Tu mensaje no se envió. ${detalleDeFallo(error)}`);
       }
-      return true;
+      return reintentable;
     }
     if (abierta?.id === id) {
       abierta.propios.set(confirmado.id, confirmado);
@@ -861,6 +888,21 @@ export async function montarMensajesPrivados(
       }
       const previa = conversaciones.find((c) => c.id === conversacionId);
       if (!previa) {
+        // B6 — alguien te escribe por primera vez: su conversación entra en
+        // la lista en ese momento. Lo tuyo desde otra pestaña a alguien nuevo
+        // no trae su apodo; aparece al volver a cargar la lista.
+        if (deMi || !mensaje.autor?.apodo) {
+          return;
+        }
+        conversaciones.unshift({
+          id: conversacionId,
+          con: mensaje.autor,
+          ultimo: { texto: mensaje.texto, enviadoEn: mensaje.enviadoEn, deMi: false },
+          noLeidos: 1,
+          estado: 'ACTIVA',
+        });
+        pintarLista();
+        anunciar(`Nuevo mensaje de ${mensaje.autor.apodo}.`);
         return;
       }
       actualizarResumen(conversacionId, {
