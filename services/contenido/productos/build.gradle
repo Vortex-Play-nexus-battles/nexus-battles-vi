@@ -27,6 +27,22 @@ dependencies {
     testImplementation 'org.testcontainers:testcontainers-mongodb'
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'io.rest-assured:rest-assured:6.0.1'
+
+    // B5: verificacion del pacto que ms-ecommerce publica sobre este servicio
+    // (contracts/pactos/ms-ecommerce-productos.json). Misma version y mismo
+    // modulo que inventario y ms-finanzas: `junit5` a secas, NO `junit5spring`,
+    // que esta compilado contra javax.servlet y revienta en Spring Boot 4 (ver
+    // el javadoc de VerificacionDelPactoDeSubastasTest en ms-finanzas).
+    testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
+}
+
+// Los pactos viven fuera de este modulo, en contracts/pactos/, asi que Gradle
+// no los ve como entrada de `test`: si solo cambiara el pacto, la tarea quedaria
+// UP-TO-DATE y la verificacion no se repetiria. Mismo arreglo que inventario.
+tasks.named('test') {
+    inputs.dir(rootProject.file('contracts/pactos'))
+            .withPropertyName('pactos')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 // Productos ya cuenta con pruebas suficientes, por eso activa desde ahora

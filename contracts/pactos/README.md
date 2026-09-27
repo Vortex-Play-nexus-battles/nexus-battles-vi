@@ -53,46 +53,32 @@ Los estados que hay que poder montar hoy:
 - el elemento está bloqueado por esa subasta y va a adjudicarse
 - ese elemento ya se transfirió con esa misma clave de idempotencia
 
-Los dos pactos se verifican:
-
-| Pacto | Verificación | Cómo |
-|---|---|---|
-| ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
-| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
-
-`tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
-tenga su `@State`.
-
-### Pactos de la compra de ms-ecommerce (B5): verificación pendiente de B4
-
-La compra reserva tiraje (`POST /api/v1/productos/{id}/adquisiciones`,
-productos 1.4.0) y entrega lo comprado (`POST /api/v1/inventario/entregas`,
-inventario 1.5.0). Las dos operaciones las implementa B4 en su propia rama, así
-que **todavía no hay verificación de proveedor** y `pactos-verificados.py` las
-lista como BRECHA (no falla). Cuando B4 esté fusionado, el integrador añade en
-cada servicio su clase de verificación con estos estados:
-
-**productos** (proveedor `productos`)
+**productos** (pacto de ms-ecommerce, B5)
 - el producto existe y le quedan unidades
 - el producto existe y esta agotado
 - el producto existe y esta suspendido
 - el producto no existe
 
-**inventario** (proveedor `inventario`)
+**inventario** (pacto de ms-ecommerce, B5)
 - los productos de la entrega existen y no estan suspendidos
 - la entrega con esa clave ya se hizo con el mismo cuerpo
 - un producto de la entrega esta suspendido
 - un producto de la entrega no existe en el catalogo
 
-El proveedor se llama `inventario` y no `ms-inventario` a propósito: la
-verificación de inventario que ya existe carga todos los pactos de
-`ms-inventario` y se pondría roja con cuatro estados que no sabe montar. Las
-claves de idempotencia se fijan por forma (`orden-{uuid}` y
-`orden-{uuid}-l{linea}-u{unidad}`); el cuerpo de la respuesta de inventario no
-se pide porque la compra solo lee el código.
+Los cuatro pactos se verifican:
 
-La verificación de inventario usa los casos de uso de verdad a propósito, y eso
-destapó dos defectos **del pacto**, no del servicio:
+| Pacto | Verificación | Cómo |
+|---|---|---|
+| ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
+| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| productos | `productos/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `AdquirirProductoServicio` y `CatalogoProductos` **reales** sobre el tiraje y el registro de claves en memoria, sin Mongo |
+| inventario | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
+
+`tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
+tenga su `@State`.
+
+La verificación del pacto de ms-subastas en inventario usa los casos de uso de
+verdad a propósito, y eso destapó dos defectos **del pacto**, no del servicio:
 
 - La transferencia exigía `{"elementoId", "propietarioUid"}` en la respuesta.
   Inventario devuelve `id` y no dice de quién es el elemento, y ms-subastas no
@@ -123,6 +109,42 @@ Lo que el pacto fija de ese endpoint, y por qué:
   no guardando la clave: si el elemento ya es del nuevo dueño, termina bien sin
   moverlo.
 - Un reintento ya aplicado responde **200**, no un error.
+
+### Pactos de la compra de ms-ecommerce (B5)
+
+La compra reserva tiraje (`POST /api/v1/productos/{id}/adquisiciones`,
+productos 1.4.0) y entrega lo comprado (`POST /api/v1/inventario/entregas`,
+inventario 1.5.0). B4 implementó las dos operaciones; con B4 ya fusionado, cada
+proveedor verifica su pacto en una clase propia,
+`VerificacionDelPactoDeEcommerceTest`, acotada con `@Consumer("ms-ecommerce")`.
+Las verificaciones del pacto de ms-subastas no se tocan.
+
+Cada estado se monta por las operaciones del dominio, nunca escribiendo el
+resultado a mano, y reinicia los dobles: el contexto de Spring es uno solo para
+las cuatro interacciones.
+
+- **productos**: con unidades, tiraje limitado y ACTIVO; agotado, tiraje 1 y
+  otra compra se lleva la última unidad por `AdquirirProductoServicio`;
+  suspendido, con unidades y `CatalogoProductos.suspender` (el 409 sale de la
+  suspensión, no del tiraje); inexistente, almacén vacío. Las cuatro
+  interacciones usan la misma `Idempotency-Key`, así que cada estado vacía
+  también el registro de claves.
+- **inventario**: el doble del servicio de productos responde el identificador
+  del pacto como «Kit de urgencias», un arma del catálogo oficial
+  (`contracts/esquemas/catalogo-oficial.yaml`), ACTIVO o SUSPENDIDO, o no lo
+  conoce; la entrega repetida la hace antes el propio `EntregarProductos` con la
+  misma clave y el mismo cuerpo, y la petición del pacto es su reintento.
+
+Las dos se comprobaron rompiendo a propósito un estado (el suspendido montado
+sin suspender): se puso roja esa interacción, con el código y el cuerpo que
+esperaba el pacto, y ninguna más.
+
+El proveedor se llama `inventario` y no `ms-inventario` a propósito: la
+verificación del pacto de ms-subastas carga todos los pactos de
+`ms-inventario` y se pondría roja con cuatro estados que no sabe montar. Las
+claves de idempotencia se fijan por forma (`orden-{uuid}` y
+`orden-{uuid}-l{linea}-u{unidad}`); el cuerpo de la respuesta de inventario no
+se pide porque la compra solo lee el código.
 
 ## Por qué esto y no un documento
 
