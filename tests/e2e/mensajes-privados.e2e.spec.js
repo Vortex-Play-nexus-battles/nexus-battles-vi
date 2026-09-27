@@ -6,12 +6,17 @@
  * mismo chat —el mismo servicio (salas-partidas) y el mismo canal STOMP— y con
  * sus mismas reglas: lista negra, sanción activa y fallo cerrado.
  *
+ * La interfaz es UNA: la pestaña «Mensajes privados» del chat
+ * (`chat.html#privados`, `mensajes-privados.js`, UXC-6), que habla con el
+ * servicio por su fuente (`fuente-mensajes.js`). La vista suelta
+ * `mensajes.html` que B6 había hecho aparte ya no existe.
+ *
  * Contra los servicios reales del banco (`tests/e2e/compose.yml`):
  *
- *   1. sin sesión: 401 por REST, y la vista manda al login
+ *   1. sin sesión: 401 por REST, y la pestaña manda al login
  *   2. a quien no está conectado le llega un aviso a su bandeja, sin el texto;
  *      el sexto mensaje en 10 s se rechaza con 429 y Retry-After
- *   3. A escribe a B desde la vista: B, con la suya abierta, lo recibe por
+ *   3. A escribe a B desde la pestaña: B, con la suya abierta, lo recibe por
  *      /usuario/cola/mensajes-directos sin pedir nada por REST; C, también
  *      conectada, no recibe nada
  *   4. queda en el historial de los dos, con el remitente del token, y B lo
@@ -20,20 +25,27 @@
  *      por STOMP el broker le niega suscribirse a colas ajenas
  *   6. A no puede hacerse pasar por C ni escribirse a sí misma
  *   7. un término de la lista negra (MENSAJE_PRIVADO → BLOQUEAR) no se entrega,
- *      ni por REST ni desde la vista
- *   8. «Mensaje privado» junto al apodo, en el chat general, abre la conversación
+ *      ni por REST ni desde la pestaña, que dice por qué y devuelve el texto
+ *   8. buscar a un jugador por su apodo y escribirle: a él la conversación le
+ *      aparece en su lista en ese momento, con su no leído
+ *   9. bloquear todavía no existe (decisión del PO pendiente): la pestaña lo
+ *      dice y la conversación sigue abierta, sin fingir un bloqueo
  *
  * ## De qué depende
  *
  * - `GET /api/v1/internal/usuarios/{uid}/contacto` de ms-identidad
  *   (`contracts/openapi/ms-identidad-admin.yaml`): salas-partidas lo consulta
  *   con su credencial de servicio para saber si el destinatario existe y está
- *   ACTIVO. Lo implementa en paralelo la rama de identidad. Sin él, TODO envío
- *   se rechaza —404 destinatario-inexistente o 503 moderacion-no-disponible—,
- *   y es a propósito: fallo cerrado. Cada envío que debía salir dice qué mirar.
- * - Registro: en esta rama la cuenta queda ACTIVA sin verificar el correo. Si
- *   se exige la verificación antes del login, `sesionDe` tendrá que hacerla
- *   como la haga el resto del banco.
+ *   ACTIVO. Sin él, TODO envío se rechaza —404 destinatario-inexistente o 503
+ *   moderacion-no-disponible—, y es a propósito: fallo cerrado. Cada envío que
+ *   debía salir dice qué mirar.
+ * - `GET /api/v1/perfiles/publicos?apodo=` de ms-identidad
+ *   (`contracts/openapi/ms-identidad-perfiles.yaml`), para el caso 8: lo
+ *   implementa la rama de identidad de B6. Sin él, el buscador de la pestaña
+ *   dice «No pudimos buscar ahora» y el caso lo explica.
+ * - Registro: la cuenta queda ACTIVA sin verificar el correo. Si se exige la
+ *   verificación antes del login, `sesionDe` tendrá que hacerla como la haga el
+ *   resto del banco.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -48,10 +60,12 @@ const ANA = process.env.E2E_DM_ANA ?? 'dm_ana_e2e';
 const BRUNO = process.env.E2E_DM_BRUNO ?? 'dm_bruno_e2e';
 const CARLA = process.env.E2E_DM_CARLA ?? 'dm_carla_e2e';
 const RAPIDA = process.env.E2E_DM_RAPIDA ?? 'dm_rapida_e2e';
+const DANI = process.env.E2E_DM_DANI ?? 'dm_dani_e2e';
 
 const API = '/api/v1/mensajes-directos/conversaciones';
-const VISTA = '/mensajes';
 const CHAT = '/frontend/app-web/src/plataforma/salas-partidas/chat.html';
+/** La pestaña «Mensajes privados» del chat, abierta desde la dirección. */
+const PRIVADOS = `${CHAT}#privados`;
 const COLA = '/usuario/cola/mensajes-directos';
 
 /**
@@ -152,7 +166,7 @@ async function conversacionesDe(api, quien) {
  * Una pestaña con la sesión de ese jugador, en su propio contexto (nada
  * compartido con las demás), que apunta los frames STOMP y las peticiones.
  */
-async function pestanaDe(browser, jugador, ruta) {
+async function pestanaDe(browser, jugador, ruta = PRIVADOS) {
   const contexto = await browser.newContext({ baseURL: BORDE });
   const pagina = await contexto.newPage();
   await conSesion(pagina, jugador);
@@ -170,23 +184,69 @@ async function pestanaDe(browser, jugador, ruta) {
     }),
   );
   await pagina.goto(ruta);
-  return { contexto, pagina, frames, peticiones };
+  const privados = pagina.locator('.chat__privados');
+  return { contexto, pagina, frames, peticiones, privados };
 }
 
-/** Conectada y con su cola pedida: desde aquí, lo que le escriban le llega. */
+/**
+ * La pestaña «Mensajes privados» con su servicio: la lista y el buscador, no
+ * el aviso de «no están disponibles ahora».
+ */
+async function conServicio(pestana) {
+  await expect(
+    pestana.privados.locator('.mensajes-privados'),
+    'la pestaña pregunta primero GET /api/v1/mensajes-directos/conversaciones por el borde: ' +
+      'si sale el aviso de «no están disponibles ahora», esa ruta no contesta 200',
+  ).toBeVisible({ timeout: 20_000 });
+  // Y la lista ya cargó: ni esqueletos, ni el error con «Reintentar».
+  const lista = pestana.privados.locator('[data-zona="conversaciones"]');
+  await expect(lista.locator('.estado-vista--cargando')).toHaveCount(0, { timeout: 20_000 });
+  await expect(lista.locator('.estado-vista--error')).toHaveCount(0);
+}
+
+/** Con la cola pedida: desde aquí, lo que le escriban le llega en vivo. */
 async function escuchando(pestana) {
-  await expect(pestana.pagina.locator('[data-zona="conexion"]')).toContainText('Conectado', {
-    timeout: 20_000,
-  });
   await expect
     .poll(
       () =>
         pestana.frames.enviados.some(
           (frame) => /^\s*SUBSCRIBE/.test(frame) && frame.includes(`destination:${COLA}`),
         ),
-      { timeout: 20_000 },
+      {
+        timeout: 20_000,
+        message: 'la pestaña se suscribe a /usuario/cola/mensajes-directos por /ws',
+      },
     )
     .toBe(true);
+}
+
+/** La conversación con ese apodo en la lista de la pestaña. */
+function conversacionCon(pestana, apodo) {
+  return pestana.privados.locator('.conversaciones__item').filter({
+    has: pestana.pagina.locator('.conversaciones__apodo', { hasText: new RegExp(`^${apodo}$`) }),
+  });
+}
+
+/** Abre, desde la lista, la conversación con ese apodo. */
+async function abrirConversacion(pestana, apodo) {
+  const item = conversacionCon(pestana, apodo);
+  await expect(item, `la conversación con ${apodo} está en la lista`).toBeVisible();
+  await item.click();
+  await expect(pestana.privados.locator('#mensajes-privados-con')).toHaveText(apodo);
+}
+
+/** Escribe y envía en la conversación abierta. */
+async function escribir(pestana, texto) {
+  const hilo = pestana.privados.locator('.mensajes-privados__hilo');
+  await hilo.locator('#mensaje-privado').fill(texto);
+  await hilo.locator('.redactor-mensaje__enviar').click();
+}
+
+/** Los globos de la conversación abierta con ese texto: `yo` u `otro`. */
+function globo(pestana, quien, texto) {
+  return pestana.privados.locator(`.mensajes-privados__hilo li.mensaje--${quien}`, {
+    hasText: texto,
+  });
 }
 
 test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', () => {
@@ -197,6 +257,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
   let bruno;
   let carla;
   let rapida;
+  let dani;
   let admin;
 
   test.beforeAll(async () => {
@@ -205,6 +266,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     bruno = await sesionDe(api, BRUNO);
     carla = await sesionDe(api, CARLA);
     rapida = await sesionDe(api, RAPIDA);
+    dani = await sesionDe(api, DANI);
     admin = await sesionDe(api, ADMIN);
     expect(admin.claims.rol, 'sembrar.sh deja a admin_e2e como ADMINISTRADOR').toBe(
       'ADMINISTRADOR',
@@ -215,7 +277,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     await api?.dispose();
   });
 
-  test('sin sesión no hay mensajes privados: 401 por REST y la vista manda al login', async ({
+  test('sin sesión no hay mensajes privados: 401 por REST y la pestaña manda al login', async ({
     page,
   }) => {
     expect((await api.get(API)).status()).toBe(401);
@@ -223,13 +285,13 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
       (await api.post(`${API}/${bruno.claims.uid}/mensajes`, { data: { texto: 'hola' } })).status(),
     ).toBe(401);
 
-    await page.goto(VISTA);
+    await page.goto(PRIVADOS);
     await page.waitForURL(/\/login/, { timeout: 20_000 });
-    expect(new URL(page.url()).searchParams.get('volver') ?? '').toContain('mensajes');
+    expect(new URL(page.url()).searchParams.get('volver') ?? '').toContain('chat');
   });
 
   test('a quien no está conectado le llega un aviso sin el texto; el sexto mensaje en 10 s es 429', async () => {
-    // B todavía no ha abierto ninguna vista en este spec: no escucha. Se
+    // B todavía no ha abierto ninguna pestaña en este spec: no escucha. Se
     // parte de cero no leídos de la rápida para que este mensaje abra la
     // racha —el aviso lleva el id del primer no leído— también cuando el
     // banco se reutiliza entre corridas.
@@ -289,33 +351,36 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     expect(guardados, 'el rechazado no se guardó').toHaveLength(LIMITE - 1);
   });
 
-  test('A escribe a B desde la vista y B lo recibe al instante por su cola; C, conectada, no recibe nada', async ({
+  test('A escribe a B desde la pestaña del chat y B lo recibe al instante por su cola; C, conectada, no recibe nada', async ({
     browser,
   }) => {
-    const b = await pestanaDe(browser, bruno, `${VISTA}?con=${ana.claims.uid}`);
-    const c = await pestanaDe(browser, carla, VISTA);
+    // La conversación ya existe en las dos listas: este caso es el vivo, no
+    // el buscador (ese es el 8, que depende de otra rama).
+    await enviarBien(api, ana, bruno, `para abrir la conversación ${SUFIJO}`);
+
+    const b = await pestanaDe(browser, bruno);
+    const c = await pestanaDe(browser, carla);
     let a = null;
     try {
+      await conServicio(b);
       await escuchando(b);
+      await abrirConversacion(b, ANA);
+      await conServicio(c);
       await escuchando(c);
       // La pestaña de A tarda en cargar y conectar lo bastante para que el
       // servidor ya haya registrado las suscripciones de B y C.
-      a = await pestanaDe(browser, ana, `${VISTA}?con=${bruno.claims.uid}`);
+      a = await pestanaDe(browser, ana);
+      await conServicio(a);
       await escuchando(a);
-      await expect(a.pagina.locator('[data-zona="redactor"]')).toBeVisible();
+      await abrirConversacion(a, BRUNO);
 
       const desde = Date.now();
-      await a.pagina.locator('[data-zona="redactor"] [name="texto"]').fill(SALUDO);
-      await a.pagina.locator('[data-zona="redactor"] button[type="submit"]').click();
+      await escribir(a, SALUDO);
 
-      // B: aparece en su hilo abierto...
-      await expect(b.pagina.locator('[data-zona="lineas"] li', { hasText: SALUDO })).toBeVisible({
-        timeout: 15_000,
-      });
-      await expect(b.pagina.locator('[data-zona="titulo-hilo"]')).toHaveText(
-        `Conversación con ${ANA}`,
-      );
-      // ...porque llegó por STOMP a su cola, no porque la vista lo pidiera.
+      // B: aparece en su conversación abierta...
+      await expect(globo(b, 'otro', SALUDO)).toBeVisible({ timeout: 15_000 });
+      await expect(globo(b, 'otro', SALUDO).locator('.mensaje__autor')).toHaveText(ANA);
+      // ...porque llegó por STOMP a su cola, no porque la pestaña lo pidiera.
       expect(
         b.frames.recibidos.some(
           (frame) =>
@@ -331,14 +396,11 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
         'B no consultó nada: le llegó solo',
       ).toEqual([]);
 
-      // A: su línea la confirma el eco del servidor, y salió por STOMP, no por
-      // el POST de respaldo.
+      // A: su globo lo confirma el eco del servidor, y salió por STOMP, no
+      // por el POST de respaldo.
       await expect(
-        a.pagina.locator('[data-zona="lineas"] li[data-estado="entregado"]', { hasText: SALUDO }),
+        globo(a, 'yo', SALUDO).locator('.mensaje__entrega[data-entrega="ENVIADO"]'),
       ).toBeVisible();
-      await expect(a.pagina.locator('[data-zona="titulo-hilo"]')).toHaveText(
-        `Conversación con ${BRUNO}`,
-      );
       expect(
         a.peticiones.filter(
           (p) => p.metodo === 'POST' && p.ruta.startsWith(API) && p.ruta.endsWith('/mensajes'),
@@ -349,7 +411,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
       // C: nada. Se le da el mismo margen que tuvo B, y un poco más.
       await c.pagina.waitForTimeout(1500);
       expect(c.frames.recibidos.filter((frame) => frame.includes(SALUDO))).toEqual([]);
-      await expect(c.pagina.locator('[data-zona="conversaciones"]')).not.toContainText(ANA);
+      await expect(c.privados.locator('[data-zona="conversaciones"]')).not.toContainText(ANA);
     } finally {
       await a?.contexto.close();
       await b.contexto.close();
@@ -358,7 +420,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
   });
 
   test('queda en el historial de los dos, con el remitente del token, y B lo vuelve a ver al recargar', async ({
-    page,
+    browser,
   }) => {
     const enB = (await historialEntre(api, bruno, ana)).find((m) => m.texto === SALUDO);
     expect(enB, 'B lo tiene en su historial').toBeTruthy();
@@ -377,11 +439,14 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     const deB = await conversacionesDe(api, bruno);
     expect(deB.find((r) => r.uidOtro === ana.claims.uid)).toMatchObject({ apodoOtro: ANA });
 
-    await conSesion(page, bruno);
-    await page.goto(`${VISTA}?con=${ana.claims.uid}`);
-    await expect(page.locator('[data-zona="lineas"] li', { hasText: SALUDO })).toBeVisible({
-      timeout: 20_000,
-    });
+    const b = await pestanaDe(browser, bruno);
+    try {
+      await conServicio(b);
+      await abrirConversacion(b, ANA);
+      await expect(globo(b, 'otro', SALUDO)).toBeVisible({ timeout: 20_000 });
+    } finally {
+      await b.contexto.close();
+    }
   });
 
   test('C no puede leer la conversación de A y B: por REST solo ve las suyas y el broker le niega las colas ajenas', async ({
@@ -413,7 +478,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     // Por STOMP: C abre un cliente propio y pide TODAS las colas con un
     // comodín. En un broker simple sin autorización eso recibiría lo de todo
     // el mundo; aquí el broker lo rechaza.
-    const c = await pestanaDe(browser, carla, VISTA);
+    const c = await pestanaDe(browser, carla);
     try {
       await escuchando(c);
       const intento = c.pagina.evaluate(async (destino) => {
@@ -473,7 +538,7 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     expect((await aSiMisma.json()).type).toMatch(/\/destinatario-propio$/);
   });
 
-  test('un término de la lista negra no se entrega: 422 por REST y rechazo explicado en la vista', async ({
+  test('un término de la lista negra no se entrega: 422 por REST, y la pestaña dice por qué y devuelve el texto', async ({
     browser,
   }) => {
     // La lista negra del banco trae términos de otras suites; se prueba con
@@ -492,21 +557,23 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
       expect(porRest.status(), cuerpo).toBe(422);
       expect(JSON.parse(cuerpo).type).toMatch(/\/contenido-bloqueado$/);
 
-      a = await pestanaDe(browser, ana, `${VISTA}?con=${bruno.claims.uid}`);
+      a = await pestanaDe(browser, ana);
+      await conServicio(a);
       await escuchando(a);
-      const desdeLaVista = `desde la vista: ${termino}`;
-      await a.pagina.locator('[data-zona="redactor"] [name="texto"]').fill(desdeLaVista);
-      await a.pagina.locator('[data-zona="redactor"] button[type="submit"]').click();
+      await abrirConversacion(a, BRUNO);
+      const desdeLaVista = `desde la pestaña: ${termino}`;
+      await escribir(a, desdeLaVista);
 
-      await expect(a.pagina.locator('[data-zona="aviso-redactor"]')).toContainText(
-        'Tu mensaje no se envió',
-        { timeout: 15_000 },
-      );
-      await expect(
-        a.pagina.locator('[data-zona="lineas"] li[data-estado="fallido"]', {
-          hasText: desdeLaVista,
-        }),
-      ).toBeVisible();
+      const hilo = a.privados.locator('.mensajes-privados__hilo');
+      const aviso = hilo.locator('.redactor-mensaje [data-zona="aviso"]');
+      await expect(aviso).toContainText('Tu mensaje no se envió', { timeout: 15_000 });
+      await expect(aviso).toContainText('no están permitidas');
+      const fallido = globo(a, 'yo', desdeLaVista);
+      await expect(fallido.locator('.mensaje__entrega[data-entrega="FALLIDO"]')).toBeVisible();
+      // Repetirlo daría el mismo rechazo: sin «Reintentar», y el texto vuelve
+      // al campo para cambiarlo.
+      await expect(fallido.locator('[data-accion="reintentar-mensaje"]')).toHaveCount(0);
+      await expect(hilo.locator('#mensaje-privado')).toHaveValue(desdeLaVista);
       // El rechazo llegó por la cola, con su motivo.
       expect(
         a.frames.recibidos.some(
@@ -528,37 +595,68 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     }
   });
 
-  test('«Mensaje privado» junto al apodo, en el chat general, abre la conversación', async ({
+  test('buscar a un jugador por su apodo y escribirle: a él la conversación le aparece en su lista en ese momento', async ({
     browser,
   }) => {
-    const a = await pestanaDe(browser, ana, CHAT);
-    let b = null;
+    const texto = `hola carla, te encontré buscando ${SUFIJO}`;
+    const c = await pestanaDe(browser, carla);
+    let d = null;
     try {
-      await expect(a.pagina.locator('[data-zona="conexion"]')).toHaveText(/conectado/i, {
-        timeout: 20_000,
-      });
-      const texto = `quien quiera una 1v1, que me escriba ${SUFIJO}`;
-      await a.pagina.fill('#formulario-chat [name="texto"]', texto);
-      await a.pagina.click('#formulario-chat button[type="submit"]');
-      const propio = a.pagina.locator('[data-zona="mensajes"] li', { hasText: texto });
-      await expect(propio).toBeVisible({ timeout: 20_000 });
-      await expect(propio.locator('[data-accion="mensaje-privado"]')).toHaveCount(0);
+      await conServicio(c);
+      await escuchando(c);
 
-      b = await pestanaDe(browser, bruno, CHAT);
-      const suyo = b.pagina.locator('[data-zona="mensajes"] li', { hasText: texto });
-      await expect(suyo).toBeVisible({ timeout: 20_000 });
-      const boton = suyo.locator('[data-accion="mensaje-privado"]');
-      await expect(boton).toHaveAttribute('aria-label', `Enviar un mensaje privado a ${ANA}`);
-      await boton.click();
+      d = await pestanaDe(browser, dani);
+      await conServicio(d);
+      await escuchando(d);
+      await d.privados.locator('#buscar-jugador').fill(CARLA.slice(0, 8));
+      const resultado = d.privados.getByRole('button', { name: `Escribir a ${CARLA}` });
+      await expect(
+        resultado,
+        'el buscador usa GET /api/v1/perfiles/publicos?apodo= de ms-identidad (rama de ' +
+          'identidad de B6): si dice «No pudimos buscar ahora», esa ruta no está desplegada',
+      ).toBeVisible({ timeout: 20_000 });
+      await resultado.click();
+      await expect(d.privados.locator('#mensajes-privados-con')).toHaveText(CARLA);
+      await escribir(d, texto);
+      await expect(
+        globo(d, 'yo', texto).locator('.mensaje__entrega[data-entrega="ENVIADO"]'),
+      ).toBeVisible({ timeout: 15_000 });
 
-      await b.pagina.waitForURL(/mensajes(\.html)?\?con=/, { timeout: 20_000 });
-      expect(new URL(b.pagina.url()).searchParams.get('con')).toBe(ana.claims.uid);
-      await expect(b.pagina.locator('[data-zona="titulo-hilo"]')).toHaveText(
-        `Conversación con ${ANA}`,
-      );
-      await expect(b.pagina.locator('[data-zona="redactor"]')).toBeVisible();
+      // A C le entra la conversación en la lista, en vivo, con su no leído.
+      const nueva = conversacionCon(c, DANI);
+      await expect(nueva).toBeVisible({ timeout: 15_000 });
+      await expect(nueva.locator('.conversaciones__vista')).toHaveText(texto);
+      await expect(nueva.locator('.conversaciones__no-leidos')).toBeVisible();
+      await nueva.click();
+      await expect(globo(c, 'otro', texto)).toBeVisible();
+      await expect(conversacionCon(c, DANI).locator('.conversaciones__no-leidos')).toHaveCount(0);
     } finally {
-      await b?.contexto.close();
+      await d?.contexto.close();
+      await c.contexto.close();
+    }
+  });
+
+  test('bloquear a un jugador todavía no existe: la pestaña lo dice y la conversación sigue abierta', async ({
+    browser,
+  }) => {
+    const a = await pestanaDe(browser, ana);
+    try {
+      await conServicio(a);
+      await abrirConversacion(a, BRUNO);
+      await a.privados.locator('[data-accion="bloquear"]').click();
+      await a.pagina.locator('[role="dialog"] [data-accion="confirmar"]').click();
+
+      const hilo = a.privados.locator('.mensajes-privados__hilo');
+      await expect(hilo.locator('.redactor-mensaje [data-zona="aviso"]')).toContainText(
+        'No pudimos bloquear',
+      );
+      await expect(hilo.locator('.redactor-mensaje [data-zona="aviso"]')).toContainText(
+        'todavía no está disponible',
+      );
+      // No se finge: ni «Bloqueaste a…», ni el campo sustituido.
+      await expect(hilo).not.toContainText('Bloqueaste a');
+      await expect(hilo.locator('#mensaje-privado')).toBeEnabled();
+    } finally {
       await a.contexto.close();
     }
   });
