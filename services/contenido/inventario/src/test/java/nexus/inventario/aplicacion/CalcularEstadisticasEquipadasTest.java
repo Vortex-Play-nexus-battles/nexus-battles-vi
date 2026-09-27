@@ -115,6 +115,36 @@ class CalcularEstadisticasEquipadasTest {
         assertThat(resultado.vida()).isEqualTo(45);                 // magma ardiente
     }
 
+    @Test
+    void b4_unHeroeAnteriorSinNivel_seCalculaEnNivel1() {
+        calculadora.calcular(inventarioBase, HEROE_ELEMENTO_ID);
+
+        assertThat(heroes.nivelesPedidos()).containsExactly(1);
+    }
+
+    @Test
+    void b4_lasEstadisticasBaseSonLasDelNivelDelHeroe() {
+        // Cifras del doble, no del documento: el escalado lo calcula el
+        // servicio de heroes. Lo que se verifica es que se piden las del
+        // nivel que guarda el inventario.
+        heroes.registrar("Guerrero Tanque", 3, new EstadisticasHeroe(
+                10, 63, 15, new FormulaDetalle(14, 1, 6), new FormulaDetalle(0, 1, 4), null));
+        Inventario enNivel3 = Inventario.vacio(JUGADOR_ID)
+                .agregar(new ElementoInventario(
+                        HEROE_ELEMENTO_ID, HEROE_PRODUCTO_ID, TipoElementoInventario.HEROE,
+                        "Mi Guerrero Tanque", null, null, null, null, 3, 250d))
+                .agregar(new ElementoInventario(
+                        ESPADA_ELEMENTO_ID, ESPADA_PRODUCTO_ID, TipoElementoInventario.ARMA, "mi espada"))
+                .equipar(HEROE_ELEMENTO_ID, ESPADA_ELEMENTO_ID);
+
+        EstadisticasHeroe resultado = calculadora.calcular(enNivel3, HEROE_ELEMENTO_ID);
+
+        assertThat(heroes.nivelesPedidos()).containsExactly(3);
+        assertThat(resultado.vida()).isEqualTo(63);
+        assertThat(resultado.defensa()).isEqualTo(15);
+        assertThat(resultado.ataqueDetalle().base()).isEqualTo(15); // 14 del nivel 3 + 1 de la espada
+    }
+
     // --- Dobles en memoria ---
 
     private static class ResolutorDeProductoEnMemoria implements ResolutorDeProducto {
@@ -134,16 +164,28 @@ class CalcularEstadisticasEquipadasTest {
         }
     }
 
+    /** B4: resuelve por prototipo y nivel; un nivel sin registrar usa el del nivel 1. */
     private static class ResolutorDeEstadisticasHeroeEnMemoria implements ResolutorDeEstadisticasHeroe {
         private final Map<String, EstadisticasHeroe> estadisticas = new HashMap<>();
+        private final java.util.List<Integer> nivelesPedidos = new java.util.ArrayList<>();
 
         void registrar(String prototipo, EstadisticasHeroe valores) {
-            estadisticas.put(prototipo, valores);
+            registrar(prototipo, 1, valores);
+        }
+
+        void registrar(String prototipo, int nivel, EstadisticasHeroe valores) {
+            estadisticas.put(prototipo + "@" + nivel, valores);
+        }
+
+        java.util.List<Integer> nivelesPedidos() {
+            return nivelesPedidos;
         }
 
         @Override
-        public EstadisticasHeroe resolver(String prototipo) {
-            EstadisticasHeroe valores = estadisticas.get(prototipo);
+        public EstadisticasHeroe resolver(String prototipo, int nivel) {
+            nivelesPedidos.add(nivel);
+            EstadisticasHeroe valores = estadisticas.getOrDefault(
+                    prototipo + "@" + nivel, estadisticas.get(prototipo + "@1"));
             if (valores == null) {
                 throw new IllegalStateException("Prototipo no registrado en el doble: " + prototipo);
             }

@@ -1,6 +1,7 @@
 package nexus.productos.dominio;
 
 import java.util.Objects;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,19 +24,40 @@ public class CatalogoProductos {
                 .orElseThrow(() -> new ProductoNoEncontradoException(productoId));
     }
 
-    public ResultadoAdquisicion adquirir(String productoId) {
-        return repositorio.adquirirUnaUnidad(productoId);
+    /**
+     * Reserva una unidad con una clave de idempotencia: repetir la misma clave
+     * no vuelve a descontar (ver {@link RepositorioDisponibilidadProductos}).
+     */
+    public ResultadoAdquisicion adquirir(String productoId, String clave) {
+        return repositorio.adquirirUnaUnidad(productoId, clave);
     }
 
+    /**
+     * Reserva una unidad sin idempotencia: cada llamada es una reserva nueva,
+     * con una clave que no se repite. La API nunca lo usa —exige
+     * {@code Idempotency-Key}—; es la operacion de dominio pura.
+     */
+    public ResultadoAdquisicion adquirir(String productoId) {
+        return adquirir(productoId, UUID.randomUUID().toString());
+    }
+
+    /** Suspende; si ya estaba suspendido no escribe nada. */
     public DisponibilidadProducto suspender(String productoId) {
-        DisponibilidadProducto suspendido = consultar(productoId).suspender();
-        repositorio.guardar(suspendido);
+        DisponibilidadProducto actual = consultar(productoId);
+        DisponibilidadProducto suspendido = actual.suspender();
+        if (suspendido != actual) {
+            repositorio.guardar(suspendido);
+        }
         return suspendido;
     }
 
+    /** Reactiva al estado anterior; si no estaba suspendido no escribe nada. */
     public DisponibilidadProducto reactivar(String productoId) {
-        DisponibilidadProducto reactivado = consultar(productoId).reactivar();
-        repositorio.guardar(reactivado);
+        DisponibilidadProducto actual = consultar(productoId);
+        DisponibilidadProducto reactivado = actual.reactivar();
+        if (reactivado != actual) {
+            repositorio.guardar(reactivado);
+        }
         return reactivado;
     }
 

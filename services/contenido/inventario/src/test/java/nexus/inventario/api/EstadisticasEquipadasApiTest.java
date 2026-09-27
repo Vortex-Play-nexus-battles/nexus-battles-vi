@@ -85,6 +85,8 @@ class EstadisticasEquipadasApiTest {
         mvc.perform(get(ruta(HEROE_ELEMENTO_ID)).with(ComoLlamador.servicio()).header("X-User-Name", JUGADOR_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.heroeId").value(HEROE_ELEMENTO_ID))
+                // B4: un heroe anterior a la progresion persistida esta en nivel 1.
+                .andExpect(jsonPath("$.nivel").value(1))
                 .andExpect(jsonPath("$.vida").value(44))
                 .andExpect(jsonPath("$.defensa").value(11))
                 .andExpect(jsonPath("$.ataque.base").value(11)) // Espada de una mano: +1 ataque
@@ -93,6 +95,30 @@ class EstadisticasEquipadasApiTest {
                 .andExpect(jsonPath("$.ataque.formula").value("11 + 1d6"))
                 .andExpect(jsonPath("$.dano.formula").value("1d4"))
                 .andExpect(jsonPath("$.sanar").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("B4: las estadisticas salen del nivel que guarda el inventario, y la respuesta lo dice")
+    void estadisticasEnElNivelDelHeroe() throws Exception {
+        repositorio.guardar(Inventario.vacio("jugador-2").agregar(new ElementoInventario(
+                "heroe-nivel-4", HEROE_PRODUCTO_ID, TipoElementoInventario.HEROE, "Veterano",
+                null, null, null, null, 4, 12.5)));
+        ResolutorDeProductoEnMemoria productos = new ResolutorDeProductoEnMemoria();
+        productos.registrar(HEROE_PRODUCTO_ID,
+                new ResolutorDeProducto.DetalleProducto(null, "HEROE", "Guerrero Tanque"));
+        ResolutorDeEstadisticasHeroeEnMemoria heroes = new ResolutorDeEstadisticasHeroeEnMemoria();
+        heroes.registrar("Guerrero Tanque", new EstadisticasHeroe(10, 44, 11, new FormulaDetalle(10, 1, 6), null, null));
+        // Cifras del doble: lo que se verifica es que se piden las del nivel 4.
+        heroes.registrar("Guerrero Tanque", 4, new EstadisticasHeroe(10, 70, 16, new FormulaDetalle(15, 1, 6), null, null));
+
+        construirMvc(productos, heroes)
+                .perform(get(ruta("heroe-nivel-4")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nivel").value(4))
+                .andExpect(jsonPath("$.vida").value(70))
+                .andExpect(jsonPath("$.defensa").value(16));
+
+        assertThat(heroes.nivelesPedidos()).containsExactly(4);
     }
 
     @Test
@@ -158,16 +184,28 @@ class EstadisticasEquipadasApiTest {
         }
     }
 
+    /** B4: resuelve por prototipo y nivel; un nivel sin registrar usa el del nivel 1. */
     private static class ResolutorDeEstadisticasHeroeEnMemoria implements ResolutorDeEstadisticasHeroe {
         private final Map<String, EstadisticasHeroe> estadisticas = new HashMap<>();
+        private final java.util.List<Integer> nivelesPedidos = new java.util.ArrayList<>();
 
         void registrar(String prototipo, EstadisticasHeroe valores) {
-            estadisticas.put(prototipo, valores);
+            registrar(prototipo, 1, valores);
+        }
+
+        void registrar(String prototipo, int nivel, EstadisticasHeroe valores) {
+            estadisticas.put(prototipo + "@" + nivel, valores);
+        }
+
+        java.util.List<Integer> nivelesPedidos() {
+            return nivelesPedidos;
         }
 
         @Override
-        public EstadisticasHeroe resolver(String prototipo) {
-            EstadisticasHeroe valores = estadisticas.get(prototipo);
+        public EstadisticasHeroe resolver(String prototipo, int nivel) {
+            nivelesPedidos.add(nivel);
+            EstadisticasHeroe valores = estadisticas.getOrDefault(
+                    prototipo + "@" + nivel, estadisticas.get(prototipo + "@1"));
             if (valores == null) {
                 throw new IllegalStateException("Prototipo no registrado en el doble: " + prototipo);
             }

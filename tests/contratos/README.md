@@ -11,6 +11,7 @@ si encuentran algo, y todos se pueden correr en local desde la raíz del reposit
 | `cambios-de-contrato.py <base>` | Un cambio incompatible sin versión mayor: operación, `operationId` o 2xx que desaparecen, parámetro que pasa a obligatorio, cuerpo de petición con una propiedad obligatoria nueva o un tipo cambiado, respuesta 2xx que pierde una propiedad o cambia de forma, canal AsyncAPI que desaparece. Y un contrato que cambia sin mover `info.version`. |
 | `pactos-verificados.py` | Un pacto de `contracts/pactos/` sin prueba de proveedor que monte cada uno de sus estados. |
 | `transferencia-de-subasta.py` | Que se desconecte cualquiera de las cinco piezas de la transferencia de propiedad por subasta (#660/#669). |
+| `catalogo-oficial.py` (B4) | Que el catálogo que siembra el código se aparte del documento: la semilla de productos, `PrototiposIniciales` y `EpicasIniciales` se comparan con `contracts/esquemas/catalogo-oficial.yaml` (Tablas 5 a 20) y falla si algo sobra, falta, se llama distinto o tiene otra estadística. `--autoprueba` rompe copias del catálogo a propósito y exige que lo vea. |
 | `sin-secretos-en-bitacora.py` | Una línea de bitácora que imprima contraseñas, tokens, códigos o secretos. |
 | `compose-sin-claves-duplicadas.py`, `compose-credencial-de-servicio-completa.py` | Compose con claves repetidas o con credencial de servicio a medias. |
 
