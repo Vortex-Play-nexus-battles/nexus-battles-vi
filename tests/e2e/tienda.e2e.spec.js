@@ -35,6 +35,27 @@
  *
  * Depende del listado del catálogo (`GET /api/v1/productos`, productos.yaml
  * 1.2.0, #687): sin él la vitrina no tiene de dónde leer y responde 503.
+ *
+ * ## B5 — la compra (ecommerce-carrito.yaml 1.4.0)
+ *
+ * Las últimas pruebas pagan de verdad contra la pasarela simulada: una
+ * compra aprobada (tarjeta 4242) que termina COMPLETA con el producto en el
+ * inventario y el carrito vacío, la misma clave que devuelve la misma orden,
+ * y un rechazo (tarjeta 0002) que deja el carrito intacto; y la compra desde
+ * la vista, con el formulario de §7.5.
+ *
+ * **Necesitan B4 fusionado**: la reserva de tiraje (productos 1.4.0,
+ * `POST /productos/{id}/adquisiciones`) y la entrega (inventario 1.5.0,
+ * `POST /inventario/entregas`). Sin ellas la compra se compensa (409
+ * `compra-reembolsada`) y estas pruebas se ponen en rojo, que es justo la
+ * señal que tienen que dar.
+ *
+ * El correo de confirmación no se comprueba aquí: este banco no tiene
+ * servicio de correo ni Mailpit, así que ms-ecommerce corre con
+ * `TIENDA_CORREO_HABILITADO=false` (compose.yml) y la orden termina con el
+ * correo OMITIDO. El único ayudante de Mailpit de la rama (`correosPara`, en
+ * `activacion-del-jugador.smoke.spec.js`) mira el entorno desplegado, no este
+ * banco. Quien añada el correo al banco cambia esa aserción por la del buzón.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -68,6 +89,33 @@ async function sesionDe(api, apodo) {
 
 function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+}
+
+/** B5 — una petición de pago: el token y la clave de idempotencia del intento. */
+function conClave(token, clave) {
+  return { ...conToken(token), 'Idempotency-Key': clave };
+}
+
+/**
+ * Tarjetas de la pasarela simulada (README de ms-ecommerce): cualquiera que
+ * pase Luhn con vencimiento futuro se aprueba, salvo la terminada en 0002.
+ */
+const TARJETA_APROBADA = {
+  titular: 'Compradora E2E',
+  numeroTarjeta: '4242 4242 4242 4242',
+  vencimiento: '12/39',
+  codigoSeguridad: '123',
+};
+const TARJETA_RECHAZADA = { ...TARJETA_APROBADA, numeroTarjeta: '4000 0000 0000 0002' };
+
+/** Pone un producto en el carrito de una sesión y devuelve el carrito. */
+async function alCarrito(api, sesion, productoId) {
+  const alta = await api.post('/api/v1/carrito/items', {
+    headers: conToken(sesion.token),
+    data: { productoId, cantidad: 1 },
+  });
+  expect(alta.status(), await alta.text()).toBe(200);
+  return alta.json();
 }
 
 /**
@@ -362,5 +410,153 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     } finally {
       await contexto.close();
     }
+  });
+
+  test('B5 — compra con la 4242: COMPLETA, el producto en el inventario y el carrito vacío', async () => {
+    const compradoraB5 = await sesionDe(api, `tienda_paga_${sufijo}`);
+    const carrito = await alCarrito(api, compradoraB5, idEnDineroReal);
+    const linea = carrito.items.find((i) => i.producto?.id === idEnDineroReal);
+
+    // La cantidad se cambia en su línea (1.4.0) y el total lo recalcula el servidor.
+    const cambio = await api.put(`/api/v1/carrito/items/${linea.id}/cantidad`, {
+      headers: conToken(compradoraB5.token),
+      data: { cantidad: 2 },
+    });
+    expect(cambio.status(), await cambio.text()).toBe(200);
+    expect(Number((await cambio.json()).total)).toBe(2 * PRECIO_EN_DINERO_REAL);
+
+    const clave = `e2e-compra-${sufijo}`;
+    const pago = await api.post('/api/v1/checkout', {
+      headers: conClave(compradoraB5.token, clave),
+      data: { ...TARJETA_APROBADA, moneda: 'COP' },
+    });
+    expect(pago.status(), await pago.text()).toBe(201);
+    const orden = await pago.json();
+    expect(orden.estado).toBe('COMPLETA');
+    expect(Number(orden.total)).toBe(2 * PRECIO_EN_DINERO_REAL);
+    expect(orden.moneda).toBe('COP');
+    expect(orden.lineas).toEqual([
+      expect.objectContaining({ productoId: idEnDineroReal, cantidad: 2 }),
+    ]);
+    // De la tarjeta solo quedan la marca y los cuatro últimos: ni el número,
+    // ni el titular, ni el código (que se busca por el nombre del campo: tres
+    // cifras sueltas pueden salir en un UUID o en una hora).
+    expect(orden.medioDePago).toEqual({ marca: 'VISA', ultimos4: '4242' });
+    const comoTexto = JSON.stringify(orden);
+    expect(comoTexto).not.toContain('4242 4242');
+    expect(comoTexto).not.toContain('4242424242424242');
+    expect(comoTexto).not.toContain(TARJETA_APROBADA.titular);
+    expect(comoTexto).not.toMatch(/numeroTarjeta|codigoSeguridad|titular/);
+    // Este banco no tiene servicio de correo (ver la cabecera).
+    expect(orden.correoConfirmacion).toBe('OMITIDO');
+
+    // La misma clave es la misma compra: 200, la misma orden, nada se repite.
+    const repetida = await api.post('/api/v1/checkout', {
+      headers: conClave(compradoraB5.token, clave),
+      data: { ...TARJETA_APROBADA, moneda: 'COP' },
+    });
+    expect(repetida.status(), await repetida.text()).toBe(200);
+    expect((await repetida.json()).id).toBe(orden.id);
+
+    // Entregado: dos unidades en el inventario, ni una más.
+    const inventario = await (
+      await api.get('/api/v1/inventario/elementos', { headers: conToken(compradoraB5.token) })
+    ).json();
+    expect(inventario.elementos.filter((e) => e.productoId === idEnDineroReal)).toHaveLength(2);
+
+    // Lo comprado salió del carrito.
+    const despues = await (
+      await api.get('/api/v1/carrito', { headers: conToken(compradoraB5.token) })
+    ).json();
+    expect(despues.items).toHaveLength(0);
+
+    // «Mis compras»: la suya sí; la de otra jugadora, no existe para ella.
+    const ordenes = await (
+      await api.get('/api/v1/ordenes', { headers: conToken(compradoraB5.token) })
+    ).json();
+    expect(ordenes.map((o) => o.id)).toContain(orden.id);
+    const ajena = await api.get(`/api/v1/ordenes/${orden.id}`, {
+      headers: conToken(compradora.token),
+    });
+    expect(ajena.status()).toBe(404);
+
+    // Y la vitrina con su sesión ya lo marca como propio.
+    const vitrina = await vitrinaCompleta(api, compradoraB5.token);
+    expect(vitrina.find((p) => p.id === idEnDineroReal)?.esPropio).toBe(true);
+  });
+
+  test('B5 — la 0002 se rechaza: 402, orden RECHAZADA con motivo y el carrito intacto', async () => {
+    const rechazada = await sesionDe(api, `tienda_rechazo_${sufijo}`);
+    await alCarrito(api, rechazada, idEnDineroReal);
+
+    const pago = await api.post('/api/v1/checkout', {
+      headers: conClave(rechazada.token, `e2e-rechazo-${sufijo}`),
+      data: { ...TARJETA_RECHAZADA, moneda: 'COP' },
+    });
+
+    expect(pago.status(), await pago.text()).toBe(402);
+    const problema = await pago.json();
+    expect(problema.type).toBe('urn:nexus:problema:pago-rechazado');
+    expect(problema.estado).toBe('RECHAZADA');
+    expect(problema.motivo).toMatch(/fondos insuficientes/);
+    expect(problema.ordenId).toMatch(UUID);
+
+    const carrito = await (
+      await api.get('/api/v1/carrito', { headers: conToken(rechazada.token) })
+    ).json();
+    expect(carrito.items.map((i) => i.producto?.id)).toEqual([idEnDineroReal]);
+    const inventario = await (
+      await api.get('/api/v1/inventario/elementos', { headers: conToken(rechazada.token) })
+    ).json();
+    expect(inventario.elementos.some((e) => e.productoId === idEnDineroReal)).toBe(false);
+  });
+
+  test('B5 — la vista: «Pagar», el formulario de §7.5 y «Mis compras»', async ({ page }) => {
+    const enLaVista = await sesionDe(api, `tienda_ui_paga_${sufijo}`);
+    await alCarrito(api, enLaVista, idEnDineroReal);
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'JUGADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [enLaVista.token, enLaVista.apodo, enLaVista.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}`);
+
+    const pagar = page.locator('#btn-pagar');
+    await expect(pagar).toBeEnabled({ timeout: 20_000 });
+    await pagar.click();
+
+    const dialogo = page.getByRole('dialog', { name: 'Pagar tu compra' });
+    await expect(dialogo.locator('.pago__total')).toContainText('45.000 COP');
+    await dialogo.getByLabel('Nombre del titular de la tarjeta').fill(TARJETA_APROBADA.titular);
+    await dialogo.getByLabel('Número de tarjeta').fill(TARJETA_APROBADA.numeroTarjeta);
+    await dialogo.getByLabel('Fecha de vencimiento (MM/AA)').fill(TARJETA_APROBADA.vencimiento);
+    await dialogo.getByLabel('Código de seguridad').fill(TARJETA_APROBADA.codigoSeguridad);
+
+    const cobro = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/checkout') && r.request().method() === 'POST',
+    );
+    await dialogo.locator('[data-accion="confirmar-pago"]').click();
+    const respuesta = await cobro;
+    expect(respuesta.status()).toBe(201);
+    expect(respuesta.request().headers()['idempotency-key']).toMatch(/^pago-/);
+
+    await expect(dialogo.locator('.pago__resultado')).toContainText('Compra completada');
+    // El número y el código no quedaron en el navegador (el número entero, con
+    // o sin espacios: cuatro cifras sueltas pueden salir en el token).
+    const guardado = await page.evaluate(() =>
+      JSON.stringify({ ...sessionStorage, ...localStorage }),
+    );
+    expect(guardado).not.toContain('4242 4242 4242 4242');
+    expect(guardado).not.toContain('4242424242424242');
+    expect(guardado).not.toMatch(/numeroTarjeta|codigoSeguridad/);
+
+    await dialogo.locator('[data-accion="ver-mis-compras"]').click();
+    const compras = page.getByRole('dialog', { name: 'Mis compras' });
+    await expect(compras.locator('.compra').first()).toContainText('Completada');
+    await expect(page.locator('#cart-items')).toContainText('vacío');
   });
 });
