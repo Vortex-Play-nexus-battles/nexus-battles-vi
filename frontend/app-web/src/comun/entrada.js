@@ -121,6 +121,36 @@ export function entrarCon(body, { volver = null, almacen = globalThis.sessionSto
 }
 
 /**
+ * UXC-7 (§12 de la auditoría) — lo que se le dice a quien se registra cuando
+ * el servidor rechaza el alta, por el `type` estable del rechazo
+ * (`ProblemaDeRegistro`, ms-identidad-auth 1.1.0). Con palabras del producto
+ * y qué hacer; el servidor sigue siendo quien decide: aquí no se comprueba
+ * ninguna lista negra ni ninguna regla, solo se explica su respuesta.
+ * Un motivo sin entrada aquí se dice con el texto del servidor.
+ */
+export const MOTIVOS_DE_REGISTRO = Object.freeze({
+  'correo-en-uso': 'Ya hay una cuenta con ese correo. Si es tuya, entra o recupera tu contraseña.',
+  'apodo-en-uso':
+    'Ese apodo ya lo usa otro jugador. Prueba con otro: es el nombre con el que te verán en las partidas.',
+  'apodo-no-permitido':
+    'Ese apodo no está permitido: lleva palabras que el juego no admite en nombres públicos. Elige otro.',
+  'avatar-invalido': 'Esa imagen no sirve como avatar. Usa una foto JPG, PNG o WebP.',
+});
+
+/**
+ * El motivo estable de un problem details: el último tramo de su `type`.
+ *
+ * @param {unknown} body
+ * @returns {string|null}
+ */
+export function motivoDelRechazo(body) {
+  if (!body || typeof body !== 'object' || typeof body.type !== 'string') {
+    return null;
+  }
+  return body.type.split('/').filter(Boolean).pop() ?? null;
+}
+
+/**
  * Envía el formulario de registro (multipart, porque puede llevar el avatar).
  *
  * @param {FormData} datos
@@ -165,12 +195,20 @@ export async function registrarYEntrar(
   const { respuesta, body } = await pedirRegistro(datos, fetchImpl);
   if (!respuesta.ok) {
     const campo = body && typeof body === 'object' ? (body.campo ?? null) : null;
+    const motivo = respuesta.status >= 500 ? null : motivoDelRechazo(body);
     const mensaje =
       respuesta.status >= 500
         ? 'No pudimos crear la cuenta ahora mismo. Inténtalo de nuevo en unos minutos.'
-        : (mensajeDelServidor(body) ??
+        : (MOTIVOS_DE_REGISTRO[motivo] ??
+          mensajeDelServidor(body) ??
           'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');
-    return { resultado: 'rechazada', mensaje, campo, estado: respuesta.status };
+    return {
+      resultado: 'rechazada',
+      mensaje,
+      campo,
+      estado: respuesta.status,
+      ...(motivo ? { motivo } : {}),
+    };
   }
 
   try {

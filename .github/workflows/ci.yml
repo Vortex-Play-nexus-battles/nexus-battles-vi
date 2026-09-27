@@ -315,6 +315,19 @@ jobs:
         shell: bash
         run: python3 tests/contratos/transferencia-de-subasta.py
 
+      # B4 (BACKEND-06): el catalogo que siembra el codigo es el del documento.
+      # Compara la semilla de productos, PrototiposIniciales y EpicasIniciales
+      # (y los nombres con efecto del inventario) contra
+      # contracts/esquemas/catalogo-oficial.yaml, copia literal de las Tablas
+      # 5 a 20: falla si algo sobra, falta, se llama distinto o tiene otra
+      # estadistica. La autoprueba rompe a proposito copias del catalogo y exige
+      # que el guardian lo vea: uno que no sabe ponerse rojo no guarda nada.
+      - name: El catalogo del codigo es el del documento
+        shell: bash
+        run: |
+          python3 tests/contratos/catalogo-oficial.py
+          python3 tests/contratos/catalogo-oficial.py --autoprueba
+
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con
       # `git show`: no consulta ningun broker ni registro externo, asi que no

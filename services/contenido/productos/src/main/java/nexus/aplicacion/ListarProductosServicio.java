@@ -1,5 +1,6 @@
 package nexus.aplicacion;
 
+import java.util.List;
 import java.util.Set;
 
 import nexus.api.PaginaDeProductos;
@@ -22,11 +23,14 @@ import org.springframework.stereotype.Service;
  * vitrina proyecte ESTE catalogo, y este listado es lo que consume para
  * hacerlo.
  *
- * <p>Las dos reglas del listado viven aqui y no en el controlador:
+ * <p>Las reglas del listado viven aqui y no en el controlador:
  * <ul>
- *   <li>que estados se listan cuando quien llama no pide uno, y</li>
+ *   <li>que estados se listan cuando quien llama no pide uno,</li>
  *   <li>el orden, que tiene que ser estable para que recorrer todas las
- *       paginas no salte ni repita productos.</li>
+ *       paginas no salte ni repita productos, y</li>
+ *   <li>(B4, contrato 1.4.0) que ve cada quien: los SUSPENDIDO solo los lista
+ *       un servicio o un administrador, y los campos internos solo salen para
+ *       ellos (ver {@link Visibilidad} y {@link ProyeccionDeProductos}).</li>
  * </ul>
  * La validacion de {@code page} y {@code size} es de la frontera HTTP y la
  * hace el controlador con Bean Validation.
@@ -52,29 +56,45 @@ public class ListarProductosServicio {
                 Sort.Order.asc("id"));
 
         private final ProductoRepository repositorio;
-        private final ProductoMapper mapper;
+        private final ProyeccionDeProductos proyeccion;
 
         public ListarProductosServicio(
                         ProductoRepository repositorio,
-                        ProductoMapper mapper) {
+                        ProyeccionDeProductos proyeccion) {
                 this.repositorio = repositorio;
-                this.mapper = mapper;
+                this.proyeccion = proyeccion;
         }
 
-        /**
-         * @param pagina numero de pagina, desde 0
-         * @param tamano productos por pagina, al menos 1
-         * @param tipo si no es nulo, solo ese tipo de producto
-         * @param estado si no es nulo, solo ese estado; si es nulo, los
-         *               {@link #ESTADOS_LISTABLES_POR_OMISION}
-         */
+        /** El listado completo, como lo ve un administrador. */
         public PaginaDeProductos listar(
                         int pagina,
                         int tamano,
                         TipoProducto tipo,
                         EstadoProducto estado) {
+                return listar(pagina, tamano, tipo, estado, Visibilidad.PRIVILEGIADA);
+        }
+
+        /**
+         * @param pagina      numero de pagina, desde 0
+         * @param tamano      productos por pagina, al menos 1
+         * @param tipo        si no es nulo, solo ese tipo de producto
+         * @param estado      si no es nulo, solo ese estado; si es nulo, los
+         *                    {@link #ESTADOS_LISTABLES_POR_OMISION}
+         * @param visibilidad quien pregunta: pedir SUSPENDIDO sin ser servicio
+         *                    ni administrador devuelve una pagina vacia, igual
+         *                    que si no hubiera ninguno
+         */
+        public PaginaDeProductos listar(
+                        int pagina,
+                        int tamano,
+                        TipoProducto tipo,
+                        EstadoProducto estado,
+                        Visibilidad visibilidad) {
 
                 Pageable paginacion = PageRequest.of(pagina, tamano, ORDEN_DEL_LISTADO);
+                if (estado == EstadoProducto.SUSPENDIDO && !visibilidad.veLoInterno()) {
+                        return new PaginaDeProductos(List.of(), pagina, tamano, 0, 0);
+                }
                 Set<EstadoProducto> estados = estado == null
                         ? ESTADOS_LISTABLES_POR_OMISION
                         : Set.of(estado);
@@ -85,7 +105,7 @@ public class ListarProductosServicio {
 
                 return new PaginaDeProductos(
                         resultado.getContent().stream()
-                                .map(mapper::aRespuesta)
+                                .map(producto -> proyeccion.proyectar(producto, visibilidad))
                                 .toList(),
                         resultado.getNumber(),
                         resultado.getSize(),

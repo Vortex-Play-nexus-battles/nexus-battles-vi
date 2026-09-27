@@ -10,6 +10,14 @@ info:
     lleguen los datos que esa plantilla necesita. Anadir tipos nuevos es anadir
     rutas, que es un cambio compatible y no rompe a quien ya consume.
 
+    **1.4.1 (B1): implementado `POST /correos/sancion`** (plantilla `sancion`:
+    accion tomada, motivo, fin de la suspension y plazo para apelar, 7.3.7).
+    Sin cambios de forma: se documenta que, si la cola persistente no esta
+    disponible, las rutas de envio responden `503` en problem details (con
+    `Retry-After`) y no guardan nada, y se corrige el `202` de misiones y
+    subastas (con `debeEnviarCorreo=false` el correo queda en la cola como
+    `OMITIDO`, sin enviarse).
+
     **1.4.0 (B0/B1 — correo durable).** Un `202` significa desde ahora
     «**guardado** en la cola persistente del servicio», no «entregado al
     SMTP»: cada peticion aceptada queda en la tabla de envios (PostgreSQL,
@@ -34,7 +42,7 @@ info:
     correo es un servicio entre servicios y nunca lo llama un navegador. Por
     eso el borde tampoco expone `/api/v1/correos`. Es version menor porque
     rutas y cuerpos no cambian.
-  version: 1.4.0
+  version: 1.4.1
 servers:
   - url: http://localhost:8082/api/v1
     description: Entorno local de desarrollo
@@ -183,8 +191,8 @@ paths:
       responses:
         '202':
           description: >
-            Correo aceptado y entregado al servidor SMTP, o suprimido a
-            proposito porque debeEnviarCorreo era false.
+            Correo guardado en la cola persistente (1.4.0), o guardado como
+            OMITIDO y sin enviarse porque debeEnviarCorreo era false (1.4.1).
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -207,8 +215,8 @@ paths:
       responses:
         '202':
           description: >
-            Correo aceptado y entregado al servidor SMTP, o suprimido a
-            proposito porque debeEnviarCorreo era false.
+            Correo guardado en la cola persistente (1.4.0), o guardado como
+            OMITIDO y sin enviarse porque debeEnviarCorreo era false (1.4.1).
         '400':
           $ref: '#/components/responses/SolicitudInvalida'
 
@@ -245,8 +253,6 @@ paths:
         El documento del curso exige «notificacion automatica al correo» de la
         suspension y «notificacion formal» del baneo.
       operationId: enviarCorreoSancion
-      x-implementacion: pendiente
-      x-fase: B2
       parameters:
         - $ref: '#/components/parameters/TraceId'
         - $ref: '#/components/parameters/IdempotencyKey'

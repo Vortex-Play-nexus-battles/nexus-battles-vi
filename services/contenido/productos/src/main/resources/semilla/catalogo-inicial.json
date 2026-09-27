@@ -1,5 +1,6 @@
 {
-  "descripcion": "Catalogo inicial de productos extraido literalmente de las reglas del curso. Precios: NO estan en el documento del curso (RF-ADM-03 dice que los fija el administrador); los de `preciosDemostracion` son decision del PO para la demo.",
+  "version": 1,
+  "descripcion": "Catalogo inicial de productos extraido literalmente de las reglas del curso. Precios: NO estan en el documento del curso (RF-ADM-03 dice que los fija el administrador); los de `preciosDemostracion` son decision del PO para la demo. `version` es la version del contenido (B4): quien cambie un producto de este archivo la sube, y al arrancar la semilla pone al dia los productos sembrados con una version menor que ningun administrador edito. El guardian tests/contratos/catalogo-oficial.py compara este archivo con contracts/esquemas/catalogo-oficial.yaml.",
   "heroes": [
     {
       "tipo": "HEROE",

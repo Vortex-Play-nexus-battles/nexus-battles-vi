@@ -1,7 +1,9 @@
 package nexus.productos.dominio;
 
+import java.util.HashSet;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import nexus.dominio.EstadoProducto;
@@ -11,6 +13,9 @@ public final class RepositorioDisponibilidadEnMemoria
 
     private final ConcurrentHashMap<String, DisponibilidadProducto> productos =
             new ConcurrentHashMap<>();
+
+    /** Claves que ya reservaron, por producto; se leen y escriben dentro del mismo compute. */
+    private final ConcurrentHashMap<String, Set<String>> claves = new ConcurrentHashMap<>();
 
     @Override
     public void guardar(DisponibilidadProducto producto) {
@@ -26,7 +31,7 @@ public final class RepositorioDisponibilidadEnMemoria
     }
 
     @Override
-    public ResultadoAdquisicion adquirirUnaUnidad(String productoId) {
+    public ResultadoAdquisicion adquirirUnaUnidad(String productoId, String clave) {
         AtomicReference<ResultadoAdquisicion> resultado = new AtomicReference<>();
         productos.compute(productoId, (id, producto) -> {
             if (producto == null) {
@@ -34,6 +39,13 @@ public final class RepositorioDisponibilidadEnMemoria
                         EstadoAdquisicion.NO_ENCONTRADO,
                         "El producto no existe"));
                 return null;
+            }
+            Set<String> reservadas = claves.computeIfAbsent(id, sinClaves -> new HashSet<>());
+            if (reservadas.contains(clave)) {
+                resultado.set(new ResultadoAdquisicion(
+                        EstadoAdquisicion.ACEPTADA,
+                        "Unidad reservada"));
+                return producto;
             }
             if (producto.estado() == EstadoProducto.SUSPENDIDO) {
                 resultado.set(new ResultadoAdquisicion(
@@ -47,6 +59,7 @@ public final class RepositorioDisponibilidadEnMemoria
                         "El producto está agotado"));
                 return producto;
             }
+            reservadas.add(clave);
             resultado.set(new ResultadoAdquisicion(
                     EstadoAdquisicion.ACEPTADA,
                     "Unidad reservada"));
