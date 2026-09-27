@@ -28,6 +28,10 @@
  *      (cola con marcado=true) aunque este publicado; DESMARCAR lo saca
  *  12. (B3, 7.3.3) la moderadora lo EDITA -> el hilo ensena el texto nuevo,
  *      marcado como editado, y el asiento guarda el anterior
+ *  13. (B3) lo mismo desde la pantalla: la consola lleva a «Comentarios», el
+ *      comentario reportado de nuevo esta en la cola, se MARCA desde su
+ *      detalle (y la pantalla dice que es una nota interna), sale en
+ *      «Marcados para seguimiento» y se EDITA escribiendo el texto nuevo
  *
  * El paso 10 es el que cierra el defecto: sin el, todo lo anterior seria un
  * camino de ida a otro agujero.
@@ -334,5 +338,90 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
       'DESMARCAR',
       'EDITAR',
     ]);
+  });
+
+  test('13: desde la pantalla, la consola lleva a la cola; se marca, se filtra y se edita (B3)', async ({
+    page,
+  }) => {
+    // Otro jugador lo reporta: vuelve a la cola de revision.
+    const reportero = await sesionDe(api, `reportero_${Date.now().toString(36)}`);
+    const reporte = await api.post(`${hiloDe()}/${comentario.id}/reportes`, {
+      headers: conToken(reportero.token),
+      data: { categoria: 'CONTENIDO_OFENSIVO', descripcion: 'Sigue sin gustarme' },
+    });
+    expect(reporte.status(), await reporte.text()).toBe(201);
+
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'MODERADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [moderadora.token, MODERADORA, moderadora.claims.uid],
+    );
+
+    // La consola lleva a la cola de comentarios: antes solo se llegaba
+    // escribiendo la direccion.
+    await page.goto(`${BORDE}/frontend/app-web/src/plataforma/consola/consola.html`);
+    const herramienta = page.locator('[data-herramienta="comentarios"]');
+    await expect(herramienta).toBeVisible({ timeout: 20_000 });
+    await expect(herramienta).toHaveAttribute('href', /moderar-comentarios\.html$/);
+
+    await page.goto(
+      `${BORDE}/frontend/app-web/src/plataforma/comentarios/moderar-comentarios.html?producto=${producto}`,
+    );
+    const tarjeta = page.locator(`[data-zona="cola"] [data-comentario-id="${comentario.id}"]`);
+    await expect(tarjeta).toBeVisible({ timeout: 20_000 });
+    await tarjeta.locator('[data-accion="revisar"]').click();
+
+    // MARCAR con su motivo: nota interna, y el detalle se queda delante.
+    const panel = page.locator('[data-zona="detalle"]');
+    await panel.locator('#accion').selectOption('MARCAR');
+    await expect(panel.locator('#motivo-pista')).toContainText('nota interna');
+    await panel.locator('#motivo').fill('Seguimiento especial desde la pantalla');
+    const marcado = page.waitForResponse((r) =>
+      r.url().endsWith(`/comentarios/moderacion/${comentario.id}/decision`),
+    );
+    await panel.locator('[data-accion="decidir"]').click();
+    const respuesta = await marcado;
+    expect(respuesta.status()).toBe(200);
+    expect((await respuesta.json()).autorNotificado).toBe(false);
+    const aviso = page.locator('[data-zona="aviso"]');
+    await expect(aviso).toContainText('Comentario marcado para seguimiento');
+    await expect(aviso).toContainText('nota interna');
+    await expect(panel.locator('[data-campo="marcado"]')).toBeVisible();
+
+    // La lista de seguimiento lo trae.
+    await page.locator('[data-zona="filtro"]').selectOption('marcados');
+    await expect(
+      page.locator(`[data-zona="cola"] [data-comentario-id="${comentario.id}"]`),
+    ).toBeVisible();
+
+    // EDITAR: el texto nuevo, con su motivo.
+    await page
+      .locator(`[data-zona="cola"] [data-comentario-id="${comentario.id}"] [data-accion="revisar"]`)
+      .click();
+    await panel.locator('#accion').selectOption('EDITAR');
+    await panel.locator('#texto-nuevo').fill('No me convencio, pero es cuestion de gustos');
+    await panel.locator('#motivo').fill('Se suaviza el tono');
+    const editado = page.waitForResponse((r) =>
+      r.url().endsWith(`/comentarios/moderacion/${comentario.id}/decision`),
+    );
+    await panel.locator('[data-accion="decidir"]').click();
+    const cuerpo = (await editado).request().postDataJSON();
+    expect(cuerpo).toEqual({
+      accion: 'EDITAR',
+      motivo: 'Se suaviza el tono',
+      textoNuevo: 'No me convencio, pero es cuestion de gustos',
+    });
+    await expect(aviso).toContainText('Texto del comentario editado');
+    await expect(panel.locator('[data-zona="historial"]')).toContainText(
+      'Ahora: «No me convencio, pero es cuestion de gustos»',
+    );
+
+    const d = await detalle();
+    expect(d.comentario.texto).toBe('No me convencio, pero es cuestion de gustos');
+    expect(d.comentario.marcado).toBe(true);
   });
 });

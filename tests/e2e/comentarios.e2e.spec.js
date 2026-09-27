@@ -23,7 +23,8 @@
  *   5. eliminar: ajeno 403; propio 204 y la calificación SIGUE (3.0, 3)
  *   6. imagen: se sube, se adjunta por id y se ve con sus cabeceras; un HTML
  *      con extensión .png es 415
- *   7. la vista: promedio arriba y «Eliminar» solo en los míos
+ *   7. la vista: promedio arriba, «Eliminar» solo en los míos y la imagen del
+ *      comentario con foto se ve de verdad (B3: el hilo la pinta por su id)
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -314,5 +315,15 @@ test.describe('Comentarios y calificaciones: única, promedio, eliminar e imáge
     const mios = page.locator('[data-zona="hilo-lista"] article:has([data-accion="eliminar"])');
     await expect(mios).toHaveCount(2);
     await expect(mios.first().locator('[data-campo="apodo"]')).toHaveText(ANFITRION);
+
+    // B3: el comentario con foto enseña la imagen de verdad, servida por su id
+    // (antes el hilo solo sabía pintar un nombre de archivo sin imagen detrás).
+    const foto = page.locator('[data-zona="hilo-lista"] article', { hasText: 'Mirad la foto' });
+    const imagen = foto.locator('img.comentario__imagen');
+    await expect(imagen).toBeVisible();
+    await expect(imagen).toHaveAttribute('src', /\/api\/v1\/comentarios\/imagenes\/[0-9a-f-]{36}$/);
+    await expect
+      .poll(() => imagen.evaluate((img) => (img.complete ? img.naturalWidth : 0)))
+      .toBeGreaterThan(0);
   });
 });

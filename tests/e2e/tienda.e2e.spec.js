@@ -25,6 +25,11 @@
  *      su nombre y su subtotal;
  *   4. la vista: la tarjeta lleva el nombre y el precio en COP, y «Añadir» lo
  *      pone en el panel del carrito.
+ *   5. (UXC-3, B3) el detalle trae la calificación y las opiniones del servicio
+ *      real: se opina con una imagen de verdad (se sube al elegirla y el
+ *      comentario viaja con su id) y la imagen se ve en el hilo; se califica
+ *      SIN comentar, una sola vez, y el segundo intento no se ofrece ni lo
+ *      admite el servicio (7.1: «solo pueden calificar un producto una vez»).
  *
  * Los nombres llevan `Date.now()`: repetir la corrida contra el mismo banco
  * crea productos nuevos en vez de chocar con los de la anterior. La API se
@@ -48,6 +53,11 @@ const VISTA = '/frontend/app-web/src/cuentas/tienda.html';
 const IMAGEN = '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRECIO_EN_DINERO_REAL = 45000;
+/** Un PNG de verdad de 3x2 (el mismo que usan las pruebas del servicio de comentarios). */
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAHElEQVR42mNkYGBQZTBVZTBlYYg2ZWAwZWAwBQAPAgG01W6s7gAAAABJRU5ErkJggg==',
+  'base64',
+);
 
 function cuerpoDelToken(jwt) {
   const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
@@ -322,18 +332,153 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     await expect(ajena.locator('[data-accion="reportar-comentario"]')).toBeVisible();
     await expect(ficha.locator('.compra-producto')).toContainText('45.000 COP');
 
-    // Y se opina desde el mismo detalle: entra en el hilo, marcada como propia.
+    // Y se opina desde el mismo detalle, con una imagen de verdad (B3): se
+    // sube al elegirla, el comentario viaja con su id y entra en el hilo,
+    // marcada como propia y con la imagen a la vista.
     await ficha.locator('.redactor-comentario textarea').fill(`Llegó rápido ${sufijo}`);
+    const subida = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/comentarios/imagenes') && r.request().method() === 'POST',
+    );
+    await ficha
+      .locator('.redactor-comentario input[type="file"]')
+      .setInputFiles({ name: 'captura.png', mimeType: 'image/png', buffer: PNG });
+    expect((await subida).status()).toBe(201);
+    await expect(ficha.locator('.redactor-comentario__miniatura[data-estado="lista"]')).toHaveCount(
+      1,
+    );
+
     const publicada = page.waitForResponse(
       (r) => r.url().includes('/comments') && r.request().method() === 'POST',
     );
     await ficha.locator('[data-accion="publicar-opinion"]').click();
-    expect((await publicada).status()).toBe(201);
+    const respuesta = await publicada;
+    expect(respuesta.status()).toBe(201);
+    const cuerpo = respuesta.request().postDataJSON();
+    expect(cuerpo.texto).toBe(`Llegó rápido ${sufijo}`);
+    // El redactor ya no califica: las estrellas van por su cuenta.
+    expect(cuerpo).not.toHaveProperty('estrellas');
+    expect(cuerpo.imagenes).toHaveLength(1);
+    expect(cuerpo.imagenes[0]).toMatch(UUID);
+
     const propia = ficha.locator('.hilo-comentarios .comentario', {
       hasText: `Llegó rápido ${sufijo}`,
     });
     await expect(propia).toBeVisible({ timeout: 20_000 });
     await expect(propia.locator('.comentario__propio')).toHaveText('Tú');
+    const imagen = propia.locator('img.comentario__imagen');
+    await expect(imagen).toBeVisible();
+    await expect(imagen).toHaveAttribute(
+      'src',
+      `/api/v1/comentarios/imagenes/${cuerpo.imagenes[0]}`,
+    );
+    // Se ve de verdad: el navegador la descargó y la decodificó.
+    await expect
+      .poll(() => imagen.evaluate((img) => (img.complete ? img.naturalWidth : 0)))
+      .toBeGreaterThan(0);
+  });
+
+  test('se califica sin comentar, una sola vez: la segunda ni se ofrece ni la admite el servicio (7.1, B3)', async ({
+    page,
+  }) => {
+    const calificadora = await sesionDe(api, `tienda_califica_${sufijo}`);
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'JUGADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [calificadora.token, calificadora.apodo, calificadora.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}`);
+    await page.locator('#busqueda-tienda').fill(`E2E ${sufijo}`);
+    await page.locator(`[data-ver-producto="${idEnDineroReal}"]`).click();
+
+    const ficha = page.locator('[role="dialog"].ficha');
+    // Sin calificación propia (`rating/mia` 404): se ofrecen las estrellas.
+    const control = ficha.locator('.calificar-producto');
+    await expect(control).toHaveAttribute('data-estado', 'pendiente', { timeout: 20_000 });
+    await expect(control.getByRole('group', { name: 'Califica este producto' })).toBeVisible();
+
+    // Cuatro estrellas, y «Calificar»: sin escribir ninguna opinión.
+    await control.locator('label.selector-estrellas__opcion').nth(3).click();
+    const calificada = page.waitForResponse(
+      (r) =>
+        r.url().endsWith(`/products/${idEnDineroReal}/rating`) && r.request().method() === 'POST',
+    );
+    await control.locator('[data-accion="calificar"]').click();
+    const respuesta = await calificada;
+    expect(respuesta.status()).toBe(201);
+    expect(respuesta.request().postDataJSON()).toEqual({ estrellas: 4 });
+    const { resumen } = await respuesta.json();
+
+    await expect(control).toHaveAttribute('data-estado', 'calificado');
+    await expect(control).toContainText('Tu calificación: 4 de 5');
+    await expect(control.locator('input[type="radio"]')).toHaveCount(0);
+    // El resumen es el que devolvió el servicio, no una cuenta de la vista.
+    expect(resumen.total).toBeGreaterThanOrEqual(2);
+    await expect(ficha.locator('.ficha__valoracion')).toContainText(
+      `${resumen.total} valoraciones`,
+    );
+
+    // El segundo intento no se ofrece: al volver a abrir, la suya, sin estrellas.
+    await ficha.locator('.ficha__cerrar').click();
+    await page.locator(`[data-ver-producto="${idEnDineroReal}"]`).click();
+    await expect(control).toHaveAttribute('data-estado', 'calificado', { timeout: 20_000 });
+    await expect(control).toContainText('Tu calificación: 4 de 5');
+    await expect(control.locator('input, button')).toHaveCount(0);
+
+    // Y el servicio tampoco lo admite (ni cambia la que había).
+    const otra = await api.post(`/api/v1/products/${idEnDineroReal}/rating`, {
+      headers: conToken(calificadora.token),
+      data: { estrellas: 1 },
+    });
+    expect(otra.status()).toBe(409);
+    expect((await otra.json()).type).toMatch(/ya-calificado$/);
+    const mia = await api.get(`/api/v1/products/${idEnDineroReal}/rating/mia`, {
+      headers: conToken(calificadora.token),
+    });
+    expect((await mia.json()).estrellas).toBe(4);
+  });
+
+  test('si otra pestaña calificó primero, «Calificar» lo explica y enseña la que cuenta (409, B3)', async ({
+    page,
+  }) => {
+    const jugadora = await sesionDe(api, `tienda_dos_${sufijo}`);
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'JUGADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [jugadora.token, jugadora.apodo, jugadora.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}`);
+    await page.locator('#busqueda-tienda').fill(`E2E ${sufijo}`);
+    await page.locator(`[data-ver-producto="${idEnDineroReal}"]`).click();
+    const control = page.locator('[role="dialog"].ficha .calificar-producto');
+    await expect(control).toHaveAttribute('data-estado', 'pendiente', { timeout: 20_000 });
+
+    // Mientras la ficha está abierta, la misma jugadora califica por otro lado.
+    const primera = await api.post(`/api/v1/products/${idEnDineroReal}/rating`, {
+      headers: conToken(jugadora.token),
+      data: { estrellas: 2 },
+    });
+    expect(primera.status(), await primera.text()).toBe(201);
+
+    await control.locator('label.selector-estrellas__opcion').nth(4).click();
+    const segunda = page.waitForResponse(
+      (r) =>
+        r.url().endsWith(`/products/${idEnDineroReal}/rating`) && r.request().method() === 'POST',
+    );
+    await control.locator('[data-accion="calificar"]').click();
+    expect((await segunda).status()).toBe(409);
+
+    // No es un error suyo: se dice, y se enseña la calificación que cuenta.
+    await expect(control).toContainText('Ya habías calificado este producto');
+    await expect(control).toContainText('Tu calificación: 2 de 5');
+    await expect(control.locator('input[type="radio"]')).toHaveCount(0);
   });
 
   test('la portada pública enseña la tienda, su detalle y lleva a entrar para comprar (UXC-4)', async ({
