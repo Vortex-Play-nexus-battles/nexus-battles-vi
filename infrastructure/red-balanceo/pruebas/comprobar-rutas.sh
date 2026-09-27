@@ -501,6 +501,30 @@ else
 fi
 
 echo
+echo "Trazas (regla 5, B12) — el borde no se come traceparent ni X-Trace-Id"
+# nginx reenvia las cabeceras de la peticion salvo las que tienen guion bajo
+# (underscores_in_headers off) y las que pisa un proxy_set_header; y devuelve
+# las de la respuesta salvo unas pocas suyas. Ninguna de las de traza cae en
+# esos casos, pero eso se comprueba, no se supone: en una location normal, en
+# una que reescribe la ruta (vitrina) y en una de WebSocket, que declara sus
+# propios proxy_set_header. El eco devuelve lo que le llego y pone su propio
+# traceparent en la respuesta, como FiltroDeTraza en cada servicio.
+TRAZA='00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01'
+for ruta in /api/v1/salas "/api/v1/vitrina?page=0" /ws/notificaciones; do
+    cab="$(curl -s -o /dev/null -D - -H "traceparent: $TRAZA" -H 'X-Trace-Id: traza-del-banco' "$BORDE$ruta" | tr -d '\r')"
+    ida="$(printf '%s\n' "$cab" | grep -i '^x-eco-traceparent:' | sed 's/^[^:]*: *//')"
+    idaId="$(printf '%s\n' "$cab" | grep -i '^x-eco-trace-id:' | sed 's/^[^:]*: *//')"
+    vuelta="$(printf '%s\n' "$cab" | grep -i '^traceparent:' | sed 's/^[^:]*: *//')"
+    if [ "$ida" = "$TRAZA" ] && [ "$idaId" = "traza-del-banco" ] && [ -n "$vuelta" ]; then
+        printf '  ok    %-26s traceparent y X-Trace-Id llegan al servicio; su traceparent vuelve\n' "$ruta"
+    else
+        printf '  FALLA %-26s ida traceparent "%s", X-Trace-Id "%s"; vuelta traceparent "%s"\n' \
+            "$ruta" "$ida" "$idaId" "$vuelta"
+        fallos=$((fallos + 1))
+    fi
+done
+
+echo
 echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
