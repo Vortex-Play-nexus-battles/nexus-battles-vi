@@ -97,6 +97,18 @@ la credencial de servicio de ADR-005) y no depende de SQL manual: si un
 servicio está caído, el alta queda `ERROR_REINTENTABLE` y se completa sola al
 volver, al iniciar sesión o con el botón «Reintentar».
 
+### B5 — la tienda cobra (25 de septiembre de 2026)
+
+La compra con pasarela simulada (§7.5, ecommerce-carrito.yaml 1.4.0) dejó tres
+huecos que la ficha no cierra. El primero es del PO y **no tiene valor
+provisional**; los otros dos son convenciones del equipo, revisables.
+
+| # | Qué falta decidir | Qué hace hoy el sistema | Dónde se cambia |
+|---|---|---|---|
+| **D-32** · PO | **Tasas COP→USD y COP→EUR.** §7.5 pide el precio «en COP o dólar o euro dependiendo de su ubicación geográfica» y ningún documento da la tasa ni su fuente. | ms-ecommerce vende **solo en COP** mientras no haya tasa: la vitrina publica `monedasDisponibles: [COP]`, pedir USD o EUR responde 422 `moneda-no-disponible` y la tienda enseña esas monedas desactivadas y dice por qué. **No se inventa ninguna tasa.** | Parámetros `tienda.tasa-cop-usd` y `tienda.tasa-cop-eur` (pesos por una unidad) de admin-parametros. Están en su catálogo desde la migración V3, sin valor; el PO fija el valor en el panel **Parámetros** y la tienda lo toma en menos de un minuto. |
+| **D-33** · equipo | **Qué es la «ubicación geográfica».** | La moneda sale de la región de `navigator.languages` (Colombia y cualquier otra región → COP; Estados Unidos, Puerto Rico, Ecuador, El Salvador y Panamá → USD; zona euro → EUR), y el jugador la cambia en el selector (se recuerda en el navegador). No se pide la geolocalización. **Convención técnica, revisable.** | `frontend/app-web/src/cuentas/tienda-moneda.js` |
+| **D-34** · equipo | **Reglas operativas de la compra que la ficha no fija.** | Una compra a la vez por jugador (409 `compra-en-curso`); una orden PENDIENTE (la pasarela no respondió) caduca a los 30 min; lo comprado sale del carrito al cobrar; el asiento en ms-finanzas se escribe al entregar, porque su libro no tiene reembolsos; una orden compensada no libera el tiraje reservado (productos 1.4.0 no tiene esa operación); tras un cobro, los pasos pendientes se reintentan sin rendirse, con espera creciente hasta 15 min. **Convención técnica, revisable.** | `tienda.ordenes.*` en `application.properties` de ms-ecommerce; README del servicio. |
+
 ### B7 — combate contractual, recompensas y cofres (27 de septiembre de 2026)
 
 BACKEND-09. Lo que la sección 6 y el §7.6 del documento **fijan** (fórmulas,
@@ -122,7 +134,7 @@ texto que el PO puede revisar, pero que no necesita su firma para funcionar.
 | **D-B7-11** · PO | **Héroe de la IA** (§7.6: «un héroe aleatorio controlado por la IA»; sustituye a D-03 y D-13). | Un prototipo aleatorio del catálogo **sin sanadores** (un sanador no inflige daño y la máquina no podría ganar), en el nivel del héroe del anfitrión y **sin equipamiento**, uno por cupo. Si el catálogo no responde, copia del héroe del anfitrión. | `ClienteCatalogoDeHeroes`, `IniciarPartida` |
 | **D-B7-12** · PO | **Cómo juega la IA** (sustituye a D-04). | Política simple y determinista con las mismas reglas que un humano: la especial de ataque más cara que pueda pagar (si no, el ataque básico) contra el rival en pie con menos vida; si es sanadora, sana a quien tenga menos vida proporcional de su bando. No usa defensas. | `PoliticaDeLaMaquina` (motor-combate) |
 | **D-B7-13** · alcance | **«Aprendizaje profundo»** de la IA a partir de las partidas almacenadas (§7.6). | **Fuera de este bloque y no simulado**: no hay modelo ni datos de entrenamiento. La IA es la política de D-B7-12. | — |
-| **D-B7-14** · PO | **Tiempo por turno** (§6.1.3 pide duración equitativa, sin cifra). | El parámetro `salas.partidas.segundos-por-turno` nace **sin valor**: sin límite. Con valor, al agotarse el turno pasa sin acción (`TIEMPO_AGOTADO`, tarea programada de salas-partidas) y el aviso de turno y la partida llevan los segundos que quedan (`segundosParaJugar`, `turnoActual.segundosRestantes`); la vista todavía no pinta esa cuenta atrás. | `admin-parametros` (V3) |
+| **D-B7-14** · PO | **Tiempo por turno** (§6.1.3 pide duración equitativa, sin cifra). | El parámetro `salas.partidas.segundos-por-turno` nace **sin valor**: sin límite. Con valor, al agotarse el turno pasa sin acción (`TIEMPO_AGOTADO`, tarea programada de salas-partidas) y el aviso de turno y la partida llevan los segundos que quedan (`segundosParaJugar`, `turnoActual.segundosRestantes`); la vista todavía no pinta esa cuenta atrás. | `admin-parametros` (V4) |
 | **D-B7-15** · equipo | **Quién gana en el modo por equipos** cuando cayó parte del equipo ganador. | Gana el **equipo**: todos sus integrantes, también los caídos, están en `ganadores` y reciben lo del ganador. | `Partida`, `AcreditarRecompensa` |
 | **D-B7-16** · equipo | **Qué es «1 vs 1» y qué es «grupal»** para los 2/4 créditos (§7.6). | Por **cuántos combatieron**: dos contendientes (personas o máquina) es un uno contra uno; más de dos, una grupal. La modalidad del formulario no basta: una sala «hasta seis» con dos dentro es, en el combate, un 1 vs 1. | `AcreditarRecompensa.tipoDe` |
 | **D-B7-17** · PO | **Semana de los dos cofres y créditos que sobran** (§7.6: «dos veces por semana», «el contador se reinicia»). | Semana **ISO** contada en `America/Bogota`; lo que pasa de 20 cuenta para el siguiente cofre (22 → 2). Con los dos cofres de la semana ya dados, completar otra cuota **reinicia el contador sin cofre** (lectura literal). | `FINANZAS_COFRES_ZONA`, `FINANZAS_COFRES_CONSERVAR_SOBRANTE` (ms-finanzas) |

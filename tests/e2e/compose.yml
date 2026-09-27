@@ -158,7 +158,8 @@ services:
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
       # ms-finanzas (B7): entrega el contenido de los cofres al inventario.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-finanzas=e2e-secreto-de-finanzas
+      # ms-ecommerce: la compra (B5) reserva tiraje, entrega, asienta y pide contacto.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;ms-finanzas=e2e-secreto-de-finanzas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -476,6 +477,23 @@ services:
       CORS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
       # show-sql=true por omision: en la bitacora del fallo taparia la causa.
       SPRING_JPA_SHOW_SQL: "false"
+      # La compra (B5): credencial de servicio del emisor de ADR-005 (secreto
+      # de banco de pruebas, registrado arriba en AUTH_CLIENTES_SERVICIO) y
+      # los servicios que toca despues de cobrar, todos de este banco.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-ecommerce
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-ecommerce
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      CORREO_URL: http://srv-correo:8082
+      # Este banco no tiene servicio de correo ni mailpit (ver srv-ms-identidad):
+      # la orden termina COMPLETA con el correo OMITIDO en vez de quedarse
+      # reintentando un servicio que no existe. En DEV va en true.
+      TIENDA_CORREO_HABILITADO: "false"
+      # La tarea que retoma ordenes a medias, mas agil que en DEV (15 s).
+      TIENDA_REANUDACION_INTERVALO_MS: "5000"
     depends_on:
       e2e-ecommerce-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
