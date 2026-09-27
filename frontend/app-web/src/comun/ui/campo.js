@@ -46,7 +46,10 @@ export function campo({
 
   let control;
   if (opciones) {
-    control = h('select', { clase: 'campo__control desplegable', atributos: { id, name: nombre } });
+    // UXC-7 — sin `desplegable`: esa clase del kit es la del contenedor
+    // (flex en columna), y puesta en el propio `<select>` dejaba el texto
+    // pegado arriba del control.
+    control = h('select', { clase: 'campo__control', atributos: { id, name: nombre } });
     for (const opcion of opciones) {
       control.append(h('option', { texto: opcion.texto, atributos: { value: opcion.valor } }));
     }

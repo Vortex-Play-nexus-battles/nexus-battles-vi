@@ -7,6 +7,7 @@ import {
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { montarCabecera } from '../comun/cabecera-app.js';
+import { confirmar, confirmarCritico } from '../comun/ui/dialogo.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 
 const BASE_API = '/api/v1/admin/usuarios';
@@ -295,7 +296,10 @@ async function buscarUsuario(evento) {
 
     const datos = await respuesta.json();
 
-    usuarioSeleccionado = { id: Number(datos.id ?? usuarioId) };
+    usuarioSeleccionado = {
+      id: Number(datos.id ?? usuarioId),
+      apodo: typeof datos.apodo === 'string' && datos.apodo.trim() ? datos.apodo.trim() : null,
+    };
     sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioSeleccionado.id));
 
     mostrarPanelUsuario();
@@ -469,9 +473,14 @@ async function guardarPerfil(evento) {
     return;
   }
 
-  const confirmado = window.confirm(
-    `¿Deseas guardar los cambios del usuario ${usuarioSeleccionado.id}?`,
-  );
+  // UXC-7 — los diálogos del kit en lugar de `window.confirm()`: se leen con
+  // lector de pantalla, devuelven el foco y dicen qué va a pasar.
+  const confirmado = await confirmar({
+    titulo: `¿Guardar los cambios de ${nombreDelSeleccionado()}?`,
+    mensaje: 'Se actualizan sus nombres, apodo, preferencias y, si elegiste uno, su avatar.',
+    textoConfirmar: 'Guardar cambios',
+    peligro: false,
+  });
 
   if (!confirmado) {
     return;
@@ -537,13 +546,21 @@ async function suspenderUsuario() {
     return;
   }
 
-  const confirmado = window.confirm(`¿Deseas suspender al usuario ${usuarioSeleccionado.id}?`);
+  const confirmado = await confirmar({
+    titulo: `¿Suspender a ${nombreDelSeleccionado()}?`,
+    mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.`,
+    textoConfirmar: 'Suspender',
+  });
 
   if (!confirmado) {
     return;
   }
 
-  await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.');
+  // El servicio exige la fecha fin en el cuerpo (`SuspenderCuentaRequest`):
+  // antes la petición salía vacía y el servidor la rechazaba siempre.
+  await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.', {
+    suspendidoHasta,
+  });
 }
 
 async function reactivarUsuario() {
@@ -557,7 +574,12 @@ async function reactivarUsuario() {
     return;
   }
 
-  const confirmado = window.confirm(`¿Deseas reactivar al usuario ${usuarioSeleccionado.id}?`);
+  const confirmado = await confirmar({
+    titulo: `¿Reactivar a ${nombreDelSeleccionado()}?`,
+    mensaje: 'Podrá volver a entrar al juego enseguida.',
+    textoConfirmar: 'Reactivar',
+    peligro: false,
+  });
 
   if (!confirmado) {
     return;
@@ -577,9 +599,15 @@ async function banearUsuario() {
     return;
   }
 
-  const confirmado = window.confirm(
-    `Esta acción es permanente. ¿Deseas banear definitivamente al usuario ${usuarioSeleccionado.id}?`,
-  );
+  // §7.3.9 — el baneo es una acción crítica: además de confirmar hay que
+  // escribir el apodo (o el ID) de la cuenta.
+  const confirmado = await confirmarCritico({
+    titulo: `Banear definitivamente a ${nombreDelSeleccionado()}`,
+    mensaje: 'Esta acción es permanente.',
+    consecuencias: ['No podrá volver a entrar con esta cuenta.'],
+    palabra: usuarioSeleccionado.apodo ?? String(usuarioSeleccionado.id),
+    textoConfirmar: 'Banear',
+  });
 
   if (!confirmado) {
     return;
@@ -588,13 +616,17 @@ async function banearUsuario() {
   await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.');
 }
 
-async function ejecutarAccionEstado(ruta, estado, mensajeExito) {
+async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
   try {
     const respuesta = await fetchWithHttpErrorInterceptor(
       `${BASE_API}/${usuarioSeleccionado.id}${ruta}`,
-      {
-        method: 'PUT',
-      },
+      cuerpo
+        ? {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(cuerpo),
+          }
+        : { method: 'PUT' },
     );
 
     if (!respuesta.ok) {
@@ -624,9 +656,12 @@ async function restablecerPassword() {
     return;
   }
 
-  const confirmado = window.confirm(
-    `¿Deseas restablecer la contraseña del usuario ${usuarioSeleccionado.id}? El usuario deberá completar el mecanismo seguro de restablecimiento.`,
-  );
+  const confirmado = await confirmar({
+    titulo: `¿Restablecer la contraseña de ${nombreDelSeleccionado()}?`,
+    mensaje: 'El usuario deberá completar el mecanismo seguro de restablecimiento.',
+    textoConfirmar: 'Restablecer',
+    peligro: false,
+  });
 
   if (!confirmado) {
     return;
@@ -650,6 +685,29 @@ async function restablecerPassword() {
 
     mostrarMensajePerfil(error.message || 'No fue posible restablecer la contraseña.');
   }
+}
+
+/** El apodo de la cuenta elegida, o su ID si no lo trae. */
+function nombreDelSeleccionado() {
+  return usuarioSeleccionado?.apodo ?? `la cuenta ${usuarioSeleccionado?.id ?? ''}`.trim();
+}
+
+/**
+ * La fecha fin de la suspensión, como se lee: «30 de septiembre, 10:00».
+ *
+ * @param {string} valorLocal valor de un `datetime-local`
+ */
+function fechaLegible(valorLocal) {
+  const fecha = new Date(valorLocal);
+  if (Number.isNaN(fecha.getTime())) {
+    return valorLocal;
+  }
+  return fecha.toLocaleString('es-CO', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function validarUsuarioSeleccionado() {
