@@ -211,6 +211,20 @@ jobs:
             done
 
             echo
+            echo "===================== CORREO: ENTREGAS DE 7 DIAS ============"
+            # B13 — evidencia de que el correo sale de verdad: por el
+            # proveedor SMTP (destino PROVEEDOR) para las direcciones reales y
+            # por el buzon de pruebas (BUZON_DE_PRUEBAS) para las reservadas
+            # (.test). Solo recuentos por plantilla, estado y destino: ninguna
+            # direccion, asunto ni contenido sale de la base.
+            if sudo docker ps --format '{{.Names}}' | grep -q '^plataforma-db$'; then
+              sudo docker exec plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -c "SELECT plantilla, estado, COALESCE(destino, chr(45)), count(*) FROM correo.envios WHERE creado_en > now() - interval '"'"'7 days'"'"' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"' 2>/dev/null \
+                | sed 's/^/    /' || echo "    (sin tabla correo.envios)"
+            else
+              echo "    (este host no tiene la base de plataforma)"
+            fi
+
+            echo
             echo "===================== BORDE ================================"
             curl -s --max-time 5 http://localhost/salud-borde || echo "  el borde no responde"
 
