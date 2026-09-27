@@ -1,22 +1,33 @@
 /**
- * Entrar al juego — R17.
+ * Entrar al juego — R17, y desde B1 con el correo verificado.
  *
- * Lo comparten el login y el registro, que desde R17 entra solo al crear la
- * cuenta: pedir el login, guardar la sesión que devuelve y decidir adónde ir.
- * Antes el login lo hacía a mano, clave por clave, y el registro mandaba a
- * la persona al login a escribir otra vez lo que acababa de escribir.
+ * Lo comparten el login y el registro: pedir el login, guardar la sesión que
+ * devuelve y decidir adónde ir. Antes el login lo hacía a mano, clave por
+ * clave.
+ *
+ * B1 (identidad 2.0.0) — una cuenta de autorregistro nace pendiente de
+ * verificar su correo, y hasta entonces el login la rechaza. Por eso el
+ * registro ya no entra solo: lleva a la verificación, y es la verificación la
+ * que después lleva al login.
  *
  * @module comun/entrada
  */
 
 import { destinoDeCuentaNueva, destinoTrasEntrar } from './alta.js';
 import { rutaDeApi } from './base-api.js';
-import { MOTIVOS, guardarSesion, urlDeLogin } from './sesion.js';
+import { CLAVES_DEL_CORREO, recordar, tipoDelProblema } from './codigo-de-correo.js';
+import {
+  MOTIVOS,
+  MOTIVOS_DE_VERIFICACION,
+  guardarSesion,
+  urlDeLogin,
+  urlDeVerificacion,
+} from './sesion.js';
 
 /**
- * Correo que deja el registro cuando no pudo entrar solo, para que el login
- * lo traiga escrito. Va en `sessionStorage` y se borra al usarlo: nunca en la
- * URL, donde quedaría en el historial y en las bitácoras del borde.
+ * Correo que el login trae ya escrito: el de la cuenta que se acaba de crear,
+ * verificar o recuperar. Va en `sessionStorage` y se borra al usarlo: nunca en
+ * la URL, donde quedaría en el historial y en las bitácoras del borde.
  */
 export const CLAVE_CORREO_REGISTRADO = 'nexus.registro.correo';
 
@@ -103,11 +114,19 @@ export async function pedirLogin(credenciales, fetchImpl = globalThis.fetch) {
  * Entra con la respuesta de un login correcto: guarda la sesión y dice
  * adónde ir (la preparación de la cuenta si aún no está lista).
  *
+ * B1 — `cuentaNueva`: es la primera entrada de una cuenta que acaba de
+ * verificar su correo. Va SIEMPRE a «Preparando tu cuenta», aunque el alta ya
+ * haya terminado, por lo mismo que antes iba el registro
+ * (`destinoDeCuentaNueva`): es la pantalla que le dice qué le dio el juego.
+ *
  * @param {{token: string, apodo?: string, rol?: string, uid?: string, usuarioId?: unknown, onboardingListo?: boolean}} body
- * @param {{volver?: string|null, almacen?: Storage, base?: string}} [opciones]
+ * @param {{volver?: string|null, cuentaNueva?: boolean, almacen?: Storage, base?: string}} [opciones]
  * @returns {string} URL de destino
  */
-export function entrarCon(body, { volver = null, almacen = globalThis.sessionStorage, base } = {}) {
+export function entrarCon(
+  body,
+  { volver = null, cuentaNueva = false, almacen = globalThis.sessionStorage, base } = {},
+) {
   guardarSesion(
     {
       token: body.token,
@@ -117,7 +136,7 @@ export function entrarCon(body, { volver = null, almacen = globalThis.sessionSto
     },
     almacen,
   );
-  return destinoTrasEntrar(body, volver, base);
+  return cuentaNueva ? destinoDeCuentaNueva(base) : destinoTrasEntrar(body, volver, base);
 }
 
 /**
@@ -168,49 +187,102 @@ export async function pedirRegistro(datos, fetchImpl = globalThis.fetch) {
 }
 
 /**
- * Crea la cuenta y entra con ella, sin volver a pedir lo que se acaba de
- * escribir.
+ * Por qué el servicio no pudo comprobar el apodo (identidad 2.0.0): la lista
+ * negra no respondió y el alta NO se hace. Tiene mensaje propio porque, a
+ * diferencia de un fallo cualquiera, no hay nada mal en lo que se escribió.
+ */
+const MODERACION_NO_DISPONIBLE = 'moderacion-no-disponible';
+
+/**
+ * Crea la cuenta y dice adónde ir después.
  *
- * Tres finales:
- *   - `dentro`    — cuenta creada y sesión abierta; `destino` es SIEMPRE la
- *                   preparación de la cuenta, aunque el alta ya esté lista:
- *                   es donde se le dice qué le dio el juego
- *                   (`destinoDeCuentaNueva`).
- *   - `creada`    — la cuenta existe pero no se pudo entrar solo (el login
- *                   falló o no contestó): al login con el correo ya escrito.
+ * Cuatro finales:
+ *   - `pendiente` — B1: cuenta creada y pendiente de verificar su correo. El
+ *                   correo se recuerda en esta pestaña (nunca en la URL) y
+ *                   `destino` es la verificación, que es donde se escribe el
+ *                   código que acaba de salir.
+ *   - `dentro`    — la cuenta ya nació activa (un servicio anterior a la
+ *                   verificación) y el login entró solo: a «Preparando tu
+ *                   cuenta», como en R17.
+ *   - `creada`    — nació activa pero no se pudo entrar solo: al login con el
+ *                   correo ya escrito.
  *   - `rechazada` — el servidor no creó la cuenta; `campo` dice cuál marcar.
+ *
+ * Qué camino se toma lo dice el `estado` que devuelve el propio registro, no
+ * una suposición: solo una cuenta `ACTIVO` puede iniciar sesión ya.
  *
  * Un fallo de red al CREAR la cuenta se propaga: la vista no sabe si se creó,
  * y lo honesto es decirlo así.
  *
  * @param {FormData} datos
  * @param {{email: string, password: string}} credenciales
- * @param {{fetchImpl?: typeof fetch, almacen?: Storage, base?: string}} [opciones]
+ * @param {{fetchImpl?: typeof fetch, almacen?: Storage, base?: string, ahora?: () => number}} [opciones]
+ * @returns {Promise<{resultado: 'pendiente'|'dentro'|'creada'|'rechazada', destino?: string,
+ *   mensaje?: string, campo?: string|null, estado?: number}>}
  */
-export async function registrarYEntrar(
+export async function registrarCuenta(
   datos,
   { email, password },
-  { fetchImpl = globalThis.fetch, almacen = globalThis.sessionStorage, base } = {},
+  {
+    fetchImpl = globalThis.fetch,
+    almacen = globalThis.sessionStorage,
+    base,
+    ahora = () => Date.now(),
+  } = {},
 ) {
   const { respuesta, body } = await pedirRegistro(datos, fetchImpl);
   if (!respuesta.ok) {
-    const campo = body && typeof body === 'object' ? (body.campo ?? null) : null;
-    const motivo = respuesta.status >= 500 ? null : motivoDelRechazo(body);
-    const mensaje =
-      respuesta.status >= 500
-        ? 'No pudimos crear la cuenta ahora mismo. Inténtalo de nuevo en unos minutos.'
-        : (MOTIVOS_DE_REGISTRO[motivo] ??
-          mensajeDelServidor(body) ??
-          'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');
-    return {
-      resultado: 'rechazada',
-      mensaje,
-      campo,
-      estado: respuesta.status,
-      ...(motivo ? { motivo } : {}),
-    };
+    return rechazoDelRegistro(respuesta.status, body);
   }
 
+  if (body && typeof body === 'object' && body.estado === 'ACTIVO') {
+    return entrarTrasRegistrar({ email, password }, { fetchImpl, almacen, base });
+  }
+
+  recordar(CLAVES_DEL_CORREO.porVerificar, email, almacen);
+  recordar(CLAVES_DEL_CORREO.ultimoEnvio, String(ahora()), almacen);
+  return {
+    resultado: 'pendiente',
+    destino: urlDeVerificacion({ motivo: MOTIVOS_DE_VERIFICACION.REGISTRO }, base),
+  };
+}
+
+/**
+ * @param {number} estado
+ * @param {unknown} body
+ */
+function rechazoDelRegistro(estado, body) {
+  const campo = body && typeof body === 'object' ? (body.campo ?? null) : null;
+  if (tipoDelProblema(body) === MODERACION_NO_DISPONIBLE) {
+    return {
+      resultado: 'rechazada',
+      mensaje:
+        'No pudimos comprobar tu apodo en este momento, así que la cuenta no se creó. Inténtalo de nuevo en unos minutos.',
+      campo,
+      estado,
+    };
+  }
+  // UXC-7: los rechazos del alta se explican por su `type` estable, con
+  // palabras del producto; lo que no tenga entrada se dice con el texto del
+  // servidor.
+  const motivo = estado >= 500 ? null : motivoDelRechazo(body);
+  const mensaje =
+    estado >= 500
+      ? 'No pudimos crear la cuenta ahora mismo. Inténtalo de nuevo en unos minutos.'
+      : (MOTIVOS_DE_REGISTRO[motivo] ??
+        mensajeDelServidor(body) ??
+        'No se pudo crear la cuenta. Revisa los datos e inténtalo de nuevo.');
+  return { resultado: 'rechazada', mensaje, campo, estado, ...(motivo ? { motivo } : {}) };
+}
+
+/**
+ * La cuenta nació activa: entra con ella sin volver a pedir lo que se acaba
+ * de escribir (R17).
+ *
+ * @param {{email: string, password: string}} credenciales
+ * @param {{fetchImpl: typeof fetch, almacen: Storage, base?: string}} opciones
+ */
+async function entrarTrasRegistrar({ email, password }, { fetchImpl, almacen, base }) {
   try {
     const login = await pedirLogin({ email, password }, fetchImpl);
     if (login.respuesta.ok && login.body?.token) {
@@ -220,6 +292,6 @@ export async function registrarYEntrar(
   } catch {
     // La cuenta ya existe: queda entrar a mano, con el correo ya escrito.
   }
-  almacen.setItem(CLAVE_CORREO_REGISTRADO, email);
+  recordar(CLAVE_CORREO_REGISTRADO, email, almacen);
   return { resultado: 'creada', destino: urlDeLogin({ motivo: MOTIVOS.REGISTRADA }, base) };
 }

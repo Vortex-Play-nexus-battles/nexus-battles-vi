@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
-  <body class="portal">
+  <body class="portal" data-vista="restablecer-solicitar">
     <div data-cabecera-app></div>
 
     <main class="entrada">
@@ -30,7 +30,7 @@
             <svg class="icono" aria-hidden="true">
               <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
             </svg>
-            <span>La contraseña nueva se elige desde el propio código</span>
+            <span>Si configuraste preguntas de seguridad, también te las pediremos</span>
           </li>
         </ul>
       </section>
@@ -42,6 +42,19 @@
         </div>
 
         <p class="estado" id="estadoSolicitud" hidden role="status"></p>
+
+        <!-- El resultado de la solicitud. Tras enviarla dice SIEMPRE lo mismo,
+             exista o no la cuenta; y si no se pudo enviar, por qué. -->
+        <div data-zona="aviso" tabindex="-1" hidden></div>
+        <div data-zona="siguiente" hidden>
+          <a
+            class="boton boton--primario"
+            data-zona="escribir-codigo"
+            href="./restablecer-confirmar.html"
+          >
+            Escribir el código
+          </a>
+        </div>
 
         <form id="formSolicitud" class="pila" novalidate>
           <div class="campo">
@@ -73,13 +86,5 @@
     </main>
 
     <script type="module" src="./restablecer-solicitar.js"></script>
-    <script type="module">
-      import { montarCabecera } from '../comun/cabecera-app.js';
-
-      montarCabecera(document.querySelector('[data-cabecera-app]'), {
-        vista: 'restablecer-solicitar',
-        seccionActiva: null,
-      });
-    </script>
   </body>
 </html>

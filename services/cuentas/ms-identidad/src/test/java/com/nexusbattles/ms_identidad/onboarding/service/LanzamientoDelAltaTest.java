@@ -1,6 +1,5 @@
 package com.nexusbattles.ms_identidad.onboarding.service;
 
-import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.onboarding.model.EstadoOnboarding;
 import com.nexusbattles.ms_identidad.onboarding.repository.OnboardingJugadorRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -20,7 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -89,16 +87,13 @@ class LanzamientoDelAltaTest {
     }
 
     @Test
-    @DisplayName("al confirmarse el registro: primero la auditoria del alta, luego el bootstrap")
+    @DisplayName("al confirmarse la transaccion del alta (B1: la verificacion del correo): el bootstrap")
     void alRegistrar() {
-        AuditoriaDeCuenta auditoria = mock(AuditoriaDeCuenta.class);
         LanzadorOnboarding lanzador = mock(LanzadorOnboarding.class);
 
-        new AlRegistrarJugador(auditoria, lanzador).alConfirmarse(new JugadorRegistrado(UID, "profe", "10.0.0.2"));
+        new AlRegistrarJugador(lanzador).alConfirmarse(new JugadorRegistrado(UID, "profe", "10.0.0.2"));
 
-        var orden = inOrder(auditoria, lanzador);
-        orden.verify(auditoria).registro(UID, "profe", "10.0.0.2");
-        orden.verify(lanzador).lanzar(UID);
+        verify(lanzador).lanzar(UID);
     }
 
     @Test
