@@ -97,6 +97,18 @@ la credencial de servicio de ADR-005) y no depende de SQL manual: si un
 servicio está caído, el alta queda `ERROR_REINTENTABLE` y se completa sola al
 volver, al iniciar sesión o con el botón «Reintentar».
 
+### B5 — la tienda cobra (25 de septiembre de 2026)
+
+La compra con pasarela simulada (§7.5, ecommerce-carrito.yaml 1.4.0) dejó tres
+huecos que la ficha no cierra. El primero es del PO y **no tiene valor
+provisional**; los otros dos son convenciones del equipo, revisables.
+
+| # | Qué falta decidir | Qué hace hoy el sistema | Dónde se cambia |
+|---|---|---|---|
+| **D-32** · PO | **Tasas COP→USD y COP→EUR.** §7.5 pide el precio «en COP o dólar o euro dependiendo de su ubicación geográfica» y ningún documento da la tasa ni su fuente. | ms-ecommerce vende **solo en COP** mientras no haya tasa: la vitrina publica `monedasDisponibles: [COP]`, pedir USD o EUR responde 422 `moneda-no-disponible` y la tienda enseña esas monedas desactivadas y dice por qué. **No se inventa ninguna tasa.** | Parámetros `tienda.tasa-cop-usd` y `tienda.tasa-cop-eur` (pesos por una unidad) de admin-parametros. Hay que darlos de alta en su catálogo, sin valor (SQL en el README de ms-ecommerce); el PO fija el valor en el panel **Parámetros** y la tienda lo toma en menos de un minuto. |
+| **D-33** · equipo | **Qué es la «ubicación geográfica».** | La moneda sale de la región de `navigator.languages` (Colombia y cualquier otra región → COP; Estados Unidos, Puerto Rico, Ecuador, El Salvador y Panamá → USD; zona euro → EUR), y el jugador la cambia en el selector (se recuerda en el navegador). No se pide la geolocalización. **Convención técnica, revisable.** | `frontend/app-web/src/cuentas/tienda-moneda.js` |
+| **D-34** · equipo | **Reglas operativas de la compra que la ficha no fija.** | Una compra a la vez por jugador (409 `compra-en-curso`); una orden PENDIENTE (la pasarela no respondió) caduca a los 30 min; lo comprado sale del carrito al cobrar; el asiento en ms-finanzas se escribe al entregar, porque su libro no tiene reembolsos; una orden compensada no libera el tiraje reservado (productos 1.4.0 no tiene esa operación); tras un cobro, los pasos pendientes se reintentan sin rendirse, con espera creciente hasta 15 min. **Convención técnica, revisable.** | `tienda.ordenes.*` en `application.properties` de ms-ecommerce; README del servicio. |
+
 ---
 
 Cuando el PO decida una de las dos que quedan, se aplica el cambio en el sitio

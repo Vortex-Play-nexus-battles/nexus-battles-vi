@@ -112,6 +112,32 @@ Sin credencial de servicio o sin la dirección de un servicio de la compra,
 `POST /checkout` responde **503 `compra-no-disponible` antes de cobrar**; la
 vitrina, el carrito y la lista de deseos siguen funcionando.
 
+### Coexistencia conocida: `POST /api/v1/pagos/procesar` de ms-finanzas (#715)
+
+Con #715 entró en develop otra pasarela simulada, dentro de ms-finanzas
+(HU-PAG-001, solo token de servicio; contrato `pagos.yaml` 1.0.0, publicado en
+B0 con sus defectos conocidos). **La tienda no la usa** (decisión técnica de
+B5): cobra con su `PasarelaSimulada` interna y asienta el cobro con
+`POST /transacciones` (`refId` = la orden), como se describe arriba. Por qué:
+
+- el cobro de la tienda es un paso de una orden con estados, clave de
+  idempotencia del jugador, compensación con reembolso y reanudación. Esa ruta
+  recibe `uidUsuario`, `monto`, `moneda`, `concepto` y `refId`, **no la
+  tarjeta**, y aprueba todo monto positivo: no puede aplicar las tarjetas de
+  prueba de 7.5 (`0002` rechaza, `0069` pasarela caída);
+- llamarla además de lo anterior duplicaría el asiento (ella también registra
+  la transacción) y mandaría un segundo correo que hoy el servicio de correo
+  rechaza (usa el `uid` como dirección, defecto anotado en `pagos.yaml`).
+
+Consecuencias: ms-finanzas tiene dos caminos para dejar constancia de un cobro
+en dinero real, y el de `/pagos/procesar` no tiene consumidor en la tienda;
+tampoco lo tiene `frontend/app-web/src/comun/ui/resultado-pago.js` (de #715),
+que pinta su respuesta: el resultado de la compra sale de la orden
+(`src/cuentas/tienda-pago.js`). Si se decide unificar, el punto de cambio es
+`compra/pago/PasarelaSimulada` (que pase a llamar a ms-finanzas con
+`refId = orden-{id}`), sin tocar el contrato de la tienda. B5 no modificó
+ms-finanzas.
+
 ## Configuración (solo variables de entorno)
 
 | Variable | Por omisión (local) | Para qué |
@@ -129,6 +155,15 @@ vitrina, el carrito y la lista de deseos siguen funcionando.
 | `TIENDA_REANUDACION_HABILITADA` · `TIENDA_REANUDACION_INTERVALO_MS` | `true` · `15000` | tarea que termina órdenes a medias |
 | `CORS_ORIGENES` | `http://localhost:8080,http://127.0.0.1:8080` | origen del borde |
 
+## La interfaz (`frontend/app-web/src/cuentas/`)
+
+| Módulo | Qué hace |
+|---|---|
+| `tienda.js` | Vitrina, filtros, carrito con «−»/«+» (`PUT …/cantidad`), «Pagar» y «Mis compras» |
+| `tienda-moneda.js` | Moneda inicial por la región de `navigator.languages`: **aproximación** a la «ubicación geográfica» de 7.5, sin geolocalización (D-33). Solo ofrece las de `monedasDisponibles`; las demás salen desactivadas y la nota dice que falta su tasa (D-32) |
+| `tienda-deseos.js` | El corazón de la tarjeta y del detalle (`PUT`/`DELETE /lista-deseos/{id}`), con `aria-pressed` |
+| `tienda-pago.js` | Resumen y formulario de 7.5 (`autocomplete` `cc-name`, `cc-number`, `cc-exp`, `cc-csc`), una `Idempotency-Key` por intento (la misma al reintentar tras un 503 o un 409 `compra-en-curso`), resultado por estado y «Mis compras». El número y el código solo viven en el formulario y en el cuerpo de la petición: ni almacenamiento del navegador, ni consola, ni dirección |
+
 ## Pruebas
 
 ```powershell
@@ -143,3 +178,8 @@ vitrina, el carrito y la lista de deseos siguen funcionando.
 - `contratos/*PactoTest`: pactos de consumidor con productos (reserva) e
   inventario (entrega) en `contracts/pactos/`. La verificación de proveedor la
   añade el integrador cuando esté fusionado B4 (ver `contracts/pactos/README.md`).
+- `tests/e2e/tienda.e2e.spec.js` (banco de servicios reales): compra con la
+  `4242` hasta COMPLETA con el producto en el inventario, la misma clave dos
+  veces, el rechazo `0002` y la compra desde la vista. Necesita B4 fusionado
+  (reserva de tiraje y entregas); el banco no tiene correo, así que la orden
+  termina con el correo OMITIDO (`TIENDA_CORREO_HABILITADO=false`).
