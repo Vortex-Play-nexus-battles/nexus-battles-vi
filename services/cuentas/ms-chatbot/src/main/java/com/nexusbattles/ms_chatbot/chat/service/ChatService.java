@@ -18,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Instant;
 import java.util.List;
 
-// HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 2.0.0):
+// HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 1.2.0):
 //
 //   1. Limite de frecuencia por usuario o sesion (7.4.8), antes de nada.
 //   2. El texto pasa por la lista negra (7.4.8) antes de procesarlo o

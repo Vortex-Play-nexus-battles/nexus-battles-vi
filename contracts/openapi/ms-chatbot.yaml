@@ -43,7 +43,7 @@ openapi: 3.1.0
 # menos. Interpretacion pendiente de confirmar con el cliente.
 #
 # ---------------------------------------------------------------------------
-# IDENTIDAD EN EL CHAT: VISITANTE O USUARIO AUTENTICADO (2.0.0, B11)
+# IDENTIDAD EN EL CHAT: VISITANTE O USUARIO AUTENTICADO (1.2.0, B11)
 #
 # Todas las rutas de `/chat/**` aceptan las dos formas, porque el chat debe
 # funcionar para visitantes sin cuenta (criterio de HU-CHA-001):
@@ -51,21 +51,27 @@ openapi: 3.1.0
 #   * Usuario autenticado: `Authorization: Bearer <JWT de ms-identidad>`. La
 #     conversacion se identifica SOLO por el claim `uid` del token (ADR-002).
 #     Con token valido, `X-Id-Sesion-Anonima` se ignora.
-#   * Visitante: sin token, con la cabecera `X-Id-Sesion-Anonima` que EMITE EL
-#     SERVIDOR (`POST /chat/sesiones`, o la cabecera de respuesta del primer
-#     `POST /chat/mensajes`): `anon_` + 43 caracteres base64url de 256 bits
-#     aleatorios. El servidor solo guarda su huella SHA-256, y la conversacion
-#     del visitante vive en un espacio de claves distinto del de los `uid`
-#     (`anonimo:<sesion>`), asi que un identificador de visitante NUNCA puede
-#     abrir la conversacion de un usuario registrado.
+#   * Visitante: sin token, con la cabecera `X-Id-Sesion-Anonima` en una de
+#     dos formas:
+#       - EMITIDA POR EL SERVIDOR (`POST /chat/sesiones`, o la cabecera de
+#         respuesta del primer `POST /chat/mensajes`): `anon_` + 43 caracteres
+#         base64url de 256 bits aleatorios. La recomendada.
+#       - DECLARADA POR EL NAVEGADOR: `visitante-` + 10 a 64 caracteres
+#         `[A-Za-z0-9-]`. Es la que ya manda el asistente de la interfaz
+#         (`comun/cliente-chatbot.js`, `visitante-` + crypto.randomUUID()); se
+#         registra la primera vez que escribe.
+#     En los dos casos el servidor solo guarda su huella SHA-256, y la
+#     conversacion del visitante vive en un espacio de claves distinto del de
+#     los `uid` (`anonimo:<sesion>`), asi que un identificador de visitante
+#     NUNCA puede abrir la conversacion de un usuario registrado.
 #
-# Por que 2.0.0: hasta la 1.1.0 el frontend elegia el identificador del
-# visitante y el servidor lo usaba como la misma clave que el `uid`. Un
-# visitante que mandara `X-Id-Sesion-Anonima: <uid de un jugador>` (los `uid`
-# son publicos, p. ej. en `GET /torneos`) leia, calificaba o BORRABA el
-# historial de ese jugador. Ahora un identificador que el servidor no emitio
-# no da acceso a nada: `GET /historial` responde vacio, `DELETE` no borra nada
-# y calificar responde 404.
+# El fallo que cierra la 1.2.0: hasta la 1.1.0 el servidor usaba la cabecera
+# como la misma clave que el `uid`. Un visitante que mandara
+# `X-Id-Sesion-Anonima: <uid de un jugador>` (los `uid` son publicos, p. ej. en
+# `GET /torneos`) leia, calificaba o BORRABA el historial de ese jugador.
+# Ahora un `uid` a secas, un valor sin ninguna de las dos formas o una sesion
+# vencida no dan acceso a nada: `GET /historial` responde vacio, `DELETE` no
+# borra nada y calificar responde 404.
 #
 # Un JWT invalido o vencido NO produce 401 en estas rutas: la peticion se
 # atiende como la de un visitante (HU-CHA-008). Asi, a un jugador cuya sesion
@@ -91,7 +97,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 2.0.0
+  version: 1.2.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -100,19 +106,18 @@ info:
     conocimiento y despliegue evaluado de sus versiones.
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
-    estandar de Spring; los de 2.0.0 traen ademas `motivo`.
+    estandar de Spring; los de 1.2.0 traen ademas `motivo`.
 
-    ### 2.0.0 (B11) — por que version mayor
+    ### 1.2.0 (B11) — compatible con 1.1.0
 
-    * **Sesion de visitante emitida por el servidor.** `X-Id-Sesion-Anonima`
-      ya no la inventa el frontend: la emite `POST /chat/sesiones` (o el
-      primer `POST /chat/mensajes` sin sesion, en la cabecera de respuesta
-      del mismo nombre). Un valor que el servidor no emitio ya no identifica
-      ninguna conversacion: cierra el acceso de un visitante al historial de
-      un jugador cuyo `uid` conociera (auditoria de B11). Es incompatible para
-      un cliente que generaba su propio identificador: sigue pudiendo
-      chatear, pero su historial ya no persiste hasta que guarde el que le
-      devuelve el servidor.
+    * **Sesion de visitante en su propio espacio de claves.** Un valor de
+      `X-Id-Sesion-Anonima` ya nunca es la clave de la conversacion de un
+      usuario: cierra el acceso de un visitante al historial de un jugador
+      cuyo `uid` conociera (auditoria de B11). El identificador que ya
+      declara el asistente de la interfaz (`visitante-...`) sigue valiendo
+      tal cual; `POST /chat/sesiones` emite ademas uno de 256 bits para el
+      cliente que lo prefiera. Un valor sin ninguna de las dos formas se
+      trata como si no viniera.
     * **Limite de frecuencia** por usuario o sesion en `POST /chat/mensajes`
       y por direccion en `POST /chat/sesiones`: 429 con `Retry-After`
       (7.4.8 del documento).
@@ -124,7 +129,8 @@ info:
       creditos del propio jugador (con su token). Las secciones de torneos y
       misiones ya existen en el menu: la navegacion asistida lleva a ellas.
     * **Sin cambios de forma** en los cuerpos de peticion y respuesta que ya
-      existian.
+      existian; lo nuevo (`POST /chat/sesiones`, las respuestas 422, 429 y
+      503, el campo `motivo`) es adicional.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -149,15 +155,16 @@ paths:
     post:
       tags: [chat]
       operationId: crearSesionAnonimaDelChatbot
-      summary: Emite la sesion de un visitante (2.0.0)
+      summary: Emite la sesion de un visitante (1.2.0)
       description: |
         Devuelve un identificador aleatorio de 256 bits (`anon_` + 43
         caracteres base64url) que el visitante manda despues en
         `X-Id-Sesion-Anonima`. El servidor guarda solo su huella SHA-256 y lo
         da por vencido tras `expiraEn` sin actividad (se renueva con cada
         mensaje). No hace falta token; con token no hace falta sesion.
-        Limitado por direccion de origen para que nadie fabrique sesiones en
-        masa (429).
+        Opcional: el identificador que declara el navegador (`visitante-...`)
+        tambien vale. Limitado por direccion de origen para que nadie fabrique
+        sesiones en masa (429).
       security:
         - {}
       responses:
@@ -183,16 +190,19 @@ paths:
         primero de esa sesion) y devuelve la respuesta del bot, que tambien
         queda guardada.
 
-        Antes de responder (2.0.0): limite de frecuencia por usuario o sesion
+        Antes de responder (1.2.0): limite de frecuencia por usuario o sesion
         (429), y el texto pasa por la lista negra en el contexto CHAT_GENERAL:
         si coincide con un termino prohibido, 422 y no se guarda nada; si la
         lista negra no responde, 503 y tampoco.
 
-        Un visitante sin sesion valida (sin `X-Id-Sesion-Anonima`, o con una
-        que el servidor no emitio o que vencio) recibe una sesion NUEVA en la
-        cabecera de respuesta `X-Id-Sesion-Anonima` y su mensaje abre una
-        conversacion nueva. El cliente debe guardarla y mandarla en las
-        siguientes peticiones para conservar su historial.
+        Un visitante con un identificador declarado (`visitante-...`) lo
+        conserva: la primera vez queda registrado y no se emite otro (si
+        habia vencido, su mensaje abre una conversacion nueva). Un visitante
+        sin sesion valida (sin `X-Id-Sesion-Anonima`, con un valor sin
+        ninguna de las dos formas o con una sesion emitida que vencio) recibe
+        una sesion NUEVA en la cabecera de respuesta `X-Id-Sesion-Anonima` y
+        su mensaje abre una conversacion nueva: el cliente debe guardarla y
+        mandarla en las siguientes peticiones para conservar su historial.
 
         Como se genera la respuesta:
 
@@ -270,9 +280,9 @@ paths:
       description: |
         Todos los mensajes (del usuario y del bot) de la conversacion de esta
         sesion, del mas antiguo al mas reciente. Lista vacia si la sesion
-        todavia no ha escrito, y tambien (2.0.0) si no hay token valido ni una
-        `X-Id-Sesion-Anonima` emitida por el servidor: un identificador
-        inventado no abre la conversacion de nadie.
+        todavia no ha escrito, y tambien (1.2.0) si no hay token valido ni una
+        sesion de visitante vigente y registrada: un `uid` u otro valor no
+        abre la conversacion de nadie.
       security:
         - {}
         - tokenDeUsuario: []
@@ -299,7 +309,7 @@ paths:
         calificaciones. Las brechas de conocimiento ya registradas NO se
         borran: son un agregado anonimo, sin vinculo con la sesion.
         Idempotente: sin conversacion previa, responde igual. Sin token valido
-        ni sesion emitida por el servidor no borra nada (2.0.0).
+        ni sesion de visitante vigente y registrada no borra nada (1.2.0).
       security:
         - {}
         - tokenDeUsuario: []
@@ -320,7 +330,7 @@ paths:
         Una sola calificacion por respuesta. Solo se califican mensajes del
         bot, y solo los de la propia conversacion: un mensaje de otra sesion
         responde 404, igual que uno inexistente, para no revelar que existe.
-        Sin token valido ni sesion emitida por el servidor, 404 (2.0.0).
+        Sin token valido ni sesion de visitante vigente y registrada, 404 (1.2.0).
 
         Una calificacion "no util" registra como brecha de conocimiento la
         pregunta del usuario que origino esa respuesta.
@@ -896,7 +906,7 @@ components:
 
   headers:
     SesionAnonimaEmitida:
-      description: Sesion de visitante recien emitida por el servidor (2.0.0).
+      description: Sesion de visitante recien emitida por el servidor (1.2.0).
       schema:
         type: string
         pattern: '^anon_[A-Za-z0-9_-]{43}$'
@@ -907,9 +917,12 @@ components:
       in: header
       required: false
       description: |
-        Sesion de un visitante, EMITIDA POR EL SERVIDOR (2.0.0: antes la
-        generaba el frontend). Se ignora si hay token valido. Un valor que el
-        servidor no emitio, o vencido, se trata como si no viniera.
+        Sesion de un visitante (1.2.0): emitida por el servidor (`anon_` + 43
+        caracteres base64url, `POST /chat/sesiones`) o declarada por el
+        navegador (`visitante-` + 10 a 64 caracteres `[A-Za-z0-9-]`). Se
+        ignora si hay token valido. Nunca es la clave de la conversacion de un
+        usuario; un valor sin ninguna de las dos formas, o vencido, se trata
+        como si no viniera.
       schema:
         type: string
         maxLength: 255
@@ -1061,11 +1074,11 @@ components:
         motivo:
           type: string
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE]
-          description: 2.0.0. Solo en los errores nuevos de /chat/**.
+          description: 1.2.0. Solo en los errores nuevos de /chat/**.
 
     SesionAnonima:
       type: object
-      description: 2.0.0. Sesion de visitante emitida por el servidor.
+      description: 1.2.0. Sesion de visitante emitida por el servidor.
       required: [idSesionAnonima, expiraEn]
       properties:
         idSesionAnonima:

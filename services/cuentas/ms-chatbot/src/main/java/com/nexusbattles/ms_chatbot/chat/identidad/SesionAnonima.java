@@ -12,10 +12,10 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
-// B11 (ms-chatbot.yaml 2.0.0): la sesion de un visitante, EMITIDA POR EL
-// SERVIDOR. Se guarda solo la huella SHA-256 del identificador que se le
-// entrego al navegador: quien lea la base no obtiene identificadores que
-// sirvan para abrir la conversacion de nadie.
+// B11 (ms-chatbot.yaml 1.2.0): la sesion de un visitante, emitida por el
+// servidor o declarada por el navegador (SesionesAnonimas). Se guarda solo la
+// huella SHA-256 del identificador que tiene el navegador: quien lea la base
+// no obtiene identificadores que sirvan para abrir la conversacion de nadie.
 //
 // Caduca por inactividad (expiraEn se renueva con cada mensaje): el documento
 // pide historial «persistente durante la sesion del usuario» (7.4.2), no para

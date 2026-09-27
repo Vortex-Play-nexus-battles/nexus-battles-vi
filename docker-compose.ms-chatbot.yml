@@ -100,7 +100,7 @@ services:
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://srv-ms-subastas:8092/api/v1}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
-      # B11 (ms-chatbot.yaml 2.0.0): movimientos de creditos del propio jugador
+      # B11 (ms-chatbot.yaml 1.2.0): movimientos de creditos del propio jugador
       # (con su token), torneos como dato publico y la lista negra para filtrar
       # lo que escribe el usuario (fail-closed por omision, D-14).
       FINANZAS_BASE_URL: ${FINANZAS_BASE_URL:-http://srv-ms-finanzas:8093/api/v1}

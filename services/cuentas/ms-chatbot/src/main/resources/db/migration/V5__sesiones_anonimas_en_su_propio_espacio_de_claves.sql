@@ -1,4 +1,5 @@
--- B11 (ms-chatbot.yaml 2.0.0): la sesion del visitante la emite el servidor.
+-- B11 (ms-chatbot.yaml 1.2.0): la conversacion del visitante vive en su propio
+-- espacio de claves, nunca en el de los uid.
 --
 -- El fallo que cierra: hasta aqui el visitante mandaba en X-Id-Sesion-Anonima
 -- un identificador que elegia el propio frontend, y el servidor lo usaba como
@@ -8,9 +9,11 @@
 --
 -- Desde esta version:
 --   * los usuarios con sesion siguen en su clave de siempre: el uid del token;
---   * los visitantes tienen una sesion emitida por el servidor (256 bits
---     aleatorios) de la que aqui solo se guarda la huella SHA-256, y su
---     conversacion vive en otro espacio de claves: 'anonimo:<id de la sesion>';
+--   * los visitantes tienen una sesion -emitida por el servidor (256 bits
+--     aleatorios) o declarada por el navegador ('visitante-...', la que manda
+--     el asistente de la interfaz)- de la que aqui solo se guarda la huella
+--     SHA-256, y su conversacion vive en otro espacio de claves:
+--     'anonimo:<id de la sesion>';
 --   * las conversaciones anonimas anteriores, con claves que eligio el cliente,
 --     se apartan a 'legado-anonimo:<id>': ya no las puede abrir nadie (tampoco
 --     el atacante que se hubiera apropiado de la clave de un uid), y dejan libre

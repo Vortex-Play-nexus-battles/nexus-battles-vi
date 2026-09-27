@@ -21,8 +21,8 @@ import java.util.List;
 // HU-CHA-001: el chat debe funcionar 24/7 para visitantes SIN autenticarse
 // (criterio de aceptacion), asi que /chat/** queda en permitAll. Aun asi, si
 // la peticion trae un JWT valido de ms-identidad, Spring Security lo valida
-// e informa quien es -- eso es lo que usa ChatController.resolverIdentidad
-// para distinguir visitante de usuario autenticado.
+// e informa quien es -- eso es lo que usa ResolutorDeIdentidad (B11) para
+// distinguir visitante de usuario autenticado.
 //
 // HU-CHA-008: un JWT presente pero invalido/vencido no debe tumbar el chat
 // con 401 -- debe degradar a modo visitante. Por eso /chat/** vive en su
@@ -67,7 +67,9 @@ public class SecurityConfig {
             "Authorization", "Content-Type", "Accept", "X-Id-Sesion-Anonima", "traceparent"));
         // El panel descarga la exportacion (CSV y JSON) y necesita leer el
         // nombre del archivo; sin esto el navegador le oculta la cabecera.
-        configuracion.setExposedHeaders(List.of("Content-Disposition"));
+        // B11 (1.2.0): la sesion de visitante que emite el servidor y el
+        // Retry-After del 429 tambien viajan en cabeceras.
+        configuracion.setExposedHeaders(List.of("Content-Disposition", "X-Id-Sesion-Anonima", "Retry-After"));
         configuracion.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource fuente = new UrlBasedCorsConfigurationSource();

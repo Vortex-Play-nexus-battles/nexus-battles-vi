@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 import java.util.Optional;
 import java.util.UUID;
 
-// B11 — quien habla con el chatbot (ms-chatbot.yaml 2.0.0).
+// B11 — quien habla con el chatbot (ms-chatbot.yaml 1.2.0).
 //
 // El fallo de la auditoria: ChatController.resolverIdentidad tomaba
 // X-Id-Sesion-Anonima como la MISMA clave que el uid, asi que un visitante que
@@ -16,11 +16,14 @@ import java.util.UUID;
 //
 //   1. Con un JWT valido que identifica a un usuario, la identidad es el uid
 //      del token y nada mas: la cabecera se ignora.
-//   2. Sin el, la cabecera solo cuenta si es una sesion que emitio este
-//      servidor y sigue vigente (SesionesAnonimas.validar). Un uid, un valor
-//      inventado o una sesion vencida no identifican a nadie.
-//   3. Solo al ENVIAR un mensaje se le emite una sesion nueva a quien no tenga
-//      una valida; consultar o borrar sin sesion no crea nada.
+//   2. Sin el, la cabecera solo cuenta si es una sesion de visitante vigente
+//      y registrada (SesionesAnonimas.validar): emitida por este servidor o
+//      declarada por el navegador. Un uid, un valor sin forma o una sesion
+//      vencida no identifican a nadie.
+//   3. Solo al ENVIAR un mensaje se registra una sesion: la que declaro el
+//      navegador (el asistente de la interfaz, #708, manda la suya siempre)
+//      o, si no trae ninguna valida, una nueva que emite el servidor.
+//      Consultar o borrar sin sesion no crea nada.
 @Component
 public class ResolutorDeIdentidad {
 
@@ -45,13 +48,17 @@ public class ResolutorDeIdentidad {
         return sesiones.validar(cabeceraDeSesion).map(IdentidadDelChat::visitante);
     }
 
-    // Para enviar un mensaje: si no hay usuario ni sesion valida, se emite una
-    // sesion nueva (limitada por origen) y se devuelve para que el cliente la
+    // Para enviar un mensaje: si no hay usuario ni sesion valida, se registra
+    // la que declaro el navegador (sin devolver nada: ya la tiene) o se emite
+    // una nueva (limitada por origen) y se devuelve para que el cliente la
     // guarde.
     public Resultado resolverOEmitir(Authentication autenticacion, String cabeceraDeSesion, String origen) {
         Optional<IdentidadDelChat> conocida = resolver(autenticacion, cabeceraDeSesion);
         if (conocida.isPresent()) {
             return new Resultado(conocida.get(), null);
+        }
+        if (SesionesAnonimas.esDeclarada(cabeceraDeSesion)) {
+            return new Resultado(IdentidadDelChat.visitante(sesiones.declarar(cabeceraDeSesion, origen)), null);
         }
         SesionesAnonimas.Emitida emitida = sesiones.emitir(origen);
         return new Resultado(IdentidadDelChat.visitante(emitida.sesion()), emitida.identificador());

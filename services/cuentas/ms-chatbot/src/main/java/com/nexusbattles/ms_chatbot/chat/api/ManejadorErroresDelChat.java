@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 // Regla 4: problem details. Los errores nuevos del chat (ms-chatbot.yaml
-// 2.0.0) llevan ademas `motivo`, para que el frontend decida por el motivo y
+// 1.2.0) llevan ademas `motivo`, para que el frontend decida por el motivo y
 // no por el texto.
 @RestControllerAdvice(basePackages = "com.nexusbattles.ms_chatbot.chat.api")
 public class ManejadorErroresDelChat {

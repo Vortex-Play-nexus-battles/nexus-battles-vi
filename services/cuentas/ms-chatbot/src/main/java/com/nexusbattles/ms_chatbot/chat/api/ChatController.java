@@ -26,10 +26,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-// B11 (ms-chatbot.yaml 2.0.0): la identidad la resuelve ResolutorDeIdentidad.
-// Un usuario es el uid de su token y nada mas; un visitante es una sesion que
-// emitio este servidor. X-Id-Sesion-Anonima nunca abre la conversacion de un
-// usuario registrado (el ataque de la auditoria: mandar el uid de otro).
+// B11 (ms-chatbot.yaml 1.2.0): la identidad la resuelve ResolutorDeIdentidad.
+// Un usuario es el uid de su token y nada mas; un visitante es una sesion
+// registrada, emitida por este servidor o declarada por el navegador.
+// X-Id-Sesion-Anonima nunca abre la conversacion de un usuario registrado (el
+// ataque de la auditoria: mandar el uid de otro).
 @RestController
 @RequestMapping("/chat")
 public class ChatController {
@@ -56,7 +57,8 @@ public class ChatController {
         this.sesiones = sesiones;
     }
 
-    // 2.0.0: el visitante pide su sesion al servidor en vez de inventarla.
+    // 1.2.0: el visitante puede pedir su sesion al servidor (256 bits) en vez
+    // de declarar la suya.
     @PostMapping("/sesiones")
     public ResponseEntity<SesionAnonimaResponse> crearSesion(HttpServletRequest peticion) {
         SesionesAnonimas.Emitida emitida = sesiones.emitir(origenDe(peticion));

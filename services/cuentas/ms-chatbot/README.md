@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 2.0.0
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.2.0 (compatible con 1.1.0)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V5) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -16,19 +16,34 @@ conocimiento y panel de analíticas. **No** es un modelo de lenguaje: es un moto
 
 **Identidad.** El fallo de la auditoría: `X-Id-Sesion-Anonima` se usaba como la misma clave
 que el `uid`, así que un visitante que mandara el `uid` de un jugador (son públicos, p. ej.
-en `GET /torneos`) leía, calificaba o borraba su historial. Desde 2.0.0:
+en `GET /torneos`) leía, calificaba o borraba su historial. Desde 1.2.0:
 
 - Un jugador es el `uid` de su token y nada más (`ResolutorDeIdentidad`); con token válido la
   cabecera se ignora. Un token que no identifica a una persona degrada a visitante.
-- Un visitante usa una sesión **que emite el servidor** (`POST /chat/sesiones`, o la cabecera
-  de respuesta del primer `POST /chat/mensajes`): `anon_` + 256 bits aleatorios en base64url.
-  En la base solo queda su huella SHA-256 (`sesiones_anonimas`, V5). Vence tras
-  `CHATBOT_SESION_ANONIMA_HORAS` (24) sin actividad.
+- Un visitante usa una sesión de una de dos formas, y en la base solo queda su huella SHA-256
+  (`sesiones_anonimas`, V5):
+  - **emitida por el servidor** (`POST /chat/sesiones`, o la cabecera de respuesta del primer
+    `POST /chat/mensajes`): `anon_` + 256 bits aleatorios en base64url. La recomendada.
+  - **declarada por el navegador**: `visitante-` + 10 a 64 caracteres `[A-Za-z0-9-]`, la que ya
+    manda el asistente de la interfaz (PR #708, `comun/cliente-chatbot.js`). Se registra la
+    primera vez que escribe y cuenta en el límite de sesiones nuevas.
+
+  Las dos vencen tras `CHATBOT_SESION_ANONIMA_HORAS` (24) sin actividad; al volver después,
+  el visitante empieza otra conversación.
 - Espacios de claves separados: la conversación de un jugador es su `uid`; la de un visitante,
   `anonimo:<id de sesión>`. Una restricción `CHECK` en la base impide mezclarlos, y V5 apartó
   las conversaciones anónimas anteriores (claves elegidas por el cliente) a `legado-anonimo:`.
-- Un identificador que el servidor no emitió no abre nada: historial vacío, nada que borrar,
-  404 al calificar. Las pruebas negativas del ataque exacto están en `SeguridadDelHistorialIT`.
+- Un `uid` a secas, un valor sin ninguna de las dos formas o una sesión vencida no abren nada:
+  historial vacío, nada que borrar, 404 al calificar. `visitante-<uid de un jugador>` es solo
+  otra conversación de visitante. Las pruebas negativas del ataque exacto están en
+  `SeguridadDelHistorialIT`.
+
+**Por qué 1.2.0 y no una versión mayor.** El primer borrador de B11 exigía la sesión emitida
+por el servidor (2.0.0) y dejaba sin historial al asistente de #708, que ya estaba en `develop`
+y declara su propio identificador; además, la regla 2 pide una ruta nueva para un cambio
+incompatible. Aceptar también la forma declarada —siempre en el espacio de visitante— cierra el
+mismo fallo sin romper a ningún cliente: `POST /chat/sesiones` queda como opción, no como
+requisito.
 
 **Límite de frecuencia** (7.4.8; ventana de un minuto en memoria de la instancia, 429 con
 `Retry-After`). Cifras **provisionales**, convención técnica (el documento no las da):
@@ -97,10 +112,12 @@ plataforma (≈128 MiB, pero la JVM sigue sin caber) o desplegarlo a demanda en 
 
 ## Frontend
 
-`frontend/app-web/src/comun/cliente-chatbot.js` (PR #708) genera hoy su propio identificador
-de visitante: con 2.0.0 el chat le sigue funcionando, pero su historial no persiste hasta que
-guarde el identificador que devuelve el servidor en la cabecera `X-Id-Sesion-Anonima` (y, en
-desarrollo con CORS, lo exponga en `exposedHeaders`).
+`frontend/app-web/src/comun/cliente-chatbot.js` (PR #708, equipo de Cuentas) declara su propio
+identificador de visitante (`visitante-` + `crypto.randomUUID()`) y lo manda siempre: funciona
+tal cual con 1.2.0, sin cambios. Recomendación para su dueño, no requisito: fuera de HTTPS
+`crypto.randomUUID()` no existe y el respaldo (tiempo y `Math.random()` en base 36) es fácil de
+adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS ya expone
+`X-Id-Sesion-Anonima` y `Retry-After` para desarrollo local.
 
 ## Pruebas
 

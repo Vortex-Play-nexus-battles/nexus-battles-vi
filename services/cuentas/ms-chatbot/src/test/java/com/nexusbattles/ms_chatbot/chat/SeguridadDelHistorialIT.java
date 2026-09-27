@@ -170,15 +170,69 @@ class SeguridadDelHistorialIT {
     }
 
     @Test
-    @DisplayName("un identificador inventado por el cliente no abre nada y el primer mensaje recibe una sesion emitida")
-    void identificadorInventado() throws Exception {
-        String inventado = "visitante-" + UUID.randomUUID();
+    @DisplayName("un valor sin ninguna de las dos formas no abre nada y el primer mensaje recibe una sesion emitida")
+    void identificadorSinForma() throws Exception {
+        String inventado = "abc";
         mvc.perform(get("/chat/historial").header(CABECERA, inventado))
             .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
         mvc.perform(post("/chat/mensajes").header(CABECERA, inventado)
                 .contentType("application/json").content("{\"contenido\":\"hola\"}"))
             .andExpect(status().isOk())
             .andExpect(header().string(CABECERA, org.hamcrest.Matchers.matchesPattern("^anon_[A-Za-z0-9_-]{43}$")));
+    }
+
+    // 1.2.0: el asistente de la interfaz (#708, comun/cliente-chatbot.js)
+    // declara su identificador, 'visitante-' + crypto.randomUUID(), y lo manda
+    // siempre. Su historial persiste entre mensajes, en el espacio de visitante.
+    @Test
+    @DisplayName("el identificador que declara el asistente de la interfaz conserva su historial y no ve el de nadie")
+    void identificadorDeclaradoPorElNavegador() throws Exception {
+        escribir(tokenDe(victima), null, "soy la jugadora");
+        String declarado = "visitante-" + UUID.randomUUID();
+
+        mvc.perform(get("/chat/historial").header(CABECERA, declarado))
+            .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+
+        for (String texto : new String[] {"primero", "segundo"}) {
+            mvc.perform(post("/chat/mensajes").header(CABECERA, declarado)
+                    .contentType("application/json").content("{\"contenido\":\"" + texto + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist(CABECERA));
+        }
+        String historial = mvc.perform(get("/chat/historial").header(CABECERA, declarado))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+        assertThat(historial).contains("primero").contains("segundo").doesNotContain("soy la jugadora");
+        Integer cuantos = JsonPath.read(historial, "$.length()");
+        assertThat(cuantos).as("dos mensajes del visitante y dos respuestas, en una sola conversacion").isEqualTo(4);
+
+        // En la base: una sola sesion, guardada por su huella; ni el
+        // identificador ni una clave que no sea de visitante.
+        assertThat(jdbc.queryForObject("select count(*) from chatbot.sesiones_anonimas where huella = ?", Integer.class,
+            declarado)).isZero();
+        assertThat(jdbc.queryForObject("select count(*) from chatbot.conversaciones where identificador_sesion = ?",
+            Integer.class, declarado)).isZero();
+
+        // Borrar lo propio no toca lo de la jugadora.
+        mvc.perform(delete("/chat/historial").header(CABECERA, declarado)).andExpect(status().isNoContent());
+        mvc.perform(get("/chat/historial").header(CABECERA, declarado))
+            .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        assertThat(mensajesDe(tokenDe(victima))).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("'visitante-' + el uid de una jugadora es otra conversacion de visitante, nunca la de ella")
+    void declaradoConElUidDeUnaJugadora() throws Exception {
+        escribir(tokenDe(victima), null, "soy la jugadora");
+        String conSuUid = "visitante-" + victima;
+
+        mvc.perform(get("/chat/historial").header(CABECERA, conSuUid))
+            .andExpect(status().isOk()).andExpect(jsonPath("$").isEmpty());
+        escribir(null, conSuUid, "intruso");
+        String suyo = mvc.perform(get("/chat/historial").header(CABECERA, conSuUid))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+
+        assertThat(suyo).contains("intruso").doesNotContain("soy la jugadora");
+        assertThat(mensajesDe(tokenDe(victima))).as("la conversacion de la jugadora sigue intacta").isEqualTo(2);
     }
 
     @Test

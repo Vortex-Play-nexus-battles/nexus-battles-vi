@@ -35,6 +35,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -95,8 +96,35 @@ class ChatControllerTest {
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
     }
 
-    // 2.0.0: sin sesion valida, el servidor emite una y la devuelve en la
-    // cabecera; el mensaje abre una conversacion nueva de visitante.
+    // 1.2.0 (#708): el asistente de la interfaz manda su propio identificador,
+    // 'visitante-' + crypto.randomUUID(). Se registra como sesion de visitante
+    // y no se emite otra: el navegador sigue con el suyo.
+    @Test
+    void enviarMensaje_conIdentificadorDeclaradoPorElNavegador_loRegistraYNoEmiteOtro() throws Exception {
+        String declarada = "visitante-" + UUID.randomUUID();
+        SesionAnonima sesion = sesion();
+        when(sesiones.validar(declarada)).thenReturn(Optional.empty());
+        when(sesiones.declarar(declarada, "203.0.113.7")).thenReturn(sesion);
+        Mensaje respuestaBot = crearMensajeBot("Hola visitante");
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, declarada)
+                .header("X-Real-IP", "203.0.113.7")
+                .contentType("application/json")
+                .content("{\"contenido\":\"Hola\"}"))
+            .andExpect(status().isOk())
+            .andExpect(header().doesNotExist(CABECERA));
+
+        ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        assertThat(identidad.getValue().autenticado()).isFalse();
+        assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
+        verify(sesiones, never()).emitir(anyString());
+    }
+
+    // Sin sesion valida, el servidor emite una y la devuelve en la cabecera;
+    // el mensaje abre una conversacion nueva de visitante.
     @Test
     void enviarMensaje_sinSesion_emiteUnaNuevaYLaDevuelveEnLaCabecera() throws Exception {
         SesionAnonima sesion = sesion();
