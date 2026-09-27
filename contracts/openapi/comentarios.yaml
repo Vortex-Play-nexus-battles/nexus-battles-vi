@@ -33,7 +33,24 @@ info:
     moderador (RF-COM-005) y las acciones con su asiento (RF-COM-008), y el
     estado OCULTO, que RF-COM-008 exige distinguir de ELIMINADO porque
     "Ocultar debe preservar el registro en base de datos".
-  version: 1.3.0
+
+    1.4.0 (B0/B3 — comunidad de producto; 7.1 del documento del curso: «vista de
+    detalle ... calificacion promedio valorada en cinco estrellas, incluyendo el
+    hilo de comentarios ... Los usuarios solo pueden calificar un producto una
+    vez, pero podran agregar o retirar tantos comentarios como sea de su
+    agrado»). La calificacion se separa del comentario: `POST
+    /products/{productId}/rating` califica sin escribir nada, una sola vez por
+    jugador y producto, y el resumen (promedio, total, distribucion) lo calcula
+    el servidor. Los comentarios se paginan (`pagina`, `tamano`; del mas
+    reciente al mas antiguo) y se comprueba que el producto exista en el
+    catalogo. Las imagenes dejan de ser nombres de archivo: se suben por
+    `POST /comentarios/imagenes` (JPEG, PNG o WebP comprobados por su firma de
+    bytes, no por la extension ni por Content-Type) y el comentario lleva sus
+    `id`. La moderacion gana EDITAR (con registro del texto anterior) y
+    MARCAR/DESMARCAR (7.3.3). `estrellas` en el cuerpo del comentario sigue
+    aceptandose por compatibilidad: si el jugador aun no califico, se registra
+    como su calificacion; si ya lo hizo, se descarta como hasta ahora.
+  version: 1.4.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -63,6 +80,23 @@ paths:
           required: true
           schema:
             type: string
+        - name: pagina
+          in: query
+          required: false
+          description: 1.4.0 — pagina (desde 0) de comentarios, del mas reciente al mas antiguo.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          description: 1.4.0 — comentarios por pagina (16 por omision, como la vitrina).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 16
       responses:
         "200":
           description: El hilo del producto, aunque este vacio
@@ -431,6 +465,213 @@ paths:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
 
+  /products/{productId}/rating:
+    get:
+      summary: Resumen de la calificacion de un producto (1.4.0)
+      operationId: resumenDeCalificaciones
+      x-implementacion: pendiente
+      x-fase: B3
+      description: >
+        Promedio, total y distribucion por estrellas, calculados por el
+        servidor (la unica fuente de verdad del promedio). Publico: la vitrina
+        y la ficha lo muestran sin sesion. Producto sin calificaciones:
+        promedio nulo y total 0, nunca 404; producto que no existe en el
+        catalogo: 404.
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: Resumen de calificaciones.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResumenDeCalificaciones"
+        "404":
+          $ref: "#/components/responses/ProductoInexistente"
+    post:
+      summary: Calificar un producto de 1 a 5 estrellas, una sola vez (1.4.0)
+      operationId: calificarProducto
+      x-implementacion: pendiente
+      x-fase: B3
+      description: >
+        El autor sale del token. Una sola calificacion por jugador y producto,
+        sin edicion ni retirada (7.1: «solo pueden calificar un producto una
+        vez»): la segunda responde 409 `ya-calificado`. No exige escribir un
+        comentario. Un jugador sancionado (suspension o baneo) recibe 403.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CalificacionRequest"
+      responses:
+        "201":
+          description: Calificacion registrada; trae el resumen ya actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalificacionResponse"
+        "400":
+          description: Estrellas fuera de 1..5.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin sesion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: Jugador sancionado.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          $ref: "#/components/responses/ProductoInexistente"
+        "409":
+          description: El jugador ya califico este producto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /products/{productId}/rating/mia:
+    get:
+      summary: La calificacion del propio jugador sobre un producto (1.4.0)
+      operationId: miCalificacion
+      x-implementacion: pendiente
+      x-fase: B3
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: La calificacion propia.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CalificacionResponse"
+        "401":
+          description: Sin sesion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: El jugador todavia no califico este producto.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/imagenes:
+    post:
+      summary: Sube una imagen para adjuntarla a un comentario (1.4.0)
+      operationId: subirImagenDeComentario
+      x-implementacion: pendiente
+      x-fase: B3
+      description: >
+        `multipart/form-data` con el campo `archivo`. Se acepta solo si la
+        firma de bytes es JPEG, PNG o WebP y su cabecera describe una imagen
+        de como maximo 4096x4096; tamano maximo 2 MB. El nombre original se
+        descarta: la imagen recibe un UUID y se guarda fuera de cualquier
+        carpeta publica. Queda asociada al autor y pendiente hasta que un
+        comentario suyo la use; las no usadas en 24 h se borran.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Imagen guardada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImagenSubida"
+        "400":
+          description: Archivo ausente o vacio.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin sesion.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "413":
+          description: Mas de 2 MB.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "415":
+          description: No es una imagen JPEG, PNG o WebP valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/imagenes/{imagenId}:
+    get:
+      summary: Descarga una imagen de comentario (1.4.0)
+      operationId: obtenerImagenDeComentario
+      x-implementacion: pendiente
+      x-fase: B3
+      description: >
+        Publica si pertenece a un comentario PUBLICADO; si no, solo para su
+        autor y para moderacion. Se sirve con el tipo detectado,
+        `X-Content-Type-Options: nosniff`, `Content-Security-Policy:
+        default-src 'none'` y `Cache-Control` de larga duracion (el id es
+        inmutable).
+      parameters:
+        - name: imagenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Los bytes de la imagen.
+          content:
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: No existe o no es visible para quien la pide.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
 components:
   parameters:
     ProductId:
@@ -447,6 +688,15 @@ components:
       schema:
         type: string
       description: Identificador del comentario.
+  responses:
+    ProductoInexistente:
+      description: >
+        1.4.0 — `type` `.../errors/producto-inexistente`: el producto no existe
+        en el catalogo (se comprueba contra `GET /api/v1/productos/{id}`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetail"
   securitySchemes:
     bearerAuth:
       type: http
@@ -484,10 +734,11 @@ components:
           type: array
           items:
             type: string
+          maxItems: 3
           description: >
-            Nombres de archivo de los adjuntos. Los formatos admitidos estan
-            pendientes de definir con el Product Owner y por eso son
-            configurables en el servicio.
+            1.4.0 — `id` de imagenes subidas antes con `POST
+            /comentarios/imagenes` por el mismo autor (maximo 3). Un nombre de
+            archivo o el id de una imagen ajena responde 400.
         estrellas:
           type: integer
           minimum: 1
@@ -638,11 +889,19 @@ components:
 
     AccionDeModeracion:
       type: string
+      description: >
+        EDITAR, MARCAR y DESMARCAR entran en la 1.4.0 (7.3.3: «Editar: modificar
+        contenido inapropiado manteniendo el contexto del comentario (con
+        registro de la edicion)»; «Marcar: senalar comentarios para seguimiento
+        especial»). EDITAR exige `textoNuevo` y guarda el anterior en el asiento.
       enum:
         - APROBAR
         - OCULTAR
         - ELIMINAR
         - RESTAURAR
+        - EDITAR
+        - MARCAR
+        - DESMARCAR
 
     DecisionRequest:
       type: object
@@ -659,6 +918,11 @@ components:
           description: >
             Obligatorio en TODAS las acciones, incluida APROBAR: por que se
             dejo pasar es tan parte de la trazabilidad como por que se retiro.
+        textoNuevo:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: 1.4.0 — obligatorio con EDITAR; el texto que queda visible.
 
     AsientoDeModeracion:
       type: object
@@ -690,6 +954,12 @@ components:
         fecha:
           type: string
           format: date-time
+        textoAnterior:
+          type: [string, "null"]
+          description: 1.4.0 — solo en EDITAR.
+        textoNuevo:
+          type: [string, "null"]
+          description: 1.4.0 — solo en EDITAR.
 
     DecisionResponse:
       type: object
@@ -769,6 +1039,75 @@ components:
           description: Acciones de moderacion ya aplicadas, de la mas antigua a la mas reciente.
           items:
             $ref: "#/components/schemas/AsientoDeModeracion"
+
+    CalificacionRequest:
+      type: object
+      required: [estrellas]
+      properties:
+        estrellas:
+          type: integer
+          minimum: 1
+          maximum: 5
+
+    CalificacionResponse:
+      type: object
+      required: [productoId, estrellas, fecha]
+      properties:
+        productoId:
+          type: string
+        estrellas:
+          type: integer
+          minimum: 1
+          maximum: 5
+        fecha:
+          type: string
+          format: date-time
+        resumen:
+          $ref: "#/components/schemas/ResumenDeCalificaciones"
+
+    ResumenDeCalificaciones:
+      type: object
+      required: [productoId, total, distribucion]
+      properties:
+        productoId:
+          type: string
+        promedio:
+          type: [number, "null"]
+          description: Con un decimal; nulo si nadie ha calificado.
+        total:
+          type: integer
+        distribucion:
+          type: object
+          description: Cuantas calificaciones hay de cada numero de estrellas.
+          required: ["1", "2", "3", "4", "5"]
+          properties:
+            "1":
+              type: integer
+            "2":
+              type: integer
+            "3":
+              type: integer
+            "4":
+              type: integer
+            "5":
+              type: integer
+
+    ImagenSubida:
+      type: object
+      required: [id, tipo, tamano, url]
+      properties:
+        id:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+        tamano:
+          type: integer
+          description: Bytes.
+        url:
+          type: string
+          description: Ruta publica relativa (`/api/v1/comentarios/imagenes/{id}`), nunca una ruta de disco.
 
     ProblemDetail:
       type: object

@@ -1,0 +1,137 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI — Mensajes privados entre jugadores (B0/B6)
+#
+# FEEDBACK DEL PROFESOR, no requisito del documento: el 7.6 pide chat en las
+# salas y en la vista general; la mensajeria privada la pidio el profesor en
+# la demostracion. Se implementa SOBRE el chat que ya existe en
+# salas-partidas (mismo broker STOMP, misma autenticacion del CONNECT, mismo
+# EnviarMensaje con lista negra y sancion), sin un servicio nuevo.
+#
+# Documento aparte de `salas-partidas.yaml` a proposito: los destinos del
+# chat de sala y general tienen dueno (HU-JUE-015, Alexander Nino) y este
+# contrato no los toca.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Mensajes privados (salas-partidas)
+  version: 1.0.0
+  description: |
+    Mensajes privados 1 a 1 por WebSocket + STOMP, con historial por REST
+    (`contracts/openapi/salas-partidas.yaml`, `/mensajes-directos/**`).
+
+    - **El remitente sale del token** (principal del CONNECT, el `uid`),
+      nunca del cuerpo ni del destino: no hay forma de escribir en nombre de
+      otro.
+    - **Conversacion canonica**: `dm:{uidMenor}:{uidMayor}`, una sola por
+      pareja, se escriba desde el lado que se escriba.
+    - **Entrega**: al destinatario y al remitente (sus otras pestanas) por la
+      cola de usuario `/usuario/cola/mensajes-directos`. Si el destinatario no
+      esta conectado, recibe ademas un aviso en su bandeja de notificaciones.
+    - **Moderacion**: lista negra con contexto `MENSAJE_PRIVADO` (accion
+      BLOQUEAR: el mensaje no se entrega) y sancion activa (un jugador
+      suspendido o baneado no escribe). Limite de frecuencia por remitente.
+    - **No se puede SEND a `/tema/**` ni a `/cola/**`**: el servidor solo
+      acepta envios a destinos `/app/**` (en todo el broker, no solo aqui).
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8084
+    protocol: ws
+    pathname: /ws
+    description: Mismo endpoint STOMP que las salas (CONNECT con Bearer).
+
+channels:
+  enviarMensajeDirecto:
+    address: '/app/mensajes-directos/{uidDestino}'
+    x-implementacion: pendiente
+    x-fase: B6
+    parameters:
+      uidDestino:
+        description: '`uid` del jugador que recibe. No puede ser el propio.'
+    messages:
+      mensajeSaliente:
+        $ref: '#/components/messages/MensajeSaliente'
+
+  recibirMensajesDirectos:
+    address: '/usuario/cola/mensajes-directos'
+    description: |
+      Cola privada del usuario conectado (destino de usuario de Spring:
+      `convertAndSendToUser(uid, "/cola/mensajes-directos", ...)`). Lleva los
+      mensajes entregados y los rechazos de los envios propios.
+    messages:
+      mensajeEntregado:
+        $ref: '#/components/messages/MensajeEntregado'
+      envioRechazado:
+        $ref: '#/components/messages/EnvioRechazado'
+
+operations:
+  enviar:
+    action: send
+    channel:
+      $ref: '#/channels/enviarMensajeDirecto'
+  recibir:
+    action: receive
+    channel:
+      $ref: '#/channels/recibirMensajesDirectos'
+
+components:
+  messages:
+    MensajeSaliente:
+      payload:
+        type: object
+        required: [texto]
+        properties:
+          texto:
+            type: string
+            minLength: 1
+            maxLength: 500
+          idCliente:
+            type: string
+            maxLength: 64
+            description: Id que pone el cliente para reconocer el eco y deduplicar reintentos.
+    MensajeEntregado:
+      payload:
+        type: object
+        required: [tipo, id, conversacion, remitente, destinatario, texto, fecha]
+        properties:
+          tipo:
+            type: string
+            const: MENSAJE
+          id:
+            type: string
+            format: uuid
+          conversacion:
+            type: string
+            description: '`dm:{uidMenor}:{uidMayor}`'
+          remitente:
+            type: string
+            format: uuid
+          apodoRemitente:
+            type: string
+          destinatario:
+            type: string
+            format: uuid
+          texto:
+            type: string
+          fecha:
+            type: string
+            format: date-time
+          idCliente:
+            type: [string, 'null']
+    EnvioRechazado:
+      payload:
+        type: object
+        required: [tipo, motivo]
+        properties:
+          tipo:
+            type: string
+            const: RECHAZO
+          motivo:
+            type: string
+            enum: [TEXTO_NO_PERMITIDO, SANCIONADO, DESTINATARIO_INEXISTENTE, DESTINATARIO_PROPIO, DEMASIADO_RAPIDO, TEXTO_INVALIDO, MODERACION_NO_DISPONIBLE]
+          idCliente:
+            type: [string, 'null']

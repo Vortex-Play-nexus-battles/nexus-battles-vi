@@ -9,7 +9,7 @@ info:
   # 1.3.0 (Grupo 2, #685): crear un elemento exige que el producto exista y
   # este activo en el catalogo (422 inexistente, 409 suspendido, 400 tipo que
   # no coincide, 503 catalogo no disponible). Aditivo: solo agrega respuestas.
-  version: 1.3.0
+  version: 1.4.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -35,6 +35,19 @@ info:
     producto inexistente responde 422, uno suspendido 409, un tipo distinto
     al del producto 400, y si productos no responde 503: nunca se acepta a
     ciegas. En 1.1.1 cualquier productoId se aceptaba.
+
+    1.4.0 (B0/B4 — la propiedad solo llega por canales validos). La auditoria
+    contractual encontro que `POST /elementos` dejaba a cualquier JUGADOR
+    crearse gratis cualquier producto del catalogo: sin compra, sin tiraje,
+    sin rastro. Desde B4 esa ruta solo la puede usar un ADMINISTRADOR o
+    SUPER_ADMINISTRADOR (alta manual auditada) o un servicio, y la via normal
+    es `POST /api/v1/inventario/entregas`: la usan ms-identidad (paquete
+    inicial), ms-ecommerce (compra), ms-subastas (ya tiene su transferencia),
+    ms-finanzas (cofre), torneos (premio) y misiones (recompensa), siempre con
+    `Idempotency-Key`: reintentar una entrega devuelve el mismo resultado y
+    nunca duplica elementos. El `origen` queda guardado con cada elemento.
+    Al equipar una armadura, la parte del cuerpo la decide el catalogo, no
+    el cliente.
 servers:
   - url: http://localhost:8080
     description: Entorno local de desarrollo
@@ -466,6 +479,66 @@ paths:
           $ref: "#/components/responses/InventarioAjeno"
         "404":
           $ref: "#/components/responses/ElementoNoEncontrado"
+  /api/v1/inventario/entregas:
+    post:
+      summary: Entrega productos del catalogo al inventario de un jugador (1.4.0)
+      operationId: entregarProductos
+      x-implementacion: pendiente
+      x-fase: B4
+      description: >
+        Unica via por la que un servicio da propiedad de un producto a un
+        jugador (compra, cofre, premio de torneo, recompensa de mision,
+        paquete inicial). Idempotente por `Idempotency-Key`: la misma clave
+        con el mismo cuerpo devuelve 200 con la entrega original; con otro
+        cuerpo, 409. Comprueba que cada producto exista y no este suspendido
+        (sin consumir tiraje: el tiraje lo reserva quien vende, con
+        `POST /api/v1/productos/{id}/adquisiciones`). Solo token de servicio
+        (rol SERVICIO) o ADMINISTRADOR/SUPER_ADMINISTRADOR.
+      security:
+        - BearerInterno: []
+        - TokenDeAcceso: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeEntrega"
+      responses:
+        "201":
+          description: Entrega realizada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entrega"
+        "200":
+          description: La misma clave ya se proceso; se devuelve la entrega original.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Entrega"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          description: El llamador no es un servicio ni un administrador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: La clave ya se uso con otro cuerpo, o un producto esta suspendido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "422":
+          $ref: "#/components/responses/ProductoInexistente"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+
 components:
   securitySchemes:
     TokenDeAcceso:
@@ -484,6 +557,60 @@ components:
       bearerFormat: JWT
       description: Token OAuth2 client_credentials emitido para ms-subastas.
   schemas:
+    OrigenDeEntrega:
+      type: string
+      enum: [PAQUETE_INICIAL, COMPRA, SUBASTA, COFRE, PREMIO_TORNEO, MISION, RECOMPENSA, ADMINISTRACION]
+
+    SolicitudDeEntrega:
+      type: object
+      required: [uid, origen, referencia, productos]
+      properties:
+        uid:
+          type: string
+          format: uuid
+          description: Jugador que recibe (claim `uid`).
+        origen:
+          $ref: "#/components/schemas/OrigenDeEntrega"
+        referencia:
+          type: string
+          maxLength: 120
+          description: Id del hecho que causa la entrega (orden, cofre, torneo, mision...).
+        productos:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            type: object
+            required: [productoId, cantidad]
+            properties:
+              productoId:
+                type: string
+              cantidad:
+                type: integer
+                minimum: 1
+                maximum: 20
+
+    Entrega:
+      type: object
+      required: [id, uid, origen, referencia, elementos, entregadaEn]
+      properties:
+        id:
+          type: string
+        uid:
+          type: string
+          format: uuid
+        origen:
+          $ref: "#/components/schemas/OrigenDeEntrega"
+        referencia:
+          type: string
+        elementos:
+          type: array
+          items:
+            $ref: "#/components/schemas/ElementoInventario"
+        entregadaEn:
+          type: string
+          format: date-time
+
     CrearElemento:
       type: object
       additionalProperties: false

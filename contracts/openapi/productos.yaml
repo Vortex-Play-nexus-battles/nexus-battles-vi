@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.3.0
+  version: 1.3.1
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -24,6 +24,13 @@ info:
     previo del estado anterior y reversión si falla el guardado. Solo
     ADMINISTRADOR y SUPER_ADMINISTRADOR. Cambio aditivo: versión menor.
 
+
+    1.3.1 (B0): solo marcas. `adquisiciones`, `suspender` y `reactivar`
+    estaban publicadas desde 1.0.0 sin una linea de codigo detras (la
+    auditoria contractual y el guardian `rutas-contrato-codigo.py` lo
+    encontraron). Se marcan `x-implementacion: pendiente` (fase B4) en vez
+    de borrarlas: el contrato sigue siendo el acordado y deja de mentir sobre
+    lo que hay detras.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -278,6 +285,8 @@ paths:
     post:
       summary: Reserva una unidad disponible del producto
       operationId: adquirirProducto
+      x-implementacion: pendiente
+      x-fase: B4
       description: >
         Descuenta de forma atómica una unidad del tiraje limitado. Los
         productos ilimitados conservan el valor -1. Esta operación solo
@@ -317,6 +326,8 @@ paths:
     put:
       summary: Suspende lógicamente un producto
       operationId: suspenderProducto
+      x-implementacion: pendiente
+      x-fase: B4
       description: >
         Impide nuevas adquisiciones sin eliminar el producto ni modificar
         su tiraje. Operación exclusiva para ADMINISTRADOR y
@@ -355,6 +366,8 @@ paths:
     put:
       summary: Reactiva un producto suspendido
       operationId: reactivarProducto
+      x-implementacion: pendiente
+      x-fase: B4
       description: >
         Restaura el estado ACTIVO o UNICO que el producto tenía antes de
         suspenderse y conserva el tiraje. Operación exclusiva para

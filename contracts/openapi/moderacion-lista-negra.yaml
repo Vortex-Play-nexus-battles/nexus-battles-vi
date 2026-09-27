@@ -1,10 +1,61 @@
 openapi: 3.1.0
 info:
   title: Nexus Battles VI - Moderacion y Sanciones (lista negra de terminos)
-  description: >
+  description: |
     API para verificar texto contra la lista negra de terminos prohibidos,
-    administrable por moderadores (HU-ADM-002).
-  version: 1.0.0
+    administrable por moderadores (HU-ADM-002; 7.1.1 y 7.3.2 del documento
+    del curso: «el apodo no podra contener palabras ofensivas o nombres
+    respetados o reconocidos politicos, celebridades, dirigentes, o marcas
+    registradas» y «lista negra actualizable»).
+
+    ### 2.0.0 (B0/B2) — por que version mayor
+
+    `GET /lista-negra/terminos` devolvia una lista de cadenas y ahora devuelve
+    entradas con categoria, modo, estado y autoria (7.3.3 exige registrar quien
+    hizo cada accion). El unico consumidor es la vista de administracion
+    `lista-negra-admin.js`, que cambia en el mismo PR.
+
+    ### Como se compara (B2)
+
+    Texto y termino pasan por la **misma** normalizacion antes de comparar:
+    Unicode NFKC, minusculas (`Locale.ROOT`), sin tildes ni diacriticos, sin
+    caracteres de ancho cero, leetspeak basico y controlado
+    (`0→o 1→i 3→e 4→a 5→s 7→t @→a $→s`), rachas de 3 o mas letras iguales a
+    una, y separadores (espacios, guiones, puntos, guiones bajos) fuera. Asi
+    `spiderman`, `Spider-Man`, `spider man`, `SP1DERMAN` y `$pider_man` son el
+    mismo termino. Cada termino tiene un **modo**:
+
+    - `SUBCADENA` (por omision con 5 caracteres o mas): se busca dentro del
+      texto compacto (`xXspidermanXx` coincide).
+    - `PALABRA` (por omision con menos de 5): solo coincide una palabra
+      entera, para no rechazar palabras legitimas que contienen el termino
+      por azar (el problema «Scunthorpe»).
+
+    ### Contexto y accion
+
+    `contexto` dice donde va el texto; la respuesta trae la `accion` que la
+    politica de moderacion aplica en ese contexto, para que cada consumidor
+    no invente la suya:
+
+    | contexto | accion si coincide |
+    |---|---|
+    | APODO, NOMBRE_EQUIPO, NOMBRE_TORNEO, NOMBRE_SALA | RECHAZAR |
+    | COMENTARIO | REVISION (el comentario queda EN_REVISION) |
+    | CHAT_GENERAL, CHAT_SALA, MENSAJE_PRIVADO | BLOQUEAR (el mensaje no se entrega) |
+
+    Si no coincide, `accion` = `PERMITIR`. La tabla es configurable en el
+    servicio; lo anterior es la politica por omision.
+
+    ### Quien puede llamar
+
+    `POST /verificar` es publico para que el formulario de registro pueda
+    avisar del apodo antes de enviarlo, pero **sin token la respuesta no dice
+    que termino coincidio ni su categoria** (no sirve para recorrer la lista),
+    y el borde le pone limite de frecuencia. Con token de servicio trae el
+    detalle. El resto exige rol MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR
+    (jerarquia de roles: el Super Administrador puede todo lo del
+    Administrador).
+  version: 2.0.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -13,6 +64,9 @@ paths:
     post:
       summary: Verificar si un texto contiene terminos de la lista negra
       operationId: verificarListaNegra
+      security:
+        - {}
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -27,7 +81,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VerificacionListaNegraResponse'
         '400':
-          description: Solicitud invalida (ej. texto vacio)
+          description: Solicitud invalida (ej. texto vacio o contexto desconocido)
           content:
             application/problem+json:
               schema:
@@ -35,20 +89,58 @@ paths:
 
   /lista-negra/terminos:
     get:
-      summary: Listar los terminos prohibidos configurados (uso administrativo)
+      summary: Listar los terminos de la lista negra (uso administrativo)
       operationId: listarTerminos
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: categoria
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/CategoriaDeTermino'
+        - name: activo
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: buscar
+          in: query
+          required: false
+          description: Texto a buscar dentro del termino.
+          schema:
+            type: string
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
       responses:
         '200':
-          description: Lista de terminos prohibidos
+          description: Pagina de terminos, ordenada por termino.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: string
+                $ref: '#/components/schemas/PaginaDeTerminos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
     post:
       summary: Agregar un termino a la lista negra (uso administrativo)
       operationId: agregarTermino
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -58,17 +150,35 @@ paths:
       responses:
         '201':
           description: Termino agregado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminoResponse'
+        '400':
+          description: Termino vacio, demasiado corto tras normalizar (menos de 3) o categoria desconocida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '409':
+          description: Ya existe un termino con la misma forma normalizada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /lista-negra/terminos/{termino}:
     put:
       summary: Editar un termino existente de la lista negra (uso administrativo)
       operationId: editarTermino
+      security:
+        - bearerAuth: []
       parameters:
-        - name: termino
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/Termino'
       requestBody:
         required: true
         content:
@@ -78,8 +188,22 @@ paths:
       responses:
         '200':
           description: Termino actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TerminoResponse'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
         '404':
           description: El termino indicado no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: El termino nuevo choca con otro ya existente.
           content:
             application/problem+json:
               schema:
@@ -87,15 +211,17 @@ paths:
     delete:
       summary: Eliminar un termino de la lista negra (uso administrativo)
       operationId: eliminarTermino
+      security:
+        - bearerAuth: []
       parameters:
-        - name: termino
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: '#/components/parameters/Termino'
       responses:
         '204':
           description: Termino eliminado
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
         '404':
           description: El termino indicado no existe
           content:
@@ -104,7 +230,54 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Termino:
+      name: termino
+      in: path
+      required: true
+      description: El termino tal como se guardo (se compara por su forma normalizada).
+      schema:
+        type: string
+
+  responses:
+    NoAutenticado:
+      description: Falta el token o no es valido.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Prohibido:
+      description: El rol no puede administrar la lista negra.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
   schemas:
+    ContextoDeTexto:
+      type: string
+      enum: [APODO, COMENTARIO, CHAT_GENERAL, CHAT_SALA, MENSAJE_PRIVADO, NOMBRE_EQUIPO, NOMBRE_TORNEO, NOMBRE_SALA, GENERICO]
+      description: Donde se va a usar el texto. `GENERICO` si se omite.
+
+    AccionDeModeracion:
+      type: string
+      enum: [PERMITIR, RECHAZAR, REVISION, BLOQUEAR]
+
+    CategoriaDeTermino:
+      type: string
+      enum: [OFENSIVO, MARCA, CELEBRIDAD, POLITICO, DIRIGENTE, OTRO]
+      description: Las categorias del 7.1.1 y 7.3.2 del documento del curso.
+
+    ModoDeCoincidencia:
+      type: string
+      enum: [SUBCADENA, PALABRA]
+
     VerificacionListaNegraRequest:
       type: object
       required:
@@ -112,18 +285,32 @@ components:
       properties:
         texto:
           type: string
+          maxLength: 2000
           description: Texto a verificar (apodo, comentario, nombre de sala, etc.)
+        contexto:
+          $ref: '#/components/schemas/ContextoDeTexto'
 
     VerificacionListaNegraResponse:
       type: object
       required:
         - aprobado
+        - accion
       properties:
         aprobado:
           type: boolean
+          description: '`true` si no coincide ningun termino activo.'
+        accion:
+          $ref: '#/components/schemas/AccionDeModeracion'
         motivo:
           type: string
-          description: Presente solo cuando aprobado es false
+          description: Presente solo cuando aprobado es false. Mensaje generico sin el termino.
+        categoria:
+          $ref: '#/components/schemas/CategoriaDeTermino'
+        coincidencias:
+          type: array
+          description: Solo con token de servicio o de moderacion.
+          items:
+            type: string
 
     TerminoRequest:
       type: object
@@ -132,6 +319,59 @@ components:
       properties:
         termino:
           type: string
+          minLength: 1
+          maxLength: 120
+        categoria:
+          $ref: '#/components/schemas/CategoriaDeTermino'
+        modo:
+          $ref: '#/components/schemas/ModoDeCoincidencia'
+        activo:
+          type: boolean
+          default: true
+
+    TerminoResponse:
+      type: object
+      required: [id, termino, normalizado, categoria, modo, activo, creadoEn]
+      properties:
+        id:
+          type: integer
+          format: int64
+        termino:
+          type: string
+        normalizado:
+          type: string
+          description: Forma normalizada con la que se compara.
+        categoria:
+          $ref: '#/components/schemas/CategoriaDeTermino'
+        modo:
+          $ref: '#/components/schemas/ModoDeCoincidencia'
+        activo:
+          type: boolean
+        creadoPor:
+          type: [string, 'null']
+          description: Apodo o servicio que lo creo; `semilla` para los de la migracion inicial.
+        creadoEn:
+          type: string
+          format: date-time
+        actualizadoEn:
+          type: [string, 'null']
+          format: date-time
+
+    PaginaDeTerminos:
+      type: object
+      required: [contenido, pagina, tamano, total]
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/TerminoResponse'
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        total:
+          type: integer
+          format: int64
 
     ProblemDetail:
       type: object

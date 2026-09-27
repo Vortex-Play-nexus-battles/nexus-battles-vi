@@ -9,7 +9,7 @@ info:
   # queda deprecado, sin quitarlo. `productoId` acepta el UUID del catalogo sin
   # dejar de aceptar el entero, el carrito declara sus errores y la forma de sus
   # lineas. Todo aditivo: sube la menor.
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -36,6 +36,21 @@ info:
     es de contenido/productos para todos los metodos (issue #421): el
     GET /productos de este servicio sigue existiendo, deprecado, pero el borde
     ya no lo publica.
+
+    1.3.0 (B0/B5 — tienda publica y compra; 7.5 del documento del curso y
+    feedback del profesor «la tienda debe estar disponible desde la landing
+    page»). La vitrina sigue siendo publica y gana `moneda` (COP, USD o EUR,
+    que la interfaz elige por la ubicacion del navegador; el servidor
+    convierte con las tasas de admin-parametros y aplica la promocion: el
+    precio que se paga **siempre** lo calcula el servidor), filtros por tipo,
+    precio y promocion, y las marcas `enListaDeDeseos` y `propio` cuando hay
+    sesion. Con sesion: lista de deseos persistente, cantidad por linea y
+    compra con pasarela simulada. La compra es una orden con estados
+    (`PENDIENTE` → `COBRADA` → `ENTREGADA` → `COMPLETA`, o `RECHAZADA`, o
+    `COMPENSACION_PENDIENTE` → `REEMBOLSADA` si algo falla tras cobrar),
+    idempotente por `Idempotency-Key`: reintentar nunca cobra dos veces. Del
+    medio de pago solo se guardan los cuatro ultimos digitos y la marca;
+    nunca el numero completo ni el codigo de seguridad.
 servers:
   - url: http://localhost:8090/ecommerce/api/v1
     description: Entorno local de desarrollo
@@ -223,6 +238,234 @@ paths:
           description: Sin token de acceso
         "403":
           description: El token no es de un usuario
+  /carrito/items/{itemId}/cantidad:
+    put:
+      summary: Cambia la cantidad de una linea del carrito (1.3.0)
+      operationId: cambiarCantidad
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cantidad]
+              properties:
+                cantidad:
+                  type: integer
+                  minimum: 1
+                  maximum: 20
+      responses:
+        "200":
+          description: Carrito actualizado (el total lo recalcula el servidor).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrito"
+        "400":
+          description: Cantidad fuera de rango.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "401":
+          description: Sin sesion.
+        "404":
+          description: La linea no existe en el carrito del jugador.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "409":
+          description: Supera el tiraje disponible del producto.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+  /lista-deseos:
+    get:
+      summary: Lista de deseos del jugador (1.3.0)
+      operationId: miListaDeDeseos
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Productos en la lista, del mas reciente al mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntradaListaDeseos"
+        "401":
+          description: Sin sesion.
+
+  /lista-deseos/{productoId}:
+    put:
+      summary: Anade un producto a la lista de deseos (idempotente) (1.3.0)
+      operationId: desearProducto
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: El producto esta en la lista (ya estaba o se anadio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntradaListaDeseos"
+        "401":
+          description: Sin sesion.
+        "404":
+          description: El producto no existe en el catalogo.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
+    delete:
+      summary: Quita un producto de la lista de deseos (1.3.0)
+      operationId: dejarDeDesearProducto
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "204":
+          description: Ya no esta en la lista (idempotente).
+        "401":
+          description: Sin sesion.
+
+  /checkout:
+    post:
+      summary: Paga el carrito con la pasarela simulada y entrega los productos (1.3.0)
+      operationId: pagarCarrito
+      x-implementacion: pendiente
+      x-fase: B5
+      description: >
+        Orquesta la compra en el servidor: valida cada producto contra el
+        catalogo (existe, activo, precio y promocion vigentes, tiraje), crea la
+        orden, cobra en la pasarela simulada, reserva el tiraje en productos,
+        registra la transaccion en ms-finanzas, entrega los productos al
+        inventario (`POST /api/v1/inventario/entregas`, origen COMPRA), envia
+        el correo de confirmacion con el detalle y el total, y vacia el
+        carrito. `Idempotency-Key` obligatoria: la misma clave devuelve la
+        misma orden sin volver a cobrar. Tarjetas de prueba de la pasarela
+        simulada: cualquiera que pase Luhn con vencimiento futuro se aprueba,
+        salvo las terminadas en `0002` (rechazo por fondos) y `0069`
+        (pasarela caida, para probar la compensacion).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDePago"
+      responses:
+        "201":
+          description: Orden creada y procesada (mirar `estado`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "200":
+          description: 'La clave ya se uso: la orden original, sin volver a cobrar.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "400":
+          description: Datos de pago mal formados (Luhn, vencimiento, codigo) o carrito vacio.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "401":
+          description: Sin sesion.
+        "402":
+          description: La pasarela rechazo el pago; la orden queda RECHAZADA y el carrito intacto.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "409":
+          description: Un producto se agoto o se suspendio; nada se cobro.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
+
+  /ordenes:
+    get:
+      summary: Ordenes del jugador (1.3.0)
+      operationId: misOrdenes
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ordenes, de la mas reciente a la mas antigua.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Orden"
+        "401":
+          description: Sin sesion.
+
+  /ordenes/{ordenId}:
+    get:
+      summary: Una orden del jugador (1.3.0)
+      operationId: miOrden
+      x-implementacion: pendiente
+      x-fase: B5
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: La orden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "401":
+          description: Sin sesion.
+        "404":
+          description: No existe o es de otro jugador.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+
 security:
   - bearerAuth: []
 components:
@@ -235,6 +478,12 @@ components:
         Token de acceso emitido por ms-identidad (RS256, JWKS). El carrito es
         del claim `uid` (o del sujeto con Keycloak). Roles de usuario:
         JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR.
+  parameters:
+    ProductoId:
+      name: productoId
+      in: path
+      required: true
+      schema: { type: string }
   responses:
     CatalogoNoDisponible:
       description: >
@@ -251,6 +500,73 @@ components:
           schema:
             $ref: "#/components/schemas/ProblemDetail"
   schemas:
+    EntradaListaDeseos:
+      type: object
+      required: [productoId, agregadoEn]
+      properties:
+        productoId: { type: string }
+        nombre: { type: [string, "null"] }
+        imagen: { type: [string, "null"] }
+        agregadoEn: { type: string, format: date-time }
+
+    SolicitudDePago:
+      type: object
+      required: [titular, numeroTarjeta, vencimiento, codigoSeguridad]
+      properties:
+        titular:
+          type: string
+          minLength: 3
+          maxLength: 80
+        numeroTarjeta:
+          type: string
+          pattern: '^[0-9 ]{12,23}$'
+          description: Se valida con Luhn y se descarta; solo quedan los 4 ultimos digitos.
+        vencimiento:
+          type: string
+          pattern: '^(0[1-9]|1[0-2])/[0-9]{2}$'
+          description: MM/AA, no vencido.
+        codigoSeguridad:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+          description: Nunca se guarda ni se registra en bitacora.
+        moneda:
+          type: string
+          enum: [COP, USD, EUR]
+          default: COP
+
+    Orden:
+      type: object
+      required: [id, estado, moneda, total, lineas, creadaEn]
+      properties:
+        id: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [PENDIENTE, COBRADA, ENTREGADA, COMPLETA, RECHAZADA, COMPENSACION_PENDIENTE, REEMBOLSADA]
+        moneda: { type: string, enum: [COP, USD, EUR] }
+        total: { type: number }
+        lineas:
+          type: array
+          items:
+            type: object
+            required: [productoId, nombre, cantidad, precioUnitario, subtotal]
+            properties:
+              productoId: { type: string }
+              nombre: { type: string }
+              cantidad: { type: integer }
+              precioUnitario: { type: number }
+              descuentoPorcentaje: { type: [integer, "null"] }
+              subtotal: { type: number }
+        medioDePago:
+          type: object
+          properties:
+            marca: { type: string }
+            ultimos4: { type: string }
+        motivo:
+          type: [string, "null"]
+          description: Por que se rechazo o se compenso.
+        creadaEn: { type: string, format: date-time }
+        actualizadaEn: { type: [string, "null"], format: date-time }
+
     ProblemDetail:
       type: object
       description: >

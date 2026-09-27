@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI — Cofres de recompensa (ms-finanzas)
+  version: 1.0.0
+  description: |
+    Cofres por creditos ganados en partidas (7.6 del documento del curso:
+    «Cuando un jugador logre acumular veinte (20) creditos en juegos ganados
+    recibira un cofre con una recompensa aleatoria cada vez que se cumpla la
+    cuota. Este beneficio solo podra obtenerse dos veces por semana y el
+    contador se reinicia cada vez que complete los creditos»).
+
+    B0 (BACKEND-01): `GET /cofres/mios` existia desde HU-JUE-013 sin contrato
+    —`creditos.yaml` lo dejaba anotado como brecha conocida— y el guardian
+    `rutas-contrato-codigo.py` lo encontro. Se publica tal como responde hoy:
+    una pagina de Spring Data (`Page<ResumenCofre>`). B7 anade el contenido
+    aleatorio y la entrega al inventario.
+
+    ms-finanzas tiene `context-path` `/api/v1`.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8093/api/v1
+    description: Desarrollo local
+
+paths:
+  /cofres/mios:
+    get:
+      operationId: listarMisCofres
+      summary: Cofres entregados al jugador que firma el token
+      description: |
+        Solo los propios: el jugador sale del `uid` del token, nunca de la
+        ruta. Del mas reciente al mas antiguo.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Pagina de cofres (forma de `Page` de Spring Data).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeCofres'
+        '401':
+          description: Sin token.
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ResumenCofre:
+      type: object
+      required: [id, contenido, entregadoEn]
+      properties:
+        id:
+          type: string
+          format: uuid
+        contenido:
+          type: string
+          description: Identificador del contenido del cofre.
+        entregadoEn:
+          type: string
+          format: date-time
+
+    PaginaDeCofres:
+      type: object
+      additionalProperties: true
+      description: Serializacion de `org.springframework.data.domain.Page`.
+      required: [content]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResumenCofre'
+        totalElements:
+          type: integer
+          format: int64
+        totalPages:
+          type: integer
+        number:
+          type: integer
+        size:
+          type: integer

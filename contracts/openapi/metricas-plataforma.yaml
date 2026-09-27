@@ -70,7 +70,12 @@ info:
     por el borde; era un defecto, no una decision. `/actuator/**` sigue
     abierto (regla 3). Sin token: `401`. Con rol insuficiente (incluido
     `MODERADOR`, que nunca vio este panel en la cabecera): `403`.
-  version: 1.7.0
+
+    1.8.0 (B0): se publica `GET /admin/sistema/servicios`, que existia sin
+    contrato (lo encontro el guardian `rutas-contrato-codigo.py`): el estado
+    de cada servicio del catalogo de despliegue (OPERATIVO, CAIDO,
+    NO_DESPLEGADO, NO_OBSERVABLE) para el panel de administracion. Aditivo.
+  version: 1.8.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -299,6 +304,28 @@ paths:
         '503':
           description: moderacion-sanciones no responde (type fuente-no-disponible); nada se disimula
 
+  /admin/sistema/servicios:
+    get:
+      summary: Estado de cada servicio del catalogo de despliegue (1.8.0)
+      operationId: estadoDeLosServicios
+      description: >
+        Sondea la salud de cada servicio configurado y resume cuantos estan
+        operativos, caidos, no desplegados o sin sonda. Mismo control de
+        acceso que el resto del panel tecnico.
+      security:
+        - tokenDeAdministracion: []
+      responses:
+        '200':
+          description: Estado de los servicios.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RespuestaDelSistema'
+        '401':
+          description: Sin token.
+        '403':
+          description: Rol insuficiente.
+
 components:
   securitySchemes:
     tokenDeAdministracion:
@@ -310,6 +337,40 @@ components:
         `SUPER_ADMINISTRADOR` o `SERVICIO`.
 
   schemas:
+    RespuestaDelSistema:
+      type: object
+      required: [servicios, total, operativos, caidos, noDesplegados, noObservables, instante]
+      properties:
+        servicios:
+          type: array
+          items:
+            type: object
+            required: [servicio, estado, instante]
+            properties:
+              servicio:
+                type: string
+              estado:
+                type: string
+                enum: [OPERATIVO, CAIDO, NO_DESPLEGADO, NO_OBSERVABLE]
+              detalle:
+                type: [string, 'null']
+              instante:
+                type: string
+                format: date-time
+        total:
+          type: integer
+        operativos:
+          type: integer
+        caidos:
+          type: integer
+        noDesplegados:
+          type: integer
+        noObservables:
+          type: integer
+        instante:
+          type: string
+          format: date-time
+
     EstadoResponse:
       type: object
       required: [servicios]

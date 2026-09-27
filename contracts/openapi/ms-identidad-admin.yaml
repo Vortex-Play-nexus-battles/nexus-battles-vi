@@ -1,0 +1,571 @@
+openapi: 3.1.0
+
+# =============================================================================
+# Nexus Battles VI — Administracion de cuentas (ms-identidad)
+#
+# B0 (BACKEND-01). Hasta aqui estas ocho rutas existian sin contrato: la
+# auditoria contractual de septiembre las encontro con el guardian
+# `tests/contratos/rutas-contrato-codigo.py`, y `ms-identidad-auth.yaml`
+# las dejaba anotadas como «brecha conocida». Se documentan tal como las
+# sirve el codigo (AdminGestionUsuarioController, AdminCuentasController,
+# AdminDirectorioController), mas la ruta interna con la que
+# moderacion-sanciones proyecta una sancion sobre la cuenta (B2).
+#
+# El control de acceso lo hace `SecurityInterceptor` con la matriz RBAC de
+# `rbac.yaml` (7.3.1 del documento del curso, Tabla 24): suspender es de
+# Moderador (temporal), Administrador y Super Administrador; banear y crear
+# cuentas administrativas, segun la tabla.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
+  version: 1.0.0
+  description: |
+    Gestion de usuarios desde el panel de administracion (7.3.2 y 7.3.4 del
+    documento del curso) y la proyeccion del estado de sancion.
+
+    **Errores heredados en texto plano**: las rutas de `/admin/usuarios` y
+    `/admin/cuentas` devuelven el mensaje de la excepcion como `text/plain`
+    en 400 y 404, igual que el registro antes de 1.1.0 de
+    `ms-identidad-auth.yaml`. El 403 lo produce el interceptor con problem
+    details.
+
+    **Unificacion de sanciones (B2).** La fuente de verdad de una sancion
+    (advertencia, suspension, baneo) es `moderacion-sanciones`. Desde B2,
+    `PUT .../suspender`, `.../banear` y `.../reactivar` delegan en ella, y
+    ella devuelve el estado resultante a esta cuenta por
+    `PUT /api/v1/internal/usuarios/{uid}/estado-sancion`: la cuenta guarda la
+    proyeccion (estado, vigencia) para que el login pueda negarse sin llamar a
+    otro servicio, y sube la version de token para revocar las sesiones
+    abiertas.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8089
+    description: Desarrollo local (sin context-path; el /api/v1 va en la ruta)
+
+tags:
+  - name: administracion
+    description: Panel de administracion de usuarios (7.3.2, 7.3.4)
+  - name: interno
+    description: Llamadas entre servicios (token de servicio)
+
+paths:
+  /api/v1/admin/jugadores:
+    get:
+      tags: [administracion]
+      operationId: listarDirectorioDeJugadores
+      summary: Directorio paginado de cuentas con busqueda
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: buscar
+          in: query
+          required: false
+          description: Texto a buscar en apodo o correo (sin distinguir mayusculas).
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Pagina del directorio.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeDirectorio'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/usuarios/{usuarioId}:
+    get:
+      tags: [administracion]
+      operationId: obtenerUsuarioAdministrado
+      summary: Ficha de una cuenta para el panel
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '200':
+          description: Ficha de la cuenta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsuarioAdministrado'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuarioId}/perfil:
+    put:
+      tags: [administracion]
+      operationId: editarPerfilAdministrado
+      summary: Edita el perfil de cualquier cuenta (7.3.2 «Modificacion de usuarios»)
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                nombres:
+                  type: string
+                apellidos:
+                  type: string
+                apodo:
+                  type: string
+                  description: Sujeto a unicidad y a la lista negra (contexto APODO).
+                preferencias:
+                  type: string
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Perfil actualizado.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuarioId}/suspender:
+    put:
+      tags: [administracion]
+      operationId: suspenderCuenta
+      summary: Suspension temporal de una cuenta (7.3.2, sancion 2)
+      description: |
+        Desde B2 delega en `POST /api/v1/sanciones` de moderacion-sanciones
+        (tipo SUSPENSION): la sancion queda registrada con motivo y autor, el
+        usuario recibe correo y la cuenta proyecta el estado. Un Moderador
+        solo puede suspender de forma temporal (Tabla 24).
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [suspendidoHasta]
+              properties:
+                suspendidoHasta:
+                  type: string
+                  format: date-time
+                  description: Fin de la suspension; debe ser futuro.
+                motivo:
+                  type: string
+                  description: Causal documentada (7.3.2 «Causales de sancion»). Opcional por compatibilidad.
+      responses:
+        '204':
+          description: Cuenta suspendida.
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuarioId}/banear:
+    put:
+      tags: [administracion]
+      operationId: banearCuenta
+      summary: Baneo definitivo de una cuenta (7.3.2, sancion 3)
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '204':
+          description: Cuenta baneada.
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuarioId}/reactivar:
+    put:
+      tags: [administracion]
+      operationId: reactivarCuenta
+      summary: Levanta la suspension o el baneo de una cuenta
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '204':
+          description: Cuenta activa.
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuarioId}/restablecer-password:
+    post:
+      tags: [administracion]
+      operationId: restablecerPasswordAdministrado
+      summary: Envia a la cuenta un codigo de restablecimiento
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/UsuarioId'
+      responses:
+        '204':
+          description: Codigo emitido y correo encolado.
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/cuentas:
+    post:
+      tags: [administracion]
+      operationId: crearCuentaAdministrativa
+      summary: Alta de un Moderador o Administrador (solo Super Administrador)
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [nombres, apellidos, email, password, apodo, rolNombre]
+              properties:
+                nombres:
+                  type: string
+                apellidos:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+                apodo:
+                  type: string
+                rolNombre:
+                  type: string
+                  enum: [MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Cuenta creada (entidad serializada, como el registro).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/InvalidoTexto'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/internal/usuarios/{uid}/estado-sancion:
+    put:
+      tags: [interno]
+      operationId: proyectarEstadoDeSancion
+      summary: moderacion-sanciones fija el estado de acceso de la cuenta (B2)
+      x-implementacion: pendiente
+      x-fase: B2
+      description: |
+        Lo llama **solo** moderacion-sanciones (token de servicio con `azp`
+        `moderacion-sanciones`) cada vez que una sancion que afecta al acceso
+        empieza, se revierte o se reduce. Idempotente por `sancionId` +
+        `estado`: repetir la misma proyeccion no vuelve a subir la version de
+        token.
+
+        - `SUSPENDIDO` con `hasta`: el login responde 403
+          `cuenta-suspendida` con el fin de la suspension («contador visible
+          del tiempo restante», 7.3.2) hasta esa fecha, sin necesitar otra
+          llamada para expirar.
+        - `BANEADO`: 403 `cuenta-baneada` para siempre.
+        - `ACTIVO`: se levanta la proyeccion (apelacion revertida, reactivacion).
+
+        Suspender o banear sube `versionToken`: los tokens emitidos caducan
+        en ms-identidad en el acto.
+      security:
+        - tokenDeServicio: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProyeccionDeSancion'
+      responses:
+        '200':
+          description: Proyeccion aplicada (o ya estaba aplicada).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeCuenta'
+        '400':
+          $ref: '#/components/responses/InvalidoProblema'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: No existe una cuenta con ese uid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/internal/usuarios/{uid}/contacto:
+    get:
+      tags: [interno]
+      operationId: contactoDeUsuario
+      summary: Correo y apodo de una cuenta, para enviarle un correo (B1/B2)
+      x-implementacion: pendiente
+      x-fase: B2
+      description: |
+        Solo token de servicio. Lo usan los productores de correo que conocen
+        al jugador por su `uid` (moderacion-sanciones, ms-ecommerce,
+        ms-subastas, misiones) para no guardar copias del correo en sus
+        propias bases (regla 7 y minimizacion de datos personales). Una cuenta
+        `PENDIENTE_VERIFICACION` o `BANEADO` responde igual: decidir si se le
+        escribe es del productor.
+      security:
+        - tokenDeServicio: []
+      parameters:
+        - name: uid
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Datos de contacto.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uid, email, apodo, estado]
+                properties:
+                  uid:
+                    type: string
+                    format: uuid
+                  email:
+                    type: string
+                    format: email
+                  apodo:
+                    type: string
+                  estado:
+                    type: string
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: No existe una cuenta con ese uid.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+components:
+  securitySchemes:
+    tokenDeUsuario:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    tokenDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token `client_credentials` con rol SERVICIO (ADR-005).
+
+  parameters:
+    UsuarioId:
+      name: usuarioId
+      in: path
+      required: true
+      description: Clave interna de la cuenta (la del directorio).
+      schema:
+        type: integer
+        format: int64
+
+  responses:
+    Prohibido:
+      description: Sin token valido o sin permiso segun la matriz RBAC.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NoEncontradoTexto:
+      description: No existe la cuenta. Texto plano (heredado).
+      content:
+        text/plain:
+          schema:
+            type: string
+    InvalidoTexto:
+      description: Datos invalidos. Texto plano (heredado).
+      content:
+        text/plain:
+          schema:
+            type: string
+    InvalidoProblema:
+      description: Datos invalidos.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+    PaginaDeDirectorio:
+      type: object
+      required: [contenido, pagina, tamano, total, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntradaDeDirectorio'
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        total:
+          type: integer
+          format: int64
+        totalPaginas:
+          type: integer
+
+    EntradaDeDirectorio:
+      type: object
+      required: [apodo, email, estado, bloqueada]
+      properties:
+        uid:
+          type: [string, 'null']
+          format: uuid
+        apodo:
+          type: string
+        email:
+          type: string
+        estado:
+          type: string
+          description: ACTIVO, PENDIENTE_VERIFICACION (B1), SUSPENDIDO o BANEADO.
+        rol:
+          type: [string, 'null']
+        creadoEn:
+          type: [string, 'null']
+          format: date-time
+        ultimoAcceso:
+          type: [string, 'null']
+          format: date-time
+        suspendidoHasta:
+          type: [string, 'null']
+          format: date-time
+        bloqueada:
+          type: boolean
+          description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+
+    UsuarioAdministrado:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        apodo:
+          type: string
+        email:
+          type: string
+        estado:
+          type: string
+        rolNombre:
+          type: string
+        nombres:
+          type: [string, 'null']
+        apellidos:
+          type: [string, 'null']
+        avatar:
+          type: [string, 'null']
+        preferencias:
+          type: [string, 'null']
+
+    ProyeccionDeSancion:
+      type: object
+      required: [estado, sancionId]
+      properties:
+        estado:
+          type: string
+          enum: [ACTIVO, SUSPENDIDO, BANEADO]
+        hasta:
+          type: [string, 'null']
+          format: date-time
+          description: Obligatorio con SUSPENDIDO; ignorado en los demas.
+        sancionId:
+          type: string
+          format: uuid
+          description: Sancion de moderacion-sanciones que produce el estado.
+        motivo:
+          type: [string, 'null']
+
+    EstadoDeCuenta:
+      type: object
+      required: [uid, estado, versionToken]
+      properties:
+        uid:
+          type: string
+          format: uuid
+        estado:
+          type: string
+        suspendidoHasta:
+          type: [string, 'null']
+          format: date-time
+        versionToken:
+          type: integer
+
+    ProblemDetail:
+      type: object
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
