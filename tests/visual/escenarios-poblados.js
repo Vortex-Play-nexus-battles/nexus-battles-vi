@@ -897,11 +897,83 @@ const CARRITO_DE_LABORATORIO = {
   ],
 };
 
-function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
+/**
+ * B5 — dos compras del jugador (`Orden` de ecommerce-carrito.yaml 1.4.0): una
+ * completada y una rechazada por la pasarela, con su motivo.
+ */
+const ORDENES_DE_LABORATORIO = [
+  {
+    id: 'b5000000-0000-4000-8000-000000000001',
+    estado: 'COMPLETA',
+    moneda: 'COP',
+    total: 52000,
+    tasaDeCambio: null,
+    lineas: [
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+        nombre: 'Yelmo del Alba',
+        cantidad: 2,
+        precioUnitario: 18000,
+        subtotal: 36000,
+      },
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000002',
+        nombre: 'Amuleto de Brasa',
+        cantidad: 1,
+        precioUnitario: 16000,
+        subtotal: 16000,
+      },
+    ],
+    medioDePago: { marca: 'VISA', ultimos4: '4242' },
+    motivo: null,
+    correoConfirmacion: 'ENVIADO',
+    creadaEn: '2026-09-24T19:05:00Z',
+  },
+  {
+    id: 'b5000000-0000-4000-8000-000000000002',
+    estado: 'RECHAZADA',
+    moneda: 'COP',
+    total: 32000,
+    tasaDeCambio: null,
+    lineas: [
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000005',
+        nombre: 'Espada de Vorn',
+        cantidad: 1,
+        precioUnitario: 32000,
+        subtotal: 32000,
+      },
+    ],
+    medioDePago: { marca: 'VISA', ultimos4: '0002' },
+    motivo: 'La pasarela rechazó el pago: fondos insuficientes.',
+    correoConfirmacion: 'OMITIDO',
+    creadaEn: '2026-09-23T10:40:00Z',
+  },
+];
+
+/**
+ * @param {{hilo?: object, deseados?: string[], extra?: Array<[string, object|Function]>}} [opciones]
+ *   `deseados`: ids que la vitrina con sesión marca `enListaDeseos` (B5);
+ *   `extra`: más rutas (las órdenes, por ejemplo).
+ */
+function rutasDeTienda({ hilo = hiloDeLaboratorio(), deseados = [], extra = [] } = {}) {
+  const productos = PRODUCTOS_DE_TIENDA.map((p) =>
+    deseados.includes(p.id) ? { ...p, enListaDeseos: true } : p,
+  );
   return [
     // R16 — la vitrina se mudó a /api/v1/vitrina y sus ids son UUID del
-    // catálogo maestro. UXC-4 — se pide entera (`?size=50`).
-    ['**/api/v1/vitrina*', json({ content: PRODUCTOS_DE_TIENDA, last: true, totalPages: 1 })],
+    // catálogo maestro. UXC-4 — se pide entera (`?size=50`). B5 (1.4.0) — dice
+    // en qué moneda viene y cuáles ofrece: sin tasas del PO (D-32), solo COP.
+    [
+      '**/api/v1/vitrina*',
+      json({
+        content: productos,
+        last: true,
+        totalPages: 1,
+        moneda: 'COP',
+        monedasDisponibles: ['COP'],
+      }),
+    ],
     ['**/api/v1/carrito', json(CARRITO_DE_LABORATORIO)],
     // Lo que ya tiene el jugador: un yelmo (la tarjeta dice «Ya lo tienes»).
     [
@@ -923,6 +995,7 @@ function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
     ],
     ['**/api/v1/productos/*', detalleDelCatalogo],
     ['**/api/v1/products/*/comments', json(hilo)],
+    ...extra,
   ];
 }
 
@@ -1745,12 +1818,14 @@ export const ESCENARIOS = [
   },
   {
     id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja, lo que ya tienes y carrito con importes',
+    titulo: 'tienda con precios, rebaja, lo que ya tienes, lo deseado y carrito con importes',
     ruta: 'cuentas/tienda.html',
     sesion: () => SESION_TIENDA,
-    rutas: rutasDeTienda(),
+    rutas: rutasDeTienda({ deseados: ['aaaaaaa1-0000-4000-8000-000000000005'] }),
     // El descuento y el precio ausente son los dos estados que FI-R2 anadio;
     // UXC-4 anade la marca de «propio», la insignia del carrito y los filtros.
+    // B5 — lo deseado se distingue (corazón pulsado y distintivo), cada línea
+    // cambia su cantidad, «Pagar» se enciende y la moneda tiene selector.
     exige: [
       '.product-card',
       '.badge-descuento',
@@ -1759,6 +1834,11 @@ export const ESCENARIOS = [
       '.producto-propio',
       '.insignia-carrito__cuenta',
       '.filtros-tienda',
+      '.product-card[data-deseado="si"] .producto-deseado',
+      '.deseos--tarjeta[aria-pressed="true"]',
+      '.cart-item [data-cantidad-item]',
+      '#btn-pagar:not([disabled])',
+      '#moneda-tienda option[value="USD"][disabled]',
     ],
   },
   {
@@ -1777,7 +1857,9 @@ export const ESCENARIOS = [
       '.ficha',
       '.ficha__valoracion',
       '.compra-producto',
-      '.deseos[aria-disabled="true"]',
+      // B5 — la lista de deseos ya se guarda en la cuenta: en la tienda el
+      // conmutador está activo (aria-pressed), no apagado.
+      '.compra-producto .deseos[aria-pressed]',
       '.hilo-comentarios .comentario',
       '.comentario__adjunto',
       '.comentario--propio',
@@ -1812,6 +1894,49 @@ export const ESCENARIOS = [
       await pagina.locator('#minimizar-carrito').click();
     },
     exige: ['.main-container[data-carrito="minimizado"]', '.insignia-carrito__cuenta'],
+  },
+  {
+    // B5 — «Pagar»: el resumen de la compra y el formulario de §7.5 (titular,
+    // número, vencimiento y código), enviado vacío para auditar el estado con
+    // errores: cada campo marcado, con su mensaje enlazado y el foco en el
+    // primero. No se llega a pagar: sin datos válidos no sale ninguna petición.
+    id: 'tienda-pago-con-errores',
+    titulo: 'pagar: resumen de la compra y formulario de pago con los errores marcados',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('#btn-pagar:not([disabled])').click();
+      await pagina.locator('[data-accion="confirmar-pago"]').click();
+      await pagina.locator('.campo__error:not([hidden])').first().waitFor();
+    },
+    exige: [
+      '.dialogo--pago .pago__resumen .pago__linea',
+      '.dialogo--pago .pago__total',
+      '.pago__formulario input[autocomplete="cc-name"]',
+      '.pago__formulario input[autocomplete="cc-number"][aria-invalid="true"]',
+      '.pago__formulario input[autocomplete="cc-exp"]',
+      '.pago__formulario input[autocomplete="cc-csc"]',
+      '.campo__error:not([hidden])',
+    ],
+  },
+  {
+    // B5 — «Mis compras»: una completada (marca y cuatro últimos) y una
+    // rechazada, con el motivo de la pasarela.
+    id: 'tienda-mis-compras',
+    titulo: 'mis compras: una completada y una rechazada con su motivo',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda({ extra: [['**/api/v1/ordenes', json(ORDENES_DE_LABORATORIO)]] }),
+    interaccion: async (pagina) => {
+      await pagina.locator('.cart-item').first().waitFor();
+      await pagina.locator('#btn-mis-compras').click();
+      await pagina.locator('.compras__lista .compra').first().waitFor();
+    },
+    exige: [
+      '.dialogo--compras .compra[data-estado="COMPLETA"] .compra__medio',
+      '.dialogo--compras .compra[data-estado="RECHAZADA"] .compra__motivo',
+    ],
   },
   {
     // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
