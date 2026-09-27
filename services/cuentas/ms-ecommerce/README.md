@@ -43,22 +43,10 @@ valor, esa moneda no se ofrece: la vitrina la quita de `monedasDisponibles` y
 pedirla responde **422 `moneda-no-disponible`**. COP funciona siempre. Los
 ejemplos de la tabla son solo de formato, no una propuesta de tasa.
 
-Los parámetros **no existen todavía** en el catálogo de admin-parametros: ese
-catálogo es de su dueño y se amplía por migración. Para crearlos (sin valor,
-como `jugador.creditos-iniciales` en su `V2`), la siguiente migración libre de
-`services/plataforma/admin-parametros/src/main/resources/db/migration/`:
-
-```sql
--- Tasas de la tienda (7.5, precio en la moneda del cliente). Nacen SIN VALOR:
--- son decision del PO. Sin valor, ms-ecommerce vende solo en COP.
-INSERT INTO parametros (clave, descripcion, tipo, valor, unidad, minimo, maximo, opciones, inalterable, origen, orden) VALUES
-('tienda.tasa-cop-usd',
- 'Pesos colombianos por 1 USD para mostrar y cobrar en dolares; vacio = la tienda no ofrece USD',
- 'DECIMAL', NULL, 'COP', 1, 1000000, NULL, FALSE, 'PO pendiente / 7.5 moneda del cliente', 70),
-('tienda.tasa-cop-eur',
- 'Pesos colombianos por 1 EUR para mostrar y cobrar en euros; vacio = la tienda no ofrece EUR',
- 'DECIMAL', NULL, 'COP', 1, 1000000, NULL, FALSE, 'PO pendiente / 7.5 moneda del cliente', 71);
-```
+Los dos parámetros los crea, **sin valor**, la migración `V3__tasas_de_la_tienda.sql`
+de admin-parametros (dueño de su catálogo; D-32): aparecen en el panel
+**Parámetros** marcados como pendientes del PO y, hasta que tengan valor, la
+tienda vende solo en COP.
 
 Cuando el PO fije la tasa, un administrador la escribe desde el panel
 **Parámetros** (`PUT /parametros/{clave}`, con motivo): ms-ecommerce la toma
