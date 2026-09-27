@@ -11,6 +11,7 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 |---|---|---|---|
 | `ms-subastas-ms-finanzas.json` | ms-subastas (HU-SUB-004) | ms-finanzas | `CreditosPactoTest` |
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
+| `ms-subastas-notificaciones.json` | ms-subastas (B8, avisos de 7.7.8) | notificaciones | `NotificacionesPactoTest` |
 
 ## Regenerarlos
 
@@ -49,12 +50,25 @@ Los estados que hay que poder montar hoy:
 - el elemento está bloqueado por esa subasta y va a adjudicarse
 - ese elemento ya se transfirió con esa misma clave de idempotencia
 
-Los dos pactos se verifican:
+**notificaciones** (B8)
+- el destinatario todavia no tiene ese aviso
+- el destinatario ya tiene un aviso con ese identificador
+
+(La tercera interacción, sin credencial de servicio, no tiene estado: fija que
+`/internal/notifications` responde 401 sin `Authorization`.)
+
+Los tres pactos se verifican:
 
 | Pacto | Verificación | Cómo |
 |---|---|---|
 | ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
 | ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| notificaciones | `notificaciones/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado con su cadena de seguridad real, `ServicioDeNotificaciones` simulado, PostgreSQL de Testcontainers. La credencial de ejemplo del pacto se sustituye por un token de servicio real del emisor de prueba |
+
+El de notificaciones fija lo que falló en producción hasta B8: el adaptador de
+ms-subastas salía **sin** credencial de servicio y cada aviso recibía 401, que el
+outbox reintentaba para siempre. Ahora la cabecera está en el pacto y la
+interacción sin ella deja escrito el 401.
 
 `tests/contratos/pactos-verificados.py` vigila en CI que cada `given(...)`
 tenga su `@State`.
