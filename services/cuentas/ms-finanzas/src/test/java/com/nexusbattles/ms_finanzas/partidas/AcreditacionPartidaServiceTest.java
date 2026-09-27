@@ -44,13 +44,16 @@ class AcreditacionPartidaServiceTest {
     @Mock
     private CofreService cofreService;
 
+    @Mock
+    private EntregaDeCofres entregaDeCofres;
+
     private AcreditacionPartidaService servicio;
 
     @BeforeEach
     void setUp() {
         Clock reloj = Clock.fixed(AHORA, ZoneOffset.UTC);
         servicio = new AcreditacionPartidaService(
-                partidaProcesadaRepositorio, creditoService, cofreService, reloj);
+                partidaProcesadaRepositorio, creditoService, cofreService, entregaDeCofres, reloj);
         // lenient(): el test de idempotencia (partidaYaProcesada) sale por
         // el early-return y no llama a acreditar ni al cofre, así que estos
         // stubs no se usan en TODOS los tests; sin lenient Mockito falla.
@@ -156,6 +159,24 @@ class AcreditacionPartidaServiceTest {
 
         assertThat(resp.acreditaciones()).hasSize(1);
         assertThat(resp.acreditaciones().get(0).cofreId()).isEqualTo(cofreId);
+        // La entrega al inventario se pide para DESPUES de confirmar (B7).
+        verify(entregaDeCofres).entregarTrasConfirmar(List.of(cofreId));
+    }
+
+    // B7 (cofres.yaml 1.1.0): «veinte (20) créditos en juegos GANADOS» (§7.6).
+    @Test
+    void soloLosCreditosDeLaVictoriaCuentanParaElCofre() {
+        when(partidaProcesadaRepositorio.existsById(any())).thenReturn(false);
+
+        servicio.procesarResultadoPartida(new ResultadoPartidaRequest(
+                "partida-cuenta", TipoPartida.GRUPAL, null, List.of("uid-a"),
+                List.of(
+                        new ParticipantePartidaRequest("uid-a", false),
+                        new ParticipantePartidaRequest("uid-b", false))));
+
+        verify(cofreService).registrarCreditosGanados("uid-a", 4);
+        verify(cofreService, never()).registrarCreditosGanados(eq("uid-b"), anyInt());
+        verify(entregaDeCofres).entregarTrasConfirmar(List.of());
     }
 
     // Wrapper para eq() en el mock con anyInt de manera legible.
