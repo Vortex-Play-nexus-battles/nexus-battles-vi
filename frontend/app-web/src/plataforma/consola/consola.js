@@ -36,6 +36,7 @@ const DESCRIPCION = Object.freeze({
   control: 'Los ocho paneles del Nexo en una sola pantalla, con datos reales.',
   usuarios: 'Perfiles, roles y estado de las cuentas.',
   productos: 'Alta de héroes, armas, armaduras e ítems del catálogo.',
+  comentarios: 'Comentarios reportados: aprobar, ocultar, editar o marcar para seguimiento.',
   sanciones: 'Advertencias, suspensiones y apelaciones.',
   'lista-negra': 'Términos y apodos vetados en el registro.',
   parametros: 'Valores de juego y de plataforma en caliente.',

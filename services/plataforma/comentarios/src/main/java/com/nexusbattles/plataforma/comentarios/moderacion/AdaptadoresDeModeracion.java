@@ -113,12 +113,19 @@ public class AdaptadoresDeModeracion {
         };
     }
 
+    /**
+     * MARCAR y DESMARCAR no llegan aqui (no se avisan: ver
+     * {@link AccionDeModeracion#seAvisaAlAutor()}), pero el switch las nombra
+     * para que el compilador obligue a pensar en cada accion nueva.
+     */
     private static String tituloDe(AccionDeModeracion accion) {
         return switch (accion) {
             case APROBAR -> "Tu comentario sigue publicado";
             case OCULTAR -> "Tu comentario se oculto";
             case ELIMINAR -> "Tu comentario se elimino";
             case RESTAURAR -> "Tu comentario vuelve a estar visible";
+            case EDITAR -> "Moderacion edito tu comentario";
+            case MARCAR, DESMARCAR -> "Tu comentario tiene seguimiento de moderacion";
         };
     }
 

@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.hibernate.annotations.BatchSize;
+
 import com.nexusbattles.plataforma.comentarios.Comentario;
 
 import jakarta.persistence.CollectionTable;
@@ -26,6 +28,18 @@ import jakarta.persistence.Table;
  * valida sus reglas, mientras que esta clase solo sabe guardarse y volver. La
  * conversion vive aqui, en {@link #desde(Comentario)} y {@link #aDominio()},
  * para que el servicio no arme entidades a mano.
+ *
+ * <p><b>B3.</b> La columna {@code estrellas} sigue en la tabla con los datos
+ * de antes, pero ya no se mapea: la calificacion vive en su propia tabla
+ * (V5) y un comentario nuevo no guarda estrellas. Que no este mapeada
+ * garantiza que nada la vuelva a escribir por descuido al actualizar un
+ * comentario viejo.
+ *
+ * <p>Las imagenes se cargan en diferido y por lotes: el hilo se lee paginado y
+ * con carga inmediata cada comentario de la pagina costaba una consulta mas
+ * (el N+1 que la auditoria senalo). Con {@link BatchSize} las de toda la
+ * pagina llegan en una sola. {@link #aDominio()} se llama siempre dentro de la
+ * transaccion del servicio, que es donde vive la carga diferida.
  */
 @Entity
 @Table(name = "comentarios")
@@ -47,7 +61,8 @@ public class RegistroDeComentario {
     @Column(nullable = false)
     private String texto;
 
-    @ElementCollection(fetch = FetchType.EAGER)
+    @ElementCollection(fetch = FetchType.LAZY)
+    @BatchSize(size = 50)
     @CollectionTable(
             name = "comentario_imagenes",
             joinColumns = @JoinColumn(name = "comentario_id"))
@@ -55,14 +70,18 @@ public class RegistroDeComentario {
     @Column(name = "nombre_archivo", nullable = false)
     private List<String> imagenes = new ArrayList<>();
 
-    private Integer estrellas;
-
     @Column(name = "fecha_publicacion", nullable = false)
     private Instant fechaPublicacion;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Comentario.Estado estado;
+
+    @Column(nullable = false)
+    private boolean editado;
+
+    @Column(nullable = false)
+    private boolean marcado;
 
     protected RegistroDeComentario() {
     }
@@ -76,9 +95,10 @@ public class RegistroDeComentario {
         registro.apodoAutor = comentario.apodoAutor();
         registro.texto = comentario.texto();
         registro.imagenes = new ArrayList<>(comentario.imagenes());
-        registro.estrellas = comentario.estrellas();
         registro.fechaPublicacion = comentario.fechaPublicacion();
         registro.estado = comentario.estado();
+        registro.editado = comentario.editado();
+        registro.marcado = comentario.marcado();
         return registro;
     }
 
@@ -86,7 +106,7 @@ public class RegistroDeComentario {
     public Comentario aDominio() {
         return new Comentario(
                 id, productoId, autorId, apodoAutor, texto,
-                List.copyOf(imagenes), estrellas, fechaPublicacion, estado);
+                List.copyOf(imagenes), fechaPublicacion, estado, editado, marcado);
     }
 
     public String getId() {

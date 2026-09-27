@@ -1,10 +1,12 @@
 /**
- * UXC-3 — estrellas, resumen y tarjeta de comentario.
+ * UXC-3 y B3 — estrellas, resumen y tarjeta de comentario.
  *
  * Lo que se fija: que la calificación se lee sin depender del color (nombre
- * accesible y cifra), que «sin valoraciones» no es un cero, que el texto de
- * una persona entra como texto, que cada quien ve solo la acción que le toca
- * y que un adjunto no finge una miniatura que no existe.
+ * accesible y cifra), que «sin valoraciones» no es un cero y que el resumen es
+ * el de `GET /rating` (comentarios.yaml 1.5.0), que el texto de una persona
+ * entra como texto, que cada quien ve solo la acción que le toca, que una
+ * imagen guardada se ve de verdad y que un nombre de archivo antiguo no finge
+ * una miniatura que no existe.
  */
 
 import { jest } from '@jest/globals';
@@ -18,12 +20,18 @@ import {
 import { conCuenta, hayPromedio, resumenDeCalificacion, textoDelResumen } from './resumen.js';
 import {
   adjuntosDeComentario,
+  esIdDeImagen,
   ESTADO_LOCAL,
   inicialDe,
+  LADO_DE_MINIATURA,
   tarjetaDeComentario,
+  textoAlternativo,
 } from './comentario.js';
 
 const YO = 'uid-yo';
+const IMAGEN_1 = '3f1c2b4a-1111-4222-8333-944455566677';
+const IMAGEN_2 = '3f1c2b4a-2222-4222-8333-944455566677';
+const urlDeImagen = (id) => `/api/v1/comentarios/imagenes/${id}`;
 
 function comentario(cambios = {}) {
   return {
@@ -123,29 +131,50 @@ describe('selector de estrellas', () => {
     expect(selector.valor()).toBeNull();
     expect(selector.elemento.textContent).toContain('Ya calificaste este producto.');
   });
+
+  test('B3: ya no dice «opcional» y avisa de que la calificación es única', () => {
+    const selector = selectorDeEstrellas();
+
+    expect(selector.elemento.querySelector('legend').textContent).toBe('Tu calificación');
+    expect(selector.elemento.textContent).toMatch(/una vez y no se cambia/);
+    expect(selector.elemento.textContent).not.toMatch(/opcional/i);
+  });
+
+  test('enfocar lleva el foco a la marcada o, sin nota, a la primera', () => {
+    const selector = selectorDeEstrellas();
+    document.body.replaceChildren(selector.elemento);
+    const radios = selector.elemento.querySelectorAll('input[type="radio"]');
+
+    selector.enfocar();
+    expect(document.activeElement).toBe(radios[0]);
+
+    radios[2].checked = true;
+    selector.enfocar();
+    expect(document.activeElement).toBe(radios[2]);
+  });
 });
 
-describe('resumen de la calificación', () => {
-  test('sin nadie que califique: «sin valoraciones», nunca un cero', () => {
-    const hilo = { calificacionPromedio: null, totalCalificaciones: 0, total: 0, comentarios: [] };
+describe('resumen de la calificación (GET /rating)', () => {
+  const VACIO = { productoId: 'p-1', promedio: null, total: 0, distribucion: {} };
 
-    expect(hayPromedio(hilo)).toBe(false);
-    expect(textoDelResumen(hilo)).toBe('Sin valoraciones todavía');
-    const resumen = resumenDeCalificacion(hilo);
+  test('sin nadie que califique: «sin valoraciones», nunca un cero', () => {
+    expect(hayPromedio(VACIO)).toBe(false);
+    expect(hayPromedio(null)).toBe(false);
+    expect(textoDelResumen(VACIO)).toBe('Sin valoraciones todavía');
+    const resumen = resumenDeCalificacion(VACIO);
     expect(resumen.dataset.estado).toBe('sin-valoraciones');
     expect(resumen.textContent).not.toMatch(/\b0\b/);
     expect(resumen.querySelector('[role="img"]')).toBeNull();
   });
 
-  test('opiniones sin estrellas se cuentan igual', () => {
-    const hilo = { calificacionPromedio: null, totalCalificaciones: 0, total: 3 };
-
-    expect(textoDelResumen(hilo)).toBe('Sin valoraciones todavía · 3 opiniones');
+  test('las opiniones las da el hilo, aparte: se cuentan aunque nadie califique', () => {
+    expect(textoDelResumen(VACIO, { opiniones: 3 })).toBe('Sin valoraciones todavía · 3 opiniones');
+    expect(textoDelResumen(VACIO, { opiniones: 0 })).toBe('Sin valoraciones todavía');
   });
 
   test('con promedio: cifra grande, estrellas con nombre y los dos conteos', () => {
-    const hilo = { calificacionPromedio: 4.25, totalCalificaciones: 1, total: 2 };
-    const resumen = resumenDeCalificacion(hilo);
+    const datos = { promedio: 4.3, total: 1, distribucion: { 4: 1 } };
+    const resumen = resumenDeCalificacion(datos, { opiniones: 2 });
 
     expect(resumen.dataset.estado).toBe('con-valoraciones');
     expect(resumen.querySelector('.resumen-calificacion__cifra').textContent).toBe('4,3');
@@ -155,14 +184,19 @@ describe('resumen de la calificación', () => {
     expect(resumen.querySelector('.resumen-calificacion__detalle').textContent).toBe(
       '1 valoración · 2 opiniones',
     );
-    expect(textoDelResumen(hilo)).toBe('4,3 de 5 · 1 valoración · 2 opiniones');
+    expect(textoDelResumen(datos, { opiniones: 2 })).toBe('4,3 de 5 · 1 valoración · 2 opiniones');
+  });
+
+  test('`total` del resumen son valoraciones, no opiniones', () => {
+    const resumen = resumenDeCalificacion({ promedio: 3, total: 7 });
+
+    expect(resumen.querySelector('.resumen-calificacion__detalle').textContent).toBe(
+      '7 valoraciones',
+    );
   });
 
   test('compacto: una línea, con la cifra junto a las estrellas', () => {
-    const resumen = resumenDeCalificacion(
-      { calificacionPromedio: 3, totalCalificaciones: 5, total: 5 },
-      { compacto: true },
-    );
+    const resumen = resumenDeCalificacion({ promedio: 3, total: 5 }, { compacto: true });
 
     expect(resumen.classList.contains('resumen-calificacion--compacto')).toBe(true);
     expect(resumen.querySelector('.resumen-calificacion__cifra')).toBeNull();
@@ -260,25 +294,105 @@ describe('tarjeta de un comentario', () => {
     expect(inicialDe('')).toBe('?');
     expect(inicialDe('  ñandú')).toBe('Ñ');
   });
+
+  test('editado por moderación: se dice, porque el texto no es exactamente el del autor', () => {
+    const editado = tarjetaDeComentario(comentario({ editado: true }));
+    expect(editado.querySelector('.comentario__editado').textContent).toBe(
+      'Editado por moderación',
+    );
+    expect(
+      tarjetaDeComentario(comentario({ editado: false })).querySelector('.comentario__editado'),
+    ).toBeNull();
+    expect(tarjetaDeComentario(comentario()).querySelector('.comentario__editado')).toBeNull();
+  });
+
+  test('las imágenes de la tarjeta usan la dirección que le dan, con el apodo en el alt', () => {
+    const tarjeta = tarjetaDeComentario(comentario({ imagenes: [IMAGEN_1] }), { urlDeImagen });
+
+    const imagen = tarjeta.querySelector('img.comentario__imagen');
+    expect(imagen.getAttribute('src')).toBe(`/api/v1/comentarios/imagenes/${IMAGEN_1}`);
+    expect(imagen.getAttribute('alt')).toBe('Imagen que adjuntó Lyra');
+  });
 });
 
 describe('adjuntos de un comentario', () => {
-  test('sin nombres no hay bloque', () => {
+  test('sin imágenes no hay bloque', () => {
     expect(adjuntosDeComentario([])).toBeNull();
     expect(adjuntosDeComentario(['', '  '])).toBeNull();
     expect(adjuntosDeComentario(undefined)).toBeNull();
   });
 
-  test('cada imagen con su símbolo y su nombre, y dicho que no hay vista previa', () => {
-    const adjuntos = adjuntosDeComentario(['escudo.png', 'detalle-del-filo.jpg']);
+  test('un id de imagen es un UUID; un nombre de archivo no', () => {
+    expect(esIdDeImagen(IMAGEN_1)).toBe(true);
+    expect(esIdDeImagen(` ${IMAGEN_1.toUpperCase()} `)).toBe(true);
+    expect(esIdDeImagen('escudo.png')).toBe(false);
+    expect(esIdDeImagen(null)).toBe(false);
+  });
+
+  test('imágenes guardadas: miniatura real, acotada, perezosa y con alt útil', () => {
+    const adjuntos = adjuntosDeComentario([IMAGEN_1, IMAGEN_2], { urlDeImagen, autor: 'Lyra' });
+
+    const imagenes = adjuntos.querySelectorAll('img.comentario__imagen');
+    expect(imagenes).toHaveLength(2);
+    const [primera] = imagenes;
+    expect(primera.getAttribute('src')).toBe(urlDeImagen(IMAGEN_1));
+    expect(primera.getAttribute('alt')).toBe('Imagen 1 de 2 que adjuntó Lyra');
+    expect(primera.getAttribute('loading')).toBe('lazy');
+    expect(primera.getAttribute('width')).toBe(String(LADO_DE_MINIATURA));
+    expect(primera.getAttribute('height')).toBe(String(LADO_DE_MINIATURA));
+    // El enlace abre la imagen entera y lo dice a quien no ve la pestaña nueva.
+    const enlace = primera.closest('a');
+    expect(enlace.getAttribute('href')).toBe(urlDeImagen(IMAGEN_1));
+    expect(enlace.getAttribute('target')).toBe('_blank');
+    expect(enlace.getAttribute('rel')).toBe('noopener');
+    expect(enlace.textContent).toContain('se abre en otra pestaña');
+    expect(adjuntos.querySelector('ul').getAttribute('aria-label')).toBe('2 imágenes adjuntas');
+    expect(adjuntos.querySelector('.comentario__adjuntos-nota')).toBeNull();
+    expect(adjuntos.querySelectorAll('[data-imagen-id]')[1].dataset.imagenId).toBe(IMAGEN_2);
+  });
+
+  test('sin autor, el alt no se queda vacío', () => {
+    expect(textoAlternativo(0, 1, 'un jugador')).toBe('Imagen que adjuntó un jugador');
+    const adjuntos = adjuntosDeComentario([IMAGEN_1], { urlDeImagen });
+    expect(adjuntos.querySelector('img').getAttribute('alt')).toBe('Imagen que adjuntó un jugador');
+  });
+
+  test('si la imagen ya no está, el hueco lo dice en vez de quedarse roto', () => {
+    const adjuntos = adjuntosDeComentario([IMAGEN_1], { urlDeImagen, autor: 'Lyra' });
+
+    adjuntos.querySelector('img').dispatchEvent(new Event('error'));
+
+    const item = adjuntos.querySelector('.comentario__adjunto');
+    expect(item.dataset.estado).toBe('no-disponible');
+    expect(item.querySelector('img')).toBeNull();
+    expect(item.textContent).toContain('Imagen no disponible');
+  });
+
+  test('nombres de archivo de antes de la 1.4.0: símbolo y nombre, y dicho por qué no hay miniatura', () => {
+    const adjuntos = adjuntosDeComentario(['escudo.png', 'detalle-del-filo.jpg'], { urlDeImagen });
 
     const items = adjuntos.querySelectorAll('.comentario__adjunto');
     expect(items).toHaveLength(2);
     expect(items[0].dataset.nombre).toBe('escudo.png');
     expect(items[0].textContent).toContain('escudo.png');
-    expect(adjuntos.querySelector('ul').getAttribute('aria-label')).toBe('2 imágenes adjuntas');
-    // Ni una <img> que finja la miniatura: el servicio no guarda la imagen.
+    // Ni una <img> que finja la miniatura: detrás de un nombre no hay imagen.
     expect(adjuntos.querySelector('img')).toBeNull();
-    expect(adjuntos.textContent).toMatch(/vista previa .* no está disponible/i);
+    expect(adjuntos.querySelector('.comentario__adjuntos-nota').textContent).toMatch(
+      /antes de que se guardaran/,
+    );
+  });
+
+  test('sin dirección de imágenes, todo se pinta por su nombre', () => {
+    const adjuntos = adjuntosDeComentario([IMAGEN_1]);
+
+    expect(adjuntos.querySelector('img')).toBeNull();
+    expect(adjuntos.querySelector('.comentario__adjunto').dataset.nombre).toBe(IMAGEN_1);
+  });
+
+  test('el texto de la imagen no se interpreta como marcado', () => {
+    const adjuntos = adjuntosDeComentario(['<img src=x onerror=alert(1)>.png'], { urlDeImagen });
+
+    expect(adjuntos.querySelector('img')).toBeNull();
+    expect(adjuntos.textContent).toContain('<img src=x');
   });
 });

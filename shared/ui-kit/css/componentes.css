@@ -5788,6 +5788,45 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
+/* B3 — «Comentarios» (la cola de comentarios reportados) entra en la consola:
+   el administrador pasa a diez destinos y el super administrador a once. Por
+   encima de la banda de portátil ya no cabían en una fila en mayúsculas: con
+   diez la barra se partía en dos entre 1541 y ~1740 px (medido antes de este
+   cambio), y con once hasta ~1900. En esa franja, las consolas con muchos
+   destinos (nueve o más) usan la caja normal y las separaciones cortas de la
+   banda de portátil; las que tienen pocos —el moderador ve cuatro— siguen en
+   mayúsculas, porque les sobra sitio. Medido con el laboratorio (super
+   administrador, administrador y moderador) a 1366, 1440, 1540, 1541, 1560,
+   1580, 1599, 1600, 1620, 1700, 1800, 1919 y 1920 px: una fila de 64 px en
+   todos. */
+@media (min-width: 1541px) and (max-width: 1919px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__grupo-marca {
+    gap: var(--e-4);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__nav--consola {
+    gap: var(--e-2);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__destino {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
+/* Y justo por encima de la banda de portátil (1541–1599) los once destinos
+   del super administrador todavía no caben con la marca larga: ahí llevan la
+   corta, como en la banda de portátil. El nombre accesible no cambia. */
+@media (min-width: 1541px) and (max-width: 1599px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-corta {
+    display: inline;
+  }
+}
+
 /* El filo de acento recorre toda la barra. Es la versión a lo ancho del filo
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
    sitio. Marca el modo sin gastar un color nuevo. */
@@ -7260,6 +7299,37 @@ body:not([data-modo='combate']) .registro-combate {
   color: var(--texto-2);
 }
 
+/* B3 — imágenes guardadas (comentarios.yaml 1.5.0): la miniatura real, del
+   lado fijo que marca `LADO_DE_MINIATURA` (96 px) para que el hilo no salte
+   al cargar, recortada sin deformar y con enlace a su tamaño completo. El
+   hueco del adjunto por nombre (borde discontinuo) no aplica: aquí hay imagen. */
+.comentario__adjunto--imagen {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.comentario__imagen-enlace {
+  display: block;
+  border-radius: var(--radio-chico);
+  line-height: 0;
+}
+
+.comentario__imagen-enlace:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.comentario__imagen {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  object-fit: cover;
+}
+
 .comentario__estado {
   display: flex;
   flex-wrap: wrap;
@@ -7349,6 +7419,69 @@ body:not([data-modo='combate']) .registro-combate {
   max-width: 46ch;
 }
 
+/* B3 — cuántas hay en el servidor y en qué orden: el `total` del hilo. */
+.hilo-comentarios__conteo {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* --- Calificar sin comentar (RatingControl, B3) ---------------------------
+   La calificación va aparte de la opinión (7.1: una sola vez). Mismo panel
+   anidado que el redactor, para que se lea como un acto propio. */
+
+.calificar-producto {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.calificar-producto__formulario {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.calificar-producto__acciones {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.calificar-producto__propia {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.calificar-producto__propia:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.calificar-producto__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.calificar-producto__propia .campo__pista,
+.calificar-producto__estado {
+  margin: 0;
+}
+
+.calificar-producto__estado {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
 /* --- El redactor (CommentComposer) --------------------------------------- */
 
 .redactor-comentario {
@@ -7426,6 +7559,53 @@ body:not([data-modo='combate']) .registro-combate {
   justify-content: flex-end;
 }
 
+/* B3 — cada imagen se sube al elegirla y su miniatura dice cómo va: subiendo
+   (barra indeterminada), lista o el motivo del rechazo. El estado va escrito,
+   no solo en color. */
+.redactor-comentario__detalle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.redactor-comentario__estado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.redactor-comentario__estado .icono {
+  width: 14px;
+  height: 14px;
+}
+
+.redactor-comentario__estado--lista {
+  color: var(--exito);
+}
+
+.redactor-comentario__estado--error {
+  max-width: 32ch;
+  color: var(--error);
+}
+
+.redactor-comentario__miniatura[data-estado='error'] {
+  border-color: var(--error);
+}
+
+.redactor-comentario__progreso {
+  width: 120px;
+  height: 6px;
+  accent-color: var(--primaria);
+}
+
+/* Con tres imágenes el selector se apaga: su etiqueta lo enseña. */
+.redactor-comentario__archivo:disabled + .redactor-comentario__adjuntar {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* --- Reportar un comentario (ReportComment) ------------------------------- */
 
 .reporte-comentario__categorias {
@@ -7444,6 +7624,30 @@ body:not([data-modo='combate']) .registro-combate {
   gap: var(--e-2);
   min-height: 36px;
   cursor: pointer;
+}
+
+/* --- Imágenes de un comentario en moderación (B3) -------------------------
+   Las de un comentario en revisión no son públicas: se piden con la sesión
+   del moderador. Más grandes que en el hilo, enteras (sin recorte), porque
+   aquí se juzga lo que enseñan. */
+
+.moderacion-imagenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moderacion-imagenes__imagen {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  object-fit: contain;
 }
 
 @media (max-width: 767px) {

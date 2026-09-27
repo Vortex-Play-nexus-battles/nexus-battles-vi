@@ -201,18 +201,75 @@ function rutasDeInventario(equipamiento) {
     ['**/api/v1/inventario/heroes/*/equipamiento', json(equipamiento)],
     // UXC-3 — la ficha trae las opiniones del producto: un hilo vacío, que es
     // el estado normal de un producto que nadie ha comentado.
-    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
+    ...rutasDeOpiniones(),
   ];
 }
 
-/** Un producto sin opiniones (comentarios.yaml: 200 con la lista vacía). */
+/** Un producto sin opiniones (comentarios.yaml 1.5.0: 200 con la lista vacía). */
 const HILO_VACIO = {
   productoId: 'sin-opiniones',
   comentarios: [],
+  pagina: 0,
+  tamano: 5,
   total: 0,
+  totalPaginas: 0,
   totalCalificaciones: 0,
   calificacionPromedio: null,
 };
+
+/** B3 — nadie lo ha calificado: promedio nulo, nunca 0 (`GET /products/{id}/rating`). */
+const RESUMEN_VACIO = {
+  productoId: 'sin-opiniones',
+  promedio: null,
+  total: 0,
+  distribucion: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+};
+
+/**
+ * B3 — «todavía no calificaste»: el 404 de `GET /products/{id}/rating/mia` es
+ * el estado normal de quien aún no opinó, y la ficha le ofrece las estrellas.
+ */
+const SIN_CALIFICACION_PROPIA = {
+  status: 404,
+  contentType: 'application/problem+json',
+  body: JSON.stringify({
+    type: 'https://nexusbattles.local/errores/calificacion-no-encontrada',
+    title: 'Todavía no calificaste este producto',
+    status: 404,
+  }),
+};
+
+/**
+ * Las opiniones de un producto como las sirve comentarios.yaml 1.5.0: el hilo
+ * paginado, el resumen de la calificación, la propia (sin calificar) y las
+ * imágenes de las opiniones. La imagen es un avatar que ya está en el
+ * repositorio: el laboratorio no sale a internet.
+ */
+function rutasDeOpiniones({ hilo = HILO_VACIO, resumen = RESUMEN_VACIO } = {}) {
+  return [
+    ['**/api/v1/products/*/comments*', json(hilo)],
+    ['**/api/v1/products/*/rating', json(resumen)],
+    ['**/api/v1/products/*/rating/mia', SIN_CALIFICACION_PROPIA],
+    [
+      '**/api/v1/comentarios/imagenes/*',
+      () => ({
+        status: 200,
+        contentType: 'image/jpeg',
+        path: join(
+          AQUI_LABORATORIO,
+          '..',
+          '..',
+          'frontend',
+          'app-web',
+          'src',
+          'cuentas',
+          'avatares',
+          'arquero-cazador.jpg',
+        ),
+      }),
+    ],
+  ];
+}
 
 /* ---------------------------------------------------------------------------
    UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
@@ -412,7 +469,7 @@ function rutasDeOchoHeroes() {
       },
     ],
     // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
-    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
+    ...rutasDeOpiniones(),
   ];
 }
 
@@ -758,10 +815,14 @@ function comentarioReportado(i, cambios = {}) {
         'Buen objeto, aunque la descripción exagera el bono de defensa.',
       ][i % 3],
       imagenes: [],
-      estrellas: [5, 1, 3][i % 3],
+      // comentarios.yaml 1.5.0: en moderación las estrellas van nulas (la
+      // calificación no se modera) y cada comentario trae su marca.
+      estrellas: null,
       fechaPublicacion: new Date(Date.now() - i * 7_200_000).toISOString(),
       estado: 'EN_REVISION',
       calificacionDescartada: false,
+      editado: i % 3 === 0,
+      marcado: i % 3 === 2,
     },
     reportes: [3, 7, 1][i % 3],
     porCategoria: { OFENSIVO: [1, 5, 0][i % 3], SPAM: [2, 2, 1][i % 3] },
@@ -818,19 +879,24 @@ const PRODUCTOS_DE_TIENDA = [
   }),
 ];
 
-/** El hilo de un producto: tres opiniones, una con imagen y una propia. */
+/**
+ * El hilo de un producto: tres opiniones, una con imagen, una editada por
+ * moderación y una propia. B3 (comentarios.yaml 1.5.0): del más reciente al
+ * más antiguo, paginado, y la imagen es un `id` que se sirve aparte.
+ */
 function hiloDeLaboratorio({ propio = null } = {}) {
   const comentarios = [
     {
-      id: 'c0000000-0000-4000-8000-000000000001',
+      id: 'c0000000-0000-4000-8000-000000000003',
       productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
-      autorId: 'c1111111-0000-4000-8000-000000000001',
-      apodoAutor: 'thar_vex',
-      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
-      imagenes: ['yelmo-en-combate.png'],
-      estrellas: 5,
-      fechaPublicacion: '2026-09-18T20:15:00Z',
+      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
+      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
+      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
+      imagenes: [],
+      estrellas: null,
+      fechaPublicacion: '2026-09-22T08:05:00Z',
       estado: 'PUBLICADO',
+      editado: false,
     },
     {
       id: 'c0000000-0000-4000-8000-000000000002',
@@ -842,26 +908,40 @@ function hiloDeLaboratorio({ propio = null } = {}) {
       estrellas: 3,
       fechaPublicacion: '2026-09-20T11:40:00Z',
       estado: 'PUBLICADO',
+      editado: true,
     },
     {
-      id: 'c0000000-0000-4000-8000-000000000003',
+      id: 'c0000000-0000-4000-8000-000000000001',
       productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
-      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
-      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
-      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
-      imagenes: [],
-      fechaPublicacion: '2026-09-22T08:05:00Z',
+      autorId: 'c1111111-0000-4000-8000-000000000001',
+      apodoAutor: 'thar_vex',
+      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
+      imagenes: ['f0000000-0000-4000-8000-000000000001'],
+      estrellas: 5,
+      fechaPublicacion: '2026-09-18T20:15:00Z',
       estado: 'PUBLICADO',
+      editado: false,
     },
   ];
   return {
     productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
     comentarios,
+    pagina: 0,
+    tamano: 5,
     total: comentarios.length,
+    totalPaginas: 1,
     totalCalificaciones: 2,
     calificacionPromedio: 4,
   };
 }
+
+/** B3 — el resumen que acompaña a ese hilo: las dos calificaciones, 5 y 3. */
+const RESUMEN_DE_LABORATORIO = {
+  productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+  promedio: 4,
+  total: 2,
+  distribucion: { 1: 0, 2: 0, 3: 1, 4: 0, 5: 1 },
+};
 
 /** El detalle del catalogo de cualquier producto de la tienda de laboratorio. */
 function detalleDelCatalogo(peticion) {
@@ -1010,7 +1090,7 @@ function rutasDeTienda({ hilo = hiloDeLaboratorio(), deseados = [], extra = [] }
       }),
     ],
     ['**/api/v1/productos/*', detalleDelCatalogo],
-    ['**/api/v1/products/*/comments', json(hilo)],
+    ...rutasDeOpiniones({ hilo, resumen: RESUMEN_DE_LABORATORIO }),
     ...extra,
   ];
 }
@@ -2307,7 +2387,7 @@ export const ESCENARIOS = [
         armaduras: {},
         items: [],
       }),
-      ['**/api/v1/products/*/comments', json(hiloDeLaboratorio())],
+      ...rutasDeOpiniones({ hilo: hiloDeLaboratorio(), resumen: RESUMEN_DE_LABORATORIO }),
     ],
     interaccion: async (pagina) => {
       await pagina.locator('#pestana-objetos').click();
