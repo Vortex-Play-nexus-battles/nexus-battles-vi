@@ -417,6 +417,57 @@ class CorreoDurableIT {
     }
 
     @Test
+    @DisplayName("el correo de un hito de torneo se encola una vez por Idempotency-Key y sale sobre la plantilla corporativa con su referencia")
+    void elCorreoDeUnHitoDeTorneoSaleUnaSolaVezConSuPlantillaYSuReferencia() throws Exception {
+        String torneoId = "5b0f3c1e-8d2a-4c71-9e0b-2f6a7d4c9e11";
+        String clave = "torneo-" + torneoId + "-jugador-0d9c6c52-3b8e-4f5e-a1c2-7e4b9a6d3f20-correo-inscripcion";
+        String cuerpo = """
+                {"email":"lyra@nexusbattles.test","apodo":"Lyra",
+                 "asunto":"Inscripción confirmada: Copa de Otoño",
+                 "mensaje":"Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.",
+                 "torneoId":"%s"}
+                """.formatted(torneoId);
+        // Torneos repite la llamada con la misma clave si la primera agoto su
+        // tiempo (su operacion CORREO se reintenta): una sola fila.
+        for (int vez = 0; vez < 2; vez++) {
+            mockMvc.perform(post("/api/v1/correos/torneo")
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeServicio("torneos"))
+                            .header("Idempotency-Key", clave)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(cuerpo))
+                    .andExpect(status().isAccepted());
+        }
+
+        Fila aceptada = unicaFila();
+        assertThat(aceptada.estado()).isEqualTo("PENDIENTE");
+        assertThat(aceptada.datos()).containsEntry("apodo", "Lyra").containsEntry("torneoId", torneoId);
+        assertThat(cuantosMensajes()).as("aceptar no es enviar").isZero();
+
+        assertThat(trabajador(Clock.systemUTC()).procesarRonda()).isEqualTo(1);
+
+        Fila entregada = unicaFila();
+        assertThat(entregada.estado()).as("direccion reservada: al buzon de pruebas").isEqualTo("DESVIADO");
+        assertThat(entregada.datos())
+                .as("la referencia no es un dato sensible: queda como evidencia del envio")
+                .containsEntry("torneoId", torneoId);
+
+        Map<String, Object> mensaje = mensajePara("lyra@nexusbattles.test");
+        assertThat(mensaje.get("Subject")).as("el asunto lo decide torneos").isEqualTo("Inscripción confirmada: Copa de Otoño");
+        assertThat((String) mensaje.get("HTML"))
+                .contains("THE NEXUS BATTLES VI")
+                .contains("cid:logo-nexus")
+                .contains("Lyra")
+                .contains("Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño»")
+                .contains(torneoId);
+        assertThat((String) mensaje.get("Text"))
+                .contains("quedó inscrito en el torneo «Copa de Otoño» en la posición 3.")
+                .contains("Referencia del torneo: " + torneoId);
+
+        assertThat(trabajador(Clock.systemUTC()).procesarRonda()).as("entregado una vez, no vuelve a salir").isZero();
+        assertThat(cuantosMensajes()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("el correo sale con remitente, plantilla corporativa, logo incrustado y las dos versiones")
     void elCorreoSaleConLaPlantillaCorporativaElLogoYLasDosVersiones() throws Exception {
         ResultadoDeEntrega resultado = enviador.enviar(

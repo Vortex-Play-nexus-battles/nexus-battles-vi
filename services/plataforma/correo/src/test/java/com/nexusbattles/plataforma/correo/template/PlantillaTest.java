@@ -31,6 +31,18 @@ class PlantillaTest {
     }
 
     @Test
+    void elCorreoDeTorneoConservaLaReferenciaDelTorneo() {
+        // La referencia no es un secreto: queda en la fila como evidencia de a
+        // que torneo se referia el envio, tambien despues de terminar.
+        Map<String, Object> datos = Map.of("apodo", "Ana", "asunto", "a", "mensaje", "m",
+                "torneoId", "5b0f3c1e-8d2a-4c71-9e0b-2f6a7d4c9e11");
+
+        assertThat(Plantilla.deNombre("torneo")).contains(Plantilla.TORNEO);
+        assertThat(Plantilla.TORNEO.datosSensibles()).isEmpty();
+        assertThat(Plantilla.TORNEO.sinDatosSensibles(datos)).isEqualTo(datos);
+    }
+
+    @Test
     void cadaPlantillaSeEncuentraPorSuNombreYTieneSuHtml() {
         for (Plantilla plantilla : Plantilla.values()) {
             assertThat(Plantilla.deNombre(plantilla.nombre())).contains(plantilla);
