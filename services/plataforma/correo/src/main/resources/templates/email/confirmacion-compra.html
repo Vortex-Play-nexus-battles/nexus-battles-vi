@@ -13,13 +13,42 @@
             Hola, <span th:text="${apodo}">Jugador</span>. Tu pago quedó aprobado.
           </div>
 
+          <!--/* 7.5: «el detalle de los productos adquiridos y el total pagado».
+               Solo si ms-finanzas envio las lineas (contrato 1.4.0, opcionales).
+               Comentario de Thymeleaf: no llega al correo. */-->
+          <table th:if="${lineas != null and !#lists.isEmpty(lineas)}"
+                 border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="width:100%;margin-bottom:16px;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th align="left" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#48536A;padding:6px 8px;border-bottom:1px solid #D7DEED;">Producto</th>
+                <th align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#48536A;padding:6px 8px;border-bottom:1px solid #D7DEED;">Cantidad</th>
+                <th align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#48536A;padding:6px 8px;border-bottom:1px solid #D7DEED;">Precio unitario</th>
+                <th align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:13px;line-height:20px;color:#48536A;padding:6px 8px;border-bottom:1px solid #D7DEED;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr th:each="linea : ${lineas}">
+                <td align="left" style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#111726;padding:6px 8px;border-bottom:1px solid #D7DEED;"
+                    th:text="${linea.nombre}">Producto</td>
+                <td align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#111726;padding:6px 8px;border-bottom:1px solid #D7DEED;"
+                    th:text="${linea.cantidad}">1</td>
+                <td align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#111726;padding:6px 8px;border-bottom:1px solid #D7DEED;"
+                    th:text="${linea.precioUnitario} ?: '—'">—</td>
+                <td align="right" style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#111726;padding:6px 8px;border-bottom:1px solid #D7DEED;"
+                    th:text="${linea.subtotal}">—</td>
+              </tr>
+            </tbody>
+          </table>
+
           <table border="0" cellpadding="0" cellspacing="0" role="presentation"
                  style="background:#DDEEF7;border-radius:6px;width:100%;">
             <tbody>
               <tr>
                 <td style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#095E8C;padding:12px 16px;">
+                  <th:block th:if="${orden != null}">Orden: <strong th:text="${orden}">—</strong><br /></th:block>
                   Concepto: <strong th:text="${concepto}">—</strong><br />
-                  Monto: <strong th:text="${monto}">—</strong><br />
+                  Total pagado: <strong th:text="${monto}">—</strong><br />
                   Fecha y hora: <strong th:text="${fechaHora}">—</strong>
                 </td>
               </tr>

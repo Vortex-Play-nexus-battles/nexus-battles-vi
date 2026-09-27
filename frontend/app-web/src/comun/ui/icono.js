@@ -70,6 +70,10 @@ export const ICONOS = Object.freeze([
   'mapa',
   'sobre',
   'salir',
+  // UXC-3 — el adjunto de un comentario y la estrella rellena de una
+  // calificación (ver el comentario del sprite).
+  'imagen',
+  'estrella-llena',
 ]);
 
 const ESPACIO_SVG = 'http://www.w3.org/2000/svg';

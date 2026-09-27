@@ -46,6 +46,14 @@ export const ACCESOS = Object.freeze([
     detalle: 'Salas abiertas ahora',
     destino: '../plataforma/salas-partidas/batallas.html',
   },
+  // UXC-5 — el recorrido del jugador pasa por las misiones (§7.8). La vista
+  // dice si hay misiones abiertas; lo que funciona ya es la estrategia.
+  {
+    id: 'misiones',
+    titulo: 'Misiones',
+    detalle: 'Estrategia de tu héroe',
+    destino: '../contenido/misiones/misiones.html',
+  },
   {
     id: 'inventario',
     titulo: 'Inventario',
@@ -68,6 +76,14 @@ export const ACCESOS = Object.freeze([
     titulo: 'Comunidad',
     detalle: 'Opiniones de productos',
     destino: '../plataforma/comentarios/publicar-comentario.html',
+  },
+  // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
+  // vista dice ella misma que los mensajes privados aún no están abiertos.
+  {
+    id: 'chat',
+    titulo: 'Chat',
+    detalle: 'General y mensajes privados',
+    destino: '../plataforma/salas-partidas/chat.html',
   },
 ]);
 

@@ -1,0 +1,1593 @@
+/*
+ * Misiones — UXC-5.
+ *
+ * La vista vive sobre la atmósfera del Nexo (kit, UX-GAME-1): lo que va
+ * directamente sobre ella lee la tinta clara; lo que va dentro de una
+ * `.tarjeta` la recibe oscura. Las piezas que dibujan su propia superficie
+ * (arte de la tarjeta, jefe, Máster, vista previa) la declaran aquí.
+ *
+ * El banner rotativo está en el kit (`componentes.css`, «UXC-5 — Banner de
+ * misiones») porque también lo pinta Mi inventario.
+ */
+
+/* --- Página ------------------------------------------------------------ */
+
+.misiones__aviso:empty,
+.misiones__banner:empty {
+  display: none;
+}
+
+.misiones__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+  padding-top: var(--e-5);
+}
+
+/* --- Estado «todavía no están abiertas» -------------------------------- */
+
+.misiones-estado {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-4);
+}
+
+.misiones-estado__icono {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  color: var(--info);
+}
+
+.misiones-estado__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.misiones-estado__cuerpo p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.misiones-estado__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+}
+
+.misiones-estado__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin-top: var(--e-2);
+}
+
+.misiones-sin-abrir {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.misiones-sin-abrir__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+}
+
+.misiones-sin-abrir__texto {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--tinta-2);
+}
+
+.misiones-sin-abrir__categorias {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.misiones-sin-abrir__categoria {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.misiones-sin-abrir__categoria h3 {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+}
+
+.misiones-sin-abrir__categoria p {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.misiones-sin-abrir__icono {
+  width: 32px;
+  height: 32px;
+}
+
+/* Cada categoría con su color. Siempre acompaña a su nombre escrito. */
+[data-categoria='historia'] > .misiones-sin-abrir__icono,
+.mision-categoria[data-categoria='historia'] .mision-categoria__icono {
+  color: var(--acento-relleno);
+}
+[data-categoria='desafio'] > .misiones-sin-abrir__icono,
+.mision-categoria[data-categoria='desafio'] .mision-categoria__icono {
+  color: var(--error);
+}
+[data-categoria='exploracion'] > .misiones-sin-abrir__icono,
+.mision-categoria[data-categoria='exploracion'] .mision-categoria__icono {
+  color: var(--info);
+}
+
+/* --- Tablón: pestañas, filtros, rejilla -------------------------------- */
+
+.misiones-tablon__pestanas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+/* Las categorías son un segundo nivel de pestañas, dentro de «Tablón»: se
+   dibujan como píldoras para que no se lean como otra fila de secciones.
+   Siguen siendo pestañas (rol, flechas, Inicio y Fin). La elegida va rellena,
+   no solo de otro color. */
+.misiones-tablon__pestanas > .pestanas {
+  gap: var(--e-2);
+  padding: 3px;
+  border-bottom: 0;
+}
+
+.misiones-tablon__pestanas .pestana {
+  flex-direction: row;
+  padding: 0 var(--e-2);
+  border: 1px solid color-mix(in srgb, var(--pista) 55%, transparent);
+  border-radius: var(--radio-pildora);
+  color: var(--tinta);
+}
+
+.misiones-tablon__pestanas .pestana:hover {
+  border-color: var(--tinta);
+}
+
+.misiones-tablon__pestanas .pestana__linea {
+  display: none;
+}
+
+.misiones-tablon__pestanas .pestana[aria-selected='true'] {
+  border-color: var(--texto-sobre-color);
+  background: var(--texto-sobre-color);
+  color: var(--texto);
+}
+
+.misiones-tablon__pestanas .pestana:focus-visible {
+  outline: var(--foco-grosor) solid var(--enlace-sobre-cromo);
+  outline-offset: 2px;
+}
+
+.misiones-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3) var(--e-4);
+}
+
+.misiones-filtros .desplegable {
+  flex: 1 1 180px;
+  max-width: 260px;
+}
+
+.misiones-categoria {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.misiones-categoria__resumen {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  max-width: 80ch;
+  margin: 0;
+  color: var(--tinta-2);
+}
+
+.misiones-categoria__cuenta {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--tinta);
+}
+
+.misiones-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 270px), 1fr));
+  gap: var(--e-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.misiones-rejilla > li {
+  display: flex;
+}
+
+/* --- MissionCard -------------------------------------------------------- */
+
+.mision-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mision-card__arte {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: 120px;
+  background: var(--cromo-elevado);
+  background-image: linear-gradient(135deg, var(--cromo), var(--cromo-elevado));
+}
+
+.mision-card[data-categoria='historia'] .mision-card__arte {
+  background-image: linear-gradient(
+    135deg,
+    var(--cromo),
+    color-mix(in srgb, var(--acento-relleno) 55%, var(--cromo))
+  );
+}
+.mision-card[data-categoria='desafio'] .mision-card__arte {
+  background-image: linear-gradient(
+    135deg,
+    var(--cromo),
+    color-mix(in srgb, var(--error) 45%, var(--cromo))
+  );
+}
+.mision-card[data-categoria='exploracion'] .mision-card__arte {
+  background-image: linear-gradient(
+    135deg,
+    var(--cromo),
+    color-mix(in srgb, var(--info) 55%, var(--cromo))
+  );
+}
+
+.mision-card__imagen {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mision-card__emblema {
+  width: 56px;
+  height: 56px;
+  color: var(--enlace-sobre-cromo);
+}
+
+.mision-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.mision-card__arte .mision-card__chips {
+  position: absolute;
+  inset: var(--e-2) var(--e-2) auto;
+  justify-content: space-between;
+}
+
+.mision-categoria {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  box-shadow: var(--sombra-1);
+}
+
+.mision-categoria__icono,
+.mision-estado__icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.mision-card__cuerpo {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-4);
+}
+
+.mision-card__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+  overflow-wrap: anywhere;
+}
+
+.mision-card__descripcion {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--texto-2);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.mision-card__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-5);
+  margin: 0;
+}
+
+.mision-card__datos > div,
+.mision-detalle__datos > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mision-card__datos dt,
+.mision-detalle__datos dt {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mision-card__datos dd,
+.mision-detalle__datos dd {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.mision-card__datos .icono,
+.mision-card__recompensas .icono,
+.mision-card__motivo .icono,
+.mision-objetivos__lista .icono,
+.mision-recompensas .icono,
+.mision-reporte__productos .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.mision-card__recompensas-titulo {
+  margin: 0 0 var(--e-1);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mision-card__recompensas ul {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-card__recompensas li {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  font-size: var(--t-etiqueta-tam);
+}
+
+.mision-card__recompensas .icono,
+.mision-recompensas .icono,
+.mision-reporte__productos .icono {
+  color: var(--credito-oro);
+}
+
+.mision-card__motivo {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  color: var(--texto-2);
+  font-size: var(--t-meta-tam);
+}
+
+.mision-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin-top: auto;
+  padding: 0 var(--e-4) var(--e-4);
+}
+
+/* --- Dificultad: marcas que se cuentan, y la palabra -------------------- */
+
+.dificultad {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.dificultad__marcas {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.dificultad__marca {
+  width: 6px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--pista);
+}
+
+.dificultad__marca--llena {
+  background: currentColor;
+}
+
+.dificultad[data-dificultad='facil'] {
+  color: var(--exito);
+}
+.dificultad[data-dificultad='normal'] {
+  color: var(--info);
+}
+.dificultad[data-dificultad='dificil'] {
+  color: var(--advertencia);
+}
+.dificultad[data-dificultad='extremo'] {
+  color: var(--error);
+}
+
+.mision-progreso {
+  width: 100%;
+}
+
+/* --- Detalle ----------------------------------------------------------- */
+
+.mision-detalle,
+.mision-reporte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+}
+
+.mision-detalle__migas {
+  display: flex;
+}
+
+.mision-detalle__volver {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: var(--objetivo-tactil);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.mision-detalle__volver .icono {
+  transform: rotate(180deg);
+}
+
+.mision-detalle__aviso:empty {
+  display: none;
+}
+
+.mision-detalle__cabecera {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--e-6);
+}
+
+.mision-detalle__arte {
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 160px;
+  border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image: linear-gradient(
+    135deg,
+    var(--cromo),
+    color-mix(in srgb, var(--acento-relleno) 45%, var(--cromo))
+  );
+  overflow: hidden;
+}
+
+.mision-detalle__imagen {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.mision-detalle__emblema {
+  width: 72px;
+  height: 72px;
+  color: var(--enlace-sobre-cromo);
+}
+
+.mision-detalle__identidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.mision-detalle__nombre {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  overflow-wrap: anywhere;
+}
+
+.mision-detalle__resumen {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.mision-detalle__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3) var(--e-6);
+  margin: 0;
+}
+
+.mision-detalle__bloqueo,
+.mision-detalle__requisitos {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.mision-detalle__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.mision-detalle__compartir:empty {
+  display: none;
+}
+
+.mision-detalle__enlace {
+  max-width: 480px;
+}
+
+.mision-detalle__cuerpo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--e-5);
+  align-items: start;
+}
+
+/* Dos columnas en escritorio: historia y objetivos arriba, los enemigos a lo
+   ancho (son la galería), y el Máster con las recompensas debajo. El orden
+   del documento es el de lectura: no se reordena con CSS. */
+@media (min-width: 900px) {
+  .mision-detalle__cuerpo {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mision-detalle__cuerpo > [data-seccion='enemigos'] {
+    grid-column: 1 / -1;
+  }
+
+  [data-seccion='enemigos'] {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+    column-gap: var(--e-5);
+    align-items: start;
+  }
+
+  [data-seccion='enemigos'] > .mision-detalle__subtitulo {
+    grid-column: 1 / -1;
+  }
+
+  [data-seccion='enemigos'] > .mision-jefe {
+    margin-top: 0;
+  }
+}
+
+.mision-detalle__subtitulo {
+  margin: 0 0 var(--e-3);
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+}
+
+/* «Prepara la misión» va sobre la atmósfera, no dentro de una tarjeta. */
+.mision-detalle__subtitulo--atmosfera {
+  margin: 0;
+  color: var(--tinta);
+}
+
+.mision-detalle__narrativa {
+  max-width: 72ch;
+  margin: 0 0 var(--e-3);
+}
+
+.mision-detalle__escenario h3 {
+  margin: var(--e-3) 0 var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+}
+
+.mision-objetivos {
+  display: grid;
+  gap: var(--e-4);
+}
+
+.mision-objetivos__titulo {
+  margin: 0 0 var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.mision-objetivos__lista {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-objetivos__lista li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+}
+
+.mision-objetivos__lista .icono {
+  margin-top: 3px;
+  color: var(--primaria);
+}
+
+.mision-enemigos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-enemigo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  padding: var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.mision-enemigo__nombre {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: 600;
+}
+
+.mision-enemigo__cantidad {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  color: var(--primaria);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.mision-enemigo__descripcion {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.mision-jefe {
+  display: flex;
+  gap: var(--e-4);
+  margin-top: var(--e-4);
+  padding: var(--e-4);
+  border: 1px solid var(--borde-tenue);
+  border-left: 4px solid var(--error);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.mision-jefe__emblema {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--error-insignia);
+  color: var(--error);
+}
+
+.mision-jefe__emblema .icono {
+  width: 28px;
+  height: 28px;
+}
+
+.mision-jefe__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  min-width: 0;
+}
+
+.mision-jefe__titulo {
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--error);
+}
+
+.mision-jefe__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+}
+
+.mision-jefe__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-5);
+  margin: 0;
+}
+
+.mision-jefe__datos > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mision-jefe__datos dt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mision-jefe__datos dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.mision-jefe__datos .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+  color: var(--error);
+}
+
+.mision-jefe__descripcion {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.mision-master__probabilidad {
+  margin: 0 0 var(--e-3);
+  color: var(--texto-2);
+}
+
+.mision-masters {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-master {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border-left: 4px solid var(--rareza-epica);
+  border-radius: var(--radio);
+  background: var(--rareza-epica-insignia);
+}
+
+.mision-master p {
+  margin: 0;
+}
+
+.mision-master__nombre,
+.mision-master__epica-nombre {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  font-weight: 700;
+}
+
+.mision-master__nombre .icono,
+.mision-master__epica-nombre .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+  color: var(--rareza-epica);
+}
+
+.mision-master__prototipo {
+  font-weight: 400;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.mision-master__epica dl {
+  display: grid;
+  gap: var(--e-1);
+  margin: var(--e-1) 0 0;
+}
+
+.mision-master__epica dt {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mision-master__epica dd {
+  margin: 0;
+}
+
+/* --- Tabla de recompensas e historial ---------------------------------- */
+
+.mision-recompensas,
+.mision-historial__tabla {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.mision-recompensas th,
+.mision-recompensas td,
+.mision-historial__tabla th,
+.mision-historial__tabla td {
+  padding: var(--e-2) var(--e-3);
+  border-top: 1px solid var(--borde-tenue);
+  text-align: left;
+  vertical-align: top;
+}
+
+.mision-recompensas thead th,
+.mision-historial__tabla thead th {
+  border-top: 0;
+  background: var(--superficie-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.mision-recompensas__grupo th {
+  background: var(--superficie-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  color: var(--texto-2);
+}
+
+.mision-recompensas td:first-child {
+  font-weight: 600;
+}
+
+.mision-recompensas td .icono {
+  margin-right: var(--e-1);
+  vertical-align: -3px;
+}
+
+.mision-historial__tabla tbody th {
+  font-weight: 600;
+}
+
+.mision-historial__desplazable {
+  overflow-x: auto;
+}
+
+.mision-historial__desplazable:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.mision-historial__tabla {
+  min-width: 640px;
+}
+
+/* --- Preparar la misión ------------------------------------------------ */
+
+.mision-detalle__configurar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  scroll-margin-top: calc(var(--cabecera-alto) + var(--e-4));
+}
+
+.mision-detalle__inicio {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-3);
+}
+
+.mision-detalle__advertencia {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.mision-detalle__motivo-inicio {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+/* --- Estrategia (RotationBuilder) -------------------------------------- */
+
+.estrategia {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-5);
+}
+
+.estrategia__cabecera {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.estrategia__cabecera .t-meta {
+  margin: 0;
+  max-width: 72ch;
+}
+
+.estrategia__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+}
+
+.estrategia__formulario,
+.estrategia__eleccion,
+.estrategia__editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  min-width: 0;
+}
+
+.estrategia__paso-titulo {
+  margin-bottom: var(--e-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.estrategia__lista-heroes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr));
+  gap: var(--e-3);
+}
+
+.estrategia__heroe {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+/* El radio cubre la tarjeta entera: se pulsa en cualquier parte y el teclado
+   lo trata como lo que es, un grupo de radios con flechas. */
+.estrategia__heroe-entrada {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.estrategia__heroe-cara {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-height: 80px;
+  padding: var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+.estrategia__heroe-entrada:hover + .estrategia__heroe-cara {
+  border-color: var(--primaria);
+}
+
+/* Elegido: anillo de dos píxeles Y la palabra, no solo el color. */
+.estrategia__heroe-entrada:checked + .estrategia__heroe-cara {
+  border-color: var(--primaria-relleno);
+  box-shadow: 0 0 0 2px var(--primaria-relleno);
+}
+
+.estrategia__heroe-entrada:checked + .estrategia__heroe-cara::after {
+  /* Una marca con forma (el visto en un círculo), no solo el color del
+     anillo. El texto alternativo vacío evita que el lector la repita: el
+     radio ya dice «seleccionado». */
+  content: '✓' / '';
+  position: absolute;
+  top: var(--e-2);
+  right: var(--e-2);
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.estrategia__heroe-entrada:focus-visible + .estrategia__heroe-cara {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.estrategia__heroe-entrada:disabled,
+.estrategia__heroe-entrada:disabled + .estrategia__heroe-cara {
+  cursor: not-allowed;
+}
+
+.estrategia__heroe-entrada:disabled + .estrategia__heroe-cara {
+  border-style: dashed;
+  background: var(--superficie-2);
+}
+
+.estrategia__heroe .marco-heroe {
+  flex: none;
+  width: auto;
+}
+
+.estrategia__heroe .marco-heroe__retrato,
+.mision-activa__heroe .marco-heroe__retrato {
+  width: 56px;
+  height: 56px;
+}
+
+.estrategia__heroe .marco-heroe__imagen,
+.mision-activa__heroe .marco-heroe__imagen {
+  width: 46px;
+  height: 46px;
+}
+
+.estrategia__heroe-texto {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding-right: var(--e-8);
+}
+
+.estrategia__heroe-nombre {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.estrategia__heroe-prototipo,
+.estrategia__heroe-motivo {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.estrategia__nivel {
+  max-width: 420px;
+}
+
+.estrategia__vista-previa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.estrategia__vista-previa-titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.estrategia__habilidades {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.estrategia__habilidad {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+}
+
+.estrategia__habilidad-nombre {
+  font-weight: 600;
+}
+
+.estrategia__habilidad-costo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+.estrategia__habilidad-costo .icono,
+.estrategia__epica .icono,
+.estrategia__por-defecto .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.estrategia__habilidad-efecto {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.estrategia__epica {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  color: var(--rareza-epica);
+}
+
+.estrategia__explicacion,
+.estrategia__nota {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.estrategia__rotaciones {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.estrategia__rotacion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-top: 4px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.estrategia__rotacion[data-prioridad='alta'] {
+  border-top-color: var(--primaria-relleno);
+}
+.estrategia__rotacion[data-prioridad='media'] {
+  border-top-color: var(--info);
+}
+
+.estrategia__rotacion-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+  width: 100%;
+}
+
+.estrategia__rotacion-titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.estrategia__pasos {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.estrategia__paso {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.estrategia__paso .desplegable__control {
+  width: 100%;
+  min-width: 0;
+}
+
+.estrategia__paso-etiqueta {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+
+/* «Añadir rotación» es un botón, no una barra: no se estira a lo ancho. */
+.estrategia__editor > .boton {
+  align-self: flex-start;
+}
+
+.estrategia__por-defecto {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.estrategia__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+}
+
+.estrategia__veredicto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.estrategia__veredicto:empty {
+  display: none;
+}
+
+.estrategia__resumen {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding-left: var(--e-5);
+}
+
+/* --- En curso (ActiveMissionPanel) ------------------------------------- */
+
+.misiones-en-curso__aviso:empty {
+  display: none;
+}
+
+.misiones-en-curso__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.misiones-en-curso__rejilla > li {
+  display: flex;
+}
+
+.mision-activa {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  width: 100%;
+}
+
+.mision-activa__cabecera {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-2);
+}
+
+.mision-activa__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  overflow-wrap: anywhere;
+}
+
+.mision-activa__tiempo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-4);
+}
+
+.mision-activa__contador,
+.mision-activa__inicio {
+  margin: 0;
+}
+
+.mision-activa__contador .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+/* Dentro de la píldora informativa, la cifra hereda su color. */
+.mision-activa__contador .cuenta-atras {
+  color: inherit;
+}
+
+.mision-activa__heroe {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  padding: var(--e-3);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.mision-activa__heroe p {
+  margin: 0;
+}
+
+.mision-activa__heroe .marco-heroe {
+  flex: none;
+  width: auto;
+}
+
+.mision-activa__heroe-nombre {
+  font-weight: 600;
+}
+
+.mision-activa__equipo {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--objetivo-tactil);
+}
+
+.mision-activa__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin-top: auto;
+}
+
+.mision-activa__penalizacion {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: 600;
+  color: var(--advertencia);
+}
+
+/* --- Reporte e historial ------------------------------------------------ */
+
+.mision-reporte__resumen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.mision-reporte__antetitulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.mision-reporte__bloque {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+}
+
+.mision-reporte__bloque > .mision-detalle__subtitulo {
+  margin: 0;
+}
+
+.mision-reporte__cifras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: var(--e-3);
+}
+
+.mision-reporte__cifras .metrica--cifra {
+  min-width: 0;
+}
+
+.mision-reporte__habilidades,
+.mision-historial__cadenas {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-reporte__habilidades li,
+.mision-historial__cadenas li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-2) 0;
+  border-top: 1px solid var(--borde-tenue);
+}
+
+.mision-reporte__usos {
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+  white-space: nowrap;
+}
+
+.mision-reporte__jefe,
+.mision-reporte__epicas {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: 600;
+}
+
+.mision-reporte__productos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mision-reporte__productos li {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-1) var(--e-3);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie-2);
+}
+
+.mision-reporte__objetivos li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.mision-reporte__objetivos li[data-cumplido='true'] .icono {
+  color: var(--exito);
+}
+
+.mision-reporte__objetivos li[data-cumplido='false'] .icono {
+  color: var(--error);
+}
+
+.mision-reporte__bonificacion {
+  margin-left: auto;
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  color: var(--exito);
+}
+
+.mision-historial__laterales {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: var(--e-5);
+  align-items: start;
+}
+
+/* --- Confirmación de inicio (dentro del diálogo) ------------------------ */
+
+.misiones-confirmacion__datos {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--e-1) var(--e-3);
+  margin: 0;
+}
+
+.misiones-confirmacion__datos > div {
+  display: contents;
+}
+
+.misiones-confirmacion__datos dt {
+  color: var(--texto-3);
+}
+
+.misiones-confirmacion__datos dd {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.misiones-confirmacion__advertencia {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  color: var(--advertencia);
+}
+
+/* --- Anchos ------------------------------------------------------------- */
+
+@media (max-width: 599px) {
+  .mision-detalle__cabecera {
+    grid-template-columns: 1fr;
+    gap: var(--e-4);
+  }
+
+  .mision-detalle__arte {
+    width: 96px;
+    height: 96px;
+  }
+
+  .mision-detalle__emblema {
+    width: 48px;
+    height: 48px;
+  }
+
+  .misiones-estado {
+    flex-direction: column;
+  }
+
+  .misiones-filtros .desplegable {
+    max-width: none;
+  }
+
+  .mision-jefe {
+    flex-direction: column;
+  }
+}

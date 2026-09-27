@@ -1,0 +1,152 @@
+# Catalogo oficial de THE NEXUS BATTLES VI — BACKEND-06 (B4).
+#
+# La lista canonica del documento del cliente (Proyecto Integrador II, seccion
+# 6.1), escrita TAL CUAL la escribe el documento: nombres con sus tildes y sus
+# mayusculas, y nada que el documento no diga. No hay precios, ni imagenes, ni
+# descripciones: el documento no los fija (los precios de la semilla son una
+# decision del PO, ver catalogo-inicial.json).
+#
+# Es la fuente contra la que `tests/contratos/catalogo-oficial.py` compara el
+# catalogo que siembra el codigo:
+#
+#   * services/contenido/productos/src/main/resources/semilla/catalogo-inicial.json
+#   * services/contenido/heroes/src/main/java/nexus/dominio/PrototiposIniciales.java
+#   * services/contenido/heroes/src/main/java/nexus/dominio/EpicasIniciales.java
+#
+# Si el guardian se pone rojo, el que esta mal es el codigo, no este archivo:
+# este archivo solo cambia cuando cambia el documento del cliente, y entonces
+# sube `version` y cambia la semilla en el mismo PR.
+#
+# Notas de lectura del documento (las que no son copia literal):
+#   * "Chaman- heroe secundario" y "Medico- heroe secundario" (Tabla 5) son los
+#     prototipos "Chamán" y "Médico": asi los nombran las Tablas 6, 7 y 20.
+#   * Tabla 7, Medico, Reanimacion: su costo es "Todos los puntos de poder";
+#     aqui `costo: null`.
+#   * La asociacion de cada arma, armadura e item a un tipo de heroe sale de las
+#     columnas "Tipo de heroe" de las Tablas 8 a 19. El documento la describe
+#     ("Armas para Guerreros", "los items se describen asociados a cada heroe")
+#     pero NO enuncia una regla que impida equipar objetos de otro tipo: por eso
+#     el inventario no la aplica. La unica afinidad con efecto que el documento
+#     define es la de las epicas (Tabla 20: efecto general para todos, efecto
+#     potenciado para el tipo afin).
+#   * `probabilidadCaida` y `probabilidadMaster` son porcentajes (3 = 3 %).
+
+version: 1
+fuente: "Proyecto Integrador II, seccion 6.1: Tablas 5 y 6 (heroes), 7 (acciones), 8-11 (armas), 12-15 (armaduras), 16-19 (items), 20 (epicas)"
+
+# Tablas 5 y 6: prototipos y estadisticas de nivel 1. `null` = "-" en la tabla.
+heroes:
+  - nombre: Guerrero Tanque
+    sanador: false
+    estadisticas: {poder: 10, vida: 44, defensa: 11, ataque: "10 + 1d6", dano: "1d4", sanar: null}
+  - nombre: Guerrero Armas
+    sanador: false
+    estadisticas: {poder: 8, vida: 44, defensa: 11, ataque: "10 + 1d6", dano: "1d6", sanar: null}
+  - nombre: Mago Fuego
+    sanador: false
+    estadisticas: {poder: 8, vida: 40, defensa: 10, ataque: "10 + 1d8", dano: "1d8", sanar: null}
+  - nombre: Mago Hielo
+    sanador: false
+    estadisticas: {poder: 10, vida: 40, defensa: 10, ataque: "10 + 1d8", dano: "1d6", sanar: null}
+  - nombre: Pícaro Veneno
+    sanador: false
+    estadisticas: {poder: 8, vida: 36, defensa: 8, ataque: "10 + 1d10", dano: "1d6", sanar: null}
+  - nombre: Pícaro Machete
+    sanador: false
+    estadisticas: {poder: 8, vida: 36, defensa: 8, ataque: "10 + 1d10", dano: "1d8", sanar: null}
+  - nombre: Chamán
+    sanador: true
+    estadisticas: {poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: "6 + 1d6"}
+  - nombre: Médico
+    sanador: true
+    estadisticas: {poder: 10, vida: 28, defensa: 4, ataque: null, dano: null, sanar: "4 + 1d8"}
+
+# Tabla 7: tres acciones por heroe, en el orden de la tabla. No son productos
+# del catalogo de productos: viven con su prototipo en el servicio de heroes.
+acciones:
+  - {nombre: Golpe con escudo, heroe: Guerrero Tanque, costo: 2}
+  - {nombre: Mano de piedra, heroe: Guerrero Tanque, costo: 4}
+  - {nombre: Defensa feroz, heroe: Guerrero Tanque, costo: 6}
+  - {nombre: Embate sangriento, heroe: Guerrero Armas, costo: 4}
+  - {nombre: Lanza de los dioses, heroe: Guerrero Armas, costo: 4}
+  - {nombre: Golpe de tormenta, heroe: Guerrero Armas, costo: 6}
+  - {nombre: Misiles de magma, heroe: Mago Fuego, costo: 2}
+  - {nombre: Vulcano, heroe: Mago Fuego, costo: 6}
+  - {nombre: Pare de fuego, heroe: Mago Fuego, costo: 4}
+  - {nombre: Lluvia de hielo, heroe: Mago Hielo, costo: 2}
+  - {nombre: Cono de hielo, heroe: Mago Hielo, costo: 6}
+  - {nombre: Bola de hielo, heroe: Mago Hielo, costo: 4}
+  - {nombre: Flor de loto, heroe: Pícaro Veneno, costo: 2}
+  - {nombre: Agonía, heroe: Pícaro Veneno, costo: 4}
+  - {nombre: Piquete, heroe: Pícaro Veneno, costo: 4}
+  - {nombre: Cortada, heroe: Pícaro Machete, costo: 2}
+  - {nombre: Machetazo, heroe: Pícaro Machete, costo: 4}
+  - {nombre: Planazo, heroe: Pícaro Machete, costo: 4}
+  - {nombre: Toque de la Vida, heroe: Chamán, costo: 2}
+  - {nombre: Vínculo Natural, heroe: Chamán, costo: 4}
+  - {nombre: Canto del Bosque, heroe: Chamán, costo: 6}
+  - {nombre: Curación Directa, heroe: Médico, costo: 2}
+  - {nombre: Neutralización de Efectos, heroe: Médico, costo: 4}
+  - {nombre: Reanimación, heroe: Médico, costo: null}
+
+# Tablas 8 a 11: dos armas por heroe (SET 1 y SET 2).
+armas:
+  - {nombre: Espada de una mano, heroe: Guerrero Tanque, probabilidadCaida: 3}
+  - {nombre: Escudo de dragón, heroe: Guerrero Tanque, probabilidadCaida: 5}
+  - {nombre: Espada de dos manos, heroe: Guerrero Armas, probabilidadCaida: 1}
+  - {nombre: Piedra de afilar, heroe: Guerrero Armas, probabilidadCaida: 2}
+  - {nombre: Orbe de manos ardientes, heroe: Mago Fuego, probabilidadCaida: 1}
+  - {nombre: Fuego fatuo, heroe: Mago Fuego, probabilidadCaida: 3}
+  - {nombre: Báculo de Permafrost, heroe: Mago Hielo, probabilidadCaida: 2}
+  - {nombre: Venas heladas, heroe: Mago Hielo, probabilidadCaida: 5}
+  - {nombre: Daga purulenta, heroe: Pícaro Veneno, probabilidadCaida: 1}
+  - {nombre: Visión borrosa, heroe: Pícaro Veneno, probabilidadCaida: 4}
+  - {nombre: Machete vendito, heroe: Pícaro Machete, probabilidadCaida: 1}
+  - {nombre: Cierra sangrienta, heroe: Pícaro Machete, probabilidadCaida: 1}
+  - {nombre: Raíz china, heroe: Chamán, probabilidadCaida: 3}
+  - {nombre: Yerbabuena, heroe: Chamán, probabilidadCaida: 2}
+  - {nombre: Kit de urgencias, heroe: Médico, probabilidadCaida: 3}
+  - {nombre: Reanimador, heroe: Médico, probabilidadCaida: 2}
+
+# Tablas 12 a 15: dos armaduras por heroe (GEAR 1 y GEAR 2); `parte` es la
+# fila "Tipo" de la tabla y decide la ranura al equipar.
+armaduras:
+  - {nombre: Defensa del enfurecido, heroe: Guerrero Tanque, parte: Pecho, probabilidadCaida: 5}
+  - {nombre: Magma Ardiente, heroe: Guerrero Tanque, parte: Casco, probabilidadCaida: 5}
+  - {nombre: Puño lúcido, heroe: Guerrero Armas, parte: Guantes, probabilidadCaida: 2}
+  - {nombre: Puños en llamas, heroe: Guerrero Armas, parte: Brazaletes, probabilidadCaida: 2}
+  - {nombre: Túnica arcana, heroe: Mago Fuego, parte: Pecho, probabilidadCaida: 3}
+  - {nombre: Caída de fuego, heroe: Mago Fuego, parte: Pantalón, probabilidadCaida: 3}
+  - {nombre: Corona de hielo, heroe: Mago Hielo, parte: Casco, probabilidadCaida: 5}
+  - {nombre: Ventisca, heroe: Mago Hielo, parte: Pecho, probabilidadCaida: 5}
+  - {nombre: Mano del desterrado, heroe: Pícaro Veneno, parte: Guantes, probabilidadCaida: 4}
+  - {nombre: Atadura carmesí, heroe: Pícaro Veneno, parte: Pecho, probabilidadCaida: 3}
+  - {nombre: Pie de atleta, heroe: Pícaro Machete, parte: Zapatos, probabilidadCaida: 1}
+  - {nombre: Sangre cruel, heroe: Pícaro Machete, parte: Brazaletes, probabilidadCaida: 5}
+  - {nombre: Piel de Caminante del Bosque, heroe: Chamán, parte: Pecho, probabilidadCaida: 4}
+  - {nombre: Casco de Ecos Ancestrales, heroe: Chamán, parte: Casco, probabilidadCaida: 2}
+  - {nombre: Bata de Cirujano, heroe: Médico, parte: Pecho, probabilidadCaida: 4}
+  - {nombre: Pantalón de Expedición Médica, heroe: Médico, parte: Pantalón, probabilidadCaida: 2}
+
+# Tablas 16 a 19: un item por heroe (EQUIPMENT 1).
+items:
+  - {nombre: Pinchos de escudo, heroe: Guerrero Tanque, probabilidadCaida: 20}
+  - {nombre: Empuñadura de Furia, heroe: Guerrero Armas, probabilidadCaida: 10}
+  - {nombre: Anillo para Piro-explosión, heroe: Mago Fuego, probabilidadCaida: 7}
+  - {nombre: Libro de la ventisca helada, heroe: Mago Hielo, probabilidadCaida: 10}
+  - {nombre: Veneno lacerante, heroe: Pícaro Veneno, probabilidadCaida: 9}
+  - {nombre: Mancuerna yugular, heroe: Pícaro Machete, probabilidadCaida: 8}
+  - {nombre: Pluma sanadora, heroe: Chamán, probabilidadCaida: 10}
+  - {nombre: Benditas, heroe: Médico, probabilidadCaida: 10}
+
+# Tabla 20: una epica por tipo de heroe, con la probabilidad de encontrar a su
+# Master en una mision.
+epicas:
+  - {nombre: Golpe de defensa, heroe: Guerrero Tanque, probabilidadMaster: 0.04}
+  - {nombre: Segundo impulso, heroe: Guerrero Armas, probabilidadMaster: 0.01}
+  - {nombre: Luz cegadora, heroe: Mago Fuego, probabilidadMaster: 0.03}
+  - {nombre: Frio concentrado, heroe: Mago Hielo, probabilidadMaster: 0.05}
+  - {nombre: Toma y lleva, heroe: Pícaro Veneno, probabilidadMaster: 0.02}
+  - {nombre: Intimidación sangrienta, heroe: Pícaro Machete, probabilidadMaster: 0.01}
+  - {nombre: Té changua, heroe: Chamán, probabilidadMaster: 0.1}
+  - {nombre: Reanimador 3000, heroe: Médico, probabilidadMaster: 0.1}

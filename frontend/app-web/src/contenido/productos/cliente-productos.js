@@ -72,4 +72,87 @@ export async function consultarEstadisticasCatalogo({
   return cuerpo;
 }
 
+/**
+ * UXC-7 — una página del catálogo para administrarlo (`listarProductosDelCatalogo`).
+ *
+ * Sin `estado` el servicio lista ACTIVO y UNICO; SUSPENDIDO solo sale
+ * pidiéndolo, así que el filtro de la consola lo pide explícitamente.
+ *
+ * @param {{pagina?: number, tamano?: number, tipo?: string|null, estado?: string|null}} criterios
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{content: object[], page: number, size: number, totalElements: number, totalPages: number}>}
+ */
+export async function listarProductos(
+  { pagina = 0, tamano = 16, tipo = null, estado = null } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ page: String(pagina), size: String(tamano) });
+  if (tipo) {
+    parametros.set('tipo', tipo);
+  }
+  if (estado) {
+    parametros.set('estado', estado);
+  }
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}?${parametros}`, { method: 'GET' });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo consultar el catálogo.');
+  }
+  return cuerpo;
+}
+
+/**
+ * HU-PRD-003 — modifica solo los campos que cambian (`modificarProducto`).
+ *
+ * @param {string} id
+ * @param {object} cambios cuerpo conforme a SolicitudModificarProducto
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} el producto ya fusionado
+ */
+export async function modificarProducto(
+  id,
+  cambios,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cambios),
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(cuerpo, respuesta.status, 'No se pudo modificar el producto.');
+  }
+  return cuerpo;
+}
+
+/**
+ * Suspende o reactiva un producto (`suspenderProducto` / `reactivarProducto`).
+ *
+ * @param {string} id
+ * @param {'suspender'|'reactivar'} accion
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{productoId: string, estado: string, tiraje: number}>}
+ */
+export async function cambiarDisponibilidad(
+  id,
+  accion,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(`${RUTA_PRODUCTOS}/${encodeURIComponent(id)}/${accion}`, {
+    method: 'PUT',
+  });
+  const cuerpo = await cuerpoDe(respuesta);
+  if (!respuesta.ok) {
+    throw errorDe(
+      cuerpo,
+      respuesta.status,
+      accion === 'suspender'
+        ? 'No se pudo suspender el producto.'
+        : 'No se pudo reactivar el producto.',
+    );
+  }
+  return cuerpo;
+}
+
 export { RUTA_ESTADISTICAS, RUTA_PRODUCTOS };
