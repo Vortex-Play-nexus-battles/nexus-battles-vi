@@ -86,6 +86,17 @@ class OnboardingServiceTest {
     }
 
     @Test
+    @DisplayName("B1: si el alta ya existe (una segunda confirmacion que se colara), no se toca ni se relanza")
+    void iniciarDosVecesNoRecreaElAlta() {
+        when(jugadores.existsById(UID)).thenReturn(true);
+
+        servicio.iniciar(UID, "profe", "4bf92f3577b34da6a3ce929d0e0e4736", "10.0.0.1");
+
+        verify(jugadores, never()).save(any());
+        verifyNoInteractions(pasos, eventos, lanzador);
+    }
+
+    @Test
     @DisplayName("una cuenta sin alta (admin, anterior a R17) o sin uid: NO_APLICA y lista")
     void noAplica() {
         when(jugadores.findById(UID)).thenReturn(Optional.empty());

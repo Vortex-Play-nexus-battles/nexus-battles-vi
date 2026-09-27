@@ -60,6 +60,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -70,21 +72,13 @@ const IMAGEN = '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PRECIO_EN_DINERO_REAL = 45000;
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {

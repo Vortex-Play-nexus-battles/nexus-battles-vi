@@ -63,6 +63,9 @@ import static org.assertj.core.api.Assertions.assertThat;
         "spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect",
         "spring.datasource.driver-class-name=org.postgresql.Driver",
         "app.onboarding.ejecucion=sincrona",
+        // B1: el codigo sale al correo en el mismo hilo, despues del commit;
+        // la prueba lo lee del correo falso y confirma la cuenta.
+        "identidad.correo.envio=sincrono",
         "app.onboarding.reintentos-automaticos=false",
         "app.onboarding.creditos-iniciales-respaldo=500",
         "app.onboarding.kit-inicial-respaldo=p-heroe,p-espada",
@@ -97,6 +100,8 @@ class OnboardingFlujoIT {
         registro.add("app.lista-negra.url", () -> PLATAFORMA.url() + "/api/v1/lista-negra/verificar");
         registro.add("app.correo.url-bienvenida", () -> PLATAFORMA.url() + "/api/v1/correos/bienvenida");
         registro.add("app.correo.url-aviso-acceso", () -> PLATAFORMA.url() + "/api/v1/correos/aviso-acceso");
+        registro.add("app.correo.url-confirmacion-cuenta",
+                () -> PLATAFORMA.url() + "/api/v1/correos/confirmacion-cuenta");
         registro.add("app.notificaciones.url", () -> PLATAFORMA.url() + "/api/v1/internal/notifications");
         registro.add("app.auditoria.url", () -> PLATAFORMA.url() + "/api/v1/admin/auditoria/eventos");
     }
@@ -224,8 +229,34 @@ class OnboardingFlujoIT {
                         new String(respuesta.getBody().readAllBytes(), StandardCharsets.UTF_8)));
     }
 
+    /**
+     * B1: registrarse deja la cuenta pendiente; el alta del jugador empieza al
+     * confirmar el correo con el codigo que llego a el. Aqui se hacen los dos
+     * pasos, como la persona: se registra, lee el correo y escribe el codigo.
+     */
     private Respuesta registrar(String apodo) {
-        return registrar(apodo, apodo + "@upb.edu.co", MediaType.APPLICATION_JSON_VALUE);
+        Respuesta alta = registrar(apodo, apodo + "@upb.edu.co", MediaType.APPLICATION_JSON_VALUE);
+        if (alta.estado() == 201) {
+            Respuesta confirmacion = verificar(apodo + "@upb.edu.co");
+            assertThat(confirmacion.estado()).as(confirmacion.cuerpo()).isEqualTo(200);
+        }
+        return alta;
+    }
+
+    /** El ultimo codigo de verificacion que correo recibio para ese destinatario. */
+    private static String codigoEnviadoA(String correo) {
+        List<ServidorFalso.Peticion> enviados = PLATAFORMA.recibidas("POST", "/api/v1/correos/confirmacion-cuenta")
+                .stream().filter(p -> p.cuerpo().contains("\"email\":\"" + correo + "\"")).toList();
+        assertThat(enviados).as("correo de verificacion para " + correo).isNotEmpty();
+        return campo(enviados.get(enviados.size() - 1).cuerpo(), "codigo");
+    }
+
+    private Respuesta verificar(String correo) {
+        return cliente().post().uri("/api/v1/auth/verificacion/confirmacion")
+                .contentType(MediaType.APPLICATION_JSON)
+                .body("{\"email\":\"" + correo + "\",\"codigo\":\"" + codigoEnviadoA(correo) + "\"}")
+                .exchange((peticion, respuesta) -> new Respuesta(respuesta.getStatusCode().value(),
+                        new String(respuesta.getBody().readAllBytes(), StandardCharsets.UTF_8)));
     }
 
     private Respuesta login(String correo) {
@@ -271,7 +302,25 @@ class OnboardingFlujoIT {
     // ---------------------------------------------------------------- pruebas
 
     @Test
-    @DisplayName("registrarse desde cero deja creditos, heroe y equipo, sin tocar ninguna base a mano")
+    @DisplayName("B1: registrarse sin confirmar el correo no da creditos ni heroe, y no deja entrar")
+    void sinConfirmarNoHayAlta() {
+        Respuesta alta = registrar("zoe", "zoe@upb.edu.co", MediaType.APPLICATION_JSON_VALUE);
+        assertThat(alta.estado()).as(alta.cuerpo()).isEqualTo(201);
+        assertThat(alta.cuerpo()).contains("\"estado\":\"PENDIENTE_VERIFICACION\"");
+        UUID uid = uidDe("zoe");
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM onboarding_jugador WHERE usuario_uid = ?",
+                Integer.class, uid)).isZero();
+        Respuesta sesion = login("zoe@upb.edu.co");
+        assertThat(sesion.estado()).isEqualTo(403);
+        assertThat(sesion.cuerpo()).contains("verificado");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM onboarding_jugador WHERE usuario_uid = ?",
+                Integer.class, uid)).as("el login no arranca el alta de una cuenta pendiente").isZero();
+        assertThat(acreditacionesDe(uid)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("registrarse y confirmar el correo deja creditos, heroe y equipo, sin tocar ninguna base a mano")
     void altaCompletaDesdeElRegistro() {
         Respuesta alta = registrar("ada");
         assertThat(alta.estado()).as(alta.cuerpo()).isEqualTo(201);

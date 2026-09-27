@@ -9,16 +9,30 @@ import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 
 import java.util.UUID;
 
+/**
+ * Una cuenta.
+ *
+ * <p><b>{@link DynamicUpdate} (B2).</b> Varias cosas escriben la misma fila a
+ * la vez: el login (ultima entrada, intentos), el contador de intentos
+ * fallidos en su propia transaccion, y la proyeccion de una sancion que llega
+ * de moderacion-sanciones. Con el UPDATE de todas las columnas, un login que
+ * leyo la cuenta un instante antes de que llegara una suspension la
+ * reescribia entera al guardar y devolvia el estado a ACTIVO: la suspension
+ * se perdia sin que nadie lo viera. Con UPDATE solo de lo que cambio, cada
+ * uno escribe sus columnas y no pisa las de los demas.
+ */
 @Entity
 @Table(name = "usuarios", uniqueConstraints = {
     @UniqueConstraint(columnNames = "apodo"),
     @UniqueConstraint(columnNames = "email")
 })
+@DynamicUpdate
 @Getter
 @Setter
 @NoArgsConstructor
@@ -90,6 +104,15 @@ public class Usuario {
 
     @Column
     private LocalDateTime suspendidoHasta;
+
+    /**
+     * B2 — la sancion de moderacion-sanciones que produjo el estado actual
+     * (la ultima proyectada). Es lo que hace idempotente la proyeccion: la
+     * misma sancion con el mismo estado no vuelve a revocar sesiones. Nula en
+     * cuentas nunca sancionadas o sancionadas por el panel antiguo.
+     */
+    @Column(name = "sancion_id")
+    private UUID sancionId;
 
     // Se incrementa cada vez que cambia el rol del usuario (HU-RBAC-003).
     // Permite invalidar tokens JWT ya emitidos con el rol anterior, sin

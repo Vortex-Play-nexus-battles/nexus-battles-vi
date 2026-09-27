@@ -170,6 +170,187 @@
             </form>
           </section>
 
+          <!-- B1 (7.1.1) — preguntas de seguridad para recuperar la cuenta. Las
+               escribe la persona: el juego no propone ninguna. Lo monta
+               `preguntas-seguridad.js`. -->
+          <section
+            class="tarjeta pila"
+            data-zona="preguntas-seguridad"
+            aria-labelledby="tituloPreguntasSeguridad"
+          >
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="tituloPreguntasSeguridad">Preguntas de seguridad</h2>
+                <p class="t-meta">
+                  Junto con el código del correo, sirven para recuperar tu cuenta. Las escribes tú:
+                  el juego no propone ninguna.
+                </p>
+              </div>
+            </div>
+
+            <p class="t-meta" data-zona="estado-preguntas" role="status">
+              Consultando tus preguntas de seguridad…
+            </p>
+            <ol class="pila pila--ajustada" data-zona="lista-preguntas" hidden></ol>
+            <div data-zona="aviso-preguntas" tabindex="-1" hidden></div>
+
+            <div class="tarjeta__acciones" data-zona="acciones-preguntas">
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="configurar-preguntas"
+                hidden
+              >
+                Configurar preguntas
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="reintentar-preguntas"
+                hidden
+              >
+                Reintentar
+              </button>
+            </div>
+
+            <form class="pila" data-zona="formulario-preguntas" novalidate hidden>
+              <p class="campo__pista">
+                Escribe preguntas cuya respuesta solo sepas tú y no cambie con el tiempo. Las
+                respuestas no distinguen mayúsculas ni tildes.
+              </p>
+
+              <div class="pila" data-pregunta="1">
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad1">Pregunta 1</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad1"
+                    name="preguntaSeguridad1"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad1">Respuesta 1</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad1"
+                    name="respuestaSeguridad1"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="pila" data-pregunta="2">
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad2">Pregunta 2</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad2"
+                    name="preguntaSeguridad2"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad2">Respuesta 2</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad2"
+                    name="respuestaSeguridad2"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="pila" data-pregunta="3" hidden>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad3">Pregunta 3</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad3"
+                    name="preguntaSeguridad3"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad3">Respuesta 3</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad3"
+                    name="respuestaSeguridad3"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="tarjeta__acciones">
+                <button type="button" class="boton boton--secundario" data-accion="anadir-pregunta">
+                  Añadir una tercera pregunta
+                </button>
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="quitar-pregunta"
+                  hidden
+                >
+                  Quitar la tercera pregunta
+                </button>
+              </div>
+
+              <div class="campo">
+                <label class="campo__etiqueta" for="passwordActualPreguntas"
+                  >Contraseña actual</label
+                >
+                <input
+                  class="campo__control"
+                  type="password"
+                  id="passwordActualPreguntas"
+                  name="passwordActualPreguntas"
+                  autocomplete="current-password"
+                />
+                <p class="campo__pista">
+                  Para cambiar las preguntas hace falta tu contraseña, no solo la sesión abierta.
+                </p>
+              </div>
+
+              <div class="tarjeta__acciones">
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="cancelar-preguntas"
+                >
+                  Cancelar
+                </button>
+                <button type="submit" class="boton boton--primario" data-accion="guardar-preguntas">
+                  Guardar preguntas
+                </button>
+              </div>
+            </form>
+          </section>
+
           <section class="tarjeta pila" data-zona="sesion-caja">
             <div class="encabezado-seccion">
               <div class="pila pila--ajustada">

@@ -11,6 +11,7 @@ import { jest } from '@jest/globals';
 import {
   CLAVES,
   MOTIVOS,
+  MOTIVOS_DE_VERIFICACION,
   RUTAS,
   avisarCierreAlServidor,
   cerrarSesion,
@@ -22,6 +23,7 @@ import {
   rutaDeVuelta,
   rutaSegura,
   urlDeLogin,
+  urlDeVerificacion,
 } from './sesion.js';
 
 const BASE = 'http://localhost:8099/frontend/app-web/src/comun/sesion.js';
@@ -188,6 +190,17 @@ describe('urlDeLogin (R17)', () => {
   });
 });
 
+describe('urlDeVerificacion (B1)', () => {
+  test('lleva el motivo y nunca el correo', () => {
+    expect(urlDeVerificacion({}, BASE)).toBe(
+      'http://localhost:8099/frontend/app-web/src/cuentas/verificar-cuenta.html',
+    );
+    const url = new URL(urlDeVerificacion({ motivo: MOTIVOS_DE_VERIFICACION.REGISTRO }, BASE));
+    expect(url.searchParams.get('motivo')).toBe('registro');
+    expect([...url.searchParams.keys()]).toEqual(['motivo']);
+  });
+});
+
 describe('rutaDeVuelta', () => {
   test('solo admite rutas del propio origen', () => {
     expect(
@@ -229,10 +242,18 @@ describe('rutaDeVuelta', () => {
       '/frontend/app-web/src/cuentas/preparando.html',
       '/login',
       '/registro',
+      // B1 — la verificación del correo y el canje del código también son
+      // puertas: volver a ellas tras entrar no tiene sentido.
+      '/verificar',
+      '/restablecer',
+      '/frontend/app-web/src/cuentas/verificar-cuenta.html',
+      '/frontend/app-web/src/cuentas/restablecer-confirmar.html?x=1',
     ]) {
       expect(rutaSegura(puerta, 'http://localhost:8099')).toBeNull();
     }
     expect(rutaSegura('/inventario', 'http://localhost:8099')).toBe('/inventario');
+    // Un parecido no es una puerta.
+    expect(rutaSegura('/verificarx', 'http://localhost:8099')).toBe('/verificarx');
   });
 });
 
@@ -265,13 +286,15 @@ describe('direcciones limpias (R17.3)', () => {
     );
   });
 
-  test('con la marca, las nueve vistas enlazan en limpio', () => {
+  test('con la marca, las once vistas enlazan en limpio', () => {
     const doc = documentoCon('limpias');
     expect(hayRutasLimpias(doc)).toBe(true);
     const esperadas = {
       login: '/login',
       registro: '/registro',
       preparando: '/preparando',
+      verificar: '/verificar',
+      restablecer: '/restablecer',
       inicio: '/inicio',
       perfil: '/cuenta',
       inventario: '/inventario',

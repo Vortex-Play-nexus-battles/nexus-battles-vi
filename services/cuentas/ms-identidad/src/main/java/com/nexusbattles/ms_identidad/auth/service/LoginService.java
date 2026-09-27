@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.codigos.IgualadorDeTiempo;
 import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoAvisoAccesoRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
@@ -8,13 +9,16 @@ import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasExcepti
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaNoVerificadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
+import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
+import com.nexusbattles.ms_identidad.sanciones.ProyeccionDeSancionService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -22,13 +26,34 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
+import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
-import java.time.LocalDateTime;
 import java.util.Optional;
 
+/**
+ * Inicio de sesion (HU-AUT-001, RF-AUT-009/010).
+ *
+ * <p><b>B1: la contrasena se comprueba ANTES que el estado de la cuenta.</b>
+ * Hasta aqui una cuenta baneada, suspendida o inactiva respondia su 403 con
+ * cualquier contrasena: el estado de una cuenta se le revelaba a quien solo
+ * conocia el correo. Ahora, con la contrasena incorrecta, el 401 generico de
+ * siempre; con la correcta, el motivo exacto:
+ * <ul>
+ *   <li>{@code PENDIENTE_VERIFICACION} -> 403 {@code cuenta-no-verificada} (B1);</li>
+ *   <li>suspension vigente -> 403 {@code cuenta-suspendida}, con su fin;</li>
+ *   <li>suspension vencida -> entra, y la proyeccion se limpia;</li>
+ *   <li>{@code BANEADO} -> 403 {@code cuenta-baneada}.</li>
+ * </ul>
+ * El bloqueo por intentos fallidos (423) sigue mirandose antes de comparar
+ * la contrasena: mientras dura, no se evalua ninguna.
+ *
+ * <p>Un correo que no existe paga el mismo BCrypt que uno que si
+ * ({@link IgualadorDeTiempo}): el tiempo tampoco dice que correos hay.
+ */
 @Service
 public class LoginService {
 
@@ -45,6 +70,8 @@ public class LoginService {
     private final AuditoriaLoginClient auditoriaLoginClient;
     private final AuditoriaDeCuenta auditoriaDeCuenta;
     private final OnboardingService onboardingService;
+    private final IgualadorDeTiempo igualador;
+    private final ProyeccionDeSancionService proyecciones;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -57,7 +84,9 @@ public class LoginService {
                         JwtService jwtService,
                         AuditoriaLoginClient auditoriaLoginClient,
                         AuditoriaDeCuenta auditoriaDeCuenta,
-                        OnboardingService onboardingService) {
+                        OnboardingService onboardingService,
+                        IgualadorDeTiempo igualador,
+                        ProyeccionDeSancionService proyecciones) {
         this.usuarioRepository = usuarioRepository;
         this.dispositivoConocidoRepository = dispositivoConocidoRepository;
         this.intentosFallidosService = intentosFallidosService;
@@ -66,6 +95,8 @@ public class LoginService {
         this.auditoriaLoginClient = auditoriaLoginClient;
         this.auditoriaDeCuenta = auditoriaDeCuenta;
         this.onboardingService = onboardingService;
+        this.igualador = igualador;
+        this.proyecciones = proyecciones;
     }
 
     @Transactional
@@ -74,47 +105,31 @@ public class LoginService {
         // R17 — mismo identificador que el registro: el correo, sin espacios
         // y sin importar las mayusculas con las que se teclee (el registro lo
         // guarda en minusculas; las cuentas anteriores se encuentran igual).
-        Usuario usuario = usuarioRepository.buscarPorCorreo(datos.getEmail())
-            .orElseThrow(() -> credencialesInvalidas(datos.getEmail(), direccionIp));
-
-        // --- Estado de la cuenta ---
-        if ("BANEADA".equals(usuario.getEstado())) {
-            auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=BANEADA", datos.getEmail(), direccionIp);
-            throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
+        Optional<Usuario> encontrada = usuarioRepository.buscarPorCorreo(datos.getEmail());
+        if (encontrada.isEmpty()) {
+            igualador.comparar(datos.getPassword());
+            throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
-
-        if ("INACTIVO".equals(usuario.getEstado())) {
-            auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=INACTIVO", datos.getEmail(), direccionIp);
-            throw new CuentaInactivaException(
-                "Esta cuenta aún no ha sido activada. Revisa tu correo para completar el proceso.");
-        }
-
-        if ("SUSPENDIDA".equals(usuario.getEstado())) {
-            LocalDateTime hasta = usuario.getSuspendidoHasta();
-            if (hasta != null && LocalDateTime.now().isBefore(hasta)) {
-                long minutosRestantes = ChronoUnit.MINUTES.between(LocalDateTime.now(), hasta);
-                auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=SUSPENDIDA restante={}min",
-                    datos.getEmail(), direccionIp, minutosRestantes);
-                throw new CuentaSuspendidaException(
-                    "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.");
-            }
-        }
+        Usuario usuario = encontrada.get();
 
         // --- Bloqueo por intentos fallidos (RF-AUT-009) ---
         if (usuario.getBloqueadoHasta() != null && LocalDateTime.now().isBefore(usuario.getBloqueadoHasta())) {
             long minutosRestantes = ChronoUnit.MINUTES.between(LocalDateTime.now(), usuario.getBloqueadoHasta());
-            auditLog.info("LOGIN_RECHAZADO email={} ip={} motivo=BLOQUEADA restante={}min",
-                datos.getEmail(), direccionIp, minutosRestantes);
+            auditLog.info("LOGIN_RECHAZADO usuarioId={} ip={} motivo=BLOQUEADA restante={}min",
+                usuario.getId(), direccionIp, minutosRestantes);
             throw new CuentaBloqueadaException(
                 "Cuenta bloqueada temporalmente por intentos fallidos. Intenta de nuevo en "
                     + minutosRestantes + " minutos.");
         }
 
-        // --- Verificación de contraseña ---
+        // --- Verificación de contraseña (antes que el estado: B1) ---
         if (!passwordEncoder.matches(datos.getPassword(), usuario.getPassword())) {
             intentosFallidosService.registrarIntentoFallido(usuario.getId());
             throw credencialesInvalidas(datos.getEmail(), direccionIp);
         }
+
+        // --- Estado de la cuenta: solo quien sabe la contraseña llega aquí ---
+        exigirQuePuedaEntrar(usuario, direccionIp);
 
         // --- Login exitoso: resetear contadores ---
         boolean primerAcceso = usuario.getUltimoAcceso() == null;
@@ -145,7 +160,7 @@ public class LoginService {
             auditLog.info("DISPOSITIVO_NUEVO usuarioId={} ip={}", usuario.getId(), direccionIp);
         }
 
-        auditLog.info("LOGIN_EXITOSO email={} ip={}", datos.getEmail(), direccionIp);
+        auditLog.info("LOGIN_EXITOSO usuarioId={} ip={}", usuario.getId(), direccionIp);
 
         // Token JWT firmado, incluyendo la versión vigente (HU-RBAC-003) —
         // reemplaza la confianza ciega en X-User-Role. El publicId viaja como
@@ -158,6 +173,8 @@ public class LoginService {
         // R17 — primer acceso a la auditoria, y si el alta del jugador quedo a
         // medias (un servicio caido cuando se registro), se relanza ahora sin
         // esperar al reintento programado. Ninguna de las dos retrasa el login.
+        // B1: aqui solo llega una cuenta ACTIVA; una pendiente de verificar ya
+        // salio con su 403 y su alta no arranca hasta confirmar el correo.
         if (primerAcceso) {
             auditoriaDeCuenta.primerAcceso(usuario.getPublicId(), direccionIp);
         }
@@ -173,6 +190,49 @@ public class LoginService {
             usuario.getPublicId() == null ? null : usuario.getPublicId().toString(),
             onboardingService.listo(usuario.getPublicId())
         );
+    }
+
+    /**
+     * El estado de la cuenta, con la contraseña ya comprobada. El baneo va
+     * primero (no vence nunca); una suspension vencida se limpia y, si la
+     * cuenta nunca confirmo su correo, vuelve a quedar pendiente.
+     */
+    private void exigirQuePuedaEntrar(Usuario usuario, String direccionIp) {
+        String estado = usuario.getEstado();
+        if (EstadoCuenta.esBaneado(estado)) {
+            rechazo(usuario, direccionIp, "BANEADA");
+            throw new CuentaBaneadaException("Esta cuenta ha sido baneada permanentemente.");
+        }
+        if (EstadoCuenta.esSuspendido(estado)) {
+            // El fin se guarda como hora local del servidor; se compara como
+            // instante en esa zona para que un cambio de horario no mueva cuanto
+            // falta.
+            ZonedDateTime hasta = usuario.getSuspendidoHasta() == null
+                ? null
+                : usuario.getSuspendidoHasta().atZone(ZoneId.systemDefault());
+            ZonedDateTime ahora = ZonedDateTime.now(ZoneId.systemDefault());
+            if (hasta != null && ahora.isBefore(hasta)) {
+                long minutosRestantes = ChronoUnit.MINUTES.between(ahora, hasta);
+                rechazo(usuario, direccionIp, "SUSPENDIDA");
+                throw new CuentaSuspendidaException(
+                    "Cuenta suspendida. Tiempo restante: " + minutosRestantes + " minutos.",
+                    hasta.toOffsetDateTime());
+            }
+            estado = proyecciones.levantarSiVencida(usuario);
+        }
+        if (EstadoCuenta.PENDIENTE_VERIFICACION.equals(estado)) {
+            rechazo(usuario, direccionIp, "NO_VERIFICADA");
+            throw new CuentaNoVerificadaException();
+        }
+        if (EstadoCuenta.INACTIVO.equals(estado)) {
+            rechazo(usuario, direccionIp, "INACTIVO");
+            throw new CuentaInactivaException(
+                "Esta cuenta aún no ha sido activada. Revisa tu correo para completar el proceso.");
+        }
+    }
+
+    private static void rechazo(Usuario usuario, String direccionIp, String motivo) {
+        auditLog.info("LOGIN_RECHAZADO usuarioId={} ip={} motivo={}", usuario.getId(), direccionIp, motivo);
     }
 
     private boolean registrarOVerificarDispositivo(Usuario usuario, String huella) {
@@ -206,7 +266,7 @@ public class LoginService {
 
         auditLog.info(
             "LOGIN_FALLIDO email={} ip={} motivo=CREDENCIALES_INVALIDAS_ENTORNO",
-            email,
+            correoParaBitacora(email),
             ip
         );
 
@@ -215,5 +275,22 @@ public class LoginService {
         return new CredencialesInvalidasException(
             "Correo o contraseña incorrectos."
         );
+    }
+
+    /**
+     * El correo tal como lo escribio quien intenta entrar va a la bitacora solo
+     * si parece un correo: sin saltos de linea ni caracteres de control con los
+     * que falsear otra linea de auditoria (inyeccion en bitacora). Y enmascarado:
+     * la bitacora no necesita el buzon entero para seguir un ataque a una cuenta.
+     */
+    static String correoParaBitacora(String email) {
+        if (email == null || !email.matches("[A-Za-z0-9._%+@-]{1,254}")) {
+            return "<no-imprimible>";
+        }
+        int arroba = email.indexOf('@');
+        if (arroba <= 0) {
+            return "***";
+        }
+        return email.charAt(0) + "***" + email.substring(arroba);
     }
 }
