@@ -97,6 +97,17 @@ resource "aws_security_group" "plataforma" {
     cidr_blocks = var.cidr_servicios
   }
 
+  # B12 — misiones (host de contenido, B9) acredita las recompensas de una
+  # mision en el libro de creditos de ms-finanzas. Mismo origen que los demas:
+  # solo el host de contenido, nunca internet.
+  ingress {
+    description = "ms-finanzas (Cuentas): recompensas de misiones desde el host de contenido"
+    from_port   = 8093
+    to_port     = 8093
+    protocol    = "tcp"
+    cidr_blocks = var.cidr_servicios
+  }
+
   egress {
     description = "Salida libre: GHCR, apt, Brevo"
     from_port   = 0
