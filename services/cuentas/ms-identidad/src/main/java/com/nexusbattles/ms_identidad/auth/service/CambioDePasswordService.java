@@ -155,10 +155,15 @@ public class CambioDePasswordService {
     }
 
     private void avisarPorCorreo(Usuario usuario, String ipOrigen) {
+        // B1: con Idempotency-Key (correo.yaml 1.4.0). La version de token ya
+        // subio, asi que la clave es distinta en cada cambio y la misma en el
+        // reintento de este.
+        String cuenta = usuario.getPublicId() != null ? usuario.getPublicId().toString() : "usuario-" + usuario.getId();
         correoClient.enviarCambioClave(new CorreoCambioClaveRequest(
                 usuario.getEmail(), usuario.getApodo(),
                 ipOrigen == null ? "desconocida" : ipOrigen,
-                OffsetDateTime.now(reloj).toString()));
+                OffsetDateTime.now(reloj).toString()),
+                "cambio-clave-" + cuenta + "-v" + usuario.getVersionToken());
     }
 
     /**

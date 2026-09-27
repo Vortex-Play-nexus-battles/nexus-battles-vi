@@ -134,9 +134,23 @@ services:
       JUGADOR_KIT_INICIAL: p-heroe-e2e,p-arma-e2e
       # Reintento programado mas agil que en DEV (30 s): el banco no espera.
       ONBOARDING_INTERVALO_REINTENTOS_MS: "5000"
-      # El registro avisa por correo, pero es fail-open (Resilience4j): sin
-      # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
-      # no estan en este compose.
+      # B1 (identidad 2.0.0) — la cuenta de autorregistro nace pendiente de
+      # verificar su correo y el login responde 403 hasta que se confirma el
+      # codigo que llega al buzon. Hasta B1 el registro solo avisaba por correo
+      # (fail-open) y por eso correo y mailpit no estaban en este banco; ahora
+      # sin ellos ninguna cuenta nueva podria entrar. Las pruebas leen el
+      # codigo de Mailpit por el borde (tests/e2e/ayudantes/correo.js).
+      CORREO_BIENVENIDA_URL: http://srv-correo:8082/api/v1/correos/bienvenida
+      CORREO_AVISO_ACCESO_URL: http://srv-correo:8082/api/v1/correos/aviso-acceso
+      CORREO_RECUPERACION_CLAVE_URL: http://srv-correo:8082/api/v1/correos/recuperacion-clave
+      CORREO_CONFIRMACION_CUENTA_URL: http://srv-correo:8082/api/v1/correos/confirmacion-cuenta
+      CORREO_CAMBIO_CLAVE_URL: http://srv-correo:8082/api/v1/correos/cambio-clave
+      # B2 (BACKEND-02): la lista negra es fail-closed. Sin esta URL el
+      # servicio caia a localhost:8086 (su defecto de desarrollo), no llegaba a
+      # nadie y, desde B2, el registro responderia 503. Y el panel delega las
+      # sanciones en moderacion-sanciones.
+      LISTA_NEGRA_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       SERVER_PORT: "8089"
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de
@@ -150,6 +164,61 @@ services:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # -------------------------------------------------------------- correo
+  # B1 — el codigo que verifica cada cuenta nueva, y el de recuperacion, salen
+  # por aqui. Es el servicio de correo de verdad, con su plantilla y su cola;
+  # lo unico de banco es el destino: Mailpit, que recoge los mensajes y no los
+  # reenvia a nadie. Todas las cuentas de prueba son @nexus.test, un dominio
+  # reservado (RFC 2606), asi que tambien en DEV van al buzon de pruebas.
+  #
+  # Se llama `mailpit`, igual que en el despliegue: `borde-dev.conf` lo sirve
+  # en /mailpit/ (MP_WEBROOT), y las pruebas leen su API en la misma ruta en el
+  # banco y en AWS DEV. No publica puertos: se llega por el borde.
+  mailpit:
+    image: axllent/mailpit
+    environment:
+      MP_WEBROOT: /mailpit
+
+  srv-correo:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/correo/build/libs/*.jar
+        PUERTO: "8082"
+    environment:
+      # El servidor principal ES el buzon de pruebas: aqui no hay proveedor
+      # real al que no deba llegar nada.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      CORREO_BUZON_PRUEBAS_HOST: mailpit
+      CORREO_BUZON_PRUEBAS_PUERTO: "1025"
+      # Remitente de banco, no de ningun entorno (correo 1.4.0 lo lee de
+      # MAIL_FROM; la version anterior, de CORREO_REMITENTE).
+      MAIL_FROM: "The Nexus Battles VI <no-reply@nexus.test>"
+      CORREO_REMITENTE: "The Nexus Battles VI <no-reply@nexus.test>"
+      # Los enlaces de los correos (/verificar#codigo=..., /restablecer#...)
+      # apuntan al borde de este banco.
+      PUBLIC_BASE_URL: http://localhost:8099
+      # Una ronda por segundo: el spec lee la bandeja justo despues de pedir
+      # el correo, y el banco no espera los dos segundos de DEV.
+      CORREO_ENTREGA_INTERVALO_MS: "1000"
+      # Correo solo atiende credenciales de servicio firmadas por este emisor.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # Cola persistente de envios (correo 1.4.0): esquema propio en la base de
+      # plataforma, con las mismas variables que el resto del bloque.
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+    depends_on:
+      mailpit: { condition: service_started }
+      e2e-plataforma-db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
@@ -622,8 +691,12 @@ services:
 
   # Metricas de plataforma (HU-MET-004 / HU-MET-001): recolecta Actuator de
   # los servicios del bloque que corren en este compose y los agregados de
-  # moderacion. correo NO esta aqui a proposito: es la brecha de
-  # observabilidad que el spec espera ver senalada (CA-03).
+  # moderacion. Deja SIN observar a correo, a proposito: es la brecha de
+  # observabilidad que el spec espera ver senalada (CA-03). Hasta B1 bastaba
+  # con que correo no estuviera en el banco; desde B1 si esta (los codigos de
+  # verificacion viajan por correo), asi que a metricas se le da una direccion
+  # de salud que no responde. La brecha sigue siendo real para metricas, y el
+  # correo de verdad sigue funcionando para todos los demas.
   srv-metricas-plataforma:
     build:
       context: ../..
@@ -637,7 +710,8 @@ services:
       DB_PASS: plataforma
       DISPONIBILIDAD_INTERVALO_MS: "5000"
       SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
-      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      # A proposito SIN RESPUESTA (ver arriba): la brecha de CA-03.
+      SALUD_CORREO: http://srv-correo-sin-observar:8082/actuator/health
       SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
       SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
       SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
@@ -652,58 +726,6 @@ services:
       srv-moderacion-sanciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8087/actuator/health || exit 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 40
-
-  # Correo durable (M15, B1) con su buzon de pruebas. En el PERFIL `correo` y
-  # no en el banco por omision, a proposito: metricas-tecnicas.e2e.spec.js
-  # (HU-MET-004, CA-03) necesita un servicio del bloque FUERA del banco para
-  # demostrar que el tablero senala la brecha, y ese servicio es correo. Para
-  # probar correos (verificacion de cuenta, recuperacion, sancion):
-  #
-  #   ./gradlew :services:plataforma:correo:bootJar
-  #   docker compose -f tests/e2e/compose.yml --profile correo up -d --build --wait
-  #
-  # y leer la bandeja por el borde (/mailpit/api/v1/...), igual que
-  # activacion-del-jugador.smoke.spec.js en dev. Se llama `mailpit`, como en el
-  # despliegue, para que la ruta /mailpit/ del borde-dev.conf real funcione.
-  # ms-identidad no apunta aqui todavia (sus CORREO_*_URL van a localhost y su
-  # cliente falla hacia el lado abierto): cablearlo es del carril de identidad.
-  mailpit:
-    image: axllent/mailpit
-    profiles: ["correo"]
-    environment:
-      MP_WEBROOT: /mailpit
-
-  srv-correo:
-    profiles: ["correo"]
-    build:
-      context: ../..
-      dockerfile: tests/e2e/Dockerfile.servicio
-      args:
-        JAR: services/plataforma/correo/build/libs/*.jar
-        PUERTO: "8082"
-    environment:
-      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
-      DB_USER: plataforma
-      DB_PASS: plataforma
-      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
-      # Valores del BANCO DE PRUEBAS, no de ningun entorno: remitente del
-      # dominio reservado .test y enlaces al borde del banco.
-      MAIL_FROM: The Nexus Battles VI <no-reply@nexusbattles.test>
-      PUBLIC_BASE_URL: http://localhost:8099
-      # Una ronda por segundo: el spec lee la bandeja justo despues de pedir
-      # el correo, y el banco no espera los dos segundos de DEV.
-      CORREO_ENTREGA_INTERVALO_MS: "1000"
-    depends_on:
-      e2e-plataforma-db: { condition: service_healthy }
-      srv-ms-identidad: { condition: service_healthy }
-      mailpit: { condition: service_started }
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
@@ -863,6 +885,9 @@ services:
       srv-ms-ecommerce: { condition: service_healthy }
       # B9: /api/v1/misiones (misiones.e2e.spec.js).
       srv-misiones: { condition: service_healthy }
+      # B1: /mailpit/ (el buzon que leen las pruebas) y el correo que lo llena.
+      mailpit: { condition: service_started }
+      srv-correo: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

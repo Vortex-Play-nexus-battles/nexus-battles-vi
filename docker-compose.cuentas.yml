@@ -111,6 +111,10 @@ services:
       # es fail-open. Todos los -f de compose forman un solo proyecto, asi que
       # los nombres de servicio de plataforma resuelven desde aqui.
       LISTA_NEGRA_URL: ${LISTA_NEGRA_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
+      # B2 — sanciones unificadas: el panel (suspender, banear, reactivar)
+      # delega en moderacion-sanciones, que es la fuente de verdad. Base
+      # /api/v1 del servicio; si no responde, el panel responde 503.
+      SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
       CORREO_BIENVENIDA_URL: ${CORREO_BIENVENIDA_URL:-http://srv-correo:8082/api/v1/correos/bienvenida}
       CORREO_AVISO_ACCESO_URL: ${CORREO_AVISO_ACCESO_URL:-http://srv-correo:8082/api/v1/correos/aviso-acceso}
       CORREO_RECUPERACION_CLAVE_URL: ${CORREO_RECUPERACION_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/recuperacion-clave}
