@@ -22,6 +22,7 @@ import {
   pintarMensaje,
   reaccionAlError,
 } from './chat.js';
+import { FUENTE_SIN_SERVICIO } from './fuente-mensajes.js';
 
 const ID_SALA = '3f2b6f3e-3c2a-4a1e-9f0e-6f1a2b3c4d5e';
 const YO = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -355,7 +356,7 @@ describe('la página', () => {
     );
   });
 
-  test('sin sala: pestañas «Chat general» y «Mensajes privados», que hoy cuenta que no están abiertos', async () => {
+  test('sin sala: pestañas «Chat general» y «Mensajes privados», que dice si su servicio no responde', async () => {
     pagina();
     const cliente = clienteFalso();
 
@@ -364,6 +365,7 @@ describe('la página', () => {
       token: 't',
       miId: YO,
       conectar: async () => cliente,
+      fuenteMensajes: FUENTE_SIN_SERVICIO,
     });
     await chat;
 
@@ -374,7 +376,7 @@ describe('la página', () => {
 
     const aviso = document.querySelector('[data-estado="sin-abrir"]');
     expect(aviso.querySelector('h2').textContent).toBe(
-      'Los mensajes privados todavía no están abiertos',
+      'Los mensajes privados no están disponibles ahora',
     );
     expect(aviso.textContent).not.toMatch(/próximamente/i);
     aviso.querySelector('[data-accion="ir-al-chat-general"]').click();

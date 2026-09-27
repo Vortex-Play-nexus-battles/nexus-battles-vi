@@ -250,6 +250,15 @@ services:
       # responde, se usa el respaldo y queda en la bitacora: leer un parametro
       # nunca tumba una partida.
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
+      # B6 — mensajes privados (feedback del profesor): el destinatario existe
+      # y esta ACTIVO (ms-identidad, GET /api/v1/internal/usuarios/{uid}/contacto;
+      # sin /api/v1 en la base, la ruta ya lo lleva) y, si no esta escuchando,
+      # aviso en su bandeja (POST /internal/notifications). Los dos corren en
+      # este host y exigen la credencial de servicio de arriba. Sin estas URL el
+      # valor por omision es localhost, que dentro del contenedor es el propio
+      # servicio: ningun mensaje privado saldria (fallo cerrado).
+      IDENTIDAD_URL: ${IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
       # ------------------------------------------------------------------
       # Los cuatro servicios de CONTENIDO, que no viven en este host.
       #

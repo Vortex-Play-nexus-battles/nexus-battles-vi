@@ -741,6 +741,13 @@ services:
       # degrada al respaldo si el catalogo no esta, y ese es justamente el
       # comportamiento que se quiere en el banco.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      # B6 — mensajes privados: el destinatario existe y esta ACTIVO
+      # (GET /api/v1/internal/usuarios/{uid}/contacto, sin /api/v1 en la base)
+      # y, si no esta escuchando, aviso en su bandeja. Las dos con la
+      # credencial de arriba. El limite de frecuencia queda en su valor por
+      # omision (5 cada 10 s): mensajes-privados.e2e.spec.js lo comprueba.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
