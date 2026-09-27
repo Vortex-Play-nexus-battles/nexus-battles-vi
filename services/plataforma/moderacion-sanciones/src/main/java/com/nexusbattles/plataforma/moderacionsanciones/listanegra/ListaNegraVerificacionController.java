@@ -1,10 +1,21 @@
 package com.nexusbattles.plataforma.moderacionsanciones.listanegra;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.nexusbattles.plataforma.moderacionsanciones.seguridad.JerarquiaDeRoles;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
+
+/**
+ * {@code POST /api/v1/lista-negra/verificar} — moderacion-lista-negra.yaml 2.0.x.
+ *
+ * <p>Es publica (el formulario de registro avisa del apodo antes de enviarlo),
+ * pero el detalle solo lo ve quien trae token de servicio o de moderacion.
+ */
 @RestController
 @RequestMapping("/api/v1/lista-negra")
 public class ListaNegraVerificacionController {
@@ -16,14 +27,21 @@ public class ListaNegraVerificacionController {
     }
 
     @PostMapping("/verificar")
-    public VerificacionListaNegraResponse verificar(@RequestBody VerificacionListaNegraRequest request) {
-        var resultado = service.verificar(request.texto());
-        return new VerificacionListaNegraResponse(resultado.aprobado(), resultado.motivo());
+    public VerificacionListaNegraResponse verificar(@RequestBody VerificacionListaNegraRequest request,
+                                                    Authentication autenticacion) {
+        var resultado = service.verificar(request.texto(), request.contexto(),
+                JerarquiaDeRoles.puedeVerDetalleDeListaNegra(autenticacion));
+        return new VerificacionListaNegraResponse(resultado.aprobado(), resultado.accion(), resultado.motivo(),
+                resultado.categoria(), resultado.coincidencias());
     }
 
-    public record VerificacionListaNegraRequest(String texto) {
+    /** {@code VerificacionListaNegraRequest}; sin {@code contexto} es {@code GENERICO}. */
+    public record VerificacionListaNegraRequest(String texto, ContextoDeTexto contexto) {
     }
 
-    public record VerificacionListaNegraResponse(boolean aprobado, String motivo) {
+    /** {@code VerificacionListaNegraResponse}: lo que no aplica no viaja. */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record VerificacionListaNegraResponse(boolean aprobado, AccionDeModeracion accion, String motivo,
+                                                 CategoriaDeTermino categoria, List<String> coincidencias) {
     }
 }

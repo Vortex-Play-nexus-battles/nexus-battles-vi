@@ -16,7 +16,9 @@ public class SancionRechazada extends RuntimeException {
         /** La apelacion no procede: fuera de plazo, ya abierta, sancion no vigente, no es suya. */
         APELACION_NO_PROCEDE,
         /** La apelacion ya esta resuelta. */
-        APELACION_RESUELTA
+        APELACION_RESUELTA,
+        /** Levantar una sancion que ya no esta vigente (revertida o suspension vencida). */
+        SANCION_NO_VIGENTE
     }
 
     private final Motivo motivo;

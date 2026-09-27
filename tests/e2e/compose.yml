@@ -523,6 +523,13 @@ services:
       # cache de 1 s para que el spec vea el cambio sin esperar.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SANCIONES_PARAMETROS_CACHE_SEGUNDOS: "1"
+      # 7.3.2 (B2): la sancion se proyecta sobre la cuenta en ms-identidad
+      # (lo que niega el login a quien esta suspendido o baneado) con la
+      # credencial de arriba. correo NO esta en este banco (ver srv-ms-identidad):
+      # sus salidas se quedan en la cola, con reintento y espera creciente, sin
+      # afectar a la sancion ni al aviso en la bandeja.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      CORREO_URL: http://srv-correo:8082
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
