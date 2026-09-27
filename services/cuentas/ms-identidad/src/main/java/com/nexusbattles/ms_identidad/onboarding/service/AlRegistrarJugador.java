@@ -1,33 +1,32 @@
 package com.nexusbattles.ms_identidad.onboarding.service;
 
-import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Cuando el registro se confirma: auditoria del alta y arranque del
- * bootstrap.
+ * Cuando se confirma la transaccion que crea el alta: arranque del bootstrap.
  *
- * <p>AFTER_COMMIT y no dentro del registro: si el registro se deshace (correo
- * repetido que se colo, fallo al guardar el avatar), no debe quedar ni un
- * credito ni un heroe de una cuenta que no existe. Y el bootstrap no alarga
- * la transaccion del registro con llamadas de red.
+ * <p>AFTER_COMMIT y no dentro de la transaccion: si se deshace, no debe
+ * quedar ni un credito ni un heroe de un jugador que no existe. Y el
+ * bootstrap no alarga la transaccion con llamadas de red.
+ *
+ * <p>B1: esa transaccion es la confirmacion del correo, no el registro. La
+ * auditoria del alta de la cuenta sale al registrarse ({@code CuentaRegistrada})
+ * y la de la verificacion al confirmar ({@code CorreoVerificado}); aqui solo
+ * se lanza el bootstrap.
  */
 @Component
 public class AlRegistrarJugador {
 
-    private final AuditoriaDeCuenta auditoria;
     private final LanzadorOnboarding lanzador;
 
-    public AlRegistrarJugador(AuditoriaDeCuenta auditoria, LanzadorOnboarding lanzador) {
-        this.auditoria = auditoria;
+    public AlRegistrarJugador(LanzadorOnboarding lanzador) {
         this.lanzador = lanzador;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void alConfirmarse(JugadorRegistrado evento) {
-        auditoria.registro(evento.uid(), evento.apodo(), evento.ip());
         lanzador.lanzar(evento.uid());
     }
 }

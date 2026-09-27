@@ -36,8 +36,27 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 2.0.0
+  version: 2.1.0
   description: |
+    ### Cambios en 2.1.0 (B1, BACKEND-02 — implementado)
+
+    - 2.1.0 (B1): implementadas `POST /auth/verificacion/confirmacion`,
+      `POST /auth/verificacion/reenvio`, `POST /auth/restablecer/preguntas` y
+      `GET`/`PUT /auth/preguntas-seguridad` (fuera las marcas
+      `x-implementacion`). Menor y no parche porque se documentan respuestas
+      que el codigo da y 2.0.0 no decia, todas aditivas: `423
+      cuenta-bloqueada` y `400 datos-invalidos` en `PUT /auth/preguntas-seguridad`,
+      `400 datos-invalidos` (cuerpo mal formado) en el resto de rutas nuevas, y
+      el formato de `suspendidoHasta` del login. Tambien se corrigen dos
+      descripciones que 2.0.0 heredaba de 1.x: el ejemplo del 201 del registro
+      (ahora `PENDIENTE_VERIFICACION`) y quien devuelve problem details.
+    - Cifras que 2.0.0 dejaba sin fijar, PROVISIONALES y configurables en el
+      servicio: codigo de 8 caracteres (alfabeto sin 0/O/1/I/L), 24 h de
+      vigencia para la verificacion y 30 min para el restablecimiento, 5
+      intentos por codigo, reenvio de verificacion 60 s entre dos y 5 por hora,
+      solicitud de restablecimiento 60 s entre dos y 3 por hora, 2 a 3
+      preguntas de seguridad.
+
     ### Cambios en 2.0.0 (B0/B1 — correo verificado y recuperacion endurecida)
 
     Version mayor por **un** cambio incompatible: `POST
@@ -160,11 +179,16 @@ info:
     («formato de error estandar, identico en los 20 modulos») dentro de un
     mismo prefijo de rutas:
 
-    - `/auth/registro`, `/auth/login` y las dos de `/auth/restablecer`
-      devuelven **texto plano**: el cuerpo es el mensaje de la excepcion, sin
-      `type`, sin `title` y sin `status` en el cuerpo. Es codigo heredado.
-    - `PUT /auth/password` es **la unica ruta de /auth con problem details y
-      `type` propio**, uno por motivo de rechazo.
+    - `/auth/registro` y `/auth/login` devuelven **texto plano** por omision
+      (el mensaje de la excepcion) y problem details con
+      `Accept: application/problem+json` (1.1.0). Los 200 de
+      `/auth/restablecer/solicitar` y `/auth/restablecer/confirmar` siguen
+      siendo texto plano.
+    - `PUT /auth/password` y, desde 2.0.0/2.1.0, todas las rutas de B1
+      (`/auth/verificacion/*`, `/auth/restablecer/*`,
+      `/auth/preguntas-seguridad`) responden sus errores como **problem
+      details con `type` propio**, uno por motivo de rechazo. El 503
+      `moderacion-no-disponible` del registro, tambien.
     - `POST /auth/token` devuelve **objetos de error de OAuth2**
       (`error` / `error_description`), que no son problem details y no deben
       tratarse como tales: es el formato que exige la RFC 6749.
@@ -240,7 +264,9 @@ paths:
             **2.0.0:** una cuenta de autorregistro nace con `estado`
             `PENDIENTE_VERIFICACION` y se envia el codigo de verificacion al
             correo. No puede iniciar sesion hasta confirmarlo con
-            `POST /api/v1/auth/verificacion/confirmacion`.
+            `POST /api/v1/auth/verificacion/confirmacion`. El alta del jugador
+            (creditos de bienvenida, heroe inicial, equipo) y el correo de
+            bienvenida esperan a esa confirmacion.
           content:
             application/json:
               schema:
@@ -250,7 +276,7 @@ paths:
                 publicId: 6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b
                 apodo: valkiria
                 email: valkiria@ejemplo.upb.edu.co
-                estado: ACTIVO
+                estado: PENDIENTE_VERIFICACION
                 rol:
                   id: 1
                   nombre: JUGADOR
@@ -378,6 +404,10 @@ paths:
             correo aun no se confirmo. `cuenta-suspendida` trae ademas
             `suspendidoHasta` (fin de la suspension) para el contador visible
             del 7.3.2. Estos 403 solo salen si la contrasena es correcta.
+
+            **2.1.0:** `suspendidoHasta` es un instante ISO-8601 en UTC
+            (`2026-09-26T15:00:00Z`). Una suspension que ya vencio no da 403:
+            la persona entra y la proyeccion se limpia.
           content:
             text/plain:
               schema:
@@ -514,6 +544,14 @@ paths:
         que es exactamente la informacion que el mensaje generico del login
         ya se cuida de no dar. Un 200 aqui **no significa que el correo
         exista** ni que se haya enviado nada.
+
+        **2.1.0 (B1).** Solo una cuenta ACTIVA (o con una suspension ya
+        vencida) recibe codigo; las pendientes de verificar, baneadas o
+        suspendidas no. Limite por cuenta: 60 s entre dos solicitudes y 3 por
+        hora (`identidad.recuperacion.*`); pasado, no se envia nada y la
+        respuesta no cambia. Cada codigo nuevo anula los anteriores (tambien
+        un codigo de activacion pendiente). Los dos caminos, con o sin cuenta,
+        cuestan lo mismo (un BCrypt) para que el tiempo tampoco lo delate.
       security: []
       requestBody:
         required: true
@@ -534,21 +572,23 @@ paths:
               schema:
                 type: string
               example: Si existe una cuenta asociada, recibirás instrucciones.
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
 
   /api/v1/auth/restablecer/preguntas:
     post:
       tags: [cuenta]
       operationId: consultarPreguntasDeRecuperacion
       summary: Devuelve las preguntas de seguridad de la cuenta, a cambio del codigo (2.0.0)
-      x-implementacion: pendiente
-      x-fase: B1
       description: |
         Paso intermedio de la recuperacion (7.1.1). Solo quien tiene el codigo
         que llego al correo ve las preguntas: sin el codigo no hay forma de
         saber si una cuenta existe ni que preguntas configuro. Un codigo
         incorrecto **cuenta como intento fallido** del mismo codigo (5 y se
-        anula). Lista vacia = la cuenta no configuro preguntas; entonces basta
-        el codigo.
+        anula); uno correcto NO se consume aqui (se canjea en
+        `/auth/restablecer/confirmar`). Lista vacia = la cuenta no configuro
+        preguntas; entonces basta el codigo. Un codigo de ACTIVACION (cuenta
+        administrativa) devuelve siempre la lista vacia.
       security: []
       requestBody:
         required: true
@@ -585,6 +625,16 @@ paths:
         fallos anulan el codigo (429). Canjearlo sube la version de token —se
         cierran las sesiones abiertas—, envia el aviso `cambio-clave` y queda
         en la auditoria. Los errores salen como problem details.
+
+        **2.1.0.** Orden de las comprobaciones: codigo (un fallo cuenta
+        intento) -> politica de la contrasena (422, NO cuenta intento ni quema
+        el codigo: se corrige y se reintenta con el mismo) -> respuestas (un
+        fallo cuenta intento del codigo) -> canje. Canjear tambien desbloquea
+        el login (intentos fallidos a cero) y, si la cuenta era una cuenta
+        administrativa sin activar, la deja ACTIVA. Mientras el PO no haga
+        obligatorias las preguntas (`identidad.recuperacion.preguntas-obligatorias`,
+        desviacion documentada del 7.1.1), una cuenta que no las configuro se
+        recupera solo con el codigo.
       security: []
       requestBody:
         required: true
@@ -629,14 +679,18 @@ paths:
       tags: [cuenta]
       operationId: confirmarCorreo
       summary: Confirma el correo con el codigo recibido y activa la cuenta (2.0.0)
-      x-implementacion: pendiente
-      x-fase: B1
       description: |
         Canjea el codigo de verificacion. La cuenta pasa de
         `PENDIENTE_VERIFICACION` a `ACTIVO` y **entonces** empieza el alta del
         jugador (creditos de bienvenida, heroe inicial, equipo) y se envia el
         correo de bienvenida. Confirmar una cuenta ya activa con un codigo que
-        ya se uso responde el 400 generico; el alta nunca se lanza dos veces.
+        ya se uso responde el 400 generico; el alta nunca se lanza dos veces
+        (la transicion es un UPDATE condicionado al estado pendiente: de dos
+        confirmaciones simultaneas, una gana y la otra recibe el 400).
+
+        El codigo se compara sin distinguir mayusculas y sin espacios ni
+        guiones (`k7qx-2m9p` vale por `K7QX2M9P`). Un cuerpo sin `email` o sin
+        `codigo` responde 400 `datos-invalidos`.
       security: []
       requestBody:
         required: true
@@ -664,8 +718,6 @@ paths:
       tags: [cuenta]
       operationId: reenviarCodigoDeVerificacion
       summary: Emite un codigo de verificacion nuevo (2.0.0)
-      x-implementacion: pendiente
-      x-fase: B1
       description: |
         **Respuesta neutra**: 202 con el mismo texto exista o no una cuenta
         pendiente con ese correo. Si existe, se anula el codigo anterior y se
@@ -690,14 +742,17 @@ paths:
                 $ref: '#/components/schemas/MensajeNeutro'
               example:
                 mensaje: Si existe una cuenta pendiente asociada, recibirás un código nuevo.
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
 
   /api/v1/auth/preguntas-seguridad:
     get:
       tags: [cuenta]
       operationId: consultarMisPreguntasDeSeguridad
       summary: Preguntas de seguridad configuradas por la propia cuenta (2.0.0)
-      x-implementacion: pendiente
-      x-fase: B1
+      description: |
+        Las de la cuenta que firma el token (su `uid`; el apodo en tokens
+        anteriores al `uid`), nunca otra. Sin las respuestas.
       security:
         - tokenDeUsuario: []
       responses:
@@ -717,16 +772,18 @@ paths:
       tags: [cuenta]
       operationId: configurarMisPreguntasDeSeguridad
       summary: Configura o reemplaza las preguntas de seguridad (2.0.0)
-      x-implementacion: pendiente
-      x-fase: B1
       description: |
         Reemplaza todas las preguntas de la cuenta. Exige la contrasena
         actual (un token robado no basta para cambiar el segundo factor de la
         recuperacion). Las preguntas las escribe la persona; las respuestas se
-        normalizan (sin espacios extremos, minusculas, sin tildes) y se
-        guardan con BCrypt. Cantidad entre
+        normalizan (sin espacios extremos, minusculas, sin tildes, espacios
+        interiores colapsados) y se guardan con BCrypt. Cantidad entre
         `identidad.recuperacion.preguntas-minimas` y `-maximas` (2 y 3 por
         omision; decision del PO pendiente).
+
+        **2.1.0.** Una contrasena actual incorrecta cuenta como intento
+        fallido de la cuenta (RF-AUT-009), igual que en `PUT /auth/password`;
+        con la cuenta bloqueada no se compara y responde 423.
       security:
         - tokenDeUsuario: []
       requestBody:
@@ -748,11 +805,21 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
         '422':
           description: |
             `contrasena-actual-incorrecta` (cuenta como intento fallido) o
             `preguntas-invalidas` (cantidad fuera de rango, pregunta o
             respuesta vacia o demasiado larga, preguntas repetidas).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '423':
+          description: |
+            2.1.0 — `.../errors/cuenta-bloqueada`: la cuenta esta bloqueada por
+            intentos fallidos (RF-AUT-009) y no se compara la contrasena.
           content:
             application/problem+json:
               schema:
@@ -1044,6 +1111,18 @@ components:
         correo, no tiene un codigo vigente de ese tipo, el codigo no coincide,
         caduco o ya se uso. Un solo mensaje para todos los casos: distinguirlos
         diria que correos estan registrados.
+
+        2.1.0 — con el cuerpo mal formado (sin `email` o sin `codigo`, JSON
+        ilegible) el 400 lleva `type` `.../errors/datos-invalidos`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    DatosInvalidos:
+      description: |
+        2.1.0 — `type` `.../errors/datos-invalidos`: el cuerpo no tiene la forma
+        esperada (falta un campo obligatorio o no es JSON). No depende de que
+        exista ninguna cuenta.
       content:
         application/problem+json:
           schema:
@@ -1136,7 +1215,7 @@ components:
           format: email
         estado:
           type: string
-          description: '`ACTIVO` en un alta nueva.'
+          description: '`PENDIENTE_VERIFICACION` en un alta nueva (2.0.0; antes `ACTIVO`).'
         rol:
           type: object
           additionalProperties: true
@@ -1550,10 +1629,12 @@ components:
     ProblemDetail:
       type: object
       description: |
-        Problem details RFC 7807 (regla 4). **Solo lo devuelven
-        `PUT /api/v1/auth/password` y el 403 del interceptor**; el resto de
-        `/auth` responde texto plano y `/auth/token` responde errores de
-        OAuth2. La interfaz decide por `type`, nunca por el texto.
+        Problem details RFC 7807 (regla 4). Lo devuelven `PUT
+        /api/v1/auth/password`, el 403 del interceptor, las rutas de B1
+        (verificacion, restablecimiento, preguntas de seguridad), el 503 del
+        registro y, con `Accept: application/problem+json`, los rechazos del
+        registro y del login. `/auth/token` responde errores de OAuth2. La
+        interfaz decide por `type`, nunca por el texto.
       required: [type, title, status]
       properties:
         type:

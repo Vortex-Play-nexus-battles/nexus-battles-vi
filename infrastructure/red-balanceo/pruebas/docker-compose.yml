@@ -115,6 +115,15 @@ services:
     volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
+  # B1 — la bandeja de pruebas. El borde la sirve en /mailpit/ y las pruebas
+  # leen de su API el codigo que verifica cada cuenta nueva. Se llama como el
+  # contenedor de verdad (`mailpit`, el nombre que usa `borde-dev.conf`).
+  mailpit:
+    image: nginx:1.27-alpine
+    hostname: MAILPIT
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
   # R16 — adaptador del borde para el banco, el mismo mecanismo que
   # `e2e-borde-conf` en tests/e2e/compose.yml (R8.2, #614).
   #
@@ -186,6 +195,7 @@ services:
       srv-ms-ecommerce: { condition: service_started }
       srv-ms-chatbot: { condition: service_started }
       srv-productos: { condition: service_started }
+      mailpit: { condition: service_started }
 
 networks:
   borde:

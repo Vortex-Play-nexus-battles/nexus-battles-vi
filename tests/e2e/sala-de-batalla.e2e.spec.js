@@ -28,6 +28,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 // El libro de creditos (HU-JUE-014) no esta detras del borde: se le pregunta
 // el saldo por el puerto que expone el compose. Ningun jugador pasa por aqui;
@@ -42,39 +44,13 @@ const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CURIOSO = process.env.E2E_CURIOSO ?? 'curioso_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 
-/** Cuerpo de un JWT, sin verificar la firma: aquí solo se lee para afirmar. */
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
 /**
- * Registra (si hace falta) e inicia sesión. El registro avisa por correo, pero
- * es fail-open: sin servicio de correo la cuenta se crea igual, y por eso este
- * banco no levanta ni correo ni mailpit.
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
  */
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: {
-      nombres: 'Jugadora',
-      apellidos: 'De Prueba',
-      email,
-      password: CLAVE,
-      apodo,
-    },
-  });
-  // 409/400 si ya existe de una corrida anterior: no es un fallo del flujo.
-  expect([200, 201, 400, 409]).toContain(registro.status());
-
-  const login = await api.post('/api/v1/auth/login', {
-    data: { email, password: CLAVE },
-  });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {

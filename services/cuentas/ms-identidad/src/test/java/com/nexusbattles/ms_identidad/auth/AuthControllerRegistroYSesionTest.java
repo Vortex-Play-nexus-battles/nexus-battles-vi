@@ -6,6 +6,7 @@ import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasExcepti
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaNoVerificadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
@@ -15,7 +16,8 @@ import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
-import com.nexusbattles.ms_identidad.auth.service.TokenCredencialService;
+import com.nexusbattles.ms_identidad.auth.validation.ModeracionNoDisponibleException;
+import com.nexusbattles.ms_identidad.config.ModeracionNoDisponibleAdvice;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.rbac.repository.RbacMatrixRepository;
 import com.nexusbattles.ms_identidad.rbac.security.AuditoriaEventClient;
@@ -75,8 +77,7 @@ class AuthControllerRegistroYSesionTest {
         usuarioRepository = mock(UsuarioRepository.class);
         auditoria = mock(AuditoriaDeCuenta.class);
 
-        AuthController controlador = new AuthController(registroService, loginService,
-                mock(TokenCredencialService.class), usuarioRepository, auditoria);
+        AuthController controlador = new AuthController(registroService, loginService, usuarioRepository, auditoria);
 
         jwtService = new JwtService(new ClavesDeFirma(""));
         ReflectionTestUtils.setField(jwtService, "horasExpiracion", 24);
@@ -89,7 +90,8 @@ class AuthControllerRegistroYSesionTest {
                 new AuditoriaEventClient("http://localhost:8091/api/v1/admin/auditoria/eventos", null),
                 jwtService, usuarioRepository, false);
 
-        mockMvc = MockMvcBuilders.standaloneSetup(controlador).addInterceptors(interceptor).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(controlador).addInterceptors(interceptor)
+                .setControllerAdvice(new ModeracionNoDisponibleAdvice()).build();
     }
 
     private static MockMultipartHttpServletRequestBuilder registro() {
@@ -100,22 +102,37 @@ class AuthControllerRegistroYSesionTest {
     }
 
     private void registroRechazado(Supplier<RuntimeException> fallo) {
-        when(registroService.registrarUsuario(any(), any(), any())).thenThrow(fallo.get());
+        when(registroService.registrarUsuario(any(), any())).thenThrow(fallo.get());
     }
 
     @Test
-    @DisplayName("alta correcta: 201, con la traza y la IP de la peticion llegando al servicio")
+    @DisplayName("alta correcta: 201 con la cuenta PENDIENTE_VERIFICACION y la IP de la peticion llegando al servicio")
     void altaCorrecta() throws Exception {
         Usuario creado = new Usuario();
         creado.setApodo("ada");
-        when(registroService.registrarUsuario(any(), eq("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"),
-                eq("203.0.113.5"))).thenReturn(creado);
+        creado.setEstado("PENDIENTE_VERIFICACION");
+        creado.setPassword("$2a$10$nunca-sale");
+        when(registroService.registrarUsuario(any(), eq("203.0.113.5"))).thenReturn(creado);
 
-        mockMvc.perform(registro()
-                        .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")
-                        .header("X-Forwarded-For", "203.0.113.5"))
+        mockMvc.perform(registro().header("X-Forwarded-For", "203.0.113.5"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.apodo").value("ada"));
+                .andExpect(jsonPath("$.apodo").value("ada"))
+                .andExpect(jsonPath("$.estado").value("PENDIENTE_VERIFICACION"))
+                .andExpect(jsonPath("$.password").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("B2: lista negra caida -> 503 moderacion-no-disponible con Retry-After, nunca un apodo sin comprobar")
+    void listaNegraCaida() throws Exception {
+        registroRechazado(() -> new ModeracionNoDisponibleException("No pudimos comprobar el apodo."));
+
+        mockMvc.perform(registro())
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string("Retry-After", "30"))
+                .andExpect(content().contentTypeCompatibleWith(PROBLEMA))
+                .andExpect(jsonPath("$.type").value(TIPOS + "moderacion-no-disponible"))
+                .andExpect(jsonPath("$.instance").value("/api/v1/auth/registro"));
     }
 
     @Test
@@ -188,6 +205,7 @@ class AuthControllerRegistroYSesionTest {
         Object[][] casos = {
             {new CredencialesInvalidasException("Correo o contraseña incorrectos."), 401, "credenciales-invalidas"},
             {new CuentaBaneadaException("Baneada."), 403, "cuenta-baneada"},
+            {new CuentaNoVerificadaException(), 403, "cuenta-no-verificada"},
             {new CuentaSuspendidaException("Suspendida."), 403, "cuenta-suspendida"},
             {new CuentaInactivaException("Inactiva."), 403, "cuenta-inactiva"},
             {new CuentaBloqueadaException("Bloqueada."), 423, "cuenta-bloqueada"},
@@ -206,6 +224,25 @@ class AuthControllerRegistroYSesionTest {
                     .andExpect(jsonPath("$.type").value(TIPOS + caso[2]))
                     .andExpect(jsonPath("$.detail").value(fallo.getMessage()));
         }
+    }
+
+    @Test
+    @DisplayName("B2: cuenta-suspendida trae el fin de la suspension para el contador visible (7.3.2)")
+    void suspensionConFin() throws Exception {
+        doThrow(new CuentaSuspendidaException("Cuenta suspendida. Tiempo restante: 60 minutos.",
+                java.time.OffsetDateTime.parse("2026-09-26T10:00:00-05:00")))
+                .when(loginService).iniciarSesion(any(), any(), any());
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}").accept(PROBLEMA))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value(TIPOS + "cuenta-suspendida"))
+                .andExpect(jsonPath("$.suspendidoHasta").value("2026-09-26T15:00:00Z"));
+        // En texto plano, el mensaje de siempre.
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string("Cuenta suspendida. Tiempo restante: 60 minutos."));
     }
 
     @Test

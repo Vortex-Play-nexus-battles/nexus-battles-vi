@@ -1,7 +1,8 @@
 package com.nexusbattles.ms_identidad.auth;
 
-import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
-import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoBienvenidaRequest;
+import com.nexusbattles.ms_identidad.auth.codigos.CodigosDeCorreo;
+import com.nexusbattles.ms_identidad.auth.codigos.CuentaRegistrada;
+import com.nexusbattles.ms_identidad.auth.codigos.TipoCodigo;
 import com.nexusbattles.ms_identidad.auth.dto.RegistroRequest;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
@@ -10,8 +11,8 @@ import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
 import com.nexusbattles.ms_identidad.auth.validation.ApodoBlacklistValidator;
+import com.nexusbattles.ms_identidad.auth.validation.ModeracionNoDisponibleException;
 import com.nexusbattles.ms_identidad.auth.validation.PasswordPolicyValidator;
-import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import com.nexusbattles.ms_identidad.rbac.service.RolService;
@@ -22,6 +23,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.util.UUID;
@@ -51,13 +53,13 @@ class RegistroServiceTest {
     private PerfilUsuarioService perfilUsuarioService;
 
     @Mock
-    private CorreoClient correoClient;
-
-    @Mock
     private AvatarStorageService avatarStorageService;
 
     @Mock
-    private OnboardingService onboardingService;
+    private CodigosDeCorreo codigos;
+
+    @Mock
+    private ApplicationEventPublisher eventos;
 
     @InjectMocks
     private RegistroService registroService;
@@ -99,7 +101,7 @@ class RegistroServiceTest {
         assertEquals(Motivo.CORREO_EN_USO, exception.getMotivo());
         assertEquals("email", exception.getCampo());
         verify(usuarioRepository, never()).save(any());
-        verifyNoInteractions(onboardingService);
+        verifyNoInteractions(codigos, eventos);
     }
 
     @Test
@@ -207,7 +209,7 @@ class RegistroServiceTest {
             RegistroRechazadoException.class, () -> registroService.registrarUsuario(datosValidos()));
 
         assertEquals(Motivo.AVATAR_INVALIDO, exception.getMotivo());
-        verifyNoInteractions(onboardingService);
+        verifyNoInteractions(codigos, eventos);
     }
 
     @Test
@@ -224,19 +226,35 @@ class RegistroServiceTest {
 
         assertEquals("cristianc", resultado.getApodo());
         assertEquals("cristian@test.com", resultado.getEmail());
-        assertEquals("ACTIVO", resultado.getEstado());
+        assertEquals("PENDIENTE_VERIFICACION", resultado.getEstado(), "B1: nace sin verificar");
         assertNotEquals("MiClave123!", resultado.getPassword());
         assertTrue(new BCryptPasswordEncoder().matches("MiClave123!", resultado.getPassword()));
 
         verify(perfilUsuarioService).crearPerfil(
             resultado, "Cristian", "Chaparro", null
         );
-        verify(correoClient).enviarBienvenida(any());
+        verify(codigos).emitir(resultado, TipoCodigo.VERIFICACION);
+        verify(eventos).publishEvent(new CuentaRegistrada(UID, "cristianc", null));
     }
 
     @Test
-    @DisplayName("R17: la cuenta nace con su alta, con el correo normalizado y la traza de la peticion")
-    void nacenJuntasLaCuentaYSuAlta() {
+    @DisplayName("B2: si la lista negra no responde, la excepcion sube tal cual (503) y no se guarda nada")
+    void listaNegraCaida() {
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        when(usuarioRepository.existsByApodoIgnoreCase(anyString())).thenReturn(false);
+        doThrow(new ModeracionNoDisponibleException("sin respuesta"))
+            .when(apodoBlacklistValidator).validar(anyString());
+
+        assertThrows(ModeracionNoDisponibleException.class,
+            () -> registroService.registrarUsuario(datosValidos(), "10.0.0.1"));
+
+        verify(usuarioRepository, never()).save(any());
+        verifyNoInteractions(codigos, eventos);
+    }
+
+    @Test
+    @DisplayName("B1: la cuenta nace pendiente, con su codigo de verificacion y SIN alta del jugador")
+    void naceSinAltaYConCodigo() {
         RegistroRequest datos = datosValidos();
         datos.setEmail("  Profe@UPB.edu.CO ");
         datos.setApodo("  profe  ");
@@ -244,29 +262,14 @@ class RegistroServiceTest {
         when(usuarioRepository.existsByApodoIgnoreCase("profe")).thenReturn(false);
         guardadoConUid();
 
-        String traceId = "4bf92f3577b34da6a3ce929d0e0e4736";
-        Usuario resultado = registroService.registrarUsuario(
-            datos, "00-" + traceId + "-00f067aa0ba902b7-01", "10.1.2.3");
+        Usuario resultado = registroService.registrarUsuario(datos, "10.1.2.3");
 
         assertEquals("profe@upb.edu.co", resultado.getEmail(), "se guarda como lo encontrara el login");
         assertEquals("profe", resultado.getApodo());
-        verify(onboardingService).iniciar(UID, "profe", traceId, "10.1.2.3");
-        ArgumentCaptor<CorreoBienvenidaRequest> correo = ArgumentCaptor.forClass(CorreoBienvenidaRequest.class);
-        verify(correoClient).enviarBienvenida(correo.capture());
-        assertEquals("profe@upb.edu.co", correo.getValue().getEmail());
-    }
-
-    @Test
-    @DisplayName("R17: sin traceparent valido, el alta recibe una traza nueva")
-    void sinTraceparentHayTrazaNueva() {
-        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
-        when(usuarioRepository.existsByApodoIgnoreCase(anyString())).thenReturn(false);
-        guardadoConUid();
-
-        registroService.registrarUsuario(datosValidos(), "basura", null);
-
-        ArgumentCaptor<String> traza = ArgumentCaptor.forClass(String.class);
-        verify(onboardingService).iniciar(eq(UID), eq("cristianc"), traza.capture(), isNull());
-        assertTrue(traza.getValue().matches("[0-9a-f]{32}"));
+        assertEquals("PENDIENTE_VERIFICACION", resultado.getEstado());
+        verify(codigos).emitir(resultado, TipoCodigo.VERIFICACION);
+        ArgumentCaptor<CuentaRegistrada> evento = ArgumentCaptor.forClass(CuentaRegistrada.class);
+        verify(eventos).publishEvent(evento.capture());
+        assertEquals(new CuentaRegistrada(UID, "profe", "10.1.2.3"), evento.getValue());
     }
 }

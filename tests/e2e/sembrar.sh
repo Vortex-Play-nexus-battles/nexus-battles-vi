@@ -40,6 +40,91 @@ CLAVE="${E2E_CLAVE:-Contrasena-E2E-2026}"
 # Prototipo que el catalogo de heroes siembra solo (CatalogoEnMongo).
 PROTOTIPO="Guerrero Tanque"
 
+# B1 — la bandeja de pruebas. Desde identidad 2.0.0 una cuenta de autorregistro
+# nace pendiente de verificar su correo, y el login responde 403
+# `cuenta-no-verificada` hasta que se confirma el codigo que llega al buzon. La
+# semilla hace lo mismo que una persona: lo lee en Mailpit (el borde lo sirve en
+# /mailpit/, igual que en DEV) y lo confirma. Es la misma logica que
+# tests/e2e/ayudantes/correo.js, en bash: la semilla corre antes de que el flujo
+# de CI instale Node. Las cuentas son @nexus.test (dominio reservado): el
+# servicio de correo las entrega en Mailpit.
+MAILPIT_URL="${MAILPIT_URL:-$BORDE/mailpit}"
+AUTH_MAILPIT=()
+if [ -n "${MAILPIT_USUARIO:-}" ] && [ -n "${MAILPIT_CLAVE:-}" ]; then
+  AUTH_MAILPIT=(-u "$MAILPIT_USUARIO:$MAILPIT_CLAVE")
+fi
+
+# ids_de_correos <correo>: identificadores de los correos de esa direccion, del
+# mas nuevo al mas viejo. Mailpit busca por fragmento en `to:`: se filtra por la
+# direccion exacta.
+ids_de_correos() {
+  local correo="$1" consulta
+  consulta=$(jq -rn --arg c "to:\"$correo\"" '$c|@uri')
+  curl -sS "${AUTH_MAILPIT[@]}" "$MAILPIT_URL/api/v1/search?query=$consulta&limit=50" 2>/dev/null \
+    | jq -r --arg c "$correo" \
+      '[.messages[]? | select(any(.To[]?; ((.Address // "") | ascii_downcase) == ($c | ascii_downcase)))]
+       | sort_by(.Created) | reverse | .[].ID' 2>/dev/null || true
+}
+
+# codigo_de_verificacion <correo> <segundos> [ids a ignorar]: imprime el codigo
+# del correo de verificacion mas reciente que no este en la lista. Primero el
+# enlace de correo 1.4.0 (/verificar#codigo=...); si el correo es anterior, la
+# linea sola del codigo de un correo de confirmacion. Nunca imprime el correo.
+codigo_de_verificacion() {
+  local correo="$1" segundos="$2" ignorar="${3:-}" id detalle codigo
+  for _ in $(seq 1 "$segundos"); do
+    for id in $(ids_de_correos "$correo"); do
+      case " $ignorar " in *" $id "*) continue ;; esac
+      detalle=$(curl -sS "${AUTH_MAILPIT[@]}" "$MAILPIT_URL/api/v1/message/$id" 2>/dev/null)
+      codigo=$(printf '%s' "$detalle" | jq -r '(.Text // "") + "\n" + (.HTML // "")' 2>/dev/null \
+        | grep -oE '/verificar(\?[^#" <>]*)?#[^" <>]*codigo=[A-Za-z0-9-]+' | head -1 | sed -E 's/.*codigo=//')
+      if [ -z "$codigo" ] && printf '%s' "$detalle" \
+          | jq -e '(.Subject // "") | test("confirma|verific|activa"; "i")' >/dev/null 2>&1; then
+        codigo=$(printf '%s' "$detalle" | jq -r '.Text // ""' | tr -d '\r' \
+          | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -E '^[A-Z0-9]{6,16}$' | head -1)
+      fi
+      if [ -n "$codigo" ]; then
+        printf '%s' "$codigo" | tr -d '-' | tr '[:lower:]' '[:upper:]'
+        return 0
+      fi
+    done
+    sleep 1
+  done
+  return 1
+}
+
+# confirmar_codigo <correo> <codigo>: imprime el codigo HTTP del canje.
+confirmar_codigo() {
+  curl -sS -o /dev/null -w '%{http_code}' -X POST "$BORDE/api/v1/auth/verificacion/confirmacion" \
+    -H "Content-Type: application/json" -H "Accept: application/problem+json, application/json" \
+    -d "{\"email\":\"$1\",\"codigo\":\"$2\"}"
+}
+
+# verificar_correo <correo>: confirma una cuenta pendiente con el codigo del
+# buzon. Si el del registro no sirve (caducado, o de una corrida anterior) o no
+# llega, pide otro y espera uno que no estuviera ya. El servidor limita los
+# reenvios (60 s por omision) sin cambiar la respuesta: de ahi la espera larga.
+verificar_correo() {
+  local correo="$1" codigo vistos
+  if codigo=$(codigo_de_verificacion "$correo" 30) \
+      && [ "$(confirmar_codigo "$correo" "$codigo")" = "200" ]; then
+    return 0
+  fi
+  vistos=$(ids_de_correos "$correo" | tr '\n' ' ')
+  curl -sS -o /dev/null -X POST "$BORDE/api/v1/auth/verificacion/reenvio" \
+    -H "Content-Type: application/json" -d "{\"email\":\"$correo\"}"
+  codigo=$(codigo_de_verificacion "$correo" 100 "$vistos") || return 1
+  [ "$(confirmar_codigo "$correo" "$codigo")" = "200" ]
+}
+
+# login_de <correo>: el cuerpo de la respuesta del login, con problem details
+# para poder leer el `type` de un rechazo.
+login_de() {
+  curl -sS -X POST "$BORDE/api/v1/auth/login" \
+    -H "Content-Type: application/json" -H "Accept: application/problem+json, application/json" \
+    -d "{\"email\":\"$1\",\"password\":\"$CLAVE\"}"
+}
+
 # Inventario ya no cree en X-User-Name a secas: un jugador es quien dice su
 # JWT. Asi que cada jugador se registra e inicia sesion en ms-identidad (el
 # mismo camino que usara el navegador) y siembra su inventario con su token.
@@ -54,12 +139,24 @@ token_de() {
       -X POST "$BORDE/api/v1/auth/registro" \
       -F "nombres=Jugadora" -F "apellidos=De Prueba" -F "email=$email" \
       -F "password=$CLAVE" -F "apodo=$apodo" >&2
-    local token
-    token=$(curl -sS -X POST "$BORDE/api/v1/auth/login" \
-      -H "Content-Type: application/json" \
-      -d "{\"email\":\"$email\",\"password\":\"$CLAVE\"}" | jq -r '.token // empty')
+    local respuesta token
+    respuesta=$(login_de "$email")
+    token=$(printf '%s' "$respuesta" | jq -r '.token // empty' 2>/dev/null || true)
+    # B1 — pendiente de verificar: se confirma con el codigo del buzon y se
+    # vuelve a entrar. Una cuenta ya verificada (otra llamada, otra corrida)
+    # entra a la primera.
+    if [ -z "$token" ] && printf '%s' "$respuesta" \
+        | jq -e '(.type // "") | endswith("/cuenta-no-verificada")' >/dev/null 2>&1; then
+      echo "  $apodo: correo sin verificar; se confirma con el codigo del buzon ($MAILPIT_URL)" >&2
+      if ! verificar_correo "$email"; then
+        echo "::error::No se pudo verificar el correo de $apodo con el buzon de pruebas ($MAILPIT_URL)" >&2
+        exit 1
+      fi
+      respuesta=$(login_de "$email")
+      token=$(printf '%s' "$respuesta" | jq -r '.token // empty' 2>/dev/null || true)
+    fi
     if [ -z "$token" ]; then
-      echo "::error::No se pudo iniciar sesion como $apodo en ms-identidad"; exit 1
+      echo "::error::No se pudo iniciar sesion como $apodo en ms-identidad" >&2; exit 1
     fi
     TOKEN_DE[$apodo]="$token"
   fi
