@@ -8,10 +8,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import nexus.inventario.configuracion.IdentidadDelLlamador;
+import nexus.inventario.aplicacion.CatalogoDeProductosEnMemoria;
 import nexus.inventario.aplicacion.GestionarEquipamiento;
 import nexus.inventario.aplicacion.RepositorioInventariosEnMemoria;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.Inventario;
+import nexus.inventario.dominio.ParteArmadura;
 import nexus.inventario.dominio.TipoElementoInventario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,13 +24,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class EquipamientoApiTest {
 
     private RepositorioInventariosEnMemoria repositorio;
+    private CatalogoDeProductosEnMemoria catalogo;
     private MockMvc mvc;
 
     @BeforeEach
     void preparar() {
         repositorio = new RepositorioInventariosEnMemoria();
+        catalogo = new CatalogoDeProductosEnMemoria();
         mvc = MockMvcBuilders.standaloneSetup(
-                        new EquipamientoController(new GestionarEquipamiento(repositorio), new IdentidadDelLlamador()))
+                        new EquipamientoController(
+                                new GestionarEquipamiento(repositorio, catalogo), new IdentidadDelLlamador()))
                 .setControllerAdvice(new ManejadorDeErrores())
                 .build();
     }
@@ -84,6 +89,36 @@ class EquipamientoApiTest {
         mvc.perform(put(ruta("heroe-B", "arma-B")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.title").value("Inventario ajeno"));
+    }
+
+    @Test
+    @DisplayName("B4: una armadura ocupa la ranura que dice el catalogo, no la que guardo el elemento")
+    void armaduraEnLaRanuraDelCatalogo() throws Exception {
+        catalogo.registrarArmadura("producto-peto", ParteArmadura.PECHO);
+        repositorio.guardar(Inventario.vacio("jugador-A")
+                .agregar(new ElementoInventario("heroe-A", "producto-heroe-A", TipoElementoInventario.HEROE, "heroe-A"))
+                .agregar(new ElementoInventario(
+                        "peto-A", "producto-peto", TipoElementoInventario.ARMADURA, "Mi peto", ParteArmadura.CASCO)));
+
+        mvc.perform(put(ruta("heroe-A", "peto-A")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.armaduras.PECHO").value("peto-A"))
+                .andExpect(jsonPath("$.armaduras.CASCO").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("B4: con el catalogo caido, equipar una armadura es 503 'Catalogo no disponible'")
+    void armaduraConElCatalogoCaido() throws Exception {
+        catalogo.registrarArmadura("producto-peto", ParteArmadura.PECHO);
+        repositorio.guardar(Inventario.vacio("jugador-A")
+                .agregar(new ElementoInventario("heroe-A", "producto-heroe-A", TipoElementoInventario.HEROE, "heroe-A"))
+                .agregar(new ElementoInventario(
+                        "peto-A", "producto-peto", TipoElementoInventario.ARMADURA, "Mi peto", ParteArmadura.PECHO)));
+        catalogo.caer();
+
+        mvc.perform(put(ruta("heroe-A", "peto-A")).with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.title").value("Catalogo no disponible"));
     }
 
     private String ruta(String heroeId, String elementoId) {

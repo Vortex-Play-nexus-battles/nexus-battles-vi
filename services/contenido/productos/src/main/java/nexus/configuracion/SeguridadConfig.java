@@ -55,11 +55,27 @@ public class SeguridadConfig {
                                 .authenticated()
                                 .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // B4 (contrato 1.4.0): suspender y reactivar son de la
+                                // administracion del catalogo (seccion 7.2.1).
+                                .requestMatchers(
+                                        HttpMethod.PUT,
+                                        "/api/v1/productos/{id}/suspender",
+                                        "/api/v1/productos/{id}/reactivar")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // B4: reservar tiraje es de quien vende —un servicio
+                                // con su credencial (ADR-005)—, nunca de un usuario:
+                                // ni un jugador ni un administrador descuentan
+                                // unidades a mano.
+                                .requestMatchers(HttpMethod.POST, "/api/v1/productos/{id}/adquisiciones")
+                                .hasRole("SERVICIO")
                                 // Lectura publica del catalogo: el detalle por id y, desde
                                 // R16 (contrato 1.2.0), el listado paginado de la coleccion
                                 // que proyecta la vitrina de ms-ecommerce. Solo GET: el POST
                                 // de la misma ruta sigue exigiendo administrador (arriba), y
                                 // /estadisticas va antes para no quedar cubierta por {id}.
+                                // Publica no quiere decir igual para todos (B4): si llega un
+                                // token valido, el controlador lo usa para decidir que
+                                // proyeccion devuelve (VisibilidadDelLlamador).
                                 .requestMatchers(
                                         HttpMethod.GET,
                                         "/api/v1/productos",

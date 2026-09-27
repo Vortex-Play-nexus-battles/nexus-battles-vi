@@ -8,11 +8,12 @@ import org.springframework.data.mongodb.core.mapping.Document;
 /**
  * Estado de un {@link Producto} justo antes de una modificacion (HU-PRD-003).
  *
- * DECISION EXPLICITA: no incluye quien hizo el cambio. Hoy SeguridadConfig
- * solo extrae roles del JWT (JwtGrantedAuthoritiesConverter), no el subject
- * como identidad de negocio, y ningun controller de este modulo lo propaga.
- * Agregar un campo "modificadoPor" sin esa identidad disponible obligaria a
- * inventar un valor - se deja fuera y documentado en vez de adivinar.
+ * <p>{@code autor} es el identificador estable (claim {@code uid}) del
+ * administrador que hizo el cambio — B4. Hasta entonces el respaldo no decia
+ * quien habia modificado nada porque ningun controlador propagaba la identidad
+ * del token; ahora la pasa el controlador desde la autenticacion (principal de
+ * {@code ConversorRolesJwt}: el {@code uid}, o el {@code sub} si el token no lo
+ * trae). Los respaldos anteriores a B4 no tienen autor.
  */
 @Document(collection = "productos_historico")
 public record RespaldoProducto(
@@ -24,5 +25,7 @@ public record RespaldoProducto(
 
         Producto estadoAnterior,
 
-        Instant modificadoEn) {
+        Instant modificadoEn,
+
+        String autor) {
 }

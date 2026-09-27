@@ -11,11 +11,13 @@ import nexus.dominio.Estadisticas;
 import nexus.dominio.Formula;
 import nexus.dominio.HeroeNoDisponibleException;
 import nexus.dominio.Prototipo;
+import nexus.dominio.PrototiposIniciales;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -58,6 +60,64 @@ class CatalogoEnMongoIT {
     @DisplayName("un prototipo inexistente produce el error de dominio")
     void inexistenteProduceErrorDeDominio() {
         assertThrows(HeroeNoDisponibleException.class, () -> catalogo.fichaDe("Nigromante"));
+    }
+
+    // --- B4: semilla versionada ---
+
+    @Autowired
+    private MongoTemplate mongoTemplate;
+
+    @Test
+    @DisplayName("B4: los prototipos sembrados llevan origen SEMILLA y la version de PrototiposIniciales")
+    void sembradosConSusMarcas() {
+        PrototipoDocumento tanque = mongoTemplate.findById("Guerrero Tanque", PrototipoDocumento.class);
+
+        assertEquals(PrototipoDocumento.ORIGEN_SEMILLA, tanque.origen);
+        assertEquals(PrototiposIniciales.VERSION, tanque.semillaVersion);
+    }
+
+    @Test
+    @DisplayName("B4: una segunda ejecucion de la misma version no inserta ni actualiza nada")
+    void segundaEjecucionNoCambiaNada() {
+        CatalogoEnMongo.ResultadoSemilla otra =
+                ((CatalogoEnMongo) catalogo).sembrar(PrototiposIniciales.LISTA, PrototiposIniciales.VERSION);
+
+        assertEquals(List.of(), otra.insertados());
+        assertEquals(List.of(), otra.actualizados());
+        assertEquals(8, otra.alDia().size());
+    }
+
+    @Test
+    @DisplayName("B4: una version nueva pone al dia lo no editado, respeta lo editado y adopta lo anterior a las marcas")
+    void versionNuevaActualizaRespetaYAdopta() {
+        CatalogoEnMongo catalogoEnMongo = (CatalogoEnMongo) catalogo;
+        PrototipoDocumento editado = mongoTemplate.findById("Mago Hielo", PrototipoDocumento.class);
+        editado.modificadoPor = "uid-de-quien-lo-edito";
+        editado.descripcion = "Descripcion editada";
+        mongoTemplate.save(editado);
+        PrototipoDocumento anterior = mongoTemplate.findById("Médico", PrototipoDocumento.class);
+        anterior.origen = null;
+        anterior.semillaVersion = null;
+        mongoTemplate.save(anterior);
+
+        List<Prototipo> v2 = PrototiposIniciales.LISTA.stream()
+                .map(p -> new Prototipo(p.nombre(), p.tipo(), p.descripcion() + " (v2)", p.esSanador(),
+                        p.estadisticasNivel1(), p.acciones()))
+                .toList();
+        CatalogoEnMongo.ResultadoSemilla resultado = catalogoEnMongo.sembrar(v2, PrototiposIniciales.VERSION + 1);
+
+        assertEquals(List.of("Mago Hielo"), resultado.respetados());
+        assertEquals(7, resultado.actualizados().size());
+        assertEquals("Descripcion editada",
+                mongoTemplate.findById("Mago Hielo", PrototipoDocumento.class).descripcion);
+        PrototipoDocumento adoptado = mongoTemplate.findById("Médico", PrototipoDocumento.class);
+        assertEquals(PrototipoDocumento.ORIGEN_SEMILLA, adoptado.origen);
+        assertEquals(PrototiposIniciales.VERSION + 1, adoptado.semillaVersion);
+        assertTrue(adoptado.descripcion.endsWith("(v2)"));
+
+        // Se deja la coleccion como la dejaria la semilla real, para las demas pruebas.
+        mongoTemplate.dropCollection(PrototipoDocumento.class);
+        catalogoEnMongo.sembrar(PrototiposIniciales.LISTA, PrototiposIniciales.VERSION);
     }
 
     @Test

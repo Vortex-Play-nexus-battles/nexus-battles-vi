@@ -12,9 +12,18 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * Representacion del prototipo en la coleccion "prototipos". Clases planas a
  * proposito, sin depender del mapeo de records, con conversion explicita
  * hacia y desde el dominio.
+ *
+ * <p>B4: {@code origen}, {@code semillaVersion} y {@code modificadoPor} son las
+ * marcas de la semilla versionada, con el mismo criterio que el catalogo de
+ * productos. Hoy heroes no tiene escritura por API, asi que nadie fija
+ * {@code modificadoPor}; la marca existe para que el dia que la tenga, la
+ * semilla respete lo editado sin cambiar de criterio.
  */
 @Document("prototipos")
 public class PrototipoDocumento {
+
+    /** Origen de los prototipos que siembra {@link CatalogoEnMongo}. */
+    public static final String ORIGEN_SEMILLA = "SEMILLA";
 
     @Id
     public String nombre;
@@ -24,6 +33,9 @@ public class PrototipoDocumento {
     public boolean esSanador;
     public EstadisticasDoc estadisticasNivel1;
     public List<AccionDoc> acciones;
+    public String origen;
+    public Integer semillaVersion;
+    public String modificadoPor;
 
     public static class EstadisticasDoc {
         public int poder;
@@ -68,6 +80,28 @@ public class PrototipoDocumento {
             return ad;
         }).toList();
         return d;
+    }
+
+    /** Un prototipo de la semilla, con sus marcas (B4). */
+    public static PrototipoDocumento sembrado(Prototipo p, int semillaVersion) {
+        PrototipoDocumento d = de(p);
+        d.origen = ORIGEN_SEMILLA;
+        d.semillaVersion = semillaVersion;
+        return d;
+    }
+
+    /** Sembrado (con marca) o anterior a las marcas; un prototipo registrado aparte, no. */
+    boolean esDeLaSemilla() {
+        return origen == null || ORIGEN_SEMILLA.equals(origen);
+    }
+
+    /** La version de la semilla que lo escribio; 0 si es anterior a B4. */
+    int versionSembrada() {
+        return semillaVersion == null ? 0 : semillaVersion;
+    }
+
+    boolean editadoPorAlguien() {
+        return modificadoPor != null && !modificadoPor.isBlank();
     }
 
     public Prototipo aDominio() {
