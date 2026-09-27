@@ -237,7 +237,8 @@ class ClientesHttpTest {
                 .isEqualTo(AvisosAlJugador.Correo.ENVIADO);
         assertThat(avisos.enviarCorreo(jugador, torneo, "Asunto", "Mensaje", "clave-correo"))
                 .isEqualTo(AvisosAlJugador.Correo.SIN_CONTACTO);
-        // correo.yaml 1.5.0 declara /correos/torneo como pendiente: su 404 se reintenta.
+        // Un 404 de correo (una version anterior a la 1.5.0 todavia desplegada, o
+        // una base mal configurada) no es un rechazo del correo: se reintenta.
         assertThatThrownBy(() -> avisos.enviarCorreo(jugador, torneo, "Asunto", "Mensaje", "clave-correo"))
                 .isInstanceOfSatisfying(FalloDeIntegracion.class, f -> assertThat(f.reintentable()).isTrue());
         assertThatThrownBy(() -> avisos.enviarCorreo(jugador, torneo, "Asunto", "Mensaje", "clave-correo"))

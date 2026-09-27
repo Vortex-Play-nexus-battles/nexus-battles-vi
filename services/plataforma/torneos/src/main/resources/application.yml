@@ -47,10 +47,12 @@ torneos:
   # Avisos de los hitos en la bandeja (notificaciones.yaml, /internal/notifications).
   notificaciones:
     url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
-  # Correo de los hitos (correo.yaml 1.5.0, POST /correos/torneo) con el
-  # contacto de ms-identidad por uid. VACIOS = sin correo: torneos no crea
-  # operaciones de correo y los avisos siguen llegando a la bandeja. Se llenan
-  # cuando correo implemente /correos/torneo (hoy pendiente en su contrato).
+  # Correo de los hitos (correo.yaml 1.5.0, POST /correos/torneo, ya servido
+  # por correo) con el contacto de ms-identidad por uid. VACIOS = sin correo:
+  # torneos no crea operaciones de correo y los avisos siguen llegando a la
+  # bandeja. Cada base sigue el `servers` de su contrato: la de ms-identidad
+  # SIN /api/v1 (ms-identidad-admin.yaml) y la de correo CON /api/v1
+  # (correo.yaml), como NOTIFICACIONES_URL.
   identidad:
     url: ${TORNEOS_IDENTIDAD_URL:}
   correo:

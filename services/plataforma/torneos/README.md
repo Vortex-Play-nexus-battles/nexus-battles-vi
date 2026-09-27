@@ -88,8 +88,13 @@ integrante (`POST /internal/notifications`, idempotente por `id`). El documento 
 pide correos de torneo (7.4.12 los enumera: cuenta, contraseña, publicidad, misiones y
 subasta); aun así queda listo el envío por correo: contacto por `uid` en ms-identidad
 (`GET /api/v1/internal/usuarios/{uid}/contacto`) y `POST /correos/torneo` (correo.yaml 1.5.0,
-**pendiente de implementar en correo**). Con `TORNEOS_IDENTIDAD_URL` o `TORNEOS_CORREO_URL`
-vacías no se crea ninguna operación de correo.
+implementado en correo: plantilla corporativa `torneo` con el asunto y el mensaje de torneos,
+`torneoId` como referencia y la clave `…-correo-<hito>` como `Idempotency-Key`, así que un
+reintento no manda dos copias). Con `TORNEOS_IDENTIDAD_URL` (base sin `/api/v1`) o
+`TORNEOS_CORREO_URL` (base con `/api/v1`) vacías no se crea ninguna operación de correo; en
+`docker-compose.deploy.yml` siguen vacías (solo bandeja). Para activarlo en dev:
+`TORNEOS_IDENTIDAD_URL=http://srv-ms-identidad:8089` y
+`TORNEOS_CORREO_URL=http://srv-correo:8082/api/v1`.
 
 ## Transmisión (RF-TOR-006) — brecha declarada, no simulada
 

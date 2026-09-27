@@ -209,9 +209,11 @@ services:
       # contenido, misma IP que usa salas-partidas) y los avisos de los hitos a
       # la bandeja de notificaciones (este host), con la credencial de arriba.
       # El premio usa sus valores PROVISIONALES de application.yml (D-24) salvo
-      # que el .env fije TORNEOS_PREMIO_*. Correo de torneo: sin
-      # TORNEOS_CORREO_URL / TORNEOS_IDENTIDAD_URL (correo.yaml 1.5.0 lo declara
-      # pendiente), asi que por ahora solo bandeja.
+      # que el .env fije TORNEOS_PREMIO_*. Correo de torneo: srv-correo ya
+      # sirve /correos/torneo (correo.yaml 1.5.0), pero aqui siguen sin fijarse
+      # TORNEOS_CORREO_URL / TORNEOS_IDENTIDAD_URL, asi que por ahora solo
+      # bandeja: el documento del curso no pide correos de torneo. Activarlo es
+      # fijar las dos (ver services/plataforma/torneos/README.md).
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
 
