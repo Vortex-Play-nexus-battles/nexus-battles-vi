@@ -7,6 +7,7 @@ import com.nexusbattles.plataforma.salaspartidas.chat.PublicadorDeChat;
 import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
@@ -41,10 +42,19 @@ public class ConfiguracionDelChat {
      * lista negra y la de sancion salen sin `traceparent` y la traza del
      * mensaje se corta justo donde empieza a ser interesante —cuando el
      * mensaje NO se publica y hay que averiguar por que.
+     *
+     * <p>B12 — y la fabrica con tiempos de espera de
+     * {@code ConfiguracionDeResiliencia}, la misma que el resto de clientes de
+     * este servicio. Era el unico que salia sin ella, y es el que mas se usa:
+     * la sancion activa se consulta en cada mensaje, en cada alta de sala y en
+     * cada ingreso. Con moderacion-sanciones aceptando la conexion y sin
+     * contestar, todo eso se quedaba colgado hasta que el sistema operativo se
+     * rindiera.
      */
     @Bean
-    public RestClient restClientChat() {
+    public RestClient restClientChat(ClientHttpRequestFactory fabricaDePeticionesConTiempos) {
         return RestClient.builder()
+                .requestFactory(fabricaDePeticionesConTiempos)
                 .requestInterceptor(new com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza())
                 .build();
     }

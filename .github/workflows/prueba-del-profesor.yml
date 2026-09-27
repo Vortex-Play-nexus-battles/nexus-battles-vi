@@ -80,17 +80,26 @@ jobs:
           echo "::error::El borde o la identidad no respondieron en 600 s."
           exit 1
 
+      # B12 — Mailpit ya no es publico: el borde solo sirve /mailpit/ a
+      # origenes internos. Se alcanza por un tunel SSH al propio host con la
+      # llave de despliegue (.github/actions/tunel-mailpit), en
+      # http://localhost:18025/mailpit. Secretos del entorno `dev` (arriba).
+      - name: Tunel SSH a Mailpit
+        uses: ./.github/actions/tunel-mailpit
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          usuario: ${{ secrets.SSH_USER_DEV }}
+          llave: ${{ secrets.SSH_KEY_DEV }}
+
       # B1 — el profesor crea una cuenta que nace pendiente de verificar su
-      # correo: el codigo se lee del buzon de pruebas de DEV (Mailpit, /mailpit/
-      # del borde), como lo leeria el de su correo. Credenciales solo si el
-      # borde lo protege (B12), desde secretos del entorno `dev`.
+      # correo: el codigo se lee del buzon de pruebas de DEV (Mailpit), por el
+      # tunel de arriba, como lo leeria el de su correo. La vista, el registro
+      # y el juego van al borde publico, como los de un profesor de verdad.
       - name: La prueba del profesor
         working-directory: frontend/app-web
         env:
           PROFESOR_URL: http://${{ secrets.DEPLOY_HOST_DEV }}
-          MAILPIT_URL: http://${{ secrets.DEPLOY_HOST_DEV }}/mailpit
-          MAILPIT_USUARIO: ${{ secrets.MAILPIT_USUARIO }}
-          MAILPIT_CLAVE: ${{ secrets.MAILPIT_CLAVE }}
+          MAILPIT_URL: http://localhost:18025/mailpit
         run: |
           set -o pipefail
           npx playwright test --config=playwright.profesor.config.js 2>&1 | tee profesor.log
