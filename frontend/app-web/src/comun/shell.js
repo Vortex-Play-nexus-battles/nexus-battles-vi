@@ -69,11 +69,17 @@ const BASE_RUTAS = import.meta.url;
  * aplicación) y **cómo** se agrupan.
  *
  * `vista` enlaza con `MATRIZ` para saber si el destino es visible para quien
- * mira; `pendiente` marca los módulos que todavía no tienen pantalla.
+ * mira.
+ *
+ * UXC-5 — «Misiones» era el único destino sin pantalla: se pintaba
+ * deshabilitado con un «llegará en una próxima actualización». Ahora lleva a
+ * su vista, que cuenta la verdad desde dentro —si hay misiones o no, y qué se
+ * puede hacer ya (preparar la estrategia del héroe)—, en vez de un aviso mudo
+ * en la barra.
  */
 export const SECCIONES = Object.freeze([
   { id: 'jugar', etiqueta: 'Jugar online', vista: 'batallas', icono: 'espadas' },
-  { id: 'misiones', etiqueta: 'Misiones', pendiente: true, icono: 'mapa' },
+  { id: 'misiones', etiqueta: 'Misiones', vista: 'misiones', icono: 'mapa' },
   { id: 'torneo', etiqueta: 'Torneo', vista: 'torneos', icono: 'trofeo' },
   { id: 'inventario', etiqueta: 'Mi inventario', vista: 'inventario', icono: 'mochila' },
   { id: 'subasta', etiqueta: 'Subasta', vista: 'subastas', icono: 'martillo' },
@@ -440,30 +446,21 @@ export function montarArmazonJugador(
       datos: { seccion: seccion.id },
     });
 
-    if (seccion.pendiente) {
-      // RF-INV-008, Excepciones: «módulo destino no disponible, que debe
-      // informarse al seleccionar el acceso correspondiente». Se informa —
-      // pero en el idioma del producto. Antes el título decía «Todavía no
-      // publicada: HU-MIS (grupo-2)»: el número de una historia de Jira y el
-      // nombre de un equipo interno, a la vista de cualquier jugador.
-      destino.classList.add('cabecera__destino--pendiente');
-      destino.setAttribute('aria-disabled', 'true');
-      destino.dataset.pendiente = '';
-      destino.title = 'Misiones llegará en una próxima actualización';
-    } else {
-      const { veredicto } = puedeVer(seccion.vista, sesion);
-      if (veredicto === VEREDICTO.DENEGADA) {
-        continue;
-      }
-      destino.href = urlDeVista(seccion.vista, base);
-      if (veredicto === VEREDICTO.REDIRIGE) {
-        const login = new URL(resolver(RUTAS.login, base));
-        login.searchParams.set('volver', new URL(destino.href).pathname);
-        destino.href = login.href;
-        destino.dataset.exigeSesion = '';
-        destino.classList.add('cabecera__destino--con-sesion');
-        destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
-      }
+    // RF-INV-008, Excepciones: «módulo destino no disponible, que debe
+    // informarse al seleccionar el acceso correspondiente». Hasta UXC-5
+    // Misiones se informaba aquí, deshabilitado; ahora lo informa su vista.
+    const { veredicto } = puedeVer(seccion.vista, sesion);
+    if (veredicto === VEREDICTO.DENEGADA) {
+      continue;
+    }
+    destino.href = urlDeVista(seccion.vista, base);
+    if (veredicto === VEREDICTO.REDIRIGE) {
+      const login = new URL(resolver(RUTAS.login, base));
+      login.searchParams.set('volver', new URL(destino.href).pathname);
+      destino.href = login.href;
+      destino.dataset.exigeSesion = '';
+      destino.classList.add('cabecera__destino--con-sesion');
+      destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
     }
     if (seccion.id === seccionActiva) {
       destino.classList.add('activo');
