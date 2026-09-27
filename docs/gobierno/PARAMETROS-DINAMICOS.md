@@ -34,7 +34,7 @@ comportamiento sin reiniciar nada.
 | `chat.historial.tamano` | `salas-partidas` · `chat/canal/ChatController.java` | `CHAT_HISTORIAL_TAMANO` (50) | D-16 / HU-JUE-015 |
 | `jugador.creditos-iniciales` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_CREDITOS_INICIALES` — **provisional de DEV** (500 en AWS y en el banco E2E); sin él, el paso queda pendiente y lo dice | D-28 / PEN-04 |
 | `jugador.kit-inicial` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_KIT_INICIAL` — **provisional de DEV** (un héroe de combate y un arma del catálogo real en AWS; `p-heroe-e2e,p-arma-e2e` en el banco) | D-29 / HU-SAL-003 |
-| `salas.partidas.segundos-por-turno` | `salas-partidas` · `configuracion/ConfiguracionDelCombate.java` (se lee en cada turno; `V3__tiempo_por_turno.sql`, B7) | `SALAS_PARTIDAS_SEGUNDOS_POR_TURNO` (0 = sin límite). Nace **sin valor**: sin límite, como hasta B7 | D-B7-14 / §6.1.3 |
+| `salas.partidas.segundos-por-turno` | `salas-partidas` · `configuracion/ConfiguracionDelCombate.java` (se lee en cada turno; `V4__tiempo_por_turno.sql`, B7) | `SALAS_PARTIDAS_SEGUNDOS_POR_TURNO` (0 = sin límite). Nace **sin valor**: sin límite, como hasta B7 | D-B7-14 / §6.1.3 |
 
 Las tres de sanciones se consumen desde el Sprint 3 (#580). Las dos de `salas-partidas` se
 añadieron en R12: hasta entonces estaban en el catálogo **y** en una variable de entorno, con el
