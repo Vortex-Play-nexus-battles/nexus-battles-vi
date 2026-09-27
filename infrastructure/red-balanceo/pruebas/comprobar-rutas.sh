@@ -169,6 +169,12 @@ echo "Plataforma — los ocho servicios del bloque"
 comprobar GET  /api/v1/salas               "salas GET /api/v1/salas"
 comprobar GET  /api/v1/salas/s-1           "salas GET /api/v1/salas/s-1"
 comprobar GET  /api/v1/partidas/p-1        "salas GET /api/v1/partidas/p-1"
+# B6 — mensajes privados: mismo servicio, prefijo propio. Sin su location caia
+# en el 404 generico y la pestana de mensajes privados del chat no cargaba nada.
+comprobar GET  /api/v1/mensajes-directos/conversaciones \
+                                           "salas GET /api/v1/mensajes-directos/conversaciones"
+comprobar POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes \
+                                           "salas POST /api/v1/mensajes-directos/conversaciones/u-1/mensajes"
 comprobar GET  /api/v1/torneos             "torneos GET /api/v1/torneos"
 comprobar GET  /api/v1/parametros          "parametros GET /api/v1/parametros"
 comprobar GET  /api/v1/lista-negra         "moderacion GET /api/v1/lista-negra"
