@@ -67,14 +67,21 @@ public class OnboardingService {
     }
 
     /**
-     * Crea el alta de un jugador recien registrado, dentro de la misma
-     * transaccion que su cuenta: nacen las dos o ninguna. El perfil ya se creo
-     * en esa transaccion, asi que su paso nace hecho; los demas, pendientes.
-     * El procesamiento empieza cuando la transaccion se confirma
-     * ({@link AlRegistrarJugador}).
+     * Crea el alta de un jugador, dentro de la misma transaccion que lo
+     * habilita: nacen las dos o ninguna. El perfil ya existe, asi que su paso
+     * nace hecho; los demas, pendientes. El procesamiento empieza cuando la
+     * transaccion se confirma ({@link AlRegistrarJugador}).
+     *
+     * <p>B1: la llama la CONFIRMACION del correo, no el registro. Una cuenta
+     * con un correo que nadie ha verificado no recibe creditos ni heroe. Si el
+     * alta ya existe (una segunda confirmacion que se colara), no se toca: el
+     * alta nunca se lanza dos veces.
      */
     @Transactional(propagation = Propagation.MANDATORY)
     public void iniciar(UUID uid, String apodo, String traceId, String ip) {
+        if (jugadores.existsById(uid)) {
+            return;
+        }
         LocalDateTime ahora = ahora();
         jugadores.save(new OnboardingJugador(uid, VERSION_BOOTSTRAP, traceId, ahora));
         pasos.save(new OnboardingPaso(uid, PasoOnboarding.PERFIL, EstadoPaso.HECHO,

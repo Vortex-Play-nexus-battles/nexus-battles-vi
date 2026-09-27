@@ -86,6 +86,17 @@ fueraDeConfiguracion() {
 
 echo "Cuentas — identidad, cumplimiento, finanzas y subastas"
 comprobar POST /api/v1/auth/login          "identidad POST /api/v1/auth/login"
+# B1 — verificacion del correo, recuperacion con preguntas y preguntas de
+# seguridad (identidad 2.0.0): las cuatro son de ms-identidad por la regex de
+# /auth, y la interfaz las llama por el borde.
+comprobar POST /api/v1/auth/verificacion/confirmacion \
+                                           "identidad POST /api/v1/auth/verificacion/confirmacion"
+comprobar POST /api/v1/auth/verificacion/reenvio \
+                                           "identidad POST /api/v1/auth/verificacion/reenvio"
+comprobar POST /api/v1/auth/restablecer/preguntas \
+                                           "identidad POST /api/v1/auth/restablecer/preguntas"
+comprobar PUT  /api/v1/auth/preguntas-seguridad \
+                                           "identidad PUT /api/v1/auth/preguntas-seguridad"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
@@ -175,6 +186,16 @@ comprobar GET  /api/v1/comentarios/moderacion \
                                            "comentarios GET /api/v1/comentarios/moderacion"
 
 echo
+echo "Mailpit — la bandeja de pruebas que leen el banco E2E y los canarios (B1)"
+# Desde B1 las cuentas nuevas se verifican con un codigo que llega por correo,
+# y las pruebas lo leen de la API de Mailpit por el borde, igual en el banco
+# E2E que en DEV (tests/e2e/ayudantes/correo.js). La ruta viaja entera, con
+# su consulta: sin ella, la busqueda devolveria todos los correos.
+comprobar GET  "/mailpit/api/v1/search?query=to:ana@nexus.test" \
+                                           "mailpit GET /mailpit/api/v1/search?query=to:ana@nexus.test"
+comprobar GET  /mailpit/api/v1/message/abc "mailpit GET /mailpit/api/v1/message/abc"
+
+echo
 echo "Lo que el borde contesta el mismo"
 codigo GET /salud-borde   200
 # correo es servicio-entre-servicios (ADR-005): desde fuera NO se expone.
@@ -245,7 +266,9 @@ for par in \
     cuenta:cuentas/perfil.html subastas:cuentas/subastas.html \
     inventario:contenido/inventario/inventario.html \
     jugar:plataforma/salas-partidas/batallas.html \
-    torneos:plataforma/torneos/torneos.html; do
+    torneos:plataforma/torneos/torneos.html \
+    verificar:cuentas/verificar-cuenta.html \
+    restablecer:cuentas/restablecer-confirmar.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -257,8 +280,17 @@ done
 redirige "/frontend/app-web/src/cuentas/login.html?volver=%2Fjugar&motivo=caducada" \
                                                       "/login?volver=%2Fjugar&motivo=caducada"
 redirige /jugar/                                      "/jugar"
+# B1 — la verificacion conserva su motivo al pasar a la direccion limpia (el
+# fragmento del enlace del correo lo conserva el navegador: no llega al borde).
+redirige "/frontend/app-web/src/cuentas/verificar-cuenta.html?motivo=registro" \
+                                                      "/verificar?motivo=registro"
+redirige /restablecer/                                "/restablecer"
 # Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
 sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
+    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# Pedir el codigo de recuperacion no tiene direccion limpia: /restablecer es
+# la del canje, y la regex de /restablecer no se la puede llevar.
+sirve /frontend/app-web/src/cuentas/restablecer-solicitar.html \
     "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
 
 echo

@@ -7,9 +7,11 @@
  * héroe y equipo en inventario), el borde real con las direcciones limpias.
  * Nada simulado.
  *
- *   1. registro desde la vista → entra solo → «Preparando tu cuenta» con los
- *      pasos reales → lista, con los créditos que acreditó finanzas y el héroe
- *      equipado → «Empezar a jugar» lleva al inicio;
+ *   1. registro desde la vista → «Confirma tu correo» con el código que llegó
+ *      al buzón (B1: la cuenta nace pendiente) → al login, con el correo ya
+ *      escrito → «Preparando tu cuenta» con los pasos reales → lista, con los
+ *      créditos que acreditó finanzas y el héroe equipado → «Empezar a jugar»
+ *      lleva al inicio;
  *   2. el alta es idempotente: pedir otro intento no da más créditos;
  *   3. multipestaña: una pestaña nueva usa la sesión abierta; cerrar sesión
  *      cierra en las dos; «Atrás» no enseña la pantalla privada;
@@ -27,6 +29,8 @@ import path from 'node:path';
 
 import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect, request as apiRequest } from '@playwright/test';
+
+import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
@@ -124,6 +128,20 @@ async function entrarDesdeLaVista(page, email) {
   await page.click('#botonEnviar');
 }
 
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo: tras registrarse,
+ * «Confirma tu correo» con el código del buzón, y al login, que ya trae el
+ * correo escrito y dice que quedó verificado. Solo queda la contraseña.
+ */
+async function registrarVerificarYEntrar(page, cuenta) {
+  await registrarDesdeLaVista(page, cuenta);
+  await verificarDesdeLaVista(page, { email: cuenta.email, base: BORDE });
+  await expect(page.locator('#avisoMotivo')).toContainText('Tu correo quedó verificado');
+  await expect(page.locator('#email')).toHaveValue(cuenta.email);
+  await page.fill('#password', CLAVE);
+  await page.click('#botonEnviar');
+}
+
 // -------------------------------------------------------------- docker local
 
 function compose(...args) {
@@ -180,10 +198,12 @@ test.describe('R17 · alta del jugador y sesión', () => {
     await api?.dispose();
   });
 
-  test('1 · se registra desde la vista, entra solo y el juego lo prepara', async ({ page }) => {
-    await registrarDesdeLaVista(page, nuevo);
+  test('1 · se registra desde la vista, confirma su correo, entra y el juego lo prepara', async ({
+    page,
+  }) => {
+    await registrarVerificarYEntrar(page, nuevo);
 
-    // Entra solo: sin volver a escribir correo y contraseña.
+    // La primera entrada tras verificar pasa siempre por la preparación.
     await page.waitForURL(EN_PREPARANDO, { timeout: 20_000 });
     await expect(page.locator('[data-zona="pasos"] li')).toHaveCount(4);
 
@@ -296,7 +316,9 @@ test.describe('R17 · alta del jugador y sesión', () => {
       compose('stop', '-t', '5', 'srv-inventario');
       expect(estadoDe('srv-inventario')).toMatch(/^exited\//);
 
-      await registrarDesdeLaVista(page, cuenta);
+      // B1 — el alta empieza al verificar el correo, así que el inventario
+      // caído se nota a partir de ahí.
+      await registrarVerificarYEntrar(page, cuenta);
       await page.waitForURL(EN_PREPARANDO, { timeout: 20_000 });
 
       // Los créditos no dependen del inventario: salen; el héroe no.
