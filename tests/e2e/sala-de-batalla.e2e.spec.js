@@ -828,6 +828,25 @@ test.describe('Sala de batalla de punta a punta', () => {
     // cualquiera de los dos casos deja de estar reservada.
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
 
+    // creditos.yaml 1.4.1 (B7): el ganador VE ese ingreso en su historial de
+    // movimientos, no solo en el saldo. Antes el cobro movia su saldo sin
+    // dejar fila a su nombre.
+    const movimientos = await api.get(
+      `${FINANZAS}/creditos/${ganador.claims.uid}/movimientos?size=50`,
+      { headers: conToken(ganador.token) },
+    );
+    expect(movimientos.status(), await movimientos.text()).toBe(200);
+    const ingresos = (await movimientos.json()).content.filter(
+      (m) =>
+        m.tipo === 'CREDITO' &&
+        m.signo === 'SUMA' &&
+        String(m.concepto).startsWith('cobro-de-reserva:'),
+    );
+    expect(
+      ingresos.some((m) => Number(m.monto) === APUESTA),
+      JSON.stringify(ingresos),
+    ).toBe(true);
+
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
       { timeout: 20000 },

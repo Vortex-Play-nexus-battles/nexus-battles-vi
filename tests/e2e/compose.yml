@@ -143,7 +143,8 @@ services:
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios
+      # ms-finanzas (B7): entrega el contenido de los cofres al inventario.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-finanzas=e2e-secreto-de-finanzas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -283,6 +284,16 @@ services:
       DB_USER: finanzas_user
       DB_PASSWORD: finanzas
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # B7 — el contenido de cada cofre va al inventario del jugador
+      # (POST /inventario/entregas, origen COFRE) con la credencial de servicio
+      # de ms-finanzas. Mientras inventario no publique /entregas (B4) el cofre
+      # queda PENDIENTE y se reintenta; nada del banco depende de esa entrega.
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-finanzas
+      # Reintento mas agil que en DEV (60 s): el banco no espera.
+      FINANZAS_COFRES_REINTENTO_MS: "5000"
     depends_on:
       e2e-finanzas-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
