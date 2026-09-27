@@ -12,7 +12,7 @@ const INCIERTO =
 const MOTIVOS = new Map([
   [
     'INCREMENTO_MINIMO_NO_CONFIGURADO',
-    'DECISIÓN PO pendiente: el incremento mínimo entre pujas todavía no está configurado en administración (subastas.incremento-minimo). No se pueden publicar subastas hasta que un administrador lo fije.',
+    'DECISIÓN PO pendiente: el incremento mínimo entre pujas todavía no está configurado en administración. No se pueden publicar subastas hasta que un administrador lo fije.',
   ],
   [
     'LIMITE_PUBLICACIONES_ACTIVAS',
