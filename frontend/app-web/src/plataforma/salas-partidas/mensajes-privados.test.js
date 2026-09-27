@@ -1,20 +1,22 @@
 /**
  * UXC-6 — mensajes privados: la vista contra su puerto.
  *
- * No hay servicio de mensajes privados: estas pruebas usan una fuente falsa
- * con la forma de `fuente-mensajes.js` para comprobar que la vista cubre los
- * estados que pidió el docente. Los apodos son datos de prueba.
+ * Estas pruebas usan una fuente falsa con la forma de `fuente-mensajes.js`
+ * para comprobar que la vista cubre los estados que pidió el docente. El
+ * adaptador del servicio (B6) tiene las suyas en `fuente-mensajes.test.js`.
+ * Los apodos son datos de prueba.
  */
 
 import { jest } from '@jest/globals';
 
 import {
+  MINIMO_DE_BUSQUEDA,
   elementoDeConversacion,
   montarMensajesPrivados,
   motivoDeBloqueo,
   vistaPrevia,
 } from './mensajes-privados.js';
-import { FUENTE_SIN_SERVICIO, fuenteDeMensajes, MensajesSinAbrir } from './fuente-mensajes.js';
+import { FUENTE_SIN_SERVICIO, MensajesSinAbrir } from './fuente-mensajes.js';
 
 const YO = 'uid-yo';
 const BRUMA = { id: 'uid-bruma', apodo: 'Bruma' };
@@ -102,8 +104,7 @@ async function abrir(raiz, id = 'c-bruma') {
 }
 
 describe('sin servicio', () => {
-  test('la fuente de hoy no está disponible y no toca la red', async () => {
-    expect(fuenteDeMensajes()).toBe(FUENTE_SIN_SERVICIO);
+  test('la fuente sin servicio no está disponible y no toca la red', async () => {
     expect(FUENTE_SIN_SERVICIO.disponible).toBe(false);
     await expect(FUENTE_SIN_SERVICIO.bandeja()).rejects.toBeInstanceOf(MensajesSinAbrir);
   });
@@ -119,14 +120,29 @@ describe('sin servicio', () => {
 
     expect(estado).toBe('sin-abrir');
     expect(raiz.querySelector('h2').textContent).toBe(
-      'Los mensajes privados todavía no están abiertos',
+      'Los mensajes privados no están disponibles ahora',
     );
-    expect(raiz.textContent).toContain('Aún no hay un servicio');
+    expect(raiz.textContent).toContain('no responde');
     expect(raiz.querySelector('.conversaciones__item')).toBeNull();
     expect(raiz.querySelector('textarea')).toBeNull();
     expect(raiz.querySelector('a').getAttribute('href')).toBe('./crear-sala.html');
     raiz.querySelector('[data-accion="ir-al-chat-general"]').click();
     expect(alIrAlChatGeneral).toHaveBeenCalled();
+  });
+
+  test('B6 — mientras la fuente pregunta al servicio, la pestaña dice que carga', async () => {
+    const raiz = zona();
+    let entregar;
+    const pedida = new Promise((resolver) => {
+      entregar = resolver;
+    });
+    const montada = montarMensajesPrivados(raiz, { fuente: pedida, miId: YO });
+
+    expect(raiz.querySelector('.estado-vista--cargando')).not.toBeNull();
+    entregar(fuenteFalsa());
+    const { estado } = await montada;
+    expect(estado).toBe('bandeja');
+    expect(raiz.querySelectorAll('.conversaciones__item')).toHaveLength(2);
   });
 });
 
@@ -184,20 +200,24 @@ describe('la lista de conversaciones', () => {
 });
 
 describe('buscar jugador', () => {
-  test('pide al menos dos letras, no se encuentra a sí mismo y abre la conversación', async () => {
+  test('pide al menos tres letras (las del contrato), no se encuentra a sí mismo y abre la conversación', async () => {
+    expect(MINIMO_DE_BUSQUEDA).toBe(3);
     const { raiz, fuente } = await montar();
     const campo = raiz.querySelector('#buscar-jugador');
-
-    campo.value = 'k';
-    campo.dispatchEvent(new Event('input'));
-    await new Promise((r) => setTimeout(r, 5));
-    expect(fuente.buscarJugadores).not.toHaveBeenCalled();
+    expect(raiz.querySelector('#buscar-jugador-pista').textContent).toBe(
+      'Escribe al menos 3 letras del apodo.',
+    );
 
     campo.value = 'ka';
     campo.dispatchEvent(new Event('input'));
     await new Promise((r) => setTimeout(r, 5));
+    expect(fuente.buscarJugadores).not.toHaveBeenCalled();
+
+    campo.value = 'kae';
+    campo.dispatchEvent(new Event('input'));
+    await new Promise((r) => setTimeout(r, 5));
     await esperar();
-    expect(fuente.buscarJugadores).toHaveBeenCalledWith('ka');
+    expect(fuente.buscarJugadores).toHaveBeenCalledWith('kae');
     const resultados = [...raiz.querySelectorAll('.buscador-jugador__resultado')];
     expect(resultados.map((b) => b.getAttribute('aria-label'))).toEqual(['Escribir a Kael']);
 
@@ -218,12 +238,12 @@ describe('buscar jugador', () => {
     const { raiz } = await montar(fuente);
     const campo = raiz.querySelector('#buscar-jugador');
 
-    campo.value = 'zz';
+    campo.value = 'zzz';
     campo.dispatchEvent(new Event('input'));
     await new Promise((r) => setTimeout(r, 5));
     await esperar();
     expect(raiz.querySelector('[data-zona="resultados"]').textContent).toContain(
-      'Ningún jugador tiene un apodo con «zz»',
+      'Ningún jugador tiene un apodo con «zzz»',
     );
 
     raiz
@@ -309,12 +329,47 @@ describe('la conversación', () => {
 
     const fallido = [...raiz.querySelectorAll('li.mensaje--yo')].at(-1);
     expect(fallido.querySelector('.mensaje__entrega').textContent).toContain('No se envió');
+    // B6 — el porqué, junto al campo; sin detalle de la fuente, el genérico.
+    const aviso = raiz.querySelector('.redactor-mensaje [data-zona="aviso"]');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain('Tu mensaje no se envió');
+    expect(aviso.textContent).toContain('Revisa tu conexión');
     fallido.querySelector('[data-accion="reintentar-mensaje"]').click();
     await esperar();
     expect(fuente.enviar).toHaveBeenCalledTimes(2);
     const reenviado = [...raiz.querySelectorAll('li.mensaje--yo')].at(-1);
     expect(reenviado.querySelector('.mensaje__entrega').textContent).toBe('Enviado');
     expect(raiz.querySelectorAll('li.mensaje--yo')).toHaveLength(2);
+    expect(aviso.hidden).toBe(true);
+  });
+
+  test('B6 — un rechazo dice por qué; si repetirlo no cambia nada, el texto vuelve al campo y no hay «Reintentar»', async () => {
+    const fuente = fuenteFalsa();
+    fuente.enviar.mockRejectedValueOnce(
+      Object.assign(new Error('rechazado'), {
+        detalle:
+          'Tiene palabras que no están permitidas. Te lo devolvemos al campo para que lo cambies.',
+        reintentable: false,
+      }),
+    );
+    const { raiz } = await montar(fuente);
+    await abrir(raiz);
+    const formulario = raiz.querySelector('.redactor-mensaje');
+    formulario.elements.texto.value = 'algo vetado';
+    formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    const fallido = [...raiz.querySelectorAll('li.mensaje--yo')].at(-1);
+    expect(fallido.querySelector('.mensaje__entrega').textContent).toContain('No se envió');
+    expect(fallido.querySelector('[data-accion="reintentar-mensaje"]')).toBeNull();
+    const aviso = raiz.querySelector('.redactor-mensaje [data-zona="aviso"]');
+    expect(aviso.querySelector('.aviso--advertencia')).not.toBeNull();
+    expect(aviso.textContent).toContain('no están permitidas');
+    expect(formulario.elements.texto.value).toBe('algo vetado');
+    await new Promise((r) => setTimeout(r, 40));
+    expect(raiz.querySelector('[role="status"].solo-lectores').textContent).toContain(
+      'Tu mensaje no se envió. Tiene palabras que no están permitidas',
+    );
   });
 
   test('lo que llega en vivo: al hilo abierto, o a la lista con su no leído y un anuncio', async () => {
@@ -341,6 +396,40 @@ describe('la conversación', () => {
     expect(raiz.querySelector('[role="status"].solo-lectores').textContent).toBe(
       'Nuevo mensaje de Kael.',
     );
+  });
+
+  test('B6 — quien te escribe por primera vez entra en la lista en ese momento, con su no leído', async () => {
+    const NYRA = { id: 'uid-nyra', apodo: 'Nyra' };
+    const { raiz, fuente } = await montar();
+
+    fuente.emitir({
+      tipo: 'mensaje',
+      conversacionId: 'c-nyra',
+      mensaje: mensaje('m5', NYRA, '¿Jugamos?', '2026-09-22T15:20:00Z'),
+    });
+    // Lo tuyo desde otra pestaña a alguien nuevo no trae su apodo: no se inventa.
+    fuente.emitir({
+      tipo: 'mensaje',
+      conversacionId: 'c-orym',
+      mensaje: mensaje('m6', { id: YO, apodo: 'Simón' }, 'hola', '2026-09-22T15:21:00Z'),
+    });
+
+    const [primera] = raiz.querySelectorAll('.conversaciones__item');
+    expect(primera.dataset.conversacion).toBe('c-nyra');
+    expect(primera.querySelector('.conversaciones__apodo').textContent).toBe('Nyra');
+    expect(primera.querySelector('.conversaciones__vista').textContent).toBe('¿Jugamos?');
+    expect(primera.querySelector('.conversaciones__no-leidos').textContent).toContain(
+      '1 mensaje sin leer',
+    );
+    expect(raiz.querySelector('[data-conversacion="c-orym"]')).toBeNull();
+    await new Promise((r) => setTimeout(r, 40));
+    expect(raiz.querySelector('[role="status"].solo-lectores').textContent).toBe(
+      'Nuevo mensaje de Nyra.',
+    );
+
+    primera.click();
+    await esperar();
+    expect(fuente.hilo).toHaveBeenLastCalledWith('c-nyra');
   });
 
   test('«Leído» llega a lo tuyo cuando el otro lo lee', async () => {
