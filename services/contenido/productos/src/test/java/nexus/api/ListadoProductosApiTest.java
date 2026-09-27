@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -33,6 +34,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -141,7 +143,7 @@ class ListadoProductosApiTest {
         }
 
         @Test
-        @DisplayName("con estado explicito lista solo ese estado, incluido SUSPENDIDO")
+        @DisplayName("con estado explicito un administrador lista solo ese estado, incluido SUSPENDIDO")
         void estadoExplicito() throws Exception {
                 when(productoRepository.findByEstadoIn(any(), any()))
                         .thenReturn(new PageImpl<>(
@@ -149,13 +151,80 @@ class ListadoProductosApiTest {
                                 PRIMERA_PAGINA,
                                 1));
 
-                mvc.perform(get(LISTADO).param("estado", "SUSPENDIDO"))
+                mvc.perform(get(LISTADO).param("estado", "SUSPENDIDO")
+                                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMINISTRADOR"))))
                         .andExpect(status().isOk())
                         .andExpect(jsonPath("$.content[0].estado").value("SUSPENDIDO"));
 
                 verify(productoRepository).findByEstadoIn(
                         Set.of(EstadoProducto.SUSPENDIDO),
                         PRIMERA_PAGINA);
+        }
+
+        // --- B4: proyeccion publica (contrato 1.4.0) ---
+
+        @ParameterizedTest(name = "SUSPENDIDO para {0}: pagina vacia y no se consulta la base")
+        @ValueSource(strings = {"sin-token", "ROLE_JUGADOR"})
+        void losSuspendidosNoSeListanParaElPublicoNiParaUnJugador(String quien) throws Exception {
+                var peticion = get(LISTADO).param("estado", "SUSPENDIDO");
+                if (!"sin-token".equals(quien)) {
+                        peticion = peticion.with(jwt().authorities(new SimpleGrantedAuthority(quien)));
+                }
+
+                mvc.perform(peticion)
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content", hasSize(0)))
+                        .andExpect(jsonPath("$.totalElements").value(0));
+
+                verifyNoInteractions(productoRepository);
+        }
+
+        @Test
+        @DisplayName("sin token el listado no trae version, tasaDeCaida ni las marcas de la semilla")
+        void sinTokenSinCamposInternos() throws Exception {
+                when(productoRepository.findByEstadoIn(any(), any()))
+                        .thenReturn(new PageImpl<>(
+                                List.of(producto("p-1", TipoProducto.ARMA, EstadoProducto.ACTIVO)),
+                                PRIMERA_PAGINA,
+                                1));
+
+                mvc.perform(get(LISTADO))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].id").value("p-1"))
+                        .andExpect(jsonPath("$.content[0].tiraje").value(100))
+                        .andExpect(jsonPath("$.content[0].version").doesNotExist())
+                        .andExpect(jsonPath("$.content[0].tasaDeCaida").doesNotExist())
+                        .andExpect(jsonPath("$.content[0].origen").doesNotExist());
+        }
+
+        @ParameterizedTest(name = "{0} ve los campos internos")
+        @ValueSource(strings = {"ROLE_SERVICIO", "ROLE_ADMINISTRADOR", "ROLE_SUPER_ADMINISTRADOR"})
+        void unServicioOAdministradorVeTodo(String rol) throws Exception {
+                when(productoRepository.findByEstadoIn(any(), any()))
+                        .thenReturn(new PageImpl<>(
+                                List.of(producto("p-1", TipoProducto.ARMA, EstadoProducto.ACTIVO)),
+                                PRIMERA_PAGINA,
+                                1));
+
+                mvc.perform(get(LISTADO).with(jwt().authorities(new SimpleGrantedAuthority(rol))))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].version").value(1))
+                        .andExpect(jsonPath("$.content[0].tasaDeCaida").value(12.5));
+        }
+
+        @Test
+        @DisplayName("un jugador ve el listado sin los campos internos")
+        void unJugadorNoVeLoInterno() throws Exception {
+                when(productoRepository.findByEstadoIn(any(), any()))
+                        .thenReturn(new PageImpl<>(
+                                List.of(producto("p-1", TipoProducto.ARMA, EstadoProducto.ACTIVO)),
+                                PRIMERA_PAGINA,
+                                1));
+
+                mvc.perform(get(LISTADO).with(jwt().authorities(new SimpleGrantedAuthority("ROLE_JUGADOR"))))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].version").doesNotExist())
+                        .andExpect(jsonPath("$.content[0].tasaDeCaida").doesNotExist());
         }
 
         @ParameterizedTest(name = "size={0} responde 400 con Problem Details")

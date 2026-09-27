@@ -139,6 +139,10 @@ class ProductosApiTest {
                 when(productoRepository.save(any(Producto.class)))
                         .thenAnswer(invocacion ->
                                 invocacion.getArgument(0, Producto.class));
+                // B4: el alta usa insert (Producto.version es @Version).
+                when(productoRepository.insert(any(Producto.class)))
+                        .thenAnswer(invocacion ->
+                                invocacion.getArgument(0, Producto.class));
         }
 
 

@@ -91,7 +91,10 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
     turnosCarga: null, turnosRecarga: null,
     efectoGeneral: null, efectoPotenciado: null,
     defensa: null, parte: null, efecto: null,
-    estado: "ACTIVO", version: 0,
+    // B4: `version` es el bloqueo optimista de productos (@Version). Un alta
+    // por la API nace en 1; con 0 Spring Data lo tomaria por un documento
+    // nuevo y una edicion tendria que normalizarlo antes de guardar.
+    estado: "ACTIVO", version: 1,
     creadoEn: new Date(), modificadoEn: new Date()
   };
   db.productos.insertMany([

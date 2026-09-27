@@ -99,6 +99,11 @@ public class SecurityConfig {
                 // hace el servicio que habló con la pasarela (HU-PAG-001), nunca el
                 // jugador — va antes del matcher general de abajo por ser más
                 // específico.
+            // HU-PAG-001: procesar un pago en dinero real es otro movimiento
+            // de saldo/dinero, mismo criterio que /creditos/** y /partidas/**
+            // — lo invoca el servicio de negocio (tienda, subastas, torneos)
+            // en nombre del jugador, nunca el navegador del jugador directo.
+            .requestMatchers("/pagos/**").hasRole(ROL_SERVICIO)
                 .requestMatchers(HttpMethod.POST, "/transacciones").hasRole(ROL_SERVICIO)
                 // HU-PAG-002 / HU-JUE-013: historial y cofres del propio usuario. El
                 // controller lee el uid del principal, así que un servicio (sin uid)

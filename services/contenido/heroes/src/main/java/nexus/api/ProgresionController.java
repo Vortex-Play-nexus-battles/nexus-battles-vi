@@ -12,9 +12,21 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * Las reglas de progresion que no dependen del prototipo (HU-HER-003 y
- * HU-HER-004), como servicio sin estado: el inventario guarda nivel y
- * experiencia, las misiones otorgan puntos, y ambos consultan aqui la regla en
- * vez de reimplementarla. Contrato en contracts/openapi/heroes.yaml.
+ * HU-HER-004), como servicio sin estado. Contrato en
+ * contracts/openapi/heroes.yaml.
+ *
+ * <p><b>Es la calculadora de la regla, no su registro.</b> Aplica las formulas
+ * de la seccion 6.1.1 del documento —experiencia para subir del nivel n al
+ * siguiente, {@code 100 x 1,2^(n-1)}; experiencia por enemigo no jugador
+ * derrotado, {@code 10 x 1,2^dado} con un 1d8— y el tope del nivel 8, y no
+ * guarda nada.
+ *
+ * <p><b>La persistencia vive en el inventario</b> (B4): cada heroe que posee un
+ * jugador es un elemento de tipo HEROE con su {@code nivel} (1 al entrar) y su
+ * {@code experiencia} (0), y las estadisticas que el inventario publica de ese
+ * heroe salen de su nivel ({@code GET /api/v1/heroes/{nombre}/niveles/{nivel}}).
+ * Quien otorga los puntos y cuando —misiones y sus recompensas— es B9: aqui no
+ * se decide como se gana experiencia, solo cuanto vale y a que nivel lleva.
  */
 @RestController
 @RequestMapping("/api/v1/progresion")

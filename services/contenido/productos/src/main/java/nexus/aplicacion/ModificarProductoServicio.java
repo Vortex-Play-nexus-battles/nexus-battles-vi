@@ -35,9 +35,25 @@ public class ModificarProductoServicio {
                 this.validator = validator;
         }
 
-        public Producto modificar(String id, SolicitudModificarProducto cambios) {
+        /**
+         * @param autor identificador estable de quien modifica (claim
+         *              {@code uid} del token del administrador). Queda en el
+         *              respaldo y en el producto ({@code modificadoPor}).
+         * @throws org.springframework.dao.OptimisticLockingFailureException si
+         *         otro escribio el producto entre la lectura y el guardado; la
+         *         API lo responde con 409 y el respaldo ya se revirtio
+         */
+        public Producto modificar(String id, SolicitudModificarProducto cambios, String autor) {
                 Producto existente = repositorio.findById(id)
                         .orElseThrow(ProductoNoEncontradoException::new);
+                if (existente.version() == 0) {
+                        // Anterior a @Version (sin version, o insertado a mano con 0):
+                        // para Spring Data seria un alta. Se lleva a la version 1 y se
+                        // relee, y la edicion sigue como cualquier otra.
+                        repositorio.normalizarVersion(id);
+                        existente = repositorio.findById(id)
+                                .orElseThrow(ProductoNoEncontradoException::new);
+                }
 
                 SolicitudCrearProducto fusionada = mapper.fusionar(existente, cambios);
 
@@ -54,30 +70,28 @@ public class ModificarProductoServicio {
                         UUID.randomUUID().toString(),
                         existente.id(),
                         existente,
-                        ahora);
+                        ahora,
+                        autor);
 
                 // El respaldo se guarda ANTES de tocar el producto: si esto falla,
                 // el producto original queda intacto y no hay nada que revertir.
                 respaldoRepositorio.save(respaldo);
 
-                Producto actualizado = mapper.actualizar(fusionada, existente, ahora);
+                Producto actualizado = mapper.actualizar(fusionada, existente, ahora, autor);
 
-                // NOTA DE CONCURRENCIA (pedido explicito de dejarlo documentado):
-                // Producto no declara @Version (control de concurrencia optimista
-                // de Spring Data). Dos administradores modificando el MISMO campo
-                // del MISMO producto al mismo tiempo pueden pisarse silenciosamente:
-                // gana la ultima escritura, sin error ni aviso. La fusion parcial de
-                // este servicio evita el problema cuando editan campos DISTINTOS,
-                // pero no lo resuelve por completo. Fuera de alcance de HU-PRD-003;
-                // valdria la pena una historia aparte de control de concurrencia
-                // optimista sobre Producto.
+                // CONCURRENCIA (B4): Producto declara @Version. El guardado solo
+                // reemplaza el documento si su version sigue siendo la que se leyo
+                // arriba; si otro administrador —o una suspension, o una reserva
+                // de tiraje, que tambien la suben— escribio entre medias, Spring
+                // Data lanza OptimisticLockingFailureException y la API responde
+                // 409. Hasta B4 ganaba la ultima escritura, sin aviso.
                 //
                 // MongoDB standalone (sin replica set) no soporta transacciones
                 // multi-documento de forma confiable, por eso no se usa
                 // @Transactional aqui: en su lugar, si el guardado final falla
-                // despues de haber guardado el respaldo, se borra ese respaldo de
-                // forma compensatoria para no dejar un historico huerfano que
-                // referencia un cambio que nunca se aplico.
+                // despues de haber guardado el respaldo —tambien por conflicto—,
+                // se borra ese respaldo de forma compensatoria para no dejar un
+                // historico huerfano que referencia un cambio que nunca se aplico.
                 try {
                         return repositorio.save(actualizado);
                 } catch (RuntimeException fallo) {
