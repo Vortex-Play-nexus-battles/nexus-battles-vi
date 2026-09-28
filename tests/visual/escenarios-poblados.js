@@ -2969,14 +2969,259 @@ function participacionDe(ruta) {
   });
 }
 
+/*
+ * UXC-8 — el panel personal (ms-subastas-panel.yaml 1.0.0) y la ficha
+ * (ms-subastas-listado.yaml, `SubastaDetalle`). DATOS DE LABORATORIO: los
+ * nombres, las cifras y las fechas son inventados; la forma es la del
+ * contrato.
+ */
+const hace = (horas) => new Date(Date.now() - horas * 3_600_000).toISOString();
+const dentroDe = (horas) => new Date(Date.now() + horas * 3_600_000).toISOString();
+const PRODUCTO_DE_LA_SUBASTA = 'aaaaaaa1-0000-4000-8000-0000000000c1';
+
+function misPublicaciones() {
+  const base = {
+    miniaturaUrl: null,
+    precioInicial: '500',
+    precioCompraInmediata: null,
+    fechaPublicacion: hace(30),
+    comisionCobrada: '1.50',
+    penalizacionCobrada: null,
+    cancelable: false,
+    penalizacionSiCancela: null,
+  };
+  return json([
+    {
+      ...base,
+      subastaId: ID_SUBASTA_PROPIA,
+      nombreProducto: 'Yelmo del Vigía',
+      estado: 'ACTIVA',
+      ofertaVigente: '900',
+      cantidadPujas: 2,
+      fechaFin: dentroDe(2),
+      cerradaEn: null,
+      vistas: 41,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444445',
+      nombreProducto: 'Brazaletes de Cobre',
+      estado: 'ACTIVA',
+      ofertaVigente: '300',
+      precioInicial: '300',
+      cantidadPujas: 0,
+      fechaFin: dentroDe(20),
+      cerradaEn: null,
+      vistas: 7,
+      comisionCobrada: '1.00',
+      cancelable: true,
+      penalizacionSiCancela: '0.50',
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444446',
+      nombreProducto: 'Arco de Tejo Antiguo',
+      estado: 'ADJUDICADA',
+      ofertaVigente: '2300',
+      cantidadPujas: 6,
+      fechaFin: hace(20),
+      cerradaEn: hace(20),
+      vistas: 88,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444447',
+      nombreProducto: 'Capa Raída',
+      estado: 'SIN_ADJUDICACION',
+      ofertaVigente: '500',
+      cantidadPujas: 0,
+      fechaFin: hace(40),
+      cerradaEn: hace(40),
+      vistas: 12,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444448',
+      nombreProducto: 'Anillo Opaco',
+      estado: 'CANCELADA',
+      ofertaVigente: '400',
+      cantidadPujas: 0,
+      fechaFin: hace(10),
+      cerradaEn: hace(60),
+      vistas: 3,
+      comisionCobrada: '1.00',
+      penalizacionCobrada: '0.50',
+    },
+  ]);
+}
+
+function misSeguidas() {
+  return json([
+    {
+      subastaId: subastaTranquila().id,
+      nombreProducto: subastaTranquila().nombreProducto,
+      miniaturaUrl: null,
+      estado: 'ACTIVA',
+      ofertaVigente: subastaTranquila().ofertaVigente,
+      precioCompraInmediata: null,
+      cantidadPujas: subastaTranquila().cantidadPujas,
+      fechaFin: subastaTranquila().fechaFin,
+      seguidaDesde: hace(5),
+    },
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444449',
+      nombreProducto: 'Escudo de Roble',
+      miniaturaUrl: null,
+      estado: 'ADJUDICADA',
+      ofertaVigente: '1750',
+      precioCompraInmediata: null,
+      cantidadPujas: 9,
+      fechaFin: hace(3),
+      seguidaDesde: hace(50),
+    },
+  ]);
+}
+
+function miHistorial() {
+  const mov = (tipo, subastaId, nombreProducto, monto, horas) => ({
+    tipo,
+    subastaId,
+    nombreProducto,
+    monto,
+    fecha: hace(horas),
+  });
+  return json({
+    movimientos: [
+      mov('VENTA', 'aaaaaaa4-4444-4444-8444-444444444446', 'Arco de Tejo Antiguo', '2185', 20),
+      mov('COMPRA', 'aaaaaaa4-4444-4444-8444-44444444444a', 'Grebas del Centinela', '1200', 26),
+      mov('PENALIZACION', 'aaaaaaa4-4444-4444-8444-444444444448', 'Anillo Opaco', '0.50', 60),
+      mov('COMISION', 'aaaaaaa4-4444-4444-8444-444444444448', 'Anillo Opaco', '1.00', 70),
+      mov('COMISION', 'aaaaaaa4-4444-4444-8444-444444444446', 'Arco de Tejo Antiguo', '1.50', 72),
+    ],
+    totalGanado: '2185',
+    totalGastado: '1203',
+    comisionesPagadas: '3',
+    balance: '982',
+  });
+}
+
+/** La subasta del listado de laboratorio con ese id (la propia incluida). */
+function subastaDeLaboratorio(id) {
+  const listado = JSON.parse(subastasConLoTuyo().body).contenido;
+  return listado.find((s) => s.id === id) ?? subastaTranquila();
+}
+
+/** `SubastaDetalle` de la subasta que se pide, con visitas y reputación. */
+function fichaDe(ruta) {
+  const id = new URL(ruta.request().url()).pathname.split('/').pop();
+  const base = subastaDeLaboratorio(id);
+  const propia = id === ID_SUBASTA_PROPIA;
+  const compra = base.precioCompraInmediata ?? null;
+  return json({
+    id,
+    estado: 'ACTIVA',
+    productoId: PRODUCTO_DE_LA_SUBASTA,
+    nombreProducto: base.nombreProducto,
+    tipoProducto: base.tipoProducto,
+    rareza: base.rareza ?? null,
+    descripcionCorta: base.descripcionCorta,
+    ofertaVigente: base.ofertaVigente,
+    pujaMinimaSiguiente: String(Number(base.ofertaVigente) + 50),
+    incrementoMinimo: '50',
+    precioCompraInmediata: compra,
+    compraInmediataDisponible: compra !== null && Number(compra) > Number(base.ofertaVigente),
+    cantidadPujas: base.cantidadPujas,
+    fechaFin: base.fechaFin,
+    esMaestroDeJuego: false,
+    metodoPago: 'CREDITOS',
+    vendedorId: propia ? UID_POSTOR : 'ccccccc3-3333-4333-8333-333333333333',
+    vendedorApodo: propia ? 'qa_postor' : 'Bruma',
+    reputacionVendedor: propia
+      ? { ventasCompletadas: 1, subastasTerminadas: 3, cancelaciones: 1, tasaDeExito: 0.33 }
+      : { ventasCompletadas: 12, subastasTerminadas: 15, cancelaciones: 1, tasaDeExito: 0.8 },
+    vistas: propia ? 41 : 128,
+  });
+}
+
+/**
+ * `PujaDelHistorial` (0.4.0): tantas como diga la subasta, de la más reciente
+ * a la más antigua, con el postor anonimizado a medias (7.7.11).
+ */
+function pujasDe(ruta) {
+  const id = new URL(ruta.request().url()).pathname.split('/').slice(-2)[0];
+  const base = subastaDeLaboratorio(id);
+  const postores = ['k***s', 'l***9', 'B***a', null];
+  return json(
+    Array.from({ length: base.cantidadPujas }, (_, i) => ({
+      id: `9999999${i}-0000-4000-8000-000000000000`,
+      monto: String(Number(base.ofertaVigente) - i * 50),
+      tipo: i % 3 === 1 ? 'AUTOMATICA' : 'MANUAL',
+      estado: i === 0 ? 'ACTIVA' : 'SUPERADA',
+      creadaEn: hace(i * 0.4 + 0.1),
+      esTuya: id === subastaUrgente().id && i === 0,
+      postor: postores[i % postores.length],
+    })),
+  );
+}
+
+/** «Mis pujas» (0.4.0): las del listado y dos ya terminadas. */
+function misPujas() {
+  const participacion = (s, estado, tuMejorPuja) => ({
+    subastaId: s.id,
+    nombreProducto: s.nombreProducto,
+    miniaturaUrl: null,
+    estadoSubasta: 'ACTIVA',
+    estado,
+    tuMejorPuja,
+    ofertaVigente: s.ofertaVigente,
+    cantidadPujas: s.cantidadPujas,
+    fechaFin: s.fechaFin,
+    ultimaPujaEn: hace(1),
+  });
+  return json([
+    participacion(subastaUrgente(), 'GANANDO', '1350'),
+    participacion(subastaTranquila(), 'SUPERADA', '830'),
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-44444444444a',
+      nombreProducto: 'Grebas del Centinela',
+      miniaturaUrl: null,
+      estadoSubasta: 'ADJUDICADA',
+      estado: 'GANADA',
+      tuMejorPuja: '1200',
+      ofertaVigente: '1200',
+      cantidadPujas: 5,
+      fechaFin: hace(26),
+      ultimaPujaEn: hace(27),
+    },
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-44444444444b',
+      nombreProducto: 'Amuleto de Bruma',
+      miniaturaUrl: null,
+      estadoSubasta: 'ADJUDICADA',
+      estado: 'PERDIDA',
+      tuMejorPuja: '400',
+      ofertaVigente: '520',
+      cantidadPujas: 8,
+      fechaFin: hace(50),
+      ultimaPujaEn: hace(51),
+    },
+  ]);
+}
+
 const RUTAS_DE_LO_TUYO = [
   [/\/api\/v1\/subastas\?/, () => subastasConLoTuyo()],
   [/\/api\/v1\/subastas\/[^/?]+\/mi-participacion/, (ruta) => participacionDe(ruta)],
-  [/\/api\/v1\/subastas\/[^/?]+\/pujas/, json([])],
+  [/\/api\/v1\/subastas\/[^/?]+\/pujas/, (ruta) => pujasDe(ruta)],
+  [/\/api\/v1\/subastas\/[0-9a-f-]{36}$/, (ruta) => fichaDe(ruta)],
+  ['**/api/v1/mis-pujas', () => misPujas()],
   [
     '**/api/v1/mis-pujas/resumen',
     json({ creditosRetenidos: '1350', saldoDisponible: '4200', subastasGanando: 1 }),
   ],
+  ['**/api/v1/mis-subastas/publicadas', () => misPublicaciones()],
+  ['**/api/v1/mis-subastas/seguimiento', () => misSeguidas()],
+  ['**/api/v1/mis-subastas/historial', () => miHistorial()],
+  ['**/api/v1/mis-subastas/pendientes', json([])],
 ];
 
 /** El capitán de «Lobos del Alba» (el primer equipo del árbol). */
@@ -2998,6 +3243,15 @@ export const ESCENARIOS_UXC8 = [
       '.fila-mi-subasta.borde-superada',
       '.fila-publicacion',
       '.barra-segmentada-tramos',
+      // UXC-8 — el panel personal: tus publicaciones en cualquier estado, lo
+      // que sigues y el historial con su balance.
+      '.indice-mis-subastas',
+      '.fila-mi-puja[data-resultado="PERDIDA"]',
+      '.fila-publicacion--panel[data-estado="ADJUDICADA"]',
+      '[data-cancelar-publicacion]',
+      '.fila-seguida',
+      '.tabla-historial tbody tr',
+      '#btn-exportar-historial',
     ],
   },
   {
@@ -3005,8 +3259,29 @@ export const ESCENARIOS_UXC8 = [
     titulo: 'el detalle de una subasta propia: sin pujar y con el motivo',
     ruta: `cuentas/pujas.html?id=${ID_SUBASTA_PROPIA}`,
     sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
-    rutas: RUTAS_DE_LO_TUYO,
-    exige: ['.aviso-subasta-propia', '.badge-propia', '#btn-pujar-manual[disabled]'],
+    rutas: [...RUTAS_DE_LO_TUYO, ...rutasDeOpiniones()],
+    exige: [
+      '.aviso-subasta-propia',
+      '.badge-propia',
+      '#btn-pujar-manual[disabled]',
+      '.ficha-subasta',
+    ],
+  },
+  {
+    id: 'subasta-con-opiniones',
+    titulo: 'el detalle de una subasta ajena: vendedor, visitas y opiniones del objeto',
+    ruta: `cuentas/pujas.html?id=${subastaTranquila().id}`,
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: [
+      ...RUTAS_DE_LO_TUYO,
+      ...rutasDeOpiniones({ hilo: hiloDeLaboratorio(), resumen: RESUMEN_DE_LABORATORIO }),
+    ],
+    exige: [
+      '.ficha-subasta',
+      '.historial-postor',
+      '#opiniones-subasta .hilo-comentarios',
+      '#opiniones-subasta .comentario',
+    ],
   },
   {
     id: 'torneo-mi-equipo',

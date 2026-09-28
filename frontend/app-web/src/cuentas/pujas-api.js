@@ -63,7 +63,7 @@ export class ErrorDeSubastas extends Error {
  * depurar, no para ensenarselo a un jugador en mitad de una puja.
  */
 const MENSAJES = {
-  SUBASTA_NO_ACTIVA: 'Esta subasta ya se cerro. Actualiza para ver el resultado.',
+  SUBASTA_NO_ACTIVA: 'Esta subasta ya se cerró. Actualiza para ver el resultado.',
   PUJA_PROPIA: 'No puedes pujar en tu propia subasta.',
   OFERTA_INSUFICIENTE: 'Alguien se te adelantó: la oferta ya subió. Revisa el nuevo mínimo.',
   INTERVALO_MINIMO_NO_CUMPLIDO: 'Espera unos segundos antes de volver a pujar en esta subasta.',
@@ -73,7 +73,7 @@ const MENSAJES = {
   SALDO_INSUFICIENTE_PARA_LIMITE: 'Tu saldo disponible no cubre el límite que quieres fijar.',
   SALDO_INSUFICIENTE: 'No tienes créditos suficientes para esta operación.',
   SIN_COMPRA_INMEDIATA: 'Esta subasta no admite compra inmediata.',
-  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.',
+  CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explícita.',
   // B8 (ms-subastas-pujas.yaml 0.4.0): una puja ya alcanzo el precio de compra
   // inmediata; comprar por debajo le quitaria el objeto al mejor postor.
   COMPRA_INMEDIATA_SUPERADA:
@@ -275,14 +275,23 @@ export function crearApiSubastas({
 } = {}) {
   async function pedir(
     ruta,
-    { metodo = 'GET', cuerpo = null, conIdempotencia = false, exigeSesion = true } = {},
+    {
+      metodo = 'GET',
+      cuerpo = null,
+      conIdempotencia = false,
+      exigeSesion = true,
+      // UXC-8 — el historial exportado llega en `text/csv`, no en JSON.
+      comoTexto = false,
+    } = {},
   ) {
     const token = leerToken();
     if (!token && exigeSesion) {
       throw new ErrorDeSubastas('Inicia sesión para participar en las subastas.', { estado: 401 });
     }
 
-    const cabeceras = { Accept: 'application/json' };
+    const cabeceras = {
+      Accept: comoTexto ? 'text/csv, application/problem+json' : 'application/json',
+    };
     // Sin sesion se manda igual la peticion cuando el endpoint es publico: el
     // token solo enriquece la respuesta (marcar las pujas propias).
     if (token) {
@@ -334,7 +343,7 @@ export function crearApiSubastas({
     if (respuesta.status === 204) {
       return null;
     }
-    return respuesta.json();
+    return comoTexto ? respuesta.text() : respuesta.json();
   }
 
   return {
@@ -481,6 +490,44 @@ export function crearApiSubastas({
     /** POST /mis-subastas/pendientes/recogida — «Recoger todo». */
     recogerTodo() {
       return pedir('/mis-subastas/pendientes/recogida', { metodo: 'POST' });
+    },
+
+    // ----------------------------------------------- UXC-8 · panel personal
+
+    /**
+     * GET /mis-pujas — «Mis pujas» (7.7.9, ms-subastas-pujas.yaml 0.4.0):
+     * cada subasta en la que pujaste o dejaste una automática, también las
+     * cerradas, con el estado de tu participación.
+     */
+    misPujas() {
+      return pedir('/mis-pujas');
+    },
+
+    /**
+     * GET /mis-subastas/publicadas — lo que publicaste, en cualquier estado:
+     * pujas recibidas, visitas, lo cobrado y si todavía se puede cancelar
+     * (con lo que costaría). De la más reciente a la más antigua (7.7.9).
+     */
+    misPublicaciones() {
+      return pedir('/mis-subastas/publicadas');
+    },
+
+    /** GET /mis-subastas/seguimiento — tu lista de seguimiento, las activas primero. */
+    misSeguidas() {
+      return pedir('/mis-subastas/seguimiento');
+    },
+
+    /**
+     * GET /mis-subastas/historial — compras, ventas, comisiones y
+     * penalizaciones, con lo ganado, lo gastado y el balance.
+     */
+    miHistorial() {
+      return pedir('/mis-subastas/historial');
+    },
+
+    /** GET /mis-subastas/historial?formato=csv — el mismo historial, para guardarlo. */
+    exportarHistorial() {
+      return pedir('/mis-subastas/historial?formato=csv', { comoTexto: true });
     },
   };
 }

@@ -114,6 +114,19 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * `esc()` (las nuevas —rival, vendedor, publicaciones— también). La de
  * `publicar-subasta.js` bajó una línea más: UXC-8 añadió el enlace fijo a la
  * tienda para el inventario vacío; sigue sin interpolaciones.
+ *
+ * UXC-8 (panel personal) — y otras ~550 posiciones las cuatro de `pujas.js`:
+ * las vistas del panel (`vistaDeMiPuja`, `vistaDePublicacion`,
+ * `vistaDeSeguida`, `vistaDeHistorial`), su carga y sus acciones, y los
+ * topes de 7.7.10 corregidos, todo ARRIBA de `render()`.
+ * Revisadas: carga, error y vacío siguen iguales. `contenidoHtml` suma las
+ * partes nuevas de «Mis subastas» (tus pujas también terminadas, tus
+ * publicaciones en cualquier estado, lo que sigues, el historial) y los
+ * datos de la ficha en el detalle: cada texto del servidor pasa por `esc()`
+ * (nombres, ids, estados en atributos, fechas, la reputación y el postor
+ * anonimizado) y cada cifra es un `Number` formateado por
+ * `formatearCreditos()` o `montoConSigno()`; estados y movimientos se pintan
+ * con textos propios, nunca con los del servidor.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
@@ -127,15 +140,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2194', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2212', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2743', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2761', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2238',
+    'cuentas/pujas.js:2787',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2280',
+    'cuentas/pujas.js:2829',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

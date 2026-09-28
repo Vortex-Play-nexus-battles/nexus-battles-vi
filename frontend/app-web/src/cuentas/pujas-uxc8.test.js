@@ -120,8 +120,13 @@ describe('«Mis subastas» con el servidor', () => {
     expect(filas.map((f) => f.dataset.id).sort()).toEqual(['a', 'b']);
     expect(contenedor.querySelector('.borde-ganando')).not.toBeNull();
     expect(contenedor.querySelector('.borde-superada')).not.toBeNull();
-    // El medidor cuenta lo tuyo (2), no las tres del mercado.
-    expect(contenedor.querySelector('.grid-topes-concurrencia').textContent).toContain('2 de 10');
+    // Los medidores cuentan lo tuyo, no el mercado: tus publicaciones en
+    // curso (ninguna; el tope de 10 es de publicaciones, ms-subastas-pujas
+    // 0.4.0) y tus pujas que van ganando (1, según el servidor).
+    const topes = contenedor.querySelector('.grid-topes-concurrencia').textContent;
+    expect(topes).toContain('0 de 10');
+    expect(topes).toContain('1 de 50');
+    expect(topes).not.toContain('3 de 10');
     expect(contenedor.querySelector('.nota-alcance').textContent).toContain(
       'las 3 subastas abiertas',
     );
@@ -271,7 +276,7 @@ describe('compra inmediata', () => {
   test('si la compra falla, no queda un «¡Es tuya!» ni un detalle huérfano', async () => {
     const api = apiFalsa({
       comprarAhora: jest.fn(async () => {
-        throw new Error('Esta subasta ya se cerro. Actualiza para ver el resultado.');
+        throw new Error('Esta subasta ya se cerró. Actualiza para ver el resultado.');
       }),
     });
     const { contenedor, ctrl } = montar({ api });
@@ -285,7 +290,7 @@ describe('compra inmediata', () => {
     expect(ctrl.resultadoCierre).toBeNull();
     expect(ctrl.subastaCerrada).toBeNull();
     expect(ctrl.vista).not.toBe('detalle');
-    expect(contenedor.querySelector('#alerta-pujas').textContent).toContain('ya se cerro');
+    expect(contenedor.querySelector('#alerta-pujas').textContent).toContain('ya se cerró');
     ctrl.destruir();
   });
 

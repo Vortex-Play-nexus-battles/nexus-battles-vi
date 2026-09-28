@@ -373,7 +373,7 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
     test('renderiza medidores de topes de concurrencia y alerta reactiva al 80%', () => {
       expect(contenedor.querySelector('.grid-topes-concurrencia')).not.toBeNull();
-      expect(contenedor.textContent).toContain('Subastas en las que participas');
+      expect(contenedor.textContent).toContain('Tus publicaciones en curso');
       expect(contenedor.textContent).toContain('Pujas tuyas que van ganando');
       // Verificamos que las barras de progreso estén presentes
       const barrasProgreso = contenedor.querySelectorAll('.tope-barra-progreso');
@@ -583,24 +583,30 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
   });
 
   test('calcularEstadoTopesConcurrencia genera alertas al superar el 80%', () => {
-    // 8 de 10 subastas = 80%
-    const subastas8 = Array.from({ length: 8 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado1 = calcularEstadoTopesConcurrencia(subastas8, {
-      maxSubastasSimultaneas: 10,
-      maxPujasActivas: 50,
-    });
+    // UXC-8 — el tope de 10 es de PUBLICACIONES activas (7.7.10, y
+    // ms-subastas-pujas.yaml 0.4.0: pujar ya no emite LIMITE_SUBASTAS_ACTIVAS);
+    // antes esta prueba lo fijaba sobre las subastas en las que se puja.
+    const reglas = { maxSubastasSimultaneas: 10, maxPujasActivas: 50 };
+
+    // 8 de 10 publicaciones = 80%
+    const estado1 = calcularEstadoTopesConcurrencia({ publicaciones: 8, ganando: 0 }, reglas);
     expect(estado1.subastas.alerta).toBe(true);
     expect(estado1.subastas.topeAlcanzado).toBe(false);
     expect(estado1.subastas.pista).toContain('Aviso de tope (80%)');
+    expect(estado1.subastas.pista).toContain('puedes publicar 2 más');
 
-    // 10 de 10 subastas = 100%
-    const subastas10 = Array.from({ length: 10 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado2 = calcularEstadoTopesConcurrencia(subastas10, {
-      maxSubastasSimultaneas: 10,
-      maxPujasActivas: 50,
-    });
+    // 10 de 10 publicaciones = 100%
+    const estado2 = calcularEstadoTopesConcurrencia({ publicaciones: 10, ganando: 0 }, reglas);
     expect(estado2.subastas.topeAlcanzado).toBe(true);
-    expect(estado2.subastas.pista).toContain('Has llegado al tope');
+    expect(estado2.subastas.pista).toContain('no puedes publicar otra');
+
+    // Las pujas activas: las tuyas que van ganando, con el tope del servidor.
+    const estado3 = calcularEstadoTopesConcurrencia(
+      { publicaciones: 0, ganando: 30 },
+      { maxSubastasSimultaneas: 10, maxPujasActivas: 30 },
+    );
+    expect(estado3.pujas.topeAlcanzado).toBe(true);
+    expect(estado3.pujas.pista).toContain('tope de 30 pujas activas');
   });
 
   describe('Alertas accesibles en el DOM sin alert() bloqueante (Defecto C)', () => {

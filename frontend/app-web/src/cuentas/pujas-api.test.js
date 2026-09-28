@@ -343,12 +343,46 @@ describe('B8 — reglas, ficha, cancelación, seguimiento y pendientes', () => {
     ]);
   });
 
+  test('UXC-8 — el panel personal: publicaciones, seguimiento e historial', async () => {
+    const { falso, peticiones } = capturar([]);
+    const api = apiCon(falso);
+
+    await api.misPublicaciones();
+    await api.misSeguidas();
+    await api.miHistorial();
+
+    expect(peticiones.map((p) => `${p.opciones.method} ${p.url}`)).toEqual([
+      'GET http://servidor/api/v1/mis-subastas/publicadas',
+      'GET http://servidor/api/v1/mis-subastas/seguimiento',
+      'GET http://servidor/api/v1/mis-subastas/historial',
+    ]);
+    expect(
+      peticiones.every((p) => p.opciones.headers.Authorization === 'Bearer jwt-de-prueba'),
+    ).toBe(true);
+  });
+
+  test('UXC-8 — exportar el historial pide CSV y devuelve el texto tal cual', async () => {
+    const peticiones = [];
+    const falso = jest.fn(async (url, opciones) => {
+      peticiones.push({ url, opciones });
+      return { ok: true, status: 200, text: async () => 'tipo,subastaId\nVENTA,x\n' };
+    });
+
+    const csv = await apiCon(falso).exportarHistorial();
+
+    expect(csv).toBe('tipo,subastaId\nVENTA,x\n');
+    expect(peticiones[0].url).toBe('http://servidor/api/v1/mis-subastas/historial?formato=csv');
+    expect(peticiones[0].opciones.headers.Accept).toContain('text/csv');
+  });
+
   test('las acciones del panel exigen sesion', async () => {
     const falso = jest.fn();
     const api = apiCon(falso, { token: null });
 
     await expect(api.cancelar('sub-1')).rejects.toMatchObject({ estado: 401 });
     await expect(api.pendientes()).rejects.toMatchObject({ estado: 401 });
+    await expect(api.misPublicaciones()).rejects.toMatchObject({ estado: 401 });
+    await expect(api.exportarHistorial()).rejects.toMatchObject({ estado: 401 });
     expect(falso).not.toHaveBeenCalled();
   });
 
