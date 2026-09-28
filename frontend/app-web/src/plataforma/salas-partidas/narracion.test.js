@@ -134,6 +134,75 @@ describe('narrarAccion', () => {
     expect(lineas).toHaveLength(1);
     expect(impactos).toHaveLength(0);
   });
+
+  /* B7 · canal 1.5.0: el ejecutor viaja en `afectados` por su poder y sus cargas. */
+
+  test('el ejecutor que solo viaja por su poder no se narra como si recibiera el golpe', () => {
+    const { lineas, impactos } = narrarAccion(
+      aviso('CAUSAR_DANO', [
+        { idJugador: RIVAL, vidaActual: 50, vidaMaxima: 60, diferencia: -10 },
+        { idJugador: YO, vidaActual: 52, vidaMaxima: 52, diferencia: 0, poderActual: 4 },
+      ]),
+      participantes,
+      YO,
+    );
+    expect(lineas).toEqual([
+      {
+        texto: 'Aquiles (tú) golpea a Centinela: −10 de vida (50/60).',
+        tono: 'dano',
+        icono: 'espada',
+      },
+    ]);
+    expect(impactos.map((i) => i.idJugador)).toEqual([RIVAL]);
+  });
+
+  test('una accion que no mueve ninguna vida (una defensa) dice que se usó, sin «no hace efecto»', () => {
+    const { lineas, impactos } = narrarAccion(
+      {
+        ...aviso('Mano de piedra', [
+          { idJugador: YO, vidaActual: 52, vidaMaxima: 52, diferencia: 0 },
+        ]),
+        accion: { codigo: 'Mano de piedra', nombre: 'Mano de piedra', tipo: 'DEFENSA' },
+      },
+      participantes,
+      YO,
+    );
+    expect(lineas).toEqual([
+      { texto: 'Aquiles (tú) usa Mano de piedra.', tono: 'sistema', icono: 'rayo' },
+    ]);
+    expect(impactos).toHaveLength(0);
+  });
+
+  test('un ataque especial dice que accion fue antes de contar el golpe', () => {
+    const { lineas } = narrarAccion(
+      {
+        ...aviso('CAUSAR_DANO_CRITICO', [
+          { idJugador: RIVAL, vidaActual: 40, vidaMaxima: 60, diferencia: -20 },
+        ]),
+        accion: { codigo: 'Golpe con escudo', nombre: 'CAUSAR_DANO_CRITICO', tipo: 'ATAQUE' },
+      },
+      participantes,
+      YO,
+    );
+    expect(lineas.map((l) => l.texto)).toEqual([
+      'Aquiles (tú) usa Golpe con escudo.',
+      '¡Crítico! Aquiles (tú) golpea a Centinela: −20 de vida (40/60).',
+    ]);
+  });
+
+  test('quien se cura a si mismo sigue narrandose: su vida si cambió', () => {
+    const { lineas } = narrarAccion(
+      {
+        ...aviso('SANACION_BASICA', [
+          { idJugador: YO, vidaActual: 45, vidaMaxima: 52, diferencia: 5 },
+        ]),
+        accion: { codigo: 'SANACION_BASICA', nombre: 'SANACION_BASICA', tipo: 'SANACION' },
+      },
+      participantes,
+      YO,
+    );
+    expect(lineas[0].texto).toBe('Aquiles (tú) se cura: +5 de vida (45/52).');
+  });
 });
 
 describe('narrarTurno', () => {

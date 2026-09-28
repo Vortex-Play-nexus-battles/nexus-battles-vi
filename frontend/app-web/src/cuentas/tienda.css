@@ -432,9 +432,234 @@
   outline-offset: 2px;
 }
 
+/* --- B5: moneda, lista de deseos, cantidad, pagar y mis compras ------- */
+
+/* El selector va sobre la atmosfera, junto a la insignia: la etiqueta y la
+   nota usan la tinta contextual; el control, la superficie clara del kit. */
+.selector-moneda {
+  flex: 0 1 220px;
+  min-width: 180px;
+}
+
+.selector-moneda__nota {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-2);
+}
+
+/* Lo que paso al pulsar un corazon. Sobre la atmosfera: el tono se dice con
+   el peso, no con un color que ahi no tendria contraste. */
+.aviso-deseos {
+  min-height: 1.2em;
+  margin: 0 0 var(--e-2);
+  font-size: var(--t-meta-tam);
+}
+
+.aviso-deseos[data-tono='advertencia'] {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* La imagen del producto en su linea (§7.5: imagen, nombre, precio unitario,
+   cantidad y subtotal). */
+.item-imagen {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radio-chico);
+}
+
+.cart-item .item-info {
+  flex: 1 1 auto;
+}
+
+/* Una linea que ya no se puede pagar: franja lateral y el motivo escrito. */
+.cart-item[data-disponible='no'] {
+  padding-left: var(--e-2);
+  border-left: 3px solid var(--advertencia);
+}
+
+.item-aviso {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--advertencia);
+}
+
+.mis-compras {
+  width: 100%;
+  margin-top: var(--e-3);
+}
+
+/* El resumen y el formulario de pago, en el dialogo del kit. */
+.dialogo--pago,
+.dialogo--compras {
+  max-height: calc(100vh - var(--e-8));
+  overflow-y: auto;
+}
+
+.pago {
+  display: grid;
+  gap: var(--e-5);
+}
+
+.pago__subtitulo {
+  margin: 0 0 var(--e-2);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__lineas {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pago__linea {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.pago__importe {
+  white-space: nowrap;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.pago__total {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin: var(--e-3) 0 0;
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__formulario {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.pago__nota,
+.pago__estado {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.pago__estado {
+  min-height: 1.2em;
+}
+
+.pago__fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e-3);
+}
+
+.pago__alerta {
+  padding: var(--e-3);
+  border: 1px solid var(--advertencia);
+  border-radius: var(--radio-chico);
+  background: var(--advertencia-insignia);
+  color: var(--texto);
+}
+
+.pago__alerta p {
+  margin: 0;
+}
+
+.pago__alerta-titulo {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--e-3);
+}
+
+.pago__alerta .pago__acciones {
+  margin-top: var(--e-2);
+}
+
+.pago__resultado {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.pago__resultado p {
+  margin: 0;
+}
+
+.pago__resultado-titulo {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+/* Mis compras. */
+.compras__lista {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.compra {
+  display: grid;
+  gap: var(--e-1);
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+}
+
+.compra__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.compra__fecha,
+.compra__total,
+.compra__medio,
+.compra__motivo {
+  margin: 0;
+}
+
+.compra__lineas {
+  margin: 0;
+  padding-left: var(--e-5);
+}
+
+.compra__total {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.compra__medio {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.compra__motivo {
+  color: var(--advertencia);
+}
+
 /* --- Pantallas estrechas ---------------------------------------------- */
 
 @media (max-width: 599px) {
+  .pago__fila {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-moneda {
+    flex-basis: 100%;
+  }
+
   .main-container {
     padding: var(--e-4);
     gap: var(--e-5);

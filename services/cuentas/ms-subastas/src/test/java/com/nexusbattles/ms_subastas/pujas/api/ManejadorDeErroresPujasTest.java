@@ -33,7 +33,10 @@ class ManejadorDeErroresPujasTest {
     /** Motivos que son una carrera perdida: reintentar con datos frescos tiene sentido. */
     private static final Set<PujaRechazadaException.Motivo> ESPERADOS_409 = EnumSet.of(
             PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
-            PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE);
+            PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE,
+            // B8 (ms-subastas-pujas.yaml 0.4.0): cuando el jugador pidio comprar,
+            // la compra inmediata estaba disponible; otro puja la supero.
+            PujaRechazadaException.Motivo.COMPRA_INMEDIATA_SUPERADA);
 
     private final ManejadorDeErroresPujas manejador = new ManejadorDeErroresPujas();
     private final HttpServletRequest peticion = peticionA("/api/v1/subastas/" + UUID.randomUUID() + "/pujas");

@@ -23,4 +23,21 @@ dependencies {
     testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
     testImplementation 'org.testcontainers:junit-jupiter'
     testImplementation 'org.testcontainers:postgresql'
+
+    // B8 — verificacion del pacto que ms-subastas publica sobre este servicio
+    // (contracts/pactos/ms-subastas-notificaciones.json): POST
+    // /api/v1/internal/notifications con credencial de servicio, 201, 409 del
+    // duplicado y 401 sin credencial. Misma version y mismo modulo que
+    // ms-finanzas e inventario: `junit5` a secas, NO `junit5spring`, que esta
+    // compilado contra javax.servlet y revienta en Spring Boot 4.
+    testImplementation 'au.com.dius.pact.provider:junit5:4.6.17'
+}
+
+// Los pactos viven fuera de este modulo, en contracts/pactos/: sin declararlos
+// como entrada, un cambio solo del pacto dejaria `test` UP-TO-DATE y la
+// verificacion no se repetiria (mismo motivo que en inventario).
+tasks.named('test') {
+    inputs.dir(rootProject.file('contracts/pactos'))
+            .withPropertyName('pactos')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
 }

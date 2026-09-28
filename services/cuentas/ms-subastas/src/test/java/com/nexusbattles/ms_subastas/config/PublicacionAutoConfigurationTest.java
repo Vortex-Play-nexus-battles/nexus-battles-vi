@@ -2,6 +2,9 @@ package com.nexusbattles.ms_subastas.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.pujas.service.ParametrosPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.port.*;
 import com.nexusbattles.ms_subastas.subastas.service.*;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -24,11 +27,13 @@ class PublicacionAutoConfigurationTest {
             .withBean(SancionesClient.class, () -> mock(SancionesClient.class))
             .withBean(IdempotenciaPublicacion.class, IdempotenciaPublicacionEnMemoria::new)
             .withBean(CalculadorComisionPublicacion.class, CalculadorComisionPublicacion::new)
-            .withBean(Clock.class, Clock::systemUTC);
+            .withBean(Clock.class, Clock::systemUTC)
+            .withBean(FuenteDeReglas.class, () -> FuenteDeReglas.fijas(new ParametrosPuja(), java.math.BigDecimal.ONE))
+            .withBean(AvisosDeSubasta.class, () -> mock(AvisosDeSubasta.class));
 
     @Test
     void httpComparteUnSoloClienteYActivaPublicacion() {
-        runner.withPropertyValues("app.inventario.modo=http", "app.subastas.incremento-minimo=1")
+        runner.withPropertyValues("app.inventario.modo=http")
                 .withUserConfiguration(FinanzasPublicacionClientHttp.class)
                 .run(context -> {
                     assertThat(context).hasNotFailed().hasSingleBean(InventarioClient.class)

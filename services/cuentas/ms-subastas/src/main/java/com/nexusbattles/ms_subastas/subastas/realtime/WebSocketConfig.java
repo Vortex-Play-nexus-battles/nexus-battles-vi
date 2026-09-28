@@ -107,8 +107,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // Un solo canal de difusion para el listado (no uno por subasta):
-        // ver justificacion en el diseno de esta HU.
+        // Dos destinos de difusion bajo /topic (contracts/websocket/subastas.yaml
+        // 1.1.0): el listado, publico, y desde B8 el de cada subasta
+        // (/topic/subastas/{subastaId}), con sesion. Quien entra a cual lo
+        // decide PoliticaDelCanalDeSubastas.
         registry.enableSimpleBroker("/topic");
         registry.setApplicationDestinationPrefixes("/app");
     }

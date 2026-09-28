@@ -217,4 +217,23 @@ describe('montarBannerDeMisiones (RF-INV-003)', () => {
       '../misiones/misiones.html',
     );
   });
+
+  test('la fuente real llega como promesa (antes pregunta al servicio): se espera', async () => {
+    const zona = document.getElementById('zona');
+    const fuente = { disponible: true, destacadas: jest.fn().mockResolvedValue(MISIONES) };
+
+    expect(await montarBannerDeMisiones(zona, { fuente: Promise.resolve(fuente), hrefDe })).toBe(
+      'misiones',
+    );
+    expect(zona.hidden).toBe(false);
+
+    // Y si la pregunta dice que no hay servicio, oculto, como siempre.
+    expect(
+      await montarBannerDeMisiones(zona, {
+        fuente: Promise.resolve(FUENTE_SIN_SERVICIO),
+        hrefDe,
+      }),
+    ).toBe('oculto');
+    expect(zona.hidden).toBe(true);
+  });
 });

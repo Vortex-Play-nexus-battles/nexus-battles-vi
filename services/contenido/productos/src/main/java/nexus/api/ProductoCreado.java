@@ -4,9 +4,20 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 import nexus.dominio.EstadoProducto;
+import nexus.dominio.OrigenProducto;
 import nexus.dominio.ParteArmadura;
 import nexus.dominio.TipoProducto;
 
+/**
+ * Un producto tal como sale por la API (esquema {@code ProductoCreado}).
+ *
+ * <p>Desde B4 hay dos proyecciones del mismo registro (ver
+ * {@code ProyeccionDeProductos}): la completa, para un servicio o un
+ * administrador, y la publica, que deja en nulo —y por tanto fuera del JSON,
+ * que se publica con {@code non_null}— lo interno: {@code version},
+ * {@code tasaDeCaida}, {@code origen}, {@code semillaVersion} y
+ * {@code modificadoPor}. Por eso {@code version} es un {@link Integer}.
+ */
 public record ProductoCreado(
 
         String id,
@@ -55,9 +66,17 @@ public record ProductoCreado(
 
         EstadoProducto estado,
 
-        int version,
+        Integer version,
 
         Instant creadoEn,
 
-        Instant modificadoEn) {
+        Instant modificadoEn,
+
+        PromocionVista promocion,
+
+        OrigenProducto origen,
+
+        Integer semillaVersion,
+
+        String modificadoPor) {
 }

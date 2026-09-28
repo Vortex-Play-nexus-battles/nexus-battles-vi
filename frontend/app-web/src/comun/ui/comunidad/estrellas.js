@@ -16,6 +16,12 @@
  *     verdad (flechas del teclado, un nombre por opción) y un «Sin calificar»
  *     para desmarcar, que un grupo de radios no permite por sí solo.
  *
+ * B3 — el selector lo usa el control de calificación del detalle
+ * (`plataforma/comentarios/calificar-producto.js`), que manda la nota por su
+ * cuenta y una sola vez (`POST /products/{id}/rating`). El redactor de
+ * opiniones ya no lleva estrellas: calificar y comentar son dos actos
+ * distintos (7.1).
+ *
  * ## No solo color
  *
  * La estrella llena se distingue por color, así que el grupo entero lleva un
@@ -126,7 +132,7 @@ export function estrellasDeCalificacion(
 }
 
 /**
- * El control para calificar de 1 a 5, opcional.
+ * El control para calificar de 1 a 5.
  *
  * Cinco `input[type=radio]` escondidos a la vista pero no al teclado: cada uno
  * va dentro de su `label` con la estrella dibujada y su nombre («3
@@ -136,10 +142,10 @@ export function estrellasDeCalificacion(
  *
  * @param {{leyenda?: string, ayuda?: string|null, alCambiar?: (valor: number|null) => void}} [opciones]
  * @returns {{elemento: HTMLFieldSetElement, valor: () => number|null,
- *   limpiar: () => void, deshabilitar: (motivo: string) => void}}
+ *   limpiar: () => void, enfocar: () => void, deshabilitar: (motivo: string) => void}}
  */
 export function selectorDeEstrellas({
-  leyenda = 'Tu calificación (opcional)',
+  leyenda = 'Tu calificación',
   ayuda = null,
   alCambiar = () => {},
 } = {}) {
@@ -186,7 +192,9 @@ export function selectorDeEstrellas({
 
   const nota = h('p', {
     clase: 'campo__pista',
-    texto: ayuda ?? 'Solo puedes calificar un producto una vez; comentar, las veces que quieras.',
+    texto:
+      ayuda ??
+      'Solo puedes calificar un producto una vez y no se cambia después; comentar, las veces que quieras.',
     atributos: { id: idAyuda },
   });
 
@@ -241,6 +249,10 @@ export function selectorDeEstrellas({
     elemento,
     valor,
     limpiar,
+    /** Lleva el foco a la estrella marcada o, sin nota, a la primera. */
+    enfocar() {
+      (entradas.find((entrada) => entrada.checked) ?? entradas[0]).focus();
+    },
     /**
      * Deja el control a la vista pero sin uso, con el porqué debajo (por
      * ejemplo: ya calificaste este producto).

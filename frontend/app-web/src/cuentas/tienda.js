@@ -55,6 +55,20 @@
  *    el panel se despliega o se recoge sin mover la vitrina
  *    (`tienda-carrito.js`). Cada línea suma una unidad o se quita.
  *
+ * ## B5 — comprar de verdad (ecommerce-carrito.yaml 1.4.0)
+ *
+ * 1. **La moneda.** Selector COP/USD/EUR, que empieza por la del idioma del
+ *    navegador y solo ofrece las que el servidor tiene (`tienda-moneda.js`).
+ *    Los precios los convierte el servidor; aquí solo se elige cuál pedir.
+ * 2. **La lista de deseos.** El corazón de cada tarjeta y del detalle la
+ *    guarda en la cuenta (`tienda-deseos.js`); lo deseado se distingue.
+ * 3. **La cantidad.** «−» y «+» en cada línea cambian la cantidad con
+ *    `PUT /carrito/items/{id}/cantidad`: de 1 a 20 y nunca más de lo que
+ *    queda. Una línea que ya no se puede pagar lo dice.
+ * 4. **Pagar.** Abre el resumen con el formulario de pago de §7.5 contra la
+ *    pasarela simulada, y el resultado por estado; «Mis compras» lista las
+ *    órdenes (`tienda-pago.js`).
+ *
  * @module tienda
  */
 
@@ -89,10 +103,42 @@ import {
   textoDeUnidades,
   unidadesDelCarrito,
 } from './tienda-carrito.js';
+import {
+  MONEDA_BASE,
+  conMoneda,
+  disponiblesDe,
+  guardarMoneda,
+  monedaAMostrar,
+  monedaPreferida,
+  notaDeMoneda,
+  pintarSelectorDeMoneda,
+} from './tienda-moneda.js';
+import { cambiarDeseo, pintarDeseo, textoDelFalloDeDeseo } from './tienda-deseos.js';
+import { abrirMisCompras, abrirPago, olvidarIntentoDePago } from './tienda-pago.js';
 import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
 const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
+
+/** `type` cuando se pide una moneda sin tasa de cambio (contrato 1.4.0). */
+const TIPO_MONEDA_NO_DISPONIBLE = 'urn:nexus:problema:moneda-no-disponible';
+
+/**
+ * Lo que se le dice al jugador cuando cambiar la cantidad de una línea no
+ * sale (`PUT /carrito/items/{id}/cantidad`, 1.4.0). Por el `type`.
+ */
+const MOTIVOS_DE_CANTIDAD = Object.freeze({
+  'urn:nexus:problema:cantidad-fuera-de-rango': () => 'La cantidad va de 1 a 20 unidades.',
+  'urn:nexus:problema:cantidad-maxima-por-linea': () =>
+    'Como mucho 20 unidades de un mismo producto.',
+  'urn:nexus:problema:tiraje-insuficiente': (problema) =>
+    Number.isInteger(problema?.disponibles)
+      ? `Solo quedan ${problema.disponibles} unidades de este producto.`
+      : 'No quedan tantas unidades de este producto.',
+  'urn:nexus:problema:linea-inexistente': () => 'Ese producto ya no estaba en tu carrito.',
+  'urn:nexus:problema:producto-agotado': () => 'Ese producto se agotó.',
+  'urn:nexus:problema:producto-no-disponible': () => 'Ese producto ya no está a la venta.',
+});
 
 /**
  * Lo que se le dice al jugador cuando «Añadir» falla por un motivo conocido.
@@ -185,8 +231,16 @@ export function haySesion() {
  * que las pruebas (y cualquier vista que monte la tienda dos veces) no se
  * pisen.
  *
+ * B5 — y la moneda: la que se enseña (`moneda`, confirmada por el servidor),
+ * la que la persona prefiere (`preferida`), las que el servidor ofrece
+ * (`disponibles`) y las que dijo ofrecer pero luego rechazó (`vetadas`, para
+ * no volver a ellas en bucle); y el último carrito pintado, que es el que
+ * resume el pago.
+ *
  * @type {WeakMap<Document, {productos: object[], completo: boolean, criterios: object,
- *   pagina: number, propias: Map<string, number>, cajon: object|null}>}
+ *   pagina: number, propias: Map<string, number>, cajon: object|null, moneda: string,
+ *   preferida: string|null, porIdioma: boolean, disponibles: string[], vetadas: Set<string>,
+ *   carrito: object|null}>}
  */
 const ESTADOS = new WeakMap();
 
@@ -200,14 +254,104 @@ function estadoDe(doc) {
       pagina: 0,
       propias: new Map(),
       cajon: null,
+      moneda: MONEDA_BASE,
+      preferida: null,
+      porIdioma: false,
+      disponibles: [MONEDA_BASE],
+      vetadas: new Set(),
+      carrito: null,
     });
   }
   return ESTADOS.get(doc);
 }
 
+/** Las monedas que se pueden usar: las que el servidor ofrece y no ha rechazado. */
+function monedasUsables(vista) {
+  return vista.disponibles.filter((moneda) => !vista.vetadas.has(moneda));
+}
+
+/**
+ * La moneda preferida de la vista (la elegida o la del idioma) y la
+ * disponibilidad que se sepa. Sin llamar a nadie: la vitrina dirá después si
+ * el servidor la ofrece.
+ *
+ * @param {Document} doc
+ * @param {{moneda: string, porIdioma: boolean}} preferencia
+ */
+export function fijarMonedaPreferida(doc, { moneda, porIdioma }) {
+  const vista = estadoDe(doc);
+  vista.preferida = moneda;
+  vista.porIdioma = porIdioma;
+  pintarMoneda(doc);
+}
+
+/** Pinta el selector y su nota con lo que la vista sabe de la moneda. */
+function pintarMoneda(doc) {
+  const vista = estadoDe(doc);
+  const usables = monedasUsables(vista);
+  pintarSelectorDeMoneda(doc.getElementById('moneda-tienda'), {
+    actual: vista.moneda,
+    disponibles: usables,
+  });
+  const nota = doc.getElementById('nota-moneda');
+  if (nota) {
+    nota.textContent = notaDeMoneda({
+      actual: vista.moneda,
+      preferida: vista.preferida,
+      disponibles: usables,
+      porIdioma: vista.porIdioma,
+    });
+  }
+}
+
+/**
+ * La moneda en uso ya no está (422 `moneda-no-disponible`, por ejemplo
+ * porque se retiró su tasa): se veta para esta visita, se vuelve a la
+ * preferida si queda o a COP, que no depende de ninguna tasa, y el siguiente
+ * pago lleva otra clave.
+ *
+ * @param {Document} doc
+ * @param {unknown} disponibles las que dice el servidor
+ */
+function retirarMonedaEnUso(doc, disponibles) {
+  const vista = estadoDe(doc);
+  if (vista.moneda !== MONEDA_BASE) {
+    vista.vetadas.add(vista.moneda);
+  }
+  vista.disponibles = disponiblesDe({ monedasDisponibles: disponibles });
+  vista.moneda = monedaAMostrar(vista.preferida, monedasUsables(vista));
+  olvidarIntentoDePago(doc);
+  pintarMoneda(doc);
+}
+
+/**
+ * Cambia la moneda en la que se enseña la tienda y vuelve a pedir la vitrina
+ * y el carrito en ella.
+ *
+ * @param {Document} doc
+ * @param {string} moneda
+ * @returns {Promise<void>}
+ */
+export async function cambiarMoneda(doc, moneda) {
+  const vista = estadoDe(doc);
+  vista.preferida = moneda;
+  vista.porIdioma = false;
+  guardarMoneda(globalThis.localStorage ?? null, moneda);
+  const aMostrar = monedaAMostrar(moneda, monedasUsables(vista));
+  if (aMostrar === vista.moneda) {
+    pintarMoneda(doc);
+    return;
+  }
+  vista.moneda = aMostrar;
+  olvidarIntentoDePago(doc);
+  pintarMoneda(doc);
+  await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+}
+
 export async function cargarVitrina(doc = document) {
   const rejilla = doc.getElementById('productos-grid');
   const vista = estadoDe(doc);
+  const pedida = vista.moneda;
 
   // UX-R2.8d — no habia estado de carga: el HTML traia un comentario
   // (`<!-- Cargando productos... -->`) donde deberia ir, asi que la rejilla
@@ -220,12 +364,38 @@ export async function cargarVitrina(doc = document) {
     // R16 — `/vitrina` y no `/productos`: ese prefijo es del catálogo maestro.
     // UXC-4 — entera, de cincuenta en cincuenta: buscar y filtrar trabajan
     // sobre toda la tienda, no sobre una página (`tienda-catalogo.js`).
-    const { productos, completo } = await reunirVitrina();
+    const { productos, completo, monedasDisponibles } = await reunirVitrina({ moneda: pedida });
+    if (vista.moneda !== pedida) {
+      // Mientras llegaba, se cambió de moneda: pinta la petición nueva.
+      return;
+    }
+    vista.disponibles = monedasDisponibles;
+    // B5 — se pidió en la moneda confirmada (COP al empezar). Si la preferida
+    // está disponible y es otra, se cambia a ella antes de pintar nada: ni un
+    // error por una preferencia ni un parpadeo de precios en pesos.
+    const aMostrar = monedaAMostrar(vista.preferida, monedasUsables(vista));
+    if (aMostrar !== pedida) {
+      vista.moneda = aMostrar;
+      pintarMoneda(doc);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+      return;
+    }
     vista.productos = productos;
     vista.completo = completo;
     vista.pagina = 0;
+    pintarMoneda(doc);
     pintarCatalogo(doc);
   } catch (error) {
+    if (vista.moneda !== pedida) {
+      return;
+    }
+    // B5 — la moneda en uso dejó de estar (se retiró su tasa): a la que
+    // quede, COP como poco, y se vuelve a pedir.
+    if (error?.problema?.type === TIPO_MONEDA_NO_DISPONIBLE && pedida !== MONEDA_BASE) {
+      retirarMonedaEnUso(doc, error.problema.monedasDisponibles);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+      return;
+    }
     // Antes esto no existía: un fallo dejaba el cargador girando para siempre.
     // `.empty-cart-msg` no existe en ningun CSS (el guardian de clases solo
     // mira el HTML, y esta estaba escrita en JavaScript): el mensaje salia con
@@ -570,6 +740,7 @@ function abrirDetalle(productoId, doc, origen) {
           modo: MODOS.TIENDA,
           unidadesPropias: vista.propias.get(productoId) ?? 0,
           alAnadir: (id) => agregarAlCarrito(id, doc),
+          alDesear: (id) => alternarDeseo(id, doc),
         }),
       complementoDeOpiniones(),
     ],
@@ -648,6 +819,8 @@ export async function agregarAlCarrito(productoId, doc = document) {
     return { ok: false, ...mensaje };
   }
 
+  // B5 — el carrito cambió: pagarlo ahora es otra compra, con otra clave.
+  olvidarIntentoDePago(doc);
   await cargarCarrito(doc);
   anunciarEnLaInsignia(doc, 'Añadido al carrito.');
   return { ok: true };
@@ -673,8 +846,11 @@ export async function quitarDelCarrito(itemId, doc = document) {
   };
   let respuesta;
   try {
+    // B5 — en la moneda que se enseña: la respuesta es el carrito que se pinta.
     respuesta = await fetchWithHttpErrorInterceptor(
-      rutaDeApi(`/carrito/items/${encodeURIComponent(String(itemId))}`),
+      rutaDeApi(
+        conMoneda(`/carrito/items/${encodeURIComponent(String(itemId))}`, estadoDe(doc).moneda),
+      ),
       { method: 'DELETE', headers: cabeceras() },
     );
   } catch (error) {
@@ -709,9 +885,128 @@ export async function quitarDelCarrito(itemId, doc = document) {
     }
     return false;
   }
+  olvidarIntentoDePago(doc);
   actualizarUI(await respuesta.json(), doc);
   anunciarEnLaInsignia(doc, 'Quitado del carrito.');
   return true;
+}
+
+/**
+ * «−» y «+» de una línea — `PUT /api/v1/carrito/items/{itemId}/cantidad`
+ * (1.4.0). El servidor comprueba el rango (1..20) y lo que queda del tiraje,
+ * recalcula el total y devuelve el carrito, que es lo que se pinta.
+ *
+ * @param {string|number} itemId el `id` de la línea
+ * @param {number} cantidad la cantidad nueva
+ * @param {Document} [doc]
+ * @returns {Promise<boolean>} si cambió
+ */
+export async function cambiarCantidad(itemId, cantidad, doc = document) {
+  const zona = zonaDeAvisoDelCarrito(doc);
+  limpiarAviso(zona);
+  const reintentar = {
+    texto: 'Reintentar',
+    nombre: 'reintentar-cantidad',
+    alPulsar: () => cambiarCantidad(itemId, cantidad, doc),
+  };
+  let respuesta;
+  try {
+    respuesta = await fetchWithHttpErrorInterceptor(
+      rutaDeApi(
+        conMoneda(
+          `/carrito/items/${encodeURIComponent(String(itemId))}/cantidad`,
+          estadoDe(doc).moneda,
+        ),
+      ),
+      { method: 'PUT', headers: cabeceras(), body: JSON.stringify({ cantidad }) },
+    );
+  } catch (error) {
+    pintarAviso(zona, {
+      tono: 'error',
+      titulo: 'No se pudo cambiar la cantidad',
+      detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+      accion: reintentar,
+    });
+    console.error('Error al cambiar la cantidad:', error);
+    return false;
+  }
+  if (!respuesta.ok) {
+    const problema = await leerProblema(respuesta);
+    if (respuesta.status === 401) {
+      pintarAviso(zona, {
+        tono: 'advertencia',
+        titulo: 'Tu sesión ya no es válida',
+        detalle: 'Vuelve a iniciar sesión para usar el carrito.',
+        accion: {
+          texto: 'Iniciar sesión',
+          nombre: 'iniciar-sesion',
+          alPulsar: volverAIniciarSesion,
+        },
+      });
+    } else if (respuesta.status !== 403) {
+      const conocido = MOTIVOS_DE_CANTIDAD[problema?.type];
+      pintarAviso(zona, {
+        tono: tonoPorEstado(respuesta.status),
+        titulo: 'No se pudo cambiar la cantidad',
+        detalle: conocido
+          ? conocido(problema)
+          : 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+        accion: conocido && respuesta.status < 500 ? null : reintentar,
+      });
+      // La línea o el producto cambiaron: lo que hay que ver es el carrito de ahora.
+      if (conocido && respuesta.status < 500) {
+        await cargarCarrito(doc);
+      }
+    }
+    desplegarCarrito(doc);
+    return false;
+  }
+  olvidarIntentoDePago(doc);
+  actualizarUI(await respuesta.json(), doc);
+  anunciarEnLaInsignia(doc, `Cantidad actualizada: ${cantidad}.`);
+  return true;
+}
+
+/**
+ * El corazón de una tarjeta o del detalle: añade el producto a la lista de
+ * deseos o lo quita, según lo que diga ahora la vista, y pinta lo que el
+ * servicio confirme.
+ *
+ * @param {string} productoId
+ * @param {Document} [doc]
+ * @returns {Promise<{ok: boolean, texto: string}>}
+ */
+export async function alternarDeseo(productoId, doc = document) {
+  const vista = estadoDe(doc);
+  const id = String(productoId);
+  const dto = vista.productos.find((producto) => String(producto.id) === id) ?? null;
+  const boton = Array.from(doc.querySelectorAll('[data-deseo]')).find(
+    (candidato) => candidato.dataset.deseo === id,
+  );
+  const deseadoAhora =
+    dto !== null ? dto.enListaDeseos === true : boton?.getAttribute('aria-pressed') === 'true';
+  const desear = !deseadoAhora;
+  const nombre = dto?.nombre || 'El producto';
+
+  const resultado = await cambiarDeseo(id, desear);
+  let texto;
+  if (resultado.ok) {
+    if (dto !== null) {
+      dto.enListaDeseos = desear;
+    }
+    pintarDeseo(doc, id, desear);
+    texto = desear
+      ? `«${nombre}» está en tu lista de deseos.`
+      : `«${nombre}» salió de tu lista de deseos.`;
+  } else {
+    texto = textoDelFalloDeDeseo(resultado, desear);
+  }
+  const zona = doc.getElementById('aviso-deseos');
+  if (zona) {
+    zona.textContent = texto;
+    zona.dataset.tono = resultado.ok ? 'exito' : 'advertencia';
+  }
+  return { ok: resultado.ok, texto };
 }
 
 /** Despliega el panel del carrito si la vista lo tiene minimizado. */
@@ -849,11 +1144,14 @@ function volverAIniciarSesion() {
 }
 
 export async function cargarCarrito(doc = document) {
+  // B5 — en la moneda que se enseña. Si mientras llega se cambia de moneda,
+  // esta respuesta ya no se pinta: la pinta la petición nueva.
+  const pedida = estadoDe(doc).moneda;
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito'), {
-      method: 'GET',
-      headers: cabeceras(),
-    });
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      rutaDeApi(conMoneda('/carrito', pedida)),
+      { method: 'GET', headers: cabeceras() },
+    );
     // R16 — el interceptor no lanza ante un 4xx o un 5xx: sin esto, el
     // problem detail de un 500 se pintaba como un carrito sin `items`, o sea
     // «vacío», que es justo lo que el `catch` de abajo dice evitar.
@@ -861,13 +1159,25 @@ export async function cargarCarrito(doc = document) {
       throw await errorDeRespuesta(respuesta);
     }
 
-    actualizarUI(await respuesta.json(), doc);
+    const carrito = await respuesta.json();
+    if (estadoDe(doc).moneda === pedida) {
+      actualizarUI(carrito, doc);
+    }
   } catch (error) {
+    if (estadoDe(doc).moneda !== pedida) {
+      return;
+    }
     // Un 404 es un carrito que todavía no existe, y eso SÍ es un carrito
     // vacío. Cualquier otro fallo no lo es: pintar «vacío» ante un 500 le
     // esconde al jugador que sus productos siguen ahí.
     if (error?.estado === 404 || error?.status === 404) {
       actualizarUI(null, doc);
+      return;
+    }
+    // B5 — la moneda en uso dejó de estar: se vuelve a la que quede.
+    if (error?.problema?.type === TIPO_MONEDA_NO_DISPONIBLE && pedida !== MONEDA_BASE) {
+      retirarMonedaEnUso(doc, error.problema.monedasDisponibles);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
       return;
     }
     mostrarFalloDelCarrito(doc);
@@ -893,6 +1203,8 @@ function mostrarFalloDelCarrito(doc) {
     // No se paga lo que no se ha podido leer.
     botonPagar.disabled = true;
   }
+  estadoDe(doc).carrito = null;
+  pintarMotivoDePago(doc, 'Tu carrito no se pudo cargar: no se puede pagar ahora.');
 }
 
 export function actualizarUI(carrito, doc = document) {
@@ -910,6 +1222,8 @@ export function actualizarUI(carrito, doc = document) {
     unidades.textContent = textoDeUnidades(cuantas);
   }
 
+  estadoDe(doc).carrito = carrito && Array.isArray(carrito.items) ? carrito : null;
+
   if (!carrito || !carrito.items || carrito.items.length === 0) {
     // UXC-9 — un vacío dice qué hacer: la vitrina está al lado.
     contenedor.replaceChildren(
@@ -924,13 +1238,15 @@ export function actualizarUI(carrito, doc = document) {
     subtotal.textContent = '0';
     total.textContent = '0';
     botonPagar.disabled = true;
+    pintarMotivoDePago(doc, 'Añade productos a tu carrito para pagar.');
     return;
   }
 
-  // La moneda del carrito es la del primer producto que la declare: el DTO la
-  // trae por producto, no por carrito, y suponer COP seria decirle al jugador
-  // en que paga sin saberlo.
+  // B5 — el carrito dice su moneda (1.4.0). Sin ella, la del primer producto
+  // que la declare: suponer COP seria decirle al jugador en que paga sin
+  // saberlo.
   const moneda =
+    (typeof carrito.moneda === 'string' && carrito.moneda.trim() ? carrito.moneda : null) ||
     carrito.items.map((i) => i.producto?.moneda).find((m) => typeof m === 'string' && m.trim()) ||
     null;
 
@@ -939,16 +1255,18 @@ export function actualizarUI(carrito, doc = document) {
   const totalTexto = textoDePrecio(aImporte(carrito.total), moneda) ?? 'Sin total';
   subtotal.textContent = totalTexto;
   total.textContent = totalTexto;
-  prepararBotonDePago(botonPagar);
+  prepararBotonDePago(botonPagar, carrito, doc);
 }
 
 /**
- * Una línea del carrito: nombre, cantidad, precio por unidad, subtotal y sus
- * dos acciones — sumar una unidad (`POST /carrito/items`, que suma a la línea
- * del mismo producto) y quitarla (`DELETE /carrito/items/{id}`).
+ * Una línea del carrito (§7.5: imagen, nombre, precio unitario, cantidad y
+ * subtotal) con sus acciones: «−» y «+» cambian la cantidad
+ * (`PUT /carrito/items/{id}/cantidad`, 1.4.0) y «Quitar» la retira
+ * (`DELETE /carrito/items/{id}`).
  *
- * No hay «restar una»: el contrato no tiene cómo, y quitar la línea y volver
- * a añadir N−1 serían dos operaciones que pueden quedarse a medias.
+ * «−» se apaga en 1 (para eso está «Quitar») y «+» en el máximo que dice el
+ * servidor: 20, o lo que quede del tiraje. Una línea que ya no se puede
+ * pagar lo dice, y solo deja bajar la cantidad si el problema es ese.
  *
  * @param {object} item `LineaDeCarrito` del contrato
  * @param {string|null} moneda
@@ -956,21 +1274,32 @@ export function actualizarUI(carrito, doc = document) {
  */
 function lineaDelCarrito(item, moneda) {
   const fila = aFilaDeCarrito(item, moneda);
-  const productoId = item?.producto?.id ?? null;
-  const lineaId = item?.id ?? null;
+  const lineaId = fila.id;
   const acciones = [];
-  if (productoId !== null) {
+  if (lineaId !== null) {
+    const soloBajar = !fila.disponible && fila.motivo === 'TIRAJE_INSUFICIENTE';
+    const puedeCambiar = fila.disponible || soloBajar;
     acciones.push(
       h('button', {
         clase: 'boton boton--secundario boton--pequeno item-accion',
-        texto: '+1',
-        datos: { sumarItem: String(productoId) },
-        atributos: { type: 'button', 'aria-label': `+1: una unidad más de ${fila.nombre}` },
+        texto: '−',
+        datos: { cantidadItem: String(lineaId), cantidadNueva: String(fila.cantidad - 1) },
+        atributos: {
+          type: 'button',
+          disabled: !puedeCambiar || fila.cantidad <= 1,
+          'aria-label': `Una unidad menos de ${fila.nombre}`,
+        },
       }),
-    );
-  }
-  if (lineaId !== null) {
-    acciones.push(
+      h('button', {
+        clase: 'boton boton--secundario boton--pequeno item-accion',
+        texto: '+',
+        datos: { cantidadItem: String(lineaId), cantidadNueva: String(fila.cantidad + 1) },
+        atributos: {
+          type: 'button',
+          disabled: !fila.disponible || fila.cantidad >= fila.maximo,
+          'aria-label': `Una unidad más de ${fila.nombre}`,
+        },
+      }),
       h('button', {
         clase: 'boton boton--secundario boton--pequeno item-accion',
         texto: 'Quitar',
@@ -981,16 +1310,26 @@ function lineaDelCarrito(item, moneda) {
   }
   return h('div', {
     clase: 'cart-item',
-    datos: lineaId !== null ? { itemId: String(lineaId) } : {},
+    datos: {
+      ...(lineaId !== null ? { itemId: String(lineaId) } : {}),
+      disponible: fila.disponible ? 'si' : 'no',
+    },
     hijos: [
+      fila.imagen
+        ? h('img', {
+            clase: 'item-imagen',
+            atributos: { src: fila.imagen, alt: '', loading: 'lazy', decoding: 'async' },
+          })
+        : null,
       h('div', {
         clase: 'item-info',
         hijos: [
           h('h5', { texto: fila.nombre }),
           h('span', { texto: `x${fila.cantidad}` }),
-          fila.unitarioTexto && fila.cantidad > 1
+          fila.unitarioTexto
             ? h('span', { clase: 'item-unitario', texto: ` · ${fila.unitarioTexto} c/u` })
             : null,
+          fila.motivoTexto ? h('p', { clase: 'item-aviso', texto: fila.motivoTexto }) : null,
         ],
       }),
       h('div', {
@@ -1006,34 +1345,108 @@ function lineaDelCarrito(item, moneda) {
 }
 
 /**
- * El boton «Pagar» — FI-R2 / FI-R14.
+ * El motivo por el que «Pagar» está apagado, escrito junto al botón y
+ * enlazado con `aria-describedby`; vacío cuando se puede pagar.
  *
- * RF-CAR-010 («Resumen de compra y formulario de pago») y RF-PAG-001
- * («Integracion con pasarela de pagos simulada») existen, son de prioridad
- * Alta y estan confirmados. Lo que **no** existe es su implementacion:
- * `CarritoController` expone `GET /carrito`, `POST /carrito/items` y
- * `DELETE /carrito/items/{itemId}`, y nada mas; `ecommerce-carrito.yaml`
- * declara esas mismas tres rutas y ninguna de pago.
+ * @param {Document} doc
+ * @param {string} texto
+ */
+function pintarMotivoDePago(doc, texto) {
+  const zona = doc.getElementById('aviso-pago');
+  const boton = doc.getElementById('btn-pagar');
+  if (zona) {
+    zona.textContent = texto;
+    zona.hidden = texto === '';
+  }
+  if (boton) {
+    if (texto && zona) {
+      boton.setAttribute('aria-describedby', 'aviso-pago');
+    } else {
+      boton.removeAttribute('aria-describedby');
+    }
+  }
+}
+
+/**
+ * El boton «Pagar» — FI-R2 / FI-R14, y desde B5 con pasarela.
  *
- * Los dos requisitos son de **Grupo de Santiago** (ver
- * `docs/gobierno/MAPA-RESPONSABILIDAD-RF.md`), asi que construir aqui la
- * pasarela seria adelantarles el Sprint, no completarlo.
- *
- * Mientras tanto el boton no puede quedarse encendido: estaba habilitado en
- * cuanto el carrito tenia algo y **no tenia ningun manejador**. Pulsarlo no
- * hacia nada, ni siquiera avisar. Un boton que se enciende es una promesa.
+ * Hasta B5 no existía ninguna ruta de pago y el botón se quedaba apagado con
+ * el motivo escrito: uno encendido y sin manejador era una promesa falsa.
+ * Ahora `POST /checkout` existe (ecommerce-carrito.yaml 1.4.0) y el botón
+ * abre el resumen con el formulario de pago. Se enciende cuando hay algo que
+ * pagar y todo lo del carrito se puede pagar; si no, dice por qué.
  *
  * @param {HTMLButtonElement|null} boton
+ * @param {object} carrito el que se acaba de pintar
+ * @param {Document} doc
  */
-function prepararBotonDePago(boton) {
+function prepararBotonDePago(boton, carrito, doc) {
   if (!boton) {
     return;
   }
-  boton.disabled = true;
-  // El identificador del requisito vive en el comentario de arriba, no en la
-  // pantalla: a quien compra no le dice nada «RF-PAG-001».
-  boton.title = 'El pago todavía no está disponible.';
-  boton.setAttribute('aria-describedby', 'aviso-pago-pendiente');
+  const lineas = Array.isArray(carrito?.items) ? carrito.items : [];
+  const total = aImporte(carrito?.total);
+  let motivo = '';
+  if (lineas.some((item) => item?.disponible === false)) {
+    motivo = 'Quita o corrige lo que ya no se puede comprar para pagar el resto.';
+  } else if (carrito?.preciosVigentes === false) {
+    motivo =
+      'No se pudieron confirmar los precios con el catálogo. Vuelve a intentarlo en unos segundos.';
+  } else if (total === null || total <= 0) {
+    motivo = 'Tu carrito no tiene un total que pagar.';
+  }
+  boton.disabled = motivo !== '';
+  boton.removeAttribute('title');
+  pintarMotivoDePago(doc, motivo);
+}
+
+/**
+ * «Pagar»: el resumen con el formulario (`tienda-pago.js`). Al terminar una
+ * compra cobrada se recargan el carrito (lo comprado ya salió de él) y lo que
+ * tiene el jugador.
+ *
+ * @param {Document} doc
+ */
+function abrirElPago(doc) {
+  const vista = estadoDe(doc);
+  if (!vista.carrito) {
+    return;
+  }
+  abrirPago({
+    doc,
+    carrito: vista.carrito,
+    moneda: vista.moneda,
+    alTerminar: () => {
+      cargarCarrito(doc);
+      if (haySesion()) {
+        propiedadesDelJugador(usuarioIdDeSesion()).then((mapa) => {
+          estadoDe(doc).propias = mapa;
+          marcarPropias(doc);
+        });
+      }
+    },
+    alCambiarCarrito: () => cargarCarrito(doc),
+    alCambiarMoneda: (disponibles) => {
+      retirarMonedaEnUso(doc, disponibles);
+      cargarVitrina(doc);
+      cargarCarrito(doc);
+    },
+    alPedirSesion: volverAIniciarSesion,
+    alVerCompras: () => abrirMisCompras(),
+  });
+}
+
+/**
+ * Engancha el selector de moneda: la preferida de entrada y, al cambiarla,
+ * la vitrina y el carrito en la nueva.
+ *
+ * @param {Document} doc
+ */
+function montarMoneda(doc) {
+  fijarMonedaPreferida(doc, monedaPreferida());
+  doc.getElementById('moneda-tienda')?.addEventListener('change', (evento) => {
+    cambiarMoneda(doc, evento.target.value);
+  });
 }
 
 /**
@@ -1055,6 +1468,12 @@ export function montarTienda(doc = document) {
       agregarAlCarrito(anadir.dataset.producto, doc);
       return;
     }
+    // B5 — el corazón de la tarjeta: la lista de deseos.
+    const deseo = evento.target.closest('[data-deseo]');
+    if (deseo) {
+      alternarDeseo(deseo.dataset.deseo, doc);
+      return;
+    }
     // UXC-4 — «Ver producto»: detalle con compra y opiniones.
     const ver = evento.target.closest('[data-ver-producto]');
     if (ver) {
@@ -1065,9 +1484,9 @@ export function montarTienda(doc = document) {
   // Las acciones de cada línea del carrito, también delegadas: las líneas se
   // repintan enteras con cada respuesta del servicio.
   doc.getElementById('cart-items')?.addEventListener('click', (evento) => {
-    const sumar = evento.target.closest('[data-sumar-item]');
-    if (sumar) {
-      agregarAlCarrito(sumar.dataset.sumarItem, doc);
+    const cantidad = evento.target.closest('[data-cantidad-item]');
+    if (cantidad) {
+      cambiarCantidad(cantidad.dataset.cantidadItem, Number(cantidad.dataset.cantidadNueva), doc);
       return;
     }
     const quitar = evento.target.closest('[data-quitar-item]');
@@ -1076,8 +1495,13 @@ export function montarTienda(doc = document) {
     }
   });
 
+  // B5 — pagar y ver las compras.
+  doc.getElementById('btn-pagar')?.addEventListener('click', () => abrirElPago(doc));
+  doc.getElementById('btn-mis-compras')?.addEventListener('click', () => abrirMisCompras());
+
   vista.cajon = montarCajonDelCarrito(doc);
   montarFiltros(doc);
+  montarMoneda(doc);
 
   // Lo que el jugador ya tiene sale de su inventario y llega cuando llega: la
   // vitrina no lo espera, y las tarjetas se marcan al contestar.

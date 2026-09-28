@@ -4,19 +4,22 @@ import java.time.Instant;
 
 /**
  * Datos de participacion del jugador que el motor necesita para validar los
- * 4 limites de RF-SUB-004. Hoy los calcula quien llama al motor (tests, o mas
- * adelante un repositorio JPA); no se consultan aqui para mantener el motor
- * testeable sin base de datos.
+ * limites de 7.7.10. Los calcula quien llama al motor (tests, o
+ * PujaApplicationService con sus repositorios); no se consultan aqui para
+ * mantener el motor testeable sin base de datos.
  *
- * @param ultimaPujaDelJugador        instante de su ultima puja EN ESTA SUBASTA, o null si no ha pujado en ella.
- *                                    Es por subasta, no global: el intervalo de 5 s frena el spam dentro de una
- *                                    subasta, no la participacion en varias a la vez (la HU permite 10)
- * @param pujasActivasDelJugador      cuantas de sus pujas siguen siendo la oferta vigente de su subasta
- * @param subastasActivasDelJugador   en cuantas subastas distintas participa activamente (sin contar esta, si ya estaba en ella)
+ * <p>Hasta B8 traia tambien en cuantas subastas participaba el jugador, para
+ * un tope de 10 que se aplicaba a las pujas. Ese tope es de publicaciones
+ * (ver MotorPujasService) y el campo se fue con el.
+ *
+ * @param ultimaPujaDelJugador   instante de su ultima puja EN ESTA SUBASTA, o null si no ha pujado en ella.
+ *                               Es por subasta, no global: el intervalo de 5 s frena el spam dentro de una
+ *                               subasta, no la participacion en varias a la vez
+ * @param pujasActivasDelJugador cuantas de sus pujas siguen siendo la oferta vigente de su subasta
  */
-public record ContextoParticipacion(Instant ultimaPujaDelJugador, int pujasActivasDelJugador, int subastasActivasDelJugador) {
+public record ContextoParticipacion(Instant ultimaPujaDelJugador, int pujasActivasDelJugador) {
 
     public static ContextoParticipacion sinHistorial() {
-        return new ContextoParticipacion(null, 0, 0);
+        return new ContextoParticipacion(null, 0);
     }
 }

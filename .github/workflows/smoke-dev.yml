@@ -76,10 +76,27 @@ jobs:
           echo "::error::El borde no respondio en 400 s. ¿Esta encendido el host?"
           exit 1
 
+      # B12 — Mailpit ya no es publico: el borde solo sirve /mailpit/ a
+      # origenes internos. El smoke lo alcanza por un tunel SSH al propio host
+      # con la llave de despliegue (.github/actions/tunel-mailpit): queda en
+      # http://localhost:18025/mailpit. Los secretos son del entorno `dev`,
+      # que este job declara arriba.
+      - name: Tunel SSH a Mailpit
+        uses: ./.github/actions/tunel-mailpit
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          usuario: ${{ secrets.SSH_USER_DEV }}
+          llave: ${{ secrets.SSH_KEY_DEV }}
+
+      # B1 — las cuentas nuevas nacen pendientes de verificar su correo: el
+      # smoke lee el codigo en el buzon de pruebas de DEV (Mailpit), adonde van
+      # las direcciones @nexus.test, por el tunel del paso anterior. Todo lo
+      # demas va al borde publico, como un jugador.
       - name: Smoke
         working-directory: frontend/app-web
         env:
           E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+          MAILPIT_URL: http://localhost:18025/mailpit
         run: npx playwright test --config=playwright.smoke.config.js
 
       - name: Guardar el informe

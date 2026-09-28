@@ -29,7 +29,7 @@
 # sola dentro de ese limite. Suma ~1,7 GB: cabe en una t3.small de 2 GB, que
 # es un tipo elegible del plan gratuito (ver infrastructure/entornos/contenido/).
 #
-# Puertos de host: 8101-8104 (ecommerce usa 8090, cumplimiento 8091;
+# Puertos de host: 8101-8105, misiones el 8105 (ecommerce usa 8090, cumplimiento 8091;
 # plataforma usa 8081-8088, cuentas 8089). Es el puerto que consulta el
 # healthcheck de desplegar.sh y el que registra puerto_de() en cd.yml.
 # Todos los servicios exponen 8080 internamente; el mapeo host:contenedor
@@ -226,6 +226,66 @@ services:
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
     depends_on:
       srv-heroes:
+        condition: service_started
+
+  # --- Misiones (B9, seccion 7.8 del documento) ---
+  # En el catalogo va con desplegableDev: false (motivo y pasos alli y en el
+  # README del servicio): el despliegue automatico a dev no lo levanta todavia,
+  # pero su imagen se publica y este bloque es el que lo arranca el dia que se
+  # despliegue a demanda. Lo que le falta en este host no es codigo:
+  #   - su credencial de servicio: la emite ms-identidad en el host de
+  #     plataforma, asi que el secreto hay que traerlo de alli
+  #     (DIRECTORIO_ACTIVO_CLIENT_*_MISIONES). Sin el, el servicio arranca y
+  #     responde, pero inventario rechaza sus llamadas (401) y matricular da 503.
+  #   - ms-finanzas y correo, que viven en el host de plataforma y se alcanzan
+  #     por su IP elastica (el 8093 hay que abrirlo en el Security Group para
+  #     este host; correo no se publica, por eso su correo va apagado).
+  # Sus cuatro vecinos de contenido se alcanzan por nombre en esta red.
+  srv-misiones:
+    build:
+      context: .
+      dockerfile: services/contenido/misiones/Dockerfile
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-misiones:${TAG_MISIONES:-${TAG:-local}}
+    container_name: srv-misiones
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 320M
+    ports:
+      - "8105:8080"
+    environment:
+      # Mismo monton acotado que sus vecinos (#690).
+      JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      PUERTO_MISIONES: 8080
+      # Su propia base en la Mongo de contenido (regla 7).
+      MONGODB_URI: mongodb://contenido-mongo:27017/misiones
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
+      HEROES_BASE_URL: http://srv-heroes:8080
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      # Del host de plataforma, por su IP elastica.
+      CREDITOS_URL: ${MISIONES_CREDITOS_URL:-http://35.168.124.119:8093/api/v1}
+      CORREO_URL: ${MISIONES_CORREO_URL:-http://35.168.124.119:8082/api/v1}
+      IDENTIDAD_URL: ${MISIONES_IDENTIDAD_URL:-http://35.168.124.119:8089}
+      MISIONES_CORREO_ACTIVO: ${MISIONES_CORREO_ACTIVO:-false}
+      # Credencial de servicio (ADR-001 via ADR-005). Vacias por omision: sin
+      # client-id la biblioteca no crea la credencial y el servicio arranca
+      # igual; con client-id y sin secreto NO arrancaria.
+      DIRECTORIO_ACTIVO_URL: ${MISIONES_DIRECTORIO_ACTIVO_URL:-http://35.168.124.119:8089/api/v1/auth/token}
+      DIRECTORIO_ACTIVO_CLIENT_ID: ${DIRECTORIO_ACTIVO_CLIENT_ID_MISIONES:-}
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${DIRECTORIO_ACTIVO_CLIENT_SECRET_MISIONES:-}
+    depends_on:
+      contenido-mongo:
+        condition: service_healthy
+      srv-heroes:
+        condition: service_started
+      srv-inventario:
+        condition: service_started
+      srv-productos:
+        condition: service_started
+      srv-motor-combate:
         condition: service_started
 
   # --- JWKS de desarrollo para productos ---

@@ -34,6 +34,25 @@ public final class ResolutorCombate {
             RandomGenerator generadorIndice,
             RandomGenerator generadorCritico) {
 
+        return resolverConIndice(IndiceNormal.porOmision(), contextoAccion, ataqueResuelto, defensa,
+                distribucion, danoResuelto, generadorIndice, generadorCritico);
+    }
+
+    /**
+     * Como la anterior, con la media y la desviacion del indice configuradas
+     * (D-B7-01). Nombre propio y no una sobrecarga mas: con un {@code null}
+     * como primer argumento, dos sobrecargas de siete parametros serian ambiguas.
+     */
+    public static ResolucionAtaque resolverConIndice(
+            IndiceNormal indiceNormal,
+            ContextoAccion contextoAccion,
+            int ataqueResuelto,
+            int defensa,
+            DistribucionEfectos distribucion,
+            int danoResuelto,
+            RandomGenerator generadorIndice,
+            RandomGenerator generadorCritico) {
+
         Objects.requireNonNull(contextoAccion, "contextoAccion no puede ser nulo");
         validar(ataqueResuelto, defensa);
 
@@ -41,7 +60,7 @@ public final class ResolutorCombate {
             return new ResolucionAtaque.SinEfecto();
         }
 
-        return resolverCompleto(
+        return resolverConIndice(indiceNormal,
                 ataqueResuelto, defensa, distribucion, danoResuelto,
                 generadorIndice, generadorCritico);
     }
@@ -54,13 +73,31 @@ public final class ResolutorCombate {
             RandomGenerator generadorIndice,
             RandomGenerator generadorCritico) {
 
+        return resolverConIndice(IndiceNormal.porOmision(), ataqueResuelto, defensa, distribucion,
+                danoResuelto, generadorIndice, generadorCritico);
+    }
+
+    /**
+     * Resuelve el golpe con el indice dado. La fila de la tabla de 8.000 sale
+     * de una normal de verdad (§6.1.4, {@link IndiceNormal}).
+     */
+    public static ResolucionAtaque resolverConIndice(
+            IndiceNormal indiceNormal,
+            int ataqueResuelto,
+            int defensa,
+            DistribucionEfectos distribucion,
+            int danoResuelto,
+            RandomGenerator generadorIndice,
+            RandomGenerator generadorCritico) {
+
+        Objects.requireNonNull(indiceNormal, "indiceNormal no puede ser nulo");
         validar(ataqueResuelto, defensa);
 
         if (ataqueResuelto <= defensa) {
             return new ResolucionAtaque.SinEfecto();
         }
 
-        int indice = GeneradorIndiceTabla.generarIndice(generadorIndice);
+        int indice = indiceNormal.generar(generadorIndice);
         CategoriaEfecto categoria = SelectorEfecto.seleccionar(indice, distribucion);
         int danoAplicado = calcularDano(categoria, danoResuelto, generadorCritico);
 

@@ -201,18 +201,75 @@ function rutasDeInventario(equipamiento) {
     ['**/api/v1/inventario/heroes/*/equipamiento', json(equipamiento)],
     // UXC-3 — la ficha trae las opiniones del producto: un hilo vacío, que es
     // el estado normal de un producto que nadie ha comentado.
-    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
+    ...rutasDeOpiniones(),
   ];
 }
 
-/** Un producto sin opiniones (comentarios.yaml: 200 con la lista vacía). */
+/** Un producto sin opiniones (comentarios.yaml 1.5.0: 200 con la lista vacía). */
 const HILO_VACIO = {
   productoId: 'sin-opiniones',
   comentarios: [],
+  pagina: 0,
+  tamano: 5,
   total: 0,
+  totalPaginas: 0,
   totalCalificaciones: 0,
   calificacionPromedio: null,
 };
+
+/** B3 — nadie lo ha calificado: promedio nulo, nunca 0 (`GET /products/{id}/rating`). */
+const RESUMEN_VACIO = {
+  productoId: 'sin-opiniones',
+  promedio: null,
+  total: 0,
+  distribucion: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+};
+
+/**
+ * B3 — «todavía no calificaste»: el 404 de `GET /products/{id}/rating/mia` es
+ * el estado normal de quien aún no opinó, y la ficha le ofrece las estrellas.
+ */
+const SIN_CALIFICACION_PROPIA = {
+  status: 404,
+  contentType: 'application/problem+json',
+  body: JSON.stringify({
+    type: 'https://nexusbattles.local/errores/calificacion-no-encontrada',
+    title: 'Todavía no calificaste este producto',
+    status: 404,
+  }),
+};
+
+/**
+ * Las opiniones de un producto como las sirve comentarios.yaml 1.5.0: el hilo
+ * paginado, el resumen de la calificación, la propia (sin calificar) y las
+ * imágenes de las opiniones. La imagen es un avatar que ya está en el
+ * repositorio: el laboratorio no sale a internet.
+ */
+function rutasDeOpiniones({ hilo = HILO_VACIO, resumen = RESUMEN_VACIO } = {}) {
+  return [
+    ['**/api/v1/products/*/comments*', json(hilo)],
+    ['**/api/v1/products/*/rating', json(resumen)],
+    ['**/api/v1/products/*/rating/mia', SIN_CALIFICACION_PROPIA],
+    [
+      '**/api/v1/comentarios/imagenes/*',
+      () => ({
+        status: 200,
+        contentType: 'image/jpeg',
+        path: join(
+          AQUI_LABORATORIO,
+          '..',
+          '..',
+          'frontend',
+          'app-web',
+          'src',
+          'cuentas',
+          'avatares',
+          'arquero-cazador.jpg',
+        ),
+      }),
+    ],
+  ];
+}
 
 /* ---------------------------------------------------------------------------
    UXC-1 — los ocho prototipos de la Tabla 6 en «Mi inventario». DATOS DE
@@ -412,7 +469,7 @@ function rutasDeOchoHeroes() {
       },
     ],
     // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
-    ['**/api/v1/products/*/comments', json(HILO_VACIO)],
+    ...rutasDeOpiniones(),
   ];
 }
 
@@ -711,9 +768,25 @@ function transaccion(i, cambios = {}) {
 /* ---------------------------------------------------------------------------
    Consola — UX-GAME-6. Tablas y colas con filas: auditoría
    (`AuditLogResponse`/`PaginaDeAuditoria` de ms-cumplimiento-auditoria.yaml),
-   lista negra (lista de cadenas, moderacion-lista-negra.yaml) y cola de
-   moderación (`ColaDeModeracionResponse` de comentarios.yaml).
+   lista negra (`PaginaDeTerminos` de moderacion-lista-negra.yaml 2.0.x: desde
+   B2 ya no es una lista de cadenas) y cola de moderación
+   (`ColaDeModeracionResponse` de comentarios.yaml).
    ------------------------------------------------------------------------- */
+function terminoVetado(i, termino, categoria, modo, cambios = {}) {
+  return {
+    id: i,
+    termino,
+    normalizado: termino.toLowerCase().replace(/[^a-z0-9]/g, ''),
+    categoria,
+    modo,
+    activo: true,
+    creadoPor: i < 4 ? 'semilla' : 'qa_moderador',
+    creadoEn: new Date(Date.now() - i * 86_400_000).toISOString(),
+    actualizadoEn: null,
+    ...cambios,
+  };
+}
+
 function registroDeAuditoria(i, cambios = {}) {
   return {
     id: `33333333-1111-4111-8111-${String(i).padStart(12, '0')}`,
@@ -742,10 +815,14 @@ function comentarioReportado(i, cambios = {}) {
         'Buen objeto, aunque la descripción exagera el bono de defensa.',
       ][i % 3],
       imagenes: [],
-      estrellas: [5, 1, 3][i % 3],
+      // comentarios.yaml 1.5.0: en moderación las estrellas van nulas (la
+      // calificación no se modera) y cada comentario trae su marca.
+      estrellas: null,
       fechaPublicacion: new Date(Date.now() - i * 7_200_000).toISOString(),
       estado: 'EN_REVISION',
       calificacionDescartada: false,
+      editado: i % 3 === 0,
+      marcado: i % 3 === 2,
     },
     reportes: [3, 7, 1][i % 3],
     porCategoria: { OFENSIVO: [1, 5, 0][i % 3], SPAM: [2, 2, 1][i % 3] },
@@ -802,19 +879,24 @@ const PRODUCTOS_DE_TIENDA = [
   }),
 ];
 
-/** El hilo de un producto: tres opiniones, una con imagen y una propia. */
+/**
+ * El hilo de un producto: tres opiniones, una con imagen, una editada por
+ * moderación y una propia. B3 (comentarios.yaml 1.5.0): del más reciente al
+ * más antiguo, paginado, y la imagen es un `id` que se sirve aparte.
+ */
 function hiloDeLaboratorio({ propio = null } = {}) {
   const comentarios = [
     {
-      id: 'c0000000-0000-4000-8000-000000000001',
+      id: 'c0000000-0000-4000-8000-000000000003',
       productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
-      autorId: 'c1111111-0000-4000-8000-000000000001',
-      apodoAutor: 'thar_vex',
-      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
-      imagenes: ['yelmo-en-combate.png'],
-      estrellas: 5,
-      fechaPublicacion: '2026-09-18T20:15:00Z',
+      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
+      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
+      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
+      imagenes: [],
+      estrellas: null,
+      fechaPublicacion: '2026-09-22T08:05:00Z',
       estado: 'PUBLICADO',
+      editado: false,
     },
     {
       id: 'c0000000-0000-4000-8000-000000000002',
@@ -826,26 +908,40 @@ function hiloDeLaboratorio({ propio = null } = {}) {
       estrellas: 3,
       fechaPublicacion: '2026-09-20T11:40:00Z',
       estado: 'PUBLICADO',
+      editado: true,
     },
     {
-      id: 'c0000000-0000-4000-8000-000000000003',
+      id: 'c0000000-0000-4000-8000-000000000001',
       productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
-      autorId: propio ?? 'c1111111-0000-4000-8000-000000000003',
-      apodoAutor: propio ? 'qa_tienda' : 'lumen_9',
-      texto: 'Segunda opinión sin estrellas: después de diez partidas sigo contento.',
-      imagenes: [],
-      fechaPublicacion: '2026-09-22T08:05:00Z',
+      autorId: 'c1111111-0000-4000-8000-000000000001',
+      apodoAutor: 'thar_vex',
+      texto: 'Llegó con la defensa que promete. Para un tanque, de lo mejor que hay.',
+      imagenes: ['f0000000-0000-4000-8000-000000000001'],
+      estrellas: 5,
+      fechaPublicacion: '2026-09-18T20:15:00Z',
       estado: 'PUBLICADO',
+      editado: false,
     },
   ];
   return {
     productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
     comentarios,
+    pagina: 0,
+    tamano: 5,
     total: comentarios.length,
+    totalPaginas: 1,
     totalCalificaciones: 2,
     calificacionPromedio: 4,
   };
 }
+
+/** B3 — el resumen que acompaña a ese hilo: las dos calificaciones, 5 y 3. */
+const RESUMEN_DE_LABORATORIO = {
+  productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+  promedio: 4,
+  total: 2,
+  distribucion: { 1: 0, 2: 0, 3: 1, 4: 0, 5: 1 },
+};
 
 /** El detalle del catalogo de cualquier producto de la tienda de laboratorio. */
 function detalleDelCatalogo(peticion) {
@@ -897,11 +993,83 @@ const CARRITO_DE_LABORATORIO = {
   ],
 };
 
-function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
+/**
+ * B5 — dos compras del jugador (`Orden` de ecommerce-carrito.yaml 1.4.0): una
+ * completada y una rechazada por la pasarela, con su motivo.
+ */
+const ORDENES_DE_LABORATORIO = [
+  {
+    id: 'b5000000-0000-4000-8000-000000000001',
+    estado: 'COMPLETA',
+    moneda: 'COP',
+    total: 52000,
+    tasaDeCambio: null,
+    lineas: [
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000001',
+        nombre: 'Yelmo del Alba',
+        cantidad: 2,
+        precioUnitario: 18000,
+        subtotal: 36000,
+      },
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000002',
+        nombre: 'Amuleto de Brasa',
+        cantidad: 1,
+        precioUnitario: 16000,
+        subtotal: 16000,
+      },
+    ],
+    medioDePago: { marca: 'VISA', ultimos4: '4242' },
+    motivo: null,
+    correoConfirmacion: 'ENVIADO',
+    creadaEn: '2026-09-24T19:05:00Z',
+  },
+  {
+    id: 'b5000000-0000-4000-8000-000000000002',
+    estado: 'RECHAZADA',
+    moneda: 'COP',
+    total: 32000,
+    tasaDeCambio: null,
+    lineas: [
+      {
+        productoId: 'aaaaaaa1-0000-4000-8000-000000000005',
+        nombre: 'Espada de Vorn',
+        cantidad: 1,
+        precioUnitario: 32000,
+        subtotal: 32000,
+      },
+    ],
+    medioDePago: { marca: 'VISA', ultimos4: '0002' },
+    motivo: 'La pasarela rechazó el pago: fondos insuficientes.',
+    correoConfirmacion: 'OMITIDO',
+    creadaEn: '2026-09-23T10:40:00Z',
+  },
+];
+
+/**
+ * @param {{hilo?: object, deseados?: string[], extra?: Array<[string, object|Function]>}} [opciones]
+ *   `deseados`: ids que la vitrina con sesión marca `enListaDeseos` (B5);
+ *   `extra`: más rutas (las órdenes, por ejemplo).
+ */
+function rutasDeTienda({ hilo = hiloDeLaboratorio(), deseados = [], extra = [] } = {}) {
+  const productos = PRODUCTOS_DE_TIENDA.map((p) =>
+    deseados.includes(p.id) ? { ...p, enListaDeseos: true } : p,
+  );
   return [
     // R16 — la vitrina se mudó a /api/v1/vitrina y sus ids son UUID del
-    // catálogo maestro. UXC-4 — se pide entera (`?size=50`).
-    ['**/api/v1/vitrina*', json({ content: PRODUCTOS_DE_TIENDA, last: true, totalPages: 1 })],
+    // catálogo maestro. UXC-4 — se pide entera (`?size=50`). B5 (1.4.0) — dice
+    // en qué moneda viene y cuáles ofrece: sin tasas del PO (D-32), solo COP.
+    [
+      '**/api/v1/vitrina*',
+      json({
+        content: productos,
+        last: true,
+        totalPages: 1,
+        moneda: 'COP',
+        monedasDisponibles: ['COP'],
+      }),
+    ],
     ['**/api/v1/carrito', json(CARRITO_DE_LABORATORIO)],
     // Lo que ya tiene el jugador: un yelmo (la tarjeta dice «Ya lo tienes»).
     [
@@ -922,7 +1090,8 @@ function rutasDeTienda({ hilo = hiloDeLaboratorio() } = {}) {
       }),
     ],
     ['**/api/v1/productos/*', detalleDelCatalogo],
-    ['**/api/v1/products/*/comments', json(hilo)],
+    ...rutasDeOpiniones({ hilo, resumen: RESUMEN_DE_LABORATORIO }),
+    ...extra,
   ];
 }
 
@@ -1121,7 +1290,8 @@ async function prepararEstrategia(pagina) {
    inventados para la captura, con la forma exacta de `MensajeDeChat`
    (contracts/websocket/salas-partidas.yaml 1.4.0). El chat general y el de la
    sala van por el canal simulado; los mensajes privados, por la fuente del
-   laboratorio (`laboratorio/fuente-mensajes.js`), porque no tienen servicio.
+   laboratorio (`laboratorio/fuente-mensajes.js`), porque el banco visual no
+   tiene su servicio (B6: el de salas-partidas).
    ------------------------------------------------------------------------- */
 
 /** El `uid` de quien mira en las capturas del chat: firma «sus» mensajes. */
@@ -1222,6 +1392,62 @@ function abrirConversacion(apodo = 'Bruma') {
     await pagina.waitForTimeout(400);
   };
 }
+
+/*
+ * B6 — la fuente REAL de mensajes privados (`fuente-mensajes.js`, el
+ * adaptador del servicio), sin sustituir: el banco le contesta con cuerpos
+ * con la forma de `salas-partidas.yaml` 1.6.1 (`ResumenDeConversacion`,
+ * `MensajeDirecto`) y el canal simulado le entrega por la cola de usuario un
+ * `MensajeEntregado` de `mensajes-directos.yaml` 1.0.1. DATOS DE LABORATORIO.
+ */
+const TALA_EN_EL_CHAT = { id: 'cccccccc-6666-4666-8666-000000000005', apodo: 'Tala' };
+
+function mensajeDirecto(id, de, a, texto, minutosAtras) {
+  return {
+    id,
+    conversacion: `dm:${[de.id, a.id].sort().join(':')}`,
+    remitente: de.id,
+    apodoRemitente: de.apodo,
+    destinatario: a.id,
+    texto,
+    fecha: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
+    leido: true,
+    idCliente: null,
+  };
+}
+
+function rutasDeMensajesDelServicio() {
+  const { yo, bruma, kael } = EN_EL_CHAT;
+  const conBruma = [
+    mensajeDirecto('dm-1', yo, bruma, 'Claro. Llevo el Guerrero Tanque.', 60),
+    mensajeDirecto('dm-2', bruma, yo, 'Si ganas, la revancha la elijo yo.', 3),
+  ];
+  const json = (cuerpo) => ({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(cuerpo),
+  });
+  return [
+    [
+      '**/api/v1/mensajes-directos/conversaciones',
+      json([
+        { uidOtro: bruma.id, apodoOtro: bruma.apodo, ultimoMensaje: conBruma[1], noLeidos: 1 },
+        {
+          uidOtro: kael.id,
+          apodoOtro: kael.apodo,
+          ultimoMensaje: mensajeDirecto('dm-3', yo, kael, 'Te paso el código de la sala.', 300),
+          noLeidos: 0,
+        },
+      ]),
+    ],
+    [
+      '**/api/v1/mensajes-directos/conversaciones/*/mensajes*',
+      (ruta) => json(ruta.request().url().includes(bruma.id) ? conBruma : []),
+    ],
+    ['**/api/v1/mensajes-directos/conversaciones/*/leido', { status: 204 }],
+  ];
+}
+
 
 /* ---------------------------------------------------------------------------
    UXC-7 — consola y cuenta. DATOS DE LABORATORIO con la forma exacta de
@@ -1454,8 +1680,20 @@ export const ESCENARIOS = [
     sesion: () => sesionDe('qa_moderador', 'MODERADOR'),
     rutas: [
       [
-        '**/api/v1/lista-negra/terminos',
-        json(['admin', 'moderador', 'nexus_oficial', 'soporte', 'staff', 'sistema']),
+        '**/api/v1/lista-negra/terminos*',
+        json({
+          contenido: [
+            terminoVetado(1, 'spiderman', 'MARCA', 'SUBCADENA'),
+            terminoVetado(2, 'hitler', 'DIRIGENTE', 'SUBCADENA'),
+            terminoVetado(3, 'messi', 'CELEBRIDAD', 'PALABRA'),
+            terminoVetado(4, 'mussolini', 'POLITICO', 'SUBCADENA'),
+            terminoVetado(5, 'culo', 'OFENSIVO', 'PALABRA', { activo: false }),
+            terminoVetado(6, 'nexus_oficial', 'OTRO', 'SUBCADENA'),
+          ],
+          pagina: 0,
+          tamano: 16,
+          total: 6,
+        }),
       ],
     ],
     exige: ['.lista-terminos__fila, li'],
@@ -2003,12 +2241,14 @@ export const ESCENARIOS = [
   },
   {
     id: 'tienda-con-catalogo',
-    titulo: 'tienda con precios, rebaja, lo que ya tienes y carrito con importes',
+    titulo: 'tienda con precios, rebaja, lo que ya tienes, lo deseado y carrito con importes',
     ruta: 'cuentas/tienda.html',
     sesion: () => SESION_TIENDA,
-    rutas: rutasDeTienda(),
+    rutas: rutasDeTienda({ deseados: ['aaaaaaa1-0000-4000-8000-000000000005'] }),
     // El descuento y el precio ausente son los dos estados que FI-R2 anadio;
     // UXC-4 anade la marca de «propio», la insignia del carrito y los filtros.
+    // B5 — lo deseado se distingue (corazón pulsado y distintivo), cada línea
+    // cambia su cantidad, «Pagar» se enciende y la moneda tiene selector.
     exige: [
       '.product-card',
       '.badge-descuento',
@@ -2017,6 +2257,11 @@ export const ESCENARIOS = [
       '.producto-propio',
       '.insignia-carrito__cuenta',
       '.filtros-tienda',
+      '.product-card[data-deseado="si"] .producto-deseado',
+      '.deseos--tarjeta[aria-pressed="true"]',
+      '.cart-item [data-cantidad-item]',
+      '#btn-pagar:not([disabled])',
+      '#moneda-tienda option[value="USD"][disabled]',
     ],
   },
   {
@@ -2035,7 +2280,9 @@ export const ESCENARIOS = [
       '.ficha',
       '.ficha__valoracion',
       '.compra-producto',
-      '.deseos[aria-disabled="true"]',
+      // B5 — la lista de deseos ya se guarda en la cuenta: en la tienda el
+      // conmutador está activo (aria-pressed), no apagado.
+      '.compra-producto .deseos[aria-pressed]',
       '.hilo-comentarios .comentario',
       '.comentario__adjunto',
       '.comentario--propio',
@@ -2070,6 +2317,49 @@ export const ESCENARIOS = [
       await pagina.locator('#minimizar-carrito').click();
     },
     exige: ['.main-container[data-carrito="minimizado"]', '.insignia-carrito__cuenta'],
+  },
+  {
+    // B5 — «Pagar»: el resumen de la compra y el formulario de §7.5 (titular,
+    // número, vencimiento y código), enviado vacío para auditar el estado con
+    // errores: cada campo marcado, con su mensaje enlazado y el foco en el
+    // primero. No se llega a pagar: sin datos válidos no sale ninguna petición.
+    id: 'tienda-pago-con-errores',
+    titulo: 'pagar: resumen de la compra y formulario de pago con los errores marcados',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda(),
+    interaccion: async (pagina) => {
+      await pagina.locator('#btn-pagar:not([disabled])').click();
+      await pagina.locator('[data-accion="confirmar-pago"]').click();
+      await pagina.locator('.campo__error:not([hidden])').first().waitFor();
+    },
+    exige: [
+      '.dialogo--pago .pago__resumen .pago__linea',
+      '.dialogo--pago .pago__total',
+      '.pago__formulario input[autocomplete="cc-name"]',
+      '.pago__formulario input[autocomplete="cc-number"][aria-invalid="true"]',
+      '.pago__formulario input[autocomplete="cc-exp"]',
+      '.pago__formulario input[autocomplete="cc-csc"]',
+      '.campo__error:not([hidden])',
+    ],
+  },
+  {
+    // B5 — «Mis compras»: una completada (marca y cuatro últimos) y una
+    // rechazada, con el motivo de la pasarela.
+    id: 'tienda-mis-compras',
+    titulo: 'mis compras: una completada y una rechazada con su motivo',
+    ruta: 'cuentas/tienda.html',
+    sesion: () => SESION_TIENDA,
+    rutas: rutasDeTienda({ extra: [['**/api/v1/ordenes', json(ORDENES_DE_LABORATORIO)]] }),
+    interaccion: async (pagina) => {
+      await pagina.locator('.cart-item').first().waitFor();
+      await pagina.locator('#btn-mis-compras').click();
+      await pagina.locator('.compras__lista .compra').first().waitFor();
+    },
+    exige: [
+      '.dialogo--compras .compra[data-estado="COMPLETA"] .compra__medio',
+      '.dialogo--compras .compra[data-estado="RECHAZADA"] .compra__motivo',
+    ],
   },
   {
     // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
@@ -2113,7 +2403,7 @@ export const ESCENARIOS = [
         armaduras: {},
         items: [],
       }),
-      ['**/api/v1/products/*/comments', json(hiloDeLaboratorio())],
+      ...rutasDeOpiniones({ hilo: hiloDeLaboratorio(), resumen: RESUMEN_DE_LABORATORIO }),
     ],
     interaccion: async (pagina) => {
       await pagina.locator('#pestana-objetos').click();
@@ -2326,9 +2616,11 @@ export const ESCENARIOS = [
     exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] a'],
   },
   {
-    // Lo que ve hoy un jugador: no hay servicio de mensajes privados.
+    // Lo que ve un jugador si el servicio de mensajes privados no responde:
+    // aquí no hay servicio, así que la fuente real dice `disponible: false`.
     id: 'chat-privados-sin-abrir',
-    titulo: 'mensajes privados hoy: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
+    titulo:
+      'mensajes privados sin servicio que responda: qué pasa, por qué y qué hacer, sin conversaciones de mentira',
     ruta: 'plataforma/salas-partidas/chat.html#privados',
     sesion: sesionDelChat,
     rutas: [],
@@ -2359,7 +2651,8 @@ export const ESCENARIOS = [
     rutas: [MENSAJES_DE_LABORATORIO],
     canal: canalDelChatGeneral(),
     interaccion: async (pagina) => {
-      await pagina.locator('#buscar-jugador').fill('ra');
+      // Tres letras: el mínimo de la búsqueda por apodo (B6, contrato de perfiles).
+      await pagina.locator('#buscar-jugador').fill('bra');
       await pagina.locator('.buscador-jugador__resultado').first().waitFor({ timeout: 10_000 });
     },
     exige: ['.buscador-jugador__resultado'],
@@ -2421,6 +2714,31 @@ export const ESCENARIOS = [
     exige: [
       '[data-zona="bloqueo"]:not([hidden])',
       '[data-zona="bloqueo"] [data-accion="desbloquear"]',
+    ],
+  },
+  {
+    // B6 — la pestaña con su fuente de verdad: la bandeja y el hilo del
+    // contrato, lo tuyo «Enviado» (nunca un «Leído» que el servicio no dice)
+    // y quien escribe por primera vez entrando en la lista en vivo.
+    id: 'chat-privados-servicio',
+    titulo:
+      'mensajes privados con la fuente del servicio: bandeja, hilo y quien escribe por primera vez',
+    ruta: 'plataforma/salas-partidas/chat.html#privados',
+    sesion: sesionDelChat,
+    rutas: rutasDeMensajesDelServicio(),
+    canal: canalDelChatGeneral({
+      '/usuario/cola/mensajes-directos': [
+        {
+          tipo: 'MENSAJE',
+          ...mensajeDirecto('dm-9', TALA_EN_EL_CHAT, EN_EL_CHAT.yo, '¿Te apuntas al torneo?', 0),
+        },
+      ],
+    }),
+    interaccion: abrirConversacion('Bruma'),
+    exige: [
+      `.conversaciones__item[data-conversacion="${TALA_EN_EL_CHAT.id}"] .conversaciones__no-leidos`,
+      '.mensajes-privados__hilo li.mensaje--otro',
+      '.mensajes-privados__hilo li.mensaje--yo .mensaje__entrega[data-entrega="ENVIADO"]',
     ],
   },
   {

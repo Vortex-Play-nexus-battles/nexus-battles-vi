@@ -13,11 +13,8 @@ package com.nexusbattles.plataforma.salaspartidas.dominio;
  * decide por donde viaja. La traduccion al mensaje {@code partida.accion.resuelta}
  * de {@code contracts/websocket/salas-partidas.yaml} es cosa del adaptador.
  *
- * <p><b>Quien lo dispara.</b> Hoy, nadie en produccion: el resultado de una accion
- * lo produce el motor de combate (fuera de este bloque, ver Project Charter), y
- * mientras no exista su respuesta no hay {@link AccionResuelta} que anunciar. Este
- * puerto deja listo el tramo que si es nuestro —del servidor al navegador— para
- * que el dia que llegue ese resultado el anuncio sea una sola llamada.
+ * <p><b>Quien lo dispara.</b> {@code EjecutarAccion}, con lo que resolvio el
+ * motor de combate, e {@code IniciarPartida} al empezar.
  */
 public interface CanalDePartida {
 
@@ -46,6 +43,16 @@ public interface CanalDePartida {
      * saberlo igual.
      */
     void anunciarTurno(Partida partida);
+
+    /**
+     * Igual, diciendo por que paso el turno (canal 1.5.0): {@code ACCION},
+     * {@code TIEMPO_AGOTADO} o {@code TURNO_PERDIDO}. El adaptador real lo
+     * incluye en el mensaje; por omision se descarta, para los dobles que no
+     * lo miran.
+     */
+    default void anunciarTurno(Partida partida, String motivo) {
+        anunciarTurno(partida);
+    }
 
     /**
      * El combate termino — HU-JUE-005, RF-JUE-017, HU-JUE-014.

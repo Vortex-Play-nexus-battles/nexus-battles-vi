@@ -5,12 +5,14 @@
  * - HTML5 + CSS3 + ES2022 nativo sin dependencias de frameworks
  * - 4 estados obligatorios (RNF-USA-003): carga, éxito, vacío, error
  * - Resolución de contraste WCAG 2.2 AA y fichas de tokens
- * - Límites de participación: 10 subastas activas, intervalo de 5 s
+ * - Reglas de 7.7 (incremento, límites, intervalo) dichas por el servidor
+ *   (GET /subastas/reglas, B8), no escritas a mano
  * - Vistas integradas: Explorar, Mis subastas, Detalle y Cierre múltiple
  * - Sistema de avisos cruzados en vivo tipo toast (esquina inferior derecha)
  */
 
 import { conectarStomp } from '../comun/transporte-stomp.js';
+import { cuerpoDelToken } from '../comun/identidad.js';
 import { iconoHtml } from '../comun/ui/icono.js';
 // UX-R2.8c — esta vista se pinta con plantillas de cadena y `innerHTML`, y
 // no escapaba NADA: el nombre del objeto, su descripcion, el apodo del
@@ -27,6 +29,9 @@ import { nombreDelTipo } from '../comun/ui/formato.js';
 import { urlDeLogin } from '../comun/sesion.js';
 import { acusar } from '../comun/ui/acuse.js';
 import { textoDeError } from '../comun/ui/texto-de-fallo.js';
+// B8 — los textos de los motivos del servidor viven en un solo sitio: la
+// pantalla explica con las mismas palabras por que no ofrece cancelar.
+import { mensajePara } from './pujas-api.js';
 
 /** Canal que publica ms-subastas en cada cambio (SubastaRealtimePublisher). */
 export const CANAL_SUBASTAS = '/topic/subastas/listado';
@@ -159,6 +164,9 @@ export const SUBASTAS_INICIALES = [
     retenido: 1350,
     rival: 'draconis_91',
     rivales: 3,
+    // B8 — cada subasta lleva el incremento con el que se publico (el
+    // servidor lo da en su ficha). El de estos ejemplos es de ejemplo.
+    incrementoMinimo: 50,
     aporte: { poder: 14, vida: 0, defensa: -3 },
     historial: [
       { apodo: 'andres_nv', monto: 1350, tipo: 'Manual', cuando: 'hace 9 s', esTu: true },
@@ -186,6 +194,9 @@ export const SUBASTAS_INICIALES = [
     retenido: 0,
     rival: 'thar_vex',
     rivales: 2,
+    // B8 — cada subasta lleva el incremento con el que se publico (el
+    // servidor lo da en su ficha). El de estos ejemplos es de ejemplo.
+    incrementoMinimo: 50,
     aporte: { poder: 0, vida: 90, defensa: 18 },
     historial: [
       { apodo: 'thar_vex', monto: 880, tipo: 'Automática', cuando: 'hace 12 s', esTu: false },
@@ -212,6 +223,9 @@ export const SUBASTAS_INICIALES = [
     retenido: 2400,
     rival: 'valkyria_99',
     rivales: 4,
+    // B8 — cada subasta lleva el incremento con el que se publico (el
+    // servidor lo da en su ficha). El de estos ejemplos es de ejemplo.
+    incrementoMinimo: 50,
     aporte: { poder: 25, vida: 50, defensa: 5 },
     historial: [
       { apodo: 'andres_nv', monto: 2400, tipo: 'Automática', cuando: 'hace 1 min', esTu: true },
@@ -237,6 +251,9 @@ export const SUBASTAS_INICIALES = [
     retenido: 0,
     rival: 'novato_12',
     rivales: 1,
+    // B8 — cada subasta lleva el incremento con el que se publico (el
+    // servidor lo da en su ficha). El de estos ejemplos es de ejemplo.
+    incrementoMinimo: 50,
     aporte: { poder: 8, vida: 10, defensa: 0 },
     historial: [
       { apodo: 'novato_12', monto: 310, tipo: 'Manual', cuando: 'hace 5 min', esTu: false },
@@ -262,6 +279,9 @@ export const SUBASTAS_INICIALES = [
     retenido: 0,
     rival: 'ignis_red',
     rivales: 2,
+    // B8 — cada subasta lleva el incremento con el que se publico (el
+    // servidor lo da en su ficha). El de estos ejemplos es de ejemplo.
+    incrementoMinimo: 50,
     aporte: { poder: 6, vida: 60, defensa: 14 },
     historial: [
       { apodo: 'ignis_red', monto: 1100, tipo: 'Manual', cuando: 'hace 10 min', esTu: false },
@@ -302,7 +322,15 @@ export const CONFIG_REGLAS = {
   // /mis-pujas/resumen. Tenerlo aqui significaba validar las pujas contra una
   // cifra inventada, que es peor que no ensenarla: bloqueaba o dejaba pasar
   // pujas segun un numero que no tenia nada que ver con el dinero del jugador.
-  incrementoMinimo: 50,
+  //
+  // B8 — el incremento era 50 escrito a mano, y el servicio no aplicaba 50:
+  // aplicaba el de cada subasta. Ahora lo dice el servidor (GET
+  // /subastas/reglas, parametro `subastas.incremento-minimo` de
+  // admin-parametros) y, mientras el Product Owner no lo fije, NO hay
+  // incremento: null, nunca una cifra inventada. Los tres limites de abajo
+  // son los del documento (7.7.10) y solo sirven de respaldo si las reglas no
+  // llegan; con servidor se sustituyen por lo que el diga.
+  incrementoMinimo: null,
   intervaloSegundos: 5,
   maxSubastasSimultaneas: 10,
   maxPujasActivas: 50,
@@ -421,7 +449,47 @@ export function calcularSaldoLibre(total, subastas = []) {
 }
 
 export function calcularMinimoPuja(ofertaActual, incremento = CONFIG_REGLAS.incrementoMinimo) {
-  return (Number(ofertaActual) || 0) + (Number(incremento) || 50);
+  // B8 — sin el `|| 50` de antes: un incremento desconocido no es 50.
+  return (Number(ofertaActual) || 0) + (Number(incremento) || 0);
+}
+
+/**
+ * Lo minimo que se puede ofrecer ahora en una subasta (7.7.2 y 7.7.6), o null
+ * si no se puede saber desde aqui.
+ *
+ * <ul>
+ *   <li>Con la ficha del servidor (`pujaMinimaSiguiente`), esa: no hay nada
+ *       que calcular.</li>
+ *   <li>Sin pujas todavia, el precio minimo que fijo el vendedor (la oferta
+ *       vigente): la primera puja no suma incremento. Hasta B8 se le sumaban
+ *       50, y el servidor tampoco lo exigia bien.</li>
+ *   <li>Con pujas, oferta + incremento: el de ESTA subasta si se sabe, si no
+ *       el vigente.</li>
+ * </ul>
+ *
+ * Null significa «lo decide el servidor»: con el incremento sin configurar
+ * (decision del PO pendiente) la pantalla no inventa uno.
+ *
+ * @param {{oferta: number, rivales?: number, pujaMinimaSiguiente?: number|null,
+ *   incrementoMinimo?: number|null}} subasta
+ * @param {number|null} [incremento] el vigente segun las reglas
+ * @returns {number|null}
+ */
+export function minimoDePuja(subasta, incremento = CONFIG_REGLAS.incrementoMinimo) {
+  if (!subasta) {
+    return null;
+  }
+  if (subasta.pujaMinimaSiguiente !== null && subasta.pujaMinimaSiguiente !== undefined) {
+    return Number(subasta.pujaMinimaSiguiente);
+  }
+  if (subasta.rivales === 0) {
+    return Number(subasta.oferta) || 0;
+  }
+  const propio = subasta.incrementoMinimo ?? incremento;
+  const paso = Number(propio);
+  return propio !== null && propio !== undefined && Number.isFinite(paso) && paso > 0
+    ? (Number(subasta.oferta) || 0) + paso
+    : null;
 }
 
 export function validarPuja(
@@ -443,11 +511,16 @@ export function validarPuja(
       motivo: `Debes esperar ${esperaRestante} s antes de volver a pujar en esta subasta.`,
     };
   }
-  const min = calcularMinimoPuja(subasta.oferta, incremento);
-  if (monto < min) {
+  const min = minimoDePuja(subasta, incremento);
+  // Null: no se sabe desde aqui (incremento sin configurar). No se bloquea: el
+  // servidor aplica el de la subasta y responde OFERTA_INSUFICIENTE si no llega.
+  if (min !== null && monto < min) {
     return {
       valida: false,
-      motivo: `La oferta debe ser de al menos ${formatearCreditos(min)} cr (+${incremento} cr).`,
+      motivo:
+        subasta.rivales === 0
+          ? `La primera oferta debe ser de al menos ${formatearCreditos(min)} cr (precio mínimo).`
+          : `La oferta debe ser de al menos ${formatearCreditos(min)} cr (+${formatearCreditos(min - subasta.oferta)} cr).`,
     };
   }
   // Saldo desconocido: no se bloquea. El servidor es la autoridad sobre el
@@ -476,8 +549,8 @@ export function validarLimiteAuto(
   if (!subasta) {
     return { valida: false, motivo: 'Subasta no encontrada.' };
   }
-  const min = calcularMinimoPuja(subasta.oferta, incremento);
-  if (limite < min) {
+  const min = minimoDePuja(subasta, incremento);
+  if (min !== null && limite < min) {
     return {
       valida: false,
       motivo: `El tope de puja automática debe ser al menos ${formatearCreditos(min)} cr.`,
@@ -731,9 +804,46 @@ export function vistaDeParticipacion(conocida, ahora = Date.now()) {
     superado: conocida.superado,
     retenido: conocida.retenido,
     autoLimite: conocida.autoLimite,
+    siguiendo: Boolean(conocida.siguiendo),
     esperaSegundos: Math.max(0, Math.ceil((conocida.esperaHasta - ahora) / 1000)),
     participacionCargada: true,
   };
+}
+
+/**
+ * B8 — de la ficha del servidor a los campos que pinta la vista.
+ *
+ * @param {object} ficha `GET /subastas/{id}`
+ */
+export function vistaDeFicha(ficha) {
+  const numero = (v) => (v === null || v === undefined ? null : Number(v));
+  return {
+    estado: ficha.estado || null,
+    pujaMinimaSiguiente: numero(ficha.pujaMinimaSiguiente),
+    incrementoMinimo: numero(ficha.incrementoMinimo),
+    compraInmediataDisponible: Boolean(ficha.compraInmediataDisponible),
+    rivales: numero(ficha.cantidadPujas),
+    vendedorApodo: ficha.vendedorApodo || null,
+  };
+}
+
+/**
+ * La ficha guardada de una subasta, sobre la subasta que se pinta.
+ *
+ * @param {object} sub
+ * @param {ReturnType<typeof vistaDeFicha>|undefined} guardada
+ */
+function aplicarFicha(sub, guardada) {
+  if (!sub || !guardada) {
+    return;
+  }
+  sub.estado = guardada.estado || sub.estado;
+  sub.pujaMinimaSiguiente = guardada.pujaMinimaSiguiente;
+  sub.incrementoMinimo = guardada.incrementoMinimo;
+  sub.compraInmediataDisponible = guardada.compraInmediataDisponible;
+  sub.rivales = guardada.rivales ?? sub.rivales;
+  sub.vendedorApodo = guardada.vendedorApodo;
+  sub.fichaCargada = true;
 }
 
 /**
@@ -776,6 +886,10 @@ export class ControladorSubastas {
     // clave que usa pujas-api.js para las llamadas REST: la sesion es una
     // sola. Inyectable para que las pruebas no dependan de sessionStorage.
     leerToken = () => globalThis.sessionStorage?.getItem(CLAVE_TOKEN_SESION) || null,
+    // B8 — quien mira, por su `uid` estable (ADR-002), para saber si una
+    // subasta es suya (cancelar solo se ofrece al vendedor). Sale del mismo
+    // token; el servidor vuelve a comprobarlo.
+    leerUid = null,
     // FI-R11 — inyectables para que las pruebas no esperen treinta segundos de
     // verdad ni dependan de temporizadores reales.
     esperas = ESPERAS_DE_RECONEXION,
@@ -798,6 +912,9 @@ export class ControladorSubastas {
     // relectura del listado (el sondeo, cada 5 s sin canal) lo borraba y lo
     // volvía a pedir, y la lista parpadeaba.
     this.historiales = new Map();
+    // B8 — y la ficha (GET /subastas/{id}): puja mínima exacta, incremento de
+    // la subasta, si la compra inmediata sigue y el apodo del vendedor.
+    this.fichas = new Map();
     this.participacionesRevisadas = false;
     this.consultandoParticipaciones = false;
     // UXC-8 — la subasta que acabas de comprar: sale del listado de abiertas
@@ -853,6 +970,14 @@ export class ControladorSubastas {
     this.estadoCanal = urlCanal ? ESTADO_CANAL.CONECTANDO : ESTADO_CANAL.SIN_CONEXION;
     this.esperas = esperas;
     this.esperar = esperar;
+    this.leerUid = leerUid || (() => cuerpoDelToken(this.leerToken?.())?.uid || null);
+    // B8 — las reglas vigentes segun el servidor (GET /subastas/reglas). Null
+    // mientras no lleguen: la pantalla usa el respaldo de CONFIG_REGLAS, que
+    // no tiene incremento.
+    this.reglas = null;
+    // B8 — «Productos pendientes de recoger» (7.7.9), del servidor.
+    this.pendientes = [];
+    this.confirmandoCancelacion = false;
     /** Promesa del ciclo de reconexion en curso: nunca dos a la vez. */
     this.reconexion = null;
     this.vivo = true;
@@ -892,14 +1017,20 @@ export class ControladorSubastas {
       return;
     }
     try {
-      const [subastas, resumen] = await Promise.all([
+      const [subastas, resumen, reglas, pendientes] = await Promise.all([
         this.api.listar(),
         // Si falla, se sigue sin resumen en vez de tumbar el listado entero.
         this.intentar(() => this.api.miResumen()),
+        // B8 — las reglas y los pendientes, igual: opcionales. Sin reglas se
+        // queda el respaldo (sin incremento); sin pendientes, la lista vacia.
+        this.intentar(() => this.api.reglas()),
+        this.leerToken?.() ? this.intentar(() => this.api.pendientes()) : null,
       ]);
       this.subastas = subastas;
       this.resumen = resumen;
       this.reaplicarParticipaciones();
+      this.aplicarReglas(reglas);
+      this.pendientes = Array.isArray(pendientes) ? pendientes : [];
       this.estadoDatos = subastas.length ? 'exito' : 'vacio';
       this.mensajeError = null;
 
@@ -970,7 +1101,7 @@ export class ControladorSubastas {
       sub &&
       sub.compraInmediata !== null &&
       sub.compraInmediata !== undefined &&
-      !sub.esPropia &&
+      !this.esMiSubasta(sub) &&
       sub.segundosRestantes > 0
     ) {
       this.solicitarCompraInmediata();
@@ -1004,10 +1135,20 @@ export class ControladorSubastas {
     // publico y la participacion necesita sesion, asi que una puede fallar sin
     // la otra. Y si fallan las dos, el detalle se pinta con lo del listado —
     // poder pujar importa mas que ver el historial.
-    const [historial, participacion] = await Promise.all([
+    const [historial, participacion, ficha] = await Promise.all([
       this.intentar(() => this.api.historial(id)),
       this.intentar(() => this.api.miParticipacion(id)),
+      // B8 — la ficha dice la puja minima exacta y el incremento de ESTA
+      // subasta, que el listado no trae.
+      this.intentar(() => this.api.ficha(id)),
     ]);
+
+    if (ficha) {
+      // UXC-8 — se guarda: el listado se relee entero (el sondeo, el canal) y
+      // sin esto el mínimo exacto y la compra agotada se perdían en cada
+      // relectura hasta volver a pedir la ficha.
+      this.fichas.set(id, vistaDeFicha(ficha));
+    }
 
     if (historial) {
       this.historiales.set(id, {
@@ -1026,6 +1167,7 @@ export class ControladorSubastas {
     // La subasta de ahora, no la de antes de esperar: una recarga pudo
     // cambiar el objeto mientras llegaban las respuestas.
     const actual = this.subastas.find((s) => s.id === id) ?? sub;
+    aplicarFicha(actual, this.fichas.get(id));
     aplicarHistorial(actual, this.historiales.get(id));
 
     if (participacion) {
@@ -1056,6 +1198,8 @@ export class ControladorSubastas {
       // `retenidoAqui` lo mandaba una versión anterior del servicio.
       retenido: Number(participacion.creditosRetenidos ?? participacion.retenidoAqui ?? 0),
       autoLimite: participacion.automaticaActiva ? Number(participacion.limiteAutomatico || 0) : 0,
+      // B8 — si la sigues (lista de seguimiento, 7.7.9).
+      siguiendo: Boolean(participacion.siguiendo),
       // La espera corre: se guarda cuándo termina, no cuántos segundos faltaban.
       esperaHasta: espera > 0 ? Date.now() + espera * 1000 : 0,
     };
@@ -1084,6 +1228,7 @@ export class ControladorSubastas {
       if (conocida) {
         Object.assign(sub, vistaDeParticipacion(conocida));
       }
+      aplicarFicha(sub, this.fichas.get(sub.id));
       aplicarHistorial(sub, this.historiales.get(sub.id));
     }
   }
@@ -1207,6 +1352,146 @@ export class ControladorSubastas {
     }
   }
 
+  /**
+   * B8 — las reglas de 7.7 que dice el servidor sustituyen a las escritas a
+   * mano. El incremento solo si esta configurado: si no, null y la pantalla
+   * dice que es una decision del PO pendiente, sin inventar una cifra.
+   */
+  aplicarReglas(reglas) {
+    if (!reglas) {
+      return;
+    }
+    this.reglas = reglas;
+    this.config.incrementoMinimo =
+      reglas.incrementoMinimoConfigurado && reglas.incrementoMinimo !== null
+        ? Number(reglas.incrementoMinimo)
+        : null;
+    if (Number.isFinite(Number(reglas.intervaloMinimoSegundos))) {
+      this.config.intervaloSegundos = Number(reglas.intervaloMinimoSegundos);
+    }
+    if (Number.isFinite(Number(reglas.maxPujasActivasPorJugador))) {
+      this.config.maxPujasActivas = Number(reglas.maxPujasActivasPorJugador);
+    }
+  }
+
+  /** Si la subasta la publico quien mira (su `uid` es el vendedor). */
+  esMiSubasta(sub) {
+    // UXC-8 — el listado ya la marca (`esPropia`, por `vendedorId`) sin
+    // pintar el identificador; si no, se compara el vendedor con quien mira.
+    if (sub?.esPropia) {
+      return true;
+    }
+    const uid = this.leerUid?.();
+    const vendedor = sub?.vendedorId ?? sub?.vendedor;
+    return Boolean(uid && vendedor && vendedor === uid);
+  }
+
+  /**
+   * B8 — 7.7.10: si esta subasta se puede cancelar ahora y, si no, por que.
+   * Solo sin pujas y fuera de las ultimas horas que digan las reglas (6). El
+   * servidor lo vuelve a comprobar al cancelar; esto evita ofrecer un boton
+   * que siempre va a fallar.
+   *
+   * @returns {{cancelable: boolean, motivo: string|null}}
+   */
+  estadoDeCancelacion(sub) {
+    const horas = Number(this.reglas?.cancelacionProhibidaUltimasHoras ?? 6);
+    if (Number(sub?.rivales) > 0) {
+      return { cancelable: false, motivo: mensajePara('CANCELACION_CON_PUJAS') };
+    }
+    if (Number(sub?.segundosRestantes) <= horas * 3600) {
+      return { cancelable: false, motivo: mensajePara('CANCELACION_FUERA_DE_PLAZO') };
+    }
+    return { cancelable: true, motivo: null };
+  }
+
+  /** B8 — el boton de cancelar, solo para el vendedor y mientras la subasta siga abierta. */
+  generarHtmlCancelar(sub, { conSesion, cerrada }) {
+    if (!conSesion || cerrada || !this.esMiSubasta(sub)) {
+      return '';
+    }
+    const { cancelable, motivo } = this.estadoDeCancelacion(sub);
+    if (cancelable) {
+      return '<button type="button" class="btn btn-peligro-sm" id="btn-cancelar-subasta">Cancelar subasta</button>';
+    }
+    return `<button type="button" class="btn btn-peligro-sm" id="btn-cancelar-subasta" disabled aria-describedby="motivo-no-cancelable">Cancelar subasta</button>
+          <span class="texto-pista" id="motivo-no-cancelable">${esc(motivo)}</span>`;
+  }
+
+  /** B8 — lista de seguimiento (7.7.9): seguir o dejar de seguir la subasta abierta. */
+  alternarSeguimiento() {
+    const sub = this.getSubastaActiva();
+    if (!this.api || !sub) {
+      return Promise.resolve(false);
+    }
+    const siguiendo = Boolean(sub.siguiendo);
+    return this.ejecutarContraElServidor(() =>
+      siguiendo ? this.api.dejarDeSeguir(sub.id) : this.api.seguir(sub.id),
+    );
+  }
+
+  /** B8 — 7.7.10: cancelar es con confirmacion, porque cobra la penalizacion. */
+  solicitarCancelacion() {
+    this.limpiarError();
+    this.confirmandoCancelacion = true;
+    this.render();
+  }
+
+  descartarCancelacion() {
+    this.confirmandoCancelacion = false;
+    this.render();
+  }
+
+  confirmarCancelacion() {
+    const sub = this.getSubastaActiva();
+    this.confirmandoCancelacion = false;
+    if (!this.api || !sub) {
+      this.render();
+      return Promise.resolve(false);
+    }
+    return this.ejecutarContraElServidor(() => this.api.cancelar(sub.id));
+  }
+
+  /** B8 — recoger un producto ganado (7.7.9). */
+  recogerPendiente(subastaId) {
+    if (!this.api || !subastaId) {
+      return Promise.resolve(false);
+    }
+    return this.ejecutarContraElServidor(() => this.api.recoger(subastaId));
+  }
+
+  /** B8 — «Recoger todo»: lo que falle sigue pendiente, y se dice. */
+  recogerTodosLosPendientes() {
+    if (!this.api) {
+      return Promise.resolve(false);
+    }
+    return this.ejecutarContraElServidor(async () => {
+      const resultado = await this.api.recogerTodo();
+      if (resultado?.fallidos?.length) {
+        throw new Error(
+          `No se pudieron recoger ${resultado.fallidos.length} producto(s); siguen pendientes. Vuelve a intentarlo en un momento.`,
+        );
+      }
+    });
+  }
+
+  /**
+   * Penalizacion de cancelar a 24 h y a 48 h segun las reglas vigentes: el
+   * porcentaje (7.7.10) de la comision de la Tabla 25. Null si no llegaron.
+   */
+  textoPenalizacion() {
+    const reglas = this.reglas;
+    if (!reglas || !Array.isArray(reglas.duraciones)) {
+      return 'el 50 % de la comisión que pagaste al publicar';
+    }
+    const porcentaje = Number(reglas.penalizacionCancelacionPorcentaje);
+    const partes = reglas.duraciones.map(
+      (d) =>
+        `${formatearCreditos((Number(d.comision) * porcentaje) / 100)} cr si era de ${d.horas} h`,
+    );
+    return `el ${porcentaje} % de la comisión que pagaste (${partes.join(', ')})`;
+  }
+
   async ejecutarContraElServidor(operacion, { acuse: acuseTras = null } = {}) {
     if (this.enviando) {
       return false;
@@ -1264,8 +1549,10 @@ export class ControladorSubastas {
 
   generarHtmlAlerta() {
     const hayError = Boolean(this.mensajeError);
-    // UXC-8 — escapado: el mensaje puede traer texto del servidor, y esta
-    // alerta ahora también va en el vacío del mercado.
+    // UXC-8 / B8 — escapado: el mensaje puede traer texto del servidor, y
+    // esta alerta va también en el estado vacío (con los pendientes de
+    // recoger). Hoy los mensajes son textos propios (mensajePara), pero la
+    // plantilla no debería depender de que siga siendo así.
     return `<div id="alerta-pujas" class="alerta alerta-error alerta-pujas" role="alert" ${hayError ? '' : 'hidden style="display: none;"'}>${hayError ? esc(this.mensajeError) : ''}</div>`;
   }
 
@@ -1725,7 +2012,7 @@ export class ControladorSubastas {
     if (sub.rival && sub.segundosRestantes > 10) {
       setTimeout(() => {
         if (sub.ganando && sub.segundosRestantes > 5) {
-          const contraoferta = sub.oferta + this.config.incrementoMinimo;
+          const contraoferta = minimoDePuja(sub, this.config.incrementoMinimo) ?? sub.oferta;
           sub.oferta = contraoferta;
           sub.ganando = false;
           sub.superado = true;
@@ -1940,6 +2227,9 @@ export class ControladorSubastas {
     // UXC-8 — el mercado vacío solo tapa las vistas del mercado. Tu compra
     // recién hecha (que ya no está entre las abiertas), «Mis subastas» y los
     // cierres se siguen enseñando aunque no quede ninguna abierta.
+    // B8 — y sin subastas en curso puede seguir habiendo algo ganado por
+    // recoger (7.7.9): esconderlo dejaría el producto sin botón hasta que
+    // alguien publique otra subasta.
     const miraLaComprada =
       this.vista === 'detalle' && this.subastaCerrada?.id === this.subastaActivaId;
     const vistaPropia = this.vista === 'mis-subastas' || this.vista === 'cierre-multiple';
@@ -1952,7 +2242,9 @@ export class ControladorSubastas {
           <p>Cuando los jugadores publiquen objetos en venta, aparecerán aquí para pujar. También puedes poner a la venta algo tuyo.</p>
           <a class="btn btn-primario" href="./publicar-subasta.html">Publicar una subasta</a>
         </div>
+        ${this.generarHtmlPendientes()}
       `;
+      this.conectarEventos();
       return;
     }
 
@@ -2011,7 +2303,8 @@ export class ControladorSubastas {
    * el innerHTML; el foco se mueve una sola vez, al aparecer.
    */
   prepararModal() {
-    const modal = this.contenedor.querySelector('#modal-compra-inmediata');
+    // B8 — tambien el de cancelar la subasta, con el mismo trato de foco.
+    const modal = this.contenedor.querySelector('#modal-compra-inmediata, #modal-cancelar-subasta');
     if (!modal) {
       this.modalEnfocado = false;
       return;
@@ -2034,7 +2327,11 @@ export class ControladorSubastas {
     modal.addEventListener('keydown', (evento) => {
       if (evento.key === 'Escape') {
         evento.preventDefault();
-        this.cancelarCompraInmediata();
+        if (modal.id === 'modal-cancelar-subasta') {
+          this.descartarCancelacion();
+        } else {
+          this.cancelarCompraInmediata();
+        }
         return;
       }
       if (evento.key !== 'Tab') {
@@ -2192,7 +2489,7 @@ export class ControladorSubastas {
       textoPostor = `${sub.rivales} ${sub.rivales === 1 ? 'puja' : 'pujas'}`;
     }
 
-    if (sub.esPropia) {
+    if (this.esMiSubasta(sub)) {
       badgeEstado = `<span class="badge badge-propia">${iconoHtml('usuario', { clase: 'icono icono--menudo' })} Tu subasta</span>`;
       claseBorde = 'borde-sin-puja';
     } else if (sub.ganando) {
@@ -2291,7 +2588,7 @@ export class ControladorSubastas {
     }
 
     const participando = this.subastas.filter(pujasEn);
-    const publicadas = this.subastas.filter((s) => s.esPropia);
+    const publicadas = this.subastas.filter((s) => this.esMiSubasta(s));
     const retenidoReal = this.getRetenidoReal();
     const sobreCompromiso = verificarSobreCompromiso(total, participando);
     const estadoTopes = calcularEstadoTopesConcurrencia(participando, this.config, {
@@ -2317,6 +2614,8 @@ export class ControladorSubastas {
             estado: estadoTopes.pujas,
           })}
         </section>
+
+        ${this.generarHtmlPendientes()}
 
         <!-- Donde pujas, por lo que se acaba antes -->
         <section class="seccion-mis-subastas" aria-label="Subastas en las que pujas" aria-busy="${revisando}">
@@ -2540,6 +2839,39 @@ export class ControladorSubastas {
     `;
   }
 
+  /**
+   * B8 — «Productos pendientes de recoger» (7.7.9): lo ganado al vencer una
+   * subasta, ya pagado, que se recoge antes de 7 dias. Solo si hay algo.
+   */
+  generarHtmlPendientes() {
+    if (!this.pendientes.length) {
+      return '';
+    }
+    const dias = this.reglas?.diasParaRecoger ?? 7;
+    return `
+        <section class="seccion-mis-subastas seccion-pendientes" aria-label="Productos pendientes de recoger">
+          <div class="encabezado-mis-subastas">
+            <h2 class="titulo-seccion">Pendientes de recoger</h2>
+            <span class="contador-mis-subastas">${this.pendientes.length} producto(s)</span>
+            <button type="button" class="btn btn-contorno btn-recoger-todo" id="btn-recoger-todo" ${this.enviando ? 'disabled' : ''}>Recoger todo</button>
+          </div>
+          <p class="texto-pista">Ganaste y pagaste estos productos. Tienes ${formatearCreditos(dias)} días para recogerlos.</p>
+          <ul class="lista-mis-subastas">
+            ${this.pendientes
+              .map(
+                (p) => `
+              <li class="fila-mi-subasta fila-pendiente" data-pendiente="${esc(p.subastaId)}">
+                <span><strong>${esc(p.nombreProducto || 'Producto ganado')}</strong> · ${formatearCreditos(Number(p.montoPagado))} cr</span>
+                <span class="texto-pista">Vence: ${esc(new Date(p.venceEn).toLocaleString('es-CO'))}</span>
+                <button type="button" class="btn btn-primario btn-recoger-pendiente" data-subasta="${esc(p.subastaId)}" ${this.enviando ? 'disabled' : ''}>Recoger</button>
+              </li>
+            `,
+              )
+              .join('')}
+          </ul>
+        </section>`;
+  }
+
   generarFilaMiSubasta(sub) {
     const urgente = sub.segundosRestantes <= 10 && sub.segundosRestantes > 0;
     const rz = rarezaVisible(sub.rareza);
@@ -2749,7 +3081,20 @@ export class ControladorSubastas {
     const hero = this.getHeroeActivo();
     const comp = calcularComparacionHeroe(hero, sub);
     const rz = rarezaVisible(sub.rareza);
-    const minPuja = calcularMinimoPuja(sub.oferta, this.config.incrementoMinimo);
+    // B8 — la puja minima la dice la ficha del servidor; sin ella se calcula
+    // (la primera puja es el precio minimo, sin incremento). Null: no se sabe
+    // desde aqui (incremento sin configurar) y los campos arrancan en la
+    // oferta vigente; el servidor dira si no llega.
+    const minimo = minimoDePuja(sub, this.config.incrementoMinimo);
+    const minPuja = minimo ?? sub.oferta;
+    let etiquetaMinimo = 'mínimo';
+    if (sub.rivales === 0 && minimo !== null) {
+      etiquetaMinimo = 'precio mínimo';
+    } else if (minimo !== null) {
+      etiquetaMinimo = `+${formatearCreditos(minimo - sub.oferta)}`;
+    }
+    const compraAgotada = sub.compraInmediataDisponible === false;
+    const conSesion = Boolean(this.api && this.leerToken?.());
     // Null si no se sabe el saldo: entonces decide el servidor al pujar.
     const disponibleAqui =
       libre === null || libre === undefined ? null : libre + (sub.retenido || 0);
@@ -2758,11 +3103,17 @@ export class ControladorSubastas {
       sub.compraInmediata !== null &&
       sub.compraInmediata !== undefined &&
       disponibleAqui < sub.compraInmediata;
+    let textoCompra = 'Comprarla ya';
+    if (compraAgotada) {
+      textoCompra = 'Ya no disponible';
+    } else if (faltaParaComprar) {
+      textoCompra = `Faltan ${formatearCreditos(sub.compraInmediata - disponibleAqui)} cr`;
+    }
     const cerrada = sub.segundosRestantes <= 0 || this.resultadoCierre !== null;
     const urgente = sub.segundosRestantes <= 10 && !cerrada;
     // UXC-8 — en tu propia subasta no se puja (el servidor lo rechaza con
     // PUJA_PROPIA): se dice antes, en vez de dejar pulsar y rechazar.
-    const bloqueada = cerrada || Boolean(sub.esPropia);
+    const bloqueada = cerrada || this.esMiSubasta(sub);
     const hayCompraInmediata = sub.compraInmediata !== null && sub.compraInmediata !== undefined;
 
     const subastasOtras = this.subastas.filter((s) => s.id !== sub.id);
@@ -2787,6 +3138,14 @@ export class ControladorSubastas {
           </button>
           <span class="separador-pipe">|</span>
           <span class="saldo-contextual">Retenido en esta subasta: <strong>${formatearCreditos(sub.retenido || 0)} cr</strong></span>
+          ${
+            conSesion
+              ? `<button type="button" class="btn btn-texto" id="btn-seguir" aria-pressed="${Boolean(sub.siguiendo)}">
+            ${sub.siguiendo ? 'Dejar de seguir' : 'Seguir esta subasta'}
+          </button>`
+              : ''
+          }
+          ${this.generarHtmlCancelar(sub, { conSesion, cerrada })}
         </div>
 
         <!-- Alerta de resultado final si cerró o se adjudicó -->
@@ -2953,7 +3312,7 @@ export class ControladorSubastas {
               </div>
 
               ${
-                sub.esPropia
+                this.esMiSubasta(sub)
                   ? `<p class="alerta alerta-informativa aviso-subasta-propia" role="note">
                 <strong>Es tu subasta.</strong> Aquí ves cómo va; no puedes pujar en ella ni comprarla.
               </p>`
@@ -2965,7 +3324,7 @@ export class ControladorSubastas {
                 <span class="etiqueta-sm">Atajos de puja en un toque (+incremento):</span>
                 <div class="atajos-grid">
                   <button type="button" class="btn btn-contorno btn-atajo" data-monto="${minPuja}" ${bloqueada ? 'disabled' : ''}>
-                    Pujar ${formatearCreditos(minPuja)} cr (+50)
+                    Pujar ${formatearCreditos(minPuja)} cr (${etiquetaMinimo})
                   </button>
                   <button type="button" class="btn btn-contorno btn-atajo" data-monto="${sub.oferta + 100}" ${bloqueada ? 'disabled' : ''}>
                     Pujar ${formatearCreditos(sub.oferta + 100)} cr (+100)
@@ -2978,14 +3337,15 @@ export class ControladorSubastas {
 
               <!-- Oferta Manual -->
               <div class="seccion-bloque">
-                <label for="input-monto-puja" class="etiqueta-sm">Oferta manual (mínimo ${formatearCreditos(minPuja)} cr):</label>
+                <label for="input-monto-puja" class="etiqueta-sm">Oferta manual (mínimo ${minimo === null ? 'según el servidor' : `${formatearCreditos(minPuja)} cr`}):</label>
                 <div class="campo-con-boton">
                   <input type="number" id="input-monto-puja" class="input-estandar" min="${minPuja}" step="10" value="${this.montoPersonalizado || minPuja}" ${bloqueada ? 'disabled' : ''}>
                   <button type="button" id="btn-pujar-manual" class="btn btn-primario" ${bloqueada ? 'disabled' : ''}>
                     ${sub.esperaSegundos > 0 ? `Espera ${sub.esperaSegundos} s` : 'Pujar'}
                   </button>
                 </div>
-                <span class="texto-pista">Intervalo regulado de 5 s entre pujas del mismo jugador en esta subasta.</span>
+                <span class="texto-pista">Intervalo regulado de ${formatearCreditos(this.config.intervaloSegundos)} s entre pujas del mismo jugador en esta subasta.</span>
+                ${this.generarHtmlNotaIncremento(sub)}
               </div>
 
               <!-- Compra Inmediata: solo si la subasta la admite -->
@@ -2998,10 +3358,15 @@ export class ControladorSubastas {
                     <span class="etiqueta-sm">Compra directa</span>
                     <div class="precio-compra cifra">${formatearCreditos(sub.compraInmediata)} cr</div>
                   </div>
-                  <button type="button" id="btn-solicitar-compra" class="btn btn-acento" ${bloqueada || faltaParaComprar ? 'disabled' : ''}>
-                    ${faltaParaComprar ? `Faltan ${formatearCreditos(sub.compraInmediata - disponibleAqui)} cr` : 'Comprarla ya'}
+                  <button type="button" id="btn-solicitar-compra" class="btn btn-acento" ${bloqueada || compraAgotada || faltaParaComprar ? 'disabled' : ''}>
+                    ${textoCompra}
                   </button>
                 </div>
+                ${
+                  compraAgotada
+                    ? '<p class="texto-pista">Una puja ya alcanzó el precio de compra inmediata: comprar por debajo le quitaría el objeto al mejor postor.</p>'
+                    : ''
+                }
               </div>`
                   : ''
               }
@@ -3020,7 +3385,7 @@ export class ControladorSubastas {
                 `
                     : `
                   <div class="campo-con-boton">
-                    <label for="input-limite-auto" class="etiqueta-sm">Tope de puja automática (mínimo ${formatearCreditos(minPuja)} cr):</label>
+                    <label for="input-limite-auto" class="etiqueta-sm">Tope de puja automática (mínimo ${minimo === null ? 'según el servidor' : `${formatearCreditos(minPuja)} cr`}):</label>
                     <input type="number" id="input-limite-auto" class="input-estandar" placeholder="Ej. ${formatearCreditos(minPuja + 400)}" min="${minPuja}" step="50" ${bloqueada ? 'disabled' : ''}>
                     <button type="button" id="btn-activar-auto" class="btn btn-contorno" ${bloqueada ? 'disabled' : ''}>
                       Activar
@@ -3071,6 +3436,25 @@ export class ControladorSubastas {
         `
             : ''
         }
+
+        <!-- B8 — Confirmación de cancelación (7.7.10) -->
+        ${
+          this.confirmandoCancelacion
+            ? `
+          <div class="modal-overlay" id="modal-cancelar-subasta" role="dialog" aria-modal="true" aria-labelledby="modal-cancelar-titulo">
+            <div class="modal-tarjeta">
+              <h2 id="modal-cancelar-titulo" class="titulo-mediano">Cancelar la subasta</h2>
+              <p>Vas a cancelar la subasta de <strong>${esc(sub.nombre)}</strong>. El objeto vuelve a tu inventario.</p>
+              <p class="texto-pista">Cancelar cuesta ${esc(this.textoPenalizacion())}. Solo se puede si nadie ha pujado y faltan más de ${formatearCreditos(this.reglas?.cancelacionProhibidaUltimasHoras ?? 6)} horas para el cierre.</p>
+              <div class="modal-acciones">
+                <button type="button" class="btn btn-contorno" id="btn-descartar-cancelacion">No cancelar</button>
+                <button type="button" class="btn btn-peligro-sm" id="btn-confirmar-cancelacion">Cancelar y pagar la penalización</button>
+              </div>
+            </div>
+          </div>
+        `
+            : ''
+        }
       </div>
     `;
   }
@@ -3080,7 +3464,7 @@ export class ControladorSubastas {
    * dice, salvo en tu propia subasta, donde no vas a pujar.
    */
   avisoSinComparativa(sub) {
-    if (sub.esPropia) {
+    if (this.esMiSubasta(sub)) {
       return '';
     }
     return `
@@ -3101,7 +3485,7 @@ export class ControladorSubastas {
     }
     const pujas = Number(sub.rivales) || 0;
     if (pujas === 0) {
-      return sub.esPropia
+      return this.esMiSubasta(sub)
         ? '<p class="texto-pista historial-vacio">Nadie ha pujado todavía.</p>'
         : '<p class="texto-pista historial-vacio">Nadie ha pujado todavía: la primera oferta puede ser la tuya.</p>';
     }
@@ -3113,12 +3497,13 @@ export class ControladorSubastas {
 
   /** De quién es la subasta: tuya, de un vendedor con nombre o nada. */
   insigniaDeVendedor(sub) {
-    if (sub.esPropia) {
+    if (this.esMiSubasta(sub)) {
       return `<span class="badge badge-propia">${iconoHtml('usuario', { clase: 'icono icono--menudo' })} Tu subasta</span>`;
     }
-    return sub.vendedor
-      ? `<span class="badge badge-neutral">Vendedor: ${esc(sub.vendedor)}</span>`
-      : '';
+    // B8 — la ficha trae el apodo; el listado solo el identificador, que no
+    // se pinta.
+    const nombre = sub.vendedorApodo || sub.vendedor;
+    return nombre ? `<span class="badge badge-neutral">Vendedor: ${esc(nombre)}</span>` : '';
   }
 
   /** Quién va delante en una fila de «Donde pujas». */
@@ -3141,6 +3526,30 @@ export class ControladorSubastas {
     return pujas > 0
       ? `${pujas} ${pujas === 1 ? 'puja' : 'pujas'} hasta ahora`
       : 'Nadie ha pujado todavía';
+  }
+
+  /**
+   * B8 — el incremento minimo, dicho con honestidad: el de esta subasta si se
+   * sabe, y si administracion todavia no lo fijo, que es una decision del PO
+   * pendiente (RF-SUB-002). Nunca una cifra inventada.
+   */
+  generarHtmlNotaIncremento(sub) {
+    const propio =
+      sub.incrementoMinimo === null || sub.incrementoMinimo === undefined
+        ? null
+        : Number(sub.incrementoMinimo);
+    const sinConfigurar = this.reglas && !this.reglas.incrementoMinimoConfigurado;
+    if (sinConfigurar) {
+      return `<p class="texto-pista" data-decision-po="incremento-minimo">Incremento mínimo entre pujas: <strong>DECISIÓN PO pendiente</strong> (sin configurar en administración).${
+        propio === null
+          ? ''
+          : ` Esta subasta usa ${formatearCreditos(propio)} cr, el que regía al publicarse.`
+      }</p>`;
+    }
+    if (propio !== null) {
+      return `<p class="texto-pista">Incremento mínimo entre pujas en esta subasta: ${formatearCreditos(propio)} cr.</p>`;
+    }
+    return '';
   }
 
   generarHtmlToastCruzado() {
@@ -3328,6 +3737,26 @@ export class ControladorSubastas {
     if (btnDesactivarAuto) {
       btnDesactivarAuto.addEventListener('click', () => this.desactivarAutoPuja());
     }
+
+    // B8 — seguimiento, cancelacion y pendientes de recoger
+    this.contenedor
+      .querySelector('#btn-seguir')
+      ?.addEventListener('click', () => this.alternarSeguimiento());
+    this.contenedor
+      .querySelector('#btn-cancelar-subasta')
+      ?.addEventListener('click', () => this.solicitarCancelacion());
+    this.contenedor
+      .querySelector('#btn-descartar-cancelacion')
+      ?.addEventListener('click', () => this.descartarCancelacion());
+    this.contenedor
+      .querySelector('#btn-confirmar-cancelacion')
+      ?.addEventListener('click', () => this.confirmarCancelacion());
+    this.contenedor.querySelectorAll('.btn-recoger-pendiente').forEach((btn) => {
+      btn.addEventListener('click', () => this.recogerPendiente(btn.getAttribute('data-subasta')));
+    });
+    this.contenedor
+      .querySelector('#btn-recoger-todo')
+      ?.addEventListener('click', () => this.recogerTodosLosPendientes());
   }
 }
 

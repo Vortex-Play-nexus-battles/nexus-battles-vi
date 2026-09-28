@@ -283,6 +283,19 @@ jobs:
         shell: bash
         run: python3 tests/contratos/validar-contratos.py
 
+      # B0 (BACKEND-01): contrato, codigo y clientes cuentan la misma historia.
+      # Falla si un contrato declara una ruta que ningun controlador sirve, si
+      # un controlador sirve una ruta que ningun contrato declara, si un
+      # cliente (Java, configuracion o frontend) llama a una ruta que no esta
+      # en ningun contrato, o si un destino STOMP /app/** del AsyncAPI y los
+      # @MessageMapping no coinciden. Lo que aun no esta implementado se
+      # declara con `x-implementacion: pendiente` y su fase, y sale listado.
+      # Es el guardian que habria parado la transferencia inventada de
+      # #660/#669. Sin Docker ni compilacion: ~10 s.
+      - name: Contrato, codigo y clientes coinciden
+        shell: bash
+        run: python3 tests/contratos/rutas-contrato-codigo.py
+
       # Corre siempre y sin Docker: la verificacion de proveedor de verdad
       # (VerificacionDelPactoDeSubastasTest) esta anotada
       # `disabledWithoutDocker = true` y se salta entera en una maquina sin
@@ -301,6 +314,19 @@ jobs:
       - name: Comprobar que la transferencia de subasta sigue conectada
         shell: bash
         run: python3 tests/contratos/transferencia-de-subasta.py
+
+      # B4 (BACKEND-06): el catalogo que siembra el codigo es el del documento.
+      # Compara la semilla de productos, PrototiposIniciales y EpicasIniciales
+      # (y los nombres con efecto del inventario) contra
+      # contracts/esquemas/catalogo-oficial.yaml, copia literal de las Tablas
+      # 5 a 20: falla si algo sobra, falta, se llama distinto o tiene otra
+      # estadistica. La autoprueba rompe a proposito copias del catalogo y exige
+      # que el guardian lo vea: uno que no sabe ponerse rojo no guarda nada.
+      - name: El catalogo del codigo es el del documento
+        shell: bash
+        run: |
+          python3 tests/contratos/catalogo-oficial.py
+          python3 tests/contratos/catalogo-oficial.py --autoprueba
 
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con
@@ -365,6 +391,20 @@ jobs:
       - name: Comprobar la clave de firma estable de ms-identidad
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
+
+      # 27-sep: el paso 3d recreo ms-identidad sin su clave de firma (par
+      # efimero: sesiones cerradas, 401 entre servicios, registro en 503).
+      # Con docker y curl falsos; segundos.
+      - name: Comprobar el paso 3d (emisor al dia y con la clave del host)
+        shell: bash
+        run: bash scripts/cd/pruebas/emisor-de-credenciales.sh
+
+      # Paso 3b de desplegar.sh: imagenes de una en una y con reintentos (28-sep,
+      # B7: con el host saturado, bajar tres a la vez se corto y luego no
+      # termino en los diez minutos de la sesion SSH). Con docker falso; segundos.
+      - name: Comprobar el paso 3b (imagenes de una en una, con reintentos)
+        shell: bash
+        run: bash scripts/cd/pruebas/bajar-imagenes.sh
 
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.

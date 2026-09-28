@@ -26,6 +26,8 @@ import { test, expect, request as apiRequest } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
@@ -60,16 +62,13 @@ function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, email, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 async function saldoDe(api, quien) {
@@ -312,7 +311,10 @@ test.describe('Guion de demostración del Sprint 2', () => {
   test('8-9-10 · combate por turnos hasta el final, con la barra de vida cambiando de color', async ({
     page,
   }) => {
-    test.setTimeout(240000);
+    // B7: un combate real de dos Guerreros Tanque dura del orden de cien
+    // turnos (Tablas 21-23 con el indice normal de D-B7-01); el tope es de la
+    // prueba, holgado para que la partida termine de verdad.
+    test.setTimeout(480000);
     const jugadores = { [anfitriona.claims.uid]: anfitriona, [invitado.claims.uid]: invitado };
     const capturas = [];
     let golpes = 0;
@@ -320,7 +322,7 @@ test.describe('Guion de demostración del Sprint 2', () => {
     let capturaAmarilla = false;
     let capturaRoja = false;
 
-    for (let ronda = 0; ronda < 60; ronda += 1) {
+    for (let ronda = 0; ronda < 300; ronda += 1) {
       const estado = await (
         await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) })
       ).json();

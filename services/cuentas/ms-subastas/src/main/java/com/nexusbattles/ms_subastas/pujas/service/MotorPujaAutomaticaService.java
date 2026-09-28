@@ -1,8 +1,9 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
 import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -33,11 +34,22 @@ import java.util.UUID;
  * confirmarlo antes de la demo.
  */
 @Service
-@RequiredArgsConstructor
 public class MotorPujaAutomaticaService {
 
     private final Clock clock;
-    private final ParametrosPuja parametros;
+    private final FuenteDeReglas reglas;
+
+    /** Para las pruebas: el intervalo de {@code parametros}, sin catalogo detras. */
+    public MotorPujaAutomaticaService(Clock clock, ParametrosPuja parametros) {
+        this(clock, FuenteDeReglas.fijas(parametros));
+    }
+
+    /** @param reglas el intervalo minimo vigente (admin-parametros desde B8). */
+    @Autowired
+    public MotorPujaAutomaticaService(Clock clock, FuenteDeReglas reglas) {
+        this.clock = clock;
+        this.reglas = reglas;
+    }
 
     /**
      * Valida y arma la configuracion de una puja automatica. El saldo lo
@@ -59,7 +71,7 @@ public class MotorPujaAutomaticaService {
                     "El jugador " + jugadorId + " no puede configurar una puja automatica en su propia subasta");
         }
 
-        BigDecimal ofertaMinimaValida = subasta.getOfertaVigente().add(subasta.getIncrementoMinimo());
+        BigDecimal ofertaMinimaValida = siguienteOferta(subasta);
         if (limite.compareTo(ofertaMinimaValida) < 0) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.LIMITE_AUTOMATICO_INALCANZABLE,
                     "Un limite de " + limite + " nunca podria pujar: la siguiente oferta valida es " + ofertaMinimaValida);
@@ -114,11 +126,15 @@ public class MotorPujaAutomaticaService {
         if (ultimaPujaDelJugador == null) {
             return clock.instant();
         }
-        return ultimaPujaDelJugador.plusSeconds(parametros.getIntervaloMinimoSegundos());
+        return ultimaPujaDelJugador.plusSeconds(reglas.vigentes().intervaloMinimoSegundos());
     }
 
+    /**
+     * La misma regla que una puja manual (B8): el precio minimo si nadie ha
+     * pujado, la oferta vigente mas el incremento si ya hay pujas.
+     */
     private BigDecimal siguienteOferta(Subasta subasta) {
-        return subasta.getOfertaVigente().add(subasta.getIncrementoMinimo());
+        return subasta.pujaMinimaSiguiente();
     }
 
     private boolean alcanzaLaSiguienteOferta(Subasta subasta, PujaAutomatica automatico) {

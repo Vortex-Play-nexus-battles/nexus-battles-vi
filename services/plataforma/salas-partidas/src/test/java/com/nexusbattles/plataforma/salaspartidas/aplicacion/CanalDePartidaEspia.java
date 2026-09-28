@@ -16,6 +16,12 @@ class CanalDePartidaEspia implements CanalDePartida {
 
     final List<Anuncio> anuncios = new ArrayList<>();
 
+    /** Cada accion resuelta anunciada, en orden (B7: con su detalle). */
+    final List<AccionResuelta> acciones = new ArrayList<>();
+
+    /** Por que paso el turno en cada anuncio de turno, en orden (canal 1.5.0). */
+    final List<String> motivos = new ArrayList<>();
+
     /** Reparto que acompano a cada aviso de fin, en orden. */
     final List<List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos>> repartos = new ArrayList<>();
 
@@ -25,6 +31,7 @@ class CanalDePartidaEspia implements CanalDePartida {
     @Override
     public void anunciarAccionResuelta(AccionResuelta accion) {
         anuncios.add(new Anuncio("accion", null));
+        acciones.add(accion);
     }
 
     @Override
@@ -35,7 +42,13 @@ class CanalDePartidaEspia implements CanalDePartida {
 
     @Override
     public void anunciarTurno(Partida partida) {
+        anunciarTurno(partida, null);
+    }
+
+    @Override
+    public void anunciarTurno(Partida partida, String motivo) {
         anuncios.add(new Anuncio("turno", partida));
+        motivos.add(motivo);
     }
 
     @Override
@@ -51,5 +64,10 @@ class CanalDePartidaEspia implements CanalDePartida {
         anuncios.add(new Anuncio("fin", partida));
         repartos.add(reparto);
         recompensas.add(recompensa);
+    }
+
+    /** Los tipos de anuncio en orden: «accion», «turno», «fin»... */
+    List<String> tipos() {
+        return anuncios.stream().map(Anuncio::tipo).toList();
     }
 }

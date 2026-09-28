@@ -12,12 +12,13 @@
  *   - **Descuento**: solo si el precio de verdad bajó (`tienda-adaptador.js`).
  *   - **Moneda**: la que dice el producto; sin moneda, la cifra sola.
  *   - **Propio**: lo que dice el inventario del jugador
- *     (`propiedadesDelJugador`); la vitrina hoy no lo calcula.
- *   - **Lista de deseos**: el contrato de la tienda no tiene dónde guardarla
- *     (`enListaDeseos` sale siempre en `false`). El control existe, se ve
- *     deshabilitado y dice por qué; no guarda nada en el navegador haciéndose
- *     pasar por la cuenta. Si un día el servicio marca un producto, la tarjeta
- *     lo distingue.
+ *     (`propiedadesDelJugador`) o la vitrina con sesión (`esPropio`, 1.4.0).
+ *   - **Lista de deseos** (B5): la guarda el servicio (`PUT`/`DELETE
+ *     /lista-deseos/{id}`, ecommerce-carrito.yaml 1.4.0) y la vitrina con
+ *     sesión la marca (`enListaDeseos`). En la tienda el conmutador está en la
+ *     tarjeta y en el detalle, con `aria-pressed`; lo deseado lleva borde,
+ *     distintivo y corazón relleno. En la portada, sin cuenta, se ve apagado y
+ *     dice que hay que entrar. Nada se guarda en el navegador.
  *
  * Las clases `.product-card`, `.price`, `.price-antes`, `.badge-descuento`,
  * `.precio-ausente`, `.habilidades` y `.btn-add` se conservan: las usan el
@@ -103,24 +104,52 @@ export function distintivoDeDeseo() {
 }
 
 /**
- * El control de la lista de deseos (WishlistToggle), sin servicio que la
- * guarde: a la vista, deshabilitado y con el motivo al lado.
+ * El nombre accesible del conmutador: empieza por lo que se lee en él (WCAG
+ * 2.5.3) y dice de qué producto es. No cambia al pulsarlo: el estado lo
+ * anuncia `aria-pressed`.
  *
- * `aria-disabled` y no `disabled`: así se alcanza con el teclado y el lector
- * lee el motivo (`aria-describedby`), que es justo lo que hay que contar.
+ * @param {string} nombre
+ * @returns {string}
+ */
+export function etiquetaDelConmutadorDeDeseos(nombre) {
+  return nombre ? `Lista de deseos: ${nombre}` : 'Lista de deseos';
+}
+
+/**
+ * El control de la lista de deseos (WishlistToggle).
  *
- * @param {{idMotivo: string}} opciones
+ * - **Activo** (la tienda, con sesión y un producto con id): un botón con
+ *   `aria-pressed` y `data-deseo`, que la vista engancha para llamar al
+ *   servicio.
+ * - **Apagado** (la portada, sin cuenta, o un producto sin id):
+ *   `aria-disabled` y no `disabled`, para que se alcance con el teclado y el
+ *   lector lea el motivo (`aria-describedby`), que es justo lo que hay que
+ *   contar.
+ *
+ * @param {{idMotivo: string, productoId?: (string|null), nombre?: string,
+ *          deseado?: boolean, activo?: boolean, motivo?: string}} opciones
  * @returns {HTMLElement}
  */
-export function conmutadorDeDeseos({ idMotivo }) {
+export function conmutadorDeDeseos({
+  idMotivo,
+  productoId = null,
+  nombre = '',
+  deseado = false,
+  activo = false,
+  motivo = 'Entra con tu cuenta para guardarlo en tu lista de deseos.',
+}) {
+  const puedeUsarse = activo && productoId !== null;
   const boton = h('button', {
     clase: 'boton boton--contorno boton--pequeno deseos',
-    datos: { accion: 'lista-de-deseos' },
+    datos: puedeUsarse
+      ? { accion: 'lista-de-deseos', deseo: String(productoId) }
+      : { accion: 'lista-de-deseos' },
     atributos: {
       type: 'button',
-      'aria-disabled': 'true',
-      'aria-pressed': 'false',
-      'aria-describedby': idMotivo,
+      'aria-pressed': String(puedeUsarse && deseado),
+      ...(puedeUsarse
+        ? { 'aria-label': etiquetaDelConmutadorDeDeseos(nombre) }
+        : { 'aria-disabled': 'true', 'aria-describedby': idMotivo }),
     },
     hijos: [
       icono('corazon', { clase: 'icono deseos__icono', etiqueta: null }),
@@ -131,13 +160,31 @@ export function conmutadorDeDeseos({ idMotivo }) {
     clase: 'deseos__caja',
     hijos: [
       boton,
-      h('p', {
-        clase: 'deseos__motivo',
-        texto:
-          'Todavía no se puede guardar: la tienda aún no conserva listas de deseos en tu cuenta.',
-        atributos: { id: idMotivo },
-      }),
+      puedeUsarse
+        ? null
+        : h('p', { clase: 'deseos__motivo', texto: motivo, atributos: { id: idMotivo } }),
     ],
+  });
+}
+
+/**
+ * El conmutador de la tarjeta: solo el corazón, con su nombre accesible, para
+ * que quepa junto a «Ver producto» y «Añadir» también en un teléfono.
+ *
+ * @param {ReturnType<typeof aProductoDeVitrina>} producto
+ * @returns {HTMLElement}
+ */
+function conmutadorDeTarjeta(producto) {
+  return h('button', {
+    clase: 'boton boton--contorno boton--pequeno deseos deseos--tarjeta',
+    datos: { deseo: String(producto.id) },
+    atributos: {
+      type: 'button',
+      title: 'Lista de deseos',
+      'aria-pressed': String(producto.enListaDeseos),
+      'aria-label': etiquetaDelConmutadorDeDeseos(producto.nombre),
+    },
+    hijos: [icono('corazon', { clase: 'icono deseos__icono', etiqueta: null })],
   });
 }
 
@@ -230,6 +277,10 @@ export function tarjetaDeProducto(
       anadir.setAttribute('aria-label', `Añadir ${producto.nombre} al carrito`);
     }
     acciones.push(anadir);
+    // B5 — «añadir a la lista de deseos» en el área de cada producto (§7.5).
+    if (producto.id !== null) {
+      acciones.push(conmutadorDeTarjeta(producto));
+    }
   }
 
   // `append` nativo escribiria «null» por cada hueco: se filtran antes.
@@ -287,17 +338,20 @@ function contarResultado(zona, salida) {
 /**
  * El bloque de compra del detalle (la ficha con `contexto: 'tienda'` o
  * `'portada'`): precio, si ya lo tienes, añadir al carrito o entrar para
- * comprar, y la lista de deseos con su motivo.
+ * comprar, y la lista de deseos.
  *
  * @param {object} dto el `ProductoDeVitrina` de la tarjeta que se abrió
  * @param {{modo?: string, unidadesPropias?: number,
  *          alAnadir?: (productoId: string) => Promise<{ok: boolean, titulo?: string, detalle?: string}>,
+ *          alDesear?: (productoId: string) => Promise<{ok: boolean, texto: string}>,
  *          alEntrar?: () => void}} opciones
+ *   `alDesear` añade o quita el producto de la lista y dice qué pasó; la vista
+ *   repinta el conmutador con lo que confirme el servicio.
  * @returns {HTMLElement}
  */
 export function bloqueDeCompra(
   dto,
-  { modo = MODOS.TIENDA, unidadesPropias = 0, alAnadir, alEntrar } = {},
+  { modo = MODOS.TIENDA, unidadesPropias = 0, alAnadir, alDesear, alEntrar } = {},
 ) {
   const producto = aProductoDeVitrina(dto);
   const idMotivo = `deseos-motivo-${String(producto.id ?? 'sin-id')}`;
@@ -370,7 +424,23 @@ export function bloqueDeCompra(
       }),
     );
   }
-  hijos.push(acciones, resultado, conmutadorDeDeseos({ idMotivo }));
+  const deseos = conmutadorDeDeseos({
+    idMotivo,
+    productoId: producto.id,
+    nombre: producto.nombre,
+    deseado: producto.enListaDeseos,
+    activo: modo === MODOS.TIENDA && typeof alDesear === 'function',
+  });
+  const conmutador = deseos.querySelector('[data-deseo]');
+  conmutador?.addEventListener('click', async () => {
+    ocupado(conmutador, true);
+    const salida = await alDesear(String(producto.id));
+    ocupado(conmutador, false);
+    resultado.hidden = false;
+    resultado.dataset.tono = salida?.ok ? 'exito' : 'advertencia';
+    resultado.textContent = salida?.texto ?? '';
+  });
+  hijos.push(acciones, resultado, deseos);
 
   return h('section', {
     clase: 'compra-producto',

@@ -51,7 +51,8 @@ class TorneosControllerTest {
 
     private static TorneosService.TorneoCompleto torneo() {
         Torneo t = new Torneo(UUID.randomUUID(), "Copa Otono", ADMIN, AHORA, AHORA.plusDays(7), 10);
-        return new TorneosService.TorneoCompleto(t, List.of(), List.of());
+        return new TorneosService.TorneoCompleto(t, List.of(), List.of(), List.of(),
+                new PoliticaDePremio.Premio(100, "epica-1"));
     }
 
     @Test
@@ -169,11 +170,58 @@ class TorneosControllerTest {
                 .andExpect(jsonPath("$.motivo").value("CREDITOS_INSUFICIENTES"))
                 .andExpect(jsonPath("$.title").value("Creditos insuficientes"));
 
-        when(servicio.iniciar(any(), eq(torneoId)))
+        // 1.2.0: el unico 503 del libro que queda es al inscribirse (la reserva es sincrona).
+        when(servicio.inscribir(any(), eq(torneoId), eq(equipo.id())))
                 .thenThrow(new TorneoRechazado(TorneoRechazado.Motivo.LIBRO_NO_DISPONIBLE, "caido"));
-        mvc.perform(post("/api/v1/torneos/" + torneoId + "/inicio")
-                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR")))
+        mvc.perform(post("/api/v1/torneos/" + torneoId + "/equipos/" + equipo.id() + "/inscripcion")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("lyra", JUGADORA)))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.motivo").value("LIBRO_NO_DISPONIBLE"));
+    }
+
+    @Test
+    @DisplayName("1.2.0: el detalle trae el estado del pago de cada equipo y el premio con sus entregas")
+    void estadoDePagosYPremio() throws Exception {
+        UUID torneoId = UUID.randomUUID();
+        Torneo t = new Torneo(torneoId, "Copa Otono", ADMIN, AHORA, AHORA.plusDays(7), 10,
+                new PoliticaDePremio.Premio(100, "epica-1"));
+        Equipo equipo = Equipo.deJugadores(UUID.randomUUID(), torneoId, "Los Valientes", "avatar-1", JUGADORA,
+                UUID.randomUUID(), AHORA);
+        UUID reserva = UUID.randomUUID();
+        equipo.inscribir(1, JUGADORA, reserva);
+        Operacion cobro = Operacion.cobro(torneoId, equipo.id(), JUGADORA, reserva, 10, AHORA);
+        cobro.hecha("reserva consumida", AHORA);
+        when(servicio.obtener(torneoId)).thenReturn(new TorneosService.TorneoCompleto(t, List.of(equipo), List.of(),
+                List.of(cobro), t.premio(new PoliticaDePremio(0, null))));
+
+        mvc.perform(get("/api/v1/torneos/" + torneoId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.equipos[0].estadoPago").value("COBRADO"))
+                .andExpect(jsonPath("$.premio.creditosPorIntegrante").value(100))
+                .andExpect(jsonPath("$.premio.epicaProductoId").value("epica-1"))
+                .andExpect(jsonPath("$.premio.estado").value("SIN_CAMPEON"))
+                .andExpect(jsonPath("$.premio.entregas").isEmpty());
+    }
+
+    @Test
+    @DisplayName("1.2.0: reintentar operaciones es del administrador; el jugador recibe 403 del servicio")
+    void reintento() throws Exception {
+        UUID torneoId = UUID.randomUUID();
+        when(servicio.reintentarOperaciones(any(), eq(torneoId))).thenReturn(torneo());
+        mvc.perform(post("/api/v1/torneos/" + torneoId + "/operaciones/reintento")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("admin", ADMIN, "ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.premio.estado").value("SIN_CAMPEON"));
+        ArgumentCaptor<Actor> actor = ArgumentCaptor.forClass(Actor.class);
+        verify(servicio).reintentarOperaciones(actor.capture(), eq(torneoId));
+        assertThat(actor.getValue().puedeAdministrar()).isTrue();
+
+        when(servicio.reintentarOperaciones(any(), eq(torneoId)))
+                .thenThrow(new TorneoRechazado(TorneoRechazado.Motivo.PERMISO_INSUFICIENTE, "no"));
+        mvc.perform(post("/api/v1/torneos/" + torneoId + "/operaciones/reintento")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("lyra", JUGADORA)))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/v1/torneos/" + torneoId + "/operaciones/reintento"))
+                .andExpect(status().isUnauthorized());
     }
 }

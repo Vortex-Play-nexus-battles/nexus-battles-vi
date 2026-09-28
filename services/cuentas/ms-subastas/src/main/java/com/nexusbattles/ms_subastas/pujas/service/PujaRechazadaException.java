@@ -29,6 +29,14 @@ public class PujaRechazadaException extends RuntimeException {
         SIN_COMPRA_INMEDIATA,
 
         /**
+         * B8: una puja ya alcanzo o supero el precio de compra inmediata, asi
+         * que comprar ahora le quitaria el producto al mejor postor por menos
+         * de lo que el ofrecio. Es una carrera (alguien pujo mientras se
+         * confirmaba): 409.
+         */
+        COMPRA_INMEDIATA_SUPERADA,
+
+        /**
          * Llego una compra inmediata con {@code confirmado} en false. La
          * historia exige confirmacion explicita, asi que el servidor la exige
          * tambien: una interfaz con un bug no debe poder cerrar una compra.

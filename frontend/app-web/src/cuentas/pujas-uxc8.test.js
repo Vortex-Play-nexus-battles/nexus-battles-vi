@@ -206,6 +206,31 @@ describe('la subasta propia', () => {
     expect(contenedor.querySelector('.fila-publicacion[data-id="mia"]')).not.toBeNull();
     ctrl.destruir();
   });
+
+  test('el identificador del vendedor nunca se pinta, ni en la ajena ni en la tuya', async () => {
+    const uidAjeno = '7d1c0000-0000-4000-8000-000000000001';
+    const uidMio = '2b9e0000-0000-4000-8000-00000000000a';
+    const api = apiFalsa({
+      listado: [
+        subasta({ id: 'ajena', vendedorId: uidAjeno }),
+        subasta({ id: 'mia', vendedorId: uidMio }),
+      ],
+    });
+    const { contenedor, ctrl } = montar({ api, leerUid: () => uidMio });
+    await ctrl.iniciar();
+
+    for (const id of ['ajena', 'mia']) {
+      ctrl.abrirDetalle(id);
+      await esperar();
+      expect(contenedor.innerHTML).not.toContain(uidAjeno);
+      expect(contenedor.innerHTML).not.toContain(uidMio);
+    }
+    // La tuya se reconoce por el uid de la sesión aunque el listado no la
+    // marcara: no deja pujar.
+    expect(contenedor.querySelector('.aviso-subasta-propia')).not.toBeNull();
+    expect(contenedor.querySelector('#btn-pujar-manual').disabled).toBe(true);
+    ctrl.destruir();
+  });
 });
 
 describe('compra inmediata', () => {

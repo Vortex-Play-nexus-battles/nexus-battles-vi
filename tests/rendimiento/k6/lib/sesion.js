@@ -82,7 +82,7 @@ export function prepararSesion() {
         sonda.status +
         '.\n' +
         '  El token de ms-identidad no lo esta aceptando salas-partidas, o el borde\n' +
-        '  no enruta /api/v1/salas. Sin esto, tres de los cuatro escenarios medirian\n' +
+        '  no enruta /api/v1/salas. Sin esto, los escenarios con sesion medirian\n' +
         '  solo rechazos. Cuerpo: ' +
         String(sonda.body).substring(0, 300),
     );

@@ -128,8 +128,22 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
+  // B1 — el enlace del correo de recuperación y el de activación de una
+  // cuenta administrativa llevan aquí: `/restablecer#codigo=...&correo=...`
+  // (correo.yaml 1.4.0). Por eso tiene dirección limpia.
   'restablecer-confirmar': {
     ruta: 'cuentas/restablecer-confirmar.html',
+    limpia: '/restablecer',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
+  // B1 — una cuenta de autorregistro nace pendiente de verificar (identidad
+  // 2.0.0): aquí se escribe el código que llegó al correo, o se llega desde el
+  // enlace del propio correo (`/verificar#codigo=...&correo=...`). Pública:
+  // quien la usa todavía no puede iniciar sesión.
+  'verificar-cuenta': {
+    ruta: 'cuentas/verificar-cuenta.html',
+    limpia: '/verificar',
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
@@ -314,6 +328,14 @@ export const MATRIZ = Object.freeze({
   },
   'tablero-tecnico': {
     ruta: 'plataforma/metricas-plataforma/tablero-tecnico.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
+  // HU-CHA-012: panel del asistente (analíticas, base de conocimiento y
+  // reentrenamiento). Mismo nivel que exige el servicio en
+  // /api/v1/chatbot/admin/** (ADMINISTRADOR o SUPER_ADMINISTRADOR).
+  'panel-chatbot': {
+    ruta: 'cuentas/panel-chatbot.html',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },

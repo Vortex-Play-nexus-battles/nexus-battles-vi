@@ -92,21 +92,32 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * plantilla fija. El aviso nuevo no usa `innerHTML`: lo construye `aviso()`
  * del kit con `textContent`.
  *
- * UXC-8 — y otras ~350 posiciones las cuatro de `pujas.js`: la participación
- * por subasta, el sondeo sin canal, la compra que se queda a la vista y «Mis
- * subastas» con lo tuyo, todo ARRIBA de `render()`. Revisadas: carga y error
- * siguen iguales; el vacío lleva delante `generarHtmlAlerta()`, que ahora
- * escapa el mensaje; y `contenidoHtml` sigue saliendo de los generadores,
- * cuyas interpolaciones con datos pasan por `esc()` (las nuevas —rival,
- * vendedor, publicaciones— también).
+ * B8 — las cuatro de `pujas.js` bajaron 248 posiciones (reglas del servidor,
+ * ficha, seguimiento, cancelacion y pendientes de recoger, todo ARRIBA de
+ * `render()`) y la de `publicar-subasta.js` 26 (la consulta de
+ * `GET /subastas/reglas`). Revisadas una por una: carga, error y
+ * `contenidoHtml` siguen igual; la plantilla de `publicar-subasta.js` sigue sin
+ * una sola interpolacion (el aviso de DECISIÓN PO y las comisiones entran
+ * despues por `textContent`). La del estado vacio SI cambio y se dice: ya no
+ * es fija, lleva `generarHtmlAlerta()` —cuyo mensaje pasa ahora por `esc()`— y
+ * `generarHtmlPendientes()`, que escapa el nombre, el id y la fecha con `esc()`
+ * y pasa las cifras por `formatearCreditos()` (un `Number`). Sin esto, un
+ * producto ganado quedaba sin boton para recogerlo mientras no hubiera otra
+ * subasta en curso.
+ *
+ * UXC-8 — y otras ~400 posiciones las cuatro de `pujas.js` al juntarse con
+ * B8: la participación por subasta, el sondeo sin canal, la ficha que se
+ * reaplica, la compra que se queda a la vista y «Mis subastas» con lo tuyo,
+ * todo ARRIBA de `render()`. Revisadas: carga y error siguen iguales; el
+ * vacío es el de B8 (alerta por `esc()` y pendientes); y `contenidoHtml` sigue
+ * saliendo de los generadores, cuyas interpolaciones con datos pasan por
+ * `esc()` (las nuevas —rival, vendedor, publicaciones— también). La de
+ * `publicar-subasta.js` bajó una línea más: UXC-8 añadió el enlace fijo a la
+ * tienda para el inventario vacío; sigue sin interpolaciones.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  [
-    'cuentas/publicar-subasta.js:69',
-    'plantilla fija del formulario, sin interpolación. UXC-8 añadió el enlace fijo ' +
-      'a la tienda para el inventario vacío y la movió una línea.',
-  ],
+  ['cuentas/publicar-subasta.js:95', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -116,15 +127,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1907', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1925', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2194', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2212', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:1948',
-    'plantilla fija del estado vacío; UXC-8 le puso delante la alerta, cuyo ' +
-      'mensaje ahora también pasa por esc()',
+    'cuentas/pujas.js:2238',
+    'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
+      'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:1988',
+    'cuentas/pujas.js:2280',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

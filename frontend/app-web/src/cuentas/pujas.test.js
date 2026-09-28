@@ -7,6 +7,7 @@ import {
   calcularSaldoLibre,
   calcularSaldoRetenido,
   calcularMinimoPuja,
+  minimoDePuja,
   validarPuja,
   validarLimiteAuto,
   calcularComparacionHeroe,
@@ -56,6 +57,26 @@ describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
     test('calcula el incremento mínimo correctamente', () => {
       expect(calcularMinimoPuja(1000, 50)).toBe(1050);
       expect(calcularMinimoPuja(0, 50)).toBe(50);
+    });
+
+    // B8 — 7.7.2 y 7.7.6: la primera puja es el precio minimo; desde la
+    // segunda, oferta + incremento; y sin incremento conocido no se inventa.
+    test('B8: la puja minima sale de la ficha, del precio minimo o de oferta + incremento', () => {
+      expect(minimoDePuja({ oferta: 100, rivales: 3, pujaMinimaSiguiente: 125 }, 50)).toBe(125);
+      expect(minimoDePuja({ oferta: 100, rivales: 0 }, 50)).toBe(100);
+      expect(minimoDePuja({ oferta: 100, rivales: 2, incrementoMinimo: 10 }, 50)).toBe(110);
+      expect(minimoDePuja({ oferta: 100, rivales: 2 }, 50)).toBe(150);
+      expect(minimoDePuja({ oferta: 100, rivales: 2 }, null)).toBeNull();
+      expect(minimoDePuja(null, 50)).toBeNull();
+    });
+
+    test('B8: sin incremento conocido no se bloquea la puja: decide el servidor', () => {
+      const conPujas = { id: 's', oferta: 100, rivales: 2, retenido: 0, segundosRestantes: 60 };
+      expect(validarPuja(101, conPujas, 1000, null, 0).valida).toBe(true);
+      const primera = { ...conPujas, rivales: 0 };
+      const res = validarPuja(99, primera, 1000, 50, 0);
+      expect(res.valida).toBe(false);
+      expect(res.motivo).toContain('precio mínimo');
     });
   });
 

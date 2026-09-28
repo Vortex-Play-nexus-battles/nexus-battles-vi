@@ -9,6 +9,9 @@ import com.nexusbattles.ms_subastas.subastas.api.SubastaListadoController;
 import com.nexusbattles.ms_subastas.subastas.dto.PaginaDeSubastasResponse;
 import com.nexusbattles.ms_subastas.subastas.port.IdentidadClient;
 import com.nexusbattles.ms_subastas.subastas.service.SubastaListadoService;
+import com.nexusbattles.ms_subastas.subastas.service.CalculadorComisionPublicacion;
+import com.nexusbattles.ms_subastas.subastas.service.FichaDeSubastaService;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +57,15 @@ class SeguridadWebConfigTest {
     @MockitoBean
     private ConsultaDeParticipacionService consultas;
 
+    @MockitoBean
+    private FichaDeSubastaService fichas;
+
+    @MockitoBean
+    private FuenteDeReglas reglas;
+
+    @MockitoBean
+    private CalculadorComisionPublicacion comisiones;
+
     private final EmisorDeTokensDePrueba emisor = EmisorDeTokensDePrueba.emisor();
 
     @Test
@@ -62,6 +74,33 @@ class SeguridadWebConfigTest {
         when(listado.listar(any(), anyInt(), anyInt()))
                 .thenReturn(new PaginaDeSubastasResponse(List.of(), 0, 16, 0, 0));
         mvc.perform(get("/subastas")).andExpect(status().isOk());
+    }
+
+    /**
+     * B8: la ficha de una subasta es publica como el listado. Sin sesion la
+     * visita no se atribuye a nadie (jugador nulo), y no es un 401.
+     */
+    @Test
+    @DisplayName("la ficha de una subasta es publica: sin token responde 200")
+    void fichaPublica() throws Exception {
+        mvc.perform(get("/subastas/{id}", SUBASTA)).andExpect(status().isOk());
+        org.mockito.Mockito.verify(fichas).ficha(SUBASTA, null);
+    }
+
+    @Test
+    @DisplayName("con sesion, la ficha sabe quien la mira (para contar la visita)")
+    void fichaConSesion() throws Exception {
+        mvc.perform(get("/subastas/{id}", SUBASTA)
+                        .header("Authorization", "Bearer " + emisor.tokenDeJugador("lyra", LYRA)))
+                .andExpect(status().isOk());
+        org.mockito.Mockito.verify(fichas).ficha(SUBASTA, LYRA);
+    }
+
+    @Test
+    @DisplayName("el historial de pujas es publico; la participacion propia no")
+    void historialPublicoParticipacionPrivada() throws Exception {
+        mvc.perform(get("/subastas/{id}/pujas", SUBASTA)).andExpect(status().isOk());
+        mvc.perform(get("/subastas/{id}/mi-participacion", SUBASTA)).andExpect(status().isUnauthorized());
     }
 
     @Test

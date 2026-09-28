@@ -2,7 +2,6 @@ package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.ConsultarEstadisticasEquipadas;
 import nexus.inventario.configuracion.IdentidadDelLlamador;
-import nexus.inventario.dominio.EstadisticasHeroe;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -29,8 +28,7 @@ public class EstadisticasEquipadasController {
             Authentication autenticacion,
             @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String cabecera,
             @PathVariable String heroeId) {
-        EstadisticasHeroe estadisticas =
-                consulta.consultar(identidad.propietario(autenticacion, cabecera), heroeId);
-        return EstadisticasEquipadasResponse.de(heroeId, estadisticas);
+        return EstadisticasEquipadasResponse.de(
+                heroeId, consulta.consultar(identidad.propietario(autenticacion, cabecera), heroeId));
     }
 }

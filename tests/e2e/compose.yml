@@ -134,20 +134,93 @@ services:
       JUGADOR_KIT_INICIAL: p-heroe-e2e,p-arma-e2e
       # Reintento programado mas agil que en DEV (30 s): el banco no espera.
       ONBOARDING_INTERVALO_REINTENTOS_MS: "5000"
-      # El registro avisa por correo, pero es fail-open (Resilience4j): sin
-      # servicio de correo la cuenta se crea igual. Por eso correo y mailpit
-      # no estan en este compose.
+      # B1 (identidad 2.0.0) — la cuenta de autorregistro nace pendiente de
+      # verificar su correo y el login responde 403 hasta que se confirma el
+      # codigo que llega al buzon. Hasta B1 el registro solo avisaba por correo
+      # (fail-open) y por eso correo y mailpit no estaban en este banco; ahora
+      # sin ellos ninguna cuenta nueva podria entrar. Las pruebas leen el
+      # codigo de Mailpit por el borde (tests/e2e/ayudantes/correo.js).
+      CORREO_BIENVENIDA_URL: http://srv-correo:8082/api/v1/correos/bienvenida
+      CORREO_AVISO_ACCESO_URL: http://srv-correo:8082/api/v1/correos/aviso-acceso
+      CORREO_RECUPERACION_CLAVE_URL: http://srv-correo:8082/api/v1/correos/recuperacion-clave
+      CORREO_CONFIRMACION_CUENTA_URL: http://srv-correo:8082/api/v1/correos/confirmacion-cuenta
+      CORREO_CAMBIO_CLAVE_URL: http://srv-correo:8082/api/v1/correos/cambio-clave
+      # B2 (BACKEND-02): la lista negra es fail-closed. Sin esta URL el
+      # servicio caia a localhost:8086 (su defecto de desarrollo), no llegaba a
+      # nadie y, desde B2, el registro responderia 503. Y el panel delega las
+      # sanciones en moderacion-sanciones.
+      LISTA_NEGRA_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
+      SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       SERVER_PORT: "8089"
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de
       # pruebas, no de ningun entorno real.
       # e2e-banco: credencial con la que sembrar.sh acredita el saldo inicial en
       # ms-finanzas, que desde #455 solo atiende a servicios (ROLE_SERVICIO).
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios
+      # ms-finanzas (B7): entrega el contenido de los cofres al inventario.
+      # ms-ecommerce: la compra (B5) reserva tiraje, entrega, asienta y pide contacto.
+      # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
+      # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # -------------------------------------------------------------- correo
+  # B1 — el codigo que verifica cada cuenta nueva, y el de recuperacion, salen
+  # por aqui. Es el servicio de correo de verdad, con su plantilla y su cola;
+  # lo unico de banco es el destino: Mailpit, que recoge los mensajes y no los
+  # reenvia a nadie. Todas las cuentas de prueba son @nexus.test, un dominio
+  # reservado (RFC 2606), asi que tambien en DEV van al buzon de pruebas.
+  #
+  # Se llama `mailpit`, igual que en el despliegue: `borde-dev.conf` lo sirve
+  # en /mailpit/ (MP_WEBROOT), y las pruebas leen su API en la misma ruta en el
+  # banco y en AWS DEV. No publica puertos: se llega por el borde.
+  mailpit:
+    image: axllent/mailpit
+    environment:
+      MP_WEBROOT: /mailpit
+
+  srv-correo:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/plataforma/correo/build/libs/*.jar
+        PUERTO: "8082"
+    environment:
+      # El servidor principal ES el buzon de pruebas: aqui no hay proveedor
+      # real al que no deba llegar nada.
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      CORREO_BUZON_PRUEBAS_HOST: mailpit
+      CORREO_BUZON_PRUEBAS_PUERTO: "1025"
+      # Remitente de banco, no de ningun entorno (correo 1.4.0 lo lee de
+      # MAIL_FROM; la version anterior, de CORREO_REMITENTE).
+      MAIL_FROM: "The Nexus Battles VI <no-reply@nexus.test>"
+      CORREO_REMITENTE: "The Nexus Battles VI <no-reply@nexus.test>"
+      # Los enlaces de los correos (/verificar#codigo=..., /restablecer#...)
+      # apuntan al borde de este banco.
+      PUBLIC_BASE_URL: http://localhost:8099
+      # Una ronda por segundo: el spec lee la bandeja justo despues de pedir
+      # el correo, y el banco no espera los dos segundos de DEV.
+      CORREO_ENTREGA_INTERVALO_MS: "1000"
+      # Correo solo atiende credenciales de servicio firmadas por este emisor.
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # Cola persistente de envios (correo 1.4.0): esquema propio en la base de
+      # plataforma, con las mismas variables que el resto del bloque.
+      DB_RELACIONAL_URL: jdbc:postgresql://e2e-plataforma-db:5432/plataformadb
+      DB_USER: plataforma
+      DB_PASS: plataforma
+    depends_on:
+      mailpit: { condition: service_started }
+      e2e-plataforma-db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8082/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
@@ -198,6 +271,15 @@ services:
       # servicio vuelve a preferir KEYCLOAK_JWK_SET_URI, aqui no hay ningun
       # JWKS que servir y el banco se pone rojo en vez de pasar por suerte.
       KEYCLOAK_JWK_SET_URI: http://emisor-que-no-existe:9/jwks
+      # B4 — la semilla del catalogo oficial esta encendida por omision en
+      # todos los entornos. Aqui se apaga a proposito: el banco tiene su propio
+      # catalogo determinista (sembrar.sh), y la vista de la tienda pinta solo
+      # la primera pagina de la vitrina (16, por fecha de alta). Los 80
+      # productos oficiales, con los precios en COP de la demo, dejarian fuera
+      # de esa pagina el producto que crea tienda.e2e.spec.js. La semilla la
+      # prueba CatalogoContraMongoIT (productos) contra un Mongo real. Cuando
+      # la tienda pagine, esta linea puede irse.
+      CATALOGO_SEMILLA: "false"
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
     healthcheck:
@@ -260,6 +342,50 @@ services:
       timeout: 5s
       retries: 40
 
+  # B9 — misiones (seccion 7.8): matricula el heroe (bloqueo en inventario),
+  # simula en segundo plano con el motor y la IA de heroes, y liquida
+  # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
+  # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
+  # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
+  # mision dura dos segundos. Sin correo en este banco: va apagado.
+  srv-misiones:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/contenido/misiones/build/libs/*.jar
+    environment:
+      MONGODB_URI: mongodb://e2e-contenido-mongo:27017/misiones
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: misiones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-misiones
+      HEROES_BASE_URL: http://srv-heroes:8080
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      MOTOR_COMBATE_URL: http://srv-motor-combate:8080
+      CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      MISIONES_CORREO_ACTIVO: "false"
+      MISIONES_SEMILLA_PROVISIONAL: "true"
+      MISIONES_SEMILLA_DE_PRUEBAS: "7"
+      MISIONES_SEGUNDOS_POR_HORA: "2"
+      MISIONES_INTERVALO_MS: "1000"
+      MISIONES_REINTENTO_SEGUNDOS: "1"
+    depends_on:
+      e2e-contenido-mongo: { condition: service_healthy }
+      srv-ms-identidad: { condition: service_healthy }
+      srv-inventario: { condition: service_healthy }
+      srv-heroes: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
+      srv-motor-combate: { condition: service_healthy }
+      srv-ms-finanzas: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
   # ------------------------------------------------------------- cuentas
   # El libro de creditos de HU-JUE-014 (Grupo 4). Es el que aparta, devuelve
   # y cobra la apuesta; sin el, crear o entrar a una sala con recompensa
@@ -283,6 +409,16 @@ services:
       DB_USER: finanzas_user
       DB_PASSWORD: finanzas
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # B7 — el contenido de cada cofre va al inventario del jugador
+      # (POST /inventario/entregas, origen COFRE) con la credencial de servicio
+      # de ms-finanzas. Mientras inventario no publique /entregas (B4) el cofre
+      # queda PENDIENTE y se reintenta; nada del banco depende de esa entrega.
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-finanzas
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-finanzas
+      # Reintento mas agil que en DEV (60 s): el banco no espera.
+      FINANZAS_COFRES_REINTENTO_MS: "5000"
     depends_on:
       e2e-finanzas-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -325,17 +461,17 @@ services:
       # recibia nada, con el E2E en verde. La URL de arriba estaba puesta y no
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
-      # Sin esto, publicar una subasta responde 503 «app.subastas.incremento-minimo
-      # no esta configurado»: la propiedad no tiene valor por omision
-      # (application.properties la deja vacia) y el servicio se niega a publicar.
-      # Lo descubrio la prueba de transferencia al intentar publicar de verdad;
-      # hasta entonces ningun E2E llegaba a publicar nada.
-      #
-      # El 1 es una FIJACION DE PRUEBA, no una decision de producto: el README de
-      # ms-subastas registra el valor por defecto del incremento minimo como la
-      # pregunta abierta de RF-SUB-004, y es el mismo valor que ya usa
-      # PublicacionAutoConfigurationTest. Elegirlo aqui no la responde.
-      SUBASTAS_INCREMENTO_MINIMO: "1"
+      # B8 — las reglas de 7.7 salen de admin-parametros (RF-ADM-001), no de
+      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`,
+      # que nace SIN valor (decision del PO pendiente): mientras nadie lo fije,
+      # publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Hasta B8 aqui
+      # habia SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie.
+      # Ahora lo fija subastas.e2e.spec.js como ADMINISTRADOR por
+      # PUT /api/v1/parametros/subastas.incremento-minimo, que es exactamente lo
+      # que hara el PO. El valor de la prueba es una FIJACION DE PRUEBA, no una
+      # decision de producto. Cache de 1 s para que el spec vea el cambio.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      SUBASTAS_PARAMETROS_CACHE_SEGUNDOS: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
@@ -350,6 +486,8 @@ services:
       # transfiere. Declararla evita que subastas arranque antes que inventario
       # en un levantado parcial.
       srv-inventario: { condition: service_healthy }
+      # B8 — las reglas (incremento minimo, limites) se leen de aqui.
+      srv-admin-parametros: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s
@@ -387,6 +525,23 @@ services:
       CORS_ORIGENES: http://localhost:8099,http://127.0.0.1:8099
       # show-sql=true por omision: en la bitacora del fallo taparia la causa.
       SPRING_JPA_SHOW_SQL: "false"
+      # La compra (B5): credencial de servicio del emisor de ADR-005 (secreto
+      # de banco de pruebas, registrado arriba en AUTH_CLIENTES_SERVICIO) y
+      # los servicios que toca despues de cobrar, todos de este banco.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: ms-ecommerce
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-ecommerce
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      FINANZAS_BASE_URL: http://srv-ms-finanzas:8093/api/v1
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      CORREO_URL: http://srv-correo:8082
+      # Este banco no tiene servicio de correo ni mailpit (ver srv-ms-identidad):
+      # la orden termina COMPLETA con el correo OMITIDO en vez de quedarse
+      # reintentando un servicio que no existe. En DEV va en true.
+      TIENDA_CORREO_HABILITADO: "false"
+      # La tarea que retoma ordenes a medias, mas agil que en DEV (15 s).
+      TIENDA_REANUDACION_INTERVALO_MS: "5000"
     depends_on:
       e2e-ecommerce-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -434,6 +589,13 @@ services:
       # cache de 1 s para que el spec vea el cambio sin esperar.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SANCIONES_PARAMETROS_CACHE_SEGUNDOS: "1"
+      # 7.3.2 (B2): la sancion se proyecta sobre la cuenta en ms-identidad
+      # (lo que niega el login a quien esta suspendido o baneado) con la
+      # credencial de arriba. correo NO esta en este banco (ver srv-ms-identidad):
+      # sus salidas se quedan en la cola, con reintento y espera creciente, sin
+      # afectar a la sancion ni al aviso en la bandeja.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      CORREO_URL: http://srv-correo:8082
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       e2e-plataforma-cache: { condition: service_healthy }
@@ -488,6 +650,9 @@ services:
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       LISTA_NEGRA_VERIFICAR_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # B3 — comentar y calificar comprueban el producto en el catalogo del
+      # propio banco (el mismo contenedor al que el borde manda /api/v1/productos).
+      PRODUCTOS_URL: http://srv-productos:8080
       # R10.1 — el aviso al autor cuando se resuelve la moderacion de su
       # comentario (RF-COM-008). Con la credencial de ADR-005, porque
       # /internal/notifications exige ROLE_SERVICIO. Sin esto el E2E veria
@@ -504,6 +669,7 @@ services:
       srv-moderacion-sanciones: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
+      srv-productos: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health || exit 1"]
       interval: 5s
@@ -531,6 +697,14 @@ services:
       DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
       DIRECTORIO_ACTIVO_CLIENT_ID: torneos
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-torneos
+      # B10: premio (epica por inventario, creditos por el libro) y avisos de
+      # los hitos. El spec afirma los creditos del premio (valor PROVISIONAL de
+      # application.yml, D-24); la epica depende de /inventario/entregas (B4).
+      INVENTARIO_BASE_URL: http://srv-inventario:8080
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      # La tarea que reintenta cobros y premios pendientes, mas seguida que en
+      # dev para que el banco no espere 15 s.
+      TORNEOS_OPERACIONES_INTERVALO_MS: "3000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-moderacion-sanciones: { condition: service_healthy }
@@ -567,8 +741,12 @@ services:
 
   # Metricas de plataforma (HU-MET-004 / HU-MET-001): recolecta Actuator de
   # los servicios del bloque que corren en este compose y los agregados de
-  # moderacion. correo NO esta aqui a proposito: es la brecha de
-  # observabilidad que el spec espera ver senalada (CA-03).
+  # moderacion. Deja SIN observar a correo, a proposito: es la brecha de
+  # observabilidad que el spec espera ver senalada (CA-03). Hasta B1 bastaba
+  # con que correo no estuviera en el banco; desde B1 si esta (los codigos de
+  # verificacion viajan por correo), asi que a metricas se le da una direccion
+  # de salud que no responde. La brecha sigue siendo real para metricas, y el
+  # correo de verdad sigue funcionando para todos los demas.
   srv-metricas-plataforma:
     build:
       context: ../..
@@ -582,7 +760,8 @@ services:
       DB_PASS: plataforma
       DISPONIBILIDAD_INTERVALO_MS: "5000"
       SALUD_COMENTARIOS: http://srv-comentarios:8081/actuator/health
-      SALUD_CORREO: http://srv-correo:8082/actuator/health
+      # A proposito SIN RESPUESTA (ver arriba): la brecha de CA-03.
+      SALUD_CORREO: http://srv-correo-sin-observar:8082/actuator/health
       SALUD_TORNEOS: http://srv-torneos:8083/actuator/health
       SALUD_SALAS_PARTIDAS: http://srv-salas-partidas:8084/actuator/health
       SALUD_NOTIFICACIONES: http://srv-notificaciones:8085/actuator/health
@@ -654,6 +833,13 @@ services:
       # degrada al respaldo si el catalogo no esta, y ese es justamente el
       # comportamiento que se quiere en el banco.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      # B6 — mensajes privados: el destinatario existe y esta ACTIVO
+      # (GET /api/v1/internal/usuarios/{uid}/contacto, sin /api/v1 en la base)
+      # y, si no esta escuchando, aviso en su bandeja. Las dos con la
+      # credencial de arriba. El limite de frecuencia queda en su valor por
+      # omision (5 cada 10 s): mensajes-privados.e2e.spec.js lo comprueba.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-inventario: { condition: service_healthy }
@@ -711,6 +897,7 @@ services:
         sed -e 's|34\.193\.90\.11:8101|srv-heroes:8080|g' \
             -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
             -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
+            -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
         # comentarios a proposito, para explicar de donde sale, y un guardian
@@ -725,11 +912,11 @@ services:
         # vea, y la dejaba vacia ("The esperado variable is not set"). Un
         # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
         # siempre sin mirar nada.
-        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080; do
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080; do
           grep -q "$$esperado" /salida/default.conf || {
             echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
-        echo "Borde adaptado al banco: heroes, inventario y productos son locales."
+        echo "Borde adaptado al banco: heroes, inventario, productos y misiones son locales."
 
   srv-borde:
     image: nginx:1.27-alpine
@@ -753,6 +940,11 @@ services:
       srv-productos: { condition: service_healthy }
       # R16: /api/v1/vitrina y /api/v1/carrito (tienda.e2e.spec.js).
       srv-ms-ecommerce: { condition: service_healthy }
+      # B9: /api/v1/misiones (misiones.e2e.spec.js).
+      srv-misiones: { condition: service_healthy }
+      # B1: /mailpit/ (el buzon que leen las pruebas) y el correo que lo llena.
+      mailpit: { condition: service_started }
+      srv-correo: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

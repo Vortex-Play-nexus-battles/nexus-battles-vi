@@ -33,10 +33,9 @@ public class GeneradorDeIdInventarioDocumento implements BeforeConvertCallback<I
         if (documento.id() != null) {
             return documento;
         }
-        return new InventarioDocumento(
-                UUID.randomUUID().toString(),
-                documento.propietarioId(),
-                documento.elementos(),
-                documento.equipamientos());
+        // withId conserva todo lo demas: desde B4 un inventario nuevo puede
+        // nacer de una entrega, con la entrega ya anotada, y reconstruirlo
+        // campo a campo aqui la perdia.
+        return documento.withId(UUID.randomUUID().toString());
     }
 }

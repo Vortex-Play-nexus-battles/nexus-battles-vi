@@ -17,16 +17,21 @@ import java.math.BigDecimal;
  * @param creditosRetenidos suma de las pujas propias que siguen siendo oferta
  *                          vigente. Es lo unico que este servicio sabe de
  *                          creditos: el saldo total y el disponible los tiene
- *                          ms-finanzas, que todavia no existe.
+ *                          ms-finanzas. Hasta B8 salia como
+ *                          {@code retenidoAqui}, un nombre que el contrato
+ *                          nunca declaro ({@code ms-subastas-pujas.yaml} exige
+ *                          {@code creditosRetenidos}).
  * @param segundosParaVolverAPujar cuanto falta para poder pujar otra vez en
  *                          ESTA subasta. Cero si ya se puede.
+ * @param siguiendo         si esta en su lista de seguimiento (B8, 7.7.9).
  */
 public record MiParticipacionResponse(
         boolean vasGanando,
         boolean teSuperaron,
         @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal tuOfertaVigente,
-        @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal retenidoAqui,
+        @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal creditosRetenidos,
         @JsonFormat(shape = JsonFormat.Shape.STRING) BigDecimal limiteAutomatico,
         boolean automaticaActiva,
-        long segundosParaVolverAPujar) {
+        long segundosParaVolverAPujar,
+        boolean siguiendo) {
 }

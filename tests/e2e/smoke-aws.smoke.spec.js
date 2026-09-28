@@ -22,6 +22,9 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { correosPara } from './ayudantes/correo.js';
+import { sesionDe } from './ayudantes/cuentas.js';
+
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Smoke-2026';
 
@@ -86,25 +89,12 @@ test.describe('Smoke del entorno desplegado', () => {
   // Identidad — ms-identidad
   // ===================================================================
 
-  test('registrarse y entrar devuelve un token con la identidad de ADR-002', async () => {
-    const email = `${apodo}@nexus.test`;
-
-    const registro = await api.post('/api/v1/auth/registro', {
-      multipart: {
-        nombres: 'Smoke',
-        apellidos: 'De Prueba',
-        email,
-        password: CLAVE,
-        apodo,
-      },
-    });
-    expect([200, 201], `registro: ${await registro.text()}`).toContain(registro.status());
-
-    const login = await api.post('/api/v1/auth/login', {
-      data: { email, password: CLAVE },
-    });
-    expect(login.status(), `login: ${await login.text()}`).toBe(200);
-    jugador = await login.json();
+  test('registrarse, confirmar el correo y entrar devuelve un token con la identidad de ADR-002', async () => {
+    // B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar su correo y
+    // el login la rechaza hasta entonces. El ayudante hace lo que haria el
+    // jugador: lee el codigo en el buzon de pruebas de DEV (MAILPIT_URL, o
+    // /mailpit en este mismo host), lo confirma y entra.
+    jugador = await sesionDe(api, apodo, { clave: CLAVE, nombres: 'Smoke', base: AWS });
 
     // ADR-002: el apodo va en `sub` y el identificador estable en `uid`.
     // `JwtService` emite subject(apodo) + los claims `uid`, `rol` y `ver`.
@@ -280,7 +270,9 @@ test.describe('Smoke del entorno desplegado', () => {
     const hilo = await lectura.json();
     expect(hilo.productoId).toBe('smoke-inexistente');
     expect(Array.isArray(hilo.comentarios)).toBe(true);
-    expect(hilo.total).toBe(hilo.comentarios.length);
+    // Desde comentarios 1.5.0 (B3) el hilo se pagina y `total` cuenta todas
+    // las paginas: nunca menos que lo que trae esta.
+    expect(hilo.total).toBeGreaterThanOrEqual(hilo.comentarios.length);
     expect(typeof hilo.totalCalificaciones).toBe('number');
     // Sin calificaciones el promedio es nulo, nunca un cero que parezca nota.
     if (hilo.totalCalificaciones === 0) {
@@ -324,14 +316,24 @@ test.describe('Smoke del entorno desplegado', () => {
     });
     expect(desdeFuera.status(), 'correo no debe ser alcanzable desde el borde').toBe(404);
 
+    // B12: la bandeja tampoco. Guarda los codigos de verificacion y de
+    // recuperacion de todas las cuentas @nexus.test, y el borde solo la sirve
+    // a origenes internos. Este runner llega desde internet: 403.
+    const bandejaDesdeFuera = await api.get('/mailpit/api/v1/search', {
+      params: { query: `to:${destinatario}` },
+    });
+    expect(bandejaDesdeFuera.status(), 'Mailpit no debe ser publico (B12)').toBe(403);
+
+    // El correo se busca donde lo buscan las demas pruebas: MAILPIT_URL, que
+    // en smoke-dev.yml es el tunel SSH al propio host.
     await expect
       .poll(
         async () => {
-          const bandeja = await api.get('/mailpit/api/v1/search', {
-            params: { query: `to:${destinatario}` },
-          });
-          if (!bandeja.ok()) return 0;
-          return (await bandeja.json()).messages_count ?? 0;
+          try {
+            return (await correosPara(destinatario, { base: AWS })).length;
+          } catch {
+            return 0;
+          }
         },
         { timeout: 30000, message: 'el correo del registro no llego a Mailpit' },
       )

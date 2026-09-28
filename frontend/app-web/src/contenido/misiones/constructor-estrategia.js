@@ -6,12 +6,21 @@
  * turno la IA intenta la primera; si no es viable, la segunda; luego la
  * tercera; y si ninguna, ataque básico sin gastar poder.
  *
- * Esto funciona hoy, sin misiones: elige uno de TUS héroes (inventario), trae
- * las habilidades que ese prototipo tiene en el nivel elegido y su vista
- * previa (servicio de héroes), deja ordenar las rotaciones y las valida contra
- * la regla del servidor (`/estrategias/validacion`). Lo único que no hace es
- * guardarla, porque quien la guarda es el módulo de misiones (lo dice el
- * contrato), y eso se escribe en pantalla.
+ * Elige uno de TUS héroes (inventario), trae las habilidades que ese
+ * prototipo tiene en el nivel elegido —de entrada, el del propio héroe— y su
+ * vista previa (servicio de héroes), deja ordenar las rotaciones y las valida
+ * contra la regla del servidor (`/estrategias/validacion`).
+ *
+ * ## Guardarla
+ *
+ * Quien la guarda es el módulo de misiones (§7.8.12, «configuraciones de
+ * rotaciones guardadas»; `misiones.yaml`, `/misiones/estrategias/{heroeId}`).
+ * Con su fuente disponible, al elegir un héroe se carga la estrategia que
+ * tenga guardada, y en la pestaña Estrategia una estrategia comprobada se
+ * puede guardar. El servidor la vuelve a validar con el nivel REAL del héroe:
+ * por eso solo se ofrece guardar la del nivel del héroe. En la matrícula no
+ * hay botón: matricular ya la guarda. Si el servicio de misiones no responde,
+ * se valida igual y la pantalla dice que todavía no se guarda.
  *
  * ## Qué decide la pantalla y qué no
  *
@@ -30,6 +39,7 @@ import { h, vaciar } from '../../comun/ui/dom.js';
 import { icono } from '../../comun/ui/icono.js';
 import { aviso } from '../../comun/ui/aviso.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
+import { fecha } from '../../comun/ui/formato.js';
 import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
 import { bloqueDeEstadisticas } from '../../comun/ui/juego/estadisticas.js';
 import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
@@ -101,13 +111,14 @@ export function mensajeDeFallo(fallo, queSeHacia) {
 
 /**
  * Los héroes del jugador con su prototipo, que es lo que el servicio de
- * héroes entiende. Un héroe cuyo producto no se pudo leer se queda en la
- * lista, deshabilitado y diciendo por qué.
+ * héroes entiende, y su nivel si el inventario lo trae (inventario.yaml
+ * 1.6.0: lo sube la experiencia de las misiones). Un héroe cuyo producto no
+ * se pudo leer se queda en la lista, deshabilitado y diciendo por qué.
  *
  * @param {object[]} elementos del inventario
  * @param {(productoId: string) => Promise<object>} consultarProducto
  * @returns {Promise<Array<{id: string, nombre: string, prototipo: string|null,
- *   imagen: string|null}>>}
+ *   imagen: string|null, nivel: number|null}>>}
  */
 export async function heroesConPrototipo(elementos, consultarProducto) {
   const heroes = elementos.filter(esHeroe);
@@ -127,6 +138,7 @@ export async function heroesConPrototipo(elementos, consultarProducto) {
       nombre: heroe.nombrePropio ?? producto?.nombre ?? 'Héroe',
       prototipo,
       imagen: producto?.imagen ?? null,
+      nivel: NIVELES.includes(heroe.nivel) ? heroe.nivel : null,
     };
   });
 }
@@ -143,6 +155,9 @@ export async function heroesConPrototipo(elementos, consultarProducto) {
  * @param {(estrategia: ReturnType<ReturnType<typeof constructorDeEstrategia>['estrategia']>) => void}
  *   [opciones.alCambiar] cada vez que cambia lo que se podría enviar
  * @param {string} [opciones.hrefTienda]
+ * @param {import('./fuente-misiones.js').FuenteDeMisiones|null} [opciones.fuente] la del
+ *   servicio de misiones, para leer y guardar la estrategia de cada héroe; sin ella (o sin
+ *   servicio) se valida igual pero no se guarda
  * @param {Function} [opciones.consultar] inyección para pruebas
  * @param {Function} [opciones.consultarProducto]
  * @param {Function} [opciones.validar]
@@ -158,6 +173,7 @@ export function constructorDeEstrategia({
   nivelTitulo = 2,
   alCambiar = () => {},
   hrefTienda = '../../cuentas/tienda.html',
+  fuente = null,
   consultar = consultarPagina,
   consultarProducto = consultarProductoDelCatalogo,
   validar = validarEstrategia,
@@ -186,17 +202,29 @@ export function constructorDeEstrategia({
     atributos: { id: idTitulo, tabindex: '-1' },
   });
 
+  /** ¿El servicio de misiones responde y trae esta operación de estrategias? */
+  const conMisiones = (operacion) =>
+    fuente?.disponible === true && typeof fuente[operacion] === 'function';
+
   const zonaHeroes = h('div', { clase: 'estrategia__heroes', datos: { zona: 'heroes' } });
+  const textoDeNivel = (nivel, delHeroe) =>
+    nivel === delHeroe ? `Nivel ${nivel} (el de hoy)` : `Nivel ${nivel}`;
   const selectorNivel = h('select', {
     clase: 'desplegable__control',
     atributos: { id: `${prefijo}-nivel`, name: 'nivel', 'aria-describedby': `${prefijo}-pista` },
     hijos: NIVELES.map((nivel) =>
       h('option', {
-        texto: nivel === NIVEL_POR_OMISION ? `Nivel ${nivel} (el de hoy)` : `Nivel ${nivel}`,
+        texto: textoDeNivel(nivel, NIVEL_POR_OMISION),
         atributos: { value: String(nivel) },
       }),
     ),
   });
+  /** «(el de hoy)» va en el nivel que tiene el héroe elegido. */
+  function marcarNivelDelHeroe(delHeroe) {
+    for (const opcion of selectorNivel.options) {
+      opcion.textContent = textoDeNivel(Number(opcion.value), delHeroe);
+    }
+  }
   const campoNivel = h('div', {
     clase: 'desplegable estrategia__nivel',
     hijos: [
@@ -209,8 +237,9 @@ export function constructorDeEstrategia({
       h('p', {
         clase: 'campo__pista',
         texto:
-          'Los héroes suben de nivel con la experiencia de las misiones; hasta entonces todos están en nivel 1. ' +
-          'Puedes preparar ya la estrategia de un nivel más alto: en el 4 y en el 8 se desbloquean habilidades.',
+          'Los héroes suben de nivel con la experiencia de las misiones. ' +
+          'Puedes preparar ya la estrategia de un nivel más alto: en el 4 y en el 8 se desbloquean habilidades. ' +
+          'La que se guarda y sale de misión es la del nivel que tiene hoy tu héroe.',
         atributos: { id: `${prefijo}-pista` },
       }),
     ],
@@ -232,6 +261,9 @@ export function constructorDeEstrategia({
     hijos: [icono('mas', { etiqueta: null }), h('span', { texto: 'Añadir rotación' })],
   });
   const notaPorDefecto = h('p', { clase: 'estrategia__por-defecto' });
+  /** «Es la que guardaste»: se enseña al cargarla y se quita al cambiarla. */
+  const notaGuardada = h('p', { clase: 'estrategia__nota', datos: { zona: 'guardada' } });
+  notaGuardada.hidden = true;
   const editor = h('fieldset', {
     clase: 'estrategia__editor',
     datos: { zona: 'editor' },
@@ -243,6 +275,7 @@ export function constructorDeEstrategia({
           'En cada turno la IA intenta la rotación de prioridad alta; si no tiene poder o la ' +
           'habilidad está recargando, pasa a la media y luego a la baja.',
       }),
+      notaGuardada,
       listaRotaciones,
       botonAnadirRotacion,
       notaPorDefecto,
@@ -326,6 +359,8 @@ export function constructorDeEstrategia({
 
   /** La configuración cambió: el veredicto anterior ya no la describe. */
   function invalidarVeredicto() {
+    // Tampoco es ya «la que guardaste».
+    notaGuardada.hidden = true;
     if (estado.veredicto && estado.vigente) {
       estado.vigente = false;
       vaciar(zonaVeredicto).append(
@@ -453,8 +488,65 @@ export function constructorDeEstrategia({
 
   async function elegirHeroe(heroe) {
     estado.heroe = heroe;
+    // De entrada, su nivel de hoy: es con el que se guarda y sale de misión.
+    estado.nivel = heroe.nivel ?? NIVEL_POR_OMISION;
+    selectorNivel.value = String(estado.nivel);
+    marcarNivelDelHeroe(estado.nivel);
     campoNivel.hidden = false;
+    await cargarGuardada(heroe);
+    if (estado.heroe !== heroe) {
+      // Mientras se leía su estrategia, el jugador eligió a otro.
+      return;
+    }
     await traerHabilidades();
+  }
+
+  /**
+   * La estrategia que el jugador guardó para este héroe (§7.8.12), si la hay
+   * y el servicio de misiones responde. Si no se puede leer, se sigue sin
+   * ella: no es motivo para no dejar preparar otra.
+   *
+   * @param {{id: string}} heroe
+   */
+  async function cargarGuardada(heroe) {
+    notaGuardada.hidden = true;
+    if (!conMisiones('estrategiaGuardada')) {
+      return;
+    }
+    let guardada = null;
+    try {
+      guardada = await fuente.estrategiaGuardada(heroe.id);
+    } catch (fallo) {
+      console.error('No se pudo leer la estrategia guardada del héroe', fallo);
+      return;
+    }
+    if (guardada && estado.heroe === heroe) {
+      aplicarGuardada(guardada);
+    }
+  }
+
+  /**
+   * Pone en el editor las rotaciones guardadas. Las habilidades que el nivel
+   * no traiga las vaciará `aplicarHabilidades`, diciendo cuáles.
+   *
+   * @param {import('./fuente-misiones.js').EstrategiaGuardada} guardada
+   */
+  function aplicarGuardada(guardada) {
+    const rotaciones = (Array.isArray(guardada.rotaciones) ? guardada.rotaciones : [])
+      .map((r) =>
+        Array.isArray(r?.pasos) ? r.pasos.filter((p) => typeof p === 'string' && p) : [],
+      )
+      .filter((pasos) => pasos.length > 0)
+      .slice(0, ROTACIONES_MAXIMAS);
+    if (rotaciones.length === 0) {
+      // Guardada sin rotaciones es «solo ataque básico»: no hay nada que poner.
+      return;
+    }
+    estado.rotaciones = rotaciones;
+    notaGuardada.textContent = `Es la estrategia que guardaste${
+      guardada.actualizadaEn ? ` el ${fecha(guardada.actualizadaEn)}` : ''
+    }. Compruébala antes de usarla.`;
+    notaGuardada.hidden = false;
   }
 
   /**
@@ -808,17 +900,120 @@ export function constructorDeEstrategia({
         h('span', { texto: veredicto.comportamientoPorDefecto }),
       ],
     });
+    const seGuarda = conMisiones('guardarEstrategia');
+    let detalle;
+    if (modo === 'matricula') {
+      detalle = seGuarda
+        ? 'Se enviará con tu héroe al iniciar la misión y quedará guardada para la próxima.'
+        : 'Se enviará con tu héroe al iniciar la misión.';
+    } else {
+      detalle = seGuarda
+        ? `Guárdala para tenerla lista cuando envíes a ${estado.heroe.nombre} a una misión.`
+        : 'Todavía no se guarda: se guarda cuando envías a tu héroe a una misión.';
+    }
+    // `append` escribiría «null» como texto: solo van las piezas que hay.
     zonaVeredicto.append(
+      ...[
+        aviso({
+          tono: 'exito',
+          titulo: `Estrategia válida para ${nombreCompleto(estado.heroe)} en nivel ${veredicto.nivel}`,
+          detalle,
+        }),
+        rotaciones.length > 0 ? resumen : null,
+        respaldo,
+        modo === 'estrategia' && seGuarda ? zonaDeGuardado() : null,
+      ].filter(Boolean),
+    );
+  }
+
+  /* --------------------------------------------------------------- guardar */
+
+  /**
+   * El botón de guardar de una estrategia comprobada, o por qué no se ofrece:
+   * el servidor la valida con el nivel REAL del héroe, así que la de otro
+   * nivel no se ofrece a guardar (se rechazaría).
+   *
+   * @returns {HTMLElement}
+   */
+  function zonaDeGuardado() {
+    const zona = h('div', {
+      clase: 'estrategia__acciones',
+      datos: { zona: 'guardado' },
+      atributos: { 'aria-live': 'polite' },
+    });
+    const delHeroe = estado.heroe.nivel;
+    if (Number.isInteger(delHeroe) && estado.nivel !== delHeroe) {
+      zona.append(
+        h('p', {
+          clase: 'estrategia__nota',
+          texto: `Solo se guarda la estrategia del nivel que tiene hoy ${estado.heroe.nombre} (nivel ${delHeroe}). Compruébala en ese nivel para guardarla.`,
+        }),
+      );
+      return zona;
+    }
+    const boton = h('button', {
+      clase: 'boton boton--secundario',
+      datos: { accion: 'guardar-estrategia' },
+      atributos: { type: 'button' },
+      hijos: [icono('check', { etiqueta: null }), h('span', { texto: 'Guardar estrategia' })],
+    });
+    boton.addEventListener('click', () => guardar(boton, zona));
+    zona.append(boton);
+    return zona;
+  }
+
+  /**
+   * Guarda lo comprobado. El servidor tiene la última palabra (la valida otra
+   * vez con el nivel del inventario): su motivo se enseña tal cual.
+   *
+   * @param {HTMLButtonElement} boton
+   * @param {HTMLElement} zona
+   */
+  async function guardar(boton, zona) {
+    const envio = estrategia();
+    if (!envio) {
+      return;
+    }
+    ocupado(boton, true);
+    try {
+      const guardada = await fuente.guardarEstrategia(envio.heroeId, envio.rotaciones);
+      mostrarGuardada(zona, envio.heroeNombre, guardada);
+    } catch (fallo) {
+      console.error('No se pudo guardar la estrategia', fallo);
+      ocupado(boton, false);
+      mostrarFalloAlGuardar(zona, boton, fallo);
+    }
+  }
+
+  function mostrarGuardada(zona, nombre, guardada) {
+    zona.replaceChildren(
       aviso({
         tono: 'exito',
-        titulo: `Estrategia válida para ${nombreCompleto(estado.heroe)} en nivel ${veredicto.nivel}`,
-        detalle:
-          modo === 'matricula'
-            ? 'Se enviará con tu héroe al iniciar la misión.'
-            : 'Todavía no se guarda: se guarda cuando envías a tu héroe a una misión.',
+        titulo: 'Estrategia guardada',
+        detalle: `${nombre} la tendrá lista en sus misiones${
+          Number.isInteger(guardada?.nivel) ? ` (validada en nivel ${guardada.nivel})` : ''
+        }.`,
       }),
-      rotaciones.length > 0 ? resumen : null,
-      respaldo,
+    );
+  }
+
+  function mostrarFalloAlGuardar(zona, boton, fallo) {
+    const validas = Array.isArray(fallo?.habilidadesValidas) ? fallo.habilidadesValidas : [];
+    zona.replaceChildren(
+      ...[
+        aviso({
+          tono: 'error',
+          titulo: 'No pudimos guardar la estrategia',
+          detalle: mensajeDeFallo(fallo, 'guardar la estrategia'),
+        }),
+        validas.length > 0
+          ? h('p', {
+              clase: 'estrategia__nota',
+              texto: `Habilidades válidas en su nivel: ${validas.join(', ')}.`,
+            })
+          : null,
+        boton,
+      ].filter(Boolean),
     );
   }
 

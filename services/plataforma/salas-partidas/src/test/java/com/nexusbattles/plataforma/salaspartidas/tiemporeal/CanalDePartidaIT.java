@@ -32,6 +32,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -83,6 +84,26 @@ class CanalDePartidaIT {
     /** Solo para la sonda con la que se confirma que la suscripcion esta viva. */
     @Autowired
     private SimpMessagingTemplate mensajeria;
+
+    /**
+     * Desde B6 solo los participantes siguen {@code /tema/partidas/{id}}
+     * ({@code AutorizacionDeDestinos}). Esta IT prueba el anuncio por el canal,
+     * no el arranque de la partida, asi que el almacen se sustituye por un
+     * doble que conoce la partida y sabe que quien la sigue la juega.
+     */
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas partidas;
+
+    /** La partida existe y ANA (el token {@code visitante}) combate en ella. */
+    private void laJuegaAna(UUID idPartida) {
+        org.mockito.Mockito.when(partidas.buscarPorId(idPartida)).thenReturn(java.util.Optional.of(
+                com.nexusbattles.plataforma.salaspartidas.dominio.Partida.rehidratar(idPartida, UUID.randomUUID(),
+                        com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida.EN_CURSO,
+                        List.of(com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida.humano(ANA, 0),
+                                com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida.humano(BRUNO, 0)),
+                        com.nexusbattles.plataforma.salaspartidas.dominio.Turno.primero(ANA), 0,
+                        java.time.Instant.now())));
+    }
 
     private StompSession conectar(String token) throws Exception {
         StompHeaders connect = new StompHeaders();
@@ -136,12 +157,16 @@ class CanalDePartidaIT {
     @DisplayName("quien sigue la partida recibe la accion resuelta con el payload del contrato")
     void laAccionResueltaLlegaAQuienSigueLaPartida() throws Exception {
         UUID idPartida = UUID.randomUUID();
+        laJuegaAna(idPartida);
         BlockingQueue<String> recibidos = suscribirseA(conectar(VISITANTE), idPartida);
 
         canalDePartida.anunciarAccionResuelta(flechaDoble(idPartida));
 
         String aviso = recibidos.poll(10, TimeUnit.SECONDS);
         assertNotNull(aviso, "el mensaje no llego por el canal de la partida");
+        tools.jackson.databind.JsonNode json = tools.jackson.databind.json.JsonMapper.builder().build()
+                .readTree(aviso);
+        tools.jackson.databind.JsonNode afectados = json.get("afectados");
         assertAll(
                 () -> assertTrue(aviso.contains("\"tipo\":\"partida.accion.resuelta\""), aviso),
                 () -> assertTrue(aviso.contains("\"idPartida\":\"" + idPartida + "\""), aviso),
@@ -149,14 +174,21 @@ class CanalDePartidaIT {
                 () -> assertTrue(aviso.contains("\"codigo\":\"FLECHA_DOBLE\""), aviso),
                 () -> assertTrue(aviso.contains("\"nombre\":\"Flecha doble\""), aviso),
                 // Los dos afectados, cada uno con vidaActual y vidaMaxima (RF-JUE-009).
-                () -> assertTrue(aviso.contains(
-                        "{\"idJugador\":\"" + BRUNO + "\",\"vidaActual\":55,\"vidaMaxima\":100,\"diferencia\":-25}"),
-                        aviso),
-                () -> assertTrue(aviso.contains(
-                        "{\"idJugador\":\"" + MAQUINA + "\",\"vidaActual\":30,\"vidaMaxima\":100,\"diferencia\":-70}"),
-                        aviso),
-                // Nunca un color: el umbral del 60/40 lo aplica el cliente.
-                () -> assertTrue(!aviso.contains("color") && !aviso.contains("porcentaje"), aviso));
+                // Desde el canal 1.5.0 (B7) llevan ademas poder, recargas y
+                // efectos: se comprueba campo a campo, no la cadena entera.
+                () -> assertEquals(2, afectados.size(), aviso),
+                () -> assertEquals(BRUNO.toString(), afectados.get(0).get("idJugador").asString()),
+                () -> assertEquals(55, afectados.get(0).get("vidaActual").asInt()),
+                () -> assertEquals(100, afectados.get(0).get("vidaMaxima").asInt()),
+                () -> assertEquals(-25, afectados.get(0).get("diferencia").asInt()),
+                () -> assertEquals(MAQUINA.toString(), afectados.get(1).get("idJugador").asString()),
+                () -> assertEquals(30, afectados.get(1).get("vidaActual").asInt()),
+                () -> assertEquals(-70, afectados.get(1).get("diferencia").asInt()),
+                // Nunca un color ni un porcentaje de VIDA: el umbral del 60/40 lo
+                // aplica el cliente. (`accion.ataque.porcentajeDano`, del canal
+                // 1.5.0, es el porcentaje de la Tabla 22, no el de la barra.)
+                () -> assertTrue(!aviso.contains("color") && !afectados.toString().contains("porcentaje"),
+                        aviso));
     }
 
     @Test
@@ -164,6 +196,7 @@ class CanalDePartidaIT {
     void otraPartidaNoSeMezcla() throws Exception {
         UUID propia = UUID.randomUUID();
         UUID ajena = UUID.randomUUID();
+        laJuegaAna(propia);
         BlockingQueue<String> recibidos = suscribirseA(conectar(VISITANTE), propia);
 
         canalDePartida.anunciarAccionResuelta(flechaDoble(ajena));

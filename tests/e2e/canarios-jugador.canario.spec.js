@@ -36,6 +36,9 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe } from './ayudantes/cuentas.js';
+import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
+
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Canario-2026';
 const RAIZ = '/frontend/app-web/src';
@@ -69,11 +72,6 @@ const PANTALLAS = [
   },
 ];
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
 /**
  * Espera a que la pantalla deje de pedir cosas a `/api/v1`: 1,5 s sin
  * peticiones en vuelo, con un tope. `networkidle` no sirve aquí: varias vistas
@@ -102,17 +100,12 @@ test.describe('Canarios del jugador (R16)', () => {
   test.beforeAll(async () => {
     const api = await apiRequest.newContext({ baseURL: AWS, ignoreHTTPSErrors: true });
     const apodo = `canario_${Date.now()}`;
-    const email = `${apodo}@nexus.test`;
     try {
-      const registro = await api.post('/api/v1/auth/registro', {
-        multipart: { nombres: 'Canario', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-      });
-      expect([200, 201], `registro: ${await registro.text()}`).toContain(registro.status());
-
-      const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-      expect(login.status(), `login: ${await login.text()}`).toBe(200);
-      const cuerpo = await login.json();
-      const claims = cuerpoDelToken(cuerpo.token);
+      // B1 — la cuenta nace pendiente de verificar su correo: el ayudante lee
+      // el código en el buzón de pruebas de DEV (MAILPIT_URL, o /mailpit del
+      // mismo host) y lo confirma antes de entrar, como haría el jugador.
+      const cuerpo = await sesionDe(api, apodo, { clave: CLAVE, nombres: 'Canario', base: AWS });
+      const { claims } = cuerpo;
       sesion = { token: cuerpo.token, apodo: claims.sub, rol: claims.rol, uid: claims.uid };
     } finally {
       await api.dispose();
@@ -185,7 +178,18 @@ test.describe('Canarios del jugador (R16)', () => {
         /\/login(?:\.html)?(?:[?#]|$)/,
       );
 
-      const conFallo = peticiones.filter((p) => p.estado >= 500);
+      // Un 5xx de un servicio que el catálogo declara fuera de DEV
+      // (`desplegableDev: false`) es la verdad de este entorno: se anota, no
+      // falla. Cuando ese servicio se despliegue, su 5xx vuelve a contar solo.
+      const conFallo = peticiones.filter((p) => {
+        if (p.estado < 500) return false;
+        const fuera = servicioNoDesplegadoDe(p.ruta);
+        if (fuera) {
+          console.log(`CANARIO-NO-DESPLEGADO|${pantalla.nombre}|${fuera}|${p.ruta}|${p.estado}`);
+          return false;
+        }
+        return true;
+      });
       expect(conFallo, 'peticiones /api/v1 que respondieron 5xx').toEqual([]);
 
       for (const texto of pantalla.errores) {

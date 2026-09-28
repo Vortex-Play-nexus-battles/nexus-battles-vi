@@ -39,8 +39,8 @@ class PujaAutomaticaControllerTest {
     void configurarUsaElJugadorDelTokenYDevuelveLoQuedoGuardado() {
         UUID subastaId = UUID.randomUUID();
         UUID jugadorDelToken = UUID.randomUUID();
-        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugadorDelToken, false));
-        when(pujasAutomaticas.configurar(subastaId, jugadorDelToken, new BigDecimal("400")))
+        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugadorDelToken, false, "lyra"));
+        when(pujasAutomaticas.configurar(subastaId, jugadorDelToken, "lyra", new BigDecimal("400")))
                 .thenReturn(new PujaAutomatica(UUID.randomUUID(), subastaId, jugadorDelToken,
                         new BigDecimal("400"), true));
 

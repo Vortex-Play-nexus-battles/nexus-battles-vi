@@ -35,18 +35,24 @@ import java.util.UUID;
  * <p>{@code equipoGanador} (HU-SAL-004) solo viaja en el modo cooperativo:
  * entonces {@code ganadores} son todos los de ese equipo que quedaron en pie.
  *
+ * <p>Desde 1.5.0 (B7) {@code resultado} es el final formal —{@code GANADOR} o
+ * {@code EMPATE}— y en el modo cooperativo {@code ganadores} son TODOS los del
+ * equipo ganador, tambien los que cayeron (gana el equipo, D-B7-15).
+ *
  * @param tipo          discriminador del canal
  * @param idPartida     partida que termino
- * @param ganadores     quien quedo en pie; vacio si nadie
+ * @param ganadores     quien gano; vacio en empate
  * @param equipoGanador equipo que gano, solo con equipos; ausente si no
  * @param reparto       saldo neto de la apuesta por participante; ausente sin apuesta
  * @param recompensa    creditos por jugar acreditados por el libro; ausente si
  *                      quedo pendiente o ya se anuncio
+ * @param resultado     GANADOR o EMPATE (1.5.0)
  */
 record AvisoDePartidaFinalizada(String tipo, UUID idPartida, List<UUID> ganadores,
                                 @JsonInclude(JsonInclude.Include.NON_NULL) Integer equipoGanador,
                                 @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Reparto> reparto,
-                                @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Recompensa> recompensa) {
+                                @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Recompensa> recompensa,
+                                @JsonInclude(JsonInclude.Include.NON_NULL) String resultado) {
 
     static final String TIPO = "partida.finalizada";
 
@@ -76,6 +82,7 @@ record AvisoDePartidaFinalizada(String tipo, UUID idPartida, List<UUID> ganadore
                 partida.ganadores().stream().map(ParticipanteDePartida::idJugador).toList(),
                 partida.equipoGanador().orElse(null),
                 reparto == null ? List.of() : reparto.stream().map(Reparto::de).toList(),
-                recompensa == null ? List.of() : recompensa.stream().map(Recompensa::de).toList());
+                recompensa == null ? List.of() : recompensa.stream().map(Recompensa::de).toList(),
+                partida.resultado().map(Enum::name).orElse(null));
     }
 }
