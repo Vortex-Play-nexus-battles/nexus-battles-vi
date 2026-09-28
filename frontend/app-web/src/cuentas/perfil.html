@@ -75,66 +75,103 @@
 
       <!-- ---------------------------------------------------- Perfil -->
       <section data-zona="panel-perfil" hidden>
-        <form id="formulario-perfil" class="tarjeta pila" novalidate>
-          <div class="encabezado-seccion">
+        <div class="pila">
+          <form id="formulario-perfil" class="tarjeta pila" novalidate>
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo">Información personal</h2>
+                <p class="t-meta">Así te ven el resto de jugadores.</p>
+              </div>
+            </div>
+
+            <div class="fila">
+              <div class="campo">
+                <label class="campo__etiqueta" for="nombres">Nombres</label>
+                <input class="campo__control" type="text" id="nombres" name="nombres" required />
+              </div>
+              <div class="campo">
+                <label class="campo__etiqueta" for="apellidos">Apellidos</label>
+                <input
+                  class="campo__control"
+                  type="text"
+                  id="apellidos"
+                  name="apellidos"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="campo">
+              <label class="campo__etiqueta" for="apodo">Apodo</label>
+              <input class="campo__control" type="text" id="apodo" name="apodo" />
+              <p class="campo__pista">
+                Cambiarlo pide confirmación: es el nombre con el que te ven en las salas, el chat y
+                los comentarios.
+              </p>
+            </div>
+
+            <div class="campo">
+              <label class="campo__etiqueta" for="preferencias">Preferencias</label>
+              <textarea
+                class="campo__control campo--area"
+                id="preferencias"
+                name="preferencias"
+                rows="4"
+              ></textarea>
+            </div>
+
             <div class="pila pila--ajustada">
-              <h2 class="t-subtitulo">Información personal</h2>
-              <p class="t-meta">Así te ven el resto de jugadores.</p>
+              <p class="campo__etiqueta">Avatar</p>
+              <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
+              <img class="avatar-vista-previa" data-zona="avatar-previo" alt="Tu avatar" hidden />
+              <input
+                class="campo__control"
+                type="file"
+                id="avatar"
+                name="avatar"
+                accept="image/jpeg,image/png,image/webp"
+              />
             </div>
-          </div>
 
-          <div class="fila">
-            <div class="campo">
-              <label class="campo__etiqueta" for="nombres">Nombres</label>
-              <input class="campo__control" type="text" id="nombres" name="nombres" required />
+            <div class="tarjeta__acciones">
+              <button type="button" class="boton boton--secundario" data-accion="descartar-perfil">
+                Descartar cambios
+              </button>
+              <button type="submit" class="boton boton--primario" data-accion="guardar-perfil">
+                Guardar cambios
+              </button>
             </div>
-            <div class="campo">
-              <label class="campo__etiqueta" for="apellidos">Apellidos</label>
-              <input class="campo__control" type="text" id="apellidos" name="apellidos" required />
+          </form>
+
+          <!-- UXC-9 — §7.3.6 (portal de privacidad: portabilidad y derecho al
+             olvido). Ningún contrato publica todavía la descarga de los datos
+             ni el cierre de la cuenta; aquí se dice qué se puede hacer hoy
+             y qué no, en vez de una pestaña vacía o ninguna. -->
+          <section class="tarjeta pila" aria-labelledby="titulo-tus-datos">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-tus-datos">Tus datos personales</h2>
+                <p class="t-meta">Qué puedes hacer hoy con ellos.</p>
+              </div>
             </div>
-          </div>
-
-          <div class="campo">
-            <label class="campo__etiqueta" for="apodo">Apodo</label>
-            <input class="campo__control" type="text" id="apodo" name="apodo" />
-            <p class="campo__pista">
-              Cambiarlo pide confirmación: es el nombre con el que te ven en las salas, el chat y
-              los comentarios.
-            </p>
-          </div>
-
-          <div class="campo">
-            <label class="campo__etiqueta" for="preferencias">Preferencias</label>
-            <textarea
-              class="campo__control campo--area"
-              id="preferencias"
-              name="preferencias"
-              rows="4"
-            ></textarea>
-          </div>
-
-          <div class="pila pila--ajustada">
-            <p class="campo__etiqueta">Avatar</p>
-            <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
-            <img class="avatar-vista-previa" data-zona="avatar-previo" alt="Tu avatar" hidden />
-            <input
-              class="campo__control"
-              type="file"
-              id="avatar"
-              name="avatar"
-              accept="image/jpeg,image/png,image/webp"
-            />
-          </div>
-
-          <div class="tarjeta__acciones">
-            <button type="button" class="boton boton--secundario" data-accion="descartar-perfil">
-              Descartar cambios
-            </button>
-            <button type="submit" class="boton boton--primario" data-accion="guardar-perfil">
-              Guardar cambios
-            </button>
-          </div>
-        </form>
+            <dl class="cuenta-notas" data-zona="privacidad">
+              <div class="cuenta-notas__nota">
+                <dt>Consultarlos y corregirlos</dt>
+                <dd>
+                  Tus nombres, apellidos, apodo, avatar y preferencias se ven y se corrigen en este
+                  formulario. El correo con el que entras aparece en el resumen.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Descargarlos o cerrar tu cuenta</dt>
+                <dd>
+                  Todavía no se puede desde el juego: el servicio de privacidad que atenderá la
+                  descarga de tus datos y el cierre de la cuenta aún no está publicado.
+                </dd>
+              </div>
+            </dl>
+          </section>
+        </div>
       </section>
 
       <!-- ---------------------------------------------------- Seguridad -->

@@ -3527,6 +3527,7 @@ export const ESCENARIOS_UXC9 = [
       '[data-zona="estadisticas-misiones"] .metrica',
       '[data-zona="estadisticas-pendiente"] .cuenta-notas__nota',
       '[data-zona="suscripciones-pagos"]',
+      '[data-zona="privacidad"]',
     ],
   },
 ];
