@@ -81,8 +81,9 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           # La lista "servicio:puerto" que se consulta al final cambia segun
-          # el host: plataforma publica 8081-8091, contenido 8101-8104.
-          PARES_SALUD: ${{ inputs.ambiente == 'contenido' && 'heroes:8101 inventario:8102 productos:8103 motor-combate:8104' || 'comentarios:8081 correo:8082 torneos:8083 salas-partidas:8084 notificaciones:8085 moderacion-sanciones:8086 metricas-plataforma:8087 admin-parametros:8088 ms-identidad:8089' }}
+          # el host: plataforma publica 8081-8091, contenido 8101-8105 (y
+          # 8092, ms-subastas, desde la topologia del 28-sep).
+          PARES_SALUD: ${{ inputs.ambiente == 'contenido' && 'heroes:8101 inventario:8102 productos:8103 motor-combate:8104 misiones:8105' || 'comentarios:8081 correo:8082 torneos:8083 salas-partidas:8084 notificaciones:8085 moderacion-sanciones:8086 metricas-plataforma:8087 admin-parametros:8088 ms-identidad:8089' }}
         with:
           host: ${{ inputs.ambiente == 'contenido' && secrets.DEPLOY_HOST_CONTENIDO_DEV || secrets.DEPLOY_HOST_DEV }}
           username: ${{ inputs.ambiente == 'contenido' && secrets.SSH_USER_CONTENIDO_DEV || secrets.SSH_USER_DEV }}
@@ -243,13 +244,31 @@ jobs:
             # contenido (SG, cidr_servicios). Desde contenido, el JWKS de
             # ms-identidad (:8089) y el libro de creditos (:8093) tienen que
             # contestar; desde cualquier otro sitio, no. Solo codigos HTTP.
+            #
+            # 28-sep (topologia, fase 1): misiones y ms-subastas llaman desde
+            # contenido tambien a notificaciones (8085), sanciones (8086),
+            # parametros (8088) y correo (8082). Y en sentido contrario, el
+            # borde de plataforma tiene que llegar a lo que se publica en
+            # contenido: 8101-8105 y, segun la fase, 8092, 8090 y 8094. Esos los
+            # abre el grupo 2 en SU grupo de seguridad (reglas-entrada.json);
+            # "000" es un puerto que el grupo de seguridad todavia no admite o
+            # un servicio que no corre.
             if ! sudo docker ps --format '{{.Names}}' | grep -q '^srv-ms-identidad$'; then
-              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health"; do
+              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health" \
+                             "http://35.168.124.119:8085/actuator/health" "http://35.168.124.119:8086/actuator/health" \
+                             "http://35.168.124.119:8088/actuator/health" "http://35.168.124.119:8082/actuator/health"; do
                 r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$destino" || echo "---")
                 printf '    %-55s %s\n' "$destino" "$r"
               done
             else
-              echo "    (host de plataforma: la comprobacion se hace desde el de contenido)"
+              echo "    desde el borde hacia el host de contenido:"
+              for destino in "http://34.193.90.11:8101/actuator/health" "http://34.193.90.11:8102/actuator/health" \
+                             "http://34.193.90.11:8103/actuator/health" "http://34.193.90.11:8104/actuator/health" \
+                             "http://34.193.90.11:8105/actuator/health" "http://34.193.90.11:8092/api/v1/actuator/health" \
+                             "http://34.193.90.11:8090/ecommerce/actuator/health" "http://34.193.90.11:8094/api/v1/actuator/health"; do
+                r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 "$destino" || echo "---")
+                printf '    %-55s %s\n' "$destino" "$r"
+              done
             fi
 
             echo

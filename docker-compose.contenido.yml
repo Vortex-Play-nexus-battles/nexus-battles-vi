@@ -237,18 +237,21 @@ services:
         condition: service_started
 
   # --- Misiones (B9, seccion 7.8 del documento) ---
-  # En el catalogo va con desplegableDev: false (motivo y pasos alli y en el
-  # README del servicio): el despliegue automatico a dev no lo levanta todavia,
-  # pero su imagen se publica y este bloque es el que lo arranca el dia que se
-  # despliegue a demanda. Lo que le falta en este host no es codigo:
-  #   - su credencial de servicio: la emite ms-identidad en el host de
-  #     plataforma, asi que el secreto hay que traerlo de alli
-  #     (DIRECTORIO_ACTIVO_CLIENT_*_MISIONES). Sin el, el servicio arranca y
-  #     responde, pero inventario rechaza sus llamadas (401) y matricular da 503.
-  #   - ms-finanzas y correo, que viven en el host de plataforma y se alcanzan
-  #     por su IP elastica (el 8093 hay que abrirlo en el Security Group para
-  #     este host; correo no se publica, por eso su correo va apagado).
-  # Sus cuatro vecinos de contenido se alcanzan por nombre en esta red.
+  # 28-sep (topologia, fase 1): desplegableDev pasa a true. Lo que le faltaba
+  # en este host no era codigo, y ya esta:
+  #   - su credencial de servicio. La emite ms-identidad en el host de
+  #     plataforma; misiones esta en CLIENTES_DE_SERVICIO de desplegar.sh y el
+  #     valor es el secret SECRETO_SERVICIO_MISIONES del entorno dev, que
+  #     cd.yml pasa a los DOS jobs: el emisor y este servicio ven el mismo.
+  #     Por eso el client-id va literal (el guardian de catalogo lo exige) y,
+  #     en local, levantar este bloque pide exportar SECRETO_SERVICIO_MISIONES
+  #     con cualquier valor: con client-id y sin secreto no arranca.
+  #   - ms-finanzas (8093) e identidad (8089) del host de plataforma, por su IP
+  #     elastica: los dos admiten a este host en su grupo de seguridad (B12).
+  #     El correo de misiones sigue apagado (MISIONES_CORREO_ACTIVO=false).
+  # Sus cuatro vecinos de contenido se alcanzan por nombre en esta red. Lo que
+  # falta es de la cuenta del grupo 2: que su grupo de seguridad admita el
+  # 8105 desde el borde (infrastructure/entornos/contenido/reglas-entrada.json).
   srv-misiones:
     build:
       context: .
@@ -278,12 +281,11 @@ services:
       CORREO_URL: ${MISIONES_CORREO_URL:-http://35.168.124.119:8082/api/v1}
       IDENTIDAD_URL: ${MISIONES_IDENTIDAD_URL:-http://35.168.124.119:8089}
       MISIONES_CORREO_ACTIVO: ${MISIONES_CORREO_ACTIVO:-false}
-      # Credencial de servicio (ADR-001 via ADR-005). Vacias por omision: sin
-      # client-id la biblioteca no crea la credencial y el servicio arranca
-      # igual; con client-id y sin secreto NO arrancaria.
+      # Credencial de servicio (ADR-001 via ADR-005), la misma que conoce el
+      # emisor del host de plataforma (ver el comentario del bloque).
       DIRECTORIO_ACTIVO_URL: ${MISIONES_DIRECTORIO_ACTIVO_URL:-http://35.168.124.119:8089/api/v1/auth/token}
-      DIRECTORIO_ACTIVO_CLIENT_ID: ${DIRECTORIO_ACTIVO_CLIENT_ID_MISIONES:-}
-      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${DIRECTORIO_ACTIVO_CLIENT_SECRET_MISIONES:-}
+      DIRECTORIO_ACTIVO_CLIENT_ID: misiones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MISIONES:-}
     depends_on:
       contenido-mongo:
         condition: service_healthy
