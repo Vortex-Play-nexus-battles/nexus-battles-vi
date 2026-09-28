@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -192,6 +194,68 @@ class FlujoDeModeracionTest {
 
             assertThrows(ServicioDeModeracion.LimiteDeReportesAgotado.class, () ->
                     servicio.reportar(PRODUCTO, "c-4", "jugador-a", CategoriaDeReporte.SPAM, null));
+        }
+
+        @Test
+        @DisplayName("sin categoria se rechaza como reporte invalido y no cambia nada")
+        void sinCategoria() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", null, "texto"));
+
+            assertTrue(filasDeReportes.isEmpty(), "un reporte invalido no se guarda");
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "y tampoco encola el comentario");
+        }
+
+        @Test
+        @DisplayName("una descripcion de mas de 500 caracteres es invalida; de 500 exactos, valida")
+        void descripcionLarga() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM,
+                            "x".repeat(501)));
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+
+            // El limite es inclusivo: la columna es de 500.
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, "x".repeat(500));
+            assertEquals(1, filasDeReportes.size());
+        }
+
+        @Test
+        @DisplayName("la descripcion es opcional: nula o en blanco queda null, y se recorta")
+        void descripcionOpcional() {
+            publicar("c-1", "autor-1");
+            publicar("c-2", "autor-2");
+            publicar("c-3", "autor-3");
+
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-2", "jugador-a", CategoriaDeReporte.SPAM, "   ");
+            servicio.reportar(PRODUCTO, "c-3", "jugador-a", CategoriaDeReporte.SPAM, "  me insulta  ");
+
+            assertNull(filasDeReportes.get(0).descripcion());
+            assertNull(filasDeReportes.get(1).descripcion());
+            assertEquals("me insulta", filasDeReportes.get(2).descripcion());
+        }
+
+        @Test
+        @DisplayName("si el indice unico gana la carrera, es el mismo 409 y el comentario no se encola")
+        void carreraDeDuplicados() {
+            publicar("c-1", "autor-1");
+            // doThrow(...).when(...): la forma when(...).thenThrow(...) ejecuta
+            // primero el stub anterior con un argumento nulo y mete un null en la lista.
+            doThrow(new DataIntegrityViolationException("uq_reporte_comentario_reportante"))
+                    .when(reportes).saveAndFlush(any(RegistroDeReporte.class));
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null));
+
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "perder la carrera no deja el comentario a medias");
         }
 
         @Test
@@ -595,7 +659,7 @@ class FlujoDeModeracionTest {
     private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
         ReporteRepository repo = mock(ReporteRepository.class);
 
-        when(repo.save(any(RegistroDeReporte.class))).thenAnswer(inv -> {
+        when(repo.saveAndFlush(any(RegistroDeReporte.class))).thenAnswer(inv -> {
             RegistroDeReporte r = inv.getArgument(0);
             datos.add(r);
             return r;

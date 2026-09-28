@@ -56,6 +56,9 @@ public class ServicioDeModeracion {
     static final int MOTIVO_MINIMO = 3;
     static final int MOTIVO_MAXIMO = 500;
 
+    /** Contrato: {@code descripcion} del reporte de 0 a 500 caracteres (la columna es de 500). */
+    static final int DESCRIPCION_MAXIMA = 500;
+
     /** Contrato 1.4.0: {@code textoNuevo} de 1 a 2000 caracteres. */
     static final int TEXTO_NUEVO_MAXIMO = 2000;
 
@@ -101,11 +104,21 @@ public class ServicioDeModeracion {
      * <p>El duplicado se comprueba ANTES por cortesia —para dar un 409 claro—
      * y se vuelve a atrapar DESPUES por seguridad: dos peticiones simultaneas
      * del mismo usuario cargan cada una un estado que no ve a la otra, y el
-     * indice unico de V4 es el que de verdad lo impide.
+     * indice unico de V4 es el que de verdad lo impide. Se guarda con
+     * {@code saveAndFlush} para que el INSERT salga aqui: con el id asignado a
+     * mano {@code save} hace un merge y difiere el INSERT al commit, cuando el
+     * {@code catch} ya no esta en pila y el cliente recibiria el 409 generico.
+     *
+     * <p>La entrada se valida primero, antes de tocar la base y de gastar cupo:
+     * sin categoria o con la descripcion de mas de 500 caracteres es
+     * {@link ReporteInvalido}. Una descripcion en blanco es {@code null}.
      */
     @Transactional
     public Reportado reportar(String productoId, String comentarioId, String reportanteId,
             CategoriaDeReporte categoria, String descripcion) {
+
+        exigirCategoria(categoria);
+        String descripcionLimpia = limpiarDescripcion(descripcion);
 
         RegistroDeComentario registro = comentarios.findById(comentarioId)
                 .filter(c -> c.getProductoId().equals(productoId))
@@ -131,9 +144,9 @@ public class ServicioDeModeracion {
 
         RegistroDeReporte reporte = new RegistroDeReporte(
                 UUID.randomUUID().toString(), comentarioId, reportanteId,
-                categoria, descripcion, ahora);
+                categoria, descripcionLimpia, ahora);
         try {
-            reportes.save(reporte);
+            reportes.saveAndFlush(reporte);
         } catch (DataIntegrityViolationException carrera) {
             // El indice unico de V4 gano la carrera. Es el mismo 409.
             throw new ReporteDuplicado(comentarioId);
@@ -147,6 +160,27 @@ public class ServicioDeModeracion {
         }
 
         return new Reportado(reporte, resultante, reportes.countByComentarioId(comentarioId));
+    }
+
+    private static void exigirCategoria(CategoriaDeReporte categoria) {
+        if (categoria == null) {
+            throw new ReporteInvalido("Falta la categoria del reporte");
+        }
+    }
+
+    private static String limpiarDescripcion(String descripcion) {
+        if (descripcion == null) {
+            return null;
+        }
+        String limpia = descripcion.strip();
+        if (limpia.isEmpty()) {
+            return null;
+        }
+        if (limpia.length() > DESCRIPCION_MAXIMA) {
+            throw new ReporteInvalido(
+                    "La descripcion admite hasta " + DESCRIPCION_MAXIMA + " caracteres");
+        }
+        return limpia;
     }
 
     // ------------------------------------------------------------ RF-COM-005
@@ -339,6 +373,13 @@ public class ServicioDeModeracion {
     public static class ReporteDuplicado extends RuntimeException {
         public ReporteDuplicado(String id) {
             super("Ya reportaste el comentario " + id);
+        }
+    }
+
+    /** El reporte no cumple el contrato: categoria ausente o descripcion demasiado larga (400). */
+    public static class ReporteInvalido extends RuntimeException {
+        public ReporteInvalido(String explicacion) {
+            super(explicacion);
         }
     }
 
