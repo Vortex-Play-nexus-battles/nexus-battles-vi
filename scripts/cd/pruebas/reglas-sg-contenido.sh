@@ -99,6 +99,18 @@ codigo=$?
 [ "$codigo" -ne 0 ] && ok "se niega (codigo $codigo)" || fallo "acepto 0.0.0.0/0 como origen"
 [ ! -s "$TMP/llamadas" ] && ok "sin llamadas" || fallo "escribio con origen al mundo"
 
+echo "== Una descripcion que AWS rechaza se detecta antes de escribir =="
+jq '.puertos[0].descripcion = "heroes <- plataforma"' "$DECLARADO" > "$TMP/flecha.json"
+correr "$TMP/hoy.json" "$TMP/flecha.json"
+codigo=$?
+[ "$codigo" -ne 0 ] && ok "se niega con '<' (codigo $codigo)" || fallo "acepto '<' en la descripcion"
+[ ! -s "$TMP/llamadas" ] && ok "sin llamadas" || fallo "escribio con una descripcion invalida"
+jq ".puertos[0].descripcion = \"Let's Encrypt\"" "$DECLARADO" > "$TMP/apostrofo.json"
+correr "$TMP/hoy.json" "$TMP/apostrofo.json"
+[ $? -ne 0 ] && ok "se niega con un apostrofo" || fallo "acepto un apostrofo"
+correr "$TMP/listo.json" "$DECLARADO"
+grep -q "Descripcion no admitida" "$TMP/salida" && fallo "rechazo las descripciones del archivo real" || ok "las descripciones del archivo real son validas"
+
 echo "== Un origen que no es /32 se rechaza =="
 jq '.origen = "35.168.0.0/16"' "$DECLARADO" > "$TMP/red.json"
 correr "$TMP/hoy.json" "$TMP/red.json"

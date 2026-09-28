@@ -56,6 +56,16 @@ if [ "${#PUERTOS[@]}" -eq 0 ]; then
   exit 1
 fi
 
+# AWS solo admite en la descripcion de una regla letras sin tilde, numeros,
+# espacios y ._-:/()#,@[]+=&;{}!$* (hasta 255). Un apostrofo o un "<" hacen
+# fallar la llamada a medias; se comprueba antes de tocar nada.
+while IFS= read -r descripcion; do
+  if [ "${#descripcion}" -gt 255 ] || ! printf '%s' "$descripcion" | LC_ALL=C grep -qE '^[0-9A-Za-z_ .:/()#,@+=&;{}!$*[-]*$'; then
+    echo "::error::Descripcion no admitida por AWS: '$descripcion'. Solo letras sin tilde, numeros, espacios y ._-:/()#,@[]+=&;{}!\$*."
+    exit 1
+  fi
+done < <(jq -r '.puertos[].descripcion' "$ARCHIVO")
+
 declarado() {
   local p="$1" d
   for d in "${PUERTOS[@]}"; do
