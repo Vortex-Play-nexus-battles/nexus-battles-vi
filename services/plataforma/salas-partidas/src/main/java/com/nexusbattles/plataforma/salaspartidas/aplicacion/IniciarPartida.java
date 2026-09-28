@@ -44,7 +44,9 @@ import java.util.function.Supplier;
  *       su poder y las acciones que pueden jugar. Si no responde, la partida
  *       empieza igual y el motor completa el estado en la primera accion.</li>
  *   <li>Si el primer turno es de la maquina, juega (lo hace el gancho
- *       {@code despuesDeEmpezar}): nadie mas lo haria.</li>
+ *       {@code despuesDeEmpezar}): nadie mas lo haria. Juega ANTES de que se
+ *       anuncie el inicio, y el aviso y la respuesta traen la partida como
+ *       quedo: todavia nadie esta suscrito al tema de la partida.</li>
  * </ul>
  *
  * <p><b>El orden no es casual.</b> Primero se guarda, despues se anuncia.
@@ -78,8 +80,9 @@ public class IniciarPartida {
      * @param maquina          heroes de la maquina (D-B7-11); nulo = copia del del anfitrion
      * @param semillas         semillas del sorteo del orden; {@code SecureRandom} en produccion
      * @param segundosPorTurno tiempo por turno; nulo = sin limite (D-B7-14)
-     * @param despuesDeEmpezar se llama con la partida ya anunciada: juega los
-     *                         turnos de la maquina si el primero es suyo
+     * @param despuesDeEmpezar se llama con la partida ya guardada y antes de
+     *                         anunciarla: juega los turnos de la maquina si el
+     *                         primero es suyo
      */
     public IniciarPartida(RepositorioDeSalas salas, RepositorioDePartidas partidas, CanalDePartida canal,
                           HeroeDelJugador heroes, Clock reloj, MotorDeCombate motor, HeroesDeLaMaquina maquina,
@@ -138,10 +141,18 @@ public class IniciarPartida {
         Partida guardada = partidas.guardar(partida);
         salas.guardar(sala);
 
-        canal.anunciarInicio(sala, guardada);
+        // Si el sorteo le dio el primer turno a la maquina, juega AHORA, antes
+        // de anunciar el inicio. Quien espera en la sala se suscribe al tema de
+        // la partida DESPUES de enterarse de que empezo (por este aviso o por
+        // la respuesta de «Iniciar combate»): lo que la maquina anunciara antes
+        // no le llegaria nunca, y su vista se quedaba en «Juega la maquina»
+        // para siempre (visto en la prueba del profesor, B7). El aviso y la
+        // respuesta llevan la partida como quedo tras su turno.
         despuesDeEmpezar.accept(guardada.id());
+        Partida actual = partidas.buscarPorId(guardada.id()).orElse(guardada);
 
-        return guardada;
+        canal.anunciarInicio(sala, actual);
+        return actual;
     }
 
     /** Un heroe aleatorio del catalogo por cupo de la maquina, en el nivel del anfitrion. */

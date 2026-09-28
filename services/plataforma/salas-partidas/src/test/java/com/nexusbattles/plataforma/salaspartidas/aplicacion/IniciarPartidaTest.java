@@ -224,6 +224,39 @@ class IniciarPartidaTest {
     }
 
     @Test
+    @DisplayName("si abre la maquina, juega antes de anunciar el inicio; el aviso y la respuesta traen la partida tras su turno")
+    void laMaquinaAbreAntesDelAviso() {
+        Sala sala = salaDeSeis();
+        java.util.List<Integer> anunciosAlJugarLaMaquina = new java.util.ArrayList<>();
+        // El gancho hace lo que hace EjecutarAccion cuando abre la maquina: lee
+        // la partida guardada, juega (aqui, pasa el turno) y la vuelve a guardar.
+        IniciarPartida abreLaMaquina = new IniciarPartida(salas, partidas, canal, inventario,
+                Clock.fixed(AHORA, ZoneOffset.UTC), motor, null, () -> 1L, () -> null, idPartida -> {
+                    anunciosAlJugarLaMaquina.add(canal.anuncios.size());
+                    Partida enCurso = partidas.buscarPorId(idPartida).orElseThrow();
+                    enCurso.avanzarTurno();
+                    partidas.guardar(enCurso);
+                });
+
+        Partida devuelta = abreLaMaquina.ejecutar(sala.id(), como(ANFITRION));
+
+        Partida guardada = partidas.buscarPorId(devuelta.id()).orElseThrow();
+        Partida anunciada = canal.anuncios.get(canal.anuncios.size() - 1).partida();
+        assertAll(
+                // Quien espera se suscribe al tema de la partida DESPUES del
+                // aviso de inicio: lo que la maquina anunciara antes no le
+                // llegaria. Por eso juega antes de que haya ningun aviso.
+                () -> assertEquals(java.util.List.of(0), anunciosAlJugarLaMaquina,
+                        "la maquina juega antes de que se anuncie nada"),
+                () -> assertEquals(java.util.List.of("inicio"), canal.tipos()),
+                () -> assertEquals(guardada.turnoActual(), devuelta.turnoActual(),
+                        "la respuesta trae el turno de despues de la maquina, no el 1"),
+                () -> assertEquals(guardada.version(), devuelta.version()),
+                () -> assertEquals(guardada.turnoActual(), anunciada.turnoActual(),
+                        "el aviso de inicio tambien"));
+    }
+
+    @Test
     @DisplayName("si el motor no responde al empezar, la partida empieza igual, sin estado de combate")
     void sinMotorEmpiezaIgual() {
         Sala sala = salaDeSeis();
