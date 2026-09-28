@@ -155,9 +155,12 @@ case "$MODO" in
 
     # Lo que de verdad importa: que lo que sostiene el MVP siga contestando.
     # Si uno de estos cae, da igual que el servicio nuevo este sano.
+    #
+    # 28-sep — cada host tiene el suyo. El de plataforma es el de siempre; el
+    # job de contenido pasa NUCLEO_MVP con los cuatro servicios de los que
+    # depende el combate ("nombre:puerto:ruta", separados por espacios).
     echo "  Nucleo del MVP:"
-    for par in "borde:80:/salud-borde" "ms-identidad:8089:/actuator/health" \
-               "salas-partidas:8084:/actuator/health" "comentarios:8081:/actuator/health"; do
+    for par in ${NUCLEO_MVP:-borde:80:/salud-borde ms-identidad:8089:/actuator/health salas-partidas:8084:/actuator/health comentarios:8081:/actuator/health}; do
       nombre=${par%%:*}; resto=${par#*:}; puerto=${resto%%:*}; ruta=${resto#*:}
       codigo=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://localhost:${puerto}${ruta}" || echo "---")
       printf '    %-18s %s\n' "$nombre" "$codigo"
