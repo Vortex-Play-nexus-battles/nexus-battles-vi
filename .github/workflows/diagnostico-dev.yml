@@ -56,6 +56,8 @@ jobs:
       # el rol no puede leerla, lo dice y el diagnostico sigue.
       - name: Creditos del Free Plan de la cuenta
         if: steps.aws.outcome == 'success'
+        env:
+          NOMBRE_INSTANCIA: ${{ inputs.ambiente == 'contenido' && (vars.NOMBRE_INSTANCIA_CONTENIDO || 'nexus-contenido-dev') || 'nexus-plataforma-dev' }}
         run: |
           set -uo pipefail
           if salida=$(aws freetier get-account-plan-state --region us-east-1 --output json 2>&1); then
@@ -65,6 +67,18 @@ jobs:
           else
             echo "  No se pudo leer el estado del plan: $(printf '%s' "$salida" | head -3)"
             echo "  (el saldo sigue en la consola: Billing and Cost Management > Credits)"
+          fi
+          # Y si el tipo de la opcion E existe en la zona del host: cambiar de
+          # tipo es parar, modificar y encender, y en una zona que no lo
+          # ofrece el host se quedaria parado a mitad del cambio.
+          zona=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text 2>/dev/null || true)
+          if [ -n "$zona" ] && [ "$zona" != "None" ]; then
+            ofrecidos=$(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+              --filters "Name=location,Values=$zona" "Name=instance-type,Values=t3.small,c7i-flex.large,m7i-flex.large" \
+              --query 'InstanceTypeOfferings[].InstanceType' --output text 2>/dev/null || echo "?")
+            echo "  zona del host: $zona; tipos del Free Plan que ofrece: ${ofrecidos:-ninguno de los consultados}"
           fi
 
       # Lo primero, porque es la causa mas probable y la mas barata de
