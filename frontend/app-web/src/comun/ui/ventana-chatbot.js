@@ -10,7 +10,8 @@
  *
  * - conversación con el asistente, para visitantes y jugadores con sesión;
  * - el historial de la conversación de esta sesión, y borrarlo;
- * - adjuntar la URL de una captura ya subida (el servicio solo guarda la URL);
+ * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
+ *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional).
  *
  * Si el servicio no responde, lo dice y ofrece el chat general: CA-03 de
@@ -34,7 +35,7 @@ import { fechaHora } from './formato.js';
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
 
 /** Límites del contrato (`EnviarMensaje`, `CalificarRespuesta`). */
-export const LIMITES = Object.freeze({ mensaje: 4000, adjunto: 500, comentario: 1000 });
+export const LIMITES = Object.freeze({ mensaje: 4000, comentario: 1000 });
 
 /** Todo lo que lee el usuario, en un solo sitio. */
 export const TEXTOS = Object.freeze({
@@ -57,11 +58,6 @@ export const TEXTOS = Object.freeze({
   etiquetaMensaje: 'Tu pregunta',
   enviar: 'Enviar',
   enviando: 'Enviando…',
-  adjuntar: 'Adjuntar captura',
-  quitarAdjunto: 'Quitar captura',
-  etiquetaAdjunto: 'URL de la captura',
-  pistaAdjunto: 'Pega el enlace a una imagen que ya subiste.',
-  adjuntoInvalido: 'Escribe un enlace que empiece por http:// o https://.',
   verCaptura: 'Ver captura adjunta',
   borrar: 'Borrar conversación',
   confirmarBorrarTitulo: '¿Borrar la conversación?',
@@ -154,22 +150,6 @@ export function crearVentanaChatbot({
       'aria-label': TEXTOS.etiquetaMensaje,
     },
   });
-  const adjunto = campo({
-    nombre: 'adjuntoUrl',
-    etiqueta: TEXTOS.etiquetaAdjunto,
-    tipo: 'url',
-    pista: TEXTOS.pistaAdjunto,
-    atributos: { maxlength: LIMITES.adjunto, inputmode: 'url' },
-  });
-  adjunto.elemento.classList.add('chatbot-ventana__captura');
-  adjunto.elemento.hidden = true;
-
-  const botonAdjuntar = h('button', {
-    clase: 'chatbot-ventana__accion',
-    texto: TEXTOS.adjuntar,
-    atributos: { type: 'button', 'aria-expanded': 'false' },
-    datos: { accion: 'adjuntar-captura' },
-  });
   const botonEnviar = h('button', {
     clase: 'boton boton--primario',
     texto: TEXTOS.enviar,
@@ -179,11 +159,7 @@ export function crearVentanaChatbot({
   const formulario = h('form', {
     clase: 'chatbot-ventana__formulario',
     atributos: { novalidate: true },
-    hijos: [
-      adjunto.elemento,
-      h('div', { clase: 'chatbot-ventana__fila', hijos: [entrada, botonEnviar] }),
-      h('div', { clase: 'chatbot-ventana__herramientas', hijos: [botonAdjuntar] }),
-    ],
+    hijos: [h('div', { clase: 'chatbot-ventana__fila', hijos: [entrada, botonEnviar] })],
   });
 
   const ventana = h('section', {
@@ -419,7 +395,6 @@ export function crearVentanaChatbot({
   function habilitarFormulario(activo) {
     entrada.disabled = !activo;
     botonEnviar.disabled = !activo;
-    botonAdjuntar.disabled = !activo;
     botonBorrar.disabled = !activo;
   }
 
@@ -462,17 +437,6 @@ export function crearVentanaChatbot({
       return;
     }
 
-    let adjuntoUrl = null;
-    if (!adjunto.elemento.hidden && adjunto.control.value.trim()) {
-      adjuntoUrl = urlPermitida(adjunto.control.value.trim());
-      if (!adjuntoUrl) {
-        adjunto.marcarError(TEXTOS.adjuntoInvalido);
-        adjunto.control.focus();
-        return;
-      }
-    }
-    adjunto.marcarError(null);
-
     enviando = true;
     limpiarAviso();
     conCarga(botonEnviar, true, TEXTOS.enviando);
@@ -484,13 +448,12 @@ export function crearVentanaChatbot({
     registro.scrollTop = registro.scrollHeight;
 
     try {
-      const respuesta = await cliente.enviarMensaje(contenido, adjuntoUrl);
+      const respuesta = await cliente.enviarMensaje(contenido);
       escribiendo.remove();
       quitarBienvenida();
       pintarMensaje({
         remitente: 'USUARIO',
         contenido,
-        adjuntoUrl,
         fechaEnvio: new Date().toISOString(),
       });
       pintarMensaje(respuesta);
@@ -507,23 +470,12 @@ export function crearVentanaChatbot({
   // vive en funciones aparte (regla require-atomic-updates de ESLint).
   function vaciarFormulario() {
     entrada.value = '';
-    mostrarAdjunto(false);
   }
 
   function terminarEnvio() {
     enviando = false;
     conCarga(botonEnviar, false);
     entrada.focus();
-  }
-
-  function mostrarAdjunto(visible) {
-    adjunto.elemento.hidden = !visible;
-    botonAdjuntar.setAttribute('aria-expanded', String(visible));
-    botonAdjuntar.textContent = visible ? TEXTOS.quitarAdjunto : TEXTOS.adjuntar;
-    if (!visible) {
-      adjunto.control.value = '';
-      adjunto.marcarError(null);
-    }
   }
 
   async function borrarConversacion() {
@@ -556,12 +508,6 @@ export function crearVentanaChatbot({
     if (evento.key === 'Enter' && !evento.shiftKey && !evento.isComposing) {
       evento.preventDefault();
       enviarMensaje();
-    }
-  });
-  botonAdjuntar.addEventListener('click', () => {
-    mostrarAdjunto(adjunto.elemento.hidden);
-    if (!adjunto.elemento.hidden) {
-      adjunto.control.focus();
     }
   });
   botonBorrar.addEventListener('click', borrarConversacion);
