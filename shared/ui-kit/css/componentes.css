@@ -2746,6 +2746,58 @@ button.tarjeta--partida:disabled {
   resize: vertical;
 }
 
+/* Respuestas enriquecidas del asistente: pasos, tarjetas, enlaces a
+   secciones del sitio y botones (los botones reusan .chatbot-rapidas). */
+
+.chatbot-enriquecido {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin-top: var(--e-2);
+}
+
+.chatbot-enriquecido__pasos {
+  margin: 0;
+  padding-left: var(--e-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.chatbot-enriquecido__tarjeta {
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-left: 3px solid var(--primaria);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.chatbot-enriquecido__tarjeta-titulo {
+  margin: 0;
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot-enriquecido__tarjeta-texto {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-enriquecido__enlaces {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.chatbot-enriquecido__enlace {
+  color: var(--primaria);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot-enriquecido__soporte {
+  border-color: var(--primaria);
+}
+
 /* Preguntas rápidas y autocompletado. Los botones son de texto, como las
    acciones secundarias, para no competir con «Enviar». La lista del
    autocompletado sale ENCIMA de la caja: la ventana está pegada abajo. */

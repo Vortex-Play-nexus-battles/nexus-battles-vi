@@ -53,7 +53,7 @@ function clienteFalso(sobrescribir = {}) {
   };
 }
 
-async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado } = {}) {
+async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado, vista } = {}) {
   const lanzador = document.createElement('button');
   document.body.append(lanzador);
   const ventana = crearVentanaChatbot({
@@ -62,6 +62,7 @@ async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado } = {
     chatGeneral: 'http://localhost/chat.html',
     confirmarBorrado: confirmarBorrado ?? (async () => true),
     esperaAutocompletar: 0,
+    vista: vista ?? (() => null),
   });
   ventana.abrir(lanzador);
   await esperar();
@@ -344,6 +345,57 @@ describe('calificar (HU-CHA-011)', () => {
     expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(
       TEXTOS.errorAlCalificar,
     );
+  });
+});
+
+describe('respuestas enriquecidas y vista', () => {
+  const ENRIQUECIDA = {
+    ...BOT,
+    id: 'm-bot-rica',
+    contenido: 'Para publicar: 1) Elige el ítem. 2) Confirma.',
+    enriquecido: {
+      pasos: ['Elige el ítem.', 'Confirma.'],
+      enlaces: [],
+      tarjetas: [],
+      respuestasRapidas: ['Cómo pujar'],
+      ofrecerSoporteHumano: true,
+    },
+  };
+
+  test('manda la vista donde está el jugador', async () => {
+    const vista = await montar({ vista: () => 'SUBASTAS' });
+
+    await enviar(vista, 'como pujo');
+
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo', { vista: 'SUBASTAS' });
+  });
+
+  test('pinta los pasos sin repetirlos en el texto, y los botones funcionan', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ enviarMensaje: jest.fn(async () => ENRIQUECIDA) }),
+    });
+
+    await enviar(vista, 'como publico');
+    const burbuja = vista.el.querySelector('[data-mensaje-id="m-bot-rica"]');
+
+    expect(burbuja.querySelector('.chatbot-ventana__texto').textContent).toBe('Para publicar:');
+    expect(burbuja.querySelectorAll('.chatbot-enriquecido__pasos li')).toHaveLength(2);
+
+    burbuja.querySelector('[data-accion="ofrecer-soporte"]').click();
+    expect(vista.el.querySelector('[data-chatbot-soporte]').hidden).toBe(false);
+
+    vista.el.querySelector('[data-accion="volver-al-chat"]').click();
+    burbuja.querySelector('[data-accion="respuesta-rapida"]').click();
+    await esperar();
+    expect(vista.cliente.enviarMensaje).toHaveBeenLastCalledWith('Cómo pujar');
+  });
+
+  test('el historial también pinta lo enriquecido', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, ENRIQUECIDA]) }),
+    });
+
+    expect(vista.el.querySelector('.chatbot-enriquecido')).not.toBeNull();
   });
 });
 

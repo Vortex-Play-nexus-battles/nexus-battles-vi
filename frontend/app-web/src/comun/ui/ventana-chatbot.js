@@ -13,6 +13,9 @@
  * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
  *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
+ * - respuestas enriquecidas: pasos, enlaces a secciones del sitio, tarjetas,
+ *   botones de respuesta rápida y «Hablar con soporte» (`enriquecido-chatbot.js`);
+ *   cada mensaje manda la sección donde está el jugador (`vista`);
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
@@ -36,6 +39,7 @@ import { conCarga } from './boton.js';
 import { campo } from './campo.js';
 import { confirmar } from './dialogo.js';
 import { h, vaciar } from './dom.js';
+import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecido-chatbot.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
@@ -131,7 +135,7 @@ let contador = 0;
  * @param {{cliente?: ReturnType<typeof crearClienteChatbot>,
  *          sesion?: () => {autenticado: boolean, apodo: string},
  *          raiz?: HTMLElement, chatGeneral?: string, login?: string|null,
- *          esperaAutocompletar?: number,
+ *          esperaAutocompletar?: number, vista?: () => string|null,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>}} [opciones]
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
@@ -145,6 +149,7 @@ export function crearVentanaChatbot({
   login = urlDeVista('login'),
   confirmarBorrado = confirmar,
   esperaAutocompletar = 250,
+  vista = () => vistaDelChat(),
 } = {}) {
   contador += 1;
   const idTitulo = `chatbot-ventana-titulo-${contador}`;
@@ -302,11 +307,23 @@ export function crearVentanaChatbot({
    */
   function pintarMensaje(mensaje) {
     const esBot = mensaje.remitente === 'BOT';
+    const enriquecido = esBot ? (mensaje.enriquecido ?? null) : null;
+    // Con pasos, el texto se queda con la introducción: los pasos se pintan
+    // aparte, numerados, y no se repiten.
+    const tienePasos = (enriquecido?.pasos?.length ?? 0) > 0;
+    const texto = tienePasos ? introAntesDePasos(mensaje.contenido) : mensaje.contenido;
     const burbuja = h('li', {
       clase: `chatbot-ventana__mensaje chatbot-ventana__mensaje--${esBot ? 'bot' : 'usuario'}`,
       datos: mensaje.id ? { mensajeId: mensaje.id } : {},
-      hijos: [h('p', { clase: 'chatbot-ventana__texto', texto: mensaje.contenido })],
+      hijos: [texto ? h('p', { clase: 'chatbot-ventana__texto', texto }) : null],
     });
+    const parteEnriquecida = pintarEnriquecido(enriquecido, {
+      alPreguntar: enviarSugerencia,
+      alPedirSoporte: () => mostrarSoporte(true),
+    });
+    if (parteEnriquecida) {
+      burbuja.append(parteEnriquecida);
+    }
 
     const enlace = urlPermitida(mensaje.adjuntoUrl);
     if (enlace) {
@@ -564,7 +581,10 @@ export function crearVentanaChatbot({
     registro.scrollTop = registro.scrollHeight;
 
     try {
-      const respuesta = await cliente.enviarMensaje(contenido);
+      const donde = vista();
+      const respuesta = await (donde
+        ? cliente.enviarMensaje(contenido, { vista: donde })
+        : cliente.enviarMensaje(contenido));
       escribiendo.remove();
       quitarBienvenida();
       pintarMensaje({

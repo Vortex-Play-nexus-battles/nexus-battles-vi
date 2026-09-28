@@ -130,14 +130,18 @@ describe('operaciones', () => {
     expect(respuesta).toEqual(bot);
   });
 
-  test('enviarMensaje incluye la URL de la captura solo si la hay', async () => {
+  test('enviarMensaje manda la vista solo si la hay', async () => {
     const fetch = jest.fn(async () => respuestaJson({}));
-    await cliente({ fetch }).enviarMensaje('mira esto', 'https://img.example/captura.png');
+    const chat = cliente({ fetch });
+
+    await chat.enviarMensaje('como pujo', { vista: 'SUBASTAS' });
+    await chat.enviarMensaje('hola', { vista: null });
 
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
-      contenido: 'mira esto',
-      adjuntoUrl: 'https://img.example/captura.png',
+      contenido: 'como pujo',
+      vista: 'SUBASTAS',
     });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ contenido: 'hola' });
   });
 
   test('limpiarHistorial usa DELETE y un 204 devuelve null', async () => {

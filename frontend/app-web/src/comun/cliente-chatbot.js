@@ -184,14 +184,16 @@ export function crearClienteChatbot({
   return {
     /**
      * @param {string} contenido
-     * @param {string|null} [adjuntoUrl]
+     * @param {{vista?: string|null}} [opciones] `vista`: la sección donde
+     *   está el jugador (`INICIO`, `INVENTARIO`…), para la respuesta contextual
      * @returns {Promise<{id: string, remitente: string, contenido: string,
-     *          adjuntoUrl: string|null, fechaEnvio: string}>} la respuesta del bot
+     *          adjuntoUrl: string|null, fechaEnvio: string, enriquecido?: object|null}>}
+     *          la respuesta del bot
      */
-    enviarMensaje(contenido, adjuntoUrl = null) {
+    enviarMensaje(contenido, { vista = null } = {}) {
       const cuerpo = { contenido };
-      if (adjuntoUrl) {
-        cuerpo.adjuntoUrl = adjuntoUrl;
+      if (vista) {
+        cuerpo.vista = vista;
       }
       return llamar('POST', '/chat/mensajes', cuerpo, { rutaFija: true });
     },
