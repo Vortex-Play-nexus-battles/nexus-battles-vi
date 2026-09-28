@@ -79,17 +79,17 @@ public final class ClienteHeroesHttp implements ClienteHeroes {
             FichaHeroeJson ficha = objectMapper.readValue(cuerpoJson, FichaHeroeJson.class);
             EstadisticasJson estadisticas = ficha.estadisticasNivel1();
 
-            DetalleAtaque ataqueDetalle = estadisticas.ataqueDetalle() == null
-                ? null
-                : new DetalleAtaque(
-                    estadisticas.ataqueDetalle().base(),
-                    estadisticas.ataqueDetalle().cantidadDados(),
-                    estadisticas.ataqueDetalle().caras());
-
-            return new EstadisticasHeroeRespuesta(estadisticas.defensa(), ataqueDetalle);
+            return new EstadisticasHeroeRespuesta(estadisticas.defensa(),
+                detalle(estadisticas.ataqueDetalle()), detalle(estadisticas.danoDetalle()));
         } catch (IOException e) {
             throw new ClienteHeroesException("Respuesta de heroes no se pudo interpretar: " + e.getMessage(), e);
         }
+    }
+
+    private static DetalleAtaque detalle(FormulaDetalleJson formula) {
+        return formula == null
+            ? null
+            : new DetalleAtaque(formula.base(), formula.cantidadDados(), formula.caras());
     }
 
     private String extraerDetalleDeProblema(String cuerpoJson) {
@@ -106,7 +106,7 @@ public final class ClienteHeroesHttp implements ClienteHeroes {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record EstadisticasJson(int defensa, FormulaDetalleJson ataqueDetalle) {
+    private record EstadisticasJson(int defensa, FormulaDetalleJson ataqueDetalle, FormulaDetalleJson danoDetalle) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

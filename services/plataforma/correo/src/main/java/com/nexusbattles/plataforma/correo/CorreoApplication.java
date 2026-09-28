@@ -17,7 +17,12 @@ public class CorreoApplication {
 
     /**
      * El reloj se inyecta para que las pruebas puedan fijar el instante de un
-     * envio. En produccion es el del sistema.
+     * envio y mover el tiempo de los reintentos. En produccion es el del
+     * sistema.
+     *
+     * <p>Hasta B1 aqui vivia tambien el ejecutor que entregaba en segundo plano
+     * desde memoria. Lo sustituye la cola persistente
+     * ({@code cola.TrabajadorDeEntrega}).
      */
     @Bean
     public Clock reloj() {

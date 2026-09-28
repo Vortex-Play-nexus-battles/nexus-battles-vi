@@ -74,6 +74,22 @@ class AuditoriaDeCuentaTest {
     }
 
     @Test
+    @DisplayName("B1: verificacion, restablecimiento y preguntas, sin codigo, contrasena ni respuestas")
+    void eventosDeB1() {
+        auditoria.correoVerificado(UID, "10.0.0.1");
+        assertThat(ultimoCuerpo()).contains("\"tipoAccion\":\"ACTUALIZACION\"").contains("CORREO_VERIFICADO")
+                .contains("\"valorAnterior\":\"PENDIENTE_VERIFICACION\"").contains("\"valorNuevo\":\"ACTIVO\"");
+
+        auditoria.contrasenaRestablecida(UID.toString(), "RESTABLECIMIENTO_CONTRASENA", "10.0.0.2");
+        assertThat(ultimoCuerpo()).contains("RESTABLECIMIENTO_CONTRASENA").contains("sesiones-cerradas")
+                .doesNotContainIgnoringCase("password");
+
+        auditoria.preguntasConfiguradas("usuario-9", 3, null);
+        assertThat(ultimoCuerpo()).contains("PREGUNTAS_SEGURIDAD").contains("\"valorNuevo\":\"preguntas=3\"")
+                .contains("\"afectado\":\"usuario-9\"");
+    }
+
+    @Test
     @DisplayName("la traza del alta viaja con el evento aunque se envie desde otro hilo")
     void trazaEnOtroHilo() throws Exception {
         CountDownLatch enviado = new CountDownLatch(1);

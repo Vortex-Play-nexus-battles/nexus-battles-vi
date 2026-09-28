@@ -1,0 +1,199 @@
+{
+  "consumer": {
+    "name": "ms-ecommerce"
+  },
+  "interactions": [
+    {
+      "description": "la reserva de una unidad de un producto agotado",
+      "providerStates": [
+        {
+          "name": "el producto existe y esta agotado"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d-l1-u1"
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}-l[0-9]+-u[0-9]+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/productos/5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a/adquisiciones"
+      },
+      "response": {
+        "body": {
+          "estado": "AGOTADO",
+          "mensaje": "Resultado de la reserva"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "la reserva de una unidad de un producto suspendido",
+      "providerStates": [
+        {
+          "name": "el producto existe y esta suspendido"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d-l1-u1"
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}-l[0-9]+-u[0-9]+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/productos/5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a/adquisiciones"
+      },
+      "response": {
+        "body": {
+          "estado": "SUSPENDIDO",
+          "mensaje": "Resultado de la reserva"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 409
+      }
+    },
+    {
+      "description": "la reserva de una unidad al cobrar una orden",
+      "providerStates": [
+        {
+          "name": "el producto existe y le quedan unidades"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d-l1-u1"
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}-l[0-9]+-u[0-9]+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/productos/5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a/adquisiciones"
+      },
+      "response": {
+        "body": {
+          "estado": "ACEPTADA",
+          "mensaje": "Resultado de la reserva"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.mensaje": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la reserva de una unidad de un producto que no existe",
+      "providerStates": [
+        {
+          "name": "el producto no existe"
+        }
+      ],
+      "request": {
+        "headers": {
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d-l1-u1"
+        },
+        "matchingRules": {
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}-l[0-9]+-u[0-9]+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/productos/5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a/adquisiciones"
+      },
+      "response": {
+        "status": 404
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "productos"
+  }
+}

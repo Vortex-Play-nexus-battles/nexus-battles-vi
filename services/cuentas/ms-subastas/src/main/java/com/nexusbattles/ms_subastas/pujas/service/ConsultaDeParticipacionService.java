@@ -1,16 +1,19 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
-import com.nexusbattles.ms_subastas.pujas.dto.MiParticipacionResponse;
+import com.nexusbattles.ms_subastas.panel.repository.SeguimientoRepository;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClient;
+import com.nexusbattles.ms_subastas.pujas.dto.MiParticipacionResponse;
 import com.nexusbattles.ms_subastas.pujas.dto.MiResumenResponse;
+import com.nexusbattles.ms_subastas.pujas.dto.ParticipacionResponse;
 import com.nexusbattles.ms_subastas.pujas.dto.PujaDelHistorialResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
+import com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaAutomaticaRepository;
 import com.nexusbattles.ms_subastas.pujas.repository.PujaRepository;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -32,15 +42,28 @@ import java.util.UUID;
  */
 @Service
 @Slf4j
-@RequiredArgsConstructor
 public class ConsultaDeParticipacionService {
 
     private final SubastaRepository subastaRepository;
     private final PujaRepository pujaRepository;
     private final PujaAutomaticaRepository pujaAutomaticaRepository;
-    private final ParametrosPuja parametros;
+    private final FuenteDeReglas reglas;
     private final Clock clock;
     private final CreditoClient creditoClient;
+    private final SeguimientoRepository seguimientos;
+
+    public ConsultaDeParticipacionService(SubastaRepository subastaRepository, PujaRepository pujaRepository,
+                                          PujaAutomaticaRepository pujaAutomaticaRepository, FuenteDeReglas reglas,
+                                          Clock clock, CreditoClient creditoClient,
+                                          SeguimientoRepository seguimientos) {
+        this.subastaRepository = Objects.requireNonNull(subastaRepository);
+        this.pujaRepository = Objects.requireNonNull(pujaRepository);
+        this.pujaAutomaticaRepository = Objects.requireNonNull(pujaAutomaticaRepository);
+        this.reglas = Objects.requireNonNull(reglas);
+        this.clock = Objects.requireNonNull(clock);
+        this.creditoClient = Objects.requireNonNull(creditoClient);
+        this.seguimientos = Objects.requireNonNull(seguimientos);
+    }
 
     /**
      * @param quienMira puede ser null: el historial es publico y se puede ver
@@ -79,7 +102,8 @@ public class ConsultaDeParticipacionService {
                 miPujaVigente == null ? BigDecimal.ZERO : miPujaVigente.getMonto(),
                 automatica.map(a -> a.getLimite()).orElse(null),
                 automatica.map(a -> a.isActiva()).orElse(false),
-                segundosParaVolverAPujar(subastaId, jugadorId));
+                segundosParaVolverAPujar(subastaId, jugadorId),
+                seguimientos.existsBySubastaIdAndJugadorId(subastaId, jugadorId));
     }
 
     /**
@@ -95,6 +119,39 @@ public class ConsultaDeParticipacionService {
                 pujaRepository.sumarMontoPorJugadorYEstado(jugadorId, EstadoPuja.ACTIVA),
                 saldoDisponibleOSinSaber(jugadorId),
                 pujaRepository.countByJugadorIdAndEstado(jugadorId, EstadoPuja.ACTIVA));
+    }
+
+    /**
+     * «Mis pujas» (7.7.9, B8): las subastas en las que el jugador pujo o tiene
+     * una puja automatica, tambien las ya cerradas, con el estado de su
+     * participacion. Tres consultas en total, no una por subasta.
+     */
+    @Transactional(readOnly = true)
+    public List<ParticipacionResponse> misParticipaciones(UUID jugadorId) {
+        Map<UUID, Object[]> resumen = new HashMap<>();
+        for (Object[] fila : pujaRepository.resumenPorSubastaDe(jugadorId)) {
+            resumen.put((UUID) fila[0], fila);
+        }
+        Set<UUID> ids = new LinkedHashSet<>(resumen.keySet());
+        Set<UUID> soloAutomatica = new LinkedHashSet<>();
+        for (PujaAutomatica automatica : pujaAutomaticaRepository.findByJugadorId(jugadorId)) {
+            if (!resumen.containsKey(automatica.getSubastaId()) && automatica.isActiva()) {
+                soloAutomatica.add(automatica.getSubastaId());
+            }
+        }
+        ids.addAll(soloAutomatica);
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+        return subastaRepository.findAllById(ids).stream()
+                .map(subasta -> {
+                    Object[] fila = resumen.get(subasta.getId());
+                    return ParticipacionResponse.de(subasta, jugadorId,
+                            fila == null ? null : (BigDecimal) fila[1],
+                            fila == null ? null : (Instant) fila[2]);
+                })
+                .sorted(Comparator.comparing(ParticipacionResponse::fechaFin).reversed())
+                .toList();
     }
 
     /**
@@ -129,7 +186,7 @@ public class ConsultaDeParticipacionService {
         return pujaRepository.findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugadorId, subastaId)
                 .map(ultima -> {
                     long transcurridos = Duration.between(ultima.getCreadaEn(), clock.instant()).getSeconds();
-                    return Math.max(0, parametros.getIntervaloMinimoSegundos() - transcurridos);
+                    return Math.max(0, reglas.vigentes().intervaloMinimoSegundos() - transcurridos);
                 })
                 .orElse(0L);
     }

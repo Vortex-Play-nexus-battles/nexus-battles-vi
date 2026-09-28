@@ -124,8 +124,40 @@ export async function reintentarAlta({ fetchImpl = fetchWithHttpErrorInterceptor
  * @returns {string} URL absoluta
  */
 export function destinoTrasEntrar(respuestaLogin, volver = null, base = import.meta.url) {
+  return destinoConAlta(respuestaLogin?.onboardingListo !== false, volver, base);
+}
+
+/**
+ * Adónde llevar a quien ACABA DE CREAR su cuenta: a «Preparando tu cuenta»
+ * siempre, aunque el alta ya haya terminado.
+ *
+ * R17.4 — con el alta rápida (el banco E2E, un host sin carga) el login que
+ * sigue al registro ya llega con `onboardingListo: true`, y la persona
+ * aterrizaba en el inicio sin que nadie le dijera qué le acababan de dar.
+ * La pantalla de preparación no simula nada: si el servidor dice que todo
+ * está hecho, la primera consulta pinta los cuatro pasos hechos, los
+ * créditos y el héroe, y «Empezar a jugar». Es el mismo recibo, llegue
+ * rápido o lento, y la primera vez es cuando más falta hace.
+ *
+ * Solo aplica al registro: el login de una cuenta con el alta terminada va
+ * directo a donde iba (`destinoTrasEntrar`).
+ *
+ * @param {string} [base] para resolver las rutas (inyectable en pruebas)
+ * @returns {string} URL absoluta
+ */
+export function destinoDeCuentaNueva(base = import.meta.url) {
+  return destinoConAlta(false, null, base);
+}
+
+/**
+ * @param {boolean} lista si el alta terminó (o no aplica)
+ * @param {string|null} volver ruta de vuelta ya validada
+ * @param {string} base
+ * @returns {string} URL absoluta
+ */
+function destinoConAlta(lista, volver, base) {
   const final = volver ? new URL(volver, base).href : resolver(RUTAS.inicio, base);
-  if (respuestaLogin?.onboardingListo !== false) {
+  if (lista) {
     return final;
   }
   const preparando = new URL(resolver(RUTAS.preparando, base));

@@ -1,0 +1,61 @@
+# TABLA PROVISIONAL DE DESARROLLO del contenido del cofre (cofres.yaml 1.1.0, B7).
+#
+# NO es la tabla del juego: §7.6 del documento solo dice que el cofre trae
+# «una recompensa aleatoria». Qué productos y con qué probabilidad es decisión
+# del Product Owner (D-B7-18). Mientras no la tome, rige esta, y cada cofre
+# guarda su versión (PROVISIONAL-DEV-1) y la semilla del sorteo.
+#
+# Criterio provisional: un premio de 1 unidad, equiprobable entre las 40 piezas
+# de equipo del catálogo inicial (armas, armaduras e ítems de las Tablas 8 a
+# 19). Sin héroes (se compran) ni épicas (§6.1.2: se aprenden al derrotar a un
+# Máster). Los identificadores son los del catálogo inicial de productos
+# (services/contenido/productos/docs/catalogo-inicial-identificadores.md).
+#
+# Formato: productoId=peso. Se sustituye entera con FINANZAS_COFRES_TABLA
+# (mismo formato, ; como separador) y FINANZAS_COFRES_TABLA_VERSION.
+
+# Armas (Tablas 8 a 11)
+1647b2ea-096d-37e7-b580-0172e4c62313=1   # Espada de una mano
+37154b84-2ea0-3076-ae7b-656f7b4ebf11=1   # Espada de dos manos
+f7639c96-5fdd-38e1-b474-b4cc7123c499=1   # Escudo de dragón
+bcccae4f-a74b-30b2-b89b-5d1882b609d5=1   # Piedra de afilar
+77d90598-f504-33cb-9b68-080f0c89493d=1   # Orbe de manos ardientes
+cc0a77c9-0358-39b6-8558-d19e062adfed=1   # Báculo de Permafrost
+4c7472fe-fa32-33b6-bc1c-9b1154affa43=1   # Fuego fatuo
+a43732c6-c357-379c-ad39-b3529e5e5ade=1   # Venas heladas
+d7d1836f-e45e-33f4-a033-6e467017f1df=1   # Daga purulenta
+2666f981-47b8-3d75-9b84-df92bd32a1c0=1   # Machete vendito
+3c27a62b-7276-37b4-a7c9-4c6355683b6f=1   # Visión borrosa
+192e50d8-274a-360b-b3b4-6bd3dc4e27ff=1   # Cierra sangrienta
+94f85da1-0004-369f-bb43-1ff7ca966b84=1   # Raíz china
+69a631af-491a-3264-8684-cd01d20cef60=1   # Kit de urgencias
+a0c8771c-b54b-3a07-a8aa-dcc769500d7e=1   # Yerbabuena
+8b88964f-b8d1-33a1-929d-e36e13ed9218=1   # Reanimador
+
+# Armaduras (Tablas 12 a 15)
+fbce687b-7496-3526-aef0-500b3fe2135e=1   # Defensa del enfurecido
+ab5febe7-a919-3c66-895a-965362820dde=1   # Puño lúcido
+70f08e92-b6e0-350b-8e5e-695e4a92180b=1   # Magma Ardiente
+1d402ac5-f98b-3d21-b5da-ff81913dea29=1   # Puños en llamas
+75c8d169-edac-3e08-b038-85cb6bb9068e=1   # Túnica arcana
+fa5a4825-585e-3b01-9daf-7869f7fa202f=1   # Corona de hielo
+23679400-559b-38da-950c-68a800634fe3=1   # Caída de fuego
+824c1e0c-6c2d-3e12-b62e-345e1338e649=1   # Ventisca
+14413b85-7d68-3e83-a258-9044147440d6=1   # Mano del desterrado
+32ef0eb6-e4a9-39c2-850c-83fe1d3922bd=1   # Pie de atleta
+1336666f-1c41-3511-a7da-13d21ded606d=1   # Atadura carmesí
+9f0bfe7a-ad41-36ca-9d05-b44589dd99e0=1   # Sangre cruel
+8e7996ae-5579-3087-bffa-25bbcb7870e1=1   # Piel de Caminante del Bosque
+b4a0aece-aaf0-3b9a-98b8-59504bf505ed=1   # Bata de Cirujano
+0a1cab7c-87ac-3f17-8540-143f37a595da=1   # Casco de Ecos Ancestrales
+20d98991-33cc-3f11-8b72-a04ebe9d5c4f=1   # Pantalón de Expedición Médica
+
+# Ítems (Tablas 16 a 19)
+7cd7b72c-912f-3abd-9724-8a271b7fc77d=1   # Pinchos de escudo
+ad5a6a53-b398-3741-93c8-59efe4f6578f=1   # Empuñadura de Furia
+d7369838-a2a4-3810-9dd6-5b6c0ba97089=1   # Anillo para Piro-explosión
+57ac6dfa-568b-3a89-87ab-4853dfdb0135=1   # Libro de la ventisca helada
+ae461eab-cdbd-370d-8241-99f875417657=1   # Veneno lacerante
+5c52954a-131b-372c-a3c7-713e114e902f=1   # Mancuerna yugular
+70e6ad6c-ff34-30ab-a57c-be975c17bffb=1   # Pluma sanadora
+52d9af58-8cc1-3ba4-9e59-573cb7b69e79=1   # Benditas

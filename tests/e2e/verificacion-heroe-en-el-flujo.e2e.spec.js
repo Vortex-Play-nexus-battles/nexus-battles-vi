@@ -22,6 +22,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
@@ -43,15 +45,13 @@ const APUESTA = 10;
 const LISTADO = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
 const VERIFICACION = '/frontend/app-web/src/plataforma/salas-partidas/validacion-heroe.html';
 
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  return login.json();
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -219,10 +219,22 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
       })
       .toBe(true);
 
-    // El nivel NO se pinta: no existe como estado persistido en ningun
-    // servicio, y la vista solo dibuja el distintivo cuando llega un numero.
-    // Si algun dia apareciera un 1 aqui, seria inventado.
-    await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+    // El nivel: la vista solo dibuja el distintivo cuando el servicio manda un
+    // numero. Hasta B7 no existia en ningun servicio y aqui se exigia que no
+    // se pintara; desde B7 la verificacion trae el nivel del heroe del
+    // inventario (salas-partidas.yaml 1.7.0, `heroe.nivel`). Lo que se exige
+    // ahora es que el distintivo diga ESE numero y ninguno inventado.
+    const verificacion = await (
+      await api.get(`/api/v1/salas/${sala.id}/verificacion-heroe`, {
+        headers: conToken(invitado.token),
+      })
+    ).json();
+    const nivel = verificacion.heroe?.nivel ?? null;
+    if (nivel === null) {
+      await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+    } else {
+      await expect(dialogo.locator('.marco-heroe__nivel')).toHaveText(String(nivel));
+    }
   });
 
   test('Confirmar entra de verdad a la sala', async ({ page }) => {
@@ -299,7 +311,8 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
 
     // Vuelve atras en el historial, no a un listado recien cargado: quien
     // tenia filtros puestos los conserva.
-    await page.waitForURL(/batallas\.html/, { timeout: 20_000 });
+    // R17.3 — el listado vive en /jugar detrás del borde (la ruta antigua redirige).
+    await page.waitForURL(/\/jugar(?:[?#]|$)|batallas\.html/, { timeout: 20_000 });
     await expect(page.locator(`[data-sala="${sala.id}"]`)).toBeVisible();
   });
 

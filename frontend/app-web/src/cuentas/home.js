@@ -46,6 +46,14 @@ export const ACCESOS = Object.freeze([
     detalle: 'Salas abiertas ahora',
     destino: '../plataforma/salas-partidas/batallas.html',
   },
+  // UXC-5 — el recorrido del jugador pasa por las misiones (§7.8). La vista
+  // dice si hay misiones abiertas; lo que funciona ya es la estrategia.
+  {
+    id: 'misiones',
+    titulo: 'Misiones',
+    detalle: 'Estrategia de tu héroe',
+    destino: '../contenido/misiones/misiones.html',
+  },
   {
     id: 'inventario',
     titulo: 'Inventario',
@@ -59,12 +67,23 @@ export const ACCESOS = Object.freeze([
     destino: '../plataforma/torneos/torneos.html',
   },
   { id: 'subastas', titulo: 'Subastas', detalle: 'Pujas en vivo', destino: './subastas.html' },
-  { id: 'tienda', titulo: 'Tienda', detalle: 'Compra con créditos', destino: './tienda.html' },
+  // R18 — decia «Compra con créditos», y la tienda cobra en dinero real: los
+  // créditos solo se ganan en batalla y solo circulan en las subastas
+  // (Proyecto Integrador II, §7.7.3). La propia tienda dice «Paga con moneda local».
+  { id: 'tienda', titulo: 'Tienda', detalle: 'Paga en tu moneda', destino: './tienda.html' },
   {
     id: 'comentarios',
     titulo: 'Comunidad',
     detalle: 'Opiniones de productos',
     destino: '../plataforma/comentarios/publicar-comentario.html',
+  },
+  // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
+  // vista dice ella misma que los mensajes privados aún no están abiertos.
+  {
+    id: 'chat',
+    titulo: 'Chat',
+    detalle: 'General y mensajes privados',
+    destino: '../plataforma/salas-partidas/chat.html',
   },
 ]);
 

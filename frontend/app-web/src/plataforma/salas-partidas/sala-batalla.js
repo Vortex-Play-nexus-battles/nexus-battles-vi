@@ -18,6 +18,7 @@
 
 import { montarPanelVidas } from './panel-vidas.js';
 import { pintarCampo } from './campo.js';
+import { pintarEstadoDelCanal } from '../../comun/ui/reconexion.js';
 import { mostrarPresentacion } from '../../comun/ui/juego/presentacion.js';
 
 /**
@@ -44,6 +45,31 @@ export function destinoDePartida(idPartida) {
  */
 export function suscripcionDePartida(cliente, idPartida) {
   return (alRecibir) => cliente.suscribir(destinoDePartida(idPartida), alRecibir);
+}
+
+/**
+ * La direccion de esta misma vista con la partida anotada (`?partida=<id>`).
+ *
+ * R17.4 — la vista ya sabia recuperarse de una recarga en pleno combate si la
+ * URL traia `partida`, pero nadie la ponia: quien arrancaba el combate seguia
+ * en `?sala=<id>`, y un F5 le devolvia a la sala de espera con un «Iniciar
+ * combate» que el servidor ya rechaza (409). R18.6 intento lo mismo leyendo
+ * `idPartida` de la ficha de la sala, pero `GET /salas/{id}` lo devuelve
+ * siempre nulo (`SalaResponse.construir`): la prueba del profesor lo destapo.
+ * Se anota con `history.replaceState`, sin entrada nueva en el historial:
+ * «Atras» sigue llevando a donde estaba.
+ *
+ * Conserva el resto de la direccion (la sala, el hash) y no duplica la
+ * partida si ya estaba.
+ *
+ * @param {string} href direccion actual, absoluta
+ * @param {string} idPartida
+ * @returns {string} direccion absoluta con `partida`
+ */
+export function urlConPartida(href, idPartida) {
+  const url = new URL(href);
+  url.searchParams.set('partida', idPartida);
+  return url.href;
 }
 
 /**
@@ -104,11 +130,14 @@ function pintarConexion(zona, hayCanal) {
   if (!zona) {
     return;
   }
-
-  zona.className = hayCanal ? 'conexion conexion--estable' : 'conexion conexion--sin-conexion';
-  zona.textContent = hayCanal
-    ? 'Canal en tiempo real conectado'
-    : 'Canal en tiempo real no conectado';
+  // UXC-2 — la misma pildora que usa la reconexion (`comun/ui/reconexion.js`):
+  // una sola forma de decir en que estado esta el canal. Si la reconexion ya
+  // la dejo diciendo otra cosa (reconectando, sin conexion), no se pisa.
+  const actual = zona.dataset.estadoCanal;
+  if (hayCanal && (actual === 'reconectando' || actual === 'sin-conexion')) {
+    return;
+  }
+  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion' });
 }
 
 /**
@@ -142,10 +171,23 @@ function explicarVacio(zona, texto) {
  * @param {(alRecibir: (evento: object) => void) => void} [opciones.suscribir]
  *   Transporte del canal de la partida. Se inyecta desde fuera para que el dia
  *   que exista STOMP no haya que rehacer nada de aqui.
+ * @param {boolean} [opciones.canalConectado] si el canal en tiempo real esta
+ *   abierto aunque todavia no haya partida a la que suscribirse (la sala de
+ *   espera sigue la SALA por el canal). Sin el, el indicador se deduce de
+ *   `suscribir`.
  */
 export function montarSalaBatalla(
   raiz,
-  { partida, idPartida, participantes, suscribir, yo, turnoActual = null, presentar = false } = {},
+  {
+    partida,
+    idPartida,
+    participantes,
+    suscribir,
+    yo,
+    turnoActual = null,
+    presentar = false,
+    canalConectado,
+  } = {},
 ) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
   const zonaSinPartida = raiz.querySelector('[data-zona="sin-partida"]');
@@ -154,7 +196,11 @@ export function montarSalaBatalla(
   const campo = raiz.querySelector('[data-zona="campo"]');
   const zonaPresentacion = raiz.querySelector('[data-zona="presentacion"]');
 
-  pintarConexion(zonaConexion, typeof suscribir === 'function');
+  // R17.4 — en la sala de espera no hay partida a la que suscribirse, pero el
+  // canal SI esta abierto: por el llegan quien entra, quien sale y el arranque.
+  // Deducirlo de `suscribir` pintaba «no conectado» a quien esperaba con el
+  // canal funcionando, que es justo lo que hace creer que algo esta roto.
+  pintarConexion(zonaConexion, canalConectado ?? typeof suscribir === 'function');
 
   const id = partida?.id ?? idPartida;
   const enPantalla = partida ? participantesParaElPanel(partida) : participantes;
@@ -192,6 +238,17 @@ export function montarSalaBatalla(
   const marco = raiz.querySelector?.('[data-zona="combate"]') ?? raiz.closest?.('.combate');
   if (marco?.dataset) {
     marco.dataset.sinPartida = hayPartida ? 'no' : 'si';
+    // UXC-2 — con la partida en marcha, modo combate: el campo ocupa la
+    // pantalla entera y la barra de la aplicacion se retira (§7.6: area de
+    // juego > 80 %). La salida vive en el HUD. En la sala de espera, no.
+    const cuerpo = marco.ownerDocument?.body;
+    if (cuerpo?.dataset) {
+      if (hayPartida) {
+        cuerpo.dataset.modo = 'combate';
+      } else {
+        delete cuerpo.dataset.modo;
+      }
+    }
   }
 
   if (!hayPartida) {
@@ -214,8 +271,9 @@ export function montarSalaBatalla(
 
   // HU-JUE-017 CA-04 · la presentacion de los heroes.
   //
-  // `presentar` solo es true cuando se llega AQUI desde el aviso
-  // `sala.partida.iniciada`, no al recargar una partida que ya estaba en
+  // `presentar` solo es true cuando la partida empieza de verdad: el aviso
+  // `sala.partida.iniciada` o, para quien la arranca, la respuesta de su
+  // «Iniciar combate» (R17.4); nunca al recargar una partida que ya estaba en
   // curso: entrar a mitad de combate y que te presenten a los heroes como si
   // empezara ahora seria mentir sobre el momento.
   //

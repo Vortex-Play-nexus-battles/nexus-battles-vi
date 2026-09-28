@@ -3,14 +3,22 @@ package nexus.inventario.aplicacion;
 import nexus.inventario.dominio.EstadisticasHeroe;
 
 /**
- * Puerto para resolver las estadisticas base (nivel 1) de un prototipo de
- * heroe. La implementacion HTTP real consumiria
- * {@code GET /api/v1/heroes/{nombre}} (heroes.yaml, ya mergeado en develop
- * via PR #177), siguiendo el mismo patron que ClienteHeroesHttp en
- * motor-combate. Aqui solo se declara el puerto; el adaptador HTTP para
- * inventario todavia no existe y no es parte de este diseño.
+ * Puerto para resolver las estadisticas base de un prototipo de heroe en un
+ * nivel. La implementacion HTTP real es {@link ResolutorDeEstadisticasHeroeHttp}
+ * y consume {@code GET /api/v1/heroes/{nombre}/niveles/{nivel}} (heroes.yaml):
+ * el escalado por nivel (HU-HER-008) es una regla del servicio de heroes y el
+ * inventario no la reimplementa (B4).
  */
 public interface ResolutorDeEstadisticasHeroe {
 
-    EstadisticasHeroe resolver(String prototipo);
+    /**
+     * @param prototipo nombre del prototipo (ej. "Guerrero Tanque")
+     * @param nivel     nivel del heroe, de 1 a 8 (lo guarda el inventario)
+     */
+    EstadisticasHeroe resolver(String prototipo, int nivel);
+
+    /** Las estadisticas de nivel 1 (Tabla 6). */
+    default EstadisticasHeroe resolver(String prototipo) {
+        return resolver(prototipo, 1);
+    }
 }

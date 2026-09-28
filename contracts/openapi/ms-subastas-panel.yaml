@@ -1,0 +1,454 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI - Panel de gestión personal de subastas (ms-subastas)
+  description: >-
+    El «Panel de gestión personal» de 7.7.9 del documento del curso, y la
+    cancelación de 7.7.10: mis subastas publicadas (con la opción de cancelar
+    con penalización), la lista de seguimiento, los productos ganados
+    pendientes de recoger (7 días, «Recoger todo») y el historial de
+    transacciones exportable.
+
+
+    Todo exige sesión de jugador: quién es sale siempre del `uid` del token
+    (ADR-002), nunca del cuerpo ni de un parámetro. Los errores de negocio van
+    en problem+json con `type`
+    `https://nexusbattles.upb.edu.co/errors/operacion-rechazada` y un `motivo`
+    estable.
+
+
+    Changelog:
+
+    - 1.0.0 (B8): primera versión.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8092/api/v1
+    description: Spring Boot local (perfil dev)
+
+security:
+  - bearerJwt: []
+
+paths:
+  /mis-subastas/publicadas:
+    get:
+      summary: Las subastas que publicó el jugador, en cualquier estado
+      description: >-
+        «Mis subastas activas» de 7.7.9 y su historial: estado, pujas
+        recibidas, tiempo restante, visualizaciones y si todavía se puede
+        cancelar. De la más reciente a la más antigua.
+      operationId: misPublicaciones
+      tags: [panel]
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          description: Solo las de ese estado. Sin él, todas.
+          schema:
+            $ref: '#/components/schemas/EstadoSubasta'
+      responses:
+        '200':
+          description: Publicaciones del jugador
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MiPublicacion' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /subastas/{subastaId}/cancelacion:
+    post:
+      summary: Cancelar una subasta propia (7.7.10)
+      description: >-
+        Solo el vendedor, solo si **no hay pujas registradas** y **no en las
+        últimas 6 horas** de la subasta. Se cobra una **penalización del 50 %
+        de la comisión pagada** (0,50 créditos a 24 h, 1,50 a 48 h; el Maestro
+        de Juego, exento de comisión, no paga nada), el producto vuelve
+        disponible al inventario del vendedor y las pujas automáticas
+        configuradas se desactivan.
+
+
+        Idempotente por subasta: repetirla sobre una subasta ya cancelada por
+        su vendedor devuelve la misma cancelación sin volver a cobrar (la
+        penalización se debita en ms-finanzas con el `refId`
+        `sub-cancelacion-{subastaId}`). Avisa al vendedor (también por correo)
+        y a quien seguía la subasta, y publica el cambio en
+        `/topic/subastas/{subastaId}`.
+      operationId: cancelarSubasta
+      tags: [panel]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Subasta cancelada (o ya lo estaba)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cancelacion' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: 'No eres el vendedor (`motivo: NO_ES_EL_VENDEDOR`).'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          description: >-
+            La subasta ya no está activa (`SUBASTA_NO_ACTIVA`) o ya tiene pujas
+            (`CANCELACION_CON_PUJAS`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '422':
+          description: >-
+            Faltan menos de 6 horas para el cierre (`CANCELACION_FUERA_DE_PLAZO`)
+            o no tienes créditos para la penalización (`SALDO_INSUFICIENTE`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: ms-finanzas o inventario no respondieron; no se canceló nada.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /subastas/{subastaId}/seguimiento:
+    put:
+      summary: Agregar la subasta a la lista de seguimiento
+      description: >-
+        «Agregar a lista de seguimiento» (7.7.9). Idempotente. Quien sigue una
+        subasta recibe un aviso cuando cambia (nueva puja, cierre, cancelación)
+        y el recordatorio de 1 hora antes del cierre (7.7.8). Solo subastas
+        activas.
+      operationId: seguirSubasta
+      tags: [panel]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '204':
+          description: La subasta queda en tu lista (o ya estaba).
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+        '409':
+          description: La subasta ya no está activa (`SUBASTA_NO_ACTIVA`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+    delete:
+      summary: Quitar la subasta de la lista de seguimiento
+      description: Idempotente; sirve también para subastas ya cerradas.
+      operationId: dejarDeSeguirSubasta
+      tags: [panel]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '204':
+          description: La subasta ya no está en tu lista.
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          $ref: '#/components/responses/SubastaNoEncontrada'
+
+  /mis-subastas/seguimiento:
+    get:
+      summary: La lista de seguimiento del jugador
+      description: Las subastas que sigue, las activas primero por fecha de cierre.
+      operationId: miListaDeSeguimiento
+      tags: [panel]
+      responses:
+        '200':
+          description: Subastas seguidas
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SubastaSeguida' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /mis-subastas/pendientes:
+    get:
+      summary: Productos ganados pendientes de recoger (7.7.9)
+      description: >-
+        Al ganar una subasta por vencimiento, el producto ya es del ganador y
+        el cobro está hecho, pero queda **en custodia de la subasta** hasta que
+        lo recoge: aparece en su inventario como no disponible. Tiene 7 días
+        (7.7.9). Lo que pasa si no lo recoge no lo dice el documento: lo decide
+        el parámetro `subastas.pendientes.al-vencer` (provisional: ENTREGAR,
+        el producto queda disponible en su inventario sin más). La compra
+        inmediata no pasa por aquí: 7.7.6 la transfiere en el acto.
+      operationId: misPendientesDeRecoger
+      tags: [panel]
+      responses:
+        '200':
+          description: Pendientes del jugador, el que vence antes primero
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PendienteDeRecoger' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /mis-subastas/pendientes/recogida:
+    post:
+      summary: Recoger todo (transferencia masiva)
+      description: >-
+        «Recoger todo» (7.7.9): libera todos los pendientes del jugador en su
+        inventario. Cada uno se procesa por separado; si inventario falla con
+        uno, los demás se recogen igual y el fallido sigue pendiente.
+      operationId: recogerTodo
+      tags: [panel]
+      responses:
+        '200':
+          description: Resultado de la recogida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ResultadoDeRecogida' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  /mis-subastas/pendientes/{subastaId}/recogida:
+    post:
+      summary: Recoger un producto ganado
+      description: 'Idempotente: recoger uno ya recogido devuelve su estado.'
+      operationId: recogerPendiente
+      tags: [panel]
+      parameters:
+        - $ref: '#/components/parameters/SubastaId'
+      responses:
+        '200':
+          description: Producto recogido (ya disponible en tu inventario)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PendienteDeRecoger' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '404':
+          description: No tienes ningún pendiente de esa subasta (`PENDIENTE_NO_ENCONTRADO`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: El plazo ya venció y se aplicó la política del parámetro (`PENDIENTE_YA_RESUELTO`).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: Inventario no respondió; sigue pendiente.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /mis-subastas/historial:
+    get:
+      summary: Historial de transacciones de subastas del jugador (7.7.9)
+      description: >-
+        Compras realizadas con fecha y monto, ventas completadas con la
+        ganancia obtenida, comisiones y penalizaciones pagadas, y el balance de
+        créditos ganados y gastados en subastas. Con `formato=csv` se exporta
+        («Opción de exportar historial»): `text/csv` en UTF-8 con cabecera.
+      operationId: historialDeTransacciones
+      tags: [panel]
+      parameters:
+        - name: formato
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+            default: json
+      responses:
+        '200':
+          description: Historial
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Historial' }
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+components:
+  securitySchemes:
+    bearerJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token de ms-identidad; el jugador sale del claim `uid`.
+
+  parameters:
+    SubastaId:
+      name: subastaId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    EstadoSubasta:
+      type: string
+      enum: [ACTIVA, ADJUDICADA, SIN_ADJUDICACION, CANCELADA]
+
+    MiPublicacion:
+      type: object
+      required: [subastaId, nombreProducto, estado, ofertaVigente, cantidadPujas, fechaFin, vistas, cancelable]
+      properties:
+        subastaId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        miniaturaUrl: { type: [string, 'null'] }
+        estado: { $ref: '#/components/schemas/EstadoSubasta' }
+        precioInicial: { type: [string, 'null'], format: decimal }
+        ofertaVigente: { type: string, format: decimal }
+        precioCompraInmediata: { type: [string, 'null'], format: decimal }
+        cantidadPujas: { type: integer }
+        fechaPublicacion: { type: [string, 'null'], format: date-time }
+        fechaFin: { type: string, format: date-time }
+        cerradaEn: { type: [string, 'null'], format: date-time }
+        vistas: { type: integer, description: Visualizaciones únicas (7.7.9). }
+        comisionCobrada: { type: [string, 'null'], format: decimal }
+        penalizacionCobrada: { type: [string, 'null'], format: decimal }
+        cancelable:
+          type: boolean
+          description: Activa, sin pujas y a más de 6 horas del cierre.
+        penalizacionSiCancela:
+          type: [string, 'null']
+          format: decimal
+          description: Lo que costaría cancelarla ahora; nulo si no es cancelable.
+
+    Cancelacion:
+      type: object
+      required: [subastaId, estado, penalizacionCobrada, canceladaEn]
+      properties:
+        subastaId: { type: string, format: uuid }
+        estado: { type: string, enum: [CANCELADA] }
+        penalizacionCobrada: { type: string, format: decimal }
+        canceladaEn: { type: string, format: date-time }
+
+    SubastaSeguida:
+      type: object
+      required: [subastaId, nombreProducto, estado, ofertaVigente, cantidadPujas, fechaFin, seguidaDesde]
+      properties:
+        subastaId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        miniaturaUrl: { type: [string, 'null'] }
+        estado: { $ref: '#/components/schemas/EstadoSubasta' }
+        ofertaVigente: { type: string, format: decimal }
+        precioCompraInmediata: { type: [string, 'null'], format: decimal }
+        cantidadPujas: { type: integer }
+        fechaFin: { type: string, format: date-time }
+        seguidaDesde: { type: string, format: date-time }
+
+    PendienteDeRecoger:
+      type: object
+      required: [subastaId, nombreProducto, elementoInventarioId, montoPagado, ganadaEn, venceEn, estado]
+      properties:
+        subastaId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        miniaturaUrl: { type: [string, 'null'] }
+        elementoInventarioId: { type: string }
+        montoPagado: { type: string, format: decimal }
+        ganadaEn: { type: string, format: date-time }
+        venceEn:
+          type: string
+          format: date-time
+          description: Límite para recogerlo (7 días desde que se ganó).
+        estado:
+          type: string
+          description: >-
+            PENDIENTE hasta que se recoge; RECOGIDO; ENTREGADO_AL_VENCER o
+            DEVUELTO_AL_VENDEDOR si venció el plazo, según el parámetro.
+          enum: [PENDIENTE, RECOGIDO, ENTREGADO_AL_VENCER, DEVUELTO_AL_VENDEDOR]
+        resueltoEn: { type: [string, 'null'], format: date-time }
+
+    ResultadoDeRecogida:
+      type: object
+      required: [recogidos, fallidos]
+      properties:
+        recogidos:
+          type: array
+          items: { $ref: '#/components/schemas/PendienteDeRecoger' }
+        fallidos:
+          type: array
+          items:
+            type: object
+            required: [subastaId, detalle]
+            properties:
+              subastaId: { type: string, format: uuid }
+              detalle: { type: string }
+
+    MovimientoDeHistorial:
+      type: object
+      required: [tipo, subastaId, nombreProducto, monto, fecha]
+      properties:
+        tipo:
+          type: string
+          description: >-
+            COMPRA (subasta ganada o compra inmediata), VENTA (subasta vendida;
+            el monto es la ganancia obtenida), COMISION (al publicar),
+            PENALIZACION (al cancelar).
+          enum: [COMPRA, VENTA, COMISION, PENALIZACION]
+        subastaId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        monto: { type: string, format: decimal }
+        fecha: { type: string, format: date-time }
+
+    Historial:
+      type: object
+      required: [movimientos, totalGanado, totalGastado, comisionesPagadas, balance]
+      properties:
+        movimientos:
+          type: array
+          items: { $ref: '#/components/schemas/MovimientoDeHistorial' }
+        totalGanado:
+          type: string
+          format: decimal
+          description: Suma de las ventas.
+        totalGastado:
+          type: string
+          format: decimal
+          description: Compras más comisiones y penalizaciones.
+        comisionesPagadas:
+          type: string
+          format: decimal
+          description: Comisiones de publicación más penalizaciones de cancelación.
+        balance:
+          type: string
+          format: decimal
+          description: totalGanado - totalGastado.
+
+    ProblemDetail:
+      type: object
+      description: Formato de error estándar de los 20 módulos (regla 4 de plataforma).
+      properties:
+        type: { type: string, format: uri }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        motivo:
+          type: string
+          enum:
+            - NO_ES_EL_VENDEDOR
+            - SUBASTA_NO_ACTIVA
+            - CANCELACION_CON_PUJAS
+            - CANCELACION_FUERA_DE_PLAZO
+            - SALDO_INSUFICIENTE
+            - PENDIENTE_NO_ENCONTRADO
+            - PENDIENTE_YA_RESUELTO
+
+  responses:
+    NoAutenticado:
+      description: Falta el token o no es válido
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }
+    SubastaNoEncontrada:
+      description: No existe la subasta
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/ProblemDetail' }

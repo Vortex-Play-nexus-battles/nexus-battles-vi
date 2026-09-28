@@ -10,9 +10,32 @@ dependencies {
     implementation 'nz.net.ultraq.thymeleaf:thymeleaf-layout-dialect:3.3.0'
     implementation 'org.springframework.boot:spring-boot-starter-mail'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    testImplementation 'org.testcontainers:testcontainers:1.21.3'
-    testImplementation 'org.testcontainers:junit-jupiter:1.21.3'
+
+    // B1 — correo durable. Cada peticion aceptada se guarda en la tabla
+    // `envios` del esquema `correo` (PostgreSQL de la plataforma, regla 7)
+    // antes de responder 202, y un trabajador la entrega con reintentos.
+    //
+    // JDBC a secas y NO 'nexus.persistencia-conventions' (JPA): una tabla y
+    // media docena de consultas no justifican Hibernate en un host donde doce
+    // JVM comparten 2 GiB con -Xmx128m (infrastructure/despliegue/CAPACIDAD.md).
+    // Mismo criterio y mismas versiones que metricas-plataforma.
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-flyway'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // Regla 3: management.endpoints.web.exposure ya incluia `prometheus`,
+    // pero sin el registro la ruta no existia. Con el salen tambien
+    // correo_envios_total y correo_pendientes. Igual que ms-finanzas.
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
+
     testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    // Pruebas de integracion contra una PostgreSQL y un Mailpit reales. Mismo
+    // BOM de Testcontainers que el resto de servicios de plataforma.
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation platform('org.testcontainers:testcontainers-bom:1.21.4')
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
 
 // HU-COR-001 / CA-03: la plantilla corporativa tiene una sola fuente de verdad,

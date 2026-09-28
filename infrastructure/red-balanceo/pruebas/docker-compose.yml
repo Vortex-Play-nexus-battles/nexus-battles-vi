@@ -31,6 +31,23 @@
 # si una `location =` o una regex se la sigue quitando al catalogo. Solo lo
 # dice una peticion.
 services:
+  # B12 — un cliente "de internet". Desde el anfitrion (localhost:8099) el borde
+  # ve llegar las peticiones desde la pasarela de Docker, una direccion privada:
+  # justo lo que el borde trata como origen interno (Mailpit abierto, sin
+  # limite de frecuencia). Para ver lo que ve un visitante cualquiera hace falta
+  # un origen publico, y este contenedor lo es: vive SOLO en la red `publico`
+  # (203.0.113.0/24, TEST-NET-3, reservada para documentacion y no enrutable) y
+  # habla con el borde por ella. Es la misma imagen del borde porque trae curl:
+  # no se descarga nada nuevo. `comprobar-rutas.sh` lo usa con
+  # `docker compose exec`.
+  cliente-publico:
+    image: nginx:1.27-alpine
+    command: ["sleep", "86400"]
+    # Con init, `docker compose down` lo para en el acto: `sleep` como PID 1 no
+    # atiende SIGTERM y Compose esperaria diez segundos para matarlo.
+    init: true
+    networks: [publico]
+
   srv-comentarios:
     image: nginx:1.27-alpine
     hostname: COMENTARIOS
@@ -115,6 +132,23 @@ services:
     volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
     networks: [borde]
 
+  # B9 — misiones vive en el host de contenido (34.193.90.11:8105); el banco lo
+  # sustituye por este eco, con el mismo mecanismo que productos.
+  srv-misiones:
+    image: nginx:1.27-alpine
+    hostname: MISIONES
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
+  # B1 — la bandeja de pruebas. El borde la sirve en /mailpit/ y las pruebas
+  # leen de su API el codigo que verifica cada cuenta nueva. Se llama como el
+  # contenedor de verdad (`mailpit`, el nombre que usa `borde-dev.conf`).
+  mailpit:
+    image: nginx:1.27-alpine
+    hostname: MAILPIT
+    volumes: [./eco.conf:/etc/nginx/conf.d/default.conf:ro]
+    networks: [borde]
+
   # R16 — adaptador del borde para el banco, el mismo mecanismo que
   # `e2e-borde-conf` en tests/e2e/compose.yml (R8.2, #614).
   #
@@ -145,15 +179,18 @@ services:
       - |
         set -e
         sed -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
+            -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: el fichero nombra la IP en sus comentarios.
-        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -q '34\.193\.90\.11:8103'; then
-          echo "ADAPTACION INCOMPLETA: el catalogo sigue apuntando al host de contenido." >&2
+        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -qE '34\.193\.90\.11:810(3|5)'; then
+          echo "ADAPTACION INCOMPLETA: el catalogo o misiones siguen apuntando al host de contenido." >&2
           exit 1
         fi
         grep -q 'srv-productos:8080' /salida/default.conf || {
           echo "ADAPTACION INCOMPLETA: no aparece srv-productos:8080." >&2; exit 1; }
-        echo "Borde adaptado al banco: el catalogo de productos es el eco local."
+        grep -q 'srv-misiones:8080' /salida/default.conf || {
+          echo "ADAPTACION INCOMPLETA: no aparece srv-misiones:8080." >&2; exit 1; }
+        echo "Borde adaptado al banco: el catalogo de productos y misiones son ecos locales."
 
   borde:
     image: nginx:1.27-alpine
@@ -162,9 +199,15 @@ services:
       # destino del catalogo cambiado por el eco. Si se edita el original, la
       # siguiente corrida lo vuelve a derivar y prueba lo editado.
       - conf-del-borde:/etc/nginx/conf.d:ro
+      # R17 — las vistas y el kit, donde los deja el despliegue (/srv/nexus).
+      # Sin ellos no se pueden probar con trafico las direcciones limpias, el
+      # <base>, el nonce ni la redireccion de las rutas antiguas.
+      - ../../../frontend:/srv/nexus/frontend:ro
+      - ../../../shared:/srv/nexus/shared:ro
     ports:
       - '8099:80'
-    networks: [borde]
+    # B12 — tambien en `publico`, para que el cliente de internet llegue a el.
+    networks: [borde, publico]
     depends_on:
       borde-conf: { condition: service_completed_successfully }
       srv-comentarios: { condition: service_started }
@@ -181,10 +224,22 @@ services:
       srv-ms-ecommerce: { condition: service_started }
       srv-ms-chatbot: { condition: service_started }
       srv-productos: { condition: service_started }
+      srv-misiones: { condition: service_started }
+      mailpit: { condition: service_started }
 
 networks:
   borde:
     driver: bridge
+  # B12 — la red "de internet" del banco. `internal`: ni sale a ninguna parte
+  # ni da la ruta por defecto del borde, que sigue siendo `borde`. Por eso el
+  # puerto publicado 8099 entra por `borde` y el anfitrion sigue siendo un
+  # origen privado; comprobar-rutas.sh lo comprueba en cada corrida.
+  publico:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
 
 # Efimero: `docker compose down -v` lo borra y la siguiente corrida deriva la
 # configuracion otra vez del `borde-dev.conf` actual.

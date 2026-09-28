@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.comentarios.moderacion;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,6 +14,12 @@ public interface ReporteRepository extends JpaRepository<RegistroDeReporte, Stri
 
     /** De la mas antigua a la mas reciente: el primer reporte desempata la cola. */
     List<RegistroDeReporte> findByComentarioIdOrderByFechaAsc(String comentarioId);
+
+    /**
+     * Los reportes de todos los comentarios de la cola en una consulta (B3):
+     * la cola los pedia uno por uno, una consulta por comentario en revision.
+     */
+    List<RegistroDeReporte> findByComentarioIdInOrderByFechaAsc(Collection<String> comentarioIds);
 
     long countByComentarioId(String comentarioId);
 

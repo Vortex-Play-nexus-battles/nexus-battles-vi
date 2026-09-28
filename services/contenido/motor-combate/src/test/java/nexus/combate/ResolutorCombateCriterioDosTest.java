@@ -40,14 +40,17 @@ class ResolutorCombateCriterioDosTest {
 
     @Test
     void categoriaSinEfecto_noAplicaDano() {
-        RandomGenerator generadorFijoEnTresPuntoCinco = generadorFijoEnGaussiano(3.5);
+        // Con el indice normal real (B7) la fila es round(4000,5 + 1333,3 * z):
+        // z = 2,5 da la fila 7334, dentro de «no causar dano» (5601-8000) del
+        // Guerrero Armas. Una z de 3,5 caeria fuera de la tabla y se repetiria.
+        RandomGenerator generadorFijoEnDosPuntoCinco = generadorFijoEnGaussiano(2.5);
 
         ResolucionAtaque.ConEfecto resultado = (ResolucionAtaque.ConEfecto) ResolutorCombate.resolverCompleto(
             15, 11,
             DistribucionEfectos.GUERRERO_ARMAS,
             6,
-            generadorFijoEnTresPuntoCinco,
-            generadorFijoEnTresPuntoCinco);
+            generadorFijoEnDosPuntoCinco,
+            generadorFijoEnDosPuntoCinco);
 
         assertEquals(CategoriaEfecto.SIN_EFECTO, resultado.categoria());
         assertEquals(0, resultado.danoAplicado());

@@ -17,7 +17,8 @@ const JUGADOR = 'jugador-de-prueba';
 const MINIMO_LEGIBLE_PX = 12;
 
 function elemento(indice) {
-  const tipos = ['HEROE', 'ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
+  // UXC-1 — la vitrina de «Objetos» no lleva héroes (tienen su pestaña).
+  const tipos = ['ARMA', 'ARMADURA', 'ITEM', 'EPICA', 'HABILIDAD'];
   return {
     id: `elemento-${indice}`,
     productoId: `producto-${indice}`,
@@ -55,7 +56,7 @@ async function conInventarioDe(page, totalElementos) {
 
 async function abrirVitrina(page) {
   await prepararPagina(page);
-  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
+  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}#objetos`);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }
 
@@ -154,8 +155,10 @@ test.describe('Vitrina del inventario', () => {
     await abrirVitrina(page);
 
     // "se muestra un estado vacio que explica que aun no tiene productos"
-    await expect(page.locator('.estado-vacio')).toBeVisible();
-    await expect(page.locator('.estado-vacio')).toContainText(/todav[ií]a no tienes productos/i);
+    // UXC-1 — en «Objetos», con su siguiente paso (la tienda).
+    const vacio = page.locator('.inventario__contenido .estado-vacio');
+    await expect(vacio).toBeVisible();
+    await expect(vacio).toContainText(/todav[ií]a no tienes objetos/i);
 
     // "no se muestra ningun mensaje de error"
     await expect(page.locator('.estado-error')).toHaveCount(0);
@@ -310,7 +313,8 @@ test.describe('Equipamiento del héroe con limites', () => {
     await conEquipamiento(page);
     await abrirVitrina(page);
 
-    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+    await page.locator('#pestana-heroes').click();
+    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
 
     await expect(page.locator('.vitrina-pagina')).toHaveCSS(
       'background-color',
@@ -343,7 +347,8 @@ test.describe('Equipamiento del héroe con limites', () => {
     await conEquipamiento(page);
     await abrirVitrina(page);
 
-    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+    await page.locator('#pestana-heroes').click();
+    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
     await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
     await page.getByRole('button', { name: 'Equipar', exact: true }).click();
     await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 1/2');
@@ -355,7 +360,8 @@ test.describe('Equipamiento del héroe con limites', () => {
     await conEquipamiento(page, { rechazar: true });
     await abrirVitrina(page);
 
-    await page.getByRole('button', { name: 'Gestionar equipo de Ayla' }).click();
+    await page.locator('#pestana-heroes').click();
+    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
     await page.getByRole('button', { name: 'Equipar', exact: true }).click();
 
     await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');

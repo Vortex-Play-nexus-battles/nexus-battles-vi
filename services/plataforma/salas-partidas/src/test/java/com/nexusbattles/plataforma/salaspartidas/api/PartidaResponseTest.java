@@ -107,4 +107,59 @@ class PartidaResponseTest {
 
         assertNull(respuesta.participantes().get(1).heroe());
     }
+
+    @Test
+    @DisplayName("1.7.0: el heroe lleva prototipo, poder, recargas, efectos y acciones del motor")
+    void elEstadoDeCombateViaja() {
+        var combate = new com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate(6, 10, 2,
+                java.util.Map.of("Golpe con escudo", 1), java.util.List.of(
+                new com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate.Efecto("MANO_DE_PIEDRA",
+                        "Mano de piedra", "BONO_DEFENSA", 12, 1, true, "h-1"),
+                new com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate.Efecto("CORTADA",
+                        "Cortada", "BONO_DANO", 2, 1, false, "h-1")),
+                null, java.util.Map.of("Golpe con escudo", 1), java.util.List.of(
+                new com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate.AccionDisponible(
+                        "Golpe con escudo", "Golpe con escudo", "ATAQUE", false, 2, false, 1, 1, false,
+                        "En carga: 1 turno.")),
+                null);
+        HeroeDeCombate tanque = new HeroeDeCombate("h-1", "Muro", "Guerrero Tanque", null, 1, 30, 44, 11);
+
+        PartidaResponse.HeroeResponse respuesta = PartidaResponse.HeroeResponse.desde(tanque, combate);
+
+        assertAll(
+                () -> assertEquals("Guerrero Tanque", respuesta.prototipo()),
+                () -> assertEquals(6, respuesta.poderActual()),
+                () -> assertEquals(10, respuesta.poderMaximo()),
+                () -> assertEquals(java.util.Map.of("Golpe con escudo", 1), respuesta.recargas()),
+                () -> assertEquals(1, respuesta.efectosActivos().get(0).turnosRestantes(),
+                        "una proteccion dura hasta su proximo turno"),
+                () -> assertEquals("BONO_DANO", respuesta.efectosActivos().get(1).tipo()),
+                () -> assertEquals("En carga: 1 turno.", respuesta.acciones().get(0).motivo()));
+    }
+
+    @Test
+    @DisplayName("1.7.0: una partida terminada sale con resultado, ganadores y hora; con limite, la cuenta atras")
+    void elFinalYElTiempo() {
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
+                new FichaDeParticipante("Ana", arquero()));
+        Partida partida = Partida.iniciar(sala, AHORA);
+        partida.fijarVencimientoDelTurno(AHORA.plusSeconds(45));
+        assertEquals(30, PartidaResponse.desde(partida, AHORA.plusSeconds(15)).turnoActual().segundosRestantes());
+        assertEquals(0, PartidaResponse.desde(partida, AHORA.plusSeconds(60)).turnoActual().segundosRestantes(),
+                "nunca negativa");
+
+        UUID maquina = partida.participantes().get(1).idJugador();
+        partida.aplicarDano(maquina, 1000);
+        partida.terminarSiSoloQuedaUno(AHORA.plusSeconds(90));
+
+        PartidaResponse respuesta = PartidaResponse.desde(partida, AHORA.plusSeconds(100));
+        assertAll(
+                () -> assertEquals(com.nexusbattles.plataforma.salaspartidas.dominio.ResultadoDePartida.GANADOR,
+                        respuesta.resultado()),
+                () -> assertEquals(java.util.List.of(ANA), respuesta.ganadores()),
+                () -> assertNull(respuesta.equipoGanador()),
+                () -> assertEquals(AHORA.plusSeconds(90), respuesta.finalizadaEn()),
+                () -> assertNull(respuesta.turnoActual().segundosRestantes(), "terminada: sin cuenta atras"));
+    }
 }

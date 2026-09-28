@@ -72,6 +72,46 @@ class HeroesApiTest {
     }
 
     @Test
+    @DisplayName("cada accion trae su coste como numero, su carga y su nivel de desbloqueo (1.2.0)")
+    void accionComoDato() throws Exception {
+        // B7: el motor de combate valida poder, carga y desbloqueo sin parsear
+        // «2 puntos de poder». Tabla 7 (costes), §6.1.2 (un turno de carga) y
+        // RC-01 (niveles 1, 4 y 8).
+        mvc.perform(get("/api/v1/heroes/{nombre}", "Guerrero Armas"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acciones[0].nombre").value("Embate sangriento"))
+                .andExpect(jsonPath("$.acciones[0].costoPoder").value(4))
+                .andExpect(jsonPath("$.acciones[0].todoElPoder").value(false))
+                .andExpect(jsonPath("$.acciones[0].turnosDeCarga").value(1))
+                .andExpect(jsonPath("$.acciones[0].nivelRequerido").value(1))
+                .andExpect(jsonPath("$.acciones[1].nivelRequerido").value(4))
+                .andExpect(jsonPath("$.acciones[2].costoPoder").value(6))
+                .andExpect(jsonPath("$.acciones[2].nivelRequerido").value(8));
+    }
+
+    @Test
+    @DisplayName("la Reanimacion del Medico cuesta todo el poder: sin numero y marcada")
+    void reanimacionCuestaTodoElPoder() throws Exception {
+        mvc.perform(get("/api/v1/heroes/{nombre}", "Médico"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.acciones[2].nombre").value("Reanimación"))
+                .andExpect(jsonPath("$.acciones[2].costo").value("Todos los puntos de poder"))
+                .andExpect(jsonPath("$.acciones[2].costoPoder").doesNotExist())
+                .andExpect(jsonPath("$.acciones[2].todoElPoder").value(true));
+    }
+
+    @Test
+    @DisplayName("la vista por nivel trae las acciones desbloqueadas con los mismos datos")
+    void vistaPorNivelConAccionComoDato() throws Exception {
+        mvc.perform(get("/api/v1/heroes/{nombre}/niveles/{nivel}", "Mago Fuego", 4))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accionesDisponibles.length()").value(2))
+                .andExpect(jsonPath("$.accionesDisponibles[1].nombre").value("Vulcano"))
+                .andExpect(jsonPath("$.accionesDisponibles[1].costoPoder").value(6))
+                .andExpect(jsonPath("$.accionesDisponibles[1].nivelRequerido").value(4));
+    }
+
+    @Test
     @DisplayName("la busqueda tolera tildes y mayusculas")
     void busquedaToleranteATildes() throws Exception {
         mvc.perform(get("/api/v1/heroes/{nombre}", "picaro veneno"))

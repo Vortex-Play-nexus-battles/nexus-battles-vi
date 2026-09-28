@@ -123,6 +123,8 @@ describe('la matriz cubre lo que hay en disco', () => {
     // `productos` salió de aquí en UX-R3.5: no es el catálogo que mira un
     // jugador, es el formulario de alta del catálogo, y el servidor ya lo
     // restringía a ADMINISTRADOR (Tabla 24: «Gestionar productos»).
+    // B1 — `verificar-cuenta` entra: la usa quien todavía no puede iniciar
+    // sesión, porque su correo está sin confirmar.
     expect(publicas).toEqual([
       'login',
       'pujas',
@@ -131,6 +133,7 @@ describe('la matriz cubre lo que hay en disco', () => {
       'restablecer-solicitar',
       'subastas',
       'torneos',
+      'verificar-cuenta',
     ]);
   });
 });
@@ -203,6 +206,56 @@ describe('vistaDeRuta y urlDeVista', () => {
     expect(vistaDeRuta('/cuentas/login.html')).toBe('login');
     expect(vistaDeRuta('/cuentas/gestion-usuarios.html?pagina=2')).toBe('gestion-usuarios');
     expect(vistaDeRuta('/otra/cosa.html')).toBeNull();
+  });
+
+  test('R17.3 — reconoce también la dirección limpia, que no dice qué fichero es', () => {
+    expect(vistaDeRuta('/login')).toBe('login');
+    expect(vistaDeRuta('/jugar')).toBe('batallas');
+    expect(vistaDeRuta('/cuenta?x=1')).toBe('perfil');
+    expect(vistaDeRuta('/inicio#avisos')).toBe('home');
+    expect(vistaDeRuta('/jugar/')).toBe('batallas');
+    // Un prefijo parecido no es la vista.
+    expect(vistaDeRuta('/jugarx')).toBeNull();
+  });
+
+  test('B1 — los enlaces del correo abren su vista, con el fragmento o sin él', () => {
+    expect(vistaDeRuta('/verificar')).toBe('verificar-cuenta');
+    expect(vistaDeRuta('/verificar#codigo=K7QX2M9P&correo=ana%40nexus.test')).toBe(
+      'verificar-cuenta',
+    );
+    expect(vistaDeRuta('/restablecer#codigo=K7QX2M9P')).toBe('restablecer-confirmar');
+    expect(vistaDeRuta('/frontend/app-web/src/cuentas/verificar-cuenta.html')).toBe(
+      'verificar-cuenta',
+    );
+    // Las dos son del portal: quien las usa aún no tiene sesión.
+    expect(armazonDeVista('verificar-cuenta')).toBe('publico');
+    expect(puedeVer('verificar-cuenta', { autenticado: false }).veredicto).toBe(VEREDICTO.VISIBLE);
+    expect(puedeVer('restablecer-confirmar', { autenticado: false }).veredicto).toBe(
+      VEREDICTO.VISIBLE,
+    );
+  });
+
+  test('R17.3 y B1 — once direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+    const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
+    // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
+    // la verificación de la cuenta y el canje del código de recuperación.
+    expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
+      '/cuenta',
+      '/inicio',
+      '/inventario',
+      '/jugar',
+      '/login',
+      '/preparando',
+      '/registro',
+      '/restablecer',
+      '/subastas',
+      '/torneos',
+      '/verificar',
+    ]);
+    for (const [, entrada] of limpias) {
+      expect(['publico', 'jugador']).toContain(entrada.armazon);
+      expect(entrada.limpia).toMatch(/^\/[a-z]+$/);
+    }
   });
 
   test('la URL de una vista sale igual desde cualquier base servida', () => {

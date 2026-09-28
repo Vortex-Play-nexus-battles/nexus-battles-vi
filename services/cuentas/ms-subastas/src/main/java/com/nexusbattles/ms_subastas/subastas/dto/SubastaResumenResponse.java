@@ -28,9 +28,16 @@ public record SubastaResumenResponse(
     int cantidadPujas,
     Instant fechaFin,
     boolean esMaestroDeJuego,
-    String vendedorId
+    String vendedorId,
+    String estado
 ) {
 
+    /**
+     * B8: con {@code estado}, que el contrato del canal en vivo ya exigia
+     * ({@code contracts/websocket/subastas.yaml}: {@code required [id, estado]})
+     * y el resumen no traia. En el listado siempre es ACTIVA; en el canal dice
+     * si la subasta se adjudico, quedo sin ofertas o se cancelo.
+     */
     public static SubastaResumenResponse desde(Subasta subasta) {
         return new SubastaResumenResponse(
             subasta.getId(),
@@ -44,7 +51,8 @@ public record SubastaResumenResponse(
             subasta.getCantidadPujas(),
             subasta.getFechaFin(),
             subasta.isEsMaestroDeJuego(),
-            subasta.getVendedorId() != null ? subasta.getVendedorId().toString() : null
+            subasta.getVendedorId() != null ? subasta.getVendedorId().toString() : null,
+            subasta.getEstado() != null ? subasta.getEstado().name() : null
         );
     }
 }

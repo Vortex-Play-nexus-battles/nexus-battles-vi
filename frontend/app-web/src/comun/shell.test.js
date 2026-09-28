@@ -157,17 +157,27 @@ describe('armazón de jugador', () => {
     expect(activos[0].getAttribute('aria-current')).toBe('page');
   });
 
-  test('el destino pendiente lo dice sin destapar el backlog', () => {
-    // Decía «Todavía no publicada: HU-MIS (grupo-2)»: el número de una
-    // historia y el nombre de un equipo interno, a la vista de cualquiera.
-    // RF-INV-008 exige informar; no exige informar de esto.
+  test('Misiones lleva a su vista, que es la que dice si hay misiones (UXC-5)', () => {
+    // Antes era el único destino sin pantalla: deshabilitado y con un
+    // «Misiones llegará en una próxima actualización» en el `title`. Ahora la
+    // vista existe y cuenta desde dentro qué hay y qué se puede hacer ya. Y,
+    // como antes, nada de la barra destapa el backlog (decía «Todavía no
+    // publicada: HU-MIS (grupo-2)» hace dos bloques).
     conSesion();
     const { elemento } = montar({ vista: 'home' });
     const misiones = elemento.querySelector('[data-seccion="misiones"]');
-    expect(misiones.hasAttribute('href')).toBe(false);
-    expect(misiones.getAttribute('aria-disabled')).toBe('true');
-    expect(misiones.title).toBe('Misiones llegará en una próxima actualización');
+    expect(misiones.getAttribute('href')).toMatch(/contenido\/misiones\/misiones\.html$/);
+    expect(misiones.hasAttribute('aria-disabled')).toBe(false);
+    expect(misiones.title).toBe('');
+    expect(elemento.querySelectorAll('.cabecera__destino[aria-disabled="true"]')).toHaveLength(0);
     expect(elemento.innerHTML).not.toMatch(/HU-|grupo-\d|RF-|Sprint/);
+  });
+
+  test('sin sesión, Misiones pide entrar y vuelve a la vista', () => {
+    const { elemento } = montar({ vista: 'torneos' });
+    const misiones = elemento.querySelector('[data-seccion="misiones"]');
+    expect(misiones.dataset.exigeSesion).toBe('');
+    expect(new URL(misiones.href).searchParams.get('volver')).toMatch(/misiones\.html$/);
   });
 
   test('funciona igual servido desde src/ que desde el borde', () => {
@@ -366,7 +376,7 @@ describe('armazón de consola', () => {
     expect(elemento.querySelector('[data-zona="creditos"]')).toBeNull();
   });
 
-  test('el super administrador ve las ocho herramientas', () => {
+  test('el super administrador ve todas las herramientas', () => {
     expect(etiquetas(consolaDe('SUPER_ADMINISTRADOR'))).toEqual(
       SECCIONES_CONSOLA.map((s) => s.etiqueta),
     );
@@ -376,7 +386,28 @@ describe('armazón de consola', () => {
     expect(etiquetas(consolaDe('ADMINISTRADOR'))).not.toContain('Auditoría');
 
     document.body.innerHTML = '';
-    expect(etiquetas(consolaDe('MODERADOR'))).toEqual(['Resumen', 'Sanciones', 'Lista negra']);
+    expect(etiquetas(consolaDe('MODERADOR'))).toEqual([
+      'Resumen',
+      'Comentarios',
+      'Sanciones',
+      'Lista negra',
+    ]);
+  });
+
+  test('B3: «Comentarios» lleva a la cola de comentarios reportados y se marca activa allí', () => {
+    conSesion({ rol: 'MODERADOR' });
+    const raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    const { elemento } = montarArmazonAdmin(raiz, {
+      sesion: leerSesion(sessionStorage),
+      base: BASE,
+      navegar: jest.fn(),
+      seccionActiva: 'comentarios',
+    });
+
+    const destino = elemento.querySelector('[data-seccion="comentarios"]');
+    expect(destino.href).toMatch(/plataforma\/comentarios\/moderar-comentarios\.html$/);
+    expect(destino.getAttribute('aria-current')).toBe('page');
   });
 
   test('enseña el rol, para que «esa opción no me aparece» tenga respuesta', () => {

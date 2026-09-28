@@ -1,19 +1,23 @@
 /**
- * Entrar al juego (login y registro) — R17.
+ * Entrar al juego (login y registro) — R17, y desde B1 con el correo
+ * verificado.
  *
- * Lo importante: crear la cuenta ya no termina en «ahora escribe otra vez tu
- * correo y tu contraseña», y cuando algo falla se dice qué campo y por qué.
+ * Lo importante: cuando algo falla se dice qué campo y por qué; y desde la
+ * 2.0.0 de identidad, una cuenta nueva NO entra sola: nace pendiente de
+ * verificar su correo y se lleva a la verificación, con el correo en
+ * `sessionStorage` y nunca en la dirección.
  */
 
 import { jest } from '@jest/globals';
 
+import { CLAVES_DEL_CORREO } from './codigo-de-correo.js';
 import {
   CLAVE_CORREO_REGISTRADO,
   entrarCon,
   identificadorDeSesion,
   mensajeDelServidor,
   pedirLogin,
-  registrarYEntrar,
+  registrarCuenta,
 } from './entrada.js';
 import { CLAVES } from './sesion.js';
 
@@ -117,8 +121,29 @@ describe('entrarCon', () => {
   });
 });
 
-describe('registrarYEntrar', () => {
+describe('entrarCon tras verificar el correo (B1)', () => {
+  test('la primera entrada de una cuenta recién verificada pasa SIEMPRE por la preparación', () => {
+    // Aunque el alta ya esté lista y haya una vuelta: es la pantalla que le
+    // dice qué créditos y qué héroe acaba de recibir.
+    const destino = new URL(
+      entrarCon(
+        { ...LOGIN_OK, onboardingListo: true },
+        {
+          volver: '/frontend/app-web/src/cuentas/tienda.html',
+          cuentaNueva: true,
+          almacen: sessionStorage,
+          base: BASE,
+        },
+      ),
+    );
+    expect(destino.pathname).toBe('/frontend/app-web/src/cuentas/preparando.html');
+    expect(sessionStorage.getItem(CLAVES.token)).toBe(TOKEN);
+  });
+});
+
+describe('registrarCuenta', () => {
   const credenciales = { email: 'lyra@nexus.test', password: 'Secreta#2026' };
+  const AHORA = 1_790_000_000_000;
 
   function servidor({ registro, login }) {
     return jest.fn((url) => {
@@ -129,29 +154,72 @@ describe('registrarYEntrar', () => {
     });
   }
 
-  test('crea la cuenta, entra sola y va a «Preparando tu cuenta»', async () => {
+  function registrar(fetchImpl, extra = {}) {
+    return registrarCuenta(new FormData(), credenciales, {
+      fetchImpl,
+      almacen: sessionStorage,
+      base: BASE,
+      ahora: () => AHORA,
+      ...extra,
+    });
+  }
+
+  test('B1 — la cuenta nace pendiente: a confirmar el correo, sin entrar y sin el correo en la URL', async () => {
     const fetchImpl = servidor({
-      registro: () => respuesta(201, { apodo: 'Lyra' }),
+      registro: () => respuesta(201, { apodo: 'Lyra', estado: 'PENDIENTE_VERIFICACION' }),
       login: () => respuesta(200, LOGIN_OK),
     });
     const datos = new FormData();
 
-    const resultado = await registrarYEntrar(datos, credenciales, {
+    const resultado = await registrarCuenta(datos, credenciales, {
       fetchImpl,
       almacen: sessionStorage,
       base: BASE,
+      ahora: () => AHORA,
     });
 
-    expect(resultado.resultado).toBe('dentro');
-    expect(new URL(resultado.destino).pathname).toBe(
-      '/frontend/app-web/src/cuentas/preparando.html',
-    );
-    expect(sessionStorage.getItem(CLAVES.token)).toBe(TOKEN);
+    expect(resultado.resultado).toBe('pendiente');
+    const destino = new URL(resultado.destino);
+    expect(destino.pathname).toBe('/frontend/app-web/src/cuentas/verificar-cuenta.html');
+    expect(destino.searchParams.get('motivo')).toBe('registro');
+    expect(destino.href).not.toContain('lyra');
+    // El correo viaja por sessionStorage, y la espera del reenvío empieza ya:
+    // el código acaba de salir.
+    expect(sessionStorage.getItem(CLAVES_DEL_CORREO.porVerificar)).toBe('lyra@nexus.test');
+    expect(sessionStorage.getItem(CLAVES_DEL_CORREO.ultimoEnvio)).toBe(String(AHORA));
+    // No se intenta entrar: el login respondería 403 cuenta-no-verificada.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
     // El multipart va tal cual, con problem details pedidos.
     const [, opciones] = fetchImpl.mock.calls[0];
     expect(opciones.body).toBe(datos);
     expect(opciones.headers.Accept).toContain('application/problem+json');
     expect(opciones.headers['Content-Type']).toBeUndefined();
+  });
+
+  test('sin estado en la respuesta, también a confirmar el correo: solo ACTIVO entra', async () => {
+    const fetchImpl = servidor({
+      registro: () => respuesta(201, { apodo: 'Lyra' }),
+      login: () => respuesta(200, LOGIN_OK),
+    });
+    const resultado = await registrar(fetchImpl);
+    expect(resultado.resultado).toBe('pendiente');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  test('un servicio anterior a la verificación (cuenta ACTIVO): entra sola y va a «Preparando tu cuenta»', async () => {
+    const fetchImpl = servidor({
+      registro: () => respuesta(201, { apodo: 'Lyra', estado: 'ACTIVO' }),
+      login: () => respuesta(200, { ...LOGIN_OK, onboardingListo: true }),
+    });
+
+    const resultado = await registrar(fetchImpl);
+
+    expect(resultado.resultado).toBe('dentro');
+    const destino = new URL(resultado.destino);
+    expect(destino.pathname).toBe('/frontend/app-web/src/cuentas/preparando.html');
+    expect(destino.searchParams.get('volver')).toBe('/frontend/app-web/src/cuentas/index.html');
+    expect(sessionStorage.getItem(CLAVES.token)).toBe(TOKEN);
   });
 
   test('un rechazo dice el motivo y el campo a marcar', async () => {
@@ -167,20 +235,60 @@ describe('registrarYEntrar', () => {
       login: () => respuesta(200, LOGIN_OK),
     });
 
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
+    const resultado = await registrar(fetchImpl);
+
+    // UXC-7 — por el `type` estable, con palabras del producto y qué hacer.
+    expect(resultado).toEqual({
+      resultado: 'rechazada',
+      mensaje:
+        'Ese apodo ya lo usa otro jugador. Prueba con otro: es el nombre con el que te verán en las partidas.',
+      campo: 'apodo',
+      estado: 400,
+      motivo: 'apodo-en-uso',
+    });
+    // No se intenta nada más con una cuenta que no se creó.
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+    expect(sessionStorage.getItem(CLAVES_DEL_CORREO.porVerificar)).toBeNull();
+  });
+
+  test('UXC-7 — apodo no permitido: se explica sin decir qué palabra ni resolver la lista negra aquí', async () => {
+    const fetchImpl = servidor({
+      registro: () =>
+        respuesta(400, {
+          type: 'https://nexusbattles.upb.edu.co/errors/apodo-no-permitido',
+          title: 'Apodo no permitido',
+          status: 400,
+          detail: 'El apodo contiene terminos prohibidos.',
+          campo: 'apodo',
+        }),
+      login: () => respuesta(200, LOGIN_OK),
+    });
+    const resultado = await registrarCuenta(new FormData(), credenciales, {
       fetchImpl,
       almacen: sessionStorage,
     });
+    expect(resultado.motivo).toBe('apodo-no-permitido');
+    expect(resultado.mensaje).toMatch(/^Ese apodo no está permitido/);
+    expect(resultado.campo).toBe('apodo');
+  });
 
-    expect(resultado).toEqual({
-      resultado: 'rechazada',
-      mensaje: 'El apodo ya está en uso.',
-      campo: 'apodo',
-      estado: 400,
+  test('UXC-7 — un motivo que la vista no conoce se dice con el texto del servidor', async () => {
+    const fetchImpl = servidor({
+      registro: () =>
+        respuesta(400, {
+          type: 'https://nexusbattles.upb.edu.co/errors/datos-de-registro-invalidos',
+          status: 400,
+          detail: 'Los nombres no pueden superar 80 caracteres.',
+          campo: 'nombres',
+        }),
+      login: () => respuesta(200, LOGIN_OK),
     });
-    // No se intenta entrar con una cuenta que no se creó.
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
-    expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+    const resultado = await registrarCuenta(new FormData(), credenciales, {
+      fetchImpl,
+      almacen: sessionStorage,
+    });
+    expect(resultado.mensaje).toBe('Los nombres no pueden superar 80 caracteres.');
   });
 
   test('el texto plano de siempre también sirve (servidor sin problem details)', async () => {
@@ -188,10 +296,7 @@ describe('registrarYEntrar', () => {
       registro: () => respuesta(400, 'El correo electrónico ya está registrado.'),
       login: () => respuesta(200, LOGIN_OK),
     });
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
-      fetchImpl,
-      almacen: sessionStorage,
-    });
+    const resultado = await registrar(fetchImpl);
     expect(resultado.mensaje).toBe('El correo electrónico ya está registrado.');
     expect(resultado.campo).toBeNull();
   });
@@ -201,26 +306,40 @@ describe('registrarYEntrar', () => {
       registro: () => respuesta(500, { detail: 'org.postgresql.util.PSQLException: …' }),
       login: () => respuesta(200, LOGIN_OK),
     });
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
-      fetchImpl,
-      almacen: sessionStorage,
-    });
+    const resultado = await registrar(fetchImpl);
     expect(resultado.resultado).toBe('rechazada');
     expect(resultado.mensaje).not.toContain('PSQL');
     expect(resultado.mensaje).toContain('Inténtalo de nuevo');
   });
 
+  test('2.0.0 — la lista negra no respondió (503): se dice que el apodo no se pudo comprobar', async () => {
+    const fetchImpl = servidor({
+      registro: () =>
+        respuesta(503, {
+          type: 'https://nexusbattles.upb.edu.co/errors/moderacion-no-disponible',
+          title: 'Moderación no disponible',
+          status: 503,
+          detail: 'Detalle interno que no se enseña.',
+        }),
+      login: () => respuesta(200, LOGIN_OK),
+    });
+    const resultado = await registrar(fetchImpl);
+    expect(resultado.resultado).toBe('rechazada');
+    expect(resultado.estado).toBe(503);
+    expect(resultado.mensaje).toContain('comprobar tu apodo');
+    expect(resultado.mensaje).not.toContain('interno');
+  });
+
   test.each([
     ['el login rechaza', () => respuesta(403, { detail: 'Cuenta inactiva' })],
     ['el login no contesta', () => Promise.reject(new TypeError('red'))],
-  ])('si %s, la cuenta existe: al login con el correo ya escrito', async (_caso, login) => {
-    const fetchImpl = servidor({ registro: () => respuesta(201, {}), login });
-
-    const resultado = await registrarYEntrar(new FormData(), credenciales, {
-      fetchImpl,
-      almacen: sessionStorage,
-      base: BASE,
+  ])('cuenta ACTIVO y %s: al login con el correo ya escrito', async (_caso, login) => {
+    const fetchImpl = servidor({
+      registro: () => respuesta(201, { estado: 'ACTIVO' }),
+      login,
     });
+
+    const resultado = await registrar(fetchImpl);
 
     expect(resultado.resultado).toBe('creada');
     const destino = new URL(resultado.destino);
@@ -236,8 +355,6 @@ describe('registrarYEntrar', () => {
       registro: () => Promise.reject(new TypeError('red')),
       login: () => respuesta(200, LOGIN_OK),
     });
-    await expect(
-      registrarYEntrar(new FormData(), credenciales, { fetchImpl, almacen: sessionStorage }),
-    ).rejects.toThrow('red');
+    await expect(registrar(fetchImpl)).rejects.toThrow('red');
   });
 });

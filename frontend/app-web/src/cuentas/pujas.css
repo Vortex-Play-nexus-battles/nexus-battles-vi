@@ -1155,6 +1155,25 @@ body {
   box-shadow: var(--sombra-2);
 }
 
+/* B8 — «Productos pendientes de recoger» (7.7.9). Tres columnas propias
+   (producto y monto, vencimiento, boton): la rejilla de .fila-mi-subasta es de
+   cinco y metia el nombre en la columna de 56 px de la miniatura. La fila no
+   se abre al pulsarla —lo unico accionable es «Recoger»—, asi que no finge ser
+   un enlace. Va antes del @media de 900 px, que la deja en una columna. */
+.fila-pendiente {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 240px) 150px;
+  cursor: default;
+}
+
+.fila-pendiente:hover {
+  transform: none;
+  box-shadow: var(--sombra-1);
+}
+
+.btn-recoger-todo {
+  margin-left: auto;
+}
+
 .borde-ganando {
   border-left: 5px solid var(--exito) !important;
 }

@@ -27,6 +27,7 @@
 import { rutaDeApi } from './base-api.js';
 import { difundirCierre } from './canal-sesion.js';
 import { cuerpoDelToken } from './identidad.js';
+import { LIMPIAS_POR_RUTA } from './matriz-acceso.js';
 
 /** Claves que deja `login.js` en `sessionStorage`. Un solo sitio las nombra. */
 export const CLAVES = Object.freeze({
@@ -47,6 +48,10 @@ export const RUTAS = Object.freeze({
   registro: '../cuentas/registro.html',
   preparando: '../cuentas/preparando.html',
   recuperar: '../cuentas/restablecer-solicitar.html',
+  // B1 — confirmar el correo de una cuenta nueva (/verificar) y canjear el
+  // código de recuperación o de activación (/restablecer).
+  verificar: '../cuentas/verificar-cuenta.html',
+  restablecer: '../cuentas/restablecer-confirmar.html',
   perfil: '../cuentas/perfil.html',
   historial: '../cuentas/historial-transacciones.html',
   cofres: '../cuentas/mis-cofres.html',
@@ -72,8 +77,35 @@ export const RUTAS = Object.freeze({
   tableroTecnico: '../plataforma/metricas-plataforma/tablero-tecnico.html',
 });
 
-/** URL real de una ruta relativa a este módulo. */
-export function resolver(ruta, base = import.meta.url) {
+/**
+ * ¿Sirve el borde las direcciones limpias (`/login`, `/jugar`…)?
+ *
+ * Lo dice la propia página: el borde inyecta
+ * `<meta name="nexus-rutas" content="limpias">` en todo HTML que sirve. Sin
+ * esa marca (`npm run dev`, el laboratorio visual, un servidor estático) las
+ * direcciones limpias no existen y se usan las rutas de siempre. Así el mismo
+ * código funciona en los dos sitios sin configurar nada.
+ *
+ * @param {ParentNode} [documento]
+ * @returns {boolean}
+ */
+export function hayRutasLimpias(documento = globalThis.document) {
+  return documento?.querySelector?.('meta[name="nexus-rutas"]')?.content === 'limpias';
+}
+
+/**
+ * URL real de una ruta relativa a este módulo.
+ *
+ * R17 — si la ruta es la de una vista con dirección limpia y el borde las
+ * sirve, devuelve la limpia (`/jugar` en vez de
+ * `/frontend/app-web/src/plataforma/salas-partidas/batallas.html`). Quien
+ * llama no cambia: todos los enlaces de la aplicación pasan por aquí.
+ */
+export function resolver(ruta, base = import.meta.url, documento = globalThis.document) {
+  const limpia = LIMPIAS_POR_RUTA[ruta];
+  if (limpia && hayRutasLimpias(documento)) {
+    return new URL(limpia, base).href;
+  }
   return new URL(ruta, base).href;
 }
 
@@ -152,6 +184,12 @@ export const MOTIVOS = Object.freeze({
   CADUCADA: 'caducada',
   CERRADA: 'cerrada',
   REGISTRADA: 'registrada',
+  // B1 — el correo acaba de verificarse: la cuenta es nueva y, tras entrar,
+  // pasa por «Preparando tu cuenta» (el alta empieza al verificar).
+  VERIFICADA: 'verificada',
+  // B1 — se acaba de fijar la contraseña con un código de recuperación o de
+  // activación.
+  RESTABLECIDA: 'restablecida',
 });
 
 /**
@@ -170,6 +208,35 @@ export function urlDeLogin({ volver = null, motivo = null } = {}, base = import.
     login.searchParams.set('motivo', motivo);
   }
   return login.href;
+}
+
+/**
+ * Por qué se llega a la verificación del correo. Viaja en `?motivo=`: decide
+ * qué texto se enseña, nunca lleva el correo.
+ */
+export const MOTIVOS_DE_VERIFICACION = Object.freeze({
+  /** Recién registrada: el código acaba de salir. */
+  REGISTRO: 'registro',
+  /** El login dijo que la cuenta no está verificada. */
+  LOGIN: 'login',
+  /** Se pidió otro código desde el login. */
+  REENVIADO: 'reenviado',
+});
+
+/**
+ * URL de la verificación del correo, con el motivo por el que se llega. El
+ * correo NO va aquí: viaja en `sessionStorage` (`comun/codigo-de-correo.js`).
+ *
+ * @param {{motivo?: string|null}} [opciones]
+ * @param {string} [base]
+ * @returns {string}
+ */
+export function urlDeVerificacion({ motivo = null } = {}, base = import.meta.url) {
+  const url = new URL(resolver(RUTAS.verificar, base));
+  if (motivo) {
+    url.searchParams.set('motivo', motivo);
+  }
+  return url.href;
 }
 
 /**
@@ -225,9 +292,11 @@ export function cerrarSesion({
 /**
  * Las pantallas de entrada. Volver a una de ellas tras entrar sería un bucle:
  * del login al login, o a la preparación de una cuenta que ya está lista.
+ * B1 suma la verificación del correo y el canje del código, con sus
+ * direcciones limpias (`/verificar`, `/restablecer`).
  */
 const PUERTAS_DE_ENTRADA =
-  /\/(?:login|registro|preparando|restablecer-solicitar|restablecer-confirmar)(?:\.html)?$/;
+  /\/(?:login|registro|preparando|restablecer-solicitar|restablecer-confirmar|restablecer|verificar-cuenta|verificar)(?:\.html)?$/;
 
 /**
  * ¿Es esta ruta un destino seguro al que volver? Devuelve la ruta normalizada

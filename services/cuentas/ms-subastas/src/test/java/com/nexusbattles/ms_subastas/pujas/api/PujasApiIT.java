@@ -65,7 +65,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 // El drenador intentaria entregar los avisos a un modulo de
                 // notificaciones que aqui no existe: llenaria el log de avisos
                 // de conexion rechazada sin aportar nada a estas pruebas.
-                "app.notificaciones.drenaje-intervalo-ms=3600000"
+                "app.notificaciones.drenaje-intervalo-ms=3600000",
+                // B8: recordatorio, pendientes y correo tambien son trabajos
+                // programados que tocan las subastas: fuera del camino de la prueba.
+                "app.subastas.recordatorio-intervalo-ms=3600000",
+                "app.subastas.pendientes-intervalo-ms=3600000",
+                "app.correo.drenaje-intervalo-ms=3600000"
         })
 @Testcontainers(disabledWithoutDocker = true)
 class PujasApiIT {
@@ -354,11 +359,28 @@ class PujasApiIT {
      */
     @Test
     void pujarPorDebajoDelIncrementoMinimoDevuelve409ConSuMotivo() throws Exception {
+        UUID primero = jugadorConSaldo("1000");
+        UUID jugador = jugadorConSaldo("1000");
+        Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
+        // La primera puja puede ser el precio minimo (7.7.6); desde ahi, cada
+        // puja tiene que sumar el incremento: la siguiente valida es 110.
+        assertEquals(201, enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"100\"}", tokenDe(primero), claveNueva()).statusCode());
+
+        HttpResponse<String> respuesta = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"105\"}", tokenDe(jugador), claveNueva());
+
+        assertEquals(409, respuesta.statusCode(), respuesta.body());
+        assertEquals("OFERTA_INSUFICIENTE", motivoDe(respuesta));
+    }
+
+    @Test
+    void laPrimeraPujaPorDebajoDelPrecioMinimoDevuelve409() throws Exception {
         UUID jugador = jugadorConSaldo("1000");
         Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
 
         HttpResponse<String> respuesta = enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
-                "{\"monto\":\"105\"}", tokenDe(jugador), claveNueva());
+                "{\"monto\":\"99\"}", tokenDe(jugador), claveNueva());
 
         assertEquals(409, respuesta.statusCode(), respuesta.body());
         assertEquals("OFERTA_INSUFICIENTE", motivoDe(respuesta));
@@ -635,7 +657,10 @@ class PujasApiIT {
         UUID jugador = jugadorConSaldo("1000");
         Subasta subasta = subastaActiva(UUID.randomUUID(), "100", "500");
 
-        // La siguiente oferta valida es 110: un limite de 105 no alcanza nunca.
+        // Otro ya ofrecio 100: la siguiente oferta valida es 110 y un limite de
+        // 105 no alcanza nunca.
+        assertEquals(201, enviar("POST", "/subastas/" + subasta.getId() + "/pujas",
+                "{\"monto\":\"100\"}", tokenDe(jugadorConSaldo("1000")), claveNueva()).statusCode());
         HttpResponse<String> respuesta = enviar("PUT", "/subastas/" + subasta.getId() + "/puja-automatica",
                 "{\"limite\":\"105\"}", tokenDe(jugador), null);
 

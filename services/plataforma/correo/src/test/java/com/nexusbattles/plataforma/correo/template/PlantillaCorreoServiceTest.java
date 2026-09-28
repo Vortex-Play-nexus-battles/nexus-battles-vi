@@ -113,7 +113,8 @@ class PlantillaCorreoServiceTest {
     @Test
     void laConfirmacionDeCuentaMuestraElCodigoLaVigenciaYElApodo() {
         String html = service.renderizar("email/confirmacion-cuenta",
-                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15,
+                        "proposito", "VERIFICACION"));
 
         assertThat(html)
                 .contains("Confirma tu cuenta")
@@ -186,7 +187,260 @@ class PlantillaCorreoServiceTest {
                 .contains("Espada Legendaria");
     }
 
+    // ----- 1.5.0 (B10): plantilla de los hitos de torneo -----
+
+    private static final String TORNEO_ID = "5b0f3c1e-8d2a-4c71-9e0b-2f6a7d4c9e11";
+
+    @Test
+    void laPlantillaDeTorneoVaSobreLaCorporativaConElAsuntoElMensajeYLaReferencia() {
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "ElGuerrero",
+                "asunto", "Inscripción confirmada: Copa de Otoño",
+                "mensaje", "Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.",
+                "torneoId", TORNEO_ID));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("instagram.com/thenexusbattles")
+                .contains("ElGuerrero")
+                .contains("Inscripción confirmada: Copa de Otoño")
+                .contains("Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.")
+                .as("torneoId es la referencia del envío: se ve en el correo")
+                .contains("Referencia del torneo: <strong>" + TORNEO_ID + "</strong>")
+                .as("los valores de muestra de la plantilla quedan sustituidos")
+                .doesNotContain("Novedades de tu torneo")
+                .doesNotContain("Detalle del torneo.")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void sinTorneoIdLaPlantillaDeTorneoNoPintaUnaReferenciaVacia() {
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "ElGuerrero", "asunto", "Empezó el torneo Copa de Otoño", "mensaje", "El torneo ya empezó."));
+
+        assertThat(html)
+                .contains("El torneo ya empezó.")
+                .doesNotContain("Referencia del torneo");
+    }
+
+    @Test
+    void loQueMandaTorneosSePintaComoTextoYNuncaComoHtml() {
+        // Sin HTML del llamante (HU-COR-001): asunto, mensaje y apodo se
+        // escapan aunque parezcan marcado.
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "<b>Ana</b>", "asunto", "<i>Premio</i>", "mensaje", "<script>alert(1)</script>",
+                "torneoId", TORNEO_ID));
+
+        assertThat(html)
+                .doesNotContain("<script>alert(1)</script>")
+                .contains("&lt;script&gt;alert(1)&lt;/script&gt;")
+                .doesNotContain("<b>Ana</b>")
+                .doesNotContain("<i>Premio</i>");
+    }
+
+    @Test
+    void laPlantillaDeTorneoNoFiltraSusComentariosInternos() {
+        assertThat(service.renderizar("email/torneo", Map.of("apodo", "Ana", "asunto", "a", "mensaje", "m")))
+                .doesNotContain("Comentario de Thymeleaf")
+                .doesNotContain("correo.yaml");
+    }
+
+    // ----- 1.4.0: confirmacion de cuenta segun su proposito, con enlace -----
+
+    private static final String ENLACE_VERIFICACION =
+            "http://localhost/verificar#codigo=734201&correo=nuevo%40nexusbattles.test";
+
+    @Test
+    void laVerificacionDeUnJugadorLlevaElBotonAVerificarYElEnlaceEnClaro() {
+        String html = service.renderizar("email/confirmacion-cuenta", Map.of(
+                "apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15,
+                "proposito", "VERIFICACION", "enlace", ENLACE_VERIFICACION));
+
+        assertThat(html)
+                .contains("Confirma tu cuenta")
+                .contains("Gracias por registrarte")
+                .contains("pantalla de verificación")
+                .contains("Confirmar mi correo")
+                .as("el enlace va en el boton y, por si el boton no funciona, a la vista")
+                .contains("href=\"http://localhost/verificar#codigo=734201&amp;correo=nuevo%40nexusbattles.test\"")
+                .contains("Si el botón no funciona")
+                .contains("Si no creaste esta cuenta")
+                .doesNotContain("Super Administrador")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void laActivacionDeUnaCuentaAdministrativaPideElegirContrasena() {
+        String html = service.renderizar("email/confirmacion-cuenta", Map.of(
+                "apodo", "Moderadora", "codigo", "K7QX2M9P", "minutosVigencia", 1440,
+                "proposito", "ACTIVACION",
+                "enlace", "http://localhost/restablecer#codigo=K7QX2M9P&correo=mod%40upb.edu.co"));
+
+        assertThat(html)
+                .contains("Activa tu cuenta")
+                .contains("Un Super Administrador creó tu cuenta")
+                .contains("Elegir mi contraseña")
+                .contains("href=\"http://localhost/restablecer#codigo=K7QX2M9P&amp;correo=mod%40upb.edu.co\"")
+                .contains("1440</strong> minutos")
+                .contains("pide a quien creó tu cuenta")
+                .doesNotContain("Gracias por registrarte")
+                .doesNotContain("Confirmar mi correo");
+    }
+
+    @Test
+    void sinPropositoLaConfirmacionEsUnaActivacion() {
+        String html = service.renderizar("email/confirmacion-cuenta",
+                Map.of("apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15));
+
+        assertThat(html).contains("Activa tu cuenta").doesNotContain("Confirma tu cuenta");
+    }
+
+    @Test
+    void sinEnlaceNoSePintaUnBotonQueNoLlevaANingunSitio() {
+        String html = service.renderizar("email/confirmacion-cuenta", Map.of(
+                "apodo", "ElGuerrero", "codigo", "734201", "minutosVigencia", 15, "proposito", "VERIFICACION"));
+
+        assertThat(html)
+                .contains("734201")
+                .doesNotContain("Confirmar mi correo")
+                .doesNotContain("Si el botón no funciona")
+                .doesNotContain("href=\"#\"");
+    }
+
+    @Test
+    void laRecuperacionLlevaElBotonARestablecerYMencionaLasPreguntasDeSeguridad() {
+        String html = service.renderizar("email/recuperacion-clave", Map.of(
+                "apodo", "ElGuerrero", "codigo", "482915", "minutosVigencia", 30,
+                "enlace", "http://localhost/restablecer#codigo=482915&correo=j%40gmail.com"));
+
+        assertThat(html)
+                .contains("Recupera tu contraseña")
+                .contains("482915")
+                .contains("Restablecer mi contraseña")
+                .contains("href=\"http://localhost/restablecer#codigo=482915&amp;correo=j%40gmail.com\"")
+                .contains("30</strong> minutos")
+                .contains("preguntas de seguridad")
+                .contains("Si no pediste este cambio");
+    }
+
+    // ----- 1.4.1: aviso de sancion (7.3.2 y 7.3.7) -----
+
+    @Test
+    void laSuspensionDiceQueNoSePuedeEntrarHastaCuandoPorQueYComoApelar() {
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "SUSPENSION", "motivo", "Acoso a otros jugadores",
+                "hasta", "01/10/2026 a las 18:00 (GMT-05:00)",
+                "apelableHasta", "25/10/2026 a las 23:59 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("Tu cuenta está suspendida")
+                .contains("no podrás acceder al sistema")
+                .contains("tu inventario")
+                .contains("Acoso a otros jugadores")
+                .contains("Fin de la suspensión: <strong>01/10/2026 a las 18:00 (GMT-05:00)</strong>")
+                .contains("puedes apelar esta decisión hasta el")
+                .contains("25/10/2026 a las 23:59 (GMT-05:00)")
+                .contains("15 días hábiles")
+                .doesNotContain("Resultado:")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void elBaneoEsDefinitivoYCongelaElInventario() {
+        // Las frases de la plantilla estan partidas en varias lineas del
+        // fuente; en HTML esos saltos son espacios.
+        String html = service.renderizar("email/sancion", Map.of(
+                        "apodo", "ElGuerrero", "tipo", "BANEO", "motivo", "Suplantación de identidad"))
+                .replaceAll("\\s+", " ");
+
+        assertThat(html)
+                .contains("Tu cuenta fue baneada de forma definitiva")
+                .contains("inhabilitada de forma permanente")
+                .contains("inventario queda congelado")
+                .contains("Suplantación de identidad")
+                .doesNotContain("Fin de la suspensión")
+                .as("sin plazo de apelacion no se promete ninguno")
+                .doesNotContain("puedes apelar");
+    }
+
+    @Test
+    void laAdvertenciaNoRestringeElAcceso() {
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Lenguaje ofensivo en el chat"));
+
+        assertThat(html)
+                .contains("Recibiste una advertencia")
+                .contains("no restringe tu")
+                .contains("Lenguaje ofensivo en el chat");
+    }
+
+    @Test
+    void laResolucionDeUnaApelacionDiceElResultado() {
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "APELACION_RESUELTA", "motivo", "Acoso a otros jugadores",
+                "resultadoApelacion", "REVERTIDA"));
+
+        assertThat(html)
+                .contains("Tu apelación fue resuelta")
+                .contains("Resultado:")
+                .contains("la sanción se revirtió")
+                .doesNotContain("la sanción se mantiene");
+    }
+
+    @Test
+    void elMotivoSeEscapaComoTextoYNuncaComoHtml() {
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "<script>alert(1)</script>"));
+
+        assertThat(html).doesNotContain("<script>alert(1)</script>").contains("&lt;script&gt;");
+    }
+
     // ----- HU-PAG-003: plantilla de confirmacion de compra -----
+
+    @Test
+    void laConfirmacionDeCompraDetallaLosProductosYLaOrden() {
+        String html = service.renderizar("email/confirmacion-compra", Map.of(
+                "apodo", "ElGuerrero", "monto", "250.00 COP", "concepto", "Compra en la tienda",
+                "fechaHora", "23/09/2026 a las 10:15 (GMT-05:00)", "orden", "ORD-2026-0042",
+                "lineas", java.util.List.of(
+                        Map.of("nombre", "Espada Legendaria", "cantidad", 2,
+                                "precioUnitario", "100.00 COP", "subtotal", "200.00 COP"),
+                        Map.of("nombre", "Poción", "cantidad", 1, "subtotal", "50.00 COP"))));
+
+        assertThat(html)
+                .contains("Producto").contains("Precio unitario").contains("Subtotal")
+                .contains("Espada Legendaria").contains(">2<").contains("100.00 COP").contains("200.00 COP")
+                .as("sin precio unitario se pinta una raya, no un hueco")
+                .contains("Poción").contains(">—<").contains("50.00 COP")
+                .contains("Orden: <strong>ORD-2026-0042</strong>")
+                .contains("Total pagado: <strong>250.00 COP</strong>")
+                .as("los comentarios internos de la plantilla no viajan en el correo")
+                .doesNotContain("ms-finanzas");
+    }
+
+    @Test
+    void ningunaPlantillaDeB1FiltraSusComentariosInternos() {
+        assertThat(service.renderizar("email/sancion",
+                        Map.of("apodo", "Ana", "tipo", "BANEO", "motivo", "Fraude")))
+                .doesNotContain("7.3.7").doesNotContain("Comentario de Thymeleaf");
+        assertThat(service.renderizar("email/confirmacion-cuenta",
+                        Map.of("apodo", "Ana", "codigo", "1", "minutosVigencia", 1)))
+                .doesNotContain("contrato 1.4.0").doesNotContain("Comentario de Thymeleaf");
+    }
+
+    @Test
+    void laConfirmacionDeCompraSinDetalleNoPintaUnaTablaVacia() {
+        String html = service.renderizar("email/confirmacion-compra", Map.of(
+                "apodo", "ElGuerrero", "monto", "50000.00 COP", "concepto", "Paquete de créditos x500",
+                "fechaHora", "23/09/2026 a las 10:15 (GMT-05:00)"));
+
+        assertThat(html)
+                .doesNotContain("Precio unitario")
+                .doesNotContain("Orden:")
+                .contains("Total pagado: <strong>50000.00 COP</strong>");
+    }
 
     @Test
     void laPlantillaDeConfirmacionDeCompraVaSobreLaPlantillaCorporativaYMuestraElContenido() {

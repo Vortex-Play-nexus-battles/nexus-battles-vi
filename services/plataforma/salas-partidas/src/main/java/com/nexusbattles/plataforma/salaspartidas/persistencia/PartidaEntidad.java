@@ -13,10 +13,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OrderColumn;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,8 +32,9 @@ import java.util.UUID;
  * al construirse.
  *
  * <p>Los participantes van con {@link OrderColumn} porque <b>el orden es el
- * orden de los turnos</b>. Sin esa columna, la lista volveria de la base en el
- * orden que quisiera el motor y la rotacion cambiaria tras cada reinicio.
+ * orden de los turnos</b> (sorteado al empezar desde B7). Sin esa columna, la
+ * lista volveria de la base en el orden que quisiera el motor y la rotacion
+ * cambiaria tras cada reinicio.
  */
 @Entity
 @Table(name = "partidas")
@@ -60,6 +62,27 @@ class PartidaEntidad {
     @Column(name = "iniciada_en", nullable = false)
     private Instant iniciadaEn;
 
+    /**
+     * Bloqueo optimista (V14, B7). Primitivo a proposito, como en
+     * {@code SalaEntidad}: con un {@code Long} nulo Spring Data decidiria «es
+     * nueva» por la version y no por el identificador, que asigna el dominio.
+     */
+    @Version
+    @Column(nullable = false)
+    private long version;
+
+    /** Semilla del sorteo del orden de turnos (V14, §6.1.3); nula en orden de entrada. */
+    @Column(name = "semilla_orden")
+    private Long semillaOrden;
+
+    /** Cuando termino (V14). */
+    @Column(name = "finalizada_en")
+    private Instant finalizadaEn;
+
+    /** Cuando se agota el turno en curso (V14, D-B7-14); nula sin limite. */
+    @Column(name = "turno_vence_en")
+    private Instant turnoVenceEn;
+
     @ElementCollection(fetch = FetchType.EAGER)
     @CollectionTable(name = "partida_participantes",
             joinColumns = @JoinColumn(name = "id_partida"))
@@ -79,10 +102,21 @@ class PartidaEntidad {
         entidad.turnoNumero = partida.turnoActual().numeroTurno();
         entidad.recompensaEnJuego = partida.recompensaEnJuego();
         entidad.iniciadaEn = partida.iniciadaEn();
+        // La version que el dominio leyo: es lo que permite detectar que otra
+        // accion se guardo entre la lectura y esta escritura.
+        entidad.version = partida.version();
+        entidad.semillaOrden = partida.semillaDelOrden();
+        entidad.finalizadaEn = partida.finalizadaEn();
+        entidad.turnoVenceEn = partida.turnoVenceEn();
         entidad.participantes = partida.participantes().stream()
                 .map(ParticipanteEmbebido::desde)
                 .collect(java.util.stream.Collectors.toCollection(ArrayList::new));
         return entidad;
+    }
+
+    /** Marca de concurrencia tal como esta en la base. */
+    long version() {
+        return version;
     }
 
     Partida aDominio() {
@@ -90,7 +124,8 @@ class PartidaEntidad {
                 .map(ParticipanteEmbebido::aDominio)
                 .toList();
         return Partida.rehidratar(id, idSala, estado, enCombate,
-                new Turno(turnoIdJugador, turnoNumero), recompensaEnJuego, iniciadaEn);
+                new Turno(turnoIdJugador, turnoNumero), recompensaEnJuego, iniciadaEn, version, semillaOrden,
+                finalizadaEn, turnoVenceEn);
     }
 
     /**
@@ -99,7 +134,8 @@ class PartidaEntidad {
      * <p>El heroe se guarda aplanado en columnas en vez de como entidad propia:
      * no tiene vida fuera de la partida, no se consulta por su cuenta y su dueno
      * real es el modulo de inventario. Una tabla mas seria una entidad que este
-     * servicio no posee.
+     * servicio no posee. El perfil y el estado de combate (V14) van en JSON:
+     * este servicio los guarda, pero quien los interpreta es el motor.
      */
     @Embeddable
     static class ParticipanteEmbebido {
@@ -142,6 +178,14 @@ class PartidaEntidad {
         @Column(name = "heroe_vida_maxima")
         private Integer heroeVidaMaxima;
 
+        /** Lo que el heroe lleva al combate (V14): nivel, estadisticas, equipo y epicas. */
+        @Column(name = "heroe_perfil", columnDefinition = "text")
+        private String heroePerfil;
+
+        /** Poder, cargas, efectos y acciones tal como los devolvio el motor (V14). */
+        @Column(name = "estado_combate", columnDefinition = "text")
+        private String estadoCombate;
+
         protected ParticipanteEmbebido() {
             // JPA.
         }
@@ -162,15 +206,19 @@ class PartidaEntidad {
                 fila.heroeNivel = heroe.nivel();
                 fila.heroeVidaActual = heroe.vidaActual();
                 fila.heroeVidaMaxima = heroe.vidaMaxima();
+                fila.heroePerfil = JsonDeCombate.escribir(heroe.perfil());
             }
+            fila.estadoCombate = JsonDeCombate.escribir(participante.combate());
             return fila;
         }
 
         ParticipanteDePartida aDominio() {
             HeroeDeCombate heroe = heroeId == null ? null
                     : new HeroeDeCombate(heroeId, heroeNombre, heroePrototipo, heroeRetratoUrl,
-                            heroeNivel, heroeVidaActual, heroeVidaMaxima, heroeDefensa);
-            return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+                            heroeNivel, heroeVidaActual, heroeVidaMaxima, heroeDefensa,
+                            JsonDeCombate.perfil(heroePerfil));
+            return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados,
+                    JsonDeCombate.estado(estadoCombate));
         }
     }
 }

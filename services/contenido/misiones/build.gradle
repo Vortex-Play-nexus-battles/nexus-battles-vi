@@ -1,0 +1,63 @@
+plugins {
+    id 'nexus.spring-conventions'
+    // Servidor de recursos contra el JWKS de ms-identidad (ADR-002/ADR-005)
+    // y credencial de servicio por client_credentials para hablar con
+    // heroes, motor, inventario, ms-finanzas, correo e identidad (ADR-001).
+    // Las reglas de ruta viven en nexus/misiones/configuracion/SeguridadConfig.
+    id 'nexus.seguridad-conventions'
+}
+
+group = 'nexus'
+version = '0.0.1-SNAPSHOT'
+
+// La pila comun (Boot 4.1, Java 21, webmvc, actuator, JUnit 5, JaCoCo y la
+// instrumentacion de plataforma-observabilidad) baja de las convenciones.
+// Aqui solo lo propio de misiones: su base documental (MongoDB, como el resto
+// de contenido) y la degradacion controlada de sus siete llamadas salientes.
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // HU-DIS-003: un corta circuitos por dependencia y el problem detail de
+    // seccion degradada, identico en los veinte modulos (regla 4).
+    implementation project(':shared:libs:plataforma-resiliencia')
+
+    // JSON: el Jackson 3 (tools.jackson) que ya trae spring-boot-starter-webmvc
+    // en Boot 4.1 sirve para la semilla y para los clientes REST; no se anade
+    // un segundo Jackson.
+
+    // Testcontainers con la version que fija el BOM de Spring Boot 4 (la 2.x,
+    // artefactos testcontainers-*), como productos: sin un segundo BOM que la
+    // contradiga.
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-mongodb-test'
+    testImplementation 'org.springframework.boot:spring-boot-testcontainers'
+    testImplementation 'org.testcontainers:testcontainers-mongodb'
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+
+    // Pruebas de contrato (11.4.2): las respuestas reales se validan contra
+    // contracts/openapi/misiones.yaml, como en heroes.
+    testImplementation 'com.atlassian.oai:swagger-request-validator-mockmvc:2.44.9'
+
+    // Pacto de consumidor misiones -> ms-inventario (contracts/pactos/).
+    testImplementation 'au.com.dius.pact.consumer:junit5:4.6.17'
+}
+
+// Misiones tiene pruebas reales desde el primer commit: la compuerta del 80 %
+// de las convenciones se engancha a `check` (regla 11 de plataforma).
+tasks.named('check') {
+    dependsOn tasks.named('jacocoTestCoverageVerification')
+}
+
+// El pacto generado se versiona: es un artefacto de contrato, no de build. Su
+// sitio es contracts/pactos/, que es donde el proveedor lo va a buscar.
+//
+// Las pruebas de contrato leen contracts/openapi/misiones.yaml, fuera de este
+// modulo: se declara como entrada para que un cambio del contrato las vuelva a
+// ejecutar (mismo motivo que los pactos en inventario).
+tasks.named('test') {
+    systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
+    systemProperty 'misiones.contrato', rootProject.file('contracts/openapi/misiones.yaml').absolutePath
+    inputs.file(rootProject.file('contracts/openapi/misiones.yaml'))
+            .withPropertyName('contratoDeMisiones')
+            .withPathSensitivity(PathSensitivity.RELATIVE)
+}

@@ -57,7 +57,8 @@ const PENDIENTES = Object.freeze({
   'cuentas/pujas.js': 'grupo-4',
   // R17 — `registro.js` sale de la lista: el alta del jugador reescribió su
   // envío y, de paso, la vista previa del avatar pasó a nodos.
-  'cuentas/tienda.js': 'grupo-4',
+  // UXC-4 — `tienda.js` sale de la lista: la tarjeta de producto y las líneas
+  // del carrito se construyen con nodos (`tienda-producto.js`, `h()`).
 });
 
 function modulosDeVista() {

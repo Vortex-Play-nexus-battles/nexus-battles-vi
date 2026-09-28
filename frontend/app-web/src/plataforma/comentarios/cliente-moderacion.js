@@ -1,6 +1,9 @@
 /**
  * RF-COM-005, RF-COM-006 y RF-COM-008 — acceso HTTP a la moderacion de
- * comentarios, contrato 1.3.0 (`contracts/openapi/comentarios.yaml`).
+ * comentarios, contrato 1.3.0 (`contracts/openapi/comentarios.yaml`), con lo
+ * que anade la 1.5.0 (B3, 7.3.3): EDITAR con `textoNuevo`, MARCAR y DESMARCAR
+ * para el seguimiento especial, el filtro `marcado` de la cola y las imagenes
+ * privadas de un comentario en revision, que solo ve su autor o moderacion.
  *
  * <h2>Dos prefijos, y no es un descuido</h2>
  *
@@ -20,7 +23,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
-import { ErrorDeApi, baseDeApi, rutaDeComentarios } from './cliente-comentarios.js';
+import { ErrorDeApi, baseDeApi, rutaDeComentarios, urlDeImagen } from './cliente-comentarios.js';
 
 export { ErrorDeApi };
 
@@ -29,13 +32,19 @@ export const CATEGORIAS = Object.freeze([
   { valor: 'CONTENIDO_OFENSIVO', etiqueta: 'Contenido ofensivo' },
   { valor: 'ACOSO', etiqueta: 'Acoso a otra persona' },
   { valor: 'SPAM', etiqueta: 'Spam o publicidad' },
-  { valor: 'INFORMACION_FALSA', etiqueta: 'Informacion falsa' },
+  { valor: 'INFORMACION_FALSA', etiqueta: 'Información falsa' },
   { valor: 'CONTENIDO_INAPROPIADO', etiqueta: 'Contenido inapropiado' },
-  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violacion de derechos' },
+  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violación de derechos' },
 ]);
 
+/** Los estados desde los que se edita y se marca: todos menos ELIMINADO (1.5.0). */
+const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);
+
 /**
- * Acciones de RF-COM-008 con los estados desde los que valen.
+ * Acciones de RF-COM-008 (y de 7.3.3 desde la 1.5.0) con los estados desde los
+ * que valen y, para MARCAR y DESMARCAR, la marca que tiene que tener el
+ * comentario (`marca`): marcar uno ya marcado es 409, como desmarcar uno sin
+ * marca.
  *
  * Esta tabla es un ESPEJO de `AccionDeModeracion` del servicio, y esta aqui
  * solo para no ofrecerle al moderador un boton que va a responder 409. La
@@ -47,7 +56,27 @@ export const ACCIONES = Object.freeze([
   { valor: 'OCULTAR', etiqueta: 'Ocultar', desde: ['EN_REVISION', 'PUBLICADO'] },
   { valor: 'ELIMINAR', etiqueta: 'Eliminar', desde: ['EN_REVISION', 'PUBLICADO', 'OCULTO'] },
   { valor: 'RESTAURAR', etiqueta: 'Restaurar', desde: ['OCULTO'] },
+  { valor: 'EDITAR', etiqueta: 'Editar el texto', desde: NO_TERMINALES },
+  { valor: 'MARCAR', etiqueta: 'Marcar para seguimiento', desde: NO_TERMINALES, marca: false },
+  {
+    valor: 'DESMARCAR',
+    etiqueta: 'Quitar la marca de seguimiento',
+    desde: NO_TERMINALES,
+    marca: true,
+  },
 ]);
+
+/**
+ * Las que dejan el comentario en el estado en que estaba (1.5.0): tras ellas
+ * el moderador sigue con el mismo comentario delante.
+ */
+export const ACCIONES_SIN_CAMBIO_DE_ESTADO = Object.freeze(['EDITAR', 'MARCAR', 'DESMARCAR']);
+
+/**
+ * Las que son una nota interna de moderacion: el autor no recibe aviso
+ * (`autorNotificado: false` siempre, comentarios.yaml 1.5.0).
+ */
+export const ACCIONES_INTERNAS = Object.freeze(['MARCAR', 'DESMARCAR']);
 
 /** Motivos de rechazo que enumera el contrato 1.3.0 en `ProblemDetail.motivo`. */
 export const MOTIVO_MODERACION = Object.freeze({
@@ -56,15 +85,31 @@ export const MOTIVO_MODERACION = Object.freeze({
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
 });
 
+/** Largos del contrato (`DecisionRequest`). */
+export const MOTIVO_MINIMO = 3;
+export const MOTIVO_MAXIMO = 500;
+export const TEXTO_NUEVO_MAXIMO = 2000;
+
+/**
+ * Que mirar en la cola (`marcado`, 1.5.0): sin filtro, la de siempre (los
+ * EN_REVISION); `true`, la lista de seguimiento (los marcados en cualquier
+ * estado salvo ELIMINADO); `false`, los EN_REVISION sin marcar.
+ */
+export const FILTROS_DE_COLA = Object.freeze([
+  { valor: 'en-revision', etiqueta: 'En revisión', marcado: null },
+  { valor: 'marcados', etiqueta: 'Marcados para seguimiento', marcado: true },
+  { valor: 'sin-marcar', etiqueta: 'En revisión sin marcar', marcado: false },
+]);
+
 /**
  * @param {string} estado estado actual del comentario
+ * @param {boolean} [marcado] si tiene la marca de seguimiento (1.5.0)
  * @returns {Array<{valor: string, etiqueta: string}>} acciones que tienen sentido
  */
-export function accionesDesde(estado) {
-  return ACCIONES.filter((a) => a.desde.includes(estado)).map(({ valor, etiqueta }) => ({
-    valor,
-    etiqueta,
-  }));
+export function accionesDesde(estado, marcado = false) {
+  return ACCIONES.filter(
+    (a) => a.desde.includes(estado) && (a.marca === undefined || a.marca === Boolean(marcado)),
+  ).map(({ valor, etiqueta }) => ({ valor, etiqueta }));
 }
 
 /** @returns {string} base de la cola de moderacion, sin barra final */
@@ -125,17 +170,22 @@ export async function reportarComentario(
  * Vacia es `200` con lista vacia, no un 404: no tener trabajo pendiente es
  * una respuesta correcta, y la vista lo pinta como tal.
  *
- * @param {{productoId?: string|null, pagina?: number, tamano?: number}} [filtro]
+ * @param {{productoId?: string|null, marcado?: boolean|null, pagina?: number, tamano?: number}} [filtro]
+ *   `marcado` (1.5.0): `true` la lista de seguimiento, `false` los en revision
+ *   sin marcar; `null` no viaja y el servicio da la cola de siempre.
  * @param {{fetchImpl?: Function}} [opciones]
  * @returns {Promise<{entradas: object[], total: number, pagina: number, tamano: number}>}
  */
 export async function consultarCola(
-  { productoId = null, pagina = 0, tamano = 20 } = {},
+  { productoId = null, marcado = null, pagina = 0, tamano = 20 } = {},
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
   if (productoId) {
     parametros.set('productoId', productoId);
+  }
+  if (marcado === true || marcado === false) {
+    parametros.set('marcado', String(marcado));
   }
   return pedir(
     `${rutaDeModeracion()}?${parametros}`,
@@ -165,15 +215,17 @@ export async function consultarDetalle(
 
 /**
  * La decision — RF-COM-008. El motivo es obligatorio, incluida APROBAR: no se
- * archiva nada sin decir por que.
+ * archiva nada sin decir por que. Con EDITAR viaja ademas `textoNuevo`, el
+ * texto que queda visible (1.5.0); en las demas acciones no se manda.
  *
  * Quien firma sale del token, no de aqui.
  *
  * @param {string} comentarioId
- * @param {{accion: string, motivo: string}} decision
+ * @param {{accion: string, motivo: string, textoNuevo?: string}} decision
  * @param {{fetchImpl?: Function}} [opciones]
  * @returns {Promise<{comentario: object, asiento: object, autorNotificado: boolean}>}
- * @throws {ErrorDeApi} 400 sin motivo, 409 `TRANSICION_INVALIDA` si otro se adelanto
+ * @throws {ErrorDeApi} 400 sin motivo (o EDITAR sin texto), 409
+ *   `TRANSICION_INVALIDA` si otro se adelanto o la marca ya estaba como se pide
  */
 export async function resolverComentario(
   comentarioId,
@@ -189,4 +241,32 @@ export async function resolverComentario(
     },
     fetchImpl,
   );
+}
+
+/**
+ * Los bytes de una imagen de un comentario en revision (1.5.0).
+ *
+ * Las imagenes de un comentario que no esta PUBLICADO no son publicas: el
+ * servicio solo se las da a su autor y a moderacion, y un `<img src>` no manda
+ * el token. Por eso se piden con `fetch` (el interceptor pone la sesion) y la
+ * vista las pinta desde un `blob:`. Para cualquier otro, el servicio responde
+ * 404 igual que si no existiera.
+ *
+ * @param {string} imagenId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<Blob|null>} `null` si ya no existe (o no se puede ver)
+ * @throws {ErrorDeApi} cualquier otro fallo del servicio
+ */
+export async function imagenParaModeracion(
+  imagenId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(urlDeImagen(imagenId), { method: 'GET' });
+  if (respuesta.status === 404) {
+    return null;
+  }
+  if (!respuesta.ok) {
+    throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  }
+  return respuesta.blob();
 }

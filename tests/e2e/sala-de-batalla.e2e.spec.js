@@ -28,6 +28,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 // El libro de creditos (HU-JUE-014) no esta detras del borde: se le pregunta
 // el saldo por el puerto que expone el compose. Ningun jugador pasa por aqui;
@@ -42,39 +44,13 @@ const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CURIOSO = process.env.E2E_CURIOSO ?? 'curioso_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 
-/** Cuerpo de un JWT, sin verificar la firma: aquí solo se lee para afirmar. */
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
 /**
- * Registra (si hace falta) e inicia sesión. El registro avisa por correo, pero
- * es fail-open: sin servicio de correo la cuenta se crea igual, y por eso este
- * banco no levanta ni correo ni mailpit.
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
  */
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: {
-      nombres: 'Jugadora',
-      apellidos: 'De Prueba',
-      email,
-      password: CLAVE,
-      apodo,
-    },
-  });
-  // 409/400 si ya existe de una corrida anterior: no es un fallo del flujo.
-  expect([200, 201, 400, 409]).toContain(registro.status());
-
-  const login = await api.post('/api/v1/auth/login', {
-    data: { email, password: CLAVE },
-  });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -643,7 +619,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     // (alto) -> 12/44 (bajo)—. Exigirlo pondria la prueba roja por suerte. Lo
     // que si se exige es que CADA estado pintado case con su porcentaje, y que
     // la barra salga de «alto», que es lo que demuestra que hubo daño real.
-    test.setTimeout(240000);
+    test.setTimeout(360000);
 
     /** La regla de RF-JUE-009, escrita aqui a proposito y no importada. */
     const colorEsperado = (actual, maxima) => {
@@ -657,7 +633,9 @@ test.describe('Sala de batalla de punta a punta', () => {
     const recorrido = [];
     let turnos = 0;
 
-    while (turnos < 40 && !vistos.has('bajo') && !vistos.has('medio')) {
+    // B7: con las reglas del documento el daño llega en ~3 de cada 10 golpes
+    // de un Guerrero Tanque (Tablas 21-23, D-B7-01); el tope es de la prueba.
+    while (turnos < 150 && !vistos.has('bajo') && !vistos.has('medio')) {
       const enCurso = await (
         await api.get(`/api/v1/partidas/${partida.id}`, {
           headers: conToken(anfitriona.token),
@@ -731,7 +709,9 @@ test.describe('Sala de batalla de punta a punta', () => {
   test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
     // HU-JUE-005 / RF-JUE-017: el combate acaba de verdad. Se sigue golpeando
     // desde donde lo dejo la prueba anterior hasta que la partida cierre.
-    test.setTimeout(240000);
+    // B7: un combate real de dos Guerreros Tanque dura del orden de cien
+    // turnos (Tablas 21-23, D-B7-01); el tope es de la prueba, no de la regla.
+    test.setTimeout(480000);
 
     let enCurso = await (
       await api.get(`/api/v1/partidas/${partida.id}`, {
@@ -740,7 +720,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     ).json();
 
     let turnos = 0;
-    while (enCurso.estado === 'EN_CURSO' && turnos < 40) {
+    while (enCurso.estado === 'EN_CURSO' && turnos < 300) {
       const esAnfitriona = enCurso.turnoActual.idJugador === anfitriona.claims.uid;
       const quien = esAnfitriona ? anfitriona : invitado;
 
@@ -827,6 +807,25 @@ test.describe('Sala de batalla de punta a punta', () => {
     // Al perdedor se le cobro la reserva (consumida), no se le devolvio: en
     // cualquiera de los dos casos deja de estar reservada.
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
+
+    // creditos.yaml 1.4.1 (B7): el ganador VE ese ingreso en su historial de
+    // movimientos, no solo en el saldo. Antes el cobro movia su saldo sin
+    // dejar fila a su nombre.
+    const movimientos = await api.get(
+      `${FINANZAS}/creditos/${ganador.claims.uid}/movimientos?size=50`,
+      { headers: conToken(ganador.token) },
+    );
+    expect(movimientos.status(), await movimientos.text()).toBe(200);
+    const ingresos = (await movimientos.json()).content.filter(
+      (m) =>
+        m.tipo === 'CREDITO' &&
+        m.signo === 'SUMA' &&
+        String(m.concepto).startsWith('cobro-de-reserva:'),
+    );
+    expect(
+      ingresos.some((m) => Number(m.monto) === APUESTA),
+      JSON.stringify(ingresos),
+    ).toBe(true);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),

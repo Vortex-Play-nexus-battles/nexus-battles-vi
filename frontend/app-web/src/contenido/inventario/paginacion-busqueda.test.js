@@ -95,6 +95,8 @@ beforeEach(() => {
 describe('Paginacion con una búsqueda activa', () => {
   test('cambiar de página pide la página siguiente a la búsqueda, con el mismo criterio', async () => {
     const { consultas, busquedas } = await montarConBusqueda(raiz);
+    // UXC-1 — al montar se reune el inventario entero (diez paginas).
+    const alMontar = consultas.length;
 
     await buscarTexto(raiz, 'Espada larga');
     casillas(raiz)[1].click();
@@ -104,8 +106,9 @@ describe('Paginacion con una búsqueda activa', () => {
       ['jugador-A', 'Espada larga', 0],
       ['jugador-A', 'Espada larga', 1],
     ]);
-    // El inventario completo solo se consulto al montar la vista.
-    expect(consultas).toEqual([0]);
+    // El inventario completo solo se consulto al montar la vista: la busqueda
+    // pagina contra su indice, no contra el inventario.
+    expect(consultas).toHaveLength(alMontar);
     expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Hallazgo 16');
   });
 
@@ -134,6 +137,7 @@ describe('Paginacion con una búsqueda activa', () => {
 
   test('limpiar la busqueda vuelve a la primera pagina del inventario completo', async () => {
     const { consultas } = await montarConBusqueda(raiz);
+    const alMontar = consultas.length;
 
     await buscarTexto(raiz, 'Espada larga');
     casillas(raiz)[1].click();
@@ -141,7 +145,10 @@ describe('Paginacion con una búsqueda activa', () => {
     raiz.querySelector('.inventario-busqueda__limpiar').click();
     await esperar();
 
-    expect(consultas).toEqual([0, 0]);
+    // UXC-1 — limpiar vuelve a la coleccion ya reunida (pagina 1 de objetos)
+    // sin volver a pedirla: el criterio «solo objetos» se conserva (HU-INV-011
+    // CA-3) y no hay nada nuevo que traer.
+    expect(consultas).toHaveLength(alMontar);
     expect(casillas(raiz)).toHaveLength(10);
     expect(raiz.querySelector('[aria-current="page"]').textContent).toBe('1');
     expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Inventario 0');

@@ -20,12 +20,63 @@ info:
     partida jugada, ROLE_SERVICIO) o un administrador con `motivo`
     (incomparecencia o incidencia, RF-ADM-005); nunca un jugador.
 
-    Lo que este contrato NO cubre todavia: la premiacion (RF-TOR-007: monto y
-    «epica unica» sin definir por el PO), la transmision (RF-TOR-006, INC-18) y
-    el pago en dinero real (RF-PAG-001, pasarela de otro equipo). El valor de
-    la inscripcion lo fija quien crea el torneo, en creditos (D-23); con 0 no
-    se cobra nada. Todo cambio incompatible abre version nueva (regla 2).
-  version: 1.1.0
+    El valor de la inscripcion lo fija quien crea el torneo, en creditos
+    (D-23); con 0 no se cobra nada. Todo cambio incompatible abre version
+    nueva (regla 2).
+
+    ### 1.2.0 (B10) — cobro idempotente, premio y avisos
+
+    * **Cobro y devolucion idempotentes, fuera de la transaccion.** Iniciar y
+      cancelar ya no llaman al libro de creditos dentro de la operacion que
+      cambia el estado del torneo. Primero se confirma el cambio (EN_CURSO o
+      CANCELADO) junto con una operacion persistida por participante que paga
+      (`torneo-<torneoId>-jugador-<uid>-cobro` o `...-devolucion`, unica en
+      base de datos); despues se ejecutan contra el libro (consumir o liberar
+      la reserva, ambas idempotentes en ms-finanzas) y, si el libro no
+      responde, una tarea programada las reintenta con espera creciente. Por
+      eso `/inicio` y `/cancelacion` ya no responden 503: el estado de cada
+      pago se ve en `Equipo.estadoPago`. Dos inicios simultaneos: uno gana y el
+      otro recibe 409 (ESTADO_NO_PERMITE); nunca hay dos cobros.
+    * **Clave de la reserva por pagador.** La reserva de la inscripcion usa
+      `Idempotency-Key: torneo-<torneoId>-jugador-<uid>-inscripcion`: si el
+      otro integrante reintenta, no reutiliza la reserva de su companero.
+      Las claves no llevan el id del equipo porque el libro guarda la clave en
+      128 caracteres e inventario acepta 100; un jugador esta en un solo
+      equipo por torneo, asi que torneo + jugador ya la hace unica, y el
+      equipo viaja en la operacion persistida.
+    * **Premio (RF-TOR-007).** Al jugarse la final, cada integrante humano del
+      equipo campeon recibe `premio.creditosPorIntegrante` creditos en el
+      libro (`POST /creditos/acreditar`, `refId`
+      `torneo-<torneoId>-jugador-<uid>-premio`) y la epica
+      `premio.epicaProductoId` por `POST /api/v1/inventario/entregas`
+      (origen PREMIO_TORNEO, `Idempotency-Key`
+      `torneo-<torneoId>-jugador-<uid>-epica`); nunca se escribe el
+      inventario directamente. Un integrante con sancion activa al premiar no
+      recibe premio (CA-02 de HU-TOR-007). Si gana la maquina, no hay premio.
+      El documento del curso no fija el monto ni cual es la «epica unica»: los
+      dos son parametros del servicio con valor PROVISIONAL (D-24) y se copian
+      en el torneo al crearlo, para que el premio anunciado no cambie a mitad.
+    * **Avisos.** Inscripcion confirmada, inicio, cancelacion (con la
+      devolucion) y premio entregado se notifican a cada integrante en su
+      bandeja (`notificaciones.yaml`, `POST /internal/notifications`, con la
+      misma clave estable como `id` para no duplicar). Si se configura el
+      correo, tambien por `POST /correos/torneo` (`correo.yaml`), con el
+      contacto que da ms-identidad por `uid`: torneos no guarda correos.
+    * **Reintento manual.** `POST /torneos/{torneoId}/operaciones/reintento`
+      (administrador) vuelve a poner en cola las operaciones que agotaron sus
+      intentos o que el proveedor rechazo, despues de corregir la causa.
+
+    ### Lo que este contrato NO cubre (brechas declaradas)
+
+    * **Transmision (RF-TOR-006: live-stream y video-stream de las justas con
+      comentarios de los presentadores).** No hay servidor de video, ni
+      grabacion, ni canal de comentarios de presentadores en la
+      infraestructura del proyecto (dos t3.small del plan gratuito,
+      INC-18/D-24). No se simula: ninguna ruta de este contrato transmite.
+      Lo que si existe es el arbol en vivo (`GET /torneos/{id}`) y el canal
+      STOMP de cada partida en salas-partidas, que es donde se juega.
+    * **Pago en dinero real** (RF-PAG-001, pasarela de otro equipo, D-23).
+  version: 1.2.0
 servers:
   - url: http://localhost:8083/api/v1
     description: Entorno local de desarrollo
@@ -91,6 +142,13 @@ paths:
   /torneos/{torneoId}/cancelacion:
     post:
       summary: Cancelar antes del inicio; se devuelven las inscripciones (CA-04 RF-TOR-001)
+      description: >
+        El torneo pasa a CANCELADO y cada inscripcion pagada queda como una
+        devolucion persistida (`torneo-<torneoId>-jugador-<uid>-devolucion`)
+        que se ejecuta enseguida (liberar la reserva en el libro) y, si el
+        libro no responde, la reintenta la tarea programada (1.2.0). Si la
+        reserva ya estaba cobrada, la devolucion la acredita con esa misma
+        clave como `refId`. `Equipo.estadoPago` dice en que va cada una.
       operationId: cancelarTorneo
       parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
       requestBody:
@@ -104,7 +162,7 @@ paths:
                 motivo: { type: string, minLength: 1, maxLength: 500 }
       responses:
         '200':
-          description: Torneo CANCELADO; toda reserva de creditos liberada
+          description: Torneo CANCELADO; cada inscripcion pagada DEVUELTO o DEVOLUCION_PENDIENTE
           content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
         '401': { $ref: '#/components/responses/SinToken' }
         '403': { $ref: '#/components/responses/SinPermiso' }
@@ -112,7 +170,6 @@ paths:
         '409':
           description: Ya empezo o ya termino (ESTADO_NO_PERMITE)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
-        '503': { $ref: '#/components/responses/LibroNoDisponible' }
 
   /torneos/{torneoId}/equipos:
     post:
@@ -182,9 +239,14 @@ paths:
       description: >
         Quien llama debe ser integrante y es quien paga (D-23): se reservan
         `costoInscripcion` creditos en el libro con clave idempotente
-        `torneo-<torneoId>-equipo-<equipoId>`; se cobran al iniciar el torneo y
-        se devuelven si se cancela. Con costo 0 no se toca el libro. Si algun
-        integrante tiene una sancion activa, no se inscribe (CA-02).
+        `torneo-<torneoId>-jugador-<uid>-inscripcion` (1.2.0; antes
+        `torneo-<torneoId>-equipo-<equipoId>`, que dejaba al companero
+        reutilizar la reserva del otro); se cobran al iniciar el torneo y se
+        devuelven si se cancela. Con costo 0 no se toca el libro. Si algun
+        integrante tiene una sancion activa, no se inscribe (CA-02). La
+        consulta de sanciones y la reserva se hacen fuera de la transaccion; si
+        al confirmar ya no hay cupo o el torneo cerro, la reserva se libera (o
+        queda una devolucion pendiente) y se responde el 409 que corresponda.
       operationId: inscribirEquipo
       parameters:
         - { $ref: '#/components/parameters/TorneoId' }
@@ -212,25 +274,49 @@ paths:
     post:
       summary: Cerrar inscripciones, completar con la maquina y generar el arbol (RF-TOR-004/005)
       description: >
-        Cobra las reservas de los equipos inscritos, rellena las posiciones
-        vacias con equipos de la maquina (`ia: true`) y deja los encuentros 1-4
-        listos para jugar. Sin ningun equipo humano inscrito no arranca.
+        Rellena las posiciones vacias con equipos de la maquina (`ia: true`),
+        deja los encuentros 1-4 listos para jugar y pasa el torneo a EN_CURSO
+        junto con un cobro persistido por equipo pagado
+        (`torneo-<torneoId>-jugador-<uid>-cobro`). Despues de confirmar ese
+        cambio consume cada reserva en el libro; lo que no se pueda cobrar
+        ahora lo reintenta la tarea programada (1.2.0), sin cobrar nunca dos
+        veces: la operacion es unica en base de datos y consumir es idempotente
+        en ms-finanzas. Sin ningun equipo humano inscrito no arranca.
       operationId: iniciarTorneo
       parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
       responses:
         '200':
-          description: Torneo EN_CURSO con los 14 encuentros
+          description: Torneo EN_CURSO con los 14 encuentros; cada equipo pagado COBRADO o COBRO_PENDIENTE
           content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
         '401': { $ref: '#/components/responses/SinToken' }
         '403': { $ref: '#/components/responses/SinPermiso' }
         '404': { $ref: '#/components/responses/NoEncontrado' }
         '409':
-          description: No esta en INSCRIPCIONES_ABIERTAS (ESTADO_NO_PERMITE)
+          description: No esta en INSCRIPCIONES_ABIERTAS (ESTADO_NO_PERMITE); tambien el segundo de dos inicios simultaneos
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
         '422':
           description: Ningun equipo inscrito (SIN_EQUIPOS)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
-        '503': { $ref: '#/components/responses/LibroNoDisponible' }
+
+  /torneos/{torneoId}/operaciones/reintento:
+    post:
+      summary: Volver a intentar los cobros, devoluciones, premios y avisos que fallaron (RF-ADM-005)
+      description: >
+        Solo ADMINISTRADOR o SUPER_ADMINISTRADOR. Las operaciones que el
+        proveedor rechazo o que agotaron sus reintentos (estado
+        REQUIERE_REVISION en `estadoPago` o en `premio`) vuelven a la cola con
+        su MISMA clave, asi que repetirlas nunca duplica un cobro, una
+        devolucion ni un premio. Se intentan enseguida y la tarea programada
+        sigue con las que no se puedan completar ahora.
+      operationId: reintentarOperacionesDelTorneo
+      parameters: [ { $ref: '#/components/parameters/TorneoId' } ]
+      responses:
+        '200':
+          description: El torneo con el estado de sus pagos y su premio despues del reintento
+          content: { application/json: { schema: { $ref: '#/components/schemas/Torneo' } } }
+        '401': { $ref: '#/components/responses/SinToken' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
 
   /torneos/{torneoId}/encuentros/{numero}/resultado:
     post:
@@ -240,7 +326,11 @@ paths:
         o un administrador con `motivo` (RF-ADM-005: incomparecencia o incidencia;
         queda registrado). El ganador avanza; el perdedor baja al arbol de
         secundarios y, a la segunda derrota, queda eliminado. Con la final
-        jugada el torneo pasa a FINALIZADO con `campeonEquipoId`.
+        jugada el torneo pasa a FINALIZADO con `campeonEquipoId` y, si el
+        campeon es un equipo de jugadores, nace el premio de cada integrante
+        (1.2.0, ver `premio`), que se entrega fuera de esta transaccion.
+        Los resultados de un mismo torneo se aplican de uno en uno (bloqueo de
+        la fila del torneo): dos resultados simultaneos no se pisan.
       operationId: registrarResultado
       parameters:
         - { $ref: '#/components/parameters/TorneoId' }
@@ -377,6 +467,43 @@ components:
               type: array
               description: Vacio hasta el inicio; 14 despues
               items: { $ref: '#/components/schemas/Encuentro' }
+            premio: { $ref: '#/components/schemas/Premio' }
+
+    Premio:
+      type: object
+      description: >
+        1.2.0 (RF-TOR-007). El premio que se anuncio al crear el torneo y en que
+        va su entrega. Monto y epica son PROVISIONALES mientras el PO no fije
+        D-24: los pone la configuracion del servicio
+        (`TORNEOS_PREMIO_CREDITOS_POR_INTEGRANTE`,
+        `TORNEOS_PREMIO_EPICA_PRODUCTO_ID`) y se copian en el torneo al crearlo.
+      required: [creditosPorIntegrante, estado, entregas]
+      properties:
+        creditosPorIntegrante: { type: integer, minimum: 0 }
+        epicaProductoId:
+          type: [string, 'null']
+          description: Producto EPICA del catalogo que recibe cada integrante; nulo = sin epica
+        estado:
+          type: string
+          enum: [SIN_CAMPEON, NO_APLICA, PENDIENTE, ENTREGADO, REQUIERE_REVISION]
+          description: >
+            SIN_CAMPEON mientras no se juegue la final; NO_APLICA si gano un
+            equipo de la maquina o el premio configurado es cero y sin epica;
+            ENTREGADO cuando todas las entregas terminaron (entregadas o
+            excluidas por sancion); REQUIERE_REVISION si alguna la rechazo el
+            proveedor o agoto sus reintentos.
+        entregas:
+          type: array
+          items:
+            type: object
+            required: [uid, estado, creditosEntregados, epicaEntregada]
+            properties:
+              uid: { type: string, format: uuid }
+              estado:
+                type: string
+                enum: [PENDIENTE, ENTREGADO, EXCLUIDO_POR_SANCION, REQUIERE_REVISION]
+              creditosEntregados: { type: boolean }
+              epicaEntregada: { type: boolean }
 
     EstadoTorneo:
       type: string
@@ -399,6 +526,15 @@ components:
         inscrito: { type: boolean }
         pagadoPor: { type: [string, 'null'], format: uuid }
         reservaId: { type: [string, 'null'], format: uuid }
+        estadoPago:
+          type: [string, 'null']
+          enum: [SIN_COSTO, RESERVADO, COBRO_PENDIENTE, COBRADO, DEVOLUCION_PENDIENTE, DEVUELTO, REQUIERE_REVISION, null]
+          description: >
+            1.2.0. Nulo si el equipo no esta inscrito o es de la maquina.
+            SIN_COSTO (torneo gratuito), RESERVADO (inscrito, aun sin cobrar),
+            COBRO_PENDIENTE / COBRADO tras el inicio, DEVOLUCION_PENDIENTE /
+            DEVUELTO tras la cancelacion, REQUIERE_REVISION si el libro rechazo
+            la operacion o se agotaron sus reintentos.
         posicion: { type: [integer, 'null'], minimum: 1, maximum: 8 }
         derrotas: { type: integer }
         eliminado: { type: boolean }

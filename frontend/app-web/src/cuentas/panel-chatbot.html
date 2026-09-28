@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asistente · Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./panel-chatbot.css" />
+  </head>
+
+  <body>
+    <div data-cabecera-app></div>
+
+    <main class="pagina consola pila" data-vista="panel-chatbot">
+      <!-- El panel se pinta aquí: encabezado, pestañas y su contenido. -->
+      <div class="pila pila--amplia" data-panel-chatbot></div>
+    </main>
+
+    <script type="module">
+      import { exigirAcceso } from '../comun/acceso.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { montarPanelChatbot } from './panel-chatbot.js';
+
+      // La guarda va primero y en el mismo bloque: nada consulta al servicio
+      // hasta que se sabe que quien mira es de administración.
+      const sesion = exigirAcceso('panel-chatbot');
+      if (sesion) {
+        montarCabecera(document.querySelector('[data-cabecera-app]'), {
+          vista: 'panel-chatbot',
+          seccionActiva: 'chatbot',
+        });
+        montarPanelChatbot(document.querySelector('[data-panel-chatbot]'));
+      }
+    </script>
+  </body>
+</html>

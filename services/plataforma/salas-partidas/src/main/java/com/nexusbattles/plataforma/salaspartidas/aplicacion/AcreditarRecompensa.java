@@ -6,7 +6,6 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.AcreditadorDePartida
 import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CreditoPorPartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
-import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RecompensaDePartida;
@@ -33,10 +32,12 @@ import java.util.UUID;
  * <p><b>Lo que se informa (CA-01, CA-02):</b> solo los humanos. La maquina no
  * tiene cuenta y la ficha oficial no dice si sus cupos ganan creditos, asi
  * que no se le pide nada al libro por ella (CA-06, decision D-18). Los
- * ganadores son los humanos en pie: uno, o todo el equipo ganador (la regla
- * para equipos la aplica el libro; si el PO la cambia, no se toca esto).
- * Si la maquina gano, o hubo empate, no hay ganadores y todos reciben lo de
- * participar.
+ * ganadores son los humanos que ganaron: el que quedo en pie, o todo el equipo
+ * ganador, tambien sus caidos (gana el equipo, D-B7-15). Si la maquina gano, o
+ * hubo empate, no hay ganadores y todos reciben lo de participar.
+ *
+ * <p>La sala se conserva en el constructor: la usaba la clasificacion por
+ * modalidad, que desde B7 es por contendientes (D-B7-16).
  *
  * <p><b>Sancionados (CA-04):</b> se consulta la sancion activa de cada humano
  * (mismo hecho que silencia el chat, D-14) y se informa al libro, que es
@@ -149,14 +150,14 @@ public class AcreditarRecompensa {
     }
 
     /**
-     * Uno contra uno o grupal, por la modalidad de la sala (RF-JUE-004). Si la
-     * sala ya no esta, por cuantos jugaron: mas de dos es grupal.
+     * Uno contra uno o grupal, por CUANTOS COMBATIERON (D-B7-16): dos
+     * contendientes —personas o maquina— es un uno contra uno; mas de dos, una
+     * grupal. La modalidad de la sala no basta: una sala «hasta seis» en la
+     * que solo entraron dos es, en el combate, un uno contra uno, y el premio
+     * del documento («2 por ganar un 1 vs 1, 4 por ganar una grupal») habla del
+     * combate, no del formulario de la sala.
      */
     private TipoDePartida tipoDe(Partida partida) {
-        Optional<Modalidad> modalidad = salas.buscarPorId(partida.idSala()).map(s -> s.modalidad());
-        if (modalidad.isPresent()) {
-            return modalidad.get() == Modalidad.HASTA_SEIS ? TipoDePartida.GRUPAL : TipoDePartida.UNO_A_UNO;
-        }
         return partida.participantes().size() > 2 ? TipoDePartida.GRUPAL : TipoDePartida.UNO_A_UNO;
     }
 

@@ -150,6 +150,20 @@
 			<artifactId>junit-jupiter</artifactId>
 			<scope>test</scope>
 		</dependency>
+
+		<!--
+			B5: pactos de consumidor de la compra (ms-ecommerce -> productos:
+			reserva de tiraje; ms-ecommerce -> inventario: entrega). Misma
+			version que ms-subastas. Solo el consumidor: los escribe en
+			contracts/pactos/ (ver pact.rootDir en Surefire) y los verifica
+			cada proveedor en su propio modulo.
+		-->
+		<dependency>
+			<groupId>au.com.dius.pact.consumer</groupId>
+			<artifactId>junit5</artifactId>
+			<version>4.6.17</version>
+			<scope>test</scope>
+		</dependency>
 	</dependencies>
 
 	<build>
@@ -180,6 +194,14 @@
 						<include>**/*Tests.java</include>
 						<include>**/*IT.java</include>
 					</includes>
+					<!--
+						B5: el pacto generado se versiona; es un artefacto de
+						contrato, no de build. Mismo directorio que usa
+						ms-subastas (contracts/pactos/ en la raiz del repositorio).
+					-->
+					<systemPropertyVariables>
+						<pact.rootDir>${project.basedir}/../../../contracts/pactos</pact.rootDir>
+					</systemPropertyVariables>
 				</configuration>
 			</plugin>
 			<!--
@@ -206,6 +228,33 @@
 						<goals>
 							<goal>report</goal>
 						</goals>
+					</execution>
+					<!--
+						B5: la regla 11 (cobertura >= 80 %) tambien en local.
+						`mvn verify` falla por debajo del umbral, como el
+						`check` de los modulos Gradle; el CI sigue corriendo
+						`mvn test` y la compuerta de Sonar, sin cambios.
+					-->
+					<execution>
+						<id>umbral-de-cobertura</id>
+						<phase>verify</phase>
+						<goals>
+							<goal>check</goal>
+						</goals>
+						<configuration>
+							<rules>
+								<rule>
+									<element>BUNDLE</element>
+									<limits>
+										<limit>
+											<counter>LINE</counter>
+											<value>COVEREDRATIO</value>
+											<minimum>0.80</minimum>
+										</limit>
+									</limits>
+								</rule>
+							</rules>
+						</configuration>
 					</execution>
 				</executions>
 			</plugin>
