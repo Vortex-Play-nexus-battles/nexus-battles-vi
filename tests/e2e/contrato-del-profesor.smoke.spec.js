@@ -91,7 +91,8 @@ async function productosDelTipo(api, tipo) {
 }
 
 test.describe('B13 · lo que pidió el profesor, en DEV', () => {
-  test.describe.configure({ mode: 'serial' });
+  // La lista negra y el catálogo no dependen de nada: si una falla, las
+  // demás se siguen comprobando. Solo 3-5 van en serie (comparten a A).
 
   /** @type {import('@playwright/test').APIRequestContext} */
   let api;
@@ -136,128 +137,134 @@ test.describe('B13 · lo que pidió el profesor, en DEV', () => {
     expect(oficiales.EPICA).toHaveLength(8);
   });
 
-  test('3 · una jugadora califica un producto real una sola vez y comenta; el hilo lo muestra', async () => {
-    test.setTimeout(180_000);
-    ana = await sesionDe(api, `ana_${MARCA}`, { clave: CLAVE, base: AWS });
-    const armas = await productosDelTipo(api, 'ARMA');
-    producto = armas.find((p) => nombresOficiales().ARMA.includes(p.nombre));
-    expect(producto, 'un arma del catálogo oficial').toBeTruthy();
+  test.describe('con cuentas propias (A, B y C)', () => {
+    test.describe.configure({ mode: 'serial' });
 
-    const calificacion = await api.post(`/api/v1/products/${producto.id}/rating`, {
-      headers: conToken(ana.token),
-      data: { estrellas: 5 },
-    });
-    expect(calificacion.status(), await calificacion.text()).toBe(201);
-    const otra = await api.post(`/api/v1/products/${producto.id}/rating`, {
-      headers: conToken(ana.token),
-      data: { estrellas: 1 },
-    });
-    expect(otra.status()).toBe(409);
-    expect((await otra.json()).type).toMatch(/ya-calificado$/);
+    test('3 · una jugadora califica un producto real una sola vez y comenta; el hilo lo muestra', async () => {
+      test.setTimeout(180_000);
+      ana = await sesionDe(api, `ana_${MARCA}`, { clave: CLAVE, base: AWS });
+      const armas = await productosDelTipo(api, 'ARMA');
+      producto = armas.find((p) => nombresOficiales().ARMA.includes(p.nombre));
+      expect(producto, 'un arma del catálogo oficial').toBeTruthy();
 
-    const resumen = await api.get(`/api/v1/products/${producto.id}/rating`);
-    expect(resumen.status()).toBe(200);
-    expect((await resumen.json()).total).toBeGreaterThanOrEqual(1);
-
-    const texto = `Buen equilibrio entre daño y peso para la primera partida (${MARCA})`;
-    const comentario = await api.post(`/api/v1/products/${producto.id}/comments`, {
-      headers: conToken(ana.token),
-      data: { texto },
-    });
-    expect(comentario.status(), await comentario.text()).toBe(201);
-
-    const hilo = await api.get(`/api/v1/products/${producto.id}/comments?pagina=0&tamano=10`);
-    expect(hilo.status()).toBe(200);
-    expect(JSON.stringify(await hilo.json())).toContain(texto);
-  });
-
-  test('4 · A escribe a B por mensaje privado; B lo recibe con A como remitente y C no lo lee', async () => {
-    test.setTimeout(240_000);
-    bruno = await sesionDe(api, `bruno_${MARCA}`, { clave: CLAVE, base: AWS });
-    carla = await sesionDe(api, `carla_${MARCA}`, { clave: CLAVE, base: AWS });
-    const texto = `hola bruno, ¿jugamos una partida? (${MARCA})`;
-
-    const envio = await api.post(
-      `/api/v1/mensajes-directos/conversaciones/${bruno.claims.uid}/mensajes`,
-      { headers: conToken(ana.token), data: { texto, idCliente: `dm-${MARCA}` } },
-    );
-    expect(envio.status(), await envio.text()).toBe(201);
-
-    const bandeja = await api.get('/api/v1/mensajes-directos/conversaciones', {
-      headers: conToken(bruno.token),
-    });
-    expect(bandeja.status()).toBe(200);
-    const conAna = (await bandeja.json()).find((c) => c.uidOtro === ana.claims.uid);
-    expect(conAna, 'la conversación con A en la bandeja de B').toBeTruthy();
-    expect(conAna.noLeidos).toBeGreaterThanOrEqual(1);
-
-    const historial = await api.get(
-      `/api/v1/mensajes-directos/conversaciones/${ana.claims.uid}/mensajes?limite=20`,
-      { headers: conToken(bruno.token) },
-    );
-    expect(historial.status()).toBe(200);
-    const recibido = (await historial.json()).find((m) => m.texto === texto);
-    expect(recibido, 'el mensaje en el historial de B').toBeTruthy();
-    expect(recibido.remitente).toBe(ana.claims.uid);
-    expect(recibido.destinatario).toBe(bruno.claims.uid);
-
-    // C solo ve sus conversaciones: con A no tiene ninguna, y el texto no le llega.
-    const deCarla = await api.get(
-      `/api/v1/mensajes-directos/conversaciones/${ana.claims.uid}/mensajes?limite=20`,
-      { headers: conToken(carla.token) },
-    );
-    expect(deCarla.status()).toBe(200);
-    expect(JSON.stringify(await deCarla.json())).not.toContain(texto);
-  });
-
-  test('5 · A compra con la tarjeta de prueba 4242 y el producto llega a su inventario', async () => {
-    test.setTimeout(180_000);
-    const vitrina = await api.get('/api/v1/vitrina?page=0&size=50', {
-      headers: conToken(ana.token),
-    });
-    expect(vitrina.status(), await vitrina.text()).toBe(200);
-    const candidatos = (await vitrina.json()).content.filter(
-      (p) => Number(p.precioFinal) > 0 && !p.esPropio,
-    );
-    expect(candidatos.length, 'productos a la venta en COP').toBeGreaterThan(0);
-
-    let elegido = null;
-    for (const candidato of candidatos) {
-      const alta = await api.post('/api/v1/carrito/items', {
+      const calificacion = await api.post(`/api/v1/products/${producto.id}/rating`, {
         headers: conToken(ana.token),
-        data: { productoId: candidato.id, cantidad: 1 },
+        data: { estrellas: 5 },
       });
-      if (alta.status() === 200) {
-        elegido = candidato;
-        break;
-      }
-      // Uno agotado o sin precio en moneda real se salta; cualquier otra cosa es un fallo.
-      expect([409, 422], `al carrito ${candidato.nombre}: ${await alta.text()}`).toContain(
-        alta.status(),
+      expect(calificacion.status(), await calificacion.text()).toBe(201);
+      const otra = await api.post(`/api/v1/products/${producto.id}/rating`, {
+        headers: conToken(ana.token),
+        data: { estrellas: 1 },
+      });
+      expect(otra.status()).toBe(409);
+      expect((await otra.json()).type).toMatch(/ya-calificado$/);
+
+      const resumen = await api.get(`/api/v1/products/${producto.id}/rating`);
+      expect(resumen.status()).toBe(200);
+      expect((await resumen.json()).total).toBeGreaterThanOrEqual(1);
+
+      const texto = `Buen equilibrio entre daño y peso para la primera partida (${MARCA})`;
+      const comentario = await api.post(`/api/v1/products/${producto.id}/comments`, {
+        headers: conToken(ana.token),
+        data: { texto },
+      });
+      expect(comentario.status(), await comentario.text()).toBe(201);
+
+      const hilo = await api.get(`/api/v1/products/${producto.id}/comments?pagina=0&tamano=10`);
+      expect(hilo.status()).toBe(200);
+      expect(JSON.stringify(await hilo.json())).toContain(texto);
+    });
+
+    test('4 · A escribe a B por mensaje privado; B lo recibe con A como remitente y C no lo lee', async () => {
+      test.setTimeout(240_000);
+      bruno = await sesionDe(api, `bruno_${MARCA}`, { clave: CLAVE, base: AWS });
+      carla = await sesionDe(api, `carla_${MARCA}`, { clave: CLAVE, base: AWS });
+      const texto = `hola bruno, ¿jugamos una partida? (${MARCA})`;
+
+      const envio = await api.post(
+        `/api/v1/mensajes-directos/conversaciones/${bruno.claims.uid}/mensajes`,
+        { headers: conToken(ana.token), data: { texto, idCliente: `dm-${MARCA}` } },
       );
-    }
-    expect(elegido, 'un producto que se pueda comprar').toBeTruthy();
+      expect(envio.status(), await envio.text()).toBe(201);
 
-    const pago = await api.post('/api/v1/checkout', {
-      headers: { ...conToken(ana.token), 'Idempotency-Key': `dev-compra-${MARCA}` },
-      data: {
-        titular: 'Ana De Prueba',
-        numeroTarjeta: '4242 4242 4242 4242',
-        vencimiento: '12/39',
-        codigoSeguridad: '123',
-        moneda: 'COP',
-      },
-    });
-    expect(pago.status(), await pago.text()).toBe(201);
-    const orden = await pago.json();
-    expect(orden.estado).toBe('COMPLETA');
-    expect(orden.medioDePago).toEqual({ marca: 'VISA', ultimos4: '4242' });
+      const bandeja = await api.get('/api/v1/mensajes-directos/conversaciones', {
+        headers: conToken(bruno.token),
+      });
+      expect(bandeja.status()).toBe(200);
+      const conAna = (await bandeja.json()).find((c) => c.uidOtro === ana.claims.uid);
+      expect(conAna, 'la conversación con A en la bandeja de B').toBeTruthy();
+      expect(conAna.noLeidos).toBeGreaterThanOrEqual(1);
 
-    const inventario = await api.get('/api/v1/inventario/elementos', {
-      headers: conToken(ana.token),
+      const historial = await api.get(
+        `/api/v1/mensajes-directos/conversaciones/${ana.claims.uid}/mensajes?limite=20`,
+        { headers: conToken(bruno.token) },
+      );
+      expect(historial.status()).toBe(200);
+      const recibido = (await historial.json()).find((m) => m.texto === texto);
+      expect(recibido, 'el mensaje en el historial de B').toBeTruthy();
+      expect(recibido.remitente).toBe(ana.claims.uid);
+      expect(recibido.destinatario).toBe(bruno.claims.uid);
+
+      // C solo ve sus conversaciones: con A no tiene ninguna, y el texto no le llega.
+      const deCarla = await api.get(
+        `/api/v1/mensajes-directos/conversaciones/${ana.claims.uid}/mensajes?limite=20`,
+        { headers: conToken(carla.token) },
+      );
+      expect(deCarla.status()).toBe(200);
+      expect(JSON.stringify(await deCarla.json())).not.toContain(texto);
     });
-    expect(inventario.status()).toBe(200);
-    const propios = (await inventario.json()).elementos.filter((e) => e.productoId === elegido.id);
-    expect(propios.length, `${elegido.nombre} en el inventario de A`).toBeGreaterThanOrEqual(1);
+
+    test('5 · A compra con la tarjeta de prueba 4242 y el producto llega a su inventario', async () => {
+      test.setTimeout(180_000);
+      const vitrina = await api.get('/api/v1/vitrina?page=0&size=50', {
+        headers: conToken(ana.token),
+      });
+      expect(vitrina.status(), await vitrina.text()).toBe(200);
+      const candidatos = (await vitrina.json()).content.filter(
+        (p) => Number(p.precioFinal) > 0 && !p.esPropio,
+      );
+      expect(candidatos.length, 'productos a la venta en COP').toBeGreaterThan(0);
+
+      let elegido = null;
+      for (const candidato of candidatos) {
+        const alta = await api.post('/api/v1/carrito/items', {
+          headers: conToken(ana.token),
+          data: { productoId: candidato.id, cantidad: 1 },
+        });
+        if (alta.status() === 200) {
+          elegido = candidato;
+          break;
+        }
+        // Uno agotado o sin precio en moneda real se salta; cualquier otra cosa es un fallo.
+        expect([409, 422], `al carrito ${candidato.nombre}: ${await alta.text()}`).toContain(
+          alta.status(),
+        );
+      }
+      expect(elegido, 'un producto que se pueda comprar').toBeTruthy();
+
+      const pago = await api.post('/api/v1/checkout', {
+        headers: { ...conToken(ana.token), 'Idempotency-Key': `dev-compra-${MARCA}` },
+        data: {
+          titular: 'Ana De Prueba',
+          numeroTarjeta: '4242 4242 4242 4242',
+          vencimiento: '12/39',
+          codigoSeguridad: '123',
+          moneda: 'COP',
+        },
+      });
+      expect(pago.status(), await pago.text()).toBe(201);
+      const orden = await pago.json();
+      expect(orden.estado).toBe('COMPLETA');
+      expect(orden.medioDePago).toEqual({ marca: 'VISA', ultimos4: '4242' });
+
+      const inventario = await api.get('/api/v1/inventario/elementos', {
+        headers: conToken(ana.token),
+      });
+      expect(inventario.status()).toBe(200);
+      const propios = (await inventario.json()).elementos.filter(
+        (e) => e.productoId === elegido.id,
+      );
+      expect(propios.length, `${elegido.nombre} en el inventario de A`).toBeGreaterThanOrEqual(1);
+    });
   });
 });
