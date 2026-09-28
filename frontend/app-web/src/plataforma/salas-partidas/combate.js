@@ -37,9 +37,26 @@ import { narrarAccion, narrarTurno } from './narracion.js';
  * 1.5.0). La vista no reimplementa la regla. Mientras ese estado no llega
  * —una partida anterior a B7, o el motor no respondio al empezar— se ensenan
  * con este motivo, en vez de ofrecer un boton que el servidor rechazaria.
+ *
+ * Corto a proposito, como todos los motivos de la franja (LARGO_MAXIMO_MOTIVO):
+ * el motivo va en la cabecera del grupo y ensancha la franja de mando. Con seis
+ * participantes a 1360×768, uno de mas de ~50 caracteres empuja «Lo que ha
+ * pasado» a una segunda fila y el campo baja del 80 % de la pantalla que pide
+ * §7.6 (laboratorio visual, campo-de-combate.spec.js: 71,7 % con el texto
+ * anterior, 73 caracteres).
  */
-export const MOTIVO_ESPECIALES =
-  'Se habilitan cuando el servidor calcula el estado de combate de tu héroe.';
+export const MOTIVO_ESPECIALES = 'Llegan con el estado de combate de tu héroe.';
+
+/** Largo maximo de un motivo de la franja de especiales (ver MOTIVO_ESPECIALES). */
+export const LARGO_MAXIMO_MOTIVO = 48;
+
+/** Los motivos de la cabecera de especiales, por estado; todos caben en una fila. */
+export const MOTIVOS_DE_ESPECIALES = Object.freeze({
+  fueraDeTurno: 'Se habilitan en tu turno.',
+  sinEspeciales: 'Tu héroe no tiene acciones especiales.',
+  eligiendoRival: 'Elige el rival; púlsala otra vez para cancelar.',
+  miTurno: 'Tu turno: las que no puedes usar dicen por qué.',
+});
 
 /** El ataque sin accion especial (motor-combate.yaml 1.2.0). */
 export const ATAQUE_BASICO = 'ATAQUE_BASICO';
@@ -819,13 +836,15 @@ export function montarControlesDeCombate(
         ?.focus();
     }
     if (zonaMotivoEspeciales) {
-      let motivo = 'Se habilitan en tu turno.';
+      // El nombre de la especial elegida no va aqui: ya lo dice su boton,
+      // pulsado (aria-pressed), y con el la franja no cabria en una fila.
+      let motivo = MOTIVOS_DE_ESPECIALES.fueraDeTurno;
       if (especiales.length === 0) {
-        motivo = 'Tu héroe no tiene acciones especiales.';
+        motivo = MOTIVOS_DE_ESPECIALES.sinEspeciales;
       } else if (accionPendiente) {
-        motivo = `Elige a qué rival va «${accionPendiente.nombre}». Púlsala otra vez para cancelar.`;
+        motivo = MOTIVOS_DE_ESPECIALES.eligiendoRival;
       } else if (esMiTurno) {
-        motivo = 'Es tu turno: las que no puedes usar dicen por qué.';
+        motivo = MOTIVOS_DE_ESPECIALES.miTurno;
       }
       zonaMotivoEspeciales.textContent = motivo;
     }

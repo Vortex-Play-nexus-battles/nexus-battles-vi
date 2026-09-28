@@ -27,6 +27,8 @@ import {
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
   MOTIVO_ESPECIALES,
+  MOTIVOS_DE_ESPECIALES,
+  LARGO_MAXIMO_MOTIVO,
   MOTIVO_SANADOR,
   estadoPropioDe,
 } from './combate.js';
@@ -1284,7 +1286,7 @@ describe('B7 · las acciones que calcula el servidor se juegan', () => {
     // Coste y carga con su icono, y dichos con palabras.
     expect(especial('Golpe con escudo').getAttribute('aria-label')).toContain('cuesta 2 de poder');
     expect(especial('Golpe con escudo').getAttribute('aria-label')).toContain('Un turno de carga');
-    expect(motivo()).toBe('Es tu turno: las que no puedes usar dicen por qué.');
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.miTurno);
     // El poder que lleva el servidor, no solo el maximo.
     const poder = document.querySelector('[data-zona="poder"]');
     expect(poder.hidden).toBe(false);
@@ -1298,7 +1300,16 @@ describe('B7 · las acciones que calcula el servidor se juegan', () => {
       expect(boton.disabled).toBe(true);
       expect(boton.title).toContain('No es tu turno');
     }
-    expect(motivo()).toBe('Se habilitan en tu turno.');
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.fueraDeTurno);
+  });
+
+  // §7.6 (80 % de la pantalla para el campo): el motivo va en la cabecera del
+  // grupo y ensancha la franja de mando. Uno largo empuja «Lo que ha pasado» a
+  // otra fila con seis participantes (laboratorio visual, campo-de-combate).
+  test('todos los motivos de la franja caben en una fila', () => {
+    for (const texto of [MOTIVO_ESPECIALES, ...Object.values(MOTIVOS_DE_ESPECIALES)]) {
+      expect(texto.length).toBeLessThanOrEqual(LARGO_MAXIMO_MOTIVO);
+    }
   });
 
   test('una especial de ataque con un solo rival en pie va directa contra el', () => {
@@ -1317,7 +1328,8 @@ describe('B7 · las acciones que calcula el servidor se juegan', () => {
     especial('Golpe con escudo').click();
     expect(alAtacar).not.toHaveBeenCalled();
     expect(especial('Golpe con escudo').getAttribute('aria-pressed')).toBe('true');
-    expect(motivo()).toContain('Elige a qué rival va «Golpe con escudo»');
+    // El nombre de la especial lo dicen su boton pulsado y cada rival.
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.eligiendoRival);
     expect(rival(CARLA).getAttribute('aria-label')).toBe('Golpe con escudo contra Maga');
 
     rival(CARLA).click();
