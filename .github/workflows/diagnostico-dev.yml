@@ -47,6 +47,26 @@ jobs:
           role-session-name: diagnostico-${{ github.run_id }}
           aws-region: ${{ inputs.ambiente == 'contenido' && (vars.AWS_REGION_CONTENIDO || 'us-east-1') || vars.AWS_REGION }}
 
+      # 28-sep — cualquier decision de capacidad con coste (la opcion E de
+      # CAPACIDAD.md: pasar plataforma a c7i-flex.large) se paga con los
+      # creditos del Free Plan. Hasta hoy el saldo solo se veia en la consola
+      # (Billing > Credits), y la decision se tomaba sin el. La API de Free
+      # Tier es gratuita y de solo lectura (a diferencia de Cost Explorer, que
+      # cobra por peticion). Solo informa: si la CLI del runner no la trae o
+      # el rol no puede leerla, lo dice y el diagnostico sigue.
+      - name: Creditos del Free Plan de la cuenta
+        if: steps.aws.outcome == 'success'
+        run: |
+          set -uo pipefail
+          if salida=$(aws freetier get-account-plan-state --region us-east-1 --output json 2>&1); then
+            # Tal cual, sin el numero de cuenta: plan, estado, creditos
+            # restantes y fecha de vencimiento.
+            printf '%s\n' "$salida" | jq 'del(.accountId)' 2>/dev/null || printf '%s\n' "$salida" | head -20
+          else
+            echo "  No se pudo leer el estado del plan: $(printf '%s' "$salida" | head -3)"
+            echo "  (el saldo sigue en la consola: Billing and Cost Management > Credits)"
+          fi
+
       # Lo primero, porque es la causa mas probable y la mas barata de
       # descartar: si la instancia esta apagada, todo lo demas sobra.
       - name: Estado de la instancia en EC2
