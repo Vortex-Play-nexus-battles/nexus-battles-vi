@@ -641,6 +641,17 @@ export function mismosCriterios(a, b) {
 function montarFiltros(doc) {
   const formulario = doc.getElementById('filtros-tienda');
   const vista = estadoDe(doc);
+  // UXC-9 — RF-INV-008: la búsqueda de productos de la barra llega aquí como
+  // `?busqueda=` (desde cualquier vista) o como `#busqueda-tienda` (la lupa de
+  // la barra estrecha, que trae al campo para escribir).
+  const campoBusqueda = formulario?.elements.namedItem('busqueda');
+  const pedida = new URLSearchParams(globalThis.location?.search ?? '').get('busqueda');
+  if (campoBusqueda && pedida && !campoBusqueda.value) {
+    campoBusqueda.value = pedida.trim().slice(0, 100);
+  }
+  if (campoBusqueda && globalThis.location?.hash === '#busqueda-tienda') {
+    campoBusqueda.focus();
+  }
   // Los criterios salen del formulario tal como está al montar: el navegador
   // puede haberlo rellenado al volver atrás, y la vitrina debe coincidir con
   // lo que se ve en los campos.

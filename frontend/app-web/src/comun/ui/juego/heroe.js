@@ -164,6 +164,58 @@ export function tarjetaDeHeroe(heroe, { alPulsar, seleccionada = false } = {}) {
 }
 
 /**
+ * UXC-9 — el nivel del héroe (§6.1.1, de 1 a 8) y su experiencia, como los
+ * guarda el inventario. Con la tabla del servicio de héroes, cuánto falta
+ * para el siguiente y una barra (decorativa: el texto lo dice todo).
+ *
+ * @param {{nivel: number, experiencia: number|null, paraSubir: number|null, maximo?: boolean}|null} progreso
+ * @returns {HTMLElement|null}
+ */
+export function lineaDeProgreso(progreso) {
+  if (!progreso || !Number.isInteger(progreso.nivel)) {
+    return null;
+  }
+  const { nivel, experiencia, paraSubir, maximo = false } = progreso;
+  let texto = '';
+  if (maximo) {
+    texto = 'Nivel máximo';
+  } else if (Number.isFinite(experiencia) && Number.isFinite(paraSubir)) {
+    texto = `${experiencia} de ${paraSubir} de experiencia para el nivel ${nivel + 1}`;
+  } else if (Number.isFinite(experiencia)) {
+    texto = `${experiencia} de experiencia`;
+  }
+  const barra =
+    !maximo && Number.isFinite(experiencia) && Number.isFinite(paraSubir) && paraSubir > 0
+      ? h('span', {
+          clase: 'hero-card__experiencia',
+          atributos: { 'aria-hidden': 'true' },
+          hijos: [
+            h('span', {
+              clase: 'hero-card__experiencia-relleno',
+              atributos: {
+                style: `width: ${Math.min(100, Math.round((experiencia / paraSubir) * 100))}%`,
+              },
+            }),
+          ],
+        })
+      : null;
+  return h('div', {
+    clase: 'hero-card__progreso',
+    datos: { zona: 'progreso', nivel: String(nivel) },
+    hijos: [
+      h('p', {
+        clase: 'hero-card__nivel',
+        hijos: [
+          h('strong', { texto: `Nivel ${nivel}` }),
+          texto ? h('span', { clase: 't-meta', texto: ` · ${texto}` }) : null,
+        ],
+      }),
+      barra,
+    ],
+  });
+}
+
+/**
  * La carta de un héroe PROPIO — UXC-1 (HeroCard).
  *
  * Responde de un vistazo a lo que §14 de la auditoría pide de cada pantalla:
@@ -187,7 +239,8 @@ export function tarjetaDeHeroe(heroe, { alPulsar, seleccionada = false } = {}) {
  * @returns {HTMLElement}
  */
 export function cartaDeHeroePropio(heroe, acciones = []) {
-  const { nombre, prototipo, imagen, estadisticas, estado, ranurasOcupadas } = heroe ?? {};
+  const { nombre, prototipo, imagen, estadisticas, estado, ranurasOcupadas, progreso } =
+    heroe ?? {};
   const identidad = identidadDePrototipo(prototipo);
 
   const lineaPrototipo = prototipo
@@ -249,6 +302,7 @@ export function cartaDeHeroePropio(heroe, acciones = []) {
         ],
       }),
       estado?.estado ? selloDeEstado(estado.estado, { detalle: estado.detalle ?? null }) : null,
+      lineaDeProgreso(progreso),
       bloqueDeEstadisticas(estadisticas, { compacto: true }),
       Number.isFinite(ranurasOcupadas)
         ? h('p', {

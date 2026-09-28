@@ -29,6 +29,7 @@ import { consultarProducto as consultarProductoDelCatalogo } from './cliente-pro
 import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
 import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './coleccion-inventario.js';
 import { pintarHeroes } from './heroes-inventario.js';
+import { consultarTablaDeNiveles } from './cliente-heroes.js';
 import { fuenteDeMisiones } from '../misiones/fuente-misiones.js';
 import { montarBannerDeMisiones } from '../misiones/banner-misiones.js';
 import { complementoDeOpiniones } from '../../plataforma/comentarios/hilo-comentarios.js';
@@ -285,10 +286,14 @@ function construirGestion() {
   // UXC-1 (feedback del profesor): tres pestanas en vez de una lista mezclada.
   const zonaPestanas = elementoHtml('div', 'inventario__pestanas');
   const panelHeroes = elementoHtml('section', 'inventario__panel inventario__panel--heroes');
+  // UXC-9 — §7.8.10 nombra «en torneo» entre los estados del héroe, pero los
+  // torneos inscriben jugadores, no héroes (torneos.yaml): ningún servicio
+  // bloquea un héroe por un torneo, así que ese sello no se pinta. Se dice
+  // aquí, para que su ausencia no parezca un olvido.
   const introHeroes = elementoHtml(
     'p',
     'inventario__intro',
-    'Tus héroes, con las cifras que les da lo que llevan puesto. Uno sin equipo no puede entrar a una partida.',
+    'Tus héroes, con las cifras que les da lo que llevan puesto. Uno sin equipo no puede entrar a una partida y uno en misión no juega hasta que vuelva. Los torneos inscriben jugadores, no héroes: en un encuentro de torneo juegas con tu héroe equipado, como en cualquier batalla.',
   );
   const heroes = elementoHtml('div', 'inventario-heroes');
   panelHeroes.append(introHeroes, heroes);
@@ -477,8 +482,10 @@ export async function montarInventario(
           elementoId: heroe.id,
           identidad,
           nombrePropio: heroe.nombrePropio,
+          nivel: Number.isInteger(heroe.nivel) ? heroe.nivel : null,
         }),
       alEquipar: (heroe) => abrirEquipamiento(heroe),
+      consultarNiveles: () => consultarTablaDeNiveles(),
     });
     equipos = leido.equipos;
     prototipos = leido.prototipos;
@@ -775,9 +782,13 @@ export async function montarInventario(
 
     try {
       vista.paginacion.replaceChildren(
-        construirPaginacion({ paginaActual: numero, totalPaginas }, (pedida) => {
-          actualizar(pedida);
-        }),
+        construirPaginacion(
+          { paginaActual: numero, totalPaginas },
+          (pedida) => {
+            actualizar(pedida);
+          },
+          { etiqueta: 'Páginas del inventario' },
+        ),
       );
       if (veniaEnfocado) {
         vista.paginacion.querySelector('[aria-current="page"]')?.focus();
@@ -964,8 +975,10 @@ export async function montarInventario(
           elementoId: heroe.id,
           identidad,
           nombrePropio: heroe.nombrePropio,
+          nivel: Number.isInteger(heroe.nivel) ? heroe.nivel : null,
         }),
       alEquipar: (heroe) => abrirEquipamiento(heroe),
+      consultarNiveles: () => consultarTablaDeNiveles(),
     });
     equipos = leido.equipos;
     prototipos = leido.prototipos;

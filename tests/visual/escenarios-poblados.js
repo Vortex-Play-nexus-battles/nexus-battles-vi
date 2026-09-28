@@ -3385,6 +3385,152 @@ export const ESCENARIOS_UXC8 = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// UXC-9 — Mi cuenta · Estadísticas (§7.1.1, RF-USR-012)
+// ---------------------------------------------------------------------------
+
+const HEROES_DE_LAS_PARTIDAS = [
+  'Guerrero Tanque',
+  'Mago Fuego',
+  'Guerrero Armas',
+  'Mago Hielo',
+];
+const MODALIDADES_DE_LAS_PARTIDAS = ['UNO_CONTRA_UNO', 'CONTRA_IA', 'HASTA_SEIS'];
+const RESULTADOS_DE_LAS_PARTIDAS = ['VICTORIA', 'DERROTA', 'VICTORIA', 'EMPATE'];
+
+/**
+ * `PaginaDePartidas` (salas-partidas 1.7.0): la primera de dos páginas de
+ * dieciséis, la más reciente todavía en curso. Coherente con el contrato:
+ * 16 en la página, 23 en total, 2 páginas.
+ */
+function partidasDelJugador() {
+  const contenido = Array.from({ length: 16 }, (_, i) => {
+    const enCurso = i === 0;
+    const inicio = new Date(Date.UTC(2026, 8, 27, 20, 0) - i * 5 * 3_600_000);
+    const modalidad = MODALIDADES_DE_LAS_PARTIDAS[i % 3];
+    return {
+      id: `eeeeeee${(i % 10).toString(16)}-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      idSala: `eeeeeee${(i % 10).toString(16)}-1111-4111-8111-${String(i).padStart(12, '0')}`,
+      modalidad,
+      estado: enCurso ? 'EN_CURSO' : 'FINALIZADA',
+      resultado: enCurso ? null : RESULTADOS_DE_LAS_PARTIDAS[i % 4],
+      heroe: HEROES_DE_LAS_PARTIDAS[i % 4],
+      participantes: modalidad === 'HASTA_SEIS' ? 4 : 2,
+      iniciadaEn: inicio.toISOString(),
+      finalizadaEn: enCurso ? null : new Date(inicio.getTime() + 12 * 60_000).toISOString(),
+    };
+  });
+  return { contenido, pagina: 0, tamano: 16, totalElementos: 23, totalPaginas: 2 };
+}
+
+/** `HistorialDeMisiones` (misiones 1.0.0) con cifras por categoría y una épica. */
+const HISTORIAL_DE_MISIONES_DE_LA_CUENTA = {
+  completadas: [
+    {
+      ejecucionId: 'eeeeeee1-2222-4222-8222-000000000001',
+      misionId: 'prologo',
+      nombre: 'Prólogo: El Llamado del Nexo',
+      categoria: 'HISTORIA',
+      terminadaEn: '2026-09-26T10:00:00Z',
+      resultado: 'EXITO',
+      duracionMs: 3_600_000,
+    },
+  ],
+  porCategoria: [
+    { categoria: 'HISTORIA', completadas: 4, fallidas: 1 },
+    { categoria: 'DESAFIO', completadas: 2, fallidas: 2 },
+    { categoria: 'EXPLORACION', completadas: 3, fallidas: 0 },
+  ],
+  mejoresTiempos: [],
+  epicas: [
+    // La misma épica que el laboratorio de misiones (tabla del documento).
+    { nombre: 'Velo de Sombras', master: 'Sombra del Olvido', obtenidaEn: '2026-09-24T12:00:00Z' },
+  ],
+  cadenas: [],
+};
+
+/** Una conversación con el asistente (`/chat/historial`, ms-chatbot). */
+const CONVERSACION_CON_EL_ASISTENTE = [
+  {
+    id: 'eeeeeee2-3333-4333-8333-000000000001',
+    remitente: 'USUARIO',
+    contenido: '¿Cómo pujo en una subasta?',
+    adjuntoUrl: null,
+    fechaEnvio: '2026-09-27T18:00:00Z',
+  },
+  {
+    id: 'eeeeeee2-3333-4333-8333-000000000002',
+    remitente: 'BOT',
+    contenido:
+      'Abre la subasta y escribe tu puja: tiene que superar la actual por el incremento mínimo.',
+    adjuntoUrl: null,
+    fechaEnvio: '2026-09-27T18:00:02Z',
+  },
+];
+
+export const ESCENARIOS_UXC9 = [
+  {
+    // La ventana del asistente sobre la atmósfera: su texto tiene que salir
+    // oscuro sobre su superficie clara (antes el título y las respuestas del
+    // bot salían en blanco sobre blanco), y sus controles de minimizar y de
+    // tamaño, con nombre.
+    id: 'asistente-abierto',
+    titulo: 'el asistente abierto con una conversación, minimizable y redimensionable (§7.4)',
+    ruta: 'cuentas/perfil.html',
+    sesion: () => sesionDe('qa_asistente', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/perfiles/*', json({ apodo: 'qa_asistente', email: 'asistente@nexus.test' })],
+      ['**/api/v1/sanciones/usuarios/*', json([])],
+      ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 480, saldoReservado: 0 })],
+      ['**/api/v1/creditos/*/movimientos*', json({ content: [], totalPages: 0 })],
+      ['**/api/v1/chat/historial', json(CONVERSACION_CON_EL_ASISTENTE)],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('.chatbot-flotante').click();
+      await pagina
+        .locator('.chatbot-ventana:not([hidden]) .chatbot-ventana__mensaje--bot')
+        .first()
+        .waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '.chatbot-ventana:not([hidden]) .chatbot-ventana__mensaje--bot',
+      '[data-accion="minimizar-asistente"][aria-expanded="true"]',
+      '[data-accion="tamano-asistente"]',
+    ],
+  },
+  {
+    id: 'perfil-estadisticas',
+    titulo: 'mi cuenta: tus batallas, tus misiones, torneos y logros (§7.1.1)',
+    ruta: 'cuentas/perfil.html#estadisticas',
+    sesion: () => sesionDe('qa_estadisticas', 'JUGADOR'),
+    rutas: [
+      [
+        '**/api/v1/perfiles/*',
+        json({
+          apodo: 'qa_estadisticas',
+          email: 'estadisticas@nexus.test',
+          nombres: 'Elena',
+          apellidos: 'Duarte',
+        }),
+      ],
+      ['**/api/v1/sanciones/usuarios/*', json([])],
+      ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 480, saldoReservado: 0 })],
+      ['**/api/v1/creditos/*/movimientos*', json({ content: [], totalPages: 0 })],
+      ['**/api/v1/partidas/mias*', json(partidasDelJugador())],
+      ['**/api/v1/misiones/historial', json(HISTORIAL_DE_MISIONES_DE_LA_CUENTA)],
+    ],
+    exige: [
+      '[data-zona="mis-partidas"] .distintivo--victoria',
+      '[data-zona="mis-partidas"] .distintivo--derrota',
+      '[data-zona="mis-partidas"] .distintivo--en-juego',
+      'nav.paginacion[aria-label="Páginas de tus partidas"]',
+      '[data-zona="estadisticas-misiones"] .metrica',
+      '[data-zona="estadisticas-pendiente"] .cuenta-notas__nota',
+      '[data-zona="suscripciones-pagos"]',
+    ],
+  },
+];
+
 // Los escenarios de arriba usan ayudantes definidos después del arreglo
 // principal; se suman al final, cuando ya existen.
-ESCENARIOS.push(...ESCENARIOS_UXC8);
+ESCENARIOS.push(...ESCENARIOS_UXC8, ...ESCENARIOS_UXC9);

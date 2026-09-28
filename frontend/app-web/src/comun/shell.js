@@ -126,6 +126,75 @@ export const NOMBRE_DE_ROL = Object.freeze({
   SUPER_ADMINISTRADOR: 'Super administrador',
 });
 
+/**
+ * RF-INV-008 — «la búsqueda de productos» de la barra (y §3.1.1: «barra de
+ * navegación superior permanente con el buscador de productos»).
+ *
+ * Hasta UXC-9 el buscador solo salía si la vista lo pedía, y ninguna lo
+ * pedía; y a 1100 px se plegaba a una lupa que no hacía nada al pulsarla.
+ * Ahora la barra del jugador con sesión lo lleva siempre: lleva a la tienda
+ * con lo escrito (`tienda.html?busqueda=`), que busca por nombre, tipo,
+ * habilidad y precio (§7.5). Una vista puede quitarlo con `buscador: null` o
+ * quedarse el texto con `alBuscar` (la tienda, que ya tiene su búsqueda).
+ */
+export const BUSCADOR_DE_PRODUCTOS = Object.freeze({ placeholder: 'Buscar productos' });
+
+/** Cuatro letras como mínimo, como el índice de búsqueda del inventario. */
+export const MINIMO_DE_BUSQUEDA = 4;
+
+/**
+ * El «historial de búsquedas» (§3.1.1): las últimas, en este dispositivo,
+ * como sugerencias del campo. Es una comodidad de quien mira, no un dato del
+ * juego: si el navegador no deja guardar, simplemente no hay sugerencias.
+ */
+const CLAVE_BUSQUEDAS = 'nexus.busquedasRecientes';
+const MAXIMO_DE_RECIENTES = 5;
+
+function almacenLocal() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {Storage|null} [almacen]
+ * @returns {string[]} de la más reciente a la más antigua
+ */
+export function busquedasRecientes(almacen = almacenLocal()) {
+  try {
+    const guardadas = JSON.parse(almacen?.getItem(CLAVE_BUSQUEDAS) ?? '[]');
+    return Array.isArray(guardadas)
+      ? guardadas.filter((t) => typeof t === 'string').slice(0, MAXIMO_DE_RECIENTES)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @param {string} texto
+ * @param {Storage|null} [almacen]
+ */
+export function recordarBusqueda(texto, almacen = almacenLocal()) {
+  const limpio = String(texto ?? '').trim();
+  if (!limpio || !almacen) {
+    return;
+  }
+  const resto = busquedasRecientes(almacen).filter(
+    (t) => t.toLocaleLowerCase('es') !== limpio.toLocaleLowerCase('es'),
+  );
+  try {
+    almacen.setItem(
+      CLAVE_BUSQUEDAS,
+      JSON.stringify([limpio, ...resto].slice(0, MAXIMO_DE_RECIENTES)),
+    );
+  } catch {
+    // Almacenamiento lleno o bloqueado: la búsqueda sigue, sin recordarla.
+  }
+}
+
 /* -------------------------------------------------------------------------
    Piezas compartidas por los tres armazones
    ------------------------------------------------------------------------- */
@@ -428,7 +497,7 @@ export function montarArmazonJugador(
   raiz,
   {
     seccionActiva = null,
-    buscador = null,
+    buscador = BUSCADOR_DE_PRODUCTOS,
     sesion,
     base = BASE_RUTAS,
     almacen = globalThis.sessionStorage,
@@ -484,8 +553,11 @@ export function montarArmazonJugador(
   grupoMarca.append(nav);
   cabecera.append(grupoMarca);
 
-  if (buscador) {
-    cabecera.append(construirBuscador(buscador, base));
+  // RF-INV-008: la búsqueda de productos, para quien tiene sesión (la tienda
+  // la pide; un visitante tiene «Iniciar sesión» y «Registrarse» al lado).
+  const conBuscador = Boolean(buscador) && sesion.autenticado;
+  if (conBuscador) {
+    cabecera.append(construirBuscador(buscador, { base, navegar }));
   }
 
   const acciones = h('div', { clase: 'cabecera__acciones' });
@@ -516,6 +588,9 @@ export function montarArmazonJugador(
     );
     acciones.append(zona);
   } else {
+    if (conBuscador) {
+      acciones.append(atajoDeBusqueda(buscador, base));
+    }
     acciones.append(
       indicadorDeCreditos(base),
       campana(base),
@@ -565,32 +640,83 @@ function campana(base) {
   return enlaceCampana;
 }
 
-function construirBuscador(buscador, base) {
+/**
+ * El campo de la barra. Sin `alBuscar` lleva a la tienda con lo escrito; con
+ * él, se lo entrega a la vista (la tienda, que filtra en el sitio).
+ *
+ * @param {{placeholder?: string, alBuscar?: (texto: string) => void}} buscador
+ * @param {{base: string, navegar: (url: string) => void}} opciones
+ * @returns {HTMLFormElement}
+ */
+function construirBuscador(buscador, { base, navegar }) {
+  const nombre = buscador.placeholder ?? BUSCADOR_DE_PRODUCTOS.placeholder;
   const formulario = h('form', {
     clase: 'cabecera__buscador',
-    atributos: { role: 'search' },
+    // La validación la hace el envío (abajo): el globo nativo saldría en el
+    // idioma del navegador, no en el del juego.
+    atributos: { role: 'search', 'aria-label': nombre, novalidate: '' },
   });
   formulario.append(icono('buscar', base, 'icono icono--menudo'));
-  const etiqueta = h('label', {
-    clase: 'solo-lectores',
-    texto: buscador.placeholder ?? 'Buscar',
-  });
+  const etiqueta = h('label', { clase: 'solo-lectores', texto: nombre });
   etiqueta.htmlFor = 'cabecera-busqueda';
   const campo = h('input', {
     clase: 'cabecera__buscador-texto',
     atributos: {
       type: 'search',
       id: 'cabecera-busqueda',
-      name: 'q',
-      placeholder: buscador.placeholder ?? 'Buscar',
+      name: 'busqueda',
+      placeholder: nombre,
+      minlength: String(MINIMO_DE_BUSQUEDA),
+      maxlength: '100',
+      autocomplete: 'off',
+      list: 'cabecera-busquedas-recientes',
     },
   });
-  formulario.append(etiqueta, campo);
+  const recientes = h('datalist', {
+    atributos: { id: 'cabecera-busquedas-recientes' },
+    hijos: busquedasRecientes().map((texto) => h('option', { atributos: { value: texto } })),
+  });
+  formulario.append(etiqueta, campo, recientes);
+  campo.addEventListener('input', () => campo.setCustomValidity(''));
   formulario.addEventListener('submit', (evento) => {
     evento.preventDefault();
-    buscador.alBuscar?.(campo.value.trim());
+    const texto = campo.value.trim();
+    if (texto.length < MINIMO_DE_BUSQUEDA) {
+      campo.setCustomValidity('Escribe al menos cuatro letras para buscar.');
+      campo.reportValidity?.();
+      return;
+    }
+    recordarBusqueda(texto);
+    if (typeof buscador.alBuscar === 'function') {
+      buscador.alBuscar(texto);
+      return;
+    }
+    const destino = new URL(urlDeVista('tienda', base));
+    destino.searchParams.set('busqueda', texto);
+    navegar(destino.href);
   });
   return formulario;
+}
+
+/**
+ * Cuando la barra no tiene sitio para el campo (≤1100 px y en el teléfono),
+ * una lupa que sí lleva a algún sitio: la búsqueda de la tienda. Antes el
+ * campo se plegaba a una lupa que no hacía nada al pulsarla.
+ *
+ * @param {{placeholder?: string}} buscador
+ * @param {string} base
+ * @returns {HTMLAnchorElement}
+ */
+function atajoDeBusqueda(buscador, base) {
+  const nombre = buscador.placeholder ?? BUSCADOR_DE_PRODUCTOS.placeholder;
+  const destino = new URL(urlDeVista('tienda', base));
+  destino.hash = 'busqueda-tienda';
+  const atajo = h('a', {
+    clase: 'cabecera__buscador-atajo',
+    atributos: { href: destino.href, 'aria-label': nombre, title: nombre },
+  });
+  atajo.append(icono('buscar', base));
+  return atajo;
 }
 
 /* -------------------------------------------------------------------------
@@ -714,7 +840,7 @@ export function montarArmazon(
     vista = null,
     armazon = null,
     seccionActiva = null,
-    buscador = null,
+    buscador = BUSCADOR_DE_PRODUCTOS,
     almacen = globalThis.sessionStorage,
     base = BASE_RUTAS,
     ahora,

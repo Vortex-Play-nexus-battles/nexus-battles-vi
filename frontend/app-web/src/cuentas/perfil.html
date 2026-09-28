@@ -17,20 +17,60 @@
       <header class="encabezado-pagina">
         <div class="pila pila--ajustada">
           <h1>Mi cuenta</h1>
-          <p class="t-cuerpo">Tus datos, tu seguridad y todo lo que movió tus créditos.</p>
+          <p class="t-cuerpo">
+            Tus datos, cómo te va en el juego, tu seguridad y todo lo que movió tus créditos.
+          </p>
         </div>
       </header>
 
       <!-- Aviso global de la pantalla: guardado, rechazo del servicio. -->
       <div data-zona="aviso" hidden></div>
 
-      <!-- Las cuatro cosas que esta pantalla hace de verdad. La navegación
+      <!-- Las cinco cosas que esta pantalla hace de verdad. La navegación
            por pestañas la monta `comun/ui/pestanas.js` (patrón ARIA tabs). -->
       <div data-zona="pestanas"></div>
 
       <!-- ---------------------------------------------------- Resumen -->
       <section data-zona="panel-resumen" hidden>
         <div class="pila" data-zona="contenido"></div>
+      </section>
+
+      <!-- ---------------------------------------------- Estadísticas -->
+      <!-- UXC-9 — §7.1.1 «estadísticas y logros del jugador». Lo pinta
+           `estadisticas-cuenta.js` con lo que publican salas-partidas
+           (`GET /partidas/mias`) y misiones (`GET /misiones/historial`). -->
+      <section data-zona="panel-estadisticas" hidden>
+        <div class="pila">
+          <section class="tarjeta pila" aria-labelledby="titulo-mis-batallas">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-mis-batallas">Tus batallas</h2>
+                <p class="t-meta">Cada partida que jugaste, con su resultado.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-partidas"></div>
+          </section>
+
+          <section class="tarjeta pila" aria-labelledby="titulo-mis-misiones">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-mis-misiones">Tus misiones</h2>
+                <p class="t-meta">Lo que tus héroes consiguieron fuera de las batallas.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-misiones"></div>
+          </section>
+
+          <section class="tarjeta pila" aria-labelledby="titulo-torneos-logros">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-torneos-logros">Torneos y logros</h2>
+                <p class="t-meta">Dónde se ve hoy lo que no tiene resumen en tu cuenta.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-pendiente"></div>
+          </section>
+        </div>
       </section>
 
       <!-- ---------------------------------------------------- Perfil -->
@@ -376,6 +416,41 @@
             </a>
           </div>
           <div data-zona="contenido"></div>
+
+          <!-- UXC-9 — §7.1.1 «administración de suscripciones y métodos de
+               pago». Ningún contrato publica suscripciones ni guarda
+               tarjetas (ecommerce-carrito: el número se valida y se
+               descarta; solo quedan los cuatro últimos dígitos), así que
+               aquí se dice eso, con adónde ir, en vez de una sección vacía. -->
+          <section class="tarjeta pila" aria-labelledby="titulo-suscripciones-pagos">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-suscripciones-pagos">
+                  Suscripciones y métodos de pago
+                </h2>
+                <p class="t-meta">Qué guarda tu cuenta de tus pagos.</p>
+              </div>
+            </div>
+            <dl class="cuenta-notas" data-zona="suscripciones-pagos">
+              <div class="cuenta-notas__nota">
+                <dt>Suscripciones</dt>
+                <dd>
+                  No tienes ninguna: el juego todavía no ofrece suscripciones. Los productos se
+                  compran uno a uno en la tienda.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Métodos de pago</dt>
+                <dd>
+                  No se guarda ninguna tarjeta: la escribes en cada compra, se comprueba y se
+                  descarta. Con el pago solo quedan sus cuatro últimos dígitos.
+                </dd>
+              </div>
+            </dl>
+            <div class="tarjeta__acciones">
+              <a class="boton boton--secundario" href="./tienda.html">Ir a la tienda</a>
+            </div>
+          </section>
         </div>
       </section>
     </main>

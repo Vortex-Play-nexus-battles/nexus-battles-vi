@@ -963,6 +963,33 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(nombres()).toEqual(['Hacha']);
   });
 
+  test('la búsqueda de la barra llega como ?busqueda= y la vitrina abre filtrada (RF-INV-008)', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [producto(1, { nombre: 'Espada Élfica' }), producto(2, { nombre: 'Coraza' })],
+    });
+    globalThis.history.replaceState(null, '', '?busqueda=elfica');
+    try {
+      await montarTienda(document);
+
+      expect(filtros().elements.namedItem('busqueda').value).toBe('elfica');
+      expect(nombres()).toEqual(['Espada Élfica']);
+    } finally {
+      globalThis.history.replaceState(null, '', '/');
+    }
+  });
+
+  test('la lupa de la barra estrecha trae el foco al campo de búsqueda', async () => {
+    globalThis.fetch = servicios({ vitrina: [producto(1)] });
+    globalThis.history.replaceState(null, '', '#busqueda-tienda');
+    try {
+      await montarTienda(document);
+
+      expect(document.activeElement).toBe(filtros().elements.namedItem('busqueda'));
+    } finally {
+      globalThis.history.replaceState(null, '', '/');
+    }
+  });
+
   test('buscar y pulsar «Añadir»: salir de la búsqueda no repinta la vitrina y el clic llega', async () => {
     // El `change` de la búsqueda llega al perder el foco, justo entre el
     // `mousedown` y el `mouseup` de quien pulsa «Añadir». Repintar ahí

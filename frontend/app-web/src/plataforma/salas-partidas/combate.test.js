@@ -31,6 +31,7 @@ import {
   LARGO_MAXIMO_MOTIVO,
   MOTIVO_SANADOR,
   estadoPropioDe,
+  insigniasDe,
 } from './combate.js';
 
 const PARTIDA = '11111111-1111-1111-1111-111111111111';
@@ -1261,13 +1262,49 @@ describe('B7 · las acciones que calcula el servidor se juegan', () => {
     const delCanal = [{ jugador: { id: ANA }, heroe: { acciones: DEL_GUERRERO, poderActual: 3 } }];
     const deLaApi = [{ jugador: ANA, heroe: { acciones: DEL_GUERRERO, poderMaximo: 10 } }];
 
+    // UXC-9 — también `recargas` (1.5.0): lo que falta de carga, por acción.
     expect(estadoPropioDe(delCanal, ANA)).toEqual({
       acciones: DEL_GUERRERO,
       poderActual: 3,
       poderMaximo: null,
+      recargas: {},
     });
     expect(estadoPropioDe(deLaApi, ANA).poderMaximo).toBe(10);
-    expect(estadoPropioDe([], ANA)).toEqual({ acciones: [], poderActual: null, poderMaximo: null });
+    expect(estadoPropioDe([], ANA)).toEqual({
+      acciones: [],
+      poderActual: null,
+      poderMaximo: null,
+      recargas: {},
+    });
+    const enCarga = [{ jugador: ANA, heroe: { acciones: DEL_GUERRERO, recargas: { X: 2 } } }];
+    expect(estadoPropioDe(enCarga, ANA).recargas).toEqual({ X: 2 });
+  });
+
+  test('UXC-9 — insigniasDe: con `recargas`, el reloj dice lo que falta', () => {
+    const golpe = { codigo: 'GOLPE', costoPoder: 2, turnosDeCarga: 1 };
+    expect(insigniasDe(golpe).map((i) => i.texto)).toEqual(['2', '1']);
+    const enCarga = insigniasDe(golpe, { GOLPE: 2 });
+    expect(enCarga.at(-1)).toMatchObject({
+      texto: 'faltan 2',
+      enCarga: true,
+      etiqueta: 'En carga: faltan 2 turnos',
+    });
+    expect(insigniasDe({ ...golpe, esEpica: true, costoPoder: 0 })[0].texto).toBe('Épica');
+  });
+
+  test('UXC-9 — la épica y la carga que falta se ven en la carta, no solo en el título', () => {
+    montar({
+      acciones: [
+        accion('Golpe con escudo'),
+        accion('Furia ancestral', { esEpica: true, costoPoder: 0, turnosDeCarga: 2 }),
+        accion('Mano de piedra', { disponible: false, motivo: 'En carga: 2 turnos.' }),
+      ],
+    });
+    const epica = especial('Furia ancestral');
+    expect(epica.querySelector('.accion-combate__insignias').textContent).toContain('Épica');
+    expect(epica.getAttribute('aria-label')).toContain('Acción épica');
+    // Sin `recargas`, la carga es la de la acción («⟳1»); con ellas, lo que falta.
+    expect(especial('Mano de piedra').textContent).not.toContain('faltan');
   });
 
   test('se pintan al montar, con su disponibilidad y su motivo, y sin el ataque basico', () => {

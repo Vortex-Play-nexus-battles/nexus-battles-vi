@@ -180,7 +180,10 @@ function pieDeAccion({ insignias, detalle, coste }) {
       atributos: { 'aria-hidden': 'true' },
       hijos: insignias.map((insignia) =>
         h('span', {
-          clase: 'accion-combate__insignia',
+          clase: clases(
+            'accion-combate__insignia',
+            insignia.enCarga && 'accion-combate__insignia--en-carga',
+          ),
           atributos: { title: insignia.etiqueta ?? null },
           hijos: [
             icono(insignia.icono, {
@@ -347,24 +350,52 @@ const ICONO_DE_EFECTO = Object.freeze({
 });
 
 /**
+ * UXC-9 — el icono por el TIPO del motor (`Efecto.tipo`, canal 1.5.0;
+ * `TipoDeEfecto` de motor-combate.yaml). El servidor manda `icono: null` y
+ * códigos de acción como `CONO_DE_HIELO` que no se pueden adivinar: sin
+ * esto, todo efecto real salía con la estrella neutra.
+ */
+const ICONO_POR_TIPO = Object.freeze({
+  BONO_ATAQUE: 'espada',
+  BONO_DANO: 'daga',
+  BONO_SANACION: 'cruz',
+  BONO_CRITICO: 'objetivo',
+  BONO_DEFENSA: 'escudo',
+  PENALIZA_ATAQUE: 'alerta',
+  PENALIZA_DANO: 'alerta',
+  INMUNE_FISICO: 'escudo-check',
+  REDUCE_MAGICO: 'escudo',
+  INMUNE_TOTAL: 'escudo-check',
+  REFLEJA_MITAD: 'rayo',
+  DANO_POR_TURNO: 'gota',
+  SANACION_POR_TURNO: 'corazon',
+  VINCULO_REANIMACION: 'estrella-llena',
+});
+
+/** El símbolo de un efecto: el del servidor, el de su tipo, el de su código o la estrella. */
+export function simboloDeEfecto(efecto) {
+  const porIcono = ICONO_DE_EFECTO[String(efecto?.icono ?? '').toUpperCase()];
+  const porTipo = ICONO_POR_TIPO[String(efecto?.tipo ?? '').toUpperCase()];
+  const porCodigo = ICONO_DE_EFECTO[String(efecto?.codigo ?? '').toUpperCase()];
+  return porIcono ?? porTipo ?? porCodigo ?? 'estrella';
+}
+
+/**
  * Un efecto activo sobre un héroe — UXC-2 (EffectChip).
  *
  * §7.6: «todos los efectos o controles deben ser representados por iconos».
- * `Efecto` del contrato trae `codigo`, `nombre`, `icono` opcional y
- * `turnosRestantes` opcional. El icono se busca por el `icono` que mande el
- * servidor o por el código; si no se reconoce, una estrella neutra. El nombre
- * va siempre escrito (y en el nombre accesible), así que el icono refuerza.
+ * `Efecto` del contrato trae `codigo`, `nombre`, `icono` opcional,
+ * `turnosRestantes` opcional y (1.5.0) `tipo`. El icono se busca por el
+ * `icono` que mande el servidor, por el tipo del motor o por el código; si no
+ * se reconoce, una estrella neutra. El nombre va siempre escrito (y en el
+ * nombre accesible), así que el icono refuerza.
  *
- * @param {{codigo: string, nombre: string, icono?: string|null, turnosRestantes?: number|null}} efecto
+ * @param {{codigo: string, nombre: string, icono?: string|null, tipo?: string|null, turnosRestantes?: number|null}} efecto
  * @param {{compacto?: boolean}} [opciones] solo icono y turnos (HUD); el nombre queda en `title`
  * @returns {HTMLElement}
  */
 export function chipDeEfecto(efecto, { compacto = false } = {}) {
-  const clave = String(efecto?.icono ?? efecto?.codigo ?? '').toUpperCase();
-  const simbolo =
-    ICONO_DE_EFECTO[clave] ??
-    ICONO_DE_EFECTO[String(efecto?.codigo ?? '').toUpperCase()] ??
-    'estrella';
+  const simbolo = simboloDeEfecto(efecto);
   const turnos = Number.isInteger(efecto?.turnosRestantes) ? efecto.turnosRestantes : null;
   const accesible = [
     efecto?.nombre ?? efecto?.codigo ?? 'Efecto',

@@ -851,3 +851,52 @@ describe('el detalle con la ficha', () => {
     ctrl.destruir();
   });
 });
+
+describe('compartir una subasta', () => {
+  test('copia el enlace a la subasta y lo confirma en el botón', async () => {
+    const escribir = jest.fn(async () => {});
+    const anterior = globalThis.navigator.clipboard;
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: { writeText: escribir },
+      configurable: true,
+    });
+    const api = apiFalsa();
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('abierta-1');
+    await esperar();
+
+    contenedor.querySelector('#btn-compartir').click();
+    await esperar();
+
+    expect(escribir).toHaveBeenCalledWith(expect.stringMatching(/pujas\.html\?id=abierta-1$/));
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: anterior,
+      configurable: true,
+    });
+    ctrl.destruir();
+  });
+
+  test('si no se puede copiar, lo dice sin tecnicismos', async () => {
+    Object.defineProperty(globalThis.navigator, 'clipboard', {
+      value: {
+        writeText: async () => {
+          throw new Error('NotAllowedError: Document is not focused');
+        },
+      },
+      configurable: true,
+    });
+    const api = apiFalsa();
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('abierta-1');
+    await esperar();
+
+    await ctrl.compartirSubasta();
+
+    const alerta = contenedor.querySelector('#alerta-pujas').textContent;
+    expect(alerta).toContain('No pudimos copiar el enlace');
+    expect(alerta).not.toContain('NotAllowedError');
+    ctrl.destruir();
+  });
+});

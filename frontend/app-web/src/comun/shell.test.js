@@ -316,24 +316,109 @@ describe('sesión vigilada y preparación de la cuenta (R17)', () => {
   });
 });
 
-describe('buscador solo donde aplica', () => {
-  test('por omisión no hay buscador', () => {
-    conSesion();
-    expect(montar({ vista: 'home' }).elemento.querySelector('[role="search"]')).toBeNull();
-  });
-
-  test('con buscador, enviar entrega el texto a la vista', () => {
-    conSesion();
-    const alBuscar = jest.fn();
-    const { elemento } = montar({
-      vista: 'inventario',
-      buscador: { placeholder: 'Buscar productos', alBuscar },
-    });
-    elemento.querySelector('input[type="search"]').value = '  espada  ';
+describe('la búsqueda de productos de la barra (RF-INV-008)', () => {
+  // UXC-9 — antes esto decía «por omisión no hay buscador», y ninguna vista lo
+  // pedía: la barra no tenía búsqueda en ninguna parte. RF-INV-008 (estado
+  // «Confirmado») la pide en la barra: «una barra de navegación que incluya la
+  // búsqueda de productos», y §3.1.1 la llama «permanente». La prueba vieja
+  // protegía lo contrario de lo que pide el requisito; se reescribe con él.
+  function enviar(elemento, texto) {
+    elemento.querySelector('input[type="search"]').value = texto;
     elemento
       .querySelector('[role="search"]')
       .dispatchEvent(new Event('submit', { cancelable: true }));
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test('con sesión, la barra del jugador la lleva siempre, con su nombre', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+
+    const formulario = elemento.querySelector('form[role="search"]');
+    expect(formulario).not.toBeNull();
+    expect(formulario.getAttribute('aria-label')).toBe('Buscar productos');
+    const campo = formulario.querySelector('input[type="search"]');
+    expect(campo.getAttribute('minlength')).toBe('4');
+    expect(formulario.querySelector('label').textContent).toBe('Buscar productos');
+  });
+
+  test('buscar lleva a la tienda con lo escrito', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'home', navegar });
+
+    enviar(elemento, '  espada  ');
+
+    const destino = new URL(navegar.mock.calls[0][0]);
+    expect(destino.pathname).toMatch(/cuentas\/tienda\.html$/);
+    expect(destino.searchParams.get('busqueda')).toBe('espada');
+  });
+
+  test('con menos de cuatro letras no navega y lo dice en español', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'home', navegar });
+
+    enviar(elemento, 'esp');
+
+    expect(navegar).not.toHaveBeenCalled();
+    expect(elemento.querySelector('input[type="search"]').validationMessage).toBe(
+      'Escribe al menos cuatro letras para buscar.',
+    );
+  });
+
+  test('recuerda las últimas búsquedas como sugerencias del campo', () => {
+    conSesion();
+    enviar(montar({ vista: 'home' }).elemento, 'Espada de hielo');
+    document.body.innerHTML = '';
+
+    const { elemento } = montar({ vista: 'home' });
+    const campo = elemento.querySelector('input[type="search"]');
+    const sugerencias = [...elemento.querySelectorAll(`#${campo.getAttribute('list')} option`)];
+    expect(sugerencias.map((o) => o.value)).toEqual(['Espada de hielo']);
+  });
+
+  test('sin sitio para el campo, la lupa lleva a la búsqueda de la tienda', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+
+    const atajo = elemento.querySelector('.cabecera__buscador-atajo');
+    expect(atajo.getAttribute('aria-label')).toBe('Buscar productos');
+    const destino = new URL(atajo.href);
+    expect(destino.pathname).toMatch(/cuentas\/tienda\.html$/);
+    expect(destino.hash).toBe('#busqueda-tienda');
+  });
+
+  test('una vista que filtra en el sitio se queda el texto (la tienda)', () => {
+    conSesion();
+    const alBuscar = jest.fn();
+    const navegar = jest.fn();
+    const { elemento } = montar({
+      vista: 'tienda',
+      navegar,
+      buscador: { placeholder: 'Buscar productos', alBuscar },
+    });
+
+    enviar(elemento, '  espada  ');
+
     expect(alBuscar).toHaveBeenCalledWith('espada');
+    expect(navegar).not.toHaveBeenCalled();
+  });
+
+  test('una vista puede quitarla', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home', buscador: null });
+    expect(elemento.querySelector('[role="search"]')).toBeNull();
+    expect(elemento.querySelector('.cabecera__buscador-atajo')).toBeNull();
+  });
+
+  test('un visitante no la ve: la tienda pide sesión', () => {
+    const { elemento } = montar({ vista: 'subastas' });
+    expect(elemento.dataset.armazon).toBe('jugador');
+    expect(elemento.querySelector('[role="search"]')).toBeNull();
   });
 
   test('el portal nunca lleva buscador, aunque se lo pidan', () => {

@@ -30,8 +30,11 @@ const marcar = (selector) => {
   $(selector).checked = true;
   $(selector).dispatchEvent(new Event('input', { bubbles: true }));
 };
+// UXC-9 — la cabecera del jugador lleva ahora la búsqueda de productos
+// (RF-INV-008), que también es un <form>: el de publicar es el de la vista.
+const formulario = () => $('#raiz form');
 const submit = () =>
-  $('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 const vaciar = async () => {
   for (let i = 0; i < 8; i++) {
     await Promise.resolve();
@@ -72,7 +75,7 @@ test.each([null, {}, { uid, exp: 1 }, { sub: uid }])(
       autenticar(claims);
     }
     const { consultar } = await montar();
-    expect($('form').hidden).toBe(true);
+    expect(formulario().hidden).toBe(true);
     expect($('#nexus-rbac-forbidden').textContent).toMatch(/iniciar sesión/);
     expect(consultar).not.toHaveBeenCalled();
   },
@@ -224,7 +227,7 @@ test('publica solo tras aceptación, envía contrato y muestra éxito con vuelta
     './pujas.html?id=subasta-creada',
   );
   expect($('#raiz a').getAttribute('href')).toBe('./subastas.html');
-  expect($('form').hidden).toBe(true);
+  expect(formulario().hidden).toBe(true);
   expect(sessionStorage.getItem(`nexus.hu-sub-001.intento:${uid}`)).toBeNull();
   submit();
   expect(publicar).toHaveBeenCalledTimes(1);

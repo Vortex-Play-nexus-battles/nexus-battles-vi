@@ -37,10 +37,13 @@ import {
 } from '../../comun/ui/estado-vista.js';
 import { cambiarDisponibilidad, listarProductos, modificarProducto } from './cliente-productos.js';
 import {
+  CAMPOS_DE_PROMOCION,
+  LIMITES_DE_PROMOCION,
   construirSolicitudProducto,
   PARTES_ARMADURA,
   PROTOTIPOS,
   TIPOS_PRODUCTO,
+  valorLocalDe,
 } from './solicitud-producto.js';
 
 /** RNF-USA-001: dieciséis por página. */
@@ -203,6 +206,27 @@ export function textoDePrecio(producto) {
 }
 
 /**
+ * ¿Dicen lo mismo dos promociones? Mismo descuento y mismos instantes (el
+ * servidor puede devolverlos con otra forma: `Z` o `+00:00`, con o sin
+ * milisegundos).
+ *
+ * @param {{porcentaje?: number, desde?: string, hasta?: string}|null|undefined} a
+ * @param {{porcentaje?: number, desde?: string, hasta?: string}|null|undefined} b
+ * @returns {boolean}
+ */
+export function mismaPromocion(a, b) {
+  if (!a || !b) {
+    return !a && !b;
+  }
+  const instante = (valor) => new Date(valor ?? '').getTime();
+  return (
+    Number(a.porcentaje) === Number(b.porcentaje) &&
+    instante(a.desde) === instante(b.desde) &&
+    instante(a.hasta) === instante(b.hasta)
+  );
+}
+
+/**
  * Solo lo que cambió: el cuerpo de un PATCH (`minProperties: 1`).
  *
  * @param {object} original el producto tal como vino del servidor
@@ -215,11 +239,47 @@ export function cambiosDe(original, nueva) {
     if (clave === 'tipo') {
       continue;
     }
+    if (clave === 'promocion') {
+      // UXC-9 — la promoción es un objeto: se compara por lo que dice.
+      if (!mismaPromocion(original.promocion, valor)) {
+        cambios.promocion = valor;
+      }
+      continue;
+    }
     if (original[clave] !== valor) {
       cambios[clave] = valor;
     }
   }
   return cambios;
+}
+
+/**
+ * La promoción de un producto dicha para quien administra: vigente,
+ * programada o terminada. `vigente` lo calcula el servidor; lo demás es solo
+ * cómo se dice.
+ *
+ * @param {{porcentaje: number, desde: string, hasta: string, vigente?: boolean}|null|undefined} promocion
+ * @param {number} [ahora]
+ * @returns {{texto: string, estado: 'vigente'|'programada'|'terminada'}|null}
+ */
+export function textoDePromocion(promocion, ahora = Date.now()) {
+  if (!promocion || !Number.isFinite(Number(promocion.porcentaje))) {
+    return null;
+  }
+  const descuento = `${promocion.porcentaje} % de descuento`;
+  if (promocion.vigente) {
+    return {
+      texto: `${descuento}, vigente hasta el ${fechaHora(promocion.hasta)}`,
+      estado: 'vigente',
+    };
+  }
+  if (new Date(promocion.desde).getTime() > ahora) {
+    return {
+      texto: `${descuento}, programado del ${fechaHora(promocion.desde)} al ${fechaHora(promocion.hasta)}`,
+      estado: 'programada',
+    };
+  }
+  return { texto: `${descuento}, terminó el ${fechaHora(promocion.hasta)}`, estado: 'terminada' };
 }
 
 /**
@@ -346,6 +406,7 @@ function formularioDeEdicion(producto) {
           }),
         ],
       }),
+      camposDePromocion(producto.promocion, campos),
     ],
   });
   repasarPrecio();
@@ -373,6 +434,65 @@ function formularioDeEdicion(producto) {
 }
 
 /**
+ * UXC-9 — §7.2.4 «fecha de publicación y vigencia» y §7.5 «marcador de
+ * porcentaje de descuento»: la promoción del producto (productos.yaml 1.4.0),
+ * editable en la ficha y en el alta. Los tres campos son opcionales juntos: o
+ * los tres o ninguno (`promocionDelFormulario`).
+ *
+ * @param {{porcentaje?: number, desde?: string, hasta?: string}|null|undefined} promocion
+ * @param {Array<object>} [campos] dónde apuntar los campos para marcar errores
+ * @returns {HTMLFieldSetElement}
+ */
+export function camposDePromocion(promocion, campos = []) {
+  const crear = (definicion) => {
+    const creado = campo(definicion);
+    campos.push(creado);
+    return creado.elemento;
+  };
+  return h('fieldset', {
+    clase: 'hoja-producto__tipo',
+    datos: { zona: 'promocion' },
+    hijos: [
+      h('legend', { texto: 'Promoción' }),
+      h('p', {
+        clase: 'campo__pista',
+        texto:
+          'Opcional: un descuento con fecha de inicio y de fin. Para terminarla antes de tiempo, adelanta su fin.',
+      }),
+      h('div', {
+        clase: 'hoja-producto__rejilla',
+        hijos: [
+          crear({
+            nombre: CAMPOS_DE_PROMOCION.porcentaje,
+            etiqueta: 'Descuento (%)',
+            tipo: 'number',
+            valor: promocion?.porcentaje === undefined ? '' : String(promocion.porcentaje),
+            pista: `Entre ${LIMITES_DE_PROMOCION.minimo} y ${LIMITES_DE_PROMOCION.maximo}.`,
+            atributos: {
+              step: 1,
+              min: LIMITES_DE_PROMOCION.minimo,
+              max: LIMITES_DE_PROMOCION.maximo,
+            },
+          }),
+          crear({
+            nombre: CAMPOS_DE_PROMOCION.desde,
+            etiqueta: 'Empieza',
+            tipo: 'datetime-local',
+            valor: valorLocalDe(promocion?.desde),
+          }),
+          crear({
+            nombre: CAMPOS_DE_PROMOCION.hasta,
+            etiqueta: 'Termina',
+            tipo: 'datetime-local',
+            valor: valorLocalDe(promocion?.hasta),
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
+/**
  * ProductAdminSheet: la ficha de gestión de un producto.
  *
  * @param {object} producto `ProductoCreado`
@@ -394,6 +514,7 @@ export function abrirHojaDeProducto(
   });
 
   function pintarResumen() {
+    const promocion = textoDePromocion(actual.promocion);
     resumen.replaceChildren(
       h('p', {
         clase: 'hoja-producto__distintivos',
@@ -401,8 +522,18 @@ export function abrirHojaDeProducto(
           distintivo(ETIQUETA_DE_TIPO[actual.tipo] ?? actual.tipo),
           distintivoDeEstado(actual.estado),
           actual.premium ? distintivo('Premium', 'promocion') : null,
+          promocion?.estado === 'vigente'
+            ? distintivo(`−${actual.promocion.porcentaje} %`, 'promocion')
+            : null,
         ],
       }),
+      promocion
+        ? h('p', {
+            clase: 't-meta',
+            datos: { zona: 'promocion-actual', estado: promocion.estado },
+            texto: `Promoción: ${promocion.texto}.`,
+          })
+        : null,
       h('p', {
         clase: 't-meta',
         texto: `Versión ${actual.version ?? '—'} · modificado el ${fechaHora(actual.modificadoEn)} · creado el ${fechaHora(actual.creadoEn)}`,

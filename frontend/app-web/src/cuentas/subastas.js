@@ -36,7 +36,10 @@
 
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { listarSubastas, sugerirSubastas } from './cliente-subastas.js';
-import { construirVitrinaSubastas } from './subastas-vitrina.js';
+import { actualizarTarjeta, construirVitrinaSubastas } from './subastas-vitrina.js';
+import { urlDelCanal } from './pujas-api.js';
+import { conectarStomp } from '../comun/transporte-stomp.js';
+import { calcularVentana } from '../comun/paginacion.js';
 import { construirFiltros } from './subastas-filtros.js';
 import { h } from '../comun/ui/dom.js';
 import { encabezadoDePagina } from '../comun/ui/pagina.js';
@@ -51,16 +54,29 @@ import { adoptarCuentaAtras, vigilarCuentasAtras } from '../comun/ui/cuenta-atra
 const TAMANO_PAGINA = 16;
 const ESPERA_DEBOUNCE_MS = 300;
 
+/**
+ * UXC-9 — «selector de tamaño» de 7.7.9. Múltiplos de 16 para que la rejilla
+ * de cuatro columnas quede llena; el contrato admite `size` de 1 a 100.
+ */
+export const TAMANOS_DE_PAGINA = Object.freeze([16, 32, 48]);
+
+/** El canal público del listado (contracts/websocket/subastas.yaml 1.1.0). */
+export const CANAL_DEL_LISTADO = '/topic/subastas/listado';
+
 const estado = {
   pagina: 0,
   filtros: {},
   ordenarPor: 'FECHA_PUBLICACION',
+  tamano: TAMANO_PAGINA,
 };
+
+/** El canal del listado abierto, para cerrarlo al montar otra vez. */
+let canalDelListado = null;
 
 /** Como parar el latido de los contadores de la tanda anterior. */
 let detenerContadores = null;
 
-document.addEventListener('DOMContentLoaded', inicializar);
+document.addEventListener('DOMContentLoaded', () => inicializar());
 
 /**
  * Monta la pantalla sobre `#raiz-subastas`.
@@ -69,10 +85,11 @@ document.addEventListener('DOMContentLoaded', inicializar);
  * mercado —la que enseñaba «Error 404» en las cinco anchuras— no tenia ni
  * una prueba. Se sigue enganchando a `DOMContentLoaded` como siempre.
  */
-export function inicializar() {
+export function inicializar({ conectarCanal = conectarStomp, urlCanal = null } = {}) {
   estado.pagina = 0;
   estado.filtros = {};
   estado.ordenarPor = 'FECHA_PUBLICACION';
+  estado.tamano = TAMANO_PAGINA;
   const raiz = document.getElementById('raiz-subastas');
   if (!raiz) {
     throw new Error('subastas.html debe traer un elemento con id="raiz-subastas"');
@@ -166,10 +183,87 @@ export function inicializar() {
   const zonaResultados = document.createElement('div');
   zonaResultados.id = 'subastas-resultados';
 
-  contenido.append(panelFiltros, zonaResultados);
+  // UXC-9 — lo que cambia fuera de la página que se ve (una subasta nueva,
+  // otra página) se avisa aquí, con la forma de verlo; lo que se ve se pone
+  // al día solo.
+  const novedades = h('div', {
+    clase: 'aviso aviso--info mercado__novedades',
+    datos: { zona: 'novedades-mercado' },
+    atributos: { role: 'status' },
+  });
+  novedades.hidden = true;
+  const columna = h('div', { clase: 'mercado__resultados', hijos: [novedades, zonaResultados] });
+
+  contenido.append(panelFiltros, columna);
   raiz.appendChild(contenido);
 
   cargarYRenderizar();
+  escucharElMercado({ conectarCanal, urlCanal: urlCanal ?? urlDelCanal(), novedades });
+}
+
+/**
+ * UXC-9 — el listado en vivo (7.7.9: contador y número de pujas en tiempo
+ * real). El canal del listado es público: cada cambio llega con el resumen
+ * de la subasta. Si está en la página que se ve, su tarjeta se pone al día;
+ * si no, se avisa de que hay cambios y se ofrece ponerse al día. Sin canal,
+ * el listado sigue siendo el de la última lectura, que es lo que ya era.
+ */
+function escucharElMercado({ conectarCanal, urlCanal, novedades }) {
+  canalDelListado?.cerrar?.();
+  canalDelListado = null;
+  if (typeof conectarCanal !== 'function') {
+    return;
+  }
+  let fuera = 0;
+  Promise.resolve()
+    .then(() => conectarCanal({ url: urlCanal }))
+    .then((canal) => {
+      canalDelListado = canal;
+      canal.suscribir(CANAL_DEL_LISTADO, (resumen) => {
+        const zona = document.getElementById('subastas-resultados');
+        if (!resumen?.id || !zona) {
+          return;
+        }
+        const tarjeta = [...zona.querySelectorAll('[data-subasta-id]')].find(
+          (t) => t.dataset.subastaId === String(resumen.id),
+        );
+        if (tarjeta) {
+          actualizarTarjeta(tarjeta, resumen);
+          return;
+        }
+        fuera += 1;
+        avisarNovedades(novedades, fuera, () => {
+          fuera = 0;
+          novedades.hidden = true;
+          cargarYRenderizar();
+        });
+      });
+    })
+    .catch(() => {
+      // Sin canal no hay nada roto que decir: la página no promete tiempo real
+      // y el listado es el de la última lectura.
+    });
+}
+
+/** El aviso de cambios fuera de la vista, con su botón para verlos. */
+function avisarNovedades(novedades, cuantos, alActualizar) {
+  const boton = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Actualizar el listado',
+    atributos: { type: 'button' },
+    datos: { accion: 'actualizar-mercado' },
+  });
+  boton.addEventListener('click', alActualizar);
+  novedades.replaceChildren(
+    h('span', {
+      texto:
+        cuantos === 1
+          ? 'Hubo un cambio en una subasta que no está en esta página.'
+          : `Hubo ${cuantos} cambios en subastas que no están en esta página.`,
+    }),
+    boton,
+  );
+  novedades.hidden = false;
 }
 
 /** Buscador con autocompletado, independiente del de la barra compartida. */
@@ -294,7 +388,24 @@ function construirBarraOrden() {
     cargarYRenderizar();
   });
 
-  contenedor.appendChild(control);
+  // UXC-9 — el tamaño de página (7.7.9 «selector de tamaño»).
+  const tamano = document.createElement('select');
+  tamano.className = 'subastas-orden__control';
+  tamano.setAttribute('aria-label', 'Subastas por página');
+  tamano.dataset.control = 'tamano-pagina';
+  for (const valor of TAMANOS_DE_PAGINA) {
+    const opcion = document.createElement('option');
+    opcion.value = String(valor);
+    opcion.textContent = `${valor} por página`;
+    tamano.appendChild(opcion);
+  }
+  tamano.addEventListener('change', () => {
+    estado.tamano = Number(tamano.value) || TAMANO_PAGINA;
+    estado.pagina = 0;
+    cargarYRenderizar();
+  });
+
+  contenedor.append(control, tamano);
   return contenedor;
 }
 
@@ -315,7 +426,7 @@ async function cargarYRenderizar() {
     pagina = await listarSubastas(
       { ...estado.filtros, ordenarPor: estado.ordenarPor },
       estado.pagina,
-      TAMANO_PAGINA,
+      estado.tamano,
     );
   } catch (error) {
     pintarEstado(zona, estadoDelFallo(error));
@@ -488,11 +599,10 @@ function construirPaginacion(pagina) {
   const paginas = h('div', { clase: 'paginacion__paginas' });
   paginas.append(construirBotonPagina('Anterior', pagina.pagina - 1, pagina.pagina > 0, irA));
 
-  for (const numero of paginasVisibles(pagina.pagina, pagina.totalPaginas)) {
-    if (numero === '...') {
-      paginas.append(h('span', { clase: 'paginacion__info', texto: '…' }));
-      continue;
-    }
+  // UXC-9 — «paginación de hasta diez páginas» (7.7.9): la misma ventana
+  // centrada de diez casillas que el inventario (`comun/paginacion.js`).
+  const { inicio, fin } = calcularVentana(pagina.pagina, pagina.totalPaginas);
+  for (let numero = inicio; numero < fin; numero += 1) {
     const boton = h('button', {
       clase: 'paginacion__pagina',
       // Vista 1-indexada; el backend es 0-indexado.
@@ -537,21 +647,6 @@ function construirBotonPagina(etiqueta, numeroDestino, habilitado, irA) {
     boton.addEventListener('click', () => irA(numeroDestino));
   }
   return boton;
-}
-
-/** Ventana de paginas a mostrar: primera, ultima, y vecinas de la actual. */
-function paginasVisibles(actual, total) {
-  const paginas = new Set([0, total - 1, actual - 1, actual, actual + 1]);
-  const ordenadas = [...paginas].filter((p) => p >= 0 && p < total).sort((a, b) => a - b);
-
-  const resultado = [];
-  for (let i = 0; i < ordenadas.length; i++) {
-    if (i > 0 && ordenadas[i] - ordenadas[i - 1] > 1) {
-      resultado.push('...');
-    }
-    resultado.push(ordenadas[i]);
-  }
-  return resultado;
 }
 
 function debounce(funcion, esperaMs) {

@@ -5,7 +5,13 @@
 import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from '../cliente-chatbot.js';
-import { TEXTOS, crearVentanaChatbot, urlPermitida } from './ventana-chatbot.js';
+import {
+  TAMANO,
+  TEXTOS,
+  acotarTamano,
+  crearVentanaChatbot,
+  urlPermitida,
+} from './ventana-chatbot.js';
 
 const BOT = {
   id: 'm-bot-1',
@@ -68,6 +74,7 @@ async function enviar(vista, texto) {
 
 beforeEach(() => {
   document.body.replaceChildren();
+  sessionStorage.clear();
 });
 
 describe('abrir y cerrar', () => {
@@ -359,6 +366,80 @@ describe('borrar la conversación', () => {
 
     expect(vista.cliente.limpiarHistorial).not.toHaveBeenCalled();
     expect(vista.mensajes()).toHaveLength(2);
+  });
+});
+
+describe('minimizar y cambiar el tamaño (UXC-9, §7.4)', () => {
+  test('minimizar deja la barra de título y la conversación intacta; el mismo botón restaura', async () => {
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial: async () => [BOT] }) });
+    const boton = vista.el.querySelector('[data-accion="minimizar-asistente"]');
+    expect(boton.getAttribute('aria-label')).toBe(TEXTOS.minimizar);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(document.getElementById(boton.getAttribute('aria-controls'))).toBe(
+      vista.el.querySelector('.chatbot-ventana__registro'),
+    );
+
+    boton.click();
+    expect(vista.ventana.minimizada()).toBe(true);
+    expect(vista.ventana.abierta()).toBe(true);
+    expect(vista.el.classList).toContain('chatbot-ventana--minimizada');
+    expect(boton.getAttribute('aria-label')).toBe(TEXTOS.restaurar);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(vista.mensajes()).toHaveLength(1);
+
+    boton.click();
+    expect(vista.ventana.minimizada()).toBe(false);
+    expect(document.activeElement).toBe(vista.entrada);
+  });
+
+  test('volver a abrirla la trae restaurada', async () => {
+    const vista = await montar();
+    vista.el.querySelector('[data-accion="minimizar-asistente"]').click();
+    vista.ventana.cerrar();
+    vista.ventana.abrir();
+    expect(vista.ventana.minimizada()).toBe(false);
+  });
+
+  test('el asa cambia el tamaño con las flechas y lo recuerda en la sesión', async () => {
+    const vista = await montar();
+    const asa = vista.el.querySelector('[data-accion="tamano-asistente"]');
+    expect(asa.tagName).toBe('BUTTON');
+    expect(asa.getAttribute('aria-label')).toBe(TEXTOS.tamano);
+
+    // jsdom no mide cajas: se parte del tamaño que dijo el asa.
+    vista.el.style.width = '400px';
+    vista.el.style.height = '500px';
+    asa.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }));
+    asa.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
+
+    expect(vista.el.style.width).toBe(`${400 + TAMANO.paso}px`);
+    expect(vista.el.style.height).toBe(`${500 + TAMANO.paso}px`);
+    expect(JSON.parse(sessionStorage.getItem('nexus.asistente.tamano'))).toEqual({
+      ancho: 400 + TAMANO.paso,
+      alto: 500 + TAMANO.paso,
+    });
+
+    asa.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(vista.el.style.width).toBe('');
+    expect(sessionStorage.getItem('nexus.asistente.tamano')).toBeNull();
+  });
+
+  test('una ventana nueva en otra vista abre con el tamaño elegido', () => {
+    sessionStorage.setItem('nexus.asistente.tamano', JSON.stringify({ ancho: 520, alto: 560 }));
+    const ventana = crearVentanaChatbot({ cliente: clienteFalso(), sesion: () => ({}) });
+    expect(ventana.elemento.style.width).toBe('520px');
+    expect(ventana.elemento.style.height).toBe('560px');
+  });
+
+  test('el tamaño nunca baja del mínimo ni se sale de la pantalla', () => {
+    expect(acotarTamano({ ancho: 10, alto: 10 }, { ancho: 1440, alto: 900 })).toEqual({
+      ancho: TAMANO.anchoMinimo,
+      alto: TAMANO.altoMinimo,
+    });
+    expect(acotarTamano({ ancho: 5000, alto: 5000 }, { ancho: 1440, alto: 900 })).toEqual({
+      ancho: 1440 - 48,
+      alto: 900 - 56 - 96,
+    });
   });
 });
 

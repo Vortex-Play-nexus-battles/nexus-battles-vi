@@ -234,6 +234,9 @@ export async function abrirFicha(
     elementoId = null,
     identidad = null,
     nombrePropio = null,
+    // UXC-9 — el nivel que guarda el inventario (1.5.0): con él, la ficha dice
+    // qué acciones ya aprendió y cuál es su épica afín.
+    nivel = null,
     detalleDeHeroe = construirDetalleDeHeroe,
     // UXC-3/UXC-4 — lo que cada vista añade al final de la ficha: las
     // opiniones de la comunidad, el bloque de compra de la tienda. Cada uno es
@@ -296,6 +299,7 @@ export async function abrirFicha(
       identidad,
       heroeId: elementoId,
       prototipo: producto.prototipo ?? null,
+      nivel,
     });
   } catch (fallo) {
     console.error('No se pudo completar el detalle del héroe', fallo);
