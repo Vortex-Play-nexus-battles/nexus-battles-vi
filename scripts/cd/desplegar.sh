@@ -695,6 +695,10 @@ INCLUYE_BORDE=0
 if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-balanceo" ]; then
   INCLUYE_BORDE=1
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
+  # 28-sep — lo que el borde monta para HTTPS (docker-compose.deploy.yml). Se
+  # crean aqui, con este usuario, para que Docker no los cree como root al
+  # montarlos. Vacios = el borde sigue solo en HTTP (scripts/cd/certificado.sh).
+  mkdir -p "$DIRECTORIO/tls" "$DIRECTORIO/letsencrypt" "$DIRECTORIO/acme/.well-known/acme-challenge"
 fi
 
 # R16.5b: los contenedores que se crean AHORA llevan la hora de su creacion.
@@ -728,6 +732,18 @@ if [ "$INCLUYE_BORDE" -eq 1 ]; then
     exit 1
   fi
   echo "  borde: saludable"
+
+  # 28-sep — HTTPS con Let's Encrypt. Nunca tumba el despliegue: sin dominio,
+  # sin consentimiento o con cualquier fallo, el borde se queda en HTTP y el
+  # script lo dice. Con el certificado ya emitido, renueva si toca.
+  echo "== 3c-bis) HTTPS del borde (Let's Encrypt) =="
+  if [ -f "$DIRECTORIO/scripts/cd/certificado.sh" ]; then
+    chmod +x "$DIRECTORIO/scripts/cd/certificado.sh"
+    NEXUS_DIR="$DIRECTORIO" "$DIRECTORIO/scripts/cd/certificado.sh" \
+      || echo "::warning::certificado.sh termino con error; el borde sigue en HTTP."
+  else
+    echo "  certificado.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+  fi
 fi
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="
