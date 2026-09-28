@@ -8,6 +8,7 @@ import {
 } from './solicitud-producto.js';
 
 import { h, vaciar } from '../../comun/ui/dom.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 const ETIQUETAS_TIPO = {
   HEROE: 'Héroe',
@@ -412,9 +413,9 @@ function mensajeFallo(fallo) {
     return 'No tienes permiso para crear productos.';
   }
   if (fallo?.status === 400) {
-    return fallo.message || 'Revisa los datos ingresados.';
+    return textoDeError(fallo, 'Revisa los datos ingresados.');
   }
-  return fallo?.message || 'No pudimos crear el producto. Inténtalo nuevamente.';
+  return textoDeError(fallo, 'No pudimos crear el producto. Inténtalo nuevamente.');
 }
 
 /** Monta la vista de creación y delega la autenticación al interceptor común. */

@@ -25,6 +25,7 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 /** Etiqueta de la insignia por estado. Son las del componente `Insignia`. */
 const ETIQUETA_DE_ESTADO = {
@@ -455,7 +456,7 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No se pudo cargar el listado',
-        error.detalle ?? error.message,
+        textoDeError(error, 'Las batallas no responden ahora mismo. Vuelve a intentarlo.'),
         { texto: 'Reintentar', alPulsar: () => refrescar() },
       );
     }
@@ -636,7 +637,7 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No pudiste entrar',
-        error.detalle ?? error.message,
+        textoDeError(error, 'No pudimos meterte en la sala. Vuelve a intentarlo.'),
       );
     }
   }

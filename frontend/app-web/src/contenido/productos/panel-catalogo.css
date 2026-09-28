@@ -205,6 +205,10 @@
 }
 
 .catalogo-admin {
+  /* UXC-9 — sin mínimo 0, el ancho mínimo de la tabla (720 px) estiraba el
+     panel entero —encabezado y filtros incluidos— a 768 y 375 px, en vez de
+     quedarse en su región desplazable. */
+  min-width: 0;
   margin-top: 20px;
 }
 
@@ -241,6 +245,8 @@
 /* La tabla se desplaza a lo ancho en pantalla estrecha, sin empujar la
    página: la región es enfocable para poder desplazarla con el teclado. */
 .catalogo-admin__desplazable {
+  /* Su ancho lo pone el panel, no la tabla: la tabla se desplaza dentro. */
+  contain: inline-size;
   overflow-x: auto;
   border: 1px solid var(--borde);
   border-radius: var(--radio);

@@ -42,6 +42,7 @@
 import { h, vaciar, clases } from '../../comun/ui/dom.js';
 import { grupoDeRanuras } from '../../comun/ui/juego/ranura.js';
 import { abrirDialogo } from '../../comun/ui/dialogo.js';
+import { RUTAS, resolver } from '../../comun/sesion.js';
 import { ICONO_DEL_TIPO, etiquetaDeParte } from './vitrina.js';
 
 /** Las seis partes de `ParteArmadura`, en el orden en que se viste uno. */
@@ -469,7 +470,18 @@ function elegirObjeto(ranura, candidatos, alElegir, { alCargar = null } = {}) {
         // Aqui si se puede afirmar: se ha mirado hasta donde dice el servicio.
         nota.textContent = hayMas
           ? 'Nada de esta tanda entra en esta ranura. Sigue buscando.'
-          : 'No tienes nada en el inventario que entre en esta ranura.';
+          : 'No tienes nada en el inventario que entre en esta ranura. Consíguelo en la tienda o en las misiones.';
+        if (!hayMas) {
+          // UXC-9 — un vacío con salida: adónde ir a por algo que entre.
+          nota.append(
+            ' ',
+            h('a', {
+              texto: 'Ir a la tienda',
+              atributos: { href: resolver(RUTAS.tienda) },
+              datos: { accion: 'ir-a-la-tienda' },
+            }),
+          );
+        }
       }
     } catch {
       boton.disabled = false;

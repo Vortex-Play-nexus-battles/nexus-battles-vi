@@ -24,6 +24,11 @@ import { campo } from '../../comun/ui/campo.js';
 import { cuentaAtrasRotulada, vigilarCuentasAtras } from '../../comun/ui/cuenta-atras.js';
 import { lineaDeTiempo } from '../../comun/ui/linea-de-tiempo.js';
 import { estadoDeCuenta, hechosDeSanciones, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
+import {
+  respaldoPorEstado,
+  textoDelServidor,
+  tituloDelServidor,
+} from '../../comun/ui/texto-de-fallo.js';
 
 export const TIPO = Object.freeze({
   ADVERTENCIA: 'ADVERTENCIA',
@@ -53,11 +58,14 @@ function baseDeApi() {
 /** Error del servicio con la forma del problem details. */
 export class ErrorDeSanciones extends Error {
   constructor(problema, estado) {
-    super(problema?.detail ?? problema?.title ?? `Error ${estado}`);
+    // UXC-9 — nunca «Error 503»: el texto del servidor si se lee, y si no
+    // la frase que toca a su código.
+    const detalle = textoDelServidor(problema, estado, respaldoPorEstado(estado));
+    super(detalle);
     this.name = 'ErrorDeSanciones';
     this.estado = estado;
-    this.titulo = problema?.title ?? 'No se pudo completar';
-    this.detalle = problema?.detail ?? '';
+    this.titulo = tituloDelServidor(problema, 'No se pudo completar');
+    this.detalle = detalle;
     this.motivo = problema?.motivo ?? null;
   }
 }

@@ -23,8 +23,8 @@ import { sesionSintetica } from './identidad.js';
  * `sessionStorage`, y sin ellos la cabecera pintaba «undefined» en todas las
  * capturas con datos (UX-GAME-3).
  */
-export function sesionDe(apodo, rol = 'JUGADOR') {
-  return { ...sesionSintetica({ apodo, rol }), apodo, rol };
+export function sesionDe(apodo, rol = 'JUGADOR', uid = undefined) {
+  return { ...sesionSintetica({ apodo, rol, ...(uid ? { uid } : {}) }), apodo, rol };
 }
 
 export const json = (cuerpo) => ({
@@ -691,12 +691,22 @@ const EQUIPOS = NOMBRES_DE_EQUIPO.map((nombre, i) => ({
   capitanUid: i >= 6 ? null : `aaaaaaa${i + 1}-1111-4111-8111-111111111111`,
   integrantes: i >= 6 ? [] : [`aaaaaaa${i + 1}-1111-4111-8111-111111111111`],
   inscrito: true,
-  pagadoPor: null,
+  // torneos.yaml 1.2.0: quién pagó y en qué va el cobro (la máquina no paga).
+  pagadoPor: i >= 6 ? null : `aaaaaaa${i + 1}-1111-4111-8111-111111111111`,
   reservaId: null,
+  estadoPago: i >= 6 ? null : 'COBRADO',
   posicion: i + 1,
   derrotas: [1, 3, 5, 7].includes(i + 1) ? 0 : 1,
   eliminado: false,
 }));
+
+/** El premio anunciado del torneo de laboratorio (1.2.0; monto provisional, D-24). */
+const PREMIO_DEL_TORNEO = {
+  creditosPorIntegrante: 500,
+  epicaProductoId: 'aaaaaaa1-0000-4000-8000-0000000000e1',
+  estado: 'SIN_CAMPEON',
+  entregas: [],
+};
 const E = (i) => EQUIPOS[i - 1].id;
 
 function encuentro(numero, llave, ronda, a, b, ganador, estado) {
@@ -748,6 +758,51 @@ export function torneoEnCurso() {
       encuentro(13, 'SECUNDARIOS', 4, null, null, null, 'PENDIENTE'),
       encuentro(14, 'FINAL', 5, null, null, null, 'PENDIENTE'),
     ],
+    premio: PREMIO_DEL_TORNEO,
+  };
+}
+
+/**
+ * El mismo torneo, terminado: «Lobos del Alba» (el equipo del capitán de
+ * laboratorio) ganó la gran final y el premio ya se entregó.
+ */
+export function torneoTerminadoConCampeon() {
+  const base = torneoEnCurso();
+  const jugados = base.encuentros.map((e) => {
+    const lados = {
+      5: [E(1), E(3), E(1)],
+      6: [E(5), E(7), E(5)],
+      7: [E(2), E(4), E(2)],
+      8: [E(6), E(8), E(6)],
+      9: [E(3), E(2), E(3)],
+      10: [E(7), E(6), E(6)],
+      11: [E(1), E(5), E(1)],
+      12: [E(3), E(6), E(3)],
+      13: [E(5), E(3), E(5)],
+      14: [E(1), E(5), E(1)],
+    }[e.numero];
+    return lados ? encuentro(e.numero, e.llave, e.ronda, ...lados, 'JUGADO') : e;
+  });
+  return {
+    ...base,
+    estado: 'FINALIZADO',
+    campeonEquipoId: E(1),
+    finalizadoEn: new Date(Date.now() - 600_000).toISOString(),
+    encuentros: jugados,
+    // Doble eliminación: el campeón acaba invicto y los demás, con dos derrotas.
+    equipos: EQUIPOS.map((e, i) => ({ ...e, eliminado: i !== 0, derrotas: i === 0 ? 0 : 2 })),
+    premio: {
+      ...PREMIO_DEL_TORNEO,
+      estado: 'ENTREGADO',
+      entregas: [
+        {
+          uid: 'aaaaaaa1-1111-4111-8111-111111111111',
+          estado: 'ENTREGADO',
+          creditosEntregados: true,
+          epicaEntregada: true,
+        },
+      ],
+    },
   };
 }
 
@@ -1145,11 +1200,19 @@ const TABLA_7 = {
   'Mago Fuego': [
     ['Misiles de magma', 2, '+1 al ataque, +2 de daño'],
     ['Vulcano', 6, '+3 al ataque, +(3d9) al daño'],
-    ['Pare de fuego', 4, '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior'],
+    [
+      'Pare de fuego',
+      4,
+      '+1 al ataque y retorna el (0dx) daño causado por el oponente en el turno anterior',
+    ],
   ],
   'Mago Hielo': [
     ['Lluvia de hielo', 2, '+2 al ataque, +2 de daño'],
-    ['Cono de hielo', 6, '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes'],
+    [
+      'Cono de hielo',
+      6,
+      '+2 al daño y afecta el ataque del enemigo en un (1d3) durante los dos turnos siguientes',
+    ],
     ['Bola de hielo', 4, '+2 al ataque y afecta en (0d4) al daño causado por el oponente'],
   ],
   'Pícaro Veneno': [
@@ -1193,7 +1256,12 @@ function accionesEnNivel(prototipo, nivel) {
 function veredictoDeEstrategia(ruta) {
   const { heroe, nivel = 1, rotaciones = [] } = ruta.request().postDataJSON() ?? {};
   const validas = [...accionesEnNivel(heroe, nivel).map(([nombre]) => nombre), 'Ataque básico'];
-  const base = { heroe, nivel, habilidadesValidas: validas, comportamientoPorDefecto: 'Ataque básico' };
+  const base = {
+    heroe,
+    nivel,
+    habilidadesValidas: validas,
+    comportamientoPorDefecto: 'Ataque básico',
+  };
   for (const [indice, rotacion] of rotaciones.entries()) {
     const ajena = (rotacion.pasos ?? []).find((paso) => !validas.includes(paso));
     if (ajena) {
@@ -1209,7 +1277,10 @@ function veredictoDeEstrategia(ruta) {
     ...base,
     valida: true,
     porDefecto: rotaciones.length === 0,
-    rotaciones: rotaciones.map((r, i) => ({ prioridad: ['Alta', 'Media', 'Baja'][i], pasos: r.pasos })),
+    rotaciones: rotaciones.map((r, i) => ({
+      prioridad: ['Alta', 'Media', 'Baja'][i],
+      pasos: r.pasos,
+    })),
   });
 }
 
@@ -1221,7 +1292,8 @@ function vistaDeHeroeEnNivel(ruta) {
   const nombre = decodeURIComponent(partes.pop());
   const heroe = OCHO_HEROES.find((h) => h.prototipo === nombre);
   const cifras = heroe?.estadisticas ?? {};
-  const formula = (x) => (x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null);
+  const formula = (x) =>
+    x ? `${x.base ? `${x.base} + ` : ''}${x.cantidadDados}d${x.caras}` : null;
   return json({
     nombre,
     tipo: nombre.split(' ')[0],
@@ -1267,7 +1339,6 @@ async function prepararEstrategia(pagina) {
   await pagina.locator('[data-accion="comprobar-estrategia"]').click();
   await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
 }
-
 
 /* ---------------------------------------------------------------------------
    UXC-6 — chat y mensajes privados. DATOS DE LABORATORIO: apodos y textos
@@ -2467,10 +2538,7 @@ export const ESCENARIOS = [
     interaccion: async (pagina) => {
       await pagina.locator('[data-pestana="categoria-exploracion"]').click();
     },
-    exige: [
-      '.mision-card[data-estado="completada"]',
-      '.mision-card[data-estado="abandonada"]',
-    ],
+    exige: ['.mision-card[data-estado="completada"]', '.mision-card[data-estado="abandonada"]'],
   },
   {
     id: 'misiones-detalle',
@@ -2681,7 +2749,9 @@ export const ESCENARIOS = [
     canal: canalDelChatGeneral(),
     interaccion: async (pagina) => {
       await abrirConversacion('Bruma')(pagina);
-      await pagina.locator('.mensajes-privados__hilo .mensaje--sistema').waitFor({ timeout: 10_000 });
+      await pagina
+        .locator('.mensajes-privados__hilo .mensaje--sistema')
+        .waitFor({ timeout: 10_000 });
     },
     exige: [
       '[data-zona="conexion-privados"][data-estado-canal="reconectando"]',
@@ -2696,7 +2766,10 @@ export const ESCENARIOS = [
     rutas: [MENSAJES_DE_LABORATORIO],
     canal: canalDelChatGeneral(),
     interaccion: abrirConversacion('Nyra'),
-    exige: ['[data-zona="bloqueo"]:not([hidden])', '[data-zona="bloqueo"] [data-accion="desbloquear"]'],
+    exige: [
+      '[data-zona="bloqueo"]:not([hidden])',
+      '[data-zona="bloqueo"] [data-accion="desbloquear"]',
+    ],
   },
   {
     // B6 — la pestaña con su fuente de verdad: la bandeja y el hilo del
@@ -2772,7 +2845,11 @@ export const ESCENARIOS = [
       await buscar.locator('[type="submit"]').click();
       await pagina.locator('.linea-tiempo__hecho').first().waitFor({ timeout: 10_000 });
     },
-    exige: ['[data-estado-cuenta="suspendida"]', '.linea-tiempo__hecho--futuro', '.linea-tiempo__hecho--exito'],
+    exige: [
+      '[data-estado-cuenta="suspendida"]',
+      '.linea-tiempo__hecho--futuro',
+      '.linea-tiempo__hecho--exito',
+    ],
   },
   {
     id: 'perfil-estado-de-cuenta',
@@ -2782,7 +2859,12 @@ export const ESCENARIOS = [
     rutas: [
       [
         '**/api/v1/perfiles/*',
-        json({ apodo: 'qa_sancionado', email: 'qa@nexus.test', nombres: 'Quinn', apellidos: 'Arias' }),
+        json({
+          apodo: 'qa_sancionado',
+          email: 'qa@nexus.test',
+          nombres: 'Quinn',
+          apellidos: 'Arias',
+        }),
       ],
       ['**/api/v1/sanciones/usuarios/*', json(historialDeSanciones())],
       ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 1250, saldoReservado: 100 })],
@@ -2831,10 +2913,12 @@ export const ESCENARIOS = [
       await pagina.locator('#btn-banear').click();
       await pagina.locator('.confirmacion-critica').waitFor({ timeout: 10_000 });
     },
-    exige: ['.confirmacion-critica__consecuencias', '[role="dialog"] [data-accion="confirmar"][disabled]'],
+    exige: [
+      '.confirmacion-critica__consecuencias',
+      '[role="dialog"] [data-accion="confirmar"][disabled]',
+    ],
   },
 ];
-
 
 function sala(cambios = {}) {
   return {
@@ -2874,3 +2958,433 @@ function producto(cambios = {}) {
     ...cambios,
   };
 }
+
+/* ---------------------------------------------------------------------------
+   UXC-8 / UXC-9 — lo tuyo en subastas y torneos, y el aviso de red.
+   ------------------------------------------------------------------------- */
+const UID_POSTOR = 'bbbbbbb9-9999-4999-8999-999999999999';
+const ID_SUBASTA_PROPIA = 'aaaaaaa4-4444-4444-8444-444444444444';
+
+function subastasConLoTuyo() {
+  return json({
+    contenido: [
+      subastaUrgente(),
+      subastaTranquila(),
+      { ...subastaSinRareza(), precioCompraInmediata: null },
+      {
+        ...subastaTranquila(),
+        id: ID_SUBASTA_PROPIA,
+        nombreProducto: 'Yelmo del Vigía',
+        rareza: 'comun',
+        vendedorId: UID_POSTOR,
+        cantidadPujas: 2,
+        fechaFin: new Date(Date.now() + 7_200_000).toISOString(),
+      },
+    ],
+    pagina: 0,
+    tamano: 16,
+    totalElementos: 4,
+    totalPaginas: 1,
+  });
+}
+
+/** `MiParticipacion` según la subasta: ganando en la urgente, superado en la tranquila. */
+function participacionDe(ruta) {
+  const url = ruta.request().url();
+  if (url.includes(subastaUrgente().id)) {
+    return json({
+      vasGanando: true,
+      teSuperaron: false,
+      tuOfertaVigente: '1350',
+      creditosRetenidos: '1350',
+      limiteAutomatico: '2000',
+      automaticaActiva: true,
+      segundosParaVolverAPujar: 0,
+    });
+  }
+  if (url.includes(subastaTranquila().id)) {
+    return json({
+      vasGanando: false,
+      teSuperaron: true,
+      tuOfertaVigente: null,
+      creditosRetenidos: '0',
+      limiteAutomatico: null,
+      automaticaActiva: false,
+      segundosParaVolverAPujar: 0,
+    });
+  }
+  return json({
+    vasGanando: false,
+    teSuperaron: false,
+    tuOfertaVigente: null,
+    creditosRetenidos: '0',
+    limiteAutomatico: null,
+    automaticaActiva: false,
+    segundosParaVolverAPujar: 0,
+  });
+}
+
+/*
+ * UXC-8 — el panel personal (ms-subastas-panel.yaml 1.0.0) y la ficha
+ * (ms-subastas-listado.yaml, `SubastaDetalle`). DATOS DE LABORATORIO: los
+ * nombres, las cifras y las fechas son inventados; la forma es la del
+ * contrato.
+ */
+const hace = (horas) => new Date(Date.now() - horas * 3_600_000).toISOString();
+const dentroDe = (horas) => new Date(Date.now() + horas * 3_600_000).toISOString();
+const PRODUCTO_DE_LA_SUBASTA = 'aaaaaaa1-0000-4000-8000-0000000000c1';
+
+function misPublicaciones() {
+  const base = {
+    miniaturaUrl: null,
+    precioInicial: '500',
+    precioCompraInmediata: null,
+    fechaPublicacion: hace(30),
+    comisionCobrada: '1.50',
+    penalizacionCobrada: null,
+    cancelable: false,
+    penalizacionSiCancela: null,
+  };
+  return json([
+    {
+      ...base,
+      subastaId: ID_SUBASTA_PROPIA,
+      nombreProducto: 'Yelmo del Vigía',
+      estado: 'ACTIVA',
+      ofertaVigente: '900',
+      cantidadPujas: 2,
+      fechaFin: dentroDe(2),
+      cerradaEn: null,
+      vistas: 41,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444445',
+      nombreProducto: 'Brazaletes de Cobre',
+      estado: 'ACTIVA',
+      ofertaVigente: '300',
+      precioInicial: '300',
+      cantidadPujas: 0,
+      fechaFin: dentroDe(20),
+      cerradaEn: null,
+      vistas: 7,
+      comisionCobrada: '1.00',
+      cancelable: true,
+      penalizacionSiCancela: '0.50',
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444446',
+      nombreProducto: 'Arco de Tejo Antiguo',
+      estado: 'ADJUDICADA',
+      ofertaVigente: '2300',
+      cantidadPujas: 6,
+      fechaFin: hace(20),
+      cerradaEn: hace(20),
+      vistas: 88,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444447',
+      nombreProducto: 'Capa Raída',
+      estado: 'SIN_ADJUDICACION',
+      ofertaVigente: '500',
+      cantidadPujas: 0,
+      fechaFin: hace(40),
+      cerradaEn: hace(40),
+      vistas: 12,
+    },
+    {
+      ...base,
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444448',
+      nombreProducto: 'Anillo Opaco',
+      estado: 'CANCELADA',
+      ofertaVigente: '400',
+      cantidadPujas: 0,
+      fechaFin: hace(10),
+      cerradaEn: hace(60),
+      vistas: 3,
+      comisionCobrada: '1.00',
+      penalizacionCobrada: '0.50',
+    },
+  ]);
+}
+
+function misSeguidas() {
+  return json([
+    {
+      subastaId: subastaTranquila().id,
+      nombreProducto: subastaTranquila().nombreProducto,
+      miniaturaUrl: null,
+      estado: 'ACTIVA',
+      ofertaVigente: subastaTranquila().ofertaVigente,
+      precioCompraInmediata: null,
+      cantidadPujas: subastaTranquila().cantidadPujas,
+      fechaFin: subastaTranquila().fechaFin,
+      seguidaDesde: hace(5),
+    },
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-444444444449',
+      nombreProducto: 'Escudo de Roble',
+      miniaturaUrl: null,
+      estado: 'ADJUDICADA',
+      ofertaVigente: '1750',
+      precioCompraInmediata: null,
+      cantidadPujas: 9,
+      fechaFin: hace(3),
+      seguidaDesde: hace(50),
+    },
+  ]);
+}
+
+function miHistorial() {
+  const mov = (tipo, subastaId, nombreProducto, monto, horas) => ({
+    tipo,
+    subastaId,
+    nombreProducto,
+    monto,
+    fecha: hace(horas),
+  });
+  return json({
+    movimientos: [
+      mov('VENTA', 'aaaaaaa4-4444-4444-8444-444444444446', 'Arco de Tejo Antiguo', '2185', 20),
+      mov('COMPRA', 'aaaaaaa4-4444-4444-8444-44444444444a', 'Grebas del Centinela', '1200', 26),
+      mov('PENALIZACION', 'aaaaaaa4-4444-4444-8444-444444444448', 'Anillo Opaco', '0.50', 60),
+      mov('COMISION', 'aaaaaaa4-4444-4444-8444-444444444448', 'Anillo Opaco', '1.00', 70),
+      mov('COMISION', 'aaaaaaa4-4444-4444-8444-444444444446', 'Arco de Tejo Antiguo', '1.50', 72),
+    ],
+    totalGanado: '2185',
+    totalGastado: '1203',
+    comisionesPagadas: '3',
+    balance: '982',
+  });
+}
+
+/** La subasta del listado de laboratorio con ese id (la propia incluida). */
+function subastaDeLaboratorio(id) {
+  const listado = JSON.parse(subastasConLoTuyo().body).contenido;
+  return listado.find((s) => s.id === id) ?? subastaTranquila();
+}
+
+/** `SubastaDetalle` de la subasta que se pide, con visitas y reputación. */
+function fichaDe(ruta) {
+  const id = new URL(ruta.request().url()).pathname.split('/').pop();
+  const base = subastaDeLaboratorio(id);
+  const propia = id === ID_SUBASTA_PROPIA;
+  const compra = base.precioCompraInmediata ?? null;
+  return json({
+    id,
+    estado: 'ACTIVA',
+    productoId: PRODUCTO_DE_LA_SUBASTA,
+    nombreProducto: base.nombreProducto,
+    tipoProducto: base.tipoProducto,
+    rareza: base.rareza ?? null,
+    descripcionCorta: base.descripcionCorta,
+    ofertaVigente: base.ofertaVigente,
+    pujaMinimaSiguiente: String(Number(base.ofertaVigente) + 50),
+    incrementoMinimo: '50',
+    precioCompraInmediata: compra,
+    compraInmediataDisponible: compra !== null && Number(compra) > Number(base.ofertaVigente),
+    cantidadPujas: base.cantidadPujas,
+    fechaFin: base.fechaFin,
+    esMaestroDeJuego: false,
+    metodoPago: 'CREDITOS',
+    vendedorId: propia ? UID_POSTOR : 'ccccccc3-3333-4333-8333-333333333333',
+    vendedorApodo: propia ? 'qa_postor' : 'Bruma',
+    reputacionVendedor: propia
+      ? { ventasCompletadas: 1, subastasTerminadas: 3, cancelaciones: 1, tasaDeExito: 0.33 }
+      : { ventasCompletadas: 12, subastasTerminadas: 15, cancelaciones: 1, tasaDeExito: 0.8 },
+    vistas: propia ? 41 : 128,
+  });
+}
+
+/**
+ * `PujaDelHistorial` (0.4.0): tantas como diga la subasta, de la más reciente
+ * a la más antigua, con el postor anonimizado a medias (7.7.11).
+ */
+function pujasDe(ruta) {
+  const id = new URL(ruta.request().url()).pathname.split('/').slice(-2)[0];
+  const base = subastaDeLaboratorio(id);
+  const postores = ['k***s', 'l***9', 'B***a', null];
+  return json(
+    Array.from({ length: base.cantidadPujas }, (_, i) => ({
+      id: `9999999${i}-0000-4000-8000-000000000000`,
+      monto: String(Number(base.ofertaVigente) - i * 50),
+      tipo: i % 3 === 1 ? 'AUTOMATICA' : 'MANUAL',
+      estado: i === 0 ? 'ACTIVA' : 'SUPERADA',
+      creadaEn: hace(i * 0.4 + 0.1),
+      esTuya: id === subastaUrgente().id && i === 0,
+      postor: postores[i % postores.length],
+    })),
+  );
+}
+
+/** «Mis pujas» (0.4.0): las del listado y dos ya terminadas. */
+function misPujas() {
+  const participacion = (s, estado, tuMejorPuja) => ({
+    subastaId: s.id,
+    nombreProducto: s.nombreProducto,
+    miniaturaUrl: null,
+    estadoSubasta: 'ACTIVA',
+    estado,
+    tuMejorPuja,
+    ofertaVigente: s.ofertaVigente,
+    cantidadPujas: s.cantidadPujas,
+    fechaFin: s.fechaFin,
+    ultimaPujaEn: hace(1),
+  });
+  return json([
+    participacion(subastaUrgente(), 'GANANDO', '1350'),
+    participacion(subastaTranquila(), 'SUPERADA', '830'),
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-44444444444a',
+      nombreProducto: 'Grebas del Centinela',
+      miniaturaUrl: null,
+      estadoSubasta: 'ADJUDICADA',
+      estado: 'GANADA',
+      tuMejorPuja: '1200',
+      ofertaVigente: '1200',
+      cantidadPujas: 5,
+      fechaFin: hace(26),
+      ultimaPujaEn: hace(27),
+    },
+    {
+      subastaId: 'aaaaaaa4-4444-4444-8444-44444444444b',
+      nombreProducto: 'Amuleto de Bruma',
+      miniaturaUrl: null,
+      estadoSubasta: 'ADJUDICADA',
+      estado: 'PERDIDA',
+      tuMejorPuja: '400',
+      ofertaVigente: '520',
+      cantidadPujas: 8,
+      fechaFin: hace(50),
+      ultimaPujaEn: hace(51),
+    },
+  ]);
+}
+
+const RUTAS_DE_LO_TUYO = [
+  [/\/api\/v1\/subastas\?/, () => subastasConLoTuyo()],
+  [/\/api\/v1\/subastas\/[^/?]+\/mi-participacion/, (ruta) => participacionDe(ruta)],
+  [/\/api\/v1\/subastas\/[^/?]+\/pujas/, (ruta) => pujasDe(ruta)],
+  [/\/api\/v1\/subastas\/[0-9a-f-]{36}$/, (ruta) => fichaDe(ruta)],
+  ['**/api/v1/mis-pujas', () => misPujas()],
+  [
+    '**/api/v1/mis-pujas/resumen',
+    json({ creditosRetenidos: '1350', saldoDisponible: '4200', subastasGanando: 1 }),
+  ],
+  ['**/api/v1/mis-subastas/publicadas', () => misPublicaciones()],
+  ['**/api/v1/mis-subastas/seguimiento', () => misSeguidas()],
+  ['**/api/v1/mis-subastas/historial', () => miHistorial()],
+  ['**/api/v1/mis-subastas/pendientes', json([])],
+];
+
+/** El capitán de «Lobos del Alba» (el primer equipo del árbol). */
+const UID_CAPITAN = 'aaaaaaa1-1111-4111-8111-111111111111';
+
+export const ESCENARIOS_UXC8 = [
+  {
+    id: 'mis-subastas-con-lo-tuyo',
+    titulo: 'mis subastas: ganando, superada y una publicación propia, con saldo',
+    ruta: 'cuentas/pujas.html',
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: RUTAS_DE_LO_TUYO,
+    interaccion: async (pagina) => {
+      await pagina.locator('.tab-btn[data-tab="mis-subastas"]').click();
+      await pagina.locator('.fila-mi-subasta.borde-ganando').waitFor({ timeout: 10_000 });
+    },
+    exige: [
+      '.fila-mi-subasta.borde-ganando',
+      '.fila-mi-subasta.borde-superada',
+      '.fila-publicacion',
+      '.barra-segmentada-tramos',
+      // UXC-8 — el panel personal: tus publicaciones en cualquier estado, lo
+      // que sigues y el historial con su balance.
+      '.indice-mis-subastas',
+      '.fila-mi-puja[data-resultado="PERDIDA"]',
+      '.fila-publicacion--panel[data-estado="ADJUDICADA"]',
+      '[data-cancelar-publicacion]',
+      '.fila-seguida',
+      '.tabla-historial tbody tr',
+      '#btn-exportar-historial',
+    ],
+  },
+  {
+    id: 'subasta-propia',
+    titulo: 'el detalle de una subasta propia: sin pujar y con el motivo',
+    ruta: `cuentas/pujas.html?id=${ID_SUBASTA_PROPIA}`,
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: [...RUTAS_DE_LO_TUYO, ...rutasDeOpiniones()],
+    exige: [
+      '.aviso-subasta-propia',
+      '.badge-propia',
+      '#btn-pujar-manual[disabled]',
+      '.ficha-subasta',
+    ],
+  },
+  {
+    id: 'subasta-con-opiniones',
+    titulo: 'el detalle de una subasta ajena: vendedor, visitas y opiniones del objeto',
+    ruta: `cuentas/pujas.html?id=${subastaTranquila().id}`,
+    sesion: () => sesionDe('qa_postor', 'JUGADOR', UID_POSTOR),
+    rutas: [
+      ...RUTAS_DE_LO_TUYO,
+      ...rutasDeOpiniones({ hilo: hiloDeLaboratorio(), resumen: RESUMEN_DE_LABORATORIO }),
+    ],
+    exige: [
+      '.ficha-subasta',
+      '.historial-postor',
+      '#opiniones-subasta .hilo-comentarios',
+      '#opiniones-subasta .comentario',
+    ],
+  },
+  {
+    id: 'torneo-mi-equipo',
+    titulo: 'torneo en curso visto por un capitán: tu torneo, tu encuentro y la transmisión',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO}`,
+    sesion: () => sesionDe('qa_capitan', 'JUGADOR', UID_CAPITAN),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoEnCurso()])],
+      [`**/api/v1/torneos/${ID_TORNEO}`, json(torneoEnCurso())],
+    ],
+    exige: [
+      '[data-zona="mi-torneo"]',
+      '[data-accion="jugar-mi-encuentro"]',
+      '.encuentro--mio',
+      '[data-zona="transmision"]',
+      '[data-zona="premio"]',
+      '[data-zona="pago"]',
+    ],
+  },
+  {
+    id: 'torneo-campeon',
+    titulo: 'torneo terminado visto por el capitán campeón: su premio entregado',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO}`,
+    sesion: () => sesionDe('qa_capitan', 'JUGADOR', UID_CAPITAN),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoTerminadoConCampeon()])],
+      [`**/api/v1/torneos/${ID_TORNEO}`, json(torneoTerminadoConCampeon())],
+    ],
+    exige: [
+      '[data-zona="campeon"]',
+      '[data-zona="premio"]',
+      '[data-zona="mi-premio"].torneo-mio__premio--exito',
+    ],
+  },
+  {
+    id: 'aviso-de-red',
+    titulo: 'sin conexión: el aviso de red transversal',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_red', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json([torneoEnCurso()])]],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-torneo-id]').first().waitFor({ timeout: 10_000 });
+      await pagina.evaluate(() => globalThis.dispatchEvent(new Event('offline')));
+    },
+    exige: ['.aviso-red--sin-red'],
+  },
+];
+
+// Los escenarios de arriba usan ayudantes definidos después del arreglo
+// principal; se suman al final, cuando ya existen.
+ESCENARIOS.push(...ESCENARIOS_UXC8);

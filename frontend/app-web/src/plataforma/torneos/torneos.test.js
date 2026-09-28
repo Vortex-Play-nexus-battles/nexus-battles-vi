@@ -7,7 +7,19 @@ import { jest } from '@jest/globals';
 
 import {
   ErrorDeTorneos,
+  MOTIVOS,
   accionesDe,
+  miPremio,
+  necesitaRevision,
+  textoDelPago,
+  textoDelPremio,
+  distintivoDeTorneo,
+  faseDe,
+  nombreDeLlave,
+  nombreDeRonda,
+  panelDeMiTorneo,
+  panelDeTransmision,
+  situacionDeEquipo,
   encuentrosDe,
   tarjetaDeEncuentro,
   porRonda,
@@ -85,7 +97,8 @@ describe('presentacion', () => {
     expect(miEquipo(t, 'nadie')).toBeNull();
     expect(nombreDe(t, 'eq-1')).toBe('Los Valientes');
     expect(nombreDe(t, null)).toBe('por definir');
-    expect(nombreDe(t, 'desconocido-123')).toBe('desconoc');
+    // UXC-9 — un equipo que no está en la lista no enseña su identificador.
+    expect(nombreDe(t, 'desconocido-123')).toBe('Equipo sin nombre');
   });
 
   test('accionesDe: sesión, estado, cupo, equipo sin inscribir e inscrito (CA-03)', () => {
@@ -546,5 +559,397 @@ describe('porRonda()', () => {
 
   test('sin encuentros devuelve una lista vacia', () => {
     expect(porRonda([])).toEqual([]);
+  });
+});
+
+describe('UXC-8 — el torneo del jugador', () => {
+  const A = equipo({ id: 'a', nombre: 'Los Valientes', inscrito: true, posicion: 1 });
+  const B = equipo({
+    id: 'b',
+    nombre: 'Los Lobos',
+    capitanUid: 'otro',
+    integrantes: ['otro', 'otro-2'],
+    inscrito: true,
+    posicion: 2,
+  });
+  const C = equipo({
+    id: 'c',
+    nombre: 'La Máquina',
+    ia: true,
+    capitanUid: null,
+    integrantes: [],
+    inscrito: true,
+    posicion: 3,
+  });
+  const enCurso = () =>
+    torneo({
+      estado: 'EN_CURSO',
+      equiposInscritos: 3,
+      equipos: [A, B, C],
+      encuentros: [
+        {
+          numero: 1,
+          llave: 'GANADORES',
+          ronda: 1,
+          equipoA: 'a',
+          equipoB: 'c',
+          ganador: 'a',
+          estado: 'JUGADO',
+        },
+        {
+          numero: 5,
+          llave: 'GANADORES',
+          ronda: 2,
+          equipoA: 'a',
+          equipoB: 'b',
+          ganador: null,
+          estado: 'LISTO',
+        },
+        {
+          numero: 7,
+          llave: 'SECUNDARIOS',
+          ronda: 1,
+          equipoA: 'c',
+          equipoB: null,
+          ganador: null,
+          estado: 'PENDIENTE',
+        },
+      ],
+    });
+
+  test('las rondas tienen nombre y las llaves no enseñan la numeración interna', () => {
+    expect(nombreDeRonda('GANADORES', 1, { cantidad: 4, ultima: false })).toBe('Cuartos de final');
+    expect(nombreDeRonda('GANADORES', 2, { cantidad: 2, ultima: false })).toBe('Semifinales');
+    expect(nombreDeRonda('GANADORES', 3, { cantidad: 1, ultima: true })).toBe('Final de ganadores');
+    expect(nombreDeRonda('SECUNDARIOS', 2, { cantidad: 2, ultima: false })).toBe('Ronda 2');
+    expect(nombreDeRonda('FINAL', 4, { cantidad: 1, ultima: true })).toBe('Gran final');
+    expect(nombreDeLlave('SECUNDARIOS')).toBe('Llave de segunda oportunidad');
+    expect(nombreDeLlave('GANADORES')).not.toMatch(/\d/);
+  });
+
+  test('la tarjeta dice lo que toca a cada fase, con su distintivo', () => {
+    expect(faseDe(torneo())).toMatch(/^Inscripciones hasta/);
+    expect(faseDe(torneo({ estado: 'EN_CURSO' }))).toMatch(/Se está jugando/);
+    expect(faseDe(torneo({ estado: 'FINALIZADO', campeonEquipoId: 'a' }))).toMatch(/campeón/);
+    // 1.2.0 — la devolución va después de cancelar (y con reintentos): no
+    // se puede decir que ya se devolvieron.
+    expect(faseDe(torneo({ estado: 'CANCELADO' }))).toMatch(/se devuelven las inscripciones/);
+    expect(distintivoDeTorneo(torneo({ estado: 'EN_CURSO' })).textContent).toBe('En curso');
+  });
+
+  test('«Tu torneo»: mi equipo, mi próximo encuentro con su sala y mi camino', () => {
+    const panel = panelDeMiTorneo(enCurso(), A, UID);
+
+    const mio = panel.querySelector('[data-zona="mi-equipo"]');
+    expect(mio.textContent).toContain('Los Valientes');
+    expect(mio.textContent).toContain('Tú (capitán) y tu compañero');
+    expect(mio.textContent).not.toContain(OTRO);
+
+    const proximo = panel.querySelector('[data-zona="proximo-encuentro"]');
+    expect(proximo.textContent).toContain('Contra Los Lobos');
+    expect(proximo.textContent).toContain('Llave de ganadores');
+    expect(proximo.querySelector('[data-accion="jugar-mi-encuentro"]').getAttribute('href')).toBe(
+      '../salas-partidas/crear-sala.html?torneo=t-1&encuentro=5',
+    );
+
+    const camino = panel.querySelectorAll('[data-zona="mi-camino"] li');
+    expect(camino).toHaveLength(1);
+    expect(camino[0].textContent).toContain('Victoria contra La Máquina');
+  });
+
+  test('eliminado, o sin árbol todavía, el próximo encuentro lo dice sin inventar', () => {
+    const eliminado = { ...A, eliminado: true, derrotas: 2 };
+    const t = torneo({ estado: 'EN_CURSO', equipos: [eliminado], encuentros: [] });
+    expect(panelDeMiTorneo(t, eliminado, UID).textContent).toContain('ya no juega más encuentros');
+    expect(situacionDeEquipo(t, eliminado)).toBe('Eliminado tras dos derrotas');
+
+    const abierto = torneo({ equipos: [A] });
+    expect(panelDeMiTorneo(abierto, A, UID).textContent).toContain('El árbol se genera');
+    expect(situacionDeEquipo(abierto, A)).toMatch(/posición 1/);
+  });
+
+  test('en el árbol, los encuentros de tu equipo se marcan con texto', () => {
+    const t = enCurso();
+    const tarjeta = tarjetaDeEncuentro(t, t.encuentros[1], UID);
+    expect(tarjeta.classList.contains('encuentro--mio')).toBe(true);
+    expect(tarjeta.querySelector('.encuentro__tuyo').textContent).toBe('Tu equipo');
+    expect(tarjetaDeEncuentro(t, t.encuentros[2], UID).classList.contains('encuentro--mio')).toBe(
+      false,
+    );
+  });
+
+  test('la transmisión se dice como es: sin señal y con cómo seguir el torneo', () => {
+    const alActualizar = jest.fn();
+    const panel = panelDeTransmision(enCurso(), { alActualizar });
+    expect(panel.classList.contains('transmision--sin-senal')).toBe(true);
+    expect(panel.textContent).toContain('no se transmite en vivo');
+    expect(panel.textContent).not.toMatch(/en directo/i);
+    panel.querySelector('[data-accion="actualizar-torneo"]').click();
+    expect(alActualizar).toHaveBeenCalled();
+  });
+
+  test('un rechazo nunca dice «Error 503»: dice el motivo en palabras del juego', () => {
+    const caido = new ErrorDeTorneos(null, 503);
+    expect(caido.message).not.toMatch(/\d{3}/);
+    expect(caido.message).toMatch(/no responden/);
+
+    const cupo = new ErrorDeTorneos({ motivo: 'CUPO_AGOTADO', detail: 'x' }, 409);
+    expect(cupo.titulo).toBe('El torneo está completo');
+    expect(MOTIVOS.CUPO_AGOTADO.detalle).toMatch(/siguiente torneo/);
+
+    const tecnico = new ErrorDeTorneos({ detail: 'NullPointerException at x.y(Z.java:1)' }, 409);
+    expect(tecnico.message).not.toContain('Exception');
+  });
+
+  test('la vista monta «Tu torneo» y la transmisión; cancelar usa el diálogo del kit', async () => {
+    document.body.innerHTML = VISTA;
+    const t = enCurso();
+    montarTorneos(document, {
+      uid: UID,
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [t] },
+        'GET /api/v1/torneos/t-1': { cuerpo: t },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    const detalle = document.querySelector('[data-zona="detalle"]');
+    expect(detalle.querySelector('[data-zona="mi-torneo"]')).not.toBeNull();
+    expect(detalle.querySelector('[data-zona="transmision"]')).not.toBeNull();
+    const cabeceras = [...detalle.querySelectorAll('.arbol-torneo__ronda > .t-meta')].map(
+      (p) => p.textContent,
+    );
+    // Con este árbol parcial, la última ronda de ganadores es su final.
+    expect(cabeceras).toContain('Final de ganadores');
+    expect(detalle.textContent).not.toMatch(/1-6 y 11|7-10/);
+
+    // El administrador cancela con el diálogo del kit, no con prompt().
+    document.body.innerHTML = VISTA;
+    const abierto = torneo();
+    const prompt = jest.fn();
+    globalThis.prompt = prompt;
+    montarTorneos(document, {
+      rol: 'ADMINISTRADOR',
+      uid: 'admin',
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [abierto] },
+        'GET /api/v1/torneos/t-1': { cuerpo: abierto },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    document.querySelector('[data-accion="cancelar"]').click();
+    await asentar();
+    expect(prompt).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]').textContent).toContain(
+      '¿Cancelar «Copa Otono»?',
+    );
+    delete globalThis.prompt;
+  });
+});
+
+describe('UXC-8 — pago de la inscripción y premio (torneos.yaml 1.2.0)', () => {
+  const PREMIO = {
+    creditosPorIntegrante: 500,
+    epicaProductoId: 'epica-1',
+    estado: 'SIN_CAMPEON',
+    entregas: [],
+  };
+
+  test('el pago de la inscripción en palabras, con quién la pagó', () => {
+    const pagado = equipo({ inscrito: true, estadoPago: 'COBRADO', pagadoPor: UID });
+    expect(textoDelPago(pagado, UID)).toBe('Inscripción pagada · la pagaste tú');
+    expect(textoDelPago(pagado, OTRO, 'tu capitán')).toBe(
+      'Inscripción pagada · la pagó tu capitán',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'RESERVADO', pagadoPor: UID }), UID)).toMatch(
+      /se cobra al empezar el torneo/,
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'DEVOLUCION_PENDIENTE' }), UID)).toBe(
+      'Devolviendo la inscripción…',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'SIN_COSTO', pagadoPor: UID }), UID)).toBe(
+      'Inscripción gratuita',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'REQUIERE_REVISION' }), UID)).toMatch(/administrador/);
+    // Sin inscribir o de la máquina: nada que decir.
+    expect(textoDelPago(equipo({ estadoPago: null }), UID)).toBeNull();
+  });
+
+  test('el premio para todos, según en qué va', () => {
+    expect(textoDelPremio(torneo({ premio: PREMIO }))).toBe(
+      'El equipo campeón gana 500 créditos por integrante y una épica para cada uno.',
+    );
+    expect(
+      textoDelPremio(
+        torneo({ premio: { ...PREMIO, creditosPorIntegrante: 0, epicaProductoId: null } }),
+      ),
+    ).toBe('Este torneo no tiene premio.');
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'ENTREGADO' } }))).toMatch(
+      /^Premio entregado al equipo campeón/,
+    );
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'NO_APLICA' } }))).toMatch(
+      /equipo de la máquina/,
+    );
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'REQUIERE_REVISION' } }))).toMatch(
+      /en revisión/,
+    );
+    // Un servicio anterior a 1.2.0 no trae premio: no se inventa.
+    expect(textoDelPremio(torneo())).toBeNull();
+  });
+
+  test('tu parte del premio: recibida, en camino o excluida por sanción', () => {
+    const entregado = torneo({
+      premio: {
+        ...PREMIO,
+        estado: 'ENTREGADO',
+        entregas: [
+          { uid: UID, estado: 'ENTREGADO', creditosEntregados: true, epicaEntregada: true },
+          {
+            uid: OTRO,
+            estado: 'EXCLUIDO_POR_SANCION',
+            creditosEntregados: false,
+            epicaEntregada: false,
+          },
+        ],
+      },
+    });
+    expect(miPremio(entregado, UID)).toEqual({
+      tono: 'exito',
+      texto: 'Recibiste tu premio: 500 créditos y la épica, ya en tu inventario.',
+    });
+    expect(miPremio(entregado, OTRO).texto).toMatch(/sanción activa/);
+    expect(miPremio(entregado, 'nadie')).toBeNull();
+    const enCamino = torneo({
+      premio: {
+        ...PREMIO,
+        estado: 'PENDIENTE',
+        entregas: [
+          { uid: UID, estado: 'PENDIENTE', creditosEntregados: false, epicaEntregada: false },
+        ],
+      },
+    });
+    expect(miPremio(enCamino, UID).texto).toMatch(/en camino/);
+  });
+
+  test('«Mi equipo» dice el pago y, si ganasteis, tu premio', () => {
+    const A = equipo({
+      id: 'a',
+      inscrito: true,
+      posicion: 1,
+      estadoPago: 'COBRADO',
+      pagadoPor: UID,
+    });
+    const t = torneo({
+      estado: 'FINALIZADO',
+      campeonEquipoId: 'a',
+      equipos: [A],
+      premio: {
+        ...PREMIO,
+        estado: 'ENTREGADO',
+        entregas: [
+          { uid: UID, estado: 'ENTREGADO', creditosEntregados: true, epicaEntregada: true },
+        ],
+      },
+    });
+    const panel = panelDeMiTorneo(t, A, UID);
+    expect(panel.querySelector('[data-zona="pago"]').textContent).toBe(
+      'Inscripción pagada · la pagaste tú',
+    );
+    const premio = panel.querySelector('[data-zona="mi-premio"]');
+    expect(premio.classList.contains('torneo-mio__premio--exito')).toBe(true);
+    expect(premio.textContent).toContain('Recibiste tu premio');
+  });
+
+  test('necesitaRevision: un pago o un premio que agotó sus reintentos', () => {
+    expect(necesitaRevision(torneo({ equipos: [equipo()] }))).toBe(false);
+    expect(
+      necesitaRevision(torneo({ equipos: [equipo({ estadoPago: 'REQUIERE_REVISION' })] })),
+    ).toBe(true);
+    expect(necesitaRevision(torneo({ premio: { ...PREMIO, estado: 'REQUIERE_REVISION' } }))).toBe(
+      true,
+    );
+  });
+
+  test('la vista enseña el premio a todos y el reintento solo al administrador', async () => {
+    const enRevision = torneo({
+      estado: 'CANCELADO',
+      motivoCancelacion: 'Falla del servidor de partidas',
+      equipos: [equipo({ inscrito: true, posicion: 1, estadoPago: 'REQUIERE_REVISION' })],
+      premio: PREMIO,
+    });
+    const reintentado = {
+      ...enRevision,
+      equipos: [{ ...enRevision.equipos[0], estadoPago: 'DEVOLUCION_PENDIENTE' }],
+    };
+
+    // Un jugador: ni rastro del bloque de administración.
+    document.body.innerHTML = VISTA;
+    montarTorneos(document, {
+      uid: UID,
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [enRevision] },
+        'GET /api/v1/torneos/t-1': { cuerpo: enRevision },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    let detalle = document.querySelector('[data-zona="detalle"]');
+    expect(detalle.querySelector('[data-zona="revision"]')).toBeNull();
+    // Cancelado: no se anuncia un premio que ya no se va a jugar.
+    expect(detalle.querySelector('[data-zona="premio"]')).toBeNull();
+    expect(detalle.querySelector('[data-zona="pago"]').textContent).toMatch(/en revisión/);
+
+    // El administrador lo ve y reintenta.
+    document.body.innerHTML = VISTA;
+    const fetchImpl = servicio({
+      'GET /api/v1/torneos': { cuerpo: [enRevision] },
+      'GET /api/v1/torneos/t-1': { cuerpo: enRevision },
+      'POST /api/v1/torneos/t-1/operaciones/reintento': { cuerpo: reintentado },
+    });
+    montarTorneos(document, {
+      rol: 'ADMINISTRADOR',
+      uid: 'admin',
+      fetchImpl,
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    detalle = document.querySelector('[data-zona="detalle"]');
+    const revision = detalle.querySelector('[data-zona="revision"]');
+    expect(revision.textContent).toContain('Hay pagos o premios en revisión');
+    revision.querySelector('[data-accion="reintentar-operaciones"]').click();
+    await asentar();
+    await asentar();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/torneos/t-1/operaciones/reintento'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // Repintado con lo que devolvió el servidor: ya no hay nada en revisión.
+    expect(document.querySelector('[data-zona="revision"]')).toBeNull();
+    expect(document.querySelector('[data-zona="aviso"]').textContent).toContain(
+      'Operaciones en cola otra vez',
+    );
+  });
+
+  test('en curso, el premio que se anunció se ve en el detalle', async () => {
+    document.body.innerHTML = VISTA;
+    const t = torneo({ estado: 'EN_CURSO', premio: PREMIO });
+    montarTorneos(document, {
+      uid: UID,
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [t] },
+        'GET /api/v1/torneos/t-1': { cuerpo: t },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    expect(document.querySelector('[data-zona="premio"]').textContent).toBe(
+      'El equipo campeón gana 500 créditos por integrante y una épica para cada uno.',
+    );
   });
 });

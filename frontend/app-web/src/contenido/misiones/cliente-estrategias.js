@@ -21,6 +21,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 const RUTA_VALIDACION = '/api/v1/estrategias/validacion';
 const RUTA_HEROES = '/api/v1/heroes';
@@ -45,9 +46,8 @@ async function detalleApto(respuesta) {
   }
   try {
     const problema = await respuesta.json();
-    return typeof problema?.detail === 'string' && problema.detail.trim() !== ''
-      ? problema.detail.trim()
-      : undefined;
+    // UXC-9 — el detalle solo si está escrito para quien juega.
+    return textoDelServidor(problema, respuesta.status, '') || undefined;
   } catch {
     return undefined;
   }
