@@ -20,3 +20,21 @@ test('monta el encabezado y las pestañas, y carga solo la pestaña visible', as
   );
   expect(cliente.analiticas).toHaveBeenCalledTimes(1);
 });
+
+test('tiene la pestaña «Soporte» y la carga al abrirla', async () => {
+  const raiz = document.createElement('div');
+  document.body.replaceChildren(raiz);
+  const cliente = {
+    analiticas: jest.fn(async () => new Promise(() => {})),
+    listarTickets: jest.fn(async () => new Promise(() => {})),
+  };
+
+  montarPanelChatbot(raiz, { cliente, hash: false });
+  const pestana = raiz.querySelector('[data-pestana="soporte"]');
+  expect(pestana.textContent).toBe('Soporte');
+  expect(cliente.listarTickets).not.toHaveBeenCalled();
+
+  pestana.click();
+
+  expect(cliente.listarTickets).toHaveBeenCalledTimes(1);
+});
