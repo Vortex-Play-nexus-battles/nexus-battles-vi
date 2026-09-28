@@ -133,7 +133,10 @@ public class MotorRespuestas {
             return deTema(tema, texto, temas);
         }
 
+        // Los temas de cortesia (saludo, despedida) no son "preguntas
+        // relacionadas": nadie necesita que le sugieran decir "hola".
         List<String> sugerencias = todas.stream()
+            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
             .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
             .map(c -> c.tema().getTitulo())
             .distinct()

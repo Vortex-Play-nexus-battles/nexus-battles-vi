@@ -81,6 +81,23 @@ class MotorRespuestasTest {
         assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
     }
 
+    // Un saludo nunca sale como "pregunta relacionada" de un escalamiento.
+    @Test
+    void generarRespuesta_escalada_noSugiereTemasDeCortesia() {
+        TemaConocimiento saludo = new TemaConocimiento(null, "clave-saludo", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz", null, "¡Hola!", null, 0, true);
+        // "inventarioz" se parece a "inventario" (+2): el saludo queda como
+        // candidato, pero por debajo del umbral, asi que la consulta se escala.
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(saludo, temaRegistro(0)));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("llevame a mi inventario");
+
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        assertThat(resultado.temasSugeridos()).doesNotContain("Saludo");
+        assertThat(resultado.enriquecido().respuestasRapidas()).doesNotContain("Saludo");
+    }
+
     // 1.3.4: a igual puntaje, la vista del jugador decide antes que la prioridad.
     @Test
     void generarRespuesta_conEmpate_ganaElTemaDeLaCategoriaDeLaVista() {
