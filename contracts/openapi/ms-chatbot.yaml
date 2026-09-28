@@ -15,6 +15,10 @@ openapi: 3.1.0
 #   HU-CHA-011  calificacion de respuestas y brechas de conocimiento
 #   HU-CHA-012  panel de administracion: analiticas, base de conocimiento y
 #               "reentrenamiento" (versiones evaluadas antes de desplegarse)
+#   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
+#               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
+#               respuestas enriquecidas sin imagenes, vista del jugador y
+#               "mis misiones"
 #
 # Dueno del contrato: Grupo 4 (ms-chatbot).
 #
@@ -84,8 +88,10 @@ openapi: 3.1.0
 # Con un usuario autenticado, `POST /chat/mensajes` puede consultar
 # inventario (`inventario.yaml`), subastas (`ms-subastas-pujas.yaml`),
 # notificaciones (`notificaciones.yaml`) y sus movimientos de creditos
-# (`creditos.yaml`, `GET /creditos/{uid}/movimientos`), reenviando el MISMO
-# token del jugador: esos servicios derivan el dueno del claim `uid`. El
+# (`creditos.yaml`, `GET /creditos/{uid}/movimientos`) y sus misiones en curso
+# (`misiones.yaml` 1.0.0, `GET /api/v1/misiones/en-curso`, desde 1.3.0),
+# reenviando el MISMO token del jugador: esos servicios derivan el dueno del
+# claim `uid`. El
 # chatbot NUNCA usa una credencial de servicio para leer datos de un jugador.
 # Los torneos se consultan como dato publico (`torneos.yaml`, `GET /torneos`).
 # Todo el texto del usuario pasa antes por la lista negra
@@ -97,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -107,6 +113,31 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.0 (7.4) — compatible con 1.2.0
+
+    Todo lo nuevo es adicional: campos opcionales y operaciones nuevas.
+    Las operaciones que aun no tienen codigo llevan
+    `x-implementacion: pendiente` y se les quita la marca en el PR que las
+    implementa (guardian `rutas-contrato-codigo.py`).
+
+    * **Mis misiones en vivo:** "mis misiones" deja de responder "en
+      construccion" y consulta `misiones.yaml` con el token del jugador.
+    * **Sin imagenes** (decision del cliente): `adjuntoUrl` queda obsoleto.
+      El servidor lo acepta para no romper a nadie, pero lo ignora y ya no
+      lo guarda; los mensajes viejos lo siguen devolviendo.
+    * **`vista` opcional en `EnviarMensaje`:** la seccion donde esta el
+      jugador, para respuestas contextuales (7.4.3).
+    * **`enriquecido` opcional en `Mensaje`:** pasos, enlaces a secciones
+      internas, tarjetas de texto, botones de respuesta rapida y la oferta de
+      soporte humano (7.4.3 y 7.4.6), sin imagenes.
+    * **`GET /chat/sugerencias`:** preguntas rapidas, temas frecuentes y
+      autocompletado, tomados de la version EN PRODUCCION de la base.
+    * **Tickets de soporte** (7.4.3, RF-CHA-007, RF-ADM-004): el jugador con
+      sesion abre uno (`POST /chat/tickets`) y ve los suyos; el
+      administrador los lista, los lee con el contexto de la conversacion ya
+      redactado y los atiende (`/chatbot/admin/tickets`). Sin email, nombre
+      ni telefono.
 
     ### 1.2.0 (B11) — compatible con 1.1.0
 
@@ -149,6 +180,10 @@ tags:
     description: Versiones y temas de la base de conocimiento (HU-CHA-012, RF-CHA-013)
   - name: admin-reentrenamiento
     description: Casos de evaluacion, despliegue evaluado y reversion (HU-CHA-012, RF-CHA-014)
+  - name: soporte
+    description: Tickets de soporte humano del jugador (1.3.0, 7.4.3, RF-CHA-007)
+  - name: admin-soporte
+    description: Atencion de los tickets de soporte (1.3.0, RF-ADM-004)
 
 paths:
   /chat/sesiones:
@@ -210,12 +245,16 @@ paths:
            propia cuenta (inventario, subastas, notificaciones, movimientos
            de creditos), el estado de sus torneos, ir a una seccion del sitio
            o un informe de actividad, se responde con datos en vivo
-           (HU-CHA-008). Misiones responde, por ahora, que esta en
-           construccion (su servicio aun no publica contrato).
+           (HU-CHA-008). Desde 1.3.0 tambien sus misiones en curso
+           (`misiones.yaml`).
         2. Si no, se busca en la base de conocimiento (HU-CHA-004).
         3. Si la pregunta no se entiende, se escala: la respuesta ofrece
            soporte humano y temas relacionados, y la pregunta se registra
            como brecha de conocimiento (HU-CHA-011).
+
+        Desde 1.3.0 la respuesta puede traer `enriquecido` (pasos, enlaces,
+        tarjetas, respuestas rapidas, oferta de soporte humano), y la `vista`
+        opcional de la peticion ayuda a elegir la respuesta contextual.
 
         Nunca ejecuta operaciones economicas (pujas, compras): solo consulta.
       security:
@@ -379,6 +418,154 @@ paths:
                 $ref: '#/components/schemas/ProblemDetail'
         '409':
           description: Esa respuesta ya fue calificada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /chat/sugerencias:
+    get:
+      tags: [chat]
+      operationId: sugerirPreguntasDelChatbot
+      summary: Preguntas rapidas, temas frecuentes y autocompletado (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      description: |
+        Salen de la version EN PRODUCCION de la base de conocimiento, asi que
+        cada sugerencia es una pregunta que el chatbot sabe responder.
+
+        * Sin `q`: los temas mas consultados, para los botones de preguntas
+          rapidas y el menu de temas frecuentes (7.4.6). Con `categoria`,
+          solo los de esa categoria.
+        * Con `q` (2 o mas caracteres): autocompletado; los temas cuyo
+          titulo o variantes empiezan o contienen lo que el usuario lleva
+          escrito, con la misma tolerancia a tildes y mayusculas del motor.
+
+        Es igual para todos (no depende de quien pregunta), asi que no lleva
+        identidad y se puede guardar en cache.
+      security:
+        - {}
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Lo que el usuario lleva escrito. Menos de 2 caracteres equivale a no mandarlo.
+          schema:
+            type: string
+            maxLength: 100
+        - name: categoria
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Categoria'
+        - name: limite
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 10
+            default: 6
+      responses:
+        '200':
+          description: Sugerencias, la mas relevante primero. Lista vacia si no hay ninguna.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SugerenciaDePregunta'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/tickets:
+    post:
+      tags: [soporte]
+      operationId: abrirTicketDeSoporteDelChatbot
+      summary: Abre un ticket de soporte humano (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      description: |
+        Solo para jugadores con sesion: el ticket queda a nombre del `uid`
+        del token. A un visitante se le responde 401 (`motivo`
+        SESION_REQUERIDA) y la ventana le ofrece iniciar sesion o el chat
+        general.
+
+        El servidor guarda con el ticket el contexto de la conversacion
+        actual (los ultimos mensajes, ya redactados: sin contrasenas,
+        tarjetas ni tokens). No se piden ni se guardan email, nombre ni
+        telefono.
+
+        Un solo ticket abierto (ABIERTO o EN_PROCESO) por conversacion: el
+        segundo responde 409 (`motivo` TICKET_ABIERTO). Pasa por el mismo
+        limite de frecuencia (429) y la misma lista negra (422 y 503) que
+        `POST /chat/mensajes`.
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AbrirTicket'
+            example:
+              categoria: SOPORTE_TECNICO
+              asunto: No carga mi inventario
+              mensaje: Desde ayer la seccion de inventario se queda cargando.
+      responses:
+        '201':
+          description: Ticket abierto.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDeSoporte'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          description: Sin token valido (`motivo` SESION_REQUERIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: Ya hay un ticket abierto para esta conversacion (`motivo` TICKET_ABIERTO).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: El asunto o el mensaje tienen un termino de la lista negra (`motivo` CONTENIDO_BLOQUEADO).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
+        '503':
+          description: La lista negra no responde (`motivo` MODERACION_NO_DISPONIBLE). No se guarda nada.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    get:
+      tags: [soporte]
+      operationId: listarMisTicketsDelChatbot
+      summary: Tickets del propio jugador, el mas reciente primero (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Tickets del `uid` del token, con su estado y la respuesta de soporte si ya la hay.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TicketDeSoporte'
+        '401':
+          description: Sin token valido (`motivo` SESION_REQUERIDA).
           content:
             application/problem+json:
               schema:
@@ -886,6 +1073,125 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
 
+  /chatbot/admin/tickets:
+    get:
+      tags: [admin-soporte]
+      operationId: listarTicketsDelChatbot
+      summary: Tickets de soporte, los mas recientes primero (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      security:
+        - tokenDeAdministrador: []
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          description: Solo los de ese estado. Sin el, todos.
+          schema:
+            $ref: '#/components/schemas/EstadoDeTicket'
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          description: Una pagina de tickets (sin el contexto de la conversacion).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDeTickets'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+
+  /chatbot/admin/tickets/{ticketId}:
+    parameters:
+      - name: ticketId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [admin-soporte]
+      operationId: consultarTicketDelChatbot
+      summary: Un ticket con el contexto de la conversacion (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: El ticket.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDeSoporteAdmin'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+    patch:
+      tags: [admin-soporte]
+      operationId: atenderTicketDelChatbot
+      summary: Cambia el estado, lo asigna o le responde (1.3.0)
+      x-implementacion: pendiente
+      x-fase: 7.4 P1 (feat/ms-chatbot-7.4)
+      description: |
+        Solo cambia los campos que vienen. Transiciones validas:
+        ABIERTO -> EN_PROCESO, RESUELTO o CERRADO; EN_PROCESO -> RESUELTO o
+        CERRADO; RESUELTO -> CERRADO o EN_PROCESO (reabrir). Un ticket
+        CERRADO ya no cambia (409, `motivo` TRANSICION_NO_PERMITIDA).
+        Pasar a RESUELTO exige una `respuesta`, que es lo que ve el jugador.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AtenderTicket'
+            example:
+              estado: RESUELTO
+              respuesta: Ya revisamos tu inventario; vuelve a entrar y deberia cargar.
+      responses:
+        '200':
+          description: Ticket actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketDeSoporteAdmin'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El estado actual no permite ese cambio (`motivo` TRANSICION_NO_PERMITIDA).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -1004,10 +1310,19 @@ components:
         adjuntoUrl:
           type: [string, 'null']
           maxLength: 500
+          deprecated: true
           description: |
-            URL de una captura ya subida a otro lado (HU-CHA-001). El chatbot
-            solo guarda la URL; el tamano maximo del adjunto sigue pendiente
-            con el cliente (RF-CHA-002).
+            Obsoleto desde 1.3.0: el cliente decidio que el chatbot no recibe
+            imagenes. Se acepta para no romper a quien lo mande, pero el
+            servidor lo ignora y ya no lo guarda.
+        vista:
+          oneOf:
+            - $ref: '#/components/schemas/VistaDelChat'
+            - type: 'null'
+          description: |
+            1.3.0. Seccion donde esta el jugador al escribir, para la
+            respuesta contextual (7.4.3). Opcional; sin ella se responde
+            igual que en 1.2.0.
 
     Mensaje:
       type: object
@@ -1023,9 +1338,224 @@ components:
           type: string
         adjuntoUrl:
           type: [string, 'null']
+          deprecated: true
+          description: Obsoleto desde 1.3.0. Solo lo traen mensajes guardados antes; los nuevos, null.
         fechaEnvio:
           type: string
           format: date-time
+        enriquecido:
+          oneOf:
+            - $ref: '#/components/schemas/RespuestaEnriquecida'
+            - type: 'null'
+          description: |
+            1.3.0. Solo en mensajes del BOT. null en los del usuario y en los
+            guardados antes de 1.3.0. El texto de `contenido` sigue siendo la
+            respuesta completa: quien no sepa pintar esto no pierde nada.
+
+    VistaDelChat:
+      type: string
+      description: 1.3.0. Seccion del sitio donde esta el jugador.
+      enum: [INICIO, INVENTARIO, MISIONES, TORNEOS, SUBASTAS, CUENTA]
+
+    RespuestaEnriquecida:
+      type: object
+      description: |
+        1.3.0. Partes de la respuesta que la ventana pinta como elementos
+        interactivos (7.4.3, 7.4.6). Sin imagenes (decision del cliente).
+        Todas las listas pueden venir vacias.
+      required: [pasos, enlaces, tarjetas, respuestasRapidas, ofrecerSoporteHumano]
+      properties:
+        pasos:
+          type: array
+          maxItems: 20
+          description: Instrucciones en orden, para las respuestas paso a paso.
+          items:
+            type: string
+            maxLength: 500
+        enlaces:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/EnlaceInterno'
+        tarjetas:
+          type: array
+          maxItems: 5
+          items:
+            $ref: '#/components/schemas/TarjetaInformativa'
+        respuestasRapidas:
+          type: array
+          maxItems: 6
+          description: Botones; al pulsar uno, la ventana envia su texto como la siguiente pregunta.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 200
+        ofrecerSoporteHumano:
+          type: boolean
+          description: true cuando conviene ofrecer abrir un ticket (escalamiento).
+
+    EnlaceInterno:
+      type: object
+      description: |
+        1.3.0. Enlace a una seccion del propio sitio. `destino` es el
+        identificador de la vista en la matriz de acceso del frontend
+        (`comun/matriz-acceso.js`), nunca una URL: asi el chatbot no puede
+        mandar a nadie fuera del sitio.
+      required: [texto, destino]
+      properties:
+        texto:
+          type: string
+          maxLength: 80
+        destino:
+          type: string
+          pattern: '^[a-z0-9-]{1,40}$'
+          example: inventario
+
+    TarjetaInformativa:
+      type: object
+      description: 1.3.0. Bloque de texto con titulo y, opcionalmente, un enlace interno.
+      required: [titulo, texto]
+      properties:
+        titulo:
+          type: string
+          maxLength: 120
+        texto:
+          type: string
+          maxLength: 1000
+        enlace:
+          oneOf:
+            - $ref: '#/components/schemas/EnlaceInterno'
+            - type: 'null'
+
+    SugerenciaDePregunta:
+      type: object
+      description: 1.3.0. Una pregunta que la version en produccion sabe responder.
+      required: [clave, titulo, categoria, pregunta]
+      properties:
+        clave:
+          type: string
+          description: Clave estable del tema.
+        titulo:
+          type: string
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        pregunta:
+          type: string
+          description: Texto listo para enviar como pregunta (la primera variante del tema).
+
+    EstadoDeTicket:
+      type: string
+      description: 1.3.0.
+      enum: [ABIERTO, EN_PROCESO, RESUELTO, CERRADO]
+
+    AbrirTicket:
+      type: object
+      description: 1.3.0.
+      required: [categoria, asunto, mensaje]
+      properties:
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        asunto:
+          type: string
+          minLength: 1
+          maxLength: 150
+        mensaje:
+          type: string
+          minLength: 1
+          maxLength: 2000
+
+    TicketDeSoporte:
+      type: object
+      description: 1.3.0. Lo que ve el jugador de su ticket.
+      required: [ticketId, categoria, asunto, mensaje, estado, creadoEn, actualizadoEn]
+      properties:
+        ticketId:
+          type: string
+          format: uuid
+        categoria:
+          $ref: '#/components/schemas/Categoria'
+        asunto:
+          type: string
+        mensaje:
+          type: string
+          description: Ya redactado (sin contrasenas, tarjetas ni tokens).
+        estado:
+          $ref: '#/components/schemas/EstadoDeTicket'
+        respuesta:
+          type: [string, 'null']
+          description: La respuesta de soporte, cuando la hay.
+        creadoEn:
+          type: string
+          format: date-time
+        actualizadoEn:
+          type: string
+          format: date-time
+
+    TicketDeSoporteAdmin:
+      description: 1.3.0. El ticket como lo ve el administrador.
+      allOf:
+        - $ref: '#/components/schemas/TicketDeSoporte'
+        - type: object
+          required: [uid, contexto]
+          properties:
+            uid:
+              type: string
+              description: Jugador que lo abrio (claim `uid` de su token). Sin email, nombre ni telefono.
+            asignadoA:
+              type: [string, 'null']
+              description: '`uid` del administrador que lo atiende.'
+            contexto:
+              type: array
+              maxItems: 20
+              description: Ultimos mensajes de la conversacion al abrir el ticket, ya redactados.
+              items:
+                $ref: '#/components/schemas/MensajeDeContexto'
+
+    MensajeDeContexto:
+      type: object
+      description: 1.3.0.
+      required: [remitente, contenido, fechaEnvio]
+      properties:
+        remitente:
+          type: string
+          enum: [USUARIO, BOT]
+        contenido:
+          type: string
+        fechaEnvio:
+          type: string
+          format: date-time
+
+    AtenderTicket:
+      type: object
+      description: 1.3.0. Todos opcionales; solo cambia lo que viene. Al menos uno.
+      minProperties: 1
+      properties:
+        estado:
+          $ref: '#/components/schemas/EstadoDeTicket'
+        asignadoA:
+          type: [string, 'null']
+          maxLength: 64
+          description: '`uid` de un administrador; null lo desasigna.'
+        respuesta:
+          type: [string, 'null']
+          maxLength: 2000
+
+    PaginaDeTickets:
+      type: object
+      description: 1.3.0.
+      required: [contenido, pagina, tamano, totalElementos]
+      properties:
+        contenido:
+          type: array
+          items:
+            $ref: '#/components/schemas/TicketDeSoporte'
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+        totalElementos:
+          type: integer
+          format: int64
 
     CalificarRespuesta:
       type: object
@@ -1073,8 +1603,12 @@ components:
           type: string
         motivo:
           type: string
-          enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE]
-          description: 1.2.0. Solo en los errores nuevos de /chat/**.
+          enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
+                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA]
+          description: |
+            1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
+            los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
+            TRANSICION_NO_PERMITIDA.
 
     SesionAnonima:
       type: object
