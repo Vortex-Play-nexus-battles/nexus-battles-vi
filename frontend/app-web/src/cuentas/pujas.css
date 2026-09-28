@@ -440,8 +440,9 @@ body {
 /* Vista Detalle */
 .barra-volver {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   font-size: 14px;
 }
 
@@ -455,7 +456,9 @@ body {
 
 .detalle-grid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  /* Mínimo 0: sin él, una columna crece hasta el contenido más ancho que
+     no se puede partir y el detalle desborda en móvil. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 28px;
 }
 
@@ -475,6 +478,7 @@ body {
 
 .objeto-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -564,10 +568,39 @@ body {
 
 .item-historial {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr));
+  gap: 4px 8px;
   padding: 8px 12px;
   font-size: 13px;
   border-bottom: 1px solid var(--borde-tenue);
+}
+
+.historial-monto {
+  text-align: right;
+}
+
+/* En móvil, cada puja en dos líneas: quién y cuánto; cómo y cuándo. */
+@media (max-width: 600px) {
+  .item-historial {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .historial-postor {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .historial-monto {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .historial-tipo,
+  .historial-cuando {
+    grid-row: 2;
+    color: var(--texto-3);
+  }
+  .historial-cuando {
+    grid-column: 2;
+    text-align: right;
+  }
 }
 
 .item-historial:last-child {
@@ -637,13 +670,24 @@ body {
 
 .campo-con-boton {
   display: flex;
+  /* UXC-9 — la fila de la puja automática (etiqueta, campo y botón) no
+     cabía a 375 px y empujaba «Activar» fuera de la pantalla. */
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 6px;
   margin-bottom: 4px;
 }
 
+@media (max-width: 600px) {
+  .campo-con-boton > .etiqueta-sm {
+    flex: 1 1 100%;
+  }
+}
+
 .input-estandar {
   flex: 1;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--borde-int);
   border-radius: 6px;
@@ -828,7 +872,7 @@ body {
 /* Responsive */
 @media (max-width: 1024px) {
   .detalle-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .panel-puja {
     position: static;
@@ -1823,6 +1867,13 @@ body {
 
 .barra-volver .separador-pipe {
   color: var(--tinta-3);
+}
+
+/* En móvil la barra parte en líneas: el separador quedaría colgando. */
+@media (max-width: 600px) {
+  .barra-volver .separador-pipe {
+    display: none;
+  }
 }
 
 .barra-volver .saldo-contextual {
