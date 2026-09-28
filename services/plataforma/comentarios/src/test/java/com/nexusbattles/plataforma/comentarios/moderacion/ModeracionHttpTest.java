@@ -196,6 +196,30 @@ class ModeracionHttpTest {
         }
 
         @Test
+        @DisplayName("un reporte invalido es 400 con motivo y tipo estables")
+        void reporteInvalidoEs400() throws Exception {
+            when(servicio.reportar(anyString(), anyString(), anyString(), any(), anyString()))
+                    .thenThrow(new ServicioDeModeracion.ReporteInvalido("La descripcion admite hasta 500 caracteres"));
+
+            mvc.perform(reportarCon(comoJugadora()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.motivo").value("REPORTE_INVALIDO"))
+                    .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/reporte-invalido"));
+        }
+
+        @Test
+        @DisplayName("una categoria fuera del enum es 400 antes de llegar al servicio")
+        void categoriaInventadaEs400() throws Exception {
+            mvc.perform(post(RUTA_REPORTES)
+                            .header(HttpHeaders.AUTHORIZATION, comoJugadora())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"categoria\": \"INVENTADA\"}"))
+                    .andExpect(status().isBadRequest());
+
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
         @DisplayName("agotado el limite diario es 429 con motivo, no un 400 mudo")
         void limiteEs429() throws Exception {
             when(servicio.reportar(anyString(), anyString(), anyString(), any(), anyString()))

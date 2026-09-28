@@ -342,6 +342,13 @@ public class ServicioDeModeracion {
         }
     }
 
+    /** El reporte no cumple el contrato: categoria ausente o descripcion demasiado larga (400). */
+    public static class ReporteInvalido extends RuntimeException {
+        public ReporteInvalido(String explicacion) {
+            super(explicacion);
+        }
+    }
+
     public static class LimiteDeReportesAgotado extends RuntimeException {
         public LimiteDeReportesAgotado(int limite) {
             super("Alcanzaste el limite de " + limite + " reportes en un dia");
