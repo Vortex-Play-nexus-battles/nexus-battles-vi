@@ -470,6 +470,29 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     await api.dispose();
   });
 
+  /**
+   * B4 (inventario 1.5.0): una jugadora ya no se crea objetos con
+   * `POST /elementos` (403). La vendedora recibe cada objeto que va a subastar
+   * por una entrega con la credencial de servicio del banco, como la haria la
+   * tienda o un cofre. La clave es de esta llamada: repetirla devolveria la
+   * misma entrega y no un objeto nuevo.
+   */
+  async function entregarALaVendedora(motivo) {
+    const servicio = await tokenDeServicio(api);
+    const clave = `e2e-b8-${motivo}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const entrega = await api.post('/api/v1/inventario/entregas', {
+      headers: { ...conToken(servicio), 'Idempotency-Key': clave },
+      data: {
+        uid: vendedora.claims.uid,
+        origen: 'ADMINISTRACION',
+        referencia: clave,
+        productos: [{ productoId: PRODUCTO_SUBASTABLE, cantidad: 1 }],
+      },
+    });
+    expect(entrega.status(), `entregar el objeto: ${await entrega.text()}`).toBe(201);
+    return (await entrega.json()).elementos[0].id;
+  }
+
   test('las reglas vigentes son publicas y vienen del servidor (Tabla 25 y admin-parametros)', async () => {
     const r = await api.get('/api/v1/subastas/reglas');
     expect(r.status(), await r.text()).toBe(200);
@@ -486,16 +509,7 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
   });
 
   test('la compra inmediata tiene que superar el precio minimo (7.7.2)', async () => {
-    const creado = await api.post('/api/v1/inventario/elementos', {
-      headers: conToken(vendedora.token),
-      data: {
-        productoId: PRODUCTO_SUBASTABLE,
-        tipo: 'ARMA',
-        nombrePropio: `Lanza B8 ${Date.now()}`,
-      },
-    });
-    expect(creado.status(), await creado.text()).toBe(201);
-    elementoId = (await creado.json()).id;
+    elementoId = await entregarALaVendedora('lanza');
 
     const igual = await api.post('/api/v1/subastas', {
       headers: { ...conToken(vendedora.token), 'Idempotency-Key': `e2e-b8-igual-${Date.now()}` },
@@ -586,16 +600,7 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     expect((await conPuja.json()).motivo).toBe('CANCELACION_CON_PUJAS');
 
     // Otra subasta, sin pujas, para cancelar de verdad.
-    const creado = await api.post('/api/v1/inventario/elementos', {
-      headers: conToken(vendedora.token),
-      data: {
-        productoId: PRODUCTO_SUBASTABLE,
-        tipo: 'ARMA',
-        nombrePropio: `Escudo B8 ${Date.now()}`,
-      },
-    });
-    expect(creado.status(), await creado.text()).toBe(201);
-    const otroElemento = (await creado.json()).id;
+    const otroElemento = await entregarALaVendedora('escudo');
     const publicar = await api.post('/api/v1/subastas', {
       headers: {
         ...conToken(vendedora.token),
