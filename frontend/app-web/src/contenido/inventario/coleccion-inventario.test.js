@@ -5,7 +5,7 @@
 import { jest } from '@jest/globals';
 
 import { esHeroe, mapaDeEquipados, paginaLocal, reunirInventario } from './coleccion-inventario.js';
-import { pintarHeroes } from './heroes-inventario.js';
+import { pintarHeroes, progresoDe } from './heroes-inventario.js';
 
 function pagina(numero, elementos, totalPaginas) {
   return {
@@ -166,5 +166,57 @@ describe('pintarHeroes', () => {
     // Sin equipo leido no se afirma que no pueda combatir.
     expect(carta.dataset.estado).toBe('DISPONIBLE');
     expect(carta.textContent).toContain('Prototipo sin identificar');
+  });
+});
+
+describe('UXC-9 — nivel y experiencia del héroe (inventario 1.5.0)', () => {
+  const TABLA = [
+    { nivel: 1, experienciaParaSubir: 100 },
+    { nivel: 2, experienciaParaSubir: 120 },
+    { nivel: 8 },
+  ];
+
+  test('progresoDe lee lo que guarda el inventario y lo que pide la tabla', () => {
+    expect(progresoDe({ nivel: 2, experiencia: 30 }, TABLA)).toEqual({
+      nivel: 2,
+      experiencia: 30,
+      paraSubir: 120,
+      maximo: false,
+    });
+    expect(progresoDe({ nivel: 8, experiencia: 500 }, TABLA).maximo).toBe(true);
+    // Sin tabla, se dice lo que se sabe.
+    expect(progresoDe({ nivel: 2, experiencia: 30 }, null)).toMatchObject({ paraSubir: null });
+    // Sin nivel del inventario no se supone el 1.
+    expect(progresoDe({ experiencia: 0 }, TABLA)).toBeNull();
+  });
+
+  test('la carta dice el nivel y cuánto falta para el siguiente', async () => {
+    const contenedor = document.createElement('div');
+    document.body.replaceChildren(contenedor);
+    await pintarHeroes(contenedor, {
+      heroes: [
+        {
+          id: 'h1',
+          productoId: 'p-h1',
+          tipo: 'HEROE',
+          nombrePropio: 'Aquiles',
+          disponible: true,
+          subastaId: null,
+          nivel: 2,
+          experiencia: 30,
+        },
+      ],
+      identidad: 'yo',
+      consultarEquipo: jest.fn(async () => ({ armas: [], armaduras: [], items: [] })),
+      consultarEstadisticas: jest.fn(async () => null),
+      consultarProducto: jest.fn(async () => ({ prototipo: 'Guerrero Tanque' })),
+      consultarNiveles: jest.fn(async () => TABLA),
+      alVerFicha: jest.fn(),
+      alEquipar: jest.fn(),
+    });
+    const progreso = contenedor.querySelector('[data-zona="progreso"]');
+    expect(progreso.textContent).toContain('Nivel 2');
+    expect(progreso.textContent).toContain('30 de 120 de experiencia para el nivel 3');
+    expect(progreso.querySelector('.hero-card__experiencia-relleno').style.width).toBe('25%');
   });
 });

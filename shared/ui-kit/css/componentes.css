@@ -30,6 +30,7 @@
 .resultado,
 .transmision,
 .chatbot__tarjeta,
+.chatbot-ventana,
 .metrica,
 .encuentro,
 .panel-resultado,
@@ -2804,13 +2805,79 @@ button.tarjeta--partida:disabled {
   display: none;
 }
 
+/* UXC-9 — minimizada: queda la barra de título; la conversación sigue ahí.
+   `!important` gana al alto que puso el asa (estilo en línea). */
+.chatbot-ventana.chatbot-ventana--minimizada {
+  height: auto !important;
+}
+
+.chatbot-ventana--minimizada .chatbot-ventana__registro,
+.chatbot-ventana--minimizada .chatbot-ventana__aviso,
+.chatbot-ventana--minimizada .chatbot-ventana__formulario,
+.chatbot-ventana--minimizada .chatbot-ventana__estado,
+.chatbot-ventana--minimizada .chatbot-ventana__asa {
+  display: none;
+}
+
+/* UXC-9 — el asa del tamaño. La ventana cuelga de la esquina inferior
+   derecha, así que se agarra por la superior izquierda. Tiene objetivo táctil
+   de 24 px y foco visible: con las flechas también cambia el tamaño. */
+.chatbot-ventana__asa {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radio) 0 var(--radio-chico) 0;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.chatbot-ventana__asa::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 9px;
+  height: 9px;
+  border-top: 2px solid var(--borde-int);
+  border-left: 2px solid var(--borde-int);
+  border-top-left-radius: 2px;
+}
+
+.chatbot-ventana__asa:hover {
+  background: var(--superficie-2);
+}
+
+/* El título empieza donde acaba el asa, para que agarrarla no sea pulsar
+   sobre «Asistente». */
+.chatbot-ventana__cabecera {
+  padding-left: var(--e-6);
+}
+
 /* En el teléfono ocupa el ancho, pero sigue por encima del botón flotante:
    si lo tapara, no habría cómo cerrarla con un toque sobre el mismo botón. */
 @media (max-width: 480px) {
+  .chatbot-ventana__asa {
+    display: none;
+  }
+
+  .chatbot-ventana__cabecera {
+    padding-left: var(--e-4);
+  }
+
   .chatbot-ventana {
     right: var(--e-2);
     left: var(--e-2);
-    width: auto;
+    /* UXC-9 — el tamaño elegido con el asa es de pantalla ancha (estilo en
+       línea): en el teléfono manda la pantalla. */
+    width: auto !important;
+    height: auto !important;
+    max-height: min(600px, calc(100vh - 56px - var(--e-16))) !important;
   }
 }
 
@@ -2868,6 +2935,10 @@ button.tarjeta--partida:disabled {
 
 .cabecera__buscador {
   flex: 1 1 auto;
+  /* Ni una barra de 1200 px en una pantalla ancha ni un campo que empuje los
+     destinos a otra línea: crece hasta aquí y encoge lo que haga falta. */
+  max-width: 22rem;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--e-2);
@@ -2892,6 +2963,40 @@ button.tarjeta--partida:disabled {
 .cabecera__buscador-texto::placeholder {
   color: var(--pista);
   opacity: 1;
+}
+
+/* El campo recibe el foco sin contorno propio (no tiene borde): el anillo va
+   en la caja entera, que es lo que se ve. */
+.cabecera__buscador:focus-within {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+}
+
+.cabecera__buscador-texto:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* RF-INV-008 — la lupa que lleva a la búsqueda de la tienda cuando la barra
+   no tiene sitio para el campo (ver la regla de 1100 px). */
+.cabecera__buscador-atajo {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radio);
+  color: inherit;
+  transition: background-color var(--transicion);
+}
+
+.cabecera__buscador-atajo:hover {
+  background: var(--cromo-elevado);
+}
+
+.cabecera__buscador-atajo:focus-visible {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
 }
 
 .cabecera__acciones {
@@ -2999,7 +3104,8 @@ button.tarjeta--partida:disabled {
   color: var(--pista);
 }
 
-/* A 1024 px el buscador se repliega a icono. Nunca se quita un destino. */
+/* A 1024 px la marca pasa a la corta (el buscador, ver la regla de 1300 px).
+   Nunca se quita un destino. */
 @media (max-width: 1100px) {
   .cabecera__nav {
     gap: var(--e-4);
@@ -3016,14 +3122,28 @@ button.tarjeta--partida:disabled {
   .cabecera .cabecera__marca-corta {
     display: inline;
   }
-  .cabecera__buscador {
-    flex: 0 0 auto;
-    width: 32px;
-    padding: 0;
-    justify-content: center;
-  }
-  .cabecera__buscador .cabecera__buscador-texto {
+}
+
+/* UXC-9 — el campo de búsqueda cabe junto a la marca, los seis destinos y la
+   cuenta desde unos 1300 px (1366 y 1440 lo muestran). Por debajo, la lupa
+   lleva a la búsqueda de la tienda. Antes el campo se plegaba a 1100 px a una
+   lupa de 32 px que no hacía nada, y entre 1100 y 1300 empujaba «Mi Cuenta» a
+   una tercera línea de la barra. */
+@media (max-width: 1300px) {
+  .cabecera .cabecera__buscador {
     display: none;
+  }
+  .cabecera .cabecera__buscador-atajo {
+    display: inline-flex;
+  }
+}
+
+/* Con el campo a la vista, lo que encoge es el campo, no los destinos: sin
+   esto, a 1366 px el reparto de espacio encogía también la navegación y
+   «Mi Cuenta» saltaba de línea. */
+@media (min-width: 1301px) {
+  .cabecera--jugador .cabecera__grupo-marca {
+    flex-shrink: 0;
   }
 }
 
@@ -3095,6 +3215,21 @@ button.tarjeta--partida:disabled {
 .distintivo--maestro-juego {
   background: var(--rareza-epica-insignia);
   color: var(--rareza-epica);
+}
+/* UXC-9 — el resultado de una partida en «Mi cuenta». La palabra dice el
+   resultado; el color solo lo refuerza. El empate va neutro (`--texto-2`
+   sobre `--pista`, 5,18:1): no es ni logro ni fallo. */
+.distintivo--victoria {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--derrota {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+.distintivo--empate {
+  background: var(--pista);
+  color: var(--texto-2);
 }
 
 /* =======================================================================
@@ -4447,6 +4582,40 @@ button.tarjeta--partida:disabled {
   display: grid;
   gap: var(--e-4);
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+/* --- Mi cuenta · Estadísticas (UXC-9) ---------------------------------------
+   Las cifras de la cuenta conservan su ancho aunque haya una sola: con
+   `auto-fit`, «Partidas jugadas» sola se estiraba a lo ancho de la tarjeta. */
+.cuenta-estadisticas__cifras {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* Notas de una o dos frases con su título (torneos y logros; suscripciones y
+   métodos de pago). `.tarjeta__datos` es para datos cortos en negrita: con
+   frases largas partía el texto en columnas de 96 px a 375. */
+.cuenta-notas {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  margin: 0;
+}
+
+.cuenta-notas__nota {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+}
+
+.cuenta-notas dt {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.cuenta-notas dd {
+  margin: 0;
+  color: var(--texto-2);
 }
 
 .home__accesos {
@@ -6697,6 +6866,31 @@ button.tarjeta-heroe[aria-pressed='true'] {
   margin: 0;
 }
 
+/* UXC-9 — nivel y experiencia (inventario 1.5.0): el texto dice cuánto hay y
+   cuánto falta; la barra solo lo acompaña. */
+.hero-card__progreso {
+  display: grid;
+  gap: 4px;
+}
+
+.hero-card__nivel {
+  margin: 0;
+}
+
+.hero-card__experiencia {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radio-pildora);
+  background: var(--pista);
+}
+
+.hero-card__experiencia-relleno {
+  display: block;
+  height: 100%;
+  background: var(--acento-relleno);
+}
+
 .hero-card__acciones {
   display: flex;
   flex-wrap: wrap;
@@ -6995,6 +7189,12 @@ body[data-modo='combate'] .accion-combate__etiqueta {
 .accion-combate__insignia-icono {
   width: 12px;
   height: 12px;
+}
+
+/* UXC-9 — la carga que falta: «faltan N» con el reloj, en ámbar (el texto
+   ya lo dice; el color acompaña). */
+.accion-combate__insignia--en-carga {
+  color: var(--advertencia);
 }
 
 /* La especial deshabilitada sigue legible: se atenua el icono, no el texto

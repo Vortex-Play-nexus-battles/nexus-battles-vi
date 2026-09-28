@@ -109,6 +109,20 @@ export function narrarAccion(aviso, participantes, yo) {
       a?.idJugador !== aviso?.idEjecutor || (Number.isFinite(a.diferencia) && a.diferencia !== 0),
   );
 
+  // UXC-9 — 1.5.0: faltó poder para la acción pedida y el turno se jugó con
+  // el valor base (§6.1.1). Sin decirlo, parecía que el servidor había
+  // ignorado la acción elegida.
+  if (aviso?.accion?.enValorBase === true) {
+    const pedida = aviso.accion.accionPedida;
+    lineas.push({
+      texto: pedida
+        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeAccion(pedida)}: ataca con su valor base.`
+        : `A ${ejecutor} no le alcanza el poder: ataca con su valor base.`,
+      tono: 'sistema',
+      icono: 'rayo',
+    });
+  }
+
   if (afectados.length === 0 && todos.length > 0 && !categoria) {
     // Una accion que no mueve ninguna vida (una defensa, un apoyo): se dice
     // que se uso; lo que cambia (poder, efectos) ya se ve en su sitio.

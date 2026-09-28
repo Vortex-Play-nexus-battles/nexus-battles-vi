@@ -127,6 +127,11 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * anonimizado) y cada cifra es un `Number` formateado por
  * `formatearCreditos()` o `montoConSigno()`; estados y movimientos se pintan
  * con textos propios, nunca con los del servidor.
+ *
+ * UXC-9 (cierre de brechas) — las cuatro bajan 37 líneas: `compartirSubasta()`
+ * (7.7.9) entra ARRIBA de `render()`. Lo único nuevo en `contenidoHtml` es el
+ * botón «Compartir», marcado fijo sin ningún dato; el enlace se arma con
+ * `encodeURIComponent` y viaja por la API del navegador, no por el HTML.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
@@ -140,15 +145,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2743', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2761', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2780', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2798', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2787',
+    'cuentas/pujas.js:2824',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2829',
+    'cuentas/pujas.js:2866',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

@@ -9,13 +9,11 @@
  *
  * ## Lo que este cliente NO trae
  *
- * **Nivel.** El catalogo lo acepta como parametro de ruta
- * (`/heroes/{nombre}/niveles/{nivel}`) pero no lo guarda: su propio contrato
- * dice que «el estado del heroe (nivel y experiencia) lo guarda el inventario;
- * aqui no se persiste nada», y el documento del inventario no tiene esa
- * columna. Nadie lo persiste, asi que no hay nivel que pedir. Llamar a
- * `/niveles/1` para rellenar el hueco seria inventarse que todos los heroes
- * estan a nivel 1.
+ * **Nivel del heroe propio.** El catalogo no lo guarda: «el estado del
+ * heroe (nivel y experiencia) lo guarda el inventario». Desde inventario
+ * 1.5.0 (B4) `ElementoInventario` trae `nivel` y `experiencia`; lo que da
+ * este servicio es la tabla de cuanta experiencia pide cada nivel
+ * (`GET /api/v1/progresion/niveles`, UXC-9), para decir cuanto falta.
  *
  * **Rareza.** No existe en ningun contrato de contenido.
  *
@@ -51,6 +49,53 @@ export async function consultarFichaDeHeroe(
   const respuesta = await fetchImpl(`${RUTA}/${encodeURIComponent(prototipo.trim())}`);
   if (!respuesta.ok) {
     const fallo = new Error(`No se pudo leer el héroe del catálogo (${respuesta.status})`);
+    fallo.status = respuesta.status;
+    throw fallo;
+  }
+  return respuesta.json();
+}
+
+/**
+ * UXC-9 — la tabla de progresión (§6.1.1): los ocho niveles y la
+ * experiencia que pide cada uno para subir (el 8 no pide). La regla vive en
+ * el servicio de héroes; aquí solo se lee.
+ *
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<Array<{nivel: number, experienciaParaSubir?: number}>>}
+ */
+export async function consultarTablaDeNiveles({ fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl('/api/v1/progresion/niveles');
+  if (!respuesta.ok) {
+    const fallo = new Error('No se pudo leer la tabla de niveles');
+    fallo.status = respuesta.status;
+    throw fallo;
+  }
+  const tabla = await respuesta.json();
+  return Array.isArray(tabla) ? tabla : [];
+}
+
+/**
+ * UXC-9 — el prototipo en un nivel (`GET /api/v1/heroes/{nombre}/niveles/{nivel}`):
+ * las acciones ya aprendidas en ese nivel y su épica afín.
+ *
+ * @param {string} prototipo
+ * @param {number} nivel
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} `VistaPorNivel` de heroes.yaml
+ */
+export async function consultarVistaPorNivel(
+  prototipo,
+  nivel,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  if (typeof prototipo !== 'string' || prototipo.trim() === '' || !Number.isInteger(nivel)) {
+    throw new TypeError('El prototipo y el nivel son obligatorios');
+  }
+  const respuesta = await fetchImpl(
+    `${RUTA}/${encodeURIComponent(prototipo.trim())}/niveles/${nivel}`,
+  );
+  if (!respuesta.ok) {
+    const fallo = new Error('No se pudo leer el héroe en su nivel');
     fallo.status = respuesta.status;
     throw fallo;
   }

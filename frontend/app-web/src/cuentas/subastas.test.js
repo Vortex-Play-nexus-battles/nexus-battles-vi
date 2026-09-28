@@ -11,7 +11,7 @@
 
 import { jest } from '@jest/globals';
 
-import { inicializar, rutaDePujas } from './subastas.js';
+import { CANAL_DEL_LISTADO, TAMANOS_DE_PAGINA, inicializar, rutaDePujas } from './subastas.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -45,9 +45,9 @@ function responder(cuerpo, estado = 200) {
   };
 }
 
-function montar() {
+function montar(opciones = { conectarCanal: null }) {
   document.body.innerHTML = '<div id="raiz-subastas"></div>';
-  inicializar();
+  inicializar(opciones);
   return asentar();
 }
 
@@ -233,7 +233,7 @@ describe('estructura de la pantalla', () => {
     let resolver;
     globalThis.fetch = jest.fn(() => new Promise((r) => (resolver = r)));
     document.body.innerHTML = '<div id="raiz-subastas"></div>';
-    inicializar();
+    inicializar({ conectarCanal: null });
 
     expect(zona().querySelector('[data-estado="cargando"]')).not.toBeNull();
 
@@ -262,7 +262,10 @@ describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () =>
     await montar();
 
     expect(panel().contains(zona())).toBe(false);
-    expect(panel().nextElementSibling).toBe(zona());
+    // UXC-9 — en la columna de al lado, con el aviso de cambios del mercado
+    // encima (oculto mientras no haya ninguno).
+    expect(panel().nextElementSibling.contains(zona())).toBe(true);
+    expect(document.querySelector('[data-zona="novedades-mercado"]').hidden).toBe(true);
   });
 
   test('sin filtros puestos el resumen no promete nada', async () => {
@@ -282,5 +285,89 @@ describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () =>
     // Un panel plegado que esconde filtros activos deja a alguien mirando
     // «ninguna subasta coincide» sin saber por que.
     expect(resumen().textContent).toBe('Filtros · 1 activos');
+  });
+});
+
+describe('UXC-9 — paginación de 7.7.9 y listado en vivo', () => {
+  test('el tamaño de página se elige y se pide al servicio', async () => {
+    await montar();
+    const selector = document.querySelector('[data-control="tamano-pagina"]');
+    expect([...selector.options].map((o) => Number(o.value))).toEqual([...TAMANOS_DE_PAGINA]);
+
+    selector.value = '32';
+    selector.dispatchEvent(new Event('change'));
+    await asentar();
+
+    const url = String(globalThis.fetch.mock.calls.at(-1)[0]);
+    expect(url).toContain('size=32');
+    expect(url).toContain('page=0');
+  });
+
+  test('hasta diez casillas de página, centradas en la actual', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta()], { totalPaginas: 25, pagina: 0 })),
+    );
+    await montar();
+
+    const casillas = [...zona().querySelectorAll('.paginacion__pagina[aria-label^="Página"]')];
+    expect(casillas.map((c) => c.textContent)).toEqual([
+      '1',
+      '2',
+      '3',
+      '4',
+      '5',
+      '6',
+      '7',
+      '8',
+      '9',
+      '10',
+    ]);
+  });
+
+  test('un cambio de una subasta a la vista pone su tarjeta al día; uno de fuera se avisa', async () => {
+    globalThis.fetch = jest.fn(async () => responder(listado([subasta()])));
+    let alRecibir = null;
+    const canal = {
+      suscribir: jest.fn((destino, fn) => {
+        alRecibir = fn;
+      }),
+      cerrar: jest.fn(),
+    };
+    await montar({ conectarCanal: async () => canal, urlCanal: 'ws://prueba/ws-subastas' });
+    await asentar();
+
+    expect(canal.suscribir).toHaveBeenCalledWith(CANAL_DEL_LISTADO, expect.any(Function));
+
+    alRecibir({ id: 's-1', estado: 'ACTIVA', ofertaVigente: 1450, cantidadPujas: 4 });
+    const tarjeta = zona().querySelector('[data-subasta-id="s-1"]');
+    expect(tarjeta.querySelector('.subastas__precio').textContent).toBe('1.450 créditos');
+    expect(tarjeta.querySelector('.subastas__pujas').textContent).toBe('4 pujas');
+
+    alRecibir({ id: 's-1', estado: 'ADJUDICADA', ofertaVigente: 1450, cantidadPujas: 4 });
+    expect(tarjeta.querySelector('.subastas__acciones')).toBeNull();
+    expect(tarjeta.textContent).toContain('Esta subasta ya terminó');
+
+    const novedades = document.querySelector('[data-zona="novedades-mercado"]');
+    alRecibir({ id: 'otra', estado: 'ACTIVA', ofertaVigente: 10, cantidadPujas: 0 });
+    expect(novedades.hidden).toBe(false);
+    expect(novedades.textContent).toContain('Hubo un cambio en una subasta');
+
+    const llamadas = globalThis.fetch.mock.calls.length;
+    novedades.querySelector('[data-accion="actualizar-mercado"]').click();
+    await asentar();
+    expect(globalThis.fetch.mock.calls.length).toBe(llamadas + 1);
+    expect(novedades.hidden).toBe(true);
+  });
+
+  test('sin canal, el listado funciona igual y no se inventa ningún aviso', async () => {
+    globalThis.fetch = jest.fn(async () => responder(listado([subasta()])));
+    await montar({
+      conectarCanal: async () => {
+        throw new Error('no abre');
+      },
+    });
+    await asentar();
+    expect(zona().querySelector('[data-subasta-id="s-1"]')).not.toBeNull();
+    expect(document.querySelector('[data-zona="novedades-mercado"]').hidden).toBe(true);
   });
 });

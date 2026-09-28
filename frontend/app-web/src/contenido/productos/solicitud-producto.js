@@ -72,6 +72,89 @@ function tasaDeCaida(formulario) {
   return numero(formulario, 'tasaDeCaida', 'La tasa de caída', { minimo: 0, maximo: 100 });
 }
 
+/** Límites de `Promocion` (productos.yaml 1.4.0; 1..90 provisional hasta que el PO fije otro). */
+export const LIMITES_DE_PROMOCION = Object.freeze({ minimo: 1, maximo: 90 });
+
+/** Los tres campos de la promoción, con el nombre con el que viajan en el formulario. */
+export const CAMPOS_DE_PROMOCION = Object.freeze({
+  porcentaje: 'promocionPorcentaje',
+  desde: 'promocionDesde',
+  hasta: 'promocionHasta',
+});
+
+/**
+ * Un `datetime-local` (hora de quien administra) como instante ISO 8601.
+ *
+ * @param {string} valor
+ * @returns {string|null}
+ */
+export function instanteDe(valor) {
+  const escrito = String(valor ?? '').trim();
+  if (!escrito) {
+    return null;
+  }
+  const fecha = new Date(escrito);
+  return Number.isNaN(fecha.getTime()) ? null : fecha.toISOString();
+}
+
+/**
+ * Un instante ISO como valor de `datetime-local`, en la hora de quien mira.
+ *
+ * @param {string|null|undefined} iso
+ * @returns {string}
+ */
+export function valorLocalDe(iso) {
+  const fecha = new Date(iso ?? '');
+  if (!iso || Number.isNaN(fecha.getTime())) {
+    return '';
+  }
+  const dos = (n) => String(n).padStart(2, '0');
+  return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}T${dos(
+    fecha.getHours(),
+  )}:${dos(fecha.getMinutes())}`;
+}
+
+/**
+ * UXC-9 — §7.2.4 y §7.5: la promoción (descuento con vigencia). Opcional: sin
+ * ningún campo lleno no viaja; con alguno, se piden los tres. El servidor
+ * calcula si está vigente y tiene la última palabra.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {{porcentaje: number, desde: string, hasta: string}|null}
+ */
+export function promocionDelFormulario(formulario) {
+  const campos = Object.fromEntries(
+    Object.entries(CAMPOS_DE_PROMOCION).map(([clave, nombre]) => [
+      clave,
+      formulario.querySelector(`[name="${nombre}"]`),
+    ]),
+  );
+  if (!campos.porcentaje) {
+    return null;
+  }
+  const valores = Object.values(campos).map((c) => String(c?.value ?? '').trim());
+  if (valores.every((v) => v === '')) {
+    return null;
+  }
+  const porcentaje = numero(formulario, CAMPOS_DE_PROMOCION.porcentaje, 'El descuento', {
+    entero: true,
+    minimo: LIMITES_DE_PROMOCION.minimo,
+    maximo: LIMITES_DE_PROMOCION.maximo,
+  });
+  const desde = instanteDe(campos.desde?.value);
+  const hasta = instanteDe(campos.hasta?.value);
+  if (!desde) {
+    throw new Error('Indica cuándo empieza la promoción.');
+  }
+  if (!hasta) {
+    throw new Error('Indica cuándo termina la promoción.');
+  }
+  if (new Date(hasta) <= new Date(desde)) {
+    throw new Error('La promoción termina antes de empezar: revisa las fechas.');
+  }
+  return { porcentaje, desde, hasta };
+}
+
 /** Convierte el formulario en una solicitud sin campos ajenos al tipo elegido. */
 export function construirSolicitudProducto(formulario) {
   const tipo = texto(formulario, 'tipo', 'El tipo');
@@ -164,5 +247,9 @@ export function construirSolicitudProducto(formulario) {
       break;
   }
 
+  const promocion = promocionDelFormulario(formulario);
+  if (promocion) {
+    solicitud.promocion = promocion;
+  }
   return solicitud;
 }

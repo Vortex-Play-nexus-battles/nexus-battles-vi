@@ -30,6 +30,10 @@ const VARIANTES_CONOCIDAS = new Set([
   'administrador',
   'moderador',
   'maestro-juego',
+  // UXC-9 — el resultado de una partida (Mi cuenta · Estadísticas).
+  'victoria',
+  'derrota',
+  'empate',
 ]);
 
 /**

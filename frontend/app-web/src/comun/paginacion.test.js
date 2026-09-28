@@ -202,9 +202,19 @@ describe('Control de paginacion', () => {
     const control = construirPaginacion({ paginaActual: 20, totalPaginas: 40 }, () => {});
 
     expect(control.tagName).toBe('NAV');
-    expect(control.getAttribute('aria-label')).toMatch(/paginacion/i);
-    expect(flecha(control, 'anterior').getAttribute('aria-label')).toMatch(/anterior/i);
-    expect(flecha(control, 'siguiente').getAttribute('aria-label')).toMatch(/siguiente/i);
+    // UXC-9: el nombre por omisión ya no es «Paginacion del inventario» en
+    // todas las vistas; se escribe con su tilde.
+    expect(control.getAttribute('aria-label')).toBe('Paginación');
+    expect(flecha(control, 'anterior').getAttribute('aria-label')).toBe('Página anterior');
+    expect(flecha(control, 'siguiente').getAttribute('aria-label')).toBe('Página siguiente');
+  });
+
+  test('quien lo monta le da el nombre de lo que pagina (UXC-9)', () => {
+    const control = construirPaginacion({ paginaActual: 0, totalPaginas: 3 }, () => {}, {
+      etiqueta: 'Páginas de tus partidas',
+    });
+
+    expect(control.getAttribute('aria-label')).toBe('Páginas de tus partidas');
   });
 
   test('informa en texto la pagina en curso y el total', () => {

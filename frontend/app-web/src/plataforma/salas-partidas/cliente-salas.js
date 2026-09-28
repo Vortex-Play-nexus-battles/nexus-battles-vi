@@ -382,6 +382,36 @@ export async function obtenerPartida(
 }
 
 /**
+ * Historial de partidas de quien firma el token — `GET /partidas/mias`
+ * (salas-partidas 1.7.0, UXC-9 · Mi cuenta).
+ *
+ * El jugador sale del token, nunca de la ruta: no hay forma de pedir el de
+ * otro. De la más reciente a la más antigua, con el resultado desde su punto
+ * de vista (`ResumenDePartida`).
+ *
+ * @param {{pagina?: number, tamano?: number}} [criterios] página desde cero; 16 por omisión
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<{contenido: object[], pagina: number, tamano: number,
+ *   totalElementos: number, totalPaginas: number}>} `PaginaDePartidas`
+ * @throws {ErrorDeApi}
+ */
+export async function misPartidas(
+  { pagina = 0, tamano = 16 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  const respuesta = await fetchImpl(`${baseDeApi()}/api/v1/partidas/mias?${parametros}`, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'listado'), respuesta.status);
+}
+
+/**
  * True cuando detras de la ruta no hay ninguna API, sino un servidor de
  * ficheros. Un servidor estatico responde 405 a un POST sobre una ruta que
  * para el es un fichero (`http-server` lo hace con `text/plain`), y devuelve

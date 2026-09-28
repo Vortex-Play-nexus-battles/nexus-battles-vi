@@ -429,12 +429,22 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
 /**
  * Monta el panel de moderación.
  *
+ * UXC-9 — `usuarioInicial` (por omisión, `?usuario=` de la URL) abre el
+ * historial de esa cuenta al montar: el directorio de la consola enlaza
+ * aquí cada jugador, y antes había que copiar su identificador a mano.
+ *
  * @param {ParentNode} raiz documento con las zonas `[data-zona=...]`
- * @param {{rol?: string|null, fetchImpl?: Function, ahora?: () => number}} [opciones]
+ * @param {{rol?: string|null, fetchImpl?: Function, ahora?: () => number,
+ *          usuarioInicial?: string|null}} [opciones]
  */
 export function montarPanelDeModeracion(
   raiz,
-  { rol = null, fetchImpl, ahora = () => Date.now() } = {},
+  {
+    rol = null,
+    fetchImpl,
+    ahora = () => Date.now(),
+    usuarioInicial = new URLSearchParams(globalThis.location?.search ?? '').get('usuario'),
+  } = {},
 ) {
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const formBuscar = raiz.querySelector('[data-zona="buscar"]');
@@ -649,6 +659,16 @@ export function montarPanelDeModeracion(
 
   aplicarLimites();
   cargarApelaciones();
+  const pedido = String(usuarioInicial ?? '').trim();
+  if (pedido) {
+    for (const formulario of [formBuscar, formEmitir]) {
+      const campoUsuario = formulario?.querySelector('[name="usuarioId"]');
+      if (campoUsuario) {
+        campoUsuario.value = pedido;
+      }
+    }
+    cargarHistorial(pedido);
+  }
   return { cargarHistorial, cargarApelaciones, aplicarLimites };
 }
 

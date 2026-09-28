@@ -1971,6 +1971,43 @@ export class ControladorSubastas {
     }
   }
 
+  /**
+   * UXC-9 — «Compartir» (7.7.9): el enlace a esta subasta, con el menú de
+   * compartir del sistema si lo hay y, si no, copiado al portapapeles. No
+   * necesita servidor: `pujas.html?id=` ya abre la subasta a cualquiera.
+   *
+   * @returns {Promise<boolean>}
+   */
+  async compartirSubasta() {
+    const sub = this.getSubastaActiva();
+    if (!sub) {
+      return false;
+    }
+    const base = globalThis.location?.href ?? 'http://localhost/';
+    const enlace = new URL(`./pujas.html?id=${encodeURIComponent(sub.id)}`, base).href;
+    const boton = this.contenedor?.querySelector('#btn-compartir');
+    const navegador = globalThis.navigator;
+    try {
+      if (typeof navegador?.share === 'function') {
+        await navegador.share({ title: sub.nombre, text: `Subasta de ${sub.nombre}`, url: enlace });
+        return true;
+      }
+      await navegador.clipboard.writeText(enlace);
+      if (boton) {
+        acusar(boton, { tipo: 'exito', texto: 'Enlace copiado' });
+      }
+      return true;
+    } catch (fallo) {
+      // Cerrar el menú de compartir no es un fallo que haya que contar.
+      if (fallo?.name !== 'AbortError') {
+        this.mostrarError(
+          'No pudimos copiar el enlace desde aquí. Copia la dirección de esta página para compartirla.',
+        );
+      }
+      return false;
+    }
+  }
+
   /** «Ver todas» / «Ver menos» en las listas largas del panel. */
   alternarVerTodo(lista) {
     this.verTodo = { ...this.verTodo, [lista]: !this.verTodo[lista] };
@@ -4232,6 +4269,7 @@ export class ControladorSubastas {
           </button>`
               : ''
           }
+          <button type="button" class="btn btn-texto" id="btn-compartir">Compartir</button>
           ${this.generarHtmlCancelar(sub, { conSesion, cerrada })}
         </div>
 
@@ -4865,6 +4903,9 @@ export class ControladorSubastas {
     this.contenedor
       .querySelector('#btn-seguir')
       ?.addEventListener('click', () => this.alternarSeguimiento());
+    this.contenedor
+      .querySelector('#btn-compartir')
+      ?.addEventListener('click', () => this.compartirSubasta());
     this.contenedor
       .querySelector('#btn-cancelar-subasta')
       ?.addEventListener('click', () => this.solicitarCancelacion());

@@ -363,6 +363,7 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
         <dd id="usuario-estado-mostrado">-</dd>
         <form id="formulario-perfil-admin">
           <input id="estado" /><input id="suspendido-hasta" />
+          <textarea id="motivo-sancion"></textarea>
           <select id="nuevo-rol"><option value="JUGADOR">JUGADOR</option></select>
         </form>
         <button type="button" id="btn-suspender">Suspender</button>
@@ -463,5 +464,45 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
     await esperar();
 
     expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/banear');
+    // Sin causal escrita el cuerpo no viaja (es opcional en el contrato).
+    expect(globalThis.fetch.mock.calls.at(-1)[1].body).toBeUndefined();
+  });
+
+  test('UXC-9 — la causal escrita viaja con la suspensión y se lee en el diálogo', async () => {
+    document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('motivo-sancion').value = '  Lenguaje ofensivo en el chat  ';
+    document.getElementById('btn-suspender').click();
+    await esperar();
+
+    expect(dialogo().textContent).toContain('Motivo: «Lenguaje ofensivo en el chat».');
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+    dialogo().querySelector('[data-accion="confirmar"]').click();
+    await esperar();
+
+    expect(JSON.parse(globalThis.fetch.mock.calls.at(-1)[1].body)).toEqual({
+      suspendidoHasta: '2026-10-01T10:00',
+      motivo: 'Lenguaje ofensivo en el chat',
+    });
+  });
+
+  test('UXC-9 — la causal viaja con el baneo y queda en sus consecuencias', async () => {
+    document.getElementById('motivo-sancion').value = 'Fraude en subastas';
+    document.getElementById('btn-banear').click();
+    await esperar();
+
+    const caja = dialogo();
+    expect(caja.querySelector('.confirmacion-critica__consecuencias').textContent).toContain(
+      'Motivo que queda registrado: «Fraude en subastas».',
+    );
+    const campo = caja.querySelector('input');
+    campo.value = 'nyx_valiente';
+    campo.dispatchEvent(new Event('input'));
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+    caja.querySelector('[data-accion="confirmar"]').click();
+    await esperar();
+
+    const [ruta, opciones] = globalThis.fetch.mock.calls.at(-1);
+    expect(ruta).toBe('/api/v1/admin/usuarios/15/banear');
+    expect(JSON.parse(opciones.body)).toEqual({ motivo: 'Fraude en subastas' });
   });
 });

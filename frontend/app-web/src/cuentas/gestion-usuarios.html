@@ -256,6 +256,26 @@
                   name="suspendido-hasta"
                 />
               </div>
+
+              <!-- UXC-9 — §7.3.2 «Causales de sanción»: la causal viaja con
+                   la suspensión y con el baneo (ms-identidad-admin 1.1.0,
+                   `motivo` opcional). Sin ella, el servidor anota que vino
+                   de este panel. -->
+              <div class="campo campo--area rejilla-formulario__ancho">
+                <label class="campo__etiqueta" for="motivo-sancion">Motivo</label>
+                <textarea
+                  class="campo__control"
+                  id="motivo-sancion"
+                  name="motivo-sancion"
+                  rows="2"
+                  maxlength="1000"
+                  aria-describedby="pista-motivo-sancion"
+                ></textarea>
+                <p class="campo__pista" id="pista-motivo-sancion">
+                  Opcional. Queda en el registro de la sanción; si lo dejas vacío, se anota que vino
+                  de este panel.
+                </p>
+              </div>
             </div>
 
             <div class="tarjeta__acciones">
