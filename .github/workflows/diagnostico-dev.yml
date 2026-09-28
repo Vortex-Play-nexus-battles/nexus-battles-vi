@@ -306,6 +306,34 @@ jobs:
             fi
 
             echo
+            echo "===================== CREDENCIALES DE SERVICIO =============="
+            # 28-sep (topologia, fase 1) — misiones y ms-subastas piden su
+            # token a un emisor que vive en OTRO host, con un secreto que tiene
+            # que ser el mismo en los dos (secret compartido de GitHub). Un
+            # desajuste no se ve en la salud: el servicio arranca y responde,
+            # y lo que falla es cada llamada suya a otro servicio. Aqui cada
+            # contenedor que presenta credencial la prueba contra su emisor
+            # (grant client_credentials) y se ensena SOLO el codigo HTTP: 200
+            # es aceptada, 401 es un secreto que el emisor no conoce. El
+            # secreto va a curl por la entrada estandar (-K -), nunca por la
+            # linea de ordenes, que `ps` ensena a cualquiera en el host; el
+            # token que devuelve el emisor se descarta sin mirarlo.
+            for c in $(sudo docker ps --format '{{.Names}}' | sort); do
+              entorno=$(sudo docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$c" 2>/dev/null || true)
+              cliente=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_CLIENT_ID=//p' | head -1)
+              [ -n "$cliente" ] || continue
+              emisor=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_URL=//p' | head -1)
+              # Desde el host el nombre del contenedor no resuelve: en el host
+              # de plataforma el emisor se publica en su 8089.
+              emisor=$(printf '%s' "$emisor" | sed 's#//srv-ms-identidad:#//localhost:#')
+              codigo=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_CLIENT_SECRET=//p' | head -1 \
+                | { read -r s; printf 'user = "%s:%s"\n' "$cliente" "$s"; } \
+                | curl -s -o /dev/null -w '%{http_code}' --max-time 10 -K - \
+                    -d grant_type=client_credentials "$emisor" || echo "---")
+              printf '    %-28s %-24s %s\n' "$c" "$cliente" "$codigo"
+            done
+
+            echo
             echo "===================== CORREO: ENTREGAS DE 7 DIAS ============"
             # B13 — evidencia de que el correo sale de verdad: por el
             # proveedor SMTP (destino PROVEEDOR) para las direcciones reales y
