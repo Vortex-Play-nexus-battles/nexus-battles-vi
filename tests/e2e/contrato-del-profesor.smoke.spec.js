@@ -215,7 +215,7 @@ test.describe('B13 · lo que pidió el profesor, en DEV', () => {
     });
 
     test('5 · A compra con la tarjeta de prueba 4242 y el producto llega a su inventario', async () => {
-      test.setTimeout(180_000);
+      test.setTimeout(300_000);
       const vitrina = await api.get('/api/v1/vitrina?page=0&size=50', {
         headers: conToken(ana.token),
       });
@@ -254,7 +254,13 @@ test.describe('B13 · lo que pidió el profesor, en DEV', () => {
       });
       expect(pago.status(), await pago.text()).toBe(201);
       const orden = await pago.json();
-      expect(orden.estado).toBe('COMPLETA');
+      // ecommerce-carrito 1.4.0: con el producto ya ENTREGADO, el asiento en
+      // el libro y el correo pueden quedar para la tarea programada si un
+      // servicio tarda; la respuesta es 201 con ese estado intermedio (en DEV
+      // pasa: smoke 36361600960). Lo que el jugador pagó ya está en su inventario.
+      expect(['ENTREGADA', 'COMPLETA'], `estado de la orden: ${orden.estado}`).toContain(
+        orden.estado,
+      );
       expect(orden.medioDePago).toEqual({ marca: 'VISA', ultimos4: '4242' });
 
       const inventario = await api.get('/api/v1/inventario/elementos', {
@@ -265,6 +271,19 @@ test.describe('B13 · lo que pidió el profesor, en DEV', () => {
         (e) => e.productoId === elegido.id,
       );
       expect(propios.length, `${elegido.nombre} en el inventario de A`).toBeGreaterThanOrEqual(1);
+
+      // Y la orden termina sola, sin que nadie la toque: COMPLETA.
+      await expect
+        .poll(
+          async () => {
+            const r = await api.get(`/api/v1/ordenes/${orden.id}`, {
+              headers: conToken(ana.token),
+            });
+            return r.status() === 200 ? (await r.json()).estado : `HTTP ${r.status()}`;
+          },
+          { timeout: 180_000, intervals: [2_000, 5_000, 10_000] },
+        )
+        .toBe('COMPLETA');
     });
   });
 });
