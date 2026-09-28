@@ -348,11 +348,13 @@ function seccionPartidas(consultarApi) {
 }
 
 /**
- * Misiones: no hay backend, y no se fabrica uno.
+ * Misiones: el servicio existe, pero no publica nada para operar.
  *
- * Ningun servicio del catalogo publica misiones. La alternativa -- inventar
- * tres misiones de ejemplo para que el panel se vea lleno -- convertiria la
- * consola en una demo, que es justo lo que no puede ser.
+ * UXC-9 — este panel decía que ningún servicio publicaba misiones, y desde B9
+ * ya no es verdad: `misiones.yaml` publica el tablón, las misiones en curso y
+ * el historial, pero todo es de cada jugador (sale de su token). No hay un
+ * agregado de progreso para la consola, y la alternativa -- inventar cifras
+ * para que el panel se vea lleno -- la convertiría en una demo.
  */
 function panelDeMisiones() {
   const partes = panel({
@@ -364,8 +366,9 @@ function panelDeMisiones() {
     vaciar(partes.zona).append(
       moduloNoImplementado({
         razon:
-          'Todavía no hay ningún servicio que publique misiones. No hay nada que ' +
-          'consultar, y esta consola no fabrica datos para llenar un hueco.',
+          'El servicio de misiones publica lo de cada jugador (su tablón, sus misiones en curso ' +
+          'y su historial), pero no un progreso de todos para operación. No hay nada que ' +
+          'consultar aquí, y esta consola no fabrica datos para llenar un hueco.',
       }),
     );
     partes.sello.dataset.estado = 'neutro';
