@@ -129,4 +129,15 @@ public class CorreoController {
         // moderacion-sanciones; aqui solo se transcribe.
         cola.encolar(solicitud.aCorreo(), clave, traza);
     }
+
+    @PostMapping("/torneo")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCorreoTorneo(
+            @Valid @RequestBody CorreoTorneoRequest solicitud,
+            @RequestHeader(name = IDEMPOTENCY_KEY, required = false) @Size(max = ColaDeCorreos.LARGO_MAXIMO_CLAVE) String clave,
+            @RequestHeader(name = TRACE_ID, required = false) String traza) {
+        // 1.5.0 (B10): hitos de torneo. Torneos manda su clave estable por
+        // participante y hito, asi que su reintento no encola una segunda copia.
+        cola.encolar(solicitud.aCorreo(), clave, traza);
+    }
 }

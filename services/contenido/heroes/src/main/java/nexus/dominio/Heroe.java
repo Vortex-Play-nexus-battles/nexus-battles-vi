@@ -72,6 +72,20 @@ public record Heroe(Prototipo prototipo, int nivel, double experiencia) {
      */
     public static final List<Integer> NIVELES_DE_DESBLOQUEO = List.of(1, 4, 8);
 
+    /**
+     * Nivel desde el que se tiene la accion que ocupa esa posicion en la Tabla 7
+     * (RC-01). Lo publica la ficha para que el motor de combate valide el
+     * desbloqueo sin reimplementar la regla (B7).
+     *
+     * @param posicion 0, 1 o 2: orden de la accion en su prototipo
+     */
+    public static int nivelDeDesbloqueo(int posicion) {
+        if (posicion < 0 || posicion >= NIVELES_DE_DESBLOQUEO.size()) {
+            throw new IllegalArgumentException("Un héroe tiene tres acciones: posición " + posicion + " fuera de rango.");
+        }
+        return NIVELES_DE_DESBLOQUEO.get(posicion);
+    }
+
     public List<Accion> accionesDisponibles() {
         int desbloqueadas = 0;
         for (int umbral : NIVELES_DE_DESBLOQUEO) {

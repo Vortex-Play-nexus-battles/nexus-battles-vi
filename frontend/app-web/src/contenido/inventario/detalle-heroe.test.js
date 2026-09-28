@@ -9,6 +9,7 @@ import {
   construirEstadisticas,
   construirAccionesDelPrototipo,
   construirDetalleDeHeroe,
+  construirEpicaAfin,
 } from './detalle-heroe.js';
 
 /** Respuesta de `GET /inventario/heroes/{id}/estadisticas`, tal como la manda. */
@@ -81,7 +82,7 @@ describe('construirEstadisticas', () => {
     expect(bloque.textContent).not.toMatch(/—|\bDefensa\b/);
   });
 
-  test('NO pinta nivel ni rareza: no existen en ningun contrato', () => {
+  test('NO pinta nivel ni rareza: el nivel va en la carta (inventario 1.5.0) y la rareza no existe', () => {
     const bloque = construirEstadisticas(
       // Aunque el servicio empezara a mandarlos, este bloque no los conoce.
       estadisticasDelServicio({ nivel: 3, rareza: 'EPICA' }),
@@ -195,5 +196,69 @@ describe('construirDetalleDeHeroe · dos servicios, ninguno hunde al otro', () =
 
     expect(fichaDe).not.toHaveBeenCalled();
     expect(bloques).toHaveLength(1);
+  });
+});
+
+describe('UXC-9 — el héroe en su nivel (heroes.yaml, vista por nivel)', () => {
+  const VISTA = {
+    nombre: 'Guerrero Tanque',
+    tipo: 'TANQUE',
+    esSanador: false,
+    nivel: 2,
+    estadisticas: {},
+    accionesDisponibles: [{ nombre: 'Golpe' }],
+    multiplicadorDeEfecto: 2,
+    epica: {
+      nombre: 'Luz cegadora',
+      efectoGeneral: '+1 a la vida',
+      efectoPotenciado: '+2 al daño',
+      turnosDeRecarga: 2,
+    },
+  };
+
+  test('marca las acciones que todavía no aprendió y añade su épica afín', async () => {
+    const vistaDe = jest.fn(async () => VISTA);
+    const bloques = await construirDetalleDeHeroe({
+      identidad: 'jugadora',
+      heroeId: 'h-1',
+      prototipo: 'Guerrero Tanque',
+      nivel: 2,
+      estadisticasDe: async () => estadisticasDelServicio(),
+      fichaDe: async () => fichaDelCatalogo(),
+      vistaDe,
+    });
+
+    expect(vistaDe).toHaveBeenCalledWith('Guerrero Tanque', 2);
+    const acciones = bloques[1];
+    const [golpe, muro] = acciones.querySelectorAll('.ficha__accion');
+    expect(golpe.classList.contains('ficha__accion--bloqueada')).toBe(false);
+    expect(muro.classList.contains('ficha__accion--bloqueada')).toBe(true);
+    expect(muro.textContent).toContain('se desbloquea al subir de nivel');
+    const epica = bloques[2];
+    expect(epica.textContent).toContain('Épica afín');
+    expect(epica.textContent).toContain('Luz cegadora');
+    expect(epica.textContent).toContain('Sin coste de poder');
+    expect(epica.textContent).toContain('2 turnos de recarga');
+    expect(epica.textContent).toContain('Para este héroe: +2 al daño');
+  });
+
+  test('sin nivel no se pide la vista ni se marca nada como bloqueado', async () => {
+    const vistaDe = jest.fn();
+    const bloques = await construirDetalleDeHeroe({
+      identidad: 'jugadora',
+      heroeId: 'h-1',
+      prototipo: 'Guerrero Tanque',
+      estadisticasDe: async () => estadisticasDelServicio(),
+      fichaDe: async () => fichaDelCatalogo(),
+      vistaDe,
+    });
+    expect(vistaDe).not.toHaveBeenCalled();
+    expect(bloques).toHaveLength(2);
+    expect(bloques[1].querySelector('.ficha__accion--bloqueada')).toBeNull();
+  });
+
+  test('sin épica en la vista, no hay bloque que inventar', () => {
+    expect(construirEpicaAfin(null)).toBeNull();
+    expect(construirEpicaAfin({})).toBeNull();
   });
 });

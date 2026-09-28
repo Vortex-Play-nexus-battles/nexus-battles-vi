@@ -392,6 +392,20 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
 
+      # 27-sep: el paso 3d recreo ms-identidad sin su clave de firma (par
+      # efimero: sesiones cerradas, 401 entre servicios, registro en 503).
+      # Con docker y curl falsos; segundos.
+      - name: Comprobar el paso 3d (emisor al dia y con la clave del host)
+        shell: bash
+        run: bash scripts/cd/pruebas/emisor-de-credenciales.sh
+
+      # Paso 3b de desplegar.sh: imagenes de una en una y con reintentos (28-sep,
+      # B7: con el host saturado, bajar tres a la vez se corto y luego no
+      # termino en los diez minutos de la sesion SSH). Con docker falso; segundos.
+      - name: Comprobar el paso 3b (imagenes de una en una, con reintentos)
+        shell: bash
+        run: bash scripts/cd/pruebas/bajar-imagenes.sh
+
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
       # Asi murio la corrida 35931028022 -- la del commit que traia

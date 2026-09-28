@@ -73,7 +73,10 @@ class MotorPujasServiceTest {
 
     @Test
     void unaPujaQueNoSuperaElIncrementoMinimoSeRechaza() {
+        // Ya hay una puja de 100: la siguiente tiene que llegar a 100 + 10.
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        subasta.setMejorPostorId(UUID.randomUUID());
+        subasta.setCantidadPujas(1);
         UUID jugador = UUID.randomUUID();
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
 
@@ -81,6 +84,38 @@ class MotorPujasServiceTest {
                 () -> motor.pujar(subasta, null, jugador, new BigDecimal("105"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL));
 
         assertEquals(PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE, ex.getMotivo());
+    }
+
+    /**
+     * B8 (7.7.2, 7.7.6): la primera puja llega al precio minimo que fijo el
+     * vendedor; el incremento es ENTRE pujas. Hasta B8 la primera exigia
+     * precio minimo mas incremento.
+     */
+    @Test
+    void laPrimeraPujaPuedeSerExactamenteElPrecioMinimo() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("100"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        assertEquals(EstadoPuja.ACTIVA, puja.getEstado());
+        assertEquals(0, new BigDecimal("100").compareTo(subasta.getOfertaVigente()));
+        assertEquals(0, new BigDecimal("110").compareTo(subasta.pujaMinimaSiguiente()),
+                "desde la segunda, oferta vigente mas incremento");
+    }
+
+    @Test
+    void laPrimeraPujaPorDebajoDelPrecioMinimoSeRechaza() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.pujar(subasta, null, jugador, new BigDecimal("99.99"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL));
+
+        assertEquals(PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE, ex.getMotivo());
+        assertTrue(ex.getMessage().contains("precio minimo"));
     }
 
     @Test
@@ -112,7 +147,7 @@ class MotorPujasServiceTest {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         UUID jugador = UUID.randomUUID();
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
-        ContextoParticipacion hacePocoMenosDe5s = new ContextoParticipacion(clock.instant().minusSeconds(3), 0, 0);
+        ContextoParticipacion hacePocoMenosDe5s = new ContextoParticipacion(clock.instant().minusSeconds(3), 0);
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
                 () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), hacePocoMenosDe5s, claveUnica(), TipoPuja.MANUAL));
@@ -125,7 +160,7 @@ class MotorPujasServiceTest {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         UUID jugador = UUID.randomUUID();
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
-        ContextoParticipacion hace5sExactos = new ContextoParticipacion(clock.instant().minus(Duration.ofSeconds(5)), 0, 0);
+        ContextoParticipacion hace5sExactos = new ContextoParticipacion(clock.instant().minus(Duration.ofSeconds(5)), 0);
 
         Puja puja = motor.pujar(subasta, null, jugador, new BigDecimal("110"), hace5sExactos, claveUnica(), TipoPuja.MANUAL);
 
@@ -133,24 +168,11 @@ class MotorPujasServiceTest {
     }
 
     @Test
-    void rechazaAlAlcanzarElLimiteDeSubastasActivasSimultaneas() {
-        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
-        UUID jugador = UUID.randomUUID();
-        creditoClient.acreditar(jugador, new BigDecimal("1000"));
-        ContextoParticipacion enElLimite = new ContextoParticipacion(null, 0, parametros.getMaxSubastasActivasPorJugador());
-
-        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
-                () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica(), TipoPuja.MANUAL));
-
-        assertEquals(PujaRechazadaException.Motivo.LIMITE_SUBASTAS_ACTIVAS, ex.getMotivo());
-    }
-
-    @Test
     void rechazaAlAlcanzarElLimiteDePujasActivasSimultaneas() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
         UUID jugador = UUID.randomUUID();
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
-        ContextoParticipacion enElLimite = new ContextoParticipacion(null, parametros.getMaxPujasActivasPorJugador(), 0);
+        ContextoParticipacion enElLimite = new ContextoParticipacion(null, parametros.getMaxPujasActivasPorJugador());
 
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
                 () -> motor.pujar(subasta, null, jugador, new BigDecimal("110"), enElLimite, claveUnica(), TipoPuja.MANUAL));
@@ -236,6 +258,58 @@ class MotorPujasServiceTest {
         assertEquals(PujaRechazadaException.Motivo.SIN_COMPRA_INMEDIATA, ex.getMotivo());
     }
 
+    /**
+     * B8: comprar por debajo de lo que otro jugador ya ofrecio le quitaria el
+     * producto al mejor postor. Cuando una puja alcanza el precio de compra
+     * inmediata, deja de estar disponible (409, es una carrera).
+     */
+    @Test
+    void laCompraInmediataSeBloqueaCuandoUnaPujaAlcanzaSuPrecio() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID postor = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+        Puja alPrecio = motor.pujar(subasta, null, postor, new BigDecimal("500"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.comprarAhora(subasta, alPrecio, comprador, claveUnica()));
+
+        assertEquals(PujaRechazadaException.Motivo.COMPRA_INMEDIATA_SUPERADA, ex.getMotivo());
+        assertEquals(EstadoSubasta.ACTIVA, subasta.getEstado());
+        assertEquals(EstadoPuja.ACTIVA, alPrecio.getEstado(), "el mejor postor sigue siendolo");
+        assertEquals(new BigDecimal("1000"), creditoClient.saldoDisponible(comprador), "no se reservo nada");
+    }
+
+    @Test
+    void laCompraInmediataSeBloqueaCuandoUnaPujaSuperaSuPrecio() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID postor = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        Puja porEncima = motor.pujar(subasta, null, postor, new BigDecimal("620"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        assertFalse(subasta.compraInmediataDisponible());
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.comprarAhora(subasta, porEncima, UUID.randomUUID(), claveUnica()));
+        assertEquals(PujaRechazadaException.Motivo.COMPRA_INMEDIATA_SUPERADA, ex.getMotivo());
+    }
+
+    @Test
+    void laCompraInmediataSigueDisponibleMientrasNingunaPujaLaAlcance() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID postor = UUID.randomUUID();
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(postor, new BigDecimal("1000"));
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
+        Puja debajo = motor.pujar(subasta, null, postor, new BigDecimal("499.99"), ContextoParticipacion.sinHistorial(), claveUnica(), TipoPuja.MANUAL);
+
+        assertTrue(subasta.compraInmediataDisponible());
+        Puja compra = motor.comprarAhora(subasta, debajo, comprador, claveUnica());
+
+        assertEquals(EstadoPuja.GANADORA, compra.getEstado());
+        assertEquals(clock.instant(), subasta.getCerradaEn(), "el cierre queda fechado");
+    }
+
     @Test
     void reintentarLaMismaPujaConLaMismaClaveNoReservaDosVecesLosCreditos() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
@@ -263,6 +337,7 @@ class MotorPujasServiceTest {
         motor.cerrarPorVencimiento(subasta, null);
 
         assertEquals(EstadoSubasta.SIN_ADJUDICACION, subasta.getEstado());
+        assertEquals(clock.instant(), subasta.getCerradaEn());
     }
 
     @Test
@@ -497,12 +572,14 @@ class MotorPujasServiceTest {
         verify(inventarioClient).transferirProducto("elem-cierre-ok", ganador, subasta.getId(),
                 "cierre-" + subasta.getId());
         verify(inventarioClient, never()).transferirProducto(eq("elem-cierre-ok"), eq(VENDEDOR), any(), any());
-        // Y la venta es definitiva, asi que el bloqueo se suelta: sin esto el
-        // ganador tendria el objeto pagado y no podria equiparlo ni revenderlo.
-        verify(inventarioClient).liberarReserva("elem-cierre-ok", subasta.getId(),
-                "liberar-cierre-" + subasta.getId());
+        // B8 (7.7.9): la venta es definitiva pero el producto queda PENDIENTE
+        // DE RECOGER, en custodia de la subasta: el bloqueo NO se suelta aqui.
+        // Lo suelta PendientesService cuando el ganador lo recoge, o al vencer
+        // los 7 dias.
+        verify(inventarioClient, never()).liberarReserva(eq("elem-cierre-ok"), any(), any());
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+        assertEquals(clock.instant(), subasta.getCerradaEn());
     }
 
     /**
@@ -515,24 +592,24 @@ class MotorPujasServiceTest {
      * no responde, se registra y se sigue.
      */
     @Test
-    void siFallaSoltarElBloqueoLaSubastaSigueAdjudicada() {
+    void siFallaSoltarElBloqueoTrasLaCompraInmediataLaSubastaSigueAdjudicada() {
+        // La compra inmediata SI suelta el bloqueo en el acto (7.7.6,
+        // «transferencia automatica»); si inventario no responde en ese ultimo
+        // paso, el cobro ya entro y no se deshace nada.
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
-        subasta.setElementoInventarioId("elem-cierre-bloqueo-fail");
-        UUID ganador = UUID.randomUUID();
-        creditoClient.acreditar(ganador, new BigDecimal("1000"));
-        ReservaCredito reserva = creditoClient.reservar(ganador, new BigDecimal("110"), subasta.getId(), claveUnica());
-        Puja pujaVigente = new Puja(UUID.randomUUID(), subasta.getId(), ganador, new BigDecimal("110"),
-                TipoPuja.MANUAL, EstadoPuja.ACTIVA, clock.instant().minusSeconds(30), reserva.id().toString());
+        subasta.setElementoInventarioId("elem-compra-bloqueo-fail");
+        UUID comprador = UUID.randomUUID();
+        creditoClient.acreditar(comprador, new BigDecimal("1000"));
         doThrow(new InventarioClientException("inventario no responde"))
-                .when(inventarioClient).liberarReserva(eq("elem-cierre-bloqueo-fail"), any(), any());
+                .when(inventarioClient).liberarReserva(eq("elem-compra-bloqueo-fail"), any(), any());
 
-        motorConInventario.cerrarPorVencimiento(subasta, pujaVigente);
+        Puja ganadora = motorConInventario.comprarAhora(subasta, null, comprador, claveUnica());
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
-        assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
+        assertEquals(EstadoPuja.GANADORA, ganadora.getEstado());
         // Y sobre todo: no se devolvio el objeto a un vendedor que ya cobro.
         verify(inventarioClient, never())
-                .transferirProducto(eq("elem-cierre-bloqueo-fail"), eq(VENDEDOR), any(), any());
+                .transferirProducto(eq("elem-compra-bloqueo-fail"), eq(VENDEDOR), any(), any());
     }
 
     @Test

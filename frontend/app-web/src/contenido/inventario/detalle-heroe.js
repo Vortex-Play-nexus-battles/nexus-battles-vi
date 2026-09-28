@@ -40,7 +40,7 @@
  */
 
 import { consultarEstadisticasDelHeroe } from './cliente-inventario.js';
-import { consultarFichaDeHeroe } from './cliente-heroes.js';
+import { consultarFichaDeHeroe, consultarVistaPorNivel } from './cliente-heroes.js';
 import { bloqueDeEstadisticas } from '../../comun/ui/juego/estadisticas.js';
 import { icono } from '../../comun/ui/icono.js';
 
@@ -73,10 +73,13 @@ export function construirEstadisticas(estadisticas) {
  * @param {object} ficha respuesta del catalogo de heroes.
  * @returns {HTMLElement|null}
  */
-export function construirAccionesDelPrototipo(ficha) {
+export function construirAccionesDelPrototipo(ficha, { aprendidas = null } = {}) {
   if (!ficha || typeof ficha !== 'object') {
     return null;
   }
+  // UXC-9 — con la vista por nivel, cuáles sabe ya este héroe (las demás se
+  // desbloquean al subir de nivel; el catálogo no las da todas desde el 1).
+  const sabe = Array.isArray(aprendidas) ? new Set(aprendidas.map((a) => a?.nombre)) : null;
   const acciones = Array.isArray(ficha.acciones) ? ficha.acciones : [];
   if (acciones.length === 0) {
     return null;
@@ -93,6 +96,10 @@ export function construirAccionesDelPrototipo(ficha) {
     // numero solo se destaca si el texto lo trae.
     const punto = document.createElement('li');
     punto.className = 'ficha__accion';
+    const bloqueada = sabe !== null && !sabe.has(accion.nombre);
+    if (bloqueada) {
+      punto.classList.add('ficha__accion--bloqueada');
+    }
     const cabeza = document.createElement('p');
     cabeza.className = 'ficha__accion-cabeza';
     cabeza.append(icono('rayo', { clase: 'icono ficha__accion-icono', etiqueta: null }));
@@ -124,6 +131,15 @@ export function construirAccionesDelPrototipo(ficha) {
       efecto.textContent = accion.efecto;
       punto.append(efecto);
     }
+    if (bloqueada) {
+      const aviso = document.createElement('p');
+      aviso.className = 'ficha__accion-bloqueo';
+      aviso.append(icono('candado', { clase: 'icono', etiqueta: null }));
+      aviso.append(
+        document.createTextNode('Todavía no la aprendió: se desbloquea al subir de nivel.'),
+      );
+      punto.append(aviso);
+    }
     lista.append(punto);
   }
   if (lista.children.length === 0) {
@@ -154,14 +170,21 @@ export async function construirDetalleDeHeroe({
   identidad,
   heroeId,
   prototipo = null,
+  nivel = null,
   estadisticasDe = consultarEstadisticasDelHeroe,
   fichaDe = consultarFichaDeHeroe,
+  vistaDe = consultarVistaPorNivel,
 }) {
   const peticiones = [
     heroeId ? estadisticasDe(identidad, heroeId) : Promise.reject(new Error('sin heroe')),
     prototipo ? fichaDe(prototipo) : Promise.reject(new Error('sin prototipo')),
+    // UXC-9 — con el nivel del inventario, el prototipo en ese nivel.
+    prototipo && Number.isInteger(nivel)
+      ? vistaDe(prototipo, nivel)
+      : Promise.reject(new Error('sin nivel')),
   ];
-  const [estadisticas, ficha] = await Promise.allSettled(peticiones);
+  const [estadisticas, ficha, vista] = await Promise.allSettled(peticiones);
+  const enSuNivel = vista.status === 'fulfilled' ? vista.value : null;
 
   const bloques = [];
   if (estadisticas.status === 'fulfilled') {
@@ -171,12 +194,77 @@ export async function construirDetalleDeHeroe({
     }
   }
   if (ficha.status === 'fulfilled') {
-    const bloque = construirAccionesDelPrototipo(ficha.value);
+    const bloque = construirAccionesDelPrototipo(ficha.value, {
+      aprendidas: enSuNivel?.accionesDisponibles ?? null,
+    });
     if (bloque) {
       bloques.push(bloque);
     }
   }
+  const epica = construirEpicaAfin(enSuNivel?.epica);
+  if (epica) {
+    bloques.push(epica);
+  }
   return bloques;
+}
+
+/**
+ * UXC-9 — la épica afín del prototipo (§6.1.2, Tabla 20; `EpicaVista` de
+ * heroes.yaml): no gasta poder y tiene su recarga; para este héroe, además,
+ * su efecto potenciado.
+ *
+ * @param {{nombre: string, efectoGeneral?: string, efectoPotenciado?: string,
+ *   turnosDeRecarga?: number}|null|undefined} epica
+ * @returns {HTMLElement|null}
+ */
+export function construirEpicaAfin(epica) {
+  if (!epica?.nombre) {
+    return null;
+  }
+  const carta = document.createElement('div');
+  carta.className = 'ficha__epica';
+  const cabeza = document.createElement('p');
+  cabeza.className = 'ficha__accion-cabeza';
+  cabeza.append(icono('estrella-llena', { clase: 'icono ficha__accion-icono', etiqueta: null }));
+  const nombre = document.createElement('strong');
+  nombre.textContent = epica.nombre;
+  cabeza.append(nombre);
+  carta.append(cabeza);
+
+  const datos = document.createElement('p');
+  datos.className = 'ficha__accion-datos';
+  const coste = document.createElement('span');
+  coste.className = 'ficha__accion-coste';
+  coste.textContent = 'Sin coste de poder';
+  datos.append(coste);
+  if (Number.isInteger(epica.turnosDeRecarga)) {
+    const recarga = document.createElement('span');
+    recarga.className = 'ficha__accion-carga';
+    recarga.append(icono('reloj', { clase: 'icono', etiqueta: null }));
+    recarga.append(
+      document.createTextNode(
+        `${epica.turnosDeRecarga} ${epica.turnosDeRecarga === 1 ? 'turno' : 'turnos'} de recarga`,
+      ),
+    );
+    datos.append(recarga);
+  }
+  carta.append(datos);
+
+  for (const [clase, texto] of [
+    ['ficha__accion-efecto', epica.efectoGeneral],
+    [
+      'ficha__accion-efecto',
+      epica.efectoPotenciado ? `Para este héroe: ${epica.efectoPotenciado}` : null,
+    ],
+  ]) {
+    if (texto) {
+      const parrafo = document.createElement('p');
+      parrafo.className = clase;
+      parrafo.textContent = texto;
+      carta.append(parrafo);
+    }
+  }
+  return conTitulo('Épica afín', 'La épica que mejor le va a este prototipo.', carta);
 }
 
 function conTitulo(texto, nota, contenido) {

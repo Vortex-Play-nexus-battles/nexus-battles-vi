@@ -12,7 +12,10 @@ import nexus.inventario.aplicacion.InventarioAjenoException;
 import nexus.inventario.aplicacion.ProductoInexistenteException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
 import nexus.inventario.aplicacion.ProductoSuspendidoException;
+import nexus.inventario.aplicacion.ProgresionNoDisponibleException;
 import nexus.inventario.aplicacion.TipoNoCoincideException;
+import nexus.inventario.dominio.HeroeEnMisionException;
+import nexus.inventario.dominio.NoEsUnHeroeException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
@@ -69,6 +72,28 @@ public class ManejadorDeErrores {
     @ExceptionHandler(ElementoNoDisponibleException.class)
     public ProblemDetail elementoNoDisponible(ElementoNoDisponibleException error) {
         return problema(HttpStatus.CONFLICT, "Producto no disponible", error.getMessage());
+    }
+
+    /** 1.6.0 (B9): el heroe esta en una mision (seccion 7.8.10). */
+    @ExceptionHandler(HeroeEnMisionException.class)
+    public ProblemDetail heroeEnMision(HeroeEnMisionException error) {
+        return problema(HttpStatus.CONFLICT, "Heroe en mision", error.getMessage());
+    }
+
+    /** 1.6.0 (B9): solo un heroe sale de mision. */
+    @ExceptionHandler(NoEsUnHeroeException.class)
+    public ProblemDetail noEsUnHeroe(NoEsUnHeroeException error) {
+        return problema(HttpStatus.BAD_REQUEST, "No es un heroe", error.getMessage());
+    }
+
+    /**
+     * 1.6.0 (B9): hay experiencia que sumar y heroes no respondio; no se aplica
+     * nada y el heroe sigue bloqueado hasta el reintento.
+     */
+    @ExceptionHandler(ProgresionNoDisponibleException.class)
+    public ProblemDetail progresionNoDisponible(ProgresionNoDisponibleException error) {
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Progresion no disponible",
+                "No se pudo calcular el nivel del heroe. Intenta nuevamente.");
     }
 
     @ExceptionHandler(ProductoNoEncontradoException.class)

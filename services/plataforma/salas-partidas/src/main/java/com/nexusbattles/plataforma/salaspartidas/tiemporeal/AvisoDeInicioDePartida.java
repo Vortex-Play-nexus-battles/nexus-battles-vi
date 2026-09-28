@@ -58,7 +58,7 @@ record AvisoDeInicioDePartida(String tipo, UUID idSala, UUID idPartida,
             FichaDeParticipante ficha = sala.fichaDe(id);
             return new Participante(
                     new ResumenJugador(id, apodoDe(ficha, enCombate)),
-                    Heroe.de(enCombate.heroe()),
+                    Heroe.de(enCombate.heroe(), enCombate.combate()),
                     enCombate.esIA(),
                     enCombate.equipo());
         }
@@ -86,15 +86,28 @@ record AvisoDeInicioDePartida(String tipo, UUID idSala, UUID idPartida,
      * anterior a la migracion V7. Se dice con null en vez de inventar una
      * vida, porque una barra a 100/100 falsa es peor que una que no se pinta.
      *
-     * <p>Desde HU-SAL-004 la IA si trae heroe —el del anfitrion a plena vida—,
-     * asi que ya no es un caso sin heroe.
+     * <p>Desde 1.5.0 (B7) la IA trae un heroe aleatorio del catalogo (D-B7-11),
+     * y cada heroe su prototipo, su poder, sus efectos y las acciones que puede
+     * jugar al empezar, calculadas por el motor.
      */
     record Heroe(String id, String nombre, String retratoUrl, Integer nivel,
-                 int vidaActual, int vidaMaxima) {
+                 int vidaActual, int vidaMaxima, String prototipo, Integer poderActual, Integer poderMaximo,
+                 List<EfectoEnCable> efectosActivos,
+                 List<com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate.AccionDisponible> acciones) {
 
         static Heroe de(HeroeDeCombate heroe) {
+            return de(heroe, null);
+        }
+
+        static Heroe de(HeroeDeCombate heroe,
+                        com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate combate) {
             return heroe == null ? null : new Heroe(heroe.id(), heroe.nombre(),
-                    heroe.retratoUrl(), heroe.nivel(), heroe.vidaActual(), heroe.vidaMaxima());
+                    heroe.retratoUrl(), heroe.nivel(), heroe.vidaActual(), heroe.vidaMaxima(),
+                    heroe.prototipo(),
+                    combate == null ? null : combate.poderActual(),
+                    combate == null ? null : combate.poderMaximo(),
+                    combate == null ? List.of() : EfectoEnCable.de(combate.efectos()),
+                    combate == null ? List.of() : combate.acciones());
         }
     }
 }

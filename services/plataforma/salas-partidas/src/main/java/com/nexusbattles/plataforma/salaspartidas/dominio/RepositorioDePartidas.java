@@ -1,28 +1,39 @@
 package com.nexusbattles.plataforma.salaspartidas.dominio;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Almacen de partidas — puerto de salida.
+ * Puerto del almacen de partidas.
  *
- * <p>Mismo criterio que {@link RepositorioDeSalas}: el dominio declara que
- * necesita guardar y recuperar partidas, y la infraestructura elige la base.
+ * <p>{@link #guardar} aplica el bloqueo optimista (B7): una partida leida antes
+ * de otra escritura no la pisa, y sale
+ * {@link PartidaModificadaConcurrentemente}. Devuelve la partida con la marca
+ * de version nueva, que es la que hay que usar para seguir.
  */
 public interface RepositorioDePartidas {
 
-    /** Guarda la partida y devuelve el estado asentado. */
     Partida guardar(Partida partida);
 
-    /** Busca por identificador. Vacio si no existe. */
     Optional<Partida> buscarPorId(UUID id);
 
-    /**
-     * Busca la partida de una sala.
-     *
-     * <p>Una sala tiene como mucho una partida: es lo que impide iniciarla dos
-     * veces, y la unicidad esta tambien en la base de datos para que no dependa
-     * solo de esta comprobacion.
-     */
     Optional<Partida> buscarPorSala(UUID idSala);
+
+    /**
+     * Historial de un jugador, de la mas reciente a la mas antigua (1.7.0).
+     * Por omision vacio, para los dobles que no lo usan.
+     */
+    default PaginaDePartidas buscarPorJugador(UUID idJugador, int pagina, int tamano) {
+        return new PaginaDePartidas(List.of(), pagina, tamano, 0, 0);
+    }
+
+    /**
+     * Partidas en curso cuyo turno se agoto antes de {@code ahora} (D-B7-14).
+     * Por omision ninguna, para los dobles que no lo usan.
+     */
+    default List<Partida> conTurnoVencido(Instant ahora) {
+        return List.of();
+    }
 }

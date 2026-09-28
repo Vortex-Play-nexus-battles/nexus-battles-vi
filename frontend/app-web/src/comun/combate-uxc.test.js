@@ -44,6 +44,22 @@ describe('chipDeEfecto (EffectChip)', () => {
     expect(chip.title).toBe('Veneno, 2 turnos restantes');
   });
 
+  test('UXC-9 — sin icono del servidor, el icono sale del tipo del motor', () => {
+    const chip = chipDeEfecto({
+      codigo: 'CONO_DE_HIELO',
+      nombre: 'Cono de hielo',
+      icono: null,
+      tipo: 'DANO_POR_TURNO',
+      turnosRestantes: 1,
+    });
+    expect(chip.querySelector('use').getAttribute('href')).toMatch(/#gota$/);
+    expect(
+      chipDeEfecto({ codigo: 'DEFENSA_FEROZ', nombre: 'Defensa feroz', tipo: 'INMUNE_FISICO' })
+        .querySelector('use')
+        .getAttribute('href'),
+    ).toMatch(/#escudo-check$/);
+  });
+
   test('compacto: el nombre queda para el lector de pantalla', () => {
     const chip = chipDeEfecto({ codigo: 'X', nombre: 'Aturdido' }, { compacto: true });
     expect(chip.querySelector('.solo-lectores').textContent).toBe('Aturdido');
@@ -272,6 +288,95 @@ describe('canalReconectable', () => {
 
     canal.reintentar();
     expect(estados.at(-1)).toBe(ESTADOS_DE_CANAL.RECONECTANDO);
+  });
+
+  test('UXC-9 — con insistirAlAbrir, un primer intento fallido no deja la vista muda', async () => {
+    const bueno = clienteFalso();
+    let intentos = 0;
+    const conectar = jest.fn(async () => {
+      intentos += 1;
+      if (intentos === 1) {
+        throw new Error('no abre');
+      }
+      return bueno;
+    });
+    const estados = [];
+    const alReconectar = jest.fn();
+    const reloj = relojManual();
+    const canal = await canalReconectable({
+      conectar,
+      alEstado: (e) => estados.push(e.estado),
+      alReconectar,
+      reloj,
+      insistirAlAbrir: true,
+      ventana: null,
+    });
+    // Sin canal todavía: se dice que se está reconectando y lo que se
+    // suscriba espera a que abra.
+    expect(canal.conectado).toBe(false);
+    expect(estados).toEqual([ESTADOS_DE_CANAL.RECONECTANDO]);
+    canal.suscribir('/tema/partidas/1', () => {});
+
+    await reloj.avanzar();
+    expect(canal.conectado).toBe(true);
+    expect(bueno.suscritos).toEqual(['/tema/partidas/1']);
+    // Al abrir, la vista relee lo que pudo perderse.
+    expect(alReconectar).toHaveBeenCalledTimes(1);
+    expect(estados.at(-1)).toBe(ESTADOS_DE_CANAL.RECONECTADO);
+  });
+
+  test('sin insistirAlAbrir, un primer intento fallido rechaza como antes', async () => {
+    await expect(
+      canalReconectable({
+        conectar: async () => {
+          throw new Error('no abre');
+        },
+        reloj: relojManual(),
+        ventana: null,
+      }),
+    ).rejects.toThrow('no abre');
+  });
+
+  test('UXC-9 — al volver la red, sin conexión, vuelve a intentarlo solo', async () => {
+    const primero = clienteFalso();
+    const segundo = clienteFalso();
+    let intentos = 0;
+    const conectar = jest.fn(async () => {
+      intentos += 1;
+      if (intentos === 1) {
+        return primero;
+      }
+      if (intentos <= 3) {
+        throw new Error('no abre');
+      }
+      return segundo;
+    });
+    const estados = [];
+    const reloj = relojManual();
+    const ventana = new EventTarget();
+    const canal = await canalReconectable({
+      conectar,
+      alEstado: (e) => estados.push(e.estado),
+      esperas: [10, 20],
+      reloj,
+      ventana,
+    });
+    primero.alCerrar();
+    await reloj.avanzar();
+    await reloj.avanzar();
+    expect(estados.at(-1)).toBe(ESTADOS_DE_CANAL.SIN_CONEXION);
+
+    ventana.dispatchEvent(new Event('online'));
+    expect(estados.at(-1)).toBe(ESTADOS_DE_CANAL.RECONECTANDO);
+    await reloj.avanzar();
+    expect(canal.conectado).toBe(true);
+
+    // Cerrado a propósito, `online` ya no reabre nada.
+    canal.cerrar();
+    const antes = conectar.mock.calls.length;
+    ventana.dispatchEvent(new Event('online'));
+    await reloj.avanzar();
+    expect(conectar.mock.calls.length).toBe(antes);
   });
 
   test('cerrado a proposito no se reconecta', async () => {

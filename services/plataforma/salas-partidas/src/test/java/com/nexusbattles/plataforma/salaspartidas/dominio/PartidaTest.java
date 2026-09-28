@@ -298,8 +298,11 @@ class PartidaTest {
                     () -> assertTrue(partida.ganador().isEmpty(),
                             "si fuera ganador, se llevaria lo apostado por su propio companero"),
                     () -> assertEquals(java.util.Optional.of(1), partida.equipoGanador()),
-                    () -> assertEquals(List.of(ANFITRION), partida.ganadores().stream()
-                            .map(ParticipanteDePartida::idJugador).toList()));
+                    // D-B7-15 (salas-partidas.yaml 1.7.0): gana el EQUIPO, tambien
+                    // el companero que cayo; antes solo contaba el superviviente.
+                    () -> assertEquals(List.of(ANFITRION, SEGUNDO), partida.ganadores().stream()
+                            .map(ParticipanteDePartida::idJugador).toList()),
+                    () -> assertEquals(java.util.Optional.of(ResultadoDePartida.GANADOR), partida.resultado()));
         }
 
         @Test
@@ -362,5 +365,209 @@ class PartidaTest {
 
         assertThrows(UnsupportedOperationException.class,
                 () -> partida.participantes().clear());
+    }
+
+    /**
+     * B7 — lo que la partida guarda del motor de combate y su final formal
+     * (salas-partidas.yaml 1.7.0). Las reglas las decide el motor; aqui se
+     * prueba que se guardan tal cual, que el final se declara bien y que el
+     * orden de los turnos se sortea (§6.1.3).
+     */
+    @Nested
+    @DisplayName("B7: estado de combate, final formal y orden sorteado")
+    class CombateContractual {
+
+        private static final EstadoDeCombate CON_PODER_6 = new EstadoDeCombate(6, 10, 2,
+                java.util.Map.of("Golpe con escudo", 1), List.of(), null, java.util.Map.of("Golpe con escudo", 1),
+                List.of(), null);
+
+        private Partida dosConHeroe() {
+            Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null),
+                    ANFITRION, new FichaDeParticipante("Ana", new HeroeDeCombate("h-a", "Ana", "Guerrero Tanque",
+                            null, 1, 44, 44, 11)));
+            sala.unirse(SEGUNDO, new FichaDeParticipante("Bruno", new HeroeDeCombate("h-b", "Bruno", "Mago Hielo",
+                    null, 1, 40, 40, 10)), null);
+            return Partida.iniciar(sala, AHORA);
+        }
+
+        @Test
+        @DisplayName("aplicarCombate guarda vida, vida maxima en su nivel y el estado que resolvio el motor")
+        void guardaLoQueResolvioElMotor() {
+            Partida partida = dosConHeroe();
+
+            ParticipanteDePartida ana = partida.aplicarCombate(ANFITRION, 30, 178, CON_PODER_6);
+
+            assertAll(
+                    () -> assertEquals(30, ana.heroe().vidaActual()),
+                    () -> assertEquals(178, ana.heroe().vidaMaxima(), "la maxima es la de su nivel, del motor"),
+                    () -> assertEquals(6, ana.combate().poderActual()),
+                    () -> assertEquals(ana, partida.participante(ANFITRION).orElseThrow()));
+        }
+
+        @Test
+        @DisplayName("aplicar ignora a quien no esta en la partida y guarda a los demas")
+        void aplicarIgnoraAjenos() {
+            Partida partida = dosConHeroe();
+
+            partida.aplicar(List.of(
+                    new CombatienteResuelto(UUID.randomUUID(), 1, 1, CON_PODER_6),
+                    new CombatienteResuelto(SEGUNDO, 12, 40, CON_PODER_6)));
+
+            assertAll(
+                    () -> assertEquals(2, partida.participantes().size()),
+                    () -> assertEquals(12, partida.participante(SEGUNDO).orElseThrow().heroe().vidaActual()),
+                    () -> assertNull(partida.participante(ANFITRION).orElseThrow().combate()));
+        }
+
+        @Test
+        @DisplayName("a un participante sin heroe no se le inventa uno: solo se guarda su estado de combate")
+        void sinHeroeSoloEstado() {
+            Partida partida = Partida.iniciar(salaCon(false, 0, SEGUNDO), AHORA);
+
+            ParticipanteDePartida sinHeroe = partida.aplicarCombate(SEGUNDO, 5, 50, CON_PODER_6);
+
+            assertAll(
+                    () -> assertNull(sinHeroe.heroe()),
+                    () -> assertEquals(CON_PODER_6, sinHeroe.combate()));
+        }
+
+        @Test
+        @DisplayName("una partida terminada no admite mas estado de combate, y un ajeno es un 409")
+        void terminadaOAjeno() {
+            Partida partida = dosConHeroe();
+            UUID ajeno = UUID.randomUUID();
+
+            assertThrows(SinObjetivoPosible.class, () -> partida.aplicarCombate(ajeno, 1, 1, CON_PODER_6));
+            partida.terminar(AHORA);
+            assertThrows(PartidaYaTerminada.class, () -> partida.aplicarCombate(ANFITRION, 1, 1, CON_PODER_6));
+        }
+
+        @Test
+        @DisplayName("si caen los dos a la vez es EMPATE: sin ganadores ni equipo ganador")
+        void empate() {
+            Partida partida = dosConHeroe();
+            partida.aplicarCombate(ANFITRION, 0, 44, CON_PODER_6);
+            partida.aplicarCombate(SEGUNDO, 0, 40, CON_PODER_6);
+
+            assertAll(
+                    () -> assertTrue(partida.terminarSiSoloQuedaUno(AHORA)),
+                    () -> assertEquals(java.util.Optional.of(ResultadoDePartida.EMPATE), partida.resultado()),
+                    () -> assertTrue(partida.ganadores().isEmpty()),
+                    () -> assertTrue(partida.ganador().isEmpty()),
+                    () -> assertTrue(partida.equipoGanador().isEmpty()),
+                    () -> assertEquals(AHORA, partida.finalizadaEn()));
+        }
+
+        @Test
+        @DisplayName("con uno en pie es GANADOR; en curso no hay resultado")
+        void ganador() {
+            Partida partida = dosConHeroe();
+            assertTrue(partida.resultado().isEmpty(), "en curso no hay resultado");
+
+            partida.aplicarCombate(SEGUNDO, 0, 40, CON_PODER_6);
+            partida.terminarSiSoloQuedaUno(AHORA);
+
+            assertAll(
+                    () -> assertEquals(java.util.Optional.of(ResultadoDePartida.GANADOR), partida.resultado()),
+                    () -> assertEquals(List.of(ANFITRION), partida.ganadores().stream()
+                            .map(ParticipanteDePartida::idJugador).toList()),
+                    () -> assertFalse(partida.terminarSiSoloQuedaUno(AHORA.plusSeconds(5)),
+                            "una partida terminada no vuelve a terminar"));
+        }
+
+        @Test
+        @DisplayName("la primera hora de fin es la que vale, y terminar borra el vencimiento del turno")
+        void horaDeFinYVencimiento() {
+            Partida partida = dosConHeroe();
+            partida.fijarVencimientoDelTurno(AHORA.plusSeconds(30));
+            assertEquals(AHORA.plusSeconds(30), partida.turnoVenceEn());
+
+            partida.terminar(AHORA);
+            partida.terminar(AHORA.plusSeconds(60));
+            partida.fijarVencimientoDelTurno(AHORA.plusSeconds(90));
+
+            assertAll(
+                    () -> assertEquals(AHORA, partida.finalizadaEn()),
+                    () -> assertNull(partida.turnoVenceEn(), "una partida terminada no tiene turno que venza"));
+        }
+
+        @Test
+        @DisplayName("avanzar el turno borra el vencimiento del que termina: lo fija quien conoce el tiempo")
+        void avanzarBorraElVencimiento() {
+            Partida partida = dosConHeroe();
+            partida.fijarVencimientoDelTurno(AHORA.plusSeconds(30));
+
+            partida.avanzarTurno();
+
+            assertNull(partida.turnoVenceEn());
+        }
+
+        @Test
+        @DisplayName("solo quien juega es participante; la maquina y los extranos no preguntan")
+        void esParticipante() {
+            Partida partida = dosConHeroe();
+
+            assertAll(
+                    () -> assertTrue(partida.esParticipante(ANFITRION)),
+                    () -> assertTrue(partida.esParticipante(SEGUNDO)),
+                    () -> assertFalse(partida.esParticipante(TERCERO)),
+                    () -> assertFalse(partida.esParticipante(null)));
+        }
+
+        @Test
+        @DisplayName("§6.1.3: el orden sorteado con la misma semilla es el mismo, y la semilla queda guardada")
+        void ordenSorteadoReproducible() {
+            Sala sala = salaCon(false, 0, SEGUNDO, TERCERO);
+
+            Partida una =Partida.iniciar(sala, AHORA, OrdenDeTurnos.sorteado(42L), List.of());
+            Partida otra = Partida.iniciar(sala, AHORA, OrdenDeTurnos.sorteado(42L), List.of());
+
+            List<UUID> ordenUna = una.participantes().stream().map(ParticipanteDePartida::idJugador).toList();
+            assertAll(
+                    () -> assertEquals(ordenUna,
+                            otra.participantes().stream().map(ParticipanteDePartida::idJugador).toList()),
+                    () -> assertEquals(42L, una.semillaDelOrden()),
+                    () -> assertEquals(ordenUna.get(0), una.turnoActual().idJugador(),
+                            "abre quien salio primero en el sorteo"),
+                    () -> assertEquals(java.util.Set.of(ANFITRION, SEGUNDO, TERCERO), java.util.Set.copyOf(ordenUna),
+                            "cada uno exactamente una vez"));
+        }
+
+        /**
+         * §6.1.3: el primer turno «se determina aleatoriamente entre todos los
+         * participantes». Con 3.000 sorteos de semilla fija cada uno de los tres
+         * deberia abrir un tercio de las veces; la tolerancia (±5 puntos) esta
+         * muy por encima de la desviacion tipica esperada (~0,9 puntos), asi que
+         * la prueba no falla por azar y si falla si el sorteo favorece a alguien.
+         */
+        @Test
+        @DisplayName("§6.1.3: el primer turno se reparte por igual entre todos (3.000 sorteos, ±5 puntos)")
+        void elPrimerTurnoSeReparte() {
+            Sala sala = salaCon(false, 0, SEGUNDO, TERCERO);
+            java.util.Random semillas = new java.util.Random(20260927L);
+            java.util.Map<UUID, Integer> abre = new java.util.HashMap<>();
+            int sorteos = 3000;
+
+            for (int i = 0; i < sorteos; i++) {
+                Partida partida = Partida.iniciar(sala, AHORA, OrdenDeTurnos.sorteado(semillas.nextLong()), List.of());
+                abre.merge(partida.turnoActual().idJugador(), 1, Integer::sum);
+            }
+
+            for (UUID jugador : List.of(ANFITRION, SEGUNDO, TERCERO)) {
+                double proporcion = abre.getOrDefault(jugador, 0) / (double) sorteos;
+                assertTrue(Math.abs(proporcion - 1.0 / 3) < 0.05,
+                        jugador + " abre el " + proporcion + " de las veces: " + abre);
+            }
+        }
+
+        @Test
+        @DisplayName("el orden de entrada no baraja: existe para pruebas de otras reglas")
+        void ordenDeEntrada() {
+            List<String> entrada = List.of("a", "b", "c");
+
+            assertAll(
+                    () -> assertEquals(entrada, OrdenDeTurnos.DE_ENTRADA.aplicar(entrada)),
+                    () -> assertNull(OrdenDeTurnos.DE_ENTRADA.semilla()));
+        }
     }
 }

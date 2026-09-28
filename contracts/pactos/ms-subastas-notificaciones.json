@@ -1,0 +1,280 @@
+{
+  "consumer": {
+    "name": "ms-subastas"
+  },
+  "interactions": [
+    {
+      "description": "un aviso de subasta con la credencial de servicio de ms-subastas",
+      "providerStates": [
+        {
+          "name": "el destinatario todavia no tiene ese aviso"
+        }
+      ],
+      "request": {
+        "body": {
+          "creadaEn": "2026-09-20T12:00:00Z",
+          "cuerpo": "Otra puja super\u00F3 tu oferta de 110 cr\u00E9ditos por Espada del Alba.",
+          "id": "cccccccc-0000-0000-0000-000000000003",
+          "tipo": "PUJA_SUPERADA",
+          "titulo": "Te superaron en una subasta \u00B7 Espada del Alba",
+          "usuarioId": "77777777-0000-0000-0000-0000000000cc"
+        },
+        "headers": {
+          "Authorization": "Bearer token-de-servicio-de-ms-subastas",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.creadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "$.cuerpo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.titulo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.usuarioId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "Bearer .+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/internal/notifications"
+      },
+      "response": {
+        "status": 201
+      }
+    },
+    {
+      "description": "el reintento de un aviso que ya estaba en la bandeja",
+      "providerStates": [
+        {
+          "name": "el destinatario ya tiene un aviso con ese identificador"
+        }
+      ],
+      "request": {
+        "body": {
+          "creadaEn": "2026-09-20T12:00:00Z",
+          "cuerpo": "Otra puja super\u00F3 tu oferta de 110 cr\u00E9ditos por Espada del Alba.",
+          "id": "dddddddd-0000-0000-0000-000000000004",
+          "tipo": "PUJA_SUPERADA",
+          "titulo": "Te superaron en una subasta \u00B7 Espada del Alba",
+          "usuarioId": "77777777-0000-0000-0000-0000000000cc"
+        },
+        "headers": {
+          "Authorization": "Bearer token-de-servicio-de-ms-subastas",
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.creadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "$.cuerpo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.titulo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.usuarioId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Authorization": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "Bearer .+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/internal/notifications"
+      },
+      "response": {
+        "status": 409
+      }
+    },
+    {
+      "description": "un aviso sin credencial de servicio",
+      "request": {
+        "body": {
+          "creadaEn": "2026-09-20T12:00:00Z",
+          "cuerpo": "Otra puja super\u00F3 tu oferta de 110 cr\u00E9ditos por Espada del Alba.",
+          "id": "cccccccc-0000-0000-0000-000000000003",
+          "tipo": "PUJA_SUPERADA",
+          "titulo": "Te superaron en una subasta \u00B7 Espada del Alba",
+          "usuarioId": "77777777-0000-0000-0000-0000000000cc"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.creadaEn": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?Z"
+                }
+              ]
+            },
+            "$.cuerpo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.tipo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.titulo": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.usuarioId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/internal/notifications"
+      },
+      "response": {
+        "status": 401
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "notificaciones"
+  }
+}

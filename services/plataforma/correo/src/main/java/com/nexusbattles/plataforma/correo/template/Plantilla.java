@@ -31,7 +31,9 @@ public enum Plantilla {
     MISION("mision"),
     SUBASTA("subasta"),
     CONFIRMACION_COMPRA("confirmacion-compra"),
-    SANCION("sancion");
+    SANCION("sancion"),
+    /** Hitos de torneo (1.5.0, B10): asunto y mensaje los decide torneos. */
+    TORNEO("torneo");
 
     private final String nombre;
     private final Set<String> datosSensibles;

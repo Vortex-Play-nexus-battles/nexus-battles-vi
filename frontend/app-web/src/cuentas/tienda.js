@@ -115,6 +115,7 @@ import {
 } from './tienda-moneda.js';
 import { cambiarDeseo, pintarDeseo, textoDelFalloDeDeseo } from './tienda-deseos.js';
 import { abrirMisCompras, abrirPago, olvidarIntentoDePago } from './tienda-pago.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
 const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
@@ -439,8 +440,11 @@ export function pintarCatalogo(doc = document) {
       rejilla,
       estadoVacio({
         titulo: 'La tienda no tiene productos ahora mismo',
-        detalle: 'Vuelve más tarde: el catálogo lo publica la administración.',
+        detalle:
+          'El catálogo lo publica la administración y todavía no hay nada a la venta. Mientras tanto, puedes jugar y ganar créditos.',
         icono: '◇',
+        // UXC-9 — un vacío con salida.
+        accion: { texto: 'Jugar una batalla', href: '../plataforma/salas-partidas/batallas.html' },
       }),
     );
     pintarResultado(doc, '');
@@ -637,6 +641,17 @@ export function mismosCriterios(a, b) {
 function montarFiltros(doc) {
   const formulario = doc.getElementById('filtros-tienda');
   const vista = estadoDe(doc);
+  // UXC-9 — RF-INV-008: la búsqueda de productos de la barra llega aquí como
+  // `?busqueda=` (desde cualquier vista) o como `#busqueda-tienda` (la lupa de
+  // la barra estrecha, que trae al campo para escribir).
+  const campoBusqueda = formulario?.elements.namedItem('busqueda');
+  const pedida = new URLSearchParams(globalThis.location?.search ?? '').get('busqueda');
+  if (campoBusqueda && pedida && !campoBusqueda.value) {
+    campoBusqueda.value = pedida.trim().slice(0, 100);
+  }
+  if (campoBusqueda && globalThis.location?.hash === '#busqueda-tienda') {
+    campoBusqueda.focus();
+  }
   // Los criterios salen del formulario tal como está al montar: el navegador
   // puede haberlo rellenado al volver atrás, y la vitrina debe coincidir con
   // lo que se ve en los campos.
@@ -1114,8 +1129,7 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   } else {
     // Un rechazo que el contrato no declara. El `detail`, si llega, esta
     // escrito para el jugador (MAPEO-ERRORES §3); si no, una pauta propia.
-    const delServidor =
-      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    const delServidor = textoDelServidor(problema, estado, '') || null;
     mensaje = {
       titulo: 'No se pudo añadir el producto al carrito',
       detalle:

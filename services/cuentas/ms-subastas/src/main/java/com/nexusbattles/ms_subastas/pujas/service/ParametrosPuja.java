@@ -4,10 +4,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Los 4 limites de participacion de HU-SUB-004, configurables desde
- * administracion (app.pujas.* en application.properties / variables de
- * entorno). Pendiente decidir si en el futuro los sirve admin-parametros
- * en vez de config estatica.
+ * Los limites de participacion de 7.7.10 tal como los trae el entorno
+ * ({@code app.pujas.*}): 10 subastas activas por jugador, 50 pujas activas y
+ * 5 s entre pujas consecutivas.
+ *
+ * <p>Desde B8 no son la fuente de verdad sino su <b>respaldo</b>: los valores
+ * vigentes salen de admin-parametros
+ * ({@code subastas.max-subastas-activas-por-jugador},
+ * {@code subastas.max-pujas-activas-por-jugador},
+ * {@code subastas.intervalo-minimo-segundos}) por
+ * {@code reglas.ReglasDesdeParametros}, y estos se usan cuando el catalogo no
+ * esta configurado o no responde. Los valores por omision son los del
+ * documento; el Project Charter los declara inalterables.
  */
 @Component
 @ConfigurationProperties(prefix = "app.pujas")

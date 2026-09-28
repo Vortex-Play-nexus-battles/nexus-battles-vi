@@ -30,8 +30,11 @@ const marcar = (selector) => {
   $(selector).checked = true;
   $(selector).dispatchEvent(new Event('input', { bubbles: true }));
 };
+// UXC-9 — la cabecera del jugador lleva ahora la búsqueda de productos
+// (RF-INV-008), que también es un <form>: el de publicar es el de la vista.
+const formulario = () => $('#raiz form');
 const submit = () =>
-  $('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 const vaciar = async () => {
   for (let i = 0; i < 8; i++) {
     await Promise.resolve();
@@ -72,7 +75,7 @@ test.each([null, {}, { uid, exp: 1 }, { sub: uid }])(
       autenticar(claims);
     }
     const { consultar } = await montar();
-    expect($('form').hidden).toBe(true);
+    expect(formulario().hidden).toBe(true);
     expect($('#nexus-rbac-forbidden').textContent).toMatch(/iniciar sesión/);
     expect(consultar).not.toHaveBeenCalled();
   },
@@ -89,7 +92,9 @@ test('usa cliente real de inventario, elementos y Authorization', async () => {
       headers: { 'X-User-Name': 'Guerrero', Authorization: expect.stringMatching(/^Bearer /) },
     }),
   );
-  expect($('#producto').options[1].textContent).toBe('Espada de luz · ARMA · unidad-1');
+  // UXC-8 — el tipo en palabras y sin el identificador interno del elemento.
+  expect($('#producto').options[1].textContent).toBe('Espada de luz · Arma');
+  expect($('#producto').options[1].value).toBe('unidad-1');
   expect($('.cabecera')).not.toBeNull();
 });
 
@@ -133,9 +138,63 @@ test('precio obligatorio, compra inmediata opcional y resumen confirmado', async
   cambiar('#inmediata', '9');
   marcar('#aceptar');
   expect($('[type="submit"]').disabled).toBe(true);
+  // B8 — 7.7.2: la compra inmediata tiene que SUPERAR el precio minimo; igual ya no vale.
   cambiar('#inmediata', '10');
   marcar('#aceptar');
-  expect($('[data-resumen-inmediata]').textContent).toBe('10 créditos');
+  expect($('[type="submit"]').disabled).toBe(true);
+  cambiar('#inmediata', '11');
+  marcar('#aceptar');
+  expect($('[data-resumen-inmediata]').textContent).toBe('11 créditos');
+  expect($('[type="submit"]').disabled).toBe(false);
+});
+
+test('B8: la compra inmediata igual al precio inicial se rechaza con el motivo del documento', () => {
+  expect(validarCondiciones(elemento, '24H', '10', '10').inmediata).toMatch(
+    /superior al precio inicial/,
+  );
+  expect(validarCondiciones(elemento, '24H', '10', '10.5').inmediata).toBeUndefined();
+});
+
+test('B8: las comisiones salen de las reglas del servidor, no de la pantalla', async () => {
+  const consultarReglas = jest.fn().mockResolvedValue({
+    duraciones: [
+      { codigo: '24H', horas: 24, comision: '2' },
+      { codigo: '48H', horas: 48, comision: '5' },
+    ],
+    incrementoMinimoConfigurado: true,
+    incrementoMinimo: '5',
+  });
+  await montar({ consultarReglas });
+  expect(consultarReglas).toHaveBeenCalled();
+  expect($('[data-comision="24H"]').textContent).toBe('Comisión: 2 créditos');
+  marcar('[value="48H"]');
+  expect($('[data-resumen-comision]').textContent).toBe('5 créditos');
+  expect($('[data-decision-po]').hidden).toBe(true);
+});
+
+test('B8: sin incremento configurado (DECISIÓN PO) se dice antes y no se deja publicar', async () => {
+  const consultarReglas = jest.fn().mockResolvedValue({
+    duraciones: [
+      { codigo: '24H', horas: 24, comision: '1' },
+      { codigo: '48H', horas: 48, comision: '3' },
+    ],
+    incrementoMinimoConfigurado: false,
+    incrementoMinimo: null,
+  });
+  const { publicar } = await montar({ consultarReglas });
+  expect($('[data-decision-po]').hidden).toBe(false);
+  expect($('[data-decision-po]').textContent).toMatch(/DECISIÓN PO pendiente/);
+  completar();
+  expect($('[type="submit"]').disabled).toBe(true);
+  submit();
+  await vaciar();
+  expect(publicar).not.toHaveBeenCalled();
+});
+
+test('B8: si las reglas no llegan se sigue con el respaldo de la Tabla 25', async () => {
+  await montar({ consultarReglas: jest.fn().mockResolvedValue(null) });
+  expect($('[data-comision="48H"]').textContent).toBe('Comisión: 3 créditos');
+  completar();
   expect($('[type="submit"]').disabled).toBe(false);
 });
 
@@ -161,11 +220,14 @@ test('publica solo tras aceptación, envía contrato y muestra éxito con vuelta
     },
     'clave-estable',
   );
-  expect($('#nexus-rbac-forbidden').textContent).toMatch(
-    /publicada correctamente.*Comisión cobrada: 1/,
+  expect($('#nexus-rbac-forbidden').textContent).toMatch(/Subasta publicada.*Comisión cobrada: 1/);
+  // UXC-9 — sin el identificador en el texto; en su lugar, el camino a verla.
+  expect($('#nexus-rbac-forbidden').textContent).not.toContain('subasta-creada');
+  expect($('[data-accion="ver-publicada"]').getAttribute('href')).toBe(
+    './pujas.html?id=subasta-creada',
   );
   expect($('#raiz a').getAttribute('href')).toBe('./subastas.html');
-  expect($('form').hidden).toBe(true);
+  expect(formulario().hidden).toBe(true);
   expect(sessionStorage.getItem(`nexus.hu-sub-001.intento:${uid}`)).toBeNull();
   submit();
   expect(publicar).toHaveBeenCalledTimes(1);
@@ -262,7 +324,11 @@ test('inventario vacío y fallo de carga tienen estados claros', async () => {
   await montar({
     consultar: jest.fn().mockResolvedValue({ ...pagina, elementos: [], totalPaginas: 0 }),
   });
-  expect($('[data-inventario]').textContent).toMatch(/No hay productos/);
+  // UXC-9 — qué pasa y adónde ir, sin «Página 0 de 0».
+  expect($('[data-inventario]').textContent).toMatch(/Tu inventario está vacío/);
+  expect($('[data-sin-inventario]').hidden).toBe(false);
+  expect($('[data-sin-inventario] a').getAttribute('href')).toBe('./tienda.html');
+  expect($('.publicacion__paginacion').hidden).toBe(true);
   await montar({ consultar: jest.fn().mockRejectedValue(new Error('interno')) });
   expect($('[data-recargar]').hidden).toBe(false);
   expect($('#nexus-rbac-forbidden').textContent).not.toContain('interno');

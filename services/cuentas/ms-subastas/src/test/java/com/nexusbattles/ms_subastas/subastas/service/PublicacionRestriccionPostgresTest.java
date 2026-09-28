@@ -1,6 +1,10 @@
 package com.nexusbattles.ms_subastas.subastas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.pujas.service.ParametrosPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.dto.PublicarSubastaRequest;
+import org.springframework.context.ApplicationEventPublisher;
 import com.nexusbattles.ms_subastas.subastas.model.*;
 import com.nexusbattles.ms_subastas.subastas.port.*;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -25,7 +29,12 @@ import static org.mockito.ArgumentMatchers.any;
 @SpringBootTest(properties = {
         "app.pujas.emision-automatica-intervalo-ms=3600000",
         "app.subastas.cierre-intervalo-ms=3600000",
-        "app.notificaciones.drenaje-intervalo-ms=3600000"
+        "app.notificaciones.drenaje-intervalo-ms=3600000",
+        // B8: recordatorio, pendientes y correo tambien son trabajos
+        // programados que tocan las subastas: fuera del camino de la prueba.
+        "app.subastas.recordatorio-intervalo-ms=3600000",
+        "app.subastas.pendientes-intervalo-ms=3600000",
+        "app.correo.drenaje-intervalo-ms=3600000"
 })
 @Testcontainers
 class PublicacionRestriccionPostgresTest {
@@ -67,7 +76,9 @@ class PublicacionRestriccionPostgresTest {
         when(catalogo.buscar(producto)).thenReturn(Optional.of(new CatalogoProductosClient.Producto(producto, "Espada", null, null, null, null, null, true)));
         var servicio = new PublicarSubastaApplicationService(repositorio, inventario, catalogo,
                 mock(FinanzasPublicacionClient.class), () -> new IdentidadClient.Identidad(jugador, false),
-                mock(SancionesClient.class), new IdempotenciaPublicacionEnMemoria(), new CalculadorComisionPublicacion(), Clock.systemUTC(), "1");
+                mock(SancionesClient.class), new IdempotenciaPublicacionEnMemoria(), new CalculadorComisionPublicacion(), Clock.systemUTC(),
+                FuenteDeReglas.fijas(new ParametrosPuja(), BigDecimal.ONE), mock(AvisosDeSubasta.class),
+                mock(ApplicationEventPublisher.class));
         servicio.publicar(new PublicarSubastaRequest("unidad", producto, DuracionSubasta.H24, BigDecimal.TEN, null), "k");
     }
 

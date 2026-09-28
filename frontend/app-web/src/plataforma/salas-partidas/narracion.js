@@ -100,7 +100,46 @@ export function narrarAccion(aviso, participantes, yo) {
   const ejecutor = nombreDe(aviso?.idEjecutor, participantes, yo);
   const categoria = categoriaDe(aviso?.accion);
   const accion = categoria ? null : nombreDeAccion(aviso?.accion?.nombre ?? aviso?.accion?.codigo);
-  const afectados = Array.isArray(aviso?.afectados) ? aviso.afectados : [];
+  const todos = Array.isArray(aviso?.afectados) ? aviso.afectados : [];
+  // Desde B7 (canal 1.5.0) el aviso trae tambien al ejecutor aunque su vida no
+  // cambie: viaja para llevar su poder, sus cargas y sus efectos. Eso no se
+  // narra como si hubiera recibido su propia accion.
+  const afectados = todos.filter(
+    (a) =>
+      a?.idJugador !== aviso?.idEjecutor || (Number.isFinite(a.diferencia) && a.diferencia !== 0),
+  );
+
+  // UXC-9 — 1.5.0: faltó poder para la acción pedida y el turno se jugó con
+  // el valor base (§6.1.1). Sin decirlo, parecía que el servidor había
+  // ignorado la acción elegida.
+  if (aviso?.accion?.enValorBase === true) {
+    const pedida = aviso.accion.accionPedida;
+    lineas.push({
+      texto: pedida
+        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeAccion(pedida)}: ataca con su valor base.`
+        : `A ${ejecutor} no le alcanza el poder: ataca con su valor base.`,
+      tono: 'sistema',
+      icono: 'rayo',
+    });
+  }
+
+  if (afectados.length === 0 && todos.length > 0 && !categoria) {
+    // Una accion que no mueve ninguna vida (una defensa, un apoyo): se dice
+    // que se uso; lo que cambia (poder, efectos) ya se ve en su sitio.
+    lineas.push({ texto: `${ejecutor} usa ${accion}.`, tono: 'sistema', icono: 'rayo' });
+    return { lineas, impactos };
+  }
+
+  // Un ataque especial (B7) llega con la categoria del golpe en `nombre` y la
+  // accion jugada en `codigo`: se dice cual fue antes de contar el golpe.
+  const codigo = aviso?.accion?.codigo;
+  if (categoria && codigo && codigo !== 'ATAQUE_BASICO' && !categoriaDe({ codigo })) {
+    lineas.push({
+      texto: `${ejecutor} usa ${nombreDeAccion(codigo)}.`,
+      tono: 'sistema',
+      icono: 'rayo',
+    });
+  }
 
   if (afectados.length === 0) {
     lineas.push({

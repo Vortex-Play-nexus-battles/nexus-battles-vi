@@ -34,6 +34,20 @@
       montarCabecera(document.getElementById('navbar-container'), {
         vista: 'tienda',
         seccionActiva: 'cuenta',
+        // UXC-9 — RF-INV-008: aquí la búsqueda de la barra filtra la tienda en
+        // el sitio, con el mismo campo que la vitrina, en vez de recargarla.
+        buscador: {
+          placeholder: 'Buscar productos',
+          alBuscar: (texto) => {
+            const campo = document.getElementById('busqueda-tienda');
+            if (!campo) {
+              return;
+            }
+            campo.value = texto;
+            campo.form?.requestSubmit();
+            campo.focus();
+          },
+        },
       });
     </script>
 

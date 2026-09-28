@@ -25,6 +25,48 @@ El criterio concreto para un empate exacto no está documentado todavía en el
 repositorio. `CriterioDesempate` lo recibe por inyección para que el equipo
 pueda conectar la decisión aprobada sin inventar una regla provisional.
 
+## El combate de verdad (B7, contrato 1.2.0)
+
+`POST /api/v1/combate/acciones` resuelve UNA acción del turno y
+`POST /api/v1/combate/turnos` lo que pasa al EMPEZAR uno. Son sin estado: el
+estado de los combatientes (vida, poder, cargas, efectos, último golpe) llega
+entero y sale entero, y lo guarda `salas-partidas`. Solo con credencial de
+servicio.
+
+| Regla del documento | Dónde vive | Prueba |
+|---|---|---|
+| §6.1.4 índice pseudoaleatorio con distribución normal (no uniforme), truncado a 1..8000 | `IndiceNormal` | `IndiceNormalTest`, `TablaDeEfectosEnCombateTest` |
+| Tablas 21 y 22: reparto por tipo de héroe y porcentaje de daño; crítico de 120 a 180 % | `DistribucionEfectos.dePrototipo`, `MotorDeAcciones.golpear` | `DistribucionPorPrototipoTest`, `TablaDeEfectosEnCombateTest` |
+| Tabla 23: el crítico del equipo resta de «no causar daño» | `DistribucionEfectos.ajustarCritico`, `EquipoDeCombate` | `EquipoEnCombateTest`, `TablaDeEfectosEnCombateTest` |
+| §6.1.1 poder: +2 por turno, coste por acción, valor base sin poder | `MotorDeAcciones` (`iniciarTurno`, `planEnValorBase`) | `InicioDeTurnoTest`, `MotorDeAccionesTest` |
+| Tabla 7: las 24 acciones como reglas; §6.1.2 un turno de carga y multiplicador de nivel | `Reglamento` (datos en heroes, efecto aquí) | `AccionesEspecialesTest` |
+| Tabla 20: épicas, dos turnos de recarga, efecto potenciado del héroe afín | `Reglamento.tabla20` | `EpicasEnCombateTest` |
+| Tablas 8 a 19: efectos de combate de armas e ítems | `EquipoDeCombate` | `EquipoEnCombateTest` |
+| §6.1.3 cooperativo: sin daño a compañeros; mismas reglas para la IA | `MotorDeAcciones.elegirObjetivo`, `PoliticaDeLaMaquina` | `MotorDeAccionesTest`, `PoliticaDeLaMaquinaTest` |
+| §6.1.1 el sanador no inflige daño | `Reglamento.exigirQueAtaque` | `AccionesEspecialesTest`, `AccionesDisponiblesTest` |
+
+**Datos contra reglas.** El nombre, el coste, la carga y el nivel de
+desbloqueo de cada acción son datos del catálogo de héroes (heroes.yaml 1.2.0);
+lo que la acción HACE es una regla y vive una sola vez en `Reglamento`. El
+catálogo se consulta por `CatalogoDeCombateHttp`, con caché.
+
+**La IA** (`DECISION_DE_LA_MAQUINA`) juega con las mismas reglas y una política
+simple y determinista (D-B7-12). El «aprendizaje profundo» del §7.6 queda fuera
+de este bloque (D-B7-13): no se simula.
+
+### Configuración (regla 10, todas con valor por omisión seguro)
+
+| Variable | Por omisión | Qué es |
+|---|---|---|
+| `HEROES_URL` | `http://localhost:8081` | Servicio de héroes |
+| `MOTOR_HEROES_CACHE_SEGUNDOS` | `300` | Vigencia de la ficha de combate en caché; `0` la desactiva |
+| `MOTOR_INDICE_MEDIA` | `4000.5` | Media del índice normal (D-B7-01, el documento no la fija) |
+| `MOTOR_INDICE_DESVIACION` | `1333.3333333333333` | Desviación del índice normal (D-B7-01) |
+
+Con el índice normal, el porcentaje de FILAS de un efecto no es su
+probabilidad: con los valores por omisión, el 60 % de filas de «causar daño»
+del Guerrero Armas (1-4800) sale el 72,6 % de las veces.
+
 ## Como correr
 
 ```powershell

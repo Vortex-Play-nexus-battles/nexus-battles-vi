@@ -67,6 +67,61 @@ test('el reporte trae sus cinco bloques, con las cifras tal cual llegan', () => 
   expect(objetivos[1].textContent).toContain('No cumplido: Encontrar los 3 fragmentos');
 });
 
+test('sin nivel alcanzado, entrega pendiente ni recompensas sin entregar, no se inventan', () => {
+  const reporte = reporteDeMision(REPORTE, rutas);
+
+  expect(reporte.textContent).not.toContain('Subió al');
+  expect(reporte.querySelector('[data-estado="entrega-pendiente"]')).toBeNull();
+  expect(reporte.querySelector('.mision-reporte__sin-entregar')).toBeNull();
+  expect(reporte.textContent).not.toContain('null');
+});
+
+test('B9: el nivel alcanzado, lo que sigue entregándose y lo que no existe en ningún catálogo', () => {
+  const reporte = reporteDeMision(
+    {
+      ...REPORTE,
+      heroe: { ...REPORTE.heroe, nivelAlcanzado: 2 },
+      recompensas: {
+        ...REPORTE.recompensas,
+        productos: [],
+        entregaPendiente: true,
+        sinEntregar: [
+          {
+            nombre: 'Cofre de Bronce',
+            motivo: 'No existe en el catálogo oficial de productos.',
+          },
+          { nombre: 'Título «Explorador del Templo»', motivo: 'Ningún servicio guarda títulos.' },
+        ],
+      },
+    },
+    rutas,
+  );
+
+  const datos = [...reporte.querySelectorAll('.mision-detalle__datos div')].map(
+    (d) => d.textContent,
+  );
+  expect(datos).toContain('Subió alnivel 2');
+  const recompensas = reporte.querySelector('[data-bloque="recompensas"]');
+  expect(recompensas.querySelector('[data-estado="entrega-pendiente"]').textContent).toContain(
+    'llegará sola a tu inventario',
+  );
+  const sinEntregar = [...recompensas.querySelectorAll('.mision-reporte__sin-entregar li')].map(
+    (li) => li.textContent,
+  );
+  expect(sinEntregar).toEqual([
+    'Cofre de Bronce: No existe en el catálogo oficial de productos.',
+    'Título «Explorador del Templo»: Ningún servicio guarda títulos.',
+  ]);
+});
+
+test('el mismo nivel al volver no se anuncia como subida', () => {
+  const reporte = reporteDeMision(
+    { ...REPORTE, heroe: { ...REPORTE.heroe, nivelAlcanzado: 1 } },
+    rutas,
+  );
+  expect(reporte.textContent).not.toContain('Subió al');
+});
+
 test('un fallo se dice con palabra e icono, no solo con color', () => {
   const sello = selloDeResultado('FALLO');
   expect(sello.textContent).toBe('Fallo');

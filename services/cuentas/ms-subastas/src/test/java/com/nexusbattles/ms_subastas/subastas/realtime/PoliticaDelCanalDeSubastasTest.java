@@ -18,6 +18,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * La politica del canal del listado de subastas — R9.6b.
@@ -149,11 +151,50 @@ class PoliticaDelCanalDeSubastasTest {
                     () -> politica.preSend(suscripcionA("/user/queue/mis-pujas", false), null));
         }
 
+        /**
+         * B8 ({@code contracts/websocket/subastas.yaml} 1.1.0): el canal de una
+         * subasta existe y exige sesion.
+         */
         @Test
-        @DisplayName("identificado, si")
+        @DisplayName("identificado, al canal de una subasta, si")
+        void identificadoAlCanalDeUnaSubasta() {
+            assertDoesNotThrow(() -> politica.preSend(
+                    suscripcionA("/topic/subastas/" + UUID.randomUUID(), true), null));
+        }
+
+        @Test
+        @DisplayName("un visitante NO puede seguir el canal de una subasta")
+        void visitanteAlCanalDeUnaSubasta() {
+            assertThrows(AccessDeniedException.class, () -> politica.preSend(
+                    suscripcionA("/topic/subastas/" + UUID.randomUUID(), false), null));
+        }
+
+        /**
+         * Hasta B8 un identificado podia suscribirse a cualquier destino, porque
+         * no habia ninguno mas. Ahora que el AsyncAPI declara dos canales, lo
+         * que no esta declarado nace cerrado tambien para quien tiene sesion.
+         */
+        @Test
+        @DisplayName("identificado, a un destino que el AsyncAPI no declara, no")
         void identificadoAOtroDestino() {
-            assertDoesNotThrow(
+            assertThrows(AccessDeniedException.class,
                     () -> politica.preSend(suscripcionA("/user/queue/mis-pujas", true), null));
+            assertThrows(AccessDeniedException.class,
+                    () -> politica.preSend(suscripcionA("/topic/subastas/no-es-un-id", true), null));
+            assertThrows(AccessDeniedException.class,
+                    () -> politica.preSend(suscripcionA("/topic/subastas/" + UUID.randomUUID() + "/pujas", true), null));
+        }
+
+        @Test
+        @DisplayName("solo /topic/subastas/{uuid} cuenta como canal de una subasta")
+        void formaDelCanalDeUnaSubasta() {
+            UUID id = UUID.randomUUID();
+            assertTrue(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta("/topic/subastas/" + id));
+            assertTrue(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta("/topic/subastas/" + id.toString().toUpperCase()));
+            assertFalse(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta("/topic/subastas/listado"));
+            assertFalse(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta("/topic/subastas/"));
+            assertFalse(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta("/topic/otra/" + id));
+            assertFalse(PoliticaDelCanalDeSubastas.esCanalDeUnaSubasta(null));
         }
     }
 

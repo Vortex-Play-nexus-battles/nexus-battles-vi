@@ -18,6 +18,18 @@ import java.util.Objects;
  *       —anterior a B4— se lee en nivel 1 con 0 de experiencia. Como se gana
  *       experiencia no se decide aqui: es B9 (misiones).</li>
  * </ul>
+ *
+ * <h2>B9 (inventario 1.6.0, misiones)</h2>
+ * <ul>
+ *   <li>{@code ejecucionMisionId}: solo en los HEROE, la ejecucion de mision que
+ *       lo tiene bloqueado (seccion 7.8.10, «En mision»), o nulo. Mientras la
+ *       tenga, el heroe no esta {@linkplain #disponible() disponible}: no se
+ *       equipa, no se renombra, no se borra ni se publica en subasta.</li>
+ *   <li>La mision no trae una progresion propia: hace avanzar el {@code nivel} y
+ *       la {@code experiencia} de B4 —mismos campos, mismos valores por
+ *       omision—. Al liberarlo ({@link #liberarDeMision}) se guardan el nivel y
+ *       la experiencia dentro de su nivel que ya calculo la aplicacion.</li>
+ * </ul>
  */
 public record ElementoInventario(
         String id,
@@ -29,7 +41,8 @@ public record ElementoInventario(
         OrigenDeEntrega origen,
         String referencia,
         Integer nivel,
-        Double experiencia) {
+        Double experiencia,
+        String ejecucionMisionId) {
 
     public static final int NIVEL_INICIAL = 1;
     public static final int NIVEL_MAXIMO = 8;
@@ -62,6 +75,22 @@ public record ElementoInventario(
         this(id, productoId, tipo, nombrePropio, parteArmadura, subastaId, null, null, null, null);
     }
 
+    /** La forma de B4: con origen, referencia y progresion, fuera de cualquier mision. */
+    public ElementoInventario(
+            String id,
+            String productoId,
+            TipoElementoInventario tipo,
+            String nombrePropio,
+            ParteArmadura parteArmadura,
+            String subastaId,
+            OrigenDeEntrega origen,
+            String referencia,
+            Integer nivel,
+            Double experiencia) {
+        this(id, productoId, tipo, nombrePropio, parteArmadura, subastaId, origen, referencia, nivel, experiencia,
+                null);
+    }
+
     public ElementoInventario {
         exigirTexto(id, "id");
         exigirTexto(productoId, "productoId");
@@ -88,6 +117,14 @@ public record ElementoInventario(
         } else if (nivel != null || experiencia != null) {
             throw new IllegalArgumentException("Solo un heroe tiene nivel y experiencia");
         }
+        if (ejecucionMisionId != null) {
+            if (tipo != TipoElementoInventario.HEROE) {
+                throw new IllegalArgumentException("Solo un heroe puede estar en una mision");
+            }
+            if (ejecucionMisionId.isBlank()) {
+                throw new IllegalArgumentException("ejecucionMisionId no puede estar vacio");
+            }
+        }
     }
 
     /** Un elemento recien entregado por un canal valido (B4). */
@@ -107,7 +144,7 @@ public record ElementoInventario(
     public ElementoInventario renombrar(String nuevoNombre) {
         exigirDisponible();
         return new ElementoInventario(id, productoId, tipo, nuevoNombre, parteArmadura, subastaId,
-                origen, referencia, nivel, experiencia);
+                origen, referencia, nivel, experiencia, ejecucionMisionId);
     }
 
     /**
@@ -120,11 +157,16 @@ public record ElementoInventario(
             throw new IllegalArgumentException("Solo una armadura tiene parte");
         }
         return new ElementoInventario(id, productoId, tipo, nombrePropio, parteDelCatalogo, subastaId,
-                origen, referencia, nivel, experiencia);
+                origen, referencia, nivel, experiencia, ejecucionMisionId);
     }
 
+    /** Libre para operar: ni en una subasta vigente ni en una mision (1.6.0). */
     public boolean disponible() {
-        return subastaId == null;
+        return subastaId == null && ejecucionMisionId == null;
+    }
+
+    public boolean enMision() {
+        return ejecucionMisionId != null;
     }
 
     public ElementoInventario bloquearEnSubasta(String nuevaSubastaId) {
@@ -132,18 +174,23 @@ public record ElementoInventario(
         if (nuevaSubastaId.equals(subastaId)) {
             return this;
         }
+        if (enMision()) {
+            throw new HeroeEnMisionException("El heroe esta en una mision y no se puede publicar en subasta.");
+        }
         if (!disponible()) {
             throw new ElementoNoDisponibleException(
                     "El producto ya esta bloqueado por otra subasta vigente.");
         }
         return new ElementoInventario(
                 id, productoId, tipo, nombrePropio, parteArmadura, nuevaSubastaId,
-                origen, referencia, nivel, experiencia);
+                origen, referencia, nivel, experiencia, ejecucionMisionId);
     }
 
     public ElementoInventario liberarBloqueoSubasta(String subastaQueFinalizo) {
         exigirTexto(subastaQueFinalizo, "subastaId");
-        if (disponible()) {
+        // Solo el bloqueo por subasta: un heroe en mision tampoco esta disponible,
+        // pero el aviso de una subasta no le concierne.
+        if (subastaId == null) {
             return this;
         }
         if (!subastaId.equals(subastaQueFinalizo)) {
@@ -151,10 +198,58 @@ public record ElementoInventario(
                     "El aviso no corresponde a la subasta que mantiene el bloqueo.");
         }
         return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura, null,
-                origen, referencia, nivel, experiencia);
+                origen, referencia, nivel, experiencia, ejecucionMisionId);
+    }
+
+    /**
+     * El heroe sale a una mision (7.8.6, «queda bloqueado y no puede usarse en
+     * otros modos»). Idempotente para la misma ejecucion.
+     *
+     * @throws NoEsUnHeroeException     si no es un heroe
+     * @throws ElementoNoDisponibleException si esta en una subasta vigente
+     * @throws HeroeEnMisionException   si ya esta en OTRA mision
+     */
+    public ElementoInventario bloquearEnMision(String ejecucionId) {
+        exigirTexto(ejecucionId, "ejecucionId");
+        if (tipo != TipoElementoInventario.HEROE) {
+            throw new NoEsUnHeroeException();
+        }
+        if (ejecucionId.equals(ejecucionMisionId)) {
+            return this;
+        }
+        if (subastaId != null) {
+            throw new ElementoNoDisponibleException("El heroe esta bloqueado por una subasta vigente.");
+        }
+        if (enMision()) {
+            throw new HeroeEnMisionException("El heroe ya esta en otra mision.");
+        }
+        return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura, null,
+                origen, referencia, nivel, experiencia, ejecucionId);
+    }
+
+    /**
+     * El heroe vuelve de la mision con su progresion ya calculada (7.8.6, «el
+     * heroe es liberado y regresa al inventario»): el mismo {@code nivel} y la
+     * misma {@code experiencia} de B4, avanzados.
+     *
+     * @throws HeroeEnMisionException si lo bloquea otra ejecucion
+     */
+    public ElementoInventario liberarDeMision(String ejecucionId, int nuevoNivel, double nuevaExperiencia) {
+        exigirTexto(ejecucionId, "ejecucionId");
+        if (!enMision()) {
+            return this;
+        }
+        if (!ejecucionMisionId.equals(ejecucionId)) {
+            throw new HeroeEnMisionException("El heroe esta bloqueado por otra ejecucion de mision.");
+        }
+        return new ElementoInventario(id, productoId, tipo, nombrePropio, parteArmadura, subastaId,
+                origen, referencia, nuevoNivel, nuevaExperiencia, null);
     }
 
     public void exigirDisponible() {
+        if (enMision()) {
+            throw new HeroeEnMisionException("El heroe esta en una mision y no se puede modificar hasta que vuelva.");
+        }
         if (!disponible()) {
             throw new ElementoNoDisponibleException(
                     "El producto esta bloqueado por una subasta vigente.");

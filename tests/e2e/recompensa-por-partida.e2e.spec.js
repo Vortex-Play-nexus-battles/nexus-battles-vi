@@ -103,7 +103,11 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
   test('al terminar una partida contra la IA, el libro acredita 2 por ganar o 1 por participar, y la vista lo dice', async ({
     page,
   }) => {
-    test.setTimeout(180000);
+    // B7: con las reglas del documento un combate dura mucho mas que antes
+    // (Tablas 21-23: un Guerrero Tanque solo hace daño en ~3 de cada 10 golpes
+    // con el indice normal de D-B7-01). El tope no es de la regla, es de la
+    // prueba: holgado para que termine la partida real.
+    test.setTimeout(480000);
 
     const antes = await saldoBrutoDe(api, anfitriona);
 
@@ -133,7 +137,7 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
     await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
 
     let golpes = 0;
-    while (partida.estado === 'EN_CURSO' && golpes < 30) {
+    while (partida.estado === 'EN_CURSO' && golpes < 150) {
       // Se espera el turno propio segun el SERVICIO, no segun el boton: entre
       // que el boton se ve habilitado y el clic, la maquina puede jugar y hasta
       // terminar la partida, y el clic se quedaba esperando a un boton ya

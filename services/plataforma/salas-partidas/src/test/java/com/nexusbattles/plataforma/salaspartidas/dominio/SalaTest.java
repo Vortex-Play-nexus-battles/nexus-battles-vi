@@ -768,6 +768,45 @@ class SalaTest {
         }
     }
 
+    @Nested
+    @DisplayName("B7 · la sala termina con su partida (salas-partidas.yaml 1.7.0)")
+    class FinDeLaPartida {
+
+        @Test
+        @DisplayName("una sala en juego pasa a FINALIZADA cuando termina su partida")
+        void enJuegoPasaAFinalizada() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+
+            assertAll(
+                    () -> assertTrue(sala.terminarPartida()),
+                    () -> assertEquals(EstadoSala.FINALIZADA, sala.estado()));
+        }
+
+        @Test
+        @DisplayName("repetir el aviso de fin no es un error: la sala sigue FINALIZADA y no cambia")
+        void esIdempotente() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+            sala.terminarPartida();
+
+            assertAll(
+                    () -> assertTrue(!sala.terminarPartida(), "la segunda vez no cambia nada"),
+                    () -> assertEquals(EstadoSala.FINALIZADA, sala.estado()));
+        }
+
+        @Test
+        @DisplayName("una sala que nunca se jugo no se da por terminada por una partida ajena")
+        void soloDesdeEnJuego() {
+            Sala abierta = Sala.crear(validos(), ANFITRION);
+            Sala cancelada = enEstado(EstadoSala.CANCELADA);
+
+            assertAll(
+                    () -> assertTrue(!abierta.terminarPartida()),
+                    () -> assertEquals(EstadoSala.ABIERTA, abierta.estado()),
+                    () -> assertTrue(!cancelada.terminarPartida()),
+                    () -> assertEquals(EstadoSala.CANCELADA, cancelada.estado()));
+        }
+    }
+
     /** Sala en un estado que {@code crear} no produce, para probar los rechazos. */
     private static Sala enEstado(EstadoSala estado) {
         return Sala.rehidratar(UUID.randomUUID(), estado, Modalidad.HASTA_SEIS, 4, 0,

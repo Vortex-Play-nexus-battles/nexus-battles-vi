@@ -12,7 +12,10 @@
  * - el historial de la conversación de esta sesión, y borrarlo;
  * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
  *   el cliente decidió que el asistente no recibe imágenes);
- * - calificar cada respuesta del bot (útil / no útil, con comentario opcional).
+ * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
+ * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
+ *   conversación, y cambiarle el tamaño arrastrando la esquina o con las
+ *   flechas del teclado sobre ella. El tamaño se recuerda en esta sesión.
  *
  * Si el servicio no responde, lo dice y ofrece el chat general: CA-03 de
  * HU-CHA-001.
@@ -36,6 +39,36 @@ const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
 
 /** Límites del contrato (`EnviarMensaje`, `CalificarRespuesta`). */
 export const LIMITES = Object.freeze({ mensaje: 4000, comentario: 1000 });
+
+/**
+ * UXC-9 — tamaños de la ventana (px). El mínimo deja leer una respuesta y
+ * escribir; el máximo lo pone la pantalla (ver `acotarTamano`). Cada pulsación
+ * de flecha mueve un paso.
+ */
+export const TAMANO = Object.freeze({ anchoMinimo: 300, altoMinimo: 320, paso: 32 });
+
+/** Dónde se recuerda el tamaño elegido: solo esta pestaña (sessionStorage). */
+const CLAVE_TAMANO = 'nexus.asistente.tamano';
+
+/**
+ * El tamaño pedido, dentro de lo que cabe en la pantalla.
+ *
+ * @param {{ancho: number, alto: number}} pedido
+ * @param {{ancho: number, alto: number}} pantalla tamaño de la ventana del navegador
+ * @returns {{ancho: number, alto: number}}
+ */
+export function acotarTamano(pedido, pantalla) {
+  // Lo que ocupa la esquina: el margen derecho, el botón flotante debajo y un
+  // respiro arriba para no tapar la cabecera.
+  const anchoMaximo = Math.max(TAMANO.anchoMinimo, pantalla.ancho - 48);
+  const altoMaximo = Math.max(TAMANO.altoMinimo, pantalla.alto - 56 - 96);
+  const acotar = (valor, minimo, maximo) =>
+    Math.round(Math.min(maximo, Math.max(minimo, Number(valor) || minimo)));
+  return {
+    ancho: acotar(pedido.ancho, TAMANO.anchoMinimo, anchoMaximo),
+    alto: acotar(pedido.alto, TAMANO.altoMinimo, altoMaximo),
+  };
+}
 
 /** Todo lo que lee el usuario, en un solo sitio. */
 export const TEXTOS = Object.freeze({
@@ -65,6 +98,9 @@ export const TEXTOS = Object.freeze({
     'Se borrarán todos los mensajes de esta conversación. No se puede deshacer.',
   confirmarBorrarBoton: 'Borrar',
   cerrar: 'Cerrar el asistente',
+  minimizar: 'Minimizar el asistente',
+  restaurar: 'Restaurar el asistente',
+  tamano: 'Cambiar el tamaño del asistente. Usa las flechas; Inicio vuelve al tamaño normal.',
   preguntaCalificacion: '¿Te sirvió esta respuesta?',
   util: '👍 Sí',
   noUtil: '👎 No',
@@ -124,19 +160,41 @@ export function crearVentanaChatbot({
     atributos: { type: 'button', 'aria-label': TEXTOS.cerrar },
     datos: { accion: 'cerrar-asistente' },
   });
+  // UXC-9 — minimizar deja la barra de título a la vista y la conversación
+  // intacta; el mismo botón la restaura.
+  const botonMinimizar = h('button', {
+    clase: 'chatbot-ventana__cerrar',
+    texto: '−',
+    atributos: { type: 'button', 'aria-label': TEXTOS.minimizar, 'aria-expanded': 'true' },
+    datos: { accion: 'minimizar-asistente' },
+  });
+  // UXC-9 — la esquina que cambia el tamaño. La ventana cuelga de la esquina
+  // inferior derecha, así que se agarra por la superior izquierda. Es un
+  // botón para que también se alcance y se use con el teclado.
+  const asa = h('button', {
+    clase: 'chatbot-ventana__asa',
+    atributos: { type: 'button', 'aria-label': TEXTOS.tamano, title: TEXTOS.tamano },
+    datos: { accion: 'tamano-asistente' },
+  });
 
   const cabecera = h('header', {
     clase: 'chatbot-ventana__cabecera',
     hijos: [
       titulo,
-      h('div', { clase: 'chatbot-ventana__acciones', hijos: [botonBorrar, botonCerrar] }),
+      h('div', {
+        clase: 'chatbot-ventana__acciones',
+        hijos: [botonBorrar, botonMinimizar, botonCerrar],
+      }),
       estado,
     ],
   });
 
+  // UXC-9 — lista con región viva, sin `role="log"`: ese rol le quitaba al
+  // <ol> su semántica de lista y cada mensaje (<li>) quedaba huérfano (axe,
+  // «listitem», grave). `aria-live` sigue anunciando lo que llega.
   const registro = h('ol', {
     clase: 'chatbot-ventana__registro',
-    atributos: { role: 'log', 'aria-live': 'polite', 'aria-label': TEXTOS.registro },
+    atributos: { 'aria-live': 'polite', 'aria-label': TEXTOS.registro },
   });
   const zonaAviso = h('div', { clase: 'chatbot-ventana__aviso', atributos: { hidden: true } });
 
@@ -171,9 +229,11 @@ export function crearVentanaChatbot({
       hidden: true,
     },
     datos: { chatbotVentana: '' },
-    hijos: [cabecera, registro, zonaAviso, formulario],
+    hijos: [asa, cabecera, registro, zonaAviso, formulario],
   });
   ventana.id = `chatbot-ventana-${contador}`;
+  registro.id = `chatbot-ventana-registro-${contador}`;
+  botonMinimizar.setAttribute('aria-controls', registro.id);
   raiz.append(ventana);
 
   // ------------------------------------------------------------- mensajes
@@ -512,6 +572,125 @@ export function crearVentanaChatbot({
   });
   botonBorrar.addEventListener('click', borrarConversacion);
   botonCerrar.addEventListener('click', () => cerrar());
+
+  // ------------------------------------------------- minimizar y tamaño
+
+  function minimizada() {
+    return ventana.classList.contains('chatbot-ventana--minimizada');
+  }
+
+  function fijarMinimizada(si) {
+    ventana.classList.toggle('chatbot-ventana--minimizada', si);
+    botonMinimizar.textContent = si ? '+' : '−';
+    botonMinimizar.setAttribute('aria-label', si ? TEXTOS.restaurar : TEXTOS.minimizar);
+    botonMinimizar.setAttribute('aria-expanded', String(!si));
+  }
+
+  botonMinimizar.addEventListener('click', () => {
+    fijarMinimizada(!minimizada());
+    if (!minimizada()) {
+      enfocarDentro();
+    }
+  });
+
+  function pantalla() {
+    return {
+      ancho: globalThis.innerWidth ?? 1440,
+      alto: globalThis.innerHeight ?? 900,
+    };
+  }
+
+  function aplicarTamano(pedido, { recordar = true } = {}) {
+    const { ancho, alto } = acotarTamano(pedido, pantalla());
+    ventana.style.width = `${ancho}px`;
+    ventana.style.height = `${alto}px`;
+    ventana.style.maxHeight = 'none';
+    ventana.dataset.tamano = 'propio';
+    if (recordar) {
+      try {
+        globalThis.sessionStorage?.setItem(CLAVE_TAMANO, JSON.stringify({ ancho, alto }));
+      } catch {
+        // Sin almacenamiento: el tamaño vale mientras la vista siga abierta.
+      }
+    }
+  }
+
+  function tamanoNormal() {
+    ventana.style.removeProperty('width');
+    ventana.style.removeProperty('height');
+    ventana.style.removeProperty('max-height');
+    delete ventana.dataset.tamano;
+    try {
+      globalThis.sessionStorage?.removeItem(CLAVE_TAMANO);
+    } catch {
+      // Nada que olvidar.
+    }
+  }
+
+  function tamanoActual() {
+    const caja = ventana.getBoundingClientRect();
+    return {
+      ancho: caja.width || parseFloat(ventana.style.width) || TAMANO.anchoMinimo,
+      alto: caja.height || parseFloat(ventana.style.height) || TAMANO.altoMinimo,
+    };
+  }
+
+  // El que se eligió en otra vista de esta misma sesión.
+  try {
+    const guardado = JSON.parse(globalThis.sessionStorage?.getItem(CLAVE_TAMANO) ?? 'null');
+    if (guardado && Number.isFinite(guardado.ancho) && Number.isFinite(guardado.alto)) {
+      aplicarTamano(guardado, { recordar: false });
+    }
+  } catch {
+    // Un valor ilegible se ignora: tamaño normal.
+  }
+
+  // Con el teclado: flecha izquierda/arriba agranda (la esquina se aleja de
+  // la esquina fija), derecha/abajo encoge, Inicio vuelve al normal.
+  asa.addEventListener('keydown', (evento) => {
+    const actual = tamanoActual();
+    const paso = TAMANO.paso;
+    const cambios = {
+      ArrowLeft: { ancho: actual.ancho + paso, alto: actual.alto },
+      ArrowRight: { ancho: actual.ancho - paso, alto: actual.alto },
+      ArrowUp: { ancho: actual.ancho, alto: actual.alto + paso },
+      ArrowDown: { ancho: actual.ancho, alto: actual.alto - paso },
+    };
+    if (evento.key === 'Home') {
+      evento.preventDefault();
+      tamanoNormal();
+    } else if (cambios[evento.key]) {
+      evento.preventDefault();
+      aplicarTamano(cambios[evento.key]);
+    }
+  });
+
+  // Con el puntero: se arrastra la esquina superior izquierda.
+  asa.addEventListener('pointerdown', (evento) => {
+    if (evento.button !== 0) {
+      return;
+    }
+    evento.preventDefault();
+    const inicio = { x: evento.clientX, y: evento.clientY, ...tamanoActual() };
+    asa.setPointerCapture?.(evento.pointerId);
+    const mover = (movimiento) =>
+      aplicarTamano(
+        {
+          ancho: inicio.ancho + (inicio.x - movimiento.clientX),
+          alto: inicio.alto + (inicio.y - movimiento.clientY),
+        },
+        { recordar: false },
+      );
+    const soltar = () => {
+      asa.removeEventListener('pointermove', mover);
+      asa.removeEventListener('pointerup', soltar);
+      asa.removeEventListener('pointercancel', soltar);
+      aplicarTamano(tamanoActual());
+    };
+    asa.addEventListener('pointermove', mover);
+    asa.addEventListener('pointerup', soltar);
+    asa.addEventListener('pointercancel', soltar);
+  });
   ventana.addEventListener('keydown', (evento) => {
     if (evento.key === 'Escape') {
       evento.stopPropagation();
@@ -532,6 +711,7 @@ export function crearVentanaChatbot({
   function abrir(desde = null) {
     devolverFocoA = desde ?? document.activeElement;
     pintarEstado();
+    fijarMinimizada(false);
     ventana.hidden = false;
     if (!cargada) {
       cargarHistorial();
@@ -544,6 +724,10 @@ export function crearVentanaChatbot({
   // está, en la primera acción del aviso; y si no, en «Cerrar».
   function enfocarDentro() {
     if (ventana.hidden) {
+      return;
+    }
+    if (minimizada()) {
+      botonMinimizar.focus();
       return;
     }
     const destino = !entrada.disabled
@@ -570,6 +754,7 @@ export function crearVentanaChatbot({
     cerrar,
     alternar: (desde = null) => (ventana.hidden ? abrir(desde) : cerrar()),
     abierta: () => !ventana.hidden,
+    minimizada,
   };
 }
 

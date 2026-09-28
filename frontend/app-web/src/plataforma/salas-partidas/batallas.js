@@ -25,6 +25,8 @@ import {
   pintarSeccionDegradada,
   limpiarSeccionDegradada,
 } from '../../comun/degradacion/aviso-degradacion.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 
 /** Etiqueta de la insignia por estado. Son las del componente `Insignia`. */
 const ETIQUETA_DE_ESTADO = {
@@ -131,13 +133,6 @@ export function textoDePaginacion(pagina) {
  * @param {Document} doc
  * @returns {HTMLButtonElement}
  */
-/** Nombre legible de la modalidad (`Modalidad` del contrato, RF-JUE-004). */
-const NOMBRE_DE_MODALIDAD = {
-  UNO_CONTRA_UNO: '1 contra 1',
-  CONTRA_IA: 'Contra la IA',
-  HASTA_SEIS: 'Hasta seis',
-};
-
 function tarjetaDeSala(sala, doc) {
   const pulsable = sala.estado !== 'LLENA';
 
@@ -162,7 +157,7 @@ function tarjetaDeSala(sala, doc) {
 
   const titulo = doc.createElement('span');
   titulo.className = 'tarjeta__titulo';
-  titulo.textContent = NOMBRE_DE_MODALIDAD[sala.modalidad] ?? 'Sala de batalla';
+  titulo.textContent = nombreDeModalidad(sala.modalidad, 'Sala de batalla');
 
   const insignia = doc.createElement('span');
   insignia.className = `distintivo distintivo--${CLASE_DE_ESTADO[sala.estado] ?? 'abierta'}`;
@@ -455,7 +450,7 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No se pudo cargar el listado',
-        error.detalle ?? error.message,
+        textoDeError(error, 'Las batallas no responden ahora mismo. Vuelve a intentarlo.'),
         { texto: 'Reintentar', alPulsar: () => refrescar() },
       );
     }
@@ -636,7 +631,7 @@ export function montarBatallas(raiz, puertos = {}) {
       mostrarEstado(
         'estado-vista--error',
         error.titulo ?? 'No pudiste entrar',
-        error.detalle ?? error.message,
+        textoDeError(error, 'No pudimos meterte en la sala. Vuelve a intentarlo.'),
       );
     }
   }

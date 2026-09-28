@@ -2,24 +2,21 @@ package nexus.combate;
 
 import java.util.random.RandomGenerator;
 
+/**
+ * Indice de la tabla de efectos con la configuracion por omision.
+ *
+ * <p>Se conserva como fachada estatica para quien ya la usaba (la resolucion de
+ * {@code /combate/ataques} y sus pruebas). Desde B7 delega en
+ * {@link IndiceNormal}: el indice sigue una distribucion normal de verdad
+ * (§6.1.4). Antes pasaba la gaussiana por su funcion de distribucion y salia
+ * uniforme.
+ */
 public final class GeneradorIndiceTabla {
-
-    private static final int TOTAL_FILAS = 8000;
 
     private GeneradorIndiceTabla() {
     }
 
     public static int generarIndice(RandomGenerator generador) {
-        double z = generador.nextGaussian();
-        double u = FuncionNormalEstandar.cdf(z);
-
-        int indice = (int) Math.ceil(u * TOTAL_FILAS);
-        if (indice < 1) {
-            indice = 1;
-        }
-        if (indice > TOTAL_FILAS) {
-            indice = TOTAL_FILAS;
-        }
-        return indice;
+        return IndiceNormal.porOmision().generar(generador);
     }
 }

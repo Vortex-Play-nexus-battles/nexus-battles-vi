@@ -9,6 +9,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { confirmar, confirmarCritico } from '../comun/ui/dialogo.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
+import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const BASE_API = '/api/v1/admin/usuarios';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
@@ -426,7 +427,7 @@ async function cambiarRolUsuarioSeleccionado() {
   } catch (error) {
     console.error('Error cambiando rol:', error);
 
-    mostrarMensajeCambioRol(error.message || 'No fue posible cambiar el rol del usuario.');
+    mostrarMensajeCambioRol(textoDeError(error, 'No fue posible cambiar el rol del usuario.'));
   } finally {
     cambiarEstadoBoton(boton, false, 'Cambiar rol');
   }
@@ -521,7 +522,7 @@ async function guardarPerfil(evento) {
   } catch (error) {
     console.error('Error actualizando perfil:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible actualizar el perfil.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible actualizar el perfil.'));
   } finally {
     cambiarEstadoBoton(boton, false, 'Guardar cambios');
   }
@@ -546,9 +547,12 @@ async function suspenderUsuario() {
     return;
   }
 
+  const motivo = obtenerValor('motivo-sancion');
   const confirmado = await confirmar({
     titulo: `¿Suspender a ${nombreDelSeleccionado()}?`,
-    mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.`,
+    mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.${
+      motivo ? ` Motivo: «${motivo}».` : ''
+    }`,
     textoConfirmar: 'Suspender',
   });
 
@@ -558,9 +562,13 @@ async function suspenderUsuario() {
 
   // El servicio exige la fecha fin en el cuerpo (`SuspenderCuentaRequest`):
   // antes la petición salía vacía y el servidor la rechazaba siempre.
-  await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.', {
-    suspendidoHasta,
-  });
+  // UXC-9 — y la causal, si se escribió (§7.3.2; opcional en el contrato).
+  await ejecutarAccionEstado(
+    `/suspender`,
+    'SUSPENDIDO',
+    'Cuenta suspendida correctamente.',
+    motivo ? { suspendidoHasta, motivo } : { suspendidoHasta },
+  );
 }
 
 async function reactivarUsuario() {
@@ -601,10 +609,16 @@ async function banearUsuario() {
 
   // §7.3.9 — el baneo es una acción crítica: además de confirmar hay que
   // escribir el apodo (o el ID) de la cuenta.
+  const motivo = obtenerValor('motivo-sancion');
   const confirmado = await confirmarCritico({
     titulo: `Banear definitivamente a ${nombreDelSeleccionado()}`,
     mensaje: 'Esta acción es permanente.',
-    consecuencias: ['No podrá volver a entrar con esta cuenta.'],
+    consecuencias: [
+      'No podrá volver a entrar con esta cuenta.',
+      motivo
+        ? `Motivo que queda registrado: «${motivo}».`
+        : 'Sin motivo escrito: se registrará que el baneo vino de este panel.',
+    ],
     palabra: usuarioSeleccionado.apodo ?? String(usuarioSeleccionado.id),
     textoConfirmar: 'Banear',
   });
@@ -613,7 +627,13 @@ async function banearUsuario() {
     return;
   }
 
-  await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.');
+  // UXC-9 — el cuerpo es opcional en el contrato: solo viaja con causal.
+  await ejecutarAccionEstado(
+    `/banear`,
+    'BANEADO',
+    'Cuenta baneada definitivamente.',
+    motivo ? { motivo } : null,
+  );
 }
 
 async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
@@ -641,7 +661,7 @@ async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
   } catch (error) {
     console.error('Error modificando estado:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible modificar el estado de la cuenta.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible modificar el estado de la cuenta.'));
   }
 }
 
@@ -683,7 +703,7 @@ async function restablecerPassword() {
   } catch (error) {
     console.error('Error restableciendo contraseña:', error);
 
-    mostrarMensajePerfil(error.message || 'No fue posible restablecer la contraseña.');
+    mostrarMensajePerfil(textoDeError(error, 'No fue posible restablecer la contraseña.'));
   }
 }
 
@@ -830,24 +850,18 @@ function limpiarMensajeCambioRol() {
 async function obtenerMensajeError(respuesta) {
   try {
     const datos = await respuesta.clone().json();
-
-    if (typeof datos === 'string') {
-      return datos;
-    }
-
-    return datos.detail || datos.message || datos.title || `Error HTTP ${respuesta.status}`;
+    // UXC-9 — nunca «Error HTTP 502» ni la página de un proxy: el texto del
+    // servidor solo si se puede leer (comun/ui/texto-de-fallo.js).
+    return textoDelServidor(datos, respuesta.status, respaldoPorEstado(respuesta.status));
   } catch {
     try {
       const texto = await respuesta.clone().text();
-
-      if (texto) {
-        return texto;
-      }
+      return textoDelServidor(texto, respuesta.status, respaldoPorEstado(respuesta.status));
     } catch {
       // Se utiliza el mensaje genérico.
     }
 
-    return `Error HTTP ${respuesta.status}`;
+    return respaldoPorEstado(respuesta.status);
   }
 }
 

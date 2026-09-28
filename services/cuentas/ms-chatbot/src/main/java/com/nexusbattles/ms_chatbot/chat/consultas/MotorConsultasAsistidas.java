@@ -5,6 +5,9 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
@@ -13,6 +16,7 @@ import org.springframework.web.client.RestClientException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 // HU-CHA-008: consultas y acciones asistidas para usuarios autenticados.
 // Este motor es INDEPENDIENTE de MotorRespuestas (HU-CHA-004): mientras ese
@@ -56,7 +60,14 @@ public class MotorConsultasAsistidas {
     );
     private static final List<String> PALABRAS_TORNEOS = List.of(
         "mi torneo", "mis torneos", "estado de mi torneo", "en que torneo estoy",
-        "my tournament", "my tournaments"
+        "torneo en curso", "torneos en curso", "hay torneos", "hay algun torneo",
+        "my tournament", "my tournaments", "current tournament"
+    );
+    // B11 — 7.4.4 «historial de transacciones reciente».
+    private static final List<String> PALABRAS_MOVIMIENTOS = List.of(
+        "mis movimientos", "mis transacciones", "historial de transacciones", "historial de creditos",
+        "movimientos de creditos", "ultimos movimientos",
+        "my transactions", "my credit history", "my movements"
     );
 
     private static final List<String> PALABRAS_NAVEGACION_INVENTARIO = List.of(
@@ -102,9 +113,10 @@ public class MotorConsultasAsistidas {
     private static final String MENSAJE_MISIONES_EN_CONSTRUCCION =
         "La consulta de tu progreso en misiones todavia esta en construccion. "
             + "Pronto podras preguntarme por el estado de tus misiones directamente aqui.";
-    private static final String MENSAJE_TORNEOS_EN_CONSTRUCCION =
-        "La consulta del estado de tus torneos todavia esta en construccion. "
-            + "Pronto podras preguntarme por tu progreso en torneos directamente aqui.";
+    private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_TORNEOS =
+        "No pude consultar los torneos en este momento porque el servicio no esta disponible. Intenta de nuevo en unos minutos.";
+    private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_MOVIMIENTOS =
+        "No pude consultar tus movimientos de creditos en este momento porque el servicio no esta disponible. Intenta de nuevo en unos minutos.";
     private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_INVENTARIO =
         "No pude consultar tu inventario en este momento porque el servicio no esta disponible. Intenta de nuevo en unos minutos.";
     private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_SUBASTAS =
@@ -120,20 +132,31 @@ public class MotorConsultasAsistidas {
         "Puedes revisar tus notificaciones en la seccion de Notificaciones del menu principal.";
     private static final String MENSAJE_NAVEGACION_PERFIL =
         "Puedes revisar y editar tu perfil en la seccion de Mi Perfil del menu principal.";
-    private static final String MENSAJE_NAVEGACION_MISIONES_EN_CONSTRUCCION =
-        "La seccion de misiones todavia esta en construccion. Pronto podras navegar directamente a ella desde aqui.";
-    private static final String MENSAJE_NAVEGACION_TORNEOS_EN_CONSTRUCCION =
-        "La seccion de torneos todavia esta en construccion. Pronto podras navegar directamente a ella desde aqui.";
+    // B11: las dos secciones ya existen en el menu principal (shell.js:
+    // «Misiones» y «Torneo»); la navegacion asistida lleva a ellas.
+    private static final String MENSAJE_NAVEGACION_MISIONES =
+        "Puedes ver tus misiones en la seccion Misiones del menu principal.";
+    private static final String MENSAJE_NAVEGACION_TORNEOS =
+        "Puedes ver los torneos, inscribir a tu equipo y seguir el arbol en la seccion Torneo del menu principal.";
+
+    // Cuantos torneos recientes se revisan buscando el equipo del jugador.
+    private static final int TORNEOS_A_REVISAR = 3;
+    private static final int MOVIMIENTOS_A_MOSTRAR = 5;
 
     private final InventarioClient inventarioClient;
     private final SubastasClient subastasClient;
     private final NotificacionesClient notificacionesClient;
+    private final TorneosClient torneosClient;
+    private final FinanzasClient finanzasClient;
 
     public MotorConsultasAsistidas(InventarioClient inventarioClient, SubastasClient subastasClient,
-                                   NotificacionesClient notificacionesClient) {
+                                   NotificacionesClient notificacionesClient, TorneosClient torneosClient,
+                                   FinanzasClient finanzasClient) {
         this.inventarioClient = inventarioClient;
         this.subastasClient = subastasClient;
         this.notificacionesClient = notificacionesClient;
+        this.torneosClient = torneosClient;
+        this.finanzasClient = finanzasClient;
     }
 
     public Optional<ResultadoMotor> generarRespuesta(String mensajeUsuario, String tokenBearer, String uid) {
@@ -152,10 +175,10 @@ public class MotorConsultasAsistidas {
             return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_PERFIL, null, TipoRespuesta.DIRECTA));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_MISIONES)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_MISIONES_EN_CONSTRUCCION, null, TipoRespuesta.DIRECTA));
+            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_MISIONES, null, TipoRespuesta.DIRECTA));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_TORNEOS)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_TORNEOS_EN_CONSTRUCCION, null, TipoRespuesta.DIRECTA));
+            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_TORNEOS, null, TipoRespuesta.DIRECTA));
         }
 
         if (contieneAlguna(mensajeNormalizado, PALABRAS_INFORME_ACTIVIDAD)) {
@@ -171,14 +194,123 @@ public class MotorConsultasAsistidas {
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NOTIFICACIONES)) {
             return Optional.of(consultarNotificaciones(tokenBearer, uid));
         }
+        if (contieneAlguna(mensajeNormalizado, PALABRAS_MOVIMIENTOS)) {
+            return Optional.of(consultarMovimientos(tokenBearer, uid));
+        }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_MISIONES)) {
             return Optional.of(ResultadoMotor.deTema(MENSAJE_MISIONES_EN_CONSTRUCCION, null, TipoRespuesta.DIRECTA));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_TORNEOS)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_TORNEOS_EN_CONSTRUCCION, null, TipoRespuesta.DIRECTA));
+            return Optional.of(consultarTorneos(uid));
         }
 
         return Optional.empty();
+    }
+
+    // B11 — torneos en curso y el equipo del jugador. Solo datos publicos
+    // (GET /torneos, sin credencial): el uid del token sirve para encontrar su
+    // equipo en lo que cualquiera puede ver, no para pedir nada en su nombre.
+    private ResultadoMotor consultarTorneos(String uid) {
+        try {
+            return ResultadoMotor.deTema(construirTextoTorneos(uid), null, TipoRespuesta.CONTEXTUAL);
+        } catch (RestClientException excepcion) {
+            return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_TORNEOS, null, TipoRespuesta.DIRECTA);
+        }
+    }
+
+    private String construirTextoTorneos(String uid) {
+        List<TorneoResumenDto> activos = torneosClient.listar().stream()
+            .filter(t -> "INSCRIPCIONES_ABIERTAS".equals(t.estado()) || "EN_CURSO".equals(t.estado()))
+            .limit(TORNEOS_A_REVISAR)
+            .toList();
+        if (activos.isEmpty()) {
+            return "Ahora mismo no hay ningun torneo con inscripciones abiertas ni en curso.";
+        }
+        UUID jugador = uidComoUuid(uid);
+        for (TorneoResumenDto resumen : activos) {
+            TorneoDetalleDto torneo = torneosClient.obtener(resumen.id());
+            if (torneo == null || torneo.equipos() == null) {
+                continue;
+            }
+            Optional<TorneoDetalleDto.Equipo> suyo = torneo.equipos().stream()
+                .filter(e -> e.integrantes() != null && jugador != null && e.integrantes().contains(jugador))
+                .findFirst();
+            if (suyo.isPresent()) {
+                return textoDelEquipo(torneo, suyo.get());
+            }
+        }
+        TorneoResumenDto primero = activos.get(0);
+        return "No estas en ningun torneo activo. El torneo «" + primero.nombre() + "» "
+            + ("EN_CURSO".equals(primero.estado())
+                ? "ya esta en curso."
+                : "tiene inscripciones abiertas (" + primero.equiposInscritos() + " de " + primero.cupos()
+                    + " equipos, inscripcion de " + primero.costoInscripcion() + " creditos).")
+            + " " + MENSAJE_NAVEGACION_TORNEOS;
+    }
+
+    private static String textoDelEquipo(TorneoDetalleDto torneo, TorneoDetalleDto.Equipo equipo) {
+        StringBuilder texto = new StringBuilder("Estas en el torneo «").append(torneo.nombre())
+            .append("» con tu equipo «").append(equipo.nombre()).append("».");
+        if ("INSCRIPCIONES_ABIERTAS".equals(torneo.estado())) {
+            texto.append(equipo.inscrito()
+                ? " Tu equipo ya esta inscrito, en la posicion " + equipo.posicion() + "."
+                : " Tu equipo esta registrado pero todavia no se ha inscrito: la inscripcion se paga en la seccion Torneo.");
+            return texto.toString();
+        }
+        if (equipo.eliminado()) {
+            return texto.append(" Tu equipo ya quedo eliminado.").toString();
+        }
+        List<TorneoDetalleDto.Encuentro> encuentros = torneo.encuentros() == null ? List.of() : torneo.encuentros();
+        encuentros.stream()
+            .filter(e -> "LISTO".equals(e.estado()) && (equipo.id().equals(e.equipoA()) || equipo.id().equals(e.equipoB())))
+            .findFirst()
+            .ifPresentOrElse(
+                e -> texto.append(" Tu proximo encuentro es el ").append(e.numero()).append(" y ya esta listo para jugarse."),
+                () -> texto.append(" Tu equipo sigue en carrera; tu proximo encuentro espera a que se jueguen los anteriores."));
+        return texto.toString();
+    }
+
+    // B11 — ultimos movimientos de creditos, con el token del propio jugador.
+    private ResultadoMotor consultarMovimientos(String tokenBearer, String uid) {
+        try {
+            return ResultadoMotor.deTema(construirTextoMovimientos(tokenBearer, uid), null, TipoRespuesta.CONTEXTUAL);
+        } catch (RestClientException excepcion) {
+            return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_MOVIMIENTOS, null, TipoRespuesta.DIRECTA);
+        }
+    }
+
+    private String construirTextoMovimientos(String tokenBearer, String uid) {
+        PaginaMovimientosDto pagina = finanzasClient.movimientos(tokenBearer, uid, MOVIMIENTOS_A_MOSTRAR);
+        List<PaginaMovimientosDto.Movimiento> movimientos = pagina == null || pagina.content() == null
+            ? List.of() : pagina.content();
+        if (movimientos.isEmpty()) {
+            return "Todavia no tienes movimientos de creditos.";
+        }
+        String lista = movimientos.stream()
+            .limit(MOVIMIENTOS_A_MOSTRAR)
+            .map(MotorConsultasAsistidas::textoDelMovimiento)
+            .reduce((a, b) -> a + "; " + b)
+            .orElse("");
+        return "Tus ultimos movimientos de creditos: " + lista + ".";
+    }
+
+    private static String textoDelMovimiento(PaginaMovimientosDto.Movimiento movimiento) {
+        String monto = movimiento.monto() == null ? "?" : movimiento.monto().stripTrailingZeros().toPlainString();
+        String cifra = switch (movimiento.signo() == null ? "" : movimiento.signo()) {
+            case "SUMA" -> "+" + monto;
+            case "RESTA" -> "-" + monto;
+            case "APARTA" -> monto + " apartados";
+            default -> monto + " sin mover saldo";
+        };
+        return cifra + (movimiento.concepto() == null ? "" : " (" + movimiento.concepto() + ")");
+    }
+
+    private static UUID uidComoUuid(String uid) {
+        try {
+            return uid == null ? null : UUID.fromString(uid);
+        } catch (IllegalArgumentException noEsUuid) {
+            return null;
+        }
     }
 
     private ResultadoMotor consultarInventario(String tokenBearer) {
@@ -216,9 +348,18 @@ public class MotorConsultasAsistidas {
         String texto = "Este es un resumen de tu actividad reciente:" + System.lineSeparator() + System.lineSeparator()
             + "Inventario: " + obtenerTextoInventarioOFallo(tokenBearer) + System.lineSeparator() + System.lineSeparator()
             + "Subastas: " + obtenerTextoSubastasOFallo(tokenBearer) + System.lineSeparator() + System.lineSeparator()
-            + "Notificaciones: " + obtenerTextoNotificacionesOFallo(tokenBearer, uid);
+            + "Notificaciones: " + obtenerTextoNotificacionesOFallo(tokenBearer, uid) + System.lineSeparator() + System.lineSeparator()
+            + "Creditos: " + obtenerTextoMovimientosOFallo(tokenBearer, uid);
 
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL);
+    }
+
+    private String obtenerTextoMovimientosOFallo(String tokenBearer, String uid) {
+        try {
+            return construirTextoMovimientos(tokenBearer, uid);
+        } catch (RestClientException excepcion) {
+            return MENSAJE_SERVICIO_NO_DISPONIBLE_MOVIMIENTOS;
+        }
     }
 
     private String obtenerTextoInventarioOFallo(String tokenBearer) {

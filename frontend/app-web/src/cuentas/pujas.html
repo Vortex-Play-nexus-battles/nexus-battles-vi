@@ -19,6 +19,11 @@
       <!-- Inyectado por pujas.js -->
     </main>
 
+    <!-- UXC-8 — las opiniones del objeto de la subasta abierta. Fuera del
+         contenedor que se repinta: un comentario a medio escribir no puede
+         rehacerse con cada lectura del mercado. -->
+    <div id="opiniones-subasta" class="opiniones-subasta" hidden></div>
+
     <script type="module">
       import { montarCabecera } from '../comun/cabecera-app.js';
       import { montarSubastas } from './pujas.js';
@@ -39,6 +44,9 @@
       // existe. Cambiar ese destino por ./pujas.html?id={id} conecta las dos
       // pantallas, pero es una linea en el archivo de Cristian y la decide el.
       const subastaId = parametros.get('id');
+      // UXC-8 — ?accion=comprar llega del botón «Comprar ahora» de la vitrina:
+      // abre la confirmación de la compra inmediata (que sigue haciendo falta).
+      const accion = parametros.get('accion');
 
       // Siempre contra el servicio real. No hay modo de demostracion: una
       // pantalla que se pinta con datos inventados cuando el backend no
@@ -50,7 +58,9 @@
       const subastas = montarSubastas(contenedor, {
         api: crearApiSubastas(),
         urlCanal: urlDelCanal(),
+        zonaOpiniones: document.getElementById('opiniones-subasta'),
         ...(subastaId ? { subastaInicialId: subastaId } : {}),
+        ...(subastaId && accion === 'comprar' ? { accionInicial: 'comprar' } : {}),
       });
 
       // FI-R11 — al irse de la pagina se suelta el ciclo de reconexion. Sin

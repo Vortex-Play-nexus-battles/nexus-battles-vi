@@ -25,7 +25,7 @@ class PaginaDeSubastasResponseTest {
             UUID.randomUUID(), "Espada del Alba Eterna", "ARMA", "Legendaria",
             "https://cdn.nexusbattles.test/armas/espada.png",
             new BigDecimal("100.00"), new BigDecimal("150.00"), new BigDecimal("300.00"),
-            12, Instant.now().plusSeconds(3600), true, UUID.randomUUID().toString()
+            12, Instant.now().plusSeconds(3600), true, UUID.randomUUID().toString(), "ACTIVA"
         );
     }
 

@@ -128,6 +128,15 @@ salas:
     # es lo que se aplica si el catalogo no esta configurado o no responde.
     si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
 
+  # B7 · D-B7-14: tiempo por turno. El documento no fija uno, asi que el valor
+  # vigente es el parametro `salas.partidas.segundos-por-turno` de
+  # admin-parametros, que NACE SIN VALOR: sin valor no hay limite. Esto es el
+  # RESPALDO si el catalogo no esta configurado o no responde (0 = sin limite).
+  partidas:
+    segundos-por-turno: ${SALAS_PARTIDAS_SEGUNDOS_POR_TURNO:0}
+    # Cada cuanto se buscan turnos agotados (solo hay alguno si hay limite).
+    vencimiento-ms: ${SALAS_PARTIDAS_VENCIMIENTO_MS:5000}
+
 # HU-DIS-003: degradacion controlada. Cada dependencia externa (inventario,
 # motor de combate, libro de creditos) va detras de su propio corta circuitos
 # (shared/libs/plataforma-resiliencia). Cuando una no responde, la seccion que
