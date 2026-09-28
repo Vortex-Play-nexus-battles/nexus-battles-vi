@@ -1,0 +1,16 @@
+{
+  "_comentario": "Reglas de entrada del grupo de seguridad de nexus-contenido-dev (cuenta 551262695144, del Grupo 2). Las aplica scripts/infra/reglas-sg-contenido.sh desde infra-dev.yml (accion reglas-sg) cuando existe vars.AWS_ROLE_ARN_CONTENIDO. Solo se toca lo que esta aqui: cada puerto se abre al origen declarado y, si ese mismo puerto estaba abierto a 0.0.0.0/0, esa regla se revoca. El 22 (despliegue por SSH desde runners de GitHub, sin IP fija) no se declara a proposito: no se toca. Unico cliente de estos puertos: el host de plataforma (borde y salas-partidas), por su IP elastica.",
+  "grupo": "sg-01bfe668448b037c4",
+  "region": "us-east-1",
+  "origen": "35.168.124.119/32",
+  "puertos": [
+    { "puerto": 8101, "descripcion": "heroes <- plataforma" },
+    { "puerto": 8102, "descripcion": "inventario <- plataforma" },
+    { "puerto": 8103, "descripcion": "productos <- plataforma" },
+    { "puerto": 8104, "descripcion": "motor-combate <- plataforma" },
+    { "puerto": 8105, "descripcion": "misiones <- plataforma" },
+    { "puerto": 8092, "descripcion": "ms-subastas (HTTP y WebSocket) <- borde" },
+    { "puerto": 8090, "descripcion": "ms-ecommerce <- borde" },
+    { "puerto": 8094, "descripcion": "ms-chatbot <- borde" }
+  ]
+}
