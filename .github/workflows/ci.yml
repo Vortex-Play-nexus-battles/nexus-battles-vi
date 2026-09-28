@@ -422,6 +422,13 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/bajar-imagenes.sh
 
+      # 28-sep: las reglas del SG de contenido (cuenta del Grupo 2) las aplica
+      # infra-dev.yml con reglas-sg-contenido.sh. Equivocarse abre un puerto
+      # interno al mundo o cierra el 22 del CD. Con aws falso; segundos.
+      - name: Comprobar las reglas del SG de contenido (solo puertos declarados)
+        shell: bash
+        run: bash scripts/cd/pruebas/reglas-sg-contenido.sh
+
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.
       # Asi murio la corrida 35931028022 -- la del commit que traia
