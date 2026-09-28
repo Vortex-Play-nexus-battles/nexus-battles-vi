@@ -13,6 +13,7 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 | `ms-subastas-ms-inventario.json` | ms-subastas (HU-SUB-001/004) | ms-inventario | `InventarioPactoTest` |
 | `ms-ecommerce-productos.json` | ms-ecommerce (compra, B5) | productos | `contratos/ProductosPactoTest` |
 | `ms-ecommerce-inventario.json` | ms-ecommerce (compra, B5) | inventario | `contratos/InventarioPactoTest` |
+| `ms-subastas-notificaciones.json` | ms-subastas (B8, avisos de 7.7.8) | notificaciones | `NotificacionesPactoTest` |
 | `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
 | `comentarios-productos.json` | comentarios (B3: comentar y calificar solo productos que existen) | productos | `CatalogoPactoTest` |
 
@@ -69,6 +70,13 @@ Los estados que hay que poder montar hoy:
 - un producto de la entrega esta suspendido
 - un producto de la entrega no existe en el catalogo
 
+**notificaciones** (B8)
+- el destinatario todavia no tiene ese aviso
+- el destinatario ya tiene un aviso con ese identificador
+
+(La tercera interacción, sin credencial de servicio, no tiene estado: fija que
+`/internal/notifications` responde 401 sin `Authorization`.)
+
 **ms-inventario, para misiones** (B9, inventario.yaml 1.6.0)
 - el héroe es del jugador y está libre
 - el héroe no existe
@@ -90,6 +98,7 @@ Los pactos se verifican:
 | ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes, y la colección `entregas` y el catálogo en memoria para `POST /entregas` |
 | productos (ms-ecommerce) | `productos/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `AdquirirProductoServicio` y `CatalogoProductos` **reales** sobre el tiraje y el registro de claves en memoria, sin Mongo |
 | inventario (ms-ecommerce) | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
+| notificaciones | `notificaciones/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado con su cadena de seguridad real, `ServicioDeNotificaciones` simulado, PostgreSQL de Testcontainers. La credencial de ejemplo del pacto se sustituye por un token de servicio real del emisor de prueba |
 | productos (comentarios) | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
 
 Un proveedor con varios consumidores tiene una clase de verificación por
@@ -104,6 +113,11 @@ B9 no la tenía, `VerificacionDelPactoDeMisionesTest` la dejaba fuera con un
 nueve interacciones, la entrega con el caso de uso real (`EntregarProductos`) y
 un catálogo en memoria que solo conoce la épica que misiones entrega («Segundo
 impulso», del catálogo oficial).
+
+El de notificaciones fija lo que falló en producción hasta B8: el adaptador de
+ms-subastas salía **sin** credencial de servicio y cada aviso recibía 401, que el
+outbox reintentaba para siempre. Ahora la cabecera está en el pacto y la
+interacción sin ella deja escrito el 401.
 
 Lo que fija `comentarios-productos.json`, y por qué es tan poco: comentarios
 pregunta al catálogo si un producto existe antes de dejar comentarlo o

@@ -102,9 +102,15 @@ public class NotificacionesClientHttp implements NotificacionesClient {
 
         // 400 es culpa de este servicio (payload mal armado) y reintentarlo no
         // lo va a arreglar, pero tampoco se descarta en silencio un aviso que
-        // la historia exige: se deja sin marcar y visible en el log.
+        // la historia exige: queda visible en el log. Desde B8 se marca como
+        // definitivo, para que el drenador lo aparte y no bloquee la cola: antes
+        // cortaba el lote en el y los avisos de detras no salian nunca. 401 y
+        // 403 no son definitivos: son la credencial, que se arregla sin tocar
+        // el aviso; y 5xx es una averia que pasa.
+        int estado = respuesta.statusCode();
+        boolean definitivo = estado >= 400 && estado < 500 && estado != 401 && estado != 403 && estado != 429;
         throw new NotificacionesClientException(
-                "Respuesta inesperada del modulo de notificaciones: " + respuesta.statusCode());
+                "Respuesta inesperada del modulo de notificaciones: " + estado, definitivo);
     }
 
     private String cuerpoDe(Aviso aviso) {

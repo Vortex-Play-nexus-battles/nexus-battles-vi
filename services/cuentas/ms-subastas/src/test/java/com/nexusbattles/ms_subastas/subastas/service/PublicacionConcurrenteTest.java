@@ -1,6 +1,10 @@
 package com.nexusbattles.ms_subastas.subastas.service;
 
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.pujas.service.ParametrosPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.subastas.dto.*;
+import org.springframework.context.ApplicationEventPublisher;
 import com.nexusbattles.ms_subastas.subastas.model.DuracionSubasta;
 import com.nexusbattles.ms_subastas.subastas.port.*;
 import com.nexusbattles.ms_subastas.subastas.repository.SubastaRepository;
@@ -39,7 +43,9 @@ class PublicacionConcurrenteTest {
     void preparar() {
         servicio = new PublicarSubastaApplicationService(repo, inventario, catalogo, finanzas,
                 () -> new IdentidadClient.Identidad(usuario.get(), false), sanciones, claves,
-                new CalculadorComisionPublicacion(), Clock.systemUTC(), "1");
+                new CalculadorComisionPublicacion(), Clock.systemUTC(),
+                FuenteDeReglas.fijas(new ParametrosPuja(), BigDecimal.ONE), mock(AvisosDeSubasta.class),
+                mock(ApplicationEventPublisher.class));
         when(inventario.buscar(any())).thenAnswer(i -> Optional.of(new InventarioClient.ElementoInventario(
                 i.getArgument(0), producto, "b".equals(i.getArgument(0)) ? b : a, false)));
         when(catalogo.buscar(producto)).thenReturn(Optional.of(new CatalogoProductosClient.Producto(

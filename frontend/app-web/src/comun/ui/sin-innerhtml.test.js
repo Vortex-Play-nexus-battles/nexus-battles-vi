@@ -91,10 +91,23 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * carrito vacío la misma cadena literal y la fila del carrito la misma
  * plantilla fija. El aviso nuevo no usa `innerHTML`: lo construye `aviso()`
  * del kit con `textContent`.
+ *
+ * B8 — las cuatro de `pujas.js` bajaron 248 posiciones (reglas del servidor,
+ * ficha, seguimiento, cancelacion y pendientes de recoger, todo ARRIBA de
+ * `render()`) y la de `publicar-subasta.js` 26 (la consulta de
+ * `GET /subastas/reglas`). Revisadas una por una: carga, error y
+ * `contenidoHtml` siguen igual; la plantilla de `publicar-subasta.js` sigue sin
+ * una sola interpolacion (el aviso de DECISIÓN PO y las comisiones entran
+ * despues por `textContent`). La del estado vacio SI cambio y se dice: ya no
+ * es fija, lleva `generarHtmlAlerta()` —cuyo mensaje pasa ahora por `esc()`— y
+ * `generarHtmlPendientes()`, que escapa el nombre, el id y la fecha con `esc()`
+ * y pasa las cifras por `formatearCreditos()` (un `Number`). Sin esto, un
+ * producto ganado quedaba sin boton para recogerlo mientras no hubiera otra
+ * subasta en curso.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:68', 'plantilla fija del formulario, sin interpolación'],
+  ['cuentas/publicar-subasta.js:94', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -104,11 +117,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1533', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1551', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
-  ['cuentas/pujas.js:1567', 'plantilla fija del estado vacío'],
+  ['cuentas/pujas.js:1785', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:1803', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:1607',
+    'cuentas/pujas.js:1822',
+    'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
+      'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
+  ],
+  [
+    'cuentas/pujas.js:1865',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

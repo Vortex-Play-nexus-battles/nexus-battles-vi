@@ -11,6 +11,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class SubastaRealtimePublisherTest {
@@ -42,6 +44,28 @@ class SubastaRealtimePublisherTest {
         assertEquals(3, resumen.cantidadPujas());
         assertEquals(subasta.getFechaFin(), resumen.fechaFin());
         assertNull(resumen.vendedorId());
+        // B8: el mismo mensaje llega al canal de ESA subasta, para la ficha.
+        verify(mensajeria).convertAndSend("/topic/subastas/" + subasta.getId(), resumen);
+        verifyNoMoreInteractions(mensajeria);
+    }
+
+    @Test
+    void elCanalDeUnaSubastaEsSuIdDetrasDelPrefijo() {
+        UUID id = UUID.randomUUID();
+        assertEquals("/topic/subastas/" + id, SubastaRealtimePublisher.canalDe(id));
+        assertTrue(SubastaRealtimePublisher.canalDe(id).startsWith(SubastaRealtimePublisher.PREFIJO_CANAL_SUBASTA));
+    }
+
+    @Test
+    void sinIdSoloSeAvisaAlListado() {
+        SimpMessagingTemplate mensajeria = mock(SimpMessagingTemplate.class);
+        Subasta sinId = new Subasta();
+        sinId.setOfertaVigente(BigDecimal.TEN);
+        sinId.setFechaFin(Instant.parse("2026-09-15T12:00:00Z"));
+
+        new SubastaRealtimePublisher(mensajeria).alActualizarSubasta(new SubastaActualizadaEvent(this, sinId));
+
+        verify(mensajeria).convertAndSend(eq(SubastaRealtimePublisher.CANAL_LISTADO), any(SubastaResumenResponse.class));
         verifyNoMoreInteractions(mensajeria);
     }
 }

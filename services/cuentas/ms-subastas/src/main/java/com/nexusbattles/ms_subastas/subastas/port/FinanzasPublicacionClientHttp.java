@@ -71,6 +71,9 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
 
     private static final Logger log = LoggerFactory.getLogger(FinanzasPublicacionClientHttp.class);
 
+    /** Codigo del rechazo por saldo insuficiente (motivo estable para la interfaz). */
+    public static final String SALDO_INSUFICIENTE = "SALDO_INSUFICIENTE";
+
     private static PortadorDeServicio credencialDesde(ObjectProvider<TokenDeServicio> proveedor) {
         TokenDeServicio token = proveedor.getIfAvailable();
         if (token == null) {
@@ -87,30 +90,60 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
 
     @Override
     public void debitarComision(UUID jugadorUid, BigDecimal monto, UUID subastaId, String concepto) {
-        if (jugadorUid == null) throw new FinanzasPublicacionClientException("El uid del jugador es obligatorio");
-        if (monto == null || monto.signum() <= 0) throw new FinanzasPublicacionClientException("El monto debe ser positivo");
         validarTexto(concepto, "concepto");
-        String refId = refId(subastaId);
-        post("debitar", new Debito(jugadorUid, monto, refId, concepto), refId);
+        debitar(jugadorUid, monto, refId(PREFIJO_PUBLICACION, subastaId), concepto,
+                "Creditos insuficientes para publicar la subasta");
     }
 
     @Override
     public void compensarDebito(UUID subastaId, String motivo) {
         validarTexto(motivo, "motivo");
-        String refId = refId(subastaId);
-        post("reversar", new Reversa(refId, motivo), refId);
+        String refId = refId(PREFIJO_PUBLICACION, subastaId);
+        post("reversar", new Reversa(refId, motivo), refId, null);
     }
 
-    private static String refId(UUID subastaId) {
+    /**
+     * B8 (7.7.10): la penalizacion de cancelar, con su propio {@code refId}.
+     * Por el refId es idempotente: repetir la cancelacion no cobra dos veces.
+     */
+    @Override
+    public void debitarPenalizacionCancelacion(UUID jugadorUid, BigDecimal monto, UUID subastaId) {
+        debitar(jugadorUid, monto, refId(PREFIJO_CANCELACION, subastaId), CONCEPTO_CANCELACION,
+                "Creditos insuficientes para pagar la penalizacion de cancelar");
+    }
+
+    @Override
+    public void compensarPenalizacionCancelacion(UUID subastaId, String motivo) {
+        validarTexto(motivo, "motivo");
+        String refId = refId(PREFIJO_CANCELACION, subastaId);
+        post("reversar", new Reversa(refId, motivo), refId, null);
+    }
+
+    static final String PREFIJO_PUBLICACION = "sub-publicacion-";
+    static final String PREFIJO_CANCELACION = "sub-cancelacion-";
+    static final String CONCEPTO_CANCELACION = "penalizacion-cancelacion-subasta";
+
+    private void debitar(UUID jugadorUid, BigDecimal monto, String refId, String concepto, String sinSaldo) {
+        if (jugadorUid == null) throw new FinanzasPublicacionClientException("El uid del jugador es obligatorio");
+        if (monto == null || monto.signum() <= 0) throw new FinanzasPublicacionClientException("El monto debe ser positivo");
+        post("debitar", new Debito(jugadorUid, monto, refId, concepto), refId, sinSaldo);
+    }
+
+    private static String refId(String prefijo, UUID subastaId) {
         if (subastaId == null) throw new FinanzasPublicacionClientException("El id de subasta es obligatorio");
-        return "sub-publicacion-" + subastaId;
+        return prefijo + subastaId;
     }
 
     private static void validarTexto(String valor, String campo) {
         if (valor == null || valor.isBlank()) throw new FinanzasPublicacionClientException("El " + campo + " es obligatorio");
     }
 
-    private void post(String operacion, Object payload, String refId) {
+    /**
+     * @param sinSaldo el mensaje del rechazo por saldo insuficiente, que es
+     *                 distinto al publicar y al cancelar; nulo en las
+     *                 operaciones que no cobran (reversar)
+     */
+    private void post(String operacion, Object payload, String refId, String sinSaldo) {
         final String body;
         try {
             body = objectMapper.writeValueAsString(payload);
@@ -134,10 +167,10 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
             throw new FinanzasPublicacionClientException("Resultado financiero incierto: " + refId, e, true);
         }
         if (response.statusCode() != 200) {
-            if (operacion.equals("debitar") && response.statusCode() == 422
+            if (sinSaldo != null && operacion.equals("debitar") && response.statusCode() == 422
                     && tipoDelProblema(response).equals("https://nexusbattles.upb.edu.co/errors/saldo-insuficiente")) {
-                throw new PublicacionSubastaException(
-                        "Creditos insuficientes para publicar la subasta");
+                throw new PublicacionSubastaException(PublicacionSubastaException.Motivo.REGLA_NEGOCIO,
+                        SALDO_INSUFICIENTE, sinSaldo);
             }
             throw new FinanzasPublicacionClientException("Respuesta inesperada de finanzas: " + response.statusCode(),
                     null, response.statusCode() >= 500);

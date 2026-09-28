@@ -44,15 +44,29 @@ public class SubastaRealtimePublisher {
      */
     public static final String CANAL_LISTADO = "/topic/subastas/listado";
 
+    /**
+     * B8: el canal de UNA subasta ({@code contracts/websocket/subastas.yaml}
+     * 1.1.0). Mismo mensaje que el listado; exige sesion en el CONNECT
+     * ({@code PoliticaDelCanalDeSubastas}).
+     */
+    public static final String PREFIJO_CANAL_SUBASTA = "/topic/subastas/";
+
     private final SimpMessagingTemplate mensajeria;
 
     public SubastaRealtimePublisher(SimpMessagingTemplate mensajeria) {
         this.mensajeria = mensajeria;
     }
 
+    public static String canalDe(java.util.UUID subastaId) {
+        return PREFIJO_CANAL_SUBASTA + subastaId;
+    }
+
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void alActualizarSubasta(SubastaActualizadaEvent evento) {
         SubastaResumenResponse actualizado = SubastaResumenResponse.desde(evento.getSubasta());
         mensajeria.convertAndSend(CANAL_LISTADO, actualizado);
+        if (evento.getSubasta().getId() != null) {
+            mensajeria.convertAndSend(canalDe(evento.getSubasta().getId()), actualizado);
+        }
     }
 }

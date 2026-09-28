@@ -154,6 +154,29 @@ public class Subasta implements Persistable<UUID> {
     @Column(nullable = false)
     private int vistas = 0;
 
+    // --- B8 (7.7 del documento del curso) ---
+
+    /**
+     * Comision de publicacion que se cobro (Tabla 25). La penalizacion de
+     * cancelar es el 50 % de esta cifra (7.7.10), asi que tiene que quedar
+     * guardada: la duracion por si sola no dice si el vendedor era el Maestro
+     * de Juego, que no paga.
+     */
+    private BigDecimal comisionCobrada;
+
+    /** Lo que se debito al cancelar (7.7.10); nulo si no se cancelo. */
+    private BigDecimal penalizacionCobrada;
+
+    /** Cuando dejo de estar ACTIVA: adjudicada, sin adjudicacion o cancelada. */
+    private Instant cerradaEn;
+
+    /** El aviso de 1 hora antes del cierre (7.7.8) sale una sola vez. */
+    private Instant recordatorioEnviadoEn;
+
+    /** Apodo del vendedor al publicar (claim {@code sub}); una foto, no la cuenta viva. */
+    @Column(length = 60)
+    private String apodoVendedor;
+
     /**
      * Constructor historico (10 parametros), identico al que generaba
      * @AllArgsConstructor antes de HU-SUB-011. Se mantiene a mano
@@ -181,5 +204,52 @@ public class Subasta implements Persistable<UUID> {
 
     public boolean esVendedor(UUID jugadorId) {
         return vendedorId.equals(jugadorId);
+    }
+
+    /**
+     * Si alguien ya pujo: hay un mejor postor. Mientras nadie puja, la oferta
+     * vigente es el precio minimo que fijo el vendedor.
+     */
+    public boolean tieneOfertas() {
+        return mejorPostorId != null;
+    }
+
+    /**
+     * Lo minimo que se puede ofrecer ahora (7.7.2 y 7.7.6).
+     *
+     * <p>La primera puja tiene que llegar al precio minimo que fijo el vendedor
+     * («establecer precio minimo de puja»); desde la segunda, superar la
+     * oferta vigente en al menos el incremento minimo («las pujas deben ser
+     * superiores a la oferta actual», «incremento minimo configurable entre
+     * pujas»). Hasta B8 la primera exigia precio minimo MAS incremento, que no
+     * es lo que dice el documento: el incremento es entre pujas.
+     */
+    public BigDecimal pujaMinimaSiguiente() {
+        return tieneOfertas() ? ofertaVigente.add(incrementoMinimo) : ofertaVigente;
+    }
+
+    /**
+     * Si la compra inmediata se puede ejecutar ahora.
+     *
+     * <p>Deja de estarlo cuando una puja alcanza o supera su precio: comprar
+     * por debajo de lo que otro jugador ya ofrecio le quitaria el producto al
+     * mejor postor, que ademas llego primero. El documento solo dice «opcion
+     * de Comprar ahora si esta disponible» (7.7.9); cuando deja de estarlo es
+     * esta decision tecnica, anotada en el README del servicio.
+     */
+    public boolean compraInmediataDisponible() {
+        if (!estaActiva() || precioCompraInmediata == null) {
+            return false;
+        }
+        return !(tieneOfertas() && ofertaVigente.compareTo(precioCompraInmediata) >= 0);
+    }
+
+    /** Deja constancia de que termino, sea como sea. */
+    public void cerrar(EstadoSubasta estadoFinal, Instant cuando) {
+        if (estadoFinal == EstadoSubasta.ACTIVA) {
+            throw new IllegalArgumentException("cerrar una subasta es dejarla en un estado final");
+        }
+        this.estado = estadoFinal;
+        this.cerradaEn = cuando;
     }
 }

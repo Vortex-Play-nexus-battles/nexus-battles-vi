@@ -1,19 +1,30 @@
 openapi: 3.1.0
 info:
-  title: ms-subastas — Listado de subastas activas
+  title: ms-subastas — Listado, detalle y reglas vigentes de las subastas
   description: >
-    Contrato de HU-SUB-011. Endpoints públicos (jugador o visitante, sin
-    autenticación requerida) para explorar el mercado de subastas activas,
-    con filtros, ordenamiento, búsqueda y autocompletado.
-  version: "1.0.0-draft"
-  x-historia: HU-SUB-011
-  x-responsable: Cristian
-  x-estado: >
-    BORRADOR. Los campos de Subasta que este contrato expone (nombreProducto,
-    tipoProducto, rareza, miniaturaUrl, cantidadPujas, esMaestroDeJuego,
-    vistas) están pendientes de confirmar en el diseño conjunto con Edwin
-    (HU-SUB-001). El tipo de vendedorId está pendiente de la decisión de
-    identificador estable en JWT (ver discusión con Andrés/Santiago).
+    Lecturas públicas del mercado de subastas (7.7.9 del documento del curso):
+    el listado de subastas activas con filtros, ordenamiento, búsqueda y
+    autocompletado (HU-SUB-011), la ficha de una subasta y las reglas vigentes
+    con las que se publica y se puja. Ninguna exige sesión (jugador o
+    visitante).
+
+
+    Changelog:
+
+    - 1.0.0-draft: borrador de HU-SUB-011 (listado y sugerencias).
+
+    - 1.1.0 (B8): se publica como versión real. Nuevas operaciones
+      `GET /subastas/{subastaId}` (ficha de la subasta en cualquier estado,
+      también las cerradas y canceladas, con la reputación del vendedor) y
+      `GET /subastas/reglas` (las reglas vigentes de 7.7: duraciones y
+      comisiones, incremento mínimo desde admin-parametros, límites,
+      cancelación, recordatorio y plazo para recoger). `SubastaResumen` gana
+      `estado`, el mismo campo que ya prometía el mensaje del canal en vivo
+      (`contracts/websocket/subastas.yaml`). El vendedor sigue siendo el `uid`
+      estable del token (ADR-002): la decisión de identificador que el
+      borrador dejaba abierta ya está tomada.
+  version: "1.1.0"
+  x-historia: HU-SUB-011, HU-SUB-001, HU-SUB-004 (7.7.9)
 
 paths:
   /api/v1/subastas:
@@ -122,11 +133,83 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
 
+  /api/v1/subastas/reglas:
+    get:
+      summary: Reglas vigentes de publicación y participación (7.7.2, 7.7.10)
+      description: >
+        Lo que la interfaz necesita para validar y explicar antes de enviar,
+        dicho por el servidor en vez de escrito a mano en el navegador: las
+        duraciones con su comisión, el incremento mínimo vigente, los límites de
+        participación, las reglas de cancelación, el recordatorio y el plazo
+        para recoger lo ganado. El servidor sigue siendo la autoridad: estas
+        reglas se vuelven a aplicar en cada operación.
+
+
+        `incrementoMinimo` sale del parámetro `subastas.incremento-minimo` de
+        admin-parametros (RF-SUB-002). **Nulo significa que el Product Owner
+        todavía no lo fijó** (o que el catálogo no respondió): mientras tanto
+        publicar responde 503 `parametro-no-configurado` y la interfaz lo dice
+        con esas palabras. Las subastas ya publicadas conservan el incremento
+        con el que nacieron.
+      operationId: reglasVigentesDeSubastas
+      tags: [Subastas]
+      responses:
+        '200':
+          description: Reglas vigentes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReglasVigentes'
+
+  /api/v1/subastas/{subastaId}:
+    get:
+      summary: Ficha de una subasta, en cualquier estado
+      description: >
+        La vista de detalle de 7.7.9: el producto, la subasta (precio mínimo,
+        compra inmediata, puja más alta, número de pujas, fecha de fin, método
+        de pago) y el vendedor con su reputación basada en transacciones
+        previas. Devuelve también las subastas cerradas, adjudicadas y
+        canceladas: el historial necesita poder abrirlas.
+
+
+        Pública. Si quien mira tiene sesión y no es el vendedor, cuenta como
+        una visualización única (7.7.9 «Estadísticas de visualizaciones»; el
+        orden por popularidad del listado usa ese número). Las visitas sin
+        sesión no se cuentan: no hay forma honesta de no contarlas dos veces.
+      operationId: detalleDeSubasta
+      tags: [Subastas]
+      parameters:
+        - name: subastaId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: La subasta.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubastaDetalle'
+        '404':
+          description: No existe la subasta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+
 components:
   schemas:
     TipoProducto:
       type: string
       enum: [HEROE, HABILIDAD, ARMA, ARMADURA, ITEM, EPICA]
+
+    EstadoSubasta:
+      type: string
+      description: >
+        ACTIVA mientras corre el plazo; ADJUDICADA cuando cerró con ganador (por
+        vencimiento o por compra inmediata); SIN_ADJUDICACION cuando venció sin
+        ofertas; CANCELADA cuando el vendedor la canceló (7.7.10).
+      enum: [ACTIVA, ADJUDICADA, SIN_ADJUDICACION, CANCELADA]
 
     SubastaResumen:
       type: object
@@ -141,6 +224,7 @@ components:
         - esMaestroDeJuego
       properties:
         id: { type: string, format: uuid }
+        estado: { $ref: '#/components/schemas/EstadoSubasta' }
         nombreProducto: { type: string }
         tipoProducto: { $ref: '#/components/schemas/TipoProducto' }
         rareza: { type: string }
@@ -151,8 +235,9 @@ components:
         cantidadPujas: { type: integer }
         fechaFin: { type: string, format: date-time }
         esMaestroDeJuego: { type: boolean }
-        # PENDIENTE: tipo real a confirmar (Long / String / UUID publicId)
-        vendedorId: { type: string }
+        vendedorId:
+          type: string
+          description: El `uid` estable del vendedor (claim `uid` del token, ADR-002).
 
     PaginaDeSubastas:
       type: object
@@ -173,6 +258,153 @@ components:
         sugerencias:
           type: array
           items: { type: string }
+
+    ReputacionVendedor:
+      type: object
+      description: >
+        «Calificación del vendedor basada en transacciones previas» (7.7.9),
+        calculada con lo que este servicio sabe de sus subastas ya terminadas.
+        `tasaDeExito` es la de 7.7.12 (con ventas contra sin ventas y
+        canceladas): ventas completadas entre subastas terminadas, de 0 a 1;
+        nula si todavía no terminó ninguna. Cómo se traduce a estrellas, si se
+        traduce, es una decisión del Product Owner que no se toma aquí.
+      required: [ventasCompletadas, subastasTerminadas, cancelaciones]
+      properties:
+        ventasCompletadas: { type: integer, minimum: 0 }
+        subastasTerminadas:
+          type: integer
+          minimum: 0
+          description: Adjudicadas + sin adjudicación + canceladas.
+        cancelaciones: { type: integer, minimum: 0 }
+        tasaDeExito:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+
+    SubastaDetalle:
+      type: object
+      required:
+        - id
+        - estado
+        - nombreProducto
+        - ofertaVigente
+        - incrementoMinimo
+        - cantidadPujas
+        - fechaFin
+        - esMaestroDeJuego
+        - metodoPago
+        - compraInmediataDisponible
+        - vendedorId
+        - reputacionVendedor
+        - vistas
+      properties:
+        id: { type: string, format: uuid }
+        estado: { $ref: '#/components/schemas/EstadoSubasta' }
+        productoId: { type: string, format: uuid }
+        nombreProducto: { type: string }
+        tipoProducto: { $ref: '#/components/schemas/TipoProducto' }
+        rareza: { type: [string, 'null'] }
+        miniaturaUrl: { type: [string, 'null'] }
+        descripcionCorta: { type: [string, 'null'] }
+        habilidades: { type: [string, 'null'] }
+        precioInicial:
+          type: [string, 'null']
+          format: decimal
+          description: Precio mínimo establecido por el vendedor.
+        ofertaVigente:
+          type: string
+          format: decimal
+          description: La puja más alta; igual al precio mínimo mientras nadie ha pujado.
+        pujaMinimaSiguiente:
+          type: [string, 'null']
+          format: decimal
+          description: >
+            Lo mínimo que se puede ofrecer ahora: el precio mínimo si nadie ha
+            pujado, la oferta vigente más el incremento si ya hay pujas. Nula si
+            la subasta no está activa.
+        incrementoMinimo:
+          type: string
+          format: decimal
+          description: El incremento con el que nació esta subasta.
+        precioCompraInmediata: { type: [string, 'null'], format: decimal }
+        compraInmediataDisponible:
+          type: boolean
+          description: >
+            Falso si la subasta no lo ofrece, si ya no está activa o si una puja
+            ya alcanzó o superó el precio de compra inmediata.
+        cantidadPujas: { type: integer }
+        fechaPublicacion: { type: [string, 'null'], format: date-time }
+        fechaFin: { type: string, format: date-time }
+        cerradaEn:
+          type: [string, 'null']
+          format: date-time
+          description: Cuándo terminó (adjudicada, sin adjudicación o cancelada).
+        esMaestroDeJuego: { type: boolean }
+        metodoPago:
+          type: string
+          enum: [CREDITOS, DINERO_REAL]
+        vendedorId: { type: string, format: uuid }
+        vendedorApodo:
+          type: [string, 'null']
+          description: Apodo del vendedor en el momento de publicar.
+        reputacionVendedor: { $ref: '#/components/schemas/ReputacionVendedor' }
+        vistas:
+          type: integer
+          description: Visualizaciones únicas de jugadores con sesión (sin contar al vendedor).
+
+    Duracion:
+      type: object
+      required: [codigo, horas, comision]
+      properties:
+        codigo: { type: string, enum: [24H, 48H] }
+        horas: { type: integer }
+        comision:
+          type: string
+          format: decimal
+          description: Créditos que se cobran al publicar (Tabla 25). El Maestro de Juego está exento.
+
+    ReglasVigentes:
+      type: object
+      required:
+        - duraciones
+        - incrementoMinimoConfigurado
+        - maxSubastasActivasPorJugador
+        - maxPujasActivasPorJugador
+        - intervaloMinimoSegundos
+        - penalizacionCancelacionPorcentaje
+        - cancelacionProhibidaUltimasHoras
+        - recordatorioMinutosAntesDelCierre
+        - diasParaRecoger
+        - alVencerPendientes
+      properties:
+        duraciones:
+          type: array
+          items: { $ref: '#/components/schemas/Duracion' }
+        incrementoMinimo:
+          type: [string, 'null']
+          format: decimal
+          description: Nulo mientras el Product Owner no fije `subastas.incremento-minimo`.
+        incrementoMinimoConfigurado: { type: boolean }
+        maxSubastasActivasPorJugador:
+          type: integer
+          description: Publicaciones activas simultáneas por jugador (7.7.10).
+        maxPujasActivasPorJugador: { type: integer }
+        intervaloMinimoSegundos: { type: integer }
+        penalizacionCancelacionPorcentaje:
+          type: integer
+          description: Porcentaje de la comisión pagada que se cobra al cancelar (7.7.10).
+        cancelacionProhibidaUltimasHoras: { type: integer }
+        recordatorioMinutosAntesDelCierre: { type: integer }
+        diasParaRecoger:
+          type: integer
+          description: Plazo para recoger un producto ganado (7.7.9).
+        alVencerPendientes:
+          type: string
+          enum: [ENTREGAR, DEVOLVER_AL_VENDEDOR]
+          description: >
+            Qué pasa con un producto ganado que nadie recogió en el plazo. El
+            documento no lo dice: es el parámetro `subastas.pendientes.al-vencer`
+            (decisión del Product Owner; provisional ENTREGAR).
 
     Problem:
       type: object
