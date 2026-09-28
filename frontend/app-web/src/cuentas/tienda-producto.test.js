@@ -1,6 +1,6 @@
 /**
  * UXC-4 — la tarjeta de producto, el precio, la marca de «tuyo», la lista de
- * deseos sin servicio y el bloque de compra del detalle.
+ * deseos (B5: guardada en la cuenta) y el bloque de compra del detalle.
  */
 
 import { jest } from '@jest/globals';
@@ -136,16 +136,74 @@ describe('precio', () => {
   });
 });
 
-describe('lista de deseos sin servicio', () => {
-  test('se ve, no se usa, y el motivo está escrito y enlazado', () => {
-    const caja = conmutadorDeDeseos({ idMotivo: 'motivo-1' });
+describe('lista de deseos (B5)', () => {
+  test('sin cuenta (la portada) se ve apagada, y el motivo está escrito y enlazado', () => {
+    const caja = conmutadorDeDeseos({ idMotivo: 'motivo-1', productoId: UUID });
     document.body.replaceChildren(caja);
     const boton = caja.querySelector('[data-accion="lista-de-deseos"]');
 
     expect(boton.getAttribute('aria-disabled')).toBe('true');
     expect(boton.getAttribute('aria-pressed')).toBe('false');
     expect(boton.getAttribute('aria-describedby')).toBe('motivo-1');
-    expect(document.getElementById('motivo-1').textContent).toMatch(/Todavía no se puede guardar/);
+    expect(boton.dataset.deseo).toBeUndefined();
+    expect(document.getElementById('motivo-1').textContent).toMatch(/Entra con tu cuenta/);
+  });
+
+  test('en la tienda es un conmutador de verdad: aria-pressed y el producto', () => {
+    const caja = conmutadorDeDeseos({
+      idMotivo: 'motivo-2',
+      productoId: UUID,
+      nombre: 'Yelmo del Alba',
+      deseado: true,
+      activo: true,
+    });
+    const boton = caja.querySelector('[data-deseo]');
+
+    expect(boton.dataset.deseo).toBe(UUID);
+    expect(boton.getAttribute('aria-pressed')).toBe('true');
+    expect(boton.hasAttribute('aria-disabled')).toBe(false);
+    expect(boton.getAttribute('aria-label')).toBe('Lista de deseos: Yelmo del Alba');
+    expect(caja.querySelector('.deseos__motivo')).toBeNull();
+  });
+
+  test('la tarjeta de la tienda lleva el corazón; la de la portada no', () => {
+    const enTienda = tarjetaDeProducto(dto({ enListaDeseos: true })).querySelector('[data-deseo]');
+    expect(enTienda.getAttribute('aria-pressed')).toBe('true');
+    expect(enTienda.getAttribute('aria-label')).toBe('Lista de deseos: Yelmo del Alba');
+
+    expect(
+      tarjetaDeProducto(dto(), { modo: MODOS.PORTADA }).querySelector('[data-deseo]'),
+    ).toBeNull();
+    expect(tarjetaDeProducto(dto({ id: null })).querySelector('[data-deseo]')).toBeNull();
+  });
+
+  test('en el detalle, el corazón llama a la tienda y dice lo que pasó', async () => {
+    const alDesear = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: true, texto: '«Yelmo del Alba» está en tu lista de deseos.' })
+      .mockResolvedValueOnce({ ok: false, texto: 'No se pudo quitar de tu lista de deseos.' });
+    const bloque = bloqueDeCompra(dto(), { alAnadir: jest.fn(), alDesear });
+    document.body.replaceChildren(bloque);
+    const corazon = bloque.querySelector('[data-deseo]');
+    const resultado = bloque.querySelector('.compra-producto__resultado');
+
+    corazon.click();
+    await esperar();
+    expect(alDesear).toHaveBeenCalledWith(UUID);
+    expect(resultado.dataset.tono).toBe('exito');
+    expect(resultado.textContent).toBe('«Yelmo del Alba» está en tu lista de deseos.');
+
+    corazon.click();
+    await esperar();
+    expect(resultado.dataset.tono).toBe('advertencia');
+    expect(corazon.disabled).toBe(false);
+  });
+
+  test('en el detalle de la portada, apagado: no hay cuenta que guarde nada', () => {
+    const bloque = bloqueDeCompra(dto(), { modo: MODOS.PORTADA, alEntrar: jest.fn() });
+
+    expect(bloque.querySelector('[data-deseo]')).toBeNull();
+    expect(bloque.querySelector('.deseos').getAttribute('aria-disabled')).toBe('true');
   });
 });
 

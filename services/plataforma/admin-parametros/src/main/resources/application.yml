@@ -35,6 +35,10 @@ spring:
 parametros:
   auditoria:
     url: ${AUDITORIA_URL:}
+    # B12: tiempos de espera del cliente de auditoria; sin ellos, una auditoria
+    # colgada dejaba colgado el cambio de parametro.
+    tiempo-conexion-ms: ${AUDITORIA_TIEMPO_CONEXION_MS:2000}
+    tiempo-respuesta-ms: ${AUDITORIA_TIEMPO_RESPUESTA_MS:5000}
 
 seguridad:
   servicio:

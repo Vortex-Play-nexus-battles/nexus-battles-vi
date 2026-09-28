@@ -129,8 +129,17 @@ class TiendaConCatalogoMaestroIT {
         }
     }
 
+    /**
+     * Con la fabrica del JDK y no la que Spring elegiria sola: desde B5 el
+     * classpath de pruebas trae Apache HttpClient 5 (lo usa Pact), y ese
+     * cliente repite solo un 503 con {@code Retry-After} tras esperar esos
+     * 30 s. La prueba quiere ver el 503, no esperarlo.
+     */
     private RestClient cliente() {
-        return RestClient.create("http://localhost:" + puerto);
+        return RestClient.builder()
+                .baseUrl("http://localhost:" + puerto)
+                .requestFactory(new org.springframework.http.client.SimpleClientHttpRequestFactory())
+                .build();
     }
 
     private static String tokenNuevo(UUID uid) {

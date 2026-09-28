@@ -41,10 +41,13 @@ public class ConfiguracionCors implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         // Las rutas van sin /ecommerce: el context-path ya lo antepone.
+        // B5: PUT (cantidad de una linea, lista de deseos) e Idempotency-Key
+        // (la compra). Sin PUT aqui, cambiar una cantidad desde el borde
+        // repetiria el 403 de «Añadir» que explica esta clase.
         registry.addMapping("/api/**")
                 .allowedOrigins(origenesPermitidos.toArray(String[]::new))
-                .allowedMethods("GET", "POST", "DELETE", "OPTIONS")
-                .allowedHeaders("Authorization", "Content-Type", "Accept")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                .allowedHeaders("Authorization", "Content-Type", "Accept", "Idempotency-Key", "traceparent")
                 .maxAge(3600);
     }
 }

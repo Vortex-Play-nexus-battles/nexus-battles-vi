@@ -29,7 +29,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/inventario` | **`34.193.90.11:8102`** (host de contenido) |
 | `/ws/notificaciones` | `srv-notificaciones:8085` |
 | `/ws` | `srv-salas-partidas:8084` |
-| `/mailpit/` | bandeja del SMTP de pruebas |
+| `/mailpit/` | bandeja del SMTP de pruebas — **solo orígenes internos** desde B12; desde internet, 403 (ver abajo) |
 | `/salud-borde` | `UP` (lo comprueba `desplegar.sh`) |
 | otro `/api/…` | 404 problem details "ruta sin servicio en el borde" |
 
@@ -41,6 +41,110 @@ ese prefijo.
 
 **Registrar un prefijo nuevo:** añadir la `location` aquí, el puerto en
 `puerto_de()` de `cd.yml` y el servicio en `docker-compose.deploy.yml`.
+
+### Mailpit no es público (B12)
+
+La bandeja de pruebas guarda los códigos de verificación y de recuperación de
+todas las cuentas `@nexus.test`. Hasta B12, `http://35.168.124.119/mailpit/`
+respondía 200 a cualquiera: con eso bastaba para activar una cuenta ajena o
+quedarse con ella. Ahora `location /mailpit/` solo admite orígenes internos y
+responde **403** al resto:
+
+| Origen admitido | Quién llega así |
+|---|---|
+| `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` | la pasarela de Docker: todo lo que entra por el `localhost:80` del propio host (un túnel SSH o de Session Manager) y los bancos, que entran por el puerto publicado de su anfitrión |
+| `127.0.0.0/8` | el propio contenedor del borde |
+
+`$remote_addr` es el par real porque el borde no usa `real_ip`. Si algún día se
+pone un proxy o CloudFront delante, todo llegaría desde la dirección del proxy y
+esta regla (y el límite de frecuencia) habría que revisarla **antes**.
+
+**Las pruebas contra DEV** (`smoke-dev.yml`, `canarios-jugador.yml`,
+`prueba-del-profesor.yml`) abren un túnel con la llave de despliegue
+(`.github/actions/tunel-mailpit`) y leen el buzón en
+`MAILPIT_URL=http://localhost:18025/mailpit`; el resto de su tráfico sigue
+yendo al borde público, como el de un jugador. El smoke afirma además que
+`/mailpit/` responde 403 desde internet.
+
+**Una persona que necesite la bandeja de DEV** (una demo con cuentas
+`@nexus.test`, depurar un correo):
+
+```bash
+# con la llave de despliegue
+ssh -N -L 18025:localhost:80 ubuntu@35.168.124.119
+# o sin ella, con Session Manager (usuario IAM con permiso)
+aws ssm start-session --target <id-de-la-instancia> \
+  --document-name AWS-StartPortForwardingSession \
+  --parameters portNumber=80,localPortNumber=18025
+# y en el navegador: http://localhost:18025/mailpit/
+```
+
+Solo las direcciones reservadas para pruebas (`.test`, `.example`,
+`.invalid`, `.localhost`, `.local`) van a Mailpit; una dirección real va al
+servidor SMTP que tenga configurado el entorno (`SMTP_HOST`, ver
+`services/plataforma/correo/src/main/resources/application.yml`), no a esta
+bandeja.
+
+### Límite de frecuencia (B12)
+
+Para lo que un bot haría en bucle desde una sola dirección. **No añade ninguna
+`location`**: el reparto de rutas es el mismo; la ruta solo decide con qué
+clave se cuenta la petición, y una clave vacía no se cuenta.
+
+| Zona | Qué cuenta (solo `POST`) | Límite por dirección | `Retry-After` |
+|---|---|---|---|
+| `acceso` | `/api/v1/auth/login`, `/api/v1/auth/registro`, `/api/v1/auth/verificacion/*`, `/api/v1/auth/restablecer/*` | 30/min, ráfaga de 20 sin espera | 2 s |
+| `escritura` | `/api/v1/products/{id}/comments` (y `…/comments/{id}/reportes`), `/api/v1/products/{id}/rating`, `/api/v1/comentarios/imagenes`, `/api/v1/mensajes-directos/…`, `/api/v1/subastas/{id}/pujas` | 120/min, ráfaga de 60 sin espera | 1 s |
+
+- **Los orígenes internos no se limitan** (`geo $origen_interno`, los mismos
+  rangos que `/mailpit/`): el banco E2E hace cientos de logins por minuto desde
+  la pasarela de Docker, y un túnel al host entra por ella.
+- **La lectura no se limita**, ni siquiera en una ruta cuya escritura sí.
+- **La respuesta** es `429` con `application/problem+json`
+  (`type` `https://nexusbattles.upb.edu.co/errors/demasiadas-peticiones`,
+  `title`, `status`, `detail` en español) y `Retry-After`, lo que tarda en
+  liberarse el siguiente hueco. Sale de la location con nombre
+  `@demasiadas_peticiones` (`error_page 429`), que hereda las cabeceras de
+  seguridad del server. Un 429 que venga de un servicio pasa tal cual: el borde
+  solo pone `Retry-After` cuando el rechazo es suyo (`$limit_req_status`).
+- **Todo va a nivel de `server`** (`limit_req`, `limit_req_status`,
+  `error_page`): como con `add_header`, una `location` que declarara los suyos
+  dejaría de heredar estos. `comprobar-rutas.sh` falla si alguna lo hace.
+- **El método elige la clave, nunca el destino** (#421). El guardián lo
+  comprueba siguiendo la dependencia de `$request_method` a través de los `map`
+  hasta cualquier `set`, `proxy_pass`, `return`, `rewrite` o `if`.
+- `/api/v1/mensajes-directos` está en la lista pero aún no tiene `location`
+  (B6): hoy cae en el 404 de «prefijo sin servicio», que se contesta antes de
+  contar.
+
+**Los números son de protección, no requisitos del documento del curso.**
+Registrarse, confirmar el correo y entrar son tres peticiones de `acceso`;
+equivocarse de contraseña un par de veces, cinco o seis. Un aula entera detrás
+del mismo NAT entra de golpe hasta 20 y después una cada 2 s; a quien le toque
+un 429 la interfaz le dice que espere un momento (`comun/codigo-de-correo.js`,
+`cuentas/login.js`). Un bot que prueba contraseñas se queda en 30/min, y
+ms-identidad además bloquea la cuenta tras sus intentos fallidos. En escritura,
+dos por segundo sostenidas es más de lo que escribe nadie a mano.
+
+**Consecuencias conocidas:**
+
+- La medición k6 **a demanda contra DEV** desde un runner es una sola dirección
+  pública: el escenario `login` mediría 429 del borde, no el login. Contra DEV
+  se deja fuera con `ESCENARIOS` (campo `escenarios` del workflow, ver
+  `tests/rendimiento/README.md`) y se mide en el banco E2E (origen privado).
+- Si algún día hay un proxy o CloudFront delante, todos los clientes llegarían
+  desde la dirección del proxy: compartirían cupo (o, si es privada, nadie
+  tendría límite). Hay que configurar `real_ip` **antes**.
+
+### El banco también entra desde internet (B12)
+
+`pruebas/` levanta, además de los ecos, un `cliente-publico` que solo vive en la
+red `publico` (`203.0.113.0/24`, TEST-NET-3, interna). `comprobar-rutas.sh`
+comprueba en cada corrida que el anfitrión llega al borde como origen privado y
+ese cliente como `203.0.113.x`, y desde él: `/mailpit/` → 403, las ráfagas de
+cada ruta limitada → 429 con su forma, la lectura y un `POST /api/v1/salas`
+sin límite. Desde el anfitrión, Mailpit sigue en 200 y 40 logins seguidos
+llegan los 40.
 
 ### Cómo se comprueba el reparto — `pruebas/`
 

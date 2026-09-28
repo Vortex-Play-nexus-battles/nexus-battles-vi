@@ -3,6 +3,7 @@ package com.nexusbattles.ms_ecommerce.catalogo;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Set;
 
 /**
@@ -26,6 +27,9 @@ import java.util.Set;
  *                         no se vende en moneda real
  * @param estado           ACTIVO, UNICO o SUSPENDIDO
  * @param habilidades      texto, lista de textos o ausente, segun el tipo de producto
+ * @param promocion        (B5, productos.yaml 1.4.0) descuento con vigencia; ausente
+ *                         si el producto no tiene, y en la vista publica tambien si
+ *                         ya no esta vigente
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ProductoDelCatalogo(
@@ -39,7 +43,8 @@ public record ProductoDelCatalogo(
         BigDecimal precioMonedaReal,
         Boolean premium,
         String estado,
-        Object habilidades) {
+        Object habilidades,
+        PromocionDelCatalogo promocion) {
 
     /** Tiraje de un producto sin limite de unidades. */
     public static final int TIRAJE_ILIMITADO = -1;
@@ -49,6 +54,14 @@ public record ProductoDelCatalogo(
      * (RN-PRD-004), y un estado desconocido tampoco: ante la duda, no se vende.
      */
     public static final Set<String> ESTADOS_EN_VENTA = Set.of("ACTIVO", "UNICO");
+
+    /** Un producto sin promocion: la forma que tenia el catalogo antes de 1.4.0. */
+    public ProductoDelCatalogo(String id, String nombre, String imagen, String descripcion, String tipo,
+                               Integer tiraje, Integer precioCreditos, BigDecimal precioMonedaReal,
+                               Boolean premium, String estado, Object habilidades) {
+        this(id, nombre, imagen, descripcion, tipo, tiraje, precioCreditos, precioMonedaReal, premium, estado,
+                habilidades, null);
+    }
 
     /** RN-PRD-003/004: el catalogo lo ofrece ahora mismo. */
     public boolean estaEnVenta() {
@@ -65,6 +78,11 @@ public record ProductoDelCatalogo(
         return tiraje != null && (tiraje == TIRAJE_ILIMITADO || tiraje > 0);
     }
 
+    /** El tiraje es un numero de unidades y no «ilimitado». */
+    public boolean tieneTirajeLimitado() {
+        return tiraje != null && tiraje != TIRAJE_ILIMITADO;
+    }
+
     /**
      * RF-CAR-002 / RN-PAG-001: la tienda cobra en moneda real. Un producto sin
      * ese precio no se vende aqui; nunca se ensena a 0.
@@ -77,5 +95,10 @@ public record ProductoDelCatalogo(
      */
     public boolean tienePrecioEnMonedaReal() {
         return precioMonedaReal != null && precioMonedaReal.signum() > 0;
+    }
+
+    /** El porcentaje de la promocion si esta vigente en ese instante; null si no hay. */
+    public Integer porcentajeVigenteEn(Instant ahora) {
+        return promocion == null ? null : promocion.porcentajeVigenteEn(ahora);
     }
 }

@@ -223,6 +223,75 @@ asegurar_clave_de_firma() {
   export JWT_CLAVE_PRIVADA="$clave"
 }
 
+# Paso 3d: el emisor de credenciales de servicio (ms-identidad, ADR-005) al dia
+# cuando esta corrida NO lo trae.
+#
+# B5: el emisor lee AUTH_CLIENTES_SERVICIO SOLO al arrancar. Cuando una corrida
+# trae un cliente nuevo (ms-ecommerce en B5, misiones despues) y ms-identidad
+# no viene en ella, `up -d` no lo toca y el emisor sigue rechazando al cliente
+# nuevo: su token responde 401 y todo lo que hace con el falla. Se compara la
+# lista que tiene el contenedor con la de este .env y, si difieren, se recrea
+# SOLO srv-ms-identidad, con la imagen que ya corre (no con el TAG de esta
+# corrida, que no la construyo) y sin tocar su base.
+#
+# 27-sep (fc226c05): la primera version recreaba el emisor SIN
+# JWT_CLAVE_PRIVADA -- asegurar_clave_de_firma solo corre en el paso 3.0, cuando
+# ms-identidad viene en la corrida -- y arranco con un par RSA efimero: las
+# sesiones abiertas se cerraron, las credenciales de servicio firmadas con la
+# clave del host se rechazaron con 401 hasta caducar y el registro respondio
+# 503 porque moderacion no reconocia la credencial de ms-identidad (smoke
+# 36357921316). Ahora este paso carga la misma clave que el 3.0 y recrea
+# tambien un emisor que corre SIN ella: el siguiente despliegue sana al que
+# arranco mal.
+#
+# Nada se imprime: la lista de clientes y la clave son secretos.
+# Usa DIRECTORIO, SERVICIOS_COMPOSE, INCLUYE_CONTENIDO, ARCHIVOS_COMPOSE y
+# AUTH_CLIENTES_SERVICIO. Devuelve 1 si el emisor recreado no vuelve sano.
+sanar_emisor() {
+  if [ "${INCLUYE_CONTENIDO:-0}" -ne 0 ] || ! docker inspect srv-ms-identidad >/dev/null 2>&1; then
+    return 0
+  fi
+  case " ${SERVICIOS_COMPOSE:-} " in
+    *" srv-ms-identidad "*) return 0 ;;  # ya se recreo en esta corrida, con lista y clave
+  esac
+  local entorno clientes_vigentes clave_vigente motivo="" imagen_emisor tag_emisor emisor_sano
+  entorno=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' srv-ms-identidad)
+  clientes_vigentes=$(printf '%s\n' "$entorno" | sed -n 's/^AUTH_CLIENTES_SERVICIO=//p')
+  clave_vigente=$(printf '%s\n' "$entorno" | sed -n 's/^JWT_CLAVE_PRIVADA=//p')
+  asegurar_clave_de_firma "$DIRECTORIO/secretos-firma.env"
+  if [ "$clientes_vigentes" != "${AUTH_CLIENTES_SERVICIO:-}" ]; then
+    motivo="cambio la lista de credenciales de servicio"
+  fi
+  if [ -n "${JWT_CLAVE_PRIVADA:-}" ] && [ "$clave_vigente" != "$JWT_CLAVE_PRIVADA" ]; then
+    motivo="${motivo:+$motivo; }corre sin la clave de firma del host"
+  fi
+  if [ -z "$motivo" ]; then
+    return 0
+  fi
+  imagen_emisor=$(docker inspect --format '{{.Config.Image}}' srv-ms-identidad)
+  tag_emisor="${imagen_emisor##*:}"
+  echo "== 3d) Se recrea srv-ms-identidad con su imagen de siempre (${tag_emisor}): ${motivo} =="
+  local archivos=("${ARCHIVOS_COMPOSE[@]}")
+  case " ${ARCHIVOS_COMPOSE[*]} " in
+    *"docker-compose.cuentas.yml"*) : ;;
+    *) archivos+=(-f "$DIRECTORIO/docker-compose.cuentas.yml") ;;
+  esac
+  TAG="$tag_emisor" docker compose "${archivos[@]}" up -d --no-deps srv-ms-identidad
+  emisor_sano=0
+  for _ in $(seq 1 36); do
+    if curl -fsS --max-time 5 "http://localhost:8089/actuator/health" 2>/dev/null | grep -q '"UP"'; then
+      emisor_sano=1
+      break
+    fi
+    sleep 5
+  done
+  if [ "$emisor_sano" -ne 1 ]; then
+    echo "srv-ms-identidad no volvio sano tras recrearlo"
+    return 1
+  fi
+  echo "  srv-ms-identidad: saludable, con la lista de clientes y la clave de firma del host"
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -316,7 +385,7 @@ chmod 600 .env
 # servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
 # volver a desplegar. Nunca se imprimen.
 SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros"
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce"
 touch "$SECRETOS_SERVICIOS"
 chmod 600 "$SECRETOS_SERVICIOS"
 AUTH_CLIENTES_SERVICIO=""
@@ -608,6 +677,12 @@ fi
 export ARRANQUE_CREADO_EN="$(date +%s)"
 docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
+
+# Paso 3d: el emisor de credenciales de servicio al dia (lista de clientes y
+# clave de firma) cuando esta corrida no lo trae. Ver sanar_emisor.
+if ! sanar_emisor; then
+  exit 1
+fi
 
 if [ "$INCLUYE_BORDE" -eq 1 ]; then
   echo "== 3c) Recargando el borde con la configuracion copiada en esta corrida =="

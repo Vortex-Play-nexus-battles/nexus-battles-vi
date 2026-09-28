@@ -42,9 +42,21 @@ variable "cidr_ssh" {
 }
 
 variable "cidr_servicios" {
-  description = "Origenes admitidos en los puertos de los servicios de plataforma (8081-8088, docker-compose.yml y puerto_de() en cd.yml)."
+  description = <<-EOT
+    Origenes admitidos en los puertos directos de los servicios de plataforma
+    (8081-8089, docker-compose.yml y puerto_de() en cd.yml). B12: solo el host
+    de contenido (IP elastica 34.193.90.11, cuenta del grupo 2), que es el
+    unico que llama a un puerto directo: sus servicios validan tokens contra
+    el JWKS de ms-identidad en :8089 (IDENTIDAD_JWKS_URL en
+    docker-compose.contenido.yml). El publico entra SOLO por el borde (:80);
+    las llamadas entre servicios de este host van por la red de Docker y no
+    pasan por aqui. Hasta B12 era 0.0.0.0/0: cualquiera llegaba a /actuator y
+    a las rutas internas de cada servicio sin pasar por el borde.
+    Para depurar desde un portatil se anade la IP propia a proposito y
+    temporalmente, en un PR, nunca a mano en la consola.
+  EOT
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["34.193.90.11/32"]
 }
 
 variable "correo_alertas" {

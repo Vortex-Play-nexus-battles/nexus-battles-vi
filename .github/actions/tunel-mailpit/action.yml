@@ -1,0 +1,73 @@
+# Abre un tunel SSH del runner al borde de un host de DEV para leer Mailpit.
+#
+# ## Por que existe (B12)
+#
+# Desde B12 el borde solo sirve /mailpit/ a origenes internos
+# (infrastructure/red-balanceo/borde-dev.conf). La bandeja guarda los codigos
+# de verificacion y de recuperacion de todas las cuentas @nexus.test, y hasta
+# B12 cualquiera los leia en http://<ip-del-host>/mailpit/.
+#
+# Las tres suites que corren contra DEV y necesitan esos codigos
+# (smoke-dev.yml, canarios-jugador.yml, prueba-del-profesor.yml) llegan ahora
+# por este tunel, con la llave de despliegue que ya usa cd.yml: la peticion
+# entra por el localhost:80 del host y el borde la ve llegar desde la pasarela
+# de Docker, que es una direccion privada. Las pruebas leen el buzon en
+# MAILPIT_URL=http://localhost:18025/mailpit (tests/e2e/ayudantes/correo.js);
+# el resto de su trafico sigue yendo al borde publico, como el de un jugador.
+#
+# Accion LOCAL por la misma razon que asegurar-host-encendido: tres copias
+# identicas de este paso garantizan que la proxima correccion se aplique a una
+# y se olvide en las otras.
+#
+# ## La llave
+#
+# Entra por input desde un secreto del entorno `dev` (GitHub la enmascara en la
+# bitacora), va a un fichero 600 dentro de RUNNER_TEMP, nunca se imprime y se
+# borra en cuanto ssh se ha autenticado: con -f y ExitOnForwardFailure, ssh
+# pasa a segundo plano DESPUES de autenticarse y de abrir el reenvio, asi que
+# ya no la necesita. El proceso del tunel muere con el job.
+
+name: Tunel SSH a Mailpit
+description: Abre un tunel del runner (localhost:18025) al borde de un host de DEV y comprueba que Mailpit responde por el.
+
+inputs:
+  host:
+    description: IP o nombre del host (secreto DEPLOY_HOST_DEV).
+    required: true
+  usuario:
+    description: Usuario SSH (secreto SSH_USER_DEV).
+    required: true
+  llave:
+    description: Llave privada de despliegue (secreto SSH_KEY_DEV).
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        HOST_DEV: ${{ inputs.host }}
+        USUARIO_SSH: ${{ inputs.usuario }}
+        LLAVE_SSH: ${{ inputs.llave }}
+      run: |
+        set -euo pipefail
+        llave="$RUNNER_TEMP/llave-tunel-mailpit"
+        install -m 600 /dev/null "$llave"
+        printf '%s\n' "$LLAVE_SSH" > "$llave"
+        if ! ssh -i "$llave" -o StrictHostKeyChecking=accept-new -o ExitOnForwardFailure=yes \
+               -o ServerAliveInterval=30 -o BatchMode=yes -o ConnectTimeout=20 \
+               -f -N -L 18025:localhost:80 "$USUARIO_SSH@$HOST_DEV"; then
+          rm -f "$llave"
+          echo "::error::No se pudo abrir el tunel SSH al host de DEV (host apagado, usuario o llave)."
+          exit 1
+        fi
+        rm -f "$llave"
+        for i in $(seq 1 10); do
+          if curl -fsS --max-time 5 -o /dev/null http://localhost:18025/mailpit/api/v1/info; then
+            echo "Tunel a Mailpit listo en localhost:18025 (intento $i)."
+            exit 0
+          fi
+          sleep 3
+        done
+        echo "::error::El tunel SSH se abrio, pero Mailpit no responde por el (http://localhost:18025/mailpit/)."
+        exit 1

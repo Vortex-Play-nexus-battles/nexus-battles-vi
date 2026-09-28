@@ -38,7 +38,7 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | `aws_instance` `nexus-plataforma-dev` | `t3.small` (2 vCPU, 2 GiB, x86) por defecto; Ubuntu 22.04; Docker + Compose v2; swap 2 GB; IMDSv2; créditos de CPU `standard` | 0,0208 USD/h → 15,0 USD/mes 24×7, ~6,2 con apagado nocturno |
 | `aws_eip` | IP fija para `DEPLOY_HOST_DEV` | 0,005 USD/h → 3,60 USD/mes, encendida o apagada |
 | disco raíz gp3 20 GB | cifrado, se borra con la instancia | 1,60 USD/mes |
-| `aws_security_group` | 22 (cd.yml) y 8081-8088 (servicios) | 0 |
+| `aws_security_group` | 22 (cd.yml), 80 (el borde, público) y 8081-8089 **solo desde el host de contenido** (B12, ver «Red») | 0 |
 | perfil de instancia + `AmazonSSMManagedInstanceCore` | Session Manager: consola sin puerto 22 | 0 |
 | parámetro SecureString `/nexus/dev/plataforma/llave-ssh-despliegue` | llave privada del par de despliegue | 0 |
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
@@ -92,6 +92,54 @@ Dónde está probado el camino completo, además del entorno:
   duplicados y el final del combate.
 - El banco E2E (`tests/e2e/compose.yml`), que juega una partida entera con los
   servicios de verdad.
+
+## Red: qué puerto está abierto y a quién (B12)
+
+| Puerto | Origen admitido | Por qué |
+|---|---|---|
+| 22 | `cidr_ssh` = `0.0.0.0/0` | `cd.yml` entra por `scp`/`ssh` desde runners de GitHub, que no tienen IP fija. Solo con llave (la AMI no acepta contraseña). |
+| 80 | `0.0.0.0/0` | El borde (`infrastructure/red-balanceo/borde-dev.conf`): **la única puerta del público**. |
+| 8081-8088, 8089 | `cidr_servicios` = **`34.193.90.11/32`** | Solo el host de contenido llama a un puerto directo: sus servicios validan los tokens contra el JWKS de ms-identidad en `:8089` (`IDENTIDAD_JWKS_URL` en `docker-compose.contenido.yml`). |
+| 8090-8094 | nadie | ms-ecommerce, ms-cumplimiento, ms-subastas, ms-finanzas y ms-chatbot nunca estuvieron en el grupo de seguridad: se llega a ellos por el borde. |
+
+**Hasta B12 `cidr_servicios` valía `0.0.0.0/0`.** Cualquiera llegaba a los
+puertos directos saltándose el borde: al `/actuator` de cada servicio, a rutas
+entre servicios que el borde no publica a propósito (las de envío de correo,
+`/internal/notifications`) y a todo sin las cabeceras de seguridad ni el límite
+de frecuencia del borde. Las llamadas entre servicios de ESTE host no pasan por
+aquí: van por la red de Docker (`srv-ms-identidad:8089`…), así que cerrar estos
+puertos al público no corta nada de dentro. Ningún workflow llama a un puerto
+directo (`diagnostico-dev.yml` pregunta a `localhost` por SSH).
+
+**El cambio no reemplaza nada.** En el `aws_security_group` solo cambian los
+`cidr_blocks` de dos reglas `ingress`; ni el `name` ni la `description` del
+grupo (los dos atributos que obligan a recrearlo) se tocan, y la instancia
+referencia el grupo por su `id`, que sigue igual. El plan esperado es
+`0 to add, 1 to change, 0 to destroy` (`~ aws_security_group.plataforma`,
+actualización en sitio: el proveedor revoca las dos reglas abiertas y autoriza
+las dos nuevas), así que la compuerta «0 destroy y 0 replace» de
+`infra-dev.yml` lo deja pasar y se aplica solo al fusionar en `develop`. Entre
+la revocación y la autorización hay un instante sin regla: como mucho falla una
+descarga del JWKS desde contenido, que se repite en la petición siguiente.
+
+Si la IP elástica de contenido cambia algún día, se cambian a la vez
+`cidr_servicios`, los destinos de contenido del borde y las URL de
+`srv-salas-partidas` en `docker-compose.deploy.yml`.
+
+### Depurar contra un puerto directo
+
+1. **Primero, un túnel** (no toca el grupo de seguridad): con la llave de
+   despliegue, `ssh -N -L 8089:localhost:8089 ubuntu@35.168.124.119` y
+   `http://localhost:8089/...` en el portátil; sin la llave, Session Manager
+   (`aws ssm start-session --target <id-de-la-instancia> --document-name
+   AWS-StartPortForwardingSession --parameters portNumber=8089,localPortNumber=8089`),
+   que ya está habilitado en la instancia.
+2. **Si de verdad hace falta el puerto abierto a un portátil**: un PR que añade
+   `"<ip-propia>/32"` al `default` de `cidr_servicios`, con un comentario de
+   quién, para qué y hasta cuándo. El plan del PR lo enseña y la fusión lo
+   aplica. Al terminar, otro PR que lo quita. **Nunca a mano en la consola**:
+   no queda rastro de quién lo abrió, y el siguiente `apply` lo borra sin avisar
+   (o, peor, lo deja si nadie aplica).
 
 ## Operación (todo desde GitHub → Actions → "Infra dev (AWS Free Plan)")
 
