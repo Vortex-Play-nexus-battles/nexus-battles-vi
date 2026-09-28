@@ -25,6 +25,7 @@ import {
   mismosCriterios,
   montarTienda,
   leerCriterios,
+  cambiarCantidad,
 } from './tienda.js';
 
 const UID = '44444444-4444-4444-4444-444444444444';
@@ -39,6 +40,7 @@ const VISTA = `
   <span id="cart-subtotal"></span>
   <span id="cart-total"></span>
   <button id="btn-pagar"></button>
+  <p id="aviso-pago"></p>
 `;
 
 /** JWT de mentira con el claim que lee la identidad. */
@@ -227,10 +229,9 @@ describe('carrito', () => {
 
     expect(document.querySelectorAll('.cart-item')).toHaveLength(1);
     expect(document.getElementById('cart-total').textContent).toBe('250 COP');
-    // FI-R2 — «Pagar» ya NO se habilita: RF-CAR-010 y RF-PAG-001 estan
-    // confirmados pero `CarritoController` no tiene ninguna ruta de pago, y el
-    // boton no tenia manejador. Ver `prepararBotonDePago`.
-    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    // B5 — hasta aquí «Pagar» no se encendía: no había ruta de pago. Desde
+    // 1.4.0 hay `POST /checkout`, y con algo que pagar se enciende.
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
   });
 
   test('agregar manda el producto y refresca el carrito', async () => {
@@ -468,7 +469,7 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(boton.dataset.producto).toBeUndefined();
   });
 
-  test('«Pagar» no se enciende mientras no exista la pasarela (RF-PAG-001)', () => {
+  test('«Pagar» se enciende con algo que pagar, y sin motivo que leer (B5)', () => {
     actualizarUI(
       {
         total: 400,
@@ -478,9 +479,61 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     );
 
     const boton = document.getElementById('btn-pagar');
+    expect(boton.disabled).toBe(false);
+    expect(boton.hasAttribute('aria-describedby')).toBe(false);
+    expect(document.getElementById('aviso-pago').hidden).toBe(true);
+  });
+
+  test('«Pagar» apagado con una línea que no se puede pagar: el motivo, escrito y enlazado', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 400,
+        items: [
+          { id: 1, cantidad: 1, subtotal: 400, disponible: true, producto: { nombre: 'Escudo' } },
+          {
+            id: 2,
+            cantidad: 1,
+            subtotal: 900,
+            disponible: false,
+            motivo: 'AGOTADO',
+            maximo: 0,
+            producto: { nombre: 'Espada' },
+          },
+        ],
+      },
+      document,
+    );
+
+    const boton = document.getElementById('btn-pagar');
     expect(boton.disabled).toBe(true);
-    // Y el motivo esta escrito, no solo apagado.
-    expect(boton.getAttribute('aria-describedby')).toBe('aviso-pago-pendiente');
+    expect(boton.getAttribute('aria-describedby')).toBe('aviso-pago');
+    expect(document.getElementById('aviso-pago').textContent).toMatch(/ya no se puede comprar/);
+    const linea = document.querySelector('[data-item-id="2"]');
+    expect(linea.dataset.disponible).toBe('no');
+    expect(linea.querySelector('.item-aviso').textContent).toBe('Se agotó. Quítalo para pagar.');
+    // Agotada: ni subir ni bajar; solo quitar.
+    const [menos, mas, quitar] = linea.querySelectorAll('.item-accion');
+    expect(menos.disabled).toBe(true);
+    expect(mas.disabled).toBe(true);
+    expect(quitar.disabled).toBe(false);
+  });
+
+  test('«Pagar» apagado si los precios no se pudieron confirmar, o con el carrito vacío', () => {
+    actualizarUI(
+      {
+        total: 400,
+        preciosVigentes: false,
+        items: [{ id: 1, cantidad: 1, subtotal: 400, producto: { nombre: 'Escudo' } }],
+      },
+      document,
+    );
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    expect(document.getElementById('aviso-pago').textContent).toMatch(/confirmar los precios/);
+
+    actualizarUI({ total: 0, items: [] }, document);
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    expect(document.getElementById('aviso-pago').textContent).toMatch(/Añade productos/);
   });
 
   test('un item sin subtotal no escribe «undefined» en el carrito', () => {
@@ -747,6 +800,12 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
   const VISTA_COMPLETA = `
     <main class="main-container">
       <section class="store-section">
+        <select id="moneda-tienda">
+          <option value="COP">COP</option>
+          <option value="USD">USD</option>
+          <option value="EUR">EUR</option>
+        </select>
+        <p id="nota-moneda"></p>
         <button id="insignia-carrito" type="button" aria-controls="panel-carrito">
           <span data-zona="unidades">—</span>
         </button>
@@ -771,6 +830,7 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
           </details>
         </form>
         <p id="resultado-tienda" role="status"></p>
+        <p id="aviso-deseos" role="status"></p>
         <div id="productos-grid"></div>
         <div id="paginacion-tienda"></div>
       </section>
@@ -782,7 +842,9 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
         <span id="cart-unidades"></span>
         <span id="cart-subtotal"></span>
         <span id="cart-total"></span>
-        <button id="btn-pagar"></button>
+        <button id="btn-pagar" type="button"></button>
+        <p id="aviso-pago"></p>
+        <button id="btn-mis-compras" type="button">Mis compras</button>
       </aside>
     </main>
   `;
@@ -802,7 +864,12 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
    * Un `fetch` que contesta según la ruta: la vitrina, el carrito y el
    * inventario del jugador, como los tres servicios de verdad.
    */
-  function servicios({ vitrina = [], carrito = { items: [] }, inventario = [] } = {}) {
+  function servicios({
+    vitrina = [],
+    carrito = { items: [] },
+    inventario = [],
+    trasCantidad = carrito,
+  } = {}) {
     return jest.fn(async (url, opciones = {}) => {
       if (String(url).includes('/api/v1/vitrina')) {
         return respuesta({ content: vitrina, last: true });
@@ -812,6 +879,9 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
       }
       if (String(url).includes('/api/v1/carrito/items') && opciones.method === 'DELETE') {
         return respuesta({ items: [], total: 0 });
+      }
+      if (String(url).includes('/cantidad') && opciones.method === 'PUT') {
+        return respuesta(trasCantidad);
       }
       if (String(url).includes('/api/v1/carrito/items')) {
         return respuesta(carrito);
@@ -1044,7 +1114,7 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(opciones.headers['X-User-Name']).toBe(UID);
   });
 
-  test('la insignia cuenta las unidades; cada línea suma una o se quita', async () => {
+  test('la insignia cuenta las unidades; cada línea cambia su cantidad o se quita', async () => {
     const carrito = {
       total: 3000,
       items: [
@@ -1073,12 +1143,14 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(document.getElementById('cart-unidades').textContent).toBe('3 productos');
     expect(document.querySelector('[data-item-id="7"]').textContent).toContain('1.000 COP c/u');
 
+    // B5 — «+» cambia la cantidad de la línea con PUT …/cantidad (1.4.0).
     globalThis.fetch.mockClear();
-    document.querySelector('[data-sumar-item="p-1"]').click();
+    document.querySelector('[data-cantidad-item="7"][data-cantidad-nueva="3"]').click();
     await new Promise((r) => setTimeout(r, 0));
     const [url, opciones] = globalThis.fetch.mock.calls[0];
-    expect(url).toBe('/api/v1/carrito/items');
-    expect(JSON.parse(opciones.body)).toEqual({ productoId: 'p-1', cantidad: 1 });
+    expect(url).toBe('/api/v1/carrito/items/7/cantidad');
+    expect(opciones.method).toBe('PUT');
+    expect(JSON.parse(opciones.body)).toEqual({ cantidad: 3 });
 
     globalThis.fetch.mockClear();
     document.querySelector('[data-quitar-item="8"]').click();
@@ -1136,5 +1208,316 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(resultado).toEqual({ ok: true });
     expect(document.getElementById('panel-carrito').hidden).toBe(true);
     expect(document.getElementById('aviso-insignia').textContent).toBe('Añadido al carrito.');
+  });
+
+  /**
+   * B5 — la tienda compra de verdad (ecommerce-carrito.yaml 1.4.0): la moneda,
+   * la lista de deseos, la cantidad y el pago, montados sobre la vista.
+   */
+  describe('B5 — moneda, lista de deseos, cantidad y pago', () => {
+    const esperar = async () => {
+      for (let i = 0; i < 6; i += 1) {
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    };
+    const rutas = () => globalThis.fetch.mock.calls.map(([url]) => String(url));
+
+    /**
+     * Un `fetch` que contesta según la ruta y la moneda, como el servicio de
+     * verdad: la vitrina dice qué monedas ofrece y el carrito viene en la
+     * pedida.
+     */
+    function tienda({
+      disponibles = ['COP'],
+      vitrina = [producto(1)],
+      carrito = { items: [] },
+      rechazar = null,
+      extra = () => null,
+    } = {}) {
+      return jest.fn(async (url, opciones = {}) => {
+        const texto = String(url);
+        const moneda = new URL(texto, 'http://x').searchParams.get('moneda') ?? 'COP';
+        const propia = extra(texto, opciones);
+        if (propia) {
+          return propia;
+        }
+        if (rechazar && moneda === rechazar && !texto.includes('/inventario')) {
+          return problema(422, 'urn:nexus:problema:moneda-no-disponible', {
+            monedasDisponibles: disponibles,
+          });
+        }
+        if (texto.includes('/api/v1/vitrina')) {
+          return respuesta({
+            content: vitrina.map((p) => ({ ...p, moneda })),
+            last: true,
+            moneda,
+            monedasDisponibles: disponibles,
+          });
+        }
+        if (texto.includes('/api/v1/inventario/elementos')) {
+          return respuesta({ elementos: [], ultima: true, totalPaginas: 1 });
+        }
+        if (texto.includes('/api/v1/carrito')) {
+          return respuesta({ ...carrito, moneda });
+        }
+        return respuesta({}, false, 404);
+      });
+    }
+
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    test('la preferida sin tasa todavía: todo en COP, y el selector y su nota lo dicen', async () => {
+      localStorage.setItem('nexus.tienda.moneda', 'USD');
+      globalThis.fetch = tienda({ disponibles: ['COP'] });
+
+      await montarTienda(document);
+
+      expect(rutas().filter((r) => r.includes('moneda='))).toEqual([]);
+      const selector = document.getElementById('moneda-tienda');
+      expect(selector.value).toBe('COP');
+      expect(selector.querySelector('option[value="USD"]').disabled).toBe(true);
+      // D-32 — sin tasa, el porqué se dice con palabras junto al selector.
+      expect(document.getElementById('nota-moneda').textContent).toBe(
+        'Los precios en USD no están disponibles por ahora (la tienda aún no tiene su tasa de cambio): se muestran en COP.',
+      );
+    });
+
+    test('la preferida disponible: se cambia a ella antes de pintar, vitrina y carrito', async () => {
+      localStorage.setItem('nexus.tienda.moneda', 'USD');
+      globalThis.fetch = tienda({
+        disponibles: ['COP', 'USD'],
+        vitrina: [producto(1, { precioFinal: 0.25, precioOriginal: 0.25 })],
+      });
+
+      await montarTienda(document);
+
+      expect(rutas()).toContain('/api/v1/vitrina?size=50&moneda=USD');
+      expect(rutas()).toContain('/api/v1/carrito?moneda=USD');
+      expect(document.getElementById('moneda-tienda').value).toBe('USD');
+      expect(document.querySelector('.product-card .price').textContent).toBe('0,25 USD');
+    });
+
+    test('cambiar el selector recuerda la moneda y vuelve a pedir en ella', async () => {
+      globalThis.fetch = tienda({ disponibles: ['COP', 'EUR'] });
+      await montarTienda(document);
+      globalThis.fetch.mockClear();
+
+      const selector = document.getElementById('moneda-tienda');
+      selector.value = 'EUR';
+      selector.dispatchEvent(new Event('change', { bubbles: true }));
+      await esperar();
+
+      expect(localStorage.getItem('nexus.tienda.moneda')).toBe('EUR');
+      expect(rutas()).toContain('/api/v1/vitrina?size=50&moneda=EUR');
+      expect(rutas()).toContain('/api/v1/carrito?moneda=EUR');
+      expect(document.querySelector('.product-card .price').textContent).toMatch(/EUR$/);
+    });
+
+    test('una moneda que el servidor rechaza (422) se deja: a COP y sin bucle', async () => {
+      localStorage.setItem('nexus.tienda.moneda', 'USD');
+      // El servidor dice que ofrece USD pero lo rechaza: se prueba una vez.
+      globalThis.fetch = tienda({ disponibles: ['COP', 'USD'], rechazar: 'USD' });
+
+      await montarTienda(document);
+      await esperar();
+
+      const vitrinas = rutas().filter((r) => r.includes('/vitrina'));
+      expect(vitrinas.filter((r) => r.includes('moneda=USD')).length).toBeLessThanOrEqual(1);
+      expect(vitrinas.length).toBeLessThanOrEqual(4);
+      expect(document.getElementById('moneda-tienda').value).toBe('COP');
+      expect(document.querySelector('.product-card .price').textContent).toMatch(/COP$/);
+    });
+
+    test('el corazón guarda y quita de la lista de deseos, y la tarjeta lo distingue', async () => {
+      const llamadas = [];
+      globalThis.fetch = tienda({
+        extra: (url, opciones) => {
+          if (url.includes('/lista-deseos/')) {
+            llamadas.push([url, opciones.method]);
+            return respuesta(
+              opciones.method === 'PUT' ? [] : null,
+              true,
+              opciones.method === 'PUT' ? 200 : 204,
+            );
+          }
+          return null;
+        },
+      });
+      await montarTienda(document);
+      const tarjeta = document.querySelector('[data-id-producto="p-1"]');
+      const corazon = tarjeta.querySelector('[data-deseo]');
+
+      corazon.click();
+      await esperar();
+
+      expect(llamadas[0]).toEqual(['/api/v1/lista-deseos/p-1', 'PUT']);
+      expect(corazon.getAttribute('aria-pressed')).toBe('true');
+      expect(tarjeta.dataset.deseado).toBe('si');
+      expect(tarjeta.querySelector('.producto-deseado')).not.toBeNull();
+      expect(document.getElementById('aviso-deseos').textContent).toBe(
+        '«Producto 1» está en tu lista de deseos.',
+      );
+
+      corazon.click();
+      await esperar();
+
+      expect(llamadas[1]).toEqual(['/api/v1/lista-deseos/p-1', 'DELETE']);
+      expect(corazon.getAttribute('aria-pressed')).toBe('false');
+      expect(tarjeta.dataset.deseado).toBeUndefined();
+    });
+
+    test('si guardar el deseo falla, la tarjeta no cambia y se dice', async () => {
+      globalThis.fetch = tienda({
+        extra: (url) => (url.includes('/lista-deseos/') ? respuesta({}, false, 500) : null),
+      });
+      await montarTienda(document);
+      const corazon = document.querySelector('[data-deseo="p-1"]');
+
+      corazon.click();
+      await esperar();
+
+      expect(corazon.getAttribute('aria-pressed')).toBe('false');
+      const aviso = document.getElementById('aviso-deseos');
+      expect(aviso.dataset.tono).toBe('advertencia');
+      expect(aviso.textContent).toMatch(/No se pudo guardar/);
+    });
+
+    test('la vitrina con sesión ya dice lo deseado: el corazón nace pulsado', async () => {
+      globalThis.fetch = tienda({ vitrina: [producto(1, { enListaDeseos: true })] });
+
+      await montarTienda(document);
+
+      expect(document.querySelector('[data-deseo="p-1"]').getAttribute('aria-pressed')).toBe(
+        'true',
+      );
+      expect(document.querySelector('[data-id-producto="p-1"]').dataset.deseado).toBe('si');
+    });
+
+    test('«−» se apaga en 1 y «+» en el máximo que dice el servidor', async () => {
+      const linea = (cantidad) => ({
+        total: 1000 * cantidad,
+        items: [
+          {
+            id: 7,
+            cantidad,
+            maximo: 2,
+            disponible: true,
+            precioUnitario: 1000,
+            subtotal: 1000 * cantidad,
+            producto: { id: 'p-1', nombre: 'Producto 1' },
+          },
+        ],
+      });
+      globalThis.fetch = servicios({
+        vitrina: [producto(1)],
+        carrito: linea(1),
+        trasCantidad: linea(2),
+      });
+      await montarTienda(document);
+      const botones = () => document.querySelectorAll('[data-item-id="7"] [data-cantidad-item]');
+      let [menos, mas] = botones();
+      expect(menos.disabled).toBe(true);
+      expect(mas.disabled).toBe(false);
+      expect(menos.getAttribute('aria-label')).toBe('Una unidad menos de Producto 1');
+
+      mas.click();
+      await esperar();
+
+      [menos, mas] = botones();
+      expect(menos.disabled).toBe(false);
+      expect(mas.disabled).toBe(true);
+      expect(document.getElementById('aviso-insignia').textContent).toBe(
+        'Cantidad actualizada: 2.',
+      );
+    });
+
+    test('no quedan tantas: se dice cuántas quedan y se vuelve a leer el carrito', async () => {
+      globalThis.fetch = jest
+        .fn()
+        .mockResolvedValueOnce(
+          problema(409, 'urn:nexus:problema:tiraje-insuficiente', { disponibles: 2 }),
+        )
+        .mockResolvedValue(respuesta({ items: [], total: 0 }));
+
+      const cambio = await cambiarCantidad(7, 5, document);
+
+      expect(cambio).toBe(false);
+      expect(document.querySelector('#aviso-carrito').textContent).toContain(
+        'Solo quedan 2 unidades de este producto.',
+      );
+      expect(globalThis.fetch.mock.calls[1][0]).toBe('/api/v1/carrito');
+    });
+
+    test('«Pagar» abre el resumen con el formulario; al completar, recarga el carrito', async () => {
+      const carrito = {
+        total: 1000,
+        preciosVigentes: true,
+        items: [
+          {
+            id: 7,
+            cantidad: 1,
+            disponible: true,
+            precioUnitario: 1000,
+            subtotal: 1000,
+            producto: { id: 'p-1', nombre: 'Producto 1' },
+          },
+        ],
+      };
+      const pagos = [];
+      globalThis.fetch = tienda({
+        carrito,
+        extra: (url, opciones) => {
+          if (url.includes('/checkout')) {
+            pagos.push(opciones);
+            return respuesta(
+              { id: 'o-1', estado: 'COMPLETA', moneda: 'COP', total: 1000, lineas: [] },
+              true,
+              201,
+            );
+          }
+          return null;
+        },
+      });
+      await montarTienda(document);
+      const boton = document.getElementById('btn-pagar');
+      expect(boton.disabled).toBe(false);
+
+      boton.click();
+      const dialogo = document.querySelector('[role="dialog"]');
+      expect(dialogo.textContent).toContain('Resumen de la compra');
+      expect(dialogo.querySelector('.pago__total').textContent).toContain('1.000 COP');
+      dialogo.querySelector('input[name="titular"]').value = 'Ana Pérez';
+      dialogo.querySelector('input[name="numero"]').value = '4242 4242 4242 4242';
+      dialogo.querySelector('input[name="vencimiento"]').value = '12/99';
+      dialogo.querySelector('input[name="codigo"]').value = '123';
+      globalThis.fetch.mockClear();
+      dialogo.querySelector('[data-accion="confirmar-pago"]').click();
+      await esperar();
+
+      expect(pagos).toHaveLength(1);
+      expect(JSON.parse(pagos[0].body).moneda).toBe('COP');
+      expect(pagos[0].headers['Idempotency-Key']).toMatch(/^pago-/);
+      expect(document.querySelector('.pago__resultado').textContent).toContain('Compra completada');
+      // Lo comprado ya salió del carrito: se vuelve a leer.
+      expect(rutas()).toContain('/api/v1/carrito');
+    });
+
+    test('«Mis compras» abre las órdenes del jugador', async () => {
+      globalThis.fetch = tienda({
+        extra: (url) =>
+          url.includes('/ordenes')
+            ? respuesta([{ id: 'o-1', estado: 'COMPLETA', moneda: 'COP', total: 1000, lineas: [] }])
+            : null,
+      });
+      await montarTienda(document);
+
+      document.getElementById('btn-mis-compras').click();
+      await esperar();
+
+      expect(document.querySelector('[role="dialog"]').textContent).toContain('Mis compras');
+      expect(document.querySelectorAll('.compra')).toHaveLength(1);
+    });
   });
 });

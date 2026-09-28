@@ -25,6 +25,13 @@ import { rutaDeApi } from '../comun/base-api.js';
 import { RUTAS, resolver } from '../comun/sesion.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
 import { MODOS, bloqueDeCompra, tarjetaDeProducto } from './tienda-producto.js';
+import {
+  MONEDA_BASE,
+  conMoneda,
+  disponiblesDe,
+  monedaAMostrar,
+  monedaPreferida,
+} from './tienda-moneda.js';
 
 /** Cuántos productos enseña la portada: dos filas en escritorio. */
 export const PRODUCTOS_EN_PORTADA = 8;
@@ -35,24 +42,45 @@ const PINTADOS = new WeakMap();
 /**
  * Pide la primera página de la vitrina.
  *
- * @param {{fetchImpl?: Function, cuantos?: number}} [opciones]
- * @returns {Promise<{productos: object[], total: number|null}>}
+ * B5 — en la moneda del visitante si el servidor la ofrece (§7.5: «COP o
+ * dólar o euro dependiendo de su ubicación geográfica»; `tienda-moneda.js`).
+ * Se pregunta primero en COP, que está siempre, y solo si la página dice que
+ * la preferida está disponible se vuelve a pedir en ella; si esa segunda
+ * petición falla, se enseña lo que ya llegó en pesos.
+ *
+ * @param {{fetchImpl?: Function, cuantos?: number, preferida?: string}} [opciones]
+ * @returns {Promise<{productos: object[], total: number|null, moneda: string}>}
  */
 export async function pedirVitrinaPublica({
   fetchImpl = fetchWithHttpErrorInterceptor,
   cuantos = PRODUCTOS_EN_PORTADA,
+  preferida = monedaPreferida().moneda,
 } = {}) {
-  const respuesta = await fetchImpl(rutaDeApi(`/vitrina?size=${cuantos}`), {
-    method: 'GET',
-    headers: { Accept: 'application/json' },
-  });
-  if (!respuesta.ok) {
-    throw new Error(`La vitrina respondió ${respuesta.status}`);
+  const pedir = async (moneda) => {
+    const respuesta = await fetchImpl(rutaDeApi(conMoneda(`/vitrina?size=${cuantos}`, moneda)), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!respuesta.ok) {
+      throw new Error(`La vitrina respondió ${respuesta.status}`);
+    }
+    return respuesta.json();
+  };
+  let datos = await pedir(MONEDA_BASE);
+  let moneda = MONEDA_BASE;
+  const aMostrar = monedaAMostrar(preferida, disponiblesDe(datos));
+  if (aMostrar !== MONEDA_BASE) {
+    try {
+      datos = await pedir(aMostrar);
+      moneda = aMostrar;
+    } catch {
+      // Se queda en pesos: mejor precios en COP que ninguno.
+    }
   }
-  const datos = await respuesta.json();
   return {
     productos: Array.isArray(datos?.content) ? datos.content : [],
     total: Number.isFinite(datos?.totalElements) ? datos.totalElements : null,
+    moneda,
   };
 }
 
