@@ -47,6 +47,40 @@ jobs:
           role-session-name: diagnostico-${{ github.run_id }}
           aws-region: ${{ inputs.ambiente == 'contenido' && (vars.AWS_REGION_CONTENIDO || 'us-east-1') || vars.AWS_REGION }}
 
+      # 28-sep — cualquier decision de capacidad con coste (la opcion E de
+      # CAPACIDAD.md: pasar plataforma a c7i-flex.large) se paga con los
+      # creditos del Free Plan. Hasta hoy el saldo solo se veia en la consola
+      # (Billing > Credits), y la decision se tomaba sin el. La API de Free
+      # Tier es gratuita y de solo lectura (a diferencia de Cost Explorer, que
+      # cobra por peticion). Solo informa: si la CLI del runner no la trae o
+      # el rol no puede leerla, lo dice y el diagnostico sigue.
+      - name: Creditos del Free Plan de la cuenta
+        if: steps.aws.outcome == 'success'
+        env:
+          NOMBRE_INSTANCIA: ${{ inputs.ambiente == 'contenido' && (vars.NOMBRE_INSTANCIA_CONTENIDO || 'nexus-contenido-dev') || 'nexus-plataforma-dev' }}
+        run: |
+          set -uo pipefail
+          if salida=$(aws freetier get-account-plan-state --region us-east-1 --output json 2>&1); then
+            # Tal cual, sin el numero de cuenta: plan, estado, creditos
+            # restantes y fecha de vencimiento.
+            printf '%s\n' "$salida" | jq 'del(.accountId)' 2>/dev/null || printf '%s\n' "$salida" | head -20
+          else
+            echo "  No se pudo leer el estado del plan: $(printf '%s' "$salida" | head -3)"
+            echo "  (el saldo sigue en la consola: Billing and Cost Management > Credits)"
+          fi
+          # Y si el tipo de la opcion E existe en la zona del host: cambiar de
+          # tipo es parar, modificar y encender, y en una zona que no lo
+          # ofrece el host se quedaria parado a mitad del cambio.
+          zona=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text 2>/dev/null || true)
+          if [ -n "$zona" ] && [ "$zona" != "None" ]; then
+            ofrecidos=$(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+              --filters "Name=location,Values=$zona" "Name=instance-type,Values=t3.small,c7i-flex.large,m7i-flex.large" \
+              --query 'InstanceTypeOfferings[].InstanceType' --output text 2>/dev/null || echo "?")
+            echo "  zona del host: $zona; tipos del Free Plan que ofrece: ${ofrecidos:-ninguno de los consultados}"
+          fi
+
       # Lo primero, porque es la causa mas probable y la mas barata de
       # descartar: si la instancia esta apagada, todo lo demas sobra.
       - name: Estado de la instancia en EC2
