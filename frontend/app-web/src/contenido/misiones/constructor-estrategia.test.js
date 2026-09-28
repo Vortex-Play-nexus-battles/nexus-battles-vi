@@ -183,19 +183,35 @@ describe('héroes', () => {
     expect(document.querySelector('.estado-vista--vacio')).not.toBeNull();
   });
 
-  test('heroesConPrototipo junta inventario y catálogo sin inventar el prototipo', async () => {
+  test('heroesConPrototipo junta inventario y catálogo sin inventar el prototipo ni el nivel', async () => {
     const heroes = await heroesConPrototipo(
       [
-        { id: 'a', tipo: 'HEROE', nombrePropio: 'Uno', productoId: 'p1' },
-        { id: 'b', tipo: 'HEROE', nombrePropio: 'Dos', productoId: null },
+        { id: 'a', tipo: 'HEROE', nombrePropio: 'Uno', productoId: 'p1', nivel: 3 },
+        { id: 'b', tipo: 'HEROE', nombrePropio: 'Dos', productoId: null, nivel: 9 },
         { id: 'c', tipo: 'ARMA', nombrePropio: 'Tres', productoId: 'p3' },
       ],
       async (id) => ({ prototipo: id === 'p1' ? 'Mago Hielo' : '' }),
     );
     expect(heroes).toEqual([
-      { id: 'a', nombre: 'Uno', prototipo: 'Mago Hielo', imagen: null },
-      { id: 'b', nombre: 'Dos', prototipo: null, imagen: null },
+      { id: 'a', nombre: 'Uno', prototipo: 'Mago Hielo', imagen: null, nivel: 3 },
+      // Un nivel fuera de 1..8 (§6.1.1) no se cree.
+      { id: 'b', nombre: 'Dos', prototipo: null, imagen: null, nivel: null },
     ]);
+  });
+
+  test('el nivel de partida es el que trae el inventario, marcado como «el de hoy»', async () => {
+    const { validar, vista } = await montar({
+      elementos: [
+        { id: 'h-1', tipo: 'HEROE', nombrePropio: 'Aquiles', productoId: 'p-armas', nivel: 4 },
+      ],
+    });
+
+    const nivel = document.querySelector('select[name="nivel"]');
+    expect(nivel.value).toBe('4');
+    expect(nivel.selectedOptions[0].textContent).toBe('Nivel 4 (el de hoy)');
+    expect([...nivel.options].filter((o) => o.textContent.includes('el de hoy'))).toHaveLength(1);
+    expect(validar).toHaveBeenCalledWith({ heroe: 'Guerrero Armas', nivel: 4 });
+    expect(vista).toHaveBeenCalledWith('Guerrero Armas', 4);
   });
 });
 
@@ -410,6 +426,23 @@ describe('veredicto', () => {
     );
   });
 
+  test('sin servicio de misiones no se ofrece guardar ni se pregunta por la guardada', async () => {
+    const fuente = {
+      disponible: false,
+      estrategiaGuardada: jest.fn(),
+      guardarEstrategia: jest.fn(),
+    };
+    await montar({ extra: { fuente } });
+    elegir(pasos()[0], 'Embate sangriento');
+    await comprobar();
+
+    expect(fuente.estrategiaGuardada).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-accion="guardar-estrategia"]')).toBeNull();
+    expect(document.querySelector('[data-zona="veredicto"]').textContent).toContain(
+      'Todavía no se guarda',
+    );
+  });
+
   test('los fallos se dicen en el idioma del jugador, nunca con un código', () => {
     expect(mensajeDeFallo({ status: 401 }, 'comprobar la estrategia')).toBe(
       'Tu sesión ya no es válida. Vuelve a iniciar sesión para comprobar la estrategia.',
@@ -420,5 +453,214 @@ describe('veredicto', () => {
     expect(mensajeDeFallo({ status: 502 }, 'leer sus habilidades')).toBe(
       'No pudimos leer sus habilidades. Revisa tu conexión e inténtalo de nuevo.',
     );
+  });
+});
+
+describe('estrategia guardada (§7.8.12, la guarda el módulo de misiones)', () => {
+  const GUARDADA = {
+    heroeId: 'h-1',
+    prototipo: 'Guerrero Armas',
+    nivel: 1,
+    rotaciones: [
+      { prioridad: 'Alta', pasos: ['Embate sangriento', 'Ataque básico'] },
+      { prioridad: 'Media', pasos: ['Ataque básico'] },
+    ],
+    actualizadaEn: '2026-09-20T10:00:00Z',
+  };
+
+  /** La parte de la fuente de misiones que usa el configurador. */
+  function fuenteDeMisiones(cambios = {}) {
+    return {
+      disponible: true,
+      estrategiaGuardada: jest.fn(async () => null),
+      guardarEstrategia: jest.fn(async (heroeId, rotaciones) => ({
+        heroeId,
+        prototipo: 'Guerrero Armas',
+        nivel: 1,
+        rotaciones: rotaciones.map((r, i) => ({ prioridad: ['Alta', 'Media', 'Baja'][i], ...r })),
+        actualizadaEn: '2026-09-27T10:00:00Z',
+      })),
+      ...cambios,
+    };
+  }
+
+  test('al elegir el héroe se carga la que guardó, y se dice que es la guardada', async () => {
+    const fuente = fuenteDeMisiones({ estrategiaGuardada: jest.fn(async () => GUARDADA) });
+    await montar({ extra: { fuente } });
+
+    expect(fuente.estrategiaGuardada).toHaveBeenCalledWith('h-1');
+    expect(pasos().map((p) => p.value)).toEqual([
+      'Embate sangriento',
+      'Ataque básico',
+      'Ataque básico',
+    ]);
+    expect(document.querySelectorAll('.estrategia__rotacion')).toHaveLength(2);
+    const nota = document.querySelector('[data-zona="guardada"]');
+    expect(nota.hidden).toBe(false);
+    expect(nota.textContent).toMatch(/^Es la estrategia que guardaste el .+2026\. Compruébala/);
+
+    // En cuanto se cambia, ya no es «la que guardaste».
+    elegir(pasos()[2], 'Embate sangriento');
+    expect(nota.hidden).toBe(true);
+  });
+
+  test('sin estrategia guardada (null) el editor empieza vacío y no hay nota', async () => {
+    const fuente = fuenteDeMisiones();
+    await montar({ extra: { fuente } });
+
+    expect(fuente.estrategiaGuardada).toHaveBeenCalledWith('h-1');
+    expect(pasos().map((p) => p.value)).toEqual(['']);
+    expect(document.querySelector('[data-zona="guardada"]').hidden).toBe(true);
+  });
+
+  test('si la guardada no se puede leer, se sigue sin ella', async () => {
+    const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const fuente = fuenteDeMisiones({
+      estrategiaGuardada: jest.fn(async () => {
+        throw Object.assign(new Error('503'), { status: 503 });
+      }),
+    });
+    await montar({ extra: { fuente } });
+
+    expect(document.querySelector('[data-zona="editor"]').hidden).toBe(false);
+    expect(pasos().map((p) => p.value)).toEqual(['']);
+    expect(consola).toHaveBeenCalled();
+    consola.mockRestore();
+  });
+
+  test('una guardada con habilidades que este nivel no trae: esos pasos se vacían y se dice', async () => {
+    const fuente = fuenteDeMisiones({
+      estrategiaGuardada: jest.fn(async () => ({
+        ...GUARDADA,
+        rotaciones: [{ prioridad: 'Alta', pasos: ['Golpe de tormenta'] }],
+      })),
+    });
+    await montar({ extra: { fuente } });
+
+    expect(pasos()[0].value).toBe('');
+    expect(document.querySelector('[data-zona="veredicto"]').textContent).toContain(
+      'En nivel 1 no tiene Golpe de tormenta',
+    );
+  });
+
+  test('en la pestaña Estrategia, una comprobada se guarda y se confirma', async () => {
+    const fuente = fuenteDeMisiones();
+    await montar({ extra: { fuente } });
+    elegir(pasos()[0], 'Embate sangriento');
+    await comprobar();
+
+    const veredicto = document.querySelector('[data-zona="veredicto"]');
+    expect(veredicto.textContent).toContain(
+      'Guárdala para tenerla lista cuando envíes a Aquiles a una misión.',
+    );
+    expect(veredicto.textContent).not.toContain('null');
+    document.querySelector('[data-accion="guardar-estrategia"]').click();
+    await esperar();
+
+    expect(fuente.guardarEstrategia).toHaveBeenCalledWith('h-1', [
+      { pasos: ['Embate sangriento'] },
+    ]);
+    const guardado = document.querySelector('[data-zona="guardado"]');
+    expect(guardado.querySelector('.aviso--exito').textContent).toContain('Estrategia guardada');
+    expect(guardado.textContent).toContain('Aquiles la tendrá lista en sus misiones');
+    expect(document.querySelector('[data-accion="guardar-estrategia"]')).toBeNull();
+  });
+
+  test('si el servidor no la acepta, su motivo, lo que sí vale y el botón para reintentar', async () => {
+    const consola = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const fuente = fuenteDeMisiones({
+      guardarEstrategia: jest.fn(async () => {
+        throw Object.assign(new Error('422'), {
+          status: 422,
+          detalle: 'La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 1.',
+          habilidadesValidas: ['Embate sangriento', 'Ataque básico'],
+        });
+      }),
+    });
+    await montar({ extra: { fuente } });
+    elegir(pasos()[0], 'Embate sangriento');
+    await comprobar();
+    document.querySelector('[data-accion="guardar-estrategia"]').click();
+    await esperar();
+
+    const guardado = document.querySelector('[data-zona="guardado"]');
+    expect(guardado.querySelector('.aviso--error').textContent).toContain(
+      'La rotación 1 usa una habilidad que Guerrero Armas no posee en nivel 1.',
+    );
+    expect(guardado.textContent).toContain(
+      'Habilidades válidas en su nivel: Embate sangriento, Ataque básico.',
+    );
+    expect(guardado.textContent).not.toMatch(/422/);
+    const boton = document.querySelector('[data-accion="guardar-estrategia"]');
+    expect(boton.disabled).toBe(false);
+    consola.mockRestore();
+  });
+
+  test('comprobada en otro nivel que el del héroe: no se ofrece guardarla y se dice por qué', async () => {
+    const fuente = fuenteDeMisiones();
+    await montar({
+      extra: { fuente },
+      elementos: [
+        { id: 'h-1', tipo: 'HEROE', nombrePropio: 'Aquiles', productoId: 'p-armas', nivel: 1 },
+      ],
+    });
+    elegir(document.querySelector('select[name="nivel"]'), '8');
+    await esperar();
+    elegir(pasos()[0], 'Golpe de tormenta');
+    await comprobar();
+
+    expect(document.querySelector('[data-accion="guardar-estrategia"]')).toBeNull();
+    expect(document.querySelector('[data-zona="guardado"]').textContent).toContain(
+      'Solo se guarda la estrategia del nivel que tiene hoy Aquiles (nivel 1).',
+    );
+  });
+
+  test('en la matrícula no hay botón: al matricular ya se guarda, y se dice', async () => {
+    const fuente = fuenteDeMisiones();
+    await montar({ extra: { fuente, modo: 'matricula' } });
+    elegir(pasos()[0], 'Embate sangriento');
+    await comprobar();
+
+    expect(document.querySelector('[data-accion="guardar-estrategia"]')).toBeNull();
+    expect(document.querySelector('[data-zona="veredicto"]').textContent).toContain(
+      'Se enviará con tu héroe al iniciar la misión y quedará guardada para la próxima.',
+    );
+  });
+
+  test('si el jugador cambia de héroe mientras llega la guardada del anterior, no se mezcla', async () => {
+    let entregar;
+    const fuente = fuenteDeMisiones({
+      estrategiaGuardada: jest.fn((heroeId) =>
+        heroeId === 'h-1'
+          ? new Promise((resolver) => {
+              entregar = () => resolver(GUARDADA);
+            })
+          : Promise.resolve(null),
+      ),
+    });
+    const inyecciones = servicios({
+      elementos: [
+        { id: 'h-1', tipo: 'HEROE', nombrePropio: 'Aquiles', productoId: 'p-armas' },
+        { id: 'h-2', tipo: 'HEROE', nombrePropio: 'Héctor', productoId: 'p-armas' },
+      ],
+    });
+    const configurador = constructorDeEstrategia({ identidad: 'ana', fuente, ...inyecciones });
+    document.body.replaceChildren(configurador.elemento);
+    const carga = configurador.cargar();
+    await esperar();
+
+    const segundo = [...document.querySelectorAll('.estrategia__heroe-entrada')].find(
+      (r) => r.value === 'h-2',
+    );
+    segundo.checked = true;
+    segundo.dispatchEvent(new Event('change', { bubbles: true }));
+    await esperar();
+    entregar();
+    await carga;
+    await esperar();
+
+    expect(pasos().map((p) => p.value)).toEqual(['']);
+    expect(document.querySelector('[data-zona="guardada"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="vista-previa"] h3').textContent).toContain('Héctor');
   });
 });

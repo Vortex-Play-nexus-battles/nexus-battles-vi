@@ -112,14 +112,19 @@ public class RegistroService {
             throw new RegistroRechazadoException(Motivo.CORREO_EN_USO, "El correo electrónico ya está registrado.");
         }
 
-        if (usuarioRepository.existsByApodoIgnoreCase(apodo)) {
-            throw new RegistroRechazadoException(Motivo.APODO_EN_USO, "El apodo ya está en uso.");
-        }
-
+        // La lista negra va ANTES que la unicidad (B13): un apodo prohibido es
+        // prohibido exista o no una cuenta con el. En DEV, «SpiderMan» se
+        // habia registrado antes de la lista negra y quien probaba la lista
+        // recibia «El apodo ya está en uso»: parecia que no funcionaba. Asi
+        // tampoco se revela que esa cuenta existe.
         try {
             apodoBlacklistValidator.validar(apodo);
         } catch (IllegalArgumentException prohibido) {
             throw new RegistroRechazadoException(Motivo.APODO_NO_PERMITIDO, prohibido.getMessage());
+        }
+
+        if (usuarioRepository.existsByApodoIgnoreCase(apodo)) {
+            throw new RegistroRechazadoException(Motivo.APODO_EN_USO, "El apodo ya está en uso.");
         }
 
         try {

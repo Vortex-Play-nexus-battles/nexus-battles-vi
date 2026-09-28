@@ -1,0 +1,601 @@
+{
+  "consumer": {
+    "name": "misiones"
+  },
+  "interactions": [
+    {
+      "description": "el bloqueo del heroe al salir a una mision",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y esta libre"
+        }
+      ],
+      "request": {
+        "body": {
+          "ejecucionId": "0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11",
+          "propietarioUid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-bloqueo"
+        },
+        "matchingRules": {
+          "body": {
+            "$.ejecucionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01/bloqueo-mision"
+      },
+      "response": {
+        "status": 200
+      }
+    },
+    {
+      "description": "la consulta de un heroe antes de matricularlo",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y esta libre"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01"
+      },
+      "response": {
+        "body": {
+          "disponible": true,
+          "elementoId": "heroe-vorn-01",
+          "experiencia": 0,
+          "nivel": 1,
+          "nombrePropio": "Vorn",
+          "productoId": "2239ecfa-3fc4-3f02-9d87-df52cf06665b",
+          "propietarioUid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b",
+          "tipo": "HEROE"
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.nivel": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.nombrePropio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la consulta interna de un heroe cuyo producto no tiene id UUID",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y su producto conserva un id historico"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01"
+      },
+      "response": {
+        "status": 409
+      }
+    },
+    {
+      "description": "la vitrina del jugador, leida por misiones con su credencial",
+      "providerStates": [
+        {
+          "name": "el heroe es del jugador y su producto conserva un id historico"
+        }
+      ],
+      "request": {
+        "headers": {
+          "X-User-Name": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "matchingRules": {
+          "header": {
+            "X-User-Name": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos",
+        "query": {
+          "pagina": [
+            "0"
+          ]
+        }
+      },
+      "response": {
+        "body": {
+          "elementos": [
+            {
+              "disponible": true,
+              "experiencia": 0,
+              "id": "heroe-vorn-01",
+              "nivel": 1,
+              "nombrePropio": "Vorn",
+              "productoId": "p-heroe-historico",
+              "tipo": "HEROE"
+            }
+          ],
+          "totalPaginas": 1,
+          "ultima": true
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.elementos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.elementos[*].experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.elementos[*].nivel": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.elementos[*].nombrePropio": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.elementos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.totalPaginas": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.ultima": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la liberacion del heroe sumandole la experiencia de la mision",
+      "providerStates": [
+        {
+          "name": "el heroe esta en esa mision"
+        }
+      ],
+      "request": {
+        "body": {
+          "experiencia": 130.5,
+          "propietarioUid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-liberacion"
+        },
+        "matchingRules": {
+          "body": {
+            "$.experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01/bloqueo-mision/0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11/liberacion"
+      },
+      "response": {
+        "body": {
+          "disponible": true,
+          "experiencia": 30.5,
+          "nivel": 2
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.nivel": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "el bloqueo de un heroe que ya esta en otra mision",
+      "providerStates": [
+        {
+          "name": "el heroe esta en otra mision"
+        }
+      ],
+      "request": {
+        "body": {
+          "ejecucionId": "0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11",
+          "propietarioUid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-bloqueo"
+        },
+        "matchingRules": {
+          "body": {
+            "$.ejecucionId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "PUT",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01/bloqueo-mision"
+      },
+      "response": {
+        "status": 409
+      }
+    },
+    {
+      "description": "la consulta de un heroe que no esta en ningun inventario",
+      "providerStates": [
+        {
+          "name": "el heroe no existe"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01"
+      },
+      "response": {
+        "status": 404
+      }
+    },
+    {
+      "description": "una liberacion repetida por un reintento",
+      "providerStates": [
+        {
+          "name": "el heroe ya volvio de esa mision"
+        }
+      ],
+      "request": {
+        "body": {
+          "experiencia": 130.5,
+          "propietarioUid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-liberacion"
+        },
+        "matchingRules": {
+          "body": {
+            "$.experiencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "decimal"
+                }
+              ]
+            },
+            "$.propietarioUid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/elementos/heroe-vorn-01/bloqueo-mision/0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11/liberacion"
+      },
+      "response": {
+        "body": {
+          "disponible": true,
+          "nivel": 2
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.nivel": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
+      "description": "la entrega de la epica ganada en una mision",
+      "providerStates": [
+        {
+          "name": "el jugador puede recibir productos del catalogo"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "MISION",
+          "productos": [
+            {
+              "cantidad": 1,
+              "productoId": "4481eb34-384a-3fa0-ba9a-1aac9562c38f"
+            }
+          ],
+          "referencia": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11",
+          "uid": "5f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "mision-0c7a2d9e-4f8b-4a55-9b65-6f1d3b2f0a11-epica"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": ".+"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "status": 201
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "ms-inventario"
+  }
+}

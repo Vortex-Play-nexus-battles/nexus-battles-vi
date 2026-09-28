@@ -14,12 +14,14 @@ No los escribe nadie a mano: salen de correr las pruebas del consumidor.
 | `ms-ecommerce-productos.json` | ms-ecommerce (compra, B5) | productos | `contratos/ProductosPactoTest` |
 | `ms-ecommerce-inventario.json` | ms-ecommerce (compra, B5) | inventario | `contratos/InventarioPactoTest` |
 | `ms-subastas-notificaciones.json` | ms-subastas (B8, avisos de 7.7.8) | notificaciones | `NotificacionesPactoTest` |
+| `misiones-ms-inventario.json` | misiones (B9, §7.8.6 y §7.8.10) | ms-inventario | `InventarioPactoTest` de misiones |
 | `comentarios-productos.json` | comentarios (B3: comentar y calificar solo productos que existen) | productos | `CatalogoPactoTest` |
 
 ## Regenerarlos
 
 ```bash
 ./gradlew :services:cuentas:ms-subastas:test --tests '*PactoTest'
+./gradlew :services:contenido:misiones:test --tests '*InventarioPactoTest'
 ./gradlew :services:plataforma:comentarios:test --tests '*PactoTest'
 # ms-ecommerce es Maven: desde services/cuentas/ms-ecommerce
 ./mvnw -B test -Dtest='*PactoTest'
@@ -75,6 +77,14 @@ Los estados que hay que poder montar hoy:
 (La tercera interacción, sin credencial de servicio, no tiene estado: fija que
 `/internal/notifications` responde 401 sin `Authorization`.)
 
+**ms-inventario, para misiones** (B9, inventario.yaml 1.6.0)
+- el héroe es del jugador y está libre
+- el héroe no existe
+- el héroe está en otra misión
+- el héroe está en esa misión
+- el héroe ya volvió de esa misión
+- el jugador puede recibir productos del catálogo
+
 **productos** (B3; lo consume comentarios)
 - el producto existe en el catalogo
 - el producto no existe en el catalogo
@@ -84,11 +94,25 @@ Los pactos se verifican:
 | Pacto | Verificación | Cómo |
 |---|---|---|
 | ms-finanzas | `ms-finanzas/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, `CreditoService` simulado, PostgreSQL de Testcontainers |
-| ms-inventario | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
-| productos | `productos/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `AdquirirProductoServicio` y `CatalogoProductos` **reales** sobre el tiraje y el registro de claves en memoria, sin Mongo |
-| inventario | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
+| ms-inventario (ms-subastas) | `inventario/.../contratos/VerificacionDelPactoDeSubastasTest` (`@Consumer("ms-subastas")`) | servicio arrancado, **casos de uso reales** sobre un repositorio en memoria, sin Mongo |
+| ms-inventario (misiones) | `inventario/.../contratos/VerificacionDelPactoDeMisionesTest` (`@Consumer("misiones")`) | igual, con la tabla de niveles del documento en lugar de la de heroes, y la colección `entregas` y el catálogo en memoria para `POST /entregas` |
+| productos (ms-ecommerce) | `productos/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `AdquirirProductoServicio` y `CatalogoProductos` **reales** sobre el tiraje y el registro de claves en memoria, sin Mongo |
+| inventario (ms-ecommerce) | `inventario/.../contratos/VerificacionDelPactoDeEcommerceTest` | servicio arrancado, `EntregarProductos` **real** sobre inventarios, entregas y catálogo en memoria, sin Mongo |
 | notificaciones | `notificaciones/.../contratos/VerificacionDelPactoDeSubastasTest` | servicio arrancado con su cadena de seguridad real, `ServicioDeNotificaciones` simulado, PostgreSQL de Testcontainers. La credencial de ejemplo del pacto se sustituye por un token de servicio real del emisor de prueba |
-| productos | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
+| productos (comentarios) | `productos/.../contratos/VerificacionDelPactoDeComentariosTest` | servicio arrancado, caso de uso real (`ConsultarProductoServicio`) sobre `ProductoRepository` simulado, sin Mongo |
+
+Un proveedor con varios consumidores tiene una clase de verificación por
+consumidor, cada una con `@Consumer`: sin él, la clase de un consumidor
+intentaría montar los estados del otro. El guardián empareja cada pacto con la
+clase de su consumidor (o con la del proveedor sin `@Consumer`, si solo hay una).
+
+**Fusionado con B4:** la interacción de misiones «el jugador puede recibir
+productos del catálogo» es de `POST /api/v1/inventario/entregas` (B4). Mientras
+B9 no la tenía, `VerificacionDelPactoDeMisionesTest` la dejaba fuera con un
+`@PactFilter`; al fusionar con develop se quitó el filtro y hoy se verifican las
+nueve interacciones, la entrega con el caso de uso real (`EntregarProductos`) y
+un catálogo en memoria que solo conoce la épica que misiones entrega («Segundo
+impulso», del catálogo oficial).
 
 El de notificaciones fija lo que falló en producción hasta B8: el adaptador de
 ms-subastas salía **sin** credencial de servicio y cada aviso recibía 401, que el
