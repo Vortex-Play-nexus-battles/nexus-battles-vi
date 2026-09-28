@@ -235,6 +235,17 @@ jobs:
             if sudo docker ps --format '{{.Names}}' | grep -q '^plataforma-db$'; then
               sudo docker exec plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -c "SELECT plantilla, estado, COALESCE(destino, chr(45)), count(*) FROM correo.envios WHERE creado_en > now() - interval '"'"'7 days'"'"' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"' 2>/dev/null \
                 | sed 's/^/    /' || echo "    (sin tabla correo.envios)"
+              # Las direcciones REALES (fuera de los dominios reservados de la
+              # RFC 2606), desde siempre: si alguna vez salio una por el
+              # proveedor, y cuando. La direccion no sale de la base.
+              echo "  -- direcciones reales, desde siempre: estado | destino | cuantos | ultimo dia"
+              sudo docker exec -i plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | "' 2>/dev/null <<'SQL' | sed 's/^/    /' || true
+            SELECT estado, COALESCE(destino, '-'), count(*), max(COALESCE(enviado_en, actualizado_en))::date
+            FROM correo.envios
+            WHERE split_part(lower(destinatario), '@', 2) !~ '(^|\.)(test|example|invalid|localhost)$'
+              AND split_part(lower(destinatario), '@', 2) NOT IN ('example.com', 'example.net', 'example.org')
+            GROUP BY 1, 2 ORDER BY 1, 2;
+            SQL
             else
               echo "    (este host no tiene la base de plataforma)"
             fi
