@@ -84,7 +84,7 @@ resource "aws_security_group" "plataforma" {
   # dominio, nginx no escucha en el 443 y la conexion se rechaza. Asi el dia
   # que llegue el dominio no hace falta tocar el grupo de seguridad.
   ingress {
-    description = "Borde nginx en HTTPS (Let's Encrypt): mismo origen que el 80, que redirige a este"
+    description = "Borde nginx en HTTPS (Lets Encrypt): mismo origen que el 80, que redirige a este"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
