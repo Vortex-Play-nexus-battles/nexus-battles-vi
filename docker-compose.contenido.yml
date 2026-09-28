@@ -55,11 +55,19 @@ services:
           memory: 384M
     volumes:
       - contenido-mongo-data:/data/db
+    # Healthcheck sin mongosh (28-sep). mongosh es un Node.js de ~230 MB que
+    # arrancaba cada 10 s DENTRO de este contenedor: era el proceso que mas
+    # memoria usaba del host de contenido (diagnostico-dev.yml, corrida
+    # 36491039653) y contaba contra los 384M de este mismo limite, junto a
+    # mongod. Para "acepta conexiones", que es lo que esperan los depends_on,
+    # basta abrir el puerto: bash /dev/tcp no carga nada. Para inspeccionar a
+    # mano, "docker exec -it contenido-mongo mongosh" sigue funcionando.
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
-      interval: 10s
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/27017"]
+      interval: 15s
       timeout: 5s
       retries: 10
+      start_period: 20s
 
   # --- Servicios de contenido ---
 

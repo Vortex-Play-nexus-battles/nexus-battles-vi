@@ -45,6 +45,10 @@
 #               Apagada solo factura la IP elastica (3,60 USD/mes) y el disco.
 #   destroy  -> borra TODO lo de esa carpeta, incluida la IP. Exige "destroy".
 #               Nunca corre sola.
+#   reglas-sg -> SOLO contenido, y solo con vars.AWS_ROLE_ARN_CONTENIDO: aplica
+#               las reglas de entrada de infrastructure/entornos/contenido/
+#               reglas-entrada.json (cada puerto solo desde plataforma; revoca
+#               lo que esos puertos tuvieran abierto al mundo; el 22 no se toca).
 #
 # Limite de GitHub: el boton "Run workflow" y los `cron` solo existen cuando el
 # archivo esta en la rama por defecto (`main`). Hasta que develop se promueva a
@@ -70,7 +74,7 @@ on:
         type: choice
         required: true
         default: plan
-        options: [inventario, plan, apply, start, stop, destroy]
+        options: [inventario, plan, apply, start, stop, destroy, reglas-sg]
       confirmar:
         description: "Para apply/destroy: escribe la misma accion aqui"
         type: string
@@ -248,12 +252,21 @@ jobs:
           case $(( ${#cuerpo} % 4 )) in 2) cuerpo="$cuerpo==";; 3) cuerpo="$cuerpo=";; esac
           echo "$cuerpo" | base64 -d | jq '{iss, sub, aud, repository, repository_owner, ref, event_name}'
 
+      # 28-sep — contenido vive en la cuenta del Grupo 2. Si su dueño crea el
+      # rol OIDC para este repositorio (vars.AWS_ROLE_ARN_CONTENIDO, pasos en
+      # infrastructure/entornos/contenido/README.md), encender, apagar, el
+      # inventario y las reglas del SG de contenido usan ESE rol: es el unico
+      # que ve la instancia. plan/apply de contenido siguen con el de
+      # plataforma, porque el estado de OpenTofu esta en el bucket de esta
+      # cuenta (y sus compuertas impiden crear nada). Sin la variable, todo se
+      # queda como antes: el rol de plataforma no ve el host y start/stop
+      # dicen "nada que hacer".
       - name: Asumir el rol de AWS por OIDC (sin claves)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-to-assume: ${{ (matrix.host == 'contenido' && vars.AWS_ROLE_ARN_CONTENIDO != '' && contains(fromJSON('["start","stop","inventario","reglas-sg"]'), steps.accion.outputs.accion)) && vars.AWS_ROLE_ARN_CONTENIDO || vars.AWS_ROLE_ARN }}
           role-session-name: infra-${{ matrix.host }}-${{ steps.accion.outputs.accion }}-${{ github.run_id }}
-          aws-region: ${{ vars.AWS_REGION }}
+          aws-region: ${{ (matrix.host == 'contenido' && vars.AWS_ROLE_ARN_CONTENIDO != '' && contains(fromJSON('["start","stop","inventario","reglas-sg"]'), steps.accion.outputs.accion)) && (vars.AWS_REGION_CONTENIDO || 'us-east-1') || vars.AWS_REGION }}
 
       - name: Comprobar que la cuenta sigue en Free Plan
         working-directory: .
@@ -318,6 +331,27 @@ jobs:
               --output json | tee -a "$GITHUB_STEP_SUMMARY"
           done
           echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # ------------------------------------------------------------- reglas-sg
+      # 28-sep — reglas de entrada del SG de contenido declaradas en
+      # infrastructure/entornos/contenido/reglas-entrada.json: abre cada puerto
+      # SOLO al host de plataforma y revoca lo que esos mismos puertos tuvieran
+      # abierto al mundo. No toca el 22 ni nada que no este declarado.
+      # Plataforma no la necesita: su SG lo gobierna OpenTofu.
+      - name: Reglas de entrada del grupo de seguridad de contenido
+        if: steps.accion.outputs.accion == 'reglas-sg'
+        working-directory: .
+        run: |
+          set -euo pipefail
+          if [ "${{ matrix.host }}" != "contenido" ]; then
+            echo "Plataforma: su grupo de seguridad lo gobierna OpenTofu (infrastructure/entornos/plataforma/main.tf). Nada que hacer aqui."
+            exit 0
+          fi
+          if [ -z "${{ vars.AWS_ROLE_ARN_CONTENIDO }}" ]; then
+            echo "::error::Falta vars.AWS_ROLE_ARN_CONTENIDO: el rol OIDC en la cuenta del Grupo 2. Pasos en infrastructure/entornos/contenido/README.md."
+            exit 1
+          fi
+          bash scripts/infra/reglas-sg-contenido.sh infrastructure/entornos/contenido/reglas-entrada.json
 
       # --------------------------------------------------------------- start/stop
       - name: Encender o apagar la instancia
