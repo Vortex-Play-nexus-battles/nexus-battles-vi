@@ -145,9 +145,8 @@
 }
 
 /* RF-CAR-005 — distincion de lo que ya es tuyo y de lo que esta en la lista de
-   deseos. `ProductoVitrinaDto` trae los dos campos, pero hoy `VitrinaService`
-   los escribe siempre en `false`: el realce existe y no se activara hasta que
-   el servicio los calcule de verdad (deuda de Grupo de Santiago). */
+   deseos. Desde B5 (1.4.0) la vitrina con sesion calcula los dos campos
+   (`esPropio`, `enListaDeseos`) y el corazon los cambia sin repintar. */
 .product-card[data-propio='si'] {
   border-color: var(--exito);
 }
@@ -289,8 +288,10 @@
   color: var(--advertencia);
 }
 
-/* La lista de deseos, sin servicio que la guarde: se ve, no se usa, y dice
-   por que al lado (no solo en un `title`). */
+/* La lista de deseos (B5). En la tienda el conmutador guarda en la cuenta y
+   su estado es `aria-pressed`: deseado, relleno del acento con el corazon en
+   claro. En la portada, sin cuenta, se ve apagado y dice por que al lado (no
+   solo en un `title`). */
 .deseos__caja {
   display: flex;
   flex-wrap: wrap;
@@ -312,6 +313,19 @@
 .deseos__icono {
   width: 16px;
   height: 16px;
+}
+
+.deseos[aria-pressed='true'] {
+  border-color: var(--acento-relleno);
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+}
+
+/* El de la tarjeta: solo el corazon, cuadrado, junto a «Añadir». */
+.deseos--tarjeta {
+  justify-content: center;
+  min-width: var(--boton-pequeno);
+  padding: 0;
 }
 
 .deseos__motivo {

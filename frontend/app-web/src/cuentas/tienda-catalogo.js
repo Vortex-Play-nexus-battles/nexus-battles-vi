@@ -23,17 +23,24 @@
  *
  * ## Qué es «tuyo»
  *
- * La vitrina trae `esPropio` y hoy lo escribe siempre en `false`: no se
- * cruza con el inventario. El inventario del jugador sí lo publica
- * (`GET /api/v1/inventario/elementos`, con su `productoId`), así que la
- * tienda lo lee y marca lo que ya tiene. Es un dato del inventario, no una
- * deducción: si no se puede leer, no se marca nada.
+ * Desde B5 (1.4.0) la vitrina con sesión trae `esPropio` y `enListaDeseos`
+ * calculados en el servidor. Además la tienda lee el inventario del jugador
+ * (`GET /api/v1/inventario/elementos`, con su `productoId`) para decir
+ * cuántos tiene («Tienes 2»). Es un dato del inventario, no una deducción: si
+ * no se puede leer, no se marca nada.
+ *
+ * ## La moneda
+ *
+ * Se pide en la moneda que se enseña (`moneda`, salvo COP, que no lleva
+ * parámetro) y la primera página dice cuáles ofrece el servidor
+ * (`monedasDisponibles`): ver `tienda-moneda.js`.
  *
  * @module cuentas/tienda-catalogo
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { rutaDeApi } from '../comun/base-api.js';
+import { MONEDA_BASE, conMoneda, disponiblesDe } from './tienda-moneda.js';
 import { NOMBRE_DEL_TIPO } from '../contenido/inventario/ficha-producto.js';
 import { reunirInventario } from '../contenido/inventario/coleccion-inventario.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
@@ -84,21 +91,24 @@ async function errorDeRespuesta(respuesta) {
  *
  * La primera petición va a `/vitrina?size=50`; las siguientes añaden la
  * página. Se para en la última (`last`, un lote corto o `totalPages`) o en el
- * tope.
+ * tope. En otra moneda que COP se añade `moneda`.
  *
- * @param {{fetchImpl?: Function, porLote?: number, maxLotes?: number}} [opciones]
- * @returns {Promise<{productos: object[], completo: boolean}>} los DTO tal cual
+ * @param {{fetchImpl?: Function, porLote?: number, maxLotes?: number, moneda?: string}} [opciones]
+ * @returns {Promise<{productos: object[], completo: boolean, monedasDisponibles: string[]}>}
+ *   los DTO tal cual y las monedas que ofrece el servidor (de la primera página)
  * @throws {Error & {estado: number, problema: object|null}} si el servicio rechaza
  */
 export async function reunirVitrina({
   fetchImpl = fetchWithHttpErrorInterceptor,
   porLote = PRODUCTOS_POR_LOTE,
   maxLotes = MAX_LOTES,
+  moneda = MONEDA_BASE,
 } = {}) {
   const productos = [];
+  let monedasDisponibles = [MONEDA_BASE];
   for (let pagina = 0; pagina < maxLotes; pagina += 1) {
     const consulta = pagina === 0 ? `?size=${porLote}` : `?page=${pagina}&size=${porLote}`;
-    const respuesta = await fetchImpl(rutaDeApi(`/vitrina${consulta}`), {
+    const respuesta = await fetchImpl(rutaDeApi(conMoneda(`/vitrina${consulta}`, moneda)), {
       method: 'GET',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -106,6 +116,9 @@ export async function reunirVitrina({
       throw await errorDeRespuesta(respuesta);
     }
     const datos = await respuesta.json();
+    if (pagina === 0) {
+      monedasDisponibles = disponiblesDe(datos);
+    }
     const lote = Array.isArray(datos?.content) ? datos.content : [];
     productos.push(...lote);
     const ultima =
@@ -113,10 +126,10 @@ export async function reunirVitrina({
       lote.length < porLote ||
       (Number.isInteger(datos?.totalPages) && pagina + 1 >= datos.totalPages);
     if (ultima) {
-      return { productos, completo: true };
+      return { productos, completo: true, monedasDisponibles };
     }
   }
-  return { productos, completo: false };
+  return { productos, completo: false, monedasDisponibles };
 }
 
 /**
