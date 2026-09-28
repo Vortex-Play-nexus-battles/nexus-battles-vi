@@ -140,6 +140,122 @@ Y el smoke de DEV (`smoke-dev.yml`) en verde: pasa por el borde y por `salas-par
 
 Sin coste nuevo: es configuración del mismo contenedor, en el mismo host.
 
+## Acción humana pendiente (28-sep) — puertos para repartir carga y rol OIDC
+
+Medido el 28-sep (`diagnostico-dev.yml`, ver `../../despliegue/CAPACIDAD.md`):
+plataforma está con el swap lleno (2047/2047 MiB) y este host tiene 722-740
+MiB disponibles. El reparto propuesto trae aquí **misiones** (8105),
+**ms-subastas** (8092) y **ms-ecommerce** (8090), y **ms-chatbot** (8094) solo
+si la medición lo permite. Su único cliente es el borde del host de plataforma,
+así que los cuatro puertos se abren **solo** a su IP elástica. Lo hace el dueño
+de la cuenta `551262695144`, una vez, en la consola o en CloudShell.
+
+### Paso A · Grupo de seguridad (10 minutos, sin ventana)
+
+```text
+AWS Console (cuenta 551262695144, N. Virginia us-east-1)
+→ EC2 → Security Groups → sg-01bfe668448b037c4 → Inbound rules → Edit inbound rules
+   1) Añadir primero (para no cortar nada), todas con Source Custom 35.168.124.119/32:
+      Custom TCP 8101 "heroes <- plataforma"      Custom TCP 8105 "misiones <- plataforma"
+      Custom TCP 8102 "inventario <- plataforma"  Custom TCP 8092 "ms-subastas (HTTP+WS) <- borde"
+      Custom TCP 8103 "productos <- plataforma"   Custom TCP 8090 "ms-ecommerce <- borde"
+      Custom TCP 8104 "motor <- plataforma"       Custom TCP 8094 "ms-chatbot <- borde"
+   2) Borrar las reglas de 8101-8104 cuyo Source sea 0.0.0.0/0
+   3) No tocar el 22. Ninguna regla nueva con 0.0.0.0/0.
+   → Save rules
+```
+
+En CloudShell de esa cuenta, lo mismo:
+
+```bash
+SG=sg-01bfe668448b037c4
+for p in 8101 8102 8103 8104 8105 8092 8090 8094; do
+  aws ec2 authorize-security-group-ingress --region us-east-1 --group-id $SG \
+    --ip-permissions "IpProtocol=tcp,FromPort=$p,ToPort=$p,IpRanges=[{CidrIp=35.168.124.119/32,Description=nexus-plataforma}]"
+done
+aws ec2 describe-security-group-rules --region us-east-1 --filters Name=group-id,Values=$SG \
+  --query "SecurityGroupRules[?IsEgress==\`false\` && CidrIpv4=='0.0.0.0/0'].[SecurityGroupRuleId,FromPort,ToPort]" --output table
+aws ec2 revoke-security-group-ingress --region us-east-1 --group-id $SG --security-group-rule-ids <sgr-de-8101-8104>
+```
+
+Lo comprueba Grupo 6 después: desde internet, 8101-8104 dejan de contestar;
+desde plataforma, 8090, 8092, 8094 y 8101-8105 contestan.
+
+### Paso B · Rol OIDC para este repositorio (15-20 minutos, recomendado)
+
+Con él, el pipeline enciende y apaga este host con el mismo horario que
+plataforma (hoy lleva semanas encendido 24 h) y los cambios de puertos
+futuros dejan de necesitar a una persona. Permisos mínimos: nada de IAM, S3,
+otras instancias ni otros grupos de seguridad.
+
+1. IAM → Identity providers → Add provider → OpenID Connect ·
+   `https://token.actions.githubusercontent.com` · audiencia `sts.amazonaws.com`
+   (si ya existe, se salta).
+2. IAM → Policies → Create policy → JSON, nombre `nexus-contenido-dev-ci`:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       { "Sid": "Leer", "Effect": "Allow",
+         "Action": ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules"],
+         "Resource": "*" },
+       { "Sid": "EncenderApagarSoloContenido", "Effect": "Allow",
+         "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+         "Resource": "arn:aws:ec2:us-east-1:551262695144:instance/i-0388a00d533e39039" },
+       { "Sid": "ReglasDeEntradaSoloDeEsteSG", "Effect": "Allow",
+         "Action": ["ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
+                    "ec2:UpdateSecurityGroupRuleDescriptionsIngress"],
+         "Resource": ["arn:aws:ec2:us-east-1:551262695144:security-group/sg-01bfe668448b037c4",
+                      "arn:aws:ec2:us-east-1:551262695144:security-group-rule/*"] }
+     ]
+   }
+   ```
+
+3. IAM → Roles → Create role → Web identity → proveedor
+   `token.actions.githubusercontent.com`, audiencia `sts.amazonaws.com`,
+   organización `Vortex-Play-nexus-battles`, repositorio `nexus-battles-vi`,
+   rama `develop` → política `nexus-contenido-dev-ci` → nombre
+   `github-actions-nexus-contenido-dev`.
+4. Trust relationships → Edit trust policy:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Principal": { "Federated": "arn:aws:iam::551262695144:oidc-provider/token.actions.githubusercontent.com" },
+       "Action": "sts:AssumeRoleWithWebIdentity",
+       "Condition": {
+         "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+         "StringLike": { "token.actions.githubusercontent.com:sub": [
+           "repo:Vortex-Play-nexus-battles/nexus-battles-vi:environment:dev",
+           "repo:Vortex-Play-nexus-battles/nexus-battles-vi:ref:refs/heads/develop",
+           "repo:Vortex-Play-nexus-battles@317725248/nexus-battles-vi@1336530373:environment:dev",
+           "repo:Vortex-Play-nexus-battles@317725248/nexus-battles-vi@1336530373:ref:refs/heads/develop"
+         ] }
+       }
+     }]
+   }
+   ```
+
+5. El ARN (`arn:aws:iam::551262695144:role/github-actions-nexus-contenido-dev`)
+   no es un secreto: se guarda como variable de repositorio
+   `AWS_ROLE_ARN_CONTENIDO`. `cd.yml`, `diagnostico-dev.yml` e `infra-dev.yml`
+   ya lo leen. Nunca access keys estáticas.
+
+Con el rol puesto:
+
+- **El paso A lo puede hacer el pipeline:** `Actions → Infra dev → Run workflow → host
+  contenido, accion reglas-sg` aplica `reglas-entrada.json` (probado en CI con
+  `scripts/cd/pruebas/reglas-sg-contenido.sh`). Si el dueño solo hace el paso B, Grupo 6
+  hace el A desde ahí.
+- **El horario de plataforma pasa a aplicarse también a este host:** se apaga a las 23:23 y
+  se enciende a las 07:17 (hora Colombia) de lunes a viernes, y queda apagado el fin de
+  semana. Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
+  `ec2:StopInstances`.
+
 ## Cómo se levantó (histórico)
 
 ```bash
