@@ -180,17 +180,20 @@ services:
         set -e
         sed -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
             -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
+            -e 's|34\.193\.90\.11:8092|srv-ms-subastas:8092|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: el fichero nombra la IP en sus comentarios.
-        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -qE '34\.193\.90\.11:810(3|5)'; then
-          echo "ADAPTACION INCOMPLETA: el catalogo o misiones siguen apuntando al host de contenido." >&2
+        if grep -v '^[[:space:]]*#' /salida/default.conf | grep -qE '34\.193\.90\.11:(810(3|5)|8092)'; then
+          echo "ADAPTACION INCOMPLETA: el catalogo, misiones o subastas siguen apuntando al host de contenido." >&2
           exit 1
         fi
         grep -q 'srv-productos:8080' /salida/default.conf || {
           echo "ADAPTACION INCOMPLETA: no aparece srv-productos:8080." >&2; exit 1; }
         grep -q 'srv-misiones:8080' /salida/default.conf || {
           echo "ADAPTACION INCOMPLETA: no aparece srv-misiones:8080." >&2; exit 1; }
-        echo "Borde adaptado al banco: el catalogo de productos y misiones son ecos locales."
+        grep -q 'srv-ms-subastas:8092' /salida/default.conf || {
+          echo "ADAPTACION INCOMPLETA: no aparece srv-ms-subastas:8092." >&2; exit 1; }
+        echo "Borde adaptado al banco: el catalogo de productos, misiones y subastas son ecos locales."
 
   borde:
     image: nginx:1.27-alpine

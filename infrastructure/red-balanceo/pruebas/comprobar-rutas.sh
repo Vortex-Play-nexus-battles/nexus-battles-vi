@@ -628,6 +628,10 @@ enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
 enConfiguracion "misiones va al host de contenido"   '34\.193\.90\.11:8105'
+# Topologia 28-sep: ms-subastas vive en contenido; su API y su canal STOMP
+# van a su IP y puerto (el banco los devuelve al eco srv-ms-subastas).
+enConfiguracion "subastas va al host de contenido"   'set \$destino 34\.193\.90\.11:8092'
+enConfiguracion "el canal de subastas va al host de contenido" 'set \$destino_ws 34\.193\.90\.11:8092'
 
 echo
 echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"
