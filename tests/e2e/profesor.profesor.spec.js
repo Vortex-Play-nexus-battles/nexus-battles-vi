@@ -41,6 +41,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
+import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
 
 // ------------------------------------------------------------------ rutas
 
@@ -809,11 +810,16 @@ test.describe('R17 · la prueba del profesor', () => {
           .join(' · ');
       });
 
-      // Ningún error de página en todo el recorrido, y ningún 5xx fuera de
-      // subastas (que puede no estar desplegado y lo dice).
-      const graves = bitacora.incidencias.filter(
-        (i) => i.tipo === 'pagina' || (i.tipo === 'http' && !/\/api\/v1\/subastas/.test(i.detalle)),
-      );
+      // Ningún error de página en todo el recorrido, y ningún 5xx fuera de los
+      // servicios que el catálogo declara fuera de DEV (`desplegableDev:
+      // false`: hoy subastas, chatbot y misiones), cuya vista dice que no
+      // están —se comprobó arriba—. Cuando uno se despliegue, su 5xx cuenta.
+      const graves = bitacora.incidencias.filter((i) => {
+        if (i.tipo === 'pagina') return true;
+        if (i.tipo !== 'http') return false;
+        const ruta = i.detalle.split(' ')[1] ?? '';
+        return servicioNoDesplegadoDe(ruta) === null;
+      });
       expect(graves, 'errores de página o 5xx durante el recorrido').toEqual([]);
     } finally {
       await bitacora.cerrar(testInfo);
