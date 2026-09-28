@@ -11,9 +11,9 @@
  *     «contenido promocional alternativo»; con el módulo de misiones caído o
  *     inexistente, **el banner se oculta sin afectar el resto de la vista**.
  *
- * Esto último es lo que pasa hoy, porque no hay servicio de misiones: en el
- * inventario el banner no aparece. No es un hueco: es la excepción que el
- * requisito escribe para este caso.
+ * Esto último es lo que pasa cuando el servicio de misiones no responde (ver
+ * `fuente-misiones.js`): en el inventario el banner no aparece. No es un
+ * hueco: es la excepción que el requisito escribe para este caso.
  *
  * ## Carrusel accesible
  *
@@ -383,7 +383,9 @@ export function promocionDeEstrategia(hrefEstrategia) {
  *
  * @param {HTMLElement} zona
  * @param {object} opciones
- * @param {import('./fuente-misiones.js').FuenteDeMisiones} opciones.fuente
+ * @param {import('./fuente-misiones.js').FuenteDeMisiones
+ *   |Promise<import('./fuente-misiones.js').FuenteDeMisiones>} opciones.fuente
+ *   la de `fuenteDeMisiones()` llega como promesa: antes pregunta al servicio
  * @param {(mision: object) => string} opciones.hrefDe
  * @param {string|null} [opciones.hrefTablon]
  * @param {string|null} [opciones.hrefEstrategia] con él, sin destacadas se promociona la estrategia
@@ -391,10 +393,11 @@ export function promocionDeEstrategia(hrefEstrategia) {
  */
 export async function montarBannerDeMisiones(
   zona,
-  { fuente, hrefDe, hrefTablon = null, hrefEstrategia = null },
+  { fuente: fuentePedida, hrefDe, hrefTablon = null, hrefEstrategia = null },
 ) {
   vaciar(zona);
   zona.hidden = true;
+  const fuente = await fuentePedida;
   if (!fuente?.disponible) {
     return 'oculto';
   }

@@ -28,6 +28,9 @@ docs/
 !services/contenido/productos/build/libs/*.jar
 !services/contenido/inventario/build/libs/*.jar
 !services/contenido/motor-combate/build/libs/*.jar
+# B9: misiones (misiones.e2e.spec.js). Sin esta linea el COPY de srv-misiones
+# no encuentra el jar y `docker compose up --build` no levanta el banco.
+!services/contenido/misiones/build/libs/*.jar
 !services/plataforma/salas-partidas/build/libs/*.jar
 !services/plataforma/comentarios/build/libs/*.jar
 !services/cuentas/ms-finanzas/build/libs/*.jar

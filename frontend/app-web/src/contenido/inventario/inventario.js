@@ -517,7 +517,10 @@ export async function montarInventario(
       boton.setAttribute('aria-pressed', String(heroeSeleccionado?.id === heroe.id));
       boton.disabled = heroe.disponible === false;
       if (boton.disabled) {
-        boton.title = 'Bloqueado por una subasta: no se puede equipar mientras dure.';
+        // §7.8.10: en misión tampoco se cambia el equipo (inventario.yaml 1.6.0).
+        boton.title = heroe.ejecucionMisionId
+          ? 'En una misión: no se puede cambiar su equipo hasta que vuelva.'
+          : 'Bloqueado por una subasta: no se puede equipar mientras dure.';
       }
       boton.addEventListener('click', () => abrirEquipamiento(heroe));
       vista.selectorHeroe.append(boton);

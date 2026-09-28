@@ -443,3 +443,27 @@ describe('FI-R7 - el selector alcanza todo el inventario, no solo la pagina visi
     expect(document.querySelector('[data-elegir="arma-lejana"]')).not.toBeNull();
   });
 });
+
+test('un heroe en mision (§7.8.10, inventario.yaml 1.6.0) se ve «En misión» y no deja cambiar su equipo', async () => {
+  // Asi lo publica el inventario mientras misiones lo tiene bloqueado.
+  const enMision = [
+    { ...elementos[0], disponible: false, subastaId: null, ejecucionMisionId: 'e-1' },
+    ...elementos.slice(1),
+  ];
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => ({ ...pagina(), elementos: enMision }),
+    consultarEquipo: async () => ({ ...vacio(), armas: ['arma-1'] }),
+  });
+  await esperarHasta(() => raiz.querySelector('[data-accion="equipar"]'));
+
+  expect(raiz.querySelector('.sello-estado-heroe[data-estado="EN_MISION"]').textContent).toBe(
+    'En misión',
+  );
+  const equipar = raiz.querySelector('[data-accion="equipar"]');
+  expect(equipar.disabled).toBe(true);
+  expect(equipar.title).toBe('Está en una misión: no se puede cambiar su equipo hasta que vuelva.');
+  // Tampoco desde la pestaña Equipamiento, y no se confunde con una subasta.
+  const opcion = raiz.querySelector('.inventario-equipo__opcion[data-heroe="heroe-1"]');
+  expect(opcion.disabled).toBe(true);
+  expect(opcion.title).toBe('En una misión: no se puede cambiar su equipo hasta que vuelva.');
+});
