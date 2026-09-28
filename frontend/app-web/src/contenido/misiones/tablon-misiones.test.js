@@ -248,7 +248,7 @@ describe('tablón sin abrir', () => {
   test('explica las tres categorías sin fingir ni una tarjeta', () => {
     const seccion = tablonSinAbrir();
 
-    expect(seccion.querySelector('h2').textContent).toBe('Así serán las misiones');
+    expect(seccion.querySelector('h2').textContent).toBe('Así son las misiones');
     expect([...seccion.querySelectorAll('h3')].map((t) => t.textContent)).toEqual([
       'Historia',
       'Desafío',

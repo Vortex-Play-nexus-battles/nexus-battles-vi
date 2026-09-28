@@ -18,6 +18,16 @@ import { estadoDeHeroe, ranurasOcupadas, ESTADOS } from '../../comun/ui/juego/es
 import { construirVacio } from './estados-vista.js';
 
 /**
+ * Por qué no se ofrece cambiar el equipo de un héroe, según su estado: el
+ * bloqueo de una subasta (HU-INV-010) y la misión en curso (§7.8.10: «no puede
+ * ser modificado su equipamiento»; el inventario respondería 409).
+ */
+const MOTIVO_SIN_EQUIPAR = Object.freeze({
+  [ESTADOS.BLOQUEADO]: 'Está bloqueado por una subasta: no se puede equipar mientras dure.',
+  [ESTADOS.EN_MISION]: 'Está en una misión: no se puede cambiar su equipo hasta que vuelva.',
+});
+
+/**
  * Pinta la rejilla de héroes y devuelve el equipo que se pudo leer de cada
  * uno (lo necesita la pestaña de objetos para decir qué está equipado).
  *
@@ -84,7 +94,7 @@ export async function pintarHeroes(
     const prototipo = producto?.prototipo ?? null;
     prototipos.set(heroe.id, prototipo);
     const estado = estadoDeHeroe({ elemento: heroe, equipamiento: equipo });
-    const bloqueado = estado.estado === ESTADOS.BLOQUEADO;
+    const motivoSinEquipar = MOTIVO_SIN_EQUIPAR[estado.estado] ?? null;
 
     rejilla.append(
       h('li', {
@@ -111,9 +121,7 @@ export async function pintarHeroes(
                 etiqueta: `Gestionar el equipamiento de ${heroe.nombrePropio}`,
                 principal: estado.estado === ESTADOS.NO_ELEGIBLE,
                 datos: { accion: 'equipar', idHeroe: heroe.id },
-                deshabilitada: bloqueado
-                  ? 'Está bloqueado por una subasta: no se puede equipar mientras dure.'
-                  : null,
+                deshabilitada: motivoSinEquipar,
                 alPulsar: () => alEquipar(heroe),
               },
             ],

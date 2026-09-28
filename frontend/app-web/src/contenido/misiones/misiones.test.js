@@ -72,7 +72,7 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/misiones.html');
 });
 
-describe('sin servicio de misiones (hoy)', () => {
+describe('sin respuesta del servicio de misiones', () => {
   test('dice qué pasa, por qué y qué se puede hacer, sin pedir nada', async () => {
     // Copia espiable de la fuente de producción (que está congelada).
     const fuente = { ...FUENTE_SIN_SERVICIO, tablero: jest.fn(), destacadas: jest.fn() };
@@ -86,7 +86,9 @@ describe('sin servicio de misiones (hoy)', () => {
 
     expect(modo).toBe('sin-abrir');
     const estado = document.querySelector('.misiones-estado');
-    expect(estado.querySelector('h2').textContent).toBe('Las misiones todavía no están abiertas');
+    expect(estado.querySelector('h2').textContent).toBe('Las misiones no están disponibles ahora');
+    expect(estado.textContent).toContain('El servicio de misiones no responde');
+    expect(estado.textContent).toContain('El resto del juego sigue funcionando.');
     expect(estado.textContent).toContain('preparar la estrategia de combate');
     expect(estado.querySelector('a[data-accion="jugar"]').getAttribute('href')).toMatch(
       /batallas\.html$/,
@@ -137,13 +139,36 @@ describe('sin servicio de misiones (hoy)', () => {
 
     document.querySelector('#pestana-en-curso').click();
     const enCurso = document.querySelector('[data-seccion="en-curso"]');
-    expect(enCurso.textContent).toContain('Ningún héroe está en misión');
+    // Sin respuesta del servicio no se sabe si hay héroes en misión: no se
+    // dice que no los hay.
+    expect(enCurso.textContent).toContain('No podemos ver tus misiones en curso ahora');
+    expect(enCurso.textContent).not.toContain('Ningún héroe está en misión');
     expect(enCurso.querySelector('[data-accion="preparar-estrategia"]')).not.toBeNull();
 
     document.querySelector('#pestana-historial').click();
     expect(document.querySelector('[data-seccion="historial"]').textContent).toContain(
-      'Todavía no hay historial',
+      'No podemos enseñar tu historial ahora',
     );
+  });
+
+  test('la fuente real llega como promesa: mientras pregunta, la página dice que carga', async () => {
+    let responder;
+    const pregunta = new Promise((resolver) => {
+      responder = resolver;
+    });
+
+    const montaje = montarMisiones(document, {
+      fuente: pregunta,
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html'),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    await esperar();
+    expect(document.querySelector('.estado-vista--cargando')).not.toBeNull();
+
+    responder(FUENTE_SIN_SERVICIO);
+    expect(await montaje).toBe('sin-abrir');
+    expect(document.querySelector('.estado-vista--cargando')).toBeNull();
   });
 
   test('un enlace a una misión no abre nada que no existe: se queda en el estado honesto', async () => {
@@ -172,6 +197,57 @@ describe('con servicio de misiones', () => {
     expect(document.querySelector('.misiones-estado')).toBeNull();
     expect(document.querySelector('.banner-misiones')).not.toBeNull();
     expect(document.querySelectorAll('.mision-card')).toHaveLength(1);
+  });
+
+  test('una fuente que llega como promesa y contesta abre el tablón', async () => {
+    const fuente = fuenteDeLaboratorio();
+    const modo = await montarMisiones(document, {
+      fuente: Promise.resolve(fuente),
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html'),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    await esperar();
+
+    expect(modo).toBe('tablon');
+    expect(fuente.tablero).toHaveBeenCalledWith(expect.objectContaining({ categoria: 'HISTORIA' }));
+    expect(document.querySelectorAll('.mision-card')).toHaveLength(1);
+  });
+
+  test('la pestaña Estrategia carga la guardada del héroe y la deja guardar (§7.8.12)', async () => {
+    const guardada = {
+      heroeId: 'h-1',
+      prototipo: 'Guerrero Armas',
+      nivel: 1,
+      rotaciones: [{ prioridad: 'Alta', pasos: ['Embate sangriento'] }],
+      actualizadaEn: '2026-09-20T10:00:00Z',
+    };
+    const fuente = fuenteDeLaboratorio({
+      estrategiaGuardada: jest.fn(async () => guardada),
+      guardarEstrategia: jest.fn(async () => guardada),
+    });
+    await montarMisiones(document, {
+      fuente,
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html'),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    document.querySelector('#pestana-estrategia').click();
+    await esperar();
+
+    expect(fuente.estrategiaGuardada).toHaveBeenCalledWith('h-1');
+    expect(document.querySelector('.estrategia__paso select').value).toBe('Embate sangriento');
+
+    document
+      .querySelector('[data-seccion="estrategia"] .estrategia__formulario')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await esperar();
+    document.querySelector('[data-accion="guardar-estrategia"]').click();
+    await esperar();
+
+    expect(fuente.guardarEstrategia).toHaveBeenCalledWith('h-1', [
+      { pasos: ['Embate sangriento'] },
+    ]);
   });
 
   test('?mision=: el detalle; con héroe y estrategia comprobada se confirma y se matricula', async () => {

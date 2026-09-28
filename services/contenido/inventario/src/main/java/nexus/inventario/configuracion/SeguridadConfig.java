@@ -27,7 +27,7 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
 /**
  * Seguridad del inventario.
  *
- * <p>Tres clases de rutas:
+ * <p>Clases de rutas:
  * <ul>
  *   <li><b>Del jugador</b> (vitrina, busqueda, crear/modificar/borrar,
  *       equipamiento, estadisticas): exigen un usuario autenticado o un
@@ -41,6 +41,9 @@ import org.springframework.security.web.access.intercept.RequestAuthorizationCon
  *       Un jugador que intenta crearse un elemento recibe 403.</li>
  *   <li><b>De subastas</b> (consulta por id, bloqueo y liberacion): solo el
  *       servicio de subastas, por su {@code azp}, como desde HU-INV-010.</li>
+ *   <li><b>De misiones</b> (1.6.0, B9: bloqueo del heroe en mision y su
+ *       liberacion): solo el servicio de misiones, con rol SERVICIO y su
+ *       {@code azp}. La consulta por id la comparten subastas y misiones.</li>
  *   <li><b>Actuator</b>: abierto para la sonda de salud (regla 3).</li>
  * </ul>
  */
@@ -67,7 +70,8 @@ public class SeguridadConfig {
     public SecurityFilterChain filterChain(
             HttpSecurity http,
             ConversorRolesJwt conversor,
-            @Value("${integraciones.subastas.client-id}") String subastasClientId) throws Exception {
+            @Value("${integraciones.subastas.client-id}") String subastasClientId,
+            @Value("${integraciones.misiones.client-id:misiones}") String misionesClientId) throws Exception {
         CadenaDeSeguridad.aplicarBase(http, conversor);
         // La cadena base deja el 401 de Spring (cuerpo vacio). El contrato de
         // inventario promete el problem detail "Identidad requerida" tambien
@@ -84,8 +88,20 @@ public class SeguridadConfig {
             }
             return new AuthorizationDecision(false);
         };
+        // 1.6.0 (B9): el heroe en mision lo bloquea y lo libera SOLO el servicio
+        // de misiones, con su credencial de servicio (rol SERVICIO y su azp).
+        AuthorizationManager<RequestAuthorizationContext> soloMisiones = (authentication, context) ->
+                new AuthorizationDecision(esServicioConAzp(authentication.get(), misionesClientId));
+        // La consulta interna por id la usan subastas (HU-INV-010) y misiones.
+        AuthorizationManager<RequestAuthorizationContext> subastasOMisiones = (authentication, context) ->
+                new AuthorizationDecision(soloSubastas.authorize(authentication, context).isGranted()
+                        || esServicioConAzp(authentication.get(), misionesClientId));
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers(HttpMethod.PUT, "/api/v1/inventario/elementos/*/bloqueo-mision")
+                .access(soloMisiones)
+                .requestMatchers(HttpMethod.POST, "/api/v1/inventario/elementos/*/bloqueo-mision/*/liberacion")
+                .access(soloMisiones)
                 // Subastas (HU-INV-010): por azp, antes que el comodin de elementos.
                 .requestMatchers(HttpMethod.PUT, "/api/v1/inventario/elementos/*/bloqueo-subasta")
                 .access(soloSubastas)
@@ -100,7 +116,7 @@ public class SeguridadConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/busqueda")
                 .hasAnyRole(ROLES_DEL_INVENTARIO)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/*")
-                .access(soloSubastas)
+                .access(subastasOMisiones)
                 // B4: la propiedad solo llega por canales validos. Crear un
                 // elemento a mano y entregar productos son de un servicio (la
                 // compra, el cofre, el paquete inicial de ms-identidad...) o de
@@ -113,6 +129,17 @@ public class SeguridadConfig {
                 .requestMatchers("/api/v1/inventario/**").hasAnyRole(ROLES_DEL_INVENTARIO)
                 .anyRequest().authenticated());
         return http.build();
+    }
+
+    /** Un token de servicio (rol SERVICIO) cuyo {@code azp} es {@code clientId}. */
+    static boolean esServicioConAzp(org.springframework.security.core.Authentication autenticacion,
+                                    String clientId) {
+        if (!(autenticacion instanceof JwtAuthenticationToken jwt)) {
+            return false;
+        }
+        boolean servicio = jwt.getAuthorities().stream()
+                .anyMatch(autoridad -> "ROLE_SERVICIO".equals(autoridad.getAuthority()));
+        return servicio && clientId.equals(jwt.getToken().getClaimAsString("azp"));
     }
 
     static void responderIdentidadRequerida(
