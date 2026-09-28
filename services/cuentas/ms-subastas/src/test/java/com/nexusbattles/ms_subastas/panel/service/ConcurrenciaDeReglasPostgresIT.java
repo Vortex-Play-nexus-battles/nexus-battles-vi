@@ -78,6 +78,9 @@ import static org.mockito.Mockito.*;
         "app.pujas.emision-automatica-intervalo-ms=3600000",
         "app.subastas.cierre-intervalo-ms=3600000",
         "app.notificaciones.drenaje-intervalo-ms=3600000",
+        // B8: el drenador de correos tambien es un trabajo programado:
+        // fuera del camino de la prueba.
+        "app.correo.drenaje-intervalo-ms=3600000",
         "app.subastas.recordatorio-intervalo-ms=3600000",
         "app.subastas.pendientes-intervalo-ms=3600000",
         "app.pujas.intervalo-minimo-segundos=0"

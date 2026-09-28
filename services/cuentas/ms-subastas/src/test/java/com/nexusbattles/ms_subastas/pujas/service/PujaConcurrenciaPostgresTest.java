@@ -62,7 +62,12 @@ import static org.junit.jupiter.api.Assertions.*;
         "app.pujas.intervalo-minimo-segundos=0",
         "app.pujas.emision-automatica-intervalo-ms=3600000",
         "app.subastas.cierre-intervalo-ms=3600000",
-        "app.notificaciones.drenaje-intervalo-ms=3600000"
+        "app.notificaciones.drenaje-intervalo-ms=3600000",
+        // B8: recordatorio, pendientes y correo tambien son trabajos
+        // programados que tocan las subastas: fuera del camino de la prueba.
+        "app.subastas.recordatorio-intervalo-ms=3600000",
+        "app.subastas.pendientes-intervalo-ms=3600000",
+        "app.correo.drenaje-intervalo-ms=3600000"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class PujaConcurrenciaPostgresTest {

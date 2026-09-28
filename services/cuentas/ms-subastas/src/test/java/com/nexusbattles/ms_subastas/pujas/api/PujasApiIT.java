@@ -65,7 +65,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
                 // El drenador intentaria entregar los avisos a un modulo de
                 // notificaciones que aqui no existe: llenaria el log de avisos
                 // de conexion rechazada sin aportar nada a estas pruebas.
-                "app.notificaciones.drenaje-intervalo-ms=3600000"
+                "app.notificaciones.drenaje-intervalo-ms=3600000",
+                // B8: recordatorio, pendientes y correo tambien son trabajos
+                // programados que tocan las subastas: fuera del camino de la prueba.
+                "app.subastas.recordatorio-intervalo-ms=3600000",
+                "app.subastas.pendientes-intervalo-ms=3600000",
+                "app.correo.drenaje-intervalo-ms=3600000"
         })
 @Testcontainers(disabledWithoutDocker = true)
 class PujasApiIT {
