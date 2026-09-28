@@ -137,7 +137,6 @@ class RegistroServiceTest {
     void debePropagarRechazoDeListaNegra() {
 
         when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
-        when(usuarioRepository.existsByApodoIgnoreCase(anyString())).thenReturn(false);
         doThrow(new IllegalArgumentException("El apodo contiene términos prohibidos."))
             .when(apodoBlacklistValidator).validar(anyString());
 
@@ -149,6 +148,26 @@ class RegistroServiceTest {
         assertEquals("El apodo contiene términos prohibidos.", exception.getMessage());
         assertEquals(Motivo.APODO_NO_PERMITIDO, exception.getMotivo());
         verify(passwordPolicyValidator, never()).validar(anyString());
+        verify(usuarioRepository, never()).save(any());
+    }
+
+    // B13, la prueba del profesor en DEV: «SpiderMan» ya existia (se creo
+    // antes de la lista negra) y el registro respondia «El apodo ya está en
+    // uso». Quien prueba la lista negra concluia que no funcionaba. Un apodo
+    // prohibido es prohibido exista o no una cuenta con el: la lista negra va
+    // antes que la unicidad, y de paso no revela que la cuenta existe.
+    @Test
+    @DisplayName("B13: un apodo prohibido que ya existe responde apodo-no-permitido, no apodo-en-uso")
+    void apodoProhibidoQueYaExiste() {
+        when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
+        doThrow(new IllegalArgumentException("El apodo no está permitido."))
+            .when(apodoBlacklistValidator).validar("cristianc");
+
+        RegistroRechazadoException exception = assertThrows(
+            RegistroRechazadoException.class, () -> registroService.registrarUsuario(datosValidos()));
+
+        assertEquals(Motivo.APODO_NO_PERMITIDO, exception.getMotivo());
+        verify(usuarioRepository, never()).existsByApodoIgnoreCase(anyString());
         verify(usuarioRepository, never()).save(any());
     }
 
@@ -241,7 +260,6 @@ class RegistroServiceTest {
     @DisplayName("B2: si la lista negra no responde, la excepcion sube tal cual (503) y no se guarda nada")
     void listaNegraCaida() {
         when(usuarioRepository.existsByEmailIgnoreCase(anyString())).thenReturn(false);
-        when(usuarioRepository.existsByApodoIgnoreCase(anyString())).thenReturn(false);
         doThrow(new ModeracionNoDisponibleException("sin respuesta"))
             .when(apodoBlacklistValidator).validar(anyString());
 
