@@ -1,0 +1,46 @@
+# HTTPS del borde — plantilla (28-sep). NO se monta tal cual.
+#
+# scripts/cd/certificado.sh la copia a /opt/nexus/tls/borde-tls.conf,
+# cambiando __DOMINIO__ por vars.DOMINIO_PUBLICO, SOLO cuando existe un
+# certificado de Let's Encrypt para ese nombre. borde-dev.conf la incluye
+# DENTRO de su unico `server` con
+#     include /etc/nginx/nexus-tls/*.conf;
+# y un include con comodin que no encuentra ningun archivo no es un error: sin
+# certificado, el borde sigue exactamente como antes (solo el 80).
+#
+# Lo que hace al activarse:
+#   - el mismo server escucha tambien en el 443 con el certificado del dominio
+#     (una sola lista de rutas para los dos puertos: nada que duplicar);
+#   - el 80 redirige con 301 a https://__DOMINIO__ todo MENOS /salud-borde
+#     (lo consultan desplegar.sh, la compuerta de capacidad y el diagnostico
+#     por http://localhost) y el reto de ACME (/.well-known/acme-challenge/,
+#     que la renovacion tiene que poder servir por el 80);
+#   - la redireccion va al DOMINIO, no a $host: quien entre por la IP acaba en
+#     el nombre para el que vale el certificado.
+# Los WebSocket no necesitan nada: el mismo /ws, /ws-subastas y
+# /ws/notificaciones pasan por el 443 (wss://), y la interfaz ya deriva ws(s)
+# del protocolo de la pagina. X-Forwarded-Proto ya sale con $scheme.
+# HSTS NO: se pone a mano cuando HTTPS lleve una semana estable.
+
+listen 443 ssl;
+ssl_certificate     /etc/letsencrypt/live/__DOMINIO__/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/__DOMINIO__/privkey.pem;
+ssl_protocols TLSv1.2 TLSv1.3;
+ssl_prefer_server_ciphers off;
+ssl_session_cache shared:nexus_tls:1m;
+ssl_session_timeout 1d;
+ssl_session_tickets off;
+
+set $nexus_a_https 1;
+if ($scheme = https) {
+    set $nexus_a_https 0;
+}
+if ($uri = /salud-borde) {
+    set $nexus_a_https 0;
+}
+if ($uri ~ ^/\.well-known/acme-challenge/) {
+    set $nexus_a_https 0;
+}
+if ($nexus_a_https) {
+    return 301 https://__DOMINIO__$request_uri;
+}

@@ -4,13 +4,13 @@
   "region": "us-east-1",
   "origen": "35.168.124.119/32",
   "puertos": [
-    { "puerto": 8101, "descripcion": "heroes <- plataforma" },
-    { "puerto": 8102, "descripcion": "inventario <- plataforma" },
-    { "puerto": 8103, "descripcion": "productos <- plataforma" },
-    { "puerto": 8104, "descripcion": "motor-combate <- plataforma" },
-    { "puerto": 8105, "descripcion": "misiones <- plataforma" },
-    { "puerto": 8092, "descripcion": "ms-subastas (HTTP y WebSocket) <- borde" },
-    { "puerto": 8090, "descripcion": "ms-ecommerce <- borde" },
-    { "puerto": 8094, "descripcion": "ms-chatbot <- borde" }
+    { "puerto": 8101, "descripcion": "heroes desde plataforma" },
+    { "puerto": 8102, "descripcion": "inventario desde plataforma" },
+    { "puerto": 8103, "descripcion": "productos desde plataforma" },
+    { "puerto": 8104, "descripcion": "motor-combate desde plataforma" },
+    { "puerto": 8105, "descripcion": "misiones desde plataforma" },
+    { "puerto": 8092, "descripcion": "ms-subastas HTTP y WebSocket desde el borde" },
+    { "puerto": 8090, "descripcion": "ms-ecommerce desde el borde" },
+    { "puerto": 8094, "descripcion": "ms-chatbot desde el borde" }
   ]
 }

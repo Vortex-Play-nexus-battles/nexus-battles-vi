@@ -98,7 +98,8 @@ Dónde está probado el camino completo, además del entorno:
 | Puerto | Origen admitido | Por qué |
 |---|---|---|
 | 22 | `cidr_ssh` = `0.0.0.0/0` | `cd.yml` entra por `scp`/`ssh` desde runners de GitHub, que no tienen IP fija. Solo con llave (la AMI no acepta contraseña). |
-| 80 | `0.0.0.0/0` | El borde (`infrastructure/red-balanceo/borde-dev.conf`): **la única puerta del público**. |
+| 80 | `0.0.0.0/0` | El borde (`infrastructure/red-balanceo/borde-dev.conf`): **la única puerta del público**. Con HTTPS activo redirige a https salvo `/salud-borde` y el reto de ACME. |
+| 443 | `0.0.0.0/0` | 28-sep: el mismo borde en HTTPS (Let's Encrypt, `scripts/cd/certificado.sh`). Abierto antes que el certificado: mientras no haya dominio, nadie escucha ahí. |
 | 8081-8088, 8089 | `cidr_servicios` = **`34.193.90.11/32`** | Solo el host de contenido llama a un puerto directo: sus servicios validan los tokens contra el JWKS de ms-identidad en `:8089` (`IDENTIDAD_JWKS_URL` en `docker-compose.contenido.yml`). |
 | 8090-8094 | nadie | ms-ecommerce, ms-cumplimiento, ms-subastas, ms-finanzas y ms-chatbot nunca estuvieron en el grupo de seguridad: se llega a ellos por el borde. |
 

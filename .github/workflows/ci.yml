@@ -202,6 +202,14 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
+      # 28-sep — el mismo borde con el fragmento TLS que dejaria
+      # scripts/cd/certificado.sh y un certificado autofirmado: 80 -> 301 salvo
+      # /salud-borde y ACME, y el 443 enruta como el 80. Sin esto, el dia que
+      # llegue el dominio seria el primer dia que se pruebe.
+      - name: Comprobar el HTTPS del borde (fragmento TLS con certificado de prueba)
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: bash ./comprobar-tls.sh
+
       - name: Recoger la bitacora del borde si algo fallo
         if: failure()
         working-directory: infrastructure/red-balanceo/pruebas
@@ -383,6 +391,14 @@ jobs:
       - name: Comprobar la compuerta de capacidad del CD
         shell: bash
         run: bash scripts/cd/pruebas/comprobar-capacidad.sh
+
+      # 28-sep: HTTPS del borde. Sin dominio, sin consentimiento de Let's
+      # Encrypt, con el DNS apuntando a otro sitio o si nginx rechaza el
+      # fragmento, el borde se queda en HTTP; nunca emite para una IP. Con
+      # docker, curl y getent falsos; segundos.
+      - name: Comprobar certificado.sh (HTTPS del borde, sin romper nunca el HTTP)
+        shell: bash
+        run: bash scripts/cd/pruebas/certificado.sh
 
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las

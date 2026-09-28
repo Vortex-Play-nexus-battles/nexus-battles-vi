@@ -1,0 +1,101 @@
+# Renovacion diaria del certificado HTTPS del borde de DEV (28-sep).
+#
+# ## Que hace
+#
+# Copia scripts/cd/certificado.sh y la plantilla TLS al host de plataforma y
+# lo ejecuta alli: con el certificado ya emitido hace `certbot renew` (no hace
+# nada si faltan mas de 30 dias) y recarga nginx; sin dominio o sin el
+# consentimiento de Let's Encrypt, deja el borde en HTTP y lo dice. Es el
+# mismo script que corre desplegar.sh en cada despliegue: esto solo cubre los
+# dias sin despliegues.
+#
+# ## Sin coste nuevo
+#
+# Un runner de GitHub y una sesion SSH. NO enciende el host: si esta apagado,
+# el certificado no se usa y la siguiente corrida con el host encendido lo
+# renueva (Let's Encrypt emite con 90 dias y certbot renueva a los 60).
+#
+# ## Cuando
+#
+# 15:47 UTC (10:47 en Colombia), de lunes a viernes, con el host encendido.
+# Los cron de GitHub solo corren desde la rama por defecto y pueden llegar
+# tarde: un dia de retraso no importa con 30 dias de margen.
+name: Certificado HTTPS de DEV
+
+on:
+  schedule:
+    - cron: "47 15 * * 1-5"
+  workflow_dispatch:
+
+concurrency:
+  group: certificado-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  renovar:
+    name: Asegurar y renovar el certificado del borde
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Comprobar que el host contesta (sin encenderlo)
+        id: host
+        env:
+          DESTINO: ${{ secrets.DEPLOY_HOST_DEV }}
+        run: |
+          if [ -z "$DESTINO" ]; then
+            echo "::error::Falta el secreto DEPLOY_HOST_DEV en el entorno dev."
+            exit 1
+          fi
+          if timeout 10 bash -c "exec 3<>/dev/tcp/$DESTINO/22" 2>/dev/null; then
+            echo "encendido=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "encendido=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::El host de plataforma no contesta (apagado): nada que renovar hoy."
+          fi
+
+      - name: Copiar el script y la plantilla
+        if: steps.host.outputs.encendido == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "scripts/cd/certificado.sh"
+          target: "/opt/nexus"
+          strip_components: 0
+
+      - name: Copiar la plantilla TLS del borde
+        if: steps.host.outputs.encendido == 'true'
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          source: "infrastructure/red-balanceo/tls/borde-tls.conf.plantilla"
+          target: "/opt/nexus/web"
+          strip_components: 0
+
+      - name: Asegurar y renovar
+        if: steps.host.outputs.encendido == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DOMINIO_PUBLICO: ${{ vars.DOMINIO_PUBLICO }}
+          DOMINIOS_ADICIONALES: ${{ vars.DOMINIOS_ADICIONALES }}
+          ACME_ACEPTA_TERMINOS: ${{ vars.ACME_ACEPTA_TERMINOS }}
+          ACME_CORREO: ${{ vars.ACME_CORREO }}
+          ACME_PRUEBAS: ${{ vars.ACME_PRUEBAS }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST_DEV }}
+          username: ${{ secrets.SSH_USER_DEV }}
+          key: ${{ secrets.SSH_KEY_DEV }}
+          command_timeout: 5m
+          envs: DOMINIO_PUBLICO,DOMINIOS_ADICIONALES,ACME_ACEPTA_TERMINOS,ACME_CORREO,ACME_PRUEBAS
+          script: |
+            chmod +x /opt/nexus/scripts/cd/certificado.sh
+            NEXUS_DIR=/opt/nexus /opt/nexus/scripts/cd/certificado.sh
