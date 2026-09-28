@@ -218,6 +218,22 @@ export function crearClienteChatbot({
       }
       return llamar('POST', `/chat/mensajes/${encodeURIComponent(mensajeId)}/calificacion`, cuerpo);
     },
+
+    /**
+     * Abre una solicitud de soporte humano (solo con sesión; el servidor
+     * responde 401 SESION_REQUERIDA a un visitante).
+     *
+     * @param {{categoria: string, asunto: string, mensaje: string}} datos
+     * @returns {Promise<object>} la solicitud como la ve el jugador
+     */
+    abrirTicket({ categoria, asunto, mensaje }) {
+      return llamar('POST', '/chat/tickets', { categoria, asunto, mensaje }, { rutaFija: true });
+    },
+
+    /** @returns {Promise<Array<object>>} las solicitudes del jugador, la más reciente primero */
+    async misTickets() {
+      return (await llamar('GET', '/chat/tickets', undefined, { rutaFija: true })) ?? [];
+    },
   };
 }
 

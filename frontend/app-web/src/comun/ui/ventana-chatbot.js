@@ -13,6 +13,8 @@
  * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
  *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
+ * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
+ *   (`soporte-chatbot.js`); el visitante recibe la invitación a iniciar sesión;
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
  *   conversación, y cambiarle el tamaño arrastrando la esquina o con las
  *   flechas del teclado sobre ella. El tamaño se recuerda en esta sesión.
@@ -25,6 +27,7 @@
  * @module comun/ui/ventana-chatbot
  */
 
+import { urlDeVista } from '../acceso.js';
 import { crearClienteChatbot } from '../cliente-chatbot.js';
 import { leerSesion } from '../sesion.js';
 import { conCarga } from './boton.js';
@@ -33,6 +36,7 @@ import { confirmar } from './dialogo.js';
 import { h, vaciar } from './dom.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
+import { crearPanelSoporte } from './soporte-chatbot.js';
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
@@ -93,6 +97,7 @@ export const TEXTOS = Object.freeze({
   enviando: 'Enviando…',
   verCaptura: 'Ver captura adjunta',
   borrar: 'Borrar conversación',
+  soporte: 'Soporte',
   confirmarBorrarTitulo: '¿Borrar la conversación?',
   confirmarBorrarMensaje:
     'Se borrarán todos los mensajes de esta conversación. No se puede deshacer.',
@@ -122,7 +127,7 @@ let contador = 0;
  *
  * @param {{cliente?: ReturnType<typeof crearClienteChatbot>,
  *          sesion?: () => {autenticado: boolean, apodo: string},
- *          raiz?: HTMLElement, chatGeneral?: string,
+ *          raiz?: HTMLElement, chatGeneral?: string, login?: string|null,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>}} [opciones]
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
@@ -133,6 +138,7 @@ export function crearVentanaChatbot({
   sesion = () => leerSesion(),
   raiz = document.body,
   chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
+  login = urlDeVista('login'),
   confirmarBorrado = confirmar,
 } = {}) {
   contador += 1;
@@ -148,6 +154,12 @@ export function crearVentanaChatbot({
   titulo.id = idTitulo;
   const estado = h('p', { clase: 'chatbot-ventana__estado' });
 
+  const botonSoporte = h('button', {
+    clase: 'chatbot-ventana__accion',
+    texto: TEXTOS.soporte,
+    atributos: { type: 'button', 'aria-expanded': 'false' },
+    datos: { accion: 'hablar-con-soporte' },
+  });
   const botonBorrar = h('button', {
     clase: 'chatbot-ventana__accion',
     texto: TEXTOS.borrar,
@@ -183,7 +195,7 @@ export function crearVentanaChatbot({
       titulo,
       h('div', {
         clase: 'chatbot-ventana__acciones',
-        hijos: [botonBorrar, botonMinimizar, botonCerrar],
+        hijos: [botonSoporte, botonBorrar, botonMinimizar, botonCerrar],
       }),
       estado,
     ],
@@ -231,6 +243,16 @@ export function crearVentanaChatbot({
     datos: { chatbotVentana: '' },
     hijos: [asa, cabecera, registro, zonaAviso, formulario],
   });
+  // «Soporte» ocupa el sitio de la conversación mientras está abierto; la
+  // conversación no se pierde, solo se oculta.
+  const panelSoporte = crearPanelSoporte({
+    cliente,
+    sesion,
+    login,
+    chatGeneral,
+    alVolver: () => mostrarSoporte(false),
+  });
+  ventana.append(panelSoporte.elemento);
   ventana.id = `chatbot-ventana-${contador}`;
   registro.id = `chatbot-ventana-registro-${contador}`;
   botonMinimizar.setAttribute('aria-controls', registro.id);
@@ -573,6 +595,31 @@ export function crearVentanaChatbot({
   botonBorrar.addEventListener('click', borrarConversacion);
   botonCerrar.addEventListener('click', () => cerrar());
 
+  // -------------------------------------------------------------- soporte
+
+  function soporteAbierto() {
+    return !panelSoporte.elemento.hidden;
+  }
+
+  function mostrarSoporte(si) {
+    registro.hidden = si;
+    formulario.hidden = si;
+    if (si) {
+      limpiarAviso();
+      panelSoporte.abrir();
+    } else {
+      panelSoporte.elemento.hidden = true;
+    }
+    botonSoporte.setAttribute('aria-expanded', String(si));
+    if (si) {
+      panelSoporte.enfocar();
+    } else {
+      enfocarDentro();
+    }
+  }
+
+  botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+
   // ------------------------------------------------- minimizar y tamaño
 
   function minimizada() {
@@ -728,6 +775,10 @@ export function crearVentanaChatbot({
     }
     if (minimizada()) {
       botonMinimizar.focus();
+      return;
+    }
+    if (soporteAbierto()) {
+      panelSoporte.enfocar();
       return;
     }
     const destino = !entrada.disabled

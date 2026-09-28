@@ -39,6 +39,8 @@ function clienteFalso(sobrescribir = {}) {
     enviarMensaje: jest.fn(async () => ({ ...BOT, id: 'm-bot-nuevo' })),
     limpiarHistorial: jest.fn(async () => null),
     calificar: jest.fn(async () => ({ id: 'c-1' })),
+    abrirTicket: jest.fn(async () => ({ ticketId: 't-1', estado: 'ABIERTO' })),
+    misTickets: jest.fn(async () => []),
     ...sobrescribir,
   };
 }
@@ -333,6 +335,55 @@ describe('calificar (HU-CHA-011)', () => {
     expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(
       TEXTOS.errorAlCalificar,
     );
+  });
+});
+
+describe('soporte', () => {
+  test('«Soporte» cambia la conversación por el panel y «Volver al chat» la devuelve', async () => {
+    const vista = await montar({ sesion: () => ({ autenticado: true, apodo: 'Kai' }) });
+    const boton = vista.el.querySelector('[data-accion="hablar-con-soporte"]');
+    const panel = vista.el.querySelector('[data-chatbot-soporte]');
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+
+    expect(panel.hidden).toBe(true);
+    boton.click();
+    await esperar();
+
+    expect(panel.hidden).toBe(false);
+    expect(registro.hidden).toBe(true);
+    expect(vista.formulario.hidden).toBe(true);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
+    expect(panel.contains(document.activeElement)).toBe(true);
+
+    vista.el.querySelector('[data-accion="volver-al-chat"]').click();
+
+    expect(panel.hidden).toBe(true);
+    expect(registro.hidden).toBe(false);
+    expect(vista.formulario.hidden).toBe(false);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(vista.entrada);
+  });
+
+  test('el mismo botón cierra el panel si ya estaba abierto', async () => {
+    const vista = await montar();
+    const boton = vista.el.querySelector('[data-accion="hablar-con-soporte"]');
+
+    boton.click();
+    boton.click();
+
+    expect(vista.el.querySelector('[data-chatbot-soporte]').hidden).toBe(true);
+  });
+
+  test('a un visitante el panel le ofrece iniciar sesión', async () => {
+    const vista = await montar();
+
+    vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+
+    expect(vista.el.querySelector('[data-chatbot-soporte]').textContent).toContain(
+      'necesitas iniciar sesión',
+    );
+    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
   });
 });
 

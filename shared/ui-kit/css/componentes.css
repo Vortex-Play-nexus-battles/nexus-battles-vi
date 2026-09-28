@@ -2746,6 +2746,96 @@ button.tarjeta--partida:disabled {
   resize: vertical;
 }
 
+/* «Soporte»: solicitud de soporte humano dentro de la ventana. Ocupa el
+   sitio de la conversación mientras está abierto. */
+
+.chatbot-soporte {
+  flex: 1 1 auto;
+  min-height: 160px;
+  overflow-y: auto;
+  padding: var(--e-3) var(--e-4);
+}
+
+.chatbot-soporte__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.chatbot-soporte__titulo,
+.chatbot-soporte__subtitulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot-soporte__subtitulo {
+  margin-top: var(--e-4);
+}
+
+.chatbot-soporte__texto {
+  margin: var(--e-2) 0;
+  color: var(--texto-2);
+}
+
+.chatbot-soporte__aviso {
+  margin: var(--e-2) 0;
+}
+
+.chatbot-soporte__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.chatbot-soporte__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.chatbot-soporte__lista {
+  margin: var(--e-2) 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.chatbot-soporte__ticket {
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.chatbot-soporte__fila {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.chatbot-soporte__asunto,
+.chatbot-soporte__respuesta {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.chatbot-soporte__meta,
+.chatbot-soporte__vacio {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-soporte__respuesta {
+  margin-top: var(--e-2);
+}
+
 /* Calificación de cada respuesta del bot (HU-CHA-011) */
 
 .chatbot-calificacion {
@@ -2807,6 +2897,7 @@ button.tarjeta--partida:disabled {
 }
 
 .chatbot-ventana--minimizada .chatbot-ventana__registro,
+.chatbot-ventana--minimizada .chatbot-soporte,
 .chatbot-ventana--minimizada .chatbot-ventana__aviso,
 .chatbot-ventana--minimizada .chatbot-ventana__formulario,
 .chatbot-ventana--minimizada .chatbot-ventana__estado,

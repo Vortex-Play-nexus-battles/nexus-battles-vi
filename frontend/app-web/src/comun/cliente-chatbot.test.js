@@ -162,6 +162,55 @@ describe('operaciones', () => {
     });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ util: true });
   });
+
+  test('abrirTicket manda categoría, asunto y mensaje con el token del jugador', async () => {
+    const fetch = jest.fn(async () => respuestaJson({ ticketId: 't-1', estado: 'ABIERTO' }, 201));
+
+    const ticket = await cliente({ fetch, sesion: JUGADOR }).abrirTicket({
+      categoria: 'SOPORTE_TECNICO',
+      asunto: 'No carga',
+      mensaje: 'Se queda cargando',
+    });
+
+    const [url, opciones] = fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/chat/tickets');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.headers.Authorization).toBe('Bearer token-del-jugador');
+    expect(JSON.parse(opciones.body)).toEqual({
+      categoria: 'SOPORTE_TECNICO',
+      asunto: 'No carga',
+      mensaje: 'Se queda cargando',
+    });
+    expect(ticket.estado).toBe('ABIERTO');
+  });
+
+  test('misTickets devuelve la lista, o vacía si no llega cuerpo', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ ticketId: 't-1' }]))
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => null });
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.misTickets()).toEqual([{ ticketId: 't-1' }]);
+    expect(await chat.misTickets()).toEqual([]);
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/tickets');
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+  });
+
+  test('un 409 al abrir un ticket conserva el motivo del servidor', async () => {
+    const fetch = jest.fn(async () =>
+      respuestaJson({ title: 'Ya tienes un ticket abierto', motivo: 'TICKET_ABIERTO' }, 409),
+    );
+
+    const error = await cliente({ fetch, sesion: JUGADOR })
+      .abrirTicket({ categoria: 'FAQ_GENERAL', asunto: 'a', mensaje: 'b' })
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(409);
+    expect(error.problema.motivo).toBe('TICKET_ABIERTO');
+    expect(error.noDisponible).toBe(false);
+  });
 });
 
 describe('errores', () => {
