@@ -1,6 +1,19 @@
 /* Panel de administración del asistente (HU-CHA-012). Solo lo propio de esta
    vista; tarjetas, pestañas, campos y botones vienen del kit. */
 
+/* Superficies claras de esta vista: la tinta vuelve a oscuro (ver «Tinta
+   contextual» en base.css). La página vive sobre la atmósfera oscura, así que
+   sin esto el texto de las tablas y de la gráfica salía blanco sobre blanco. */
+.tabla-panel,
+.panel-chatbot__grafica {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
 .panel-chatbot__filtros {
   display: flex;
   flex-wrap: wrap;
