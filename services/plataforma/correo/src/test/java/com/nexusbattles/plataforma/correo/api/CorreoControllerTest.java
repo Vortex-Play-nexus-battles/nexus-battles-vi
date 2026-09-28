@@ -64,6 +64,7 @@ class CorreoControllerTest {
     private static final String SUBASTA = "/api/v1/correos/subasta";
     private static final String CONFIRMACION_COMPRA = "/api/v1/correos/confirmacion-compra";
     private static final String SANCION = "/api/v1/correos/sancion";
+    private static final String TORNEO = "/api/v1/correos/torneo";
 
     private static final EmisorDeTokensDePrueba EMISOR = EmisorDeTokensDePrueba.emisor();
 
@@ -134,6 +135,26 @@ class CorreoControllerTest {
                                      "tipo":"BANEO","motivo":"Suplantación de identidad"}
                                     """))
                     .andExpect(status().isForbidden());
+
+            nadaEncolado();
+        }
+
+        @Test
+        void nadieFueraDeLosServiciosMandaCorreosDeTorneoConLaPlantillaCorporativa() throws Exception {
+            // Asunto y mensaje los decide quien llama: abierto a un jugador,
+            // seria un «ganaste el torneo» con la imagen de la marca hacia
+            // cualquier direccion.
+            String cuerpo = """
+                    {"email":"victima@ejemplo.com","apodo":"Victima",
+                     "asunto":"Ganaste el torneo","mensaje":"Reclama tu premio"}
+                    """;
+            String deJugador = EMISOR.tokenDeJugador("ElGuerrero", UUID.randomUUID());
+
+            mockMvc.perform(post(TORNEO).header(HttpHeaders.AUTHORIZATION, "Bearer " + deJugador)
+                            .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(post(TORNEO).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                    .andExpect(status().isUnauthorized());
 
             nadaEncolado();
         }
@@ -779,6 +800,144 @@ class CorreoControllerTest {
     })
     void rechazaSancionConDatosInvalidos(String cuerpo) throws Exception {
         mockMvc.perform(comoServicio(SANCION).contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isBadRequest());
+
+        nadaEncolado();
+    }
+
+    // ----- 1.5.0 (B10): hitos de torneo (consumidor: torneos) -----
+
+    private static final String TORNEO_ID = "5b0f3c1e-8d2a-4c71-9e0b-2f6a7d4c9e11";
+
+    /** Una peticion tal como la hace torneos: con su propia credencial de servicio. */
+    private static MockHttpServletRequestBuilder comoTorneos() {
+        return post(TORNEO).header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeServicio("torneos"));
+    }
+
+    @Test
+    void aceptaUnCorreoDeTorneoYLoEncolaConSuAsuntoSuMensajeYLaReferenciaDelTorneo() throws Exception {
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Inscripción confirmada: Copa de Otoño",
+                 "mensaje":"Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.",
+                 "torneoId":"%s"}
+                """.formatted(TORNEO_ID)))
+                .andExpect(status().isAccepted());
+
+        CorreoPedido pedido = encolado();
+        assertThat(pedido.plantilla()).isEqualTo(Plantilla.TORNEO);
+        assertThat(pedido.destinatario()).isEqualTo("jugador@ejemplo.com");
+        assertThat(pedido.asunto()).as("el asunto lo decide torneos").isEqualTo("Inscripción confirmada: Copa de Otoño");
+        assertThat(pedido.debeEnviarse()).isTrue();
+        assertThat(pedido.datos())
+                .containsEntry("apodo", "ElGuerrero")
+                .containsEntry("asunto", "Inscripción confirmada: Copa de Otoño")
+                .containsEntry("mensaje",
+                        "Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.")
+                .containsEntry("torneoId", TORNEO_ID);
+    }
+
+    @Test
+    void laIdempotencyKeyEstableDeTorneosLlegaALaCola() throws Exception {
+        // torneo-<id>-jugador-<uid>-correo-<hito>: la misma en cada reintento de
+        // torneos, para que un tiempo agotado no le mande dos copias al jugador.
+        String clave = "torneo-" + TORNEO_ID + "-jugador-0d9c6c52-3b8e-4f5e-a1c2-7e4b9a6d3f20-correo-cancelacion";
+        mockMvc.perform(comoTorneos()
+                        .header("Idempotency-Key", clave)
+                        .contentType(MediaType.APPLICATION_JSON).content("""
+                                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                                 "asunto":"Se canceló el torneo Copa de Otoño","mensaje":"El torneo se canceló."}
+                                """))
+                .andExpect(status().isAccepted());
+
+        verify(cola).encolar(any(), eq(clave), isNull());
+    }
+
+    @Test
+    void sinTorneoIdElCorreoDeTorneoSeEncolaIgualYSinReferencia() throws Exception {
+        // torneoId es opcional en el contrato ([string, null]).
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Empezó el torneo Copa de Otoño","mensaje":"El torneo ya empezó.",
+                 "torneoId":null}
+                """))
+                .andExpect(status().isAccepted());
+
+        assertThat(encolado().datos())
+                .containsEntry("mensaje", "El torneo ya empezó.")
+                .doesNotContainKey("torneoId");
+    }
+
+    @Test
+    void elCorreoDeTorneoNoTienePreferencia_elHitoSiempreSeComunica() throws Exception {
+        // Contrato 1.5.0: «misma forma que CorreoSubastaRequest, sin
+        // preferencia». Un debeEnviarCorreo que llegara no es un campo de este
+        // cuerpo: no convierte el correo en OMITIDO.
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Premio del torneo Copa de Otoño","mensaje":"Recibiste 100 créditos.",
+                 "debeEnviarCorreo":false}
+                """))
+                .andExpect(status().isAccepted());
+
+        CorreoPedido pedido = encolado();
+        assertThat(pedido.debeEnviarse()).isTrue();
+        assertThat(pedido.motivoDeOmision()).isNull();
+    }
+
+    @Test
+    void elCorreoDeTorneoNuncaLlevaHtmlDelLlamante() throws Exception {
+        // HU-COR-001: el cuerpo lo pinta la plantilla corporativa.
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero",
+                 "asunto":"Empezó el torneo","mensaje":"Ya empezó.","html":"<h1>contenido propio</h1>"}
+                """))
+                .andExpect(status().isAccepted());
+
+        assertThat(encolado().datos()).doesNotContainKey("html");
+    }
+
+    @Test
+    void unAsuntoDe200YUnMensajeDe2000CaracteresEntranJustos() throws Exception {
+        // Los topes del contrato 1.5.0 (maxLength 200 y 2000) son inclusivos.
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","asunto":"%s","mensaje":"%s"}
+                """.formatted("a".repeat(200), "m".repeat(2000))))
+                .andExpect(status().isAccepted());
+
+        assertThat(encolado().asunto()).hasSize(200);
+    }
+
+    @Test
+    void unAsuntoOUnMensajeMasLargosQueElContratoSon400YNoSeEncolan() throws Exception {
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","asunto":"%s","mensaje":"m"}
+                """.formatted("a".repeat(201))))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400));
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content("""
+                {"email":"jugador@ejemplo.com","apodo":"ElGuerrero","asunto":"a","mensaje":"%s"}
+                """.formatted("m".repeat(2001))))
+                .andExpect(status().isBadRequest());
+
+        nadaEncolado();
+    }
+
+    @ParameterizedTest(name = "torneo rechazado: {0}")
+    @ValueSource(strings = {
+            "{\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+            "{\"email\":\"no-es-un-correo\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"  \",\"asunto\":\"a\",\"mensaje\":\"m\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"mensaje\":\"m\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"  \",\"mensaje\":\"m\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"\"}",
+            "{\"email\":\"jugador@ejemplo.com\",\"apodo\":\"ElGuerrero\",\"asunto\":\"a\",\"mensaje\":\"m\",\"torneoId\":\"torneo-7\"}",
+    })
+    void rechazaTorneoConDatosInvalidos(String cuerpo) throws Exception {
+        mockMvc.perform(comoTorneos().contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isBadRequest());
 
         nadaEncolado();

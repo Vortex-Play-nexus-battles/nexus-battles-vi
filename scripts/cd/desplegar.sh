@@ -292,6 +292,34 @@ sanar_emisor() {
   echo "  srv-ms-identidad: saludable, con la lista de clientes y la clave de firma del host"
 }
 
+# Paso 3b: bajar las imagenes DE UNA EN UNA y con reintentos.
+#
+# El host de plataforma va justo de memoria (swap de 2 GiB lleno, CAPACIDAD.md).
+# El 28-sep (B7, corrida 36366483510) bajar tres imagenes a la vez se corto una
+# vez con «short read: expected 59501166 bytes but got 12713984: unexpected
+# EOF» y otra no termino en los diez minutos de la sesion SSH. De una en una
+# compiten menos por memoria y disco, y un corte se reintenta en vez de tumbar
+# el despliegue. Las capas ya bajadas se conservan entre intentos.
+#
+# $@ = servicios del compose. Devuelve 1 si alguno no baja tras
+# INTENTOS_DE_BAJADA intentos (3 por omision).
+bajar_imagenes() {
+  local s intento maximo="${INTENTOS_DE_BAJADA:-3}"
+  for s in "$@"; do
+    intento=1
+    until docker compose "${ARCHIVOS_COMPOSE[@]}" pull --quiet "$s"; do
+      if [ "$intento" -ge "$maximo" ]; then
+        echo "No se pudo bajar la imagen de $s tras $maximo intentos"
+        return 1
+      fi
+      echo "  $s: fallo al bajar la imagen (intento $intento de $maximo); se reintenta en ${PAUSA_DE_BAJADA:-10} s"
+      intento=$((intento + 1))
+      sleep "${PAUSA_DE_BAJADA:-10}"
+    done
+    echo "  $s: imagen al dia"
+  done
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -675,7 +703,11 @@ fi
 # es decir, cuando lo levanta Docker al volver del apagado. Lo que despliega
 # esta corrida arranca en el acto, aunque el CD acabe de encender el host.
 export ARRANQUE_CREADO_EN="$(date +%s)"
-docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
+echo "== 3b) Bajando las imagenes de una en una =="
+# shellcheck disable=SC2086  # SERVICIOS_COMPOSE es una lista separada por espacios
+if ! bajar_imagenes $SERVICIOS_COMPOSE; then
+  exit 1
+fi
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
 # Paso 3d: el emisor de credenciales de servicio al dia (lista de clientes y
