@@ -691,12 +691,22 @@ const EQUIPOS = NOMBRES_DE_EQUIPO.map((nombre, i) => ({
   capitanUid: i >= 6 ? null : `aaaaaaa${i + 1}-1111-4111-8111-111111111111`,
   integrantes: i >= 6 ? [] : [`aaaaaaa${i + 1}-1111-4111-8111-111111111111`],
   inscrito: true,
-  pagadoPor: null,
+  // torneos.yaml 1.2.0: quién pagó y en qué va el cobro (la máquina no paga).
+  pagadoPor: i >= 6 ? null : `aaaaaaa${i + 1}-1111-4111-8111-111111111111`,
   reservaId: null,
+  estadoPago: i >= 6 ? null : 'COBRADO',
   posicion: i + 1,
   derrotas: [1, 3, 5, 7].includes(i + 1) ? 0 : 1,
   eliminado: false,
 }));
+
+/** El premio anunciado del torneo de laboratorio (1.2.0; monto provisional, D-24). */
+const PREMIO_DEL_TORNEO = {
+  creditosPorIntegrante: 500,
+  epicaProductoId: 'aaaaaaa1-0000-4000-8000-0000000000e1',
+  estado: 'SIN_CAMPEON',
+  entregas: [],
+};
 const E = (i) => EQUIPOS[i - 1].id;
 
 function encuentro(numero, llave, ronda, a, b, ganador, estado) {
@@ -748,6 +758,51 @@ export function torneoEnCurso() {
       encuentro(13, 'SECUNDARIOS', 4, null, null, null, 'PENDIENTE'),
       encuentro(14, 'FINAL', 5, null, null, null, 'PENDIENTE'),
     ],
+    premio: PREMIO_DEL_TORNEO,
+  };
+}
+
+/**
+ * El mismo torneo, terminado: «Lobos del Alba» (el equipo del capitán de
+ * laboratorio) ganó la gran final y el premio ya se entregó.
+ */
+export function torneoTerminadoConCampeon() {
+  const base = torneoEnCurso();
+  const jugados = base.encuentros.map((e) => {
+    const lados = {
+      5: [E(1), E(3), E(1)],
+      6: [E(5), E(7), E(5)],
+      7: [E(2), E(4), E(2)],
+      8: [E(6), E(8), E(6)],
+      9: [E(3), E(2), E(3)],
+      10: [E(7), E(6), E(6)],
+      11: [E(1), E(5), E(1)],
+      12: [E(3), E(6), E(3)],
+      13: [E(5), E(3), E(5)],
+      14: [E(1), E(5), E(1)],
+    }[e.numero];
+    return lados ? encuentro(e.numero, e.llave, e.ronda, ...lados, 'JUGADO') : e;
+  });
+  return {
+    ...base,
+    estado: 'FINALIZADO',
+    campeonEquipoId: E(1),
+    finalizadoEn: new Date(Date.now() - 600_000).toISOString(),
+    encuentros: jugados,
+    // Doble eliminación: el campeón acaba invicto y los demás, con dos derrotas.
+    equipos: EQUIPOS.map((e, i) => ({ ...e, eliminado: i !== 0, derrotas: i === 0 ? 0 : 2 })),
+    premio: {
+      ...PREMIO_DEL_TORNEO,
+      estado: 'ENTREGADO',
+      entregas: [
+        {
+          uid: 'aaaaaaa1-1111-4111-8111-111111111111',
+          estado: 'ENTREGADO',
+          creditosEntregados: true,
+          epicaEntregada: true,
+        },
+      ],
+    },
   };
 }
 
@@ -3297,6 +3352,23 @@ export const ESCENARIOS_UXC8 = [
       '[data-accion="jugar-mi-encuentro"]',
       '.encuentro--mio',
       '[data-zona="transmision"]',
+      '[data-zona="premio"]',
+      '[data-zona="pago"]',
+    ],
+  },
+  {
+    id: 'torneo-campeon',
+    titulo: 'torneo terminado visto por el capitán campeón: su premio entregado',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO}`,
+    sesion: () => sesionDe('qa_capitan', 'JUGADOR', UID_CAPITAN),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoTerminadoConCampeon()])],
+      [`**/api/v1/torneos/${ID_TORNEO}`, json(torneoTerminadoConCampeon())],
+    ],
+    exige: [
+      '[data-zona="campeon"]',
+      '[data-zona="premio"]',
+      '[data-zona="mi-premio"].torneo-mio__premio--exito',
     ],
   },
   {

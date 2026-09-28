@@ -1,5 +1,5 @@
 /**
- * Torneos — HU-TOR-008 (menú «Torneo»), sobre contracts/openapi/torneos.yaml 1.0.0.
+ * Torneos — HU-TOR-008 (menú «Torneo»), sobre contracts/openapi/torneos.yaml 1.2.0.
  *
  * Una sola vista: el listado de torneos y, al elegir uno, su detalle con
  * los equipos, el árbol de ocho (RF-TOR-004) y las acciones que corresponden
@@ -204,6 +204,10 @@ export const api = {
     ),
   iniciar: (id, f) =>
     pedir(`/api/v1/torneos/${encodeURIComponent(id)}/inicio`, { method: 'POST' }, f),
+  // 1.2.0 — vuelve a poner en cola los cobros, devoluciones y premios que
+  // fallaron (administrador, RF-ADM-005).
+  reintentar: (id, f) =>
+    pedir(`/api/v1/torneos/${encodeURIComponent(id)}/operaciones/reintento`, { method: 'POST' }, f),
 };
 
 /* ---- Presentación (puro, probado) ---- */
@@ -343,7 +347,8 @@ export function faseDe(torneo) {
         ? 'Terminado y con campeón: abre el torneo para ver quién ganó.'
         : 'Terminado.';
     case 'CANCELADO':
-      return 'Cancelado: las inscripciones se devolvieron.';
+      // 1.2.0 — la devolución va después de cancelar, y puede tardar.
+      return 'Cancelado: se devuelven las inscripciones que se pagaron.';
     default:
       return '';
   }
@@ -523,6 +528,142 @@ export function situacionDeEquipo(torneo, equipo) {
 }
 
 /**
+ * UXC-8 — en qué va el pago de la inscripción de un equipo (`estadoPago`,
+ * torneos.yaml 1.2.0). Cobrar y devolver ya no pasan en el acto: van después
+ * de iniciar o cancelar, con reintentos, y esto es lo que se ve de ellos.
+ */
+export const ESTADOS_DE_PAGO = Object.freeze({
+  SIN_COSTO: 'Inscripción gratuita',
+  RESERVADO: 'Inscripción reservada: se cobra al empezar el torneo',
+  COBRO_PENDIENTE: 'Cobrando la inscripción…',
+  COBRADO: 'Inscripción pagada',
+  DEVOLUCION_PENDIENTE: 'Devolviendo la inscripción…',
+  DEVUELTO: 'Inscripción devuelta',
+  REQUIERE_REVISION: 'El pago de la inscripción está en revisión: lo resolverá un administrador',
+});
+
+/**
+ * El pago de la inscripción de tu equipo, con quién lo hizo.
+ *
+ * @param {object} equipo `Equipo`
+ * @param {string} uid quien mira
+ * @param {string} otro cómo se llama al otro integrante («tu compañero», «tu capitán»)
+ * @returns {string|null} null si no hay nada que decir (sin inscribir, de la máquina)
+ */
+export function textoDelPago(equipo, uid, otro = 'tu compañero') {
+  const estado = ESTADOS_DE_PAGO[equipo.estadoPago];
+  if (!estado) {
+    return null;
+  }
+  if (!equipo.pagadoPor || equipo.estadoPago === 'SIN_COSTO') {
+    return estado;
+  }
+  return `${estado} · ${equipo.pagadoPor === uid ? 'la pagaste tú' : `la pagó ${otro}`}`;
+}
+
+/** Lo que reparte el premio, en palabras: «500 créditos por integrante y una épica». */
+function loteDelPremio(premio) {
+  const partes = [];
+  if (premio.creditosPorIntegrante > 0) {
+    partes.push(`${premio.creditosPorIntegrante} créditos por integrante`);
+  }
+  if (premio.epicaProductoId) {
+    partes.push('una épica para cada uno');
+  }
+  return partes.join(' y ');
+}
+
+/**
+ * El premio del torneo (RF-TOR-007, torneos.yaml 1.2.0) en una frase para
+ * todos. El monto y la épica son los que se anunciaron al crear el torneo.
+ *
+ * @param {object} torneo `Torneo`
+ * @returns {string|null}
+ */
+export function textoDelPremio(torneo) {
+  const premio = torneo.premio;
+  if (!premio) {
+    return null;
+  }
+  const lote = loteDelPremio(premio);
+  switch (premio.estado) {
+    case 'SIN_CAMPEON':
+      return lote ? `El equipo campeón gana ${lote}.` : 'Este torneo no tiene premio.';
+    case 'PENDIENTE':
+      return `Entregando el premio al equipo campeón: ${lote}.`;
+    case 'ENTREGADO':
+      return `Premio entregado al equipo campeón: ${lote}.`;
+    case 'REQUIERE_REVISION':
+      return 'El premio está en revisión: un administrador lo está resolviendo.';
+    case 'NO_APLICA':
+      return lote
+        ? 'Ganó un equipo de la máquina: este torneo no reparte premio.'
+        : 'Este torneo no tiene premio.';
+    default:
+      return null;
+  }
+}
+
+/**
+ * Tu parte del premio, si tu equipo lo ganó: la entrega de `premio.entregas`
+ * con tu `uid`.
+ *
+ * @param {object} torneo
+ * @param {string} uid
+ * @returns {{tono: string, texto: string}|null}
+ */
+export function miPremio(torneo, uid) {
+  const premio = torneo.premio;
+  const entrega = premio?.entregas?.find((e) => e.uid === uid);
+  if (!entrega) {
+    return null;
+  }
+  switch (entrega.estado) {
+    case 'ENTREGADO': {
+      const partes = [];
+      if (entrega.creditosEntregados && premio.creditosPorIntegrante > 0) {
+        partes.push(`${premio.creditosPorIntegrante} créditos`);
+      }
+      if (entrega.epicaEntregada) {
+        partes.push('la épica, ya en tu inventario');
+      }
+      return {
+        tono: 'exito',
+        texto: partes.length
+          ? `Recibiste tu premio: ${partes.join(' y ')}.`
+          : 'Recibiste tu premio.',
+      };
+    }
+    case 'PENDIENTE':
+      return {
+        tono: 'info',
+        texto: 'Tu premio está en camino: te avisaremos en la campana cuando llegue.',
+      };
+    case 'EXCLUIDO_POR_SANCION':
+      return {
+        tono: 'advertencia',
+        texto: 'No recibes premio: tenías una sanción activa cuando terminó el torneo.',
+      };
+    case 'REQUIERE_REVISION':
+      return {
+        tono: 'advertencia',
+        texto: 'Tu premio está en revisión: un administrador lo está resolviendo.',
+      };
+    default:
+      return null;
+  }
+}
+
+/** Si algún cobro, devolución o premio del torneo necesita que un administrador lo reintente. */
+export function necesitaRevision(torneo) {
+  return (
+    torneo.equipos.some((e) => e.estadoPago === 'REQUIERE_REVISION') ||
+    torneo.premio?.estado === 'REQUIERE_REVISION' ||
+    Boolean(torneo.premio?.entregas?.some((e) => e.estado === 'REQUIERE_REVISION'))
+  );
+}
+
+/**
  * «Tu torneo» — UXC-8: Mi equipo, Próximo encuentro y Mi camino.
  *
  * Solo con lo que trae el contrato: el compañero es un identificador sin
@@ -565,6 +706,25 @@ export function panelDeMiTorneo(torneo, equipo, uid) {
       }),
     ],
   });
+  // UXC-8 — 1.2.0: en qué va el pago de la inscripción y, si ganasteis, tu
+  // parte del premio.
+  const pago = textoDelPago(equipo, uid, soyCapitan ? 'tu compañero' : 'tu capitán');
+  if (pago) {
+    bloqueEquipo.append(h('p', { clase: 't-meta', datos: { zona: 'pago' }, texto: pago }));
+  }
+  const premio = miPremio(torneo, uid);
+  if (premio) {
+    bloqueEquipo.append(
+      h('p', {
+        clase: `torneo-mio__premio torneo-mio__premio--${premio.tono}`,
+        datos: { zona: 'mi-premio' },
+        hijos: [
+          icono('trofeo', { clase: 'icono icono--menudo' }),
+          h('span', { texto: premio.texto }),
+        ],
+      }),
+    );
+  }
 
   const siguiente = proximoEncuentro(torneo, equipo.id);
   const bloqueProximo = h('article', {
@@ -845,6 +1005,18 @@ export function montarTorneos(
     if (torneo.motivoCancelacion) {
       zonaDetalle.appendChild(nodo('p', 't-meta', `Cancelado: ${torneo.motivoCancelacion}`));
     }
+    // UXC-8 — el premio (RF-TOR-007, 1.2.0), para todos: qué gana el
+    // campeón y en qué va la entrega.
+    const premio = torneo.estado === 'CANCELADO' ? null : textoDelPremio(torneo);
+    if (premio) {
+      zonaDetalle.appendChild(
+        h('p', {
+          clase: 'torneo__premio',
+          datos: { zona: 'premio' },
+          hijos: [icono('trofeo', { clase: 'icono icono--menudo' }), h('span', { texto: premio })],
+        }),
+      );
+    }
 
     // Acciones del jugador (HU-TOR-003 / HU-TOR-002).
     const acciones = accionesDe(torneo, uid);
@@ -931,7 +1103,8 @@ export function montarTorneos(
           pintarAviso(zonaAviso, {
             tono: 'info',
             titulo: 'Torneo cancelado',
-            detalle: 'Las inscripciones se devolvieron.',
+            detalle:
+              'Las inscripciones pagadas se devuelven ahora; cada equipo ve en el torneo en qué va la suya.',
           });
           await abrir(torneo.id);
           await cargarListado();
@@ -941,6 +1114,13 @@ export function montarTorneos(
       });
       zonaAdmin.append(iniciar, cancelar);
       zonaDetalle.appendChild(zonaAdmin);
+    }
+
+    // UXC-8 — 1.2.0: un cobro, una devolución o un premio que el proveedor
+    // rechazó o que agotó sus reintentos se vuelve a poner en cola desde aquí
+    // (RF-ADM-005), después de corregir la causa.
+    if (administra && necesitaRevision(torneo)) {
+      zonaDetalle.appendChild(bloqueDeRevision(torneo));
     }
 
     // UXC-8 — lo tuyo primero: tu equipo, tu próximo encuentro y tu camino.
@@ -1022,6 +1202,40 @@ export function montarTorneos(
       arbol.appendChild(cuadro);
     });
     zonaDetalle.appendChild(arbol);
+  }
+
+  function bloqueDeRevision(torneo) {
+    const reintentar = nodo('button', 'boton boton--primario boton--pequeno', 'Reintentar ahora');
+    reintentar.type = 'button';
+    reintentar.dataset.accion = 'reintentar-operaciones';
+    reintentar.addEventListener('click', async () => {
+      reintentar.disabled = true;
+      try {
+        const actualizado = await api.reintentar(torneo.id, fetchImpl);
+        pintarAviso(zonaAviso, {
+          tono: 'exito',
+          titulo: 'Operaciones en cola otra vez',
+          detalle:
+            'Los cobros, devoluciones y premios pendientes se vuelven a intentar; el estado de cada uno se ve en el torneo.',
+        });
+        pintarDetalle(actualizado);
+      } catch (error) {
+        avisarError(zonaAviso, error);
+        reintentar.disabled = false;
+      }
+    });
+    return h('div', {
+      clase: 'aviso aviso--advertencia pila pila--ajustada',
+      datos: { zona: 'revision' },
+      hijos: [
+        h('strong', { texto: 'Hay pagos o premios en revisión' }),
+        h('p', {
+          texto:
+            'Algún cobro, devolución o premio de este torneo no se pudo completar tras varios intentos. Corrige la causa y vuelve a intentarlo.',
+        }),
+        reintentar,
+      ],
+    });
   }
 
   function formularioDeEquipo(torneo) {

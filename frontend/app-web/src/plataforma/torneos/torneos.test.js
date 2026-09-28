@@ -9,6 +9,10 @@ import {
   ErrorDeTorneos,
   MOTIVOS,
   accionesDe,
+  miPremio,
+  necesitaRevision,
+  textoDelPago,
+  textoDelPremio,
   distintivoDeTorneo,
   faseDe,
   nombreDeLlave,
@@ -627,7 +631,9 @@ describe('UXC-8 — el torneo del jugador', () => {
     expect(faseDe(torneo())).toMatch(/^Inscripciones hasta/);
     expect(faseDe(torneo({ estado: 'EN_CURSO' }))).toMatch(/Se está jugando/);
     expect(faseDe(torneo({ estado: 'FINALIZADO', campeonEquipoId: 'a' }))).toMatch(/campeón/);
-    expect(faseDe(torneo({ estado: 'CANCELADO' }))).toMatch(/devolvieron/);
+    // 1.2.0 — la devolución va después de cancelar (y con reintentos): no
+    // se puede decir que ya se devolvieron.
+    expect(faseDe(torneo({ estado: 'CANCELADO' }))).toMatch(/se devuelven las inscripciones/);
     expect(distintivoDeTorneo(torneo({ estado: 'EN_CURSO' })).textContent).toBe('En curso');
   });
 
@@ -741,5 +747,209 @@ describe('UXC-8 — el torneo del jugador', () => {
       '¿Cancelar «Copa Otono»?',
     );
     delete globalThis.prompt;
+  });
+});
+
+describe('UXC-8 — pago de la inscripción y premio (torneos.yaml 1.2.0)', () => {
+  const PREMIO = {
+    creditosPorIntegrante: 500,
+    epicaProductoId: 'epica-1',
+    estado: 'SIN_CAMPEON',
+    entregas: [],
+  };
+
+  test('el pago de la inscripción en palabras, con quién la pagó', () => {
+    const pagado = equipo({ inscrito: true, estadoPago: 'COBRADO', pagadoPor: UID });
+    expect(textoDelPago(pagado, UID)).toBe('Inscripción pagada · la pagaste tú');
+    expect(textoDelPago(pagado, OTRO, 'tu capitán')).toBe(
+      'Inscripción pagada · la pagó tu capitán',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'RESERVADO', pagadoPor: UID }), UID)).toMatch(
+      /se cobra al empezar el torneo/,
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'DEVOLUCION_PENDIENTE' }), UID)).toBe(
+      'Devolviendo la inscripción…',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'SIN_COSTO', pagadoPor: UID }), UID)).toBe(
+      'Inscripción gratuita',
+    );
+    expect(textoDelPago(equipo({ estadoPago: 'REQUIERE_REVISION' }), UID)).toMatch(/administrador/);
+    // Sin inscribir o de la máquina: nada que decir.
+    expect(textoDelPago(equipo({ estadoPago: null }), UID)).toBeNull();
+  });
+
+  test('el premio para todos, según en qué va', () => {
+    expect(textoDelPremio(torneo({ premio: PREMIO }))).toBe(
+      'El equipo campeón gana 500 créditos por integrante y una épica para cada uno.',
+    );
+    expect(
+      textoDelPremio(
+        torneo({ premio: { ...PREMIO, creditosPorIntegrante: 0, epicaProductoId: null } }),
+      ),
+    ).toBe('Este torneo no tiene premio.');
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'ENTREGADO' } }))).toMatch(
+      /^Premio entregado al equipo campeón/,
+    );
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'NO_APLICA' } }))).toMatch(
+      /equipo de la máquina/,
+    );
+    expect(textoDelPremio(torneo({ premio: { ...PREMIO, estado: 'REQUIERE_REVISION' } }))).toMatch(
+      /en revisión/,
+    );
+    // Un servicio anterior a 1.2.0 no trae premio: no se inventa.
+    expect(textoDelPremio(torneo())).toBeNull();
+  });
+
+  test('tu parte del premio: recibida, en camino o excluida por sanción', () => {
+    const entregado = torneo({
+      premio: {
+        ...PREMIO,
+        estado: 'ENTREGADO',
+        entregas: [
+          { uid: UID, estado: 'ENTREGADO', creditosEntregados: true, epicaEntregada: true },
+          {
+            uid: OTRO,
+            estado: 'EXCLUIDO_POR_SANCION',
+            creditosEntregados: false,
+            epicaEntregada: false,
+          },
+        ],
+      },
+    });
+    expect(miPremio(entregado, UID)).toEqual({
+      tono: 'exito',
+      texto: 'Recibiste tu premio: 500 créditos y la épica, ya en tu inventario.',
+    });
+    expect(miPremio(entregado, OTRO).texto).toMatch(/sanción activa/);
+    expect(miPremio(entregado, 'nadie')).toBeNull();
+    const enCamino = torneo({
+      premio: {
+        ...PREMIO,
+        estado: 'PENDIENTE',
+        entregas: [
+          { uid: UID, estado: 'PENDIENTE', creditosEntregados: false, epicaEntregada: false },
+        ],
+      },
+    });
+    expect(miPremio(enCamino, UID).texto).toMatch(/en camino/);
+  });
+
+  test('«Mi equipo» dice el pago y, si ganasteis, tu premio', () => {
+    const A = equipo({
+      id: 'a',
+      inscrito: true,
+      posicion: 1,
+      estadoPago: 'COBRADO',
+      pagadoPor: UID,
+    });
+    const t = torneo({
+      estado: 'FINALIZADO',
+      campeonEquipoId: 'a',
+      equipos: [A],
+      premio: {
+        ...PREMIO,
+        estado: 'ENTREGADO',
+        entregas: [
+          { uid: UID, estado: 'ENTREGADO', creditosEntregados: true, epicaEntregada: true },
+        ],
+      },
+    });
+    const panel = panelDeMiTorneo(t, A, UID);
+    expect(panel.querySelector('[data-zona="pago"]').textContent).toBe(
+      'Inscripción pagada · la pagaste tú',
+    );
+    const premio = panel.querySelector('[data-zona="mi-premio"]');
+    expect(premio.classList.contains('torneo-mio__premio--exito')).toBe(true);
+    expect(premio.textContent).toContain('Recibiste tu premio');
+  });
+
+  test('necesitaRevision: un pago o un premio que agotó sus reintentos', () => {
+    expect(necesitaRevision(torneo({ equipos: [equipo()] }))).toBe(false);
+    expect(
+      necesitaRevision(torneo({ equipos: [equipo({ estadoPago: 'REQUIERE_REVISION' })] })),
+    ).toBe(true);
+    expect(necesitaRevision(torneo({ premio: { ...PREMIO, estado: 'REQUIERE_REVISION' } }))).toBe(
+      true,
+    );
+  });
+
+  test('la vista enseña el premio a todos y el reintento solo al administrador', async () => {
+    const enRevision = torneo({
+      estado: 'CANCELADO',
+      motivoCancelacion: 'Falla del servidor de partidas',
+      equipos: [equipo({ inscrito: true, posicion: 1, estadoPago: 'REQUIERE_REVISION' })],
+      premio: PREMIO,
+    });
+    const reintentado = {
+      ...enRevision,
+      equipos: [{ ...enRevision.equipos[0], estadoPago: 'DEVOLUCION_PENDIENTE' }],
+    };
+
+    // Un jugador: ni rastro del bloque de administración.
+    document.body.innerHTML = VISTA;
+    montarTorneos(document, {
+      uid: UID,
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [enRevision] },
+        'GET /api/v1/torneos/t-1': { cuerpo: enRevision },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    let detalle = document.querySelector('[data-zona="detalle"]');
+    expect(detalle.querySelector('[data-zona="revision"]')).toBeNull();
+    // Cancelado: no se anuncia un premio que ya no se va a jugar.
+    expect(detalle.querySelector('[data-zona="premio"]')).toBeNull();
+    expect(detalle.querySelector('[data-zona="pago"]').textContent).toMatch(/en revisión/);
+
+    // El administrador lo ve y reintenta.
+    document.body.innerHTML = VISTA;
+    const fetchImpl = servicio({
+      'GET /api/v1/torneos': { cuerpo: [enRevision] },
+      'GET /api/v1/torneos/t-1': { cuerpo: enRevision },
+      'POST /api/v1/torneos/t-1/operaciones/reintento': { cuerpo: reintentado },
+    });
+    montarTorneos(document, {
+      rol: 'ADMINISTRADOR',
+      uid: 'admin',
+      fetchImpl,
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    detalle = document.querySelector('[data-zona="detalle"]');
+    const revision = detalle.querySelector('[data-zona="revision"]');
+    expect(revision.textContent).toContain('Hay pagos o premios en revisión');
+    revision.querySelector('[data-accion="reintentar-operaciones"]').click();
+    await asentar();
+    await asentar();
+    expect(fetchImpl).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/torneos/t-1/operaciones/reintento'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    // Repintado con lo que devolvió el servidor: ya no hay nada en revisión.
+    expect(document.querySelector('[data-zona="revision"]')).toBeNull();
+    expect(document.querySelector('[data-zona="aviso"]').textContent).toContain(
+      'Operaciones en cola otra vez',
+    );
+  });
+
+  test('en curso, el premio que se anunció se ve en el detalle', async () => {
+    document.body.innerHTML = VISTA;
+    const t = torneo({ estado: 'EN_CURSO', premio: PREMIO });
+    montarTorneos(document, {
+      uid: UID,
+      fetchImpl: servicio({
+        'GET /api/v1/torneos': { cuerpo: [t] },
+        'GET /api/v1/torneos/t-1': { cuerpo: t },
+      }),
+      torneoInicial: 't-1',
+    });
+    await asentar();
+    await asentar();
+    expect(document.querySelector('[data-zona="premio"]').textContent).toBe(
+      'El equipo campeón gana 500 créditos por integrante y una épica para cada uno.',
+    );
   });
 });

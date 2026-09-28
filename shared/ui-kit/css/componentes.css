@@ -4679,6 +4679,10 @@ button.tarjeta--partida:disabled {
    ======================================================================= */
 
 .arbol-torneo {
+  /* UXC-9 — contenedor de lo absoluto de dentro: el «(gana este encuentro)»
+     para lectores de pantalla se posicionaba contra la página y, en la
+     última ronda, la ensanchaba 2 px a 768. */
+  position: relative;
   display: flex;
   gap: var(--e-5);
   align-items: flex-start;
@@ -9153,6 +9157,48 @@ body:not([data-modo='combate']) .registro-combate {
 .transmision__simbolo {
   width: 40px;
   height: 40px;
+}
+
+/* UXC-8 — el premio del torneo (RF-TOR-007, torneos.yaml 1.2.0): la frase
+   para todos va sobre la tinta del lugar; tu parte del premio, en «Mi
+   equipo», con el fondo tenue de su estado. Icono y texto, nunca solo color. */
+.torneo__premio {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.torneo-mio__premio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  font-weight: 600;
+}
+
+.torneo-mio__premio .icono {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.torneo-mio__premio--exito {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.torneo-mio__premio--info {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.torneo-mio__premio--advertencia {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
 }
 
 /* =======================================================================
