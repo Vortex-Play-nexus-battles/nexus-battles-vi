@@ -37,7 +37,8 @@
 }
 
 .panel-catalogo__encabezado h2,
-.panel-distribucion h2 {
+.panel-distribucion h2,
+.panel-catalogo--pendiente h2 {
   margin: 0;
   font-family: Rajdhani, Inter, system-ui, sans-serif;
   font-size: 1.25rem;
@@ -398,4 +399,14 @@
 .hoja-producto .casilla__etiqueta {
   display: grid;
   gap: 2px;
+}
+
+/* UXC-9 — lo que el catálogo todavía no ofrece (§7.2.3, §7.2.4): una lista
+   de lectura, en el tono secundario del resto de explicaciones del panel. */
+.panel-catalogo--pendiente ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--texto-2);
 }

@@ -156,7 +156,34 @@ function crearVista() {
     datos: { zona: 'catalogo-admin' },
   });
 
-  return [cabecera, panel, catalogo];
+  // UXC-9 — lo que §7.2.3 y §7.2.4 piden y ningún contrato publica todavía.
+  // Se dice aquí, donde lo buscaría quien administra el catálogo, en vez de
+  // callarlo.
+  const pendiente = h('section', {
+    clase: 'panel-catalogo panel-catalogo--pendiente',
+    datos: { zona: 'catalogo-pendiente' },
+    atributos: { 'aria-labelledby': 'panel-pendiente-titulo' },
+    hijos: [
+      h('h2', {
+        texto: 'Lo que el catálogo todavía no ofrece',
+        atributos: { id: 'panel-pendiente-titulo' },
+      }),
+      h('ul', {
+        hijos: [
+          h('li', {
+            texto:
+              'Diseñador visual con vista previa, historial de versiones, importar y exportar: el servicio de productos no los publica. Cada modificación sí guarda en el servidor la versión anterior como respaldo.',
+          }),
+          h('li', {
+            texto:
+              'Avisos de cambios del catálogo al iniciar sesión y banner rotativo de anuncios: todavía no hay un servicio que los publique.',
+          }),
+        ],
+      }),
+    ],
+  });
+
+  return [cabecera, panel, catalogo, pendiente];
 }
 
 function mostrarMensaje(raiz, texto, tipo) {
