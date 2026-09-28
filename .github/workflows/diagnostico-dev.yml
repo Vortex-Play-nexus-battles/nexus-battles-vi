@@ -172,6 +172,33 @@ jobs:
               --format 'table {{.Name}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.CPUPerc}}'
 
             echo
+            echo "=========== MEMORIA REAL POR CONTENEDOR (RAM + swap) ========="
+            # docker stats solo cuenta lo que esta en RAM. Con el swap lleno,
+            # un servicio que parece ocupar 55 MiB puede tener 200 mas fuera:
+            # es la cifra que decide si moverlo a otro host libera algo de
+            # verdad. Se lee del cgroup v2 de cada contenedor (memory.current y
+            # memory.swap.current: todos sus procesos, tambien los backends de
+            # Postgres); si el host no tiene cgroup v2, del proceso principal
+            # en /proc. Solo numeros.
+            printf '    %-28s %10s %10s %10s\n' "CONTENEDOR" "RAM" "SWAP" "TOTAL"
+            total_ram=0; total_swap=0
+            for c in $(sudo docker ps -q --no-trunc); do
+              n=$(sudo docker inspect -f '{{.Name}}' "$c" | tr -d /)
+              cg="/sys/fs/cgroup/system.slice/docker-${c}.scope"
+              if [ -r "$cg/memory.current" ]; then
+                rss=$(( $(sudo cat "$cg/memory.current") / 1048576 ))
+                swp=$(( $(sudo cat "$cg/memory.swap.current" 2>/dev/null || echo 0) / 1048576 ))
+              else
+                pid=$(sudo docker inspect -f '{{.State.Pid}}' "$c")
+                rss=$(sudo awk '/^VmRSS:/{print int($2/1024)}' "/proc/$pid/status" 2>/dev/null || echo 0)
+                swp=$(sudo awk '/^VmSwap:/{print int($2/1024)}' "/proc/$pid/status" 2>/dev/null || echo 0)
+              fi
+              total_ram=$(( total_ram + ${rss:-0} )); total_swap=$(( total_swap + ${swp:-0} ))
+              printf '    %-28s %6s MiB %6s MiB %6s MiB\n' "$n" "${rss:-0}" "${swp:-0}" "$(( ${rss:-0} + ${swp:-0} ))"
+            done
+            printf '    %-28s %6s MiB %6s MiB %6s MiB\n' "SUMA" "$total_ram" "$total_swap" "$(( total_ram + total_swap ))"
+
+            echo
             echo "=========== CUANTA MEMORIA HAY COMPROMETIDA (mem_limit) ====="
             # La suma de los mem_limit declarados frente a la RAM real del
             # host: es lo que decide si cabe UN servicio mas sin empujar a
@@ -232,6 +259,15 @@ jobs:
             # por el buzon de pruebas (BUZON_DE_PRUEBAS) para las reservadas
             # (.test). Solo recuentos por plantilla, estado y destino: ninguna
             # direccion, asunto ni contenido sale de la base.
+            # Quien es el proveedor, sin imprimir el valor: SMTP_HOST es un
+            # secret y el registro de Actions lo taparia igual. Basta la
+            # familia (GMAIL, BREVO...) para saber si el remitente configurado
+            # puede autenticarse con ese proveedor.
+            if sudo docker ps --format '{{.Names}}' | grep -q '^srv-correo$'; then
+              familia=$(sudo docker exec srv-correo sh -c 'h=$(printf "%s" "${SMTP_HOST:-}" | tr "A-Z" "a-z"); case "$h" in "") echo VACIO ;; *gmail.com) echo GMAIL ;; *brevo.com|*sendinblue.com) echo BREVO ;; *amazonaws.com) echo AMAZON_SES ;; *resend.com) echo RESEND ;; *mailjet.com) echo MAILJET ;; *sendgrid.net) echo SENDGRID ;; *smtp2go.com) echo SMTP2GO ;; *mailgun.org) echo MAILGUN ;; mailpit|localhost|127.0.0.1) echo BUZON_LOCAL ;; *) echo OTRO ;; esac' 2>/dev/null || echo "?")
+              remitente=$(sudo docker exec srv-correo sh -c 'printf "%s" "${MAIL_FROM:-}" | sed "s/.*@//; s/>.*//" | tr "A-Z" "a-z"' 2>/dev/null || echo "?")
+              echo "    proveedor SMTP (familia): $familia · dominio del remitente: ${remitente:-vacio}"
+            fi
             if sudo docker ps --format '{{.Names}}' | grep -q '^plataforma-db$'; then
               sudo docker exec plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -c "SELECT plantilla, estado, COALESCE(destino, chr(45)), count(*) FROM correo.envios WHERE creado_en > now() - interval '"'"'7 days'"'"' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"' 2>/dev/null \
                 | sed 's/^/    /' || echo "    (sin tabla correo.envios)"
