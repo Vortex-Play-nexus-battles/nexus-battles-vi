@@ -77,10 +77,11 @@ public class AuthAdminServiceImpl implements AuthAdminService {
         if (usuarioRepository.findByEmail(email).isPresent()) {
             throw new IllegalArgumentException("El correo electrónico ya está registrado.");
         }
+        // Igual que en el registro (B13): la lista negra antes que la unicidad.
+        apodoBlacklistValidator.validar(apodo);
         if (usuarioRepository.findByApodo(apodo).isPresent()) {
             throw new IllegalArgumentException("El apodo ya está en uso.");
         }
-        apodoBlacklistValidator.validar(apodo);
 
         Usuario nuevoUsuario = new Usuario();
         nuevoUsuario.setApodo(apodo);

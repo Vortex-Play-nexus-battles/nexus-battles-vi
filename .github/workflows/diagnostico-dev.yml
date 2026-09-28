@@ -211,6 +211,46 @@ jobs:
             done
 
             echo
+            echo "===================== RED ENTRE HOSTS ======================="
+            # B12 — los puertos directos de plataforma solo admiten al host de
+            # contenido (SG, cidr_servicios). Desde contenido, el JWKS de
+            # ms-identidad (:8089) y el libro de creditos (:8093) tienen que
+            # contestar; desde cualquier otro sitio, no. Solo codigos HTTP.
+            if ! sudo docker ps --format '{{.Names}}' | grep -q '^srv-ms-identidad$'; then
+              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health"; do
+                r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$destino" || echo "---")
+                printf '    %-55s %s\n' "$destino" "$r"
+              done
+            else
+              echo "    (host de plataforma: la comprobacion se hace desde el de contenido)"
+            fi
+
+            echo
+            echo "===================== CORREO: ENTREGAS DE 7 DIAS ============"
+            # B13 — evidencia de que el correo sale de verdad: por el
+            # proveedor SMTP (destino PROVEEDOR) para las direcciones reales y
+            # por el buzon de pruebas (BUZON_DE_PRUEBAS) para las reservadas
+            # (.test). Solo recuentos por plantilla, estado y destino: ninguna
+            # direccion, asunto ni contenido sale de la base.
+            if sudo docker ps --format '{{.Names}}' | grep -q '^plataforma-db$'; then
+              sudo docker exec plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | " -c "SELECT plantilla, estado, COALESCE(destino, chr(45)), count(*) FROM correo.envios WHERE creado_en > now() - interval '"'"'7 days'"'"' GROUP BY 1, 2, 3 ORDER BY 1, 2, 3"' 2>/dev/null \
+                | sed 's/^/    /' || echo "    (sin tabla correo.envios)"
+              # Las direcciones REALES (fuera de los dominios reservados de la
+              # RFC 2606), desde siempre: si alguna vez salio una por el
+              # proveedor, y cuando. La direccion no sale de la base.
+              echo "  -- direcciones reales, desde siempre: estado | destino | cuantos | ultimo dia"
+              sudo docker exec -i plataforma-db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At -F " | "' 2>/dev/null <<'SQL' | sed 's/^/    /' || true
+            SELECT estado, COALESCE(destino, '-'), count(*), max(COALESCE(enviado_en, actualizado_en))::date
+            FROM correo.envios
+            WHERE split_part(lower(destinatario), '@', 2) !~ '(^|\.)(test|example|invalid|localhost)$'
+              AND split_part(lower(destinatario), '@', 2) NOT IN ('example.com', 'example.net', 'example.org')
+            GROUP BY 1, 2 ORDER BY 1, 2;
+            SQL
+            else
+              echo "    (este host no tiene la base de plataforma)"
+            fi
+
+            echo
             echo "===================== BORDE ================================"
             curl -s --max-time 5 http://localhost/salud-borde || echo "  el borde no responde"
 
