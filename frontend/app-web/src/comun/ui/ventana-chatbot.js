@@ -13,6 +13,8 @@
  * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
  *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
+ * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
+ *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
  *   (`soporte-chatbot.js`); el visitante recibe la invitación a iniciar sesión;
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
@@ -37,6 +39,7 @@ import { h, vaciar } from './dom.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
+import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
@@ -128,6 +131,7 @@ let contador = 0;
  * @param {{cliente?: ReturnType<typeof crearClienteChatbot>,
  *          sesion?: () => {autenticado: boolean, apodo: string},
  *          raiz?: HTMLElement, chatGeneral?: string, login?: string|null,
+ *          esperaAutocompletar?: number,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>}} [opciones]
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
@@ -140,6 +144,7 @@ export function crearVentanaChatbot({
   chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
   login = urlDeVista('login'),
   confirmarBorrado = confirmar,
+  esperaAutocompletar = 250,
 } = {}) {
   contador += 1;
   const idTitulo = `chatbot-ventana-titulo-${contador}`;
@@ -226,10 +231,27 @@ export function crearVentanaChatbot({
     atributos: { type: 'submit' },
   });
 
+  // Preguntas rápidas y autocompletado. El autocompletado se conecta aquí,
+  // antes del manejador de Enter de más abajo, para que Enter elija la
+  // sugerencia marcada en vez de enviar lo escrito.
+  const rapidas = crearPreguntasRapidas({ cliente, alElegir: enviarSugerencia });
+  const autocompletado = conectarAutocompletado({
+    entrada,
+    cliente,
+    alElegir: enviarSugerencia,
+    esperaMs: esperaAutocompletar,
+  });
+
   const formulario = h('form', {
     clase: 'chatbot-ventana__formulario',
     atributos: { novalidate: true },
-    hijos: [h('div', { clase: 'chatbot-ventana__fila', hijos: [entrada, botonEnviar] })],
+    hijos: [
+      rapidas.elemento,
+      h('div', {
+        clase: 'chatbot-ventana__fila chatbot-ventana__fila--entrada',
+        hijos: [autocompletado.elemento, entrada, botonEnviar],
+      }),
+    ],
   });
 
   const ventana = h('section', {
@@ -478,6 +500,7 @@ export function crearVentanaChatbot({
     entrada.disabled = !activo;
     botonEnviar.disabled = !activo;
     botonBorrar.disabled = !activo;
+    rapidas.habilitar(activo);
   }
 
   // ------------------------------------------------------------- historial
@@ -500,6 +523,7 @@ export function crearVentanaChatbot({
       }
       cargada = true;
       habilitarFormulario(true);
+      rapidas.cargar();
     } catch (error) {
       vaciar(registro);
       mostrarAviso(error, { alReintentar: cargarHistorial });
@@ -508,6 +532,15 @@ export function crearVentanaChatbot({
   }
 
   // ----------------------------------------------------------------- envío
+
+  // Una pregunta rápida o una sugerencia se envía como si se hubiera escrito.
+  function enviarSugerencia(pregunta) {
+    if (entrada.disabled || enviando) {
+      return;
+    }
+    entrada.value = pregunta;
+    enviarMensaje();
+  }
 
   async function enviarMensaje() {
     if (enviando) {
@@ -520,6 +553,7 @@ export function crearVentanaChatbot({
     }
 
     enviando = true;
+    autocompletado.cerrar();
     limpiarAviso();
     conCarga(botonEnviar, true, TEXTOS.enviando);
     const escribiendo = h('li', {
@@ -552,6 +586,7 @@ export function crearVentanaChatbot({
   // vive en funciones aparte (regla require-atomic-updates de ESLint).
   function vaciarFormulario() {
     entrada.value = '';
+    autocompletado.cerrar();
   }
 
   function terminarEnvio() {

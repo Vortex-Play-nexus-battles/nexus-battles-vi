@@ -2746,6 +2746,94 @@ button.tarjeta--partida:disabled {
   resize: vertical;
 }
 
+/* Preguntas rápidas y autocompletado. Los botones son de texto, como las
+   acciones secundarias, para no competir con «Enviar». La lista del
+   autocompletado sale ENCIMA de la caja: la ventana está pegada abajo. */
+
+.chatbot-rapidas {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.chatbot-rapidas__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.chatbot-rapidas__titulo {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-rapidas__tema {
+  max-width: 55%;
+  min-height: var(--objetivo-tactil);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: var(--t-meta-tam);
+}
+
+.chatbot-rapidas__lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1);
+}
+
+.chatbot-rapidas__opcion {
+  min-height: var(--objetivo-tactil);
+  padding: 0 var(--e-2);
+  border: 1px solid var(--borde);
+  border-radius: 999px;
+  background: var(--superficie-2);
+  color: var(--primaria);
+  font-size: var(--t-meta-tam);
+  cursor: pointer;
+}
+
+.chatbot-rapidas__opcion:hover:not(:disabled) {
+  border-color: var(--primaria);
+}
+
+.chatbot-rapidas__opcion:disabled {
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.chatbot-ventana__fila--entrada {
+  position: relative;
+}
+
+.chatbot-autocompletar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + var(--e-1));
+  margin: 0;
+  padding: var(--e-1) 0;
+  list-style: none;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+}
+
+.chatbot-autocompletar__opcion {
+  padding: var(--e-2) var(--e-3);
+  cursor: pointer;
+}
+
+.chatbot-autocompletar__opcion:hover,
+.chatbot-autocompletar__opcion[aria-selected='true'] {
+  background: var(--superficie-2);
+  color: var(--primaria);
+}
+
 /* «Soporte»: solicitud de soporte humano dentro de la ventana. Ocupa el
    sitio de la conversación mientras está abierto. */
 

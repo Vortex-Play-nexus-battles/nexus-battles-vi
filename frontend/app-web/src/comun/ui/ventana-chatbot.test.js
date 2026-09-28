@@ -41,6 +41,14 @@ function clienteFalso(sobrescribir = {}) {
     calificar: jest.fn(async () => ({ id: 'c-1' })),
     abrirTicket: jest.fn(async () => ({ ticketId: 't-1', estado: 'ABIERTO' })),
     misTickets: jest.fn(async () => []),
+    sugerencias: jest.fn(async () => [
+      {
+        clave: 'k-1',
+        titulo: 'Cómo funciona el Torneo',
+        categoria: 'MODALIDAD_JUEGO',
+        pregunta: 'Cómo funciona el Torneo',
+      },
+    ]),
     ...sobrescribir,
   };
 }
@@ -53,6 +61,7 @@ async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado } = {
     sesion: sesion ?? (() => ({ autenticado: false, apodo: '' })),
     chatGeneral: 'http://localhost/chat.html',
     confirmarBorrado: confirmarBorrado ?? (async () => true),
+    esperaAutocompletar: 0,
   });
   ventana.abrir(lanzador);
   await esperar();
@@ -335,6 +344,41 @@ describe('calificar (HU-CHA-011)', () => {
     expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(
       TEXTOS.errorAlCalificar,
     );
+  });
+});
+
+describe('preguntas rápidas y autocompletado', () => {
+  test('al cargar muestra las preguntas rápidas y al pulsar una la envía', async () => {
+    const vista = await montar();
+    await esperar();
+    const boton = vista.el.querySelector('[data-accion="pregunta-rapida"]');
+
+    expect(boton.textContent).toBe('Cómo funciona el Torneo');
+    boton.click();
+    await esperar();
+
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('Cómo funciona el Torneo');
+    expect(vista.mensajes().some((m) => m.textContent.includes('Cómo funciona el Torneo'))).toBe(
+      true,
+    );
+  });
+
+  test('escribir sugiere y Enter con una marcada la envía en lugar del texto', async () => {
+    const vista = await montar();
+    vista.entrada.value = 'tor';
+    vista.entrada.dispatchEvent(new Event('input'));
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    await esperar();
+
+    vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    vista.entrada.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await esperar();
+
+    expect(vista.cliente.sugerencias).toHaveBeenCalledWith({ q: 'tor', limite: 5 });
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledTimes(1);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('Cómo funciona el Torneo');
   });
 });
 

@@ -197,6 +197,23 @@ describe('operaciones', () => {
     expect(fetch.mock.calls[0][1].method).toBe('GET');
   });
 
+  test('sugerencias arma la consulta solo con lo que hay y devuelve la lista', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ clave: 'k-1' }]))
+      .mockResolvedValueOnce(respuestaJson([]));
+    const chat = cliente({ fetch });
+
+    expect(await chat.sugerencias()).toEqual([{ clave: 'k-1' }]);
+    await chat.sugerencias({ q: '  cómo  ', categoria: 'PRODUCTO', limite: 3 });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/sugerencias?limite=6');
+    expect(fetch.mock.calls[1][0]).toBe(
+      '/api/v1/chat/sugerencias?q=c%C3%B3mo&categoria=PRODUCTO&limite=3',
+    );
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+  });
+
   test('un 409 al abrir un ticket conserva el motivo del servidor', async () => {
     const fetch = jest.fn(async () =>
       respuestaJson({ title: 'Ya tienes un ticket abierto', motivo: 'TICKET_ABIERTO' }, 409),

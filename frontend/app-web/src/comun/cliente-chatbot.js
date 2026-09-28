@@ -230,6 +230,29 @@ export function crearClienteChatbot({
       return llamar('POST', '/chat/tickets', { categoria, asunto, mensaje }, { rutaFija: true });
     },
 
+    /**
+     * Preguntas rápidas, temas frecuentes o autocompletado (con `q`). Salen
+     * de la versión en producción de la base de conocimiento.
+     *
+     * @param {{q?: string, categoria?: string|null, limite?: number}} [filtro]
+     * @returns {Promise<Array<{clave: string, titulo: string, categoria: string, pregunta: string}>>}
+     */
+    async sugerencias({ q = '', categoria = null, limite = 6 } = {}) {
+      const parametros = new URLSearchParams();
+      if (q && q.trim()) {
+        parametros.set('q', q.trim().slice(0, 100));
+      }
+      if (categoria) {
+        parametros.set('categoria', categoria);
+      }
+      parametros.set('limite', String(limite));
+      return (
+        (await llamar('GET', `/chat/sugerencias?${parametros.toString()}`, undefined, {
+          rutaFija: true,
+        })) ?? []
+      );
+    },
+
     /** @returns {Promise<Array<object>>} las solicitudes del jugador, la más reciente primero */
     async misTickets() {
       return (await llamar('GET', '/chat/tickets', undefined, { rutaFija: true })) ?? [];
