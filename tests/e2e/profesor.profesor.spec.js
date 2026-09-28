@@ -130,11 +130,16 @@ async function sinBarrerasGraves(page, donde) {
   return resultado.violations.length;
 }
 
-/** Todas las imágenes visibles cargaron (el logotipo, los retratos). */
+/**
+ * Todas las imágenes visibles cargaron (el logotipo, los retratos, las de la
+ * vitrina pública). Una imagen diferida (`loading="lazy"`) que aún está por
+ * debajo de la pantalla no se pide hasta que se acerca: todavía no cuenta.
+ */
 async function imagenesCargadas(page) {
   return page.evaluate(() =>
     [...document.images]
       .filter((i) => i.getBoundingClientRect().width > 0)
+      .filter((i) => i.loading !== 'lazy' || i.getBoundingClientRect().top < window.innerHeight)
       .every((i) => i.complete && i.naturalWidth > 0),
   );
 }
@@ -310,7 +315,16 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
       '/login',
     );
     await expect(page.locator('#formLogin')).toBeVisible();
-    expect(await imagenesCargadas(page), 'el logotipo y las imágenes cargan').toBe(true);
+    // La vitrina pública (UXC-4) pinta sus productos después del formulario:
+    // se espera a que sus imágenes lleguen en vez de mirar un instante al azar
+    // (una vez falló a los 338 ms con las imágenes aún en camino). Una imagen
+    // rota sigue fallando: nunca llega a cargar.
+    await expect
+      .poll(() => imagenesCargadas(page), {
+        message: 'el logotipo y las imágenes cargan',
+        timeout: 15_000,
+      })
+      .toBe(true);
     const avisos = await sinBarrerasGraves(page, 'login');
     await capturar(page, testInfo, '01-login');
     return `/ → /login; axe sin graves (${avisos} avisos menores)`;
