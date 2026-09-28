@@ -16,12 +16,19 @@ variable "instance_type" {
       t4g.small 2 GiB  arm64 USD 0,0168/h  ->  12,1 USD/mes 24x7,  5,0 con apagado nocturno
       c7i-flex.large 4 GiB   USD 0,0848/h  ->  61,1 USD/mes 24x7, 25,4 con apagado nocturno
       m7i-flex.large 8 GiB   USD 0,0958/h  ->  69,0 USD/mes 24x7, 28,7 con apagado nocturno
-    t3.small por defecto: x86 como las imagenes que ya publica cd.yml (sin
-    buildx multi-arquitectura) y 2 GiB, que con los limites de memoria de
-    docker-compose.deploy.yml alcanzan para el perfil de la demo del Sprint 2.
+    Hasta el 28-sep: t3.small (x86 como las imagenes que publica cd.yml, sin
+    buildx multi-arquitectura; 2 GiB).
+    Desde la opcion E de infrastructure/despliegue/CAPACIDAD.md: c7i-flex.large.
+    Medido el 28-sep, 15 min despues de un reinicio limpio: 3305 MiB de
+    demanda (12 JVM + 5 Postgres) sobre 1910 MiB de RAM, swap de 2 GB lleno y
+    cinco servicios sin salud en 5 s; el smoke de dev fallaba por eso. 4 GiB,
+    tambien x86 (misma AMI, mismas imagenes), del Free Plan; el cambio de tipo
+    es en caliente (parar, cambiar, encender) con la misma IP elastica y el
+    mismo disco. Se paga con creditos del Free Plan: SOLO con autorizacion
+    expresa, y con el saldo a la vista (diagnostico-dev.yml lo muestra).
   EOT
   type        = string
-  default     = "t3.small"
+  default     = "c7i-flex.large"
 
   validation {
     condition     = contains(["t3.micro", "t3.small", "t4g.micro", "t4g.small", "c7i-flex.large", "m7i-flex.large"], var.instance_type)
