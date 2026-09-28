@@ -181,6 +181,15 @@ public class ManejadorErroresComentarios {
         return problema;
     }
 
+    /** Categoria ausente o descripcion de mas de 500 caracteres: 400, no una violacion de la base. */
+    @ExceptionHandler(ServicioDeModeracion.ReporteInvalido.class)
+    public ProblemDetail manejarReporteInvalido(ServicioDeModeracion.ReporteInvalido ex) {
+        ProblemDetail problema = problema(HttpStatus.BAD_REQUEST, "reporte-invalido",
+                "El reporte no es valido", ex);
+        problema.setProperty("motivo", "REPORTE_INVALIDO");
+        return problema;
+    }
+
     @ExceptionHandler(ServicioDeModeracion.LimiteDeReportesAgotado.class)
     public ProblemDetail manejarLimiteDeReportes(ServicioDeModeracion.LimiteDeReportesAgotado ex) {
         ProblemDetail problema =
