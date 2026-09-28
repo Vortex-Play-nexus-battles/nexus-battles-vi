@@ -199,7 +199,7 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
 
   test('el formulario se acomoda a la modalidad y crea la sala contra la IA', async ({ page }) => {
     // El combate del final tarda lo que tarde la maquina en caer.
-    test.setTimeout(180000);
+    test.setTimeout(480000);
     await conSesion(page, anfitriona, ANFITRION);
     await page.goto(`${BORDE}${CREAR}`);
 
@@ -253,7 +253,9 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
 
     await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
     let golpes = 0;
-    while (partida.estado === 'EN_CURSO' && golpes < 30) {
+    // B7: con las reglas del documento (Tablas 21-23, D-B7-01) un combate dura
+    // mucho mas que el simplificado; el tope es de la prueba, no de la regla.
+    while (partida.estado === 'EN_CURSO' && golpes < 150) {
       // Se espera el turno propio segun el SERVICIO antes de pulsar: si la
       // maquina abrio, juega sola y devuelve el turno. La maquina nunca deja el
       // turno colgado (mismo patron que recompensa-por-partida.e2e.spec.js).

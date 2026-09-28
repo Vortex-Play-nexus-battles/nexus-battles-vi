@@ -436,7 +436,7 @@ test.describe('R17 · la prueba del profesor', () => {
     context,
   }, testInfo) => {
     test.skip(testInfo.project.name !== ESCRITORIO, 'los veinte pasos se recorren en escritorio');
-    test.setTimeout(12 * 60_000);
+    test.setTimeout(15 * 60_000);
 
     const cuenta = cuentaDesechable(testInfo.project.name);
     const clave = claveDesechable();
@@ -569,7 +569,8 @@ test.describe('R17 · la prueba del profesor', () => {
         // campo hasta que se entra al combate (o hasta el primer aviso del
         // canal, si abre el rival). Una persona pulsa «Entrar al combate».
         const entrar = page.locator('[data-accion="entrar-al-combate"]');
-        const limite = Date.now() + 5 * 60_000;
+        // B7: el combate real dura mas que el simplificado (Tablas 21-23, D-B7-01).
+        const limite = Date.now() + 8 * 60_000;
         let golpes = 0;
         let recargada = false;
         let presentacion = false;

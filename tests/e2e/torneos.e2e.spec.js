@@ -336,7 +336,7 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
   test('HU-TOR-004 CA-04: el encuentro 5 se juega en una sala vinculada desde la vista y el resultado llega solo', async ({
     page,
   }) => {
-    test.setTimeout(240000);
+    test.setTimeout(480000);
 
     // Un encuentro fuera de rango no crea la sala: 400 con el campo.
     const fuera = await api.post('/api/v1/salas', {
@@ -422,7 +422,9 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       return partida;
     };
     let golpes = 0;
-    while (partida.estado === 'EN_CURSO' && golpes < 30) {
+    // B7: con las reglas del documento (Tablas 21-23, D-B7-01) un combate dura
+    // mucho mas que el simplificado; el tope es de la prueba, no de la regla.
+    while (partida.estado === 'EN_CURSO' && golpes < 150) {
       // Se espera el turno propio segun el SERVICIO, no segun el boton: entre
       // que el boton se ve habilitado y el clic, la maquina puede jugar y hasta
       // terminar la partida (el clic se quedaria esperando para siempre).
