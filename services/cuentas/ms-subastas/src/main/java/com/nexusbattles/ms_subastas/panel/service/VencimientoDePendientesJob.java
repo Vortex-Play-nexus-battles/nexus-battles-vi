@@ -32,7 +32,8 @@ public class VencimientoDePendientesJob {
         this.clock = clock;
     }
 
-    @Scheduled(fixedDelayString = "${app.subastas.pendientes-intervalo-ms:300000}")
+    @Scheduled(fixedDelayString = "${app.subastas.pendientes-intervalo-ms:300000}",
+            initialDelayString = "${app.subastas.pendientes-intervalo-ms:300000}")
     public void resolverVencidos() {
         for (UUID subastaId : pendientes.idsVencidos(EstadoPendiente.PENDIENTE, clock.instant())) {
             try {

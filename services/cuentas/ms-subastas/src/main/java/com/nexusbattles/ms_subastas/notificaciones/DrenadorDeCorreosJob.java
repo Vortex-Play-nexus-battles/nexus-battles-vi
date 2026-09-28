@@ -69,7 +69,8 @@ public class DrenadorDeCorreosJob {
         this.maxIntentos = maxIntentos;
     }
 
-    @Scheduled(fixedDelayString = "${app.correo.drenaje-intervalo-ms:10000}")
+    @Scheduled(fixedDelayString = "${app.correo.drenaje-intervalo-ms:10000}",
+            initialDelayString = "${app.correo.drenaje-intervalo-ms:10000}")
     public void drenar() {
         CorreoSubastaClient cliente = correo.getIfAvailable();
         ContactoClient identidad = contactos.getIfAvailable();

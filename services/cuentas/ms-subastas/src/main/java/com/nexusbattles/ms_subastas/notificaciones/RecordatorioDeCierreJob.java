@@ -44,7 +44,8 @@ public class RecordatorioDeCierreJob {
         this.transaccion = new TransactionTemplate(transacciones);
     }
 
-    @Scheduled(fixedDelayString = "${app.subastas.recordatorio-intervalo-ms:60000}")
+    @Scheduled(fixedDelayString = "${app.subastas.recordatorio-intervalo-ms:60000}",
+            initialDelayString = "${app.subastas.recordatorio-intervalo-ms:60000}")
     public void recordar() {
         Instant ahora = clock.instant();
         for (UUID subastaId : subastas.idsParaRecordar(ahora, ahora.plus(ReglasDelDocumento.RECORDATORIO_ANTES_DEL_CIERRE))) {

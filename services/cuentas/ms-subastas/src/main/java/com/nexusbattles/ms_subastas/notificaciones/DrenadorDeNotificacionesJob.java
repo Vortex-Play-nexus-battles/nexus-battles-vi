@@ -44,7 +44,8 @@ public class DrenadorDeNotificacionesJob {
     private final NotificacionesClient notificaciones;
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}")
+    @Scheduled(fixedDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}",
+            initialDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}")
     public void drenar() {
         List<NotificacionPendiente> pendientes = repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc();
         if (pendientes.isEmpty()) {
