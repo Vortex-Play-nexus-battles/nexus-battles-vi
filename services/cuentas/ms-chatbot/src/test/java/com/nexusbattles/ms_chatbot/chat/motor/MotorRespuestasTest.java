@@ -55,6 +55,27 @@ class MotorRespuestasTest {
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
     }
 
+    // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.
+    @Test
+    void generarRespuesta_conElTituloDeUnTema_respondeConEseTema() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("  cómo PUBLICAR en subasta ");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
+        assertThat(resultado.texto()).contains("Elige el ítem");
+    }
+
+    @Test
+    void generarRespuesta_conDosTemasDelMismoTitulo_ganaElDeMayorPrioridad() {
+        TemaConocimiento otro = new TemaConocimiento(null, "clave-registro-2", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Cómo crear una cuenta", "alta", null, "Versión prioritaria.", null, 9, true);
+
+        ResultadoMotor resultado = motorRespuestas.responderCon("Cómo crear una cuenta",
+            List.of(temaRegistro(0), otro));
+
+        assertThat(resultado.temaClave()).isEqualTo("clave-registro-2");
+    }
+
     @Test
     void generarRespuesta_conMensajeSinRelacion_escalaYSugiereTemas() {
         ResultadoMotor resultado = motorRespuestas.generarRespuesta("xk fmk qzr blublu");

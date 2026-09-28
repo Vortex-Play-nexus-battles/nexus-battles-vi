@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -76,6 +77,12 @@ public class MotorRespuestas {
      */
     public ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas) {
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
+        Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
+        if (porTitulo.isPresent()) {
+            TemaConocimiento tema = porTitulo.get();
+            return ResultadoMotor.deTema(tema.getContenidoRespuestaEs(), tema.getCategoria(),
+                tema.getTipoRespuesta(), tema.getClave());
+        }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
         Coincidencia mejor = null;
@@ -121,6 +128,22 @@ public class MotorRespuestas {
             + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
 
         return ResultadoMotor.escalado(textoEscalamiento, sugerencias);
+    }
+
+    // ms-chatbot.yaml 1.3.3: el titulo de un tema, tal cual (sin importar
+    // tildes ni mayusculas), es una pregunta de ese tema. Es lo que manda la
+    // ventana al pulsar una sugerencia (GET /chat/sugerencias) o una de las
+    // "preguntas relacionadas" de un escalamiento, que tambien son titulos.
+    // Sin esto, pulsar una sugerencia podia no alcanzar el umbral y escalar.
+    private static Optional<TemaConocimiento> temaConElTitulo(String mensajeNormalizado,
+                                                              List<TemaConocimiento> temas) {
+        if (mensajeNormalizado.isEmpty()) {
+            return Optional.empty();
+        }
+        return temas.stream()
+            .filter(TemaConocimiento::isActivo)
+            .filter(tema -> mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTitulo())))
+            .max(Comparator.comparingInt(TemaConocimiento::getPrioridad));
     }
 
     // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,
