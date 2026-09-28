@@ -6,7 +6,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.nexusbattles.ms_finanzas.partidas.AcreditacionPartidaService;
+import com.nexusbattles.ms_finanzas.partidas.RegistroDeResultados;
 import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaRequest;
 import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse;
 
@@ -35,14 +35,15 @@ import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse;
 @RequestMapping("/partidas")
 public class AcreditacionPartidaController {
 
-    private final AcreditacionPartidaService servicio;
+    private final RegistroDeResultados servicio;
 
-    public AcreditacionPartidaController(AcreditacionPartidaService servicio) {
+    public AcreditacionPartidaController(RegistroDeResultados servicio) {
         this.servicio = servicio;
     }
 
+    /** B7: pasa por {@link RegistroDeResultados}, que repite si otra escritura se cruzó. */
     @PostMapping("/resultado")
     public ResponseEntity<ResultadoPartidaResponse> resultado(@RequestBody ResultadoPartidaRequest req) {
-        return ResponseEntity.ok(servicio.procesarResultadoPartida(req));
+        return ResponseEntity.ok(servicio.registrar(req));
     }
 }

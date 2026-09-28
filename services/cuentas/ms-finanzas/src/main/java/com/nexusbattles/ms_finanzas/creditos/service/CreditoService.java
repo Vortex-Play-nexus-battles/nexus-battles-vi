@@ -122,6 +122,7 @@ public class CreditoService {
             CuentaCredito vendedor = obtenerOCrearCuenta(req.vendedorUid());
             vendedor.setSaldoBruto(vendedor.getSaldoBruto().add(reserva.getMonto()));
             cuentaRepository.save(vendedor);
+            registrarCobroDelBeneficiario(reserva, req.vendedorUid());
         }
 
         reserva.setEstado(ReservaCredito.EstadoReserva.CONSUMIDA);
@@ -129,6 +130,38 @@ public class CreditoService {
 
         String txId = "TX-CRED-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
         return new ConsumirResponse(reserva.getId(), reserva.getEstado().name(), reserva.getMonto(), req.vendedorUid(), txId);
+    }
+
+    /** Prefijo del concepto del movimiento del beneficiario (creditos.yaml 1.4.1). */
+    static final String PREFIJO_COBRO = "cobro-de-reserva:";
+
+    /**
+     * El beneficiario ve el ingreso — creditos.yaml 1.4.1 (B7).
+     *
+     * <p>Hasta 1.4.0 el crédito al beneficiario movía su saldo sin dejar fila:
+     * el ganador de una apuesta cobraba y no veía de dónde en
+     * {@code GET /creditos/{uid}/movimientos}. Ahora queda un movimiento
+     * {@code CREDITO} a su nombre (signo {@code SUMA}) con la referencia de la
+     * reserva y la clave {@code consumo-{reservaId}}: una sola fila por reserva
+     * aunque se consuma dos veces (el segundo consumo ni siquiera llega aquí,
+     * y si llegara la clave ya existe).
+     */
+    private void registrarCobroDelBeneficiario(ReservaCredito reserva, String beneficiarioUid) {
+        String clave = "consumo-" + reserva.getId();
+        if (reservaRepository.findByIdempotencyKey(clave).isPresent()) {
+            return;
+        }
+        String concepto = PREFIJO_COBRO + (reserva.getConcepto() == null ? "" : reserva.getConcepto());
+        reservaRepository.save(ReservaCredito.builder()
+            .jugadorUid(beneficiarioUid)
+            .monto(reserva.getMonto())
+            .concepto(concepto.length() > 128 ? concepto.substring(0, 128) : concepto)
+            .referenciaId(reserva.getReferenciaId() != null ? reserva.getReferenciaId() : reserva.getId().toString())
+            .idempotencyKey(clave)
+            .estado(ReservaCredito.EstadoReserva.CONSUMIDA)
+            .tipoOperacion(ReservaCredito.TipoOperacion.CREDITO)
+            .expiraEn(OffsetDateTime.now().plusDays(72))
+            .build());
     }
 
     @Transactional

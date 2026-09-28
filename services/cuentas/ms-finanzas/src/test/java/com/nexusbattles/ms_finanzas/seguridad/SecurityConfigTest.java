@@ -42,7 +42,7 @@ import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservaResponse;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.ReservarRequest;
 import com.nexusbattles.ms_finanzas.creditos.dto.CreditoDTOs.SaldoResponse;
 import com.nexusbattles.ms_finanzas.creditos.service.CreditoService;
-import com.nexusbattles.ms_finanzas.partidas.AcreditacionPartidaService;
+import com.nexusbattles.ms_finanzas.partidas.RegistroDeResultados;
 import com.nexusbattles.ms_finanzas.partidas.MisCofresConsultaService;
 import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse;
 import com.nexusbattles.ms_finanzas.partidas.api.AcreditacionPartidaController;
@@ -90,7 +90,7 @@ class SecurityConfigTest {
     private CreditoService creditoService;
 
     @MockitoBean
-    private AcreditacionPartidaService acreditacionPartidaService;
+    private RegistroDeResultados registroDeResultados;
 
     @MockitoBean
     private TransaccionConsultaService consultaService;
@@ -181,7 +181,7 @@ class SecurityConfigTest {
                     .andExpect(status().isUnauthorized());
             mvc.perform(post("/transacciones").contentType(JSON).content(registroDe(UID_ANA)))
                     .andExpect(status().isUnauthorized());
-            verifyNoInteractions(creditoService, acreditacionPartidaService, registroService);
+            verifyNoInteractions(creditoService, registroDeResultados, registroService);
         }
 
         @Test
@@ -243,7 +243,7 @@ class SecurityConfigTest {
             mvc.perform(post("/partidas/resultado").contentType(JSON)
                             .header(HttpHeaders.AUTHORIZATION, comoAna()).content(resultadoConGanador(UID_ANA)))
                     .andExpect(status().isForbidden());
-            verifyNoInteractions(acreditacionPartidaService);
+            verifyNoInteractions(registroDeResultados);
         }
 
         @Test
@@ -377,7 +377,7 @@ class SecurityConfigTest {
 
         @Test
         void unServicioInformaElResultadoDeLaPartida() throws Exception {
-            when(acreditacionPartidaService.procesarResultadoPartida(any()))
+            when(registroDeResultados.registrar(any()))
                     .thenReturn(new ResultadoPartidaResponse("partida-1", List.of(), List.of()));
 
             mvc.perform(post("/partidas/resultado").contentType(JSON)

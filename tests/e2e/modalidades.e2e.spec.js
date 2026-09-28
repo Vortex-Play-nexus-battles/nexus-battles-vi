@@ -159,12 +159,19 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
     expect(inicio.status(), await inicio.text()).toBe(201);
     const partida = await inicio.json();
 
-    // Anfitriona y invitado en el equipo 1; las dos maquinas en el 2.
+    // Anfitriona y invitado en el equipo 1; las dos maquinas en el 2. Los
+    // equipos salen del orden de ENTRADA; la lista de participantes viene en
+    // el orden de los TURNOS, que desde B7 se sortea (§6.1.3). Por eso se
+    // busca a cada uno por quien es, no por su posicion.
     expect(partida.participantes).toHaveLength(4);
-    expect(partida.participantes.map((p) => p.equipo)).toEqual([1, 1, 2, 2]);
-    expect(partida.participantes.map((p) => p.esIA)).toEqual([false, false, true, true]);
-    expect(partida.participantes[0].jugador).toBe(anfitriona.claims.uid);
-    expect(partida.participantes[1].jugador).toBe(invitado.claims.uid);
+    const equipoDe = (uid) => partida.participantes.find((p) => p.jugador === uid)?.equipo;
+    expect(equipoDe(anfitriona.claims.uid)).toBe(1);
+    expect(equipoDe(invitado.claims.uid)).toBe(1);
+    const deLaMaquina = partida.participantes.filter((p) => p.esIA);
+    expect(deLaMaquina).toHaveLength(2);
+    expect(deLaMaquina.map((p) => p.equipo)).toEqual([2, 2]);
+    // El turno es de alguien de la partida, persona o maquina.
+    expect(partida.participantes.map((p) => p.jugador)).toContain(partida.turnoActual.idJugador);
 
     // La vista de la anfitriona: dos botones, los dos contra maquinas. Al
     // companero no se le puede apuntar.
@@ -192,7 +199,7 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
 
   test('el formulario se acomoda a la modalidad y crea la sala contra la IA', async ({ page }) => {
     // El combate del final tarda lo que tarde la maquina en caer.
-    test.setTimeout(180000);
+    test.setTimeout(480000);
     await conSesion(page, anfitriona, ANFITRION);
     await page.goto(`${BORDE}${CREAR}`);
 
@@ -240,11 +247,33 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
     });
     expect(inicio.status(), await inicio.text()).toBe(201);
     let partida = await inicio.json();
-    expect(partida.participantes.map((p) => p.esIA)).toEqual([false, true]);
+    // Una persona y una maquina, en el orden de turnos que haya salido del
+    // sorteo (§6.1.3, B7): la maquina tambien puede abrir.
+    expect(partida.participantes.map((p) => p.esIA).sort()).toEqual([false, true]);
 
     await page.goto(`${BORDE}${VISTA}?sala=${sala.id}&partida=${partida.id}`);
     let golpes = 0;
-    while (partida.estado === 'EN_CURSO' && golpes < 30) {
+    // B7: con las reglas del documento (Tablas 21-23, D-B7-01) un combate dura
+    // mucho mas que el simplificado; el tope es de la prueba, no de la regla.
+    while (partida.estado === 'EN_CURSO' && golpes < 150) {
+      // Se espera el turno propio segun el SERVICIO antes de pulsar: si la
+      // maquina abrio, juega sola y devuelve el turno. La maquina nunca deja el
+      // turno colgado (mismo patron que recompensa-por-partida.e2e.spec.js).
+      await expect
+        .poll(
+          async () => {
+            partida = await partidaDe(api, anfitriona, partida.id);
+            return (
+              partida.estado !== 'EN_CURSO' ||
+              partida.turnoActual.idJugador === anfitriona.claims.uid
+            );
+          },
+          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
+        )
+        .toBe(true);
+      if (partida.estado !== 'EN_CURSO') {
+        break;
+      }
       const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
       await expect(boton).toBeEnabled({ timeout: 20000 });
       const turnoPrevio = partida.turnoActual.numeroTurno;
@@ -258,22 +287,6 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
             return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > turnoPrevio;
           },
           { timeout: 25000, message: `golpe ${golpes + 1}: ni rota el turno ni acaba` },
-        )
-        .toBe(true);
-      // Tras el golpe humano y la respuesta de la maquina, vuelve a tocar a la
-      // anfitriona: la maquina nunca deja el turno colgado. Se espera a que lo
-      // devuelva: antes se comprobaba en el mismo instante en que el turno
-      // pasaba a la maquina, que todavia no habia jugado (rojo intermitente).
-      await expect
-        .poll(
-          async () => {
-            partida = await partidaDe(api, anfitriona, partida.id);
-            return (
-              partida.estado !== 'EN_CURSO' ||
-              partida.turnoActual.idJugador === anfitriona.claims.uid
-            );
-          },
-          { timeout: 25000, message: `golpe ${golpes + 1}: la maquina no devuelve el turno` },
         )
         .toBe(true);
       golpes += 1;

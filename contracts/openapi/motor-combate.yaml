@@ -3,59 +3,67 @@ openapi: 3.1.0
 # =============================================================================
 # Nexus Battles VI — Motor de combate (M?? · equipo de Contenido y juego)
 #
-# Regla 1 de plataforma: contrato primero. Este documento se escribe A PARTIR
-# del dominio que ya existe en `services/contenido/motor-combate`, no al reves:
-# cada operacion de aqui corresponde a una capacidad que las clases de
-# `nexus.combate` ya implementan y tienen probada. No se ha inventado ninguna
-# regla de juego.
+# Regla 1 de plataforma: contrato primero. Cada operacion de aqui corresponde a
+# una capacidad que las clases de `nexus.combate` implementan y tienen probada.
+# Las reglas salen del documento del curso, seccion 6 (Tablas 6, 7, 20, 21, 22
+# y 23) y seccion 7.6; donde el documento no fija algo, el contrato lo dice y
+# lo deja como parametro o como decision del Product Owner
+# (docs/gobierno/DECISIONES-PENDIENTES-DEL-PO.md, entradas D-B7-01 a D-B7-19).
 #
 # ---------------------------------------------------------------------------
-# POR QUE ESTE SERVICIO NO GESTIONA PARTIDAS
+# POR QUE ESTE SERVICIO NO GUARDA PARTIDAS
 #
-# `nexus.combate.Partida` existe y es el agregado del combate, pero HOY no
-# tiene identificador, no tiene persistencia y no expone accesores de lectura:
-# vive en memoria dentro de una sola llamada. Exponer `POST /partidas` obligaria
-# a inventarle un almacen y un ciclo de vida que su dominio no tiene, y a
-# duplicar el estado que `salas-partidas` ya persiste (tablas `partidas` y
-# `partida_participantes`, migracion V6).
-#
-# Se contrata por tanto lo que el motor SI sabe hacer y nadie mas sabe: resolver
-# el resultado de un ataque. El estado del combate se queda donde ya vive, en
-# `salas-partidas`, que llama aqui para cada accion y aplica el resultado sobre
-# la vida que el guarda.
-#
-# El dia que `Partida` tenga identificador y almacen, este contrato crece con
-# `/partidas`; nada de lo de aqui tendria que cambiar.
+# El motor es SIN ESTADO: resuelve una accion, o el comienzo de un turno, con
+# el estado que le mandan y devuelve el estado nuevo. Quien lo guarda —vida,
+# poder, cargas, efectos, turno, ganador— es `salas-partidas`, que persiste la
+# partida con bloqueo optimista. Asi el motor escala sin coordinar nada y las
+# reglas viven en un solo sitio: aqui.
 #
 # ---------------------------------------------------------------------------
-# DECISION FUNCIONAL PENDIENTE (no bloquea nada de lo de aqui)
+# 1.2.0 (B7, BACKEND-09) — EL COMBATE DE VERDAD. Aditivo.
 #
-# `DistribucionEfectos` tiene seis prototipos —GUERRERO_TANQUE, GUERRERO_ARMAS,
-# MAGO_FUEGO, MAGO_HIELO, PICARO_VENENO, PICARO_MACHETE— pero el catalogo de
-# heroes tiene mas tipos (Chaman, Medico, Nigromante...) y en NINGUN sitio del
-# repositorio existe el mapeo heroe -> prototipo. No se inventa: el prototipo
-# viaja como parametro de entrada y lo elige quien llama. Cuando el Product
-# Owner fije ese mapeo, se puede anadir aqui un valor por defecto derivado del
-# heroe sin romper a nadie.
+#   POST /combate/acciones  resuelve UNA accion del turno con el heroe real de
+#                           cada combatiente: prototipo, nivel, estadisticas
+#                           con el equipamiento plano ya aplicado (las calcula
+#                           inventario), armas e items equipados, epicas y el
+#                           estado (vida, poder, cargas y efectos activos).
+#   POST /combate/turnos    lo que ocurre al EMPEZAR el turno de un
+#                           combatiente: +2 de poder (§6.1.1), efectos por
+#                           turno y fin de las protecciones.
+#
+# Y dos correcciones de comportamiento sin cambio de forma:
+#   - El indice de la tabla de 8.000 filas sigue una distribucion NORMAL de
+#     verdad (§6.1.4). Hasta 1.1.0 se pasaba por su funcion de distribucion y
+#     salia uniforme. Media y desviacion son parametros (D-B7-01).
+#   - `POST /combate/ataques` usaba la tirada de ATAQUE como dano. El dano es
+#     la formula de dano del heroe (Tabla 6: «Daño: la cantidad de daño que el
+#     héroe inflige a un enemigo con un ataque exitoso»).
+#
+# La «decision funcional pendiente» de 1.1.0 (mapeo heroe -> prototipo de la
+# Tabla 21) no lo era: la Tabla 21 esta escrita por TIPO DE HEROE, y el tipo
+# de heroe es el prototipo del catalogo. /acciones lo deduce del prototipo.
 # =============================================================================
 
 info:
   title: Nexus Battles VI — Motor de combate
-  version: 1.1.0
+  version: 1.2.0
   description: |
-    Resuelve el resultado de un ataque segun las reglas del juego: tirada de
-    dados, comparacion con la defensa, sorteo del efecto sobre la tabla de
-    8.000 filas y calculo del dano aplicado.
+    Reglas del combate de THE NEXUS BATTLES VI (seccion 6 del documento del
+    curso): tirada de ataque contra la defensa, tabla de efectos de 8.000
+    filas con indice de distribucion normal, criticos, las 24 acciones de la
+    Tabla 7 con su coste de poder y su turno de carga, las 8 epicas de la
+    Tabla 20 con sus dos turnos de recarga, el multiplicador de nivel, los
+    efectos de combate del equipamiento (Tablas 8 a 19) y la sanacion.
 
     **Sin estado.** Cada peticion se resuelve entera y no deja rastro. Quien
-    lleva el combate —de quien es el turno, cuanta vida queda, quien gano— es
-    `salas-partidas`.
+    lleva el combate es `salas-partidas`.
 
-    **La aleatoriedad es real.** El indice de la tabla se sortea con una
-    distribucion normal (`GeneradorIndiceTabla`) y el porcentaje del critico con
-    un uniforme, ambos sobre `SecureRandom`. Dos peticiones identicas pueden dar
-    resultados distintos, y eso es el juego, no un defecto. Para pruebas
-    reproducibles existe `semilla`.
+    **La aleatoriedad es real.** Dados, indice y critico salen de
+    `SecureRandom`; `semilla` existe solo para pruebas reproducibles.
+
+    Cambios: 1.1.0 (R8.1) cerro la resolucion a credenciales de servicio.
+    1.2.0 (B7) anade `/acciones` y `/turnos`, pasa el indice a una normal
+    real y corrige el dano de `/ataques` (ver el comentario de cabecera).
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -71,24 +79,155 @@ tags:
 
 paths:
 
+  /api/v1/combate/acciones:
+    post:
+      tags: [Combate]
+      operationId: resolverAccion
+      security: [{ tokenDeServicio: [] }]
+      summary: Resuelve una accion del turno con el heroe real (1.2.0)
+      description: |
+        El ejecutor juega la accion `accion` (sobre `objetivo` si la accion lo
+        necesita) y el motor devuelve el estado nuevo de TODOS los
+        combatientes, con lo que paso en `afectados` y `eventos`.
+
+        **Que valida el servidor, no el cliente** (el cliente solo elige
+        accion y objetivo):
+          - que la accion sea del heroe: una de la Tabla 7 desbloqueada en su
+            nivel (1, 4 y 8, regla RC-01 del catalogo de heroes), una epica
+            que tenga, `ATAQUE_BASICO` (heroes con ataque) o
+            `SANACION_BASICA` (sanadores, Tabla 6: «Sanar»);
+          - que no este en carga: una accion especial tiene UN turno de carga
+            y una epica DOS (§6.1.2), contados en turnos propios del ejecutor;
+          - el objetivo: un ataque va a un rival en pie; en combate por
+            equipos nunca a un companero (§6.1.3; ninguna accion del
+            documento lo permite); una sanacion va a si mismo o a un
+            companero en pie; «Reanimacion» a un companero, caido o no;
+          - que un sanador no ataque (§6.1.1: «le esta vedado infligir dano»).
+        Un rechazo es `409` `accion-no-permitida` con `motivo`.
+
+        **Sin poder suficiente no es un rechazo.** §6.1.1: «Si el heroe carece
+        de poder suficiente para ejecutar una accion, el valor de ataque se
+        reduce a su valor base». La accion no se ejecuta (no gasta poder ni
+        entra en carga) y el turno se juega como ataque basico —o sanacion
+        basica— con el VALOR BASE de la formula, sin dados ni bonos:
+        `enValorBase: true`.
+
+        **La accion `DECISION_DE_LA_MAQUINA`** hace que el motor elija por el
+        ejecutor con una politica simple y determinista (D-B7-12): la accion
+        especial disponible mas cara de tipo ATAQUE (empate: orden de la
+        Tabla 7), si no el ataque basico; objetivo, el rival en pie con menos
+        vida (empate: el primero de `combatientes`). No hay aprendizaje: el
+        «aprendizaje profundo» del §7.6 queda fuera (D-B7-13).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeticionDeAccion'
+      responses:
+        '200':
+          description: Accion resuelta. Fallar el golpe tambien es un 200.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDeAccion'
+        '400':
+          description: Peticion mal formada (ejecutor que no esta, ids repetidos, valores fuera de rango)
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: Algun prototipo no esta en el catalogo de heroes
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            La accion no se puede jugar ahora. `type`
+            `https://nexusbattles.local/errores/accion-no-permitida`, con la
+            propiedad `motivo` (ver `MotivoDeRechazo`) y un `detail` apto para
+            el jugador. No se aplico nada.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              example:
+                type: 'https://nexusbattles.local/errores/accion-no-permitida'
+                title: 'La accion no se puede jugar ahora'
+                status: 409
+                detail: 'Golpe de tormenta esta en carga: vuelve a estar disponible dentro de 1 turno.'
+                motivo: EN_CARGA
+        '503':
+          description: El catalogo de heroes no responde. No se inventa un combatiente.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /api/v1/combate/turnos:
+    post:
+      tags: [Combate]
+      operationId: iniciarTurno
+      security: [{ tokenDeServicio: [] }]
+      summary: Empieza el turno de un combatiente (1.2.0)
+      description: |
+        Lo que ocurre al empezar el turno de `combatiente`, en este orden:
+          1. terminan sus protecciones «hasta su proximo turno» (Mano de
+             piedra, Defensa feroz, Frio concentrado, Toma y lleva);
+          2. se aplican sus efectos por turno (sangrado de Cierra sangrienta
+             o Daga purulenta, sanacion de Canto del Bosque, Yerbabuena o
+             Benditas) y se descuentan;
+          3. recupera 2 puntos de poder sin pasar de su maximo (§6.1.1: «el
+             poder se recupera ... cada dos (2) puntos por turno»).
+        Si un efecto lo deja sin vida, `combatientes` lo trae con vida 0 y
+        quien lleva la partida pasa al siguiente.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PeticionDeTurno'
+      responses:
+        '200':
+          description: Estado al empezar el turno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoDeTurno'
+        '400':
+          description: Peticion mal formada
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: Algun prototipo no esta en el catalogo de heroes
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: El catalogo de heroes no responde
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
   /api/v1/combate/ataques:
     post:
       tags: [Combate]
       operationId: resolverAtaque
       security: [{ tokenDeServicio: [] }]
-      summary: Resuelve un ataque de principio a fin
+      summary: Resuelve un ataque basico suelto (compatibilidad)
       description: |
-        Hace las tres cosas que el dominio ya sabe hacer, en orden:
+        Hace tres cosas, en orden:
 
-        1. Pide al servicio de heroes las estadisticas del atacante
-           (`ClienteHeroes`): su defensa y su formula de ataque.
-        2. Tira los dados de esa formula (`TiradorDados`).
-        3. Compara con la defensa del objetivo y sortea el efecto
-           (`ResolutorCombate.resolverCompleto`).
+        1. Pide al servicio de heroes las estadisticas de nivel 1 del atacante
+           (`ClienteHeroes`): su formula de ataque y su formula de dano.
+        2. Tira el ATAQUE y lo compara con la defensa del objetivo.
+        3. Si supera la defensa, sortea la fila de la tabla (indice de
+           distribucion normal) y aplica su porcentaje al DANO, que es la
+           tirada de la formula de dano del heroe (desde 1.2.0; hasta 1.1.0
+           se usaba la tirada de ataque).
 
-        Es la operacion que `salas-partidas` necesita para cada accion del
-        turno: le devuelve cuanto dano aplicar, y el se encarga de restarlo a la
-        vida que persiste y de anunciarlo por el canal.
+        Se conserva por compatibilidad. El combate de las partidas usa
+        `POST /combate/acciones`, que conoce el nivel, el equipamiento, el
+        poder y las acciones del heroe.
       requestBody:
         required: true
         content:
@@ -149,12 +288,13 @@ paths:
       security: [{ tokenDePortador: [] }]
       summary: Prototipos de distribucion de efectos disponibles
       description: |
-        Los seis prototipos que el dominio define, con su reparto porcentual.
-        Sirve para que quien llama pueda elegir uno sin tener que copiarse los
-        numeros, y para que la interfaz pueda explicar por que un heroe falla
-        mas que otro.
+        Los seis repartos de la Tabla 21, por tipo de heroe. Los sanadores no
+        tienen reparto: la Tabla 21 les da 0 % en todo porque no atacan.
 
-        Es una lectura de constantes: no cambia entre llamadas.
+        Son porcentajes de FILAS de la tabla de 8.000 (Tablas 22 y 23). Como
+        el indice sigue una normal (§6.1.4), la probabilidad efectiva de cada
+        efecto depende de la media y la desviacion del indice (D-B7-01) y no
+        coincide con el porcentaje de filas.
       responses:
         '200':
           description: Los seis prototipos
@@ -165,8 +305,8 @@ paths:
                 items: { $ref: '#/components/schemas/PrototipoDeDistribucion' }
 
 components:
-  # R8.1 — antes de esta version el motor no tenia seguridad ninguna: cualquiera
-  # que alcanzara el puerto podia resolver un ataque, y con ello sondear la tabla
+  # R8.1 — antes de 1.1.0 el motor no tenia seguridad ninguna: cualquiera que
+  # alcanzara el puerto podia resolver un ataque, y con ello sondear la tabla
   # de efectos. Resolver un ataque decide quien gana una partida, asi que es
   # exclusivo de servicio: su unico consumidor legitimo es salas-partidas, que
   # es quien conoce el estado del combate.
@@ -187,6 +327,337 @@ components:
 
   schemas:
 
+    # ---------------------------------------------------------------- 1.2.0
+    PeticionDeAccion:
+      type: object
+      required: [accion, ejecutor, combatientes]
+      properties:
+        accion:
+          type: string
+          description: |
+            `ATAQUE_BASICO`, `SANACION_BASICA`, el nombre de una accion de la
+            Tabla 7 tal como lo publica el catalogo («Golpe con escudo»), el
+            nombre de una epica de la Tabla 20 («Golpe de defensa») o
+            `DECISION_DE_LA_MAQUINA`.
+          example: Golpe con escudo
+        ejecutor:
+          type: string
+          description: '`id` del combatiente que actua; tiene que estar en `combatientes`.'
+        objetivo:
+          type: [string, 'null']
+          description: |
+            `id` del objetivo. Opcional cuando solo hay uno posible (un rival
+            en pie para un ataque; uno mismo para una defensa o una sanacion
+            sin companeros).
+        porEquipos:
+          type: boolean
+          default: false
+          description: Combate cooperativo por equipos (§6.1.3). Sin equipos cada uno es su propio bando.
+        combatientes:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items: { $ref: '#/components/schemas/Combatiente' }
+        semilla:
+          type: [integer, 'null']
+          format: int64
+          description: Solo para pruebas reproducibles. En partidas reales, ausente.
+
+    PeticionDeTurno:
+      type: object
+      required: [combatiente, combatientes]
+      properties:
+        combatiente:
+          type: string
+          description: '`id` de quien empieza su turno.'
+        porEquipos:
+          type: boolean
+          default: false
+        combatientes:
+          type: array
+          minItems: 1
+          maxItems: 6
+          items: { $ref: '#/components/schemas/Combatiente' }
+        semilla:
+          type: [integer, 'null']
+          format: int64
+
+    Combatiente:
+      type: object
+      description: |
+        Estado de un combatiente. Es a la vez ENTRADA y SALIDA: el motor
+        devuelve el mismo objeto actualizado y quien lleva la partida lo
+        guarda tal cual para la siguiente llamada. `recargas` y `acciones`
+        son solo de salida (se recalculan en cada respuesta).
+      required: [id, prototipo, vidaActual]
+      properties:
+        id: { type: string }
+        equipo:
+          type: [integer, 'null']
+          description: Equipo en combate cooperativo; nulo sin equipos.
+        prototipo:
+          type: string
+          description: Prototipo del catalogo de heroes («Guerrero Tanque»). Es tambien su fila de la Tabla 21.
+        nivel:
+          type: integer
+          minimum: 1
+          maximum: 8
+          default: 1
+          description: Nivel del heroe (§6.1.1). Multiplica el efecto de las acciones de la Tabla 7 y fija cuales estan desbloqueadas.
+        estadisticas:
+          oneOf:
+            - $ref: '#/components/schemas/EstadisticasDeCombate'
+            - type: 'null'
+          description: |
+            Estadisticas en su nivel CON el equipamiento plano ya aplicado
+            (las publica inventario, `GET /inventario/heroes/{id}/estadisticas`).
+            Ausentes: las del catalogo de heroes en ese nivel, sin equipo (la
+            IA, o un heroe del que no se conocen). En la salida van siempre.
+        vidaActual: { type: integer, minimum: 0 }
+        poderActual:
+          type: [integer, 'null']
+          minimum: 0
+          description: Nulo = su poder maximo (inicio del combate).
+        turnosJugados:
+          type: integer
+          minimum: 0
+          default: 0
+          description: Turnos propios ya jugados. Las cargas se cuentan sobre este contador.
+        cargas:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+          description: Por accion o epica, el valor de `turnosJugados` cuando se uso por ultima vez.
+        efectos:
+          type: array
+          items: { $ref: '#/components/schemas/EfectoActivo' }
+        equipamiento:
+          type: array
+          maxItems: 10
+          items: { type: string }
+          description: |
+            Nombres de las armas e items equipados (Tablas 8 a 19). El motor
+            aplica sus efectos de COMBATE: criticos (Tabla 23), los que tocan
+            al oponente y los que duran varios turnos. Los efectos planos
+            (+1 al ataque, +2 de vida...) ya vienen en `estadisticas`.
+        epicas:
+          type: array
+          maxItems: 8
+          items: { type: string }
+          description: Epicas de la Tabla 20 que el heroe puede usar en este combate.
+        ultimoDanoRecibido:
+          type: [object, 'null']
+          description: El ultimo golpe que recibio y de quien («Pare de fuego» lo retorna).
+          required: [de, cantidad]
+          properties:
+            de: { type: string }
+            cantidad: { type: integer, minimum: 0 }
+        recargas:
+          type: object
+          readOnly: true
+          additionalProperties: { type: integer, minimum: 1 }
+          description: Solo salida. Por accion o epica en carga, cuantos turnos propios le faltan.
+        acciones:
+          type: array
+          readOnly: true
+          items: { $ref: '#/components/schemas/EstadoDeAccion' }
+          description: Solo salida. Lo que este combatiente puede jugar AHORA y por que no lo demas.
+
+    EstadisticasDeCombate:
+      type: object
+      required: [poder, vida, defensa]
+      properties:
+        poder: { type: integer, minimum: 0, description: Poder maximo }
+        vida: { type: integer, minimum: 1, description: Vida maxima }
+        defensa: { type: integer, minimum: 0 }
+        ataque:
+          oneOf:
+            - $ref: '#/components/schemas/FormulaDetalle'
+            - type: 'null'
+        dano:
+          oneOf:
+            - $ref: '#/components/schemas/FormulaDetalle'
+            - type: 'null'
+        sanar:
+          oneOf:
+            - $ref: '#/components/schemas/FormulaDetalle'
+            - type: 'null'
+
+    FormulaDetalle:
+      type: object
+      required: [base, cantidadDados, caras]
+      properties:
+        base: { type: integer, minimum: 0 }
+        cantidadDados: { type: integer, minimum: 0 }
+        caras: { type: integer, minimum: 0 }
+
+    EfectoActivo:
+      type: object
+      required: [codigo, nombre, tipo, valor, turnos]
+      properties:
+        codigo: { type: string, example: CONO_DE_HIELO }
+        nombre: { type: string, example: Cono de hielo }
+        tipo: { $ref: '#/components/schemas/TipoDeEfecto' }
+        valor: { type: integer, description: Magnitud (puntos, o porcentaje en BONO_CRITICO) }
+        turnos:
+          type: integer
+          minimum: 0
+          description: Turnos PROPIOS del portador que le quedan (o ticks, en los efectos por turno).
+        hastaSuTurno:
+          type: boolean
+          default: false
+          description: Termina al empezar el siguiente turno del portador (protecciones).
+        origen:
+          type: [string, 'null']
+          description: '`id` de quien lo causo.'
+
+    TipoDeEfecto:
+      type: string
+      enum:
+        - BONO_ATAQUE          # suma a las tiradas de ataque del portador
+        - BONO_DANO            # suma al dano de sus golpes
+        - BONO_SANACION        # suma a sus sanaciones
+        - BONO_CRITICO         # puntos de % de critico para su proximo ataque
+        - BONO_DEFENSA         # suma a su defensa (protecciones)
+        - PENALIZA_ATAQUE      # resta a sus tiradas de ataque
+        - PENALIZA_DANO        # resta al dano que causa
+        - INMUNE_FISICO        # no recibe dano fisico (Defensa feroz)
+        - REDUCE_MAGICO        # resta al dano magico que recibe (Defensa feroz)
+        - INMUNE_TOTAL         # no recibe dano (Frio concentrado)
+        - REFLEJA_MITAD        # recibe la mitad y retorna el resto (Toma y lleva)
+        - DANO_POR_TURNO       # pierde vida al empezar su turno
+        - SANACION_POR_TURNO   # recupera vida al empezar su turno
+        - VINCULO_REANIMACION  # si cae, se reanima con el 20 % (Reanimador 3000)
+
+    EstadoDeAccion:
+      type: object
+      required: [codigo, nombre, tipo, disponible]
+      properties:
+        codigo: { type: string, description: Lo que se manda en `accion` }
+        nombre: { type: string }
+        tipo: { $ref: '#/components/schemas/TipoDeAccion' }
+        esEpica: { type: boolean }
+        costoPoder:
+          type: [integer, 'null']
+          description: Nulo cuando cuesta «todos los puntos de poder» (Reanimacion).
+        todoElPoder: { type: boolean }
+        turnosDeCarga: { type: integer, minimum: 0 }
+        nivelRequerido: { type: integer, minimum: 1, maximum: 8 }
+        disponible: { type: boolean }
+        motivo:
+          type: [string, 'null']
+          description: Por que no esta disponible, apto para el jugador.
+
+    TipoDeAccion:
+      type: string
+      enum: [ATAQUE, DEFENSA, SANACION, SANACION_GRUPAL, REANIMACION, APOYO]
+
+    MotivoDeRechazo:
+      type: string
+      enum:
+        - ACCION_DESCONOCIDA     # no es de este heroe
+        - BLOQUEADA_POR_NIVEL    # RC-01: se aprende en el nivel 4 u 8
+        - EN_CARGA               # §6.1.2: un turno de carga (dos las epicas)
+        - OBJETIVO_REQUERIDO     # hay mas de un objetivo posible
+        - OBJETIVO_INVALIDO      # companero, caido, ajeno, uno mismo...
+        - EJECUTOR_CAIDO         # sin vida no se actua
+        - SANADOR_NO_ATACA       # §6.1.1
+        - EPICA_NO_DISPONIBLE    # no la tiene
+        - EPICA_SIN_EFECTO       # «No aplica» para su tipo de heroe (Tabla 20)
+        - SIN_TABLA_DE_EFECTOS   # prototipo sin fila en la Tabla 21
+
+    ResultadoDeAccion:
+      type: object
+      required: [accion, accionEjecutada, enValorBase, ejecutor, tipo, afectados, eventos, combatientes]
+      properties:
+        accion:
+          type: string
+          description: La pedida. Con `DECISION_DE_LA_MAQUINA`, la que decidio el motor.
+        accionEjecutada:
+          type: string
+          description: La que de verdad se jugo; distinta de `accion` cuando falto poder.
+        enValorBase:
+          type: boolean
+          description: Falto poder y el turno se jugo con el valor base (§6.1.1).
+        ejecutor: { type: string }
+        objetivo: { type: [string, 'null'] }
+        tipo: { $ref: '#/components/schemas/TipoDeAccion' }
+        esEpica: { type: boolean }
+        potenciada:
+          type: boolean
+          description: Epica jugada por su tipo de heroe afin (efecto epico de la Tabla 20).
+        ataque:
+          oneOf:
+            - $ref: '#/components/schemas/DetalleDeAtaque'
+            - type: 'null'
+        afectados:
+          type: array
+          items: { $ref: '#/components/schemas/Afectado' }
+        eventos:
+          type: array
+          items: { $ref: '#/components/schemas/Evento' }
+        combatientes:
+          type: array
+          items: { $ref: '#/components/schemas/Combatiente' }
+
+    ResultadoDeTurno:
+      type: object
+      required: [combatiente, afectados, eventos, combatientes]
+      properties:
+        combatiente: { type: string }
+        afectados:
+          type: array
+          items: { $ref: '#/components/schemas/Afectado' }
+        eventos:
+          type: array
+          items: { $ref: '#/components/schemas/Evento' }
+        combatientes:
+          type: array
+          items: { $ref: '#/components/schemas/Combatiente' }
+
+    DetalleDeAtaque:
+      type: object
+      required: [ataqueResuelto, defensaObjetivo, acierta, categoria, danoAplicado]
+      properties:
+        ataqueResuelto: { type: integer }
+        defensaObjetivo: { type: integer }
+        acierta:
+          type: boolean
+          description: El ataque supero la defensa (§6.1.4). Si no, no hay tirada en la tabla.
+        categoria: { $ref: '#/components/schemas/CategoriaEfecto' }
+        indiceTabla:
+          type: [integer, 'null']
+          minimum: 1
+          maximum: 8000
+        porcentajeDano:
+          type: integer
+          description: 100, 120..180 (critico), 80, 60, 20 o 0.
+        danoBase: { type: integer, minimum: 0 }
+        danoAplicado: { type: integer, minimum: 0 }
+
+    Afectado:
+      type: object
+      required: [id, vidaAntes, vidaDespues, diferencia]
+      properties:
+        id: { type: string }
+        vidaAntes: { type: integer, minimum: 0 }
+        vidaDespues: { type: integer, minimum: 0 }
+        diferencia: { type: integer, description: Negativa si perdio vida, positiva si la recupero }
+
+    Evento:
+      type: object
+      required: [tipo, combatiente]
+      properties:
+        tipo:
+          type: string
+          enum: [DANO, SANACION, EFECTO_APLICADO, EFECTO_TERMINADO, DANO_POR_TURNO,
+                 SANACION_POR_TURNO, REFLEJO, PROTEGIDO, REANIMACION, PODER_PERDIDO,
+                 PODER_RECUPERADO, CAIDO, VALOR_BASE]
+        combatiente: { type: string, description: A quien le paso }
+        origen: { type: [string, 'null'], description: Quien lo causo }
+        efecto: { type: [string, 'null'], description: Nombre del efecto, accion o equipo }
+        cantidad: { type: [integer, 'null'] }
+
+    # ---------------------------------------------------------------- 1.1.0
     PeticionDeAtaque:
       type: object
       required: [heroeAtacante, defensaObjetivo, distribucion]
@@ -238,7 +709,7 @@ components:
 
     NombreDePrototipo:
       type: string
-      description: Los seis prototipos que define `DistribucionEfectos`.
+      description: Los seis prototipos que define `DistribucionEfectos` (Tabla 21).
       enum:
         - GUERRERO_TANQUE
         - GUERRERO_ARMAS
@@ -273,13 +744,14 @@ components:
           type: integer
           minimum: 0
           description: |
-            Dano final, ya con el porcentaje de la categoria aplicado. Es el
-            numero que hay que restar a la vida del objetivo. Cero cuando el
-            ataque no supera la defensa o la accion protege a un companero.
+            Dano final, ya con el porcentaje de la categoria aplicado sobre la
+            tirada de DANO del heroe. Es el numero que hay que restar a la
+            vida del objetivo. Cero cuando el ataque no supera la defensa o la
+            accion protege a un companero.
         ataqueResuelto:
           type: integer
           description: |
-            Resultado de la tirada de dados del atacante. Se devuelve para que
+            Resultado de la tirada de ATAQUE del atacante. Se devuelve para que
             el combate sea auditable: sin el, un dano de 0 no se distingue de un
             fallo de integracion.
         defensaObjetivo:
@@ -296,8 +768,8 @@ components:
     CategoriaEfecto:
       type: string
       description: |
-        Efecto sorteado. El porcentaje de dano que aplica cada uno lo fija el
-        dominio y **no es intuitivo**: `EVADIR_EL_GOLPE` aplica el 80 % del
+        Efecto sorteado. El porcentaje de dano que aplica cada uno lo fija la
+        Tabla 22 y **no es intuitivo**: `EVADIR_EL_GOLPE` aplica el 80 % del
         dano, no cero. Esta documentado asi a proposito para que nadie lo
         "corrija" al leerlo.
       enum:
@@ -325,3 +797,5 @@ components:
         status: { type: integer }
         detail: { type: string }
         instance: { type: string }
+        motivo:
+          $ref: '#/components/schemas/MotivoDeRechazo'

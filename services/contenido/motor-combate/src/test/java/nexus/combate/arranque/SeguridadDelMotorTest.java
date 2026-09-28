@@ -108,6 +108,65 @@ class SeguridadDelMotorTest {
         }
     }
 
+    /**
+     * B7: {@code /acciones} y {@code /turnos} resuelven el combate con el
+     * estado que les mandan, asi que son de servicio igual que {@code /ataques}.
+     */
+    @Nested
+    @DisplayName("Resolver acciones y turnos tambien es exclusivo de servicios")
+    class AccionesYTurnos {
+
+        private static final String ACCION = """
+                { "accion": "ATAQUE_BASICO", "ejecutor": "a",
+                  "combatientes": [
+                    { "id": "a", "prototipo": "Guerrero Armas", "vidaActual": 44 },
+                    { "id": "b", "prototipo": "Guerrero Tanque", "vidaActual": 44 } ] }
+                """;
+
+        private static final String TURNO = """
+                { "combatiente": "a",
+                  "combatientes": [ { "id": "a", "prototipo": "Guerrero Armas", "vidaActual": 44 } ] }
+                """;
+
+        @Test
+        @DisplayName("sin token: 401 en las dos rutas")
+        void sinTokenEs401() throws Exception {
+            mvc.perform(post("/api/v1/combate/acciones").contentType("application/json").content(ACCION))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/v1/combate/turnos").contentType("application/json").content(TURNO))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("un jugador no puede jugar por su cuenta contra el motor: 403")
+        void conJugadorEs403() throws Exception {
+            String jugador = "Bearer " + EMISOR.tokenDeJugador("lyra", UUID.randomUUID());
+            mvc.perform(post("/api/v1/combate/acciones").header("Authorization", jugador)
+                            .contentType("application/json").content(ACCION))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.type").value("urn:nexus:problema:acceso-denegado"));
+            mvc.perform(post("/api/v1/combate/turnos").header("Authorization", jugador)
+                            .contentType("application/json").content(TURNO))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("con la credencial de salas-partidas: pasa la puerta")
+        void conServicioPasaLaPuerta() throws Exception {
+            String servicio = "Bearer " + EMISOR.tokenDeServicio("salas-partidas");
+            int accion = mvc.perform(post("/api/v1/combate/acciones").header("Authorization", servicio)
+                            .contentType("application/json").content(ACCION))
+                    .andReturn().getResponse().getStatus();
+            int turno = mvc.perform(post("/api/v1/combate/turnos").header("Authorization", servicio)
+                            .contentType("application/json").content(TURNO))
+                    .andReturn().getResponse().getStatus();
+
+            // heroes apunta a un puerto cerrado: se espera el 503 de catalogo caido.
+            org.junit.jupiter.api.Assertions.assertEquals(503, accion);
+            org.junit.jupiter.api.Assertions.assertEquals(503, turno);
+        }
+    }
+
     @Nested
     @DisplayName("El resto de la superficie")
     class Resto {

@@ -130,11 +130,16 @@ async function sinBarrerasGraves(page, donde) {
   return resultado.violations.length;
 }
 
-/** Todas las imágenes visibles cargaron (el logotipo, los retratos). */
+/**
+ * Todas las imágenes visibles cargaron (el logotipo, los retratos, las de la
+ * vitrina pública). Una imagen diferida (`loading="lazy"`) que aún está por
+ * debajo de la pantalla no se pide hasta que se acerca: todavía no cuenta.
+ */
 async function imagenesCargadas(page) {
   return page.evaluate(() =>
     [...document.images]
       .filter((i) => i.getBoundingClientRect().width > 0)
+      .filter((i) => i.loading !== 'lazy' || i.getBoundingClientRect().top < window.innerHeight)
       .every((i) => i.complete && i.naturalWidth > 0),
   );
 }
@@ -310,7 +315,16 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
       '/login',
     );
     await expect(page.locator('#formLogin')).toBeVisible();
-    expect(await imagenesCargadas(page), 'el logotipo y las imágenes cargan').toBe(true);
+    // La vitrina pública (UXC-4) pinta sus productos después del formulario:
+    // se espera a que sus imágenes lleguen en vez de mirar un instante al azar
+    // (una vez falló a los 338 ms con las imágenes aún en camino). Una imagen
+    // rota sigue fallando: nunca llega a cargar.
+    await expect
+      .poll(() => imagenesCargadas(page), {
+        message: 'el logotipo y las imágenes cargan',
+        timeout: 15_000,
+      })
+      .toBe(true);
     const avisos = await sinBarrerasGraves(page, 'login');
     await capturar(page, testInfo, '01-login');
     return `/ → /login; axe sin graves (${avisos} avisos menores)`;
@@ -437,7 +451,7 @@ test.describe('R17 · la prueba del profesor', () => {
     context,
   }, testInfo) => {
     test.skip(testInfo.project.name !== ESCRITORIO, 'los veinte pasos se recorren en escritorio');
-    test.setTimeout(12 * 60_000);
+    test.setTimeout(15 * 60_000);
 
     const cuenta = cuentaDesechable(testInfo.project.name);
     const clave = claveDesechable();
@@ -570,7 +584,8 @@ test.describe('R17 · la prueba del profesor', () => {
         // campo hasta que se entra al combate (o hasta el primer aviso del
         // canal, si abre el rival). Una persona pulsa «Entrar al combate».
         const entrar = page.locator('[data-accion="entrar-al-combate"]');
-        const limite = Date.now() + 5 * 60_000;
+        // B7: el combate real dura mas que el simplificado (Tablas 21-23, D-B7-01).
+        const limite = Date.now() + 8 * 60_000;
         let golpes = 0;
         let recargada = false;
         let presentacion = false;

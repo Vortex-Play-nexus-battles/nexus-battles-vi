@@ -123,6 +123,46 @@ class ClienteHeroesHttpIntegracionTest {
     }
 
     @Test
+    void traeLaFormulaDeDanoDelGuerreroTanque() {
+        // Tabla 6: el dano del Guerrero Tanque es 0 + 1d4 (motor-combate 1.2.0 lo usa en /ataques).
+        EstadisticasHeroeRespuesta respuesta = cliente.obtenerEstadisticas("Guerrero Tanque");
+
+        assertNotNull(respuesta.danoDetalle());
+        assertEquals(1, respuesta.danoDetalle().cantidadDados());
+        assertEquals(4, respuesta.danoDetalle().caras());
+    }
+
+    @Test
+    void laFichaDeCombateSaleDelServicioReal() {
+        // B7: el motor pide la vista por nivel y las acciones de la ficha al heroes de verdad.
+        String base = "http://" + heroesContainer.getHost() + ":" + heroesContainer.getMappedPort(8080);
+        nexus.combate.reglas.FichaDeCombate ficha = new CatalogoDeCombateHttp(URI.create(base), Duration.ZERO)
+            .ficha("Guerrero Tanque", 1);
+
+        assertEquals(10, ficha.estadisticas().poder());
+        assertEquals(44, ficha.estadisticas().vida());
+        assertEquals(11, ficha.estadisticas().defensa());
+        assertEquals(3, ficha.acciones().size());
+        assertEquals("Golpe con escudo", ficha.acciones().get(0).nombre());
+        assertEquals(2, ficha.acciones().get(0).costoPoder());
+        assertEquals(1, ficha.acciones().get(0).nivelRequerido());
+        assertEquals(4, ficha.acciones().get(1).nivelRequerido());
+        assertEquals(8, ficha.acciones().get(2).nivelRequerido());
+        assertEquals("Golpe de defensa", ficha.epicaAfin());
+    }
+
+    @Test
+    void laFichaDeCombateDeUnSanadorConTildes() {
+        String base = "http://" + heroesContainer.getHost() + ":" + heroesContainer.getMappedPort(8080);
+        nexus.combate.reglas.FichaDeCombate ficha = new CatalogoDeCombateHttp(URI.create(base), Duration.ZERO)
+            .ficha("Médico", 1);
+
+        assertNull(ficha.estadisticas().ataque());
+        assertNotNull(ficha.estadisticas().sanar());
+        assertEquals(true, ficha.acciones().get(2).todoElPoder(), "Reanimacion cuesta todo el poder");
+    }
+
+    @Test
     void sanadorNoTraeAtaqueDetalle() {
         EstadisticasHeroeRespuesta respuesta = cliente.obtenerEstadisticas("Chamán");
 

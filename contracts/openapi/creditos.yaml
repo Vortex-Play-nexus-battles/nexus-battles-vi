@@ -64,7 +64,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Libro de creditos
-  version: 1.4.0
+  version: 1.4.1
   description: |
     Saldo, reservas y movimientos de creditos de los jugadores.
 
@@ -88,6 +88,11 @@ info:
     documentan ahora tal como responden hoy. Las tres escrituras comparten la
     misma tabla que las reservas, y por eso `refId` es a la vez la referencia
     del llamador y la clave de idempotencia.
+
+    **1.4.1 (B7, BACKEND-09), sin cambio de forma.** `consumir` deja un
+    movimiento a nombre del beneficiario (el ganador de una apuesta ya ve su
+    ingreso) y el cofre de `/partidas/resultado` cuenta solo los creditos de
+    las partidas ganadas (`cofres.yaml` 1.1.0).
 
     **Brecha conocida, fuera de este contrato:** `GET /api/v1/cofres/mios` de
     ms-finanzas (HU-JUE-013) no esta en ningun contrato publicado. Queda
@@ -334,6 +339,14 @@ paths:
         Descuenta el monto del saldo bruto del jugador que reservo y lo suma
         al saldo bruto de `vendedorUid` si viene informado; sin beneficiario
         los creditos simplemente se descuentan.
+
+        **El beneficiario ve el ingreso (1.4.1, B7).** Hasta 1.4.0 el credito
+        al beneficiario movia su saldo sin dejar fila: el ganador de una
+        apuesta cobraba y no veia de donde en `GET /creditos/{uid}/movimientos`.
+        Ahora deja un movimiento `CREDITO` a su nombre (`signo: SUMA`), con
+        concepto `cobro-de-reserva:{concepto de la reserva}`, `referenciaId`
+        la de la reserva, y clave `consumo-{reservaId}`: una sola fila por
+        reserva aunque se consuma dos veces.
 
         **Idempotente:** consumir una reserva ya `CONSUMIDA` responde 200
         con `transaccionId = TX-EXISTENTE` y no vuelve a cobrar. Consumir una
@@ -643,7 +656,10 @@ paths:
         RF-JUE-012 (HU-JUE-012). Acredita **2** creditos al ganador de un
         `UNO_A_UNO`, **4** a cada ganador de una `GRUPAL` y **1** a cada
         participante que no gano, y registra los creditos ganados para los
-        cofres de RF-JUE-013 (`cofreId` cuando toca uno). Un participante
+        cofres de RF-JUE-013 (`cofreId` cuando toca uno). Desde 1.4.1 (B7)
+        solo cuentan para el cofre los creditos de las partidas GANADAS
+        (§7.6: «veinte creditos en juegos ganados»); el de participar no, y
+        las reglas del cofre estan en `cofres.yaml` 1.1.0. Un participante
         `sancionado` no recibe nada y vuelve en `sancionadosExcluidos`: la
         sancion la sabe quien llama (moderacion), no este servicio.
 
