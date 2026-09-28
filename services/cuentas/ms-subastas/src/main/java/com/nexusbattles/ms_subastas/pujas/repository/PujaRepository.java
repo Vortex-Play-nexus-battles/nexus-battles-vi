@@ -54,17 +54,21 @@ public interface PujaRepository extends JpaRepository<Puja, UUID> {
     List<UUID> findDistinctJugadorIdBySubastaId(@Param("subastaId") UUID subastaId);
 
     /**
-     * En cuantas subastas DISTINTAS participa activamente, excluyendo la que
-     * esta pujando ahora (tope de 10). Se excluye la actual para que volver a
-     * pujar en una subasta en la que ya participa no cuente como una nueva.
+     * Si la subasta tiene alguna puja registrada. Es la condicion de 7.7.10
+     * para poder cancelarla («Posible solo si no hay pujas registradas»); se
+     * pregunta a la tabla y no al contador de la subasta, que las filas
+     * sembradas a mano pueden no tener al dia.
      */
-    @Query("""
-            select count(distinct p.subastaId) from Puja p
-            where p.jugadorId = :jugadorId
-              and p.estado = :estado
-              and p.subastaId <> :subastaExcluida
-            """)
-    int contarSubastasActivasExcluyendo(@Param("jugadorId") UUID jugadorId,
-                                        @Param("estado") EstadoPuja estado,
-                                        @Param("subastaExcluida") UUID subastaExcluida);
+    boolean existsBySubastaId(UUID subastaId);
+
+    /** Sus pujas en un estado: las GANADORAS son sus compras (historial, 7.7.9). */
+    List<Puja> findByJugadorIdAndEstado(UUID jugadorId, EstadoPuja estado);
+
+    /**
+     * «Mis pujas» (7.7.9): por cada subasta en la que pujo, su mejor oferta y
+     * cuando pujo por ultima vez. Filas de {subastaId, max(monto), max(creadaEn)}.
+     */
+    @Query("select p.subastaId, max(p.monto), max(p.creadaEn) from Puja p where p.jugadorId = :jugadorId "
+            + "group by p.subastaId")
+    List<Object[]> resumenPorSubastaDe(@Param("jugadorId") UUID jugadorId);
 }

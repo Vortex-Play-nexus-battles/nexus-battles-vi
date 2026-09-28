@@ -30,6 +30,7 @@ openapi:
   ms-identidad-perfiles.yaml: services/cuentas/ms-identidad
   rbac.yaml: services/cuentas/ms-identidad
   ms-subastas-listado.yaml: services/cuentas/ms-subastas
+  ms-subastas-panel.yaml: services/cuentas/ms-subastas
   ms-subastas-publicar.yaml: services/cuentas/ms-subastas
   ms-subastas-pujas.yaml: services/cuentas/ms-subastas
   notificaciones.yaml: services/plataforma/notificaciones

@@ -461,17 +461,17 @@ services:
       # recibia nada, con el E2E en verde. La URL de arriba estaba puesta y no
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
-      # Sin esto, publicar una subasta responde 503 «app.subastas.incremento-minimo
-      # no esta configurado»: la propiedad no tiene valor por omision
-      # (application.properties la deja vacia) y el servicio se niega a publicar.
-      # Lo descubrio la prueba de transferencia al intentar publicar de verdad;
-      # hasta entonces ningun E2E llegaba a publicar nada.
-      #
-      # El 1 es una FIJACION DE PRUEBA, no una decision de producto: el README de
-      # ms-subastas registra el valor por defecto del incremento minimo como la
-      # pregunta abierta de RF-SUB-004, y es el mismo valor que ya usa
-      # PublicacionAutoConfigurationTest. Elegirlo aqui no la responde.
-      SUBASTAS_INCREMENTO_MINIMO: "1"
+      # B8 — las reglas de 7.7 salen de admin-parametros (RF-ADM-001), no de
+      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`,
+      # que nace SIN valor (decision del PO pendiente): mientras nadie lo fije,
+      # publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Hasta B8 aqui
+      # habia SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie.
+      # Ahora lo fija subastas.e2e.spec.js como ADMINISTRADOR por
+      # PUT /api/v1/parametros/subastas.incremento-minimo, que es exactamente lo
+      # que hara el PO. El valor de la prueba es una FIJACION DE PRUEBA, no una
+      # decision de producto. Cache de 1 s para que el spec vea el cambio.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      SUBASTAS_PARAMETROS_CACHE_SEGUNDOS: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
@@ -486,6 +486,8 @@ services:
       # transfiere. Declararla evita que subastas arranque antes que inventario
       # en un levantado parcial.
       srv-inventario: { condition: service_healthy }
+      # B8 — las reglas (incremento minimo, limites) se leen de aqui.
+      srv-admin-parametros: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s

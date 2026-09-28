@@ -1,6 +1,6 @@
 import { montarCabecera, leerSesion } from '../comun/cabecera-app.js';
 import { cuerpoDelToken } from '../comun/identidad.js';
-import { baseDeApi } from '../comun/base-api.js';
+import { baseDeApi, rutaDeApi } from '../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
 import {
@@ -9,7 +9,31 @@ import {
   ErrorPublicacion,
 } from './cliente-publicacion-subastas.js';
 
+/**
+ * Respaldo de la Tabla 25 por si las reglas del servidor no llegan. Desde B8
+ * la pantalla pide GET /subastas/reglas al montarse y usa lo que diga el
+ * servidor (duraciones, comisiones y si el incremento minimo esta
+ * configurado); estas cifras solo evitan una pantalla en blanco sin red.
+ */
 const DURACIONES = { '24H': { horas: 24, comision: 1 }, '48H': { horas: 48, comision: 3 } };
+
+/**
+ * GET /subastas/reglas (ms-subastas-listado.yaml 1.1.0). Publica. Null si no
+ * responde: la pantalla sigue con el respaldo y el servidor decide al publicar.
+ */
+export async function consultarReglasDeSubastas(fetchImpl = globalThis.fetch) {
+  if (typeof fetchImpl !== 'function') {
+    return null;
+  }
+  try {
+    const respuesta = await fetchImpl(rutaDeApi('/subastas/reglas'), {
+      headers: { Accept: 'application/json' },
+    });
+    return respuesta?.ok ? await respuesta.json() : null;
+  } catch {
+    return null;
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function sesionUtilizable() {
@@ -33,9 +57,10 @@ export function validarCondiciones(elemento, duracion, inicial, inmediata) {
   }
   if (String(inmediata).trim()) {
     const compra = Number(inmediata);
-    if (!Number.isFinite(compra) || compra <= 0 || compra < precio) {
+    // B8 — 7.7.2: superior al precio minimo, no igual (el servidor tambien lo exige).
+    if (!Number.isFinite(compra) || compra <= 0 || compra <= precio) {
       errores.inmediata =
-        'La compra inmediata debe ser positiva y mayor o igual al precio inicial.';
+        'La compra inmediata debe ser superior al precio inicial (mínimo de puja).';
     }
   }
   return errores;
@@ -58,6 +83,7 @@ export async function montarPublicacion(
     consultar = consultarPagina,
     publicar = publicarSubasta,
     crearClave = crearClavePublicacion,
+    consultarReglas = consultarReglasDeSubastas,
   } = {},
 ) {
   const cabecera = document.querySelector('[data-cabecera-app]');
@@ -94,6 +120,7 @@ export async function montarPublicacion(
               </nav>
             </fieldset>
             <p class="publicacion__ayuda">Los productos no disponibles aparecen deshabilitados. Al publicar se comprobarán también el uso, la propiedad y si el producto es subastable.</p>
+            <p class="publicacion__ayuda" data-decision-po hidden></p>
           </section>
           <section class="publicacion__panel" aria-labelledby="titulo-condiciones">
             <h2 id="titulo-condiciones"><span class="publicacion__paso">02</span> Condiciones de publicación</h2>
@@ -101,8 +128,8 @@ export async function montarPublicacion(
               <fieldset aria-describedby="error-duracion">
                 <legend>Duración y comisión</legend>
                 <div class="publicacion__duraciones">
-                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="24H" checked required /><span>24 horas<small>Comisión: 1 crédito</small></span></label>
-                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="48H" required /><span>48 horas<small>Comisión: 3 créditos</small></span></label>
+                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="24H" checked required /><span>24 horas<small data-comision="24H">Comisión: 1 crédito</small></span></label>
+                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="48H" required /><span>48 horas<small data-comision="48H">Comisión: 3 créditos</small></span></label>
                 </div>
                 <small id="error-duracion" class="campo__error"></small>
               </fieldset>
@@ -146,6 +173,12 @@ export async function montarPublicacion(
   let intento = null;
   let retenido = false;
   let sinSesion = !sesion;
+  // B8 — con el incremento minimo sin configurar el servidor no publica
+  // (503 INCREMENTO_MINIMO_NO_CONFIGURADO): se dice antes y no se deja enviar.
+  let pendientePO = false;
+  const duraciones = Object.fromEntries(
+    Object.entries(DURACIONES).map(([codigo, valor]) => [codigo, { ...valor }]),
+  );
   const almacenamiento = globalThis.sessionStorage;
   const claveAlmacen = sesion ? `nexus.hu-sub-001.intento:${sesion.uid}` : null;
 
@@ -185,7 +218,7 @@ export async function montarPublicacion(
   function actualizar() {
     const { seleccionado, duracion, errores } = datos();
     const solicitud = retenido ? intento.solicitud : null;
-    const configuracion = DURACIONES[solicitud?.duracion ?? duracion];
+    const configuracion = duraciones[solicitud?.duracion ?? duracion];
     const nombreSeleccionado = seleccionado
       ? `${seleccionado.nombrePropio} · ${seleccionado.tipo} · ${seleccionado.id}`
       : 'Sin seleccionar';
@@ -227,6 +260,7 @@ export async function montarPublicacion(
       enviando ||
       terminado ||
       sinSesion ||
+      (!retenido && pendientePO) ||
       (!retenido && (cargando || !aceptar.checked || Object.keys(errores).length > 0));
     enviar.textContent = retenido ? 'Reintentar misma publicación' : 'Confirmar y publicar';
     if (enviando) {
@@ -245,6 +279,26 @@ export async function montarPublicacion(
     return;
   }
   form.hidden = false;
+  const reglas = await consultarReglas();
+  if (reglas && Array.isArray(reglas.duraciones)) {
+    for (const d of reglas.duraciones) {
+      if (Object.hasOwn(duraciones, d.codigo) && Number.isFinite(Number(d.comision))) {
+        duraciones[d.codigo] = { horas: Number(d.horas), comision: Number(d.comision) };
+        const etiqueta = $(`[data-comision="${d.codigo}"]`);
+        if (etiqueta) {
+          const comision = Number(d.comision);
+          etiqueta.textContent = `Comisión: ${comision} ${comision === 1 ? 'crédito' : 'créditos'}`;
+        }
+      }
+    }
+  }
+  if (reglas && reglas.incrementoMinimoConfigurado === false) {
+    pendientePO = true;
+    const aviso = $('[data-decision-po]');
+    aviso.textContent =
+      'DECISIÓN PO pendiente: el incremento mínimo entre pujas todavía no está configurado en administración. No se pueden publicar subastas hasta que un administrador lo fije.';
+    aviso.hidden = false;
+  }
   try {
     const guardado = almacenamiento.getItem(claveAlmacen);
     if (guardado) {
@@ -343,7 +397,7 @@ export async function montarPublicacion(
   $('[data-recargar]').addEventListener('click', () => cargar(pagina));
   form.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    if (enviando || terminado || sinSesion) {
+    if (enviando || terminado || sinSesion || (!retenido && pendientePO)) {
       return;
     }
     const actual = sesionUtilizable();

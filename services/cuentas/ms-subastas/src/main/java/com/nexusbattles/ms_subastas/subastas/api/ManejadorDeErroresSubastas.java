@@ -86,6 +86,18 @@ public class ManejadorDeErroresSubastas {
         return null;
     }
 
+    /** B8: la ficha de una subasta que no existe. Mismo tipo que en pujas. */
+    @ExceptionHandler(com.nexusbattles.ms_subastas.pujas.service.SubastaNoEncontradaException.class)
+    public ProblemDetail manejarSubastaNoEncontrada(
+            com.nexusbattles.ms_subastas.pujas.service.SubastaNoEncontradaException ex, HttpServletRequest request) {
+        ProblemDetail problema = ProblemDetail.forStatus(HttpStatus.NOT_FOUND);
+        problema.setType(URI.create("https://nexusbattles.upb.edu.co/errors/subasta-no-encontrada"));
+        problema.setTitle("Subasta no encontrada");
+        problema.setDetail(ex.getMessage());
+        problema.setInstance(URI.create(request.getRequestURI()));
+        return problema;
+    }
+
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ProblemDetail manejarParametroFaltante(MissingServletRequestParameterException ex,
                                                   HttpServletRequest request) {

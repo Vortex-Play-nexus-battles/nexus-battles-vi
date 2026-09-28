@@ -35,6 +35,12 @@ dependencies {
     // (La convencion de seguridad ya la trae; se deja explicita por claridad.)
     implementation project(':shared:libs:plataforma-seguridad')
 
+    // B8: el incremento minimo y los limites de participacion salen de
+    // admin-parametros (RF-SUB-002/004, «configurables desde administracion»).
+    // `LectorDeParametros` pone la politica comun de los veinte modulos: cache
+    // corta, respaldo por variable de entorno y ningun fallo hacia arriba.
+    implementation project(':shared:libs:plataforma-resiliencia')
+
     // HU-SUB-011: contador en vivo del listado, vía STOMP sobre WebSocket
     // (backend-spring.md: "Tiempo real: Spring WebSocket + STOMP").
     implementation 'org.springframework.boot:spring-boot-starter-websocket'

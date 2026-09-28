@@ -72,7 +72,8 @@ public class PujaController {
             @RequestHeader("Idempotency-Key") @NotBlank @Size(min = 8, max = 128) String idempotencyKey,
             @Valid @RequestBody PujarRequest solicitud) {
 
-        Puja puja = pujas.pujar(subastaId, jugadorAutenticado(), solicitud.monto(), idempotencyKey);
+        IdentidadClient.Identidad quien = identidad.actual();
+        Puja puja = pujas.pujar(subastaId, quien.usuarioId(), quien.apodo(), solicitud.monto(), idempotencyKey);
         return PujaResponse.de(puja);
     }
 
@@ -90,7 +91,8 @@ public class PujaController {
                     "La compra inmediata exige confirmacion explicita del jugador");
         }
 
-        Puja ganadora = pujas.comprarAhora(subastaId, jugadorAutenticado(), idempotencyKey);
+        IdentidadClient.Identidad quien = identidad.actual();
+        Puja ganadora = pujas.comprarAhora(subastaId, quien.usuarioId(), quien.apodo(), idempotencyKey);
         return PujaResponse.de(ganadora);
     }
 

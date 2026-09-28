@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_subastas.subastas.repository;
 
+import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Pageable;
@@ -71,4 +72,55 @@ public interface SubastaRepository extends JpaRepository<Subasta, UUID>,
             order by s.cantidadPujas desc
             """)
     List<Subasta> buscarSugeridasPorTexto(@Param("texto") String texto, Pageable limite);
+
+    // --- B8 (7.7 del documento del curso) ------------------------------------
+
+    /**
+     * Candado de publicacion por vendedor, hasta el final de la transaccion
+     * ({@code pg_advisory_xact_lock}).
+     *
+     * <p>El tope de 10 subastas activas (7.7.10) se comprueba contando; sin
+     * candado, dos publicaciones simultaneas del mismo vendedor con 9 activas
+     * contarian 9 las dos y quedarian 11. Un {@code SELECT ... FOR UPDATE} de
+     * sus subastas no sirve: con cero filas no bloquea nada, y la fila nueva
+     * que inserta el otro no la ve. El candado consultivo es del vendedor, no
+     * de una fila, asi que si serializa. Se envuelve en un SELECT que devuelve
+     * 1 porque la funcion devuelve {@code void}.
+     */
+    @Query(value = "select 1 from (select pg_advisory_xact_lock(:clave)) as candado", nativeQuery = true)
+    Integer bloquearPublicacionesDe(@Param("clave") long clave);
+
+    long countByVendedorIdAndEstado(UUID vendedorId, EstadoSubasta estado);
+
+    /** «Mis subastas» (7.7.9), de la mas reciente a la mas antigua. */
+    List<Subasta> findByVendedorIdOrderByFechaFinDesc(UUID vendedorId);
+
+    List<Subasta> findByVendedorIdAndEstadoOrderByFechaFinDesc(UUID vendedorId, EstadoSubasta estado);
+
+    /**
+     * Activas que cierran en la proxima hora y todavia no avisaron (7.7.8,
+     * «Aviso 1 hora antes de finalizar»). Solo ids: cada una se avisa en su
+     * propia transaccion.
+     */
+    @Query("""
+            select s.id from Subasta s
+            where s.estado = com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta.ACTIVA
+              and s.recordatorioEnviadoEn is null
+              and s.fechaFin > :ahora
+              and s.fechaFin <= :limite
+            """)
+    List<UUID> idsParaRecordar(@Param("ahora") Instant ahora, @Param("limite") Instant limite);
+
+    /**
+     * Subastas terminadas del vendedor por estado: la base de su reputacion
+     * (7.7.9, «Calificacion del vendedor basada en transacciones previas»).
+     * Filas de {estado, cantidad}.
+     */
+    @Query("""
+            select s.estado, count(s) from Subasta s
+            where s.vendedorId = :vendedorId
+              and s.estado <> com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta.ACTIVA
+            group by s.estado
+            """)
+    List<Object[]> terminadasPorEstado(@Param("vendedorId") UUID vendedorId);
 }

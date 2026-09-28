@@ -253,3 +253,104 @@ describe('listado', () => {
     expect(aVistaDeSubasta({ id: 'x', fechaFin: null }).historial).toEqual([]);
   });
 });
+
+// ---------------------------------------------------------------------- B8
+
+describe('B8 — reglas, ficha, cancelación, seguimiento y pendientes', () => {
+  function capturar(cuerpo = {}, status = 200) {
+    const peticiones = [];
+    const falso = jest.fn(async (url, opciones) => {
+      peticiones.push({ url, opciones });
+      return respuesta({ status, cuerpo });
+    });
+    return { falso, peticiones };
+  }
+
+  test('las reglas y la ficha son publicas: salen aunque no haya sesion', async () => {
+    const { falso, peticiones } = capturar({ incrementoMinimoConfigurado: false });
+    const api = apiCon(falso, { token: null });
+
+    await api.reglas();
+    await api.ficha('sub-1');
+
+    expect(peticiones[0].url).toBe('http://servidor/api/v1/subastas/reglas');
+    expect(peticiones[1].url).toBe('http://servidor/api/v1/subastas/sub-1');
+    expect(peticiones[0].opciones.headers.Authorization).toBeUndefined();
+  });
+
+  test('cancelar es un POST con sesion y sin cuerpo', async () => {
+    const { falso, peticiones } = capturar({ estado: 'CANCELADA' });
+
+    await apiCon(falso).cancelar('sub-1');
+
+    expect(peticiones[0].url).toBe('http://servidor/api/v1/subastas/sub-1/cancelacion');
+    expect(peticiones[0].opciones.method).toBe('POST');
+    expect(peticiones[0].opciones.body).toBeUndefined();
+    expect(peticiones[0].opciones.headers.Authorization).toBe('Bearer jwt-de-prueba');
+  });
+
+  test('seguir es PUT y dejar de seguir DELETE sobre el mismo recurso; los 204 no rompen', async () => {
+    const { falso, peticiones } = capturar({}, 204);
+    const api = apiCon(falso);
+
+    await expect(api.seguir('sub-1')).resolves.toBeNull();
+    await expect(api.dejarDeSeguir('sub-1')).resolves.toBeNull();
+
+    expect(peticiones.map((p) => `${p.opciones.method} ${p.url}`)).toEqual([
+      'PUT http://servidor/api/v1/subastas/sub-1/seguimiento',
+      'DELETE http://servidor/api/v1/subastas/sub-1/seguimiento',
+    ]);
+  });
+
+  test('los pendientes de recoger: listar, recoger uno y recoger todo', async () => {
+    const { falso, peticiones } = capturar([]);
+    const api = apiCon(falso);
+
+    await api.pendientes();
+    await api.recoger('sub-9');
+    await api.recogerTodo();
+
+    expect(peticiones.map((p) => `${p.opciones.method} ${p.url}`)).toEqual([
+      'GET http://servidor/api/v1/mis-subastas/pendientes',
+      'POST http://servidor/api/v1/mis-subastas/pendientes/sub-9/recogida',
+      'POST http://servidor/api/v1/mis-subastas/pendientes/recogida',
+    ]);
+  });
+
+  test('las acciones del panel exigen sesion', async () => {
+    const falso = jest.fn();
+    const api = apiCon(falso, { token: null });
+
+    await expect(api.cancelar('sub-1')).rejects.toMatchObject({ estado: 401 });
+    await expect(api.pendientes()).rejects.toMatchObject({ estado: 401 });
+    expect(falso).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['CANCELACION_CON_PUJAS', /no se puede cancelar/],
+    ['CANCELACION_FUERA_DE_PLAZO', /últimas 6 horas/],
+    ['NO_ES_EL_VENDEDOR', /Solo quien publicó/],
+    ['PENDIENTE_YA_RESUELTO', /7 días/],
+    ['COMPRA_INMEDIATA_SUPERADA', /ya no está disponible/],
+  ])('el motivo %s tiene su mensaje', (motivo, esperado) => {
+    expect(mensajePara(motivo)).toMatch(esperado);
+  });
+
+  test('el resumen del listado trae el estado y deja lo que no sabe en null', () => {
+    const vista = aVistaDeSubasta({
+      id: 'sub-1',
+      estado: 'ACTIVA',
+      ofertaVigente: '100',
+      precioInicial: '100',
+      cantidadPujas: 0,
+    });
+
+    expect(vista.estado).toBe('ACTIVA');
+    expect(vista.precioInicial).toBe(100);
+    expect(vista.rivales).toBe(0);
+    expect(vista.pujaMinimaSiguiente).toBeNull();
+    expect(vista.incrementoMinimo).toBeNull();
+    expect(vista.compraInmediataDisponible).toBeNull();
+    expect(vista.siguiendo).toBe(false);
+  });
+});

@@ -72,6 +72,16 @@ const MENSAJES = {
   SALDO_INSUFICIENTE: 'No tienes créditos suficientes para esta operación.',
   SIN_COMPRA_INMEDIATA: 'Esta subasta no admite compra inmediata.',
   CONFIRMACION_REQUERIDA: 'Hay que confirmar la compra de forma explicita.',
+  // B8 (ms-subastas-pujas.yaml 0.4.0): una puja ya alcanzo el precio de compra
+  // inmediata; comprar por debajo le quitaria el objeto al mejor postor.
+  COMPRA_INMEDIATA_SUPERADA:
+    'La compra inmediata ya no está disponible: una puja alcanzó su precio. Puedes seguir pujando.',
+  // B8 (ms-subastas-panel.yaml 1.0.0): cancelar, seguir y recoger.
+  NO_ES_EL_VENDEDOR: 'Solo quien publicó la subasta puede cancelarla.',
+  CANCELACION_CON_PUJAS: 'Ya hay pujas registradas: la subasta no se puede cancelar.',
+  CANCELACION_FUERA_DE_PLAZO: 'No se puede cancelar en las últimas 6 horas de la subasta.',
+  PENDIENTE_NO_ENCONTRADO: 'No tienes ningún producto pendiente de recoger de esa subasta.',
+  PENDIENTE_YA_RESUELTO: 'El plazo de 7 días para recogerlo ya venció.',
   // No deberia verlo un jugador: significa que el cliente reutilizo una clave
   // de idempotencia. Se traduce igual, porque un mensaje en blanco seria peor
   // que uno generico si alguna vez pasa.
@@ -150,6 +160,20 @@ export function aVistaDeSubasta(resumen, apodoPropio = null) {
     retenido: 0,
     rival: null,
     rivales: Number(resumen.cantidadPujas || 0),
+    // B8 — `estado` llega en SubastaResumen desde ms-subastas-listado.yaml
+    // 1.1.0. Lo que el listado NO trae (la puja minima exacta, el incremento
+    // de ESTA subasta, si la compra inmediata sigue disponible, si la sigues)
+    // queda en null hasta que el detalle lo pida a GET /subastas/{id}: null es
+    // «todavia no se sabe», no un valor.
+    estado: resumen.estado || 'ACTIVA',
+    precioInicial:
+      resumen.precioInicial === null || resumen.precioInicial === undefined
+        ? null
+        : Number(resumen.precioInicial),
+    pujaMinimaSiguiente: null,
+    incrementoMinimo: null,
+    compraInmediataDisponible: null,
+    siguiendo: false,
     // FI-R1 — el contrato no dice que aporta un objeto a un heroe. Los tres
     // ceros llenaban la columna «Con <objeto>» y toda la de «Diferencia».
     aporte: null,
@@ -381,6 +405,56 @@ export function crearApiSubastas({
     /** DELETE /subastas/{id}/puja-automatica */
     desactivarAutomatica(subastaId) {
       return pedir(`/subastas/${subastaId}/puja-automatica`, { metodo: 'DELETE' });
+    },
+
+    // ------------------------------------------------------------------ B8
+
+    /**
+     * GET /subastas/reglas — las reglas de 7.7 tal como estan (duraciones y
+     * comisiones, incremento minimo de admin-parametros, limites). Publica.
+     * Sustituye a las cifras escritas a mano en CONFIG_REGLAS.
+     */
+    reglas() {
+      return pedir('/subastas/reglas', { exigeSesion: false });
+    },
+
+    /**
+     * GET /subastas/{id} — la ficha: puja minima exacta, incremento de esta
+     * subasta, si la compra inmediata sigue disponible y la reputacion del
+     * vendedor. Publica; con sesion cuenta la visita.
+     */
+    ficha(subastaId) {
+      return pedir(`/subastas/${subastaId}`, { exigeSesion: false });
+    },
+
+    /** POST /subastas/{id}/cancelacion — 7.7.10: sin pujas, fuera de las ultimas 6 h, 50 % de la comision. */
+    cancelar(subastaId) {
+      return pedir(`/subastas/${subastaId}/cancelacion`, { metodo: 'POST' });
+    },
+
+    /** PUT /subastas/{id}/seguimiento — lista de seguimiento (7.7.9). Idempotente. */
+    seguir(subastaId) {
+      return pedir(`/subastas/${subastaId}/seguimiento`, { metodo: 'PUT' });
+    },
+
+    /** DELETE /subastas/{id}/seguimiento */
+    dejarDeSeguir(subastaId) {
+      return pedir(`/subastas/${subastaId}/seguimiento`, { metodo: 'DELETE' });
+    },
+
+    /** GET /mis-subastas/pendientes — lo ganado al vencer, pendiente de recoger 7 dias (7.7.9). */
+    pendientes() {
+      return pedir('/mis-subastas/pendientes');
+    },
+
+    /** POST /mis-subastas/pendientes/{id}/recogida — recoger uno. Idempotente. */
+    recoger(subastaId) {
+      return pedir(`/mis-subastas/pendientes/${subastaId}/recogida`, { metodo: 'POST' });
+    },
+
+    /** POST /mis-subastas/pendientes/recogida — «Recoger todo». */
+    recogerTodo() {
+      return pedir('/mis-subastas/pendientes/recogida', { metodo: 'POST' });
     },
   };
 }
