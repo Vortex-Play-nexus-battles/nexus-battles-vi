@@ -204,6 +204,99 @@ class CreditoServiceTest {
         assertEquals("NEUTRO", linea.signo());
     }
 
+    // ------------------------------------------------------------------
+    // creditos.yaml 1.4.1 (B7): el beneficiario de un consumo ve su ingreso
+    // ------------------------------------------------------------------
+
+    private ReservaCredito apuestaActiva(UUID id) {
+        return ReservaCredito.builder()
+                .id(id)
+                .jugadorUid("perdedor")
+                .monto(new BigDecimal("50.00"))
+                .concepto("apuesta-sala")
+                .referenciaId("sala-7-jugador-perdedor")
+                .idempotencyKey("sala-7-jugador-perdedor-v1")
+                .estado(ReservaCredito.EstadoReserva.ACTIVA)
+                .tipoOperacion(ReservaCredito.TipoOperacion.RESERVA)
+                .build();
+    }
+
+    @Test
+    void consumir_ConBeneficiario_leDejaUnMovimientoDeCreditoASuNombre() {
+        UUID id = UUID.randomUUID();
+        ReservaCredito apuesta = apuestaActiva(id);
+        CuentaCredito perdedor = CuentaCredito.builder().jugadorUid("perdedor")
+                .saldoBruto(new BigDecimal("100.00")).saldoReservado(new BigDecimal("50.00")).build();
+        CuentaCredito ganador = CuentaCredito.builder().jugadorUid("ganador")
+                .saldoBruto(new BigDecimal("10.00")).saldoReservado(BigDecimal.ZERO).build();
+        when(reservaRepository.findById(id)).thenReturn(Optional.of(apuesta));
+        when(cuentaRepository.findByJugadorUid("perdedor")).thenReturn(Optional.of(perdedor));
+        when(cuentaRepository.findByJugadorUid("ganador")).thenReturn(Optional.of(ganador));
+        when(reservaRepository.findByIdempotencyKey("consumo-" + id)).thenReturn(Optional.empty());
+
+        creditoService.consumir(id, new ConsumirRequest("ganador"));
+
+        org.mockito.ArgumentCaptor<ReservaCredito> guardadas = org.mockito.ArgumentCaptor.forClass(ReservaCredito.class);
+        verify(reservaRepository, times(2)).save(guardadas.capture());
+        ReservaCredito ingreso = guardadas.getAllValues().get(0);
+        assertEquals("ganador", ingreso.getJugadorUid());
+        assertEquals(new BigDecimal("50.00"), ingreso.getMonto());
+        assertEquals("cobro-de-reserva:apuesta-sala", ingreso.getConcepto());
+        assertEquals("sala-7-jugador-perdedor", ingreso.getReferenciaId());
+        assertEquals("consumo-" + id, ingreso.getIdempotencyKey());
+        assertEquals(ReservaCredito.TipoOperacion.CREDITO, ingreso.getTipoOperacion());
+        assertEquals("SUMA", CreditoService.comoMovimiento(ingreso).signo());
+        assertEquals(new BigDecimal("60.00"), ganador.getSaldoBruto());
+        assertEquals(ReservaCredito.EstadoReserva.CONSUMIDA, apuesta.getEstado());
+    }
+
+    @Test
+    void consumir_SinBeneficiario_noDejaIngresoANadie() {
+        UUID id = UUID.randomUUID();
+        ReservaCredito apuesta = apuestaActiva(id);
+        CuentaCredito perdedor = CuentaCredito.builder().jugadorUid("perdedor")
+                .saldoBruto(new BigDecimal("100.00")).saldoReservado(new BigDecimal("50.00")).build();
+        when(reservaRepository.findById(id)).thenReturn(Optional.of(apuesta));
+        when(cuentaRepository.findByJugadorUid("perdedor")).thenReturn(Optional.of(perdedor));
+
+        creditoService.consumir(id, new ConsumirRequest(null));
+
+        verify(reservaRepository, times(1)).save(apuesta);
+        verify(reservaRepository, never()).findByIdempotencyKey(any());
+    }
+
+    @Test
+    void consumir_YaConsumida_noVuelveACobrarNiDuplicaElIngreso() {
+        UUID id = UUID.randomUUID();
+        ReservaCredito apuesta = apuestaActiva(id);
+        apuesta.setEstado(ReservaCredito.EstadoReserva.CONSUMIDA);
+        when(reservaRepository.findById(id)).thenReturn(Optional.of(apuesta));
+
+        ConsumirResponse respuesta = creditoService.consumir(id, new ConsumirRequest("ganador"));
+
+        assertEquals("TX-EXISTENTE", respuesta.transaccionId());
+        verify(reservaRepository, never()).save(any(ReservaCredito.class));
+    }
+
+    @Test
+    void consumir_ConElIngresoYaAnotado_noLoRepite() {
+        UUID id = UUID.randomUUID();
+        ReservaCredito apuesta = apuestaActiva(id);
+        CuentaCredito perdedor = CuentaCredito.builder().jugadorUid("perdedor")
+                .saldoBruto(new BigDecimal("100.00")).saldoReservado(new BigDecimal("50.00")).build();
+        CuentaCredito ganador = CuentaCredito.builder().jugadorUid("ganador")
+                .saldoBruto(BigDecimal.ZERO).saldoReservado(BigDecimal.ZERO).build();
+        when(reservaRepository.findById(id)).thenReturn(Optional.of(apuesta));
+        when(cuentaRepository.findByJugadorUid("perdedor")).thenReturn(Optional.of(perdedor));
+        when(cuentaRepository.findByJugadorUid("ganador")).thenReturn(Optional.of(ganador));
+        when(reservaRepository.findByIdempotencyKey("consumo-" + id))
+                .thenReturn(Optional.of(ReservaCredito.builder().build()));
+
+        creditoService.consumir(id, new ConsumirRequest("ganador"));
+
+        verify(reservaRepository, times(1)).save(apuesta);
+    }
+
     private static String signoDe(ReservaCredito.TipoOperacion tipo, ReservaCredito.EstadoReserva estado) {
         return CreditoService.comoMovimiento(ReservaCredito.builder()
                 .jugadorUid("ana")

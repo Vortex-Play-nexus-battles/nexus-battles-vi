@@ -83,6 +83,26 @@ info:
     Project Charter): mismo control de lista negra, sancion y frecuencia.
     Solo los dos participantes ven una conversacion.
 
+    Cambios 1.7.0 (B7, BACKEND-09, aditivo — combate contractual):
+    - `Partida` gana `resultado` (`GANADOR` o `EMPATE`), `ganadores`,
+      `equipoGanador` y `finalizadaEn`: el final es un estado formal, tambien
+      en equipos, y la sala pasa a `FINALIZADA`.
+    - El orden de los turnos se sortea al empezar entre todos los
+      participantes (§6.1.3) con una semilla que la partida guarda, y no
+      cambia hasta el final. Ya no abre siempre el anfitrion.
+    - `HeroeEnPartida` gana `prototipo`, `poderActual`, `poderMaximo`,
+      `recargas` y `acciones` (lo que puede jugar ahora y por que no lo
+      demas), y `efectosActivos` y `nivel` dejan de ir vacios: el combate usa
+      el heroe real (nivel, equipamiento, poder, cargas y efectos, §6).
+    - `turnoActual.segundosRestantes` se rellena cuando el Product Owner fija
+      el tiempo por turno (`salas.partidas.segundos-por-turno` en
+      admin-parametros; sin valor, sin limite: D-B7-14).
+    - `GET /partidas/{idPartida}` solo lo ve quien juega la partida (y los
+      roles de operacion, que ya podian leer): cualquier otro jugador recibe
+      `403` `partida-ajena`.
+    - `GET /partidas/mias`: historial de partidas del jugador, de la mas
+      reciente a la mas antigua, con su resultado.
+
     Cambios 1.6.1 (B6): implementadas las cuatro operaciones de
     `/mensajes-directos/**` (sin cambio de forma). Aclaraciones: `leido` se
     lee desde quien consulta (lo que uno escribio cuenta como leido para el:
@@ -93,7 +113,7 @@ info:
     `jugador-sancionado`, `destinatario-inexistente`, `contenido-bloqueado`,
     `demasiados-mensajes` con `Retry-After`, `moderacion-no-disponible`),
     los mismos motivos que `EnvioRechazado` del AsyncAPI.
-  version: 1.6.1
+  version: 1.7.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -529,6 +549,13 @@ paths:
         Se consulta al entrar al combate y al reconectar tras una caida del
         canal en tiempo real. Durante el juego normal el estado llega por
         WebSocket, no por esta ruta.
+
+        Desde 1.7.0 (B7) solo la ven sus participantes y los roles de
+        operacion (MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR, que ya
+        podian leer partidas para atender reportes). Un jugador que no juega
+        esta partida recibe `403` con `type` `partida-ajena`: el poder, las
+        cargas y las acciones disponibles de cada heroe son informacion de la
+        partida, no publica.
       operationId: obtenerPartida
       responses:
         '200':
@@ -539,11 +566,53 @@ paths:
                 $ref: '#/components/schemas/Partida'
         '401':
           $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: El jugador no participa en esta partida (1.7.0).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              example:
+                type: 'https://nexusbattles.local/errores/partida-ajena'
+                title: 'No participas en esta partida'
+                status: 403
+                detail: 'Solo quienes juegan una partida pueden ver su estado.'
         '404':
           description: Partida no encontrada
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
+  # 1.7.0 (B7) — Historial de partidas del jugador
+  # ---------------------------------------------------------------------------
+  /partidas/mias:
+    get:
+      tags: [Partidas]
+      summary: Historial de partidas del jugador autenticado (1.7.0)
+      description: |
+        Las partidas en las que jugo quien firma el token (el jugador sale del
+        `uid`, nunca de la ruta), de la mas reciente a la mas antigua: en
+        curso y terminadas, con su resultado desde su punto de vista. Mismo
+        tamano de pagina que el listado de salas (RNF-USA-001: dieciseis).
+      operationId: misPartidas
+      parameters:
+        - name: pagina
+          in: query
+          description: Numero de pagina, base 0
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: tamano
+          in: query
+          description: Elementos por pagina. El valor de diseno es 16.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 16 }
+      responses:
+        '200':
+          description: Pagina del historial
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDePartidas'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
 
   /mensajes-directos/conversaciones:
     get:
@@ -1170,6 +1239,92 @@ components:
               codigo: { type: string }
               nombre: { type: string }
               turnosRestantes: { type: [integer, 'null'] }
+              tipo:
+                type: [string, 'null']
+                description: Tipo de efecto del motor de combate (BONO_DEFENSA, DANO_POR_TURNO...), 1.7.0.
+              valor: { type: [integer, 'null'] }
+        prototipo:
+          type: [string, 'null']
+          description: |
+            (1.7.0) Prototipo del catalogo de heroes («Guerrero Tanque»): el
+            tipo de heroe, que fija sus acciones y su fila de la Tabla 21. No es
+            el nombre propio.
+        poderActual:
+          type: [integer, 'null']
+          minimum: 0
+          description: (1.7.0) Poder del heroe ahora (§6.1.1). Nulo antes del combate.
+        poderMaximo:
+          type: [integer, 'null']
+          minimum: 0
+        recargas:
+          type: object
+          additionalProperties: { type: integer, minimum: 1 }
+          description: (1.7.0) Por accion en carga, cuantos turnos propios le faltan (§6.1.2).
+        acciones:
+          type: array
+          description: |
+            (1.7.0) Lo que este heroe puede jugar AHORA y por que no lo demas,
+            calculado por el motor de combate: la interfaz no reimplementa la
+            regla. El `codigo` es lo que se manda como `codigoAccion` por el
+            canal (`contracts/websocket/salas-partidas.yaml`).
+          items:
+            $ref: '#/components/schemas/EstadoDeAccion'
+
+    EstadoDeAccion:
+      type: object
+      description: (1.7.0) Una accion jugable y su disponibilidad, tal como la calcula el motor de combate.
+      required: [codigo, nombre, disponible]
+      properties:
+        codigo: { type: string, example: Golpe con escudo }
+        nombre: { type: string, example: Golpe con escudo }
+        tipo:
+          type: [string, 'null']
+          enum: [ATAQUE, DEFENSA, SANACION, SANACION_GRUPAL, REANIMACION, APOYO, null]
+        esEpica: { type: boolean }
+        costoPoder: { type: [integer, 'null'], description: Nulo si cuesta todo el poder }
+        turnosDeCarga: { type: [integer, 'null'] }
+        nivelRequerido: { type: [integer, 'null'] }
+        disponible: { type: boolean }
+        motivo:
+          type: [string, 'null']
+          description: Por que no esta disponible, apto para el jugador.
+
+    ResumenDePartida:
+      type: object
+      description: (1.7.0) Una linea del historial del jugador.
+      required: [id, idSala, estado, iniciadaEn]
+      properties:
+        id: { type: string, format: uuid }
+        idSala: { type: string, format: uuid }
+        modalidad:
+          oneOf:
+            - $ref: '#/components/schemas/Modalidad'
+            - type: 'null'
+        estado:
+          type: string
+          enum: [EN_CURSO, FINALIZADA]
+        resultado:
+          type: [string, 'null']
+          enum: [VICTORIA, DERROTA, EMPATE, null]
+          description: Desde el punto de vista de quien consulta; nulo en curso.
+        heroe:
+          type: [string, 'null']
+          description: Nombre del heroe con el que jugo.
+        participantes: { type: integer, minimum: 1 }
+        iniciadaEn: { type: string, format: date-time }
+        finalizadaEn: { type: [string, 'null'], format: date-time }
+
+    PaginaDePartidas:
+      type: object
+      required: [contenido, pagina, tamano, totalElementos, totalPaginas]
+      properties:
+        contenido:
+          type: array
+          items: { $ref: '#/components/schemas/ResumenDePartida' }
+        pagina: { type: integer }
+        tamano: { type: integer }
+        totalElementos: { type: integer }
+        totalPaginas: { type: integer }
 
     VerificacionHeroe:
       type: object
@@ -1191,7 +1346,9 @@ components:
 
     Partida:
       type: object
-      description: Estado del combate (RF-JUE-017).
+      description: |
+        Estado del combate (RF-JUE-017). `participantes` va en el ORDEN DE LOS
+        TURNOS, sorteado al empezar entre todos (§6.1.3, 1.7.0).
       required: [id, idSala, estado, participantes, turnoActual]
       properties:
         id: { type: string, format: uuid }
@@ -1208,9 +1365,34 @@ components:
           properties:
             idJugador: { type: string, format: uuid }
             numeroTurno: { type: integer, minimum: 1 }
-            segundosRestantes: { type: [integer, 'null'] }
+            segundosRestantes:
+              type: [integer, 'null']
+              description: |
+                Nulo si no hay tiempo por turno: el documento no fija uno y el
+                parametro `salas.partidas.segundos-por-turno` nace sin valor
+                (D-B7-14). Con valor, al agotarse el turno pasa sin accion.
         recompensaEnJuego: { type: integer, minimum: 0 }
         iniciadaEn: { type: string, format: date-time }
+        resultado:
+          type: [string, 'null']
+          enum: [GANADOR, EMPATE, null]
+          description: |
+            (1.7.0) Nulo en curso. `GANADOR` cuando queda en pie un solo heroe
+            o un solo equipo (§6.1.3); `EMPATE` cuando no queda nadie (un
+            reflejo o un sangrado pueden tumbar a los dos a la vez).
+        ganadores:
+          type: array
+          items: { type: string, format: uuid }
+          description: |
+            (1.7.0) Quien gano: el heroe en pie o, en combate por equipos,
+            TODOS los integrantes del equipo ganador, tambien los caidos
+            (D-B7-15). Vacio en curso o en empate.
+        equipoGanador:
+          type: [integer, 'null']
+          description: (1.7.0) Solo en combate por equipos.
+        finalizadaEn:
+          type: [string, 'null']
+          format: date-time
 
   securitySchemes:
     keycloak:

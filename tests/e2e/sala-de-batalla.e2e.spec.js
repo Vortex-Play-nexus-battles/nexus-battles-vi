@@ -619,7 +619,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     // (alto) -> 12/44 (bajo)—. Exigirlo pondria la prueba roja por suerte. Lo
     // que si se exige es que CADA estado pintado case con su porcentaje, y que
     // la barra salga de «alto», que es lo que demuestra que hubo daño real.
-    test.setTimeout(240000);
+    test.setTimeout(360000);
 
     /** La regla de RF-JUE-009, escrita aqui a proposito y no importada. */
     const colorEsperado = (actual, maxima) => {
@@ -633,7 +633,9 @@ test.describe('Sala de batalla de punta a punta', () => {
     const recorrido = [];
     let turnos = 0;
 
-    while (turnos < 40 && !vistos.has('bajo') && !vistos.has('medio')) {
+    // B7: con las reglas del documento el daño llega en ~3 de cada 10 golpes
+    // de un Guerrero Tanque (Tablas 21-23, D-B7-01); el tope es de la prueba.
+    while (turnos < 150 && !vistos.has('bajo') && !vistos.has('medio')) {
       const enCurso = await (
         await api.get(`/api/v1/partidas/${partida.id}`, {
           headers: conToken(anfitriona.token),
@@ -707,7 +709,9 @@ test.describe('Sala de batalla de punta a punta', () => {
   test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
     // HU-JUE-005 / RF-JUE-017: el combate acaba de verdad. Se sigue golpeando
     // desde donde lo dejo la prueba anterior hasta que la partida cierre.
-    test.setTimeout(240000);
+    // B7: un combate real de dos Guerreros Tanque dura del orden de cien
+    // turnos (Tablas 21-23, D-B7-01); el tope es de la prueba, no de la regla.
+    test.setTimeout(480000);
 
     let enCurso = await (
       await api.get(`/api/v1/partidas/${partida.id}`, {
@@ -716,7 +720,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     ).json();
 
     let turnos = 0;
-    while (enCurso.estado === 'EN_CURSO' && turnos < 40) {
+    while (enCurso.estado === 'EN_CURSO' && turnos < 300) {
       const esAnfitriona = enCurso.turnoActual.idJugador === anfitriona.claims.uid;
       const quien = esAnfitriona ? anfitriona : invitado;
 
@@ -803,6 +807,25 @@ test.describe('Sala de batalla de punta a punta', () => {
     // Al perdedor se le cobro la reserva (consumida), no se le devolvio: en
     // cualquiera de los dos casos deja de estar reservada.
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
+
+    // creditos.yaml 1.4.1 (B7): el ganador VE ese ingreso en su historial de
+    // movimientos, no solo en el saldo. Antes el cobro movia su saldo sin
+    // dejar fila a su nombre.
+    const movimientos = await api.get(
+      `${FINANZAS}/creditos/${ganador.claims.uid}/movimientos?size=50`,
+      { headers: conToken(ganador.token) },
+    );
+    expect(movimientos.status(), await movimientos.text()).toBe(200);
+    const ingresos = (await movimientos.json()).content.filter(
+      (m) =>
+        m.tipo === 'CREDITO' &&
+        m.signo === 'SUMA' &&
+        String(m.concepto).startsWith('cobro-de-reserva:'),
+    );
+    expect(
+      ingresos.some((m) => Number(m.monto) === APUESTA),
+      JSON.stringify(ingresos),
+    ).toBe(true);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),

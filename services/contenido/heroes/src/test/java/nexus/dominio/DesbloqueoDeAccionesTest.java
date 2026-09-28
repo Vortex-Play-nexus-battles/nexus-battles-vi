@@ -55,4 +55,20 @@ class DesbloqueoDeAccionesTest {
         assertEquals(3, heroe.accionesDisponibles().size());
         assertEquals(heroe.prototipo().acciones(), heroe.accionesDisponibles());
     }
+
+    @ParameterizedTest
+    @CsvSource({"0, 1", "1, 4", "2, 8"})
+    @DisplayName("cada posicion de la Tabla 7 tiene su nivel de desbloqueo (B7: la accion como dato)")
+    void nivelDeDesbloqueoPorPosicion(int posicion, int nivel) {
+        assertEquals(nivel, Heroe.nivelDeDesbloqueo(posicion));
+    }
+
+    @Test
+    @DisplayName("una posicion fuera de las tres acciones no tiene nivel de desbloqueo")
+    void posicionFueraDeRango() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> Heroe.nivelDeDesbloqueo(3));
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> Heroe.nivelDeDesbloqueo(-1));
+    }
 }

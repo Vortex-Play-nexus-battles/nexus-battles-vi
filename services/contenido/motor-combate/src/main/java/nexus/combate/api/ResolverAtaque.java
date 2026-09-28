@@ -5,6 +5,7 @@ import nexus.combate.ContextoAccion;
 import nexus.combate.DetalleAtaque;
 import nexus.combate.DistribucionEfectos;
 import nexus.combate.EstadisticasHeroeRespuesta;
+import nexus.combate.IndiceNormal;
 import nexus.combate.ResolucionAtaque;
 import nexus.combate.ResolutorCombate;
 import nexus.combate.TiradorDados;
@@ -33,9 +34,16 @@ import java.util.random.RandomGenerator;
 public class ResolverAtaque {
 
     private final ClienteHeroes heroes;
+    private final IndiceNormal indice;
 
     public ResolverAtaque(ClienteHeroes heroes) {
+        this(heroes, IndiceNormal.porOmision());
+    }
+
+    /** Con la media y la desviacion del indice configuradas (D-B7-01). */
+    public ResolverAtaque(ClienteHeroes heroes, IndiceNormal indice) {
         this.heroes = Objects.requireNonNull(heroes, "Sin catalogo de heroes no hay ataque.");
+        this.indice = Objects.requireNonNull(indice, "Sin indice no hay tabla de efectos.");
     }
 
     /**
@@ -67,27 +75,30 @@ public class ResolverAtaque {
         RandomGenerator paraCritico = generador(peticion.semilla());
 
         int ataqueResuelto = TiradorDados.resolver(formula, paraDados);
+        // 1.2.0: el porcentaje de la Tabla 22 se aplica al DANO, que es la
+        // formula de dano del heroe (Tabla 6). Hasta 1.1.0 se usaba la tirada
+        // de ataque, y un Guerrero Tanque pegaba 10-16 en vez de 1-4.
+        DetalleAtaque formulaDeDano = estadisticas.danoDetalle();
+        int danoResuelto = formulaDeDano == null ? 0 : TiradorDados.resolver(formulaDeDano, paraDados);
 
         ResolucionAtaque resolucion = resolver(peticion, distribucion, defensa,
-                ataqueResuelto, paraIndice, paraCritico);
+                ataqueResuelto, danoResuelto, paraIndice, paraCritico);
 
         return RespuestaDeAtaque.de(resolucion, ataqueResuelto, defensa);
     }
 
-    private static ResolucionAtaque resolver(PeticionDeAtaque peticion,
-                                             DistribucionEfectos distribucion,
-                                             int defensa, int ataqueResuelto,
-                                             RandomGenerator paraIndice,
-                                             RandomGenerator paraCritico) {
-        // El dano base de la categoria es la propia tirada: es lo que el
-        // dominio usa como `danoResuelto` en sus pruebas de integracion.
+    private ResolucionAtaque resolver(PeticionDeAtaque peticion,
+                                      DistribucionEfectos distribucion,
+                                      int defensa, int ataqueResuelto, int danoResuelto,
+                                      RandomGenerator paraIndice,
+                                      RandomGenerator paraCritico) {
         if (peticion.contexto() == null) {
-            return ResolutorCombate.resolverCompleto(ataqueResuelto, defensa, distribucion,
-                    ataqueResuelto, paraIndice, paraCritico);
+            return ResolutorCombate.resolverConIndice(indice, ataqueResuelto, defensa, distribucion,
+                    danoResuelto, paraIndice, paraCritico);
         }
         ContextoAccion contexto = peticion.contexto().aDominio();
-        return ResolutorCombate.resolverCompleto(contexto, ataqueResuelto, defensa, distribucion,
-                ataqueResuelto, paraIndice, paraCritico);
+        return ResolutorCombate.resolverConIndice(indice, contexto, ataqueResuelto, defensa, distribucion,
+                danoResuelto, paraIndice, paraCritico);
     }
 
     /**

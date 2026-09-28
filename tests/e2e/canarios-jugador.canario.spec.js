@@ -37,6 +37,7 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { sesionDe } from './ayudantes/cuentas.js';
+import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
 
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Canario-2026';
@@ -177,7 +178,18 @@ test.describe('Canarios del jugador (R16)', () => {
         /\/login(?:\.html)?(?:[?#]|$)/,
       );
 
-      const conFallo = peticiones.filter((p) => p.estado >= 500);
+      // Un 5xx de un servicio que el catálogo declara fuera de DEV
+      // (`desplegableDev: false`) es la verdad de este entorno: se anota, no
+      // falla. Cuando ese servicio se despliegue, su 5xx vuelve a contar solo.
+      const conFallo = peticiones.filter((p) => {
+        if (p.estado < 500) return false;
+        const fuera = servicioNoDesplegadoDe(p.ruta);
+        if (fuera) {
+          console.log(`CANARIO-NO-DESPLEGADO|${pantalla.nombre}|${fuera}|${p.ruta}|${p.estado}`);
+          return false;
+        }
+        return true;
+      });
       expect(conFallo, 'peticiones /api/v1 que respondieron 5xx').toEqual([]);
 
       for (const texto of pantalla.errores) {

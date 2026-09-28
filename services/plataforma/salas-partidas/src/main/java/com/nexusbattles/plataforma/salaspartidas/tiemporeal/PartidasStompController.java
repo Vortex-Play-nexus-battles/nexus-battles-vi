@@ -29,9 +29,10 @@ import java.util.UUID;
  * contrato ya tenia este y su mensaje {@code EjecutarAccion}.
  *
  * <p><b>Resuelve la accion de verdad.</b> El cuerpo llega entero —{@code
- * codigoAccion} y {@code idObjetivo}— y el caso de uso pide al motor de combate
- * cuanto dano hace el golpe, lo aplica a la vida que este servicio persiste,
- * anuncia {@code partida.accion.resuelta} y despues pasa el turno.
+ * codigoAccion} y {@code idObjetivo}— y el caso de uso se la pide al motor de
+ * combate, que valida poder, carga y objetivo y resuelve con el heroe real
+ * (B7); guarda el estado de todos, anuncia {@code partida.accion.resuelta} y
+ * despues pasa el turno.
  *
  * <p>Los rechazos vuelven por la cola privada de quien envio, no al tema de la
  * partida: que a alguien le rechacen una accion no es asunto de sus rivales.
@@ -75,6 +76,20 @@ public class PartidasStompController {
                 HttpStatus.valueOf(error.estado()), error.detalle());
         problema.setType(error.tipo());
         problema.setTitle(error.titulo());
+        return problema;
+    }
+
+    /**
+     * El motor rechazo la accion (canal 1.5.0): mismo problem detail, con el
+     * {@code motivo} del motor (EN_CARGA, BLOQUEADA_POR_NIVEL,
+     * OBJETIVO_INVALIDO...) para que la vista diga por que sin adivinarlo. El
+     * turno sigue siendo del jugador.
+     */
+    @MessageExceptionHandler(com.nexusbattles.plataforma.salaspartidas.dominio.AccionNoPermitida.class)
+    @SendToUser(destinations = "/cola/salas", broadcast = false)
+    public ProblemDetail accionNoPermitida(com.nexusbattles.plataforma.salaspartidas.dominio.AccionNoPermitida error) {
+        ProblemDetail problema = errorDeNegocio(error);
+        problema.setProperty("motivo", error.motivo());
         return problema;
     }
 

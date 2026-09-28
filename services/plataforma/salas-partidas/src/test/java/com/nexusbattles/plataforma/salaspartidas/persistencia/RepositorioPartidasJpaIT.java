@@ -1,11 +1,17 @@
 package com.nexusbattles.plataforma.salaspartidas.persistencia;
 
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadisticasDeCombate;
+import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoPartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante;
 import com.nexusbattles.plataforma.salaspartidas.dominio.HeroeDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
+import com.nexusbattles.plataforma.salaspartidas.dominio.OrdenDeTurnos;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Partida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.PartidaModificadaConcurrentemente;
 import com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida;
+import com.nexusbattles.plataforma.salaspartidas.dominio.PerfilDeCombate;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
@@ -76,6 +82,10 @@ class RepositorioPartidasJpaIT {
      */
     @Autowired
     private PartidasSpringData almacen;
+
+    /** Para vaciar la cache de primer nivel y leer de verdad de la base (B7). */
+    @Autowired
+    private jakarta.persistence.EntityManager entityManager;
 
     /**
      * Sala ya guardada con tres dentro. Hace falta guardarla de verdad: la
@@ -250,5 +260,135 @@ class RepositorioPartidasJpaIT {
 
         assertEquals(EstadoPartida.FINALIZADA,
                 partidas.buscarPorId(partida.id()).orElseThrow().estado());
+    }
+
+    // =========================================================================
+    // B7 (V14): estado de combate, bloqueo optimista, historial y vencimientos
+    // =========================================================================
+
+    private static final EstadisticasDeCombate EN_NIVEL_4 = new EstadisticasDeCombate(40, 178, 45,
+            new EstadisticasDeCombate.Formula(41, 1, 6), new EstadisticasDeCombate.Formula(0, 1, 4), null);
+
+    /** Partida de dos con heroes reales guardada con su sala; Ana abre (orden de entrada). */
+    private Partida conHeroesReales(Instant cuando) {
+        HeroeDeCombate tanque = new HeroeDeCombate("h-1", "Muro", "Guerrero Tanque", null, 4, 178, 178, 45,
+                new PerfilDeCombate(4, EN_NIVEL_4, List.of("Espada de una mano"), List.of("Golpe de defensa")));
+        HeroeDeCombate mago = new HeroeDeCombate("h-2", "Escarcha", "Mago Hielo", null, 1, 40, 40, 10,
+                PerfilDeCombate.delCatalogo(1));
+        Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null),
+                ANA, new FichaDeParticipante("Ana", tanque));
+        sala.unirse(BRUNO, new FichaDeParticipante("Bruno", mago), null);
+        sala.iniciarPartida(ANA);
+        salas.guardar(sala);
+        return Partida.iniciar(sala, cuando, OrdenDeTurnos.sorteado(20260927L), List.of());
+    }
+
+    @Test
+    @DisplayName("B7: perfil, estado de combate, semilla, fin y vencimiento sobreviven al viaje")
+    void elEstadoDeCombateSobreviveAlViaje() {
+        Partida partida = conHeroesReales(AHORA);
+        UUID primero = partida.turnoActual().idJugador();
+        EstadoDeCombate estado = new EstadoDeCombate(6, 40, 3, java.util.Map.of("Golpe con escudo", 2),
+                List.of(new EstadoDeCombate.Efecto("MANO_DE_PIEDRA", "Mano de piedra", "BONO_DEFENSA", 48, 1, true,
+                        primero.toString())),
+                new EstadoDeCombate.GolpeRecibido(BRUNO.toString(), 7), java.util.Map.of("Mano de piedra", 1),
+                List.of(new EstadoDeCombate.AccionDisponible("Mano de piedra", "Mano de piedra", "DEFENSA", false, 4,
+                        false, 1, 4, false, "En carga: 1 turno.")),
+                EN_NIVEL_4);
+        partida.aplicarCombate(primero, 150, 178, estado);
+        partida.fijarVencimientoDelTurno(AHORA.plusSeconds(30));
+
+        partidas.guardar(partida);
+        // Sin la cache de primer nivel: lo que vuelve sale de las columnas de
+        // PostgreSQL (V14), no de la entidad que se acaba de escribir.
+        entityManager.clear();
+        Partida recuperada = partidas.buscarPorId(partida.id()).orElseThrow();
+        ParticipanteDePartida enCombate = recuperada.participante(primero).orElseThrow();
+        ParticipanteDePartida ana = recuperada.participante(ANA).orElseThrow();
+
+        assertAll(
+                () -> assertEquals(estado, enCombate.combate(), "el estado del motor vuelve tal cual"),
+                () -> assertEquals(150, enCombate.heroe().vidaActual()),
+                () -> assertEquals(4, ana.heroe().perfil().nivel()),
+                () -> assertEquals(List.of("Espada de una mano"), ana.heroe().perfil().equipamiento()),
+                () -> assertEquals(List.of("Golpe de defensa"), ana.heroe().perfil().epicas()),
+                () -> assertEquals(EN_NIVEL_4, ana.heroe().perfil().estadisticas()),
+                () -> assertEquals(20260927L, recuperada.semillaDelOrden()),
+                () -> assertEquals(AHORA.plusSeconds(30).getEpochSecond(), recuperada.turnoVenceEn().getEpochSecond()),
+                () -> assertNull(recuperada.finalizadaEn()));
+
+        recuperada.terminar(AHORA.plusSeconds(90));
+        partidas.guardar(recuperada);
+        Partida terminada = partidas.buscarPorId(partida.id()).orElseThrow();
+        assertAll(
+                () -> assertEquals(AHORA.plusSeconds(90).getEpochSecond(), terminada.finalizadaEn().getEpochSecond()),
+                () -> assertNull(terminada.turnoVenceEn()));
+    }
+
+    @Test
+    @DisplayName("B7: cada escritura avanza la version, y una sobre una lectura vieja sale partida-modificada sin pisar nada")
+    void bloqueoOptimista() {
+        Partida partida = conHeroesReales(AHORA);
+        Partida guardada = partidas.guardar(partida);
+        Partida lecturaUno = partidas.buscarPorId(partida.id()).orElseThrow();
+        Partida lecturaDos = partidas.buscarPorId(partida.id()).orElseThrow();
+
+        lecturaUno.avanzarTurno();
+        Partida trasLaPrimera = partidas.guardar(lecturaUno);
+        lecturaDos.avanzarTurno();
+
+        assertAll(
+                () -> assertEquals(guardada.version(), lecturaDos.version()),
+                () -> assertEquals(guardada.version() + 1, trasLaPrimera.version(),
+                        "guardar devuelve la marca nueva: es la que hay que usar para seguir"),
+                () -> assertThrows(PartidaModificadaConcurrentemente.class, () -> partidas.guardar(lecturaDos)));
+        Partida enBase = partidas.buscarPorId(partida.id()).orElseThrow();
+        assertAll(
+                () -> assertEquals(2, enBase.turnoActual().numeroTurno(), "un solo avance de turno"),
+                () -> assertEquals(trasLaPrimera.version(), enBase.version()));
+    }
+
+    @Test
+    @DisplayName("B7: el historial de un jugador, de la mas reciente a la mas antigua y paginado")
+    void historialDelJugador() {
+        Partida antigua = partidas.guardar(conHeroesReales(AHORA));
+        Partida reciente = partidas.guardar(conHeroesReales(AHORA.plusSeconds(3600)));
+        partidas.guardar(Partida.iniciar(salaGuardada(0, false), AHORA.plusSeconds(7200)));
+
+        var deBruno = partidas.buscarPorJugador(BRUNO, 0, 16);
+        var primeraDeUna = partidas.buscarPorJugador(BRUNO, 0, 1);
+        var segundaDeUna = partidas.buscarPorJugador(BRUNO, 1, 1);
+
+        assertAll(
+                // Bruno esta en las dos partidas con heroes y tambien en la de
+                // salaGuardada (entra como invitado): tres en total.
+                () -> assertEquals(3, deBruno.totalElementos()),
+                () -> assertEquals(reciente.id(), deBruno.contenido().get(1).id()),
+                () -> assertEquals(antigua.id(), deBruno.contenido().get(2).id()),
+                () -> assertEquals(3, primeraDeUna.totalPaginas()),
+                () -> assertEquals(1, primeraDeUna.contenido().size()),
+                () -> assertEquals(reciente.id(), segundaDeUna.contenido().get(0).id()),
+                () -> assertEquals(0, partidas.buscarPorJugador(UUID.randomUUID(), 0, 16).totalElementos()));
+    }
+
+    @Test
+    @DisplayName("B7: solo las partidas EN CURSO con el turno ya agotado se pasan por vencimiento")
+    void turnosVencidos() {
+        Partida vencida = conHeroesReales(AHORA);
+        vencida.fijarVencimientoDelTurno(AHORA.minusSeconds(1));
+        partidas.guardar(vencida);
+        Partida porVencer = conHeroesReales(AHORA);
+        porVencer.fijarVencimientoDelTurno(AHORA.plusSeconds(60));
+        partidas.guardar(porVencer);
+        Partida sinLimite = conHeroesReales(AHORA);
+        partidas.guardar(sinLimite);
+        Partida terminada = conHeroesReales(AHORA);
+        terminada.fijarVencimientoDelTurno(AHORA.minusSeconds(1));
+        terminada.terminar(AHORA);
+        partidas.guardar(terminada);
+
+        List<UUID> vencidas = partidas.conTurnoVencido(AHORA).stream().map(Partida::id).toList();
+
+        assertEquals(List.of(vencida.id()), vencidas);
     }
 }
