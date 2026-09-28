@@ -110,7 +110,8 @@ jobs:
           cache: gradle
 
       # Mismos pasos que `e2e.yml`: los jars se construyen una vez y las
-      # imágenes solo los copian.
+      # imágenes solo los copian. B9 — el banco levanta misiones: sin su jar
+      # el build de su imagen falla con «lstat .../misiones/build/libs».
       - name: Construir los jars de los servicios Gradle
         run: |
           chmod +x ./gradlew
@@ -119,6 +120,7 @@ jobs:
             :services:contenido:productos:bootJar \
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
+            :services:contenido:misiones:bootJar \
             :services:cuentas:ms-finanzas:bootJar \
             :services:cuentas:ms-subastas:bootJar \
             :services:plataforma:moderacion-sanciones:bootJar \
