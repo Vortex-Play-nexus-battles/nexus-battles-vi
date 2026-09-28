@@ -156,10 +156,10 @@ de la cuenta `551262695144`, una vez, en la consola o en CloudShell.
 AWS Console (cuenta 551262695144, N. Virginia us-east-1)
 → EC2 → Security Groups → sg-01bfe668448b037c4 → Inbound rules → Edit inbound rules
    1) Añadir primero (para no cortar nada), todas con Source Custom 35.168.124.119/32:
-      Custom TCP 8101 "heroes <- plataforma"      Custom TCP 8105 "misiones <- plataforma"
-      Custom TCP 8102 "inventario <- plataforma"  Custom TCP 8092 "ms-subastas (HTTP+WS) <- borde"
-      Custom TCP 8103 "productos <- plataforma"   Custom TCP 8090 "ms-ecommerce <- borde"
-      Custom TCP 8104 "motor <- plataforma"       Custom TCP 8094 "ms-chatbot <- borde"
+      Custom TCP 8101 "heroes desde plataforma"      Custom TCP 8105 "misiones desde plataforma"
+      Custom TCP 8102 "inventario desde plataforma"  Custom TCP 8092 "ms-subastas HTTP y WS desde el borde"
+      Custom TCP 8103 "productos desde plataforma"   Custom TCP 8090 "ms-ecommerce desde el borde"
+      Custom TCP 8104 "motor desde plataforma"       Custom TCP 8094 "ms-chatbot desde el borde"
    2) Borrar las reglas de 8101-8104 cuyo Source sea 0.0.0.0/0
    3) No tocar el 22. Ninguna regla nueva con 0.0.0.0/0.
    → Save rules

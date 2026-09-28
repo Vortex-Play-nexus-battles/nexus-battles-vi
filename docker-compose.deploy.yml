@@ -134,9 +134,18 @@ services:
     mem_limit: 48m
     ports:
       - "80:80"
+      # 28-sep — HTTPS (Let's Encrypt). Sin certificado nginx no escucha en el
+      # 443 y el puerto publicado no tiene a nadie detras: nada cambia hasta
+      # que scripts/cd/certificado.sh deje /opt/nexus/tls/borde-tls.conf.
+      - "443:443"
     volumes:
       - /opt/nexus/web:/srv/nexus:ro
       - /opt/nexus/web/infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      # Lo que incluye borde-dev.conf dentro de su server (vacio = solo 80),
+      # los certificados de certbot y la carpeta del reto HTTP-01.
+      - /opt/nexus/tls:/etc/nginx/nexus-tls:ro
+      - /opt/nexus/letsencrypt:/etc/letsencrypt:ro
+      - /opt/nexus/acme:/srv/acme:ro
 
   srv-comentarios:
     <<: *servicio-plataforma
