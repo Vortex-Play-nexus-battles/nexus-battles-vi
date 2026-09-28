@@ -9,6 +9,8 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
@@ -173,22 +175,22 @@ public class MotorConsultasAsistidas {
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
 
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_INVENTARIO)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_INVENTARIO, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_INVENTARIO, "inventario"));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_SUBASTAS)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_SUBASTAS, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_SUBASTAS, "subastas"));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_NOTIFICACIONES)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_NOTIFICACIONES, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_NOTIFICACIONES, "notificaciones"));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_PERFIL)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_PERFIL, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_PERFIL, "perfil"));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_MISIONES)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_MISIONES, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_MISIONES, "misiones"));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_NAVEGACION_TORNEOS)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_NAVEGACION_TORNEOS, null, TipoRespuesta.DIRECTA));
+            return Optional.of(navegar(MENSAJE_NAVEGACION_TORNEOS, "torneos"));
         }
 
         if (contieneAlguna(mensajeNormalizado, PALABRAS_INFORME_ACTIVIDAD)) {
@@ -222,7 +224,7 @@ public class MotorConsultasAsistidas {
     // equipo en lo que cualquiera puede ver, no para pedir nada en su nombre.
     private ResultadoMotor consultarTorneos(String uid) {
         try {
-            return ResultadoMotor.deTema(construirTextoTorneos(uid), null, TipoRespuesta.CONTEXTUAL);
+            return consultado(construirTextoTorneos(uid), "torneos");
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_TORNEOS, null, TipoRespuesta.DIRECTA);
         }
@@ -285,14 +287,23 @@ public class MotorConsultasAsistidas {
     // servicio; desde misiones.yaml 1.0.0 (#748) ya lo tiene.
     private ResultadoMotor consultarMisiones(String tokenBearer) {
         try {
-            return ResultadoMotor.deTema(construirTextoMisiones(tokenBearer), null, TipoRespuesta.CONTEXTUAL);
+            List<MisionActivaDto> misiones = misionesClient.enCurso(tokenBearer);
+            List<TarjetaInformativa> tarjetas = misiones == null ? List.of() : misiones.stream()
+                .limit(MISIONES_A_MOSTRAR)
+                .map(m -> new TarjetaInformativa(m.nombre(), textoDeLaMision(m), null))
+                .toList();
+            return ResultadoMotor.deTema(textoDeMisiones(misiones), null, TipoRespuesta.CONTEXTUAL)
+                .conEnriquecido(Enriquecedor.conTarjetas(tarjetas, "misiones"));
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_MISIONES, null, TipoRespuesta.DIRECTA);
         }
     }
 
     private String construirTextoMisiones(String tokenBearer) {
-        List<MisionActivaDto> misiones = misionesClient.enCurso(tokenBearer);
+        return textoDeMisiones(misionesClient.enCurso(tokenBearer));
+    }
+
+    private static String textoDeMisiones(List<MisionActivaDto> misiones) {
         if (misiones == null || misiones.isEmpty()) {
             return "No tienes misiones en curso. " + MENSAJE_NAVEGACION_MISIONES;
         }
@@ -322,10 +333,20 @@ public class MotorConsultasAsistidas {
         return texto.toString();
     }
 
+    // 1.3.4: la navegacion y las consultas llevan un enlace a su seccion.
+    private static ResultadoMotor navegar(String texto, String destino) {
+        return ResultadoMotor.deTema(texto, null, TipoRespuesta.DIRECTA).conEnriquecido(Enriquecedor.conEnlace(destino));
+    }
+
+    private static ResultadoMotor consultado(String texto, String destino) {
+        return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL)
+            .conEnriquecido(Enriquecedor.conEnlace(destino));
+    }
+
     // B11 — ultimos movimientos de creditos, con el token del propio jugador.
     private ResultadoMotor consultarMovimientos(String tokenBearer, String uid) {
         try {
-            return ResultadoMotor.deTema(construirTextoMovimientos(tokenBearer, uid), null, TipoRespuesta.CONTEXTUAL);
+            return consultado(construirTextoMovimientos(tokenBearer, uid), "perfil");
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_MOVIMIENTOS, null, TipoRespuesta.DIRECTA);
         }
@@ -368,7 +389,7 @@ public class MotorConsultasAsistidas {
     private ResultadoMotor consultarInventario(String tokenBearer) {
         try {
             PaginaInventarioDto pagina = inventarioClient.consultarInventario(tokenBearer, 0);
-            return ResultadoMotor.deTema(construirTextoInventario(pagina), null, TipoRespuesta.CONTEXTUAL);
+            return consultado(construirTextoInventario(pagina), "inventario");
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_INVENTARIO, null, TipoRespuesta.DIRECTA);
         }
@@ -377,7 +398,7 @@ public class MotorConsultasAsistidas {
     private ResultadoMotor consultarSubastas(String tokenBearer) {
         try {
             MiResumenDto resumen = subastasClient.consultarMiResumen(tokenBearer);
-            return ResultadoMotor.deTema(construirTextoSubastas(resumen), null, TipoRespuesta.CONTEXTUAL);
+            return consultado(construirTextoSubastas(resumen), "subastas");
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_SUBASTAS, null, TipoRespuesta.DIRECTA);
         }
@@ -386,7 +407,7 @@ public class MotorConsultasAsistidas {
     private ResultadoMotor consultarNotificaciones(String tokenBearer, String uid) {
         try {
             BandejaResponseDto bandeja = notificacionesClient.consultarBandeja(tokenBearer, uid);
-            return ResultadoMotor.deTema(construirTextoNotificaciones(bandeja), null, TipoRespuesta.CONTEXTUAL);
+            return consultado(construirTextoNotificaciones(bandeja), "notificaciones");
         } catch (RestClientException excepcion) {
             return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_NOTIFICACIONES, null, TipoRespuesta.DIRECTA);
         }

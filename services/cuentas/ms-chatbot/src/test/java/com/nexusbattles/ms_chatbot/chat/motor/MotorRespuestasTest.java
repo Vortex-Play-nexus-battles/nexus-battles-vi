@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
@@ -53,6 +54,48 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isFalse();
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+    }
+
+    // 1.3.4: una respuesta de un tema trae su parte enriquecida.
+    @Test
+    void generarRespuesta_deUnTema_traeSuEnlaceYOtrasPreguntasDeSuCategoria() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("olvide mi contrasena");
+
+        assertThat(resultado.enriquecido().pasos()).containsExactly("Ve al inicio.", "Responde las preguntas.");
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("login");
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Cómo crear una cuenta");
+    }
+
+    @Test
+    void generarRespuesta_escalada_ofreceSoporteHumano() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("xk fmk qzr blublu", VistaDelChat.SUBASTAS);
+
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
+        assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
+    }
+
+    // 1.3.4: a igual puntaje, la vista del jugador decide antes que la prioridad.
+    @Test
+    void generarRespuesta_conEmpate_ganaElTemaDeLaCategoriaDeLaVista() {
+        TemaConocimiento tienda = new TemaConocimiento(null, "clave-tienda", Categoria.PRODUCTO,
+            TipoRespuesta.DIRECTA, "Comprar en la tienda", "comprar", null, "En la tienda.", null, 9, true);
+        TemaConocimiento subasta = new TemaConocimiento(null, "clave-compra-subasta", Categoria.SUBASTA_Y_COMERCIO,
+            TipoRespuesta.DIRECTA, "Comprar en subasta", "comprar", null, "En la subasta.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(tienda, subasta));
+
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo").temaClave()).isEqualTo("clave-tienda");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.SUBASTAS).temaClave())
+            .isEqualTo("clave-compra-subasta");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INICIO).temaClave())
+            .isEqualTo("clave-tienda");
     }
 
     // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.

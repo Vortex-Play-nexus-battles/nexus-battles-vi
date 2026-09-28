@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
@@ -59,6 +60,13 @@ public class ChatService {
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
+        return enviarMensaje(identidad, contenido, adjuntoUrl, null);
+    }
+
+    // ms-chatbot.yaml 1.3.4: `vista` es la seccion donde esta el jugador; la
+    // usa MotorRespuestas para la respuesta contextual. Puede ser null.
+    public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl,
+                                 VistaDelChat vista) {
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
         moderacion.verificar(contenido);
 
@@ -67,7 +75,7 @@ public class ChatService {
         Instant recibido = Instant.now();
         long inicio = System.nanoTime();
 
-        ResultadoMotor resultado = generarRespuesta(identidad, contenido);
+        ResultadoMotor resultado = generarRespuesta(identidad, contenido, vista);
         if (resultado.requiereEscalamiento()) {
             registrarPreguntaNoCubierta(contenido);
         }
@@ -89,12 +97,18 @@ public class ChatService {
     // intencion no aplica (Optional vacio), se sigue exactamente igual que en
     // HU-CHA-004 con MotorRespuestas. Un visitante nunca pasa por el primer
     // motor.
-    private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido) {
+    private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
         if (identidad.autenticado() && identidad.tokenCrudo() != null) {
             return motorConsultasAsistidas.generarRespuesta(contenido, identidad.tokenCrudo(), identidad.uid())
-                .orElseGet(() -> motorRespuestas.generarRespuesta(contenido));
+                .orElseGet(() -> responderConLaBase(contenido, vista));
         }
-        return motorRespuestas.generarRespuesta(contenido);
+        return responderConLaBase(contenido, vista);
+    }
+
+    private ResultadoMotor responderConLaBase(String contenido, VistaDelChat vista) {
+        return vista == null
+            ? motorRespuestas.generarRespuesta(contenido)
+            : motorRespuestas.generarRespuesta(contenido, vista);
     }
 
     // HU-CHA-011: una pregunta que MotorRespuestas no entendio y escalo es,

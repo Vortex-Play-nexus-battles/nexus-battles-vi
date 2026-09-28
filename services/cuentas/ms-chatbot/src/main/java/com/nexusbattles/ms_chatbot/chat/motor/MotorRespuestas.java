@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
@@ -66,8 +69,18 @@ public class MotorRespuestas {
 
     /** Responde con la versión de la base de conocimiento que está en producción. */
     public ResultadoMotor generarRespuesta(String mensajeUsuario) {
-        return responderCon(mensajeUsuario,
-            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION));
+        return generarRespuesta(mensajeUsuario, null);
+    }
+
+    /**
+     * ms-chatbot.yaml 1.3.4: como {@link #generarRespuesta(String)}, sabiendo
+     * en qué sección está el jugador. La vista desempata entre temas con el
+     * mismo puntaje y, si la consulta se escala, aporta preguntas de su tema.
+     */
+    public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista) {
+        List<TemaConocimiento> temas =
+            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
+        return responderCon(mensajeUsuario, temas, vista);
     }
 
     /**
@@ -76,12 +89,16 @@ public class MotorRespuestas {
      * sin activarla. Solo se tienen en cuenta los temas activos.
      */
     public ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas) {
+        return responderCon(mensajeUsuario, temas, null);
+    }
+
+    private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas, VistaDelChat vista) {
+        Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
         Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
         if (porTitulo.isPresent()) {
             TemaConocimiento tema = porTitulo.get();
-            return ResultadoMotor.deTema(tema.getContenidoRespuestaEs(), tema.getCategoria(),
-                tema.getTipoRespuesta(), tema.getClave());
+            return deTema(tema, tema.getContenidoRespuestaEs(), temas);
         }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
@@ -101,7 +118,7 @@ public class MotorRespuestas {
             if (puntaje > 0) {
                 Coincidencia coincidencia = new Coincidencia(tema, puntaje, esIngles);
                 todas.add(coincidencia);
-                if (esMejor(coincidencia, mejor)) {
+                if (esMejor(coincidencia, mejor, preferida)) {
                     mejor = coincidencia;
                 }
             }
@@ -113,7 +130,7 @@ public class MotorRespuestas {
             if (texto == null || texto.isBlank()) {
                 texto = tema.getContenidoRespuestaEs();
             }
-            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave());
+            return deTema(tema, texto, temas);
         }
 
         List<String> sugerencias = todas.stream()
@@ -127,7 +144,15 @@ public class MotorRespuestas {
             + "Puedo ponerte en contacto con soporte humano para resolverla; "
             + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
 
-        return ResultadoMotor.escalado(textoEscalamiento, sugerencias);
+        return ResultadoMotor.escalado(textoEscalamiento, sugerencias)
+            .conEnriquecido(Enriquecedor.paraEscalamiento(sugerencias, temas, vista));
+    }
+
+    // 1.3.4: la respuesta de un tema lleva sus pasos, el enlace a su sección y
+    // otras preguntas de su categoría.
+    private static ResultadoMotor deTema(TemaConocimiento tema, String texto, List<TemaConocimiento> temas) {
+        return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
+            .conEnriquecido(Enriquecedor.paraTema(tema, texto, temas));
     }
 
     // ms-chatbot.yaml 1.3.3: el titulo de un tema, tal cual (sin importar
@@ -149,12 +174,22 @@ public class MotorRespuestas {
     // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,
     // un empate lo decidia el orden en que la base devolvia las filas, que no
     // esta garantizado y podia cambiar entre una consulta y otra.
-    private static boolean esMejor(Coincidencia candidata, Coincidencia actual) {
+    // 1.3.4: con la vista del jugador, a igual puntaje gana primero el tema de
+    // la categoria de esa vista (en «Subastas», una duda sobre "comprar" es de
+    // subastas antes que de la tienda); despues, la prioridad.
+    private static boolean esMejor(Coincidencia candidata, Coincidencia actual, Categoria preferida) {
         if (actual == null || candidata.puntaje() > actual.puntaje()) {
             return true;
         }
-        return candidata.puntaje() == actual.puntaje()
-            && candidata.tema().getPrioridad() > actual.tema().getPrioridad();
+        if (candidata.puntaje() != actual.puntaje()) {
+            return false;
+        }
+        boolean candidataEsDeLaVista = preferida != null && candidata.tema().getCategoria() == preferida;
+        boolean actualEsDeLaVista = preferida != null && actual.tema().getCategoria() == preferida;
+        if (candidataEsDeLaVista != actualEsDeLaVista) {
+            return candidataEsDeLaVista;
+        }
+        return candidata.tema().getPrioridad() > actual.tema().getPrioridad();
     }
 
     private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas) {

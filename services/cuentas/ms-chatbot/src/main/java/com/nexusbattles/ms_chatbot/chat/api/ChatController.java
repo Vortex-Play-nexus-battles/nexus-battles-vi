@@ -79,7 +79,8 @@ public class ChatController {
         // 1.3.0: adjuntoUrl queda obsoleto (el cliente decidio que el chatbot no
         // recibe imagenes). Se sigue aceptando en el cuerpo para no romper a
         // quien lo mande, pero no llega al servicio ni se guarda.
-        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), null);
+        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), null,
+            request.vista());
 
         ResponseEntity.BodyBuilder ok = ResponseEntity.ok();
         if (quien.sesionEmitida() != null) {

@@ -106,6 +106,29 @@ class MotorConsultasAsistidasTest {
             .contains("termina el 28/09 a las 15:30");
     }
 
+    // 1.3.4: cada mision en curso sale ademas como tarjeta, con enlace a Misiones.
+    @Test
+    void consultaDeMisionesTraeUnaTarjetaPorMision() {
+        MisionActivaDto templo = new MisionActivaDto("El Templo Olvidado", "EXPLORACION",
+            new MisionActivaDto.Heroe("Guerrero Tanque", 3), null, 0.4);
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of(templo));
+
+        ResultadoMotor resultado = motor.generarRespuesta("mis misiones", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.enriquecido().tarjetas()).singleElement()
+            .satisfies(t -> assertThat(t.titulo()).isEqualTo("El Templo Olvidado"));
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("misiones");
+    }
+
+    // 1.3.4: la navegacion asistida lleva un enlace de verdad a la seccion.
+    @Test
+    void navegacionYConsultaTraenElEnlaceASuSeccion() {
+        assertThat(motor.generarRespuesta("llevame a mi inventario", TOKEN, UID).orElseThrow()
+            .enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("inventario");
+        assertThat(motor.generarRespuesta("ir a mis torneos", TOKEN, UID).orElseThrow()
+            .enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("torneos");
+    }
+
     @Test
     void consultaDeMisionesSinNingunaLlevaALaSeccion() {
         when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());

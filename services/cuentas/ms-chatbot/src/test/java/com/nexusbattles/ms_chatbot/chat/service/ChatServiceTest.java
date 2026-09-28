@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -284,5 +286,22 @@ class ChatServiceTest {
         chatService.limpiarHistorial(visitante);
 
         verify(mensajeRepository, never()).deleteByConversacionId(any());
+    }
+
+    // 1.3.4: con vista, la base responde sabiendolo; y lo enriquecido llega
+    // tal cual al registro para guardarse con la respuesta.
+    @Test
+    void enviarMensaje_conVista_laUsaYGuardaLoEnriquecido() {
+        registroDevuelveLaRespuesta();
+        RespuestaEnriquecida enriquecida = new RespuestaEnriquecida(List.of(), List.of(), List.of(),
+            List.of("Otra"), true);
+        when(motorRespuestas.generarRespuesta("algo raro", VistaDelChat.SUBASTAS))
+            .thenReturn(ResultadoMotor.escalado("No entendi", List.of()).conEnriquecido(enriquecida));
+
+        chatService.enviarMensaje(visitante, "algo raro", null, VistaDelChat.SUBASTAS);
+
+        verify(registro).guardarIntercambio(any(), eq("algo raro"), any(), any(), anyString(),
+            org.mockito.ArgumentMatchers.argThat(r -> r.enriquecido() == enriquecida), anyInt());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
     }
 }
