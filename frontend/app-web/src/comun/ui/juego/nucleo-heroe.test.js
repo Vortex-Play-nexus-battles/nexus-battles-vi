@@ -101,6 +101,23 @@ describe('estado del heroe y del objeto', () => {
     });
   });
 
+  test('en mision (inventario.yaml 1.6.0, §7.8.10) gana a todo lo demas', () => {
+    // El inventario lo marca no disponible y con la ejecucion que lo tiene.
+    expect(
+      estadoDeHeroe({
+        elemento: { disponible: false, subastaId: null, ejecucionMisionId: 'e-1' },
+        equipamiento: equipo,
+      }),
+    ).toEqual({ estado: ESTADOS.EN_MISION, detalle: null });
+    expect(
+      estadoDeHeroe({ elemento: { ejecucionMisionId: 'e-1' }, equipamiento: undefined }).estado,
+    ).toBe(ESTADOS.EN_MISION);
+    // Sin ejecucion no se deduce: nulo o ausente es «no esta en ninguna».
+    expect(
+      estadoDeHeroe({ elemento: { ejecucionMisionId: null }, equipamiento: equipo }).estado,
+    ).toBe(ESTADOS.DISPONIBLE);
+  });
+
   test('un heroe sin nada puesto no puede combatir (HU-SAL-003)', () => {
     expect(
       estadoDeHeroe({ elemento: {}, equipamiento: { armas: [], armaduras: {}, items: [] } }),
@@ -130,7 +147,7 @@ describe('estado del heroe y del objeto', () => {
     expect(sello.textContent).toBe('Equipado · Ayla');
     expect(sello.querySelector('svg')).not.toBeNull();
     expect(sello.dataset.estado).toBe('EQUIPADO');
-    // «En mision» existe como estado del componente aunque nada lo deduzca.
+    // «En mision» lo deduce estadoDeHeroe de `ejecucionMisionId` (B9).
     expect(selloDeEstado(ESTADOS.EN_MISION).textContent).toBe('En misión');
   });
 });

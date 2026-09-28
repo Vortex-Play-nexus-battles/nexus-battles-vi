@@ -30,6 +30,7 @@ include 'services:plataforma:torneos'
 // --- Contenido y juego ---
 include 'services:contenido:heroes'
 include 'services:contenido:inventario'
+include 'services:contenido:misiones'
 include 'services:contenido:motor-combate'
 include 'services:contenido:productos'
 
@@ -43,7 +44,6 @@ include 'services:cuentas:ms-chatbot'
 // Sin build.gradle todavia: la carpeta existe pero no hay nada que compilar.
 // Descomentar en cuanto el servicio tenga su build.gradle y su primera clase.
 //
-// include 'services:contenido:misiones'
 // include 'services:contenido:progresion-jugador'
 //
 // Todavia en Maven (pom.xml). Migrarlos a Gradle y descomentar aqui:

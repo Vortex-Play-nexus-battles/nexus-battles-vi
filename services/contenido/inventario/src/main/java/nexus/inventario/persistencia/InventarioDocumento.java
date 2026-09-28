@@ -90,6 +90,13 @@ record InventarioDocumento(
     }
 }
 
+/**
+ * Un elemento dentro del documento del jugador. B4 anade {@code origen},
+ * {@code referencia}, {@code nivel} y {@code experiencia}; 1.6.0 (B9) anade
+ * {@code ejecucionMisionId}, la mision que tiene bloqueado al heroe. Todos
+ * aditivos: los documentos anteriores no los traen y se leen como nulos (un
+ * heroe, en nivel 1 con 0 de experiencia y sin mision).
+ */
 record ElementoDocumento(
         String id,
         @TextIndexed String productoId,
@@ -100,7 +107,8 @@ record ElementoDocumento(
         OrigenDeEntrega origen,
         String referencia,
         Integer nivel,
-        Double experiencia) {
+        Double experiencia,
+        String ejecucionMisionId) {
 
     @PersistenceCreator
     ElementoDocumento {
@@ -112,7 +120,7 @@ record ElementoDocumento(
             TipoElementoInventario tipo,
             String nombrePropio,
             ParteArmadura parteArmadura) {
-        this(id, productoId, tipo, nombrePropio, parteArmadura, null, null, null, null, null);
+        this(id, productoId, tipo, nombrePropio, parteArmadura, null);
     }
 
     ElementoDocumento(
@@ -122,21 +130,22 @@ record ElementoDocumento(
             String nombrePropio,
             ParteArmadura parteArmadura,
             String subastaId) {
-        this(id, productoId, tipo, nombrePropio, parteArmadura, subastaId, null, null, null, null);
+        this(id, productoId, tipo, nombrePropio, parteArmadura, subastaId, null, null, null, null, null);
     }
 
     static ElementoDocumento de(ElementoInventario elemento) {
         return new ElementoDocumento(
                 elemento.id(), elemento.productoId(), elemento.tipo(),
                 elemento.nombrePropio(), elemento.parteArmadura(), elemento.subastaId(),
-                elemento.origen(), elemento.referencia(), elemento.nivel(), elemento.experiencia());
+                elemento.origen(), elemento.referencia(), elemento.nivel(), elemento.experiencia(),
+                elemento.ejecucionMisionId());
     }
 
     /** Un heroe guardado antes de B4 no trae nivel ni experiencia: el dominio lo lee en nivel 1. */
     ElementoInventario aDominio() {
         return new ElementoInventario(
                 id, productoId, tipo, nombrePropio, parteArmadura, subastaId,
-                origen, referencia, nivel, experiencia);
+                origen, referencia, nivel, experiencia, ejecucionMisionId);
     }
 }
 
