@@ -71,6 +71,20 @@ la única alternativa medida es pasar plataforma a `c7i-flex.large` (4 GiB,
 admitido por el Free Plan): ≈USD 28 de créditos hasta el 6-nov con el apagado
 nocturno. Tiene coste: solo con autorización expresa.
 
+**Fase 1 en el repositorio (28-sep).** El catálogo pone misiones y ms-subastas
+en contenido con `desplegableDev: true`; el job de contenido de `cd.yml` pasa
+la compuerta de capacidad antes y después (con el núcleo de ese host:
+heroes, inventario, productos y motor) y reparte su credencial de servicio,
+que ahora es la misma en los dos hosts (secrets `SECRETO_SERVICIO_MISIONES` y
+`SECRETO_SERVICIO_MS_SUBASTAS` del entorno `dev`). Los dos corren en contenido
+aunque el Grupo 2 no haya abierto todavía sus puertos: lo que falta es que el
+borde llegue a ellos, no que arranquen. El borde de ms-subastas sigue en su
+nombre de contenedor (502 al instante) hasta que el 8092 esté abierto; entonces
+un PR pequeño lo cambia a `34.193.90.11:8092`.
+
+Fase 1 **no** libera memoria en plataforma: ninguno de los dos corría allí. La
+que la libera es la fase 2 (ms-ecommerce).
+
 ## 24-sep 04:00-04:30 UTC — el host colgado, la tormenta de arranque y el arranque escalonado (R16.5b)
 
 **Que paso.** A las 03:53 el push de #691 desplego `ms-subastas` como 13.ª JVM
