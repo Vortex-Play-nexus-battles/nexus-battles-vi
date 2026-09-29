@@ -8,6 +8,8 @@ import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.slf4j.Logger;
@@ -50,11 +52,13 @@ public class ChatService {
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
     private final RegistroDeConversaciones registro;
+    private final PreferenciasService preferenciasService;
 
     public ChatService(ConversacionRepository conversacionRepository, MensajeRepository mensajeRepository,
                        MotorRespuestas motorRespuestas, MotorConsultasAsistidas motorConsultasAsistidas,
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
-                       ModeracionDeContenido moderacion, RegistroDeConversaciones registro) {
+                       ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
+                       PreferenciasService preferenciasService) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -63,6 +67,7 @@ public class ChatService {
         this.limitador = limitador;
         this.moderacion = moderacion;
         this.registro = registro;
+        this.preferenciasService = preferenciasService;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
@@ -106,15 +111,33 @@ public class ChatService {
     private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
         if (identidad.autenticado() && identidad.tokenCrudo() != null) {
             return motorConsultasAsistidas.generarRespuesta(contenido, identidad.tokenCrudo(), identidad.uid())
-                .orElseGet(() -> responderConLaBase(contenido, vista));
+                .orElseGet(() -> responderConLaBase(identidad, contenido, vista));
         }
-        return responderConLaBase(contenido, vista);
+        return responderConLaBase(identidad, contenido, vista);
     }
 
-    private ResultadoMotor responderConLaBase(String contenido, VistaDelChat vista) {
+    // 1.3.6: con preferencias propias (idioma o nivel de detalle), la base
+    // responde con ellas; con las de por defecto, exactamente como antes.
+    private ResultadoMotor responderConLaBase(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
+        PreferenciasDeRespuesta preferencias = preferenciasDe(identidad);
+        if (!preferencias.sonPorDefecto()) {
+            return motorRespuestas.generarRespuesta(contenido, vista, preferencias);
+        }
         return vista == null
             ? motorRespuestas.generarRespuesta(contenido)
             : motorRespuestas.generarRespuesta(contenido, vista);
+    }
+
+    // Si no se pueden leer las preferencias, se responde con las de por
+    // defecto: contestar importa mas que el formato de la respuesta.
+    private PreferenciasDeRespuesta preferenciasDe(IdentidadDelChat identidad) {
+        try {
+            PreferenciasDeRespuesta guardadas = preferenciasService.de(identidad);
+            return guardadas == null ? PreferenciasDeRespuesta.POR_DEFECTO : guardadas;
+        } catch (RuntimeException excepcion) {
+            log.warn("No se pudieron leer las preferencias del chat; se responde con las de por defecto", excepcion);
+            return PreferenciasDeRespuesta.POR_DEFECTO;
+        }
     }
 
     // HU-CHA-011: una pregunta que MotorRespuestas no entendio y escalo es,

@@ -6,6 +6,9 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -191,6 +194,75 @@ class MotorRespuestasTest {
             List.of(temaRegistro(0), registroPrioritario));
 
         assertThat(resultado.temaClave()).isEqualTo("clave-registro-nuevo");
+    }
+
+    // 1.3.6 (7.4.5): preferencias de idioma y de nivel de detalle.
+    @Test
+    void generarRespuesta_conIdiomaEs_respondeEnEspanolAunqueLaPreguntaSeaEnIngles() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("how do i sign up for an account", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL));
+
+        assertThat(resultado.texto()).contains("Para crear tu cuenta");
+    }
+
+    @Test
+    void generarRespuesta_conIdiomaEn_respondeEnInglesTambienAlPulsarUnTitulo() {
+        PreferenciasDeRespuesta ingles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL);
+
+        assertThat(motorRespuestas.generarRespuesta("como me registro", null, ingles).texto())
+            .contains("To create your account");
+        assertThat(motorRespuestas.generarRespuesta("Cómo crear una cuenta", null, ingles).texto())
+            .contains("To create your account");
+    }
+
+    @Test
+    void generarRespuesta_conIdiomaEnYUnTemaSinIngles_quedaEnEspanol() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaTorneoSoloEnEspanol()));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("torneo", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL));
+
+        assertThat(resultado.texto()).isEqualTo("El torneo se juega en equipos. Tiene 8 encuentros.");
+    }
+
+    @Test
+    void generarRespuesta_breve_dejaLaPrimeraOracionSalvoEnLosTemasPasoAPaso() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaTorneoSoloEnEspanol(), temaRegistro(0)));
+        PreferenciasDeRespuesta breve = new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.BREVE);
+
+        assertThat(motorRespuestas.generarRespuesta("torneo", null, breve).texto())
+            .isEqualTo("El torneo se juega en equipos.");
+        assertThat(motorRespuestas.generarRespuesta("como me registro", null, breve).texto())
+            .isEqualTo("Para crear tu cuenta necesitas nombres, correo, contraseña, apodo y avatar.");
+    }
+
+    @Test
+    void generarRespuesta_detallado_agregaLosTemasRelacionadosAlTexto() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como me registro", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.DETALLADO));
+
+        assertThat(resultado.texto()).endsWith("Temas relacionados: Recuperar mi contraseña.");
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
+    }
+
+    @Test
+    void generarRespuesta_conPreferenciasNulas_respondeComoSinPreferencias() {
+        assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account", null, null).texto())
+            .isEqualTo(motorRespuestas.generarRespuesta("how do i sign up for an account").texto());
+    }
+
+    private static TemaConocimiento temaTorneoSoloEnEspanol() {
+        return new TemaConocimiento(null, "clave-torneo", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA,
+            "Cómo funciona el Torneo", "torneo, torneos", null,
+            "El torneo se juega en equipos. Tiene 8 encuentros.", null, 0, true);
     }
 
     private static TemaConocimiento temaRegistro(int prioridad) {

@@ -1,11 +1,14 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.springframework.stereotype.Service;
 
@@ -78,9 +81,21 @@ public class MotorRespuestas {
      * mismo puntaje y, si la consulta se escala, aporta preguntas de su tema.
      */
     public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista) {
+        return generarRespuesta(mensajeUsuario, vista, PreferenciasDeRespuesta.POR_DEFECTO);
+    }
+
+    /**
+     * ms-chatbot.yaml 1.3.6 (7.4.5): como {@link #generarRespuesta(String, VistaDelChat)},
+     * con las preferencias de quien pregunta: el idioma de la respuesta (si el
+     * tema lo tiene) y el nivel de detalle. Con las preferencias por defecto
+     * responde exactamente igual que sin ellas.
+     */
+    public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista,
+                                           PreferenciasDeRespuesta preferencias) {
         List<TemaConocimiento> temas =
             temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
-        return responderCon(mensajeUsuario, temas, vista);
+        return responderCon(mensajeUsuario, temas, vista,
+            preferencias == null ? PreferenciasDeRespuesta.POR_DEFECTO : preferencias);
     }
 
     /**
@@ -89,16 +104,16 @@ public class MotorRespuestas {
      * sin activarla. Solo se tienen en cuenta los temas activos.
      */
     public ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas) {
-        return responderCon(mensajeUsuario, temas, null);
+        return responderCon(mensajeUsuario, temas, null, PreferenciasDeRespuesta.POR_DEFECTO);
     }
 
-    private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas, VistaDelChat vista) {
+    private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas, VistaDelChat vista,
+                                        PreferenciasDeRespuesta preferencias) {
         Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
         Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
         if (porTitulo.isPresent()) {
-            TemaConocimiento tema = porTitulo.get();
-            return deTema(tema, tema.getContenidoRespuestaEs(), temas);
+            return deTema(porTitulo.get(), false, temas, preferencias);
         }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
@@ -125,12 +140,7 @@ public class MotorRespuestas {
         }
 
         if (mejor != null && mejor.puntaje() >= UMBRAL_CONFIANZA) {
-            TemaConocimiento tema = mejor.tema();
-            String texto = mejor.esIngles() ? tema.getContenidoRespuestaEn() : tema.getContenidoRespuestaEs();
-            if (texto == null || texto.isBlank()) {
-                texto = tema.getContenidoRespuestaEs();
-            }
-            return deTema(tema, texto, temas);
+            return deTema(mejor.tema(), mejor.esIngles(), temas, preferencias);
         }
 
         // Los temas de cortesia (saludo, despedida) no son "preguntas
@@ -153,9 +163,31 @@ public class MotorRespuestas {
 
     // 1.3.4: la respuesta de un tema lleva sus pasos, el enlace a su sección y
     // otras preguntas de su categoría.
-    private static ResultadoMotor deTema(TemaConocimiento tema, String texto, List<TemaConocimiento> temas) {
-        return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
-            .conEnriquecido(Enriquecedor.paraTema(tema, texto, temas));
+    // 1.3.6: el idioma lo decide la preferencia (AUTOMATICO: el de la
+    // pregunta) y, si el tema no tiene texto en ingles, queda en espanol. Lo
+    // enriquecido se arma con el texto completo; el nivel de detalle solo
+    // cambia el texto que se muestra.
+    private static ResultadoMotor deTema(TemaConocimiento tema, boolean preguntaEnIngles, List<TemaConocimiento> temas,
+                                         PreferenciasDeRespuesta preferencias) {
+        boolean ingles = enIngles(preguntaEnIngles, preferencias.idioma());
+        String texto = ingles ? tema.getContenidoRespuestaEn() : tema.getContenidoRespuestaEs();
+        if (texto == null || texto.isBlank()) {
+            texto = tema.getContenidoRespuestaEs();
+            ingles = false;
+        }
+        RespuestaEnriquecida enriquecida = Enriquecedor.paraTema(tema, texto, temas);
+        String mostrado = AjusteDeDetalle.aplicar(texto, tema.getTipoRespuesta(), preferencias.nivelDetalle(),
+            enriquecida.respuestasRapidas(), ingles);
+        return ResultadoMotor.deTema(mostrado, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
+            .conEnriquecido(enriquecida);
+    }
+
+    private static boolean enIngles(boolean preguntaEnIngles, IdiomaPreferido idioma) {
+        return switch (idioma) {
+            case ES -> false;
+            case EN -> true;
+            case AUTOMATICO -> preguntaEnIngles;
+        };
     }
 
     // ms-chatbot.yaml 1.3.3: el titulo de un tema, tal cual (sin importar

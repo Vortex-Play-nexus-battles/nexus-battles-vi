@@ -16,6 +16,10 @@ import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,6 +72,8 @@ class ChatServiceTest {
     private ModeracionDeContenido moderacion;
     @Mock
     private RegistroDeConversaciones registro;
+    @Mock
+    private PreferenciasService preferenciasService;
 
     private ChatService chatService;
 
@@ -79,7 +85,7 @@ class ChatServiceTest {
     @BeforeEach
     void configurar() {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
-            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro);
+            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService);
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -364,5 +370,32 @@ class ChatServiceTest {
         verify(registro).guardarIntercambio(any(), eq("algo raro"), any(), any(), anyString(),
             org.mockito.ArgumentMatchers.argThat(r -> r.enriquecido() == enriquecida), anyInt());
         verify(motorRespuestas, never()).generarRespuesta(anyString());
+    }
+
+
+    // 1.3.6: con preferencias propias, la base responde con ellas.
+    @Test
+    void enviarMensaje_conPreferenciasPropias_laBaseRespondeConEllas() {
+        registroDevuelveLaRespuesta();
+        PreferenciasDeRespuesta breveEnIngles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.BREVE);
+        when(preferenciasService.de(visitante)).thenReturn(breveEnIngles);
+        when(motorRespuestas.generarRespuesta("torneo", null, breveEnIngles))
+            .thenReturn(ResultadoMotor.deTema("Short.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "torneo", null);
+
+        assertEquals("Short.", respuesta.getContenido());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+    }
+
+    // Si la lectura falla, se responde igual, con las de por defecto.
+    @Test
+    void enviarMensaje_siNoSePuedenLeerLasPreferencias_respondeConLasDePorDefecto() {
+        registroDevuelveLaRespuesta();
+        when(preferenciasService.de(visitante)).thenThrow(new IllegalStateException("base caida"));
+        when(motorRespuestas.generarRespuesta("torneo"))
+            .thenReturn(ResultadoMotor.deTema("Normal.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
+
+        assertEquals("Normal.", chatService.enviarMensaje(visitante, "torneo", null).getContenido());
     }
 }

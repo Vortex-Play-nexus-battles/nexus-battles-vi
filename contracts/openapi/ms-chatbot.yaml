@@ -103,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.5
+  version: 1.3.6
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +113,14 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.6 — preferencias y nivel de detalle (7.4.5)
+
+    `GET` y `PUT /chat/preferencias`: el idioma de las respuestas
+    (`AUTOMATICO`, `ES`, `EN`) y el nivel de detalle (`BREVE`, `NORMAL`,
+    `DETALLADO`), guardados por conversacion (V8): los de un jugador lo
+    siguen entre dispositivos. Con las de por defecto el chatbot responde
+    exactamente como en 1.3.5. Operaciones nuevas: compatible.
 
     ### 1.3.5 — historial por paginas (7.4.6, scroll infinito)
 
@@ -539,6 +547,74 @@ paths:
                   $ref: '#/components/schemas/SugerenciaDePregunta'
         '400':
           $ref: '#/components/responses/PeticionInvalida'
+
+  /chat/preferencias:
+    get:
+      tags: [ chat ]
+      operationId: obtenerPreferenciasDelChatbot
+      summary: Preferencias de respuesta de esta sesion (1.3.6)
+      description: |
+        El idioma y el nivel de detalle con que responde el chatbot (7.4.5).
+        Quien nunca las cambio, o no tiene token valido ni una sesion de
+        visitante vigente y registrada, recibe las de por defecto
+        (`AUTOMATICO`, `NORMAL`), que responden exactamente como antes de
+        1.3.6. Un `uid` en la cabecera no abre las preferencias de nadie.
+      security:
+        - { }
+        - tokenDeUsuario: [ ]
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      responses:
+        '200':
+          description: Preferencias vigentes.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenciasDelChat'
+              example:
+                idioma: AUTOMATICO
+                nivelDetalle: NORMAL
+    put:
+      tags: [ chat ]
+      operationId: guardarPreferenciasDelChatbot
+      summary: Guarda las preferencias de respuesta (1.3.6)
+      description: |
+        Guarda el par completo (no es un parche). Las de un jugador se
+        guardan por su `uid` y lo siguen entre dispositivos; las de un
+        visitante, por su sesion, y se pierden cuando esta vence. Como el
+        primer mensaje, si el visitante no tiene una sesion registrada se le
+        emite una y vuelve en `X-Id-Sesion-Anonima`.
+      security:
+        - { }
+        - tokenDeUsuario: [ ]
+      parameters:
+        - $ref: '#/components/parameters/IdSesionAnonima'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreferenciasDelChat'
+            example:
+              idioma: EN
+              nivelDetalle: BREVE
+      responses:
+        '200':
+          description: Preferencias guardadas.
+          headers:
+            X-Id-Sesion-Anonima:
+              description: Solo si el servidor acaba de emitir una sesion de visitante para esta peticion.
+              schema:
+                type: string
+                pattern: '^anon_[A-Za-z0-9_-]{43}$'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreferenciasDelChat'
+        '400':
+          $ref: '#/components/responses/PeticionInvalida'
+        '429':
+          $ref: '#/components/responses/DemasiadasPeticiones'
 
   /chat/tickets:
     post:
@@ -1497,6 +1573,27 @@ components:
             Texto listo para enviar como pregunta: el titulo del tema. El chat
             reconoce un titulo tal cual (sin importar tildes ni mayusculas)
             como pregunta de ese tema (1.3.3).
+
+    PreferenciasDelChat:
+      type: object
+      description: |
+        1.3.6 (7.4.5). Como responde el chatbot a esta sesion.
+      required: [ idioma, nivelDetalle ]
+      properties:
+        idioma:
+          type: string
+          enum: [ AUTOMATICO, ES, EN ]
+          description: |
+            `AUTOMATICO`: el idioma de la pregunta (como antes de 1.3.6).
+            `ES`: siempre en espanol. `EN`: en ingles cuando el tema tiene
+            respuesta en ingles; si no, en espanol.
+        nivelDetalle:
+          type: string
+          enum: [ BREVE, NORMAL, DETALLADO ]
+          description: |
+            `BREVE`: solo la primera oracion (los temas paso a paso conservan
+            sus pasos). `NORMAL`: la respuesta completa. `DETALLADO`: la
+            respuesta completa y, al final, los temas relacionados.
 
     EstadoDeTicket:
       type: string
