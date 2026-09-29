@@ -73,6 +73,7 @@ public class ServicioDeModeracion {
     private final RegistroDeAuditoria auditoria;
     private final Clock reloj;
     private final int limiteDiarioDeReportes;
+    private final int umbralDePrioridad;
 
     public ServicioDeModeracion(
             ComentarioRepository comentarios,
@@ -81,7 +82,8 @@ public class ServicioDeModeracion {
             AvisoAlAutor aviso,
             RegistroDeAuditoria auditoria,
             Clock reloj,
-            @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes) {
+            @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes,
+            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad) {
         this.comentarios = comentarios;
         this.reportes = reportes;
         this.asientos = asientos;
@@ -89,6 +91,17 @@ public class ServicioDeModeracion {
         this.auditoria = auditoria;
         this.reloj = reloj;
         this.limiteDiarioDeReportes = limiteDiarioDeReportes;
+        this.umbralDePrioridad = umbralDePrioridad;
+    }
+
+    /**
+     * CA-02: cuantos reportes elevan la prioridad en la cola. El PO aun no fija
+     * el valor, asi que nace en 0 = sin umbral, y 0 (o menos) no eleva nunca.
+     * Se deriva del conteo y no se guarda: no hay estado que pueda quedar a
+     * medias y, si el umbral cambia, la cola lo refleja sin migrar nada.
+     */
+    private boolean elevaLaPrioridad(long reportesDelComentario) {
+        return umbralDePrioridad > 0 && reportesDelComentario >= umbralDePrioridad;
     }
 
     // ------------------------------------------------------------ RF-COM-006
@@ -159,7 +172,8 @@ public class ServicioDeModeracion {
             comentarios.save(RegistroDeComentario.desde(resultante));
         }
 
-        return new Reportado(reporte, resultante, reportes.countByComentarioId(comentarioId));
+        long totales = reportes.countByComentarioId(comentarioId);
+        return new Reportado(reporte, resultante, totales, elevaLaPrioridad(totales));
     }
 
     private static void exigirCategoria(CategoriaDeReporte categoria) {
@@ -223,7 +237,8 @@ public class ServicioDeModeracion {
                 porCategoria.merge(r.categoria(), 1L, Long::sum);
             }
             Instant primero = suyos.isEmpty() ? c.fechaPublicacion() : suyos.get(0).fecha();
-            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero));
+            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero,
+                    elevaLaPrioridad(suyos.size())));
         }
 
         // Mas reportado primero; a igualdad, el que lleva mas tiempo esperando.
@@ -345,11 +360,13 @@ public class ServicioDeModeracion {
 
     // ------------------------------------------------------------- resultados
 
-    public record Reportado(RegistroDeReporte reporte, Comentario comentario, long totales) {
+    public record Reportado(RegistroDeReporte reporte, Comentario comentario, long totales,
+            boolean prioridadElevada) {
     }
 
     public record Entrada(Comentario comentario, int reportes,
-            Map<CategoriaDeReporte, Long> porCategoria, Instant primerReporte) {
+            Map<CategoriaDeReporte, Long> porCategoria, Instant primerReporte,
+            boolean prioridadElevada) {
     }
 
     public record Cola(List<Entrada> entradas, int total, int pagina, int tamano) {
