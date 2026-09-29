@@ -22,6 +22,8 @@
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
  *   (`soporte-chatbot.js`); el visitante recibe la invitación a iniciar sesión;
+ * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
+ *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
  *   conversación, y cambiarle el tamaño arrastrando la esquina o con las
  *   flechas del teclado sobre ella. El tamaño se recuerda en esta sesión.
@@ -44,6 +46,7 @@ import { h, vaciar } from './dom.js';
 import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecido-chatbot.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
+import { crearPanelPreferencias } from './preferencias-chatbot.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
 import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
 
@@ -118,6 +121,7 @@ export const TEXTOS = Object.freeze({
   cargandoAnteriores: 'Cargando mensajes anteriores…',
   borrar: 'Borrar conversación',
   soporte: 'Soporte',
+  preferencias: 'Preferencias',
   confirmarBorrarTitulo: '¿Borrar la conversación?',
   confirmarBorrarMensaje:
     'Se borrarán todos los mensajes de esta conversación. No se puede deshacer.',
@@ -185,6 +189,12 @@ export function crearVentanaChatbot({
   titulo.id = idTitulo;
   const estado = h('p', { clase: 'chatbot-ventana__estado' });
 
+  const botonPreferencias = h('button', {
+    clase: 'chatbot-ventana__accion',
+    texto: TEXTOS.preferencias,
+    atributos: { type: 'button', 'aria-expanded': 'false' },
+    datos: { accion: 'preferencias-asistente' },
+  });
   const botonSoporte = h('button', {
     clase: 'chatbot-ventana__accion',
     texto: TEXTOS.soporte,
@@ -226,7 +236,7 @@ export function crearVentanaChatbot({
       titulo,
       h('div', {
         clase: 'chatbot-ventana__acciones',
-        hijos: [botonSoporte, botonBorrar, botonMinimizar, botonCerrar],
+        hijos: [botonPreferencias, botonSoporte, botonBorrar, botonMinimizar, botonCerrar],
       }),
       estado,
     ],
@@ -315,6 +325,13 @@ export function crearVentanaChatbot({
     alVolver: () => mostrarSoporte(false),
   });
   ventana.append(panelSoporte.elemento);
+  // «Preferencias» ocupa el mismo sitio; solo uno de los dos a la vez.
+  const panelPreferencias = crearPanelPreferencias({
+    cliente,
+    sesion,
+    alVolver: () => mostrarPreferencias(false),
+  });
+  ventana.append(panelPreferencias.elemento);
   ventana.id = `chatbot-ventana-${contador}`;
   registro.id = `chatbot-ventana-registro-${contador}`;
   botonMinimizar.setAttribute('aria-controls', registro.id);
@@ -793,6 +810,9 @@ export function crearVentanaChatbot({
   }
 
   function mostrarSoporte(si) {
+    if (si) {
+      ocultarPreferencias();
+    }
     registro.hidden = si;
     formulario.hidden = si;
     if (si) {
@@ -810,6 +830,37 @@ export function crearVentanaChatbot({
   }
 
   botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+
+  // ---------------------------------------------------------- preferencias
+
+  function preferenciasAbiertas() {
+    return !panelPreferencias.elemento.hidden;
+  }
+
+  function ocultarPreferencias() {
+    panelPreferencias.elemento.hidden = true;
+    botonPreferencias.setAttribute('aria-expanded', 'false');
+  }
+
+  function mostrarPreferencias(si) {
+    if (si && soporteAbierto()) {
+      panelSoporte.elemento.hidden = true;
+      botonSoporte.setAttribute('aria-expanded', 'false');
+    }
+    registro.hidden = si;
+    formulario.hidden = si;
+    if (si) {
+      limpiarAviso();
+      panelPreferencias.abrir();
+      botonPreferencias.setAttribute('aria-expanded', 'true');
+      panelPreferencias.enfocar();
+    } else {
+      ocultarPreferencias();
+      enfocarDentro();
+    }
+  }
+
+  botonPreferencias.addEventListener('click', () => mostrarPreferencias(!preferenciasAbiertas()));
 
   // ------------------------------------------------- minimizar y tamaño
 
@@ -970,6 +1021,10 @@ export function crearVentanaChatbot({
     }
     if (soporteAbierto()) {
       panelSoporte.enfocar();
+      return;
+    }
+    if (preferenciasAbiertas()) {
+      panelPreferencias.enfocar();
       return;
     }
     const destino = !entrada.disabled

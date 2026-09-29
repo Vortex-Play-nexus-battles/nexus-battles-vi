@@ -157,6 +157,29 @@ describe('operaciones', () => {
     expect(fetch.mock.calls[2][0]).toBe('/api/v1/chat/historial?antesDe=m-40&limite=30');
   });
 
+  test('preferencias usa GET y guardarPreferencias manda el par completo con PUT', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' }))
+      .mockResolvedValueOnce(respuestaJson({ idioma: 'EN', nivelDetalle: 'BREVE' }));
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.preferencias()).toEqual({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' });
+    expect(await chat.guardarPreferencias({ idioma: 'EN', nivelDetalle: 'BREVE' })).toEqual({
+      idioma: 'EN',
+      nivelDetalle: 'BREVE',
+    });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/preferencias');
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+    expect(fetch.mock.calls[1][1].method).toBe('PUT');
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
+      idioma: 'EN',
+      nivelDetalle: 'BREVE',
+    });
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer token-del-jugador');
+  });
+
   test('limpiarHistorial usa DELETE y un 204 devuelve null', async () => {
     const fetch = jest.fn(async () => ({ ok: true, status: 204, json: async () => null }));
     const resultado = await cliente({ fetch }).limpiarHistorial();

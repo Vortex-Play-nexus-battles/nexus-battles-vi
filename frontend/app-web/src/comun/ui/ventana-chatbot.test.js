@@ -42,6 +42,8 @@ function clienteFalso(sobrescribir = {}) {
     calificar: jest.fn(async () => ({ id: 'c-1' })),
     abrirTicket: jest.fn(async () => ({ ticketId: 't-1', estado: 'ABIERTO' })),
     misTickets: jest.fn(async () => []),
+    preferencias: jest.fn(async () => ({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' })),
+    guardarPreferencias: jest.fn(async (datos) => datos),
     sugerencias: jest.fn(async () => [
       {
         clave: 'k-1',
@@ -619,6 +621,83 @@ describe('soporte', () => {
       'necesitas iniciar sesión',
     );
     expect(vista.cliente.misTickets).not.toHaveBeenCalled();
+  });
+});
+
+// 7.4.5: «Preferencias» ocupa el sitio de la conversación, como «Soporte».
+describe('preferencias', () => {
+  const botonPreferencias = (vista) =>
+    vista.el.querySelector('[data-accion="preferencias-asistente"]');
+  const panelPreferencias = (vista) => vista.el.querySelector('[data-chatbot-preferencias]');
+  const panelSoporte = (vista) => vista.el.querySelector('[data-chatbot-soporte]');
+
+  test('el botón abre el panel en lugar de la conversación y lo carga', async () => {
+    const vista = await montar();
+    const boton = botonPreferencias(vista);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(panelPreferencias(vista).hidden).toBe(true);
+
+    boton.click();
+    await esperar();
+
+    expect(panelPreferencias(vista).hidden).toBe(false);
+    expect(vista.el.querySelector('.chatbot-ventana__registro').hidden).toBe(true);
+    expect(vista.formulario.hidden).toBe(true);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(vista.cliente.preferencias).toHaveBeenCalledTimes(1);
+  });
+
+  test('«Volver al chat» y el mismo botón devuelven la conversación con el foco dentro', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    panelPreferencias(vista).querySelector('[data-accion="volver-al-chat"]').click();
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(vista.el.querySelector('.chatbot-ventana__registro').hidden).toBe(false);
+    expect(document.activeElement).toBe(vista.entrada);
+
+    botonPreferencias(vista).click();
+    await esperar();
+    botonPreferencias(vista).click();
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(botonPreferencias(vista).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('abrir «Soporte» cierra «Preferencias» y al revés: nunca los dos', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+    await esperar();
+    expect(panelSoporte(vista).hidden).toBe(false);
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(botonPreferencias(vista).getAttribute('aria-expanded')).toBe('false');
+
+    botonPreferencias(vista).click();
+    await esperar();
+    expect(panelPreferencias(vista).hidden).toBe(false);
+    expect(panelSoporte(vista).hidden).toBe(true);
+    expect(
+      vista.el.querySelector('[data-accion="hablar-con-soporte"]').getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  test('guardar desde la ventana manda lo elegido', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    const panel = panelPreferencias(vista);
+    panel.querySelector('select[name="nivelDetalle"]').value = 'BREVE';
+    panel.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(vista.cliente.guardarPreferencias).toHaveBeenCalledWith({
+      idioma: 'AUTOMATICO',
+      nivelDetalle: 'BREVE',
+    });
   });
 });
 

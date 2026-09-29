@@ -271,6 +271,26 @@ export function crearClienteChatbot({
       );
     },
 
+    /**
+     * Preferencias de respuesta de esta sesión (idioma y nivel de detalle).
+     * Sin identidad, el servidor responde las de por defecto.
+     *
+     * @returns {Promise<{idioma: string, nivelDetalle: string}>}
+     */
+    preferencias() {
+      return llamar('GET', '/chat/preferencias', undefined, { rutaFija: true });
+    },
+
+    /**
+     * Guarda las preferencias (el par completo).
+     *
+     * @param {{idioma: string, nivelDetalle: string}} preferencias
+     * @returns {Promise<{idioma: string, nivelDetalle: string}>} las guardadas
+     */
+    guardarPreferencias({ idioma, nivelDetalle }) {
+      return llamar('PUT', '/chat/preferencias', { idioma, nivelDetalle }, { rutaFija: true });
+    },
+
     /** @returns {Promise<Array<object>>} las solicitudes del jugador, la más reciente primero */
     async misTickets() {
       return (await llamar('GET', '/chat/tickets', undefined, { rutaFija: true })) ?? [];
