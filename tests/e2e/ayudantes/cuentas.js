@@ -56,6 +56,56 @@ export function tipoDe(cuerpo) {
   return typeof tipo === 'string' && tipo.startsWith(ERRORES) ? tipo.slice(ERRORES.length) : null;
 }
 
+/** El 429 del límite de frecuencia del BORDE (B12, borde-dev.conf). */
+const LIMITE_DEL_BORDE = 'demasiadas-peticiones';
+
+/**
+ * Repite una petición que el límite de frecuencia del borde rechazó, después
+ * de esperar lo que dice su `Retry-After`: lo que hace un cliente educado.
+ *
+ * ## Por qué (29-sep)
+ *
+ * El borde admite 30 altas y entradas por minuto y dirección, con ráfaga de
+ * 20 (`zone=acceso`). Mientras el host de DEV iba sin memoria, cada petición
+ * tardaba segundos y las suites nunca llegaban al límite. Con el host en 4 GiB
+ * responden en milisegundos, y una sola suite —registros, entradas,
+ * verificaciones, las variantes de «SpiderMan»— pasa de 50 en su primer minuto
+ * desde la IP del runner. El límite está bien: es el que protege el login de
+ * un bot. Lo que no estaba bien era un cliente de prueba que no lo respetaba.
+ *
+ * Solo el 429 del borde (`type` `demasiadas-peticiones`). Un 429 de un
+ * servicio —los intentos de un código en ms-identidad, el tope de reportes—
+ * se devuelve tal cual: es lo que la prueba quiere ver.
+ *
+ * @template {import('@playwright/test').APIResponse} R
+ * @param {() => Promise<R>} peticion
+ * @param {{intentos?: number, esperaMaximaMs?: number}} [opciones]
+ * @returns {Promise<R>}
+ */
+export async function respetandoElLimite(peticion, { intentos = 8, esperaMaximaMs = 30_000 } = {}) {
+  for (let intento = 1; ; intento += 1) {
+    const respuesta = await peticion();
+    if (respuesta.status() !== 429 || intento >= intentos) {
+      return respuesta;
+    }
+    let tipo = null;
+    try {
+      tipo = tipoDe(JSON.parse(await respuesta.text()));
+    } catch {
+      tipo = null;
+    }
+    if (tipo !== LIMITE_DEL_BORDE) {
+      return respuesta;
+    }
+    const segundos = Number(respuesta.headers()['retry-after']);
+    const espera = Math.min(
+      esperaMaximaMs,
+      (Number.isFinite(segundos) && segundos > 0 ? segundos : 2) * 1000 * intento,
+    );
+    await new Promise((resolver) => setTimeout(resolver, espera));
+  }
+}
+
 /**
  * @param {import('@playwright/test').APIResponse} respuesta
  * @returns {Promise<{estado: number, cuerpo: any, tipo: string|null, texto: string}>}
@@ -82,10 +132,12 @@ export async function registrar(
   { apodo, email, clave, nombres = 'Jugadora', apellidos = 'De Prueba' },
 ) {
   return leer(
-    await api.post('/api/v1/auth/registro', {
-      headers: { Accept: ACEPTA },
-      multipart: { nombres, apellidos, email, password: clave, apodo },
-    }),
+    await respetandoElLimite(() =>
+      api.post('/api/v1/auth/registro', {
+        headers: { Accept: ACEPTA },
+        multipart: { nombres, apellidos, email, password: clave, apodo },
+      }),
+    ),
   );
 }
 
@@ -98,10 +150,12 @@ export async function registrar(
  */
 export async function iniciarSesion(api, email, clave) {
   return leer(
-    await api.post('/api/v1/auth/login', {
-      headers: { Accept: ACEPTA },
-      data: { email, password: clave },
-    }),
+    await respetandoElLimite(() =>
+      api.post('/api/v1/auth/login', {
+        headers: { Accept: ACEPTA },
+        data: { email, password: clave },
+      }),
+    ),
   );
 }
 
@@ -114,10 +168,12 @@ export async function iniciarSesion(api, email, clave) {
  */
 export async function confirmarCodigo(api, email, codigo) {
   return leer(
-    await api.post('/api/v1/auth/verificacion/confirmacion', {
-      headers: { Accept: ACEPTA },
-      data: { email, codigo },
-    }),
+    await respetandoElLimite(() =>
+      api.post('/api/v1/auth/verificacion/confirmacion', {
+        headers: { Accept: ACEPTA },
+        data: { email, codigo },
+      }),
+    ),
   );
 }
 
@@ -129,10 +185,12 @@ export async function confirmarCodigo(api, email, codigo) {
  */
 export async function pedirOtroCodigo(api, email) {
   return leer(
-    await api.post('/api/v1/auth/verificacion/reenvio', {
-      headers: { Accept: ACEPTA },
-      data: { email },
-    }),
+    await respetandoElLimite(() =>
+      api.post('/api/v1/auth/verificacion/reenvio', {
+        headers: { Accept: ACEPTA },
+        data: { email },
+      }),
+    ),
   );
 }
 
@@ -247,7 +305,12 @@ export async function verificarDesdeLaVista(
   { email, base = baseDelEntorno(), porElEnlace = false },
 ) {
   await page.waitForURL(/\/verificar(?:[?#]|$)|verificar-cuenta\.html/, { timeout: 30_000 });
-  const correo = await esperarCodigo(email, { tipo: 'verificacion', base });
+  // 100 s y no los 45 por omisión: si la primera entrega falla (el servicio de
+  // correo recién desplegado, en frío), su cola la reintenta a los 30 s y
+  // luego al minuto (CORREO_REINTENTOS_ESPERAS). Esperar menos que eso era
+  // pedirle a la prueba más de lo que promete el servicio; 29-sep, primera
+  // cuenta de la prueba del profesor justo después de un despliegue.
+  const correo = await esperarCodigo(email, { tipo: 'verificacion', base, espera: 100_000 });
   if (porElEnlace && correo.enlace) {
     // Se pasa por una página en blanco: si solo cambiara el fragmento, el
     // navegador no recargaría la vista y el enlace no se leería.
