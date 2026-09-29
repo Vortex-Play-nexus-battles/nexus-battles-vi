@@ -9,7 +9,9 @@ import {
   diaEnZona,
   duracion,
   graficaDeTendencia,
+  horasDeAtencion,
   montarAnaliticas,
+  nombreDeCategoria,
   textoDeErrorDelPanel,
 } from './panel-chatbot-analiticas.js';
 
@@ -75,7 +77,9 @@ test('sin fechas pide el período por omisión, lo muestra en el filtro y pinta 
   expect(cliente.analiticas).toHaveBeenCalledWith({ desde: null, hasta: null });
   expect(raiz.querySelector('input[name="desde"]').value).toBe('2026-09-09');
   expect(raiz.querySelector('input[name="hasta"]').value).toBe('2026-09-10');
-  const cifras = [...raiz.querySelectorAll('.metrica__valor')].map((nodo) => nodo.textContent);
+  const cifras = [
+    ...raiz.querySelector('.panel-chatbot__cifras').querySelectorAll('.metrica__valor'),
+  ].map((nodo) => nodo.textContent);
   expect(cifras).toEqual(['2', '3', '67 %', '—', expect.stringMatching(/s$/)]);
   expect(raiz.textContent).toContain('Nadie calificó respuestas en el período');
   expect(raiz.querySelectorAll('.grafica-tendencia__barra')).toHaveLength(2);
@@ -146,4 +150,76 @@ test('textoDeErrorDelPanel distingue permiso, período inválido y caída', () =
     'El período no es válido',
   );
   expect(textoDeErrorDelPanel(new ErrorDelChatbot(null, 0)).titulo).toContain('no responde');
+});
+
+// 1.3.7 (7.4.7): solicitudes de soporte y palabras clave.
+const CON_SOPORTE = {
+  ...TABLERO,
+  tickets: {
+    total: 4,
+    abiertos: 1,
+    enProceso: 1,
+    resueltos: 1,
+    cerrados: 1,
+    horasPromedioDeAtencion: 2.5,
+    porCategoria: [
+      { categoria: 'SOPORTE_TECNICO', tickets: 3 },
+      { categoria: 'SUBASTA_Y_COMERCIO', tickets: 1 },
+    ],
+  },
+  palabrasClave: [{ palabra: 'torneo', preguntas: 5, conversaciones: 3 }],
+};
+
+test('horasDeAtencion usa minutos por debajo de una hora y — sin datos', () => {
+  expect(horasDeAtencion(null)).toBe('—');
+  expect(horasDeAtencion(0.5)).toBe('30 min');
+  expect(horasDeAtencion(2.5)).toMatch(/^2[,.]5 h$/);
+});
+
+test('nombreDeCategoria usa el nombre que ve el jugador', () => {
+  expect(nombreDeCategoria('SOPORTE_TECNICO')).toBe('Problema técnico');
+  expect(nombreDeCategoria('OTRA_NUEVA')).toBe('OTRA_NUEVA');
+});
+
+test('pinta las solicitudes de soporte y las palabras más usadas', async () => {
+  const { raiz, pestana } = montar({ analiticas: jest.fn(async () => CON_SOPORTE) });
+
+  await pestana.cargar();
+
+  const soporte = raiz.querySelector('[data-zona="soporte"]');
+  const cifras = [...soporte.querySelectorAll('.metrica__valor')].map((nodo) => nodo.textContent);
+  expect(cifras).toEqual(['4', '2', '2', expect.stringMatching(/h$/)]);
+  const categorias = [
+    ...soporte.querySelectorAll('[data-zona="soporte-por-categoria"] tbody tr'),
+  ].map((fila) => fila.textContent);
+  expect(categorias).toEqual(['Problema técnico3', 'Subastas y comercio1']);
+
+  const palabras = raiz.querySelector('[data-zona="palabras-clave"]');
+  expect(palabras.querySelector('tbody tr').textContent).toBe('torneo53');
+});
+
+test('sin solicitudes ni palabras muestra estados vacíos; sin los campos, no pinta las secciones', async () => {
+  const vacio = {
+    ...TABLERO,
+    tickets: {
+      total: 0,
+      abiertos: 0,
+      enProceso: 0,
+      resueltos: 0,
+      cerrados: 0,
+      horasPromedioDeAtencion: null,
+      porCategoria: [],
+    },
+    palabrasClave: [],
+  };
+  const conVacios = montar({ analiticas: jest.fn(async () => vacio) });
+  await conVacios.pestana.cargar();
+  expect(conVacios.raiz.textContent).toContain('Nadie pidió soporte en este período');
+  expect(conVacios.raiz.textContent).toContain('Todavía no hay solicitudes atendidas');
+  expect(conVacios.raiz.textContent).toContain('Todavía no hay palabras que se repitan');
+
+  const antiguo = montar({ analiticas: jest.fn(async () => TABLERO) });
+  await antiguo.pestana.cargar();
+  expect(antiguo.raiz.querySelector('[data-zona="soporte"]')).toBeNull();
+  expect(antiguo.raiz.querySelector('[data-zona="palabras"]')).toBeNull();
 });

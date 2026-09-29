@@ -9,6 +9,10 @@
  * Una tasa `null` significa «sin datos» (p. ej. nadie calificó) y se muestra
  * como «—», nunca como 0 %.
  *
+ * Desde ms-chatbot.yaml 1.3.7 (7.4.7) muestra también las solicitudes de
+ * soporte del período y las palabras más usadas en las preguntas. Si el
+ * servicio todavía no las manda, esas secciones no se pintan.
+ *
  * @module cuentas/panel-chatbot-analiticas
  */
 
@@ -23,6 +27,7 @@ import {
 } from '../comun/ui/estado-vista.js';
 import { numero, porcentaje } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
+import { CATEGORIAS } from '../comun/ui/soporte-chatbot.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 
 const SVG = 'http://www.w3.org/2000/svg';
@@ -87,6 +92,29 @@ export function duracion(ms) {
     return '—';
   }
   return ms < 1000 ? `${numero(ms)} ms` : `${numero(ms / 1000, 1)} s`;
+}
+
+/**
+ * Horas de atención legibles: minutos por debajo de una hora.
+ *
+ * @param {number|null} horas
+ * @returns {string}
+ */
+export function horasDeAtencion(horas) {
+  if (horas === null || horas === undefined) {
+    return '—';
+  }
+  return horas < 1 ? `${numero(horas * 60)} min` : `${numero(horas, 1)} h`;
+}
+
+/**
+ * Nombre de una categoría como lo lee el jugador al abrir una solicitud.
+ *
+ * @param {string} categoria valor del contrato, p. ej. `SOPORTE_TECNICO`
+ * @returns {string}
+ */
+export function nombreDeCategoria(categoria) {
+  return CATEGORIAS.find((opcion) => opcion.valor === categoria)?.texto ?? categoria;
 }
 
 /** @param {string} dia `AAAA-MM-DD` */
@@ -208,6 +236,112 @@ function tablaDeTemas(temas) {
   });
 }
 
+function tabla(zona, columnas, filas) {
+  return h('table', {
+    clase: 'tabla-panel',
+    datos: { zona },
+    hijos: [
+      h('thead', {
+        hijos: [
+          h('tr', {
+            hijos: columnas.map((texto) => h('th', { texto, atributos: { scope: 'col' } })),
+          }),
+        ],
+      }),
+      h('tbody', {
+        hijos: filas.map((celdas) => h('tr', { hijos: celdas.map((texto) => h('td', { texto })) })),
+      }),
+    ],
+  });
+}
+
+/**
+ * 1.3.7: las solicitudes de soporte abiertas en el período.
+ *
+ * @param {{total: number, abiertos: number, enProceso: number, resueltos: number,
+ *          cerrados: number, horasPromedioDeAtencion: number|null,
+ *          porCategoria: Array<{categoria: string, tickets: number}>}} tickets
+ * @returns {HTMLElement}
+ */
+function seccionDeSoporte(tickets) {
+  const porCategoria = tickets.porCategoria ?? [];
+  return h('section', {
+    clase: 'pila',
+    datos: { zona: 'soporte' },
+    hijos: [
+      encabezadoDeSeccion({
+        titulo: 'Solicitudes de soporte',
+        detalle: 'Las que abrieron los jugadores en este período.',
+      }),
+      h('div', {
+        clase: 'panel-chatbot__cifras',
+        hijos: [
+          tarjetaDeCifra({ etiqueta: 'Abiertas en el período', valor: numero(tickets.total) }),
+          tarjetaDeCifra({
+            etiqueta: 'Por atender',
+            valor: numero(tickets.abiertos + tickets.enProceso),
+            detalle: `${numero(tickets.abiertos)} sin atender, ${numero(tickets.enProceso)} en revisión`,
+          }),
+          tarjetaDeCifra({
+            etiqueta: 'Atendidas',
+            valor: numero(tickets.resueltos + tickets.cerrados),
+            detalle: `${numero(tickets.resueltos)} respondidas, ${numero(tickets.cerrados)} cerradas`,
+          }),
+          tarjetaDeCifra({
+            etiqueta: 'Tiempo promedio de atención',
+            valor: horasDeAtencion(tickets.horasPromedioDeAtencion),
+            detalle:
+              tickets.horasPromedioDeAtencion === null
+                ? 'Todavía no hay solicitudes atendidas'
+                : 'Desde que se abre hasta su última actualización',
+          }),
+        ],
+      }),
+      porCategoria.length === 0
+        ? estadoVacio({ titulo: 'Nadie pidió soporte en este período' })
+        : tabla(
+            'soporte-por-categoria',
+            ['Tema', 'Solicitudes'],
+            porCategoria.map((fila) => [nombreDeCategoria(fila.categoria), numero(fila.tickets)]),
+          ),
+    ],
+  });
+}
+
+/**
+ * 1.3.7: las palabras que más usan los jugadores en sus preguntas.
+ *
+ * @param {Array<{palabra: string, preguntas: number, conversaciones: number}>} palabras
+ * @returns {HTMLElement}
+ */
+function seccionDePalabras(palabras) {
+  return h('section', {
+    clase: 'pila',
+    datos: { zona: 'palabras' },
+    hijos: [
+      encabezadoDeSeccion({
+        titulo: 'Palabras más usadas',
+        detalle:
+          'En las preguntas del período, sin tildes ni mayúsculas. Solo aparecen las que usaron al menos dos conversaciones.',
+      }),
+      palabras.length === 0
+        ? estadoVacio({
+            titulo: 'Todavía no hay palabras que se repitan',
+            detalle: 'Aparecen cuando varias conversaciones preguntan por lo mismo.',
+          })
+        : tabla(
+            'palabras-clave',
+            ['Palabra', 'Preguntas', 'Conversaciones'],
+            palabras.map((fila) => [
+              fila.palabra,
+              numero(fila.preguntas),
+              numero(fila.conversaciones),
+            ]),
+          ),
+    ],
+  });
+}
+
 /**
  * Pinta el tablero ya recibido.
  *
@@ -291,6 +425,12 @@ export function pintarAnaliticas(zona, analitica) {
   });
 
   zona.append(cifras, seccionTendencia, seccionTemas);
+  if (analitica.tickets) {
+    zona.append(seccionDeSoporte(analitica.tickets));
+  }
+  if (Array.isArray(analitica.palabrasClave)) {
+    zona.append(seccionDePalabras(analitica.palabrasClave));
+  }
 }
 
 /**
