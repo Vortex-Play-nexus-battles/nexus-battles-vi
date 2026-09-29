@@ -24,8 +24,12 @@ variable "instance_type" {
     cinco servicios sin salud en 5 s; el smoke de dev fallaba por eso. 4 GiB,
     tambien x86 (misma AMI, mismas imagenes), del Free Plan; el cambio de tipo
     es en caliente (parar, cambiar, encender) con la misma IP elastica y el
-    mismo disco. Se paga con creditos del Free Plan: SOLO con autorizacion
-    expresa, y con el saldo a la vista (diagnostico-dev.yml lo muestra).
+    mismo disco. Se paga con creditos del Free Plan (autorizado por el
+    responsable del bloque el 29-sep, con USD 113,75 de saldo; el saldo lo
+    muestra diagnostico-dev.yml).
+    Volver a t3.small: revertir el PR que puso este valor. Es el mismo cambio
+    en caliente al reves, y la compuerta de infra-dev.yml comprueba antes que
+    el tipo se ofrece en la zona del host.
   EOT
   type        = string
   default     = "c7i-flex.large"
@@ -83,9 +87,20 @@ variable "credito_total_usd" {
 }
 
 variable "tope_mensual_usd" {
-  description = "Tope de gasto bruto mensual (antes de credito). Con un t3.small, su IP y su disco 24x7 el consumo real es ~20 USD/mes; el tope avisa antes de que un recurso olvidado se coma el credito."
+  description = <<-EOT
+    Tope de gasto bruto mensual (antes de credito). Su trabajo es avisar de lo
+    que NO esta previsto (una segunda instancia, un volumen huerfano) antes de
+    que se coma el credito, asi que tiene que quedar por encima del gasto
+    previsto y no mucho mas: si el gasto normal lo supera, sus avisos pasan a
+    ser ruido y nadie los lee.
+    Con t3.small, IP y disco 24x7 el gasto era ~20 USD/mes (tope 30). Con
+    c7i-flex.large (opcion E, 29-sep) y el apagado programado (~83 h por
+    semana), ~36 USD/mes (instancia ~30,5 + IP 3,65 + disco 1,60); 24x7
+    serian ~67. Tope 50: el pronostico avisa si el host se queda encendido de
+    noche o los fines de semana.
+  EOT
   type        = number
-  default     = 30
+  default     = 50
 }
 
 variable "recordatorios" {

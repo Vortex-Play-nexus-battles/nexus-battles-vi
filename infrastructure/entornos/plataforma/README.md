@@ -35,7 +35,7 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 
 | Recurso | Detalle | Costo oficial (us-east-1, 2026-09-15) |
 |---|---|---|
-| `aws_instance` `nexus-plataforma-dev` | `t3.small` (2 vCPU, 2 GiB, x86) por defecto; Ubuntu 22.04; Docker + Compose v2; swap 2 GB; IMDSv2; créditos de CPU `standard` | 0,0208 USD/h → 15,0 USD/mes 24×7, ~6,2 con apagado nocturno |
+| `aws_instance` `nexus-plataforma-dev` | `c7i-flex.large` (2 vCPU, 4 GiB, x86) desde el 29-sep (opción E de `../../despliegue/CAPACIDAD.md`; antes `t3.small`, 2 GiB); Ubuntu 22.04; Docker + Compose v2; swap 2 GB; IMDSv2 | 0,0848 USD/h → 61,9 USD/mes 24×7, ~30,5 con el apagado programado |
 | `aws_eip` | IP fija para `DEPLOY_HOST_DEV` | 0,005 USD/h → 3,60 USD/mes, encendida o apagada |
 | disco raíz gp3 20 GB | cifrado, se borra con la instancia | 1,60 USD/mes |
 | `aws_security_group` | 22 (cd.yml), 80 (el borde, público) y 8081-8089 **solo desde el host de contenido** (B12, ver «Red») | 0 |
@@ -44,12 +44,22 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
 
-Total 24×7 ≈ **20,2 USD/mes**; con el apagado programado (23:00 → 07:00 y fines
-de semana) ≈ **11,5 USD/mes**. Estas cifras son **solo de este host**: desde el
-8-sep-2026 hay un segundo `t3.small` para el dominio de contenido
-(`../contenido/`), con su propio coste del mismo orden, así que el gasto real de
-dev es aproximadamente el doble. Aun así el crédito de USD 100 cubre el proyecto
-hasta el 6/nov con el apagado programado en los dos hosts.
+Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches y fines de
+semana, hora de Colombia) ≈ **36 USD/mes**, contra el crédito del Free Plan
+(USD 113,75 el 29-sep; `diagnostico-dev.yml` lo muestra). Con `t3.small` eran
+≈20,2 y ≈11,5.
+
+**Opción E (29-sep): de `t3.small` a `c7i-flex.large`.** Con 2 GiB el host no
+cabía: 3305 MiB de demanda, swap de 2 GB lleno a los 15 minutos de un reinicio
+limpio y el smoke en rojo. El cambio de tipo es en caliente (parar, cambiar,
+encender): misma instancia, misma IP elástica, mismo disco y mismos datos. La
+compuerta de `infra-dev.yml` comprueba antes de aplicar que el tipo nuevo se
+ofrece en la zona real del host (`us-east-1f`). **Volver atrás:** revertir el PR
+de `instance_type`; es el mismo cambio al revés, con la misma compuerta.
+
+Las cifras de arriba son **solo de este host**. El segundo host, el de
+contenido (`../contenido/`, un `t3.small` desde el 8-sep-2026), vive en la
+cuenta del Grupo 2 y gasta de su crédito, no de este.
 
 > Memoria: 2 GiB corren el perfil de plataforma con `mem_limit` por contenedor,
 > pero no dan para el monorepo entero. La salida fue **un segundo `t3.small`**,
