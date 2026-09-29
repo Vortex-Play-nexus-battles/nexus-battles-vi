@@ -144,6 +144,19 @@ describe('operaciones', () => {
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ contenido: 'hola' });
   });
 
+  test('obtenerHistorial pide una página solo si se le dan límite o cursor', async () => {
+    const fetch = jest.fn(async () => respuestaJson([]));
+    const chat = cliente({ fetch });
+
+    await chat.obtenerHistorial();
+    await chat.obtenerHistorial({ limite: 30 });
+    await chat.obtenerHistorial({ antesDe: 'm-40', limite: 30 });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/historial');
+    expect(fetch.mock.calls[1][0]).toBe('/api/v1/chat/historial?limite=30');
+    expect(fetch.mock.calls[2][0]).toBe('/api/v1/chat/historial?antesDe=m-40&limite=30');
+  });
+
   test('limpiarHistorial usa DELETE y un 204 devuelve null', async () => {
     const fetch = jest.fn(async () => ({ ok: true, status: 204, json: async () => null }));
     const resultado = await cliente({ fetch }).limpiarHistorial();

@@ -6,6 +6,7 @@ import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from '../cliente-chatbot.js';
 import {
+  PAGINA_DEL_HISTORIAL,
   TAMANO,
   TEXTOS,
   acotarTamano,
@@ -195,6 +196,144 @@ describe('historial', () => {
     expect(vista.el.querySelector('.chatbot-ventana__aviso').hidden).toBe(true);
     expect(vista.entrada.disabled).toBe(false);
     expect(vista.mensajes()).toHaveLength(1);
+  });
+});
+
+// 7.4.6: el historial llega por páginas; los anteriores se piden al subir.
+describe('historial por páginas', () => {
+  /** `cuantos` mensajes del usuario con ids m-<desde>…, del más antiguo al más reciente. */
+  function mensajes(desde, cuantos) {
+    return Array.from({ length: cuantos }, (_, i) => ({
+      ...USUARIO,
+      id: `m-${desde + i}`,
+      contenido: `mensaje ${desde + i}`,
+    }));
+  }
+  const textos = (vista) =>
+    vista.mensajes().map((m) => m.querySelector('.chatbot-ventana__texto').textContent);
+  const botonAnteriores = (vista) => vista.el.querySelector('[data-accion="ver-anteriores"]');
+
+  test('al abrir pide solo la última página', async () => {
+    const vista = await montar();
+    expect(vista.cliente.obtenerHistorial).toHaveBeenCalledWith({ limite: PAGINA_DEL_HISTORIAL });
+  });
+
+  test('con una página incompleta no ofrece mensajes anteriores', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, BOT]) }),
+    });
+    expect(botonAnteriores(vista)).toBeNull();
+  });
+
+  test('con una página llena ofrece los anteriores y los pone arriba, en orden', async () => {
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockResolvedValueOnce(mensajes(98, 2));
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    const boton = botonAnteriores(vista);
+    expect(boton).not.toBeNull();
+    expect(vista.el.querySelector('.chatbot-ventana__registro').firstElementChild).toBe(
+      boton.closest('li'),
+    );
+
+    boton.click();
+    await esperar();
+
+    expect(obtenerHistorial).toHaveBeenLastCalledWith({
+      antesDe: 'm-100',
+      limite: PAGINA_DEL_HISTORIAL,
+    });
+    expect(textos(vista).slice(0, 3)).toEqual(['mensaje 98', 'mensaje 99', 'mensaje 100']);
+    expect(vista.mensajes()).toHaveLength(PAGINA_DEL_HISTORIAL + 2);
+    // Página incompleta: ya no hay más hacia atrás, y el foco no se pierde.
+    expect(botonAnteriores(vista)).toBeNull();
+    expect(vista.el.contains(document.activeElement)).toBe(true);
+  });
+
+  test('llegar arriba con el scroll pide los anteriores, una sola vez a la vez', async () => {
+    let resolver;
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolver = r;
+          }),
+      );
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+
+    registro.scrollTop = 0;
+    registro.dispatchEvent(new Event('scroll'));
+    registro.dispatchEvent(new Event('scroll'));
+    expect(obtenerHistorial).toHaveBeenCalledTimes(2);
+    expect(registro.getAttribute('aria-busy')).toBe('true');
+
+    resolver(mensajes(70, PAGINA_DEL_HISTORIAL));
+    await esperar();
+
+    expect(registro.hasAttribute('aria-busy')).toBe(false);
+    expect(textos(vista)[0]).toBe('mensaje 70');
+    // La página vino llena: puede haber más.
+    expect(botonAnteriores(vista)).not.toBeNull();
+  });
+
+  test('si el servidor repite mensajes que ya se ven, no los pinta dos veces', async () => {
+    const primera = mensajes(1, PAGINA_DEL_HISTORIAL);
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(primera)
+      .mockResolvedValueOnce(primera);
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    botonAnteriores(vista).click();
+    await esperar();
+
+    expect(vista.mensajes()).toHaveLength(PAGINA_DEL_HISTORIAL);
+    expect(botonAnteriores(vista)).toBeNull();
+  });
+
+  test('si falla, lo dice y Reintentar vuelve a pedir la misma página', async () => {
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockRejectedValueOnce(new ErrorDelChatbot(null, 500))
+      .mockResolvedValueOnce(mensajes(99, 1));
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    botonAnteriores(vista).click();
+    await esperar();
+    const aviso = vista.el.querySelector('.chatbot-ventana__aviso');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain(TEXTOS.errorAlCargar);
+
+    aviso.querySelector('[data-accion="reintentar"]').click();
+    await esperar();
+
+    expect(obtenerHistorial).toHaveBeenLastCalledWith({
+      antesDe: 'm-100',
+      limite: PAGINA_DEL_HISTORIAL,
+    });
+    expect(textos(vista)[0]).toBe('mensaje 99');
+    expect(aviso.hidden).toBe(true);
+  });
+
+  test('borrar la conversación quita «Ver mensajes anteriores»', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        obtenerHistorial: jest.fn(async () => mensajes(1, PAGINA_DEL_HISTORIAL)),
+      }),
+    });
+    expect(botonAnteriores(vista)).not.toBeNull();
+
+    vista.el.querySelector('[data-accion="borrar-conversacion"]').click();
+    await esperar();
+
+    expect(botonAnteriores(vista)).toBeNull();
+    expect(textos(vista)).toEqual([TEXTOS.bienvenida]);
   });
 });
 

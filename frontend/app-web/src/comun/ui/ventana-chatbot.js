@@ -9,7 +9,9 @@
  * Qué ofrece:
  *
  * - conversación con el asistente, para visitantes y jugadores con sesión;
- * - el historial de la conversación de esta sesión, y borrarlo;
+ * - el historial de la conversación de esta sesión, y borrarlo. Llega por
+ *   páginas (7.4.6): al abrir, los últimos mensajes; al subir hasta arriba, o
+ *   con «Ver mensajes anteriores», los de antes, sin mover lo que se está leyendo;
  * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
  *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
@@ -50,6 +52,15 @@ const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
 
 /** Límites del contrato (`EnviarMensaje`, `CalificarRespuesta`). */
 export const LIMITES = Object.freeze({ mensaje: 4000, comentario: 1000 });
+
+/**
+ * Mensajes por página del historial (`GET /chat/historial?limite=`, 1 a 100).
+ * Una página llena indica que puede haber más hacia atrás.
+ */
+export const PAGINA_DEL_HISTORIAL = 30;
+
+/** A cuántos px del borde superior se piden los mensajes anteriores. */
+const UMBRAL_DE_ANTERIORES = 48;
 
 /**
  * UXC-9 — tamaños de la ventana (px). El mínimo deja leer una respuesta y
@@ -103,6 +114,8 @@ export const TEXTOS = Object.freeze({
   enviar: 'Enviar',
   enviando: 'Enviando…',
   verCaptura: 'Ver captura adjunta',
+  anteriores: 'Ver mensajes anteriores',
+  cargandoAnteriores: 'Cargando mensajes anteriores…',
   borrar: 'Borrar conversación',
   soporte: 'Soporte',
   confirmarBorrarTitulo: '¿Borrar la conversación?',
@@ -157,6 +170,14 @@ export function crearVentanaChatbot({
   let cargada = false;
   let enviando = false;
   let devolverFocoA = null;
+
+  // Historial por páginas: el mensaje más antiguo que ya se ve (cursor para
+  // pedir los anteriores), si puede haber más, y los ya pintados (así un
+  // servidor que devuelva de más no repite ninguno).
+  let masAntiguoId = null;
+  let hayAnteriores = false;
+  let cargandoAnteriores = false;
+  const idsPintados = new Set();
 
   // ------------------------------------------------------------ estructura
 
@@ -219,6 +240,20 @@ export function crearVentanaChatbot({
     atributos: { 'aria-live': 'polite', 'aria-label': TEXTOS.registro },
   });
   const zonaAviso = h('div', { clase: 'chatbot-ventana__aviso', atributos: { hidden: true } });
+
+  // Va siempre primero en la lista, solo mientras puede haber mensajes
+  // anteriores. Es la vía de teclado y de lector de pantalla del scroll
+  // infinito: llegar arriba con la rueda hace lo mismo.
+  const botonAnteriores = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: TEXTOS.anteriores,
+    atributos: { type: 'button' },
+    datos: { accion: 'ver-anteriores' },
+  });
+  const filaAnteriores = h('li', {
+    clase: 'chatbot-ventana__anteriores',
+    hijos: [botonAnteriores],
+  });
 
   const entrada = h('textarea', {
     clase: 'campo__control chatbot-ventana__entrada',
@@ -306,6 +341,19 @@ export function crearVentanaChatbot({
    *          adjuntoUrl?: string|null, fechaEnvio?: string|null}} mensaje
    */
   function pintarMensaje(mensaje) {
+    registro.append(crearBurbuja(mensaje));
+    registro.scrollTop = registro.scrollHeight;
+  }
+
+  /**
+   * @param {{id?: string|null, remitente: string, contenido: string,
+   *          adjuntoUrl?: string|null, fechaEnvio?: string|null}} mensaje
+   * @returns {HTMLElement} la burbuja, sin colgar de la lista
+   */
+  function crearBurbuja(mensaje) {
+    if (mensaje.id) {
+      idsPintados.add(mensaje.id);
+    }
     const esBot = mensaje.remitente === 'BOT';
     const enriquecido = esBot ? (mensaje.enriquecido ?? null) : null;
     // Con pasos, el texto se queda con la introducción: los pasos se pintan
@@ -343,8 +391,7 @@ export function crearVentanaChatbot({
     if (esBot && mensaje.id) {
       burbuja.append(controlDeCalificacion(mensaje.id));
     }
-    registro.append(burbuja);
-    registro.scrollTop = registro.scrollHeight;
+    return burbuja;
   }
 
   // --------------------------------------------------------- calificación
@@ -524,13 +571,14 @@ export function crearVentanaChatbot({
 
   async function cargarHistorial() {
     limpiarAviso();
+    reiniciarPaginas();
     vaciar(registro);
     const cargando = estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' });
     registro.append(h('li', { clase: 'chatbot-ventana__cargando', hijos: [cargando] }));
     habilitarFormulario(false);
 
     try {
-      const historial = await cliente.obtenerHistorial();
+      const historial = await cliente.obtenerHistorial({ limite: PAGINA_DEL_HISTORIAL });
       vaciar(registro);
       if (historial.length === 0) {
         pintarBienvenida();
@@ -538,6 +586,7 @@ export function crearVentanaChatbot({
       for (const mensaje of historial) {
         pintarMensaje(mensaje);
       }
+      recordarPagina(historial, historial.length >= PAGINA_DEL_HISTORIAL);
       cargada = true;
       habilitarFormulario(true);
       rapidas.cargar();
@@ -546,6 +595,85 @@ export function crearVentanaChatbot({
       mostrarAviso(error, { alReintentar: cargarHistorial });
       enfocarDentro();
     }
+  }
+
+  function reiniciarPaginas() {
+    masAntiguoId = null;
+    hayAnteriores = false;
+    idsPintados.clear();
+    mostrarAnteriores(false);
+  }
+
+  /**
+   * @param {Array<{id?: string|null}>} mensajes los recién pintados, en orden
+   * @param {boolean} llena si la página vino completa (puede haber más)
+   */
+  function recordarPagina(mensajes, llena) {
+    masAntiguoId = mensajes[0]?.id ?? masAntiguoId;
+    hayAnteriores = llena && Boolean(masAntiguoId);
+    mostrarAnteriores(hayAnteriores);
+  }
+
+  function mostrarAnteriores(si) {
+    if (si) {
+      if (registro.firstElementChild !== filaAnteriores) {
+        registro.prepend(filaAnteriores);
+      }
+      return;
+    }
+    const teniaElFoco = filaAnteriores.contains(document.activeElement);
+    filaAnteriores.remove();
+    if (teniaElFoco) {
+      enfocarDentro();
+    }
+  }
+
+  async function cargarAnteriores() {
+    if (cargandoAnteriores || !hayAnteriores || !masAntiguoId) {
+      return;
+    }
+    cargandoAnteriores = true;
+    limpiarAviso();
+    conCarga(botonAnteriores, true, TEXTOS.cargandoAnteriores);
+    registro.setAttribute('aria-busy', 'true');
+    try {
+      const pagina = await cliente.obtenerHistorial({
+        antesDe: masAntiguoId,
+        limite: PAGINA_DEL_HISTORIAL,
+      });
+      agregarAnteriores(pagina);
+    } catch (error) {
+      mostrarAviso(error, { alReintentar: cargarAnteriores });
+    } finally {
+      terminarAnteriores();
+    }
+  }
+
+  // Los mensajes de antes entran arriba, en orden, y lo que el jugador estaba
+  // leyendo no se mueve: se compensa el scroll con lo que creció la lista.
+  function agregarAnteriores(pagina) {
+    const nuevos = pagina.filter((mensaje) => !(mensaje.id && idsPintados.has(mensaje.id)));
+    if (nuevos.length === 0) {
+      hayAnteriores = false;
+      mostrarAnteriores(false);
+      return;
+    }
+    const alturaAntes = registro.scrollHeight;
+    const desdeArriba = registro.scrollTop;
+    const fragmento = document.createDocumentFragment();
+    for (const mensaje of nuevos) {
+      fragmento.append(crearBurbuja(mensaje));
+    }
+    const ancla = filaAnteriores.isConnected ? filaAnteriores.nextSibling : registro.firstChild;
+    registro.insertBefore(fragmento, ancla);
+    recordarPagina(nuevos, pagina.length >= PAGINA_DEL_HISTORIAL);
+    registro.scrollTop = registro.scrollHeight - alturaAntes + desdeArriba;
+  }
+
+  function terminarAnteriores() {
+    cargandoAnteriores = false;
+    conCarga(botonAnteriores, false);
+    registro.removeAttribute('aria-busy');
   }
 
   // ----------------------------------------------------------------- envío
@@ -626,6 +754,7 @@ export function crearVentanaChatbot({
     }
     try {
       await cliente.limpiarHistorial();
+      reiniciarPaginas();
       vaciar(registro);
       limpiarAviso();
       pintarBienvenida();
@@ -648,6 +777,13 @@ export function crearVentanaChatbot({
     }
   });
   botonBorrar.addEventListener('click', borrarConversacion);
+  botonAnteriores.addEventListener('click', cargarAnteriores);
+  // Scroll infinito: al llegar arriba se piden los anteriores.
+  registro.addEventListener('scroll', () => {
+    if (registro.scrollTop <= UMBRAL_DE_ANTERIORES && hayAnteriores && !cargandoAnteriores) {
+      cargarAnteriores();
+    }
+  });
   botonCerrar.addEventListener('click', () => cerrar());
 
   // -------------------------------------------------------------- soporte

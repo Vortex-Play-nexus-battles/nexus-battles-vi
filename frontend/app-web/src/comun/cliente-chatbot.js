@@ -198,9 +198,25 @@ export function crearClienteChatbot({
       return llamar('POST', '/chat/mensajes', cuerpo, { rutaFija: true });
     },
 
-    /** @returns {Promise<Array<object>>} del más antiguo al más reciente */
-    async obtenerHistorial() {
-      return (await llamar('GET', '/chat/historial', undefined, { rutaFija: true })) ?? [];
+    /**
+     * Sin opciones, toda la conversación. Con `limite` (y opcionalmente
+     * `antesDe`, el id del mensaje más antiguo que ya se tiene), una página:
+     * los más recientes, o los anteriores a ese mensaje.
+     *
+     * @param {{antesDe?: string|null, limite?: number|null}} [pagina]
+     * @returns {Promise<Array<object>>} del más antiguo al más reciente
+     */
+    async obtenerHistorial({ antesDe = null, limite = null } = {}) {
+      const parametros = new URLSearchParams();
+      if (antesDe) {
+        parametros.set('antesDe', antesDe);
+      }
+      if (limite) {
+        parametros.set('limite', String(limite));
+      }
+      const consulta = parametros.toString();
+      const ruta = consulta ? `/chat/historial?${consulta}` : '/chat/historial';
+      return (await llamar('GET', ruta, undefined, { rutaFija: true })) ?? [];
     },
 
     /** @returns {Promise<null>} */

@@ -2719,6 +2719,13 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
+
+/* 7.4.6 — historial por páginas: «Ver mensajes anteriores» encabeza la lista
+   mientras puede haber más hacia atrás. */
+.chatbot-ventana__anteriores {
+  align-self: center;
+}
+
 .chatbot-ventana__aviso {
   padding: 0 var(--e-4) var(--e-3);
   background: var(--fondo);
