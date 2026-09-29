@@ -3,6 +3,7 @@ package com.nexusbattles.ms_chatbot.chat.repository;
 import com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema;
 import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDePregunta;
 import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeTexto;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
 import org.springframework.data.domain.Pageable;
@@ -84,6 +85,20 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     List<RegistroDeRespuesta> buscarRespuestasMedidasEntre(@Param("remitente") Remitente remitente,
                                                            @Param("desde") Instant desde,
                                                            @Param("hasta") Instant hasta);
+
+    // 1.3.7: el texto de las preguntas mas recientes del periodo, solo para
+    // contar palabras clave (PalabrasClaveFrecuentes).
+    @Query("""
+        select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeTexto(m.conversacion.id, m.contenido)
+        from Mensaje m
+        where m.remitente = :remitente
+          and m.fechaEnvio >= :desde and m.fechaEnvio < :hasta
+        order by m.fechaEnvio desc
+        """)
+    List<RegistroDeTexto> buscarTextosDePreguntasEntre(@Param("remitente") Remitente remitente,
+                                                       @Param("desde") Instant desde,
+                                                       @Param("hasta") Instant hasta,
+                                                       Pageable limite);
 
     @Query("""
         select new com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema(m.temaClave, count(m))

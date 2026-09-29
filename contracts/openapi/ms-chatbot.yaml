@@ -103,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.6
+  version: 1.3.7
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +113,14 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.7 — analiticas de soporte y palabras clave (7.4.7)
+
+    `GET /chatbot/admin/analiticas` agrega `tickets` (solicitudes de soporte
+    del periodo por estado y categoria, y horas promedio de atencion) y
+    `palabrasClave` (las palabras mas usadas en las preguntas). La
+    exportacion CSV agrega los mismos dos bloques. Campos nuevos en la
+    respuesta: compatible.
 
     ### 1.3.6 — preferencias y nivel de detalle (7.4.5)
 
@@ -1859,7 +1867,70 @@ components:
               escalamientos:
                 type: integer
                 format: int64
-
+        tickets:
+          type: object
+          description: |
+            1.3.7 (7.4.7). Solicitudes de soporte abiertas en el periodo.
+            Siempre viene; sin solicitudes, todo en 0.
+          required: [total, abiertos, enProceso, resueltos, cerrados, porCategoria]
+          properties:
+            total:
+              type: integer
+              format: int64
+            abiertos:
+              type: integer
+              format: int64
+              description: Sin atender todavia.
+            enProceso:
+              type: integer
+              format: int64
+            resueltos:
+              type: integer
+              format: int64
+            cerrados:
+              type: integer
+              format: int64
+            horasPromedioDeAtencion:
+              type: [number, 'null']
+              minimum: 0
+              description: |
+                Horas promedio entre que se abre una solicitud y su ultima
+                actualizacion, solo de las respondidas o cerradas. null si
+                no hay ninguna ("sin datos" no es 0 horas).
+            porCategoria:
+              type: array
+              description: La categoria con mas solicitudes primero.
+              items:
+                type: object
+                required: [categoria, tickets]
+                properties:
+                  categoria:
+                    $ref: '#/components/schemas/Categoria'
+                  tickets:
+                    type: integer
+                    format: int64
+        palabrasClave:
+          type: array
+          maxItems: 15
+          description: |
+            1.3.7 (7.4.7). Las palabras mas usadas en las preguntas del
+            periodo (de las ultimas 5000), sin tildes ni mayusculas, la mas
+            usada primero. Para no exponer datos de una persona (7.4.8), solo
+            salen palabras de 4 o mas letras, sin digitos, usadas en al menos
+            2 conversaciones distintas.
+          items:
+            type: object
+            required: [palabra, preguntas, conversaciones]
+            properties:
+              palabra:
+                type: string
+              preguntas:
+                type: integer
+                format: int64
+                description: Preguntas que la contienen.
+              conversaciones:
+                type: integer
+                format: int64
     VersionBaseConocimiento:
       type: object
       required: [id, numero, estado, fechaCreacion]
