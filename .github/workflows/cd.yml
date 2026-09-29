@@ -554,7 +554,8 @@ jobs:
       # B11: docker-compose.ms-chatbot.yml viaja como los demas overrides de
       # Cuentas. Sin el, un despliegue a demanda de ms-chatbot (servicios.json lo
       # nombra como su composeExtra) fallaba en el host por archivo inexistente.
-      # Copiarlo no lo despliega: desplegableDev sigue en false (CAPACIDAD.md).
+      # 29-sep: con plataforma en c7i-flex.large, ms-chatbot es desplegableDev
+      # (medicion en CAPACIDAD.md) y un push que lo toque lo despliega.
       - name: Copiar docker-compose.yml, docker-compose.deploy.yml y el script de despliegue
         uses: appleboy/scp-action@v0.1.7
         with:
