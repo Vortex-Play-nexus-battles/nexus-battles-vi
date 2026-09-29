@@ -15,6 +15,13 @@
  *
  * El prefijo de cada servicio sale de su `pruebaBorde` (la ruta con la que el
  * borde lo prueba): los tres primeros segmentos, `/api/v1/<recurso>`.
+ *
+ * 29-sep (topología, fase 1): un servicio también puede estar desplegado y
+ * sano en su host sin que el borde le llegue todavía —misiones y ms-subastas
+ * en el host de contenido, a la espera de que el grupo de seguridad de la
+ * cuenta del Grupo 2 admita sus puertos—. El catálogo lo dice con
+ * `accesoPendiente` (el motivo), y su 5xx se anota igual que el de un servicio
+ * fuera de DEV. Al quitar ese campo, su 5xx vuelve a contar solo.
  */
 
 import fs from 'node:fs';
@@ -28,7 +35,8 @@ const AQUI =
 const CATALOGO = path.resolve(AQUI, '../../../infrastructure/despliegue/servicios.json');
 
 /**
- * Prefijos `/api/v1/<recurso>` de los servicios que DEV no despliega.
+ * Prefijos `/api/v1/<recurso>` de los servicios que DEV no despliega o a los
+ * que el borde todavía no llega (`accesoPendiente`).
  *
  * @param {string} [catalogo] ruta del catálogo (para las pruebas del ayudante)
  * @returns {{servicio: string, prefijo: string}[]}
@@ -37,7 +45,11 @@ export function rutasNoDesplegadasEnDev(catalogo = CATALOGO) {
   const servicios = JSON.parse(fs.readFileSync(catalogo, 'utf8'));
   const lista = Array.isArray(servicios) ? servicios : (servicios.servicios ?? []);
   return lista
-    .filter((s) => s.desplegableDev === false && typeof s.pruebaBorde === 'string')
+    .filter(
+      (s) =>
+        (s.desplegableDev === false || typeof s.accesoPendiente === 'string') &&
+        typeof s.pruebaBorde === 'string',
+    )
     .map((s) => ({
       servicio: s.nombre,
       prefijo: s.pruebaBorde.split('?')[0].split('/').slice(0, 4).join('/'),

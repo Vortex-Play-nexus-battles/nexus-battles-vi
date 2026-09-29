@@ -41,7 +41,12 @@ import {
   esperarCodigo,
   leerCorreo,
 } from './ayudantes/correo.js';
-import { confirmarCodigo, cuerpoDelToken, iniciarSesion } from './ayudantes/cuentas.js';
+import {
+  confirmarCodigo,
+  cuerpoDelToken,
+  iniciarSesion,
+  respetandoElLimite,
+} from './ayudantes/cuentas.js';
 
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-R18-2026';
@@ -90,10 +95,14 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
   // ------------------------------------------------------------------ alta
 
   test('el registro crea la cuenta PENDIENTE de verificar, con rol de jugador', async () => {
-    const registro = await api.post('/api/v1/auth/registro', {
-      headers: { Accept: 'application/problem+json, application/json' },
-      multipart: { nombres: 'Jugador', apellidos: 'Nuevo', email, password: CLAVE, apodo },
-    });
+    // Por el límite del borde (respetandoElLimite): con el host rápido, el
+    // runner llega a él.
+    const registro = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/registro', {
+        headers: { Accept: 'application/problem+json, application/json' },
+        multipart: { nombres: 'Jugador', apellidos: 'Nuevo', email, password: CLAVE, apodo },
+      }),
+    );
 
     expect(registro.status(), await registro.text()).toBe(201);
     const cuenta = await registro.json();
@@ -292,14 +301,19 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
   // ------------------------------------------------ recuperar la contrasena
 
   test('pedir el restablecimiento no revela si la cuenta existe', async () => {
-    const existe = await api.post('/api/v1/auth/restablecer/solicitar', {
-      headers: { Accept: ACEPTA },
-      data: { email },
-    });
-    const noExiste = await api.post('/api/v1/auth/restablecer/solicitar', {
-      headers: { Accept: ACEPTA },
-      data: { email: `no.existe.${marca}@nexus.test` },
-    });
+    // Un 429 del borde no llega a ms-identidad: repetirlo no manda dos correos.
+    const existe = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/restablecer/solicitar', {
+        headers: { Accept: ACEPTA },
+        data: { email },
+      }),
+    );
+    const noExiste = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/restablecer/solicitar', {
+        headers: { Accept: ACEPTA },
+        data: { email: `no.existe.${marca}@nexus.test` },
+      }),
+    );
 
     expect(existe.status()).toBe(200);
     expect(noExiste.status()).toBe(200);
@@ -328,19 +342,23 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
   });
 
   test('el codigo da acceso a las preguntas de la cuenta: sin configurar, ninguna', async () => {
-    const r = await api.post('/api/v1/auth/restablecer/preguntas', {
-      headers: { Accept: ACEPTA },
-      data: { email, codigo: codigoDeRecuperacion },
-    });
+    const r = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/restablecer/preguntas', {
+        headers: { Accept: ACEPTA },
+        data: { email, codigo: codigoDeRecuperacion },
+      }),
+    );
     expect(r.status(), await r.text()).toBe(200);
     expect(await r.json()).toEqual({ configuradas: false, preguntas: [] });
   });
 
   test('el codigo cambia la contrasena, y solo sirve una vez', async () => {
-    const cambio = await api.post('/api/v1/auth/restablecer/confirmar', {
-      headers: { Accept: ACEPTA },
-      data: { email, codigo: codigoDeRecuperacion, nuevaPassword: CLAVE_NUEVA },
-    });
+    const cambio = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/restablecer/confirmar', {
+        headers: { Accept: ACEPTA },
+        data: { email, codigo: codigoDeRecuperacion, nuevaPassword: CLAVE_NUEVA },
+      }),
+    );
     expect(cambio.status(), await cambio.text()).toBe(200);
 
     const conLaNueva = await iniciarSesion(api, email, CLAVE_NUEVA);
@@ -350,10 +368,12 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
     expect(conLaVieja.estado, 'la contrasena anterior deja de valer').toBe(401);
 
     // Un codigo de un solo uso que se puede reutilizar no es de un solo uso.
-    const reintento = await api.post('/api/v1/auth/restablecer/confirmar', {
-      headers: { Accept: ACEPTA },
-      data: { email, codigo: codigoDeRecuperacion, nuevaPassword: 'Otra-Contrasena-R18-2026' },
-    });
+    const reintento = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/restablecer/confirmar', {
+        headers: { Accept: ACEPTA },
+        data: { email, codigo: codigoDeRecuperacion, nuevaPassword: 'Otra-Contrasena-R18-2026' },
+      }),
+    );
     expect(reintento.status()).toBe(400);
   });
 
