@@ -16,12 +16,23 @@ variable "instance_type" {
       t4g.small 2 GiB  arm64 USD 0,0168/h  ->  12,1 USD/mes 24x7,  5,0 con apagado nocturno
       c7i-flex.large 4 GiB   USD 0,0848/h  ->  61,1 USD/mes 24x7, 25,4 con apagado nocturno
       m7i-flex.large 8 GiB   USD 0,0958/h  ->  69,0 USD/mes 24x7, 28,7 con apagado nocturno
-    t3.small por defecto: x86 como las imagenes que ya publica cd.yml (sin
-    buildx multi-arquitectura) y 2 GiB, que con los limites de memoria de
-    docker-compose.deploy.yml alcanzan para el perfil de la demo del Sprint 2.
+    Hasta el 28-sep: t3.small (x86 como las imagenes que publica cd.yml, sin
+    buildx multi-arquitectura; 2 GiB).
+    Desde la opcion E de infrastructure/despliegue/CAPACIDAD.md: c7i-flex.large.
+    Medido el 28-sep, 15 min despues de un reinicio limpio: 3305 MiB de
+    demanda (12 JVM + 5 Postgres) sobre 1910 MiB de RAM, swap de 2 GB lleno y
+    cinco servicios sin salud en 5 s; el smoke de dev fallaba por eso. 4 GiB,
+    tambien x86 (misma AMI, mismas imagenes), del Free Plan; el cambio de tipo
+    es en caliente (parar, cambiar, encender) con la misma IP elastica y el
+    mismo disco. Se paga con creditos del Free Plan (autorizado por el
+    responsable del bloque el 29-sep, con USD 113,75 de saldo; el saldo lo
+    muestra diagnostico-dev.yml).
+    Volver a t3.small: revertir el PR que puso este valor. Es el mismo cambio
+    en caliente al reves, y la compuerta de infra-dev.yml comprueba antes que
+    el tipo se ofrece en la zona del host.
   EOT
   type        = string
-  default     = "t3.small"
+  default     = "c7i-flex.large"
 
   validation {
     condition     = contains(["t3.micro", "t3.small", "t4g.micro", "t4g.small", "c7i-flex.large", "m7i-flex.large"], var.instance_type)
@@ -76,9 +87,20 @@ variable "credito_total_usd" {
 }
 
 variable "tope_mensual_usd" {
-  description = "Tope de gasto bruto mensual (antes de credito). Con un t3.small, su IP y su disco 24x7 el consumo real es ~20 USD/mes; el tope avisa antes de que un recurso olvidado se coma el credito."
+  description = <<-EOT
+    Tope de gasto bruto mensual (antes de credito). Su trabajo es avisar de lo
+    que NO esta previsto (una segunda instancia, un volumen huerfano) antes de
+    que se coma el credito, asi que tiene que quedar por encima del gasto
+    previsto y no mucho mas: si el gasto normal lo supera, sus avisos pasan a
+    ser ruido y nadie los lee.
+    Con t3.small, IP y disco 24x7 el gasto era ~20 USD/mes (tope 30). Con
+    c7i-flex.large (opcion E, 29-sep) y el apagado programado (~83 h por
+    semana), ~36 USD/mes (instancia ~30,5 + IP 3,65 + disco 1,60); 24x7
+    serian ~67. Tope 50: el pronostico avisa si el host se queda encendido de
+    noche o los fines de semana.
+  EOT
   type        = number
-  default     = 30
+  default     = 50
 }
 
 variable "recordatorios" {

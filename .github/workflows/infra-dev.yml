@@ -488,6 +488,32 @@ jobs:
           fi
           echo "Sin destroy ni replace sobre recursos criticos."
 
+      # 28-sep (opcion E de CAPACIDAD.md) — cambiar el tipo de instancia es
+      # parar, modificar y encender. Si el tipo nuevo no se ofrece en la zona
+      # del host, el modify falla con la instancia YA parada y el host se queda
+      # apagado. Se comprueba antes de aplicar, con la zona real de la
+      # instancia (no todas las zonas de us-east-1 tienen todos los tipos).
+      - name: Compuerta — el tipo de instancia nuevo se ofrece en la zona del host
+        if: matrix.host == 'plataforma' && steps.accion.outputs.accion == 'apply'
+        run: |
+          set -euo pipefail
+          nuevo=$(grep -oE 'instance_type *= *"[^"]+" *-> *"[^"]+"' plan.txt | head -1 | sed -E 's/.*-> *"([^"]+)".*/\1/' || true)
+          if [ -z "$nuevo" ]; then
+            echo "El plan no cambia el tipo de instancia."
+            exit 0
+          fi
+          zona=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text)
+          ofrecido=$(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+            --filters "Name=location,Values=$zona" "Name=instance-type,Values=$nuevo" \
+            --query 'InstanceTypeOfferings[].InstanceType' --output text)
+          if [ "$ofrecido" != "$nuevo" ]; then
+            echo "::error::$nuevo no se ofrece en $zona: el host se quedaria parado a mitad del cambio. NO SE APLICA."
+            exit 1
+          fi
+          echo "$nuevo se ofrece en $zona: el cambio es parar, modificar y encender, con la misma IP elastica y el mismo disco."
+
       - name: Publicar el plan en el PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
