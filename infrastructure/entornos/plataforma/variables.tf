@@ -103,6 +103,24 @@ variable "tope_mensual_usd" {
   default     = 50
 }
 
+variable "horario_activo" {
+  description = "Apagado nocturno y encendido programados del host (horario.tf). false los desactiva sin borrarlos: por ejemplo, la semana de la demo si hace falta el entorno 24 h. Con c7i-flex.large cada noche encendida cuesta ~0,65 USD de credito."
+  type        = bool
+  default     = true
+}
+
+variable "horario_apagar" {
+  description = "Cuando se apaga el host, en hora de Colombia (America/Bogota), con la sintaxis cron de EventBridge Scheduler: minutos horas dia-del-mes mes dia-de-la-semana ano. Por omision, todos los dias a las 23:23."
+  type        = string
+  default     = "cron(23 23 * * ? *)"
+}
+
+variable "horario_encender" {
+  description = "Cuando se enciende el host, en hora de Colombia (America/Bogota), sintaxis cron de EventBridge Scheduler. Por omision, de lunes a viernes a las 06:47: las JVM arrancan por turnos (unos 5 minutos) y el entorno queda listo antes de la jornada. Los fines de semana no se enciende solo; el CD lo enciende si hace falta desplegar."
+  type        = string
+  default     = "cron(47 6 ? * MON-FRI *)"
+}
+
 variable "recordatorios" {
   description = "Recordatorios de salida (fecha UTC -> mensaje). El plan free cierra la cuenta el 2027-03-15; el proyecto se entrega el 2026-11-06."
   type        = map(string)

@@ -43,6 +43,7 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | parámetro SecureString `/nexus/dev/plataforma/llave-ssh-despliegue` | llave privada del par de despliegue | 0 |
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
+| EventBridge Scheduler (`horario.tf`) | apaga el host todos los días a las 23:23 y lo enciende de lunes a viernes a las 06:47, **hora de Colombia** (`America/Bogota`), a la hora exacta; el rol del planificador solo puede encender y apagar esta instancia. `horario_activo = false` lo suspende (p. ej. la semana de la demo) | 0 (14 M invocaciones/mes gratis) |
 
 Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches y fines de
 semana, hora de Colombia) ≈ **36 USD/mes**, contra el crédito del Free Plan
