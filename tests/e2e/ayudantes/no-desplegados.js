@@ -2,11 +2,10 @@
  * Lo que DEV no despliega, leído del catálogo de servicios.
  *
  * `infrastructure/despliegue/servicios.json` dice qué servicio NO se levanta en
- * DEV (`desplegableDev: false`) y por qué (`motivoFueraDeDev`): hoy ms-subastas
- * y ms-chatbot por capacidad del host de plataforma, y misiones porque en el
- * host de contenido le falta su credencial de servicio (README de misiones,
- * «Despliegue»). Sus rutas en el borde responden 502 o 504, y eso es la verdad
- * de ese entorno, no un fallo nuevo.
+ * DEV (`desplegableDev: false`) y por qué (`motivoFueraDeDev`). Desde el 29-sep
+ * (plataforma en c7i-flex.large, ms-chatbot encendido) ninguno lo está; la
+ * lista queda por si otro vuelve a no caber. Sus rutas en el borde responden
+ * 502 o 504, y eso es la verdad de ese entorno, no un fallo nuevo.
  *
  * Las pruebas contra DEV (canarios, prueba del profesor) no deben ponerse rojas
  * por ellas —la vista tiene que decirlo, y eso se comprueba aparte—, pero

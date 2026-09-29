@@ -13,6 +13,39 @@ gh workflow run medir-jvm-dev.yml            # RAM + swap de cada contenedor, so
 gh workflow run experimento-flags-jvm.yml    # A/B de flags en el banco E2E, con la suite como carga
 ```
 
+## 29-sep 01:57-02:50 UTC — plataforma en `c7i-flex.large` (opción E) y ms-chatbot encendido
+
+Autorizado por el responsable del bloque el 29-sep, con créditos del Free Plan
+(saldo USD 113,75). Cambio de tipo en caliente por `infra-dev.yml` (#767):
+misma instancia `i-072c81aa0b68370cf`, misma IP elástica, mismo disco; parar,
+cambiar, encender, con las compuertas de 0 destroy/replace y de oferta del
+tipo en `us-east-1f`. Apagado nocturno y encendido por EventBridge Scheduler en
+hora de Colombia (#769, `infrastructure/entornos/plataforma/horario.tf`).
+
+| Medición (`diagnostico-dev.yml`) | t3.small, 28-sep | c7i-flex.large, 22 min (36512218032) | + ms-chatbot, tras smoke/canarios/profesor (36514193941) |
+|---|--:|--:|--:|
+| RAM del host | 1910 MiB | 3816 MiB | 3816 MiB |
+| Disponible | 50-99 MiB | 427 MiB | 378 MiB |
+| Swap en uso | 2047/2047 | 933/2047 | 1360/2047 |
+| Demanda real (RAM + swap) | 3302 MiB | 3916 MiB | 4236 MiB |
+| Carga media (1 min) | host en *thrashing* | 0,11 | 0,14 |
+| Servicios sin salud en 5 s | 5 | 0 | 0 |
+| Reinicios de contenedores | — | 0 | 0 |
+
+**ms-chatbot** se desplegó a demanda (CD 36513743369) con la compuerta de
+capacidad: ANTES 282 MiB disponibles y 1025 de swap libre (umbrales 150/150),
+DESPUÉS 440 y 590 (umbrales 80/50); sano al tercer intento y el borde responde
+200 en `/api/v1/chat/historial`. Con él encendido, canarios y prueba del
+profesor en verde y el smoke 27/28 (el rojo era el 429 del borde que corrige
+#773); los veinte pasos del profesor tardaron 43 s, frente a 1,4 min antes.
+Desde aquí pasa a `desplegableDev: true`: ya no queda ningún servicio de
+plataforma fuera de DEV.
+
+El swap en uso es alto, pero son páginas frías (cada JVM topa su `mem_limit` y
+el cgroup manda lo que no toca a swap): la carga no pasa de 0,3 y ninguna
+suite se ralentizó. La siguiente mejora de memoria no es de este host: es la
+fase 2 (ms-ecommerce a contenido) cuando el Grupo 2 abra sus puertos (#771).
+
 ## 28-sep 22:13-22:45 UTC — la memoria REAL por contenedor (RAM + swap) y el reparto entre los dos hosts
 
 `diagnostico-dev.yml` mide ahora cada contenedor desde su cgroup v2
