@@ -103,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.7
+  version: 1.3.8
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +113,14 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.8 — publicacion programada de la candidata (7.4.10)
+
+    `PUT` y `DELETE /chatbot/admin/base-conocimiento/borrador/programacion`
+    programan o cancelan la publicacion automatica de la candidata. Al
+    llegar la hora se evalua como un despliegue manual y solo se publica si
+    no rinde peor. `VersionBaseConocimiento` agrega `despliegueProgramadoEn`
+    y `programacionRechazadaEn`. Operaciones y campos nuevos: compatible.
 
     ### 1.3.7 — analiticas de soporte y palabras clave (7.4.7)
 
@@ -1092,6 +1100,77 @@ paths:
                 oneOf:
                   - $ref: '#/components/schemas/DespliegueRechazado'
                   - $ref: '#/components/schemas/ProblemDetail'
+  /chatbot/admin/base-conocimiento/borrador/programacion:
+    put:
+      tags: [admin-reentrenamiento]
+      operationId: programarDespliegueDelChatbot
+      summary: Programa la publicacion de la candidata (1.3.8)
+      description: |
+        Deja la candidata lista para publicarse sola en `desplegarEn`
+        (7.4.10). Al llegar la hora, el servicio hace exactamente lo mismo
+        que `.../borrador/despliegue`: evalua y solo la publica si no acierta
+        menos que produccion. Si no pasa (o faltan casos o produccion), queda
+        sin programar y con `programacionRechazadaEn`. Programar de nuevo
+        reemplaza la fecha anterior. Con varias instancias del servicio se
+        publica una sola vez.
+      security:
+        - tokenDeAdministrador: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProgramarDespliegue'
+            example:
+              desplegarEn: '2026-10-01T15:00:00Z'
+      responses:
+        '200':
+          description: La candidata, con su fecha programada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionBaseConocimiento'
+        '400':
+          description: |
+            Sin fecha, a menos de un minuto o a mas de 90 dias de ahora.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: No hay version candidata.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      tags: [admin-reentrenamiento]
+      operationId: cancelarDespliegueProgramadoDelChatbot
+      summary: Cancela la publicacion programada de la candidata (1.3.8)
+      description: La candidata sigue igual, sin fecha de publicacion.
+      security:
+        - tokenDeAdministrador: []
+      responses:
+        '200':
+          description: La candidata, sin programar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionBaseConocimiento'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/SinPermiso'
+        '409':
+          description: No hay version candidata.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /chatbot/admin/base-conocimiento/produccion/reversion:
     post:
@@ -1951,6 +2030,28 @@ components:
           type: [string, 'null']
           format: date-time
           description: Ultima vez que la version entro a produccion (al desplegarse o al restaurarse).
+
+        despliegueProgramadoEn:
+          type: [string, 'null']
+          format: date-time
+          description: 1.3.8. Cuando se publicara sola la candidata; null si no esta programada.
+        programacionRechazadaEn:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            1.3.8. Cuando se intento publicar la candidata programada y no
+            paso la evaluacion (o faltaban casos o produccion); null si no
+            ocurrio o si se volvio a programar.
+
+    ProgramarDespliegue:
+      type: object
+      description: 1.3.8. Cuando publicar la candidata.
+      required: [desplegarEn]
+      properties:
+        desplegarEn:
+          type: string
+          format: date-time
+          description: Entre un minuto y 90 dias desde ahora.
 
     EstadoVersion:
       type: string
