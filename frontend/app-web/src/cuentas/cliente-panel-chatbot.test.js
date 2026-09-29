@@ -72,6 +72,8 @@ test('las rutas de la base de conocimiento y del reentrenamiento', async () => {
   await panel.editarTema('t-1', { titulo: 'x' });
   await panel.importarTemas({ temas: [] });
   await panel.desplegarCandidata();
+  await panel.programarDespliegue('2026-10-01T15:00:00.000Z');
+  await panel.cancelarProgramacion();
   await panel.revertir();
   await panel.eliminarCaso('c-1');
 
@@ -81,10 +83,15 @@ test('las rutas de la base de conocimiento y del reentrenamiento', async () => {
     'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/temas/t-1',
     'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/importacion',
     'POST /api/v1/chatbot/admin/base-conocimiento/borrador/despliegue',
+    'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/programacion',
+    'DELETE /api/v1/chatbot/admin/base-conocimiento/borrador/programacion',
     'POST /api/v1/chatbot/admin/base-conocimiento/produccion/reversion',
     'DELETE /api/v1/chatbot/admin/base-conocimiento/casos-evaluacion/c-1',
   ]);
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ descripcion: null });
+  expect(JSON.parse(fetch.mock.calls[4][1].body)).toEqual({
+    desplegarEn: '2026-10-01T15:00:00.000Z',
+  });
 });
 
 test('consultaDeTickets pone el estado solo si lo hay', () => {

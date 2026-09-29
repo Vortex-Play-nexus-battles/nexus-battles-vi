@@ -154,6 +154,10 @@ export function crearClientePanelChatbot({
     // --- Reentrenamiento (RF-CHA-014)
     evaluarCandidata: () => json('POST', `${BASE_CONOCIMIENTO}/borrador/evaluacion`),
     desplegarCandidata: () => json('POST', `${BASE_CONOCIMIENTO}/borrador/despliegue`),
+    // ms-chatbot.yaml 1.3.8: publicación programada de la candidata.
+    programarDespliegue: (desplegarEn) =>
+      json('PUT', `${BASE_CONOCIMIENTO}/borrador/programacion`, { desplegarEn }),
+    cancelarProgramacion: () => json('DELETE', `${BASE_CONOCIMIENTO}/borrador/programacion`),
     revertir: () => json('POST', `${BASE_CONOCIMIENTO}/produccion/reversion`),
     listarCasos: () => json('GET', `${BASE_CONOCIMIENTO}/casos-evaluacion`),
     crearCaso: (datos) => json('POST', `${BASE_CONOCIMIENTO}/casos-evaluacion`, datos),
