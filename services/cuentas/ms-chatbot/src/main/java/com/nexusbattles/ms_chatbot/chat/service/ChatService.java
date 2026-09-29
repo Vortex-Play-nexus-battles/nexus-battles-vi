@@ -16,8 +16,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 // HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 1.2.0):
 //
@@ -145,6 +151,35 @@ public class ChatService {
         return conversacionRepository.findByIdentificadorSesion(identidad.claveDeConversacion())
             .map(c -> mensajeRepository.findByConversacionIdOrderByFechaEnvioAsc(c.getId()))
             .orElseGet(List::of);
+    }
+
+    // ms-chatbot.yaml 1.3.5: una pagina del historial. Sin cursor, los
+    // 'limite' mensajes mas recientes; con cursor, los 'limite' anteriores a
+    // el. Siempre en orden cronologico, como el historial completo. Un cursor
+    // de otra conversacion (o ya borrado) da lista vacia: no revela nada.
+    @Transactional(readOnly = true)
+    public List<Mensaje> obtenerHistorial(IdentidadDelChat identidad, UUID antesDe, int limite) {
+        return conversacionRepository.findByIdentificadorSesion(identidad.claveDeConversacion())
+            .map(c -> paginaDelHistorial(c.getId(), antesDe, limite))
+            .orElseGet(List::of);
+    }
+
+    private List<Mensaje> paginaDelHistorial(UUID conversacionId, UUID antesDe, int limite) {
+        PageRequest pagina = PageRequest.of(0, limite);
+        List<Mensaje> recientesPrimero;
+        if (antesDe == null) {
+            recientesPrimero = mensajeRepository.findByConversacionIdOrderByFechaEnvioDescIdDesc(conversacionId, pagina);
+        } else {
+            Optional<Mensaje> cursor = mensajeRepository.findByIdAndConversacionId(antesDe, conversacionId);
+            if (cursor.isEmpty()) {
+                return List.of();
+            }
+            recientesPrimero = mensajeRepository.buscarAnteriores(conversacionId, cursor.get().getFechaEnvio(),
+                antesDe, pagina);
+        }
+        List<Mensaje> cronologico = new ArrayList<>(recientesPrimero);
+        Collections.reverse(cronologico);
+        return cronologico;
     }
 
     @Transactional

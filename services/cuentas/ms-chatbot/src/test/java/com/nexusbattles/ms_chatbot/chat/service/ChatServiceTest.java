@@ -24,6 +24,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -264,6 +265,66 @@ class ChatServiceTest {
 
         assertEquals(1, historial.size());
         assertEquals("Hola", historial.get(0).getContenido());
+    }
+
+
+    // 1.3.5: historial por paginas.
+    @Test
+    void obtenerHistorialPaginado_sinCursor_devuelveLosUltimosEnOrdenCronologico() {
+        UUID idConversacion = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        Mensaje viejo = new Mensaje(conversacion, Remitente.USUARIO, "viejo", null);
+        Mensaje nuevo = new Mensaje(conversacion, Remitente.BOT, "nuevo", null);
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByConversacionIdOrderByFechaEnvioDescIdDesc(idConversacion, PageRequest.of(0, 2)))
+            .thenReturn(List.of(nuevo, viejo));
+
+        List<Mensaje> pagina = chatService.obtenerHistorial(usuario, null, 2);
+
+        assertEquals(List.of("viejo", "nuevo"), pagina.stream().map(Mensaje::getContenido).toList());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_conCursor_traeLosAnterioresAlCursor() {
+        UUID idConversacion = UUID.randomUUID();
+        UUID idCursor = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        Mensaje cursor = new Mensaje(conversacion, Remitente.USUARIO, "cursor", null,
+            Instant.parse("2026-09-28T10:00:00Z"));
+        Mensaje anterior = new Mensaje(conversacion, Remitente.BOT, "anterior", null,
+            Instant.parse("2026-09-28T09:59:00Z"));
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByIdAndConversacionId(idCursor, idConversacion)).thenReturn(Optional.of(cursor));
+        when(mensajeRepository.buscarAnteriores(idConversacion, Instant.parse("2026-09-28T10:00:00Z"), idCursor,
+            PageRequest.of(0, 50))).thenReturn(List.of(anterior));
+
+        List<Mensaje> pagina = chatService.obtenerHistorial(usuario, idCursor, 50);
+
+        assertEquals(List.of("anterior"), pagina.stream().map(Mensaje::getContenido).toList());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_conCursorDeOtraConversacion_devuelveVacioSinBuscarMas() {
+        UUID idConversacion = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByIdAndConversacionId(any(), eq(idConversacion))).thenReturn(Optional.empty());
+
+        assertTrue(chatService.obtenerHistorial(usuario, UUID.randomUUID(), 10).isEmpty());
+
+        verify(mensajeRepository, never()).buscarAnteriores(any(), any(), any(), any());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_sinConversacion_devuelveVacio() {
+        when(conversacionRepository.findByIdentificadorSesion(visitante.claveDeConversacion())).thenReturn(Optional.empty());
+
+        assertTrue(chatService.obtenerHistorial(visitante, null, 20).isEmpty());
+
+        verifyNoInteractions(mensajeRepository);
     }
 
     @Test

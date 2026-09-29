@@ -284,6 +284,44 @@ class ChatControllerTest {
             .andExpect(jsonPath("$[0].contenido").value("Historial"));
     }
 
+
+    // 1.3.5: con antesDe o limite, una pagina; sin ellos, todo (compatibilidad).
+    @Test
+    void obtenerHistorial_conCursorYLimite_pideUnaPagina() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        UUID cursor = UUID.randomUUID();
+        Mensaje mensaje = crearMensajeBot("Pagina");
+        when(chatService.obtenerHistorial(any(), eq(cursor), eq(20))).thenReturn(List.of(mensaje));
+
+        mockMvc.perform(get("/chat/historial").header(CABECERA, SESION)
+                .param("antesDe", cursor.toString())
+                .param("limite", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].contenido").value("Pagina"));
+
+        verify(chatService, never()).obtenerHistorial(any());
+    }
+
+    @Test
+    void obtenerHistorial_soloConCursor_usaElLimitePorDefecto() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        UUID cursor = UUID.randomUUID();
+
+        mockMvc.perform(get("/chat/historial").header(CABECERA, SESION).param("antesDe", cursor.toString()))
+            .andExpect(status().isOk());
+
+        verify(chatService).obtenerHistorial(any(), eq(cursor), eq(50));
+    }
+
+    @Test
+    void obtenerHistorial_conParametrosInvalidos_responde400() throws Exception {
+        mockMvc.perform(get("/chat/historial").param("limite", "0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/chat/historial").param("limite", "101")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/chat/historial").param("antesDe", "no-es-un-uuid")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(chatService);
+    }
+
     @Test
     void limpiarHistorial_conJwt_borraLaConversacionDelUsuario() throws Exception {
         mockMvc.perform(delete("/chat/historial").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))

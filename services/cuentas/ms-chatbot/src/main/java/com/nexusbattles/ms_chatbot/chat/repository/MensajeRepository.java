@@ -17,6 +17,26 @@ import java.util.UUID;
 
 public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
 
+
+    // ms-chatbot.yaml 1.3.5: historial por paginas, del mas reciente hacia
+    // atras. Los empates de hora se deciden por id, para que ningun mensaje se
+    // repita ni se pierda entre una pagina y la siguiente.
+    List<Mensaje> findByConversacionIdOrderByFechaEnvioDescIdDesc(UUID conversacionId, Pageable limite);
+
+    // 1.3.5: el cursor 'antesDe' solo vale si es de la propia conversacion.
+    Optional<Mensaje> findByIdAndConversacionId(UUID id, UUID conversacionId);
+
+    @Query("""
+        select m from Mensaje m
+        where m.conversacion.id = :conversacionId
+          and (m.fechaEnvio < :fecha or (m.fechaEnvio = :fecha and m.id < :id))
+        order by m.fechaEnvio desc, m.id desc
+        """)
+    List<Mensaje> buscarAnteriores(@Param("conversacionId") UUID conversacionId,
+                                   @Param("fecha") Instant fecha,
+                                   @Param("id") UUID id,
+                                   Pageable limite);
+
     List<Mensaje> findByConversacionIdOrderByFechaEnvioAsc(UUID conversacionId);
 
     // Soporta el criterio "limpiar historial" de HU-CHA-001.

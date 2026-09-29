@@ -103,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.4
+  version: 1.3.5
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +113,14 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.5 — historial por paginas (7.4.6, scroll infinito)
+
+    `GET /chat/historial` acepta `limite` (1 a 100) y `antesDe` (el `id` de
+    un mensaje de la conversacion) para traer el historial por partes, del
+    mas reciente hacia atras. La respuesta sigue siendo la misma lista en
+    orden cronologico. Sin ninguno de los dos parametros responde todo el
+    historial, igual que antes: compatible con 1.3.4.
 
     ### 1.3.4 — `vista` y `enriquecido` implementados
 
@@ -347,16 +355,42 @@ paths:
       operationId: obtenerHistorialDelChatbot
       summary: Historial de la conversacion de la sesion
       description: |
-        Todos los mensajes (del usuario y del bot) de la conversacion de esta
-        sesion, del mas antiguo al mas reciente. Lista vacia si la sesion
-        todavia no ha escrito, y tambien (1.2.0) si no hay token valido ni una
-        sesion de visitante vigente y registrada: un `uid` u otro valor no
-        abre la conversacion de nadie.
+        Mensajes (del usuario y del bot) de la conversacion de esta sesion,
+        del mas antiguo al mas reciente. Lista vacia si la sesion todavia no
+        ha escrito, y tambien (1.2.0) si no hay token valido ni una sesion de
+        visitante vigente y registrada: un `uid` u otro valor no abre la
+        conversacion de nadie.
+
+        Sin `limite` ni `antesDe` devuelve todo el historial. Con alguno de
+        los dos (1.3.5) devuelve una pagina: los `limite` mensajes mas
+        recientes o, con `antesDe`, los `limite` anteriores a ese mensaje.
+        Para seguir hacia atras se pasa como `antesDe` el `id` del primer
+        mensaje recibido; una lista vacia indica que no hay mas.
       security:
-        - {}
-        - tokenDeUsuario: []
+        - { }
+        - tokenDeUsuario: [ ]
       parameters:
         - $ref: '#/components/parameters/IdSesionAnonima'
+        - name: antesDe
+          in: query
+          required: false
+          description: |
+            (1.3.5) `id` de un mensaje de esta conversacion: devuelve los
+            anteriores a el. Un `id` de otra conversacion, o que ya no existe,
+            devuelve lista vacia.
+          schema:
+            type: string
+            format: uuid
+        - name: limite
+          in: query
+          required: false
+          description: |
+            (1.3.5) Maximo de mensajes de la pagina. Si llega `antesDe` sin
+            `limite`, se usan 50.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
       responses:
         '200':
           description: Mensajes de la conversacion, en orden cronologico.
