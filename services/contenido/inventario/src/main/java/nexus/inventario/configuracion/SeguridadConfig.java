@@ -113,6 +113,8 @@ public class SeguridadConfig {
                 // puede caer en el comodin de "cualquier servicio autenticado".
                 .requestMatchers(HttpMethod.POST, "/api/v1/inventario/elementos/*/transferencias")
                 .access(soloSubastas)
+                .requestMatchers(HttpMethod.POST, "/api/v1/inventario/transferencias-combate")
+                .hasRole("SERVICIO")
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/busqueda")
                 .hasAnyRole(ROLES_DEL_INVENTARIO)
                 .requestMatchers(HttpMethod.GET, "/api/v1/inventario/elementos/*")
