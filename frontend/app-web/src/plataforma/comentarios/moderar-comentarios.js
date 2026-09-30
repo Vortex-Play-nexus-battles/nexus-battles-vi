@@ -102,11 +102,23 @@ export const RESULTADO_DE_ACCION = Object.freeze({
  * siempre), si esta marcado para seguimiento y si moderacion edito su texto.
  *
  * @param {object} comentario `ComentarioResponse` de moderacion
- * @param {{conEstado?: boolean}} [opciones] `conEstado`: pintar tambien EN_REVISION
+ * @param {{conEstado?: boolean, prioridadElevada?: boolean}} [opciones] `conEstado`: pintar
+ *   tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo `true` pinta el
+ *   distintivo. Viene de la entrada de la cola, no del comentario: el detalle no la trae.
  * @returns {HTMLElement[]}
  */
-export function distintivosDe(comentario, { conEstado = false } = {}) {
+export function distintivosDe(comentario, { conEstado = false, prioridadElevada = false } = {}) {
   const lista = [];
+  if (prioridadElevada === true) {
+    // Con texto y no solo con color: el tono ambar no basta para quien no lo distingue.
+    lista.push(
+      h('span', {
+        clase: 'distintivo distintivo--aviso',
+        datos: { campo: 'prioridad' },
+        texto: 'Prioridad elevada',
+      }),
+    );
+  }
   if (conEstado || comentario?.estado !== 'EN_REVISION') {
     lista.push(
       h('span', {
@@ -175,7 +187,7 @@ export function tarjetaDeEntrada(entrada, alAbrir) {
           datos: { campo: 'reportes' },
           texto: `${reportes} reporte${reportes === 1 ? '' : 's'}`,
         }),
-        ...distintivosDe(comentario),
+        ...distintivosDe(comentario, { prioridadElevada: entrada.prioridadElevada }),
         h('span', {
           clase: 'tarjeta__meta',
           // En la lista de seguimiento hay marcados sin ningun reporte: para
@@ -287,13 +299,19 @@ function pistaDelMotivo(accion) {
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
  * @param {{cargarImagen?: ((id: string) => Promise<Blob|null>)|null,
- *          crearUrl?: (blob: Blob) => string}} [opciones]
+ *          crearUrl?: (blob: Blob) => string,
+ *          prioridadElevada?: boolean}} [opciones] `prioridadElevada` sale de la entrada
+ *   de la cola: `DetalleDeModeracionResponse` no la trae.
  * @returns {HTMLElement}
  */
 export function panelDeDetalle(
   detalle,
   alDecidir,
-  { cargarImagen = null, crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '' } = {},
+  {
+    cargarImagen = null,
+    crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
+    prioridadElevada = false,
+  } = {},
 ) {
   const comentario = detalle.comentario ?? {};
   const panel = h('section', {
@@ -305,7 +323,7 @@ export function panelDeDetalle(
     h('h2', { texto: `Comentario de ${comentario.apodoAutor ?? 'alguien'}` }),
     h('p', {
       clase: 't-meta fila fila--envuelta',
-      hijos: distintivosDe(comentario, { conEstado: true }),
+      hijos: distintivosDe(comentario, { conEstado: true, prioridadElevada }),
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
@@ -502,6 +520,9 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const filtro = raiz.querySelector('[data-zona="filtro"]');
+  // El detalle no trae `prioridadElevada`: se recuerda de la entrada de la
+  // cola desde la que se abrio. `recargar` lo rehace antes de reabrir.
+  const prioridadPorComentario = new Map();
 
   function problema(error) {
     const explicacion = EXPLICACION[error?.motivo];
@@ -538,6 +559,10 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
         tamano: TAMANO,
       });
       vaciar(zonaCola);
+      prioridadPorComentario.clear();
+      for (const { comentario, prioridadElevada } of cola.entradas ?? []) {
+        prioridadPorComentario.set(comentario?.id, prioridadElevada === true);
+      }
       if ((cola.entradas ?? []).length === 0) {
         // Cola vacia NO es un error: es la respuesta correcta cuando no hay
         // nada pendiente. Por eso estado vacio y no estado de error.
@@ -593,6 +618,7 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
       zonaDetalle.append(
         panelDeDetalle(detalle, (decision) => decidir(comentarioId, decision), {
           cargarImagen: (id) => cliente.imagenParaModeracion(id),
+          prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );
