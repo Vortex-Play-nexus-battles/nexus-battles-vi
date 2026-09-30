@@ -89,6 +89,19 @@ llama a `DELETE` con el mismo elemento, subasta y una clave de idempotencia.
 Repetir el aviso conserva el producto disponible; un aviso de otra subasta
 responde `409` y no levanta el bloqueo vigente.
 
+### Evidencia de los criterios de HU-INV-010
+
+| Criterio | Prueba automatica | Resultado local (2026-09-30) |
+| --- | --- | --- |
+| El producto publicado figura no disponible y no se puede modificar, eliminar ni equipar. | `InventarioApiTest.productoBloqueadoEnSubasta`, `InventarioTest.impedirOperacionesSobreProductoBloqueado` y `bloqueo-subasta.aceptacion.spec.js` sobre Chromium. | Verde |
+| El aviso de cierre o cancelacion levanta el bloqueo. | `InventarioApiTest.liberarProductoAlCerrarSubasta` y `GestionarBloqueoSubastaTest.liberarAlRecibirAvisoDeCierre`. | Verde |
+| Sin respuesta de Subastas se conserva el bloqueo registrado. | `InventarioApiTest.conservarBloqueoSiSubastasNoResponde` y `ConsultarInventarioPaginadoTest.conservaBloqueoSiSubastasNoResponde`. | Verde |
+
+La prueba de navegador abre la ranura de arma y comprueba que el objeto se
+muestra como `en subasta`, permanece visible para explicar el motivo y no se
+puede seleccionar. De esta manera la evidencia sigue el flujo actual de
+equipamiento por ranuras y no una interfaz anterior.
+
 Los documentos historicos cuyo propietario o producto aun sea un apodo o una
 referencia no UUID responden `409` en la consulta interna hasta que se ejecute
 su migracion. La compatibilidad queda encapsulada en Inventario y no se filtra
