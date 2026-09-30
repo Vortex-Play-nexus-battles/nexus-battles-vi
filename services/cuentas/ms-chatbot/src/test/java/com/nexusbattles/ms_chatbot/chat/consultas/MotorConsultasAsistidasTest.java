@@ -277,6 +277,56 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto()).contains("no esta disponible");
     }
 
+    // Revision de plataforma (7.4.4): se clasifica la intencion antes de
+    // consultar. Sus datos -> inventario real; un consejo -> base de conocimiento.
+    @Test
+    void preguntarQueTieneEnSuInventarioConsultaElServicio() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(
+            List.of(new ElementoInventarioDto("Espada del Alba", "ARMA", true)), 1));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("¿Qué tengo en mi inventario?", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("Espada del Alba");
+    }
+
+    @Test
+    void pedirQueLeMuestreSusHeroesConsultaElServicio() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(
+            List.of(new ElementoInventarioDto("Guerrero de Hierro", "HEROE", true)), 1));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("Muéstrame mis héroes", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("Guerrero de Hierro");
+    }
+
+    @Test
+    void pedirConsejosParaOrganizarElInventarioNoLlamaAlServicio() {
+        Optional<ResultadoMotor> resultado =
+            motor.generarRespuesta("Dame consejos para organizar mi inventario", TOKEN, UID);
+
+        assertThat(resultado).isEmpty();
+        verifyNoInteractions(inventarioClient);
+    }
+
+    @Test
+    void pedirQueLeRecomiendeObjetosNoLlamaAlServicio() {
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("¿Qué objetos me recomiendas usar?", TOKEN, UID);
+
+        assertThat(resultado).isEmpty();
+        verifyNoInteractions(inventarioClient);
+    }
+
+    @Test
+    void preguntasDeReglasConPalabrasDeInventarioNoLlamanAlServicio() {
+        for (String pregunta : List.of("tienes consejos de inventario", "como equipo a mi heroe",
+            "pierdo mis objetos", "¿Qué es el inventario?", "how do I equip my heroes")) {
+            assertThat(motor.generarRespuesta(pregunta, TOKEN, UID)).as(pregunta).isEmpty();
+        }
+        verifyNoInteractions(inventarioClient);
+    }
+
     @Test
     void detectaNavegacionAInventarioSinConsultarElServicio() {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("llevame a mi inventario", TOKEN, UID);

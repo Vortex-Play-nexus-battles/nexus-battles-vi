@@ -37,7 +37,10 @@ import java.util.UUID;
 // tolerancia a errores como en MotorRespuestas). Son intenciones fijas del
 // sistema, con frases multi-palabra bastante especificas, asi que una
 // coincidencia simple es suficiente y evita el riesgo de falsos positivos
-// que si tuvimos que resolver en MotorRespuestas.
+// que si tuvimos que resolver en MotorRespuestas. La excepcion es el
+// inventario: sus palabras ("mi inventario", "mis heroes") aparecen tambien
+// cuando el jugador pide un consejo, asi que ahi se clasifica la intencion
+// con IntencionDeConsulta antes de llamar al servicio.
 //
 // IMPORTANTE sobre el orden de deteccion: las frases de navegacion (ej.
 // "llevame a mi inventario") contienen la misma palabra de dominio que las
@@ -48,10 +51,6 @@ import java.util.UUID;
 @Service
 public class MotorConsultasAsistidas {
 
-    private static final List<String> PALABRAS_INVENTARIO = List.of(
-        "inventario", "mis armas", "mis items", "mis objetos", "mi equipo", "mi equipamiento",
-        "my inventory", "my items", "my gear", "my equipment"
-    );
     private static final List<String> PALABRAS_SUBASTAS = List.of(
         "mis subastas", "mis pujas", "mi puja", "voy ganando", "estoy ganando",
         "my auctions", "my bids", "am i winning"
@@ -197,7 +196,10 @@ public class MotorConsultasAsistidas {
             return Optional.of(generarInformeActividad(tokenBearer, uid));
         }
 
-        if (contieneAlguna(mensajeNormalizado, PALABRAS_INVENTARIO)) {
+        // El inventario no va por frase: IntencionDeConsulta separa "que tengo
+        // en mi inventario" (datos en vivo) de "dame consejos para organizar mi
+        // inventario" (base de conocimiento).
+        if (IntencionDeConsulta.consultaSuInventario(mensajeNormalizado)) {
             return Optional.of(consultarInventario(tokenBearer));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_SUBASTAS)) {
