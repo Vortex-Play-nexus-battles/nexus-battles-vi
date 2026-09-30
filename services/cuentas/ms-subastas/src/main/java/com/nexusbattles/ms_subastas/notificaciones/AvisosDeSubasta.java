@@ -11,6 +11,7 @@ import com.nexusbattles.ms_subastas.reglas.ReglasDelDocumento;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -29,7 +30,10 @@ import static com.nexusbattles.ms_subastas.notificaciones.Textos.producto;
  * negocio dicen «se registro esta puja» o «se cancelo esta subasta» y esto
  * encola los avisos que correspondan en {@link NotificacionOutbox}, dentro de
  * su misma transaccion. Cada destinatario recibe un solo aviso por hecho: el
- * vendedor que ademas sigue su propia subasta no recibe dos.
+ * vendedor que ademas sigue su propia subasta no recibe dos. La unica
+ * excepcion es la venta: el vendedor recibe el resultado y, aparte, la
+ * confirmacion de los creditos recibidos, porque 7.7.8 los enumera por
+ * separado ({@link TipoNotificacion#CREDITOS_RECIBIDOS}).
  *
  * <p>Quien sigue una subasta (7.7.9, «Notificaciones cuando hay cambios en
  * estas subastas») recibe {@link TipoNotificacion#CAMBIO_EN_SUBASTA_SEGUIDA}
@@ -111,6 +115,7 @@ public class AvisosDeSubasta {
                 titulo(TipoNotificacion.COMPRA_INMEDIATA_EJECUTADA, subasta),
                 anonimizar(compra.getApodoPostor()) + " compró tu " + nombre + " de forma inmediata por " + precio
                         + " créditos. Los créditos ya están en tu saldo.");
+        creditosRecibidos(subasta, "compra", compra.getMonto());
         avisados.add(subasta.getVendedorId());
 
         // Los postores: el cierre anticipado de HU-SUB-004 criterio 2 y 7.7.6.
@@ -153,6 +158,7 @@ public class AvisosDeSubasta {
                 "Tu subasta de " + nombre + " terminó con " + subasta.getCantidadPujas() + " puja(s) y se adjudicó a "
                         + anonimizar(ganadora.getApodoPostor()) + " por " + monto
                         + " créditos. Los créditos ya están en tu saldo.");
+        creditosRecibidos(subasta, "cierre", ganadora.getMonto());
         avisados.add(subasta.getVendedorId());
 
         for (UUID participante : participantes(subasta.getId())) {
@@ -213,13 +219,18 @@ public class AvisosDeSubasta {
 
     /**
      * 7.7.8: «Aviso 1 hora antes de finalizar subastas en las que se participa»
-     * y «Recordatorio de subastas guardadas en lista de seguimiento». Al
-     * vendedor no: no participa.
+     * y «Recordatorio de subastas guardadas en lista de seguimiento».
+     *
+     * <p>Va «a ambos», vendedor y comprador (RF-NOT-003, ficha oficial): quien
+     * pujo o tiene una automatica, quien la sigue y el vendedor, una sola vez
+     * cada uno. El vendedor recibe su propio texto: la proxima puja valida no
+     * le sirve, porque no puede pujar en su propia subasta.
      */
     public void recordatorio(Subasta subasta) {
         String nombre = producto(subasta.getNombreProducto());
         Set<UUID> destinatarios = new LinkedHashSet<>(participantes(subasta.getId()));
         destinatarios.addAll(seguimientos.seguidoresDe(subasta.getId()));
+        // El vendedor recibe el suyo abajo, aunque tambien siga su propia subasta.
         destinatarios.remove(subasta.getVendedorId());
         String cuerpo = nombre + " cierra en menos de 1 hora. Oferta vigente: " + creditos(subasta.getOfertaVigente())
                 + " créditos; la próxima puja válida es de " + creditos(subasta.pujaMinimaSiguiente()) + ".";
@@ -227,6 +238,14 @@ public class AvisosDeSubasta {
             outbox.encolar(TipoNotificacion.RECORDATORIO_CIERRE, destinatario, subasta.getId(), "recordatorio",
                     titulo(TipoNotificacion.RECORDATORIO_CIERRE, subasta), cuerpo);
         }
+
+        String alVendedor = subasta.tieneOfertas()
+                ? "Tu subasta de " + nombre + " cierra en menos de 1 hora. Oferta vigente: "
+                        + creditos(subasta.getOfertaVigente()) + " créditos. Van " + subasta.getCantidadPujas()
+                        + " puja(s)."
+                : "Tu subasta de " + nombre + " cierra en menos de 1 hora y todavía no tiene ofertas.";
+        outbox.encolar(TipoNotificacion.RECORDATORIO_CIERRE, subasta.getVendedorId(), subasta.getId(), "recordatorio",
+                titulo(TipoNotificacion.RECORDATORIO_CIERRE, subasta), alVendedor);
     }
 
     /** 7.7.8: «Confirmacion de producto agregado al inventario», al recogerlo. */
@@ -256,6 +275,19 @@ public class AvisosDeSubasta {
     }
 
     // ------------------------------------------------------------------ apoyo
+
+    /**
+     * 7.7.8 vendedor: «Confirmacion de transferencia de creditos recibidos».
+     * Solo se llama despues de que ms-finanzas los movio: MotorPujasService
+     * consume la reserva del comprador a favor del vendedor antes de que se
+     * encole ningun aviso, y si ese consumo falla no se encola nada.
+     */
+    private void creditosRecibidos(Subasta subasta, String discriminante, BigDecimal monto) {
+        outbox.encolar(TipoNotificacion.CREDITOS_RECIBIDOS, subasta.getVendedorId(), subasta.getId(), discriminante,
+                titulo(TipoNotificacion.CREDITOS_RECIBIDOS, subasta),
+                "Recibiste " + creditos(monto) + " créditos por la venta de " + producto(subasta.getNombreProducto())
+                        + ". Ya están en tu saldo.");
+    }
 
     /** Quien pujo o tiene una puja automatica configurada en la subasta. */
     private Set<UUID> participantes(UUID subastaId) {

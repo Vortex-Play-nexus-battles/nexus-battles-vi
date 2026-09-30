@@ -271,7 +271,8 @@ Reglas nuevas en el dominio:
   simultaneas: gana una sola); cobra la penalizacion en ms-finanzas
   (`refId sub-cancelacion-{id}`, idempotente) y libera el producto; si algo
   falla despues, se compensan los dos.
-- **Recordatorio de 1 hora** a quien pujo o sigue la subasta, una sola vez.
+- **Recordatorio de 1 hora** a quien pujo o sigue la subasta y al vendedor
+  (RF-NOT-003: «a ambos»), una sola vez cada uno.
 
 Avisos (7.7.8): `notificaciones/AvisosDeSubasta` decide quien se entera de que;
 el outbox es idempotente por evento (id UUID v3 de la clave del hecho,
@@ -284,6 +285,11 @@ momento (`GET /internal/usuarios/{uid}/contacto`) y no se guardan; la
 `Idempotency-Key` es el id del aviso. Reintentos con espera exponencial hasta
 FALLIDO. **Esa ruta de ms-identidad figura como pendiente (B2)**: sin ella el
 correo no sale y termina FALLIDO (no se descarta en silencio).
+
+Al vender (cierre con ganador o compra inmediata), el vendedor recibe ademas
+`CREDITOS_RECIBIDOS` (7.7.8, «Confirmacion de transferencia de creditos
+recibidos»; HU-NOT-003) con el monto que le movio ms-finanzas. Va solo a la
+bandeja: el correo de la venta sale en el mismo instante y ya lo dice.
 
 Tiempo real: ademas de `/topic/subastas/listado` (publico), cada cambio se
 publica en `/topic/subastas/{subastaId}`, que exige sesion en el CONNECT. Un
@@ -479,7 +485,7 @@ no esta en el repo y B9 dejo escrito que correo no se alcanza. Por eso el paso
 
 ### Datos
 
-El Postgres de contenido nace vacio (Flyway V1-V10). En plataforma quedo el
+El Postgres de contenido nace vacio (Flyway V1-V11). En plataforma quedo el
 volumen de los pocos minutos que ms-subastas estuvo desplegado el 24-sep
 (CAPACIDAD.md: se retiro «conservando su volumen»): no hay nada que migrar, y
 tampoco se borra.

@@ -27,7 +27,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Quien se entera de que en cada hecho de una subasta (7.7.8), sin avisos
- * duplicados: cada destinatario recibe uno por hecho.
+ * duplicados: cada destinatario recibe uno por hecho, salvo el vendedor al
+ * vender, que recibe ademas la confirmacion de creditos (CREDITOS_RECIBIDOS).
  */
 @DisplayName("Avisos de subasta (7.7.8)")
 class AvisosDeSubastaTest {
@@ -89,8 +90,14 @@ class AvisosDeSubastaTest {
         return deEseTipo.getFirst();
     }
 
+    /**
+     * Nadie recibe dos avisos del mismo hecho. La confirmacion de creditos al
+     * vendedor es la excepcion documentada: 7.7.8 la enumera aparte de la venta.
+     */
     private void cadaDestinatarioUnaVez() {
-        List<UUID> todos = encolados.stream().map(Aviso::destinatario).toList();
+        List<UUID> todos = encolados.stream()
+                .filter(a -> !(a.tipo() == TipoNotificacion.CREDITOS_RECIBIDOS && a.destinatario().equals(vendedor)))
+                .map(Aviso::destinatario).toList();
         assertEquals(todos.size(), todos.stream().distinct().count(), "nadie recibe dos avisos del mismo hecho: "
                 + encolados);
     }
@@ -168,6 +175,12 @@ class AvisosDeSubastaTest {
 
         assertEquals(List.of(comprador), destinatariosDe(TipoNotificacion.COMPRA_INMEDIATA_EXITOSA));
         assertEquals(List.of(vendedor), destinatariosDe(TipoNotificacion.COMPRA_INMEDIATA_EJECUTADA));
+        Aviso creditos = unico(TipoNotificacion.CREDITOS_RECIBIDOS);
+        assertEquals(vendedor, creditos.destinatario());
+        assertEquals("compra", creditos.discriminante());
+        assertEquals("Créditos recibidos · Espada del Alba", creditos.titulo());
+        assertEquals("Recibiste 500 créditos por la venta de Espada del Alba. Ya están en tu saldo.",
+                creditos.cuerpo());
         assertEquals(List.of(postor, superado, conAutomatica),
                 destinatariosDe(TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA));
         assertEquals(List.of(seguidor), destinatariosDe(TipoNotificacion.CAMBIO_EN_SUBASTA_SEGUIDA));
@@ -188,6 +201,13 @@ class AvisosDeSubastaTest {
         assertTrue(victoria.cuerpo().contains("antes de 7 días"), victoria.cuerpo());
         assertEquals("¡Ganaste la subasta! · Espada del Alba", victoria.titulo());
         assertEquals(vendedor, unico(TipoNotificacion.SUBASTA_VENDIDA).destinatario());
+        Aviso creditos = unico(TipoNotificacion.CREDITOS_RECIBIDOS);
+        assertEquals(vendedor, creditos.destinatario());
+        assertEquals("cierre", creditos.discriminante());
+        assertEquals("Recibiste 120 créditos por la venta de Espada del Alba. Ya están en tu saldo.",
+                creditos.cuerpo());
+        assertFalse(TipoNotificacion.CREDITOS_RECIBIDOS.conCorreo(),
+                "solo a la bandeja: el correo de la venta ya dice que los créditos están en el saldo");
         assertEquals(List.of(superado, conAutomatica), destinatariosDe(TipoNotificacion.SUBASTA_FINALIZADA));
         assertEquals(List.of(seguidor), destinatariosDe(TipoNotificacion.CAMBIO_EN_SUBASTA_SEGUIDA));
         cadaDestinatarioUnaVez();
@@ -203,6 +223,7 @@ class AvisosDeSubastaTest {
         Aviso alVendedor = unico(TipoNotificacion.SUBASTA_SIN_OFERTAS);
         assertEquals(vendedor, alVendedor.destinatario());
         assertTrue(alVendedor.cuerpo().contains("la comisión no se reembolsa"), alVendedor.cuerpo());
+        assertTrue(destinatariosDe(TipoNotificacion.CREDITOS_RECIBIDOS).isEmpty(), "sin venta no hay créditos");
         assertEquals(List.of(conAutomatica, postor), destinatariosDe(TipoNotificacion.SUBASTA_FINALIZADA));
         assertEquals(List.of(seguidor), destinatariosDe(TipoNotificacion.CAMBIO_EN_SUBASTA_SEGUIDA));
         cadaDestinatarioUnaVez();
@@ -226,16 +247,39 @@ class AvisosDeSubastaTest {
     }
 
     @Test
-    @DisplayName("recordatorio de 1 hora: participantes y seguidores, nunca el vendedor")
+    @DisplayName("recordatorio de 1 hora: participantes, seguidores y el vendedor (RF-NOT-003, «a ambos»), una vez cada uno")
     void recordatorio() {
         avisos.recordatorio(subasta);
 
         List<UUID> destinatarios = destinatariosDe(TipoNotificacion.RECORDATORIO_CIERRE);
-        assertEquals(List.of(postor, superado, conAutomatica, seguidor), destinatarios);
-        assertFalse(destinatarios.contains(vendedor));
+        assertEquals(List.of(postor, superado, conAutomatica, seguidor, vendedor), destinatarios);
         assertTrue(encolados.getFirst().cuerpo().contains("la próxima puja válida es de 130"),
                 encolados.getFirst().cuerpo());
+        // El vendedor tambien sigue su subasta (ver preparar), pero recibe un solo aviso: el suyo.
+        Aviso alVendedor = encolados.getLast();
+        assertEquals(vendedor, alVendedor.destinatario());
+        assertEquals("Una subasta cierra en menos de 1 hora · Espada del Alba", alVendedor.titulo());
+        assertEquals("Tu subasta de Espada del Alba cierra en menos de 1 hora. Oferta vigente: 120 créditos. "
+                + "Van 2 puja(s).", alVendedor.cuerpo());
         assertTrue(encolados.stream().allMatch(a -> "recordatorio".equals(a.discriminante())));
+        cadaDestinatarioUnaVez();
+    }
+
+    @Test
+    @DisplayName("recordatorio de 1 hora sin ofertas: al vendedor le dice que todavia nadie pujo")
+    void recordatorioSinOfertas() {
+        subasta.setMejorPostorId(null);
+        subasta.setOfertaVigente(new BigDecimal("100"));
+        subasta.setCantidadPujas(0);
+        when(pujas.findDistinctJugadorIdBySubastaId(subasta.getId())).thenReturn(List.of());
+        when(automaticas.jugadoresConAutomatica(subasta.getId())).thenReturn(List.of());
+
+        avisos.recordatorio(subasta);
+
+        assertEquals(List.of(seguidor, vendedor), destinatariosDe(TipoNotificacion.RECORDATORIO_CIERRE));
+        assertEquals("Tu subasta de Espada del Alba cierra en menos de 1 hora y todavía no tiene ofertas.",
+                encolados.getLast().cuerpo());
+        cadaDestinatarioUnaVez();
     }
 
     @Test
