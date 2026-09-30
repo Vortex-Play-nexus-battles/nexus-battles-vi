@@ -81,9 +81,13 @@ info:
     mismo tope que la cola, y devuelve solo lo necesario para decidir sobre el
     autor: sin imagenes, reportes, asientos ni marca de seguimiento. Incluye los
     comentarios OCULTO y ELIMINADO, con su `estado`, porque moderacion los
-    conserva. La operacion se publica con `x-implementacion: pendiente` hasta
-    que el servicio la implemente. Es menor: solo anade una operacion.
-  version: 1.7.0
+    conserva. La operacion esta implementada en el servicio. Es menor: solo
+    anade una operacion.
+
+    1.7.1 (HU-COM-005, #519): solo se quita la marca `x-implementacion` de
+    `historialDelAutor`, porque el servicio ya la implementa. No cambia la API.
+    Es un parche.
+  version: 1.7.1
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -495,8 +499,6 @@ paths:
     get:
       summary: Historial de comentarios de un autor (RF-COM-005)
       operationId: historialDelAutor
-      x-implementacion: pendiente
-      x-fase: "HU-COM-005 (#519)"
       description: >
         1.7.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Los
         comentarios del autor, del mas reciente al mas antiguo, en cualquier
