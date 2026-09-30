@@ -56,6 +56,9 @@ public class ServicioDeModeracion {
     static final int MOTIVO_MINIMO = 3;
     static final int MOTIVO_MAXIMO = 500;
 
+    /** Contrato: {@code descripcion} del reporte de 0 a 500 caracteres (la columna es de 500). */
+    static final int DESCRIPCION_MAXIMA = 500;
+
     /** Contrato 1.4.0: {@code textoNuevo} de 1 a 2000 caracteres. */
     static final int TEXTO_NUEVO_MAXIMO = 2000;
 
@@ -70,6 +73,7 @@ public class ServicioDeModeracion {
     private final RegistroDeAuditoria auditoria;
     private final Clock reloj;
     private final int limiteDiarioDeReportes;
+    private final int umbralDePrioridad;
 
     public ServicioDeModeracion(
             ComentarioRepository comentarios,
@@ -78,7 +82,8 @@ public class ServicioDeModeracion {
             AvisoAlAutor aviso,
             RegistroDeAuditoria auditoria,
             Clock reloj,
-            @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes) {
+            @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes,
+            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad) {
         this.comentarios = comentarios;
         this.reportes = reportes;
         this.asientos = asientos;
@@ -86,6 +91,17 @@ public class ServicioDeModeracion {
         this.auditoria = auditoria;
         this.reloj = reloj;
         this.limiteDiarioDeReportes = limiteDiarioDeReportes;
+        this.umbralDePrioridad = umbralDePrioridad;
+    }
+
+    /**
+     * CA-02: cuantos reportes elevan la prioridad en la cola. El PO aun no fija
+     * el valor, asi que nace en 0 = sin umbral, y 0 (o menos) no eleva nunca.
+     * Se deriva del conteo y no se guarda: no hay estado que pueda quedar a
+     * medias y, si el umbral cambia, la cola lo refleja sin migrar nada.
+     */
+    private boolean elevaLaPrioridad(long reportesDelComentario) {
+        return umbralDePrioridad > 0 && reportesDelComentario >= umbralDePrioridad;
     }
 
     // ------------------------------------------------------------ RF-COM-006
@@ -101,11 +117,21 @@ public class ServicioDeModeracion {
      * <p>El duplicado se comprueba ANTES por cortesia —para dar un 409 claro—
      * y se vuelve a atrapar DESPUES por seguridad: dos peticiones simultaneas
      * del mismo usuario cargan cada una un estado que no ve a la otra, y el
-     * indice unico de V4 es el que de verdad lo impide.
+     * indice unico de V4 es el que de verdad lo impide. Se guarda con
+     * {@code saveAndFlush} para que el INSERT salga aqui: con el id asignado a
+     * mano {@code save} hace un merge y difiere el INSERT al commit, cuando el
+     * {@code catch} ya no esta en pila y el cliente recibiria el 409 generico.
+     *
+     * <p>La entrada se valida primero, antes de tocar la base y de gastar cupo:
+     * sin categoria o con la descripcion de mas de 500 caracteres es
+     * {@link ReporteInvalido}. Una descripcion en blanco es {@code null}.
      */
     @Transactional
     public Reportado reportar(String productoId, String comentarioId, String reportanteId,
             CategoriaDeReporte categoria, String descripcion) {
+
+        exigirCategoria(categoria);
+        String descripcionLimpia = limpiarDescripcion(descripcion);
 
         RegistroDeComentario registro = comentarios.findById(comentarioId)
                 .filter(c -> c.getProductoId().equals(productoId))
@@ -131,9 +157,9 @@ public class ServicioDeModeracion {
 
         RegistroDeReporte reporte = new RegistroDeReporte(
                 UUID.randomUUID().toString(), comentarioId, reportanteId,
-                categoria, descripcion, ahora);
+                categoria, descripcionLimpia, ahora);
         try {
-            reportes.save(reporte);
+            reportes.saveAndFlush(reporte);
         } catch (DataIntegrityViolationException carrera) {
             // El indice unico de V4 gano la carrera. Es el mismo 409.
             throw new ReporteDuplicado(comentarioId);
@@ -146,7 +172,29 @@ public class ServicioDeModeracion {
             comentarios.save(RegistroDeComentario.desde(resultante));
         }
 
-        return new Reportado(reporte, resultante, reportes.countByComentarioId(comentarioId));
+        long totales = reportes.countByComentarioId(comentarioId);
+        return new Reportado(reporte, resultante, totales, elevaLaPrioridad(totales));
+    }
+
+    private static void exigirCategoria(CategoriaDeReporte categoria) {
+        if (categoria == null) {
+            throw new ReporteInvalido("Falta la categoria del reporte");
+        }
+    }
+
+    private static String limpiarDescripcion(String descripcion) {
+        if (descripcion == null) {
+            return null;
+        }
+        String limpia = descripcion.strip();
+        if (limpia.isEmpty()) {
+            return null;
+        }
+        if (limpia.length() > DESCRIPCION_MAXIMA) {
+            throw new ReporteInvalido(
+                    "La descripcion admite hasta " + DESCRIPCION_MAXIMA + " caracteres");
+        }
+        return limpia;
     }
 
     // ------------------------------------------------------------ RF-COM-005
@@ -189,7 +237,8 @@ public class ServicioDeModeracion {
                 porCategoria.merge(r.categoria(), 1L, Long::sum);
             }
             Instant primero = suyos.isEmpty() ? c.fechaPublicacion() : suyos.get(0).fecha();
-            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero));
+            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero,
+                    elevaLaPrioridad(suyos.size())));
         }
 
         // Mas reportado primero; a igualdad, el que lleva mas tiempo esperando.
@@ -311,11 +360,13 @@ public class ServicioDeModeracion {
 
     // ------------------------------------------------------------- resultados
 
-    public record Reportado(RegistroDeReporte reporte, Comentario comentario, long totales) {
+    public record Reportado(RegistroDeReporte reporte, Comentario comentario, long totales,
+            boolean prioridadElevada) {
     }
 
     public record Entrada(Comentario comentario, int reportes,
-            Map<CategoriaDeReporte, Long> porCategoria, Instant primerReporte) {
+            Map<CategoriaDeReporte, Long> porCategoria, Instant primerReporte,
+            boolean prioridadElevada) {
     }
 
     public record Cola(List<Entrada> entradas, int total, int pagina, int tamano) {
@@ -339,6 +390,13 @@ public class ServicioDeModeracion {
     public static class ReporteDuplicado extends RuntimeException {
         public ReporteDuplicado(String id) {
             super("Ya reportaste el comentario " + id);
+        }
+    }
+
+    /** El reporte no cumple el contrato: categoria ausente o descripcion demasiado larga (400). */
+    public static class ReporteInvalido extends RuntimeException {
+        public ReporteInvalido(String explicacion) {
+            super(explicacion);
         }
     }
 

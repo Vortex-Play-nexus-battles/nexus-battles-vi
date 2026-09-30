@@ -346,8 +346,32 @@ No se implementaron en B8 y no se fingen:
 
 ## Despliegue en DEV: plan (B8)
 
-`desplegableDev` sigue en `false` y **B8 no lo cambia**. Lo que sigue es el
-plan para desplegarlo sin tumbar nada, con lo que hay que comprobar en cada
+**28-sep — ejecutado en la topologia, fase 1.** El catalogo lo declara con
+`claseHost: "contenido"` y `desplegableDev: true`; `docker-compose.ms-subastas.yml`
+trae los valores por omision de ese host (inventario y catalogo por nombre en
+su red; identidad, finanzas por el 8093, notificaciones, sanciones y parametros
+por la IP elastica de plataforma); el job `desplegar-contenido-dev` de `cd.yml`
+copia su compose, le pasa la base, los origenes y la credencial, y corre la
+compuerta de capacidad. La credencial ya no se copia a mano (paso 4 de abajo):
+es el secret `SECRETO_SERVICIO_MS_SUBASTAS` del entorno `dev`, que los dos jobs
+reciben y `desplegar.sh` prefiere al valor generado en cada host.
+
+Queda **una** cosa, y no es nuestra: que el grupo de seguridad de contenido
+(cuenta del Grupo 2) admita el 8092 desde `35.168.124.119/32`
+(`infrastructure/entornos/contenido/reglas-entrada.json`). Con eso, un PR
+pequeno cambia en `borde-dev.conf` `srv-ms-subastas:8092` por
+`34.193.90.11:8092` en las dos `location` (REST y `ws-subastas`), con su
+sustitucion en los dos bancos y su comprobacion de fichero en
+`comprobar-rutas.sh`. Antes de eso el borde sigue apuntando al nombre, que da
+502 al instante; apuntar ya a la IP con el puerto cerrado daria 504 a los 5 s,
+y el smoke de dev solo admite 200, 502 o 503.
+
+El plan original, con sus comprobaciones, sigue abajo como se escribio en B8
+(27-sep): los pasos 1-3 y 5-8 aplican tal cual; el 4 lo sustituye el secret
+compartido.
+
+*(B8)* `desplegableDev` seguia en `false` y B8 no lo cambiaba. Lo que sigue es
+el plan para desplegarlo sin tumbar nada, con lo que hay que comprobar en cada
 paso. No lo activa nadie por accidente: hace falta cambiar el catalogo, el CD,
 el borde y dos grupos de seguridad, y cada cambio esta escrito abajo.
 

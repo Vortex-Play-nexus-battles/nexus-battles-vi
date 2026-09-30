@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,6 +31,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -79,7 +81,12 @@ class FlujoDeModeracionTest {
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
 
-        servicio = new ServicioDeModeracion(
+        // El umbral nace en 0 = sin umbral: el PO aun no fija ningun valor.
+        servicio = servicioConUmbral(0);
+    }
+
+    private ServicioDeModeracion servicioConUmbral(int umbral) {
+        return new ServicioDeModeracion(
                 comentarios, reportes, asientos,
                 (comentario, asiento) -> {
                     avisos.add(comentario.autorId() + ":" + asiento.accion());
@@ -87,7 +94,7 @@ class FlujoDeModeracionTest {
                 },
                 asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
                 Clock.fixed(AHORA, ZoneOffset.UTC),
-                3);
+                3, umbral);
     }
 
     private Comentario publicar(String id, String autor) {
@@ -195,6 +202,115 @@ class FlujoDeModeracionTest {
         }
 
         @Test
+        @DisplayName("sin categoria se rechaza como reporte invalido y no cambia nada")
+        void sinCategoria() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", null, "texto"));
+
+            assertTrue(filasDeReportes.isEmpty(), "un reporte invalido no se guarda");
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "y tampoco encola el comentario");
+        }
+
+        @Test
+        @DisplayName("una descripcion de mas de 500 caracteres es invalida; de 500 exactos, valida")
+        void descripcionLarga() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM,
+                            "x".repeat(501)));
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+
+            // El limite es inclusivo: la columna es de 500.
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, "x".repeat(500));
+            assertEquals(1, filasDeReportes.size());
+        }
+
+        @Test
+        @DisplayName("la descripcion es opcional: nula o en blanco queda null, y se recorta")
+        void descripcionOpcional() {
+            publicar("c-1", "autor-1");
+            publicar("c-2", "autor-2");
+            publicar("c-3", "autor-3");
+
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-2", "jugador-a", CategoriaDeReporte.SPAM, "   ");
+            servicio.reportar(PRODUCTO, "c-3", "jugador-a", CategoriaDeReporte.SPAM, "  me insulta  ");
+
+            assertNull(filasDeReportes.get(0).descripcion());
+            assertNull(filasDeReportes.get(1).descripcion());
+            assertEquals("me insulta", filasDeReportes.get(2).descripcion());
+        }
+
+        @Test
+        @DisplayName("si el indice unico gana la carrera, es el mismo 409 y el comentario no se encola")
+        void carreraDeDuplicados() {
+            publicar("c-1", "autor-1");
+            // doThrow(...).when(...): la forma when(...).thenThrow(...) ejecuta
+            // primero el stub anterior con un argumento nulo y mete un null en la lista.
+            doThrow(new DataIntegrityViolationException("uq_reporte_comentario_reportante"))
+                    .when(reportes).saveAndFlush(any(RegistroDeReporte.class));
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null));
+
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "perder la carrera no deja el comentario a medias");
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado (0) ningun numero de reportes eleva la prioridad")
+        void sinUmbralNuncaEleva() {
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado ultimo = null;
+            for (String jugador : List.of("a", "b", "c", "d", "e")) {
+                ultimo = servicio.reportar(PRODUCTO, "c-1", "jugador-" + jugador,
+                        CategoriaDeReporte.SPAM, null);
+                assertFalse(ultimo.prioridadElevada());
+            }
+            assertEquals(5, ultimo.totales());
+        }
+
+        @Test
+        @DisplayName("al alcanzar el umbral el reporte eleva la prioridad, y sigue elevada con los siguientes")
+        void alcanzarElUmbralEleva() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado primero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado segundo = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado tercero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(primero.prioridadElevada(), "1 reporte < umbral 2");
+            assertTrue(segundo.prioridadElevada(), "el umbral es inclusivo");
+            assertTrue(tercero.prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("un reporte rechazado no cambia nada, tampoco la prioridad")
+        void rechazadoNoCambiaLaPrioridad() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null));
+
+            assertEquals(1, filasDeReportes.size());
+            assertTrue(servicio.cola(null, null, 0, 20).entradas().stream()
+                    .noneMatch(ServicioDeModeracion.Entrada::prioridadElevada));
+        }
+
+        @Test
         @DisplayName("un comentario de otro producto no es un comentario de este")
         void productoAjeno() {
             publicar("c-1", "autor-1");
@@ -233,6 +349,34 @@ class FlujoDeModeracionTest {
             assertEquals(3, entradas.get(0).reportes());
             assertEquals(2L, entradas.get(0).porCategoria().get(CategoriaDeReporte.ACOSO));
             assertEquals("poco", entradas.get(1).comentario().id());
+        }
+
+        @Test
+        @DisplayName("la entrada lleva prioridadElevada al llegar al umbral, y las elevadas van antes")
+        void prioridadElevadaEnLaCola() {
+            servicio = servicioConUmbral(2);
+            publicar("poco", "autor-1");
+            publicar("mucho", "autor-2");
+
+            servicio.reportar(PRODUCTO, "poco", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
+
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            assertEquals("mucho", entradas.get(0).comentario().id());
+            assertTrue(entradas.get(0).prioridadElevada());
+            assertEquals("poco", entradas.get(1).comentario().id());
+            assertFalse(entradas.get(1).prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado ninguna entrada de la cola es de prioridad elevada")
+        void colaSinUmbral() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(servicio.cola(null, null, 0, 20).entradas().get(0).prioridadElevada());
         }
 
         @Test
@@ -342,7 +486,7 @@ class FlujoDeModeracionTest {
                     comentarios, reportes, asientos,
                     (c, a) -> false,
                     asiento -> { },
-                    Clock.fixed(AHORA, ZoneOffset.UTC), 10);
+                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0);
 
             publicar("c-1", "autor-1");
             conAvisoCaido.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
@@ -595,7 +739,7 @@ class FlujoDeModeracionTest {
     private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
         ReporteRepository repo = mock(ReporteRepository.class);
 
-        when(repo.save(any(RegistroDeReporte.class))).thenAnswer(inv -> {
+        when(repo.saveAndFlush(any(RegistroDeReporte.class))).thenAnswer(inv -> {
             RegistroDeReporte r = inv.getArgument(0);
             datos.add(r);
             return r;

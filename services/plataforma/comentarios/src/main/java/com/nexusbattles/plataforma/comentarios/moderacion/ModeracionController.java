@@ -133,7 +133,7 @@ public class ModeracionController {
     }
 
     public record EntradaResponse(ComentarioResponse comentario, int reportes,
-            Map<String, Long> porCategoria, String primerReporte) {
+            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada) {
 
         static EntradaResponse desde(ServicioDeModeracion.Entrada e) {
             return new EntradaResponse(
@@ -141,7 +141,8 @@ public class ModeracionController {
                     e.reportes(),
                     e.porCategoria().entrySet().stream()
                             .collect(Collectors.toMap(x -> x.getKey().name(), Map.Entry::getValue)),
-                    e.primerReporte().toString());
+                    e.primerReporte().toString(),
+                    e.prioridadElevada());
         }
     }
 
