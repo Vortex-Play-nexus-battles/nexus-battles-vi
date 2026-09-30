@@ -81,7 +81,12 @@ class FlujoDeModeracionTest {
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
 
-        servicio = new ServicioDeModeracion(
+        // El umbral nace en 0 = sin umbral: el PO aun no fija ningun valor.
+        servicio = servicioConUmbral(0);
+    }
+
+    private ServicioDeModeracion servicioConUmbral(int umbral) {
+        return new ServicioDeModeracion(
                 comentarios, reportes, asientos,
                 (comentario, asiento) -> {
                     avisos.add(comentario.autorId() + ":" + asiento.accion());
@@ -89,7 +94,7 @@ class FlujoDeModeracionTest {
                 },
                 asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
                 Clock.fixed(AHORA, ZoneOffset.UTC),
-                3);
+                3, umbral);
     }
 
     private Comentario publicar(String id, String autor) {
@@ -259,6 +264,53 @@ class FlujoDeModeracionTest {
         }
 
         @Test
+        @DisplayName("sin umbral configurado (0) ningun numero de reportes eleva la prioridad")
+        void sinUmbralNuncaEleva() {
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado ultimo = null;
+            for (String jugador : List.of("a", "b", "c", "d", "e")) {
+                ultimo = servicio.reportar(PRODUCTO, "c-1", "jugador-" + jugador,
+                        CategoriaDeReporte.SPAM, null);
+                assertFalse(ultimo.prioridadElevada());
+            }
+            assertEquals(5, ultimo.totales());
+        }
+
+        @Test
+        @DisplayName("al alcanzar el umbral el reporte eleva la prioridad, y sigue elevada con los siguientes")
+        void alcanzarElUmbralEleva() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado primero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado segundo = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado tercero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(primero.prioridadElevada(), "1 reporte < umbral 2");
+            assertTrue(segundo.prioridadElevada(), "el umbral es inclusivo");
+            assertTrue(tercero.prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("un reporte rechazado no cambia nada, tampoco la prioridad")
+        void rechazadoNoCambiaLaPrioridad() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null));
+
+            assertEquals(1, filasDeReportes.size());
+            assertTrue(servicio.cola(null, null, 0, 20).entradas().stream()
+                    .noneMatch(ServicioDeModeracion.Entrada::prioridadElevada));
+        }
+
+        @Test
         @DisplayName("un comentario de otro producto no es un comentario de este")
         void productoAjeno() {
             publicar("c-1", "autor-1");
@@ -297,6 +349,34 @@ class FlujoDeModeracionTest {
             assertEquals(3, entradas.get(0).reportes());
             assertEquals(2L, entradas.get(0).porCategoria().get(CategoriaDeReporte.ACOSO));
             assertEquals("poco", entradas.get(1).comentario().id());
+        }
+
+        @Test
+        @DisplayName("la entrada lleva prioridadElevada al llegar al umbral, y las elevadas van antes")
+        void prioridadElevadaEnLaCola() {
+            servicio = servicioConUmbral(2);
+            publicar("poco", "autor-1");
+            publicar("mucho", "autor-2");
+
+            servicio.reportar(PRODUCTO, "poco", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
+
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            assertEquals("mucho", entradas.get(0).comentario().id());
+            assertTrue(entradas.get(0).prioridadElevada());
+            assertEquals("poco", entradas.get(1).comentario().id());
+            assertFalse(entradas.get(1).prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado ninguna entrada de la cola es de prioridad elevada")
+        void colaSinUmbral() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(servicio.cola(null, null, 0, 20).entradas().get(0).prioridadElevada());
         }
 
         @Test
@@ -406,7 +486,7 @@ class FlujoDeModeracionTest {
                     comentarios, reportes, asientos,
                     (c, a) -> false,
                     asiento -> { },
-                    Clock.fixed(AHORA, ZoneOffset.UTC), 10);
+                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0);
 
             publicar("c-1", "autor-1");
             conAvisoCaido.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null);

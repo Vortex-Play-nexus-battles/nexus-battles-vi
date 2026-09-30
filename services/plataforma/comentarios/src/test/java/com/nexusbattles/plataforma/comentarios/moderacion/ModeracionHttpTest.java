@@ -155,18 +155,33 @@ class ModeracionHttpTest {
                     eq(CategoriaDeReporte.CONTENIDO_OFENSIVO), anyString()))
                     .thenReturn(new ServicioDeModeracion.Reportado(
                             reporte(CategoriaDeReporte.CONTENIDO_OFENSIVO),
-                            comentario(Comentario.Estado.EN_REVISION), 1L));
+                            comentario(Comentario.Estado.EN_REVISION), 1L, false));
 
             mvc.perform(reportarCon(comoJugadora()))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.id").value("rep-1"))
                     .andExpect(jsonPath("$.categoria").value("CONTENIDO_OFENSIVO"))
                     .andExpect(jsonPath("$.estadoDelComentario").value("EN_REVISION"))
-                    .andExpect(jsonPath("$.reportesTotales").value(1));
+                    .andExpect(jsonPath("$.reportesTotales").value(1))
+                    .andExpect(jsonPath("$.prioridadElevada").value(false));
 
             // La afirmacion que importa: "otro-cualquiera" no llego al servicio.
             verify(servicio).reportar(eq(PRODUCTO), eq(COMENTARIO), eq(UID_LYRA.toString()),
                     any(), anyString());
+        }
+
+        @Test
+        @DisplayName("el reporte que alcanza el umbral devuelve prioridadElevada=true")
+        void prioridadElevadaLlegaAlCliente() throws Exception {
+            when(servicio.reportar(anyString(), anyString(), anyString(), any(), anyString()))
+                    .thenReturn(new ServicioDeModeracion.Reportado(
+                            reporte(CategoriaDeReporte.CONTENIDO_OFENSIVO),
+                            comentario(Comentario.Estado.EN_REVISION), 3L, true));
+
+            mvc.perform(reportarCon(comoJugadora()))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.reportesTotales").value(3))
+                    .andExpect(jsonPath("$.prioridadElevada").value(true));
         }
 
         @Test
@@ -271,7 +286,7 @@ class ModeracionHttpTest {
             when(servicio.cola(eq(PRODUCTO), isNull(), eq(0), anyInt())).thenReturn(
                     new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
                             comentario(Comentario.Estado.EN_REVISION), 2,
-                            Map.of(CategoriaDeReporte.ACOSO, 2L), CUANDO)), 1, 0, 20));
+                            Map.of(CategoriaDeReporte.ACOSO, 2L), CUANDO, true)), 1, 0, 20));
 
             mvc.perform(get(RUTA_COLA)
                             .param("productoId", PRODUCTO)
@@ -282,6 +297,7 @@ class ModeracionHttpTest {
                     .andExpect(jsonPath("$.entradas[0].comentario.estado").value("EN_REVISION"))
                     .andExpect(jsonPath("$.entradas[0].comentario.marcado").value(false))
                     .andExpect(jsonPath("$.entradas[0].reportes").value(2))
+                    .andExpect(jsonPath("$.entradas[0].prioridadElevada").value(true))
                     .andExpect(jsonPath("$.entradas[0].porCategoria.ACOSO").value(2))
                     .andExpect(jsonPath("$.entradas[0].primerReporte").value(CUANDO.toString()));
         }
@@ -291,7 +307,7 @@ class ModeracionHttpTest {
         void filtroMarcado() throws Exception {
             when(servicio.cola(any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
-                            comentario(Comentario.Estado.PUBLICADO).conMarca(true), 0, Map.of(), CUANDO)),
+                            comentario(Comentario.Estado.PUBLICADO).conMarca(true), 0, Map.of(), CUANDO, false)),
                             1, 0, 20));
 
             mvc.perform(get(RUTA_COLA)
