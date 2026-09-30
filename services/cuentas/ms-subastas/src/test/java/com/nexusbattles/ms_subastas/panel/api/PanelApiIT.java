@@ -484,6 +484,9 @@ class PanelApiIT {
         assertEquals(Duration.ofDays(7), Duration.between(ganada, vence));
         assertEquals(1, avisosDe(subasta.getId(), TipoNotificacion.SUBASTA_GANADA).size());
         assertEquals(1, avisosDe(subasta.getId(), TipoNotificacion.SUBASTA_VENDIDA).size());
+        // HU-NOT-003: la confirmacion de creditos pasa la restriccion de la base (V11) y va al vendedor.
+        assertEquals(List.of(vendedor), avisosDe(subasta.getId(), TipoNotificacion.CREDITOS_RECIBIDOS).stream()
+                .map(NotificacionPendiente::getDestinatarioId).toList());
 
         HttpResponse<String> ajeno = pedir("POST", "/mis-subastas/pendientes/" + subasta.getId() + "/recogida", null,
                 token(jugadorConSaldo()));

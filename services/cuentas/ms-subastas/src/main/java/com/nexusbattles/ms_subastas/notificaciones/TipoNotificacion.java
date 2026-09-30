@@ -9,8 +9,9 @@ package com.nexusbattles.ms_subastas.notificaciones;
  * 7.7.8 y el encargo de B8 piden que llegue aunque el jugador no este
  * conectado: nueva puja (al vendedor), puja superada, victoria, cierre por
  * vencimiento, cancelacion y recordatorio. El resto (confirmaciones de lo que
- * el propio jugador acaba de hacer, cambios en subastas seguidas) va solo a la
- * bandeja, para no convertir cada puja en un correo.
+ * el propio jugador acaba de hacer, cambios en subastas seguidas, y la
+ * confirmacion de creditos al vendedor, que coincide con el correo de la
+ * venta) va solo a la bandeja, para no convertir cada puja en un correo.
  *
  * <p>Anadir uno exige anadirlo tambien a la restriccion
  * {@code chk_notificaciones_tipo} con una migracion.
@@ -41,7 +42,10 @@ public enum TipoNotificacion {
     /** 7.7.7 y 7.7.8 comprador: «Aviso de victoria en subasta». */
     SUBASTA_GANADA("¡Ganaste la subasta!", true),
 
-    /** 7.7.7 y 7.7.8 vendedor: finalizacion con resultado y creditos recibidos. */
+    /**
+     * 7.7.7 y 7.7.8 vendedor: finalizacion con su resultado. La confirmacion de
+     * los creditos recibidos va aparte, en {@link #CREDITOS_RECIBIDOS}.
+     */
     SUBASTA_VENDIDA("Vendiste tu subasta", true),
 
     /** 7.7.7 «Subasta sin ofertas: notificacion al vendedor del resultado». */
@@ -72,7 +76,16 @@ public enum TipoNotificacion {
     PENDIENTE_VENCIDO("Venció el plazo para recoger tu producto", true),
 
     /** El producto que nadie recogio volvio al vendedor (politica DEVOLVER_AL_VENDEDOR). */
-    PRODUCTO_DEVUELTO("Te devolvieron un producto que nadie recogió", false);
+    PRODUCTO_DEVUELTO("Te devolvieron un producto que nadie recogió", false),
+
+    /**
+     * 7.7.8 vendedor: «Confirmacion de transferencia de creditos recibidos»
+     * (RF-NOT-003). Sale al cerrar con ganador y en la compra inmediata,
+     * despues de que ms-finanzas movio los creditos al vendedor. Solo a la
+     * bandeja: el correo de la venta sale en el mismo instante y ya dice que
+     * los creditos estan en su saldo.
+     */
+    CREDITOS_RECIBIDOS("Créditos recibidos", false);
 
     private final String titulo;
     private final boolean conCorreo;
