@@ -271,7 +271,8 @@ Reglas nuevas en el dominio:
   simultaneas: gana una sola); cobra la penalizacion en ms-finanzas
   (`refId sub-cancelacion-{id}`, idempotente) y libera el producto; si algo
   falla despues, se compensan los dos.
-- **Recordatorio de 1 hora** a quien pujo o sigue la subasta, una sola vez.
+- **Recordatorio de 1 hora** a quien pujo o sigue la subasta y al vendedor
+  (RF-NOT-003: «a ambos»), una sola vez cada uno.
 
 Avisos (7.7.8): `notificaciones/AvisosDeSubasta` decide quien se entera de que;
 el outbox es idempotente por evento (id UUID v3 de la clave del hecho,

@@ -213,13 +213,18 @@ public class AvisosDeSubasta {
 
     /**
      * 7.7.8: «Aviso 1 hora antes de finalizar subastas en las que se participa»
-     * y «Recordatorio de subastas guardadas en lista de seguimiento». Al
-     * vendedor no: no participa.
+     * y «Recordatorio de subastas guardadas en lista de seguimiento».
+     *
+     * <p>Va «a ambos», vendedor y comprador (RF-NOT-003, ficha oficial): quien
+     * pujo o tiene una automatica, quien la sigue y el vendedor, una sola vez
+     * cada uno. El vendedor recibe su propio texto: la proxima puja valida no
+     * le sirve, porque no puede pujar en su propia subasta.
      */
     public void recordatorio(Subasta subasta) {
         String nombre = producto(subasta.getNombreProducto());
         Set<UUID> destinatarios = new LinkedHashSet<>(participantes(subasta.getId()));
         destinatarios.addAll(seguimientos.seguidoresDe(subasta.getId()));
+        // El vendedor recibe el suyo abajo, aunque tambien siga su propia subasta.
         destinatarios.remove(subasta.getVendedorId());
         String cuerpo = nombre + " cierra en menos de 1 hora. Oferta vigente: " + creditos(subasta.getOfertaVigente())
                 + " créditos; la próxima puja válida es de " + creditos(subasta.pujaMinimaSiguiente()) + ".";
@@ -227,6 +232,14 @@ public class AvisosDeSubasta {
             outbox.encolar(TipoNotificacion.RECORDATORIO_CIERRE, destinatario, subasta.getId(), "recordatorio",
                     titulo(TipoNotificacion.RECORDATORIO_CIERRE, subasta), cuerpo);
         }
+
+        String alVendedor = subasta.tieneOfertas()
+                ? "Tu subasta de " + nombre + " cierra en menos de 1 hora. Oferta vigente: "
+                        + creditos(subasta.getOfertaVigente()) + " créditos. Van " + subasta.getCantidadPujas()
+                        + " puja(s)."
+                : "Tu subasta de " + nombre + " cierra en menos de 1 hora y todavía no tiene ofertas.";
+        outbox.encolar(TipoNotificacion.RECORDATORIO_CIERRE, subasta.getVendedorId(), subasta.getId(), "recordatorio",
+                titulo(TipoNotificacion.RECORDATORIO_CIERRE, subasta), alVendedor);
     }
 
     /** 7.7.8: «Confirmacion de producto agregado al inventario», al recogerlo. */

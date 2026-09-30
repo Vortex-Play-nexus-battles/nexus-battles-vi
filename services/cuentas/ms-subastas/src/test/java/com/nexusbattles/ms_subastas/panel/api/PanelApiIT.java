@@ -586,7 +586,7 @@ class PanelApiIT {
     // --- recordatorio (7.7.8) ---------------------------------------------------------
 
     @Test
-    @DisplayName("1 hora antes del cierre avisa a quien pujo y a quien la sigue, nunca al vendedor, y una sola vez")
+    @DisplayName("1 hora antes del cierre avisa al vendedor, a quien pujo y a quien la sigue, una sola vez (RF-NOT-003)")
     void recordatorioDeCierre() throws Exception {
         UUID vendedor = jugadorConSaldo();
         UUID postor = jugadorConSaldo();
@@ -601,7 +601,7 @@ class PanelApiIT {
 
         List<UUID> avisados = avisosDe(subasta.getId(), TipoNotificacion.RECORDATORIO_CIERRE).stream()
                 .map(NotificacionPendiente::getDestinatarioId).sorted().toList();
-        assertEquals(List.of(postor, seguidor).stream().sorted().toList(), avisados);
+        assertEquals(List.of(vendedor, postor, seguidor).stream().sorted().toList(), avisados);
         assertNotNull(subastas.findById(subasta.getId()).orElseThrow().getRecordatorioEnviadoEn());
     }
 }

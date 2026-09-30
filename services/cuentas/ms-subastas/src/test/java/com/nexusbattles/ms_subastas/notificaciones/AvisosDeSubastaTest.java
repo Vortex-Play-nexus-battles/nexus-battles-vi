@@ -226,16 +226,39 @@ class AvisosDeSubastaTest {
     }
 
     @Test
-    @DisplayName("recordatorio de 1 hora: participantes y seguidores, nunca el vendedor")
+    @DisplayName("recordatorio de 1 hora: participantes, seguidores y el vendedor (RF-NOT-003, «a ambos»), una vez cada uno")
     void recordatorio() {
         avisos.recordatorio(subasta);
 
         List<UUID> destinatarios = destinatariosDe(TipoNotificacion.RECORDATORIO_CIERRE);
-        assertEquals(List.of(postor, superado, conAutomatica, seguidor), destinatarios);
-        assertFalse(destinatarios.contains(vendedor));
+        assertEquals(List.of(postor, superado, conAutomatica, seguidor, vendedor), destinatarios);
         assertTrue(encolados.getFirst().cuerpo().contains("la próxima puja válida es de 130"),
                 encolados.getFirst().cuerpo());
+        // El vendedor tambien sigue su subasta (ver preparar), pero recibe un solo aviso: el suyo.
+        Aviso alVendedor = encolados.getLast();
+        assertEquals(vendedor, alVendedor.destinatario());
+        assertEquals("Una subasta cierra en menos de 1 hora · Espada del Alba", alVendedor.titulo());
+        assertEquals("Tu subasta de Espada del Alba cierra en menos de 1 hora. Oferta vigente: 120 créditos. "
+                + "Van 2 puja(s).", alVendedor.cuerpo());
         assertTrue(encolados.stream().allMatch(a -> "recordatorio".equals(a.discriminante())));
+        cadaDestinatarioUnaVez();
+    }
+
+    @Test
+    @DisplayName("recordatorio de 1 hora sin ofertas: al vendedor le dice que todavia nadie pujo")
+    void recordatorioSinOfertas() {
+        subasta.setMejorPostorId(null);
+        subasta.setOfertaVigente(new BigDecimal("100"));
+        subasta.setCantidadPujas(0);
+        when(pujas.findDistinctJugadorIdBySubastaId(subasta.getId())).thenReturn(List.of());
+        when(automaticas.jugadoresConAutomatica(subasta.getId())).thenReturn(List.of());
+
+        avisos.recordatorio(subasta);
+
+        assertEquals(List.of(seguidor, vendedor), destinatariosDe(TipoNotificacion.RECORDATORIO_CIERRE));
+        assertEquals("Tu subasta de Espada del Alba cierra en menos de 1 hora y todavía no tiene ofertas.",
+                encolados.getLast().cuerpo());
+        cadaDestinatarioUnaVez();
     }
 
     @Test
