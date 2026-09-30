@@ -55,6 +55,20 @@ y permite limpiar el criterio para volver al inventario completo.
 El `.feature` vive junto a la prueba a proposito: los criterios de aceptacion
 **son** las pruebas, y tenerlos al lado hace visible cualquier divergencia.
 
+### Evidencia de los criterios de HU-INV-005
+
+| Criterio                                              | Prueba automatica                                                                                                                         | Resultado local (2026-09-30) |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| El heroe lleva como maximo dos armas.                 | `EquipamientoHeroeTest.limiteDeArmas`, `EquipamientoApiTest.rechazarTerceraArma` y el rechazo verificado en `vitrina.aceptacion.spec.js`. | Verde                        |
+| Las seis partes de armadura ocupan ranuras distintas. | `EquipamientoHeroeTest.seisRanurasDeArmadura`, `EquipamientoHeroeTest.ranuraDeArmaduraUnica` y `equipamiento-inventario.test.js`.         | Verde                        |
+| El heroe lleva como maximo dos items.                 | `EquipamientoHeroeTest.limiteDeItems` y la representacion de las diez ranuras en `equipamiento-inventario.test.js`.                       | Verde                        |
+| Desequipar libera la ranura para otro elemento.       | `EquipamientoHeroeTest.desequiparLiberaRanura` y el flujo real de equipar y desequipar en `vitrina.aceptacion.spec.js`.                   | Verde                        |
+
+Las pruebas de navegador siguen el flujo actual: abrir una ranura, elegir el
+objeto en el dialogo y pulsar la ranura ocupada para desequiparlo. Tambien
+comprueban que un rechazo conserva el equipo y se explica sin mostrar el
+codigo HTTP.
+
 ## Medidas verificadas a 1360 x 768
 
 | Escenario                | Tarjetas | Filas | Alto   | Scroll horizontal |
