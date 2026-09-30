@@ -52,8 +52,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -92,14 +94,21 @@ class ChatDeSalaIT {
     /** Doble HTTP de moderacion-sanciones: lista negra + consulta de sancion. */
     private static HttpServer moderacion;
     private static final AtomicBoolean SANCIONES_CAIDAS = new AtomicBoolean(false);
+    /** Cuerpos que recibio la lista negra, para comprobar el contexto (HU-COM-007). */
+    private static final Queue<String> VERIFICACIONES = new ConcurrentLinkedQueue<>();
 
     @BeforeAll
     static void levantarModeracionDePrueba() throws Exception {
         moderacion = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         moderacion.createContext("/api/v1/lista-negra/verificar", intercambio -> {
-            String texto = new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-            boolean aprobado = !texto.contains("prohibida");
-            responder(intercambio, 200, "{\"aprobado\":" + aprobado + (aprobado ? "" : ",\"motivo\":\"termino prohibido\"") + "}");
+            String solicitud = new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            VERIFICACIONES.add(solicitud);
+            boolean aprobado = !solicitud.contains("prohibida");
+            // Forma 2.0.x: accion siempre; al rechazar, ademas categoria y coincidencias.
+            responder(intercambio, 200, aprobado
+                    ? "{\"aprobado\":true,\"accion\":\"PERMITIR\",\"coincidencias\":[]}"
+                    : "{\"aprobado\":false,\"accion\":\"BLOQUEAR\",\"motivo\":\"El mensaje no esta permitido.\","
+                            + "\"categoria\":\"OFENSIVO\",\"coincidencias\":[\"prohibida\"]}");
         });
         moderacion.createContext("/api/v1/sanciones/usuarios/", intercambio -> {
             if (SANCIONES_CAIDAS.get()) {
@@ -158,6 +167,7 @@ class ChatDeSalaIT {
     @BeforeEach
     void elInventarioDejaPasar() {
         SANCIONES_CAIDAS.set(false);
+        VERIFICACIONES.clear();
         Mockito.when(heroes.consultar(ArgumentMatchers.any()))
                 .thenReturn(EstadoDelHeroe.disponible(new HeroeDeCombate("h-1", "Sombra de Vael", null, 7, 140, 140)));
     }
@@ -261,7 +271,9 @@ class ChatDeSalaIT {
                 () -> assertTrue(mensaje.contains("\"texto\":\"vamos con todo\""), mensaje),
                 () -> assertTrue(mensaje.contains("\"id\":\"" + ID_ANFITRION + "\""), mensaje),
                 () -> assertTrue(mensaje.contains("\"apodo\":\"anfitrion\""), mensaje),
-                () -> assertEquals(1, historial.ultimos(Canal.deSala(idSala), 50).size(), "queda en el historial"));
+                () -> assertEquals(1, historial.ultimos(Canal.deSala(idSala), 50).size(), "queda en el historial"),
+                () -> assertTrue(VERIFICACIONES.stream().anyMatch(v -> v.contains("\"contexto\":\"CHAT_SALA\"")),
+                        "la lista negra recibe el contexto del chat de sala: " + VERIFICACIONES));
     }
 
     @Test
@@ -318,5 +330,25 @@ class ChatDeSalaIT {
         assertAll(
                 () -> assertTrue(rechazo.contains("contenido-bloqueado"), rechazo),
                 () -> assertNull(canal.poll(2, TimeUnit.SECONDS)));
+    }
+
+    @Test
+    @DisplayName("HU-COM-007: un logro con un termino prohibido no se publica ni queda en el historial")
+    void elLogroPasaPorLaListaNegra() throws Exception {
+        UUID idSala = crearSala();
+        StompSession anfitrion = conectar(ANFITRION);
+        BlockingQueue<String> canal = suscribirse(anfitrion, Canal.deSala(idSala).destino(), true);
+        BlockingQueue<String> colaPrivada = suscribirse(anfitrion, "/usuario/cola/salas", false);
+
+        anfitrion.send("/app/salas/" + idSala + "/chat",
+                "{\"texto\":\"lo logre\",\"logro\":{\"mision\":\"mision-7\",\"titulo\":\"palabra prohibida\"}}"
+                        .getBytes(StandardCharsets.UTF_8));
+
+        String rechazo = colaPrivada.poll(10, TimeUnit.SECONDS);
+        assertNotNull(rechazo, "el rechazo tiene que volver por la cola privada");
+        assertAll(
+                () -> assertTrue(rechazo.contains("contenido-bloqueado"), rechazo),
+                () -> assertNull(canal.poll(2, TimeUnit.SECONDS), "nada debe salir al canal"),
+                () -> assertEquals(0, historial.ultimos(Canal.deSala(idSala), 50).size()));
     }
 }

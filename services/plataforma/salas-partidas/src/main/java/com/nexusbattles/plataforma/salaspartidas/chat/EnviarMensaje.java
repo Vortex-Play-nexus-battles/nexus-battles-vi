@@ -19,6 +19,11 @@ import java.util.UUID;
  * Nada se entrega sin verificar: si el filtro no contesta, el mensaje se
  * bloquea y se le dice al autor que reintente, que es la postcondicion de
  * RF-COM-007 aplicada al chat.
+ *
+ * <p>El contenido es todo lo que se publica: el texto y, si se comparte un
+ * logro (CA-02), su mision y su titulo. Cada uno se verifica por separado,
+ * porque unidos en un solo texto el final de uno y el principio del otro
+ * podrian formar un termino que ninguno contiene (HU-COM-007).
  */
 public class EnviarMensaje {
 
@@ -44,18 +49,35 @@ public class EnviarMensaje {
         if (sanciones.tieneSancionActiva(autor.id())) {
             throw new JugadorSilenciado();
         }
-        Veredicto veredicto = filtro.verificar(limpio);
-        if (veredicto == Veredicto.SENALADO) {
-            throw new ContenidoBloqueado();
-        }
-        if (veredicto == Veredicto.SIN_VERIFICAR) {
-            throw new FiltroNoDisponible();
+        verificarContenido(limpio, canal);
+        if (logro != null) {
+            verificarContenido(logro.mision(), canal);
+            verificarContenido(logro.titulo(), canal);
         }
         MensajeDeChat mensaje = new MensajeDeChat(UUID.randomUUID(), canal, autor,
                 logro == null ? Tipo.MENSAJE : Tipo.LOGRO, limpio, logro, reloj.instant());
         historial.guardar(mensaje);
         publicador.publicar(mensaje);
         return mensaje;
+    }
+
+    /**
+     * Un texto que se va a publicar. Solo LIMPIO pasa: SENALADO se bloquea, y
+     * cualquier otra respuesta —SIN_VERIFICAR, o ninguna— no se da por limpia.
+     * Un campo vacio del logro no tiene nada que verificar.
+     */
+    private void verificarContenido(String contenido, Canal canal) {
+        if (contenido == null || contenido.isBlank()) {
+            return;
+        }
+        Veredicto veredicto = filtro.verificar(contenido, canal);
+        if (veredicto == Veredicto.LIMPIO) {
+            return;
+        }
+        if (veredicto == Veredicto.SENALADO) {
+            throw new ContenidoBloqueado();
+        }
+        throw new FiltroNoDisponible();
     }
 
     private static String validar(String texto) {
