@@ -258,6 +258,15 @@ export function accionesDe(torneo, uid) {
       motivo: `Ya estás inscrito con «${equipo.nombre}» (posición ${equipo.posicion}).`,
     };
   }
+  // CA-03 — un equipo registrado que no se inscribió antes de que se llenara
+  // el cupo ya no tiene sitio: ofrecerle «Inscribir» solo llevaba al rechazo.
+  if (torneo.equiposInscritos >= torneo.cupos) {
+    return {
+      crearEquipo: false,
+      inscribir: false,
+      motivo: `Cupo agotado: «${equipo.nombre}» ya no puede inscribirse.`,
+    };
+  }
   return {
     crearEquipo: false,
     inscribir: true,
@@ -352,6 +361,29 @@ export function faseDe(torneo) {
     default:
       return '';
   }
+}
+
+/**
+ * Las fechas del torneo que publica el contrato (CA-01 de HU-TOR-008), en el
+ * orden en que pasan. Solo las que ya existen: el inicio y el fin llegan
+ * nulos hasta que ocurren, y cancelar también fija el fin.
+ *
+ * @param {object} torneo esquema `Torneo`
+ * @returns {string[]}
+ */
+export function fechasDe(torneo) {
+  const fechas = [`Publicado el ${fechaHora(torneo.creadoEn)}`];
+  if (torneo.estado === 'INSCRIPCIONES_ABIERTAS') {
+    fechas.push(`Inscripciones hasta ${fechaHora(torneo.inscripcionesCierranEn)}`);
+  }
+  if (torneo.iniciadoEn) {
+    fechas.push(`Empezó el ${fechaHora(torneo.iniciadoEn)}`);
+  }
+  if (torneo.finalizadoEn) {
+    const verbo = torneo.estado === 'CANCELADO' ? 'Cancelado' : 'Terminó';
+    fechas.push(`${verbo} el ${fechaHora(torneo.finalizadoEn)}`);
+  }
+  return fechas;
 }
 
 export function tarjetaDeEquipo(torneo, equipo, uid) {
@@ -520,6 +552,10 @@ export function situacionDeEquipo(torneo, equipo) {
       : 'Registrado, falta inscribirlo';
   }
   if (torneo.estado === 'EN_CURSO') {
+    // Un equipo que no llegó a inscribirse no está en el árbol: no «sigue en juego».
+    if (!equipo.inscrito) {
+      return 'No llegó a inscribirse';
+    }
     return equipo.derrotas > 0
       ? 'Sigue en juego, en la llave de segunda oportunidad'
       : 'Sigue en juego, sin derrotas';
@@ -766,7 +802,15 @@ export function panelDeMiTorneo(torneo, equipo, uid) {
     } else if (torneo.estado === 'CANCELADO') {
       texto = 'El torneo se canceló.';
     } else if (!equipo.inscrito) {
-      texto = 'Inscribe a tu equipo para entrar en el árbol.';
+      // Solo se ofrece inscribirse mientras se puede: con el torneo en curso,
+      // o con el cupo lleno, ya no hay forma de entrar en el árbol.
+      if (torneo.estado === 'EN_CURSO') {
+        texto = 'Tu equipo no llegó a inscribirse, así que no juega en este torneo.';
+      } else if (torneo.equiposInscritos >= torneo.cupos) {
+        texto = 'El cupo se llenó antes de que tu equipo se inscribiera.';
+      } else {
+        texto = 'Inscribe a tu equipo para entrar en el árbol.';
+      }
     }
     bloqueProximo.append(h('p', { clase: 't-meta', texto }));
   }
@@ -993,6 +1037,10 @@ export function montarTorneos(
     zonaDetalle.dataset.estado = torneo.estado;
     zonaDetalle.appendChild(nodo('h2', undefined, torneo.nombre));
     zonaDetalle.appendChild(nodo('p', 't-cuerpo', resumenDe(torneo)));
+    // CA-01 de HU-TOR-008: el detalle dice sus fechas, no solo la tarjeta.
+    const fechas = nodo('p', 't-meta', fechasDe(torneo).join(' · '));
+    fechas.dataset.zona = 'fechas';
+    zonaDetalle.appendChild(fechas);
     if (torneo.campeonEquipoId) {
       const campeon = nodo(
         'p',

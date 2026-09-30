@@ -15,6 +15,7 @@ import {
   textoDelPremio,
   distintivoDeTorneo,
   faseDe,
+  fechasDe,
   nombreDeLlave,
   nombreDeRonda,
   panelDeMiTorneo,
@@ -30,6 +31,7 @@ import {
   resumenDe,
   rutaDeSalaDelEncuentro,
 } from './torneos.js';
+import { fechaHora } from '../../comun/ui/formato.js';
 
 const UID = '11111111-1111-1111-1111-111111111111';
 const OTRO = '22222222-2222-2222-2222-222222222222';
@@ -113,6 +115,43 @@ describe('presentacion', () => {
     expect(
       accionesDe(torneo({ equipos: [equipo({ inscrito: true, posicion: 2 })] }), UID).motivo,
     ).toMatch(/posición 2/);
+  });
+
+  test('accionesDe: con el cupo lleno, un equipo registrado sin inscribir ya no puede inscribirse (CA-03)', () => {
+    expect(accionesDe(torneo({ equiposInscritos: 8, equipos: [equipo()] }), UID)).toEqual({
+      crearEquipo: false,
+      inscribir: false,
+      motivo: 'Cupo agotado: «Los Valientes» ya no puede inscribirse.',
+    });
+  });
+
+  test('fechasDe dice las fechas que ya existen, en el orden en que pasan (CA-01)', () => {
+    const publicado = `Publicado el ${fechaHora('2026-10-01T10:00:00Z')}`;
+    expect(fechasDe(torneo())).toEqual([
+      publicado,
+      `Inscripciones hasta ${fechaHora('2026-10-08T10:00:00Z')}`,
+    ]);
+    expect(fechasDe(torneo({ estado: 'EN_CURSO', iniciadoEn: '2026-10-09T15:00:00Z' }))).toEqual([
+      publicado,
+      `Empezó el ${fechaHora('2026-10-09T15:00:00Z')}`,
+    ]);
+    expect(
+      fechasDe(
+        torneo({
+          estado: 'FINALIZADO',
+          iniciadoEn: '2026-10-09T15:00:00Z',
+          finalizadoEn: '2026-10-10T18:00:00Z',
+        }),
+      ),
+    ).toEqual([
+      publicado,
+      `Empezó el ${fechaHora('2026-10-09T15:00:00Z')}`,
+      `Terminó el ${fechaHora('2026-10-10T18:00:00Z')}`,
+    ]);
+    // Cancelar tambien fija el fin, y se dice como lo que es.
+    expect(fechasDe(torneo({ estado: 'CANCELADO', finalizadoEn: '2026-10-05T12:00:00Z' }))).toEqual(
+      [publicado, `Cancelado el ${fechaHora('2026-10-05T12:00:00Z')}`],
+    );
   });
 
   test('encuentrosDe filtra por llave y ordena por número', () => {
@@ -273,6 +312,11 @@ describe('vista', () => {
     await asentar();
     const detalle = document.querySelector('[data-zona="detalle"]');
     expect(detalle.hidden).toBe(false);
+    // CA-01 — el detalle dice sus fechas.
+    expect(detalle.querySelector('[data-zona="fechas"]').textContent).toBe(fechasDe(t).join(' · '));
+    expect(detalle.querySelector('[data-zona="fechas"]').textContent).toMatch(
+      /^Publicado el .+ · Inscripciones hasta .+/,
+    );
     expect(detalle.querySelector('[data-zona="arbol"]').textContent).toMatch(/se genera al cerrar/);
     expect(detalle.querySelector('[data-zona="administracion"]')).toBeNull();
 
@@ -666,6 +710,27 @@ describe('UXC-8 — el torneo del jugador', () => {
     const abierto = torneo({ equipos: [A] });
     expect(panelDeMiTorneo(abierto, A, UID).textContent).toContain('El árbol se genera');
     expect(situacionDeEquipo(abierto, A)).toMatch(/posición 1/);
+  });
+
+  test('un equipo que no llegó a inscribirse no «sigue en juego» ni se le pide inscribirse (CA-03)', () => {
+    const tardio = equipo({ id: 'd', nombre: 'Los Tardíos' });
+
+    const enCursoSinEl = torneo({
+      estado: 'EN_CURSO',
+      equiposInscritos: 8,
+      equipos: [tardio],
+      encuentros: [],
+    });
+    expect(situacionDeEquipo(enCursoSinEl, tardio)).toBe('No llegó a inscribirse');
+    const panel = panelDeMiTorneo(enCursoSinEl, tardio, UID);
+    expect(panel.textContent).not.toContain('Sigue en juego');
+    expect(panel.textContent).toContain('no llegó a inscribirse, así que no juega');
+    expect(panel.textContent).not.toContain('Inscribe a tu equipo');
+
+    const lleno = torneo({ equiposInscritos: 8, equipos: [tardio] });
+    const panelLleno = panelDeMiTorneo(lleno, tardio, UID);
+    expect(panelLleno.textContent).toContain('El cupo se llenó');
+    expect(panelLleno.textContent).not.toContain('Inscribe a tu equipo');
   });
 
   test('en el árbol, los encuentros de tu equipo se marcan con texto', () => {
