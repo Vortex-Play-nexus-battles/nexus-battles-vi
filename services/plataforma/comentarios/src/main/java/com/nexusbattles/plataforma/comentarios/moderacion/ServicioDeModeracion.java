@@ -16,9 +16,13 @@ import java.util.UUID;
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
+import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -61,6 +65,17 @@ public class ServicioDeModeracion {
 
     /** Contrato 1.4.0: {@code textoNuevo} de 1 a 2000 caracteres. */
     static final int TEXTO_NUEVO_MAXIMO = 2000;
+
+    /** Contrato 1.7.0: el historial del autor admite paginas de hasta 100, el mismo tope que la cola. */
+    static final int TAMANO_MAXIMO_DEL_HISTORIAL = 100;
+
+    /**
+     * Del mas reciente al mas antiguo y, a igual fecha, por id: sin el segundo
+     * criterio dos comentarios del mismo instante podrian salir en dos paginas
+     * o en ninguna.
+     */
+    private static final Sort ORDEN_DEL_HISTORIAL =
+            Sort.by(Sort.Order.desc("fechaPublicacion"), Sort.Order.desc("id"));
 
     /** Los estados que se pueden seguir mirando: un ELIMINADO ya no tiene seguimiento. */
     private static final Set<Comentario.Estado> ESTADOS_CON_SEGUIMIENTO = EnumSet.of(
@@ -286,6 +301,33 @@ public class ServicioDeModeracion {
                 asientos.findByComentarioIdOrderByFechaAsc(comentarioId));
     }
 
+    /**
+     * El historial de comentarios de un autor, del mas reciente al mas antiguo —
+     * RF-COM-005, contrato 1.7.0. Solo lectura y con datos de este servicio.
+     *
+     * <p>Incluye los comentarios en cualquier estado, tambien OCULTO y ELIMINADO
+     * (los retirados por el propio autor incluidos), cada uno con su estado. La
+     * pagina y el orden los resuelve la base, no una lista en memoria. Un autor
+     * sin comentarios es un historial vacio con total 0, no un error.
+     *
+     * <p>Los parametros fuera de rango se corrigen en vez de rechazarse: la
+     * pagina negativa pasa a 0, el tamano menor que 1 a 1 y el que pasa de
+     * {@link #TAMANO_MAXIMO_DEL_HISTORIAL} se recorta: el cliente no decide
+     * cuanto carga el servidor.
+     */
+    @Transactional(readOnly = true)
+    public Historial historialDelAutor(String autorId, int pagina, int tamano) {
+        int paginaEfectiva = Math.max(pagina, 0);
+        int tamanoEfectivo = Math.min(Math.max(tamano, 1), TAMANO_MAXIMO_DEL_HISTORIAL);
+
+        Page<ResumenDeComentario> leida = comentarios.findByAutorId(
+                autorId, PageRequest.of(paginaEfectiva, tamanoEfectivo, ORDEN_DEL_HISTORIAL));
+
+        String apodo = leida.isEmpty() ? null : leida.getContent().get(0).apodoAutor();
+        return new Historial(autorId, apodo, leida.getContent(), leida.getTotalElements(),
+                paginaEfectiva, tamanoEfectivo);
+    }
+
     // ------------------------------------------------------------ RF-COM-008
 
     /**
@@ -374,6 +416,11 @@ public class ServicioDeModeracion {
 
     public record Detalle(Comentario comentario, List<RegistroDeReporte> reportes,
             List<AsientoDeModeracion> historial) {
+    }
+
+    /** {@code apodoAutor} es el del comentario mas reciente de la pagina; nulo si no hay ninguno. */
+    public record Historial(String autorId, String apodoAutor, List<ResumenDeComentario> comentarios,
+            long total, int pagina, int tamano) {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {
