@@ -19,6 +19,7 @@ import {
   accionesDesde,
   consultarCola,
   consultarDetalle,
+  historialDelAutor,
   imagenParaModeracion,
   reportarComentario,
   resolverComentario,
@@ -248,5 +249,53 @@ describe('la tabla de acciones', () => {
       'CONTENIDO_INAPROPIADO',
       'VIOLACION_DE_DERECHOS',
     ]);
+  });
+});
+
+describe('HU-COM-005: el historial de comentarios del autor', () => {
+  test('cuelga de la cola de moderacion, no del prefijo de metricas', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ comentarios: [] }));
+    await historialDelAutor('aut/1', {}, { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url.startsWith('/api/v1/comentarios/moderacion/autores/aut%2F1/comentarios?')).toBe(
+      true,
+    );
+    expect(url.startsWith('/api/v1/moderacion')).toBe(false);
+    expect(opciones.method).toBe('GET');
+  });
+
+  test('por omision pide la pagina 0 de 20, como el contrato', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ comentarios: [] }));
+    await historialDelAutor('aut-1', undefined, { fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toContain('pagina=0');
+    expect(fetchImpl.mock.calls[0][0]).toContain('tamano=20');
+  });
+
+  test('lleva la pagina y el tamano que se piden', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ comentarios: [] }));
+    await historialDelAutor('aut-1', { pagina: 3, tamano: 50 }, { fetchImpl });
+    expect(fetchImpl.mock.calls[0][0]).toContain('pagina=3');
+    expect(fetchImpl.mock.calls[0][0]).toContain('tamano=50');
+  });
+
+  test('devuelve el cuerpo tal cual lo manda el servicio', async () => {
+    const cuerpo = {
+      autorId: 'aut-1',
+      comentarios: [{ id: 'c-1' }],
+      total: 1,
+      pagina: 0,
+      tamano: 20,
+    };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(cuerpo));
+    await expect(historialDelAutor('aut-1', {}, { fetchImpl })).resolves.toEqual(cuerpo);
+  });
+
+  test.each([401, 403, 503])('un %i sale como ErrorDeApi con su estado', async (status) => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ status }, { ok: false, status }));
+    await expect(historialDelAutor('aut-1', {}, { fetchImpl })).rejects.toMatchObject({
+      name: 'ErrorDeApi',
+      estado: status,
+    });
   });
 });
