@@ -2,6 +2,7 @@ package nexus.combate;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -17,26 +18,33 @@ public final class ClienteCatalogoBotinHttp implements CatalogoBotin {
     private final URI baseUri;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final TokenDeServicio token;
 
     public ClienteCatalogoBotinHttp(URI baseUri) {
         this(baseUri, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
     }
 
     public ClienteCatalogoBotinHttp(URI baseUri, HttpClient httpClient) {
+        this(baseUri, httpClient, null);
+    }
+
+    public ClienteCatalogoBotinHttp(URI baseUri, HttpClient httpClient, TokenDeServicio token) {
         this.baseUri = Objects.requireNonNull(baseUri, "La URL de productos es obligatoria");
         this.httpClient = Objects.requireNonNull(httpClient, "El cliente HTTP es obligatorio");
         this.objectMapper = new ObjectMapper();
+        this.token = token;
     }
 
     @Override
     public ProductoBotin consultar(String productoId) {
         exigirTexto(productoId, "productoId");
-        HttpRequest peticion = HttpRequest.newBuilder(
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(
                         construirUri("/api/v1/productos/" + productoId))
                 .GET()
                 .header("Accept", "application/json")
-                .timeout(Duration.ofSeconds(5))
-                .build();
+                .timeout(Duration.ofSeconds(5));
+        autenticar(constructor);
+        HttpRequest peticion = constructor.build();
         HttpResponse<String> respuesta = enviar(peticion, "consultar el producto " + productoId);
         if (respuesta.statusCode() == 404) {
             throw new IntegracionBotinException("El producto " + productoId + " no existe");
@@ -76,6 +84,12 @@ public final class ClienteCatalogoBotinHttp implements CatalogoBotin {
             return new URI(baseUri.getScheme(), baseUri.getAuthority(), ruta, null, null);
         } catch (URISyntaxException excepcion) {
             throw new IntegracionBotinException("No se pudo construir la URL de productos", excepcion);
+        }
+    }
+
+    private void autenticar(HttpRequest.Builder peticion) {
+        if (token != null) {
+            peticion.header("Authorization", "Bearer " + token.portador());
         }
     }
 

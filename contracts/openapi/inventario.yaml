@@ -36,7 +36,7 @@ info:
   # omision (1 y 0); la mision solo los hace avanzar. Equipar o desequipar un
   # heroe en mision responde 409. Aditivo: operaciones nuevas, propiedades
   # opcionales y una respuesta 409 mas; menor.
-  version: 1.6.0
+  version: 1.7.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -104,6 +104,11 @@ info:
     por esa ejecucion, la experiencia ya se sumo y se devuelve el heroe tal
     cual. Las dos operaciones son exclusivas del servicio de misiones
     (credencial de servicio con azp = misiones).
+
+    1.7.0 (HU-JUE-011) incorpora una transferencia por lote para los objetos
+    equipados que pierden los heroes derrotados. El motor de combate selecciona
+    un unico objeto por derrotado y el inventario mueve la misma instancia al
+    ganador, libera la ranura y permite reintentar la operacion sin duplicarla.
 servers:
   - url: http://localhost:8080
     description: Entorno local de desarrollo
@@ -818,6 +823,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 
+  /api/v1/inventario/transferencias-combate:
+    post:
+      summary: Transfiere al equipo ganador los objetos perdidos en combate
+      operationId: transferirEquipoPerdidoEnCombate
+      description: >
+        HU-JUE-011. Recibe todas las perdidas de una partida en una sola
+        operacion. Cada elemento debe pertenecer al propietario indicado y
+        estar equipado en el heroe derrotado. Solo admite armas, armaduras e
+        items; el inventario almacenado y los objetos epicos no se transfieren.
+        La misma Idempotency-Key puede reintentarse: si una escritura quedo a
+        medias, la operacion conserva una sola instancia en el ganador y
+        termina de retirarla del derrotado.
+      security:
+        - BearerInterno: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudTransferenciaCombate"
+      responses:
+        "200":
+          description: Transferencia completada o reintento de una operacion ya aplicada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultadoTransferenciaCombate"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/IdentidadRequerida"
+        "403":
+          $ref: "#/components/responses/AccesoDenegado"
+        "404":
+          $ref: "#/components/responses/ElementoNoEncontrado"
+        "409":
+          description: El elemento no pertenece al origen o no esta equipado en el heroe derrotado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "503":
+          $ref: "#/components/responses/PersistenciaNoDisponible"
+
 components:
   securitySchemes:
     TokenDeAcceso:
@@ -839,6 +890,45 @@ components:
         operaciones y, desde 1.6.0, misiones en las de bloqueo por mision y en
         la consulta por id. Cada operacion comprueba el `azp` que le toca.
   schemas:
+    SolicitudTransferenciaCombate:
+      type: object
+      additionalProperties: false
+      required: [transferencias]
+      properties:
+        transferencias:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/MovimientoCombate"
+    MovimientoCombate:
+      type: object
+      additionalProperties: false
+      required: [elementoId, propietarioOrigenId, heroeOrigenId, propietarioDestinoId]
+      properties:
+        elementoId:
+          type: string
+          minLength: 1
+        propietarioOrigenId:
+          type: string
+          minLength: 1
+        heroeOrigenId:
+          type: string
+          minLength: 1
+        propietarioDestinoId:
+          type: string
+          minLength: 1
+    ResultadoTransferenciaCombate:
+      type: object
+      additionalProperties: false
+      required: [operacionId, elementosTransferidos]
+      properties:
+        operacionId:
+          type: string
+        elementosTransferidos:
+          type: array
+          items:
+            type: string
     OrigenDeEntrega:
       type: string
       enum: [PAQUETE_INICIAL, COMPRA, SUBASTA, COFRE, PREMIO_TORNEO, MISION, RECOMPENSA, ADMINISTRACION]

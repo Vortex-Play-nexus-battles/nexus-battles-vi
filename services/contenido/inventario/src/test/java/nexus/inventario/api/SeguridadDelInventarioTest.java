@@ -1,6 +1,7 @@
 package nexus.inventario.api;
 
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import nexus.inventario.aplicacion.GestionarInventario;
 import nexus.inventario.configuracion.IdentidadDelLlamador;
 import nexus.inventario.configuracion.SeguridadConfig;
 import nexus.inventario.aplicacion.PaginaInventario;
+import nexus.inventario.aplicacion.TransferirEquipoPorCombate;
 import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.EquipamientoHeroe;
 import nexus.inventario.dominio.TipoElementoInventario;
@@ -49,7 +51,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * (salas-partidas al verificar el heroe de cada participante); un jugador es
  * quien dice su token, diga lo que diga la cabecera.
  */
-@WebMvcTest(controllers = {InventarioController.class, EquipamientoController.class})
+@WebMvcTest(controllers = {
+        InventarioController.class,
+        EquipamientoController.class,
+        TransferenciaCombateController.class
+})
 @Import({SeguridadConfig.class, IdentidadDelLlamador.class, DecodificadorDePrueba.class, ManejadorDeErrores.class})
 class SeguridadDelInventarioTest {
 
@@ -69,6 +75,8 @@ class SeguridadDelInventarioTest {
     private ConsultarElementoInventario consultaElemento;
     @MockitoBean
     private GestionarEquipamiento equipamiento;
+    @MockitoBean
+    private TransferirEquipoPorCombate transferenciasCombate;
 
     private static PaginaInventario paginaVacia() {
         return new PaginaInventario(List.of(), 0, 16, 0, 0, true);
@@ -260,5 +268,36 @@ class SeguridadDelInventarioTest {
                 .andExpect(status().isForbidden());
 
         verifyNoInteractions(consultaElemento);
+    }
+
+    @Test
+    @DisplayName("HU-JUE-011: solo un servicio puede transferir el equipo perdido")
+    void soloServicioTransfiereEquipoDeCombate() throws Exception {
+        String cuerpo = """
+                {"transferencias":[{"elementoId":"objeto-1","propietarioOrigenId":"perdedor",
+                "heroeOrigenId":"heroe-1","propietarioDestinoId":"ganador"}]}
+                """;
+        when(transferenciasCombate.transferir(eq("partida-1"), anyList())).thenReturn(List.of(
+                new ElementoInventario("objeto-1", "producto-1", TipoElementoInventario.ITEM, "Objeto")));
+
+        mvc.perform(post("/api/v1/inventario/transferencias-combate")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + EMISOR.tokenDeJugador("lyra", UUID.randomUUID()))
+                        .header("Idempotency-Key", "partida-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cuerpo))
+                .andExpect(status().isForbidden());
+
+        mvc.perform(post("/api/v1/inventario/transferencias-combate")
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + EMISOR.tokenDeServicio("motor-combate"))
+                        .header("Idempotency-Key", "partida-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(cuerpo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.operacionId").value("partida-1"))
+                .andExpect(jsonPath("$.elementosTransferidos[0]").value("objeto-1"));
+
+        verify(transferenciasCombate).transferir(eq("partida-1"), anyList());
     }
 }
