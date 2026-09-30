@@ -78,9 +78,15 @@ export const ACCIONES_SIN_CAMBIO_DE_ESTADO = Object.freeze(['EDITAR', 'MARCAR', 
  */
 export const ACCIONES_INTERNAS = Object.freeze(['MARCAR', 'DESMARCAR']);
 
-/** Motivos de rechazo que enumera el contrato 1.3.0 en `ProblemDetail.motivo`. */
+/**
+ * Motivos de rechazo que enumera el contrato 1.3.0 en `ProblemDetail.motivo`.
+ *
+ * `REPORTE_INVALIDO` (400 de reportar) lo emite el servicio pero el contrato
+ * todavía no lo enumera: la vista lo reconoce y, además, decide por `estado`.
+ */
 export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_DUPLICADO: 'REPORTE_DUPLICADO',
+  REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
 });
