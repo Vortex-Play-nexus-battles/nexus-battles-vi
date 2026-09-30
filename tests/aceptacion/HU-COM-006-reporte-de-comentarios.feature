@@ -26,8 +26,8 @@ Caracteristica: Reporte de comentarios inapropiados por los jugadores
     Y aparece en la cola de moderacion
 
   # CA-02 depende del umbral de denuncias, cuyo valor es una decision abierta
-  # con el Product Owner: aqui no se escribe ninguna cifra. Su implementacion
-  # esta en el PR #772 y el contrato en el PR #774.
+  # con el Product Owner: aqui no se escribe ninguna cifra. Sin umbral
+  # configurado (valor 0) el escenario no se activa.
   Escenario: Un reporte que alcanza el umbral eleva la prioridad en la cola
     Dado un umbral de denuncias configurado y un comentario al que le falta un reporte para alcanzarlo
     Cuando un jugador envia el reporte que lo alcanza
