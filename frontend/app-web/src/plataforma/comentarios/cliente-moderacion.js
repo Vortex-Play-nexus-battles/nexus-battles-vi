@@ -220,6 +220,32 @@ export async function consultarDetalle(
 }
 
 /**
+ * Los comentarios de un autor, del mas reciente al mas antiguo y en cualquier
+ * estado (HU-COM-005, comentarios.yaml 1.7.0). Solo roles de moderacion.
+ *
+ * Un autor sin comentarios es `200` con lista vacia y `total: 0`, no un 404.
+ *
+ * @param {string} autorId
+ * @param {{pagina?: number, tamano?: number}} [paginacion] `tamano` hasta 100
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{autorId: string, apodoAutor?: string, comentarios: object[],
+ *   total: number, pagina: number, tamano: number}>}
+ * @throws {ErrorDeApi} 401 sin sesion, 403 si el rol no modera
+ */
+export async function historialDelAutor(
+  autorId,
+  { pagina = 0, tamano = 20 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  return pedir(
+    `${rutaDeModeracion()}/autores/${encodeURIComponent(autorId)}/comentarios?${parametros}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
  * La decision — RF-COM-008. El motivo es obligatorio, incluida APROBAR: no se
  * archiva nada sin decir por que. Con EDITAR viaja ademas `textoNuevo`, el
  * texto que queda visible (1.5.0); en las demas acciones no se manda.
