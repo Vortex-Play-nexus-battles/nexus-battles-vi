@@ -7,11 +7,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Clock;
@@ -24,6 +26,7 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -107,6 +110,63 @@ class TicketSoporteAdminServiceTest {
         assertThat(atendido.getRespuesta()).isEqualTo("Ya quedo");
         assertThat(atendido.getAsignadoA()).isEqualTo("admin-1");
         assertThat(atendido.getActualizadoEn()).isEqualTo(AHORA);
+    }
+
+    // 1.3.9: el jugador solo puede tener un ticket abierto (indice de V6).
+    private static TicketSoporte resueltoConId(UUID id) {
+        TicketSoporte resuelto = ticket();
+        resuelto.atender(EstadoTicket.RESUELTO, "Ya quedo", null, false, AL_ABRIR);
+        ReflectionTestUtils.setField(resuelto, "id", id);
+        return resuelto;
+    }
+
+    @Test
+    void reabrirConOtroTicketAbiertoEs409YNoGuardaNada() {
+        UUID id = UUID.randomUUID();
+        TicketSoporte resuelto = resueltoConId(id);
+        when(tickets.findById(id)).thenReturn(Optional.of(resuelto));
+        when(tickets.existsByUidAndEstadoInAndIdNot(eq("uid-1"), anyCollection(), eq(id))).thenReturn(true);
+
+        assertThatThrownBy(() -> servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false))
+            .isInstanceOf(OtroTicketAbiertoException.class);
+
+        assertThat(resuelto.getEstado()).isEqualTo(EstadoTicket.RESUELTO);
+        verify(tickets, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void reabrirSinOtroAbiertoLoPasaAEnProceso() {
+        UUID id = UUID.randomUUID();
+        when(tickets.findById(id)).thenReturn(Optional.of(resueltoConId(id)));
+        when(tickets.existsByUidAndEstadoInAndIdNot(eq("uid-1"), anyCollection(), eq(id))).thenReturn(false);
+        when(tickets.saveAndFlush(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        assertThat(servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false).getEstado())
+            .isEqualTo(EstadoTicket.EN_PROCESO);
+    }
+
+    // Si el jugador abre otro justo entre la revision y el guardado, la base
+    // lo frena con el indice unico: tambien es 409, nunca un 500.
+    @Test
+    void siElIndiceUnicoLoFrenaAlGuardarTambienEs409() {
+        UUID id = UUID.randomUUID();
+        when(tickets.findById(id)).thenReturn(Optional.of(resueltoConId(id)));
+        when(tickets.existsByUidAndEstadoInAndIdNot(eq("uid-1"), anyCollection(), eq(id))).thenReturn(false);
+        when(tickets.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk_tickets_soporte"));
+
+        assertThatThrownBy(() -> servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false))
+            .isInstanceOf(OtroTicketAbiertoException.class);
+    }
+
+    @Test
+    void unCambioQueNoReabreNoConsultaOtrosTickets() {
+        UUID id = UUID.randomUUID();
+        when(tickets.findById(id)).thenReturn(Optional.of(ticket()));
+        when(tickets.saveAndFlush(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false);
+
+        verify(tickets, never()).existsByUidAndEstadoInAndIdNot(any(), any(), any());
     }
 
     @Test

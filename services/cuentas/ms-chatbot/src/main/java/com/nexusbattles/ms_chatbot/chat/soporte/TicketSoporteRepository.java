@@ -19,6 +19,9 @@ public interface TicketSoporteRepository extends JpaRepository<TicketSoporte, UU
     /** Para responder 409 TICKET_ABIERTO antes de chocar con el indice unico. */
     boolean existsByUidAndEstadoIn(String uid, Collection<EstadoTicket> estados);
 
+    /** 1.3.9: al reabrir un ticket, si el jugador ya tiene OTRO abierto (409). */
+    boolean existsByUidAndEstadoInAndIdNot(String uid, Collection<EstadoTicket> estados, UUID id);
+
     /** Bandeja del administrador filtrada por estado. */
     Page<TicketSoporte> findByEstado(EstadoTicket estado, Pageable pagina);
 

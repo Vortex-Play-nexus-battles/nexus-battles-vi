@@ -92,7 +92,8 @@ class TicketSoporteServiceTest {
         assertThat(ticket.getContexto()).extracting(MensajeDeContexto::getRemitente)
             .containsExactly("USUARIO", "BOT");
         verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:" + UID);
-        verify(moderacion).verificar("  No entro  " + System.lineSeparator() + "Probe con clave123 y nada");
+        // La lista negra (otro servicio) recibe el texto YA redactado.
+        verify(moderacion).verificar("No entro" + System.lineSeparator() + "Probe con [REDACTADO] y nada");
     }
 
     @Test

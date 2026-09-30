@@ -269,6 +269,9 @@ test('textoDeFalloAlAtender por motivo y estado', () => {
   expect(
     textoDeFalloAlAtender(new ErrorDelChatbot({ motivo: 'TRANSICION_NO_PERMITIDA' }, 409)),
   ).toContain('no está permitido');
+  expect(
+    textoDeFalloAlAtender(new ErrorDelChatbot({ motivo: 'OTRO_TICKET_ABIERTO' }, 409)),
+  ).toContain('ya tiene otra solicitud abierta');
   expect(textoDeFalloAlAtender(new ErrorDelChatbot({ title: 'x' }, 404))).toContain('ya no existe');
   expect(textoDeFalloAlAtender(new ErrorDelChatbot({ title: 'x' }, 400))).toContain('2000');
   expect(textoDeFalloAlAtender(new ErrorDelChatbot(null, 0, { rutaFija: true }))).toContain(

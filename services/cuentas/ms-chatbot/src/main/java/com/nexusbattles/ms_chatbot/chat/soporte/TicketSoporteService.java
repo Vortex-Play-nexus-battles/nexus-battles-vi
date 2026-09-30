@@ -21,10 +21,14 @@ import java.util.Set;
 //   2. Limite de frecuencia: la MISMA regla y el mismo cupo que los mensajes
 //      (un ticket es un mensaje mas hacia el servicio). Ademas, solo puede
 //      haber uno abierto a la vez, lo que ya acota el abuso.
-//   3. Lista negra sobre asunto y mensaje (422 / 503), antes de guardar nada.
-//   4. Un solo ticket abierto por jugador (409 TICKET_ABIERTO). Lo garantiza
+//   3. Se redactan asunto y mensaje ANTES de todo lo demas: ni la lista negra
+//      (otro servicio) ni la base ven nunca una contrasena o una tarjeta.
+//   4. Lista negra sobre el asunto y el mensaje ya redactados (422 / 503),
+//      antes de guardar nada.
+//   5. Un solo ticket abierto por jugador (409 TICKET_ABIERTO). Lo garantiza
 //      tambien el indice unico parcial de V6 si llegan dos a la vez.
-//   5. Se guarda redactado: asunto, mensaje y el contexto de la conversacion.
+//   6. Se guarda lo redactado, con el contexto de la conversacion tambien
+//      redactado.
 //
 // No abre transaccion propia: la lista negra es HTTP y no debe retener una
 // conexion de la base; cada lectura y el guardado usan la suya.
@@ -57,14 +61,15 @@ public class TicketSoporteService {
     public TicketSoporte abrir(IdentidadDelChat identidad, Categoria categoria, String asunto, String mensaje) {
         exigirSesion(identidad);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
-        moderacion.verificar(asunto + System.lineSeparator() + mensaje);
+        String asuntoRedactado = redaccion.redactar(asunto.strip());
+        String mensajeRedactado = redaccion.redactar(mensaje.strip());
+        moderacion.verificar(asuntoRedactado + System.lineSeparator() + mensajeRedactado);
 
         if (tickets.existsByUidAndEstadoIn(identidad.uid(), ABIERTOS)) {
             throw new TicketAbiertoException();
         }
 
-        TicketSoporte ticket = TicketSoporte.abrir(identidad.uid(), categoria,
-            redaccion.redactar(asunto.strip()), redaccion.redactar(mensaje.strip()),
+        TicketSoporte ticket = TicketSoporte.abrir(identidad.uid(), categoria, asuntoRedactado, mensajeRedactado,
             contextoDe(identidad), reloj.instant());
         try {
             return tickets.saveAndFlush(ticket);

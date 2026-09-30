@@ -18,4 +18,13 @@ public class ManejadorErroresDeSoporte {
         problema.setProperty("motivo", "TRANSICION_NO_PERMITIDA");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problema);
     }
+
+    // 1.3.9: reabrir un ticket cuando el jugador ya tiene otro abierto.
+    @ExceptionHandler(OtroTicketAbiertoException.class)
+    public ResponseEntity<ProblemDetail> otroAbierto(OtroTicketAbiertoException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problema.setTitle("El jugador ya tiene otra solicitud abierta");
+        problema.setProperty("motivo", "OTRO_TICKET_ABIERTO");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(problema);
+    }
 }

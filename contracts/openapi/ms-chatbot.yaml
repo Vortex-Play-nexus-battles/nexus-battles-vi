@@ -103,7 +103,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.3.8
+  version: 1.3.9
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -113,6 +113,15 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.3.9 — tickets: reabrir con otro abierto y redaccion primero
+
+    * `PATCH /chatbot/admin/tickets/{ticketId}`: reabrir un ticket cuando
+      el jugador ya tiene otro abierto responde 409 con `motivo`
+      OTRO_TICKET_ABIERTO (antes, el indice unico daba un 500).
+    * `POST /chat/tickets`: el asunto y el mensaje se redactan ANTES de
+      pasar por la lista negra; ningun otro servicio los ve sin redactar.
+      Sin cambios de forma: compatible.
 
     ### 1.3.8 — publicacion programada de la candidata (7.4.10)
 
@@ -1401,7 +1410,11 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          description: El estado actual no permite ese cambio (`motivo` TRANSICION_NO_PERMITIDA).
+          description: |
+            El estado actual no permite ese cambio (`motivo`
+            TRANSICION_NO_PERMITIDA), o (1.3.9) se quiere reabrir el ticket y
+            el jugador ya tiene otro abierto (`motivo` OTRO_TICKET_ABIERTO):
+            solo puede tener uno a la vez.
           content:
             application/problem+json:
               schema:

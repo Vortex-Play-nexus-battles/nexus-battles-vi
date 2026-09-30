@@ -56,6 +56,10 @@ function distintivoDeEstado(estado) {
  * @returns {string}
  */
 export function textoDeFalloAlAtender(error) {
+  // ms-chatbot.yaml 1.3.9: el jugador solo puede tener una solicitud abierta.
+  if (error?.problema?.motivo === 'OTRO_TICKET_ABIERTO') {
+    return 'No se puede reabrir: este jugador ya tiene otra solicitud abierta. Atiende esa primero.';
+  }
   if (error?.problema?.motivo === 'TRANSICION_NO_PERMITIDA' || error?.estado === 409) {
     return 'Ese cambio no está permitido para el estado actual de la solicitud. Para marcarla como respondida hace falta una respuesta.';
   }

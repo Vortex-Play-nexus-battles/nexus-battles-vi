@@ -149,6 +149,34 @@ class TicketsAdminControllerTest {
             .andExpect(jsonPath("$.motivo").value("TRANSICION_NO_PERMITIDA"));
     }
 
+    // 1.3.9: reabrir cuando el jugador ya tiene otro abierto.
+    @Test
+    void reabrirConOtroAbiertoEs409ConSuMotivo() throws Exception {
+        UUID id = UUID.randomUUID();
+        when(servicio.atender(eq(id), any(), any(), any(), anyBoolean())).thenThrow(new OtroTicketAbiertoException());
+
+        mockMvc.perform(patch(RUTA + "/" + id).with(administrador())
+                .contentType("application/json")
+                .content("{\"estado\":\"EN_PROCESO\"}"))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("OTRO_TICKET_ABIERTO"));
+    }
+
+    // CORS no autoriza nada: quien atiende un ticket lo decide el backend.
+    @Test
+    void atenderSinTokenEs401YComoJugadorEs403() throws Exception {
+        String ruta = RUTA + "/" + UUID.randomUUID();
+        mockMvc.perform(patch(ruta)
+                .contentType("application/json")
+                .content("{\"estado\":\"CERRADO\"}"))
+            .andExpect(status().isUnauthorized());
+        mockMvc.perform(patch(ruta).with(jwt().authorities(new SimpleGrantedAuthority("ROLE_JUGADOR")))
+                .contentType("application/json")
+                .content("{\"estado\":\"CERRADO\"}"))
+            .andExpect(status().isForbidden());
+        verifyNoInteractions(servicio);
+    }
+
     @Test
     void unJugadorNoEntraYSinTokenTampoco() throws Exception {
         mockMvc.perform(get(RUTA).with(jwt().authorities(new SimpleGrantedAuthority("ROLE_JUGADOR"))))

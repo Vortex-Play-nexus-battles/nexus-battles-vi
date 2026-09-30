@@ -77,6 +77,17 @@ class CorsTest {
             .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS, containsString("PATCH")));
     }
 
+    // El PATCH del panel no abre la puerta a otros sitios: los origenes siguen
+    // en la lista explicita.
+    @Test
+    void consultaPreviaDelPanel_conPatchDesdeUnOrigenNoPermitido_seRechaza() throws Exception {
+        mockMvc.perform(options("/chatbot/admin/tickets/00000000-0000-0000-0000-000000000001")
+                .header(HttpHeaders.ORIGIN, "http://sitio-ajeno.example")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "PATCH")
+                .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+            .andExpect(status().isForbidden());
+    }
+
     @Test
     void consultaPrevia_desdeUnOrigenNoPermitido_seRechaza() throws Exception {
         mockMvc.perform(options("/chat/mensajes")
