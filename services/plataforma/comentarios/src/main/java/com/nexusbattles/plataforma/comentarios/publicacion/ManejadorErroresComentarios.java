@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import java.net.URI;
+import java.util.Map;
 
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -207,6 +208,24 @@ public class ManejadorErroresComentarios {
         ProblemDetail problema =
                 ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problema.setProperty("motivo", "TRANSICION_INVALIDA");
+        return problema;
+    }
+
+    /**
+     * HU-COM-008, CA-02: el lote no se aplico y no cambio nada. Mismo 409 que
+     * {@code TRANSICION_INVALIDA}, con {@code fallidos} para que el moderador
+     * vea cuales comentarios lo impidieron y por que.
+     */
+    @ExceptionHandler(ServicioDeModeracion.LoteRechazado.class)
+    public ProblemDetail manejarLoteRechazado(ServicioDeModeracion.LoteRechazado ex) {
+        ProblemDetail problema =
+                ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problema.setProperty("motivo", "LOTE_RECHAZADO");
+        problema.setProperty("fallidos", ex.fallidos().stream()
+                .map(f -> Map.of("comentarioId", f.comentarioId(),
+                        "motivo", f.motivo().name(),
+                        "detalle", f.detalle()))
+                .toList());
         return problema;
     }
 

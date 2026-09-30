@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -320,29 +321,103 @@ public class ServicioDeModeracion {
                 .map(RegistroDeComentario::aDominio)
                 .orElseThrow(() -> new ComentarioNoEncontrado(comentarioId));
 
-        Comentario.Estado anterior = comentario.estado();
         if (!accion.aplicableA(comentario)) {
             // Es el caso que CA-03 nombra: otro moderador lo resolvio mientras
             // este miraba la pantalla. Nada cambia.
             throw new TransicionInvalida(accion, comentario);
         }
 
-        Comentario resultante = accion.aplicarA(comentario, textoNuevo);
-        comentarios.save(RegistroDeComentario.desde(resultante));
-
-        boolean edita = accion == AccionDeModeracion.EDITAR;
-        AsientoDeModeracion asiento = new AsientoDeModeracion(
-                UUID.randomUUID().toString(), comentarioId, moderadorId, apodoModerador,
-                accion, motivo, anterior, resultante.estado(), Instant.now(reloj),
-                edita ? comentario.texto() : null,
-                edita ? resultante.texto() : null,
-                ipOrigen);
-        asientos.save(asiento);
+        Aplicado aplicado = aplicar(comentario, accion, moderadorId, apodoModerador, motivo,
+                textoNuevo, ipOrigen);
+        Comentario resultante = aplicado.comentario();
+        AsientoDeModeracion asiento = aplicado.asiento();
 
         boolean avisado = accion.seAvisaAlAutor() && aviso.notificar(resultante, asiento);
         auditoria.registrar(asiento);
 
         return new Resuelto(resultante, asiento, avisado);
+    }
+
+    /**
+     * Guarda el estado nuevo y su asiento. Lo comparten {@link #resolver} y
+     * {@link #aplicarLote}: quien llama ya comprobo {@code aplicableA}.
+     */
+    private Aplicado aplicar(Comentario comentario, AccionDeModeracion accion, String moderadorId,
+            String apodoModerador, String motivo, String textoNuevo, String ipOrigen) {
+        Comentario.Estado anterior = comentario.estado();
+        Comentario resultante = accion.aplicarA(comentario, textoNuevo);
+        comentarios.save(RegistroDeComentario.desde(resultante));
+
+        boolean edita = accion == AccionDeModeracion.EDITAR;
+        AsientoDeModeracion asiento = new AsientoDeModeracion(
+                UUID.randomUUID().toString(), comentario.id(), moderadorId, apodoModerador,
+                accion, motivo, anterior, resultante.estado(), Instant.now(reloj),
+                edita ? comentario.texto() : null,
+                edita ? resultante.texto() : null,
+                ipOrigen);
+        asientos.save(asiento);
+        return new Aplicado(resultante, asiento);
+    }
+
+    /**
+     * La decision sobre varios comentarios, todo o nada (HU-COM-008, CA-02).
+     *
+     * <p>VALIDACION PRIMERO: se cargan todos y se comprueba cada uno antes de
+     * escribir nada; si alguno no existe o la accion no le aplica se lanza
+     * {@link LoteRechazado} con TODOS los que fallan, y no queda ni un cambio
+     * ni un asiento. Si todos valen se aplican con la misma logica que
+     * {@link #resolver}, en la misma transaccion: si algo falla a medias, la
+     * transaccion entera se deshace.
+     *
+     * <p>No avisa ni audita: eso es de {@link ModeracionEnLote}, y solo
+     * despues de que esta transaccion haya confirmado. EDITAR no entra (cada
+     * comentario necesitaria su propio texto). Quien llama valida la forma de
+     * la peticion (maximo, vacios, blancos); aqui se protege lo que rompe el
+     * dominio: accion, motivo y ids repetidos, que dejarian dos asientos sobre
+     * el mismo estado leido.
+     *
+     * @return un resultado por id, en el orden pedido
+     */
+    @Transactional
+    public List<Aplicado> aplicarLote(List<String> comentarioIds, String moderadorId,
+            String apodoModerador, AccionDeModeracion accion, String motivo, String ipOrigen) {
+
+        if (accion == null || accion == AccionDeModeracion.EDITAR) {
+            throw new DecisionIncompleta("El lote admite cualquier accion salvo EDITAR");
+        }
+        exigirMotivo(motivo);
+        if (new HashSet<>(comentarioIds).size() != comentarioIds.size()) {
+            // Dos asientos sobre el mismo estado leido: el segundo mentiria sobre el anterior.
+            throw new DecisionIncompleta("El lote trae comentarios repetidos");
+        }
+
+        Map<String, Comentario> existentes = new LinkedHashMap<>();
+        for (RegistroDeComentario registro : comentarios.findAllById(comentarioIds)) {
+            Comentario c = registro.aDominio();
+            existentes.put(c.id(), c);
+        }
+
+        List<Fallo> fallidos = new ArrayList<>();
+        for (String id : comentarioIds) {
+            Comentario c = existentes.get(id);
+            if (c == null) {
+                fallidos.add(new Fallo(id, Fallo.Motivo.COMENTARIO_NO_ENCONTRADO,
+                        "No existe el comentario " + id));
+            } else if (!accion.aplicableA(c)) {
+                fallidos.add(new Fallo(id, Fallo.Motivo.TRANSICION_INVALIDA,
+                        TransicionInvalida.explicar(accion, c)));
+            }
+        }
+        if (!fallidos.isEmpty()) {
+            throw new LoteRechazado(fallidos);
+        }
+
+        List<Aplicado> aplicados = new ArrayList<>();
+        for (String id : comentarioIds) {
+            aplicados.add(aplicar(existentes.get(id), accion, moderadorId, apodoModerador, motivo,
+                    null, ipOrigen));
+        }
+        return aplicados;
     }
 
     private static void exigirMotivo(String motivo) {
@@ -377,6 +452,15 @@ public class ServicioDeModeracion {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {
+    }
+
+    /** Lo que queda guardado de un comentario del lote, antes de avisar y auditar. */
+    public record Aplicado(Comentario comentario, AsientoDeModeracion asiento) {
+    }
+
+    /** Un comentario que impide el lote, y por que. */
+    public record Fallo(String comentarioId, Motivo motivo, String detalle) {
+        public enum Motivo { COMENTARIO_NO_ENCONTRADO, TRANSICION_INVALIDA }
     }
 
     // ------------------------------------------------------------- excepciones
@@ -420,12 +504,26 @@ public class ServicioDeModeracion {
         }
     }
 
+    /** Al menos un comentario del lote no existe o no admite la accion: no se cambio ninguno (409). */
+    public static class LoteRechazado extends RuntimeException {
+        private final List<Fallo> fallidos;
+
+        public LoteRechazado(List<Fallo> fallidos) {
+            super("No se aplico el lote: " + fallidos.size() + " comentario(s) no se pueden resolver");
+            this.fallidos = List.copyOf(fallidos);
+        }
+
+        public List<Fallo> fallidos() {
+            return fallidos;
+        }
+    }
+
     public static class TransicionInvalida extends RuntimeException {
         public TransicionInvalida(AccionDeModeracion accion, Comentario actual) {
             super(explicar(accion, actual));
         }
 
-        private static String explicar(AccionDeModeracion accion, Comentario actual) {
+        static String explicar(AccionDeModeracion accion, Comentario actual) {
             if (accion == AccionDeModeracion.MARCAR && actual.marcado()) {
                 return "El comentario ya esta marcado";
             }

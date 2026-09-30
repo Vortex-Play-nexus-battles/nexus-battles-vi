@@ -70,6 +70,7 @@ imagen, 3 por comentario, limpieza de pendientes a las 24 h).
 | `PRODUCTOS_TIMEOUT_CONEXION`, `PRODUCTOS_TIMEOUT_LECTURA` | Tiempos del cliente del catálogo (1 s y 2 s por omisión) |
 | `NOTIFICACIONES_URL`, `AUDITORIA_URL` | Aviso al autor y auditoría de las decisiones de moderación (fail-open) |
 | `COMENTARIOS_FORMATOS_IMAGEN` | Subconjunto de `jpg,png,webp` admitido (los tres por omisión) |
+| `COMENTARIOS_MAXIMO_POR_LOTE` | Máximo de comentarios por lote de moderación (50 por omisión; D-35) |
 
 ## Pendientes declarados
 

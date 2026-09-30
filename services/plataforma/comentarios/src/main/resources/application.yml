@@ -61,6 +61,11 @@ comentarios:
   # una linea AUDITORIA_MODERACION (regla 6).
   auditoria:
     url: ${AUDITORIA_URL:}
+  # HU-COM-008, CA-02 — cuantos comentarios admite un lote de moderacion. El
+  # contrato 1.8.0 fija 50 como tope; bajarlo es una decision de operacion
+  # (D-35), subirlo no: el contrato seguiria rechazando mas de 50.
+  moderacion:
+    maximo-por-lote: ${COMENTARIOS_MAXIMO_POR_LOTE:50}
   # B3 — el catalogo de productos (contenido/productos), por su API publica:
   # GET {url}/api/v1/productos/{id}. Publicar, calificar y leer el resumen de
   # un producto que no existe responde 404; si el catalogo no contesta, las

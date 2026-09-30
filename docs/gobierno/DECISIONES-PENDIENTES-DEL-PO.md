@@ -109,6 +109,12 @@ provisional**; los otros dos son convenciones del equipo, revisables.
 | **D-33** · equipo | **Qué es la «ubicación geográfica».** | La moneda sale de la región de `navigator.languages` (Colombia y cualquier otra región → COP; Estados Unidos, Puerto Rico, Ecuador, El Salvador y Panamá → USD; zona euro → EUR), y el jugador la cambia en el selector (se recuerda en el navegador). No se pide la geolocalización. **Convención técnica, revisable.** | `frontend/app-web/src/cuentas/tienda-moneda.js` |
 | **D-34** · equipo | **Reglas operativas de la compra que la ficha no fija.** | Una compra a la vez por jugador (409 `compra-en-curso`); una orden PENDIENTE (la pasarela no respondió) caduca a los 30 min; lo comprado sale del carrito al cobrar; el asiento en ms-finanzas se escribe al entregar, porque su libro no tiene reembolsos; una orden compensada no libera el tiraje reservado (productos 1.4.0 no tiene esa operación); tras un cobro, los pasos pendientes se reintentan sin rendirse, con espera creciente hasta 15 min. **Convención técnica, revisable.** | `tienda.ordenes.*` en `application.properties` de ms-ecommerce; README del servicio. |
 
+### HU-COM-008 — moderación en lote (#522)
+
+| # | Decisión | Qué hace hoy | Dónde se cambia |
+|---|---|---|---|
+| **D-35** · equipo | **Reglas del lote de moderación (CA-02).** La ficha pide «aplicación en lote ... sin dejar estados a medias, mostrando resultado» y no fija nada más. | **Todo o nada**: si un solo comentario no existe o no admite la acción, no cambia ninguno y el 409 `LOTE_RECHAZADO` lista todos los fallidos. **Máximo 50** comentarios por lote, configurable (solo a la baja: el contrato fija 50). **EDITAR queda fuera** (cada comentario necesita su `textoNuevo`). **Una misma acción y un mismo motivo** para todo el lote. **Los avisos a los autores se cortan tras 3 fallos seguidos** (un éxito reinicia la cuenta): el resto del lote queda con `autorNotificado: false`, para que un servicio de avisos colgado no alargue la respuesta de un lote ya aplicado. **Limitación conocida:** no hay bloqueo ni versión optimista sobre los comentarios, así que dos moderadores a la vez sobre el mismo comentario pueden pisarse, igual que hoy con `/decision`; cerrarlo pide un `@Version` con migración Flyway y se trata aparte. | `COMENTARIOS_MAXIMO_POR_LOTE` (`comentarios.moderacion.maximo-por-lote`); contrato `comentarios.yaml` 1.8.0 |
+
 ### B7 — combate contractual, recompensas y cofres (27 de septiembre de 2026)
 
 BACKEND-09. Lo que la sección 6 y el §7.6 del documento **fijan** (fórmulas,

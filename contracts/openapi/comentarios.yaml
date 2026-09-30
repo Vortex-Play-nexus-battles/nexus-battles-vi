@@ -74,7 +74,13 @@ info:
     declarara. Es menor: solo anade un campo y documenta un error existente.
     `prioridadElevada` es `false` mientras no haya umbral configurado; el valor
     del umbral lo fija el Product Owner y no se escribe aqui.
-  version: 1.6.0
+
+    1.8.0 (HU-COM-008, CA-02, #522): `POST /comentarios/moderacion/decisiones`
+    aplica una misma accion y un mismo motivo a varios comentarios de una vez,
+    todo o nada: si uno solo no se puede resolver, no cambia ninguno y el 409
+    `LOTE_RECHAZADO` dice cuales fallaron y por que. Es menor: anade una ruta
+    y no toca `/{commentId}/decision`.
+  version: 1.8.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -564,6 +570,75 @@ paths:
             application/problem+json:
               schema:
                 $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/decisiones:
+    post:
+      summary: Resolver varios comentarios en lote (HU-COM-008, CA-02)
+      operationId: resolverComentariosEnLote
+      description: >
+        Aplica UNA accion con UN motivo a todos los comentarios de
+        `comentarioIds`. Es todo o nada: primero se comprueba cada comentario y,
+        si alguno no existe o la accion no vale desde su estado actual, se
+        rechaza el lote entero (409 `LOTE_RECHAZADO`) sin cambiar ninguno ni
+        dejar asiento. Si todos valen, se aplican juntos, cada uno con su
+        asiento (quien, cuando, motivo, estado anterior y nuevo, IP de origen).
+
+
+        El moderador sale del token, nunca del cuerpo. Las reglas de cada
+        accion son las de `POST /comentarios/moderacion/{commentId}/decision`;
+        EDITAR queda fuera del lote porque cada comentario necesita su propio
+        `textoNuevo`. El maximo de comentarios por lote (50 por omision) es
+        configurable en el servicio; el contrato fija 50 como tope.
+
+
+        Una vez confirmado el lote se avisa a cada autor (salvo MARCAR y
+        DESMARCAR) y se audita cada asiento; ambos son fail-open, y
+        `autorNotificado` de cada resultado dice si el aviso salio.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionEnLoteRequest"
+      responses:
+        "200":
+          description: Todos los comentarios resueltos, en el orden pedido.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionEnLoteResponse"
+        "400":
+          description: >
+            Falta la accion o es EDITAR, el motivo no tiene de 3 a 500
+            caracteres, la lista esta vacia, trae mas de 50 ids, repite un id o
+            trae un id en blanco.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: >
+            `motivo: LOTE_RECHAZADO`. Al menos un comentario no existe o no
+            admite la accion; no se cambio ninguno. `fallidos` los lista todos
+            (no solo el primero) en el orden pedido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/LoteRechazado"
 
   /products/{productId}/rating:
     get:
@@ -1182,6 +1257,101 @@ components:
             servicio de avisos caido no puede impedir que se retire un
             comentario ofensivo.
 
+    DecisionEnLoteRequest:
+      type: object
+      required:
+        - accion
+        - motivo
+        - comentarioIds
+      properties:
+        accion:
+          type: string
+          description: Cualquiera de `AccionDeModeracion` salvo EDITAR.
+          enum:
+            - APROBAR
+            - OCULTAR
+            - ELIMINAR
+            - RESTAURAR
+            - MARCAR
+            - DESMARCAR
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 500
+          description: El mismo para todo el lote; queda en cada asiento.
+        comentarioIds:
+          type: array
+          minItems: 1
+          maxItems: 50
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            pattern: "\\S"
+          description: Sin repetidos ni ids en blanco.
+
+    ResultadoDeLote:
+      type: object
+      required:
+        - comentario
+        - asiento
+        - autorNotificado
+      properties:
+        comentario:
+          $ref: "#/components/schemas/ComentarioResponse"
+        asiento:
+          $ref: "#/components/schemas/AsientoDeModeracion"
+        autorNotificado:
+          type: boolean
+          description: Como en `DecisionResponse`; `false` no invalida la decision.
+
+    DecisionEnLoteResponse:
+      type: object
+      required:
+        - total
+        - resultados
+      properties:
+        total:
+          type: integer
+          minimum: 1
+        resultados:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultadoDeLote"
+
+    FalloDeLote:
+      type: object
+      required:
+        - comentarioId
+        - motivo
+        - detalle
+      properties:
+        comentarioId:
+          type: string
+        motivo:
+          type: string
+          enum:
+            - COMENTARIO_NO_ENCONTRADO
+            - TRANSICION_INVALIDA
+        detalle:
+          type: string
+
+    LoteRechazado:
+      description: >
+        ProblemDetail con `motivo: LOTE_RECHAZADO` y la lista de comentarios
+        que impidieron aplicar el lote.
+      allOf:
+        - $ref: "#/components/schemas/ProblemDetail"
+        - type: object
+          required:
+            - fallidos
+          properties:
+            fallidos:
+              type: array
+              minItems: 1
+              items:
+                $ref: "#/components/schemas/FalloDeLote"
+
     EntradaDeCola:
       type: object
       required:
@@ -1345,6 +1515,7 @@ components:
             - REPORTE_DUPLICADO
             - LIMITE_DE_REPORTES
             - TRANSICION_INVALIDA
+            - LOTE_RECHAZADO
           description: >
             Presente en los rechazos que el cliente tiene que distinguir sin
             interpretar el texto del detalle. `AUTOR_SILENCIADO` en el 403 de

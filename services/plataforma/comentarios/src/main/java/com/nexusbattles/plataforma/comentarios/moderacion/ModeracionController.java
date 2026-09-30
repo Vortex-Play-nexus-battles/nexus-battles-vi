@@ -55,9 +55,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ModeracionController {
 
     private final ServicioDeModeracion servicio;
+    private final ModeracionEnLote enLote;
 
-    public ModeracionController(ServicioDeModeracion servicio) {
+    public ModeracionController(ServicioDeModeracion servicio, ModeracionEnLote enLote) {
         this.servicio = servicio;
+        this.enLote = enLote;
     }
 
     /**
@@ -99,7 +101,38 @@ public class ModeracionController {
         return ResponseEntity.status(HttpStatus.OK).body(DecisionResponse.desde(resuelto));
     }
 
+    /**
+     * La decision sobre varios comentarios, todo o nada (contrato 1.8.0,
+     * HU-COM-008 CA-02). El moderador sale del token, como en {@code /decision}.
+     */
+    @PostMapping("/decisiones")
+    public DecisionEnLoteResponse resolverEnLote(
+            @AuthenticationPrincipal Jwt moderador,
+            @RequestBody DecisionEnLoteRequest peticion,
+            HttpServletRequest origen) {
+
+        return DecisionEnLoteResponse.desde(enLote.resolver(
+                peticion.comentarioIds(),
+                IdentidadDelToken.idDe(moderador).toString(),
+                IdentidadDelToken.apodoDe(moderador),
+                peticion.accion(),
+                peticion.motivo(),
+                OrigenDeLaPeticion.ipDe(origen)));
+    }
+
     // ------------------------------------------------------------------ DTOs
+
+    /** {@code DecisionEnLoteRequest} (1.8.0): una accion y un motivo para todos los ids. */
+    public record DecisionEnLoteRequest(AccionDeModeracion accion, String motivo, List<String> comentarioIds) {
+    }
+
+    public record DecisionEnLoteResponse(int total, List<DecisionResponse> resultados) {
+
+        static DecisionEnLoteResponse desde(ModeracionEnLote.Lote lote) {
+            return new DecisionEnLoteResponse(lote.total(),
+                    lote.resultados().stream().map(DecisionResponse::desde).toList());
+        }
+    }
 
     /** {@code DecisionRequest}; {@code textoNuevo} solo cuenta con EDITAR (1.4.0). */
     public record DecisionRequest(AccionDeModeracion accion, String motivo, String textoNuevo) {

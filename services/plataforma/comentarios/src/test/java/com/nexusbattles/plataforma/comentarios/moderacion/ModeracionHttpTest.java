@@ -109,6 +109,10 @@ class ModeracionHttpTest {
     @MockitoBean
     private ServicioDeModeracion servicio;
 
+    /** El controlador lo necesita para /decisiones; aqui no se ejerce (ver ModeracionEnLoteHttpTest). */
+    @MockitoBean
+    private ModeracionEnLote enLote;
+
     // ------------------------------------------------------------- utilidades
 
     private static Comentario comentario(Comentario.Estado estado) {
