@@ -130,10 +130,21 @@ class TicketSoporteServiceTest {
     @Test
     void siDosLleganALaVezElIndiceUnicoDejaPasarUno() {
         when(conversaciones.findByIdentificadorSesion(anyString())).thenReturn(Optional.empty());
-        when(tickets.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk_tickets_soporte"));
+        when(tickets.saveAndFlush(any())).thenThrow(ErroresDeLaBase.violacionDelIndiceDeV6());
 
         assertThatThrownBy(() -> servicio.abrir(jugador, Categoria.FAQ_GENERAL, "a", "b"))
             .isInstanceOf(TicketAbiertoException.class);
+    }
+
+    // Revision de plataforma: solo el indice de V6 es 409. Un texto que no cabe
+    // en su columna no es "ya tienes un ticket abierto".
+    @Test
+    void otroErrorDeLaBaseNoSeConvierteEnTicketAbierto() {
+        when(conversaciones.findByIdentificadorSesion(anyString())).thenReturn(Optional.empty());
+        DataIntegrityViolationException otroError = ErroresDeLaBase.textoMasLargoQueLaColumna();
+        when(tickets.saveAndFlush(any())).thenThrow(otroError);
+
+        assertThatThrownBy(() -> servicio.abrir(jugador, Categoria.FAQ_GENERAL, "a", "b")).isSameAs(otroError);
     }
 
     @Test

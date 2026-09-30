@@ -26,7 +26,8 @@ import java.util.Set;
 //   4. Lista negra sobre el asunto y el mensaje ya redactados (422 / 503),
 //      antes de guardar nada.
 //   5. Un solo ticket abierto por jugador (409 TICKET_ABIERTO). Lo garantiza
-//      tambien el indice unico parcial de V6 si llegan dos a la vez.
+//      tambien el indice unico parcial de V6 si llegan dos a la vez; solo ese
+//      error de la base es 409, los demas se relanzan (IndiceDeTicketAbierto).
 //   6. Se guarda lo redactado, con el contexto de la conversacion tambien
 //      redactado.
 //
@@ -73,9 +74,13 @@ public class TicketSoporteService {
             contextoDe(identidad), reloj.instant());
         try {
             return tickets.saveAndFlush(ticket);
-        } catch (DataIntegrityViolationException carrera) {
-            // Dos tickets a la vez: el indice unico parcial de V6 deja pasar uno.
-            throw new TicketAbiertoException();
+        } catch (DataIntegrityViolationException error) {
+            // Dos tickets a la vez: el indice unico parcial de V6 deja pasar
+            // uno. Cualquier otro error de la base se relanza tal cual.
+            if (IndiceDeTicketAbierto.loIncumple(error)) {
+                throw new TicketAbiertoException();
+            }
+            throw error;
         }
     }
 

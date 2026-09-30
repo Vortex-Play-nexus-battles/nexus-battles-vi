@@ -152,10 +152,24 @@ class TicketSoporteAdminServiceTest {
         UUID id = UUID.randomUUID();
         when(tickets.findById(id)).thenReturn(Optional.of(resueltoConId(id)));
         when(tickets.existsByUidAndEstadoInAndIdNot(eq("uid-1"), anyCollection(), eq(id))).thenReturn(false);
-        when(tickets.saveAndFlush(any())).thenThrow(new DataIntegrityViolationException("uk_tickets_soporte"));
+        when(tickets.saveAndFlush(any())).thenThrow(ErroresDeLaBase.violacionDelIndiceDeV6());
 
         assertThatThrownBy(() -> servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false))
             .isInstanceOf(OtroTicketAbiertoException.class);
+    }
+
+    // Revision de plataforma: una respuesta mas larga que la columna no sale
+    // como "el jugador ya tiene otro ticket abierto".
+    @Test
+    void otroErrorDeLaBaseAlGuardarSeRelanzaTalCual() {
+        UUID id = UUID.randomUUID();
+        when(tickets.findById(id)).thenReturn(Optional.of(resueltoConId(id)));
+        when(tickets.existsByUidAndEstadoInAndIdNot(eq("uid-1"), anyCollection(), eq(id))).thenReturn(false);
+        DataIntegrityViolationException otroError = ErroresDeLaBase.textoMasLargoQueLaColumna();
+        when(tickets.saveAndFlush(any())).thenThrow(otroError);
+
+        assertThatThrownBy(() -> servicio.atender(id, EstadoTicket.EN_PROCESO, null, null, false))
+            .isSameAs(otroError);
     }
 
     @Test

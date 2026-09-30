@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.soporte;
 
+import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import org.junit.jupiter.api.DisplayName;
@@ -32,6 +33,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * ms-chatbot.yaml 1.3.9 — tickets de soporte contra PostgreSQL real, con V6
  * y su indice unico parcial: un jugador solo puede tener un ticket ABIERTO o
  * EN_PROCESO. Reabrir uno cuando ya tiene otro abierto es 409, no un 500.
+ * Solo ese indice es 409: otro error de la base (un texto que no cabe en su
+ * columna) se relanza tal cual.
  */
 @Testcontainers
 @SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
@@ -48,6 +51,12 @@ class TicketsDeSoporteIT {
 
     @Autowired
     private TicketSoporteRepository tickets;
+
+    @Autowired
+    private TicketSoporteService servicio;
+
+    @Autowired
+    private TicketSoporteAdminService servicioAdmin;
 
     // La lista negra es otro servicio: aqui aprueba todo.
     @MockitoBean
@@ -68,13 +77,38 @@ class TicketsDeSoporteIT {
     }
 
     @Test
-    @DisplayName("la base no deja que un jugador tenga dos tickets abiertos")
+    @DisplayName("la base no deja que un jugador tenga dos tickets abiertos, y el error se reconoce como el de V6")
     void elIndiceUnicoImpideDosAbiertos() {
         String uid = UUID.randomUUID().toString();
         tickets.saveAndFlush(nuevo(uid, "Uno"));
 
         assertThatThrownBy(() -> tickets.saveAndFlush(nuevo(uid, "Otro")))
-            .isInstanceOf(DataIntegrityViolationException.class);
+            .isInstanceOfSatisfying(DataIntegrityViolationException.class,
+                error -> assertThat(IndiceDeTicketAbierto.loIncumple(error)).isTrue());
+    }
+
+    // Revision de plataforma: un texto que no cabe en su columna tambien es un
+    // error de integridad, pero no es "ya tienes un ticket abierto".
+    @Test
+    @DisplayName("un asunto mas largo que su columna no sale como TICKET_ABIERTO")
+    void unAsuntoMuyLargoNoEsTicketAbierto() {
+        IdentidadDelChat jugador = IdentidadDelChat.usuario(UUID.randomUUID(), "token");
+        String asuntoDemasiadoLargo = "x".repeat(151);
+
+        assertThatThrownBy(() -> servicio.abrir(jugador, Categoria.SOPORTE_TECNICO, asuntoDemasiadoLargo, "Detalle"))
+            .isInstanceOfSatisfying(DataIntegrityViolationException.class,
+                error -> assertThat(IndiceDeTicketAbierto.loIncumple(error)).isFalse());
+    }
+
+    @Test
+    @DisplayName("una respuesta mas larga que su columna no sale como OTRO_TICKET_ABIERTO")
+    void unaRespuestaMuyLargaNoEsOtroTicketAbierto() {
+        TicketSoporte abierto = tickets.saveAndFlush(nuevo(UUID.randomUUID().toString(), "Abierto"));
+        String respuestaDemasiadoLarga = "x".repeat(2001);
+
+        assertThatThrownBy(() -> servicioAdmin.atender(abierto.getId(), null, respuestaDemasiadoLarga, null, false))
+            .isInstanceOfSatisfying(DataIntegrityViolationException.class,
+                error -> assertThat(IndiceDeTicketAbierto.loIncumple(error)).isFalse());
     }
 
     @Test

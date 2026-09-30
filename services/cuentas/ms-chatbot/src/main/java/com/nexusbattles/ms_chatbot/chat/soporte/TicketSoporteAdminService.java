@@ -71,9 +71,14 @@ public class TicketSoporteAdminService {
         TicketSoporte guardado;
         try {
             guardado = tickets.saveAndFlush(ticket);
-        } catch (DataIntegrityViolationException carrera) {
-            // El jugador abrio otro ticket justo entre la revision y el guardado.
-            throw new OtroTicketAbiertoException();
+        } catch (DataIntegrityViolationException error) {
+            // El jugador abrio otro ticket justo entre la revision y el
+            // guardado. Cualquier otro error de la base (p. ej. una respuesta
+            // mas larga que la columna) se relanza tal cual.
+            if (IndiceDeTicketAbierto.loIncumple(error)) {
+                throw new OtroTicketAbiertoException();
+            }
+            throw error;
         }
         Hibernate.initialize(guardado.getContexto());
         return guardado;
