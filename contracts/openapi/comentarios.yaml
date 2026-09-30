@@ -75,12 +75,24 @@ info:
     `prioridadElevada` es `false` mientras no haya umbral configurado; el valor
     del umbral lo fija el Product Owner y no se escribe aqui.
 
+<<<<<<< HEAD
     1.8.0 (HU-COM-008, CA-02, #522): `POST /comentarios/moderacion/decisiones`
     aplica una misma accion y un mismo motivo a varios comentarios de una vez,
     todo o nada: si uno solo no se puede resolver, no cambia ninguno y el 409
     `LOTE_RECHAZADO` dice cuales fallaron y por que. Es menor: anade una ruta
     y no toca `/{commentId}/decision`.
   version: 1.8.0
+=======
+    1.7.0 (HU-COM-005, #519): `GET /comentarios/moderacion/autores/{autorId}/comentarios`,
+    el historial de comentarios de un autor para el moderador. Se sirve con los
+    datos de este servicio, sin llamar a otros. Es solo lectura, paginado con el
+    mismo tope que la cola, y devuelve solo lo necesario para decidir sobre el
+    autor: sin imagenes, reportes, asientos ni marca de seguimiento. Incluye los
+    comentarios OCULTO y ELIMINADO, con su `estado`, porque moderacion los
+    conserva. La operacion se publica con `x-implementacion: pendiente` hasta
+    que el servicio la implemente. Es menor: solo anade una operacion.
+  version: 1.7.0
+>>>>>>> origin/develop
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -483,6 +495,62 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: No existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/autores/{autorId}/comentarios:
+    get:
+      summary: Historial de comentarios de un autor (RF-COM-005)
+      operationId: historialDelAutor
+      x-implementacion: pendiente
+      x-fase: "HU-COM-005 (#519)"
+      description: >
+        1.7.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Los
+        comentarios del autor, del mas reciente al mas antiguo, en cualquier
+        estado: tambien los OCULTO y los ELIMINADO (este ultimo incluye los
+        que retiro el propio autor), que se distinguen por `estado`. Es lo que
+        el moderador necesita para decidir sobre el autor sin salir de la cola.
+
+
+        Solo lectura. Un autor sin comentarios es `200` con lista vacia y
+        `total: 0`, no un 404. No trae imagenes, reportes ni asientos de
+        moderacion: para eso esta el detalle del comentario.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AutorId"
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Pagina del historial (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialDelAutorResponse"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
           content:
             application/problem+json:
               schema:
@@ -902,6 +970,13 @@ components:
       schema:
         type: string
       description: Identificador del comentario.
+    AutorId:
+      name: autorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identificador del autor (el `autorId` de sus comentarios).
   responses:
     ProductoInexistente:
       description: >
@@ -1395,6 +1470,60 @@ components:
         total:
           type: integer
           description: Cuantos comentarios hay en revision en total, no en esta pagina.
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+
+    ItemDelHistorial:
+      type: object
+      description: >
+        1.7.0 — un comentario del autor, con lo minimo para decidir. Sin
+        imagenes, estrellas ni marca de seguimiento.
+      required:
+        - id
+        - productoId
+        - texto
+        - fechaPublicacion
+        - estado
+        - editado
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        texto:
+          type: string
+        fechaPublicacion:
+          type: string
+          format: date-time
+        estado:
+          $ref: "#/components/schemas/EstadoDeComentario"
+        editado:
+          type: boolean
+          description: Si un moderador cambio el texto.
+
+    HistorialDelAutorResponse:
+      type: object
+      required:
+        - autorId
+        - comentarios
+        - total
+        - pagina
+        - tamano
+      properties:
+        autorId:
+          type: string
+        apodoAutor:
+          type: string
+          description: Ausente si el autor no tiene comentarios.
+        comentarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDelHistorial"
+        total:
+          type: integer
+          description: Cuantos comentarios tiene el autor en total, no en esta pagina.
         pagina:
           type: integer
         tamano:
