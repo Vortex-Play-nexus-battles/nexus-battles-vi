@@ -823,7 +823,7 @@ class ComunidadDeProductoIT {
             assertEquals("un comentario", leer(r, "$.comentarios[0].texto"));
             assertEquals(producto, leer(r, "$.comentarios[0].productoId"));
             assertEquals(false, leer(r, "$.comentarios[0].editado"));
-            assertEquals(List.of(), leer(r, "$.comentarios[0].imagenes[*]"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].imagenes"));
             assertEquals(List.of(), leer(r, "$.comentarios[*].marcado"));
             assertEquals(List.of(), leer(r, "$.comentarios[*].estrellas"));
         }
