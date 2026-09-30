@@ -112,3 +112,16 @@ test('informa cuando la sesión no está disponible', async () => {
   expect(raiz.querySelector('[data-panel-mensaje]').getAttribute('role')).toBe('alert');
   consola.mockRestore();
 });
+
+test('UXC-9 — dice lo que el catálogo todavía no ofrece, sin callarlo (§7.2.3, §7.2.4)', async () => {
+  const consultar = jest.fn(async () => resumenInicial);
+  montarPanelCatalogo(raiz, { consultar, conCatalogo: false });
+
+  const pendiente = raiz.querySelector('[data-zona="catalogo-pendiente"]');
+  expect(pendiente.querySelector('h2').textContent).toBe('Lo que el catálogo todavía no ofrece');
+  const puntos = [...pendiente.querySelectorAll('li')].map((li) => li.textContent);
+  expect(puntos).toHaveLength(2);
+  expect(puntos[0]).toMatch(/^Diseñador visual/);
+  expect(puntos[1]).toMatch(/banner rotativo/);
+  expect(pendiente.textContent).not.toMatch(/próximamente/i);
+});

@@ -111,6 +111,17 @@ comprobar GET  /api/v1/transacciones       "finanzas GET /api/v1/transacciones"
 comprobar GET  /api/v1/cofres/mios         "finanzas GET /api/v1/cofres/mios"
 comprobar GET  /api/v1/subastas            "subastas GET /api/v1/subastas"
 comprobar GET  /api/v1/mis-pujas           "subastas GET /api/v1/mis-pujas"
+# B8 — el panel personal (ms-subastas-panel.yaml), las reglas vigentes y el
+# canal STOMP. /api/v1/ws-subastas no tenia location: el listado en vivo caia en
+# el 404 generico de /api/ y la vista degradaba al sondeo sin decirlo.
+comprobar GET  /api/v1/subastas/reglas     "subastas GET /api/v1/subastas/reglas"
+comprobar GET  /api/v1/mis-subastas/publicadas \
+                                           "subastas GET /api/v1/mis-subastas/publicadas"
+comprobar POST /api/v1/mis-subastas/pendientes/recogida \
+                                           "subastas POST /api/v1/mis-subastas/pendientes/recogida"
+comprobar GET  /api/v1/ws-subastas         "subastas GET /api/v1/ws-subastas"
+enConfiguracion "ws-subastas tiene su location de prefijo (^~), con Upgrade como /ws" \
+    'location \^~ /api/v1/ws-subastas'
 # R16.22 — ms-chatbot no tenia location: caia en el 404 generico.
 comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
 comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
@@ -159,6 +170,21 @@ comprobar POST /api/v1/productos           "productos POST /api/v1/productos"
 comprobar GET  /api/v1/productos/p-1       "productos GET /api/v1/productos/p-1"
 comprobar GET  "/api/v1/productos?page=0&size=20" \
                                            "productos GET /api/v1/productos?page=0&size=20"
+
+echo
+echo "Misiones — un prefijo, un dueno; la consulta y los sufijos llegan enteros (B9)"
+# El destino real es 34.193.90.11:8105; el banco lo sustituye por el eco
+# `srv-misiones` (ver `borde-conf` en docker-compose.yml). El tablon lleva la
+# categoria en la consulta y la matricula un sufijo: si alguno se perdiera,
+# la interfaz pediria otra cosa sin error ninguno que lo delatara.
+comprobar GET  "/api/v1/misiones?categoria=HISTORIA&pagina=0" \
+                                           "misiones GET /api/v1/misiones?categoria=HISTORIA&pagina=0"
+comprobar GET  /api/v1/misiones/templo-olvidado \
+                                           "misiones GET /api/v1/misiones/templo-olvidado"
+comprobar POST /api/v1/misiones/templo-olvidado/ejecuciones \
+                                           "misiones POST /api/v1/misiones/templo-olvidado/ejecuciones"
+comprobar PUT  /api/v1/misiones/estrategias/h-1 \
+                                           "misiones PUT /api/v1/misiones/estrategias/h-1"
 
 echo
 echo "Vitrina — ms-ecommerce con prefijo propio; la consulta llega entera (R16)"
@@ -256,6 +282,8 @@ codigo GET /api/v1/correos          404
 # prefijo inventado: tiene que caer en el 404 de "prefijo sin servicio", no
 # colarse en ningun upstream.
 codigo GET /api/v1/no-existe-esto   404
+# B8 — un prefijo que solo empieza como el de subastas no es de subastas.
+codigo GET /api/v1/subastasx        404
 
 echo
 echo "Direcciones limpias (R17) — se sirven, se anuncian y las antiguas redirigen"
@@ -599,6 +627,7 @@ echo "Contenido — no se puede suplantar una IP, se comprueba el fichero"
 enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.11:8101|34\.193\.90\.11:8101'
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
+enConfiguracion "misiones va al host de contenido"   '34\.193\.90\.11:8105'
 
 echo
 echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"
@@ -762,7 +791,7 @@ echo "Que promete el borde que dev hoy no puede dar (inventario de 502)"
 CATALOGO="${CATALOGO:-$(dirname "$0")/../../despliegue/servicios.json}"
 if [ -f "$CATALOGO" ] && command -v jq >/dev/null 2>&1; then
     for servicio in $(grep -oE 'srv-[a-z-]+:[0-9]+' "$CONF" | sed 's/^srv-//;s/:[0-9]*$//' | sort -u); do
-        entrada=$(jq -r --arg s "$servicio" '.servicios[] | select(.nombre == $s) | "\(.desplegableDev)"' "$CATALOGO")
+        entrada=$(jq -r --arg s "$servicio" '.servicios[] | select(.nombre == $s) | if (.accesoPendiente | type) == "string" then "acceso-pendiente" else "\(.desplegableDev)" end' "$CATALOGO")
         prefijos=$(grep -B4 "srv-${servicio}:" "$CONF" | grep -oE 'location [^{]+' | sed 's/location //' | tr -d ' ' | tr '\n' ' ')
         if [ -z "$entrada" ]; then
             printf '  FALLA %-22s el borde lo enruta y NO esta en el catalogo de despliegue\n' "$servicio"
@@ -770,6 +799,9 @@ if [ -f "$CATALOGO" ] && command -v jq >/dev/null 2>&1; then
             fallos=$((fallos + 1))
         elif [ "$entrada" = "false" ]; then
             printf '  502   %-22s fuera del host de dev por capacidad -> sus rutas dan 502\n' "$servicio"
+            printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
+        elif [ "$entrada" = "acceso-pendiente" ]; then
+            printf '  502   %-22s desplegado en su host, pero el borde aun no le llega (accesoPendiente en el catalogo)\n' "$servicio"
             printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
         else
             printf '  ok    %-22s desplegable en dev\n' "$servicio"

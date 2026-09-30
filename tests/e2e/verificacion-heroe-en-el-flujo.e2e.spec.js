@@ -219,10 +219,22 @@ test.describe('La verificacion de heroe esta en el flujo (RF-JUE-003)', () => {
       })
       .toBe(true);
 
-    // El nivel NO se pinta: no existe como estado persistido en ningun
-    // servicio, y la vista solo dibuja el distintivo cuando llega un numero.
-    // Si algun dia apareciera un 1 aqui, seria inventado.
-    await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+    // El nivel: la vista solo dibuja el distintivo cuando el servicio manda un
+    // numero. Hasta B7 no existia en ningun servicio y aqui se exigia que no
+    // se pintara; desde B7 la verificacion trae el nivel del heroe del
+    // inventario (salas-partidas.yaml 1.7.0, `heroe.nivel`). Lo que se exige
+    // ahora es que el distintivo diga ESE numero y ninguno inventado.
+    const verificacion = await (
+      await api.get(`/api/v1/salas/${sala.id}/verificacion-heroe`, {
+        headers: conToken(invitado.token),
+      })
+    ).json();
+    const nivel = verificacion.heroe?.nivel ?? null;
+    if (nivel === null) {
+      await expect(dialogo.locator('.marco-heroe__nivel')).toHaveCount(0);
+    } else {
+      await expect(dialogo.locator('.marco-heroe__nivel')).toHaveText(String(nivel));
+    }
   });
 
   test('Confirmar entra de verdad a la sala', async ({ page }) => {

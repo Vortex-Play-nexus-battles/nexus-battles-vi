@@ -202,6 +202,14 @@ jobs:
         working-directory: infrastructure/red-balanceo/pruebas
         run: ./comprobar-rutas.sh
 
+      # 28-sep — el mismo borde con el fragmento TLS que dejaria
+      # scripts/cd/certificado.sh y un certificado autofirmado: 80 -> 301 salvo
+      # /salud-borde y ACME, y el 443 enruta como el 80. Sin esto, el dia que
+      # llegue el dominio seria el primer dia que se pruebe.
+      - name: Comprobar el HTTPS del borde (fragmento TLS con certificado de prueba)
+        working-directory: infrastructure/red-balanceo/pruebas
+        run: bash ./comprobar-tls.sh
+
       - name: Recoger la bitacora del borde si algo fallo
         if: failure()
         working-directory: infrastructure/red-balanceo/pruebas
@@ -384,6 +392,14 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/comprobar-capacidad.sh
 
+      # 28-sep: HTTPS del borde. Sin dominio, sin consentimiento de Let's
+      # Encrypt, con el DNS apuntando a otro sitio o si nginx rechaza el
+      # fragmento, el borde se queda en HTTP; nunca emite para una IP. Con
+      # docker, curl y getent falsos; segundos.
+      - name: Comprobar certificado.sh (HTTPS del borde, sin romper nunca el HTTP)
+        shell: bash
+        run: bash scripts/cd/pruebas/certificado.sh
+
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
       # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java
@@ -391,6 +407,35 @@ jobs:
       - name: Comprobar la clave de firma estable de ms-identidad
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
+
+      # 27-sep: el paso 3d recreo ms-identidad sin su clave de firma (par
+      # efimero: sesiones cerradas, 401 entre servicios, registro en 503).
+      # Con docker y curl falsos; segundos.
+      - name: Comprobar el paso 3d (emisor al dia y con la clave del host)
+        shell: bash
+        run: bash scripts/cd/pruebas/emisor-de-credenciales.sh
+
+      # 28-sep (topologia, fase 1): misiones y ms-subastas pasan al host de
+      # contenido y su emisor sigue en el de plataforma. Cada host generaba su
+      # propia credencial y el emisor no reconocia la del otro. Con archivos
+      # temporales; segundos.
+      - name: Comprobar las credenciales de servicio compartidas entre hosts
+        shell: bash
+        run: bash scripts/cd/pruebas/credenciales-de-servicio.sh
+
+      # Paso 3b de desplegar.sh: imagenes de una en una y con reintentos (28-sep,
+      # B7: con el host saturado, bajar tres a la vez se corto y luego no
+      # termino en los diez minutos de la sesion SSH). Con docker falso; segundos.
+      - name: Comprobar el paso 3b (imagenes de una en una, con reintentos)
+        shell: bash
+        run: bash scripts/cd/pruebas/bajar-imagenes.sh
+
+      # 28-sep: las reglas del SG de contenido (cuenta del Grupo 2) las aplica
+      # infra-dev.yml con reglas-sg-contenido.sh. Equivocarse abre un puerto
+      # interno al mundo o cierra el 22 del CD. Con aws falso; segundos.
+      - name: Comprobar las reglas del SG de contenido (solo puertos declarados)
+        shell: bash
+        run: bash scripts/cd/pruebas/reglas-sg-contenido.sh
 
       # Una clave repetida dentro de un mismo mapa hace que Docker Compose se
       # niegue a leer el archivo ENTERO, y al negarse no despliega nada de el.

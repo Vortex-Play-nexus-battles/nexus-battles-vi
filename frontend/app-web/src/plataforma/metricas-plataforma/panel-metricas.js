@@ -17,6 +17,7 @@
 
 import { ErrorDeMetricas, obtenerInforme } from './cliente-metricas.js';
 import { h } from '../../comun/ui/dom.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 /**
  * Cabecera de tabla con celdas de verdad.
@@ -130,7 +131,7 @@ export function pintarError(contenedor, error, alReintentar) {
     estado.append(titulo, cuerpo);
   } else {
     titulo.textContent = 'No se pudo cargar el informe de latencia';
-    cuerpo.textContent = error?.message ?? 'El servicio de métricas no respondió.';
+    cuerpo.textContent = textoDeError(error, 'Las métricas no respondieron. Vuelve a intentarlo.');
     const boton = document.createElement('button');
     boton.type = 'button';
     boton.className = 'boton boton--secundario';

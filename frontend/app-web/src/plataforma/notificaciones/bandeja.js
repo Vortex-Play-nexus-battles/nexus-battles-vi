@@ -31,6 +31,7 @@ import {
   urlDelCanal,
 } from './cliente-notificaciones.js';
 import { conectarStomp } from '../../comun/transporte-stomp.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /** Variantes del componente `Estado de conexion` del ui-kit. */
 export const ESTADO_CANAL = Object.freeze({
@@ -165,7 +166,15 @@ export function crearBandeja({
       return;
     }
     if (esProblema(mensaje)) {
-      alError(new Error(mensaje.detail || mensaje.title));
+      alError(
+        new Error(
+          textoDelServidor(
+            mensaje,
+            mensaje.status,
+            'No pudimos poner al día tus notificaciones. Vuelve a intentarlo.',
+          ),
+        ),
+      );
     }
   }
 

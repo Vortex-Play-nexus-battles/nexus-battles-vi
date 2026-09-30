@@ -22,9 +22,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -64,8 +62,9 @@ class PujaControllerTest {
     void pujarUsaElJugadorDelTokenYLaClaveDeLaCabecera() {
         UUID subastaId = UUID.randomUUID();
         UUID jugadorDelToken = UUID.randomUUID();
-        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugadorDelToken, false));
-        when(pujas.pujar(eq(subastaId), eq(jugadorDelToken), eq(new BigDecimal("110")), eq(CLAVE)))
+        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(jugadorDelToken, false, "apodo_token"));
+        // B8: el apodo tambien sale del token (claim sub), para la ficha anonimizada.
+        when(pujas.pujar(eq(subastaId), eq(jugadorDelToken), eq("apodo_token"), eq(new BigDecimal("110")), eq(CLAVE)))
                 .thenReturn(pujaDe(subastaId, jugadorDelToken, "110", EstadoPuja.ACTIVA));
 
         PujaResponse respuesta = controlador.pujar(subastaId, CLAVE, new PujarRequest(new BigDecimal("110")));
@@ -79,14 +78,14 @@ class PujaControllerTest {
     void comprarAhoraConfirmadaDelegaEnElServicio() {
         UUID subastaId = UUID.randomUUID();
         UUID comprador = UUID.randomUUID();
-        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(comprador, false));
-        when(pujas.comprarAhora(subastaId, comprador, CLAVE))
+        when(identidad.actual()).thenReturn(new IdentidadClient.Identidad(comprador, false, "comprador_1"));
+        when(pujas.comprarAhora(subastaId, comprador, "comprador_1", CLAVE))
                 .thenReturn(pujaDe(subastaId, comprador, "500", EstadoPuja.GANADORA));
 
         PujaResponse respuesta = controlador.comprarAhora(subastaId, CLAVE, new CompraInmediataRequest(true));
 
         assertEquals(EstadoPuja.GANADORA, respuesta.estado());
-        verify(pujas).comprarAhora(subastaId, comprador, CLAVE);
+        verify(pujas).comprarAhora(subastaId, comprador, "comprador_1", CLAVE);
     }
 
     /**
@@ -100,8 +99,7 @@ class PujaControllerTest {
                 () -> controlador.comprarAhora(UUID.randomUUID(), CLAVE, new CompraInmediataRequest(false)));
 
         assertEquals(PujaRechazadaException.Motivo.CONFIRMACION_REQUERIDA, ex.getMotivo());
-        verify(pujas, never()).comprarAhora(any(), any(), any());
-        verifyNoInteractions(identidad);
+        verifyNoInteractions(pujas, identidad);
     }
 
     /**
@@ -114,6 +112,6 @@ class PujaControllerTest {
                 () -> controlador.comprarAhora(UUID.randomUUID(), CLAVE, new CompraInmediataRequest(null)));
 
         assertEquals(PujaRechazadaException.Motivo.CONFIRMACION_REQUERIDA, ex.getMotivo());
-        verify(pujas, never()).comprarAhora(any(), any(), any());
+        verifyNoInteractions(pujas);
     }
 }

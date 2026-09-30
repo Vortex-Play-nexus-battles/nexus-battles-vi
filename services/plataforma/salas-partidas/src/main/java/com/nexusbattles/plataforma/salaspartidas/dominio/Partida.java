@@ -16,15 +16,17 @@ import java.util.UUID;
  * <i>estado del combate</i>.
  *
  * <p><b>Que NO decide esta clase.</b> Nada de reglas de juego: ni dano, ni
- * efectos, ni quien gana. Eso es del motor de combate, que el Project Charter
- * excluye de este bloque. Aqui vive el ciclo de vida —iniciar, avanzar el
- * turno, terminar— y el estado que la vista de combate necesita pintar y que
- * hace falta para reconectar tras una caida del canal.
+ * efectos. Eso es del motor de combate, que resuelve cada accion y devuelve
+ * el estado de todos; aqui se guarda ese estado ({@link #aplicarCombate}) y
+ * vive el ciclo de vida —iniciar, avanzar el turno, terminar— con lo que la
+ * vista de combate necesita pintar y hace falta para reconectar.
  *
- * <p><b>El orden de los participantes es el orden de los turnos.</b> Se
- * conserva tal como venia de la sala: el anfitrion primero, porque es quien la
- * creo, y detras los demas en el orden en que entraron. Un orden aleatorio
- * seria una regla de juego, y esa no es nuestra.
+ * <p><b>El orden de los participantes es el orden de los turnos</b> y desde B7
+ * se SORTEA al empezar entre todos (§6.1.3, {@link OrdenDeTurnos}) con una
+ * semilla que la partida guarda. No cambia hasta el final.
+ *
+ * <p><b>Bloqueo optimista (B7).</b> {@link #version()} viaja de la lectura a
+ * la escritura: dos acciones del mismo turno no se aplican las dos.
  */
 public class Partida {
 
@@ -33,13 +35,25 @@ public class Partida {
     private final List<ParticipanteDePartida> participantes;
     private final int recompensaEnJuego;
     private final Instant iniciadaEn;
+    private final long version;
+    private final Long semillaDelOrden;
 
     private EstadoPartida estado;
     private Turno turnoActual;
+    private Instant finalizadaEn;
+    private Instant turnoVenceEn;
 
     private Partida(UUID id, UUID idSala, List<ParticipanteDePartida> participantes,
                     int recompensaEnJuego, Instant iniciadaEn, EstadoPartida estado,
                     Turno turnoActual) {
+        this(id, idSala, participantes, recompensaEnJuego, iniciadaEn, estado, turnoActual, 0L, null, null,
+                null);
+    }
+
+    private Partida(UUID id, UUID idSala, List<ParticipanteDePartida> participantes,
+                    int recompensaEnJuego, Instant iniciadaEn, EstadoPartida estado,
+                    Turno turnoActual, long version, Long semillaDelOrden, Instant finalizadaEn,
+                    Instant turnoVenceEn) {
         this.id = Objects.requireNonNull(id, "Una partida necesita identificador.");
         this.idSala = Objects.requireNonNull(idSala, "Una partida sale de una sala.");
         this.participantes = new ArrayList<>(
@@ -54,6 +68,27 @@ public class Partida {
         this.iniciadaEn = Objects.requireNonNull(iniciadaEn, "Hace falta saber cuando empezo.");
         this.estado = Objects.requireNonNull(estado, "Una partida tiene estado.");
         this.turnoActual = Objects.requireNonNull(turnoActual, "Una partida tiene un turno en curso.");
+        this.version = version;
+        this.semillaDelOrden = semillaDelOrden;
+        this.finalizadaEn = finalizadaEn;
+        this.turnoVenceEn = turnoVenceEn;
+    }
+
+    /**
+     * Arranca la partida de una sala en el orden de entrada, con la maquina
+     * combatiendo con una copia del heroe del anfitrion.
+     *
+     * <p>Ninguna partida real se inicia asi: {@code IniciarPartida} sortea el
+     * orden (§6.1.3) y le da a la maquina un heroe aleatorio del catalogo
+     * (D-B7-11) con {@link #iniciar(Sala, Instant, OrdenDeTurnos, List)}. Este
+     * atajo existe para las pruebas de otras reglas, que necesitan saber quien
+     * juega cada turno.
+     *
+     * @param sala   sala ya marcada como en juego
+     * @param ahora  reloj inyectado, para que las pruebas no dependan del sistema
+     */
+    public static Partida iniciar(Sala sala, Instant ahora) {
+        return iniciar(sala, ahora, OrdenDeTurnos.DE_ENTRADA, List.of());
     }
 
     /**
@@ -63,15 +98,26 @@ public class Partida {
      * ({@link Sala#iniciarPartida}) antes de construir nada es lo que impide
      * que existan dos partidas para la misma sala.
      *
-     * @param sala   sala ya marcada como en juego
-     * @param ahora  reloj inyectado, para que las pruebas no dependan del sistema
+     * <p>Los equipos del modo cooperativo se reparten en el ORDEN DE ENTRADA
+     * (ver {@link #repartirEnEquipos}) y despues se sortea el orden de los
+     * turnos entre todos: el equipo no depende del sorteo.
+     *
+     * @param sala              sala ya marcada como en juego
+     * @param ahora             reloj inyectado, para que las pruebas no dependan del sistema
+     * @param orden             como se ordenan los turnos (sorteo con semilla, §6.1.3)
+     * @param heroesDeLaMaquina un heroe por cupo de la IA (D-B7-11); los que
+     *                          falten combaten con una copia del heroe del
+     *                          anfitrion a vida completa
      */
-    public static Partida iniciar(Sala sala, Instant ahora) {
+    public static Partida iniciar(Sala sala, Instant ahora, OrdenDeTurnos orden,
+                                  List<HeroeDeCombate> heroesDeLaMaquina) {
         Objects.requireNonNull(sala, "Sin sala no hay partida.");
         Objects.requireNonNull(ahora, "Hace falta el momento de inicio.");
+        Objects.requireNonNull(orden, "Hace falta como se ordenan los turnos.");
+        List<HeroeDeCombate> heroesIA = heroesDeLaMaquina == null ? List.of() : heroesDeLaMaquina;
 
         List<ParticipanteDePartida> enCombate = new ArrayList<>();
-        // El anfitrion primero: es quien creo la sala y quien abre el combate.
+        // En orden de entrada: el anfitrion primero, porque abre el equipo 1.
         enCombate.add(deLaSala(sala, sala.idAnfitrion()));
         for (UUID jugador : sala.participantes()) {
             if (!jugador.equals(sala.idAnfitrion())) {
@@ -79,22 +125,24 @@ public class Partida {
             }
         }
         // Un participante por cada cupo de la maquina (HU-SAL-004), detras de
-        // las personas. Cada una combate con el heroe del anfitrion a vida
-        // completa. Ver `ParticipanteDePartida.inteligenciaArtificial`: no se
-        // inventa un heroe, se usa el unico que esta partida conoce, y de paso
-        // la pelea queda pareja.
+        // las personas.
         FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
         for (int i = 0; i < sala.heroesIA(); i++) {
-            HeroeDeCombate heroeDeLaMaquina = delAnfitrion == null
-                    ? null
-                    : delAnfitrion.heroe().aPlenaVida();
+            HeroeDeCombate heroeDeLaMaquina;
+            if (i < heroesIA.size() && heroesIA.get(i) != null) {
+                heroeDeLaMaquina = heroesIA.get(i);
+            } else {
+                heroeDeLaMaquina = delAnfitrion == null ? null : delAnfitrion.heroe().aPlenaVida();
+            }
             enCombate.add(ParticipanteDePartida.inteligenciaArtificial(
                     UUID.randomUUID(), heroeDeLaMaquina));
         }
 
-        return new Partida(UUID.randomUUID(), sala.id(), repartirEnEquipos(enCombate, sala.tamanoEquipo()),
+        List<ParticipanteDePartida> enTurnos =
+                orden.aplicar(repartirEnEquipos(enCombate, sala.tamanoEquipo()));
+        return new Partida(UUID.randomUUID(), sala.id(), enTurnos,
                 sala.recompensaCreditos(), ahora, EstadoPartida.EN_CURSO,
-                Turno.primero(enCombate.get(0).idJugador()));
+                Turno.primero(enTurnos.get(0).idJugador()), 0L, orden.semilla(), null, null);
     }
 
     /**
@@ -136,12 +184,29 @@ public class Partida {
                 false, null, sala.recompensaCreditos());
     }
 
-    /** Reconstruye una partida guardada. Solo para la capa de persistencia. */
+    /** Reconstruye una partida guardada, sin los campos de B7. Para dobles y fixtures. */
     public static Partida rehidratar(UUID id, UUID idSala, EstadoPartida estado,
                                      List<ParticipanteDePartida> participantes, Turno turnoActual,
                                      int recompensaEnJuego, Instant iniciadaEn) {
         return new Partida(id, idSala, participantes, recompensaEnJuego, iniciadaEn,
                 estado, turnoActual);
+    }
+
+    /**
+     * Reconstruye una partida guardada con todo su estado. Solo para la capa de
+     * persistencia.
+     *
+     * @param version         marca de concurrencia tal como se leyo
+     * @param semillaDelOrden semilla del sorteo de turnos, o nula (orden de entrada)
+     * @param finalizadaEn    cuando termino, o nula
+     * @param turnoVenceEn    cuando se agota el turno en curso, o nula sin limite
+     */
+    public static Partida rehidratar(UUID id, UUID idSala, EstadoPartida estado,
+                                     List<ParticipanteDePartida> participantes, Turno turnoActual,
+                                     int recompensaEnJuego, Instant iniciadaEn, long version,
+                                     Long semillaDelOrden, Instant finalizadaEn, Instant turnoVenceEn) {
+        return new Partida(id, idSala, participantes, recompensaEnJuego, iniciadaEn,
+                estado, turnoActual, version, semillaDelOrden, finalizadaEn, turnoVenceEn);
     }
 
     /**
@@ -158,6 +223,9 @@ public class Partida {
             throw new PartidaYaTerminada(id);
         }
         int actual = indiceDe(turnoActual.idJugador());
+        // El vencimiento era del turno que termina; el siguiente lo fija quien
+        // conoce el tiempo por turno (D-B7-14).
+        turnoVenceEn = null;
         // Quien ya cayo no juega (HU-SAL-004, SCRUM-1079): en una partida de
         // seis el turno saltaria a heroes derrotados y la vista esperaria a
         // alguien que no puede actuar. Se busca al siguiente en pie; si no
@@ -210,6 +278,54 @@ public class Partida {
         return golpeado;
     }
 
+    /**
+     * Guarda lo que resolvio el motor para un participante (B7): su vida, su
+     * vida maxima en su nivel y su estado de combate.
+     *
+     * <p>El motor es quien decide los numeros; aqui solo se guardan. A un
+     * participante sin heroe conocido no se le inventa uno: se guarda solo su
+     * estado de combate.
+     *
+     * @throws PartidaYaTerminada si el combate acabo
+     * @throws SinObjetivoPosible si ese participante no esta en la partida
+     */
+    public ParticipanteDePartida aplicarCombate(UUID idParticipante, int vidaActual, int vidaMaxima,
+                                                EstadoDeCombate combate) {
+        if (estado == EstadoPartida.FINALIZADA) {
+            throw new PartidaYaTerminada(id);
+        }
+        int posicion = indiceDe(idParticipante, "Ese participante no esta en esta partida.");
+        ParticipanteDePartida actual = participantes.get(posicion);
+        ParticipanteDePartida nuevo = actual.heroe() == null
+                ? actual.conCombate(combate)
+                : actual.conHeroe(actual.heroe().conVida(vidaActual, vidaMaxima)).conCombate(combate);
+        participantes.set(posicion, nuevo);
+        return nuevo;
+    }
+
+    /**
+     * Guarda el estado de todos los combatientes de una respuesta del motor.
+     * Uno que no este en la partida se ignora: el motor solo devuelve a quien
+     * se le mando.
+     */
+    public void aplicar(List<CombatienteResuelto> combatientes) {
+        for (CombatienteResuelto c : combatientes) {
+            if (participante(c.id()).isPresent()) {
+                aplicarCombate(c.id(), c.vidaActual(), c.vidaMaxima(), c.estado());
+            }
+        }
+    }
+
+    /** El participante, si esta en la partida. */
+    public java.util.Optional<ParticipanteDePartida> participante(UUID idJugador) {
+        return participantes.stream().filter(p -> p.idJugador().equals(idJugador)).findFirst();
+    }
+
+    /** Si ese jugador combate en esta partida (la maquina no es un jugador que pregunte). */
+    public boolean esParticipante(UUID idJugador) {
+        return idJugador != null && participante(idJugador).isPresent();
+    }
+
     /** Participantes que siguen en pie, en el orden de los turnos. */
     public List<ParticipanteDePartida> enPie() {
         return participantes.stream().filter(ParticipanteDePartida::enPie).toList();
@@ -224,14 +340,31 @@ public class Partida {
      * @return true si este golpe acabo la partida
      */
     public boolean terminarSiSoloQuedaUno() {
+        return terminarSiSoloQuedaUno(null);
+    }
+
+    /** Igual, anotando cuando termino (B7). */
+    public boolean terminarSiSoloQuedaUno(Instant ahora) {
         if (estado == EstadoPartida.FINALIZADA) {
             return false;
         }
         if (bandosEnPie() > 1) {
             return false;
         }
-        terminar();
+        terminar(ahora);
         return true;
+    }
+
+    /**
+     * El final formal (1.7.0): {@link ResultadoDePartida#GANADOR} cuando queda
+     * en pie un solo heroe o un solo equipo, {@link ResultadoDePartida#EMPATE}
+     * cuando no queda nadie. Vacio mientras sigue en curso.
+     */
+    public java.util.Optional<ResultadoDePartida> resultado() {
+        if (estado != EstadoPartida.FINALIZADA) {
+            return java.util.Optional.empty();
+        }
+        return java.util.Optional.of(bandosEnPie() == 1 ? ResultadoDePartida.GANADOR : ResultadoDePartida.EMPATE);
     }
 
     /**
@@ -291,11 +424,20 @@ public class Partida {
     }
 
     /**
-     * Quienes quedaron en pie al terminar: uno, o todo el equipo ganador.
-     * Vacio si sigue en curso o si nadie quedo en pie.
+     * Quien gano: el heroe que quedo en pie o, en el modo cooperativo, TODOS
+     * los integrantes del equipo ganador, tambien los que cayeron — gana el
+     * equipo (D-B7-15, salas-partidas.yaml 1.7.0). Vacio si sigue en curso o en
+     * empate.
      */
     public List<ParticipanteDePartida> ganadores() {
-        return estado == EstadoPartida.FINALIZADA ? enPie() : List.of();
+        if (resultado().filter(r -> r == ResultadoDePartida.GANADOR).isEmpty()) {
+            return List.of();
+        }
+        if (!conEquipos()) {
+            return enPie();
+        }
+        Integer equipo = equipoGanador().orElse(null);
+        return participantes.stream().filter(p -> Objects.equals(p.equipo(), equipo)).toList();
     }
 
     /** El equipo que gano, si la partida era por equipos y termino con alguien en pie. */
@@ -323,7 +465,25 @@ public class Partida {
      * correcta.
      */
     public void terminar() {
+        terminar(null);
+    }
+
+    /** Igual, anotando cuando termino. La primera hora que se anota es la que vale. */
+    public void terminar(Instant ahora) {
         estado = EstadoPartida.FINALIZADA;
+        turnoVenceEn = null;
+        if (finalizadaEn == null) {
+            finalizadaEn = ahora;
+        }
+    }
+
+    /**
+     * Cuando se agota el turno en curso, o {@code null} sin limite. Lo fija el
+     * caso de uso con el parametro {@code salas.partidas.segundos-por-turno},
+     * que nace sin valor: el documento no fija un tiempo por turno (D-B7-14).
+     */
+    public void fijarVencimientoDelTurno(Instant venceEn) {
+        this.turnoVenceEn = estado == EstadoPartida.FINALIZADA ? null : venceEn;
     }
 
     private int indiceDe(UUID idJugador) {
@@ -375,5 +535,25 @@ public class Partida {
 
     public Instant iniciadaEn() {
         return iniciadaEn;
+    }
+
+    /** Marca de concurrencia tal como se leyo (bloqueo optimista, B7). */
+    public long version() {
+        return version;
+    }
+
+    /** Semilla del sorteo del orden de turnos (§6.1.3), o nula si se jugo en orden de entrada. */
+    public Long semillaDelOrden() {
+        return semillaDelOrden;
+    }
+
+    /** Cuando termino, o nula en curso. */
+    public Instant finalizadaEn() {
+        return finalizadaEn;
+    }
+
+    /** Cuando se agota el turno en curso, o nula sin limite (D-B7-14). */
+    public Instant turnoVenceEn() {
+        return turnoVenceEn;
     }
 }

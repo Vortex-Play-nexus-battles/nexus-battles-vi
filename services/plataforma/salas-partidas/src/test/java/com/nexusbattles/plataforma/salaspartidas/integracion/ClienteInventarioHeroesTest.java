@@ -19,6 +19,7 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
@@ -138,8 +139,9 @@ class ClienteInventarioHeroesTest {
         servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
                 MediaType.APPLICATION_JSON));
+        // HU-INV-006: las del catalogo en nivel 1 (defensa 11) mas el equipo (+1).
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
-                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":12}",
                 MediaType.APPLICATION_JSON));
         esperarProducto("Guerrero Tanque");
         esperarFichaDePrototipo(11);
@@ -153,17 +155,21 @@ class ClienteInventarioHeroesTest {
                 // del catalogo. Son cosas distintas, y confundirlas es lo que
                 // hacia que el motor devolviera 404 en cada ataque.
                 () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
-                // La defensa viene del CATALOGO (11), no de la vida (140). Con
-                // la vida en su lugar, la tirada de ataque -como mucho 16- no
-                // podia superarla nunca y ningun golpe acertaba.
-                () -> assertEquals(11, estado.heroe().defensa()),
+                // La defensa es la del heroe EQUIPADO (12: 11 del catalogo mas
+                // el equipo, B7), nunca la vida (140). Con la vida en su lugar,
+                // la tirada de ataque -como mucho 16- no podia superarla nunca
+                // y ningun golpe acertaba.
+                () -> assertEquals(12, estado.heroe().defensa()),
                 () -> assertEquals(140, estado.heroe().vidaMaxima()),
                 () -> assertEquals(140, estado.heroe().vidaActual()),
-                // Y el nivel sigue nulo: ningun servicio lo persiste, asi que
-                // no hay de donde sacarlo. Este assert esta para que rellenarlo
-                // con un 1 inventado rompa una prueba en vez de pasar
-                // desapercibido.
-                () -> assertNull(estado.heroe().nivel()));
+                // B7 (salas-partidas.yaml 1.7.0: «nivel deja de ir vacio»): sin
+                // nivel publicado por inventario, el heroe combate en el nivel
+                // 1, que es el inicial de todo heroe (§6.1.1). No es un numero
+                // inventado: es el unico nivel que puede tener un heroe que
+                // nadie ha subido.
+                () -> assertEquals(1, estado.heroe().nivel()),
+                () -> assertEquals(1, estado.heroe().perfil().nivel()),
+                () -> assertEquals(12, estado.heroe().perfil().estadisticas().defensa()));
         servidor.verify();
     }
 
@@ -226,15 +232,40 @@ class ClienteInventarioHeroesTest {
     }
 
     @Test
-    @DisplayName("si el catalogo no contesta, el heroe entra igual pero sin defensa")
+    @DisplayName("si el catalogo no contesta, el heroe de nivel 1 entra igual con la defensa equipada de inventario")
     void sinCatalogoElHeroeEntraIgual() {
         esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
         servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
                 "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
                 MediaType.APPLICATION_JSON));
         servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
-                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":4}",
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140,\"defensa\":12}",
                 MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withServerError());
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        // En el nivel 1 las estadisticas de inventario ya son las de combate
+        // (HU-INV-006 parte del nivel 1): el catalogo solo hace falta para
+        // llevarlas a un nivel mayor.
+        assertAll(
+                () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
+                () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
+                () -> assertEquals(12, estado.heroe().defensa()),
+                () -> assertEquals(140, estado.heroe().vidaMaxima()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("sin estadisticas completas ni catalogo, la defensa queda nula: no se inventa")
+    void sinEstadisticasNiCatalogoNoHayDefensa() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":140}", MediaType.APPLICATION_JSON));
         esperarProducto("Guerrero Tanque");
         servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withServerError());
 
@@ -242,10 +273,148 @@ class ClienteInventarioHeroesTest {
 
         assertAll(
                 () -> assertEquals(ResultadoVerificacion.DISPONIBLE, estado.resultado()),
-                () -> assertEquals("Guerrero Tanque", estado.heroe().prototipo()),
                 () -> assertNull(estado.heroe().defensa()),
+                () -> assertNull(estado.heroe().perfil().estadisticas(),
+                        "sin estadisticas completas el motor usara las del catalogo en su nivel"),
                 () -> assertEquals(140, estado.heroe().vidaMaxima()));
         servidor.verify();
+    }
+
+    // =========================================================================
+    // B7 — el perfil de combate: nivel, estadisticas en su nivel, equipo y epicas
+    // =========================================================================
+
+    private static final String FICHA_EN_NIVEL_3 = HEROES + "/api/v1/heroes/Guerrero%20Tanque/niveles/3";
+
+    private static String elemento(String id, String tipo, String productoId, boolean disponible) {
+        return "{\"id\":\"" + id + "\",\"productoId\":\"" + productoId + "\",\"tipo\":\"" + tipo
+                + "\",\"nombrePropio\":\"" + id + "\",\"disponible\":" + disponible + ",\"subastaId\":"
+                + (disponible ? "null" : "\"99999999-9999-9999-9999-999999999999\"") + "}";
+    }
+
+    private void esperarProductoConNombre(String productoId, String nombre) {
+        servidor.expect(requestTo(PRODUCTOS + "/api/v1/productos/" + productoId)).andRespond(withSuccess(
+                "{\"id\":\"" + productoId + "\",\"nombre\":\"" + nombre + "\"}", MediaType.APPLICATION_JSON));
+    }
+
+    @Test
+    @DisplayName("B7: el perfil lleva los nombres del equipo puesto y las epicas disponibles (Tablas 8 a 20)")
+    void elPerfilLlevaEquipoYEpicas() {
+        esperarVitrina(vitrinaCon(heroe("h-1", "Sombra de Vael", true, null)
+                + "," + elemento("a-1", "ARMA", "p-espada", true)
+                + "," + elemento("i-1", "ITEM", "p-pinchos", true)
+                + "," + elemento("e-1", "EPICA", "p-golpe", true)
+                // Retenida por una subasta: no se lleva al combate.
+                + "," + elemento("e-2", "EPICA", "p-impulso", false)));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[\"i-1\"]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":44,\"defensa\":11,"
+                        + "\"ataque\":{\"base\":11,\"cantidadDados\":1,\"caras\":6,\"formula\":\"11 + 1d6\"},"
+                        + "\"dano\":{\"base\":0,\"cantidadDados\":1,\"caras\":4,\"formula\":\"1d4\"},\"sanar\":null}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
+        esperarProductoConNombre("p-espada", "Espada de una mano");
+        esperarProductoConNombre("p-pinchos", "Pinchos de escudo");
+        esperarProductoConNombre("p-golpe", "Golpe de defensa");
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        var perfil = estado.heroe().perfil();
+        assertAll(
+                () -> assertEquals(1, perfil.nivel()),
+                () -> assertEquals(List.of("Espada de una mano", "Pinchos de escudo"), perfil.equipamiento()),
+                () -> assertEquals(List.of("Golpe de defensa"), perfil.epicas(),
+                        "la epica retenida por una subasta no entra al combate"),
+                () -> assertEquals(11, perfil.estadisticas().ataque().base(), "el +1 del equipo ya viene sumado"),
+                () -> assertEquals(4, perfil.estadisticas().dano().caras()),
+                () -> assertNull(perfil.estadisticas().sanar()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("B7: un heroe de nivel 3 combate con las del catalogo en su nivel mas lo que suma su equipo")
+    void unHeroeDeNivelMayor() {
+        esperarVitrina(vitrinaCon("{\"id\":\"h-1\",\"productoId\":\"p-1\",\"tipo\":\"HEROE\","
+                + "\"nombrePropio\":\"Sombra de Vael\",\"disponible\":true,\"subastaId\":null,\"nivel\":3}"));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        // Inventario publica el nivel 1 con el equipo: +2 de vida, +2 de
+        // defensa y +1 al ataque sobre el catalogo.
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":46,\"defensa\":13,"
+                        + "\"ataque\":{\"base\":11,\"cantidadDados\":1,\"caras\":6,\"formula\":\"11 + 1d6\"},"
+                        + "\"dano\":{\"base\":0,\"cantidadDados\":1,\"caras\":4,\"formula\":\"1d4\"}}",
+                MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        servidor.expect(requestTo(FICHA_DEL_PROTOTIPO)).andRespond(withSuccess(
+                "{\"nombre\":\"Guerrero Tanque\",\"estadisticasNivel1\":{\"poder\":10,\"vida\":44,\"defensa\":11,"
+                        + "\"ataqueDetalle\":{\"base\":10,\"cantidadDados\":1,\"caras\":6},"
+                        + "\"danoDetalle\":{\"base\":0,\"cantidadDados\":1,\"caras\":4}}}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(FICHA_EN_NIVEL_3)).andRespond(withSuccess(
+                "{\"nombre\":\"Guerrero Tanque\",\"nivel\":3,\"estadisticas\":{\"poder\":30,\"vida\":132,"
+                        + "\"defensa\":33,\"ataqueDetalle\":{\"base\":30,\"cantidadDados\":1,\"caras\":6},"
+                        + "\"danoDetalle\":{\"base\":0,\"cantidadDados\":3,\"caras\":4}}}",
+                MediaType.APPLICATION_JSON));
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        var enSuNivel = estado.heroe().perfil().estadisticas();
+        assertAll(
+                () -> assertEquals(3, estado.heroe().nivel()),
+                () -> assertEquals(3, estado.heroe().perfil().nivel()),
+                () -> assertEquals(30, enSuNivel.poder()),
+                () -> assertEquals(134, enSuNivel.vida(), "132 del catalogo + 2 del equipo"),
+                () -> assertEquals(35, enSuNivel.defensa(), "33 del catalogo + 2 del equipo"),
+                () -> assertEquals(31, enSuNivel.ataque().base(), "30 del catalogo + 1 del equipo"),
+                () -> assertEquals(3, enSuNivel.dano().cantidadDados(), "los dados del nivel se conservan"),
+                () -> assertEquals(134, estado.heroe().vidaMaxima()),
+                () -> assertEquals(35, estado.heroe().defensa()));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("B7: sin la vista del catalogo en su nivel, las estadisticas van nulas y el motor usa las del catalogo")
+    void nivelMayorSinCatalogo() {
+        esperarVitrina(vitrinaCon("{\"id\":\"h-1\",\"productoId\":\"p-1\",\"tipo\":\"HEROE\","
+                + "\"nombrePropio\":\"Sombra de Vael\",\"disponible\":true,\"subastaId\":null,\"nivel\":3}"));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":46,\"defensa\":13}", MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
+        servidor.expect(requestTo(FICHA_EN_NIVEL_3)).andRespond(withServerError());
+
+        EstadoDelHeroe estado = cliente.consultar(JUGADOR);
+
+        assertAll(
+                () -> assertEquals(3, estado.heroe().perfil().nivel()),
+                () -> assertNull(estado.heroe().perfil().estadisticas()),
+                () -> assertEquals(46, estado.heroe().vidaMaxima(), "la vida conocida, no una inventada"),
+                () -> assertEquals(11, estado.heroe().defensa(), "la del catalogo en nivel 1"));
+        servidor.verify();
+    }
+
+    @Test
+    @DisplayName("B7: un nivel fuera de 1..8 se acota: el documento no admite otro (§6.1.1)")
+    void nivelAcotado() {
+        esperarVitrina(vitrinaCon("{\"id\":\"h-1\",\"productoId\":\"p-1\",\"tipo\":\"HEROE\","
+                + "\"nombrePropio\":\"Sombra de Vael\",\"disponible\":true,\"subastaId\":null,\"nivel\":0}"));
+        servidor.expect(requestTo(EQUIPAMIENTO)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"armas\":[\"a-1\"],\"armaduras\":{},\"items\":[]}",
+                MediaType.APPLICATION_JSON));
+        servidor.expect(requestTo(ESTADISTICAS)).andRespond(withSuccess(
+                "{\"heroeId\":\"h-1\",\"poder\":10,\"vida\":44,\"defensa\":11}", MediaType.APPLICATION_JSON));
+        esperarProducto("Guerrero Tanque");
+        esperarFichaDePrototipo(11);
+
+        assertEquals(1, cliente.consultar(JUGADOR).heroe().perfil().nivel());
     }
 
     @Test

@@ -13,15 +13,16 @@
  *
  *   - `disponible` y `subastaId` de `ElementoInventario` (inventario.yaml):
  *     bloqueado por subasta, o no disponible sin más.
+ *   - `ejecucionMisionId` de `ElementoInventario` (inventario.yaml 1.6.0, B9):
+ *     el héroe está en esa misión, «En misión» (§7.8.10).
  *   - `EquipamientoHeroe`: sin nada puesto el héroe no puede combatir (lo
  *     comprueba HU-SAL-003 en el servidor; aquí solo se avisa antes).
  *   - Qué héroe lleva cada objeto, del mismo `EquipamientoHeroe`.
  *
- * «En misión» y «En torneo» existen como estados del componente porque el
- * documento los pide, pero **ninguna función de aquí los deduce**: ningún
- * contrato publica hoy qué héroe está en una misión (no hay servicio de
- * misiones) ni qué héroe juega un torneo (los equipos de `torneos.yaml`
- * inscriben jugadores, no héroes). Pintarlos sin dato sería inventarlos.
+ * «En torneo» existe como estado del componente porque el documento lo pide,
+ * pero **ninguna función de aquí lo deduce**: ningún contrato publica qué
+ * héroe juega un torneo (los equipos de `torneos.yaml` inscriben jugadores,
+ * no héroes). Pintarlo sin dato sería inventarlo.
  *
  * ## No solo color
  *
@@ -85,6 +86,11 @@ export const RANURAS_TOTALES = 10;
  * @returns {{estado: string, detalle: string|null}}
  */
 export function estadoDeHeroe({ elemento, equipamiento }) {
+  // §7.8.10: mientras dure la misión no juega, no entra en torneos ni cambia
+  // de equipo. El inventario lo dice con la ejecución que lo tiene.
+  if (elemento?.ejecucionMisionId) {
+    return { estado: ESTADOS.EN_MISION, detalle: null };
+  }
   if (elemento?.disponible === false) {
     return {
       estado: ESTADOS.BLOQUEADO,

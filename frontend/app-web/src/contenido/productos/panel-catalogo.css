@@ -37,7 +37,8 @@
 }
 
 .panel-catalogo__encabezado h2,
-.panel-distribucion h2 {
+.panel-distribucion h2,
+.panel-catalogo--pendiente h2 {
   margin: 0;
   font-family: Rajdhani, Inter, system-ui, sans-serif;
   font-size: 1.25rem;
@@ -205,6 +206,10 @@
 }
 
 .catalogo-admin {
+  /* UXC-9 — sin mínimo 0, el ancho mínimo de la tabla (720 px) estiraba el
+     panel entero —encabezado y filtros incluidos— a 768 y 375 px, en vez de
+     quedarse en su región desplazable. */
+  min-width: 0;
   margin-top: 20px;
 }
 
@@ -241,6 +246,8 @@
 /* La tabla se desplaza a lo ancho en pantalla estrecha, sin empujar la
    página: la región es enfocable para poder desplazarla con el teclado. */
 .catalogo-admin__desplazable {
+  /* Su ancho lo pone el panel, no la tabla: la tabla se desplaza dentro. */
+  contain: inline-size;
   overflow-x: auto;
   border: 1px solid var(--borde);
   border-radius: var(--radio);
@@ -392,4 +399,14 @@
 .hoja-producto .casilla__etiqueta {
   display: grid;
   gap: 2px;
+}
+
+/* UXC-9 — lo que el catálogo todavía no ofrece (§7.2.3, §7.2.4): una lista
+   de lectura, en el tono secundario del resto de explicaciones del panel. */
+.panel-catalogo--pendiente ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--texto-2);
 }

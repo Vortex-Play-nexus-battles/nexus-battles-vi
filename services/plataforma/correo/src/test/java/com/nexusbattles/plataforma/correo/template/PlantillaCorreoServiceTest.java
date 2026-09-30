@@ -187,6 +187,65 @@ class PlantillaCorreoServiceTest {
                 .contains("Espada Legendaria");
     }
 
+    // ----- 1.5.0 (B10): plantilla de los hitos de torneo -----
+
+    private static final String TORNEO_ID = "5b0f3c1e-8d2a-4c71-9e0b-2f6a7d4c9e11";
+
+    @Test
+    void laPlantillaDeTorneoVaSobreLaCorporativaConElAsuntoElMensajeYLaReferencia() {
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "ElGuerrero",
+                "asunto", "Inscripción confirmada: Copa de Otoño",
+                "mensaje", "Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.",
+                "torneoId", TORNEO_ID));
+
+        assertThat(html)
+                .contains("THE NEXUS BATTLES VI")
+                .contains("src=\"cid:logo-nexus\"")
+                .contains("instagram.com/thenexusbattles")
+                .contains("ElGuerrero")
+                .contains("Inscripción confirmada: Copa de Otoño")
+                .contains("Tu equipo «Los Invictos» quedó inscrito en el torneo «Copa de Otoño» en la posición 3.")
+                .as("torneoId es la referencia del envío: se ve en el correo")
+                .contains("Referencia del torneo: <strong>" + TORNEO_ID + "</strong>")
+                .as("los valores de muestra de la plantilla quedan sustituidos")
+                .doesNotContain("Novedades de tu torneo")
+                .doesNotContain("Detalle del torneo.")
+                .doesNotContain("�");
+    }
+
+    @Test
+    void sinTorneoIdLaPlantillaDeTorneoNoPintaUnaReferenciaVacia() {
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "ElGuerrero", "asunto", "Empezó el torneo Copa de Otoño", "mensaje", "El torneo ya empezó."));
+
+        assertThat(html)
+                .contains("El torneo ya empezó.")
+                .doesNotContain("Referencia del torneo");
+    }
+
+    @Test
+    void loQueMandaTorneosSePintaComoTextoYNuncaComoHtml() {
+        // Sin HTML del llamante (HU-COR-001): asunto, mensaje y apodo se
+        // escapan aunque parezcan marcado.
+        String html = service.renderizar("email/torneo", Map.of(
+                "apodo", "<b>Ana</b>", "asunto", "<i>Premio</i>", "mensaje", "<script>alert(1)</script>",
+                "torneoId", TORNEO_ID));
+
+        assertThat(html)
+                .doesNotContain("<script>alert(1)</script>")
+                .contains("&lt;script&gt;alert(1)&lt;/script&gt;")
+                .doesNotContain("<b>Ana</b>")
+                .doesNotContain("<i>Premio</i>");
+    }
+
+    @Test
+    void laPlantillaDeTorneoNoFiltraSusComentariosInternos() {
+        assertThat(service.renderizar("email/torneo", Map.of("apodo", "Ana", "asunto", "a", "mensaje", "m")))
+                .doesNotContain("Comentario de Thymeleaf")
+                .doesNotContain("correo.yaml");
+    }
+
     // ----- 1.4.0: confirmacion de cuenta segun su proposito, con enlace -----
 
     private static final String ENLACE_VERIFICACION =

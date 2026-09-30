@@ -23,10 +23,16 @@ import java.util.List;
  * vuelven a enviar. Una transaccion unica los desharia todos y el jugador
  * recibiria seis avisos repetidos en el siguiente intento.
  *
- * <p><b>Al primer fallo se corta el lote.</b> Si el modulo de notificaciones no
- * responde, no va a responder para los 200 avisos siguientes: seguir seria
- * castigar a un servicio caido y llenar el log. Lo pendiente se queda en la
- * tabla, que es justo para lo que existe, y se reintenta en la pasada siguiente.
+ * <p><b>Al primer fallo pasajero se corta el lote.</b> Si el modulo de
+ * notificaciones no responde, no va a responder para los 200 avisos
+ * siguientes: seguir seria castigar a un servicio caido y llenar el log. Lo
+ * pendiente se queda en la tabla, que es justo para lo que existe, y se
+ * reintenta en la pasada siguiente.
+ *
+ * <p><b>Un rechazo definitivo no corta nada (B8).</b> Un aviso que la bandeja
+ * rechaza por su forma se marca {@code fallida_en} y se sigue con el
+ * siguiente: dejarlo en la cola la bloqueaba para siempre, porque el lote se
+ * cortaba siempre en el.
  */
 @Component
 @RequiredArgsConstructor
@@ -38,9 +44,10 @@ public class DrenadorDeNotificacionesJob {
     private final NotificacionesClient notificaciones;
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}")
+    @Scheduled(fixedDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}",
+            initialDelayString = "${app.notificaciones.drenaje-intervalo-ms:5000}")
     public void drenar() {
-        List<NotificacionPendiente> pendientes = repositorio.findByEnviadaEnIsNullOrderByCreadaEnAsc();
+        List<NotificacionPendiente> pendientes = repositorio.findByEnviadaEnIsNullAndFallidaEnIsNullOrderByCreadaEnAsc();
         if (pendientes.isEmpty()) {
             return;
         }
@@ -49,10 +56,18 @@ public class DrenadorDeNotificacionesJob {
         for (NotificacionPendiente pendiente : pendientes) {
             try {
                 notificaciones.entregar(avisoDe(pendiente));
+            } catch (NotificacionesClientException rechazo) {
+                if (rechazo.esDefinitivo()) {
+                    log.error("El modulo de notificaciones rechazo el aviso {} ({}): se aparta de la cola. {}",
+                            pendiente.getId(), pendiente.getTipo(), rechazo.getMessage());
+                    pendiente.setFallidaEn(clock.instant());
+                    repositorio.save(pendiente);
+                    continue;
+                }
+                registrarPasajero(pendiente, entregados, pendientes.size(), rechazo);
+                break;
             } catch (RuntimeException fallo) {
-                log.warn("No se pudo entregar el aviso {} ({} de {} en este lote): {}. "
-                                + "Queda en el outbox y se reintenta.",
-                        pendiente.getId(), entregados + 1, pendientes.size(), fallo.getMessage());
+                registrarPasajero(pendiente, entregados, pendientes.size(), fallo);
                 break;
             }
             pendiente.setEnviadaEn(clock.instant());
@@ -65,12 +80,19 @@ public class DrenadorDeNotificacionesJob {
         }
     }
 
+    private static void registrarPasajero(NotificacionPendiente pendiente, int entregados, int total,
+                                          RuntimeException fallo) {
+        log.warn("No se pudo entregar el aviso {} ({} de {} en este lote): {}. "
+                        + "Queda en el outbox y se reintenta.",
+                pendiente.getId(), entregados + 1, total, fallo.getMessage());
+    }
+
     private NotificacionesClient.Aviso avisoDe(NotificacionPendiente pendiente) {
         return new NotificacionesClient.Aviso(
                 pendiente.getId(),
                 pendiente.getDestinatarioId(),
                 pendiente.getTipo(),
-                pendiente.getTipo().getTitulo(),
+                pendiente.tituloVisible(),
                 pendiente.getDetalle(),
                 pendiente.getCreadaEn());
     }

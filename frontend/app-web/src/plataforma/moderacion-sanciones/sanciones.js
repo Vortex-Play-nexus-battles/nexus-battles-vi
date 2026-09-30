@@ -24,6 +24,11 @@ import { campo } from '../../comun/ui/campo.js';
 import { cuentaAtrasRotulada, vigilarCuentasAtras } from '../../comun/ui/cuenta-atras.js';
 import { lineaDeTiempo } from '../../comun/ui/linea-de-tiempo.js';
 import { estadoDeCuenta, hechosDeSanciones, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
+import {
+  respaldoPorEstado,
+  textoDelServidor,
+  tituloDelServidor,
+} from '../../comun/ui/texto-de-fallo.js';
 
 export const TIPO = Object.freeze({
   ADVERTENCIA: 'ADVERTENCIA',
@@ -53,11 +58,14 @@ function baseDeApi() {
 /** Error del servicio con la forma del problem details. */
 export class ErrorDeSanciones extends Error {
   constructor(problema, estado) {
-    super(problema?.detail ?? problema?.title ?? `Error ${estado}`);
+    // UXC-9 — nunca «Error 503»: el texto del servidor si se lee, y si no
+    // la frase que toca a su código.
+    const detalle = textoDelServidor(problema, estado, respaldoPorEstado(estado));
+    super(detalle);
     this.name = 'ErrorDeSanciones';
     this.estado = estado;
-    this.titulo = problema?.title ?? 'No se pudo completar';
-    this.detalle = problema?.detail ?? '';
+    this.titulo = tituloDelServidor(problema, 'No se pudo completar');
+    this.detalle = detalle;
     this.motivo = problema?.motivo ?? null;
   }
 }
@@ -421,12 +429,22 @@ export function tarjetaDeApelacion(apelacion, { resolver } = {}) {
 /**
  * Monta el panel de moderación.
  *
+ * UXC-9 — `usuarioInicial` (por omisión, `?usuario=` de la URL) abre el
+ * historial de esa cuenta al montar: el directorio de la consola enlaza
+ * aquí cada jugador, y antes había que copiar su identificador a mano.
+ *
  * @param {ParentNode} raiz documento con las zonas `[data-zona=...]`
- * @param {{rol?: string|null, fetchImpl?: Function, ahora?: () => number}} [opciones]
+ * @param {{rol?: string|null, fetchImpl?: Function, ahora?: () => number,
+ *          usuarioInicial?: string|null}} [opciones]
  */
 export function montarPanelDeModeracion(
   raiz,
-  { rol = null, fetchImpl, ahora = () => Date.now() } = {},
+  {
+    rol = null,
+    fetchImpl,
+    ahora = () => Date.now(),
+    usuarioInicial = new URLSearchParams(globalThis.location?.search ?? '').get('usuario'),
+  } = {},
 ) {
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const formBuscar = raiz.querySelector('[data-zona="buscar"]');
@@ -641,6 +659,16 @@ export function montarPanelDeModeracion(
 
   aplicarLimites();
   cargarApelaciones();
+  const pedido = String(usuarioInicial ?? '').trim();
+  if (pedido) {
+    for (const formulario of [formBuscar, formEmitir]) {
+      const campoUsuario = formulario?.querySelector('[name="usuarioId"]');
+      if (campoUsuario) {
+        campoUsuario.value = pedido;
+      }
+    }
+    cargarHistorial(pedido);
+  }
   return { cargarHistorial, cargarApelaciones, aplicarLimites };
 }
 

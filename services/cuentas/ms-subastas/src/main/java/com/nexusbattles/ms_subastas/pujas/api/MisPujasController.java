@@ -1,11 +1,14 @@
 package com.nexusbattles.ms_subastas.pujas.api;
 
 import com.nexusbattles.ms_subastas.pujas.dto.MiResumenResponse;
+import com.nexusbattles.ms_subastas.pujas.dto.ParticipacionResponse;
 import com.nexusbattles.ms_subastas.pujas.service.ConsultaDeParticipacionService;
 import com.nexusbattles.ms_subastas.subastas.port.IdentidadClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * Lo que el jugador tiene en juego sumando todas las subastas.
@@ -32,5 +35,11 @@ public class MisPujasController {
     @GetMapping("/resumen")
     public MiResumenResponse resumen() {
         return consultas.miResumen(identidad.actual().usuarioId());
+    }
+
+    /** «Mis pujas» de 7.7.9 (B8): tambien las subastas ya cerradas. */
+    @GetMapping
+    public List<ParticipacionResponse> misParticipaciones() {
+        return consultas.misParticipaciones(identidad.actual().usuarioId());
     }
 }

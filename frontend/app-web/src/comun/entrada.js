@@ -23,6 +23,7 @@ import {
   urlDeLogin,
   urlDeVerificacion,
 } from './sesion.js';
+import { textoDelServidor } from './ui/texto-de-fallo.js';
 
 /**
  * Correo que el login trae ya escrito: el de la cuenta que se acaba de crear,
@@ -57,10 +58,12 @@ export async function cuerpoDe(respuesta) {
  * @returns {string|undefined}
  */
 export function mensajeDelServidor(body) {
-  if (typeof body === 'string') {
-    return body || undefined;
-  }
-  return body?.detail ?? body?.mensaje ?? undefined;
+  // UXC-9 — una página de proxy («502 Bad Gateway · nginx») llegaba aquí como
+  // texto plano y el login la pintaba entera. Solo pasa lo que se lee.
+  // B1 — del problem details cuentan `detail` (o el `mensaje` antiguo); el
+  // `title` nombra el problema, no es un mensaje para quien entra.
+  const candidato = body && typeof body === 'object' ? (body.detail ?? body.mensaje ?? null) : body;
+  return textoDelServidor(candidato, undefined, '') || undefined;
 }
 
 /**

@@ -12,7 +12,8 @@
  *
  *   - 201: reportado; el comentario pasa a revisión y sale del hilo público.
  *   - 409 REPORTE_DUPLICADO: ya lo había reportado; se dice, sin error.
- *   - 429 LIMITE_DE_REPORTES: el tope diario (D-27); se dice cuándo vuelve.
+ *   - 429 LIMITE_DE_REPORTES: el tope (D-27); se dice sin cifra ni plazo.
+ *   - 400 REPORTE_INVALIDO: se puede corregir; el formulario se queda como está.
  *   - 404: el comentario ya no está publicado.
  *   - 401: la sesión ya no vale; se ofrece entrar otra vez.
  *   - lo demás: no se pudo enviar; el motivo elegido se conserva y se reintenta.
@@ -66,8 +67,17 @@ export function mensajeDelRechazo(error) {
   if (error.motivo === MOTIVO_MODERACION.LIMITE_DE_REPORTES || error.estado === 429) {
     return {
       tono: 'advertencia',
-      titulo: 'Alcanzaste el límite de reportes de hoy',
-      detalle: 'Podrás volver a reportar mañana. Los reportes que ya enviaste siguen en revisión.',
+      titulo: 'Alcanzaste el límite de reportes',
+      detalle:
+        'Podrás volver a reportar más adelante. Los reportes que ya enviaste siguen en revisión.',
+    };
+  }
+  if (error.motivo === MOTIVO_MODERACION.REPORTE_INVALIDO || error.estado === 400) {
+    // Texto propio: el del servidor puede traer una cifra (el largo permitido).
+    return {
+      tono: 'advertencia',
+      titulo: 'Revisa el reporte',
+      detalle: 'Elige el motivo y comprueba que la descripción no sea demasiado larga.',
     };
   }
   if (error.estado === 404) {

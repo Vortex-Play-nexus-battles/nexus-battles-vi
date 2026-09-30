@@ -20,6 +20,7 @@ import { construirDetalleDeHeroe } from './detalle-heroe.js';
 import { icono } from '../../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from './vitrina.js';
 import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
+import { NOMBRE_DEL_TIPO } from '../../comun/ui/formato.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -52,15 +53,8 @@ export const ATRIBUTOS_POR_TIPO = Object.freeze({
   ],
 });
 
-/** Etiqueta legible de cada tipo del catalogo (la usan tambien la tienda y la portada). */
-export const NOMBRE_DEL_TIPO = Object.freeze({
-  HEROE: 'Héroe',
-  HABILIDAD: 'Habilidad',
-  ARMA: 'Arma',
-  ARMADURA: 'Armadura',
-  ITEM: 'Ítem',
-  EPICA: 'Épica',
-});
+/** Etiqueta legible de cada tipo del catalogo: vive en `comun/ui/formato.js` (UXC-8). */
+export { NOMBRE_DEL_TIPO };
 
 let secuencia = 0;
 
@@ -240,6 +234,9 @@ export async function abrirFicha(
     elementoId = null,
     identidad = null,
     nombrePropio = null,
+    // UXC-9 — el nivel que guarda el inventario (1.5.0): con él, la ficha dice
+    // qué acciones ya aprendió y cuál es su épica afín.
+    nivel = null,
     detalleDeHeroe = construirDetalleDeHeroe,
     // UXC-3/UXC-4 — lo que cada vista añade al final de la ficha: las
     // opiniones de la comunidad, el bloque de compra de la tienda. Cada uno es
@@ -302,6 +299,7 @@ export async function abrirFicha(
       identidad,
       heroeId: elementoId,
       prototipo: producto.prototipo ?? null,
+      nivel,
     });
   } catch (fallo) {
     console.error('No se pudo completar el detalle del héroe', fallo);

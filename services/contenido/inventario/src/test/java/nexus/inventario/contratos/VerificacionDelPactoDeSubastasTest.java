@@ -3,6 +3,7 @@ package nexus.inventario.contratos;
 import au.com.dius.pact.provider.junit5.HttpTestTarget;
 import au.com.dius.pact.provider.junit5.PactVerificationContext;
 import au.com.dius.pact.provider.junit5.PactVerificationInvocationContextProvider;
+import au.com.dius.pact.provider.junitsupport.Consumer;
 import au.com.dius.pact.provider.junitsupport.Provider;
 import au.com.dius.pact.provider.junitsupport.State;
 import au.com.dius.pact.provider.junitsupport.loader.PactFolder;
@@ -75,6 +76,10 @@ import org.springframework.test.context.DynamicPropertySource;
  * la respuesta del servicio, no un 401.
  */
 @Provider("ms-inventario")
+// 1.6.0 (B9): ms-inventario tiene dos consumidores con pacto (ms-subastas y
+// misiones). Cada verificacion carga solo el suyo; sin esto, esta clase
+// intentaria montar los estados de misiones, que no conoce.
+@Consumer("ms-subastas")
 @PactFolder("../../../contracts/pactos")
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,

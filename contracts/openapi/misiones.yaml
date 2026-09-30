@@ -1,0 +1,1235 @@
+openapi: 3.1.0
+info:
+  title: Servicio de misiones
+  version: 1.0.0
+  description: >
+    Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
+    RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
+    simulación en segundo plano contra el entorno (JvE), reporte, historial,
+    favoritas y estrategias guardadas. Contrato publicado antes de implementar
+    (regla 1) y escrito para servir al puerto que la interfaz ya consume
+    (`frontend/app-web/src/contenido/misiones/fuente-misiones.js`, UXC-5): sus
+    tipos JSDoc son los esquemas de aquí.
+
+
+    **Identidad.** Todas las rutas son del jugador autenticado: el jugador es
+    el `uid` de su token (ADR-002), nunca un dato del cuerpo ni de la ruta.
+    Una ejecución, una estrategia o una favorita de otro jugador responden 404,
+    igual que si no existieran: no se confirma lo ajeno.
+
+
+    **Qué hace el servidor y qué no.** Las misiones se leen de una semilla
+    versionada en el repositorio (`services/contenido/misiones/src/main/resources/semilla/`):
+    «El Templo Olvidado» es el ejemplo del documento (§7.8.14), tal cual. El
+    combate lo resuelve el motor de combate (`POST /api/v1/combate/ataques`) y
+    la IA de cada turno la decide el servicio de héroes
+    (`POST /api/v1/estrategias/decision`): aquí no hay un segundo motor. La
+    experiencia por enemigo derrotado es 10 × 1,2^(1d8) (§6.1.1): el dado lo
+    tira este servidor y el valor lo da heroes
+    (`GET /api/v1/progresion/experiencia-por-enemigo/{dado}`). El nivel y la
+    experiencia del héroe los persiste el inventario (inventario.yaml 1.6.0),
+    que aplica la tabla de niveles de heroes (100 × 1,2^(n−1), tope 8).
+
+
+    **Tiempo.** Una misión dura `duracionHoras` (§7.8.3). La simulación corre
+    en segundo plano al vencer ese plazo (§7.8.12, «ejecución de simulaciones
+    en segundo plano», «capacidad de simular combates a velocidad acelerada»)
+    y el resultado se liquida entonces: créditos (ms-finanzas, idempotente por
+    `refId`), objetos y épicas (`POST /api/v1/inventario/entregas`, origen
+    MISION, con `Idempotency-Key` por ejecución), liberación del héroe con su
+    experiencia (inventario, idempotente por estado) y correo (`POST
+    /correos/mision`). En desarrollo y en el banco E2E una hora de misión
+    puede durar menos (`MISIONES_SEGUNDOS_POR_HORA`, 3600 por omisión): los
+    instantes que devuelve este contrato son siempre los reales.
+
+
+    **Decisiones del PO pendientes**, con su valor provisional (ver el README
+    del servicio): experiencia por completar según dificultad (§6.1.1 no da
+    cifras; 0 por omisión), penalización por abandonar (se pierden las
+    recompensas de esa ejecución), estadísticas de los enemigos regulares
+    (semilla marcada PROVISIONAL), «mazo completo equipado» (al menos un arma,
+    armadura o ítem, como ADR-004), la probabilidad del Máster del ejemplo
+    («0.15% (15% de probabilidad)»: se toma 15 %), el multiplicador del
+    escalón Mítico (sin cifra en §7.8.11: no se ofrece) y las recompensas del
+    ejemplo que no están en el catálogo oficial (se informan como
+    `sinEntregar`, no se inventan productos).
+servers:
+  - url: http://localhost:8080
+    description: Entorno local de desarrollo
+security:
+  - tokenDeJugador: []
+paths:
+  /api/v1/misiones:
+    get:
+      summary: Tablón de misiones del jugador, por categoría y con filtros (RF-MIS-001, RF-MIS-002)
+      description: >
+        §7.8.9: pestañas Historia / Desafío / Exploración, filtros por
+        dificultad, estado y duración estimada (se combinan con Y, HU-MIS-002)
+        y dieciséis tarjetas por página (RNF-USA-001). El estado de cada
+        misión es el del jugador que pregunta (§7.8.7): Bloqueada si le falta
+        completar la misión previa de la historia, En progreso si tiene una
+        ejecución en curso, y si no, el resultado de su última ejecución
+        (Completada, Fallida o Abandonada) o Disponible.
+      operationId: consultarTablonDeMisiones
+      parameters:
+        - name: categoria
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/Categoria"
+        - name: dificultad
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/Dificultad"
+        - name: estado
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/EstadoMision"
+        - name: duracion
+          in: query
+          required: false
+          description: >
+            Tramos del filtro de duración de la interfaz: hasta 12 horas, de
+            12 a 24 y más de 24 (la exploración, 24 a 72 h, §7.8.2).
+          schema:
+            type: string
+            enum: [HASTA_12, DE_12_A_24, MAS_DE_24]
+        - name: pagina
+          in: query
+          required: false
+          description: Número de página, desde cero.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: >
+            Una página del tablón. Una categoría sin misiones es una página
+            vacía, no un error (HU-MIS-001, CA4).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeMisiones"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+  /api/v1/misiones/destacadas:
+    get:
+      summary: Misiones del banner rotativo (§7.8.9, RF-INV-003)
+      description: >
+        Las destacadas de la semilla que el jugador todavía puede jugar (no
+        bloqueadas), con las de tiempo limitado vigentes. Sin destacadas, lista
+        vacía: la interfaz decide qué enseñar entonces.
+      operationId: consultarMisionesDestacadas
+      responses:
+        "200":
+          description: Hasta diez misiones destacadas.
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 10
+                items:
+                  $ref: "#/components/schemas/ResumenMision"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+  /api/v1/misiones/en-curso:
+    get:
+      summary: Misiones del jugador en ejecución (panel de misiones activas, §7.8.9)
+      operationId: consultarMisionesEnCurso
+      responses:
+        "200":
+          description: >
+            Las ejecuciones en progreso del jugador, de la que termina antes a
+            la que termina después. Sin ninguna, lista vacía.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MisionActiva"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+  /api/v1/misiones/historial:
+    get:
+      summary: Historial de misiones del jugador (§7.8.8, RF-MIS-011)
+      operationId: consultarHistorialDeMisiones
+      responses:
+        "200":
+          description: Misiones terminadas, estadísticas por categoría, mejores tiempos, épicas y cadenas.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialDeMisiones"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+  /api/v1/misiones/estrategias/{heroeId}:
+    parameters:
+      - $ref: "#/components/parameters/HeroeId"
+    get:
+      summary: Estrategia guardada de un héroe propio (§7.8.12, «configuraciones de rotaciones guardadas»)
+      operationId: consultarEstrategiaGuardada
+      responses:
+        "200":
+          description: La última estrategia guardada para ese héroe.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstrategiaGuardada"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          description: El jugador no tiene estrategia guardada para ese héroe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+    put:
+      summary: Guarda la estrategia de un héroe propio, validada por el servicio de héroes
+      description: >
+        §7.8.5: hasta tres rotaciones con prioridad Alta, Media y Baja. La
+        valida heroes (`POST /api/v1/estrategias/validacion`) con el prototipo
+        y el nivel REALES del héroe, leídos del inventario: el nivel no lo
+        manda el cliente. Guardarla también ocurre al matricular.
+      operationId: guardarEstrategiaDeHeroe
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeEstrategia"
+      responses:
+        "200":
+          description: Estrategia validada y guardada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstrategiaGuardada"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          $ref: "#/components/responses/HeroeNoEncontrado"
+        "422":
+          $ref: "#/components/responses/EstrategiaInvalida"
+        "503":
+          $ref: "#/components/responses/DependenciaNoDisponible"
+  /api/v1/misiones/ejecuciones/{ejecucionId}:
+    parameters:
+      - $ref: "#/components/parameters/EjecucionId"
+    get:
+      summary: Reporte de una misión terminada (§7.8.8, RF-MIS-010)
+      operationId: consultarReporteDeMision
+      responses:
+        "200":
+          description: El reporte de una ejecución Completada o Fallida.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReporteMision"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          $ref: "#/components/responses/EjecucionNoEncontrada"
+        "409":
+          description: >
+            La ejecución todavía está en progreso, o se abandonó: una misión
+            cancelada no tiene reporte (el reporte se genera al completarse el
+            tiempo, §7.8.6).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/misiones/ejecuciones/{ejecucionId}/cancelacion:
+    parameters:
+      - $ref: "#/components/parameters/EjecucionId"
+    post:
+      summary: Cancela una misión en curso con penalización (§7.8.7 «Abandonada», HU-MIS-015)
+      description: >
+        La ejecución pasa a Abandonada y el héroe se libera en el inventario.
+        Penalización provisional (decisión del PO pendiente): se pierden todas
+        las recompensas de esta ejecución, experiencia incluida. Si el
+        inventario no contesta, la ejecución queda Abandonada igual y la
+        liberación la termina el trabajo en segundo plano (`heroeLiberado`
+        falso).
+      operationId: cancelarMisionEnCurso
+      responses:
+        "200":
+          description: Misión abandonada.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancelacion"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          $ref: "#/components/responses/EjecucionNoEncontrada"
+        "409":
+          description: La ejecución ya no está en progreso (terminó o ya se canceló).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/misiones/{misionId}:
+    parameters:
+      - $ref: "#/components/parameters/MisionId"
+    get:
+      summary: Detalle de una misión (§7.8.3 y §7.8.9, RF-MIS-003)
+      operationId: consultarDetalleDeMision
+      responses:
+        "200":
+          description: >
+            Narrativa, objetivos, enemigos, jefe, Máster con su épica,
+            recompensas y el estado para este jugador.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Mision"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          description: No hay una misión publicada con ese identificador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+  /api/v1/misiones/{misionId}/ejecuciones:
+    parameters:
+      - $ref: "#/components/parameters/MisionId"
+    post:
+      summary: Envía un héroe propio a la misión con su estrategia (§7.8.6, RF-MIS-004, HU-MIS-008/009)
+      description: >
+        Matrícula. En este orden, y sin dejar nada a medias (HU-MIS-009: si
+        algo falla, la misión no queda en progreso ni el héroe reservado):
+
+        1. La misión existe y está disponible para el jugador (no bloqueada por
+           la historia, sin otra ejecución suya en curso, con intentos si es de
+           desafío y con el escalón desbloqueado, §7.8.11).
+
+        2. El héroe es del jugador (inventario), es un héroe, está disponible
+           (ni en otra misión ni en subasta) y lleva equipamiento (§7.8.6,
+           «mazo completo equipado»; provisional: al menos un arma, armadura o
+           ítem, ADR-004).
+
+        3. Un sanador no va solo (RC-09: `POST /api/v1/equipos/validacion` de
+           heroes, regla de enfrentamiento individual).
+
+        4. La estrategia la valida heroes con el prototipo y el nivel reales
+           del héroe. Sin `rotaciones` se usa la guardada, y si no hay, el
+           ataque básico (§7.8.5).
+
+        5. El inventario bloquea al héroe para esta ejecución
+           (`PUT .../bloqueo-mision`): desde ese momento no juega en línea, ni
+           entra en torneos (que se juegan en salas), ni cambia de equipo, ni
+           se subasta (§7.8.10).
+
+        6. Se guarda la ejecución. Si esto falla, se libera el héroe.
+
+        Con la misma `Idempotency-Key` se devuelve la ejecución ya creada
+        (200) en vez de crear otra.
+      operationId: matricularHeroeEnMision
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDeMatricula"
+      responses:
+        "201":
+          description: Héroe enviado; la misión queda en progreso.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MisionActiva"
+        "200":
+          description: La misma clave ya creó esta ejecución; se devuelve tal cual.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MisionActiva"
+        "400":
+          $ref: "#/components/responses/SolicitudInvalida"
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          description: La misión no existe, o el héroe no existe o no es del jugador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: >
+            La misión no se puede empezar ahora (bloqueada por la historia,
+            ya en curso para este jugador, sin intentos o con el escalón sin
+            desbloquear) o el héroe está ocupado (en otra misión o en una
+            subasta). El `detail` es apto para el jugador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "422":
+          description: >
+            El héroe no es apto (sin equipamiento, o sanador en solitario) o
+            la estrategia no vale para su nivel. `detail` dice por qué, y
+            `motivos` los enumera todos (HU-MIS-008: «se muestran todas»).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "503":
+          $ref: "#/components/responses/DependenciaNoDisponible"
+  /api/v1/misiones/{misionId}/favorita:
+    parameters:
+      - $ref: "#/components/parameters/MisionId"
+    put:
+      summary: Marca la misión como favorita del jugador (§7.8.9, HU-MIS-017)
+      operationId: marcarMisionFavorita
+      responses:
+        "204":
+          description: Marcada (repetir no cambia nada).
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          description: No hay una misión publicada con ese identificador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+    delete:
+      summary: Quita la misión de las favoritas del jugador
+      operationId: desmarcarMisionFavorita
+      responses:
+        "204":
+          description: Desmarcada (si no lo estaba, igual).
+        "401":
+          $ref: "#/components/responses/SinIdentidad"
+        "404":
+          description: No hay una misión publicada con ese identificador.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+components:
+  securitySchemes:
+    tokenDeJugador:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Token de ms-identidad (RS256, JWKS) de un usuario: JUGADOR, MODERADOR,
+        ADMINISTRADOR o SUPER_ADMINISTRADOR. El jugador es su `uid`. Un token
+        de servicio no sirve aquí: ninguna ruta de este contrato es interna.
+  parameters:
+    MisionId:
+      name: misionId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-z0-9][a-z0-9-]{1,63}$"
+      example: templo-olvidado
+    EjecucionId:
+      name: ejecucionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    HeroeId:
+      name: heroeId
+      in: path
+      required: true
+      description: Identificador del elemento HEROE en el inventario del jugador.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+  responses:
+    SolicitudInvalida:
+      description: Parámetros o cuerpo fuera del esquema.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    SinIdentidad:
+      description: Sin token, o token inválido o caducado.
+    HeroeNoEncontrado:
+      description: El héroe no existe o no es del jugador.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    EjecucionNoEncontrada:
+      description: No hay una ejecución de este jugador con ese identificador.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    EstrategiaInvalida:
+      description: >
+        Heroes rechazó la estrategia para el prototipo y el nivel del héroe;
+        `detail` lleva su motivo, apto para el jugador (heroes.yaml,
+        VeredictoDeEstrategia.motivo), y `habilidadesValidas` lo que sí puede usar.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+    DependenciaNoDisponible:
+      description: >
+        Un servicio del que depende la operación (inventario, heroes,
+        productos) no responde. Problem detail de sección degradada
+        (`https://nexusbattles.local/errores/seccion-no-disponible`, HU-DIS-003)
+        con `seccion` y `Retry-After`. No se aplica nada a medias.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/DetalleDeProblema"
+  schemas:
+    Categoria:
+      type: string
+      description: §7.8.2.
+      enum: [HISTORIA, DESAFIO, EXPLORACION]
+    Dificultad:
+      type: string
+      description: Filtro de dificultad de §7.8.9.
+      enum: [FACIL, NORMAL, DIFICIL, EXTREMO]
+    EstadoMision:
+      type: string
+      description: Los seis estados de §7.8.7, vistos por el jugador que pregunta.
+      enum: [DISPONIBLE, BLOQUEADA, EN_PROGRESO, COMPLETADA, FALLIDA, ABANDONADA]
+    Escalon:
+      type: string
+      description: >
+        Niveles de dificultad escalonada de §7.8.11. Heroico: enemigos con 50 %
+        más de estadísticas; Legendario: con 100 % más; Mítico: el documento
+        no lo cuantifica y no se ofrece hasta que el PO fije su valor.
+      enum: [NORMAL, HEROICO, LEGENDARIO, MITICO]
+    Origen:
+      type: string
+      description: >
+        DOCUMENTO: la misión es del documento del curso (§7.8.14).
+        PROVISIONAL_DEV: semilla de desarrollo para demostrar el flujo, solo
+        con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
+      enum: [DOCUMENTO, PROVISIONAL_DEV]
+    PaginaDeMisiones:
+      type: object
+      required: [misiones, total, pagina, totalPaginas, tamanio]
+      properties:
+        misiones:
+          type: array
+          maxItems: 16
+          items:
+            $ref: "#/components/schemas/ResumenMision"
+        total:
+          type: integer
+          minimum: 0
+        pagina:
+          type: integer
+          minimum: 0
+        totalPaginas:
+          type: integer
+          minimum: 0
+        tamanio:
+          type: integer
+          const: 16
+    ResumenMision:
+      type: object
+      description: La tarjeta del tablón (§7.8.9).
+      required: [id, nombre, categoria, descripcionBreve, dificultad, duracionHoras, estado]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        categoria:
+          $ref: "#/components/schemas/Categoria"
+        descripcionBreve:
+          type: string
+        imagen:
+          type: [string, "null"]
+          description: URL de la imagen representativa; nula si no hay.
+        dificultad:
+          $ref: "#/components/schemas/Dificultad"
+        duracionHoras:
+          type: number
+          exclusiveMinimum: 0
+        nivelRecomendado:
+          type: [integer, "null"]
+          description: >
+            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
+            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+        recompensasDestacadas:
+          type: array
+          items:
+            type: string
+        estado:
+          $ref: "#/components/schemas/EstadoMision"
+        motivoBloqueo:
+          type: [string, "null"]
+          description: Por qué está bloqueada, dicho para el jugador.
+        progreso:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Tiempo transcurrido sobre la duración, si está en progreso.
+        ultimaEjecucionId:
+          type: [string, "null"]
+          description: La última ejecución con reporte (Completada o Fallida).
+        destacada:
+          type: boolean
+        nueva:
+          type: boolean
+          description: El jugador todavía no la ha empezado nunca.
+        disponibleHasta:
+          type: [string, "null"]
+          format: date-time
+          description: Si es de tiempo limitado, hasta cuándo.
+        favorita:
+          type: boolean
+        origen:
+          $ref: "#/components/schemas/Origen"
+    Mision:
+      type: object
+      description: >
+        El detalle (§7.8.3 y §7.8.9): todos los campos de ResumenMision más los
+        del detalle. Se escribe plano, sin allOf, para que el esquema diga
+        exactamente qué lleva y un validador estricto no vea como «de más» los
+        campos de una mitad al validar la otra.
+      required:
+        [id, nombre, categoria, descripcionBreve, dificultad, duracionHoras, estado, narrativa, objetivos,
+         enemigos, recompensas]
+      properties:
+        id:
+          type: string
+        nombre:
+          type: string
+        categoria:
+          $ref: "#/components/schemas/Categoria"
+        descripcionBreve:
+          type: string
+        imagen:
+          type: [string, "null"]
+          description: URL de la imagen representativa; nula si no hay.
+        dificultad:
+          $ref: "#/components/schemas/Dificultad"
+        duracionHoras:
+          type: number
+          exclusiveMinimum: 0
+        nivelRecomendado:
+          type: [integer, "null"]
+          description: >
+            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
+            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+        recompensasDestacadas:
+          type: array
+          items:
+            type: string
+        estado:
+          $ref: "#/components/schemas/EstadoMision"
+        motivoBloqueo:
+          type: [string, "null"]
+          description: Por qué está bloqueada, dicho para el jugador.
+        progreso:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Tiempo transcurrido sobre la duración, si está en progreso.
+        ultimaEjecucionId:
+          type: [string, "null"]
+          description: La última ejecución con reporte (Completada o Fallida).
+        destacada:
+          type: boolean
+        nueva:
+          type: boolean
+          description: El jugador todavía no la ha empezado nunca.
+        disponibleHasta:
+          type: [string, "null"]
+          format: date-time
+          description: Si es de tiempo limitado, hasta cuándo.
+        favorita:
+          type: boolean
+        origen:
+          $ref: "#/components/schemas/Origen"
+        narrativa:
+          type: string
+        escenario:
+          type: [string, "null"]
+        objetivos:
+          type: object
+          required: [principales, secundarios]
+          properties:
+            principales:
+              type: array
+              items:
+                type: string
+            secundarios:
+              type: array
+              items:
+                type: string
+        requisitosPrevios:
+          type: array
+          description: Nombres de las misiones que hay que completar antes.
+          items:
+            type: string
+        encuentros:
+          type: [integer, "null"]
+          description: Combates de la misión sin contar un Máster que aparezca.
+        escalon:
+          $ref: "#/components/schemas/Escalon"
+        escalones:
+          type: array
+          description: Los escalones de §7.8.11 y si el jugador los tiene desbloqueados.
+          items:
+            type: object
+            required: [id, desbloqueado]
+            properties:
+              id:
+                $ref: "#/components/schemas/Escalon"
+              desbloqueado:
+                type: boolean
+              multiplicadorDeEstadisticas:
+                type: [number, "null"]
+        enemigos:
+          type: array
+          items:
+            type: object
+            required: [nombre]
+            properties:
+              nombre:
+                type: string
+              cantidad:
+                type: [integer, "null"]
+              descripcion:
+                type: [string, "null"]
+        jefe:
+          type: [object, "null"]
+          description: El jefe final; ausente o nulo si la misión no tiene.
+          required: [nombre]
+          properties:
+            nombre:
+              type: string
+            prototipo:
+              type: [string, "null"]
+            vida:
+              type: [integer, "null"]
+            descripcion:
+              type: [string, "null"]
+        probabilidadMaster:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+          description: Probabilidad de que aparezca el Máster propio de la misión, como proporción.
+        masters:
+          type: array
+          description: Máster propios de la misión con su épica (§7.8.4).
+          items:
+            $ref: "#/components/schemas/MasterVista"
+        mastersPorTipoDeHeroe:
+          type: array
+          description: >
+            Tabla 20: cada tipo de héroe tiene un Máster afín con su épica y
+            su probabilidad por misión. Aparece el del tipo del héroe que
+            se envíe.
+          items:
+            $ref: "#/components/schemas/MasterVista"
+        recompensas:
+          type: object
+          required: [garantizadas, potenciales]
+          properties:
+            garantizadas:
+              type: array
+              items:
+                type: string
+            potenciales:
+              type: array
+              items:
+                type: object
+                required: [nombre, probabilidad]
+                properties:
+                  nombre:
+                    type: string
+                  probabilidad:
+                    type: number
+                    minimum: 0
+                    maximum: 1
+                  detalle:
+                    type: [string, "null"]
+            porObjetivos:
+              type: array
+              items:
+                type: object
+                required: [objetivo, recompensa]
+                properties:
+                  objetivo:
+                    type: string
+                  recompensa:
+                    type: string
+            primeraVez:
+              type: array
+              items:
+                type: string
+        experiencia:
+          type: object
+          description: La experiencia que se puede obtener (HU-MIS-006).
+          required: [porEnemigo]
+          properties:
+            porEnemigo:
+              type: string
+              example: 10 × 1,2^(1d8) por cada enemigo derrotado
+            porCompletar:
+              type: number
+              minimum: 0
+        intentos:
+          type: [object, "null"]
+          description: Solo en desafíos (§7.8.2); ausente o nulo en las demás.
+          required: [maximo, periodo, restantes]
+          properties:
+            maximo:
+              type: integer
+              minimum: 1
+            periodo:
+              type: string
+              enum: [DIARIO, SEMANAL]
+            restantes:
+              type: integer
+              minimum: 0
+    MasterVista:
+      type: object
+      required: [nombre, epica]
+      properties:
+        nombre:
+          type: string
+        prototipo:
+          type: [string, "null"]
+        probabilidad:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        epica:
+          type: object
+          required: [nombre]
+          properties:
+            nombre:
+              type: string
+            efectoGeneral:
+              type: [string, "null"]
+            efectoPotenciado:
+              type: [string, "null"]
+    SolicitudDeMatricula:
+      type: object
+      additionalProperties: false
+      required: [heroeId]
+      properties:
+        heroeId:
+          type: string
+          minLength: 1
+          maxLength: 100
+        rotaciones:
+          type: array
+          maxItems: 3
+          description: >
+            En orden de prioridad (Alta, Media, Baja). Ausente: la estrategia
+            guardada del héroe, o el ataque básico si no hay.
+          items:
+            $ref: "#/components/schemas/RotacionSolicitada"
+        escalon:
+          $ref: "#/components/schemas/Escalon"
+    SolicitudDeEstrategia:
+      type: object
+      additionalProperties: false
+      required: [rotaciones]
+      properties:
+        rotaciones:
+          type: array
+          maxItems: 3
+          items:
+            $ref: "#/components/schemas/RotacionSolicitada"
+    RotacionSolicitada:
+      type: object
+      additionalProperties: false
+      required: [pasos]
+      properties:
+        pasos:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            minLength: 1
+            maxLength: 60
+    EstrategiaGuardada:
+      type: object
+      required: [heroeId, prototipo, nivel, rotaciones, actualizadaEn]
+      properties:
+        heroeId:
+          type: string
+        prototipo:
+          type: string
+        nivel:
+          type: integer
+          minimum: 1
+          maximum: 8
+        rotaciones:
+          type: array
+          items:
+            type: object
+            required: [prioridad, pasos]
+            properties:
+              prioridad:
+                type: string
+                enum: [Alta, Media, Baja]
+              pasos:
+                type: array
+                items:
+                  type: string
+        actualizadaEn:
+          type: string
+          format: date-time
+    MisionActiva:
+      type: object
+      description: Una misión en curso (§7.8.9, «Panel de misiones activas»).
+      required: [ejecucionId, misionId, nombre, categoria, heroe, iniciadaEn, terminaEn, estado]
+      properties:
+        ejecucionId:
+          type: string
+          format: uuid
+        misionId:
+          type: string
+        nombre:
+          type: string
+        categoria:
+          $ref: "#/components/schemas/Categoria"
+        heroe:
+          type: object
+          required: [id, nombre]
+          properties:
+            id:
+              type: string
+            nombre:
+              type: string
+            prototipo:
+              type: [string, "null"]
+            nivel:
+              type: [integer, "null"]
+        iniciadaEn:
+          type: string
+          format: date-time
+        terminaEn:
+          type: string
+          format: date-time
+        progreso:
+          type: [number, "null"]
+          minimum: 0
+          maximum: 1
+        penalizacion:
+          type: [string, "null"]
+          description: Lo que cuesta cancelarla, dicho para el jugador.
+        escalon:
+          $ref: "#/components/schemas/Escalon"
+        estado:
+          type: string
+          enum: [EN_PROGRESO]
+    Cancelacion:
+      type: object
+      required: [ejecucionId, estado, heroeLiberado, penalizacion]
+      properties:
+        ejecucionId:
+          type: string
+          format: uuid
+        estado:
+          type: string
+          enum: [ABANDONADA]
+        heroeLiberado:
+          type: boolean
+          description: Falso si el inventario no contestó; la liberación se termina en segundo plano.
+        penalizacion:
+          type: string
+    ReporteMision:
+      type: object
+      description: El reporte de una misión terminada (§7.8.8).
+      required:
+        [ejecucionId, mision, resultado, duracionMs, terminadaEn, heroe, combate,
+         enemigosDerrotados, mastersDerrotados, jefeDerrotado, recompensas, objetivos]
+      properties:
+        ejecucionId:
+          type: string
+          format: uuid
+        mision:
+          type: object
+          required: [id, nombre, categoria]
+          properties:
+            id:
+              type: string
+            nombre:
+              type: string
+            categoria:
+              $ref: "#/components/schemas/Categoria"
+        resultado:
+          type: string
+          enum: [EXITO, FALLO]
+        escalon:
+          $ref: "#/components/schemas/Escalon"
+        duracionMs:
+          type: integer
+          minimum: 0
+        terminadaEn:
+          type: string
+          format: date-time
+        heroe:
+          type: object
+          required: [nombre]
+          properties:
+            id:
+              type: string
+            nombre:
+              type: string
+            prototipo:
+              type: [string, "null"]
+            nivel:
+              type: [integer, "null"]
+              description: Nivel con el que salió a la misión.
+            nivelAlcanzado:
+              type: [integer, "null"]
+              description: Nivel tras sumar la experiencia (lo devuelve el inventario al liberarlo).
+        combate:
+          type: object
+          required: [encuentros, danoInfligido, danoRecibido, turnos, habilidadesMasUsadas, criticos]
+          properties:
+            encuentros:
+              type: integer
+              minimum: 0
+            danoInfligido:
+              type: integer
+              minimum: 0
+            danoRecibido:
+              type: integer
+              minimum: 0
+            turnos:
+              type: integer
+              minimum: 0
+            habilidadesMasUsadas:
+              type: array
+              items:
+                type: object
+                required: [nombre, usos]
+                properties:
+                  nombre:
+                    type: string
+                  usos:
+                    type: integer
+                    minimum: 1
+            criticos:
+              type: integer
+              minimum: 0
+        enemigosDerrotados:
+          type: array
+          items:
+            type: object
+            required: [nombre, cantidad]
+            properties:
+              nombre:
+                type: string
+              cantidad:
+                type: integer
+                minimum: 1
+        mastersDerrotados:
+          type: array
+          items:
+            type: object
+            required: [nombre, epica]
+            properties:
+              nombre:
+                type: string
+              epica:
+                type: string
+        jefeDerrotado:
+          type: boolean
+        recompensas:
+          type: object
+          required: [creditos, productos, epicas, experiencia]
+          properties:
+            creditos:
+              type: integer
+              minimum: 0
+            productos:
+              type: array
+              description: Objetos del catálogo entregados al inventario.
+              items:
+                type: object
+                required: [nombre]
+                properties:
+                  nombre:
+                    type: string
+                  rareza:
+                    type: [string, "null"]
+            epicas:
+              type: array
+              items:
+                type: string
+            experiencia:
+              type: number
+              minimum: 0
+            sinEntregar:
+              type: array
+              description: >
+                Recompensas que el documento describe y que no se pueden
+                entregar porque no existen en el catálogo oficial ni en ningún
+                otro servicio (por ejemplo el Cofre de Bronce o el título del
+                ejemplo §7.8.14). Se informan, no se inventan.
+              items:
+                type: object
+                required: [nombre, motivo]
+                properties:
+                  nombre:
+                    type: string
+                  motivo:
+                    type: string
+            entregaPendiente:
+              type: boolean
+              description: Algún paso de la entrega sigue reintentándose en segundo plano.
+        objetivos:
+          type: array
+          items:
+            type: object
+            required: [texto, cumplido]
+            properties:
+              texto:
+                type: string
+              cumplido:
+                type: boolean
+              bonificacion:
+                type: [string, "null"]
+    HistorialDeMisiones:
+      type: object
+      description: §7.8.8, «Historial de misiones».
+      required: [completadas, porCategoria, mejoresTiempos, epicas, cadenas]
+      properties:
+        completadas:
+          type: array
+          items:
+            type: object
+            required: [ejecucionId, misionId, nombre, categoria, terminadaEn, resultado, duracionMs]
+            properties:
+              ejecucionId:
+                type: string
+                format: uuid
+              misionId:
+                type: string
+              nombre:
+                type: string
+              categoria:
+                $ref: "#/components/schemas/Categoria"
+              terminadaEn:
+                type: string
+                format: date-time
+              resultado:
+                type: string
+                enum: [EXITO, FALLO]
+              duracionMs:
+                type: integer
+                minimum: 0
+        porCategoria:
+          type: array
+          items:
+            type: object
+            required: [categoria, completadas, fallidas]
+            properties:
+              categoria:
+                $ref: "#/components/schemas/Categoria"
+              completadas:
+                type: integer
+                minimum: 0
+              fallidas:
+                type: integer
+                minimum: 0
+        mejoresTiempos:
+          type: array
+          items:
+            type: object
+            required: [misionId, nombre, duracionMs]
+            properties:
+              misionId:
+                type: string
+              nombre:
+                type: string
+              duracionMs:
+                type: integer
+                minimum: 0
+        epicas:
+          type: array
+          description: Colección de épicas obtenidas de Máster (§7.8.10 y §7.8.12).
+          items:
+            type: object
+            required: [nombre, master, obtenidaEn]
+            properties:
+              nombre:
+                type: string
+              master:
+                type: string
+              obtenidaEn:
+                type: string
+                format: date-time
+        cadenas:
+          type: array
+          description: Progreso en las cadenas narrativas (la historia es una narrativa lineal, §7.8.2).
+          items:
+            type: object
+            required: [nombre, completadas, total]
+            properties:
+              nombre:
+                type: string
+              completadas:
+                type: integer
+                minimum: 0
+              total:
+                type: integer
+                minimum: 0
+    DetalleDeProblema:
+      type: object
+      description: Formato estándar de detalles de problema (RFC 9457) de la plataforma.
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        motivos:
+          type: array
+          description: En un 422 de matrícula, todos los motivos por los que el héroe no es apto.
+          items:
+            type: string
+        habilidadesValidas:
+          type: array
+          description: En una estrategia inválida, lo que el héroe sí puede usar en su nivel.
+          items:
+            type: string
+        seccion:
+          type: string
+          description: >
+            En un 503 de sección degradada (HU-DIS-003), la función que queda
+            limitada, dicha para el jugador («Inventario»).
+        reintentarEnSegundos:
+          type: integer
+          description: En un 503, lo mismo que la cabecera Retry-After.
+        dependencia:
+          type: string
+          description: En un 503, el nombre interno del servicio que no responde (bitácora y panel).

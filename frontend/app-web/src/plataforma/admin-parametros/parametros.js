@@ -14,6 +14,11 @@ import { nodo } from '../../comun/ui/dom.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { estadoDeError, estadoVacio, pintarEstado } from '../../comun/ui/estado-vista.js';
 import { campo } from '../../comun/ui/campo.js';
+import {
+  respaldoPorEstado,
+  textoDelServidor,
+  tituloDelServidor,
+} from '../../comun/ui/texto-de-fallo.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -24,11 +29,14 @@ function baseDeApi() {
 
 export class ErrorDeParametros extends Error {
   constructor(problema, estado) {
-    super(problema?.detail ?? problema?.title ?? `Error ${estado}`);
+    // UXC-9 — nunca «Error 503»: el texto del servidor si se lee, y si no
+    // una frase para quien administra.
+    const detalle = textoDelServidor(problema, estado, respaldoPorEstado(estado));
+    super(detalle);
     this.name = 'ErrorDeParametros';
     this.estado = estado;
-    this.titulo = problema?.title ?? 'No se pudo completar';
-    this.detalle = problema?.detail ?? '';
+    this.titulo = tituloDelServidor(problema, 'No se pudo completar');
+    this.detalle = detalle;
     this.motivo = problema?.motivo ?? null;
   }
 }

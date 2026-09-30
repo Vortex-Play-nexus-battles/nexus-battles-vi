@@ -718,7 +718,11 @@ describe('R16 - un «Añadir» rechazado se le dice al jugador', () => {
 
     const aviso = zona().querySelector('.aviso');
     expect(aviso.querySelector('img')).toBeNull();
-    expect(aviso.textContent).toContain('<img');
+    // UXC-9 — un `detail` con marcado ya ni siquiera se lee como texto: es
+    // señal de que no lo escribió el servicio para el jugador. Se dice la
+    // pauta propia, que sí sirve.
+    expect(aviso.textContent).not.toContain('<img');
+    expect(aviso.textContent).toContain('Actualiza la tienda e inténtalo otra vez.');
     expect(aviso.querySelector('[data-accion="actualizar-tienda"]')).not.toBeNull();
   });
 
@@ -957,6 +961,33 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     cambiar('tipo', '');
     cambiar('soloPromocion', true);
     expect(nombres()).toEqual(['Hacha']);
+  });
+
+  test('la búsqueda de la barra llega como ?busqueda= y la vitrina abre filtrada (RF-INV-008)', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [producto(1, { nombre: 'Espada Élfica' }), producto(2, { nombre: 'Coraza' })],
+    });
+    globalThis.history.replaceState(null, '', '?busqueda=elfica');
+    try {
+      await montarTienda(document);
+
+      expect(filtros().elements.namedItem('busqueda').value).toBe('elfica');
+      expect(nombres()).toEqual(['Espada Élfica']);
+    } finally {
+      globalThis.history.replaceState(null, '', '/');
+    }
+  });
+
+  test('la lupa de la barra estrecha trae el foco al campo de búsqueda', async () => {
+    globalThis.fetch = servicios({ vitrina: [producto(1)] });
+    globalThis.history.replaceState(null, '', '#busqueda-tienda');
+    try {
+      await montarTienda(document);
+
+      expect(document.activeElement).toBe(filtros().elements.namedItem('busqueda'));
+    } finally {
+      globalThis.history.replaceState(null, '', '/');
+    }
   });
 
   test('buscar y pulsar «Añadir»: salir de la búsqueda no repinta la vitrina y el clic llega', async () => {

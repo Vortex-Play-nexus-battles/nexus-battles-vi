@@ -134,4 +134,62 @@ class ArbolTest {
         // El campeon perdio una vez (en la 5) y el subcampeon tambien (en la final).
         assertThat(porId.get(equipo(3)).derrotas()).isEqualTo(1);
     }
+
+    /**
+     * #589 — la especificacion ejecutable del final del arbol: los catorce
+     * encuentros jugados y el estado de los OCHO equipos, uno por uno.
+     *
+     * <p>Sin «bracket reset» (la ficha habla de «la final», en singular) cada
+     * uno de los encuentros 7, 8, 9, 10, 12, 13 y la final elimina a un equipo:
+     * siete eliminados y exactamente uno en pie, el campeon. El finalista que
+     * llega invicto por la llave de ganadores y pierde la final queda eliminado
+     * con UNA sola derrota; es la regla, no un defecto.
+     */
+    @Test
+    @DisplayName("#589: tras la final hay 7 eliminados y 1 en pie; derrotas de cada equipo fijadas (campeon desde secundarios)")
+    void estadoFinalCampeonDesdeSecundarios() {
+        jugarHastaLaFinal();
+        gana(14, equipo(3));   // gana el que viene de secundarios; el invicto cae con 1 derrota
+
+        assertThat(derrotas()).containsExactly(1, 2, 1, 2, 2, 2, 2, 2);
+        assertThat(eliminados()).containsExactly(true, true, false, true, true, true, true, true);
+        assertThat(equipos.stream().filter(e -> !e.eliminado())).extracting(Equipo::id).containsExactly(equipo(3));
+    }
+
+    @Test
+    @DisplayName("#589: si el invicto gana la final, el campeon termina sin derrotas y el subcampeon con dos")
+    void estadoFinalCampeonInvicto() {
+        jugarHastaLaFinal();
+        gana(14, equipo(1));
+
+        assertThat(derrotas()).containsExactly(0, 2, 2, 2, 2, 2, 2, 2);
+        assertThat(eliminados()).containsExactly(false, true, true, true, true, true, true, true);
+        assertThat(equipos.stream().filter(Equipo::eliminado)).hasSize(7);
+    }
+
+    /** El mismo recorrido de {@link #torneoCompleto()} hasta dejar la final lista: 1 (invicto) contra 3. */
+    private void jugarHastaLaFinal() {
+        gana(1, equipo(1));
+        gana(2, equipo(3));
+        gana(3, equipo(5));
+        gana(4, equipo(7));
+        gana(7, equipo(2));
+        gana(8, equipo(6));
+        gana(5, equipo(1));
+        gana(6, equipo(5));
+        gana(9, equipo(7));
+        gana(10, equipo(3));
+        gana(11, equipo(1));
+        gana(12, equipo(3));
+        gana(13, equipo(3));
+        assertThat(encuentro(14).listo()).isTrue();
+    }
+
+    private List<Integer> derrotas() {
+        return equipos.stream().map(Equipo::derrotas).toList();
+    }
+
+    private List<Boolean> eliminados() {
+        return equipos.stream().map(Equipo::eliminado).toList();
+    }
 }

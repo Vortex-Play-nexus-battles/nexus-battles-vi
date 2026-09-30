@@ -18,6 +18,7 @@ openapi:
   heroes.yaml: services/contenido/heroes
   inventario.yaml: services/contenido/inventario
   metricas-plataforma.yaml: services/plataforma/metricas-plataforma
+  misiones.yaml: services/contenido/misiones
   moderacion-lista-negra.yaml: services/plataforma/moderacion-sanciones
   moderacion-sanciones-admin.yaml: services/plataforma/moderacion-sanciones
   moderacion-sanciones-consulta.yaml: services/plataforma/moderacion-sanciones
@@ -29,6 +30,7 @@ openapi:
   ms-identidad-perfiles.yaml: services/cuentas/ms-identidad
   rbac.yaml: services/cuentas/ms-identidad
   ms-subastas-listado.yaml: services/cuentas/ms-subastas
+  ms-subastas-panel.yaml: services/cuentas/ms-subastas
   ms-subastas-publicar.yaml: services/cuentas/ms-subastas
   ms-subastas-pujas.yaml: services/cuentas/ms-subastas
   notificaciones.yaml: services/plataforma/notificaciones

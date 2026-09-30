@@ -46,8 +46,9 @@ public class PujaAutomaticaController {
             @PathVariable UUID subastaId,
             @Valid @RequestBody PujaAutomaticaRequest solicitud) {
 
+        IdentidadClient.Identidad quien = identidad.actual();
         PujaAutomatica configurada = pujasAutomaticas.configurar(
-                subastaId, jugadorAutenticado(), solicitud.limite());
+                subastaId, quien.usuarioId(), quien.apodo(), solicitud.limite());
         return PujaAutomaticaResponse.de(configurada);
     }
 

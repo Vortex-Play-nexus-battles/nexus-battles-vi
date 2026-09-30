@@ -59,6 +59,31 @@
   font-size: var(--t-cuerpo-tam);
 }
 
+/* UXC-9 — el aviso de cambios fuera de la página que se ve, encima de los
+   resultados y dentro de su columna. */
+.mercado__resultados {
+  min-width: 0;
+}
+
+.mercado__novedades {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--e-4);
+}
+
+/* Una tarjeta cuya subasta terminó mientras se miraba: dice por qué ya no
+   ofrece pujar. */
+.subastas__terminada {
+  margin: 0;
+  font-weight: 600;
+  color: var(--texto-2);
+}
+
+.subastas-orden {
+  gap: var(--e-2);
+}
+
 /* --- Rejilla ---------------------------------------------------------- */
 
 .subastas {

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nexus Battles VI — Cofres de recompensa (ms-finanzas)
-  version: 1.0.0
+  version: 1.1.0
   description: |
     Cofres por creditos ganados en partidas (7.6 del documento del curso:
     «Cuando un jugador logre acumular veinte (20) creditos en juegos ganados
@@ -12,8 +12,32 @@ info:
     B0 (BACKEND-01): `GET /cofres/mios` existia desde HU-JUE-013 sin contrato
     —`creditos.yaml` lo dejaba anotado como brecha conocida— y el guardian
     `rutas-contrato-codigo.py` lo encontro. Se publica tal como responde hoy:
-    una pagina de Spring Data (`Page<ResumenCofre>`). B7 anade el contenido
-    aleatorio y la entrega al inventario.
+    una pagina de Spring Data (`Page<ResumenCofre>`).
+
+    **1.1.0 (B7, BACKEND-09) — el cofre de verdad. Aditivo.**
+    - El contador suma SOLO los creditos de las partidas GANADAS (2 en un uno
+      contra uno, 4 en una grupal); participar no cuenta. Cada 20, un cofre.
+      No es semanal: lo que se acumula se conserva de una semana a otra.
+    - Maximo dos cofres por semana ISO 8601 (de lunes a domingo), contada en
+      la zona horaria `America/Bogota` (`FINANZAS_COFRES_ZONA`). Si se completa
+      la cuota con el tope ya alcanzado, el contador se reinicia igual y no
+      hay cofre (lectura literal del documento, D-B7-17).
+    - Al completar la cuota el contador se reinicia CONSERVANDO el sobrante
+      (22 creditos dejan 2 para el siguiente): el documento no dice que hacer
+      con el y asi cada 20 creditos ganados cuentan (D-B7-17; configurable con
+      `FINANZAS_COFRES_CONSERVAR_SOBRANTE`).
+    - El contenido es ALEATORIO: un producto del catalogo sorteado con pesos de
+      una tabla configurable. La tabla definitiva es decision del Product
+      Owner; hoy rige una tabla PROVISIONAL DE DESARROLLO (`tablaVersion`
+      empieza por `PROVISIONAL-DEV`). El sorteo usa una semilla de
+      `SecureRandom` que queda guardada con el cofre, asi que se puede
+      reproducir.
+    - El premio se entrega al inventario del jugador con
+      `POST /api/v1/inventario/entregas` (origen `COFRE`, `Idempotency-Key`
+      `cofre-{id}`): reintentar nunca duplica. Si inventario no responde, el
+      cofre queda `PENDIENTE` y una tarea lo reintenta.
+    - `ResumenCofre` gana el detalle: premios, estado de la entrega, semana y
+      sorteo.
 
     ms-finanzas tiene `context-path` `/api/v1`.
   license:
@@ -30,7 +54,7 @@ paths:
       summary: Cofres entregados al jugador que firma el token
       description: |
         Solo los propios: el jugador sale del `uid` del token, nunca de la
-        ruta. Del mas reciente al mas antiguo.
+        ruta. Del mas reciente al mas antiguo, con su contenido real.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -76,10 +100,48 @@ components:
           format: uuid
         contenido:
           type: string
-          description: Identificador del contenido del cofre.
+          description: |
+            Identificador del contenido del cofre. Desde 1.1.0 es el
+            `productoId` del premio sorteado; los cofres anteriores conservan
+            el marcador `COFRE_ESTANDAR_v1`, que no tenia contenido real.
         entregadoEn:
           type: string
           format: date-time
+          description: Cuando se gano el cofre.
+        semanaIso:
+          type: [string, 'null']
+          description: (1.1.0) Semana ISO 8601 en la que se gano («2026-W39»).
+          example: 2026-W39
+        premios:
+          type: array
+          description: (1.1.0) Lo que trae el cofre. Vacio en los cofres anteriores a 1.1.0.
+          items:
+            $ref: '#/components/schemas/PremioDeCofre'
+        estadoEntrega:
+          type: [string, 'null']
+          enum: [PENDIENTE, ENTREGADO, SIN_CONTENIDO, null]
+          description: |
+            (1.1.0) `ENTREGADO` cuando el premio ya esta en el inventario;
+            `PENDIENTE` si inventario no respondio y se reintentara;
+            `SIN_CONTENIDO` en los cofres anteriores a 1.1.0.
+        entregaId:
+          type: [string, 'null']
+          description: (1.1.0) Identificador de la entrega en el inventario.
+        sorteo:
+          type: [object, 'null']
+          description: (1.1.0) Como se sorteo el contenido, para poder reproducirlo.
+          properties:
+            semilla: { type: integer, format: int64 }
+            tablaVersion:
+              type: string
+              example: PROVISIONAL-DEV-1
+
+    PremioDeCofre:
+      type: object
+      required: [productoId, cantidad]
+      properties:
+        productoId: { type: string, example: arma-guerrero-tanque-espada-de-una-mano }
+        cantidad: { type: integer, minimum: 1 }
 
     PaginaDeCofres:
       type: object

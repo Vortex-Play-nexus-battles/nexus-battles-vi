@@ -29,6 +29,8 @@ import { indicador, moduloNoImplementado, panel, pintarDesenlace, tabla } from '
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
+import { RUTAS, resolver } from '../../comun/sesion.js';
+import { distintivo } from '../../comun/ui/distintivo.js';
 
 /** Tamano de pagina del directorio. Coincide con el techo comodo del backend. */
 const FILAS_POR_PAGINA = 20;
@@ -254,10 +256,11 @@ export function pintarDirectorio(datos, estado, recargar) {
     jugador.bloqueada ? 'BLOQUEADA' : (jugador.estado ?? '--'),
     formatearFecha(jugador.creadoEn),
     jugador.ultimoAcceso ? formatearFecha(jugador.ultimoAcceso) : 'Nunca ha entrado',
+    enlaceASanciones(jugador),
   ]);
 
   const cuerpo = tabla({
-    columnas: ['Apodo', 'Correo', 'Rol', 'Estado', 'Registro', 'Última entrada'],
+    columnas: ['Apodo', 'Correo', 'Rol', 'Estado', 'Registro', 'Última entrada', 'Sanciones'],
     filas,
     resumen: `Página ${(datos?.pagina ?? 0) + 1} de ${datos?.totalPaginas ?? 1}, ${
       datos?.total ?? filas.length
@@ -295,6 +298,29 @@ export function pintarDirectorio(datos, estado, recargar) {
 
   return [cuerpo, navegacion];
 }
+/**
+ * UXC-9 — §7.3.4: de la ficha del directorio al historial de sanciones de
+ * esa cuenta, sin copiar su identificador. El panel de sanciones hace su
+ * propia guarda de rol (Tabla 24).
+ *
+ * @param {{uid?: string, apodo?: string}} jugador
+ * @returns {HTMLAnchorElement|string}
+ */
+function enlaceASanciones(jugador) {
+  if (!jugador?.uid) {
+    return '--';
+  }
+  const destino = new URL(resolver(RUTAS.sanciones));
+  destino.searchParams.set('usuario', jugador.uid);
+  return h('a', {
+    texto: 'Ver sanciones',
+    atributos: {
+      href: destino.href,
+      'aria-label': `Ver las sanciones de ${jugador.apodo ?? 'esta cuenta'}`,
+    },
+  });
+}
+
 /* -------------------------------------------------------------------------
    3. Partidas
    ------------------------------------------------------------------------- */
@@ -322,11 +348,13 @@ function seccionPartidas(consultarApi) {
 }
 
 /**
- * Misiones: no hay backend, y no se fabrica uno.
+ * Misiones: el servicio existe, pero no publica nada para operar.
  *
- * Ningun servicio del catalogo publica misiones. La alternativa -- inventar
- * tres misiones de ejemplo para que el panel se vea lleno -- convertiria la
- * consola en una demo, que es justo lo que no puede ser.
+ * UXC-9 — este panel decía que ningún servicio publicaba misiones, y desde B9
+ * ya no es verdad: `misiones.yaml` publica el tablón, las misiones en curso y
+ * el historial, pero todo es de cada jugador (sale de su token). No hay un
+ * agregado de progreso para la consola, y la alternativa -- inventar cifras
+ * para que el panel se vea lleno -- la convertiría en una demo.
  */
 function panelDeMisiones() {
   const partes = panel({
@@ -338,8 +366,9 @@ function panelDeMisiones() {
     vaciar(partes.zona).append(
       moduloNoImplementado({
         razon:
-          'Todavía no hay ningún servicio que publique misiones. No hay nada que ' +
-          'consultar, y esta consola no fabrica datos para llenar un hueco.',
+          'El servicio de misiones publica lo de cada jugador (su tablón, sus misiones en curso ' +
+          'y su historial), pero no un progreso de todos para operación. No hay nada que ' +
+          'consultar aquí, y esta consola no fabrica datos para llenar un hueco.',
       }),
     );
     partes.sello.dataset.estado = 'neutro';
@@ -511,7 +540,79 @@ function seccionModeracion(consultarApi) {
     pintar: (datos) => indicador({ etiqueta: 'en cola', valor: totalDe(datos) }),
   });
 
-  return [auditoria, sanciones, comentarios];
+  // UXC-9 — §7.3.4 «alertas»: las de alta frecuencia de sanciones que evalúa
+  // el servicio de métricas contra su umbral (`TableroDeModeracion`). Es el
+  // mismo dato que el tablero técnico; aquí, a la vista de quien opera sin
+  // cambiar de pantalla. Sin umbral configurado no hay alerta que evaluar, y
+  // se dice así en vez de pintar «sin alertas».
+  const alertas = panelDeRecurso({
+    id: 'alertas-moderacion',
+    titulo: 'Alertas de moderación',
+    descripcion: 'Días en que las sanciones superan el umbral configurado.',
+    recurso: '/moderacion',
+    consultarApi,
+    pintar: (datos) => pintarAlertasDeModeracion(datos),
+  });
+
+  return [alertas, auditoria, sanciones, comentarios];
+}
+
+/**
+ * Las alertas de moderación tal como las publica el servicio de métricas.
+ *
+ * @param {{alertasConfiguradas?: boolean, umbralSancionesPorDia?: number|null,
+ *          alertas?: string[], pendientes?: string[]}} datos
+ * @returns {HTMLElement[]}
+ */
+export function pintarAlertasDeModeracion(datos) {
+  const lista = (Array.isArray(datos?.alertas) ? datos.alertas : []).filter(
+    (alerta) => typeof alerta === 'string' && alerta.trim(),
+  );
+  const partes = [];
+  if (!datos?.alertasConfiguradas) {
+    partes.push(
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-umbral' },
+        texto:
+          'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta. El umbral de sanciones por día se fija en Parámetros.',
+      }),
+    );
+  } else if (lista.length === 0) {
+    const umbral = Number.isInteger(datos?.umbralSancionesPorDia)
+      ? ` de ${datos.umbralSancionesPorDia} sanciones`
+      : '';
+    partes.push(
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-alertas' },
+        texto: `Sin alertas: ningún día supera el umbral${umbral}.`,
+      }),
+    );
+  } else {
+    partes.push(
+      h('ul', {
+        clase: 'pila pila--ajustada',
+        datos: { zona: 'alertas' },
+        hijos: lista.map((alerta) =>
+          h('li', { hijos: [distintivo('Alerta', 'reportado'), ` ${alerta}`] }),
+        ),
+      }),
+    );
+  }
+  const pendientes = (Array.isArray(datos?.pendientes) ? datos.pendientes : []).filter(
+    (p) => typeof p === 'string' && p.trim(),
+  );
+  if (pendientes.length > 0) {
+    partes.push(
+      h('ul', {
+        clase: 'pila pila--ajustada',
+        datos: { zona: 'pendientes' },
+        hijos: pendientes.map((p) => h('li', { clase: 't-meta', texto: `Pendiente: ${p}` })),
+      }),
+    );
+  }
+  return partes;
 }
 
 /* -------------------------------------------------------------------------

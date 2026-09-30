@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.config;
 
 import com.nexusbattles.ms_chatbot.chat.api.ChatController;
+import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
+import com.nexusbattles.ms_chatbot.chat.identidad.SesionesAnonimas;
 import com.nexusbattles.ms_chatbot.chat.service.CalificacionService;
 import com.nexusbattles.ms_chatbot.chat.service.ChatService;
 import org.junit.jupiter.api.Test;
@@ -20,8 +22,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // El filtro de CORS responde la consulta previa del navegador antes de llegar
 // a ningun controlador, asi que con ChatController basta para probar tambien
 // las rutas del panel (/chatbot/admin/**), que van por la otra cadena.
+// B11: ChatController resuelve la identidad con ResolutorDeIdentidad (real
+// aqui) sobre SesionesAnonimas (simulada, sin base).
 @WebMvcTest(ChatController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, ResolutorDeIdentidad.class})
 class CorsTest {
 
     private static final String LIVE_SERVER = "http://localhost:5500";
@@ -35,6 +39,9 @@ class CorsTest {
 
     @MockitoBean
     private CalificacionService calificacionService;
+
+    @MockitoBean
+    private SesionesAnonimas sesiones;
 
     @Test
     void consultaPreviaDelChat_desdeLiveServer_seAutoriza() throws Exception {
@@ -74,6 +81,9 @@ class CorsTest {
                 .header(HttpHeaders.ORIGIN, LIVE_SERVER))
             .andExpect(status().isOk())
             .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, LIVE_SERVER))
-            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, containsString("Content-Disposition")));
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, containsString("Content-Disposition")))
+            // B11: la sesion emitida y el Retry-After del 429 se leen desde el navegador.
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, containsString("X-Id-Sesion-Anonima")))
+            .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS, containsString("Retry-After")));
     }
 }

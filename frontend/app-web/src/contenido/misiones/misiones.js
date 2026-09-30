@@ -12,12 +12,13 @@
  *
  * ## Sin servicio de misiones
  *
- * Es el caso de hoy (ver `fuente-misiones.js`). La vista no finge un tablón:
- * dice qué pasa —las misiones todavía no están abiertas—, por qué —no hay
- * ninguna publicada—, y qué se puede hacer ya —preparar la estrategia del
- * héroe, que valida el servicio de héroes de verdad, o jugar en línea—. Las
- * secciones En curso e Historial dicen lo mismo en su sitio. No hay
- * «próximamente» ni tarjetas de ejemplo.
+ * Es lo que pasa si el servicio de misiones no responde (ver
+ * `fuente-misiones.js`: se le pregunta antes de pintar nada). La vista no
+ * finge un tablón: dice qué pasa —las misiones no están disponibles ahora—,
+ * por qué —el servicio no contesta—, y qué se puede hacer ya —preparar la
+ * estrategia del héroe, que valida el servicio de héroes de verdad, o jugar en
+ * línea—. Las secciones En curso e Historial dicen lo mismo en su sitio. No
+ * hay «próximamente» ni tarjetas de ejemplo.
  *
  * @module contenido/misiones/misiones
  */
@@ -73,7 +74,7 @@ export function rutasDeMisiones() {
 }
 
 /**
- * El aviso de «todavía no están abiertas», con sus dos salidas.
+ * El aviso de «no están disponibles ahora», con sus dos salidas.
  *
  * @param {{alPrepararEstrategia: () => void, hrefJugar: string}} opciones
  * @returns {HTMLElement}
@@ -100,12 +101,12 @@ export function avisoSinAbrir({ alPrepararEstrategia, hrefJugar }) {
         hijos: [
           h('h2', {
             clase: 'misiones-estado__titulo',
-            texto: 'Las misiones todavía no están abiertas',
+            texto: 'Las misiones no están disponibles ahora',
             atributos: { id: 'misiones-estado-titulo' },
           }),
           h('p', {
             texto:
-              'Aún no hay ninguna misión publicada, así que no se puede enviar a ningún héroe ni hay misiones en curso ni historial que enseñar.',
+              'El servicio de misiones no responde, así que por ahora no se puede enviar a ningún héroe ni consultar las misiones en curso ni el historial. El resto del juego sigue funcionando.',
           }),
           h('p', {
             texto:
@@ -178,7 +179,9 @@ export function resumenDeMatricula(mision, { heroe, rotaciones }) {
  *
  * @param {Document} documento
  * @param {object} [opciones]
- * @param {import('./fuente-misiones.js').FuenteDeMisiones} [opciones.fuente]
+ * @param {import('./fuente-misiones.js').FuenteDeMisiones
+ *   |Promise<import('./fuente-misiones.js').FuenteDeMisiones>} [opciones.fuente]
+ *   la de `fuenteDeMisiones()` llega como promesa: antes pregunta al servicio
  * @param {string|null} [opciones.identidad] apodo de la sesión
  * @param {Location|URL} [opciones.ubicacion]
  * @param {(url: string) => void} [opciones.navegar]
@@ -188,7 +191,7 @@ export function resumenDeMatricula(mision, { heroe, rotaciones }) {
 export async function montarMisiones(
   documento,
   {
-    fuente = fuenteDeMisiones(),
+    fuente: fuentePedida = fuenteDeMisiones(),
     identidad = globalThis.sessionStorage?.getItem('nexus.apodoActual') ?? null,
     ubicacion = globalThis.location,
     navegar = (url) => {
@@ -201,10 +204,18 @@ export async function montarMisiones(
   const rutas = rutasDeMisiones();
   const parametros = new URLSearchParams(ubicacion.search ?? '');
 
+  // Mientras se pregunta al servicio, la página dice que carga en vez de
+  // quedarse en blanco.
+  raiz.replaceChildren(estadoDeCarga({ filas: 3, etiqueta: 'Cargando misiones…' }));
+  const fuente = await fuentePedida;
+
   const nuevoConfigurador = (opciones) =>
     constructorDeEstrategia({
       identidad,
       hrefTienda: rutas.hrefTienda,
+      // Para leer y guardar la estrategia de cada héroe (§7.8.12), si el
+      // servicio de misiones responde.
+      fuente,
       ...inyeccionesDeEstrategia,
       ...opciones,
     });
@@ -320,9 +331,9 @@ export async function montarMisiones(
       return estadoVacio(
         id === 'en-curso'
           ? {
-              titulo: 'Ningún héroe está en misión',
+              titulo: 'No podemos ver tus misiones en curso ahora',
               detalle:
-                'Las misiones todavía no están abiertas. Cuando lo estén, aquí verás cuánto le queda a cada héroe que envíes.',
+                'Las misiones no están disponibles ahora. Cuando vuelvan, aquí verás cuánto le queda a cada héroe que envíes.',
               accion: {
                 texto: 'Preparar la estrategia',
                 nombre: 'preparar-estrategia',
@@ -330,9 +341,9 @@ export async function montarMisiones(
               },
             }
           : {
-              titulo: 'Todavía no hay historial',
+              titulo: 'No podemos enseñar tu historial ahora',
               detalle:
-                'Las misiones todavía no están abiertas. Cada una que termines quedará aquí con su reporte.',
+                'Las misiones no están disponibles ahora. Cuando vuelvan, cada una que termines quedará aquí con su reporte.',
               accion: {
                 texto: 'Preparar la estrategia',
                 nombre: 'preparar-estrategia',

@@ -265,6 +265,33 @@ describe('panel de moderacion', () => {
     expect(hechos[0].textContent).toContain('Por moderación');
   });
 
+  test('UXC-9 — llegar con ?usuario= (desde el directorio) abre su historial', async () => {
+    const fetchImpl = servicio({
+      'GET /api/v1/apelaciones': { cuerpo: [] },
+      'GET /api/v1/sanciones/limites': { cuerpo: LIMITES },
+      [`GET /api/v1/sanciones/usuarios/${UID}`]: {
+        cuerpo: [sancion({ tipo: 'ADVERTENCIA', vigenteHasta: null })],
+      },
+    });
+    montarPanelDeModeracion(document, {
+      rol: 'MODERADOR',
+      fetchImpl,
+      ahora: () => AHORA,
+      usuarioInicial: UID,
+    });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="buscar"] [name="usuarioId"]').value).toBe(UID);
+    expect(document.querySelector('[data-zona="emitir"] [name="usuarioId"]').value).toBe(UID);
+    expect(
+      fetchImpl.mock.calls.some(([url]) => String(url).endsWith(`/sanciones/usuarios/${UID}`)),
+    ).toBe(true);
+    expect(document.querySelectorAll('[data-zona="historial"] .linea-tiempo__hecho')).toHaveLength(
+      1,
+    );
+  });
+
   test('el baneo sin confirmación no sale de la vista; el 403 del servicio se muestra tal cual', async () => {
     const fetchImpl = servicio({
       'GET /api/v1/apelaciones': { cuerpo: [] },

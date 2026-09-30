@@ -17,7 +17,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
 
-/** {@code /api/v1/torneos} — contracts/openapi/torneos.yaml 1.0.0. */
+/** {@code /api/v1/torneos} — contracts/openapi/torneos.yaml 1.2.0. */
 @RestController
 @RequestMapping("/api/v1/torneos")
 public class TorneosController {
@@ -94,6 +94,12 @@ public class TorneosController {
                         request.partidaId(), request.motivo())));
     }
 
+    /** 1.2.0: el administrador vuelve a poner en cola lo que quedo para revision. */
+    @PostMapping("/{torneoId}/operaciones/reintento")
+    public TorneoResponse reintentar(@AuthenticationPrincipal Jwt actor, @PathVariable UUID torneoId) {
+        return TorneoResponse.desde(servicio.reintentarOperaciones(actorDe(actor), torneoId));
+    }
+
     // ---- formas del contrato ----------------------------------------------
 
     public record CrearTorneoRequest(String nombre, OffsetDateTime inscripcionesCierranEn, Integer costoInscripcion) { }
@@ -120,25 +126,32 @@ public class TorneosController {
                                  OffsetDateTime inscripcionesCierranEn, int costoInscripcion, long equiposInscritos,
                                  int cupos, UUID campeonEquipoId, UUID creadoPor, OffsetDateTime iniciadoEn,
                                  OffsetDateTime finalizadoEn, String motivoCancelacion,
-                                 List<EquipoResponse> equipos, List<EncuentroResponse> encuentros) {
+                                 List<EquipoResponse> equipos, List<EncuentroResponse> encuentros,
+                                 EstadoDeOperaciones.Premio premio) {
         static TorneoResponse desde(TorneosService.TorneoCompleto t) {
             Torneo torneo = t.torneo();
             return new TorneoResponse(torneo.id(), torneo.nombre(), torneo.estado(), torneo.creadoEn(),
                     torneo.inscripcionesCierranEn(), torneo.costoInscripcion(), t.inscritos(), Torneo.CUPOS,
                     torneo.campeonEquipoId(), torneo.creadoPor(), torneo.iniciadoEn(), torneo.finalizadoEn(),
                     torneo.motivoCancelacion(),
-                    t.equipos().stream().map(EquipoResponse::desde).toList(),
-                    t.encuentros().stream().map(EncuentroResponse::desde).toList());
+                    t.equipos().stream().map(e -> EquipoResponse.desde(e, t.operaciones())).toList(),
+                    t.encuentros().stream().map(EncuentroResponse::desde).toList(),
+                    EstadoDeOperaciones.premio(torneo, t.premio(), t.operaciones()));
         }
     }
 
     public record EquipoResponse(UUID id, UUID torneoId, String nombre, String avatar, boolean ia, UUID capitanUid,
                                  List<UUID> integrantes, boolean inscrito, UUID pagadoPor, UUID reservaId,
-                                 Integer posicion, int derrotas, boolean eliminado) {
+                                 Integer posicion, int derrotas, boolean eliminado,
+                                 EstadoDeOperaciones.Pago estadoPago) {
         static EquipoResponse desde(Equipo e) {
+            return desde(e, List.of());
+        }
+
+        static EquipoResponse desde(Equipo e, List<Operacion> operaciones) {
             return new EquipoResponse(e.id(), e.torneoId(), e.nombre(), e.avatar(), e.ia(), e.capitanUid(),
                     e.integrantes(), e.inscrito(), e.pagadoPor(), e.reservaId(), e.posicion(), e.derrotas(),
-                    e.eliminado());
+                    e.eliminado(), EstadoDeOperaciones.pago(e, operaciones));
         }
     }
 

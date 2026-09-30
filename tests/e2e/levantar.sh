@@ -27,6 +27,7 @@ if [ "${1:-}" != "--solo-levantar" ]; then
     :services:contenido:productos:bootJar \
     :services:contenido:inventario:bootJar \
     :services:contenido:motor-combate:bootJar \
+    :services:contenido:misiones:bootJar \
     :services:cuentas:ms-finanzas:bootJar \
     :services:cuentas:ms-subastas:bootJar \
     :services:plataforma:moderacion-sanciones:bootJar \

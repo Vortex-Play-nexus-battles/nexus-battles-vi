@@ -134,9 +134,18 @@ services:
     mem_limit: 48m
     ports:
       - "80:80"
+      # 28-sep — HTTPS (Let's Encrypt). Sin certificado nginx no escucha en el
+      # 443 y el puerto publicado no tiene a nadie detras: nada cambia hasta
+      # que scripts/cd/certificado.sh deje /opt/nexus/tls/borde-tls.conf.
+      - "443:443"
     volumes:
       - /opt/nexus/web:/srv/nexus:ro
       - /opt/nexus/web/infrastructure/red-balanceo/borde-dev.conf:/etc/nginx/conf.d/default.conf:ro
+      # Lo que incluye borde-dev.conf dentro de su server (vacio = solo 80),
+      # los certificados de certbot y la carpeta del reto HTTP-01.
+      - /opt/nexus/tls:/etc/nginx/nexus-tls:ro
+      - /opt/nexus/letsencrypt:/etc/letsencrypt:ro
+      - /opt/nexus/acme:/srv/acme:ro
 
   srv-comentarios:
     <<: *servicio-plataforma
@@ -218,6 +227,19 @@ services:
       DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: torneos
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_TORNEOS:-}
+      # B10 (torneos.yaml 1.2.0): la epica del premio va a inventario (host de
+      # contenido, misma IP que usa salas-partidas) y los avisos de los hitos a
+      # la bandeja de notificaciones (este host), con la credencial de arriba.
+      # El premio usa sus valores PROVISIONALES de application.yml (D-24) salvo
+      # que el .env fije TORNEOS_PREMIO_*. Correo de los hitos (HU-TOR-001
+      # CA-04, HU-TOR-002 CA-01, HU-TOR-007 CA-04): srv-correo sirve
+      # /correos/torneo (correo.yaml 1.5.0) y ms-identidad da el contacto por
+      # uid; las dos en este host, con la credencial de arriba. Vaciarlas en el
+      # .env deja solo la bandeja.
+      TORNEOS_IDENTIDAD_URL: ${TORNEOS_IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      TORNEOS_CORREO_URL: ${TORNEOS_CORREO_URL:-http://srv-correo:8082/api/v1}
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1}
 
   srv-salas-partidas:
     <<: *servicio-plataforma

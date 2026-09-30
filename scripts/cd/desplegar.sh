@@ -223,6 +223,171 @@ asegurar_clave_de_firma() {
   export JWT_CLAVE_PRIVADA="$clave"
 }
 
+# Paso 3d: el emisor de credenciales de servicio (ms-identidad, ADR-005) al dia
+# cuando esta corrida NO lo trae.
+#
+# B5: el emisor lee AUTH_CLIENTES_SERVICIO SOLO al arrancar. Cuando una corrida
+# trae un cliente nuevo (ms-ecommerce en B5, misiones despues) y ms-identidad
+# no viene en ella, `up -d` no lo toca y el emisor sigue rechazando al cliente
+# nuevo: su token responde 401 y todo lo que hace con el falla. Se compara la
+# lista que tiene el contenedor con la de este .env y, si difieren, se recrea
+# SOLO srv-ms-identidad, con la imagen que ya corre (no con el TAG de esta
+# corrida, que no la construyo) y sin tocar su base.
+#
+# 27-sep (fc226c05): la primera version recreaba el emisor SIN
+# JWT_CLAVE_PRIVADA -- asegurar_clave_de_firma solo corre en el paso 3.0, cuando
+# ms-identidad viene en la corrida -- y arranco con un par RSA efimero: las
+# sesiones abiertas se cerraron, las credenciales de servicio firmadas con la
+# clave del host se rechazaron con 401 hasta caducar y el registro respondio
+# 503 porque moderacion no reconocia la credencial de ms-identidad (smoke
+# 36357921316). Ahora este paso carga la misma clave que el 3.0 y recrea
+# tambien un emisor que corre SIN ella: el siguiente despliegue sana al que
+# arranco mal.
+#
+# Nada se imprime: la lista de clientes y la clave son secretos.
+# Usa DIRECTORIO, SERVICIOS_COMPOSE, INCLUYE_CONTENIDO, ARCHIVOS_COMPOSE y
+# AUTH_CLIENTES_SERVICIO. Devuelve 1 si el emisor recreado no vuelve sano.
+sanar_emisor() {
+  if [ "${INCLUYE_CONTENIDO:-0}" -ne 0 ] || ! docker inspect srv-ms-identidad >/dev/null 2>&1; then
+    return 0
+  fi
+  case " ${SERVICIOS_COMPOSE:-} " in
+    *" srv-ms-identidad "*) return 0 ;;  # ya se recreo en esta corrida, con lista y clave
+  esac
+  local entorno clientes_vigentes clave_vigente motivo="" imagen_emisor tag_emisor emisor_sano
+  entorno=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' srv-ms-identidad)
+  clientes_vigentes=$(printf '%s\n' "$entorno" | sed -n 's/^AUTH_CLIENTES_SERVICIO=//p')
+  clave_vigente=$(printf '%s\n' "$entorno" | sed -n 's/^JWT_CLAVE_PRIVADA=//p')
+  asegurar_clave_de_firma "$DIRECTORIO/secretos-firma.env"
+  if [ "$clientes_vigentes" != "${AUTH_CLIENTES_SERVICIO:-}" ]; then
+    motivo="cambio la lista de credenciales de servicio"
+  fi
+  if [ -n "${JWT_CLAVE_PRIVADA:-}" ] && [ "$clave_vigente" != "$JWT_CLAVE_PRIVADA" ]; then
+    motivo="${motivo:+$motivo; }corre sin la clave de firma del host"
+  fi
+  if [ -z "$motivo" ]; then
+    return 0
+  fi
+  imagen_emisor=$(docker inspect --format '{{.Config.Image}}' srv-ms-identidad)
+  tag_emisor="${imagen_emisor##*:}"
+  echo "== 3d) Se recrea srv-ms-identidad con su imagen de siempre (${tag_emisor}): ${motivo} =="
+  local archivos=("${ARCHIVOS_COMPOSE[@]}")
+  case " ${ARCHIVOS_COMPOSE[*]} " in
+    *"docker-compose.cuentas.yml"*) : ;;
+    *) archivos+=(-f "$DIRECTORIO/docker-compose.cuentas.yml") ;;
+  esac
+  TAG="$tag_emisor" docker compose "${archivos[@]}" up -d --no-deps srv-ms-identidad
+  emisor_sano=0
+  for _ in $(seq 1 36); do
+    if curl -fsS --max-time 5 "http://localhost:8089/actuator/health" 2>/dev/null | grep -q '"UP"'; then
+      emisor_sano=1
+      break
+    fi
+    sleep 5
+  done
+  if [ "$emisor_sano" -ne 1 ]; then
+    echo "srv-ms-identidad no volvio sano tras recrearlo"
+    return 1
+  fi
+  echo "  srv-ms-identidad: saludable, con la lista de clientes y la clave de firma del host"
+}
+
+# Paso 3b: bajar las imagenes DE UNA EN UNA y con reintentos.
+#
+# El host de plataforma va justo de memoria (swap de 2 GiB lleno, CAPACIDAD.md).
+# El 28-sep (B7, corrida 36366483510) bajar tres imagenes a la vez se corto una
+# vez con «short read: expected 59501166 bytes but got 12713984: unexpected
+# EOF» y otra no termino en los diez minutos de la sesion SSH. De una en una
+# compiten menos por memoria y disco, y un corte se reintenta en vez de tumbar
+# el despliegue. Las capas ya bajadas se conservan entre intentos.
+#
+# $@ = servicios del compose. Devuelve 1 si alguno no baja tras
+# INTENTOS_DE_BAJADA intentos (3 por omision).
+bajar_imagenes() {
+  local s intento maximo="${INTENTOS_DE_BAJADA:-3}"
+  for s in "$@"; do
+    intento=1
+    until docker compose "${ARCHIVOS_COMPOSE[@]}" pull --quiet "$s"; do
+      if [ "$intento" -ge "$maximo" ]; then
+        echo "No se pudo bajar la imagen de $s tras $maximo intentos"
+        return 1
+      fi
+      echo "  $s: fallo al bajar la imagen (intento $intento de $maximo); se reintenta en ${PAUSA_DE_BAJADA:-10} s"
+      intento=$((intento + 1))
+      sleep "${PAUSA_DE_BAJADA:-10}"
+    done
+    echo "  $s: imagen al dia"
+  done
+}
+
+# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
+#
+# Se generan UNA vez en el host y se persisten en secretos-servicios.env (fuera
+# del .env efimero), de modo que cada despliegue reparta los mismos valores al
+# emisor (ms-identidad lee AUTH_CLIENTES_SERVICIO) y a cada cliente
+# (SECRETO_SERVICIO_<CLIENTE>, que los compose inyectan como
+# DIRECTORIO_ACTIVO_CLIENT_SECRET del servicio). Nunca se imprimen.
+#
+# 28-sep — un cliente que vive en OTRO host que el emisor. El emisor esta en
+# el host de plataforma; misiones y ms-subastas pasan al de contenido. Cada
+# host generaba su propio valor, asi que el cliente de contenido presentaba un
+# secreto que el emisor no conocia (401 en cada token). Si llega la variable de
+# entorno SECRETO_SERVICIO_<CLIENTE> (un secret del entorno dev de GitHub que
+# cd.yml pasa a los DOS jobs de dev), manda ella en los dos hosts y el archivo
+# del host se alinea con ella. Sin la variable, todo sigue como antes.
+#
+# Rotar: la de un cliente de un solo host, borrando su linea del archivo y
+# volviendo a desplegar; la de uno compartido, cambiando el secret de GitHub y
+# desplegando los dos hosts.
+#
+# La lista de clientes vive en una linea propia, a la izquierda, porque el
+# guardian scripts/cd/comprobar-catalogo-servicios.sh la lee con grep.
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones"
+
+#   $1 = archivo persistente del host, $2 = .env al que se anaden las lineas.
+# Deja AUTH_CLIENTES_SERVICIO en el shell. Devuelve 1 si una variable de
+# entorno trae un valor que no se puede repartir (vacio no cuenta).
+repartir_credenciales_de_servicio() {
+  local archivo="$1" destino="$2" cliente clave valor guardado lista=""
+  (umask 077 && touch "$archivo")
+  chmod 600 "$archivo"
+  for cliente in $CLIENTES_DE_SERVICIO; do
+    clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
+    valor="${!clave:-}"
+    guardado=$(grep "^${clave}=" "$archivo" | head -n1 | cut -d= -f2- || true)
+    if [ -n "$valor" ]; then
+      # AUTH_CLIENTES_SERVICIO separa clientes con ";" y nombre y valor con
+      # "=": un valor con esos caracteres, espacios o saltos de linea partiria
+      # la lista del emisor. Se exige ademas un minimo de longitud.
+      if ! [[ "$valor" =~ ^[A-Za-z0-9._~-]{16,}$ ]]; then
+        echo "::error::$clave llega del entorno con un valor que no se puede repartir (16 o mas caracteres de [A-Za-z0-9._~-]). No se imprime."
+        return 1
+      fi
+      if [ "$valor" != "$guardado" ]; then
+        (umask 077 && { grep -v "^${clave}=" "$archivo" || true; } > "$archivo.nuevo")
+        printf '%s=%s\n' "$clave" "$valor" >> "$archivo.nuevo"
+        mv "$archivo.nuevo" "$archivo"
+        chmod 600 "$archivo"
+        echo "  credencial de servicio de $cliente: la del entorno (compartida entre hosts); el archivo del host se alinea con ella"
+      fi
+    elif [ -n "$guardado" ]; then
+      valor="$guardado"
+    else
+      if command -v openssl >/dev/null 2>&1; then
+        valor=$(openssl rand -hex 24)
+      else
+        valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+      fi
+      printf '%s=%s\n' "$clave" "$valor" >> "$archivo"
+      echo "  credencial de servicio generada para $cliente"
+    fi
+    printf '%s=%s\n' "$clave" "$valor" >> "$destino"
+    lista="${lista:+${lista};}${cliente}=${valor}"
+  done
+  printf 'AUTH_CLIENTES_SERVICIO=%s\n' "$lista" >> "$destino"
+  AUTH_CLIENTES_SERVICIO="$lista"
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -306,36 +471,12 @@ for variable in SMTP_PORT SMTP_TLS SMTP_AUTENTICA MAIL_FROM CORREO_RESPONDER_A P
 done
 chmod 600 .env
 
-# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
-#
-# No son secrets de GitHub: se generan UNA vez en el host y se persisten en
-# secretos-servicios.env (fuera del .env efimero), de modo que cada
-# despliegue reparta los mismos valores al emisor (ms-identidad lee
-# AUTH_CLIENTES_SERVICIO) y a cada cliente (SECRETO_SERVICIO_<CLIENTE>, que
-# docker-compose.deploy.yml inyecta como DIRECTORIO_ACTIVO_CLIENT_SECRET del
-# servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
-# volver a desplegar. Nunca se imprimen.
+# Credenciales de servicio: ver repartir_credenciales_de_servicio, arriba.
 SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce"
-touch "$SECRETOS_SERVICIOS"
-chmod 600 "$SECRETOS_SERVICIOS"
 AUTH_CLIENTES_SERVICIO=""
-for cliente in $CLIENTES_DE_SERVICIO; do
-  clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
-  valor=$(grep "^${clave}=" "$SECRETOS_SERVICIOS" | head -n1 | cut -d= -f2- || true)
-  if [ -z "$valor" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-      valor=$(openssl rand -hex 24)
-    else
-      valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
-    fi
-    echo "${clave}=${valor}" >> "$SECRETOS_SERVICIOS"
-    echo "  credencial de servicio generada para $cliente"
-  fi
-  echo "${clave}=${valor}" >> .env
-  AUTH_CLIENTES_SERVICIO="${AUTH_CLIENTES_SERVICIO:+${AUTH_CLIENTES_SERVICIO};}${cliente}=${valor}"
-done
-echo "AUTH_CLIENTES_SERVICIO=${AUTH_CLIENTES_SERVICIO}" >> .env
+if ! repartir_credenciales_de_servicio "$SECRETOS_SERVICIOS" .env; then
+  exit 1
+fi
 # El emisor de esas credenciales es ms-identidad dentro de la red de compose
 # (ADR-005), SIEMPRE, mientras ese ADR este vigente: en este host no hay
 # Keycloak. El secret de GitHub DIRECTORIO_ACTIVO_URL viene de ADR-001 (la URL
@@ -598,6 +739,10 @@ INCLUYE_BORDE=0
 if [ "$INCLUYE_CONTENIDO" -eq 0 ] && [ -d "$DIRECTORIO/web/infrastructure/red-balanceo" ]; then
   INCLUYE_BORDE=1
   SERVICIOS_COMPOSE="$SERVICIOS_COMPOSE srv-borde"
+  # 28-sep — lo que el borde monta para HTTPS (docker-compose.deploy.yml). Se
+  # crean aqui, con este usuario, para que Docker no los cree como root al
+  # montarlos. Vacios = el borde sigue solo en HTTP (scripts/cd/certificado.sh).
+  mkdir -p "$DIRECTORIO/tls" "$DIRECTORIO/letsencrypt" "$DIRECTORIO/acme/.well-known/acme-challenge"
 fi
 
 # R16.5b: los contenedores que se crean AHORA llevan la hora de su creacion.
@@ -606,50 +751,17 @@ fi
 # es decir, cuando lo levanta Docker al volver del apagado. Lo que despliega
 # esta corrida arranca en el acto, aunque el CD acabe de encender el host.
 export ARRANQUE_CREADO_EN="$(date +%s)"
-docker compose "${ARCHIVOS_COMPOSE[@]}" pull $SERVICIOS_COMPOSE
+echo "== 3b) Bajando las imagenes de una en una =="
+# shellcheck disable=SC2086  # SERVICIOS_COMPOSE es una lista separada por espacios
+if ! bajar_imagenes $SERVICIOS_COMPOSE; then
+  exit 1
+fi
 docker compose "${ARCHIVOS_COMPOSE[@]}" up -d $SERVICIOS_COMPOSE
 
-# B5 — el emisor de credenciales de servicio (ms-identidad, ADR-005) lee
-# AUTH_CLIENTES_SERVICIO SOLO al arrancar. Cuando una corrida trae un cliente
-# nuevo (ms-ecommerce en B5, misiones despues) y ms-identidad no viene en ella,
-# `up -d` no lo toca y el emisor sigue rechazando al cliente nuevo: su token
-# responde 401 y todo lo que hace con el (reservar tiraje, entregar al
-# inventario) falla. Se compara la lista que tiene el contenedor con la de este
-# .env y, si difieren, se recrea SOLO srv-ms-identidad, con la imagen que ya
-# corre (no con el TAG de esta corrida, que no la construyo) y sin tocar su
-# base. Nada se imprime: las dos listas llevan secretos.
-if [ "$INCLUYE_CONTENIDO" -eq 0 ] && docker inspect srv-ms-identidad >/dev/null 2>&1; then
-  case " $SERVICIOS_COMPOSE " in
-    *" srv-ms-identidad "*) : ;;  # ya se recreo en esta corrida con la lista nueva
-    *)
-      clientes_vigentes=$(docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' srv-ms-identidad \
-        | sed -n 's/^AUTH_CLIENTES_SERVICIO=//p')
-      if [ "$clientes_vigentes" != "$AUTH_CLIENTES_SERVICIO" ]; then
-        imagen_emisor=$(docker inspect --format '{{.Config.Image}}' srv-ms-identidad)
-        tag_emisor="${imagen_emisor##*:}"
-        echo "== 3d) Cambio la lista de credenciales de servicio: se recrea srv-ms-identidad con su imagen de siempre (${tag_emisor}) =="
-        ARCHIVOS_EMISOR=("${ARCHIVOS_COMPOSE[@]}")
-        case " ${ARCHIVOS_COMPOSE[*]} " in
-          *"docker-compose.cuentas.yml"*) : ;;
-          *) ARCHIVOS_EMISOR+=(-f "$DIRECTORIO/docker-compose.cuentas.yml") ;;
-        esac
-        TAG="$tag_emisor" docker compose "${ARCHIVOS_EMISOR[@]}" up -d --no-deps srv-ms-identidad
-        emisor_sano=0
-        for _ in $(seq 1 36); do
-          if curl -fsS --max-time 5 "http://localhost:8089/actuator/health" 2>/dev/null | grep -q '"UP"'; then
-            emisor_sano=1
-            break
-          fi
-          sleep 5
-        done
-        if [ "$emisor_sano" -ne 1 ]; then
-          echo "srv-ms-identidad no volvio sano tras recrearlo con la lista nueva de clientes de servicio"
-          exit 1
-        fi
-        echo "  srv-ms-identidad: saludable y con la lista nueva de clientes de servicio"
-      fi
-      ;;
-  esac
+# Paso 3d: el emisor de credenciales de servicio al dia (lista de clientes y
+# clave de firma) cuando esta corrida no lo trae. Ver sanar_emisor.
+if ! sanar_emisor; then
+  exit 1
 fi
 
 if [ "$INCLUYE_BORDE" -eq 1 ]; then
@@ -664,6 +776,18 @@ if [ "$INCLUYE_BORDE" -eq 1 ]; then
     exit 1
   fi
   echo "  borde: saludable"
+
+  # 28-sep — HTTPS con Let's Encrypt. Nunca tumba el despliegue: sin dominio,
+  # sin consentimiento o con cualquier fallo, el borde se queda en HTTP y el
+  # script lo dice. Con el certificado ya emitido, renueva si toca.
+  echo "== 3c-bis) HTTPS del borde (Let's Encrypt) =="
+  if [ -f "$DIRECTORIO/scripts/cd/certificado.sh" ]; then
+    chmod +x "$DIRECTORIO/scripts/cd/certificado.sh"
+    NEXUS_DIR="$DIRECTORIO" "$DIRECTORIO/scripts/cd/certificado.sh" \
+      || echo "::warning::certificado.sh termino con error; el borde sigue en HTTP."
+  else
+    echo "  certificado.sh todavia no esta en el host; se copia en este despliegue y sirve a partir del siguiente."
+  fi
 fi
 
 echo "== 4) Verificando /actuator/health de cada servicio desplegado (con reintentos) =="

@@ -297,6 +297,22 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
     const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
     await expect(boton).toBeEnabled({ timeout: 20_000 });
 
+    // Desde B7 el orden de los turnos se sortea (§6.1.3): si abrio la maquina,
+    // ya jugo su turno. Lo que se afirma es relativo al turno de la anfitriona
+    // en el que se apaga el motor, no al turno 1.
+    await expect
+      .poll(
+        async () => {
+          partida = await partidaDe(api, anfitriona, partida.id);
+          return partida.turnoActual.idJugador === anfitriona.claims.uid;
+        },
+        { timeout: 25_000, message: 'la maquina no devolvio el turno' },
+      )
+      .toBe(true);
+    const turnoAntes = partida.turnoActual.numeroTurno;
+    const laMaquina = () => partida.participantes.find((p) => p.esIA);
+    const vidaDeLaMaquinaAntes = laMaquina().heroe.vidaActual;
+
     apagar('srv-motor-combate');
 
     await boton.click();
@@ -307,11 +323,9 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
     await expect(boton).toBeEnabled();
     partida = await partidaDe(api, anfitriona, partida.id);
     expect(partida.estado).toBe('EN_CURSO');
-    expect(partida.turnoActual.numeroTurno).toBe(1);
+    expect(partida.turnoActual.numeroTurno).toBe(turnoAntes);
     expect(partida.turnoActual.idJugador).toBe(anfitriona.claims.uid);
-    expect(partida.participantes[1].heroe.vidaActual).toBe(
-      partida.participantes[1].heroe.vidaMaxima,
-    );
+    expect(laMaquina().heroe.vidaActual).toBe(vidaDeLaMaquinaAntes);
 
     await encender('srv-motor-combate');
     // Retry-After ya paso de sobra mientras el motor arrancaba.
@@ -321,7 +335,7 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
       .poll(
         async () => {
           partida = await partidaDe(api, anfitriona, partida.id);
-          return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > 1;
+          return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > turnoAntes;
         },
         { timeout: 30_000, message: 'el golpe reintentado no se resolvio' },
       )

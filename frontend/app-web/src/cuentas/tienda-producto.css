@@ -17,6 +17,20 @@
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   padding: var(--e-4);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/* UXC-9 — §7.5 «hover» y §3.1.1: «cada elemento deberá resaltarse al situar
+   el puntero sobre él, con un estado de foco equivalente accesible por
+   teclado». El mismo realce que el inventario (HU-INV-013): borde primario y
+   sombra con brillo, que no ocupan sitio y no mueven la rejilla. Con
+   `:focus-within` porque el foco lo recibe un botón de la tarjeta. */
+.product-card:hover,
+.product-card:focus-within {
+  border-color: var(--primaria);
+  box-shadow: var(--sombra-2), var(--brillo-primaria);
 }
 
 .product-image {

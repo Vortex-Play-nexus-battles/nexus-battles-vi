@@ -311,7 +311,10 @@ test.describe('Guion de demostración del Sprint 2', () => {
   test('8-9-10 · combate por turnos hasta el final, con la barra de vida cambiando de color', async ({
     page,
   }) => {
-    test.setTimeout(240000);
+    // B7: un combate real de dos Guerreros Tanque dura del orden de cien
+    // turnos (Tablas 21-23 con el indice normal de D-B7-01); el tope es de la
+    // prueba, holgado para que la partida termine de verdad.
+    test.setTimeout(480000);
     const jugadores = { [anfitriona.claims.uid]: anfitriona, [invitado.claims.uid]: invitado };
     const capturas = [];
     let golpes = 0;
@@ -319,7 +322,7 @@ test.describe('Guion de demostración del Sprint 2', () => {
     let capturaAmarilla = false;
     let capturaRoja = false;
 
-    for (let ronda = 0; ronda < 60; ronda += 1) {
+    for (let ronda = 0; ronda < 300; ronda += 1) {
       const estado = await (
         await api.get(`/api/v1/partidas/${partida.id}`, { headers: conToken(anfitriona.token) })
       ).json();
