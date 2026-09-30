@@ -137,6 +137,27 @@ describe('la cola', () => {
     expect(tarjeta.textContent).toMatch(/Esperando desde/);
   });
 
+  // El umbral no se asume: con el umbral en 0 el servicio manda siempre
+  // `false`, así que estas pruebas inyectan `true` a mano.
+  test('HU-COM-005: con prioridadElevada la tarjeta lo dice con texto, no solo con color', () => {
+    const tarjeta = tarjetaDeEntrada(entrada({ prioridadElevada: true }), () => {});
+
+    const distintivo = tarjeta.querySelector('[data-campo="prioridad"]');
+    expect(distintivo).not.toBeNull();
+    expect(distintivo.textContent).toBe('Prioridad elevada');
+  });
+
+  test.each([
+    ['false', { prioridadElevada: false }],
+    ['ausente', {}],
+    ['un valor que no es booleano', { prioridadElevada: 'true' }],
+  ])('HU-COM-005: con prioridadElevada %s la tarjeta no pinta nada', (_caso, campos) => {
+    const tarjeta = tarjetaDeEntrada(entrada(campos), () => {});
+
+    expect(tarjeta.querySelector('[data-campo="prioridad"]')).toBeNull();
+    expect(tarjeta.textContent).not.toContain('Prioridad elevada');
+  });
+
   test('el filtro pide la lista de seguimiento o los sin marcar, y su vacío dice lo suyo', async () => {
     const consultarCola = jest.fn().mockResolvedValue({ entradas: [], total: 0 });
     const raiz = vista();
@@ -195,6 +216,20 @@ describe('el detalle y la decision', () => {
     expect(panel.querySelector('[data-campo="estado"]').textContent).toBe('Publicado');
     expect(panel.querySelector('[data-campo="marcado"]')).not.toBeNull();
     expect(panel.querySelector('[data-campo="editado"]')).not.toBeNull();
+  });
+
+  test('HU-COM-005: el detalle pinta la prioridad elevada solo si se le indica', () => {
+    const con = panelDeDetalle(detalle(), () => {}, { prioridadElevada: true });
+    expect(con.querySelector('[data-campo="prioridad"]').textContent).toBe('Prioridad elevada');
+
+    expect(
+      panelDeDetalle(detalle(), () => {}).querySelector('[data-campo="prioridad"]'),
+    ).toBeNull();
+    expect(
+      panelDeDetalle(detalle(), () => {}, { prioridadElevada: false }).querySelector(
+        '[data-campo="prioridad"]',
+      ),
+    ).toBeNull();
   });
 
   test('EDITAR pide el texto nuevo, que empieza siendo el actual y viaja con la decisión', () => {
@@ -467,6 +502,61 @@ describe('resolver desde la vista', () => {
     );
     expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
       'el aviso al autor no salió',
+    );
+  });
+
+  test('HU-COM-005: el detalle hereda la prioridad de la entrada de la cola (el detalle no la trae)', async () => {
+    const abrirEntrada = async (prioridadElevada) => {
+      const raiz = vista();
+      montarModeracion(raiz, {
+        api: {
+          consultarCola: jest
+            .fn()
+            .mockResolvedValue({ entradas: [entrada({ prioridadElevada })], total: 1 }),
+          consultarDetalle: jest.fn().mockResolvedValue(detalle()),
+        },
+      });
+      await asentar();
+      raiz.querySelector('[data-accion="revisar"]').click();
+      await asentar();
+      return raiz.querySelector('[data-zona="detalle"]');
+    };
+
+    const elevada = await abrirEntrada(true);
+    expect(elevada.querySelector('[data-campo="prioridad"]').textContent).toBe('Prioridad elevada');
+    expect((await abrirEntrada(false)).querySelector('[data-campo="prioridad"]')).toBeNull();
+  });
+
+  test('HU-COM-005: tras marcar, el detalle que se reabre conserva la prioridad elevada', async () => {
+    const api = apiQueResuelve({
+      comentario: { ...entrada().comentario, marcado: true },
+      asiento: { id: 'a-3' },
+      autorNotificado: false,
+    });
+    api.consultarCola = jest
+      .fn()
+      .mockResolvedValue({ entradas: [entrada({ prioridadElevada: true })], total: 1 });
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    const accion = raiz.querySelector('#accion');
+    accion.value = 'MARCAR';
+    accion.dispatchEvent(new Event('change'));
+    const motivo = raiz.querySelector('#motivo');
+    motivo.value = 'Seguimiento de este autor';
+    motivo.dispatchEvent(new Event('input'));
+    raiz
+      .querySelector('[data-zona="decision"]')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await asentar();
+    await asentar();
+
+    expect(api.consultarDetalle).toHaveBeenCalledTimes(2);
+    expect(raiz.querySelector('[data-zona="detalle"] [data-campo="prioridad"]').textContent).toBe(
+      'Prioridad elevada',
     );
   });
 
