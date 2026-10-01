@@ -25,11 +25,30 @@ import nexus.misiones.dominio.simulacion.ResultadoDeMision;
  *
  * <p>La version optimista la lleva la persistencia: dos escrituras a la vez
  * (cancelar mientras el trabajo la termina) no se pisan, la segunda falla.
+ *
+ * <h2>La simulacion en segundo plano (HU-SIM-007)</h2>
+ *
+ * Quien va a simular una ejecucion vencida primero la <b>reserva</b>
+ * ({@link #reservarParaSimular}) y guarda la reserva con la version leida: si
+ * otro barrido (u otra instancia) la reservo antes, esa escritura falla y el
+ * segundo no simula. La reserva es un arriendo ({@link #ARRIENDO_DE_SIMULACION}):
+ * si el proceso muere simulando, el arriendo vence y otra vuelta la retoma.
+ * Si la simulacion falla, el mismo campo hace de espera ({@link #simulacionFallida}):
+ * una ejecucion que falla siempre no se reintenta en cada vuelta ni le quita su
+ * sitio en el lote a las demas.
  */
 public final class Ejecucion {
 
     /** Tope de la espera exponencial entre reintentos de la liquidacion. */
     public static final Duration ESPERA_MAXIMA_ENTRE_INTENTOS = Duration.ofHours(1);
+
+    /**
+     * Cuanto tiempo es de una vuelta la simulacion que reservo. Una mision
+     * entera son cientos de llamadas a heroes y al motor (menos de un minuto
+     * en la practica); cinco minutos dejan margen y, si el proceso muere, la
+     * ejecucion no espera mas que eso.
+     */
+    public static final Duration ARRIENDO_DE_SIMULACION = Duration.ofMinutes(5);
 
     private final UUID id;
     private final String misionId;
@@ -53,6 +72,9 @@ public final class Ejecucion {
     private String ultimoError;
     private Integer nivelAlcanzado;
     private Double experienciaAcumulada;
+    private int intentosDeSimulacion;
+    private Instant simulacionReservadaHasta;
+    private String ultimoErrorDeSimulacion;
     private Long version;
 
     private Ejecucion(Estado e) {
@@ -83,6 +105,9 @@ public final class Ejecucion {
         this.ultimoError = e.ultimoError;
         this.nivelAlcanzado = e.nivelAlcanzado;
         this.experienciaAcumulada = e.experienciaAcumulada;
+        this.intentosDeSimulacion = e.intentosDeSimulacion == null ? 0 : e.intentosDeSimulacion;
+        this.simulacionReservadaHasta = e.simulacionReservadaHasta;
+        this.ultimoErrorDeSimulacion = e.ultimoErrorDeSimulacion;
         this.version = e.version;
     }
 
@@ -137,6 +162,7 @@ public final class Ejecucion {
         exigirEnProgreso("cancelar");
         estado = EstadoEjecucion.ABANDONADA;
         terminadaEn = ahora;
+        simulacionReservadaHasta = null;
         pasos.clear();
         pasos.put(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE);
         proximoIntento = ahora;
@@ -155,6 +181,8 @@ public final class Ejecucion {
         this.recompensas = Objects.requireNonNull(recompensas);
         this.estado = resultado.exito() ? EstadoEjecucion.COMPLETADA : EstadoEjecucion.FALLIDA;
         this.terminadaEn = ahora;
+        this.simulacionReservadaHasta = null;
+        this.ultimoErrorDeSimulacion = null;
         pasos.clear();
         pasos.put(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE);
         if (recompensas.creditos() > 0) {
@@ -175,6 +203,39 @@ public final class Ejecucion {
         proximoIntento = ahora;
     }
 
+    /**
+     * Se puede reservar para simular: sigue en progreso, su plazo vencio y
+     * ninguna otra vuelta la tiene reservada ahora.
+     */
+    public boolean reclamable(Instant ahora) {
+        return estado == EstadoEjecucion.EN_PROGRESO && vencida(ahora) && !reservaVigente(ahora);
+    }
+
+    /** Alguna vuelta la tiene reservada: simulando, o esperando para reintentar tras un fallo. */
+    public boolean reservaVigente(Instant ahora) {
+        return simulacionReservadaHasta != null && ahora.isBefore(simulacionReservadaHasta);
+    }
+
+    /** Cuenta el intento y la deja en manos de quien la tomo por {@link #ARRIENDO_DE_SIMULACION}. */
+    public void reservarParaSimular(Instant ahora) {
+        exigirEnProgreso("simular");
+        intentosDeSimulacion++;
+        simulacionReservadaHasta = ahora.plus(ARRIENDO_DE_SIMULACION);
+    }
+
+    /**
+     * La simulacion fallo: no se toca el estado de la mision (sigue en
+     * progreso y el heroe en mision) y no se reintenta hasta que pase la
+     * espera, que se duplica con cada intento hasta
+     * {@link #ESPERA_MAXIMA_ENTRE_INTENTOS}. Nunca se da por perdida: un
+     * servicio que vuelve la deja terminar.
+     */
+    public void simulacionFallida(Instant ahora, Duration esperaBase, String error) {
+        exigirEnProgreso("simular");
+        simulacionReservadaHasta = ahora.plus(espera(esperaBase, intentosDeSimulacion));
+        ultimoErrorDeSimulacion = error;
+    }
+
     public void pasoHecho(PasoDeLiquidacion paso) {
         pasos.put(paso, EstadoDePaso.HECHO);
         motivos.remove(paso);
@@ -189,13 +250,17 @@ public final class Ejecucion {
     /** El otro servicio no respondio: se vuelve a intentar despues, cada vez mas tarde. */
     public void reintentarMasTarde(Instant ahora, Duration esperaBase, String error) {
         intentosDeLiquidacion++;
-        long factor = 1L << Math.min(20, intentosDeLiquidacion - 1);
-        Duration espera = esperaBase.multipliedBy(factor);
-        if (espera.compareTo(ESPERA_MAXIMA_ENTRE_INTENTOS) > 0 || espera.isNegative()) {
-            espera = ESPERA_MAXIMA_ENTRE_INTENTOS;
-        }
-        proximoIntento = ahora.plus(espera);
+        proximoIntento = ahora.plus(espera(esperaBase, intentosDeLiquidacion));
         ultimoError = error;
+    }
+
+    /** La espera antes del intento siguiente: la base, duplicada con cada intento, con tope. */
+    private static Duration espera(Duration base, int intentos) {
+        long factor = 1L << Math.min(20, Math.max(0, intentos - 1));
+        Duration espera = base.multipliedBy(factor);
+        return espera.compareTo(ESPERA_MAXIMA_ENTRE_INTENTOS) > 0 || espera.isNegative()
+                ? ESPERA_MAXIMA_ENTRE_INTENTOS
+                : espera;
     }
 
     /** Nivel y experiencia que devolvio el inventario al liberar al heroe. */
@@ -320,6 +385,20 @@ public final class Ejecucion {
         return experienciaAcumulada;
     }
 
+    /** Cuantas veces se reservo para simular, con exito o sin el: el primer intento es el 1. */
+    public int intentosDeSimulacion() {
+        return intentosDeSimulacion;
+    }
+
+    /** Hasta cuando es de una vuelta la simulacion; nulo si nadie la tiene. */
+    public Instant simulacionReservadaHasta() {
+        return simulacionReservadaHasta;
+    }
+
+    public String ultimoErrorDeSimulacion() {
+        return ultimoErrorDeSimulacion;
+    }
+
     public Long version() {
         return version;
     }
@@ -347,6 +426,10 @@ public final class Ejecucion {
         public String ultimoError;
         public Integer nivelAlcanzado;
         public Double experienciaAcumulada;
+        /** Nulo en lo guardado antes de HU-SIM-007: se lee como cero. */
+        public Integer intentosDeSimulacion;
+        public Instant simulacionReservadaHasta;
+        public String ultimoErrorDeSimulacion;
         public Long version;
     }
 }

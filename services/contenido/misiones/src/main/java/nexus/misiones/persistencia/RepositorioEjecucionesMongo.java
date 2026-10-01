@@ -111,7 +111,15 @@ public class RepositorioEjecucionesMongo implements RepositorioDeEjecuciones {
 
     @Override
     public List<Ejecucion> vencidas(Instant ahora, int limite) {
-        Query consulta = new Query(Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO).and("terminaEn").lte(ahora))
+        // Sin reserva vigente: ni la que tiene otra vuelta simulando ni la que espera tras un fallo. {@code is(null)}
+        // casa tambien con las guardadas antes de HU-SIM-007, que no traen el campo.
+        Criteria sinReserva = new Criteria().orOperator(
+                Criteria.where("simulacionReservadaHasta").is(null),
+                Criteria.where("simulacionReservadaHasta").lte(ahora));
+        Query consulta = new Query(new Criteria().andOperator(
+                Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO),
+                Criteria.where("terminaEn").lte(ahora),
+                sinReserva))
                 .with(Sort.by(Sort.Direction.ASC, "terminaEn"))
                 .limit(limite);
         return leer(consulta);

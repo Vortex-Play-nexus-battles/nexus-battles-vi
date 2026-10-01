@@ -256,6 +256,8 @@ class CicloDeUnaMisionTest {
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
 
         heroes.fallarAlDecidir = null;
+        // El reintento espera su turno (HU-SIM-007): treinta segundos tras el primer fallo.
+        ahora.set(ahora.get().plusSeconds(30));
         trabajo.ejecutar();
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
     }
@@ -400,6 +402,7 @@ class CicloDeUnaMisionTest {
         assertThat(eventos.escrituras).isZero();
 
         motor.fallar = null;
+        ahora.set(ahora.get().plusSeconds(30));
         trabajo.ejecutar();
 
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
@@ -419,6 +422,7 @@ class CicloDeUnaMisionTest {
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
 
         eventos.fallarAlGuardar = null;
+        ahora.set(ahora.get().plusSeconds(30));
         trabajo.ejecutar();
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
     }

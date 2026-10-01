@@ -203,6 +203,65 @@ class RepositoriosMongoIT {
     }
 
     @Test
+    @DisplayName("HU-SIM-007: de dos barridos que reservan la misma ejecucion, Mongo deja pasar solo al primero")
+    void reservaDeLaSimulacionConVersionOptimista() {
+        Ejecucion guardada = ejecuciones.guardar(
+                nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion delBarridoA = ejecuciones.buscar(guardada.id()).orElseThrow();
+        Ejecucion delBarridoB = ejecuciones.buscar(guardada.id()).orElseThrow();
+
+        delBarridoA.reservarParaSimular(AHORA);
+        Ejecucion reservadaPorA = ejecuciones.guardar(delBarridoA);
+        delBarridoB.reservarParaSimular(AHORA);
+
+        assertThatThrownBy(() -> ejecuciones.guardar(delBarridoB))
+                .isInstanceOf(EjecucionModificadaConcurrentemente.class);
+        Ejecucion enLaBase = ejecuciones.buscar(guardada.id()).orElseThrow();
+        assertThat(enLaBase.intentosDeSimulacion()).isEqualTo(1);
+        assertThat(enLaBase.version()).isEqualTo(reservadaPorA.version());
+        assertThat(enLaBase.simulacionReservadaHasta()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: la cola de vencidas no incluye las reservadas ni las que esperan un reintento, y las incluye al vencer")
+    void colaDeVencidasRespetaLaReserva() {
+        Ejecucion libre = ejecuciones.guardar(
+                nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion simulandose = ejecuciones.guardar(
+                nueva(JUGADOR, "m-2", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion esperando = ejecuciones.guardar(
+                nueva(JUGADOR, "m-3", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        simulandose.reservarParaSimular(AHORA);
+        ejecuciones.guardar(simulandose);
+        esperando.reservarParaSimular(AHORA);
+        esperando.simulacionFallida(AHORA, Duration.ofSeconds(30), "heroes no responde");
+        ejecuciones.guardar(esperando);
+
+        assertThat(ejecuciones.vencidas(AHORA, 10)).extracting(Ejecucion::id).containsExactly(libre.id());
+        assertThat(ejecuciones.vencidas(AHORA.plusSeconds(30), 10)).extracting(Ejecucion::id)
+                .containsExactlyInAnyOrder(libre.id(), esperando.id());
+        assertThat(ejecuciones.vencidas(AHORA.plus(Ejecucion.ARRIENDO_DE_SIMULACION), 10)).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: una ejecucion guardada antes de la reserva, sin esos campos, sigue entrando en la cola de vencidas")
+    void colaDeVencidasConDocumentosViejos() {
+        Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null);
+        ejecuciones.guardar(vieja);
+        // Como la dejaron las versiones anteriores: el documento no trae los campos de la reserva.
+        mongo.getCollection("ejecuciones").updateOne(
+                new org.bson.Document("_id", vieja.id().toString()),
+                new org.bson.Document("$unset", new org.bson.Document("simulacionReservadaHasta", "")
+                        .append("intentosDeSimulacion", "").append("ultimoErrorDeSimulacion", "")));
+
+        List<Ejecucion> vencidas = ejecuciones.vencidas(AHORA, 10);
+
+        assertThat(vencidas).extracting(Ejecucion::id).containsExactly(vieja.id());
+        assertThat(vencidas.getFirst().intentosDeSimulacion()).isZero();
+        assertThat(vencidas.getFirst().reclamable(AHORA)).isTrue();
+    }
+
+    @Test
     @DisplayName("las del jugador: de la mas reciente a la mas antigua, en curso e iniciadas desde")
     void delJugador() {
         Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofDays(2)), Duration.ofHours(1), null);

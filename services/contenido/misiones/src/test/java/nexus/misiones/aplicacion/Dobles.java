@@ -127,8 +127,7 @@ public final class Dobles {
             if (fallarAlConsultarVencidas != null) {
                 throw fallarAlConsultarVencidas;
             }
-            return todas().stream().filter(e -> e.estado() == EstadoEjecucion.EN_PROGRESO && e.vencida(ahora))
-                    .limit(limite).toList();
+            return todas().stream().filter(e -> e.reclamable(ahora)).limit(limite).toList();
         }
 
         @Override
@@ -166,6 +165,9 @@ public final class Dobles {
             s.ultimoError = e.ultimoError();
             s.nivelAlcanzado = e.nivelAlcanzado();
             s.experienciaAcumulada = e.experienciaAcumulada();
+            s.intentosDeSimulacion = e.intentosDeSimulacion();
+            s.simulacionReservadaHasta = e.simulacionReservadaHasta();
+            s.ultimoErrorDeSimulacion = e.ultimoErrorDeSimulacion();
             s.version = e.version();
             return s;
         }

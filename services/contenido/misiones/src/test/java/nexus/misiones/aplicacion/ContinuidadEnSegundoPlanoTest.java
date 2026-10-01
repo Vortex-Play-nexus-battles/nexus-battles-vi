@@ -67,8 +67,7 @@ class ContinuidadEnSegundoPlanoTest {
 
     private static final Instant INICIO = Instant.parse("2026-10-01T10:00:00Z");
     private static final String JUGADOR = "11111111-1111-4111-8111-111111111111";
-    /** Lo que esta prueba le exige al arriendo: cinco minutos, ni mas ni menos (ver {@code Ejecucion}). */
-    private static final Duration ARRIENDO = Duration.ofMinutes(5);
+    private static final Duration ARRIENDO = Ejecucion.ARRIENDO_DE_SIMULACION;
     private static final Duration ESPERA_BASE = Duration.ofSeconds(30);
 
     private static final EpicaDeTabla20 ARMAS_SEGURA = new EpicaDeTabla20("Guerrero Armas",

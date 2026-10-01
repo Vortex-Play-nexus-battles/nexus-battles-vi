@@ -77,7 +77,12 @@ public class LiquidarEjecucion {
             }
         }
         try {
-            return ejecuciones.guardar(ejecucion);
+            Ejecucion guardada = ejecuciones.guardar(ejecucion);
+            if (!guardada.liquidacionPendiente() && guardada.intentosDeLiquidacion() > 0) {
+                BITACORA.info("Ejecucion {} liquidada tras {} reintentos: se recupero del fallo anterior ({})",
+                        guardada.id(), guardada.intentosDeLiquidacion(), guardada.ultimoError());
+            }
+            return guardada;
         } catch (EjecucionModificadaConcurrentemente otraVuelta) {
             // Otra vuelta del trabajo la liquido a la vez. Lo que se hizo aqui
             // fue idempotente; la siguiente lectura trae el estado bueno.
