@@ -211,7 +211,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true);
 
         assertThat(catalogo.todas()).extracting(Mision::id).startsWith("templo-olvidado")
-                .endsWith("dev-prueba-de-humo").contains(PROGRESION.toArray(String[]::new));
+                .endsWith("dev-prueba-de-humo").contains(PROGRESION.toArray(String[]::new))
+                .contains("la-forja-sumergida");
         Mision humo = catalogo.buscar("dev-prueba-de-humo").orElseThrow();
         assertThat(humo.origen()).isEqualTo(Origen.PROVISIONAL_DEV);
         assertThat(humo.nombre()).startsWith(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
