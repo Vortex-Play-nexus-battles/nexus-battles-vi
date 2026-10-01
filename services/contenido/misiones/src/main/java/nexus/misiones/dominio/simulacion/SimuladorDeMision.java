@@ -127,17 +127,22 @@ public class SimuladorDeMision {
         /** De donde salen las rotaciones de un enemigo y, si es predefinida, cual (HU-SIM-004); nulos en el heroe. */
         final OrigenDeEstrategia origenDeEstrategia;
         final String estrategiaId;
+        /** La epica que este bando juega por su cuenta (solo un Master, HU-SIM-006); nula en los demas. */
+        final String epica;
         final Map<String, Integer> usos = new HashMap<>();
         List<Integer> cursores = List.of();
+        /** El motor dijo que esta epica no se puede jugar de ninguna manera (no la conoce, no le sirve): no se insiste. */
+        boolean epicaDescartada;
 
         Bando(String id, EventoDeCombate.Actor actor, List<List<String>> rotaciones, boolean consultaAlDecisor,
-              OrigenDeEstrategia origenDeEstrategia, String estrategiaId) {
+              OrigenDeEstrategia origenDeEstrategia, String estrategiaId, String epica) {
             this.id = id;
             this.actor = actor;
             this.rotaciones = rotaciones == null ? List.of() : rotaciones;
             this.consultaAlDecisor = consultaAlDecisor;
             this.origenDeEstrategia = origenDeEstrategia;
             this.estrategiaId = estrategiaId;
+            this.epica = epica;
         }
     }
 
@@ -161,11 +166,11 @@ public class SimuladorDeMision {
             this.elHeroe = new Bando(ID_DEL_HEROE,
                     new EventoDeCombate.Actor(EventoDeCombate.Lado.HEROE, heroe.nombre(), heroe.prototipo(),
                             heroe.nivel()),
-                    estrategia, true, null, null);
+                    estrategia, true, null, null, null);
             this.elRival = new Bando(ID_DEL_RIVAL,
                     new EventoDeCombate.Actor(ladoDe(rival.tipo()), rival.nombre(), rival.prototipo(), rival.nivel()),
                     rival.rotaciones(), !rival.rotaciones().isEmpty(), rival.origenDeEstrategia(),
-                    rival.estrategiaId());
+                    rival.estrategiaId(), epicaDelMaster(rival));
             // «El poder se recupera instantaneamente al concluir el combate»:
             // cada duelo empieza con el poder al maximo (poder nulo), sin
             // cargas ni efectos y con las rotaciones en su primer paso.
@@ -173,7 +178,7 @@ public class SimuladorDeMision {
                     Combatiente.alEmpezar(ID_DEL_HEROE, heroe.prototipo(), heroe.nivel(), perfil.estadisticas(),
                             vidaDelHeroe, perfil.equipamiento(), perfil.epicas()),
                     Combatiente.alEmpezar(ID_DEL_RIVAL, rival.prototipo(), rival.nivel(), estadisticasDelRival(),
-                            rival.vida(), List.of(), List.of()));
+                            rival.vida(), List.of(), elRival.epica == null ? List.of() : List.of(elRival.epica)));
         }
 
         /**
@@ -255,14 +260,28 @@ public class SimuladorDeMision {
             DecisionDeTurno decision = null;
             boolean forzadaALaBasica = false;
             boolean intentoLaBasica = false;
+            // El Master juega su epica en cuanto puede (HU-SIM-006): es lo primero que prueba, antes de lo que
+            // decidiria su estrategia, y no cuenta entre las opciones de la rotacion.
+            boolean conEpica = puedeJugarSuEpica(quien, actor);
+            boolean jugoLaEpica = false;
+            int opciones = OPCIONES_MAXIMAS_POR_TURNO + (conEpica ? 1 : 0);
 
-            for (int intento = 0; intento < OPCIONES_MAXIMAS_POR_TURNO && resultado == null; intento++) {
-                decision = decidir(quien, contra, actor, ronda, usosDeEsteTurno);
+            for (int intento = 0; intento < opciones && resultado == null; intento++) {
+                boolean laEpica = conEpica && intento == 0;
+                decision = laEpica ? new DecisionDeTurno(quien.epica, 0, quien.cursores)
+                        : decidir(quien, contra, actor, ronda, usosDeEsteTurno);
                 // Un decisor que insiste en una opcion que el motor ya rechazo
                 // este turno no puede colgar la simulacion: ataque basico.
                 forzadaALaBasica = !decision.esAtaqueBasico() && descartadas.contains(decision.accion());
                 boolean esBasica = decision.esAtaqueBasico() || forzadaALaBasica;
                 resultado = intentar(esBasica ? basica : decision.accion(), quien, contra, rechazadas);
+                if (laEpica) {
+                    jugoLaEpica = resultado != null;
+                    if (!jugoLaEpica && !EN_CARGA.equals(rechazadas.getLast().motivo())) {
+                        quien.epicaDescartada = true;
+                    }
+                    continue;
+                }
                 if (resultado == null) {
                     if (esBasica) {
                         intentoLaBasica = true;
@@ -293,7 +312,8 @@ public class SimuladorDeMision {
             String ejecutada = nombreDe(resultado.accionEjecutada());
             // Solo lo que el motor de verdad ejecuto entra en recarga: una
             // accion jugada en valor base no gasto poder ni quedo en carga.
-            if (!resultado.enValorBase() && !esBasica(resultado.accionEjecutada())) {
+            // (la epica del Master tiene su propia recarga, que lleva el motor, y no es una habilidad de la Tabla 7).
+            if (!resultado.enValorBase() && !esBasica(resultado.accionEjecutada()) && !jugoLaEpica) {
                 quien.usos.put(resultado.accionEjecutada(), ronda);
             }
             contar(quien, resultado, ejecutada);
@@ -304,7 +324,20 @@ public class SimuladorDeMision {
                     decision.costoDePoder(), Math.max(0, poderAntes - poderDe(combatiente(quien.id))), rechazadas,
                     resultadoDe(resultado), delDecisor ? decision.decididaPor() : DecididaPor.REGLA,
                     delDecisor ? decision.versionDelModelo() : null, delDecisor ? decision.candidatas() : List.of(),
-                    quien.origenDeEstrategia, quien.estrategiaId);
+                    jugoLaEpica ? null : quien.origenDeEstrategia, jugoLaEpica ? null : quien.estrategiaId);
+        }
+
+        /**
+         * La epica del Master, si le toca jugarla ahora: no esta en recarga (el motor la cuenta en turnos propios y
+         * la devuelve en {@code recargas}) y el motor no la dio ya por imposible en este duelo.
+         */
+        private boolean puedeJugarSuEpica(Bando quien, Combatiente actor) {
+            if (quien.epica == null || quien.epicaDescartada) {
+                return false;
+            }
+            String buscada = sinAcentos(quien.epica);
+            return actor.recargas().entrySet().stream()
+                    .noneMatch(r -> r.getValue() > 0 && sinAcentos(r.getKey()).equals(buscada));
         }
 
         /** Pide la accion al motor; si la rechaza (409) deja constancia y devuelve nulo. */
@@ -404,6 +437,20 @@ public class SimuladorDeMision {
             case MASTER -> EventoDeCombate.Lado.MASTER;
             case JEFE -> EventoDeCombate.Lado.JEFE;
         };
+    }
+
+    /** El motor rechaza por carga (EN_CARGA): la epica sigue siendo suya y se vuelve a probar el turno siguiente. */
+    private static final String EN_CARGA = "EN_CARGA";
+
+    /** Solo un Master lleva una epica propia al combate; un regular o un jefe no. */
+    private static String epicaDelMaster(Rival rival) {
+        return rival.tipo() == TipoDeRival.MASTER && rival.epica() != null ? rival.epica().nombre() : null;
+    }
+
+    /** «Frío concentrado» y «Frio concentrado» son la misma epica: el motor tampoco distingue tildes ni mayusculas. */
+    private static String sinAcentos(String nombre) {
+        return java.text.Normalizer.normalize(nombre, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toLowerCase(java.util.Locale.ROOT).trim();
     }
 
     private static int poderDe(Combatiente c) {
