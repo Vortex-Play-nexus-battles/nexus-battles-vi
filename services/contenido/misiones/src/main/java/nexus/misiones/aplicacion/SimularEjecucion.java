@@ -22,6 +22,7 @@ import nexus.misiones.dominio.RepositorioDeEjecuciones;
 import nexus.misiones.dominio.RepositorioDeEventosDeCombate;
 import nexus.misiones.dominio.simulacion.Azar;
 import nexus.misiones.dominio.simulacion.AzarConSemilla;
+import nexus.misiones.dominio.simulacion.DecisorDeTurno;
 import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.dominio.simulacion.PerfilDeCombate;
 import nexus.misiones.dominio.simulacion.PlanDeCombate;
@@ -65,16 +66,30 @@ public class SimularEjecucion {
     private final RepositorioDeEjecuciones ejecuciones;
     private final RepositorioDeEventosDeCombate eventos;
     private final ServicioDeHeroes heroes;
+    private final DecisorDeTurno decisor;
     private final MotorDeCombate motor;
     private final PerfilDeCombateDelHeroe perfiles;
     private final EstrategiaDeEnemigos enemigos;
     private final ParametrosDeMisiones parametros;
     private final Clock reloj;
 
+    /** Con la IA de siempre: las jugadas las decide la regla de heroes. */
     public SimularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
                             RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes, MotorDeCombate motor,
                             PerfilDeCombateDelHeroe perfiles, EstrategiaDeEnemigos enemigos,
                             ParametrosDeMisiones parametros, Clock reloj) {
+        this(catalogo, ejecuciones, eventos, heroes, heroes, motor, perfiles, enemigos, parametros, reloj);
+    }
+
+    /**
+     * @param decisor quien decide la jugada de cada turno, de los dos lados: la regla de heroes o, con el modelo de
+     *                IA encendido (HU-SIM-008), el decorador que la envuelve
+     */
+    public SimularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
+                            RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes, DecisorDeTurno decisor,
+                            MotorDeCombate motor, PerfilDeCombateDelHeroe perfiles, EstrategiaDeEnemigos enemigos,
+                            ParametrosDeMisiones parametros, Clock reloj) {
+        this.decisor = Objects.requireNonNull(decisor);
         this.catalogo = Objects.requireNonNull(catalogo);
         this.ejecuciones = Objects.requireNonNull(ejecuciones);
         this.eventos = Objects.requireNonNull(eventos);
@@ -131,7 +146,7 @@ public class SimularEjecucion {
         List<Rival> plan = PlanDeCombate.armar(regulares, masters, rivalFinal, azar);
         PerfilDeCombate perfil = perfiles.de(ejecucion.jugadorUid(), heroe);
         Long semillaDeGolpes = parametros.semillaDePruebas() == null ? null : ejecucion.semilla();
-        Simulacion simulacion = new SimuladorDeMision(heroes, motor, heroes).simular(ejecucion.id(),
+        Simulacion simulacion = new SimuladorDeMision(decisor, motor, heroes).simular(ejecucion.id(),
                 mision.get().id(), heroe, perfil, ejecucion.estrategia(), plan, azar, semillaDeGolpes);
         ResultadoDeMision resultado = simulacion.resultado();
 

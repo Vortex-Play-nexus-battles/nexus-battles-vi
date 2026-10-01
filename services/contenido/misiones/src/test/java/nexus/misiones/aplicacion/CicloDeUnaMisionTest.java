@@ -74,6 +74,8 @@ class CicloDeUnaMisionTest {
     private MatricularHeroe matricular;
     private TrabajoDeMisiones trabajo;
     private CancelarEjecucion cancelar;
+    private Dobles.Catalogo catalogoDePrueba;
+    private ParametrosDeMisiones parametrosDePrueba;
 
     private static final EpicaDeTabla20 ARMAS_SEGURA = new EpicaDeTabla20("Guerrero Armas",
             new Epica("Segundo impulso", "Recupera 1d4 de vida", "+3 a la vida", "4481eb34-384a-3fa0-ba9a-1aac9562c38f"),
@@ -100,6 +102,8 @@ class CicloDeUnaMisionTest {
                 true, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
         Dobles.Catalogo catalogo = new Dobles.Catalogo(List.of(Misiones.templo(),
                 Misiones.historia("prueba-corta", List.of())), tabla20);
+        catalogoDePrueba = catalogo;
+        parametrosDePrueba = parametros;
         matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
                 heroes, parametros, reloj, () -> 7L);
         SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
@@ -451,5 +455,26 @@ class CicloDeUnaMisionTest {
         assertThat(deEnemigos).isNotEmpty();
         assertThat(deEnemigos).allSatisfy(t -> assertThat(t.rotaciones()).containsExactly(List.of("Golpe con escudo")));
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isNotEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    @Test
+    @DisplayName("la simulacion usa el decisor que se le da (el de la IA con modelo cuando esta encendido), no solo el de heroes")
+    void usaElDecisorQueSeLeDa() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        java.util.List<nexus.misiones.dominio.simulacion.TurnoParaDecidir> vistos = new java.util.ArrayList<>();
+        nexus.misiones.dominio.simulacion.DecisorDeTurno espia = turno -> {
+            vistos.add(turno);
+            return heroes.decidir(turno);
+        };
+        SimularEjecucion simular = new SimularEjecucion(catalogoDePrueba, ejecuciones, eventos, heroes, espia, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametrosDePrueba, reloj);
+
+        simular.simular(ejecuciones.buscar(ejecucion.id()).orElseThrow());
+
+        // Todo lo que se le pregunta al decisor lleva el contexto del duelo (lo que necesita el modelo).
+        assertThat(vistos).isNotEmpty();
+        assertThat(vistos).allSatisfy(t -> assertThat(t.contexto()).isNotNull());
     }
 }
