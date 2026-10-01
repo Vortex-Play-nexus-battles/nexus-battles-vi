@@ -37,7 +37,7 @@ import org.junit.jupiter.api.Test;
  * la simulacion de una ejecucion con las estadisticas reales de la Tabla 6 (nivel como factor multiplicador) y el
  * motor en memoria. Es la evidencia automatica que el docente pide por criterio.
  *
- * <p>Los regulares son un Guerrero Armas, un Guerrero Tanque y un Mago Fuego; el jefe, un Mago Hielo; el Master, un
+ * <p>Los regulares son un Guerrero Armas, un Guerrero Tanque y un Mago Fuego; el jefe, un Pícaro Machete; el Master, un
  * Pícaro Veneno, el prototipo de menos vida y defensa de los que pelean. Cada prototipo aparece una sola vez en su
  * papel para poder decir quien es quien por lo que el motor recibio.
  */
@@ -101,7 +101,7 @@ class MasterReforzadoTest {
                 new GrupoDeEnemigos("Sombras Corrompidas", 2, null, "Guerrero Armas", null, null, List.of()),
                 new GrupoDeEnemigos("Guardianes de Piedra", 2, null, "Guerrero Tanque", null, null, List.of()),
                 new GrupoDeEnemigos("Espectros Ancestrales", 1, null, "Mago Fuego", null, null, List.of())),
-                new Jefe("El Guardián Eterno", "Mago Hielo", 100, 5, null, List.of()), List.of(masters));
+                new Jefe("El Guardián Eterno", "Pícaro Machete", 100, 5, null, List.of()), List.of(masters));
     }
 
     private static MasterDeMision sombra() {
@@ -210,6 +210,25 @@ class MasterReforzadoTest {
             assertThat(master.nombre()).isEqualTo("Sombra del Olvido");
             assertThat(master.epica()).isEqualTo(VELO);
         });
+    }
+
+    @Test
+    @DisplayName("Criterio 2: la epica del Master entra en el perfil que va al motor y la juega; los demas no llevan ninguna")
+    void criterio2_laLlevaAlCombate() {
+        motor.danoDelHeroe = 60;
+        motor.danoDeLosEnemigos = 0;
+
+        Ejecucion terminada = simular(3, Escalon.NORMAL, mision(new MasterDeMision("Hija de la Escarcha",
+                "Mago Hielo", 1.0, FRIO)));
+
+        Map<String, Combatiente> rivales = rivalesQueLlegaronAlMotor();
+        assertThat(rivales.get("Mago Hielo").epicas()).containsExactly("Frío concentrado");
+        REGULARES.forEach(regular -> assertThat(rivales.get(regular).epicas()).isEmpty());
+        assertThat(motor.accionesPedidas).contains("Frío concentrado");
+        assertThat(eventos.de(terminada.id()))
+                .filteredOn(e -> e.actor().lado() == EventoDeCombate.Lado.MASTER && e.jugada() != null)
+                .extracting(e -> e.jugada().ejecutada())
+                .contains("Frío concentrado");
     }
 
     // ------------------------------------------------------------------ criterio 3
