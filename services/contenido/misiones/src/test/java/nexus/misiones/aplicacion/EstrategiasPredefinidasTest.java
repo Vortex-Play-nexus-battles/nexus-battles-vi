@@ -130,6 +130,23 @@ class EstrategiasPredefinidasTest {
     }
 
     @Test
+    @DisplayName("si heroes contesta que no con un error definitivo (4xx) a la predefinida, tambien cae a la heuristica y no se queda reintentando")
+    void heroesLaRechazaConUnError() {
+        heroes.fallarAlValidar = new RechazoDelServicio("heroes", 404, "prototipo desconocido");
+        CatalogoDeEstrategiasDeEnemigos catalogo = (prototipo, nivel) -> Optional.of(
+                new EstrategiaPredefinida("de-prueba", prototipo, 1, List.of(List.of("Misiles de magma"))));
+        // La heuristica tambien le pregunta a heroes: aqui responde bien.
+        RotacionesPorDefectoDeEnemigos respaldo = new RotacionesPorDefectoDeEnemigos(new Dobles.Heroes());
+        estrategias = new EstrategiasPredefinidas(catalogo, heroes, respaldo);
+
+        EstrategiaDeEnemigos.Elegida elegida = estrategias.elegir("Mago Fuego", 1);
+
+        assertThat(elegida.origen()).isEqualTo(OrigenDeEstrategia.HEURISTICA);
+        estrategias.elegir("Mago Fuego", 1);
+        assertThat(heroes.validaciones).as("se recuerda: una sola pregunta").hasSize(1);
+    }
+
+    @Test
     @DisplayName("sigue siendo una EstrategiaDeEnemigos de siempre: porDefecto devuelve las rotaciones de la elegida")
     void porDefecto() {
         assertThat(estrategias.porDefecto("Mago Fuego", 4))

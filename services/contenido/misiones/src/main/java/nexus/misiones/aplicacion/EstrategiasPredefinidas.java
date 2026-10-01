@@ -26,7 +26,8 @@ import org.slf4j.LoggerFactory;
  * <p>Una predefinida se valida con la regla de heroes —el dueno de las habilidades validas— la primera vez que se usa
  * (heroes puede no estar levantado al arrancar; el catalogo ya la valido contra la Tabla 7 local). Si heroes la
  * rechaza, se anota en la bitacora, se recuerda que no vale y ese prototipo y tramo juegan la heuristica: un contenido
- * malo no es un error para el jugador ni detiene la simulacion. Si heroes no responde, el fallo sube y la simulacion
+ * malo no es un error para el jugador ni detiene la simulacion (tampoco un 4xx de heroes sobre esa pregunta, que
+ * repetida daria lo mismo). Si heroes no responde, el fallo sube y la simulacion
  * entera se reintenta en la vuelta siguiente, como con cualquier otra consulta a heroes.
  *
  * <p>Una estrategia vale igual en todo su tramo (las habilidades se desbloquean solo en los niveles 1, 4 y 8), asi que
@@ -72,8 +73,15 @@ public class EstrategiasPredefinidas implements EstrategiaDeEnemigos {
         if (recordada != null) {
             return recordada;
         }
-        ServicioDeHeroes.VeredictoDeEstrategia veredicto = heroes.validarEstrategia(estrategia.prototipo(),
-                estrategia.desdeNivel(), estrategia.rotaciones());
+        ServicioDeHeroes.VeredictoDeEstrategia veredicto;
+        try {
+            veredicto = heroes.validarEstrategia(estrategia.prototipo(), estrategia.desdeNivel(),
+                    estrategia.rotaciones());
+        } catch (RechazoDelServicio rechazo) {
+            // Heroes contesto que no con un error definitivo (4xx): repetir la pregunta daria lo mismo y la
+            // simulacion se quedaria reintentando para siempre. Es lo mismo que una estrategia invalida.
+            veredicto = new ServicioDeHeroes.VeredictoDeEstrategia(false, rechazo.getMessage(), null, List.of());
+        }
         Optional<List<List<String>>> resultado;
         if (veredicto.valida()) {
             List<List<String>> exactas = veredicto.rotaciones() == null || veredicto.rotaciones().isEmpty()
