@@ -434,6 +434,8 @@ public final class Dobles {
     public static final class Motor implements MotorDeCombate {
         public static final String HEROE = SimuladorDeMision.ID_DEL_HEROE;
         public static final String RIVAL = SimuladorDeMision.ID_DEL_RIVAL;
+        /** 6.1.2: «tienen dos turnos de recarga»: tras jugarla no se puede otra vez hasta pasados dos turnos propios. */
+        static final int TURNOS_DE_RECARGA_DE_UNA_EPICA = 2;
 
         public int danoDelHeroe = 50;
         public int danoDeLosEnemigos = 1;
@@ -477,6 +479,7 @@ public final class Dobles {
                         }
                         c = con(c, c.vidaActual(), poder, c.turnosJugados());
                     }
+                    c = conRecargas(c, unTurnoMenos(c.recargas()));
                 }
                 nuevos.add(c);
             }
@@ -515,6 +518,11 @@ public final class Dobles {
                     blanco.turnosJugados());
             Combatiente actorDespues = con(actor, actor.vidaActual(), actor.poderActual() - gasto,
                     actor.turnosJugados() + 1);
+            if (actor.epicas().contains(accion)) {
+                Map<String, Integer> recargasNuevas = new HashMap<>(actorDespues.recargas());
+                recargasNuevas.put(accion, TURNOS_DE_RECARGA_DE_UNA_EPICA);
+                actorDespues = conRecargas(actorDespues, recargasNuevas);
+            }
             List<Combatiente> nuevos = new ArrayList<>();
             for (Combatiente c : combatientes) {
                 nuevos.add(c.id().equals(ejecutor) ? actorDespues : blancoDespues);
@@ -540,6 +548,22 @@ public final class Dobles {
             return new Combatiente(c.id(), c.prototipo(), c.nivel(), e, Math.min(c.vidaActual(), e.vida()), poder,
                     c.turnosJugados(), c.cargas(), c.efectos(), c.equipamiento(), c.epicas(), c.ultimoDanoRecibido(),
                     c.recargas(), acciones);
+        }
+
+        private static Map<String, Integer> unTurnoMenos(Map<String, Integer> recargas) {
+            Map<String, Integer> nuevas = new HashMap<>();
+            recargas.forEach((accion, faltan) -> {
+                if (faltan > 1) {
+                    nuevas.put(accion, faltan - 1);
+                }
+            });
+            return nuevas;
+        }
+
+        private static Combatiente conRecargas(Combatiente c, Map<String, Integer> recargas) {
+            return new Combatiente(c.id(), c.prototipo(), c.nivel(), c.estadisticas(), c.vidaActual(), c.poderActual(),
+                    c.turnosJugados(), c.cargas(), c.efectos(), c.equipamiento(), c.epicas(), c.ultimoDanoRecibido(),
+                    recargas, c.acciones());
         }
 
         private static Combatiente con(Combatiente c, int vida, Integer poder, int turnos) {
