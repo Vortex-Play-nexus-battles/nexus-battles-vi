@@ -1,8 +1,78 @@
 {
   "version": "1.0.0",
   "notas": [
-    "Misiones que disena el equipo (RF-MIS-56, RG-108): con el nivel de detalle del ejemplo de 7.8.14."
+    "Misiones que disena el equipo (RF-MIS-56, RG-108), con el nivel de detalle del ejemplo de 7.8.14. Esta semilla no copia el documento: es diseno del Grupo 2, decidido por el PO. Cada mision lleva origen EQUIPO y el servicio se niega a publicarla si le falta lo que el documento pide (enemigos regulares, jefe final, al menos un Master con su epica) o si su Master no aparece con la probabilidad de su dificultad (tabla en misiones-del-documento.json).",
+    "HU-MIS-012, primera mision del equipo: «La Forja Sumergida». Historia, dificultad Dificil, 18 horas, nivel recomendado 20. Sigue a «El Templo Olvidado» en la cadena de historia: su requisito previo es completarla (la narrativa arranca cuando «el sello del Templo Olvidado se rompio»).",
+    "PROVISIONAL (mismo criterio que los enemigos del Templo, seccion 7.8.13): los enemigos regulares se describen solo con palabras y el motor necesita un prototipo del catalogo de heroes con sus estadisticas en el nivel del heroe: Automatas de Escoria = Guerrero Tanque («alta defensa»), Salamandras de la Forja = Mago Fuego («ataques magicos»), Ladrones de Lingotes = Picaro Machete («ataques rapidos»).",
+    "PROVISIONAL: «El Herrero Ahogado» es un Guerrero Armas con 120 puntos de vida y la defensa del Guerrero Armas en el nivel del heroe; no tiene habilidades con cifra y pelea con ataque basico (mismo tratamiento que «El Guardian Eterno»).",
+    "PROVISIONAL: «Apagar los 3 hornos de la forja» se cumple al superar todos los encuentros regulares (la mision no reparte los 18 enemigos entre los hornos), como las 5 camaras del Templo. «Recuperar los 2 lingotes de acero frio» se cumple con el botin del mismo nombre.",
+    "El Master «Hija de la Escarcha» es de tipo Mago Hielo y lleva la epica de la Tabla 20 de ese tipo, «Frio concentrado» (efecto general -1 de poder al oponente; efecto potenciado para Mago Hielo: no recibe ningun dano en el siguiente turno). Su nombre se escribe como en el catalogo oficial, sin tilde, y se entrega con su producto EPICA. Aparece con el 20 %, que es la probabilidad de la dificultad Dificil (PROVISIONAL, decision del PO; ver la tabla del documento).",
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Lingote de acero frio y el titulo «Forjador del Lago». Con producto del catalogo oficial (services/contenido/productos/docs/catalogo-inicial-identificadores.md): el arma «Espada de dos manos» (Guerrero Armas) y la armadura «Defensa del enfurecido» (Guerrero Tanque, pecho).",
+    "PROVISIONAL: no va destacada en el banner; la destacada sigue siendo «El Templo Olvidado». El nivel recomendado 20 se publica tal cual aunque los heroes llegan al nivel 8 (6.1.1): es solo una sugerencia, como el 15 del Templo."
   ],
-  "tabla20": [],
-  "misiones": []
+  "misiones": [
+    {
+      "id": "la-forja-sumergida",
+      "origen": "EQUIPO",
+      "nombre": "La Forja Sumergida",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Bajo las aguas del Lago de Cristal Negro duerme una forja que los antiguos herreros sellaron hace siglos.",
+      "imagen": null,
+      "dificultad": "DIFICIL",
+      "duracionHoras": 18,
+      "nivelRecomendado": 20,
+      "requisitosPrevios": ["templo-olvidado"],
+      "narrativa": "Bajo las aguas del Lago de Cristal Negro duerme una forja que los antiguos herreros sellaron hace siglos. Desde que el sello del Templo Olvidado se rompió, los hornos volvieron a encenderse solos y el agua del lago hierve en las noches sin luna. Los pescadores hablan de autómatas que salen a la orilla cargando lingotes y de una figura que martilla en el fondo sin descanso. Alguien debe bajar, apagar los hornos y descubrir qué se está forjando.",
+      "escenario": null,
+      "objetivos": [
+        { "texto": "Derrotar al Herrero Ahogado (jefe final).", "principal": true, "tipo": "DERROTAR_JEFE", "valor": null, "botin": null },
+        { "texto": "Apagar los 3 hornos de la forja.", "principal": true, "tipo": "COMPLETAR_ENCUENTROS", "valor": null, "botin": null },
+        { "texto": "Completar la misión sin que la vida del héroe baje del 40 %.", "principal": false, "tipo": "VIDA_MINIMA", "valor": 40, "botin": null },
+        { "texto": "Derrotar al Máster si aparece.", "principal": false, "tipo": "DERROTAR_MASTER", "valor": null, "botin": null },
+        { "texto": "Recuperar los 2 lingotes de acero frío.", "principal": false, "tipo": "OBTENER_BOTIN", "valor": 2, "botin": "Lingote de acero frío" }
+      ],
+      "enemigos": [
+        { "nombre": "Autómatas de Escoria", "cantidad": 8, "descripcion": "Enemigos con alta defensa.", "prototipo": "Guerrero Tanque", "vida": null, "defensa": null, "rotaciones": [] },
+        { "nombre": "Salamandras de la Forja", "cantidad": 6, "descripcion": "Enemigos con ataques mágicos.", "prototipo": "Mago Fuego", "vida": null, "defensa": null, "rotaciones": [] },
+        { "nombre": "Ladrones de Lingotes", "cantidad": 4, "descripcion": "Enemigos con ataques rápidos.", "prototipo": "Pícaro Machete", "vida": null, "defensa": null, "rotaciones": [] }
+      ],
+      "jefe": {
+        "nombre": "El Herrero Ahogado",
+        "prototipo": "Guerrero Armas",
+        "vida": 120,
+        "defensa": null,
+        "descripcion": "Guerrero Armas con 120 puntos de vida y habilidades potenciadas.",
+        "rotaciones": []
+      },
+      "masters": [
+        {
+          "nombre": "Hija de la Escarcha",
+          "prototipo": "Mago Hielo",
+          "probabilidad": 0.20,
+          "epica": {
+            "nombre": "Frio concentrado",
+            "efectoGeneral": "-1 de poder al oponente",
+            "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
+            "productoId": "978446ae-c979-349b-b620-f4215852ab5f"
+          }
+        }
+      ],
+      "recompensas": {
+        "creditos": 80,
+        "garantizadas": [
+          { "nombre": "Cofre de Bronce", "detalle": "contiene ítems comunes", "cantidad": 1, "productoId": null }
+        ],
+        "potenciales": [
+          { "nombre": "Lingote de acero frío", "probabilidad": 0.5, "cantidad": 2, "detalle": "50% de probabilidad c/u - 2 en total", "productoId": null },
+          { "nombre": "Espada de dos manos", "probabilidad": 0.2, "cantidad": 1, "detalle": "Arma de Guerrero Armas", "productoId": "37154b84-2ea0-3076-ae7b-656f7b4ebf11" },
+          { "nombre": "Defensa del enfurecido", "probabilidad": 0.15, "cantidad": 1, "detalle": "Armadura de Guerrero Tanque (pecho)", "productoId": "fbce687b-7496-3526-aef0-500b3fe2135e" }
+        ],
+        "porObjetivos": [],
+        "primeraVez": { "creditos": 15, "otras": ["Título «Forjador del Lago»"] }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
 }
