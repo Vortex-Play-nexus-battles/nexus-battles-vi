@@ -16,7 +16,7 @@ Esta carpeta es el lado de Python. El lado de Java vive en `src/main/java/nexus/
 | `nexus_ia/entrenar.py` | La línea de comandos |
 | `nexus_ia/sintetico.py`, `modelo_de_prueba.py` | Eventos **sintéticos** y el modelo de **prueba** que usa Java. No son producción |
 | `nexus_ia/dorados.py` | Genera `pruebas/features-dorados.json`, que Java verifica |
-| `pruebas/` | pytest (64 pruebas) |
+| `pruebas/` | pytest (69 pruebas) |
 
 ## Cómo se entrena
 
