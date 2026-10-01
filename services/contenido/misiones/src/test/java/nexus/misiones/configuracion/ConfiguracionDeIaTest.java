@@ -73,6 +73,7 @@ class ConfiguracionDeIaTest {
         DecisorDeTurno decisor = ConfiguracionDeIa.elegirDecisor(REGLA, true, modeloDePrueba().toString(), 0.6);
 
         assertThat(decisor).isInstanceOf(DecisorConModelo.class);
+        ((DecisorConModelo) decisor).close();
     }
 
     @Test
