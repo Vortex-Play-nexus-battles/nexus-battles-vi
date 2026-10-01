@@ -1,0 +1,49 @@
+{
+  "version": "sintetico-v1",
+  "fecha": "2026-10-01T17:50:47Z",
+  "sintetico": true,
+  "eventos": 2436,
+  "ejecuciones": 120,
+  "muestras": 2436,
+  "descartes": {},
+  "candidatas": {
+    "derivadas": 1168,
+    "registradas": 1268
+  },
+  "caracteristicas": {
+    "version": 1,
+    "dimension": 54
+  },
+  "entrada": "caracteristicas",
+  "salida": "puntajes",
+  "hiperparametros": {
+    "epocas": 30,
+    "semilla": 11,
+    "validacion": 0.2,
+    "lote": 64,
+    "tasa": 0.003,
+    "decaimiento": 0.0001,
+    "ocultas": [
+      48,
+      32
+    ],
+    "peso_derrota": 0.25
+  },
+  "metricas": {
+    "perdida_inicial": 0.6282777786254883,
+    "perdida_entrenamiento": 0.19873358309268951,
+    "aciertos_entrenamiento": 0.9237373471260071,
+    "base_azar_entrenamiento": 0.5936447978019714,
+    "muestras_entrenamiento": 1980,
+    "perdida_validacion": 0.35187476873397827,
+    "aciertos_validacion": 0.9188596606254578,
+    "base_azar_validacion": 0.5807749032974243,
+    "muestras_validacion": 456
+  },
+  "onnx": {
+    "archivo": "modelo.onnx",
+    "opset": 17,
+    "bytes": 17871,
+    "sha256": "c3d15a28bcc702ecf0473f977e7834c6279614b0360ecfd1f612f536889c60de"
+  }
+}
