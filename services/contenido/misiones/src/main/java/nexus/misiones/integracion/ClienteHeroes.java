@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
 import nexus.misiones.dominio.simulacion.DecisionDeTurno;
+import nexus.misiones.dominio.simulacion.Formula;
 import nexus.misiones.dominio.simulacion.TurnoParaDecidir;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestClient;
@@ -85,7 +86,10 @@ public class ClienteHeroes implements ServicioDeHeroes {
             throw c.comoRechazo(DEPENDENCIA);
         }
         Stats s = c.cuerpo().estadisticas();
-        EstadisticasDeNivel vista = new EstadisticasDeNivel(s.poder(), s.vida(), s.defensa());
+        EstadisticasDeNivel vista = new EstadisticasDeNivel(s.poder(), s.vida(), s.defensa(),
+                s.ataqueDetalle() == null ? null : s.ataqueDetalle().aDominio(),
+                s.danoDetalle() == null ? null : s.danoDetalle().aDominio(),
+                s.sanarDetalle() == null ? null : s.sanarDetalle().aDominio());
         vistas.put(clave, vista);
         return vista;
     }
@@ -101,9 +105,13 @@ public class ClienteHeroes implements ServicioDeHeroes {
         if (turno.rotaciones().isEmpty()) {
             return new DecisionDeTurno(DecisionDeTurno.ATAQUE_BASICO, 0, List.of());
         }
+        // Heroes no admite mas poder que el maximo de su catalogo en ese nivel
+        // (400 «poder fuera de rango»), y el heroe real puede traer mas por su
+        // equipo: se acota. El motor de combate es quien lleva el poder de verdad.
+        int poder = Math.min(turno.poder(), enNivel(turno.prototipo(), turno.nivel()).poder());
         SolicitudDeDecision solicitud = new SolicitudDeDecision(turno.prototipo(), turno.nivel(),
                 comoRotaciones(turno.rotaciones()),
-                new EstadoEnTurno(turno.turno(), turno.poder(), turno.vida(), turno.turnoDeUltimoUso(),
+                new EstadoEnTurno(turno.turno(), poder, turno.vida(), turno.turnoDeUltimoUso(),
                         turno.cursores().isEmpty() ? null : turno.cursores()));
         Contestacion<Decision> c = Contestacion.protegida(corta, () -> http.post()
                 .uri(base + "/api/v1/estrategias/decision")
@@ -169,7 +177,17 @@ public class ClienteHeroes implements ServicioDeHeroes {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Stats(int poder, int vida, int defensa) {
+    record Stats(int poder, int vida, int defensa, FormulaVista ataqueDetalle, FormulaVista danoDetalle,
+                 FormulaVista sanarDetalle) {
+    }
+
+    /** {@code FormulaDetalle} de heroes.yaml: base + cantidadDados dados de N caras. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record FormulaVista(int base, int cantidadDados, int caras) {
+
+        Formula aDominio() {
+            return new Formula(base, cantidadDados, caras);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
