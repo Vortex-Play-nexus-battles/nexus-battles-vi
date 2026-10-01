@@ -104,6 +104,12 @@ class ClienteProductosYHeroesTest {
     }
 
     @Test
+    @DisplayName("la decision trae la rotacion de la que salio la accion, para saber de cual avanzar el cursor")
+    void decisionConRotacion() {
+        assertThat(heroes.decidir(turnoConPoder(6)).rotacion()).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("sin rotaciones no se pregunta nada: es ataque basico siempre")
     void sinRotacionesNoPregunta() {
         TurnoParaDecidir sinEstrategia = new TurnoParaDecidir("Guerrero Armas", 1, List.of(), 1, 14, 44, Map.of(),

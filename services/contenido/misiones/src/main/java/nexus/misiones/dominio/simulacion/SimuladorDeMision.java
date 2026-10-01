@@ -230,7 +230,7 @@ public class SimuladorDeMision {
             if (combatiente(quien.id).enPie()) {
                 jugada = jugar(quien, contra, ronda);
             }
-            registro.evento(encuentro, rival.nombre(), ronda, quien.actor, antes, alIniciar, jugada,
+            registro.evento(encuentro, rival.nombre(), ronda, quien.actor, contra.actor, antes, alIniciar, jugada,
                     estados(quien, contra));
         }
 
@@ -250,7 +250,7 @@ public class SimuladorDeMision {
             boolean intentoLaBasica = false;
 
             for (int intento = 0; intento < OPCIONES_MAXIMAS_POR_TURNO && resultado == null; intento++) {
-                decision = decidir(quien, actor, ronda, usosDeEsteTurno);
+                decision = decidir(quien, contra, actor, ronda, usosDeEsteTurno);
                 // Un decisor que insiste en una opcion que el motor ya rechazo
                 // este turno no puede colgar la simulacion: ataque basico.
                 forzadaALaBasica = !decision.esAtaqueBasico() && descartadas.contains(decision.accion());
@@ -275,7 +275,8 @@ public class SimuladorDeMision {
                 // Ni el ataque basico fue admitido: el turno se pierde, la
                 // simulacion sigue (el tope de rondas la corta si no hay salida).
                 return new EventoDeCombate.Jugada(nombreDe(decision.accion()), null, false, decision.costoDePoder(),
-                        0, rechazadas, null);
+                        0, rechazadas, null, decision.decididaPor(), decision.versionDelModelo(),
+                        decision.candidatas());
             }
 
             actualizar(resultado.combatientes());
@@ -289,9 +290,13 @@ public class SimuladorDeMision {
                 quien.usos.put(resultado.accionEjecutada(), ronda);
             }
             contar(quien, resultado, ejecutada);
+            // Si el simulador tuvo que caer al ataque basico por su cuenta, la decision no fue ni del modelo
+            // ni de la regla de heroes: queda como de la regla y sin lo que el modelo puntuo.
+            boolean delDecisor = !forzadaALaBasica;
             return new EventoDeCombate.Jugada(nombreDe(decision.accion()), ejecutada, resultado.enValorBase(),
                     decision.costoDePoder(), Math.max(0, poderAntes - poderDe(combatiente(quien.id))), rechazadas,
-                    resultadoDe(resultado));
+                    resultadoDe(resultado), delDecisor ? decision.decididaPor() : DecididaPor.REGLA,
+                    delDecisor ? decision.versionDelModelo() : null, delDecisor ? decision.candidatas() : List.of());
         }
 
         /** Pide la accion al motor; si la rechaza (409) deja constancia y devuelve nulo. */
@@ -305,15 +310,19 @@ public class SimuladorDeMision {
             }
         }
 
-        private DecisionDeTurno decidir(Bando quien, Combatiente actor, int ronda, Map<String, Integer> usos) {
+        private DecisionDeTurno decidir(Bando quien, Bando contra, Combatiente actor, int ronda,
+                                        Map<String, Integer> usos) {
             if (!quien.consultaAlDecisor) {
                 // «La IA controla a los enemigos con estrategias predefinidas»
                 // (7.8.6). Sin estrategia, su jugada es el ataque basico y no
                 // hace falta preguntarla.
                 return new DecisionDeTurno(DecisionDeTurno.ATAQUE_BASICO, 0, List.of());
             }
+            Combatiente oponente = combatiente(contra.id);
+            ContextoDelDuelo contexto = new ContextoDelDuelo(estadoDe(actor), estadoDe(oponente),
+                    contra.actor.prototipo(), contra.actor.nivel());
             return decisor.decidir(new TurnoParaDecidir(quien.actor.prototipo(), quien.actor.nivel(), quien.rotaciones,
-                    ronda, poderDe(actor), actor.vidaActual(), usos, quien.cursores));
+                    ronda, poderDe(actor), actor.vidaActual(), usos, quien.cursores, contexto));
         }
 
         /** Lo que se cuenta para el reporte (7.8.8): el dano y los criticos, y las habilidades del heroe. */
@@ -461,10 +470,10 @@ public class SimuladorDeMision {
         }
 
         void evento(int encuentro, String enemigo, int turno, EventoDeCombate.Actor actor,
-                    EventoDeCombate.Estados antes, List<Suceso> alIniciar, EventoDeCombate.Jugada jugada,
-                    EventoDeCombate.Estados despues) {
+                    EventoDeCombate.Actor oponente, EventoDeCombate.Estados antes, List<Suceso> alIniciar,
+                    EventoDeCombate.Jugada jugada, EventoDeCombate.Estados despues) {
             eventos.add(new EventoDeCombate(ejecucionId, misionId, ++secuencia, encuentro, enemigo, turno, actor,
-                    antes, alIniciar, jugada, despues));
+                    oponente, antes, alIniciar, jugada, despues));
         }
 
         void derrotado(Rival rival, int dado, double puntos) {
