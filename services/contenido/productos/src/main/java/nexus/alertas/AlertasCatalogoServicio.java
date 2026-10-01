@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
@@ -52,14 +53,21 @@ public class AlertasCatalogoServicio {
 
     public List<AlertaCatalogo> consultarAlIniciarSesion(String jugadorId) {
         String jugador = exigirTexto(jugadorId);
-        Instant desde = consultas.findById(jugador)
-                .map(ConsultaAlertasJugador::consultadoHasta)
-                .orElse(Instant.EPOCH);
         Instant hasta = reloj.instant();
-        List<AlertaCatalogo> pendientes = alertas
-                .buscarImplementadasEntre(
-                        desde,
-                        hasta);
+        Optional<ConsultaAlertasJugador> consulta = consultas.findById(jugador);
+        if (consulta.isEmpty()) {
+            // Primer ingreso: el jugador no tiene "ultima sesion" contra la cual
+            // comparar, asi que no hay cambios que avisarle. Volcarle todo el
+            // historial del catalogo lo dejaba frente a un dialogo enorme de
+            // cambios que nunca vio (y el login espera a que lo cierre). Se
+            // guarda la linea base y desde el siguiente ingreso recibe solo lo
+            // que cambie despues.
+            consultas.save(new ConsultaAlertasJugador(jugador, hasta));
+            return List.of();
+        }
+        List<AlertaCatalogo> pendientes = alertas.buscarImplementadasEntre(
+                consulta.get().consultadoHasta(),
+                hasta);
         if (!pendientes.isEmpty()) {
             Instant ultimoCambioEntregado = pendientes.getLast().implementadaEn();
             consultas.save(new ConsultaAlertasJugador(jugador, ultimoCambioEntregado));

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -95,18 +96,31 @@ class AlertasCatalogoServicioTest {
     }
 
     @Test
-    @DisplayName("un primer ingreso consulta todo el historial aplicable")
-    void primerIngresoParteDesdeElInicio() {
+    @DisplayName("un primer ingreso no vuelca el historial: guarda la linea base y no entrega alertas")
+    void primerIngresoGuardaLineaBaseSinEntregarHistorial() {
         when(consultas.findById("jugador-nuevo")).thenReturn(Optional.empty());
-        when(alertas
-                .buscarImplementadasEntre(
-                        Instant.EPOCH,
-                        AHORA))
-                .thenReturn(List.of());
 
-        assertEquals(
-                List.of(),
-                servicio.consultarAlIniciarSesion("jugador-nuevo"));
+        List<AlertaCatalogo> resultado = servicio.consultarAlIniciarSesion("jugador-nuevo");
+
+        assertEquals(List.of(), resultado);
+        verify(alertas, never()).buscarImplementadasEntre(any(), any());
+        ArgumentCaptor<ConsultaAlertasJugador> lineaBase =
+                ArgumentCaptor.forClass(ConsultaAlertasJugador.class);
+        verify(consultas).save(lineaBase.capture());
+        assertEquals("jugador-nuevo", lineaBase.getValue().jugadorId());
+        assertEquals(AHORA, lineaBase.getValue().consultadoHasta());
+    }
+
+    @Test
+    @DisplayName("tras la linea base, el siguiente ingreso recibe solo lo posterior a ella")
+    void siguienteIngresoPideSoloLoPosteriorALaLineaBase() {
+        when(consultas.findById("jugador-7"))
+                .thenReturn(Optional.of(new ConsultaAlertasJugador("jugador-7", AHORA)));
+        when(alertas.buscarImplementadasEntre(AHORA, AHORA)).thenReturn(List.of());
+
+        assertEquals(List.of(), servicio.consultarAlIniciarSesion("jugador-7"));
+        verify(alertas).buscarImplementadasEntre(AHORA, AHORA);
+        verify(consultas, never()).save(any());
     }
 
     @Test

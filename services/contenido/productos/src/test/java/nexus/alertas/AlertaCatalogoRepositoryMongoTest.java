@@ -3,8 +3,11 @@ package nexus.alertas;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
+import nexus.persistencia.ProductoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,7 +28,8 @@ import org.testcontainers.mongodb.MongoDBContainer;
  * Data, y se fijan los bordes que el servicio da por hechos: {@code desde}
  * exclusivo (lo ya entregado no se repite), {@code hasta} inclusivo (lo
  * implementado justo al iniciar sesion si se entrega) y orden ascendente (el
- * servicio toma la ultima como marca de lo entregado).
+ * servicio toma la ultima como marca de lo entregado). Tambien la linea base
+ * del primer ingreso, guardada y leida en {@code consultas_alertas_catalogo}.
  */
 @DataMongoTest
 @Testcontainers
@@ -41,9 +45,16 @@ class AlertaCatalogoRepositoryMongoTest {
     @Autowired
     private AlertaCatalogoRepository repositorio;
 
+    @Autowired
+    private ConsultaAlertasJugadorRepository consultas;
+
+    @Autowired
+    private ProductoRepository productos;
+
     @BeforeEach
     void limpiar() {
         repositorio.deleteAll();
+        consultas.deleteAll();
     }
 
     @Test
@@ -92,6 +103,43 @@ class AlertaCatalogoRepositoryMongoTest {
                 .toList();
 
         assertEquals(List.of("primera", "segunda"), ids);
+    }
+
+    @Test
+    @DisplayName("primer ingreso guarda la linea base sin entregar historial; el siguiente recibe solo lo posterior")
+    void lineaBaseDelPrimerIngresoContraMongoReal() {
+        repositorio.save(alerta("historial-viejo", DESDE.minusSeconds(3600)));
+        Instant primerIngreso = DESDE;
+        Instant segundoIngreso = DESDE.plusSeconds(600);
+
+        List<AlertaCatalogo> primera = servicioEn(primerIngreso)
+                .consultarAlIniciarSesion("jugador-nuevo");
+
+        assertEquals(List.of(), primera);
+        assertEquals(
+                primerIngreso,
+                consultas.findById("jugador-nuevo").orElseThrow().consultadoHasta());
+
+        repositorio.save(alerta("cambio-posterior", DESDE.plusSeconds(60)));
+
+        List<String> segunda = servicioEn(segundoIngreso)
+                .consultarAlIniciarSesion("jugador-nuevo")
+                .stream()
+                .map(AlertaCatalogo::id)
+                .toList();
+
+        assertEquals(List.of("cambio-posterior"), segunda);
+        assertEquals(
+                DESDE.plusSeconds(60),
+                consultas.findById("jugador-nuevo").orElseThrow().consultadoHasta());
+    }
+
+    private AlertasCatalogoServicio servicioEn(Instant ahora) {
+        return new AlertasCatalogoServicio(
+                repositorio,
+                consultas,
+                productos,
+                Clock.fixed(ahora, ZoneOffset.UTC));
     }
 
     private static AlertaCatalogo alerta(String id, Instant implementadaEn) {
