@@ -57,7 +57,7 @@ def _viables(c, ronda):
 
 
 def _sin_nulos(valor):
-    """Spring Data no escribe los campos nulos: tampoco aqui."""
+    """Spring Data no escribe los campos nulos: tampoco aqui. La fecha va como la exporta mongoexport."""
     if isinstance(valor, dict):
         return {k: _sin_nulos(v) for k, v in valor.items() if v is not None}
     if isinstance(valor, list):
@@ -108,7 +108,8 @@ def _jugar(actor, otro, ronda, azar, con_candidatas):
                           "defensaObjetivo": 11, "porcentajeDano": 100, "danoBase": dano, "danoAplicado": dano})
     jugada = {"decidida": tabla7.ATAQUE_BASICO if nombre == tabla7.ATAQUE_BASICO else nombre,
               "ejecutada": ejecutada, "enValorBase": False, "costoDecidido": costo, "costoDePoder": costo,
-              "rechazadas": [], "resultado": resultado, "decididaPor": decididor}
+              "rechazadas": [], "resultado": resultado, "decididaPor": decididor,
+              "candidatas": []}
     if con_candidatas:
         jugada["versionDelModelo"] = VERSION_DEL_MODELO_SINTETICO
         jugada["candidatas"] = [
@@ -151,7 +152,7 @@ def _ejecucion(indice, semilla, mision=MISION):
                     "_id": f"{ejecucion}:{secuencia}", "ejecucionId": ejecucion, "misionId": mision,
                     "secuencia": secuencia, "encuentro": encuentro, "enemigo": enemigo.nombre, "turno": ronda,
                     "actor": actor.actor(), "oponente": otro.actor(), "antes": antes, "alIniciar": al_iniciar,
-                    "jugada": jugada, "despues": despues, "registradoEn": "2026-10-01T10:00:00Z"}))
+                    "jugada": jugada, "despues": despues, "registradoEn": {"$date": "2026-10-01T10:00:00Z"}}))
         if heroe.vida <= 0:
             break
     return eventos

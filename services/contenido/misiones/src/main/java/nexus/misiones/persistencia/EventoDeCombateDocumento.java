@@ -41,6 +41,7 @@ record EventoDeCombateDocumento(
         String enemigo,
         int turno,
         EventoDeCombate.Actor actor,
+        EventoDeCombate.Actor oponente,
         EventoDeCombate.Estados antes,
         List<nexus.misiones.dominio.simulacion.Suceso> alIniciar,
         EventoDeCombate.Jugada jugada,
@@ -49,12 +50,12 @@ record EventoDeCombateDocumento(
 
     static EventoDeCombateDocumento de(EventoDeCombate e, Instant ahora) {
         return new EventoDeCombateDocumento(e.ejecucionId() + ":" + e.secuencia(), e.ejecucionId().toString(),
-                e.misionId(), e.secuencia(), e.encuentro(), e.enemigo(), e.turno(), e.actor(), e.antes(),
-                e.alIniciar(), e.jugada(), e.despues(), ahora);
+                e.misionId(), e.secuencia(), e.encuentro(), e.enemigo(), e.turno(), e.actor(), e.oponente(),
+                e.antes(), e.alIniciar(), e.jugada(), e.despues(), ahora);
     }
 
     EventoDeCombate aDominio() {
         return new EventoDeCombate(UUID.fromString(ejecucionId), misionId, secuencia, encuentro, enemigo, turno,
-                actor, antes, alIniciar, jugada, despues);
+                actor, oponente, antes, alIniciar, jugada, despues);
     }
 }
