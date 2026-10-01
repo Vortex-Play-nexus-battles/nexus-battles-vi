@@ -266,7 +266,7 @@ class ServicioDeMisionesIT {
                 .andExpect(jsonPath("$.nombre").value("La Forja Sumergida"))
                 .andExpect(jsonPath("$.origen").value("EQUIPO"))
                 .andExpect(jsonPath("$.dificultad").value("DIFICIL"))
-                .andExpect(jsonPath("$.requisitosPrevios[0]").value("templo-olvidado"))
+                .andExpect(jsonPath("$.requisitosPrevios[0]").value("El Templo Olvidado"))
                 .andExpect(jsonPath("$.jefe.nombre").value("El Herrero Ahogado"))
                 .andExpect(jsonPath("$.enemigos.length()").value(3))
                 .andExpect(jsonPath("$.masters[0].nombre").value("Hija de la Escarcha"))
