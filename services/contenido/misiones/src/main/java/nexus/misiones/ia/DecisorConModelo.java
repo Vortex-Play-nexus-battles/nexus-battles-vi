@@ -1,7 +1,9 @@
 package nexus.misiones.ia;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import nexus.misiones.dominio.simulacion.DecididaPor;
@@ -186,8 +188,16 @@ public class DecisorConModelo implements DecisorDeTurno, AutoCloseable {
         if (DecisionDeTurno.ATAQUE_BASICO.equals(c.accion())) {
             return true;
         }
-        boolean enAlgunaRotacion = turno.rotaciones().stream().anyMatch(r -> r.contains(c.accion()));
+        // Heroes devuelve el nombre exacto de la Tabla 7 aunque la rotacion lo traiga sin tildes o en minusculas.
+        String buscada = normalizar(c.accion());
+        boolean enAlgunaRotacion = turno.rotaciones().stream()
+                .anyMatch(r -> r.stream().anyMatch(paso -> normalizar(paso).equals(buscada)));
         return enAlgunaRotacion && c.costoDePoder() <= turno.poder();
+    }
+
+    private static String normalizar(String texto) {
+        return Normalizer.normalize(texto == null ? "" : texto, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT).trim();
     }
 
     private static double[] softmax(float[] puntajes) {

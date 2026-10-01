@@ -345,6 +345,19 @@ class DecisorConModeloTest {
     }
 
     @Test
+    @DisplayName("heroes devuelve el nombre exacto de la Tabla 7 aunque la rotacion lo traiga de otra forma: sigue siendo legal")
+    void nombresSinTildesNiMayusculas() {
+        DecisionDeTurno canonica = new DecisionDeTurno(A, 4, List.of(1), 1, DecididaPor.REGLA, null, List.of());
+        DecisorConModelo d = new DecisorConModelo(t -> canonica, modelo, 0.6);
+        modelo.puntaje(A, 9f);
+
+        DecisionDeTurno decision = d.decidir(turno(12, List.of(List.of("EMBATE SANGRIENTO")), List.of(), Map.of(), 1));
+
+        assertThat(decision.accion()).isEqualTo(A);
+        assertThat(decision.decididaPor()).isEqualTo(DecididaPor.MODELO);
+    }
+
+    @Test
     @DisplayName("la confianza minima tiene que ser una probabilidad")
     void confianzaInvalida() {
         assertThatThrownBy(() -> new DecisorConModelo(regla, modelo, 0.0)).isInstanceOf(IllegalArgumentException.class);
