@@ -100,6 +100,18 @@ public final class Misiones {
                 false, null, null);
     }
 
+    /** Una mision minima con los enemigos, el jefe y los Master que la prueba necesita (para ver contra quien pelea). */
+    public static Mision conEnemigosYMasters(String id, List<GrupoDeEnemigos> enemigos, Jefe jefe,
+                                             List<MasterDeMision> masters) {
+        return new Mision(id, Origen.PROVISIONAL_DEV, "Misión " + id, Categoria.HISTORIA, "Descripción de " + id, null,
+                Dificultad.FACIL, 1, null, List.of(), "Narrativa de " + id, null,
+                List.of(new Objetivo("Derrotar al jefe.", true, TipoDeObjetivo.DERROTAR_JEFE, null, null)),
+                enemigos, jefe, masters,
+                new RecompensasDeMision(5, List.of(), List.of(), List.of(),
+                        new RecompensasDeMision.PrimeraVez(2, List.of())),
+                false, null, null);
+    }
+
     public static Mision minima(String id, Categoria categoria, double horas, List<String> previas,
                                 List<MasterDeMision> masters, Intentos intentos) {
         return new Mision(id, Origen.PROVISIONAL_DEV, "Misión " + id, categoria, "Descripción de " + id, null,
