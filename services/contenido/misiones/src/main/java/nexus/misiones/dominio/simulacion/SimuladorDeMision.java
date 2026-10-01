@@ -124,14 +124,20 @@ public class SimuladorDeMision {
         final List<List<String>> rotaciones;
         /** El heroe siempre pregunta al decisor; un rival sin estrategia juega el ataque basico sin preguntar. */
         final boolean consultaAlDecisor;
+        /** De donde salen las rotaciones de un enemigo y, si es predefinida, cual (HU-SIM-004); nulos en el heroe. */
+        final OrigenDeEstrategia origenDeEstrategia;
+        final String estrategiaId;
         final Map<String, Integer> usos = new HashMap<>();
         List<Integer> cursores = List.of();
 
-        Bando(String id, EventoDeCombate.Actor actor, List<List<String>> rotaciones, boolean consultaAlDecisor) {
+        Bando(String id, EventoDeCombate.Actor actor, List<List<String>> rotaciones, boolean consultaAlDecisor,
+              OrigenDeEstrategia origenDeEstrategia, String estrategiaId) {
             this.id = id;
             this.actor = actor;
             this.rotaciones = rotaciones == null ? List.of() : rotaciones;
             this.consultaAlDecisor = consultaAlDecisor;
+            this.origenDeEstrategia = origenDeEstrategia;
+            this.estrategiaId = estrategiaId;
         }
     }
 
@@ -155,10 +161,11 @@ public class SimuladorDeMision {
             this.elHeroe = new Bando(ID_DEL_HEROE,
                     new EventoDeCombate.Actor(EventoDeCombate.Lado.HEROE, heroe.nombre(), heroe.prototipo(),
                             heroe.nivel()),
-                    estrategia, true);
+                    estrategia, true, null, null);
             this.elRival = new Bando(ID_DEL_RIVAL,
                     new EventoDeCombate.Actor(ladoDe(rival.tipo()), rival.nombre(), rival.prototipo(), rival.nivel()),
-                    rival.rotaciones(), !rival.rotaciones().isEmpty());
+                    rival.rotaciones(), !rival.rotaciones().isEmpty(), rival.origenDeEstrategia(),
+                    rival.estrategiaId());
             // «El poder se recupera instantaneamente al concluir el combate»:
             // cada duelo empieza con el poder al maximo (poder nulo), sin
             // cargas ni efectos y con las rotaciones en su primer paso.
@@ -276,7 +283,7 @@ public class SimuladorDeMision {
                 // simulacion sigue (el tope de rondas la corta si no hay salida).
                 return new EventoDeCombate.Jugada(nombreDe(decision.accion()), null, false, decision.costoDePoder(),
                         0, rechazadas, null, decision.decididaPor(), decision.versionDelModelo(),
-                        decision.candidatas());
+                        decision.candidatas(), quien.origenDeEstrategia, quien.estrategiaId);
             }
 
             actualizar(resultado.combatientes());
@@ -296,7 +303,8 @@ public class SimuladorDeMision {
             return new EventoDeCombate.Jugada(nombreDe(decision.accion()), ejecutada, resultado.enValorBase(),
                     decision.costoDePoder(), Math.max(0, poderAntes - poderDe(combatiente(quien.id))), rechazadas,
                     resultadoDe(resultado), delDecisor ? decision.decididaPor() : DecididaPor.REGLA,
-                    delDecisor ? decision.versionDelModelo() : null, delDecisor ? decision.candidatas() : List.of());
+                    delDecisor ? decision.versionDelModelo() : null, delDecisor ? decision.candidatas() : List.of(),
+                    quien.origenDeEstrategia, quien.estrategiaId);
         }
 
         /** Pide la accion al motor; si la rechaza (409) deja constancia y devuelve nulo. */
