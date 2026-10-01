@@ -93,6 +93,32 @@ Un Máster es el enemigo que aparece al azar y suelta una épica al caer (7.8.4)
 - **Las épicas de la Tabla 20.** Un Máster de misión puede soltar la épica de una fila de la tabla (decisión de HU-MIS-012: «Hija de la Escarcha» y «Frío concentrado»); lo que se rechaza al arrancar es que dos Máster de misión suelten la misma. El Máster afín de la Tabla 20 sí comparte épica con ese Máster de misión.
 - **Una épica que el motor no conoce.** El motor solo conoce las ocho de la Tabla 20. La del ejemplo del documento («Velo de Sombras») la rechaza como acción desconocida: se anota una vez en el evento y el Máster pelea con su estrategia.
 
+### Continuidad en segundo plano (HU-SIM-007, 7.8.12, RNF-31, RNF-32)
+
+Una misión no se simula a lo largo de su duración: el plazo solo decide cuándo se puede ver el resultado, y la simulación entera corre en lote cuando vence. «Seguir en segundo plano» es entonces que el trabajo programado la tome solo, que lo guardado sobreviva a quien deja de mirar, que un fallo no la deje a medias y que el aviso de fin salga aunque nadie esté conectado. Criterio por criterio, con la prueba que lo demuestra (`ContinuidadEnSegundoPlanoTest`, con el reloj controlado y sin que nadie consulte; el nombre de cada método empieza por el criterio):
+
+| Criterio de HU-SIM-007 | Cómo se cumple | Prueba |
+|---|---|---|
+| 1. Dejada la misión, la simulación sigue sola | `TrabajoProgramado` (`@Scheduled`, cada `MISIONES_INTERVALO_MS`, 30 s por omisión, encendido por omisión) da una vuelta de `TrabajoDeMisiones`: simula las vencidas y liquida las pendientes, en lotes de `MISIONES_LOTE`. La «cola» es la propia colección `ejecuciones`. **Brecha corregida:** una ejecución que fallaba siempre se reintentaba en cada vuelta y, al ir primera por plazo, podía ocupar el lote entero y dejar sin atender a las demás; ahora espera su turno. | `criterio1_laMisionVencidaSeSimulaSolaCuandoElProgramadorDaSuVuelta`, `criterio1_variasVencidasSeAtiendenEnLaMismaVuelta`, `criterio1_unaEnvenenadaNoDejaSinAtenderALasDemas`; el cableado de Spring en `TrabajoProgramadoTest` |
+| 2. Al volver, se conserva el estado | La ejecución vive en Mongo (héroe, estrategia, plazo, semilla); el progreso se calcula del reloj y el resultado, los turnos y las entregas quedan guardados al terminar. Un fallo no toca nada de eso. | `criterio2_alVolverLaMisionEnCursoConservaSuEstado`, `criterio2_laQueTerminoEnSegundoPlanoTieneSuReporteAlVolver`, `criterio2_trasUnFalloSigueEnCursoYConsultable` |
+| 3. Un error deja un estado válido | Ver «Recuperación» abajo. **Brechas corregidas:** nada impedía que dos barridos o dos instancias simularan lo mismo, ni que se repitiera de inmediato lo que murió a mitad, ni que cancelar durante la simulación dejara los turnos de una misión abandonada. | `criterio3_*` (once métodos: fallo a mitad, caída tras escribir los turnos, espera exponencial, recuperación, dos barridos, ocho hilos, muerte del proceso, arriendo vencido, cancelación durante la simulación, y, parametrizado, un fallo inyectado en cada uno de los seis pasos de la liquidación) |
+| 4. Al terminar en segundo plano se notifica | El paso `CORREO` (y `CORREO_EPICA`) nace dentro del mismo guardado que cierra la misión (`Ejecucion.terminar`): no existe un instante con la misión terminada y el aviso sin anotar, así que no se pierde. Sale con `Idempotency-Key = mision-{id}-correo`, la misma en cada reintento, así que correo no lo encola dos veces. | `criterio4_*` (cuatro pruebas) y el caso `criterio3_unaCaidaSinAnotarLasEntregasNoLasDuplica` |
+
+**Recuperación.** Cada estado intermedio es válido y reanudable:
+
+1. *Simulando.* Antes de empezar, la vuelta **reserva** la ejecución guardándola con la versión que leyó (`Ejecucion.reservarParaSimular`, bloqueo optimista): de dos barridos que la lean a la vez solo uno guarda y simula; el otro la deja. La reserva es un **arriendo de 5 minutos** (`Ejecucion.ARRIENDO_DE_SIMULACION`): si el proceso muere simulando, nadie la repite hasta que vence y entonces la retoma otra vuelta. Lo único que puede haber quedado escrito son turnos, y el intento siguiente los **reemplaza** (`reemplazar` es idempotente por ejecución, nunca se mezclan dos intentos). Si la simulación termina cuando el arriendo ya venció, no escribe nada: otra instancia pudo tomarla y sus turnos son los que valen.
+2. *Falla (heroes, inventario, productos o motor no responden, o no se puede guardar).* La ejecución sigue **En progreso** y el héroe en misión; se anotan `ultimoErrorDeSimulacion` e `intentosDeSimulacion` y la reserva pasa a ser la **espera** del siguiente intento: 30 s, 1 min, 2 min… hasta 1 h. Jamás se da por perdida: cuando el servicio vuelve, termina sola.
+3. *Cancelada mientras se simula.* Manda la cancelación (la escritura final choca con la versión) y se descartan los turnos ya escritos.
+4. *Liquidando.* Los seis pasos (`LIBERACION`, `CREDITOS`, `BOTIN`, `EPICA`, `CORREO`, `CORREO_EPICA`) son idempotentes de quien los recibe (estado en el inventario, `refId` en ms-finanzas, `Idempotency-Key` en inventario y correo). Un paso sin respuesta corta la vuelta y reintenta con espera exponencial; si el proceso muere con las entregas hechas y sin anotar, la vuelta siguiente repite los mismos pedidos con las mismas claves y no se duplica nada. Dos liquidaciones a la vez: la segunda falla al guardar y relee.
+
+**Bitácora.** Cada fallo registra la ejecución, el intento, la hora del reintento y el error; cada recuperación registra «simulada tras N intentos» o «liquidada tras N reintentos» con el fallo del que salió; cada vuelta que hizo algo resume cuántas simuló y liquidó. El estado persistido (`intentosDeSimulacion`, `ultimoErrorDeSimulacion`, `intentosDeLiquidacion`, `ultimoError`, `pasos`) permite ver en Mongo en qué quedó cada una.
+
+**Decisiones provisionales del PO** (ver también la tabla de abajo):
+
+- **Un fallo de simulación nunca se da por perdido.** La alternativa (cerrar tras N intentos como Fallida sin recompensas, para liberar al héroe) castiga al jugador por una caída nuestra y esconde un error de código. Con tope de espera de 1 h el costo de reintentar para siempre es una llamada por hora; la contrapartida es que un error permanente deja al héroe en misión hasta que se arregle el servicio.
+- **Arriendo de 5 minutos.** Una misión entera son cientos de llamadas y tarda menos de un minuto; si algún día tarda más, el arriendo se vence, otra vuelta la retoma y la primera descarta lo suyo sin escribir.
+- **El aviso es el correo existente.** La notificación dentro de la aplicación (bandeja de `notificaciones.yaml`) es de HU-MIS-018 y no se toca aquí.
+
 ### La IA con modelo propio (HU-SIM-008, RF-MOT-59, RF-ONL-22)
 
 La IA de los personajes propios y de los adversarios puede apoyarse en una **red neuronal pequeña, propia y entrenada por el equipo** (decisión del PO, 2026-10-01): PyTorch sobre los eventos de combate de abajo, exportada a ONNX (≈18 KB) y ejecutada aquí con ONNX Runtime. **El modelo propone y la regla acota.** Lo entrenado y su receta viven en [`ia/`](ia/README.md); lo que corre en el servicio está en `nexus.misiones.ia`.
@@ -161,6 +187,8 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 | Tiradas de Máster en exploración («mayor probabilidad») | una por cada 24 horas | `TiradaDeMasters` |
 | «Explorar las 5 cámaras» | superar todos los encuentros regulares | semilla |
 | Recompensas del ejemplo que no están en el catálogo oficial (Cofre de Bronce, Fragmentos del Sello Antiguo, «Piel del Guardián», «Espada del Templo», «Velo de Sombras», el título) | se informan en el reporte como `sinEntregar`; no se inventan productos | semilla (`productoId`) |
+| Qué hacer con una simulación que falla para siempre (HU-SIM-007) | se reintenta sin límite con espera de 30 s duplicada hasta 1 h; el héroe sigue en misión hasta que el servicio responda | `Ejecucion.simulacionFallida` (la espera base es `MISIONES_REINTENTO_SEGUNDOS`) |
+| Cuánto dura la reserva de una simulación (HU-SIM-007) | 5 minutos | `Ejecucion.ARRIENDO_DE_SIMULACION` |
 | Preferencias de correo por categoría | no hay dónde leerlas: `debeEnviarCorreo` siempre verdadero | `MISIONES_CORREO_ACTIVO` apaga el correo del módulo |
 
 ## Límites conocidos
@@ -174,6 +202,8 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 - `POST /api/v1/inventario/entregas` lo implementa la fase B4. Si el inventario de un entorno aún no la trae, las entregas quedan pendientes y se reintentan (el reporte lo dice con `entregaPendiente`), sin perderse.
 - `GET /api/v1/internal/usuarios/{uid}/contacto` de ms-identidad es de la fase B2: sin él, el correo de la misión queda como no enviado y lo demás se entrega igual.
 - Las notificaciones dentro de la aplicación (HU-NOT-004) no se integran en esta fase.
+- El aviso de fin (HU-SIM-007, criterio 4) es el correo y se decide al terminar la misión: con `MISIONES_CORREO_ACTIVO=false` no hay aviso, y una misión que la semilla ya no publica se cierra Fallida sin simular y **sin aviso** (no hay con qué redactarlo). Si ms-identidad no tiene contacto del jugador (404) el correo queda Fallido y no se reintenta: no hay a quién escribir.
+- Una simulación que tarde más que su arriendo (5 minutos) se descarta sin escribir y la retoma otra vuelta; si siempre tardara más, nunca terminaría. Hoy una misión entera tarda menos de un minuto.
 
 ## Despliegue
 
