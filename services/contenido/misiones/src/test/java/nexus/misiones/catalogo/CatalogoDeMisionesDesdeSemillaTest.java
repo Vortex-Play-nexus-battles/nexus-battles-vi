@@ -83,10 +83,10 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("D-42: la semilla de progresión solo publica misiones de progresión, con su nivel y sin Tabla 20")
     void progresionSoloDeProgresion() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        SemillaDeMisiones documento = documento(Misiones.templo());
         Mision ajena = Misiones.historia("ajena", List.of());
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(ajena)), null))
+                sinTabla(ajena), null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("ajena");
 
@@ -95,14 +95,31 @@ class CatalogoDeMisionesDesdeSemillaTest {
                 Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(), Misiones.templo().recompensas(),
                 false, null, null);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(sinNivel)), null))
+                sinTabla(sinNivel), null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("nivel recomendado");
 
         EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of()), null))
+                new SemillaDeMisiones("1", List.of(), List.of(fila), Map.of(), List.of()), null))
                 .hasMessageContaining("Tabla 20");
+    }
+
+    /** Las cifras del PO (provisionales): lo que la semilla del documento declara. */
+    static final Map<Dificultad, Double> MASTER_POR_DIFICULTAD = Map.of(
+            Dificultad.FACIL, 0.10, Dificultad.NORMAL, 0.15, Dificultad.DIFICIL, 0.20, Dificultad.EXTREMO, 0.25);
+
+    static SemillaDeMisiones documento(Mision... misiones) {
+        return documentoConTabla20(List.of(), misiones);
+    }
+
+    static SemillaDeMisiones documentoConTabla20(List<EpicaDeTabla20> tabla20, Mision... misiones) {
+        return new SemillaDeMisiones("1", List.of(), tabla20, MASTER_POR_DIFICULTAD, List.of(misiones));
+    }
+
+    /** Una semilla que no es la del documento: no declara la tabla de Master por dificultad. */
+    static SemillaDeMisiones sinTabla(Mision... misiones) {
+        return new SemillaDeMisiones("1", List.of(), List.of(), Map.of(), List.of(misiones));
     }
 
     @Test
@@ -205,11 +222,11 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("una mision provisional sin su marca no se publica")
     void provisionalSinMarca() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        SemillaDeMisiones documento = documento(Misiones.templo());
         Mision sinMarca = Misiones.historia("inventada", List.of());
 
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(sinMarca))))
+                sinTabla(sinMarca)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
     }
@@ -217,8 +234,7 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("la semilla del documento no admite misiones provisionales")
     void documentoSoloDelDocumento() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(),
-                List.of(Misiones.historia("inventada", List.of())));
+        SemillaDeMisiones documento = documento(Misiones.historia("inventada", List.of()));
 
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null))
                 .isInstanceOf(IllegalStateException.class)
@@ -230,24 +246,24 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void coherencia() {
         Mision templo = Misiones.templo();
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(templo, templo)), null))
+                documento(templo, templo), null))
                 .hasMessageContaining("mismo identificador");
 
         Mision huerfana = new Mision("huerfana", Origen.DOCUMENTO, "Huérfana", Categoria.HISTORIA, "d", null,
                 Dificultad.FACIL, 1, null, List.of("no-existe"), "n", null, templo.objetivos(), templo.enemigos(),
                 templo.jefe(), List.of(), templo.recompensas(), false, null, null);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(huerfana)), null))
+                documento(huerfana), null))
                 .hasMessageContaining("no-existe");
 
         EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(fila, fila), List.of(templo)), null))
+                documentoConTabla20(List.of(fila, fila), templo), null))
                 .hasMessageContaining("repite");
 
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(templo));
+        SemillaDeMisiones documento = documento(templo);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of())))
+                new SemillaDeMisiones("1", List.of(), List.of(fila), Map.of(), List.of())))
                 .hasMessageContaining("Tabla 20");
     }
 
@@ -301,10 +317,11 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("la semilla extra suma sus misiones al final, marcadas como provisionales de DEV")
     void semillaExtraSeSuma() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
-        SemillaDeMisiones extra = new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("solo-banco")));
+        SemillaDeMisiones documento = documento(Misiones.templo());
+        SemillaDeMisiones extra = sinTabla(conMarca("solo-banco"));
 
-        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.desde(documento, null, null, extra);
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.desde(documento, null, null, null,
+                extra);
 
         assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "solo-banco");
         assertThat(catalogo.buscar("solo-banco").orElseThrow().origen()).isEqualTo(Origen.PROVISIONAL_DEV);
@@ -313,23 +330,22 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("la semilla extra tiene las reglas de la provisional: marca, sin Tabla 20 y ids que no chocan")
     void semillaExtraConLasMismasReglas() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        SemillaDeMisiones documento = documento(Misiones.templo());
 
-        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.historia("sin-marca", List.of())))))
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null, null,
+                sinTabla(Misiones.historia("sin-marca", List.of()))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("sin-marca")
                 .hasMessageContaining(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
 
         EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
-        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null,
-                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of(conMarca("solo-banco")))))
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null, null,
+                new SemillaDeMisiones("1", List.of(), List.of(fila), Map.of(), List.of(conMarca("solo-banco")))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Tabla 20");
 
-        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("repetida"))),
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("repetida")))))
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null,
+                sinTabla(conMarca("repetida")), sinTabla(conMarca("repetida"))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("mismo identificador");
     }
@@ -400,18 +416,21 @@ class CatalogoDeMisionesDesdeSemillaTest {
     /** Una mision del documento con los datos del Templo y los Master que se digan. */
     private static Mision conMasters(String id, MasterDeMision... masters) {
         Mision templo = Misiones.templo();
-        return new Mision(id, Origen.DOCUMENTO, "Mision " + id, Categoria.HISTORIA, "d", null, Dificultad.FACIL, 1,
+        return new Mision(id, Origen.DOCUMENTO, "Mision " + id, Categoria.HISTORIA, "d", null, Dificultad.NORMAL, 1,
                 null, List.of(), "n", null, templo.objetivos(), templo.enemigos(), templo.jefe(), List.of(masters),
                 templo.recompensas(), false, null, null);
     }
 
     private static MasterDeMision master(String nombre, Epica epica) {
-        return new MasterDeMision(nombre, "Pícaro Veneno", 0.15, epica);
+        return master(nombre, "Pícaro Veneno", epica);
+    }
+
+    private static MasterDeMision master(String nombre, String prototipo, Epica epica) {
+        return new MasterDeMision(nombre, prototipo, 0.15, epica);
     }
 
     private static CatalogoDeMisionesDesdeSemilla cargar(List<EpicaDeTabla20> tabla20, Mision... misiones) {
-        return CatalogoDeMisionesDesdeSemilla.desde(new SemillaDeMisiones("1", List.of(), tabla20, List.of(misiones)),
-                null);
+        return CatalogoDeMisionesDesdeSemilla.desde(documentoConTabla20(tabla20, misiones), null);
     }
 
     @Test
@@ -460,10 +479,11 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void epicaDeLaTabla20() {
         EpicaDeTabla20 filaDeHielo = new EpicaDeTabla20("Mago Hielo", FRIO, 0.05);
 
-        assertThat(cargar(List.of(filaDeHielo), conMasters("una", master("Hija de la Escarcha", FRIO))).todas())
-                .hasSize(1);
-        assertThatThrownBy(() -> cargar(List.of(filaDeHielo), conMasters("una", master("Hija de la Escarcha", FRIO)),
-                conMasters("otra", master("Eco de la Niebla", FRIO))))
+        assertThat(cargar(List.of(filaDeHielo), conMasters("una", master("Hija de la Escarcha", "Mago Hielo", FRIO)))
+                .todas()).hasSize(1);
+        assertThatThrownBy(() -> cargar(List.of(filaDeHielo),
+                conMasters("una", master("Hija de la Escarcha", "Mago Hielo", FRIO)),
+                conMasters("otra", master("Eco de la Niebla", "Mago Hielo", FRIO))))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Frío concentrado");
     }
@@ -489,12 +509,10 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("la exclusividad se comprueba sobre todas las semillas juntas: la de progresion, sin Master, no estorba; con uno repetido, si")
     void epicaExclusivaEntreSemillas() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(),
-                List.of(conMasters("del-documento", master("Sombra del Olvido", VELO))));
-        SemillaDeMisiones progresionSinMaster = new SemillaDeMisiones("1", List.of(), List.of(),
-                List.of(deProgresion("de-progresion")));
-        SemillaDeMisiones progresionConElMismoVelo = new SemillaDeMisiones("1", List.of(), List.of(),
-                List.of(deProgresion("de-progresion", master("Eco de la Niebla", VELO))));
+        SemillaDeMisiones documento = documento(conMasters("del-documento", master("Sombra del Olvido", VELO)));
+        SemillaDeMisiones progresionSinMaster = sinTabla(deProgresion("de-progresion"));
+        SemillaDeMisiones progresionConElMismoVelo = sinTabla(
+                deProgresion("de-progresion", master("Eco de la Niebla", VELO)));
 
         assertThat(CatalogoDeMisionesDesdeSemilla.desde(documento, progresionSinMaster, null).todas()).hasSize(2);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, progresionConElMismoVelo, null))
