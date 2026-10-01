@@ -9,7 +9,9 @@ import java.util.List;
 import java.util.Objects;
 import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Dificultad;
+import nexus.misiones.dominio.Epica;
 import nexus.misiones.dominio.EpicaDeTabla20;
+import nexus.misiones.dominio.MasterDeMision;
 import nexus.misiones.dominio.Mision;
 import nexus.misiones.dominio.Misiones;
 import nexus.misiones.dominio.Origen;
@@ -225,5 +227,104 @@ class CatalogoDeMisionesDesdeSemillaTest {
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.leer("semilla/no-existe.json"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("no-existe");
+    }
+
+    // ----------------------------------------------------- cada Master, su epica (HU-SIM-006, criterio 2)
+
+    private static final Epica VELO = Misiones.VELO_DE_SOMBRAS;
+    private static final Epica FRIO = new Epica("Frío concentrado", "-1 de poder al oponente",
+            "No recibe ningún daño en el siguiente turno", "978446ae-c979-349b-b620-f4215852ab5f");
+
+    /** Una mision del documento con los datos del Templo y los Master que se digan. */
+    private static Mision conMasters(String id, MasterDeMision... masters) {
+        Mision templo = Misiones.templo();
+        return new Mision(id, Origen.DOCUMENTO, "Mision " + id, Categoria.HISTORIA, "d", null, Dificultad.FACIL, 1,
+                null, List.of(), "n", null, templo.objetivos(), templo.enemigos(), templo.jefe(), List.of(masters),
+                templo.recompensas(), false, null, null);
+    }
+
+    private static MasterDeMision master(String nombre, Epica epica) {
+        return new MasterDeMision(nombre, "Pícaro Veneno", 0.15, epica);
+    }
+
+    private static CatalogoDeMisionesDesdeSemilla cargar(List<EpicaDeTabla20> tabla20, Mision... misiones) {
+        return CatalogoDeMisionesDesdeSemilla.desde(new SemillaDeMisiones("1", List.of(), tabla20, List.of(misiones)),
+                null);
+    }
+
+    @Test
+    @DisplayName("dos Master de misiones distintas no pueden soltar la misma epica: cada Master tiene la suya")
+    void epicaCompartidaEntreMisiones() {
+        assertThatThrownBy(() -> cargar(List.of(), conMasters("una", master("Sombra del Olvido", VELO)),
+                conMasters("otra", master("Eco de la Niebla", VELO))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Velo de Sombras")
+                .hasMessageContaining("Sombra del Olvido")
+                .hasMessageContaining("Eco de la Niebla");
+    }
+
+    @Test
+    @DisplayName("tampoco dentro de una misma mision, ni escribiendola con otras tildes o mayusculas")
+    void epicaCompartidaEnLaMisma() {
+        Epica casiIgual = new Epica("velo de sombras", "x", "y", null);
+        assertThatThrownBy(() -> cargar(List.of(), conMasters("una", master("Sombra del Olvido", VELO),
+                master("Eco de la Niebla", casiIgual))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Eco de la Niebla");
+    }
+
+    @Test
+    @DisplayName("dos epicas con nombres distintos que entregan el mismo producto del catalogo tampoco son dos epicas")
+    void mismoProducto() {
+        Epica otroNombre = new Epica("Escarcha eterna", "x", "y", FRIO.productoId());
+        assertThatThrownBy(() -> cargar(List.of(), conMasters("una", master("Hija de la Escarcha", FRIO)),
+                conMasters("otra", master("Eco de la Niebla", otroNombre))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining(FRIO.productoId());
+    }
+
+    @Test
+    @DisplayName("el mismo Master en dos misiones con la misma epica es el mismo Master, no un choque")
+    void elMismoMasterDosVeces() {
+        CatalogoDeMisionesDesdeSemilla catalogo = cargar(List.of(),
+                conMasters("una", master("Sombra del Olvido", VELO)),
+                conMasters("otra", master("Sombra del Olvido", VELO)));
+
+        assertThat(catalogo.todas()).hasSize(2);
+    }
+
+    @Test
+    @DisplayName("un Master de mision puede soltar la epica de una fila de la Tabla 20 (decision del PO de HU-MIS-012), pero uno solo")
+    void epicaDeLaTabla20() {
+        EpicaDeTabla20 filaDeHielo = new EpicaDeTabla20("Mago Hielo", FRIO, 0.05);
+
+        assertThat(cargar(List.of(filaDeHielo), conMasters("una", master("Hija de la Escarcha", FRIO))).todas())
+                .hasSize(1);
+        assertThatThrownBy(() -> cargar(List.of(filaDeHielo), conMasters("una", master("Hija de la Escarcha", FRIO)),
+                conMasters("otra", master("Eco de la Niebla", FRIO))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Frío concentrado");
+    }
+
+    @Test
+    @DisplayName("la Tabla 20 no puede repetir una epica en dos tipos de heroe")
+    void tabla20SinEpicasRepetidas() {
+        assertThatThrownBy(() -> cargar(List.of(new EpicaDeTabla20("Mago Hielo", FRIO, 0.05),
+                new EpicaDeTabla20("Mago Fuego", FRIO, 0.03)), Misiones.templo()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Tabla 20")
+                .hasMessageContaining("Frío concentrado");
+    }
+
+    @Test
+    @DisplayName("las semillas publicadas cumplen la regla: cada Master suelta una epica distinta")
+    void lasSemillasPublicadasCumplen() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true);
+
+        List<MasterDeMision> masters = catalogo.todas().stream().flatMap(m -> m.masters().stream()).toList();
+        assertThat(masters).isNotEmpty();
+        assertThat(masters.stream().map(m -> m.epica().nombre()).distinct()).hasSameSizeAs(masters);
+        // Y las ocho de la Tabla 20 siguen siendo ocho epicas distintas, cada una con su producto.
+        assertThat(catalogo.tabla20().stream().map(f -> f.epica().nombre()).distinct()).hasSize(8);
     }
 }
