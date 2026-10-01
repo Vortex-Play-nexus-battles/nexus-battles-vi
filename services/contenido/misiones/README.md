@@ -41,9 +41,43 @@ Cada turno de cada duelo lo resuelve el **mismo motor de combate que las batalla
 
 - **El héroe entra con lo suyo.** Nivel, estadísticas con el equipamiento aplicado y fórmulas (`GET .../heroes/{id}/estadisticas`, que el inventario calcula en el nivel del héroe), nombres de lo que lleva puesto (`GET .../equipamiento` + la vitrina + el nombre del producto) y sus épicas disponibles. Las acciones de la Tabla 7 y las épicas las conoce el motor por el prototipo y el nivel. Se lee **al simular**, no al matricular: el equipamiento no cambia mientras está en misión (7.8.10), y así también se simulan bien las ejecuciones guardadas antes de este cambio. Si el inventario ya no conoce al héroe, pelea con lo del catálogo y se anota; si el inventario o productos no responden, la simulación espera a la vuelta siguiente.
 - **Los enemigos** entran con su prototipo en el **nivel recomendado de la misión** (§7.8.13; D-42 — antes, en el del héroe, y subir de nivel no hacía más fácil ninguna misión; la que no tiene nivel recomendado, la provisional de DEV, sigue en el del héroe; Máster: dos por encima del héroe), con la **vida y la defensa de la semilla y del escalón** y las fórmulas de la vista por nivel de heroes.
-- **La IA decide para los dos lados** con la lógica de heroes (rotaciones con prioridad, poder y recarga; HU-SIM-002): el héroe con la estrategia guardada del jugador; los enemigos con la de la misión y, si no la trae, con una **rotación por defecto de su prototipo** (una rotación por habilidad desbloqueada en su nivel, la más avanzada primero; `EstrategiaDeEnemigos`, el punto de extensión que HU-SIM-004 sustituye o completa). El poder lo lleva el motor. Esa decisión puede tomarla, en cambio, el modelo propio de HU-SIM-008 (siguiente sección), siempre acotado por la misma regla.
+- **La IA decide para los dos lados** con la lógica de heroes (rotaciones con prioridad, poder y recarga; HU-SIM-002): el héroe con la estrategia guardada del jugador; los enemigos con la que la misión escribe para ese enemigo y, si no la trae, con la **estrategia predefinida de su prototipo y nivel** (siguiente sección; HU-SIM-004). El poder lo lleva el motor. Esa decisión puede tomarla, en cambio, el modelo propio de HU-SIM-008 (siguiente sección), siempre acotado por la misma regla.
 - **Si el motor rechaza la jugada** (409 `accion-no-permitida`, p. ej. `EN_CARGA`, porque heroes y el motor cuentan la recarga a su manera), la IA prueba la siguiente opción de su rotación y, al final, el ataque básico. Nunca se queda a medias. Si el motor no responde, la simulación entera se reintenta en la vuelta siguiente (corta circuitos de HU-DIS-003) sin guardar nada.
 - **Velocidad acelerada.** No se espera tiempo real por turno: una misión entera se simula en una pasada en cuanto vence el plazo; la duración solo gobierna cuándo se ve el resultado.
+
+### Las estrategias de los enemigos (HU-SIM-004, RF-MIS-20)
+
+«La IA controla al héroe según las rotaciones y a los enemigos con estrategias predefinidas» (7.8.6). Una estrategia es lo mismo que la del héroe (7.8.5): hasta tres rotaciones por prioridad (Alta, Media, Baja) y el ataque básico de respaldo. **Las predefinidas son datos versionados**, no una heurística: [`semilla/estrategias-de-enemigos.json`](src/main/resources/semilla/estrategias-de-enemigos.json) trae una por cada uno de los 8 prototipos de la Tabla 7 y por cada tramo de nivel que marcan los desbloqueos (RC-01): niveles 1 a 3, 4 a 7 y 8 en adelante. Son 24, cada una con su `id` (`mago-fuego-n4`), sus rotaciones con los nombres exactos de la Tabla 7 y la razón de cada orden. Para cambiar una basta editar ese archivo en un PR; ninguna lleva código.
+
+**Precedencia**, de mayor a menor, para cada enemigo (regular, Máster o jefe):
+
+1. la rotación que **la misión escribe** para ese enemigo (`enemigos[].rotaciones` y `jefe.rotaciones` de la semilla de misiones; los Máster no tienen ese campo). Hoy ninguna misión publicada la trae, y no se valida al cargar la semilla (heroes la valida contra el nivel real al simular);
+2. la **predefinida** de su prototipo en el tramo de su nivel;
+3. la **heurística** de antes (`RotacionesPorDefectoDeEnemigos`: una rotación por habilidad desbloqueada, la más avanzada primero), que queda solo de respaldo.
+
+**Criterio de diseño** (decisión provisional del PO, también escrita en el archivo):
+
+- **El ataque va primero.** Las habilidades de ataque (las que dan bono al ataque o al daño) ocupan las primeras rotaciones; las de defensa y sanación van en la de menor prioridad. La regla de héroes (HU-SIM-002) **no condiciona una rotación a la vida del combatiente** (solo exige que tenga vida; pendiente P-E de esa historia), así que no se puede escribir «cura solo si está herido»: una rotación de defensa o sanación se juega en cuanto las de ataque no son viables ese turno (sin poder o en recarga), esté herido o no.
+- **Dentro de una familia, primero la de mayor valor esperado**, sumando los bonos al ataque y al daño que escribe la Tabla 7 (los dados cuentan por su media; los efectos sobre el rival y los bonos sin cifra no suman); a igual valor, el orden de la tabla. Las justificaciones numéricas están en el archivo.
+- **Cada habilidad en su propia rotación** y solo las ya desbloqueadas en el tramo.
+- **Reanimación no entra** (Médico, nivel 8): sana a un compañero y el motor solo admite compañeros como objetivo; en una misión el enemigo pelea solo y la rechazaría en cada turno.
+
+| Prototipo | Niveles 1 a 3 | Niveles 4 a 7 | Nivel 8 en adelante |
+|---|---|---|---|
+| Guerrero Tanque | Golpe con escudo | Golpe con escudo › Mano de piedra | Golpe con escudo › Defensa feroz › Mano de piedra |
+| Guerrero Armas | Embate sangriento | Embate sangriento › Lanza de los dioses | Golpe de tormenta › Embate sangriento › Lanza de los dioses |
+| Mago Fuego | Misiles de magma | Vulcano › Misiles de magma | Vulcano › Misiles de magma › Pare de fuego |
+| Mago Hielo | Lluvia de hielo | Lluvia de hielo › Cono de hielo | Lluvia de hielo › Cono de hielo › Bola de hielo |
+| Pícaro Veneno | Flor de loto | Flor de loto › Agonía | Flor de loto › Agonía › Piquete |
+| Pícaro Machete | Cortada | Machetazo › Cortada | Machetazo › Planazo › Cortada |
+| Chamán | Toque de la Vida | Vínculo Natural › Toque de la Vida | Canto del Bosque › Vínculo Natural › Toque de la Vida |
+| Médico | Curación Directa | Neutralización de Efectos › Curación Directa | Neutralización de Efectos › Curación Directa |
+
+Cada `›` es la siguiente rotación por prioridad. Quien resuelve cada turno es la regla de héroes: en cada uno juega la primera rotación **viable** (poder suficiente y recarga cumplida) y, si ninguna lo es, el ataque básico (la sanación básica en un sanador). El costo en poder y la recarga no se repiten aquí: los cobra heroes y los aplica el motor.
+
+**Validación y qué pasa si una estrategia está mal.** Al arrancar, cada estrategia se valida contra la copia local de la Tabla 7 (`Tabla7Local`, derivada del vocabulario de la IA y comprobada contra `contracts/esquemas/catalogo-oficial.yaml`): prototipo conocido, tramo 1, 4 u 8, de una a tres rotaciones, y solo habilidades de ese prototipo ya desbloqueadas en el tramo (sin tildes ni mayúsculas se acepta y se guarda el nombre exacto). Heroes no se consulta en el arranque, porque puede no estar levantado. La primera vez que un enemigo usa una estrategia, heroes la valida con su regla (una vez por estrategia, no por enemigo). **Una estrategia inválida no tumba el servicio**: se anota en la bitácora con su motivo y ese prototipo y tramo caen a la heurística; un archivo ilegible o ausente deja a todos los enemigos con la heurística. Si heroes no responde en ese momento, la simulación se reintenta en la vuelta siguiente, igual que con cualquier otra consulta. Una prueba (`CatalogoDeEstrategiasDesdeSemillaTest`) asegura que la semilla del repositorio está completa y sin rechazos, para que esa red de seguridad no sea la forma de publicar contenido roto.
+
+**Trazabilidad.** La jugada de un enemigo con rotaciones guarda `estrategia` (`MISION`, `PREDEFINIDA` o `HEURISTICA`) y, si es predefinida, `estrategiaId`. El héroe y un enemigo que juega siempre el ataque básico (sin rotaciones) no llevan esos campos. Es para auditar y para medir cada estrategia; el entrenamiento de la IA no los lee.
 
 ### La IA con modelo propio (HU-SIM-008, RF-MOT-59, RF-ONL-22)
 
@@ -75,7 +109,7 @@ Cada turno de cada combatiente se guarda en la colección `eventos_de_combate` (
 | `actor`, `oponente` | quien juega y contra quién: `lado` (`HEROE`, `ENEMIGO`, `JEFE`, `MASTER`), `nombre`, `prototipo`, `nivel` (HU-SIM-008 añadió `oponente`: así un turno se basta solo para entrenar aunque el rival caiga antes de actuar) |
 | `antes`, `despues` | `{actor, oponente}`; cada uno con `vida`, `vidaMaxima`, `poder`, `poderMaximo`, `recargas` (`accion`, `turnosRestantes`) y `efectos` (`nombre`, `tipo`, `valor`, `turnos`). `antes` es el estado al decidir (ya aplicado el inicio del turno) |
 | `alIniciar` | lo que pasó al empezar el turno: efectos por turno, poder recuperado (`tipo`, `combatiente`, `origen`, `efecto`, `cantidad`) |
-| `jugada` | ausente si el actor cayó al empezar su turno. `decidida` (lo que eligió la IA), `ejecutada` (lo que se jugó; nula si el motor no admitió ni el ataque básico), `enValorBase`, `costoDecidido`, `costoDePoder` (el gastado de verdad), `rechazadas` (`accion`, `motivo` del 409), `resultado` y, desde HU-SIM-008, `decididaPor` (`REGLA` o `MODELO`), `versionDelModelo` (si se consultó al modelo) y `candidatas` (`accion`, `costoDePoder`, `rotacion`, `puntaje`: lo que puntuó el modelo; vacía si no se consultó) |
+| `jugada` | ausente si el actor cayó al empezar su turno. `decidida` (lo que eligió la IA), `ejecutada` (lo que se jugó; nula si el motor no admitió ni el ataque básico), `enValorBase`, `costoDecidido`, `costoDePoder` (el gastado de verdad), `rechazadas` (`accion`, `motivo` del 409), `resultado` y, desde HU-SIM-008, `decididaPor` (`REGLA` o `MODELO`), `versionDelModelo` (si se consultó al modelo), `candidatas` (`accion`, `costoDePoder`, `rotacion`, `puntaje`: lo que puntuó el modelo; vacía si no se consultó) y, desde HU-SIM-004, `estrategia` (`MISION`, `PREDEFINIDA` o `HEURISTICA`: de dónde salieron las rotaciones con que jugó un enemigo) y `estrategiaId` (la predefinida, si lo es). Ambos ausentes en el héroe y en un enemigo sin rotaciones |
 | `jugada.resultado` | `categoria`, `acierta`, `ataqueResuelto`, `defensaObjetivo`, `porcentajeDano`, `danoBase`, `danoAplicado`, `critico` y `sucesos` (lo que dijo el motor; `combatiente` y `origen` hablan de `HEROE`/`ENEMIGO`/`JEFE`/`MASTER`). `categoria` y compañía son nulas si la acción no golpea |
 
 ## Dependencias y configuración
@@ -101,7 +135,9 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 | Experiencia por completar según dificultad (6.1.1 no da cifras) | 0 | `MISIONES_XP_COMPLETAR_*` |
 | Penalización por abandonar (HU-MIS-015 no la cuantifica) | se pierden todas las recompensas de esa ejecución, experiencia incluida | código (`CancelarEjecucion`) |
 | Estadísticas de los enemigos regulares de «El Templo Olvidado» | prototipos Guerrero Armas / Guerrero Tanque / Mago Fuego en nivel 8 con vida y defensa PROVISIONALES (18/70, 30/84, 12/70: con la vida completa del prototipo los 18 encuentros no los superaba nadie) | semilla 1.1.0 (D-42) |
-| «Habilidades potenciadas» del jefe | sin cifra: la rotación por defecto de su prototipo (como todo enemigo sin estrategia escrita), con los 100 de vida del documento | `EstrategiaDeEnemigos` / semilla |
+| «Habilidades potenciadas» del jefe | sin cifra: la estrategia predefinida de su prototipo (como todo enemigo sin estrategia escrita), con los 100 de vida del documento | `semilla/estrategias-de-enemigos.json` / semilla |
+| Estrategia de cada enemigo (7.8.6 dice «estrategias predefinidas» pero no las escribe) | las 24 de `estrategias-de-enemigos.json`: el ataque primero; defensa y sanación en la rotación de menor prioridad; dentro de cada familia, la de mayor valor esperado según la Tabla 7 | `semilla/estrategias-de-enemigos.json` |
+| Enemigos sanadores (Chamán, Médico) y Reanimación | sin ataque, su estrategia solo sana y el respaldo es la sanación básica; Reanimación no entra porque cura a un compañero y el enemigo pelea solo | `semilla/estrategias-de-enemigos.json` |
 | «Mazo completo equipado» (7.8.6) | al menos un arma, armadura o ítem (como ADR-004) | `MatricularHeroe` |
 | Probabilidad del Máster del ejemplo («0.15% (15% de probabilidad)») | 15 %; la Tabla 20 se toma literal (0,04 % = 0,0004) | semilla |
 | Nivel recomendado 15 con héroes hasta nivel 8 | **resuelto (D-42)**: se publica con 8; el catálogo rechaza cualquier nivel fuera de 1..8 | semilla 1.1.0, `Mision` |
@@ -115,6 +151,7 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 
 ## Límites conocidos
 
+- Una rotación de defensa o sanación de un enemigo se juega cuando las de ataque no son viables, no porque esté herido: la regla de héroes no condiciona las rotaciones a la vida (HU-SIM-004, pendiente P-E de HU-SIM-002). Si un enemigo defensivo no debe malgastar el turno, hay que pedirle a héroes ese condicionante.
 - La IA solo elige acciones de la Tabla 7 (las que traen las rotaciones); las épicas del héroe viajan al motor pero la IA de rotaciones no las elige.
 - Simular una misión entera son cientos de llamadas síncronas al motor y a heroes (tres por turno de combatiente; hasta cinco con el modelo de IA encendido); el trabajo las atiende una ejecución tras otra.
 - El modelo de IA aprende, mientras solo haya eventos de la regla, sobre todo a imitarla: lo nuevo viene del peso por resultado y de los eventos que genere el propio modelo encendido (con sus candidatas). El ciclo es encender, acumular partidas y reentrenar (`ia/README.md`).

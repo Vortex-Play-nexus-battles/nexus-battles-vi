@@ -50,6 +50,8 @@ Gana el bando que sigue en pie en el último turno del encuentro. Con esto, las 
 
 **Lo que se descarta** (y se cuenta en `descartes`): turnos sin jugada, jugadas en valor base (faltó poder: el motor y heroes discreparon), acciones fuera de la Tabla 7 (épicas) y jugadas fuera de sus candidatas.
 
+**Lo que se ignora.** La jugada de un enemigo trae además `estrategia` (`MISION`, `PREDEFINIDA` o `HEURISTICA`) y `estrategiaId` (HU-SIM-004: de dónde salieron las rotaciones con que jugó). Sirven para auditar cada estrategia, no para aprender: `eventos.py` no las lee y `test_eventos.py` comprueba que las muestras son las mismas con y sin ellas.
+
 ### Límite honesto
 
 Mientras solo haya eventos de la regla, el modelo aprende, sobre todo, a imitar la regla. Lo que aporta de nuevo viene de dos fuentes: el peso por resultado y, sobre todo, los eventos que genere la IA con modelo encendido (con sus candidatas y su versión), que traen jugadas que la regla no habría elegido. Por eso el ciclo es: encender, dejar que se acumulen partidas, reentrenar.
