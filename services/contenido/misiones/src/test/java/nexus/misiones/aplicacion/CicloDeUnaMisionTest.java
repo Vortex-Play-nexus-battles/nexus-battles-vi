@@ -796,4 +796,25 @@ class CicloDeUnaMisionTest {
         assertThat(avisos.enBandeja).isEmpty();
         assertThat(terminada.liquidacionPendiente()).isFalse();
     }
+
+    @Test
+    @DisplayName("la simulacion usa el decisor que se le da (el de la IA con modelo cuando esta encendido), no solo el de heroes")
+    void usaElDecisorQueSeLeDa() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        java.util.List<nexus.misiones.dominio.simulacion.TurnoParaDecidir> vistos = new java.util.ArrayList<>();
+        nexus.misiones.dominio.simulacion.DecisorDeTurno espia = turno -> {
+            vistos.add(turno);
+            return heroes.decidir(turno);
+        };
+        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, espia, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametros, reloj);
+
+        simular.simular(ejecuciones.buscar(ejecucion.id()).orElseThrow());
+
+        // Todo lo que se le pregunta al decisor lleva el contexto del duelo (lo que necesita el modelo).
+        assertThat(vistos).isNotEmpty();
+        assertThat(vistos).allSatisfy(t -> assertThat(t.contexto()).isNotNull());
+    }
 }
