@@ -26,6 +26,8 @@
  * @module comun/codigo-de-correo
  */
 
+import { pareceTextoTecnico } from './ui/texto-de-fallo.js';
+
 /**
  * Longitud de los códigos que manda hoy el servicio de identidad. Solo se usa
  * para decirla en pantalla: quien valida el código es el servidor.
@@ -198,11 +200,16 @@ export function tipoDelProblema(cuerpo) {
  * @returns {string|null}
  */
 export function detalleDelProblema(cuerpo) {
+  // UXC-9 — solo lo que se puede leer: un texto plano puede ser la página de
+  // un proxy («502 Bad Gateway») y un `detail`, una excepción. Eso no se
+  // enseña; la vista pone entonces su propio texto.
+  let detalle = null;
   if (typeof cuerpo === 'string') {
-    return cuerpo.trim() || null;
+    detalle = cuerpo;
+  } else if (cuerpo && typeof cuerpo === 'object') {
+    detalle = cuerpo.detail;
   }
-  const detalle = cuerpo && typeof cuerpo === 'object' ? cuerpo.detail : null;
-  return typeof detalle === 'string' && detalle.trim() ? detalle.trim() : null;
+  return typeof detalle === 'string' && !pareceTextoTecnico(detalle) ? detalle.trim() : null;
 }
 
 /** Los motivos de rechazo de un código, tal como los nombra el contrato. */

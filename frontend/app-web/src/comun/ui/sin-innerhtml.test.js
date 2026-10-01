@@ -104,10 +104,38 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * y pasa las cifras por `formatearCreditos()` (un `Number`). Sin esto, un
  * producto ganado quedaba sin boton para recogerlo mientras no hubiera otra
  * subasta en curso.
+ *
+ * UXC-8 — y otras ~400 posiciones las cuatro de `pujas.js` al juntarse con
+ * B8: la participación por subasta, el sondeo sin canal, la ficha que se
+ * reaplica, la compra que se queda a la vista y «Mis subastas» con lo tuyo,
+ * todo ARRIBA de `render()`. Revisadas: carga y error siguen iguales; el
+ * vacío es el de B8 (alerta por `esc()` y pendientes); y `contenidoHtml` sigue
+ * saliendo de los generadores, cuyas interpolaciones con datos pasan por
+ * `esc()` (las nuevas —rival, vendedor, publicaciones— también). La de
+ * `publicar-subasta.js` bajó una línea más: UXC-8 añadió el enlace fijo a la
+ * tienda para el inventario vacío; sigue sin interpolaciones.
+ *
+ * UXC-8 (panel personal) — y otras ~550 posiciones las cuatro de `pujas.js`:
+ * las vistas del panel (`vistaDeMiPuja`, `vistaDePublicacion`,
+ * `vistaDeSeguida`, `vistaDeHistorial`), su carga y sus acciones, y los
+ * topes de 7.7.10 corregidos, todo ARRIBA de `render()`.
+ * Revisadas: carga, error y vacío siguen iguales. `contenidoHtml` suma las
+ * partes nuevas de «Mis subastas» (tus pujas también terminadas, tus
+ * publicaciones en cualquier estado, lo que sigues, el historial) y los
+ * datos de la ficha en el detalle: cada texto del servidor pasa por `esc()`
+ * (nombres, ids, estados en atributos, fechas, la reputación y el postor
+ * anonimizado) y cada cifra es un `Number` formateado por
+ * `formatearCreditos()` o `montoConSigno()`; estados y movimientos se pintan
+ * con textos propios, nunca con los del servidor.
+ *
+ * UXC-9 (cierre de brechas) — las cuatro bajan 37 líneas: `compartirSubasta()`
+ * (7.7.9) entra ARRIBA de `render()`. Lo único nuevo en `contenidoHtml` es el
+ * botón «Compartir», marcado fijo sin ningún dato; el enlace se arma con
+ * `encodeURIComponent` y viaja por la API del navegador, no por el HTML.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:94', 'plantilla fija del formulario, sin interpolación'],
+  ['cuentas/publicar-subasta.js:95', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -117,15 +145,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:1785', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:1803', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2780', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2798', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:1822',
+    'cuentas/pujas.js:2824',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:1865',
+    'cuentas/pujas.js:2866',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

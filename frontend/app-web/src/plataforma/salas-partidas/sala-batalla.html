@@ -297,6 +297,8 @@
         cancelarSala,
       } from './cliente-salas.js';
       import { montarSalaDeEspera, montarInvitacion, salidaAlListado } from './sala-de-espera.js';
+      import { confirmar as confirmarDialogo } from '../../comun/ui/dialogo.js';
+      import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
       import { RUTAS, resolver } from '../../comun/sesion.js';
       // Transporte STOMP sobre WebSocket nativo del servicio, el mismo que usan
@@ -449,8 +451,13 @@
         try {
           partida = await obtenerPartida(idPartidaEnUrl);
         } catch (error) {
+          // UXC-9 — el motivo del servicio si se lee; nunca «Failed to fetch»
+          // ni el texto de una excepción.
           if (zonaVacia) {
-            zonaVacia.textContent = error.detalle ?? error.message;
+            zonaVacia.textContent = textoDeError(
+              error,
+              'No pudimos traer esta partida. Vuelve al listado de salas e inténtalo otra vez.',
+            );
           }
         }
       }
@@ -521,7 +528,13 @@
               yo,
               abandonar: abandonarSala,
               cancelar: cancelarSala,
-              confirmar: (texto) => globalThis.confirm(texto),
+              // UXC-9 — el diálogo del kit, no el confirm() del navegador.
+              confirmar: (texto) =>
+                confirmarDialogo({
+                  titulo: texto,
+                  textoConfirmar: 'Cancelar la sala',
+                  textoCancelar: 'Seguir en la sala',
+                }),
               alSalir: ({ motivo }) =>
                 volverAlListado(
                   motivo === 'cancelada'
@@ -564,7 +577,10 @@
             // Sin ficha no hay sala de espera, pero la vista sigue diciendo la
             // verdad: el mensaje del servicio (404, 401...) va donde se ve.
             if (zonaVacia) {
-              zonaVacia.textContent = error.detalle ?? error.message;
+              zonaVacia.textContent = textoDeError(
+                error,
+                'No pudimos traer esta sala. Vuelve al listado de salas e inténtalo otra vez.',
+              );
             }
           }
         }
@@ -580,6 +596,10 @@
           // del servidor para no quedarse con barras o turnos viejos.
           canal = await canalReconectable({
             conectar: () => conectarChat({ url: urlDelCanal({ base: baseDeApi() }), token }),
+            // UXC-9 — si el canal no abre a la primera, se sigue intentando
+            // con la píldora a la vista (y «Reintentar» al final) en vez de
+            // dejar la partida sin turnos y sin decir nada.
+            insistirAlAbrir: true,
             alEstado: (estado) => {
               pintarEstadoDelCanal(zonaConexion, {
                 ...estado,
@@ -709,7 +729,10 @@
         } catch (error) {
           // 403 no eres el anfitrion · 409 la sala no puede empezar todavia.
           // El texto lo redacta el servicio, que es quien sabe el motivo.
-          avisoArranque.textContent = error.detalle ?? error.message;
+          avisoArranque.textContent = textoDeError(
+            error,
+            'No pudimos iniciar el combate. Inténtalo de nuevo en un momento.',
+          );
           botonIniciar.disabled = false;
         }
       });

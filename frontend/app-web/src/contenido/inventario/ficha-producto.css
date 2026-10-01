@@ -231,6 +231,39 @@
   overflow-wrap: anywhere;
 }
 
+/* UXC-9 — la que este héroe todavía no aprendió (vista por nivel de
+   heroes.yaml): borde discontinuo y el candado con su frase, no solo gris. */
+.ficha__accion--bloqueada {
+  border-style: dashed;
+}
+
+.ficha__accion-bloqueo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+.ficha__accion-bloqueo .icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* La épica afín, con la misma carta que las acciones. */
+.ficha__epica {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 /* En pantallas estrechas la ficha ocupa todo el alto disponible. */
 @media (max-width: 599px) {
   .ficha-capa {

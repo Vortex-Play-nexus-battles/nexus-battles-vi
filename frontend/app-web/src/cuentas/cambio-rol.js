@@ -1,4 +1,5 @@
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const CLAVE_TOKEN = 'nexus.token';
 
@@ -51,10 +52,11 @@ export async function cambiarRol(
   }
 
   if (!response.ok) {
-    const mensaje =
-      typeof body === 'string'
-        ? body
-        : body?.detail || body?.mensaje || `No se pudo cambiar el rol (${response.status}).`;
+    const mensaje = textoDelServidor(
+      body,
+      response.status,
+      'No se pudo cambiar el rol. Vuelve a intentarlo en un momento.',
+    );
 
     throw new Error(mensaje);
   }

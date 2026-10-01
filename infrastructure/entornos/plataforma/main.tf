@@ -79,6 +79,18 @@ resource "aws_security_group" "plataforma" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # 28-sep — HTTPS del mismo borde (Let's Encrypt, scripts/cd/certificado.sh).
+  # Abrirlo antes de tener certificado no expone nada: mientras no haya
+  # dominio, nginx no escucha en el 443 y la conexion se rechaza. Asi el dia
+  # que llegue el dominio no hace falta tocar el grupo de seguridad.
+  ingress {
+    description = "Borde nginx en HTTPS (Lets Encrypt): mismo origen que el 80, que redirige a este"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # B12 — los dos bloques de servicios admiten solo var.cidr_servicios (el
   # host de contenido); el publico entra por el borde del puerto 80.
   ingress {

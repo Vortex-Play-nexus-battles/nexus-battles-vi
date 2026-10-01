@@ -827,8 +827,9 @@ test.describe('R17 · la prueba del profesor', () => {
 
       // Ningún error de página en todo el recorrido, y ningún 5xx fuera de los
       // servicios que el catálogo declara fuera de DEV (`desplegableDev:
-      // false`: hoy subastas, chatbot y misiones), cuya vista dice que no
-      // están —se comprobó arriba—. Cuando uno se despliegue, su 5xx cuenta.
+      // false`) o sin acceso desde el borde (`accesoPendiente`: hoy subastas y
+      // misiones, a la espera del grupo de seguridad del Grupo 2), cuya vista
+      // dice que no están —se comprobó arriba—. Al quitar la marca, su 5xx cuenta.
       const graves = bitacora.incidencias.filter((i) => {
         if (i.tipo === 'pagina') return true;
         if (i.tipo !== 'http') return false;

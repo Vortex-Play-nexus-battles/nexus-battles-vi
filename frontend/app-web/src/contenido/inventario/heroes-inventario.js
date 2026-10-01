@@ -40,6 +40,8 @@ const MOTIVO_SIN_EQUIPAR = Object.freeze({
  * @param {(productoId: string) => Promise<object>} opciones.consultarProducto
  * @param {(heroe: object, contexto: {prototipo: string|null}) => void} opciones.alVerFicha
  * @param {(heroe: object) => void} opciones.alEquipar
+ * @param {() => Promise<Array<{nivel: number, experienciaParaSubir?: number}>>} [opciones.consultarNiveles]
+ *   UXC-9 — la tabla de progresión, para decir cuánto falta al siguiente nivel
  * @param {string} [opciones.hrefTienda]
  * @returns {Promise<{equipos: Map<string, object|undefined>, prototipos: Map<string, string|null>}>}
  */
@@ -53,6 +55,7 @@ export async function pintarHeroes(
     consultarProducto,
     alVerFicha,
     alEquipar,
+    consultarNiveles = null,
     hrefTienda = '../../cuentas/tienda.html',
   },
 ) {
@@ -71,6 +74,10 @@ export async function pintarHeroes(
     );
     return { equipos, prototipos };
   }
+
+  // UXC-9 — la tabla de niveles, una vez para todos. Si no llega, el nivel
+  // y la experiencia se dicen igual, sin lo que falta.
+  const tablaDeNiveles = consultarNiveles ? await consultarNiveles().catch(() => null) : null;
 
   const detalles = await Promise.all(
     heroes.map(async (heroe) => {
@@ -108,6 +115,7 @@ export async function pintarHeroes(
               estadisticas,
               estado,
               ranurasOcupadas: equipo ? ranurasOcupadas(equipo) : null,
+              progreso: progresoDe(heroe, tablaDeNiveles),
             },
             [
               {
@@ -134,4 +142,26 @@ export async function pintarHeroes(
   vaciar(contenedor);
   contenedor.append(rejilla);
   return { equipos, prototipos };
+}
+
+/**
+ * UXC-9 — el nivel y la experiencia que guarda el inventario (1.5.0) y, con
+ * la tabla del servicio de héroes, la que pide el nivel para subir. Null si
+ * el inventario no los trae: no se supone nivel 1.
+ *
+ * @param {{nivel?: number, experiencia?: number}} heroe elemento del inventario
+ * @param {Array<{nivel: number, experienciaParaSubir?: number}>|null} tabla
+ * @returns {{nivel: number, experiencia: number|null, paraSubir: number|null}|null}
+ */
+export function progresoDe(heroe, tabla) {
+  if (!Number.isInteger(heroe?.nivel)) {
+    return null;
+  }
+  const fila = Array.isArray(tabla) ? tabla.find((n) => n?.nivel === heroe.nivel) : null;
+  return {
+    nivel: heroe.nivel,
+    experiencia: Number.isFinite(heroe.experiencia) ? heroe.experiencia : null,
+    paraSubir: Number.isFinite(fila?.experienciaParaSubir) ? fila.experienciaParaSubir : null,
+    maximo: Array.isArray(tabla) && Boolean(fila) && !Number.isFinite(fila?.experienciaParaSubir),
+  };
 }

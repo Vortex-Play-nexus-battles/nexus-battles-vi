@@ -47,6 +47,7 @@ import { h } from '../comun/ui/dom.js';
 import { fechaHora } from '../comun/ui/formato.js';
 import { anotarEnvio, reenviarCodigo } from '../comun/verificacion.js';
 import { VEREDICTOS, comprobarCredencial } from '../comun/vigilante-sesion.js';
+import { mostrarAlertasCatalogoAlIniciarSesion } from '../contenido/productos/alertas-catalogo.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
 
 // Se reexporta con su nombre de siempre: lo usan las pruebas de esta vista.
@@ -62,6 +63,12 @@ export { identificadorDeSesion };
  * @param {string} [mensajeServidor]
  */
 export function mensajeDeError(status, mensajeServidor) {
+  // UXC-9 — sin respuesta o con el servidor caído, nunca su texto.
+  if (!status || status >= 500) {
+    return status
+      ? 'No pudimos iniciar sesión ahora mismo. Inténtalo de nuevo en unos minutos.'
+      : 'No pudimos conectar. Revisa tu conexión e inténtalo otra vez.';
+  }
   switch (status) {
     case 401:
       return 'Acceso rechazado. El correo o la contraseña son incorrectos, o estas credenciales no están registradas en este ambiente.';
@@ -490,10 +497,12 @@ function iniciarVista(formulario) {
       // en la tienda de la portada, la escribe en la dirección sin recargar.
       // B1: la primera entrada tras verificar el correo pasa por «Preparando
       // tu cuenta», siempre.
-      globalThis.location.href = entrarCon(body, {
+      const destino = entrarCon(body, {
         volver: rutaDeVuelta(globalThis.location?.search ?? '') ?? volver,
         cuentaNueva: motivo === MOTIVOS.VERIFICADA,
       });
+      await mostrarAlertasCatalogoAlIniciarSesion();
+      globalThis.location.assign(destino);
     } catch {
       setEstado(
         'No pudimos conectar con el servidor. Inténtalo de nuevo en unos segundos.',

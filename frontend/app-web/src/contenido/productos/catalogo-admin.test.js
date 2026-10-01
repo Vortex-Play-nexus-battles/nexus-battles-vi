@@ -9,8 +9,10 @@ import { jest } from '@jest/globals';
 import {
   abrirHojaDeProducto,
   cambiosDe,
+  mismaPromocion,
   montarCatalogoAdmin,
   textoDePrecio,
+  textoDePromocion,
   textoDeTiraje,
 } from './catalogo-admin.js';
 
@@ -77,6 +79,39 @@ describe('formato', () => {
       defensa: 6,
     });
     expect(cambiosDe(YELMO, { tipo: 'ARMADURA', nombre: 'Yelmo del Alba' })).toEqual({});
+  });
+});
+
+describe('UXC-9 — promoción', () => {
+  const AHORA = new Date('2026-09-28T12:00:00Z').getTime();
+
+  test('mismaPromocion compara por lo que dice, no por cómo viene escrita', () => {
+    const a = { porcentaje: 20, desde: '2026-10-01T10:00:00Z', hasta: '2026-10-15T10:00:00Z' };
+    expect(
+      mismaPromocion(a, {
+        porcentaje: 20,
+        desde: '2026-10-01T10:00:00.000Z',
+        hasta: '2026-10-15T10:00:00+00:00',
+      }),
+    ).toBe(true);
+    expect(mismaPromocion(a, { ...a, porcentaje: 25 })).toBe(false);
+    expect(mismaPromocion(null, undefined)).toBe(true);
+    expect(mismaPromocion(a, null)).toBe(false);
+  });
+
+  test('vigente, programada o terminada, dicho en palabras', () => {
+    const base = { porcentaje: 20, desde: '2026-10-01T10:00:00Z', hasta: '2026-10-15T10:00:00Z' };
+    expect(textoDePromocion({ ...base, vigente: true }, AHORA).estado).toBe('vigente');
+    expect(textoDePromocion({ ...base, vigente: false }, AHORA)).toEqual(
+      expect.objectContaining({ estado: 'programada' }),
+    );
+    expect(
+      textoDePromocion(
+        { porcentaje: 20, desde: '2026-08-01T10:00:00Z', hasta: '2026-08-15T10:00:00Z' },
+        AHORA,
+      ).texto,
+    ).toMatch(/^20 % de descuento, terminó el /);
+    expect(textoDePromocion(null, AHORA)).toBeNull();
   });
 });
 
@@ -205,6 +240,45 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     await esperar();
     expect(fetchImpl).not.toHaveBeenCalled();
     expect(campo('tasaDeCaida').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  test('UXC-9 — la promoción vigente se dice y se edita; solo viaja si cambió', async () => {
+    const conPromocion = {
+      ...YELMO,
+      promocion: {
+        porcentaje: 20,
+        desde: '2026-09-20T10:00:00Z',
+        hasta: '2099-10-15T10:00:00Z',
+        vigente: true,
+      },
+    };
+    const fetchImpl = jest.fn(async (_url, opciones) =>
+      respuesta({ ...conPromocion, ...JSON.parse(opciones.body), version: 4 }),
+    );
+    abrirHojaDeProducto(conPromocion, { fetchImpl });
+
+    expect(ficha().querySelector('[data-zona="promocion-actual"]').textContent).toMatch(
+      /^Promoción: 20 % de descuento, vigente hasta el /,
+    );
+    expect(campo('promocionPorcentaje').value).toBe('20');
+    const formulario = ficha().querySelector('form');
+
+    // Cambiar otra cosa no reenvía la promoción: es la misma.
+    campo('defensa').value = '6';
+    formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({ defensa: 6 });
+
+    campo('promocionPorcentaje').value = '35';
+    formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+    const cuerpo = JSON.parse(fetchImpl.mock.calls[1][1].body);
+    expect(cuerpo).toEqual({ promocion: expect.objectContaining({ porcentaje: 35 }) });
+    // La fecha viaja como el mismo instante que ya tenía (el campo local no
+    // la cambia).
+    expect(new Date(cuerpo.promocion.hasta).getTime()).toBe(
+      new Date('2099-10-15T10:00:00Z').getTime(),
+    );
   });
 
   test('si el servidor rechaza la combinación, se dice su motivo', async () => {

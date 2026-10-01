@@ -33,6 +33,44 @@ const CLASE_POR_RAREZA = {
 const FORMATEADOR_CREDITOS = new Intl.NumberFormat('es-CO');
 
 /**
+ * UXC-9 — pone al día una tarjeta ya pintada con lo que llega por el canal
+ * del listado (`SubastaActualizada`, contracts/websocket/subastas.yaml): la
+ * oferta y el número de pujas; si la subasta terminó, lo dice y retira los
+ * botones (pujar o comprar ya no se puede).
+ *
+ * @param {HTMLElement} tarjeta `.subastas__producto`
+ * @param {object} resumen `SubastaResumen` con su `estado`
+ */
+export function actualizarTarjeta(tarjeta, resumen) {
+  if (!tarjeta || !resumen) {
+    return;
+  }
+  if (resumen.estado && resumen.estado !== 'ACTIVA') {
+    tarjeta.dataset.estado = resumen.estado;
+    const acciones = tarjeta.querySelector('.subastas__acciones');
+    const aviso = document.createElement('p');
+    aviso.className = 'subastas__terminada';
+    aviso.textContent =
+      resumen.estado === 'CANCELADA' ? 'Quien la publicó la canceló.' : 'Esta subasta ya terminó.';
+    if (acciones) {
+      acciones.replaceWith(aviso);
+    } else if (!tarjeta.querySelector('.subastas__terminada')) {
+      tarjeta.appendChild(aviso);
+    }
+    return;
+  }
+  const oferta = Number(resumen.ofertaVigente);
+  const precio = tarjeta.querySelector('.subastas__precio');
+  if (precio && Number.isFinite(oferta)) {
+    precio.textContent = `${FORMATEADOR_CREDITOS.format(oferta)} créditos`;
+  }
+  const pujas = tarjeta.querySelector('.subastas__pujas');
+  if (pujas && Number.isInteger(resumen.cantidadPujas)) {
+    pujas.textContent = `${resumen.cantidadPujas} ${resumen.cantidadPujas === 1 ? 'puja' : 'pujas'}`;
+  }
+}
+
+/**
  * Construye la rejilla de subastas de una pagina.
  *
  * @param {{contenido: Array<object>}} pagina PaginaDeSubastasResponse.

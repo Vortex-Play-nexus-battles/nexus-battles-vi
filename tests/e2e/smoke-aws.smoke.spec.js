@@ -23,7 +23,7 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { correosPara } from './ayudantes/correo.js';
-import { sesionDe } from './ayudantes/cuentas.js';
+import { respetandoElLimite, sesionDe } from './ayudantes/cuentas.js';
 
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Smoke-2026';
@@ -120,9 +120,13 @@ test.describe('Smoke del entorno desplegado', () => {
   });
 
   test('una clave equivocada no entra', async () => {
-    const r = await api.post('/api/v1/auth/login', {
-      data: { email: `${apodo}@nexus.test`, password: 'no-es-esta' },
-    });
+    // Por el limite de acceso del borde (respetandoElLimite): a estas alturas
+    // la suite ya lleva decenas de altas y entradas desde la IP del runner.
+    const r = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/login', {
+        data: { email: `${apodo}@nexus.test`, password: 'no-es-esta' },
+      }),
+    );
     expect([400, 401, 403]).toContain(r.status());
   });
 

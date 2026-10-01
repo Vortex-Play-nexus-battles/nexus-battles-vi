@@ -216,5 +216,39 @@ aparecer un reparto por `$request_method`.
 recarga sin cortar conexiones. Un push que solo toque frontend, ui-kit o esta
 carpeta también despliega.
 
-**Siguiente paso (cuando haga falta HTTPS o dominio):** CloudFront plan Free
-(USD 0/mes, TLS y DNS incluidos) delante de este mismo borde, sin cambiar rutas.
+## HTTPS con Let's Encrypt (28-sep) — preparado, apagado hasta que haya dominio
+
+El borde publica HTTPS **en el mismo nginx**, sin coste y sin cambiar rutas.
+Mientras no haya dominio todo sigue como antes: solo el 80.
+
+| Pieza | Dónde | Qué hace |
+|---|---|---|
+| `include /etc/nginx/nexus-tls/*.conf;` | `borde-dev.conf`, dentro del `server` | Sin fragmento no incluye nada (un comodín sin coincidencias no es un error) |
+| `location ^~ /.well-known/acme-challenge/` | `borde-dev.conf` | Sirve el reto HTTP-01 desde `/opt/nexus/acme` |
+| Plantilla del fragmento | `tls/borde-tls.conf.plantilla` | `listen 443 ssl`, certificado del dominio y 301 del 80 a `https://DOMINIO` salvo `/salud-borde` y el reto |
+| `scripts/cd/certificado.sh` | host de plataforma | Emite, renueva, activa o quita el fragmento; nunca deja nginx sin recargar |
+| 443 en el grupo de seguridad | `entornos/plataforma/main.tf` | Abierto antes del certificado: sin él, nadie escucha en el 443 |
+| `certificado-dev.yml` | Actions | Renovación diaria (lun-vie) sin encender el host |
+| `pruebas/comprobar-tls.sh` | CI (banco del borde) | El mismo `borde-dev.conf` con el fragmento y un certificado autofirmado |
+
+**Para activarlo** (en este orden, lo hace Grupo 6):
+
+1. Registro A del dominio → `35.168.124.119`, y comprobar que resuelve.
+2. Variables del entorno `dev`: `DOMINIO_PUBLICO` (sin `https://`), `ACME_CORREO` y
+   `ACME_ACEPTA_TERMINOS=true`. Esta última **solo tras el sí explícito de una persona** al
+   Subscriber Agreement de Let's Encrypt. `ACME_PRUEBAS=1` ensaya contra el entorno de
+   pruebas de Let's Encrypt sin gastar sus límites.
+3. Añadir `https://DOMINIO` **sin quitar** el origen actual en `SALAS_WS_ORIGENES`,
+   `CHAT_WS_ORIGENES`, `NOTIFICACIONES_WS_ORIGENES`, `SUBASTAS_WS_ORIGENES`,
+   `SUBASTAS_CORS_ORIGENES` e `IDENTIDAD_CORS_ORIGENES` (listas separadas por comas), y
+   volver a desplegar los servicios que los leen. Si no, el primer WebSocket desde
+   `https://` se rechaza.
+4. Lanzar un despliegue (`cd.yml` a demanda). `desplegar.sh` llama a `certificado.sh`, que
+   comprueba DNS y reto antes de molestar a Let's Encrypt.
+5. `PUBLIC_BASE_URL=https://DOMINIO`: los enlaces de los correos dejan de llevar la IP.
+
+**Para volver atrás:** vaciar `DOMINIO_PUBLICO` y desplegar. El script quita el fragmento y el
+borde vuelve a solo HTTP. **HSTS** no se activa hasta que HTTPS lleve una semana estable.
+
+Contingencia sin dominio: CloudFront con el plan Free (USD 0/mes, TLS incluido) delante de este
+mismo borde, con un nombre `*.cloudfront.net`.

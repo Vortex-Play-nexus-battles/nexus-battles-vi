@@ -233,9 +233,35 @@ describe('listado', () => {
   });
 
   test('una subasta sin compra inmediata no inventa un precio', () => {
+    // UXC-8 — antes quedaba en 0, y la tarjeta ofrecía «Comprar ya: 0 cr» en
+    // una subasta que no admite compra inmediata (el contrato la declara
+    // nullable). Null es «no tiene»; la vista entonces no la ofrece.
     const vista = aVistaDeSubasta({ id: 'x', precioCompraInmediata: null, fechaFin: null });
+    const sinCampo = aVistaDeSubasta({ id: 'y', fechaFin: null });
 
-    expect(vista.compraInmediata).toBe(0);
+    expect(vista.compraInmediata).toBeNull();
+    expect(sinCampo.compraInmediata).toBeNull();
+    // Un 0 que sí manda el servidor es un dato y se respeta.
+    expect(aVistaDeSubasta({ id: 'z', precioCompraInmediata: 0 }).compraInmediata).toBe(0);
+  });
+
+  test('el vendedor no se pinta como identificador; la subasta propia se reconoce', () => {
+    const ajena = aVistaDeSubasta(
+      { id: 'x', vendedorId: '7d1c0000-0000-4000-8000-000000000001' },
+      'andres_nv',
+      'uid-mio',
+    );
+    const propia = aVistaDeSubasta({ id: 'y', vendedorId: 'uid-mio' }, 'andres_nv', 'uid-mio');
+
+    // `vendedor` es lo que se pinta: sin apodo en el contrato, nada. El id
+    // se guarda aparte solo para reconocer la subasta propia (B8 compara el
+    // uid del token con él); pujas-uxc8 comprueba que no llega a la pantalla.
+    expect(ajena.vendedor).toBeNull();
+    expect(ajena.vendedorId).toBe('7d1c0000-0000-4000-8000-000000000001');
+    expect(ajena.esPropia).toBe(false);
+    expect(propia.esPropia).toBe(true);
+    // Sin sesión no hay «propia» que valga.
+    expect(aVistaDeSubasta({ id: 'z', vendedorId: 'uid-mio' }).esPropia).toBe(false);
   });
 
   test('el tiempo restante sale de fechaFin y nunca es negativo', () => {
@@ -317,12 +343,46 @@ describe('B8 — reglas, ficha, cancelación, seguimiento y pendientes', () => {
     ]);
   });
 
+  test('UXC-8 — el panel personal: publicaciones, seguimiento e historial', async () => {
+    const { falso, peticiones } = capturar([]);
+    const api = apiCon(falso);
+
+    await api.misPublicaciones();
+    await api.misSeguidas();
+    await api.miHistorial();
+
+    expect(peticiones.map((p) => `${p.opciones.method} ${p.url}`)).toEqual([
+      'GET http://servidor/api/v1/mis-subastas/publicadas',
+      'GET http://servidor/api/v1/mis-subastas/seguimiento',
+      'GET http://servidor/api/v1/mis-subastas/historial',
+    ]);
+    expect(
+      peticiones.every((p) => p.opciones.headers.Authorization === 'Bearer jwt-de-prueba'),
+    ).toBe(true);
+  });
+
+  test('UXC-8 — exportar el historial pide CSV y devuelve el texto tal cual', async () => {
+    const peticiones = [];
+    const falso = jest.fn(async (url, opciones) => {
+      peticiones.push({ url, opciones });
+      return { ok: true, status: 200, text: async () => 'tipo,subastaId\nVENTA,x\n' };
+    });
+
+    const csv = await apiCon(falso).exportarHistorial();
+
+    expect(csv).toBe('tipo,subastaId\nVENTA,x\n');
+    expect(peticiones[0].url).toBe('http://servidor/api/v1/mis-subastas/historial?formato=csv');
+    expect(peticiones[0].opciones.headers.Accept).toContain('text/csv');
+  });
+
   test('las acciones del panel exigen sesion', async () => {
     const falso = jest.fn();
     const api = apiCon(falso, { token: null });
 
     await expect(api.cancelar('sub-1')).rejects.toMatchObject({ estado: 401 });
     await expect(api.pendientes()).rejects.toMatchObject({ estado: 401 });
+    await expect(api.misPublicaciones()).rejects.toMatchObject({ estado: 401 });
+    await expect(api.exportarHistorial()).rejects.toMatchObject({ estado: 401 });
     expect(falso).not.toHaveBeenCalled();
   });
 

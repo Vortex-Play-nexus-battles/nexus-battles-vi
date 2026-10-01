@@ -15,11 +15,17 @@ import java.util.function.Predicate;
 import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
+import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -30,7 +36,13 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -79,7 +91,12 @@ class FlujoDeModeracionTest {
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
 
-        servicio = new ServicioDeModeracion(
+        // El umbral nace en 0 = sin umbral: el PO aun no fija ningun valor.
+        servicio = servicioConUmbral(0);
+    }
+
+    private ServicioDeModeracion servicioConUmbral(int umbral) {
+        return new ServicioDeModeracion(
                 comentarios, reportes, asientos,
                 (comentario, asiento) -> {
                     avisos.add(comentario.autorId() + ":" + asiento.accion());
@@ -87,7 +104,7 @@ class FlujoDeModeracionTest {
                 },
                 asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
                 Clock.fixed(AHORA, ZoneOffset.UTC),
-                3);
+                3, umbral);
     }
 
     private Comentario publicar(String id, String autor) {
@@ -195,6 +212,115 @@ class FlujoDeModeracionTest {
         }
 
         @Test
+        @DisplayName("sin categoria se rechaza como reporte invalido y no cambia nada")
+        void sinCategoria() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", null, "texto"));
+
+            assertTrue(filasDeReportes.isEmpty(), "un reporte invalido no se guarda");
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "y tampoco encola el comentario");
+        }
+
+        @Test
+        @DisplayName("una descripcion de mas de 500 caracteres es invalida; de 500 exactos, valida")
+        void descripcionLarga() {
+            publicar("c-1", "autor-1");
+
+            assertThrows(ServicioDeModeracion.ReporteInvalido.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM,
+                            "x".repeat(501)));
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+
+            // El limite es inclusivo: la columna es de 500.
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, "x".repeat(500));
+            assertEquals(1, filasDeReportes.size());
+        }
+
+        @Test
+        @DisplayName("la descripcion es opcional: nula o en blanco queda null, y se recorta")
+        void descripcionOpcional() {
+            publicar("c-1", "autor-1");
+            publicar("c-2", "autor-2");
+            publicar("c-3", "autor-3");
+
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-2", "jugador-a", CategoriaDeReporte.SPAM, "   ");
+            servicio.reportar(PRODUCTO, "c-3", "jugador-a", CategoriaDeReporte.SPAM, "  me insulta  ");
+
+            assertNull(filasDeReportes.get(0).descripcion());
+            assertNull(filasDeReportes.get(1).descripcion());
+            assertEquals("me insulta", filasDeReportes.get(2).descripcion());
+        }
+
+        @Test
+        @DisplayName("si el indice unico gana la carrera, es el mismo 409 y el comentario no se encola")
+        void carreraDeDuplicados() {
+            publicar("c-1", "autor-1");
+            // doThrow(...).when(...): la forma when(...).thenThrow(...) ejecuta
+            // primero el stub anterior con un argumento nulo y mete un null en la lista.
+            doThrow(new DataIntegrityViolationException("uq_reporte_comentario_reportante"))
+                    .when(reportes).saveAndFlush(any(RegistroDeReporte.class));
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null));
+
+            assertTrue(filasDeReportes.isEmpty());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado(),
+                    "perder la carrera no deja el comentario a medias");
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado (0) ningun numero de reportes eleva la prioridad")
+        void sinUmbralNuncaEleva() {
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado ultimo = null;
+            for (String jugador : List.of("a", "b", "c", "d", "e")) {
+                ultimo = servicio.reportar(PRODUCTO, "c-1", "jugador-" + jugador,
+                        CategoriaDeReporte.SPAM, null);
+                assertFalse(ultimo.prioridadElevada());
+            }
+            assertEquals(5, ultimo.totales());
+        }
+
+        @Test
+        @DisplayName("al alcanzar el umbral el reporte eleva la prioridad, y sigue elevada con los siguientes")
+        void alcanzarElUmbralEleva() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado primero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado segundo = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            ServicioDeModeracion.Reportado tercero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(primero.prioridadElevada(), "1 reporte < umbral 2");
+            assertTrue(segundo.prioridadElevada(), "el umbral es inclusivo");
+            assertTrue(tercero.prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("un reporte rechazado no cambia nada, tampoco la prioridad")
+        void rechazadoNoCambiaLaPrioridad() {
+            servicio = servicioConUmbral(2);
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            assertThrows(ServicioDeModeracion.ReporteDuplicado.class, () ->
+                    servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null));
+
+            assertEquals(1, filasDeReportes.size());
+            assertTrue(servicio.cola(null, null, 0, 20).entradas().stream()
+                    .noneMatch(ServicioDeModeracion.Entrada::prioridadElevada));
+        }
+
+        @Test
         @DisplayName("un comentario de otro producto no es un comentario de este")
         void productoAjeno() {
             publicar("c-1", "autor-1");
@@ -233,6 +359,34 @@ class FlujoDeModeracionTest {
             assertEquals(3, entradas.get(0).reportes());
             assertEquals(2L, entradas.get(0).porCategoria().get(CategoriaDeReporte.ACOSO));
             assertEquals("poco", entradas.get(1).comentario().id());
+        }
+
+        @Test
+        @DisplayName("la entrada lleva prioridadElevada al llegar al umbral, y las elevadas van antes")
+        void prioridadElevadaEnLaCola() {
+            servicio = servicioConUmbral(2);
+            publicar("poco", "autor-1");
+            publicar("mucho", "autor-2");
+
+            servicio.reportar(PRODUCTO, "poco", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
+
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            assertEquals("mucho", entradas.get(0).comentario().id());
+            assertTrue(entradas.get(0).prioridadElevada());
+            assertEquals("poco", entradas.get(1).comentario().id());
+            assertFalse(entradas.get(1).prioridadElevada());
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado ninguna entrada de la cola es de prioridad elevada")
+        void colaSinUmbral() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            assertFalse(servicio.cola(null, null, 0, 20).entradas().get(0).prioridadElevada());
         }
 
         @Test
@@ -342,7 +496,7 @@ class FlujoDeModeracionTest {
                     comentarios, reportes, asientos,
                     (c, a) -> false,
                     asiento -> { },
-                    Clock.fixed(AHORA, ZoneOffset.UTC), 10);
+                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0);
 
             publicar("c-1", "autor-1");
             conAvisoCaido.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
@@ -482,6 +636,141 @@ class FlujoDeModeracionTest {
     }
 
     @Nested
+    @DisplayName("Historial de comentarios del autor (HU-COM-005)")
+    class HistorialDelAutor {
+
+        private Comentario escribir(String id, String autor, Comentario.Estado estado, long segundosAtras) {
+            Comentario c = new Comentario(id, PRODUCTO, autor, "apodo-" + autor, "texto de " + id,
+                    List.of(), AHORA.minusSeconds(segundosAtras), estado);
+            comentarios.save(RegistroDeComentario.desde(c));
+            return c;
+        }
+
+        private Pageable paginaPedidaALaBase() {
+            ArgumentCaptor<Pageable> captura = ArgumentCaptor.forClass(Pageable.class);
+            verify(comentarios).findByAutorId(anyString(), captura.capture());
+            return captura.getValue();
+        }
+
+        @Test
+        @DisplayName("devuelve los comentarios del autor en cualquier estado, tambien OCULTO y ELIMINADO, y no los de otro")
+        void todosLosEstadosDelAutor() {
+            escribir("c-pub", "autor-1", Comentario.Estado.PUBLICADO, 50);
+            escribir("c-rev", "autor-1", Comentario.Estado.EN_REVISION, 40);
+            escribir("c-oculto", "autor-1", Comentario.Estado.OCULTO, 30);
+            escribir("c-borrado", "autor-1", Comentario.Estado.ELIMINADO, 20);
+            escribir("c-ajeno", "autor-2", Comentario.Estado.PUBLICADO, 10);
+
+            ServicioDeModeracion.Historial historial = servicio.historialDelAutor("autor-1", 0, 20);
+
+            assertEquals(4, historial.total());
+            assertEquals(
+                    List.of(Comentario.Estado.ELIMINADO, Comentario.Estado.OCULTO,
+                            Comentario.Estado.EN_REVISION, Comentario.Estado.PUBLICADO),
+                    historial.comentarios().stream().map(ResumenDeComentario::estado).toList());
+            assertFalse(historial.comentarios().stream().anyMatch(c -> c.id().equals("c-ajeno")),
+                    "el comentario de otro autor no es de este historial");
+        }
+
+        @Test
+        @DisplayName("cada elemento trae solo id, producto, texto, fecha, estado y editado")
+        void camposDelElemento() {
+            escribir("c-1", "autor-1", Comentario.Estado.PUBLICADO, 60);
+            servicio.resolver("c-1", "mod-1", "moderadora", AccionDeModeracion.EDITAR, "quitar insulto",
+                    "texto moderado", IP);
+
+            ResumenDeComentario resumen = servicio.historialDelAutor("autor-1", 0, 20).comentarios().get(0);
+
+            assertEquals("c-1", resumen.id());
+            assertEquals(PRODUCTO, resumen.productoId());
+            assertEquals("texto moderado", resumen.texto());
+            assertEquals(AHORA.minusSeconds(60), resumen.fechaPublicacion());
+            assertEquals(Comentario.Estado.PUBLICADO, resumen.estado());
+            assertTrue(resumen.editado());
+        }
+
+        @Test
+        @DisplayName("la base ordena por fecha y luego por id, los dos descendentes, y pagina: no se corta en memoria")
+        void ordenYPaginaSeLasPideALaBase() {
+            escribir("c-1", "autor-1", Comentario.Estado.PUBLICADO, 10);
+
+            servicio.historialDelAutor("autor-1", 2, 5);
+
+            Pageable pedida = paginaPedidaALaBase();
+            assertEquals(2, pedida.getPageNumber());
+            assertEquals(5, pedida.getPageSize());
+            assertEquals(Sort.by(Sort.Order.desc("fechaPublicacion"), Sort.Order.desc("id")), pedida.getSort());
+        }
+
+        @Test
+        @DisplayName("el tamano se recorta a 100 y una pagina negativa o un tamano menor que 1 se corrigen, sin error")
+        void parametrosSeCorrigen() {
+            servicio.historialDelAutor("autor-1", -4, 5000);
+            Pageable recortada = paginaPedidaALaBase();
+            assertEquals(0, recortada.getPageNumber());
+            assertEquals(100, recortada.getPageSize());
+
+            servicio.historialDelAutor("autor-1", 0, 0);
+            ArgumentCaptor<Pageable> todas = ArgumentCaptor.forClass(Pageable.class);
+            verify(comentarios, times(2)).findByAutorId(anyString(), todas.capture());
+            assertEquals(1, todas.getAllValues().get(1).getPageSize());
+        }
+
+        @Test
+        @DisplayName("el total es el de todas las paginas y una pagina fuera de rango viene vacia")
+        void totalYFueraDeRango() {
+            for (int i = 0; i < 5; i++) {
+                escribir("c-" + i, "autor-1", Comentario.Estado.PUBLICADO, 100 - i);
+            }
+
+            ServicioDeModeracion.Historial segunda = servicio.historialDelAutor("autor-1", 1, 2);
+            assertEquals(5, segunda.total());
+            assertEquals(1, segunda.pagina());
+            assertEquals(2, segunda.tamano());
+            assertEquals(List.of("c-2", "c-1"),
+                    segunda.comentarios().stream().map(ResumenDeComentario::id).toList());
+
+            ServicioDeModeracion.Historial despues = servicio.historialDelAutor("autor-1", 9, 2);
+            assertEquals(5, despues.total());
+            assertTrue(despues.comentarios().isEmpty());
+        }
+
+        @Test
+        @DisplayName("un autor sin comentarios es un historial vacio con total 0, no un error")
+        void autorSinComentarios() {
+            ServicioDeModeracion.Historial historial = servicio.historialDelAutor("nadie", 0, 20);
+
+            assertEquals("nadie", historial.autorId());
+            assertEquals(0, historial.total());
+            assertTrue(historial.comentarios().isEmpty());
+            assertNull(historial.apodoAutor());
+        }
+
+        @Test
+        @DisplayName("el apodo es el del comentario mas reciente")
+        void apodoDelMasReciente() {
+            escribir("c-viejo", "autor-1", Comentario.Estado.PUBLICADO, 500);
+            escribir("c-nuevo", "autor-1", Comentario.Estado.PUBLICADO, 5);
+
+            assertEquals("apodo-autor-1", servicio.historialDelAutor("autor-1", 0, 20).apodoAutor());
+        }
+
+        @Test
+        @DisplayName("es solo lectura: no guarda nada, no toca reportes ni asientos, no avisa ni audita")
+        void soloLectura() {
+            escribir("c-1", "autor-1", Comentario.Estado.OCULTO, 10);
+            clearInvocations(comentarios);
+
+            servicio.historialDelAutor("autor-1", 0, 20);
+
+            verify(comentarios, never()).save(any());
+            verifyNoInteractions(reportes, asientos);
+            assertTrue(avisos.isEmpty());
+            assertTrue(auditados.isEmpty());
+        }
+    }
+
+    @Nested
     @DisplayName("Las transiciones, en una tabla")
     class Transiciones {
 
@@ -556,6 +845,25 @@ class FlujoDeModeracionTest {
         });
         when(repo.findById(anyString())).thenAnswer(inv ->
                 Optional.ofNullable(datos.get(inv.<String>getArgument(0))));
+        // La base es la que ordena y corta la pagina. Este doble lo imita para
+        // poder leer el resultado; que el servicio le PIDA el orden y la pagina
+        // correctos se afirma mirando el Pageable que recibe, y el orden real
+        // lo prueba la IT contra PostgreSQL.
+        when(repo.findByAutorId(anyString(), any(Pageable.class))).thenAnswer(inv -> {
+            String autor = inv.getArgument(0);
+            Pageable pagina = inv.getArgument(1);
+            List<ResumenDeComentario> todos = datos.values().stream()
+                    .map(RegistroDeComentario::aDominio)
+                    .filter(c -> c.autorId().equals(autor))
+                    .sorted(Comparator.comparing(Comentario::fechaPublicacion).reversed()
+                            .thenComparing(Comentario::id, Comparator.reverseOrder()))
+                    .map(c -> new ResumenDeComentario(c.id(), c.productoId(), c.apodoAutor(), c.texto(),
+                            c.fechaPublicacion(), c.estado(), c.editado()))
+                    .toList();
+            int desde = (int) Math.min(pagina.getOffset(), todos.size());
+            int hasta = Math.min(desde + pagina.getPageSize(), todos.size());
+            return new PageImpl<>(todos.subList(desde, hasta), pagina, todos.size());
+        });
         when(repo.findByEstadoOrderByFechaPublicacionAsc(any())).thenAnswer(inv -> {
             Comentario.Estado estado = inv.getArgument(0);
             return filtrados(datos, c -> c.estado() == estado);
@@ -595,7 +903,7 @@ class FlujoDeModeracionTest {
     private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
         ReporteRepository repo = mock(ReporteRepository.class);
 
-        when(repo.save(any(RegistroDeReporte.class))).thenAnswer(inv -> {
+        when(repo.saveAndFlush(any(RegistroDeReporte.class))).thenAnswer(inv -> {
             RegistroDeReporte r = inv.getArgument(0);
             datos.add(r);
             return r;

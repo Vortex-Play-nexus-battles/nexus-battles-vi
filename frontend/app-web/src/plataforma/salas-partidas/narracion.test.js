@@ -190,6 +190,17 @@ describe('narrarAccion', () => {
     ]);
   });
 
+  test('UXC-9 — sin poder para la acción pedida, se dice que atacó con su valor base', () => {
+    const golpe = aviso('DANO', [
+      { idJugador: RIVAL, vidaActual: 50, vidaMaxima: 60, diferencia: -4 },
+    ]);
+    golpe.accion = { ...golpe.accion, enValorBase: true, accionPedida: 'Golpe con escudo' };
+    const { lineas } = narrarAccion(golpe, participantes, YO);
+    expect(lineas[0].texto).toBe(
+      'A Aquiles (tú) no le alcanza el poder para Golpe con escudo: ataca con su valor base.',
+    );
+  });
+
   test('quien se cura a si mismo sigue narrandose: su vida si cambió', () => {
     const { lineas } = narrarAccion(
       {

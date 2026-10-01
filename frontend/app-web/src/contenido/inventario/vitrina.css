@@ -159,9 +159,20 @@
   display: none;
 }
 
-/* El sello de estado de cada tarjeta de la vitrina de objetos. */
+/* El sello de estado de cada tarjeta de la vitrina de objetos. UXC-9 — con
+   un héroe de nombre largo («Equipado · Aquiles de la Ceniza») se salía de
+   la tarjeta a 1280 px: el distintivo del kit no parte líneas. Aquí sí, sin
+   pasar del ancho de la tarjeta. */
 .vitrina__estado {
+  max-width: 100%;
   margin-top: 4px;
+  border-radius: var(--radio-chico);
+  white-space: normal;
+}
+
+.vitrina__estado > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .inventario__nuevo,

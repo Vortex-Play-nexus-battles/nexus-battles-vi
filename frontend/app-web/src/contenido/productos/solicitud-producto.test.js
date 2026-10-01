@@ -113,3 +113,51 @@ test('rechaza una tasa de caída superior a cien', () => {
   agregar(formulario, 'tasaDeCaida', 101, 'number');
   expect(() => construirSolicitudProducto(formulario)).toThrow(/tasa de caída/i);
 });
+
+describe('UXC-9 — la promoción (productos.yaml 1.4.0)', () => {
+  function conArma() {
+    const formulario = formularioBase('ARMA');
+    agregar(formulario, 'poderDeAtaque', 25, 'number');
+    agregar(formulario, 'tasaDeCaida', 10, 'number');
+    return formulario;
+  }
+
+  function conPromocion(porcentaje, desde, hasta) {
+    const formulario = conArma();
+    agregar(formulario, 'promocionPorcentaje', porcentaje, 'number');
+    agregar(formulario, 'promocionDesde', desde, 'datetime-local');
+    agregar(formulario, 'promocionHasta', hasta, 'datetime-local');
+    return formulario;
+  }
+
+  test('sin ningún campo de promoción lleno, no viaja', () => {
+    const solicitud = construirSolicitudProducto(conPromocion('', '', ''));
+    expect(solicitud).not.toHaveProperty('promocion');
+  });
+
+  test('con los tres, viaja con instantes ISO de la hora local', () => {
+    const solicitud = construirSolicitudProducto(
+      conPromocion(20, '2026-10-01T10:00', '2026-10-15T23:59'),
+    );
+    expect(solicitud.promocion).toEqual({
+      porcentaje: 20,
+      desde: new Date('2026-10-01T10:00').toISOString(),
+      hasta: new Date('2026-10-15T23:59').toISOString(),
+    });
+  });
+
+  test('a medias, o con las fechas al revés, o fuera de 1..90, no sale', () => {
+    expect(() => construirSolicitudProducto(conPromocion(20, '', '2026-10-15T23:59'))).toThrow(
+      'Indica cuándo empieza la promoción.',
+    );
+    expect(() => construirSolicitudProducto(conPromocion(20, '2026-10-01T10:00', ''))).toThrow(
+      'Indica cuándo termina la promoción.',
+    );
+    expect(() =>
+      construirSolicitudProducto(conPromocion(20, '2026-10-15T10:00', '2026-10-01T10:00')),
+    ).toThrow('La promoción termina antes de empezar: revisa las fechas.');
+    expect(() =>
+      construirSolicitudProducto(conPromocion(95, '2026-10-01T10:00', '2026-10-15T10:00')),
+    ).toThrow(/descuento no puede ser mayor que 90/i);
+  });
+});

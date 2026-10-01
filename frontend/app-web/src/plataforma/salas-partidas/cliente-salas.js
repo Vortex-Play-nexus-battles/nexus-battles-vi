@@ -14,6 +14,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { textoDelServidor, tituloDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /**
  * Base de la API. Vacia por omision, es decir **mismo origen**: asi es como
@@ -53,10 +54,12 @@ export class ErrorDeApi extends Error {
    * @param {number} estado codigo HTTP real de la respuesta
    */
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'El servicio no pudo completar la operación.');
+    // UXC-9 — el texto del servidor solo si está escrito para quien juega:
+    // nunca la página de un proxy, un «Error 502» ni una excepción.
+    super(textoDelServidor(problema, estado, detalleDelFallo(estado)));
     this.name = 'ErrorDeApi';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'El servicio no pudo completar la operación';
+    this.titulo = tituloDelServidor(problema, 'No se pudo completar');
     this.detalle = this.message;
     this.estado = problema?.status ?? estado;
     /** @type {Array<{campo: string, mensaje: string}>} */
@@ -376,6 +379,36 @@ export async function obtenerPartida(
   }
 
   throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/**
+ * Historial de partidas de quien firma el token — `GET /partidas/mias`
+ * (salas-partidas 1.7.0, UXC-9 · Mi cuenta).
+ *
+ * El jugador sale del token, nunca de la ruta: no hay forma de pedir el de
+ * otro. De la más reciente a la más antigua, con el resultado desde su punto
+ * de vista (`ResumenDePartida`).
+ *
+ * @param {{pagina?: number, tamano?: number}} [criterios] página desde cero; 16 por omisión
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<{contenido: object[], pagina: number, tamano: number,
+ *   totalElementos: number, totalPaginas: number}>} `PaginaDePartidas`
+ * @throws {ErrorDeApi}
+ */
+export async function misPartidas(
+  { pagina = 0, tamano = 16 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  const respuesta = await fetchImpl(`${baseDeApi()}/api/v1/partidas/mias?${parametros}`, {
+    headers: { Accept: 'application/json' },
+  });
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'listado'), respuesta.status);
 }
 
 /**

@@ -26,6 +26,7 @@ import {
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 import { puntosDePoder } from '../../comun/heroe-propio.js';
 import { narrarAccion, narrarTurno } from './narracion.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /**
  * Por que las acciones especiales estan deshabilitadas — UXC-2, B7.
@@ -91,7 +92,14 @@ export function estadoPropioDe(participantes, yo) {
     acciones: Array.isArray(heroe?.acciones) ? heroe.acciones : [],
     poderActual: Number.isFinite(heroe?.poderActual) ? heroe.poderActual : null,
     poderMaximo: Number.isFinite(heroe?.poderMaximo) ? heroe.poderMaximo : null,
+    // UXC-9 — acciones en carga y los turnos propios que les faltan (1.5.0).
+    recargas: esMapaDeRecargas(heroe?.recargas) ? heroe.recargas : {},
   };
+}
+
+/** `recargas` del contrato: código de acción → turnos que faltan. */
+function esMapaDeRecargas(valor) {
+  return Boolean(valor) && typeof valor === 'object' && !Array.isArray(valor);
 }
 
 /** Nombres comparables: sin tildes, sin mayusculas, sin espacios sobrantes. */
@@ -106,11 +114,27 @@ function normalizar(texto) {
 /**
  * Coste y carga de una accion del servidor, como insignias del kit.
  *
- * @param {{costoPoder?: number|null, todoElPoder?: boolean, turnosDeCarga?: number|null}} accion
- * @returns {Array<{icono: string, texto: string, etiqueta: string}>}
+ * UXC-9 — la épica se ve (antes solo estaba en el nombre accesible) y la
+ * carga que falta también: con `recargas` del servidor, la insignia del reloj
+ * dice «faltan N» en vez de los turnos de carga de la acción, así que quien
+ * no usa lector ni ratón sabe por qué está cerrada.
+ *
+ * @param {{codigo?: string, esEpica?: boolean, costoPoder?: number|null, todoElPoder?: boolean,
+ *   turnosDeCarga?: number|null}} accion
+ * @param {Record<string, number>} [recargas]
+ * @returns {Array<{icono: string, texto: string, etiqueta: string, enCarga?: boolean}>}
  */
-function insigniasDe(accion) {
+export function insigniasDe(accion, recargas = {}) {
   const insignias = [];
+  if (accion.esEpica === true) {
+    insignias.push({
+      icono: 'estrella-llena',
+      texto: 'Épica',
+      // Sin la palabra «poder»: las etiquetas de coste no se repiten en el
+      // nombre accesible, y esta sí tiene que decirse.
+      etiqueta: 'Acción épica: sin coste y con dos turnos de recarga',
+    });
+  }
   if (accion.todoElPoder === true || accion.costoPoder === null) {
     insignias.push({ icono: 'rayo', texto: 'Todo', etiqueta: 'Todo tu poder' });
   } else if (Number.isFinite(accion.costoPoder) && accion.costoPoder > 0) {
@@ -120,7 +144,15 @@ function insigniasDe(accion) {
       etiqueta: `${accion.costoPoder} de poder`,
     });
   }
-  if (Number.isFinite(accion.turnosDeCarga) && accion.turnosDeCarga > 0) {
+  const faltan = Number(recargas?.[accion.codigo]);
+  if (Number.isInteger(faltan) && faltan > 0) {
+    insignias.push({
+      icono: 'reloj',
+      texto: `faltan ${faltan}`,
+      etiqueta: faltan === 1 ? 'En carga: falta un turno' : `En carga: faltan ${faltan} turnos`,
+      enCarga: true,
+    });
+  } else if (Number.isFinite(accion.turnosDeCarga) && accion.turnosDeCarga > 0) {
     insignias.push({
       icono: 'reloj',
       texto: String(accion.turnosDeCarga),
@@ -761,14 +793,8 @@ export function montarControlesDeCombate(
     const delCatalogo = (catalogo?.acciones ?? []).find(
       (c) => normalizar(c?.nombre) === normalizar(accion.nombre ?? accion.codigo),
     );
-    return (
-      [
-        accion.esEpica ? 'Acción épica' : null,
-        delCatalogo?.efecto ? `Efecto: ${delCatalogo.efecto}` : null,
-      ]
-        .filter(Boolean)
-        .join('. ') || null
-    );
+    // La épica ya se dice en su insignia (y en el nombre accesible).
+    return delCatalogo?.efecto ? `Efecto: ${delCatalogo.efecto}` : null;
   }
 
   /**
@@ -805,7 +831,7 @@ export function montarControlesDeCombate(
       } else if (accion.disponible !== true) {
         impedimento = accion.motivo || 'No se puede usar ahora.';
       }
-      const insignias = insigniasDe(accion);
+      const insignias = insigniasDe(accion, estadoPropio.recargas);
       const boton = accionDeCombate({
         nombre: accion.nombre ?? accion.codigo,
         icono: 'rayo',
@@ -911,6 +937,9 @@ export function montarControlesDeCombate(
     }
     if (Number.isFinite(fuente?.poderMaximo)) {
       estadoPropio.poderMaximo = fuente.poderMaximo;
+    }
+    if (esMapaDeRecargas(fuente?.recargas)) {
+      estadoPropio.recargas = fuente.recargas;
     }
     pintarPoder();
   }
@@ -1083,7 +1112,11 @@ export function montarControlesDeCombate(
       if (!zonaRechazo) {
         return false;
       }
-      zonaRechazo.textContent = problema?.detail ?? problema?.title ?? 'La acción fue rechazada.';
+      zonaRechazo.textContent = textoDelServidor(
+        problema,
+        problema?.status,
+        'La acción fue rechazada.',
+      );
       zonaRechazo.hidden = false;
       return true;
     },

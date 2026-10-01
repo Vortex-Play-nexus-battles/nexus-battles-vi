@@ -16,7 +16,14 @@
  *     recuerda: son de la conexión) y avisa con `alReconectar` para que la
  *     vista relea lo que pudo perderse mientras tanto;
  *   - tras el último intento se queda en «sin conexión» con un `reintentar()`
- *     que la vista ofrece como botón.
+ *     que la vista ofrece como botón;
+ *   - UXC-9 — y cuando el navegador recupera la red (`online`), vuelve a
+ *     intentarlo solo: el aviso de red promete que las pantallas se ponen al
+ *     día al volver, y sin esto, pasados los cinco intentos, no lo hacían;
+ *   - con `insistirAlAbrir`, si el PRIMER intento falla no rechaza: devuelve la
+ *     fachada sin conexión y sigue como si se hubiera perdido (las
+ *     suscripciones esperan a que abra). Para vistas sin otro camino, como
+ *     el combate, donde un canal que no abre dejaba la partida muda.
  *
  * Mientras no hay canal, `enviar` lanza: una acción mandada a un socket
  * muerto se perdería sin que nadie se enterase.
@@ -42,7 +49,11 @@ export const ESTADOS_DE_CANAL = Object.freeze({
  * @param {() => void} [opciones.alReconectar] tras volver: la vista reconcilia
  * @param {readonly number[]} [opciones.esperas]
  * @param {{setTimeout: Function, clearTimeout: Function}} [opciones.reloj] inyectable en pruebas
- * @returns {Promise<object>} la fachada, ya conectada la primera vez
+ * @param {boolean} [opciones.insistirAlAbrir] no rechazar si el primer intento falla
+ * @param {{addEventListener?: Function, removeEventListener?: Function}} [opciones.ventana]
+ *   de dónde llega el aviso `online` (inyectable en pruebas)
+ * @returns {Promise<object>} la fachada, conectada la primera vez salvo con
+ *   `insistirAlAbrir`
  */
 export async function canalReconectable({
   conectar,
@@ -50,6 +61,8 @@ export async function canalReconectable({
   alReconectar = () => {},
   esperas = ESPERAS_POR_OMISION,
   reloj = globalThis,
+  insistirAlAbrir = false,
+  ventana = globalThis,
 }) {
   /** Las suscripciones vivas, para rehacerlas en cada conexión nueva. */
   const suscripciones = [];
@@ -77,6 +90,7 @@ export async function canalReconectable({
     cerrar() {
       cerrado = true;
       reloj.clearTimeout?.(temporizador);
+      ventana?.removeEventListener?.('online', alVolverLaRed);
       cliente?.cerrar();
       cliente = null;
     },
@@ -145,6 +159,19 @@ export async function canalReconectable({
     }, espera);
   }
 
-  enlazar(await conectar(), { esReconexion: false });
+  // Al volver la red, otra ronda (si ya hay canal o se cerró, no hace nada).
+  function alVolverLaRed() {
+    fachada.reintentar();
+  }
+
+  try {
+    enlazar(await conectar(), { esReconexion: false });
+  } catch (error) {
+    if (!insistirAlAbrir) {
+      throw error;
+    }
+    programar();
+  }
+  ventana?.addEventListener?.('online', alVolverLaRed);
   return fachada;
 }
