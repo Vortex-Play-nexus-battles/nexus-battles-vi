@@ -352,6 +352,10 @@ public final class Dobles {
     /** Heroes: valida todo salvo lo que se le diga; decide ataque basico; 10 x 1,2^dado; estadisticas fijas. */
     public static final class Heroes implements ServicioDeHeroes {
         public String motivoDeRechazo;
+        /** Con un motivo de rechazo, rechaza solo las estrategias con rotaciones escritas; la vacia (la heuristica) pasa. */
+        public boolean rechazarSoloLasEscritas;
+        /** Si no es nulo, lo que heroes devuelve como rotaciones con el nombre exacto de la Tabla 7. */
+        public List<List<String>> rotacionesCanonicas;
         public final Set<String> sanadores = Set.of("Chamán", "Médico");
         public final List<String> validaciones = new ArrayList<>();
         public int vidaDeLosEnemigos = 5;
@@ -369,10 +373,11 @@ public final class Dobles {
             if (fallarAlValidar != null) {
                 throw fallarAlValidar;
             }
-            if (motivoDeRechazo != null) {
+            if (motivoDeRechazo != null && !(rechazarSoloLasEscritas && rotaciones.isEmpty())) {
                 return new VeredictoDeEstrategia(false, motivoDeRechazo, null, habilidadesValidas);
             }
-            return new VeredictoDeEstrategia(true, null, rotaciones, habilidadesValidas);
+            return new VeredictoDeEstrategia(true, null, rotacionesCanonicas != null ? rotacionesCanonicas : rotaciones,
+                    habilidadesValidas);
         }
 
         @Override

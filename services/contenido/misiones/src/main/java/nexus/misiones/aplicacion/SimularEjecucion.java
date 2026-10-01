@@ -24,6 +24,7 @@ import nexus.misiones.dominio.simulacion.Azar;
 import nexus.misiones.dominio.simulacion.AzarConSemilla;
 import nexus.misiones.dominio.simulacion.DecisorDeTurno;
 import nexus.misiones.dominio.simulacion.MotorDeCombate;
+import nexus.misiones.dominio.simulacion.OrigenDeEstrategia;
 import nexus.misiones.dominio.simulacion.PerfilDeCombate;
 import nexus.misiones.dominio.simulacion.PlanDeCombate;
 import nexus.misiones.dominio.simulacion.ResultadoDeMision;
@@ -170,8 +171,9 @@ public class SimularEjecucion {
      * enemigo); el escalon multiplica vida y defensa (7.8.11: «enemigos con 50%
      * mas estadisticas»). Las formulas de ataque y dano son las de esa vista:
      * con ellas el motor pelea con la vida y la defensa de la semilla y del
-     * escalon, y no con las del catalogo. La estrategia es la de la mision y, si
-     * no la trae escrita, la por defecto de su prototipo ({@link EstrategiaDeEnemigos}).
+     * escalon, y no con las del catalogo. La estrategia, por precedencia (HU-SIM-004): la rotacion que la
+     * mision trae escrita para ese enemigo; si no, la predefinida de su prototipo y nivel; y si tampoco, la
+     * heuristica por defecto ({@link EstrategiaDeEnemigos}). El rival lleva de cual salio.
      */
     private Rival rival(String nombre, TipoDeRival tipo, String prototipo, int nivel, Integer vida, Integer defensa,
                         List<List<String>> rotaciones, MasterDeMision master, double multiplicador,
@@ -180,12 +182,14 @@ public class SimularEjecucion {
                 clave -> heroes.enNivel(prototipo, nivel));
         int vidaBase = vida != null ? vida : vista.vida();
         int defensaBase = defensa != null ? defensa : vista.defensa();
-        List<List<String>> estrategia = rotaciones.isEmpty() ? enemigos.porDefecto(prototipo, nivel) : rotaciones;
+        EstrategiaDeEnemigos.Elegida estrategia = rotaciones.isEmpty()
+                ? enemigos.elegir(prototipo, nivel)
+                : new EstrategiaDeEnemigos.Elegida(OrigenDeEstrategia.MISION, null, rotaciones);
         return new Rival(nombre, tipo, prototipo, nivel,
                 Math.max(1, (int) Math.round(vidaBase * multiplicador)),
                 (int) Math.round(defensaBase * multiplicador),
-                vista.poder(), estrategia, master == null ? null : master.epica(),
-                vista.ataque(), vista.dano(), vista.sanar());
+                vista.poder(), estrategia.rotaciones(), master == null ? null : master.epica(),
+                vista.ataque(), vista.dano(), vista.sanar(), estrategia.origen(), estrategia.id());
     }
 
     private static ResultadoDeMision sinCombate() {

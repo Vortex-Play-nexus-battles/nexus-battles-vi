@@ -12,6 +12,7 @@ import nexus.misiones.aplicacion.ConsultarMisiones;
 import nexus.misiones.aplicacion.CorreoDeMisiones;
 import nexus.misiones.aplicacion.EstrategiaDeEnemigos;
 import nexus.misiones.aplicacion.DirectorioDeJugadores;
+import nexus.misiones.aplicacion.EstrategiasPredefinidas;
 import nexus.misiones.aplicacion.GestionarEstrategias;
 import nexus.misiones.aplicacion.GestionarFavoritas;
 import nexus.misiones.aplicacion.InventarioDeHeroes;
@@ -24,7 +25,9 @@ import nexus.misiones.aplicacion.RotacionesPorDefectoDeEnemigos;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
 import nexus.misiones.aplicacion.SimularEjecucion;
 import nexus.misiones.aplicacion.TrabajoDeMisiones;
+import nexus.misiones.catalogo.CatalogoDeEstrategiasDesdeSemilla;
 import nexus.misiones.catalogo.CatalogoDeMisionesDesdeSemilla;
+import nexus.misiones.dominio.CatalogoDeEstrategiasDeEnemigos;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.Escalon;
@@ -149,12 +152,22 @@ public class ConfiguracionDeMisiones {
     }
 
     /**
-     * La estrategia de los enemigos que la mision no trae escrita. Punto de
-     * extension de HU-SIM-004: para cambiarla basta otro bean de este tipo.
+     * Las estrategias predefinidas de los enemigos (HU-SIM-004), leidas de la semilla versionada. Un archivo
+     * ilegible o una estrategia invalida no tumban el arranque: se anotan y ese enemigo juega la heuristica.
      */
     @Bean
-    public EstrategiaDeEnemigos estrategiaDeEnemigos(ServicioDeHeroes heroes) {
-        return new RotacionesPorDefectoDeEnemigos(heroes);
+    public CatalogoDeEstrategiasDeEnemigos catalogoDeEstrategiasDeEnemigos() {
+        return CatalogoDeEstrategiasDesdeSemilla.cargar();
+    }
+
+    /**
+     * La estrategia de los enemigos que la mision no trae escrita: la predefinida de su prototipo y nivel y, si no
+     * hay una que heroes acepte, la heuristica por defecto.
+     */
+    @Bean
+    public EstrategiaDeEnemigos estrategiaDeEnemigos(CatalogoDeEstrategiasDeEnemigos catalogo,
+                                                     ServicioDeHeroes heroes) {
+        return new EstrategiasPredefinidas(catalogo, heroes, new RotacionesPorDefectoDeEnemigos(heroes));
     }
 
     @Bean
