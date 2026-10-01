@@ -74,6 +74,7 @@ def construir_modelo(lista, salida, epocas=30, semilla=0, validacion=0.2, peso_d
         "hiperparametros": dict(resultado.hiperparametros, peso_derrota=peso_derrota),
         "metricas": resultado.metricas,
         "onnx": info,
+        "ejemplos": exportacion.ejemplos(resultado.red),
     }
     (salida / "modelo.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"Modelo {version}: {len(muestras)} muestras de {len(lista)} eventos, "

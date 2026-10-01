@@ -19,6 +19,11 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // HU-SIM-008: la red neuronal propia (entrenada con PyTorch en ia/) se exporta a ONNX y se ejecuta aqui
+    // con ONNX Runtime para CPU. El jar trae las bibliotecas nativas de Linux, macOS y Windows (~55 MB de
+    // disco, que no se cargan hasta que se enciende el modelo); el modelo en si pesa unos 18 KB.
+    implementation 'com.microsoft.onnxruntime:onnxruntime:1.30.0'
+
     // HU-DIS-003: un corta circuitos por dependencia y el problem detail de
     // seccion degradada, identico en los veinte modulos (regla 4).
     implementation project(':shared:libs:plataforma-resiliencia')
@@ -58,6 +63,8 @@ tasks.named('check') {
 tasks.named('test') {
     systemProperty 'pact.rootDir', rootProject.file('contracts/pactos').absolutePath
     systemProperty 'misiones.contrato', rootProject.file('contracts/openapi/misiones.yaml').absolutePath
+    // Los casos dorados de las caracteristicas los genera Python (ia/): si cambian, Java debe volver a verificarlos.
+    inputs.dir(file('ia/pruebas')).withPropertyName('pruebasDeIa').withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.file('contracts/openapi/misiones.yaml'))
             .withPropertyName('contratoDeMisiones')
             .withPathSensitivity(PathSensitivity.RELATIVE)

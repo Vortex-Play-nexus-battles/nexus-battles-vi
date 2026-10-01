@@ -130,3 +130,16 @@ def test_el_modelo_de_prueba_se_regenera_con_un_solo_comando(tmp_path):
     assert meta["sintetico"] is True
     assert meta["version"] == "sintetico-v1"
     assert (tmp_path / "modelo.onnx").stat().st_size < 100 * 1024
+
+
+def test_el_modelo_json_trae_ejemplos_para_que_java_compruebe_su_inferencia(tmp_path):
+    entrada = tmp_path / "e.jsonl"
+    sintetico.escribir_jsonl(sintetico.generar(ejecuciones=12, semilla=5), entrada)
+    cli.main(["--jsonl", str(entrada), "--salida", str(tmp_path / "s"), "--epocas", "2"])
+    meta = json.loads((tmp_path / "s" / "modelo.json").read_text(encoding="utf-8"))
+    sesion = ort.InferenceSession(str(tmp_path / "s" / "modelo.onnx"))
+    assert len(meta["ejemplos"]) == 3
+    for ejemplo in meta["ejemplos"]:
+        assert len(ejemplo["entrada"]) == c.DIMENSION
+        x = np.array([ejemplo["entrada"]], dtype=np.float32)
+        assert sesion.run(None, {"caracteristicas": x})[0][0][0] == pytest.approx(ejemplo["salida"], abs=1e-5)

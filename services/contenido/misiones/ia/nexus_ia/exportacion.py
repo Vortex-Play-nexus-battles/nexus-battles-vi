@@ -57,3 +57,15 @@ def exportar(red, ruta):
     verificar(red, datos)
     ruta.write_bytes(datos)
     return {"archivo": ruta.name, "opset": OPSET, "bytes": len(datos), "sha256": hashlib.sha256(datos).hexdigest()}
+
+
+def ejemplos(red, cantidad=3, semilla=0):
+    """Entradas y salidas de la red, para que Java compruebe que su ONNX Runtime da lo mismo que PyTorch."""
+    generador = np.random.default_rng(semilla)
+    red.eval()
+    resultado = []
+    for _ in range(cantidad):
+        entrada = generador.random(c.DIMENSION, dtype=np.float32)
+        salida = float(red(torch.from_numpy(entrada).unsqueeze(0)).detach().numpy()[0][0])
+        resultado.append({"entrada": [float(x) for x in entrada], "salida": salida})
+    return resultado
