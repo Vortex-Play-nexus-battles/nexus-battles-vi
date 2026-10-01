@@ -2,7 +2,9 @@ package nexus.misiones.configuracion;
 
 import java.nio.file.Path;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
+import nexus.misiones.dominio.simulacion.DecisionDeTurno;
 import nexus.misiones.dominio.simulacion.DecisorDeTurno;
+import nexus.misiones.dominio.simulacion.TurnoParaDecidir;
 import nexus.misiones.ia.DecisorConModelo;
 import nexus.misiones.ia.PuntuadorOnnx;
 import org.slf4j.Logger;
@@ -24,13 +26,44 @@ public class ConfiguracionDeIa {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(ConfiguracionDeIa.class);
 
-    /** El decisor de las simulaciones. Se llama aparte de {@code servicioDeHeroes}, que tambien es un decisor. */
+    /**
+     * El decisor de las simulaciones. Es un objeto propio y no la instancia de heroes aunque la bandera este apagada:
+     * {@code ServicioDeHeroes} tambien es un {@link DecisorDeTurno}, y un segundo bean que fuera ESA misma instancia
+     * volveria ambigua toda inyeccion de {@code ServicioDeHeroes} (probado en {@code ConfiguracionDeIaContextoTest}).
+     */
     @Bean
-    public DecisorDeTurno decisorDeTurnoConfigurado(ServicioDeHeroes heroes,
-                                                    @Value("${misiones.ia.modelo.habilitado:false}") boolean habilitado,
-                                                    @Value("${misiones.ia.modelo.ruta:}") String ruta,
-                                                    @Value("${misiones.ia.modelo.confianza-minima:0.6}") double confianza) {
-        return elegirDecisor(heroes, habilitado, ruta, confianza);
+    public DecisorDeLaSimulacion decisorDeTurnoConfigurado(ServicioDeHeroes heroes,
+                                                           @Value("${misiones.ia.modelo.habilitado:false}") boolean habilitado,
+                                                           @Value("${misiones.ia.modelo.ruta:}") String ruta,
+                                                           @Value("${misiones.ia.modelo.confianza-minima:0.6}") double confianza) {
+        return new DecisorDeLaSimulacion(elegirDecisor(heroes, habilitado, ruta, confianza));
+    }
+
+    /** Delega en la regla o en la regla con modelo, y libera al modelo (recursos nativos) al apagar el servicio. */
+    public static final class DecisorDeLaSimulacion implements DecisorDeTurno, AutoCloseable {
+
+        private final DecisorDeTurno delegado;
+
+        DecisorDeLaSimulacion(DecisorDeTurno delegado) {
+            this.delegado = delegado;
+        }
+
+        @Override
+        public DecisionDeTurno decidir(TurnoParaDecidir turno) {
+            return delegado.decidir(turno);
+        }
+
+        /** Para las pruebas y la bitacora: lo que hay detras. */
+        public DecisorDeTurno delegado() {
+            return delegado;
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (delegado instanceof DecisorConModelo conModelo) {
+                conModelo.close();
+            }
+        }
     }
 
     /** La regla, o la regla envuelta por el modelo si esta encendido y se pudo cargar. Nunca lanza por el modelo. */
