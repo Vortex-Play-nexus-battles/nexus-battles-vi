@@ -2,7 +2,7 @@
 
 Módulo de misiones de THE NEXUS BATTLES VI (sección 7.8 del documento del curso, M11, Grupo 2): tablón, detalle, matrícula de un héroe con su estrategia, simulación en segundo plano contra el entorno (JvE), reporte, historial, favoritas y estrategias guardadas, con la **progresión del héroe persistida en el inventario**. Java 21 + Spring Boot 4.1, MongoDB 8, Gradle.
 
-Contrato: [`contracts/openapi/misiones.yaml`](../../../contracts/openapi/misiones.yaml) 1.0.0. Todas las rutas son del jugador autenticado (el `uid` de su token de ms-identidad); un token de servicio recibe 403.
+Contrato: [`contracts/openapi/misiones.yaml`](../../../contracts/openapi/misiones.yaml) 1.1.0. Todas las rutas son del jugador autenticado (el `uid` de su token de ms-identidad); un token de servicio recibe 403.
 
 ## Qué implementa del documento
 
@@ -21,7 +21,9 @@ Contrato: [`contracts/openapi/misiones.yaml`](../../../contracts/openapi/misione
 | 7.8.12 Técnico | Estado de las ejecuciones y registro de completadas en MongoDB; estrategias guardadas; simulación asíncrona y acelerada; la «cola» es la propia colección, con reintentos con espera exponencial. |
 | 6.1.1 Progresión | Experiencia por enemigo no jugador derrotado: 10 × 1,2^(1d8). El dado lo tira este servicio; el valor lo da heroes. El nivel (100 × 1,2^(n−1), tope 8, sobrante conservado) lo aplica el inventario al liberar al héroe, en la misma escritura. |
 
-La única misión publicada es la del documento, **«El Templo Olvidado»** (7.8.14), copiada tal cual en `src/main/resources/semilla/misiones-del-documento.json` junto con la Tabla 20. No se inventan misiones ni textos de historia. `semilla/misiones-provisionales-dev.json` trae una misión técnica marcada «[PROVISIONAL DE DEV]» que solo se publica con `MISIONES_SEMILLA_PROVISIONAL=true` (banco E2E y desarrollo local).
+Las misiones publicadas son dos. **«El Templo Olvidado»** (7.8.14) está copiada tal cual en `src/main/resources/semilla/misiones-del-documento.json`, junto con la Tabla 20 y la tabla de probabilidad de Máster por dificultad. **«La Forja Sumergida»** es la primera de las dos misiones que diseña el equipo (RF-MIS-56, RG-108, HU-MIS-012) y vive en `semilla/misiones-del-equipo.json` con origen `EQUIPO`: historia que sigue a la del Templo, dificultad Difícil, 18 horas, nivel recomendado 20, con jefe, Máster y recompensas con el detalle del ejemplo. La segunda misión del equipo se añade en ese mismo archivo. No se inventan textos de historia fuera de ellas. `semilla/misiones-provisionales-dev.json` trae una misión técnica marcada «[PROVISIONAL DE DEV]» que solo se publica con `MISIONES_SEMILLA_PROVISIONAL=true` (banco E2E y desarrollo local).
+
+**Qué comprueba el arranque.** El servicio no publica una misión si su Máster no aparece con la probabilidad de su dificultad (RF-MIS-59), y a una misión del equipo le exige enemigos regulares, jefe final y al menos un Máster cuya épica trae efecto general y potenciado y, si se entrega como producto, es el de su tipo en la Tabla 20 (RF-MIS-57 y 58). Una semilla que no cumple tumba el arranque con el motivo en español.
 
 ## Cómo funciona una misión
 
@@ -57,13 +59,15 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 | «Habilidades potenciadas» del jefe | sin cifra: ataque básico, con los 100 de vida del documento | semilla |
 | «Mazo completo equipado» (7.8.6) | al menos un arma, armadura o ítem (como ADR-004) | `MatricularHeroe` |
 | Probabilidad del Máster del ejemplo («0.15% (15% de probabilidad)») | 15 %; la Tabla 20 se toma literal (0,04 % = 0,0004) | semilla |
+| Probabilidad de aparición del Máster según la dificultad (7.8 solo dice «configurada según dificultad») | Fácil 10 %, Normal 15 % (la del ejemplo), Difícil 20 %, Extremo 25 %; la carga exige que el Máster de cada misión la cumpla | semilla del documento (`probabilidadDeMasterPorDificultad`) |
+| Enemigos y jefe de «La Forja Sumergida» | prototipos Guerrero Tanque / Mago Fuego / Pícaro Machete y jefe Guerrero Armas con 120 de vida, con el mismo criterio que los del Templo; «apagar los 3 hornos» = superar los encuentros regulares | semilla del equipo |
 | Nivel recomendado 15 con héroes hasta nivel 8 | se publica tal cual, es solo una sugerencia | semilla |
 | ¿La épica exige completar la misión? (HU-MIS-007 dice sí; 7.8.4 solo derrotar al Máster) | manda el documento | `MISIONES_EPICA_EXIGE_COMPLETAR` |
 | Multiplicador del escalón Mítico | sin cifra: no se ofrece | `MISIONES_MULTIPLICADOR_MITICO` |
 | Créditos por escalón («mejores recompensas») | el mismo factor que las estadísticas (×1,5 y ×2) | `MISIONES_CREDITOS_*` |
 | Tiradas de Máster en exploración («mayor probabilidad») | una por cada 24 horas | `TiradaDeMasters` |
 | «Explorar las 5 cámaras» | superar todos los encuentros regulares | semilla |
-| Recompensas del ejemplo que no están en el catálogo oficial (Cofre de Bronce, Fragmentos del Sello Antiguo, «Piel del Guardián», «Espada del Templo», «Velo de Sombras», el título) | se informan en el reporte como `sinEntregar`; no se inventan productos | semilla (`productoId`) |
+| Recompensas del ejemplo que no están en el catálogo oficial (Cofre de Bronce, Fragmentos del Sello Antiguo, «Piel del Guardián», «Espada del Templo», «Velo de Sombras», el título; en «La Forja Sumergida», el Cofre de Bronce, el Lingote de acero frío y el título «Forjador del Lago») | se informan en el reporte como `sinEntregar`; no se inventan productos | semilla (`productoId`) |
 | Preferencias de correo por categoría | no hay dónde leerlas: `debeEnviarCorreo` siempre verdadero | `MISIONES_CORREO_ACTIVO` apaga el correo del módulo |
 
 ## Límites conocidos

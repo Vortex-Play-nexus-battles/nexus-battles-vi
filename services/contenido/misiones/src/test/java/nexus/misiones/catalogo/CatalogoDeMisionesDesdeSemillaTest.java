@@ -91,7 +91,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void provisional() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "dev-prueba-de-humo");
+        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "la-forja-sumergida",
+                "dev-prueba-de-humo");
         Mision humo = catalogo.buscar("dev-prueba-de-humo").orElseThrow();
         assertThat(humo.origen()).isEqualTo(Origen.PROVISIONAL_DEV);
         assertThat(humo.nombre()).startsWith(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
