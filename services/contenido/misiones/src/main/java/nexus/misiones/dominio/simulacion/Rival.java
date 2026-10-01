@@ -66,4 +66,10 @@ public record Rival(
             Objects.requireNonNull(epica, "Un Master sin epica no es un Master: «" + nombre + "».");
         }
     }
+
+    /** El mismo rival con otra vida, defensa, ataque y dano: el refuerzo de un Master ({@link RefuerzoDeMaster}). */
+    Rival reforzado(int vida, int defensa, Formula ataque, Formula dano) {
+        return new Rival(nombre, tipo, prototipo, nivel, vida, defensa, poder, rotaciones, epica, ataque, dano, sanar,
+                origenDeEstrategia, estrategiaId);
+    }
 }
