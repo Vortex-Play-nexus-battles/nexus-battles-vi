@@ -57,7 +57,7 @@ public class AlertasCatalogoServicio {
                 .orElse(Instant.EPOCH);
         Instant hasta = reloj.instant();
         List<AlertaCatalogo> pendientes = alertas
-                .findByImplementadaEnAfterAndImplementadaEnLessThanEqualOrderByImplementadaEnAsc(
+                .buscarImplementadasEntre(
                         desde,
                         hasta);
         if (!pendientes.isEmpty()) {

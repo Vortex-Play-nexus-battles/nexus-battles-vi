@@ -78,7 +78,7 @@ class AlertasCatalogoServicioTest {
                         "jugador-7",
                         ingresoAnterior)));
         when(alertas
-                .findByImplementadaEnAfterAndImplementadaEnLessThanEqualOrderByImplementadaEnAsc(
+                .buscarImplementadasEntre(
                         ingresoAnterior,
                         AHORA))
                 .thenReturn(List.of(pendiente));
@@ -99,7 +99,7 @@ class AlertasCatalogoServicioTest {
     void primerIngresoParteDesdeElInicio() {
         when(consultas.findById("jugador-nuevo")).thenReturn(Optional.empty());
         when(alertas
-                .findByImplementadaEnAfterAndImplementadaEnLessThanEqualOrderByImplementadaEnAsc(
+                .buscarImplementadasEntre(
                         Instant.EPOCH,
                         AHORA))
                 .thenReturn(List.of());

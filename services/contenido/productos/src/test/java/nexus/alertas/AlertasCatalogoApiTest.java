@@ -44,7 +44,7 @@ class AlertasCatalogoApiTest {
     @BeforeEach
     void preparar() {
         when(consultas.findById("jugador-7")).thenReturn(Optional.empty());
-        when(alertas.findByImplementadaEnAfterAndImplementadaEnLessThanEqualOrderByImplementadaEnAsc(
+        when(alertas.buscarImplementadasEntre(
                 any(),
                 any()))
                 .thenReturn(List.of(new AlertaCatalogo(
