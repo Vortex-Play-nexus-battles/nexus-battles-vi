@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.EpicaDeTabla20;
@@ -17,12 +18,29 @@ import org.junit.jupiter.api.Test;
 
 class CatalogoDeMisionesDesdeSemillaTest {
 
+    /** Las cifras del PO (provisionales): lo que la semilla del documento declara. */
+    static final Map<Dificultad, Double> MASTER_POR_DIFICULTAD = Map.of(
+            Dificultad.FACIL, 0.10, Dificultad.NORMAL, 0.15, Dificultad.DIFICIL, 0.20, Dificultad.EXTREMO, 0.25);
+
+    static SemillaDeMisiones documento(Mision... misiones) {
+        return documentoConTabla20(List.of(), misiones);
+    }
+
+    static SemillaDeMisiones documentoConTabla20(List<EpicaDeTabla20> tabla20, Mision... misiones) {
+        return new SemillaDeMisiones("1", List.of(), tabla20, MASTER_POR_DIFICULTAD, List.of(misiones));
+    }
+
+    /** Una semilla que no es la del documento: no declara la tabla de Master por dificultad. */
+    static SemillaDeMisiones sinTabla(Mision... misiones) {
+        return new SemillaDeMisiones("1", List.of(), List.of(), Map.of(), List.of(misiones));
+    }
+
     @Test
     @DisplayName("la semilla del documento publica «El Templo Olvidado» con los datos de 7.8.14")
     void templo() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado");
+        assertThat(catalogo.todas()).extracting(Mision::id).contains("templo-olvidado");
         Mision templo = catalogo.buscar("templo-olvidado").orElseThrow();
         assertThat(templo.origen()).isEqualTo(Origen.DOCUMENTO);
         assertThat(templo.nombre()).isEqualTo("El Templo Olvidado");
@@ -84,11 +102,11 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("una mision provisional sin su marca no se publica")
     void provisionalSinMarca() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        SemillaDeMisiones documento = documento(Misiones.templo());
         Mision sinMarca = Misiones.historia("inventada", List.of());
 
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(sinMarca))))
+                sinTabla(sinMarca)))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
     }
@@ -96,8 +114,7 @@ class CatalogoDeMisionesDesdeSemillaTest {
     @Test
     @DisplayName("la semilla del documento no admite misiones provisionales")
     void documentoSoloDelDocumento() {
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(),
-                List.of(Misiones.historia("inventada", List.of())));
+        SemillaDeMisiones documento = documento(Misiones.historia("inventada", List.of()));
 
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null))
                 .isInstanceOf(IllegalStateException.class)
@@ -109,24 +126,24 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void coherencia() {
         Mision templo = Misiones.templo();
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(templo, templo)), null))
+                documento(templo, templo), null))
                 .hasMessageContaining("mismo identificador");
 
         Mision huerfana = new Mision("huerfana", Origen.DOCUMENTO, "Huérfana", Categoria.HISTORIA, "d", null,
                 Dificultad.FACIL, 1, null, List.of("no-existe"), "n", null, templo.objetivos(), templo.enemigos(),
                 templo.jefe(), List.of(), templo.recompensas(), false, null, null);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(), List.of(huerfana)), null))
+                documento(huerfana), null))
                 .hasMessageContaining("no-existe");
 
         EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(
-                new SemillaDeMisiones("1", List.of(), List.of(fila, fila), List.of(templo)), null))
+                documentoConTabla20(List.of(fila, fila), templo), null))
                 .hasMessageContaining("repite");
 
-        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(templo));
+        SemillaDeMisiones documento = documento(templo);
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
-                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of())))
+                new SemillaDeMisiones("1", List.of(), List.of(fila), Map.of(), List.of())))
                 .hasMessageContaining("Tabla 20");
     }
 
