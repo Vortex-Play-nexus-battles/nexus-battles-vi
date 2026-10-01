@@ -27,6 +27,7 @@ import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.dominio.simulacion.OrigenDeEstrategia;
 import nexus.misiones.dominio.simulacion.PerfilDeCombate;
 import nexus.misiones.dominio.simulacion.PlanDeCombate;
+import nexus.misiones.dominio.simulacion.RefuerzoDeMaster;
 import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 import nexus.misiones.dominio.simulacion.Rival;
 import nexus.misiones.dominio.simulacion.Simulacion;
@@ -137,9 +138,15 @@ public class SimularEjecucion {
         List<Rival> masters = new ArrayList<>();
         for (MasterDeMision master : TiradaDeMasters.quienesAparecen(mision.get(), heroe.prototipo(),
                 catalogo.tabla20(), azar)) {
-            masters.add(rival(master.nombre(), TipoDeRival.MASTER, master.prototipo(),
+            // «Estadisticas superiores a enemigos regulares» (7.8.4): los dos niveles de mas casi siempre bastan,
+            // y donde no (tope 8, un prototipo mas debil, dados que no escalan) el refuerzo lo deja por encima.
+            // Un Master que la semilla fija (vida o defensa, solo el del banco E2E) pelea con lo que dice la
+            // semilla: ese valor manda y no se refuerza.
+            Rival delMaster = rival(master.nombre(), TipoDeRival.MASTER, master.prototipo(),
                     MasterDeMision.nivelFrente(heroe.nivel()), master.vida(), master.defensa(), List.of(), master,
-                    multiplicador, vistas));
+                    multiplicador, vistas);
+            boolean fijadoPorLaSemilla = master.vida() != null || master.defensa() != null;
+            masters.add(fijadoPorLaSemilla ? delMaster : RefuerzoDeMaster.reforzar(delMaster, regulares));
         }
         Jefe jefe = mision.get().jefe();
         Rival rivalFinal = jefe == null ? null
