@@ -69,6 +69,20 @@ function hayDesplazamientoHorizontal(page) {
 }
 
 test.describe('Vitrina del inventario', () => {
+  /*
+   * Tarea #802 — decision del PO tras la revision del producto del 24-sep: la
+   * seccion se llama "Mi inventario" en los tres sitios donde el jugador la
+   * ve. La barra ya lo decia; la pestana del navegador seguia diciendo
+   * "Vitrina del inventario", que es como se llamaba el modulo por dentro, no
+   * como lo llama el jugador.
+   */
+  test('La pestana del navegador dice Mi inventario', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    await expect(page).toHaveTitle('Mi inventario');
+  });
+
   test('La vitrina muestra dieciseis productos en la resolucion de referencia', async ({
     page,
   }) => {
