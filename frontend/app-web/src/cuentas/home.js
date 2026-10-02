@@ -56,7 +56,7 @@ export const ACCESOS = Object.freeze([
   },
   {
     id: 'inventario',
-    titulo: 'Inventario',
+    titulo: 'Mi inventario',
     detalle: 'Tus héroes y objetos',
     destino: '../contenido/inventario/inventario.html',
   },

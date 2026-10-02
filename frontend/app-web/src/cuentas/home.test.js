@@ -84,6 +84,21 @@ beforeEach(() => {
   document.body.innerHTML = VISTA;
 });
 
+/*
+ * Tarea #802 — decision del PO tras la revision del producto del 24-sep: la
+ * seccion se llama "Mi inventario" en los tres sitios donde el jugador la ve.
+ * La barra y el encabezado de la vista ya lo dicen; esta tarjeta decia solo
+ * "Inventario".
+ */
+describe('la tarjeta del inventario', () => {
+  test('se llama "Mi inventario", como la barra y la propia vista', () => {
+    const inventario = ACCESOS.find((acceso) => acceso.id === 'inventario');
+
+    expect(inventario).toBeDefined();
+    expect(inventario.titulo).toBe('Mi inventario');
+  });
+});
+
 describe('con todos los servicios disponibles', () => {
   test('saluda por el apodo y pinta saldo, héroe, torneo y avisos', async () => {
     montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN) });
