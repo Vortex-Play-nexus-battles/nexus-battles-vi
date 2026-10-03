@@ -28,8 +28,10 @@
  *      ni por REST ni desde la pestaña, que dice por qué y devuelve el texto
  *   8. buscar a un jugador por su apodo y escribirle: a él la conversación le
  *      aparece en su lista en ese momento, con su no leído
- *   9. bloquear todavía no existe (decisión del PO pendiente): la pestaña lo
- *      dice y la conversación sigue abierta, sin fingir un bloqueo
+ *   9. bloquear (auditoría de DEV del 30-sep, D-40): A bloquea a B desde la
+ *      pestaña; ninguno de los dos se escribe (409 a quien bloqueó, 403 a
+ *      quien fue bloqueado, sin decirle por qué), B lo ve como «No admite
+ *      mensajes», el historial se queda, y al desbloquear todo vuelve
  *
  * ## De qué depende
  *
@@ -644,27 +646,79 @@ test.describe('Mensajes privados entre jugadores (B6, feedback del profesor)', (
     }
   });
 
-  test('bloquear a un jugador todavía no existe: la pestaña lo dice y la conversación sigue abierta', async ({
+  test('bloquear (D-40): ninguno de los dos se escribe, el otro no sabe por qué, el historial se queda y desbloquear lo deshace', async ({
     browser,
   }) => {
+    const bloqueoDe = (otro) => `${API}/${otro.claims.uid}/bloqueo`;
+    const estadoPara = async (quien, otro) => {
+      const respuesta = await api.get(bloqueoDe(otro), { headers: conToken(quien.token) });
+      expect(respuesta.status(), await respuesta.text()).toBe(200);
+      return (await respuesta.json()).estado;
+    };
+    // Punto de partida limpio (el banco se reutiliza entre corridas): ningún
+    // bloqueo entre A y B. Desbloquear es idempotente.
+    for (const [quien, otro] of [
+      [ana, bruno],
+      [bruno, ana],
+    ]) {
+      const limpio = await api.delete(bloqueoDe(otro), { headers: conToken(quien.token) });
+      expect(limpio.status(), await limpio.text()).toBe(200);
+    }
+    const antes = (await historialEntre(api, bruno, ana)).length;
+    expect(antes, 'A y B ya se escribieron en las pruebas anteriores').toBeGreaterThan(0);
+
     const a = await pestanaDe(browser, ana);
+    let b = null;
     try {
       await conServicio(a);
       await abrirConversacion(a, BRUNO);
       await a.privados.locator('[data-accion="bloquear"]').click();
       await a.pagina.locator('[role="dialog"] [data-accion="confirmar"]').click();
 
-      const hilo = a.privados.locator('.mensajes-privados__hilo');
-      await expect(hilo.locator('.redactor-mensaje [data-zona="aviso"]')).toContainText(
-        'No pudimos bloquear',
+      const hiloA = a.privados.locator('.mensajes-privados__hilo');
+      const bloqueoA = hiloA.locator('[data-zona="bloqueo"]');
+      await expect(bloqueoA, 'PUT .../bloqueo respondió y la vista pinta su estado').toContainText(
+        `Bloqueaste a ${BRUNO}`,
+        { timeout: 15_000 },
       );
-      await expect(hilo.locator('.redactor-mensaje [data-zona="aviso"]')).toContainText(
-        'todavía no está disponible',
+      await expect(hiloA.locator('#mensaje-privado')).toBeDisabled();
+      await expect(conversacionCon(a, BRUNO)).toContainText('Bloqueado');
+
+      // El servicio lo cumple, no solo la vista: ninguno de los dos escribe.
+      expect(await estadoPara(ana, bruno)).toBe('BLOQUEADA');
+      expect(await estadoPara(bruno, ana)).toBe('NO_ADMITE');
+      const deB = await enviar(api, bruno, ana, `¿me oyes? ${SUFIJO}`);
+      expect(deB.status(), await deB.text()).toBe(403);
+      expect((await deB.json()).type).toMatch(/destinatario-no-admite$/);
+      const deA = await enviar(api, ana, bruno, `ya no te escribo ${SUFIJO}`);
+      expect(deA.status(), await deA.text()).toBe(409);
+      expect((await deA.json()).type).toMatch(/conversacion-bloqueada$/);
+      expect(
+        (await historialEntre(api, bruno, ana)).length,
+        'bloquear no borra nada, y lo rechazado no se guardó',
+      ).toBe(antes);
+
+      // B lo ve como «no admite mensajes», sin la palabra bloqueo.
+      b = await pestanaDe(browser, bruno);
+      await conServicio(b);
+      await expect(conversacionCon(b, ANA)).toContainText('No admite mensajes');
+      await abrirConversacion(b, ANA);
+      const hiloB = b.privados.locator('.mensajes-privados__hilo');
+      await expect(hiloB.locator('[data-zona="bloqueo"]')).toContainText(
+        `${ANA} no recibe mensajes tuyos`,
       );
-      // No se finge: ni «Bloqueaste a…», ni el campo sustituido.
-      await expect(hilo).not.toContainText('Bloqueaste a');
-      await expect(hilo.locator('#mensaje-privado')).toBeEnabled();
+      await expect(hiloB).not.toContainText('Bloque');
+      await expect(hiloB.locator('#mensaje-privado')).toBeDisabled();
+      await expect(hiloB.locator('li.mensaje').first()).toBeVisible();
+
+      // A lo deshace desde el mismo sitio.
+      await bloqueoA.locator('[data-accion="desbloquear"]').click();
+      await expect(bloqueoA).toBeHidden({ timeout: 15_000 });
+      await expect(hiloA.locator('#mensaje-privado')).toBeEnabled();
+      expect(await estadoPara(bruno, ana)).toBe('ACTIVA');
+      await enviarBien(api, bruno, ana, `de vuelta ${SUFIJO}`);
     } finally {
+      await b?.contexto.close();
       await a.contexto.close();
     }
   });
