@@ -9,6 +9,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import nexus.dominio.ClaveDeIdempotenciaReutilizadaException;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -25,6 +27,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class ManejadorDeErrores {
+
+        private static final Logger BITACORA = LoggerFactory.getLogger(ManejadorDeErrores.class);
 
         @ExceptionHandler(MethodArgumentNotValidException.class)
         ResponseEntity<ProblemDetail> manejarValidacion(
@@ -204,6 +208,15 @@ public class ManejadorDeErrores {
         ResponseEntity<ProblemDetail> manejarErrorInesperado(
                         Exception excepcion,
                         HttpServletRequest solicitud) {
+
+                // HU-PRD-014: este 500 salio en DEV en cada inicio de sesion y la
+                // bitacora no decia nada. Al cliente le basta el mensaje generico;
+                // la causa, con su traza y la ruta, va a stdout para docker logs.
+                BITACORA.error(
+                        "Error inesperado en {} {}",
+                        solicitud.getMethod(),
+                        solicitud.getRequestURI(),
+                        excepcion);
 
                 return respuesta(
                         HttpStatus.INTERNAL_SERVER_ERROR,
