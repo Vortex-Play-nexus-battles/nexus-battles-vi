@@ -196,6 +196,15 @@ describe('pintarHistorial() — #569', () => {
     expect(filas).toHaveLength(2);
     expect(filas[0].textContent).toContain('Apuesta de una batalla');
     expect(filas[1].querySelector('.movimiento__importe').dataset.tono).toBe('suma');
+    // Tabla de datos con sus reglas de celda; el importe, cifra, a la derecha
+    // en el encabezado y en cada fila (auditoría 30-sep: columnas que no casaban).
+    const tabla = zona.querySelector('table[data-zona="movimientos"]');
+    expect(tabla.classList.contains('tabla--datos')).toBe(true);
+    const encabezados = [...tabla.querySelectorAll('thead th')];
+    expect(encabezados.every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+    expect(encabezados[1].textContent).toBe('Importe');
+    expect(encabezados[1].classList.contains('tabla__numero')).toBe(true);
+    expect(filas[0].children[1].classList.contains('tabla__numero')).toBe(true);
   });
 
   test('sin movimientos invita a jugar en vez de dejar la tabla vacia', async () => {

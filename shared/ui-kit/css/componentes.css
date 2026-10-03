@@ -1243,6 +1243,63 @@ html.con-modal {
   color: var(--primaria);
 }
 
+/* --- Tabla de datos con <table> -------------------------------------------
+   Mi cuenta pinta «Tus batallas» y los movimientos de créditos con una
+   <table> semántica (encabezados con scope, una fila por partida), no con
+   filas .tabla__fila. Sin reglas de celda, el navegador centraba los
+   encabezados y dejaba las celdas a la izquierda y sin aire: las columnas no
+   casaban (auditoría de DEV del 30-sep, «Tus batallas»). El encabezado y la
+   celda de una columna llevan la misma clase de alineación. */
+
+.tabla--datos {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tabla--datos th,
+.tabla--datos td {
+  padding: var(--e-3) var(--e-4);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.tabla--datos thead th {
+  background: var(--fondo);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.tabla--datos tbody td {
+  border-top: 1px solid var(--borde);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* Cifras y acciones, a la derecha: se comparan de un vistazo y el botón no
+   baila con el ancho del texto de las otras columnas. */
+.tabla--datos .tabla__numero,
+.tabla--datos .tabla__accion {
+  text-align: end;
+}
+
+.tabla--datos .tabla__accion {
+  white-space: nowrap;
+}
+
+/* A 375 px la tabla de partidas se desplaza dentro de su tarjeta
+   (.tabla-envoltorio); la de movimientos cabe con menos aire lateral. */
+@media (max-width: 480px) {
+  .tabla--datos th,
+  .tabla--datos td {
+    padding: var(--e-2) var(--e-3);
+  }
+}
+
 /* =======================================================================
    Pestañas
    La activa se marca con color Y con la línea, nunca solo con color.
