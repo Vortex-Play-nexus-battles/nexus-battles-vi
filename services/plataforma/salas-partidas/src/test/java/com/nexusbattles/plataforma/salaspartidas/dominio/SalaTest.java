@@ -488,7 +488,7 @@ class SalaTest {
 
             assertAll(
                     () -> assertEquals(403, error.estado(), "lo fija el contrato"),
-                    () -> assertTrue(error.detalle().toLowerCase().contains("invitacion"),
+                    () -> assertTrue(error.detalle().toLowerCase().contains("invitación"),
                             "el motivo tiene que nombrar la invitacion, no dejar adivinar"));
         }
 
@@ -687,7 +687,7 @@ class SalaTest {
             SalidaNoPermitida error = assertThrows(SalidaNoPermitida.class,
                     () -> sala.abandonar(VISITANTE));
 
-            assertTrue(error.detalle().toLowerCase().contains("comenzo"));
+            assertTrue(error.detalle().toLowerCase().contains("comenzó"));
         }
 
         @Test

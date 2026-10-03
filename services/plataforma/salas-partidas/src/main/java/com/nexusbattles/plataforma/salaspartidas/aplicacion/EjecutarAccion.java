@@ -168,7 +168,7 @@ public class EjecutarAccion {
             return jugarTurnosDeLaMaquina(pasarTurnoSinAccion(partida, POR_TURNO_PERDIDO));
         }
         if (idObjetivo != null && partida.participante(idObjetivo).isEmpty()) {
-            throw new SinObjetivoPosible("Ese objetivo no esta en la partida.");
+            throw new SinObjetivoPosible("Ese objetivo no está en la partida.");
         }
 
         String pedida = codigo == null || codigo.isBlank() ? null : codigo.trim();
@@ -484,6 +484,6 @@ public class EjecutarAccion {
 
     private static ParticipanteDePartida participante(Partida partida, UUID id) {
         return partida.participante(id)
-                .orElseThrow(() -> new SinObjetivoPosible("Ese jugador no esta en la partida."));
+                .orElseThrow(() -> new SinObjetivoPosible("Ese jugador no está en la partida."));
     }
 }
