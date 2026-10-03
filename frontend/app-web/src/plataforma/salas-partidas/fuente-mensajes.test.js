@@ -712,6 +712,32 @@ describe('enviar', () => {
     await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'BLOQUEADA' });
   });
 
+  test('auditoría 30-sep: un dibujo con símbolos dice qué regla falló, no solo el largo', async () => {
+    const red = redFalsa({
+      [`POST ${RUTA_DE_CONVERSACIONES}/${BRUMA}/mensajes`]: respuesta(400, {
+        type: `${TIPO}mensaje-invalido`,
+        title: 'Mensaje no válido',
+        status: 400,
+        detail: 'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+      }),
+    });
+    const { fuente } = adaptador({ red });
+
+    const fallo = await fuente.enviar(BRUMA, '(\\_/)').catch((error) => error);
+
+    expect(fallo).toMatchObject({ motivo: 'TEXTO_INVALIDO', reintentable: false, estado: 400 });
+    expect(fallo.detalle).toBe(
+      'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+    );
+    // Por la cola el rechazo no trae `detail`: la explicación general ya no es solo el largo.
+    expect(falloPorMotivo('TEXTO_INVALIDO').detalle).toMatch(/entre 1 y 500 caracteres/);
+    expect(falloPorMotivo('TEXTO_INVALIDO').detalle).toMatch(/dibujos hechos con símbolos/);
+    // Otro motivo no toma el texto del servidor.
+    expect(
+      falloPorMotivo('TEXTO_NO_PERMITIDO', { detalleDelServidor: 'texto del servidor' }).detalle,
+    ).not.toBe('texto del servidor');
+  });
+
   test('un rechazo que no es un bloqueo no cambia el estado de nadie', () => {
     expect(falloPorMotivo('TEXTO_NO_PERMITIDO').estadoDeConversacion).toBeNull();
     expect(falloPorMotivo('ALGO_NUEVO').estadoDeConversacion).toBeNull();

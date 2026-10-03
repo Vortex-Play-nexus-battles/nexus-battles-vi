@@ -39,6 +39,7 @@ import { RUTAS, resolver } from '../../comun/sesion.js';
 import { limpiarAviso, pintarAviso } from '../../comun/ui/aviso.js';
 import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { pintarEstadoDelCanal } from '../../comun/ui/reconexion.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 import {
   estadoDeCarga,
   estadoDeError,
@@ -61,6 +62,16 @@ const ERRORES_DEL_CHAT = Object.freeze({
   SIN_FILTRO: 'https://nexusbattles.local/errores/filtro-no-disponible',
   INVALIDO: 'https://nexusbattles.local/errores/mensaje-invalido',
 });
+
+/**
+ * Lo que se dice de un mensaje que no es un mensaje cuando el servidor no
+ * explica cuál de sus reglas falló. Desde la política de texto (#814) no es
+ * solo el largo: un dibujo con símbolos, demasiadas líneas o el mismo carácter
+ * repetido también se rechazan (D-37), y decir solo «entre 1 y 500
+ * caracteres» a quien pegó un dibujo de 300 lo confundía.
+ */
+export const TEXTO_NO_VALIDO =
+  'Un mensaje lleva entre 1 y 500 caracteres y se escribe con palabras: sin dibujos hechos con símbolos ni muchas líneas seguidas.';
 
 /** Destinos del contrato AsyncAPI para el canal elegido. */
 export function destinosDe(canal) {
@@ -138,11 +149,18 @@ export function reaccionAlError(problema) {
         devolverTexto: true,
       };
     case ERRORES_DEL_CHAT.INVALIDO:
+      // Se decide por el `type`; el cuerpo del aviso es el `detail`, que dice
+      // qué regla falló («parece un dibujo hecho con símbolos…»), como pide
+      // MAPEO-ERRORES §2. Sin `detail`, la explicación general.
       return {
         aviso: {
           tono: 'advertencia',
           titulo: 'Revisa el mensaje',
-          detalle: 'Un mensaje lleva entre 1 y 500 caracteres.',
+          detalle: textoDelServidor(
+            { detail: problema?.detail },
+            problema?.status,
+            TEXTO_NO_VALIDO,
+          ),
         },
         devolverTexto: true,
       };

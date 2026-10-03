@@ -89,6 +89,7 @@ import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-err
 import { baseDeApi } from '../../comun/base-api.js';
 import { ESPERAS_POR_OMISION, canalReconectable } from '../../comun/canal-reconectable.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
+import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 import { urlDelCanal } from './canal-sala.js';
 import { conectarChat } from './cliente-chat.js';
 
@@ -290,7 +291,10 @@ export const RECHAZOS = Object.freeze({
     reintentable: false,
   },
   TEXTO_INVALIDO: {
-    detalle: `Un mensaje lleva entre 1 y ${LARGO_MAXIMO} caracteres.`,
+    // Desde la política de texto (#814, D-37) no es solo el largo: un dibujo
+    // con símbolos o muchas líneas también se rechazan. Por la cola el rechazo
+    // no trae `detail`; por REST se usa el del servidor (`falloDeEnvio`).
+    detalle: `Un mensaje lleva entre 1 y ${LARGO_MAXIMO} caracteres y se escribe con palabras: sin dibujos hechos con símbolos ni muchas líneas seguidas.`,
     reintentable: false,
   },
   DEMASIADO_RAPIDO: {
@@ -389,7 +393,10 @@ export class FalloDeMensajes extends Error {
  * @param {{estado?: number, reintentarEnSegundos?: number|null}} [datos]
  * @returns {FalloDeMensajes}
  */
-export function falloPorMotivo(motivo, { estado = 0, reintentarEnSegundos = null } = {}) {
+export function falloPorMotivo(
+  motivo,
+  { estado = 0, reintentarEnSegundos = null, detalleDelServidor = null } = {},
+) {
   const rechazo = RECHAZOS[motivo];
   if (!rechazo) {
     return new FalloDeMensajes(SIN_ENVIO, { motivo: motivo ?? null, estado });
@@ -398,6 +405,12 @@ export function falloPorMotivo(motivo, { estado = 0, reintentarEnSegundos = null
   if (motivo === 'DEMASIADO_RAPIDO' && reintentarEnSegundos) {
     const cuanto = reintentarEnSegundos === 1 ? '1 segundo' : `${reintentarEnSegundos} segundos`;
     detalle = `Vas demasiado rápido: espera ${cuanto} antes de enviar otro.`;
+  }
+  // Un texto que no es un mensaje se rechaza por varias reglas; solo el
+  // servidor sabe cuál falló («parece un dibujo hecho con símbolos…»). Se
+  // decide por el motivo y el `detail` es el cuerpo del aviso (MAPEO-ERRORES §2).
+  if (motivo === 'TEXTO_INVALIDO' && detalleDelServidor) {
+    detalle = textoDelServidor({ detail: detalleDelServidor }, estado, detalle);
   }
   return new FalloDeMensajes(detalle, {
     motivo,
@@ -773,11 +786,13 @@ export function fuenteHttpDeMensajes({
   }
 
   async function falloDeEnvio(respuesta) {
-    const motivo = motivoDeProblema(await problemaDe(respuesta));
+    const problema = await problemaDe(respuesta);
+    const motivo = motivoDeProblema(problema);
     if (motivo) {
       return falloPorMotivo(motivo, {
         estado: respuesta.status,
         reintentarEnSegundos: segundosDe(respuesta.headers?.get?.('Retry-After')),
+        detalleDelServidor: problema?.detail ?? null,
       });
     }
     if (respuesta.status === 401) {
