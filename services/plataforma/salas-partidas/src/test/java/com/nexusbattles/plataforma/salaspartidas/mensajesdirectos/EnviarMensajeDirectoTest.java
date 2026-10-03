@@ -89,7 +89,8 @@ class EnviarMensajeDirectoTest {
         @Test
         @DisplayName("un texto de 500 caracteres justos pasa; el limite es el del chat")
         void quinientosPasan() {
-            MensajeDirecto mensaje = enviar.enviar(REMITENTE, BRUNO, "a".repeat(500), null);
+            // Texto de verdad: 500 «a» seguidas ya no es un mensaje (PoliticaDeTexto).
+            MensajeDirecto mensaje = enviar.enviar(REMITENTE, BRUNO, "hola amigo".repeat(50), null);
             assertAll(
                     () -> assertEquals(500, mensaje.texto().length()),
                     () -> assertEquals(500, EnviarMensajeDirecto.LARGO_MAXIMO),
@@ -143,6 +144,20 @@ class EnviarMensajeDirectoTest {
     @Nested
     @DisplayName("rechazos, con el motivo del contrato y el idCliente de vuelta")
     class Rechazos {
+
+        @Test
+        @DisplayName("auditoria del 30-sep: un dibujo de simbolos o una racha del mismo caracter es TEXTO_INVALIDO y no se revisa ni se guarda")
+        void unDibujoNoEsUnMensaje() {
+            String dibujo = String.join("\n", " /\\_/\\ ", "( o.o )", " > ^ < ", "/|   |\\", "(_| |_)", " || || ",
+                    " '' '' ");
+            assertAll(
+                    () -> assertEquals(MotivoDeRechazo.TEXTO_INVALIDO,
+                            rechazo(() -> enviar.enviar(REMITENTE, BRUNO, dibujo, null)).motivo()),
+                    () -> assertEquals(MotivoDeRechazo.TEXTO_INVALIDO,
+                            rechazo(() -> enviar.enviar(REMITENTE, BRUNO, "a".repeat(40), null)).motivo()),
+                    () -> assertTrue(filtro.revisados.isEmpty(), "rechazar lo evidente no cuesta una llamada"),
+                    () -> assertTrue(entrega.entregados.isEmpty()));
+        }
 
         @Test
         @DisplayName("texto vacio, en blanco o de mas de 500: TEXTO_INVALIDO")

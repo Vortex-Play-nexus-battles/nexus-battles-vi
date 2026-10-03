@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos;
 
+import com.nexusbattles.plataforma.salaspartidas.chat.PoliticaDeTexto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.canal.EntregaStomp;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.integracion.ClienteDirectorioDeIdentidad;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.integracion.ClienteListaNegraMensajesPrivados;
@@ -87,9 +88,10 @@ public class ConfiguracionDeMensajesDirectos {
                                                      FiltroDeMensajesPrivados filtro,
                                                      LimiteDeFrecuencia limite,
                                                      EntregaDeMensajesDirectos entrega,
-                                                     AvisoDeMensajeDirecto aviso) {
+                                                     AvisoDeMensajeDirecto aviso,
+                                                     PoliticaDeTexto.Limites limitesDeTexto) {
         return new EnviarMensajeDirecto(repositorio, sanciones, directorio, filtro, limite, entrega, aviso,
-                Clock.systemUTC());
+                Clock.systemUTC(), limitesDeTexto);
     }
 
     @Bean

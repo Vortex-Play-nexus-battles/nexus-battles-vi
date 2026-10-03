@@ -20,7 +20,8 @@ import java.net.URI;
 public enum MotivoDeRechazo {
 
     TEXTO_INVALIDO(400, "mensaje-invalido", "Revisa el mensaje",
-            "El mensaje no puede estar vacío ni pasar de 500 caracteres."),
+            "El mensaje no puede estar vacío ni pasar de 500 caracteres, y tiene que ser texto:"
+                    + " ni un dibujo de símbolos, ni demasiadas líneas, ni una racha del mismo carácter."),
 
     DESTINATARIO_PROPIO(400, "destinatario-propio", "No puedes escribirte a ti mismo",
             "Elige a otro jugador para enviarle un mensaje privado."),
