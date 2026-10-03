@@ -83,6 +83,21 @@ public class ProductosPropios {
         return preguntar(uid, reloj.instant(), "No se pudo saber que tiene el jugador; el producto entra: {}");
     }
 
+    /**
+     * Lo que el jugador tiene acaba de cambiar por la tienda (una compra
+     * entregada): la proxima vitrina pregunta al inventario en vez de usar la
+     * copia, que durante sus 30 s seguiria diciendo que aun no lo tiene y
+     * ofreceria «Añadir» de lo que acaba de pagar.
+     */
+    public void olvidar(String uid) {
+        if (uid == null) {
+            return;
+        }
+        synchronized (copias) {
+            copias.remove(uid);
+        }
+    }
+
     private Set<String> preguntar(String uid, Instant ahora, String siCae) {
         try {
             Set<String> productos = inventario.productosDe(uid);

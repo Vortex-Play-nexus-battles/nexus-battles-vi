@@ -79,6 +79,24 @@ class ProductosPropiosYTrazaTest {
     }
 
     @Test
+    @DisplayName("una compra entregada olvida la copia: la vitrina siguiente pregunta y ya lo marca como propio")
+    void olvidarTrasLaCompra() {
+        ClienteDeInventario inventario = mock(ClienteDeInventario.class);
+        when(inventario.productosDe("uid")).thenReturn(Set.of()).thenReturn(Set.of("espada"));
+        ProductosPropios propios = new ProductosPropios(inventario, credencial(true), RELOJ);
+
+        // Al añadirlo a la cesta (RF-CAR-004) todavia no era suyo: esa respuesta queda como copia.
+        assertThat(propios.alDia("uid")).isEmpty();
+        propios.olvidar("uid");
+
+        assertThat(propios.de("uid")).containsExactly("espada");
+        verify(inventario, times(2)).productosDe("uid");
+        // Olvidar a quien no tiene copia, o a nadie, no falla.
+        propios.olvidar("otro");
+        propios.olvidar(null);
+    }
+
+    @Test
     @DisplayName("al dia y con el inventario caido, o sin credencial: nada, sin excepcion")
     void alDiaSinInventario() {
         ClienteDeInventario caido = mock(ClienteDeInventario.class);

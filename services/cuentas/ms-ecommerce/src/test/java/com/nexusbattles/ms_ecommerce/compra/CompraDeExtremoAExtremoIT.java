@@ -728,6 +728,26 @@ class CompraDeExtremoAExtremoIT {
         }
 
         @Test
+        @DisplayName("recien comprado, sin esperar: la vitrina ya lo marca como propio y no deja añadirlo otra vez")
+        void recienCompradoEsPropio() {
+            // Añadir pregunta al inventario (RF-CAR-004) y deja la copia de antes de comprar.
+            alCarrito(ESPADA, 1);
+            assertThat(pagar("clave-recien-comprado-1", TARJETA_APROBADA).getStatusCode().value()).isEqualTo(201);
+
+            // Sin avanzar el reloj: la compra entregada olvido esa copia.
+            ResponseEntity<String> vitrina = get("/vitrina");
+            ResponseEntity<String> otraVez = enviar("POST", "/carrito/items",
+                    "{\"productoId\":\"" + ESPADA + "\",\"cantidad\":1}", Map.of());
+
+            assertThat(JsonPath.<List<Boolean>>read(vitrina.getBody(),
+                    "$.content[?(@.id=='" + ESPADA + "')].esPropio")).containsExactly(true);
+            assertThat(otraVez.getStatusCode().value()).isEqualTo(409);
+            assertThat(JsonPath.<String>read(otraVez.getBody(), "$.type"))
+                    .isEqualTo("urn:nexus:problema:producto-ya-adquirido");
+            assertThat(lineasDelCarrito()).isZero();
+        }
+
+        @Test
         @DisplayName("la vitrina con sesion marca lo deseado y lo que ya se compro; sin sesion, nada")
         void marcasEnLaVitrina() {
             enviar("PUT", "/lista-deseos/" + ESCUDO, null, Map.of());
