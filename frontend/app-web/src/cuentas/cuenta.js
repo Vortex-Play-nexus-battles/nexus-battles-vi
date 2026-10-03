@@ -248,15 +248,17 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
     return;
   }
 
-  const tabla = h('table', { clase: 'tabla', datos: { zona: 'movimientos' } });
+  // `tabla--datos`: la <table> lleva sus propias reglas de celda (shared/ui-kit);
+  // el importe, como toda cifra, a la derecha en el encabezado y en la celda.
+  const tabla = h('table', { clase: 'tabla tabla--datos', datos: { zona: 'movimientos' } });
   const cabecera = h('thead');
   cabecera.append(
     h('tr', {
       hijos: [
-        h('th', { texto: 'Concepto' }),
-        h('th', { texto: 'Importe' }),
-        h('th', { texto: 'Estado' }),
-        h('th', { texto: 'Cuándo' }),
+        h('th', { texto: 'Concepto', atributos: { scope: 'col' } }),
+        h('th', { clase: 'tabla__numero', texto: 'Importe', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Estado', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Cuándo', atributos: { scope: 'col' } }),
       ],
     }),
   );
@@ -269,7 +271,7 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
         hijos: [
           h('td', { texto: nombreDelConcepto(movimiento.concepto) }),
           h('td', {
-            clase: 'movimiento__importe',
+            clase: 'movimiento__importe tabla__numero',
             texto: importe.texto,
             datos: { tono: importe.tono },
           }),
