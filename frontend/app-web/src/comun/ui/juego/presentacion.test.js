@@ -12,7 +12,7 @@
  */
 
 import { jest } from '@jest/globals';
-import { mostrarPresentacion, presentacionDeHeroes } from './presentacion.js';
+import { mostrarPresentacion, presentacionDeHeroes, quienAbrio } from './presentacion.js';
 
 /** Un participante con la forma del esquema `Participante` del contrato. */
 function participante(id, nombre, extra = {}) {
@@ -86,6 +86,36 @@ describe('presentacionDeHeroes', () => {
 
     expect(capa.querySelector('.presentacion__turno').textContent).toBe('Abres tú');
     expect(capa.querySelector('[data-jugador="u-1"]').className).toContain('--abre');
+  });
+
+  /*
+   * Auditoría de DEV del 30-sep: contra la máquina, si abre la IA juega en el
+   * mismo instante en que empieza la partida, y quien pulsa «Iniciar combate»
+   * recibe la partida ya en el turno 2. La presentación decía «Abres tú».
+   */
+  test('pasado el turno 1, dice quién abrió (el primero del orden) y a quién le toca', () => {
+    const capa = presentacionDeHeroes({
+      // El orden de `participantes` es el de los turnos (salas-partidas 1.7.0).
+      participantes: [
+        participante('ia-1', 'Mago Fuego', { esIA: true }),
+        participante('u-1', 'Guerrero Tanque'),
+      ],
+      turnoActual: { idJugador: 'u-1', numeroTurno: 2 },
+      yo: 'u-1',
+    });
+
+    expect(capa.querySelector('.presentacion__turno').textContent).toBe(
+      'Abrió Mago Fuego; ahora te toca a ti',
+    );
+    expect(capa.querySelector('[data-jugador="ia-1"]').className).toContain('--abre');
+    expect(capa.querySelector('[data-jugador="u-1"]').className).not.toContain('--abre');
+  });
+
+  test('quienAbrio: en el turno 1 es el del turno; después, el primero del orden', () => {
+    expect(quienAbrio(DOS, { idJugador: 'u-2', numeroTurno: 1 })).toBe('u-2');
+    expect(quienAbrio(DOS, { idJugador: 'u-2', numeroTurno: 3 })).toBe('u-1');
+    expect(quienAbrio(DOS, { idJugador: 'u-2' })).toBe('u-2');
+    expect(quienAbrio(DOS, null)).toBeNull();
   });
 
   test('distingue tu héroe, el de otro jugador y el de la IA', () => {

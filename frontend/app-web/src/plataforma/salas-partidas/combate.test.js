@@ -1504,3 +1504,226 @@ describe('B7 · las acciones que calcula el servidor se juegan', () => {
     expect(especial('Golpe con escudo').disabled).toBe(false);
   });
 });
+
+describe('auditoría de DEV del 30-sep · combate', () => {
+  const MANDO = `
+    <a data-zona="salir" href="./batallas.html" title="Volver a Jugar online (la partida sigue en curso)">Jugar online</a>
+    <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+    <div data-zona="vidas">
+      <div class="barra-vida" data-jugador="${ANA}"></div>
+      <div class="barra-vida" data-jugador="${BRUNO}"></div>
+    </div>
+    <div data-zona="campo">
+      <div class="campo__puesto" data-puesto="${ANA}"></div>
+      <div class="campo__puesto" data-puesto="${BRUNO}"></div>
+    </div>
+    <div data-zona="mando">
+      <div data-zona="acciones"></div>
+      <div data-zona="especiales"></div>
+      <p id="motivo-especiales" data-zona="motivo-especiales"></p>
+      <div data-zona="poder" hidden></div>
+    </div>
+    <div data-zona="registro"></div>
+    <div data-zona="resultado" hidden></div>
+  `;
+
+  const GOLPE = { codigo: 'GOLPE_CON_ESCUDO', nombre: 'Golpe con escudo', tipo: 'ATAQUE' };
+  const MANO = { codigo: 'MANO_DE_PIEDRA', nombre: 'Mano de piedra', tipo: 'DEFENSA' };
+
+  /** Ana (Guerrero Tanque, 4/10 de poder) contra Bruno (la máquina). */
+  function enLaPartida({ vidaDeAna = 44 } = {}) {
+    return [
+      {
+        jugador: { id: BRUNO },
+        esIA: true,
+        heroe: { nombre: 'Mago Fuego', vidaActual: 40, vidaMaxima: 40 },
+      },
+      {
+        jugador: { id: ANA },
+        heroe: {
+          nombre: 'Guerrero Tanque',
+          vidaActual: vidaDeAna,
+          vidaMaxima: 44,
+          poderActual: 4,
+          poderMaximo: 10,
+          acciones: [
+            { ...GOLPE, costoPoder: 2, disponible: true },
+            { ...MANO, costoPoder: 4, disponible: true },
+          ],
+        },
+      },
+    ];
+  }
+
+  function montar(extra = {}) {
+    document.body.innerHTML = MANDO;
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: enLaPartida(),
+      turnoDe: ANA,
+      numeroTurno: 2,
+      alAtacar: () => {},
+      ...extra,
+    });
+  }
+
+  const registro = () => document.querySelector('[data-zona="registro"]').textContent;
+
+  test('una especial que no mueve ninguna vida no se descarta como repetida', () => {
+    const avisos = registroDeAvisos();
+    const defensa = (turno) => [
+      { tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: ANA, numeroTurno: turno },
+      {
+        tipo: ACCION_RESUELTA,
+        idPartida: PARTIDA,
+        idEjecutor: ANA,
+        accion: { codigo: 'MANO_DE_PIEDRA', nombre: 'MANO_DE_PIEDRA' },
+        afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44, poderActual: 6 }],
+      },
+    ];
+    const [turno2, enEl2] = defensa(2);
+    const [turno4, enEl4] = defensa(4);
+
+    expect(avisos.yaVisto(turno2)).toBe(false);
+    expect(avisos.yaVisto(enEl2)).toBe(false);
+    // La misma, reenviada dentro del mismo turno, sí es la misma.
+    expect(avisos.yaVisto(enEl2)).toBe(true);
+    // La misma defensa dos turnos después es otra jugada, aunque todo quede igual.
+    expect(avisos.yaVisto(turno4)).toBe(false);
+    expect(avisos.yaVisto(enEl4)).toBe(false);
+    // Y un cambio de turno viejo reenviado no devuelve el ancla atrás.
+    expect(avisos.yaVisto(turno2)).toBe(true);
+    expect(avisos.yaVisto(enEl4)).toBe(true);
+  });
+
+  test('dos acciones distintas con las mismas vidas son dos jugadas', () => {
+    const avisos = registroDeAvisos();
+    const jugada = (codigo) => ({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo, nombre: codigo },
+      afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44 }],
+    });
+    expect(avisos.yaVisto(jugada('MANO_DE_PIEDRA'))).toBe(false);
+    expect(avisos.yaVisto(jugada('DEFENSA_FEROZ'))).toBe(false);
+  });
+
+  test('el poder que se gasta y el que se recupera quedan en el registro', () => {
+    const controles = montar();
+
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo: 'GOLPE_CON_ESCUDO', nombre: 'CAUSAR_DANO', tipo: 'ATAQUE' },
+      afectados: [
+        { idJugador: BRUNO, vidaActual: 34, vidaMaxima: 40, diferencia: -6 },
+        { idJugador: ANA, vidaActual: 44, vidaMaxima: 44, diferencia: 0, poderActual: 2 },
+      ],
+    });
+    expect(registro()).toContain('Guerrero Tanque (tú) usa Golpe con escudo.');
+    expect(registro()).toContain('Gastas 2 de poder (2/10).');
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('2/10');
+
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: BRUNO,
+      numeroTurno: 3,
+    });
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: ANA,
+      numeroTurno: 4,
+      poderActual: 4,
+      poderMaximo: 10,
+    });
+    expect(registro()).toContain('Recuperas 2 de poder (4/10).');
+    const lineas = [...document.querySelectorAll('[data-zona="registro"] li')].map(
+      (l) => l.textContent,
+    );
+    // Primero de quién es el turno, después lo que trae.
+    expect(lineas.indexOf('Recuperas 2 de poder (4/10).')).toBeGreaterThan(
+      lineas.indexOf('Turno 4: te toca a ti.'),
+    );
+  });
+
+  test('el poder que quita una acción ajena se dice como pérdida', () => {
+    const controles = montar({ turnoDe: BRUNO });
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: BRUNO,
+      accion: { codigo: 'ROBO', nombre: 'ROBO', tipo: 'EFECTO' },
+      afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44, poderActual: 1 }],
+    });
+    expect(registro()).toContain('Pierdes 3 de poder (1/10).');
+  });
+
+  test('al terminar se retira el mando, el poder y las especiales, y la salida deja de decir «en curso»', () => {
+    const controles = montar();
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+
+    expect(document.querySelector('[data-zona="mando"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="especiales"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="poder"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+    const salir = document.querySelector('[data-zona="salir"]');
+    expect(salir.title).not.toContain('sigue en curso');
+    expect(salir.title).toContain('terminó');
+    // Lo que llegue después (el catálogo del héroe) no vuelve a pintar el poder.
+    controles.mostrarHeroe({ acciones: [], poderMaximo: 10 });
+    expect(document.querySelector('[data-zona="poder"]').hidden).toBe(true);
+  });
+
+  test('una partida que ya estaba FINALIZADA al montar nace cerrada y con su desenlace', () => {
+    montar({
+      partidaFinalizada: {
+        id: PARTIDA,
+        estado: 'FINALIZADA',
+        resultado: 'GANADOR',
+        ganadores: [BRUNO],
+        equipoGanador: null,
+      },
+    });
+
+    expect(registro()).not.toContain('Combate en curso');
+    expect(registro()).toContain('Combate finalizado: derrota.');
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+    expect(document.querySelector('[data-zona="mando"]').hidden).toBe(true);
+    expect(document.querySelectorAll('[data-especial]:not([disabled])')).toHaveLength(0);
+    const resultado = document.querySelector('[data-zona="resultado"]');
+    expect(resultado.hidden).toBe(false);
+    expect(resultado.textContent).toContain('DERROTA');
+    // La partida releida no trae créditos: se dice dónde están, no se inventa un cero.
+    expect(resultado.textContent).toContain('historial de Mi cuenta');
+  });
+
+  test('si terminó sin canal, la partida releída pinta el desenlace', () => {
+    const controles = montar();
+    controles.bloquear();
+    controles.sincronizar({ estado: 'FINALIZADA', ganadores: [ANA], resultado: 'GANADOR' });
+
+    expect(document.querySelector('[data-zona="resultado"]').textContent).toContain('VICTORIA');
+    // Una lectura atrasada que aún diga EN_CURSO no reabre nada.
+    controles.sincronizar({ estado: 'EN_CURSO', turnoActual: { idJugador: ANA, numeroTurno: 9 } });
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+  });
+
+  test('recién empezada en el turno 2, el registro cuenta quién abrió y lo que dejó', () => {
+    montar({ participantes: enLaPartida({ vidaDeAna: 34 }), recienEmpezada: true });
+
+    expect(registro()).toContain('Turno 1: abrió Mago Fuego.');
+    expect(registro()).toContain('Guerrero Tanque (tú) recibió 10 de daño en el turno 1 (34/44).');
+  });
+
+  test('al recargar a mitad de combate no se reescribe el pasado', () => {
+    montar({ participantes: enLaPartida({ vidaDeAna: 34 }), numeroTurno: 8 });
+
+    expect(registro()).not.toContain('abrió');
+    expect(registro()).not.toContain('recibió');
+  });
+});
