@@ -16,25 +16,25 @@
  *      otra pestaña— vuelve a bajar.
  */
 
-import { test, expect, request as apiRequest } from "@playwright/test";
+import { test, expect, request as apiRequest } from '@playwright/test';
 
-import { sesionDe as sesionDelBanco } from "./ayudantes/cuentas.js";
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
-const BORDE = process.env.E2E_BORDE ?? "http://localhost:8099";
-const CLAVE = "Contrasena-E2E-2026";
+const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
+const CLAVE = 'Contrasena-E2E-2026';
 
 // Jugadores de este spec y de ningún otro: sus avisos no se cruzan con nadie.
-const FOTO = process.env.E2E_FOTO ?? "foto_ana_e2e";
-const ANA = process.env.E2E_CAMPANA_ANA ?? "campana_ana_e2e";
-const BRUNO = process.env.E2E_CAMPANA_BRUNO ?? "campana_bruno_e2e";
+const FOTO = process.env.E2E_FOTO ?? 'foto_ana_e2e';
+const ANA = process.env.E2E_CAMPANA_ANA ?? 'campana_ana_e2e';
+const BRUNO = process.env.E2E_CAMPANA_BRUNO ?? 'campana_bruno_e2e';
 
-const MI_CUENTA = "/frontend/app-web/src/cuentas/perfil.html";
-const JUGAR = "/frontend/app-web/src/plataforma/salas-partidas/batallas.html";
+const MI_CUENTA = '/frontend/app-web/src/cuentas/perfil.html';
+const JUGAR = '/frontend/app-web/src/plataforma/salas-partidas/batallas.html';
 
 /** Un PNG de 1×1: lo mínimo que es una imagen de verdad. */
 const PNG = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==",
-  "base64",
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==',
+  'base64',
 );
 
 function sesionDe(api, apodo) {
@@ -49,9 +49,9 @@ function conToken(token, extra = {}) {
 async function conSesion(page, jugador) {
   await page.addInitScript(
     ([token, apodo, uid]) => {
-      sessionStorage.setItem("nexus.token", token);
-      sessionStorage.setItem("nexus.apodoActual", apodo);
-      sessionStorage.setItem("nexus.usuarioId", uid);
+      sessionStorage.setItem('nexus.token', token);
+      sessionStorage.setItem('nexus.apodoActual', apodo);
+      sessionStorage.setItem('nexus.usuarioId', uid);
     },
     [jugador.token, jugador.apodo, jugador.claims.uid],
   );
@@ -67,16 +67,16 @@ test.afterAll(async () => {
   await api?.dispose();
 });
 
-test.describe("foto de perfil", () => {
-  test("la foto que se sube se sirve por el borde, y por el borde solo se lee", async () => {
+test.describe('foto de perfil', () => {
+  test('la foto que se sube se sirve por el borde, y por el borde solo se lee', async () => {
     const ana = await sesionDe(api, FOTO);
     const subida = await api.put(`/api/v1/perfiles/${ana.claims.uid}`, {
       headers: conToken(ana.token),
       multipart: {
-        nombres: "Ana",
-        apellidos: "De Prueba",
-        preferencias: "Combate cuerpo a cuerpo",
-        avatar: { name: "ana.png", mimeType: "image/png", buffer: PNG },
+        nombres: 'Ana',
+        apellidos: 'De Prueba',
+        preferencias: 'Combate cuerpo a cuerpo',
+        avatar: { name: 'ana.png', mimeType: 'image/png', buffer: PNG },
       },
     });
     expect(subida.status(), await subida.text()).toBe(200);
@@ -86,94 +86,70 @@ test.describe("foto de perfil", () => {
     });
     expect(perfil.status(), await perfil.text()).toBe(200);
     const { avatar } = await perfil.json();
-    expect(avatar, "el perfil devuelve la dirección de su foto").toMatch(
-      /^\/avatares-subidos\//,
-    );
+    expect(avatar, 'el perfil devuelve la dirección de su foto').toMatch(/^\/avatares-subidos\//);
 
     const foto = await api.get(avatar);
     expect(
       foto.status(),
       `GET ${avatar} por el borde: tiene que llegar a ms-identidad (location /avatares-subidos/)`,
     ).toBe(200);
-    expect(foto.headers()["content-type"]).toContain("image/");
-    expect(
-      (await foto.body()).equals(PNG),
-      "es la misma imagen que se subió",
-    ).toBe(true);
+    expect(foto.headers()['content-type']).toContain('image/');
+    expect((await foto.body()).equals(PNG), 'es la misma imagen que se subió').toBe(true);
 
-    const escritura = await api.post(avatar, { data: "no" });
-    expect(
-      escritura.status(),
-      "por el borde la ruta de las fotos solo se lee",
-    ).toBe(403);
+    const escritura = await api.post(avatar, { data: 'no' });
+    expect(escritura.status(), 'por el borde la ruta de las fotos solo se lee').toBe(403);
   });
 
-  test("Mi cuenta pinta la foto cargada, no su texto alternativo", async ({
-    page,
-  }) => {
+  test('Mi cuenta pinta la foto cargada, no su texto alternativo', async ({ page }) => {
     const ana = await sesionDe(api, FOTO);
     await conSesion(page, ana);
     await page.goto(`${BORDE}${MI_CUENTA}`);
 
-    const foto = page.locator(
-      '[data-zona="identidad"] img.avatar-vista-previa',
-    );
+    const foto = page.locator('[data-zona="identidad"] img.avatar-vista-previa');
     await expect(foto).toBeVisible({ timeout: 20_000 });
     await expect
-      .poll(
-        () => foto.evaluate((img) => img.complete && img.naturalWidth > 0),
-        {
-          timeout: 10_000,
-          message:
-            "la foto tiene que cargar de verdad (naturalWidth > 0), no quedarse rota",
-        },
-      )
+      .poll(() => foto.evaluate((img) => img.complete && img.naturalWidth > 0), {
+        timeout: 10_000,
+        message: 'la foto tiene que cargar de verdad (naturalWidth > 0), no quedarse rota',
+      })
       .toBe(true);
-    await expect(
-      page.locator('[data-zona="identidad"] [data-avatar="inicial"]'),
-    ).toHaveCount(0);
+    await expect(page.locator('[data-zona="identidad"] [data-avatar="inicial"]')).toHaveCount(0);
   });
 });
 
-test.describe("número de la campana", () => {
-  test("sube con un aviso nuevo sin abrir la bandeja, y baja al leerlo desde otro sitio", async ({
+test.describe('número de la campana', () => {
+  test('sube con un aviso nuevo sin abrir la bandeja, y baja al leerlo desde otro sitio', async ({
     page,
   }) => {
     const ana = await sesionDe(api, ANA);
     const bruno = await sesionDe(api, BRUNO);
     const bandeja = `/api/v1/users/${bruno.claims.uid}/notifications`;
-    const noLeidas = async () => {
-      const respuesta = await api.get(bandeja, {
-        headers: conToken(bruno.token),
-      });
-      expect(respuesta.status(), await respuesta.text()).toBe(200);
-      return (await respuesta.json()).noLeidas;
-    };
-    const antes = await noLeidas();
+    const deBruno = { headers: conToken(bruno.token) };
+
+    // Punto de partida limpio: lo que Bruno tuviera sin leer (de una corrida
+    // anterior) se lee antes de empezar. Son sus avisos y de nadie más.
+    const previa = await api.get(bandeja, deBruno);
+    expect(previa.status(), await previa.text()).toBe(200);
+    for (const aviso of (await previa.json()).avisos.filter((a) => !a.leida)) {
+      const leido = await api.post(`${bandeja}/${encodeURIComponent(aviso.id)}/read`, deBruno);
+      expect(leido.status(), await leido.text()).toBe(200);
+    }
 
     await conSesion(page, bruno);
     await page.goto(`${BORDE}${JUGAR}`);
     const contador = page.locator('[data-cabecera-app] [data-zona="contador"]');
-    const campana = page.locator("[data-cabecera-app] .cabecera__campana");
-    // La cabecera ya preguntó: la campana dice cuántos hay (aunque sean cero).
-    await expect(campana).toHaveAttribute("aria-label", /sin leer/, {
+    const campana = page.locator('[data-cabecera-app] .cabecera__campana');
+    // La cabecera ya preguntó: la campana dice cuántos hay, aunque sean cero.
+    await expect(campana).toHaveAttribute('aria-label', /sin notificaciones sin leer/, {
       timeout: 20_000,
     });
-    // Lo que ya tenía sin leer se ve al cargar, sin abrir la bandeja.
-    if (antes > 0) {
-      await expect(contador).toHaveText(String(Math.min(antes, 99)), {
-        timeout: 20_000,
-      });
-    } else {
-      await expect(contador).toBeHidden();
-    }
+    await expect(contador).toBeHidden();
 
-    const texto = `hola desde la campana ${Date.now()}`;
     const envio = await api.post(
       `/api/v1/mensajes-directos/conversaciones/${bruno.claims.uid}/mensajes`,
       {
-        headers: conToken(ana.token, { "Content-Type": "application/json" }),
-        data: { texto },
+        headers: conToken(ana.token, { 'Content-Type': 'application/json' }),
+        data: { texto: `hola desde la campana ${Date.now()}` },
       },
     );
     expect(envio.status(), await envio.text()).toBe(201);
@@ -181,27 +157,18 @@ test.describe("número de la campana", () => {
 
     await expect(
       contador,
-      "el aviso del mensaje llega por el canal y la cabecera lo cuenta sin abrir la bandeja",
-    ).toHaveText(String(Math.min(antes + 1, 99)), { timeout: 20_000 });
+      'el aviso del mensaje llega por el canal y la cabecera lo cuenta sin abrir la bandeja',
+    ).toHaveText('1', { timeout: 20_000 });
     await expect(contador).toBeVisible();
-    await expect(campana).toHaveAttribute("aria-label", /sin leer/);
-    await expect(page).toHaveURL(new RegExp(JUGAR.replaceAll(".", "\\.")));
+    await expect(campana).toHaveAttribute('aria-label', 'Notificaciones: 1 notificación sin leer');
+    await expect(page, 'nadie abrió la bandeja').not.toHaveURL(/notificaciones/);
 
     // Leído «desde otro sitio» (la API, como otra pestaña): el contador baja solo.
-    const avisoId = `mensaje-directo-${mensaje.id}`;
     const leido = await api.post(
-      `${bandeja}/${encodeURIComponent(avisoId)}/read`,
-      {
-        headers: conToken(bruno.token),
-      },
+      `${bandeja}/${encodeURIComponent(`mensaje-directo-${mensaje.id}`)}/read`,
+      deBruno,
     );
     expect(leido.status(), await leido.text()).toBe(200);
-    if (antes > 0) {
-      await expect(contador).toHaveText(String(Math.min(antes, 99)), {
-        timeout: 20_000,
-      });
-    } else {
-      await expect(contador).toBeHidden({ timeout: 20_000 });
-    }
+    await expect(contador).toBeHidden({ timeout: 20_000 });
   });
 });
