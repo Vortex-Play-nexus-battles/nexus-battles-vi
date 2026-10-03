@@ -42,6 +42,15 @@ import org.springframework.stereotype.Component;
  *   <li>Precios: creditos y pesos (COP) de {@code preciosDemostracion},
  *       decision del PO para la demo; si falta el precio en pesos de un tipo,
  *       queda vacio (el alta lo admite con premium false).</li>
+ *   <li>EPICA: sin precio de venta, 0 creditos y 0 pesos, pase lo que pase en
+ *       {@code preciosDemostracion}. Las epicas solo se obtienen derrotando al
+ *       Master que la tiene (RG-085, RF-MOT-36), asi que no se compran. Sigue
+ *       siendo un producto ACTIVO: las misiones la entregan por su id, y la
+ *       tienda no la ofrece porque solo muestra productos con
+ *       {@code precioMonedaReal} mayor que cero. Esta en el codigo y no en el
+ *       JSON a proposito: es una regla del juego, no una decision de precios,
+ *       y un precio puesto por descuido en el JSON no debe volver a ponerla a
+ *       la venta.</li>
  * </ul>
  */
 @Component
@@ -52,6 +61,9 @@ public class MapeadorDelCatalogo {
 
     /** epicas.md, "Reglas de uso": las habilidades especiales tienen dos turnos de recarga. */
     static final int TURNOS_RECARGA_EPICA = 2;
+
+    /** RG-085: la epica no se vende. El alta pide un precio en creditos (premium false); 0 lo admite. */
+    static final int PRECIO_EN_CREDITOS_DE_LA_EPICA = 0;
 
     private static final String ESPACIO_DE_NOMBRES = "nexus-battles-vi/catalogo-inicial/";
 
@@ -82,13 +94,18 @@ public class MapeadorDelCatalogo {
      */
     public SolicitudCrearProducto aSolicitud(EntradaCatalogo entrada, CatalogoInicial catalogo) {
         TipoProducto tipo = tipoDe(entrada);
-        Integer precio = catalogo.preciosDemostracion().creditos().get(tipo.name());
         // RF-ADM-03: precio en creditos y en moneda real. Con premium false el
         // alta solo exige creditos; el precio en pesos va tambien porque la
         // tienda solo muestra productos con precioMonedaReal mayor que cero.
-        BigDecimal pesos = catalogo.preciosDemostracion().cop() == null
-                ? null
-                : catalogo.preciosDemostracion().cop().get(tipo.name());
+        // RG-085: la epica no se vende, asi que no tiene precio (0 y 0).
+        Integer precio = tipo == TipoProducto.EPICA
+                ? PRECIO_EN_CREDITOS_DE_LA_EPICA
+                : catalogo.preciosDemostracion().creditos().get(tipo.name());
+        BigDecimal pesos = tipo == TipoProducto.EPICA
+                ? BigDecimal.ZERO
+                : catalogo.preciosDemostracion().cop() == null
+                        ? null
+                        : catalogo.preciosDemostracion().cop().get(tipo.name());
         int tiraje = catalogo.preciosDemostracion().tiraje();
         boolean premium = catalogo.preciosDemostracion().premium();
 
