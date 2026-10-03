@@ -108,7 +108,7 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
     expect(r.status(), await r.text()).toBe(400);
     const problema = await r.json();
     expect(problema.errores[0].campo).toBe('heroesIA');
-    expect(problema.errores[0].mensaje).toContain('como maximo 3');
+    expect(problema.errores[0].mensaje).toContain('como máximo 3');
   });
 
   test('contra la IA con siete cupos: el limite es dos, y se dice', async () => {
@@ -238,7 +238,7 @@ test.describe('Modalidades de partida (HU-SAL-004)', () => {
       headers: conToken(invitado.token),
     });
     expect(intruso.status(), await intruso.text()).toBe(409);
-    expect((await intruso.json()).detail).toMatch(/maximo de participantes/i);
+    expect((await intruso.json()).detail).toMatch(/máximo de participantes/i);
 
     // Y se juega hasta el final: la anfitriona golpea desde la vista y la
     // maquina responde sola, turno tras turno, hasta que alguien cae.
