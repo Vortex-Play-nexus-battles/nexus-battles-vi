@@ -59,6 +59,16 @@ requisito.
 solapados). Bloqueado → 422 y no se guarda nada. Si la lista negra no responde → 503
 (fail-closed, D-14); `CHATBOT_MODERACION_SI_NO_RESPONDE=PERMITIR` lo cambia.
 
+**Redacción de datos sensibles** (7.4.8, «no almacenamiento de información sensible»):
+`chat.privacidad.RedaccionDeDatosSensibles`, con `String redactar(String texto)`. Tiene una sola
+implementación, `RedactorDeDatosSensibles`: un `@Component` sin configuración ni dependencias.
+Tapa contraseñas y claves anunciadas («contraseña: …», «mi password is …», «pin …», «token=…»),
+tarjetas de 13 a 19 cifras que cumplen Luhn con el CVV que las acompaña, tokens (Bearer, JWT,
+claves de AWS, GitHub, Stripe y Slack) y claves privadas PEM. El resto del texto no cambia, así
+que la lista negra sigue viendo un insulto. El resultado nunca es más largo que la entrada.
+Orden: redactar → lista negra → guardar solo lo redactado. `RedactorDeDatosSensiblesTest`
+impide una segunda implementación u otra interfaz con ese nombre.
+
 **Sin HTTP dentro de una transacción:** la respuesta (consultas en vivo) se genera sin
 transacción abierta y pregunta + respuesta se guardan juntas en una corta
 (`RegistroDeConversaciones`). **Tiempos de espera** en todo `RestClient`
@@ -109,6 +119,9 @@ plataforma (≈128 MiB, pero la JVM sigue sin caber) o desplegarlo a demanda en 
 - **Tickets de soporte** (7.4.3): una pregunta no entendida se escala y se registra como
   brecha de conocimiento, pero no se genera un ticket ni hay soporte humano detrás.
 - **Caché de respuestas frecuentes** (7.4.9) y cifrado en reposo (7.4.8): no implementados.
+- **Redacción en el chat** (7.4.8): el componente existe, pero `ChatService` todavía guarda
+  mensajes, brechas y calificaciones sin redactar. Se conecta cuando entre #779, que reescribe
+  esa clase. Los tickets de soporte de #779 ya redactan antes de la lista negra.
 
 ## Frontend
 
