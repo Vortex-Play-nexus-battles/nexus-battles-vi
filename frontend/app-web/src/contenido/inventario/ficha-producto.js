@@ -21,6 +21,7 @@ import { icono } from '../../comun/ui/icono.js';
 import { ICONO_DEL_TIPO } from './vitrina.js';
 import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
 import { NOMBRE_DEL_TIPO } from '../../comun/ui/formato.js';
+import { bloquearDesplazamiento, esElModalDeArriba } from '../../comun/ui/dialogo.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -256,13 +257,16 @@ export async function abrirFicha(
   capa.appendChild(construirCarga('Cargando el producto...'));
   document.body.appendChild(capa);
 
+  // Auditoría de DEV del 30-sep: con una confirmación abierta desde la ficha
+  // («Eliminar tu comentario»), Escape cerraba las dos. Ahora solo actúa la
+  // ficha si es el modal de más arriba; si no, la tecla es de la confirmación.
   const alPulsarTecla = (evento) => {
-    if (evento.key === 'Escape') {
+    if (evento.key === 'Escape' && esElModalDeArriba(capa)) {
       cerrarFicha();
     }
   };
   document.addEventListener('keydown', alPulsarTecla);
-  abierta = { capa, devolverFocoA, alPulsarTecla };
+  abierta = { capa, devolverFocoA, alPulsarTecla, soltarDesplazamiento: bloquearDesplazamiento() };
 
   // El foco entra en la ficha para que el teclado no se quede en la vista
   // de atras (RNF-ACC-002).
@@ -350,10 +354,11 @@ export function cerrarFicha() {
   if (abierta === null) {
     return;
   }
-  const { capa, devolverFocoA, alPulsarTecla } = abierta;
+  const { capa, devolverFocoA, alPulsarTecla, soltarDesplazamiento } = abierta;
   abierta = null;
   document.removeEventListener('keydown', alPulsarTecla);
   capa.remove();
+  soltarDesplazamiento?.();
   if (devolverFocoA && typeof devolverFocoA.focus === 'function') {
     devolverFocoA.focus();
   }

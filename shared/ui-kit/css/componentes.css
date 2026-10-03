@@ -981,9 +981,18 @@
 .velo {
   position: fixed;
   inset: 0;
+  /* Misma capa que la ficha de producto (tokens.css, --capa-modal): el orden
+     del DOM decide quién queda encima. */
+  z-index: var(--capa-modal);
   background: var(--interaccion-velo-modal);
   display: grid;
   place-items: center;
+}
+
+/* Con un modal abierto, la página de atrás no se desplaza (comun/ui/dialogo.js,
+   bloquearDesplazamiento). */
+html.con-modal {
+  overflow: hidden;
 }
 
 /* La Pantalla 4 atenúa el contenido pero deja la cabecera legible y usable:

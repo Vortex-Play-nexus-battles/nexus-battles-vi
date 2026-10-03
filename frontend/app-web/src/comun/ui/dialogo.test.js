@@ -1,6 +1,13 @@
 /** Dialogo modal accesible (PR-UX-1). */
 
-import { abrirDialogo, confirmar, confirmarCritico, pedirTexto } from './dialogo.js';
+import {
+  abrirDialogo,
+  bloquearDesplazamiento,
+  confirmar,
+  confirmarCritico,
+  esElModalDeArriba,
+  pedirTexto,
+} from './dialogo.js';
 import { boton } from './boton.js';
 
 beforeEach(() => {
@@ -179,5 +186,57 @@ describe('pedirTexto (UXC-7, en lugar de window.prompt)', () => {
     const promesa = pedirTexto({ titulo: 'Editar', etiqueta: 'Término' });
     document.querySelector('[data-accion="cancelar"]').click();
     await expect(promesa).resolves.toBeNull();
+  });
+});
+
+describe('varios modales a la vez (auditoría de DEV del 30-sep)', () => {
+  /** Una capa como la de la ficha de producto, que abre una confirmación encima. */
+  function fichaAbierta() {
+    const capa = document.createElement('div');
+    capa.className = 'ficha-capa';
+    document.body.append(capa);
+    return capa;
+  }
+
+  test('la confirmación abierta desde una ficha queda encima: es el modal de más arriba', () => {
+    const capa = fichaAbierta();
+    expect(esElModalDeArriba(capa)).toBe(true);
+
+    confirmar({ titulo: 'Eliminar tu comentario', mensaje: 'No se puede deshacer.' });
+    const velo = document.querySelector('.velo');
+
+    expect(esElModalDeArriba(velo)).toBe(true);
+    expect(esElModalDeArriba(capa)).toBe(false);
+    // Comparten capa (--capa-modal): manda el orden del DOM, y el velo va después.
+    expect(capa.compareDocumentPosition(velo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('Escape cierra solo el de arriba; con otro diálogo encima, el de abajo no se entera', () => {
+    abrirDialogo({ titulo: 'Abajo', cuerpo: 'x' });
+    abrirDialogo({ titulo: 'Arriba', cuerpo: 'y' });
+    expect(document.querySelectorAll('.velo')).toHaveLength(2);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelectorAll('.velo')).toHaveLength(1);
+    expect(document.querySelector('.dialogo__titulo').textContent).toBe('Abajo');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelectorAll('.velo')).toHaveLength(0);
+  });
+
+  test('la página no se desplaza mientras haya un modal, y se suelta al cerrar el último', () => {
+    const capa = fichaAbierta();
+    const soltarFicha = bloquearDesplazamiento();
+    const { cerrar } = abrirDialogo({ titulo: 'x', cuerpo: 'y' });
+    expect(document.documentElement.classList.contains('con-modal')).toBe(true);
+
+    cerrar();
+    // La ficha sigue abierta: la página sigue quieta.
+    expect(document.documentElement.classList.contains('con-modal')).toBe(true);
+
+    capa.remove();
+    soltarFicha();
+    soltarFicha(); // soltar dos veces no hace nada más
+    expect(document.documentElement.classList.contains('con-modal')).toBe(false);
   });
 });
