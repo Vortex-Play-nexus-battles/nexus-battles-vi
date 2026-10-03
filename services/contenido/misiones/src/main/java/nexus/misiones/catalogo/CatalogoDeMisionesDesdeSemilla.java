@@ -2,15 +2,18 @@ package nexus.misiones.catalogo;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.EpicaDeTabla20;
+import nexus.misiones.dominio.MasterDeMision;
 import nexus.misiones.dominio.Mision;
 import nexus.misiones.dominio.Origen;
 import tools.jackson.core.JacksonException;
@@ -120,12 +123,59 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
             }
         }
         Set<String> tipos = new HashSet<>();
+        Set<String> epicasDeLaTabla = new HashSet<>();
         for (EpicaDeTabla20 fila : documento.tabla20()) {
             if (!tipos.add(fila.prototipo())) {
                 throw new IllegalStateException("La Tabla 20 repite el tipo «" + fila.prototipo() + "».");
             }
+            if (!epicasDeLaTabla.add(clave(fila.epica().nombre()))) {
+                throw new IllegalStateException("La Tabla 20 repite la épica «" + fila.epica().nombre()
+                        + "»: cada tipo de héroe tiene la suya.");
+            }
         }
+        exigirEpicasExclusivas(todas);
         return new CatalogoDeMisionesDesdeSemilla(todas, documento.tabla20());
+    }
+
+    /**
+     * «Posesión de una habilidad épica exclusiva» (7.8.4, HU-SIM-006): cada Master de una misión suelta una épica que
+     * ningún otro Master suelta, sea por su nombre o por el producto del catálogo que entrega. El mismo Master
+     * repetido en dos misiones con su misma épica es el mismo Master. Los Master afines de la Tabla 20 (uno por tipo
+     * de héroe) quedan fuera: un Master de misión puede soltar la épica de una fila de la tabla (decisión del PO de
+     * HU-MIS-012), y es la fila quien la comparte, no otro Master de misión.
+     */
+    private static void exigirEpicasExclusivas(List<Mision> misiones) {
+        Map<String, MasterDeMision> dueno = new LinkedHashMap<>();
+        for (Mision mision : misiones) {
+            for (MasterDeMision master : mision.masters()) {
+                List<String> claves = new ArrayList<>(List.of("épica " + clave(master.epica().nombre())));
+                if (master.epica().entregable()) {
+                    claves.add("producto " + master.epica().productoId().trim());
+                }
+                for (String clave : claves) {
+                    MasterDeMision previo = dueno.putIfAbsent(clave, master);
+                    if (previo != null && !mismoMaster(previo, master)) {
+                        String repetido = clave.startsWith("producto ")
+                                ? "El producto " + master.epica().productoId() + " del catálogo, la épica «"
+                                        + master.epica().nombre() + "»,"
+                                : "La épica «" + master.epica().nombre() + "»";
+                        throw new IllegalStateException(repetido + " la sueltan dos Máster distintos, «"
+                                + previo.nombre() + "» y «" + master.nombre() + "» (misión «" + mision.id()
+                                + "»): cada Máster tiene su propia épica exclusiva (7.8.4).");
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean mismoMaster(MasterDeMision a, MasterDeMision b) {
+        return clave(a.nombre()).equals(clave(b.nombre()));
+    }
+
+    /** El nombre sin tildes, mayúsculas ni espacios de más: «Velo de Sombras» y «velo  de sombras» son la misma. */
+    private static String clave(String nombre) {
+        return Normalizer.normalize(nombre, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT)
+                .trim().replaceAll("\\s+", " ");
     }
 
     /** Lee una semilla del classpath, sin tolerar campos desconocidos. */
