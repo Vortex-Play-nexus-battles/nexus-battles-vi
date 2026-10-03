@@ -1,7 +1,7 @@
 package nexus.misiones.aplicacion;
 
 import java.time.Clock;
-import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.RepositorioDeEjecuciones;
@@ -16,7 +16,12 @@ import org.slf4j.LoggerFactory;
  *
  * <p>Un fallo en una ejecucion no para a las demas: se anota y se sigue. Lo
  * que no se pudo hacer queda en la base y lo retoma la vuelta siguiente, asi
- * que un reinicio del servicio no pierde nada.
+ * que un reinicio del servicio no pierde nada. Tampoco un fallo de la consulta
+ * de una fase (Mongo que no contesta) le quita su vuelta a la otra.
+ *
+ * <p>Pueden correr varias instancias y varias vueltas a la vez: cada
+ * simulacion se reserva antes de empezar ({@link SimularEjecucion}) y cada paso
+ * de entrega es idempotente de quien lo recibe ({@link LiquidarEjecucion}).
  */
 public class TrabajoDeMisiones {
 
@@ -38,22 +43,56 @@ public class TrabajoDeMisiones {
     }
 
     public void ejecutar() {
-        Instant ahora = reloj.instant();
-        for (Ejecucion vencida : ejecuciones.vencidas(ahora, parametros.loteDelTrabajo())) {
+        int simuladas = simularLasVencidas();
+        int liquidadas = liquidarLasPendientes();
+        if (simuladas + liquidadas > 0) {
+            BITACORA.info("Vuelta del trabajo: {} ejecuciones simuladas, {} liquidadas", simuladas, liquidadas);
+        }
+    }
+
+    private int simularLasVencidas() {
+        List<Ejecucion> vencidas;
+        try {
+            vencidas = ejecuciones.vencidas(reloj.instant(), parametros.loteDelTrabajo());
+        } catch (RuntimeException sinConsulta) {
+            BITACORA.warn("No se pudieron consultar las ejecuciones vencidas; se sigue con las entregas y se"
+                    + " reintenta en la siguiente vuelta: {}", sinConsulta.getMessage());
+            return 0;
+        }
+        int simuladas = 0;
+        for (Ejecucion vencida : vencidas) {
             try {
-                simular.simular(vencida);
+                if (simular.simular(vencida).isPresent()) {
+                    simuladas++;
+                }
             } catch (RuntimeException fallo) {
-                BITACORA.warn("No se pudo simular la ejecucion {}; se reintenta en la siguiente vuelta: {}",
+                BITACORA.warn("La ejecucion {} no se pudo simular en esta vuelta; sigue con las demas: {}",
                         vencida.id(), fallo.getMessage());
             }
         }
-        for (Ejecucion pendiente : ejecuciones.conLiquidacionPendiente(reloj.instant(), parametros.loteDelTrabajo())) {
+        return simuladas;
+    }
+
+    private int liquidarLasPendientes() {
+        List<Ejecucion> pendientes;
+        try {
+            pendientes = ejecuciones.conLiquidacionPendiente(reloj.instant(), parametros.loteDelTrabajo());
+        } catch (RuntimeException sinConsulta) {
+            BITACORA.warn("No se pudieron consultar las entregas pendientes; se reintenta en la siguiente vuelta: {}",
+                    sinConsulta.getMessage());
+            return 0;
+        }
+        int liquidadas = 0;
+        for (Ejecucion pendiente : pendientes) {
             try {
-                liquidar.liquidar(pendiente);
+                if (!liquidar.liquidar(pendiente).liquidacionPendiente()) {
+                    liquidadas++;
+                }
             } catch (RuntimeException fallo) {
                 BITACORA.warn("No se pudo liquidar la ejecucion {}; se reintenta en la siguiente vuelta: {}",
                         pendiente.id(), fallo.getMessage());
             }
         }
+        return liquidadas;
     }
 }

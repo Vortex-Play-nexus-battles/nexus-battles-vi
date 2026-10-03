@@ -150,4 +150,85 @@ class EjecucionTest {
         assertThat(ejecucion.nivelAlcanzado()).isEqualTo(2);
         assertThat(ejecucion.experienciaAcumulada()).isEqualTo(20.5);
     }
+
+    // ----------------------------------------------- reserva de la simulacion (HU-SIM-007)
+
+    private static final Instant VENCE = INICIO.plus(Duration.ofHours(12));
+
+    @Test
+    @DisplayName("solo se puede reservar para simular una ejecucion en progreso, vencida y sin reserva vigente")
+    void reclamable() {
+        Ejecucion ejecucion = enCurso();
+
+        assertThat(ejecucion.reclamable(VENCE.minusSeconds(1))).as("antes del plazo").isFalse();
+        assertThat(ejecucion.reclamable(VENCE)).as("vencida y libre").isTrue();
+
+        ejecucion.reservarParaSimular(VENCE);
+        assertThat(ejecucion.reclamable(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION).minusSeconds(1)))
+                .as("reservada por otra vuelta").isFalse();
+        assertThat(ejecucion.reclamable(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION)))
+                .as("el arriendo vencio").isTrue();
+
+        ejecucion.cancelar(VENCE);
+        assertThat(ejecucion.reclamable(VENCE.plus(Duration.ofDays(1)))).as("ya no esta en progreso").isFalse();
+    }
+
+    @Test
+    @DisplayName("reservar cuenta el intento y fija hasta cuando es de quien la tomo")
+    void reservar() {
+        Ejecucion ejecucion = enCurso();
+        assertThat(ejecucion.intentosDeSimulacion()).isZero();
+        assertThat(ejecucion.simulacionReservadaHasta()).isNull();
+
+        ejecucion.reservarParaSimular(VENCE);
+
+        assertThat(ejecucion.intentosDeSimulacion()).isEqualTo(1);
+        assertThat(ejecucion.simulacionReservadaHasta()).isEqualTo(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION));
+        assertThat(Ejecucion.ARRIENDO_DE_SIMULACION).isEqualTo(Duration.ofMinutes(5));
+        assertThat(ejecucion.reservaVigente(VENCE.plusSeconds(10))).isTrue();
+    }
+
+    @Test
+    @DisplayName("tras un fallo de la simulacion la espera crece al doble con cada intento, con tope, y queda el error")
+    void simulacionFallida() {
+        Ejecucion ejecucion = enCurso();
+        Duration base = Duration.ofSeconds(30);
+
+        ejecucion.reservarParaSimular(VENCE);
+        ejecucion.simulacionFallida(VENCE, base, "heroes no responde");
+        assertThat(ejecucion.simulacionReservadaHasta()).isEqualTo(VENCE.plusSeconds(30));
+        assertThat(ejecucion.ultimoErrorDeSimulacion()).isEqualTo("heroes no responde");
+
+        ejecucion.reservarParaSimular(VENCE.plusSeconds(30));
+        ejecucion.simulacionFallida(VENCE.plusSeconds(30), base, "heroes no responde");
+        assertThat(ejecucion.simulacionReservadaHasta()).isEqualTo(VENCE.plusSeconds(30).plusSeconds(60));
+
+        for (int i = 0; i < 25; i++) {
+            ejecucion.reservarParaSimular(VENCE);
+            ejecucion.simulacionFallida(VENCE, base, "heroes no responde");
+        }
+        assertThat(ejecucion.simulacionReservadaHasta()).isEqualTo(VENCE.plus(Ejecucion.ESPERA_MAXIMA_ENTRE_INTENTOS));
+        assertThat(ejecucion.estado()).as("un fallo no cambia el estado de la mision")
+                .isEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    @Test
+    @DisplayName("al terminar o cancelar se suelta la reserva y se olvida el error, pero se conserva la cuenta de intentos")
+    void terminarSueltaLaReserva() {
+        Ejecucion terminada = enCurso();
+        terminada.reservarParaSimular(VENCE);
+        terminada.simulacionFallida(VENCE, Duration.ofSeconds(30), "motor no responde");
+        terminada.reservarParaSimular(VENCE.plusSeconds(30));
+
+        terminada.terminar(exito(), recompensas(0, false), false, VENCE.plusSeconds(31));
+
+        assertThat(terminada.simulacionReservadaHasta()).isNull();
+        assertThat(terminada.ultimoErrorDeSimulacion()).isNull();
+        assertThat(terminada.intentosDeSimulacion()).isEqualTo(2);
+
+        Ejecucion cancelada = enCurso();
+        cancelada.reservarParaSimular(VENCE);
+        cancelada.cancelar(VENCE.plusSeconds(5));
+        assertThat(cancelada.simulacionReservadaHasta()).isNull();
+    }
 }
