@@ -7,8 +7,15 @@
     "PROVISIONAL: «Explorar las 5 camaras del templo» se cumple al superar todos los encuentros regulares (el documento no reparte los 18 enemigos entre las 5 camaras).",
     "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
     "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
-    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md)."
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
+    "PROVISIONAL (decision del PO, 2026-10-01): el documento solo dice que la probabilidad de aparicion del Master esta «configurada segun dificultad» (7.8). Mientras no haya cifras del cliente: Facil 10 %, Normal 15 % (la del ejemplo de 7.8.14), Dificil 20 % y Extremo 25 %. Esta tabla no es contenido de una mision sino configuracion de todas: el servicio no publica una mision cuyo Master no aparezca con la probabilidad de su dificultad."
   ],
+  "probabilidadDeMasterPorDificultad": {
+    "FACIL": 0.10,
+    "NORMAL": 0.15,
+    "DIFICIL": 0.20,
+    "EXTREMO": 0.25
+  },
   "tabla20": [
     {
       "prototipo": "Guerrero Tanque",

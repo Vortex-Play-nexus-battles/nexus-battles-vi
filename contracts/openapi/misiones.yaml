@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de misiones
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
     RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
@@ -522,9 +522,11 @@ components:
       type: string
       description: >
         DOCUMENTO: la misión es del documento del curso (§7.8.14).
+        EQUIPO: la misión la diseña el equipo (§7.8.4, RF-MIS-56): trae
+        enemigos regulares, jefe final y al menos un Máster con su épica.
         PROVISIONAL_DEV: semilla de desarrollo para demostrar el flujo, solo
         con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
-      enum: [DOCUMENTO, PROVISIONAL_DEV]
+      enum: [DOCUMENTO, EQUIPO, PROVISIONAL_DEV]
     PaginaDeMisiones:
       type: object
       required: [misiones, total, pagina, totalPaginas, tamanio]
