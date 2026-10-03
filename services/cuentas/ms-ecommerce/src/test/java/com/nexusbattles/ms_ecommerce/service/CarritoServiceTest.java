@@ -9,6 +9,7 @@ import com.nexusbattles.ms_ecommerce.dto.AgregarItemRequest;
 import com.nexusbattles.ms_ecommerce.dto.CarritoDto;
 import com.nexusbattles.ms_ecommerce.dto.ItemCarritoDto;
 import com.nexusbattles.ms_ecommerce.dto.MotivoDeLinea;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
 import com.nexusbattles.ms_ecommerce.model.Carrito;
 import com.nexusbattles.ms_ecommerce.model.ItemCarrito;
 import com.nexusbattles.ms_ecommerce.precios.Moneda;
@@ -85,6 +86,9 @@ class CarritoServiceTest {
     @Mock
     private PlatformTransactionManager transacciones;
 
+    @Mock
+    private ProductosPropios propios;
+
     private RelojAjustable reloj;
     private CarritoService carritoService;
 
@@ -92,7 +96,8 @@ class CarritoServiceTest {
     void preparar() {
         reloj = new RelojAjustable(Instant.parse("2026-09-25T12:00:00Z"));
         carritoService = new CarritoService(carritoRepository, catalogo, copia, tasas, new CotizadorDelCarrito(), reloj,
-                transacciones);
+                transacciones, propios);
+        when(propios.alDia(any())).thenReturn(Set.of());
         when(tasas.tarifa(Moneda.COP)).thenReturn(Tarifa.enPesos());
         when(copia.siDisponible()).thenReturn(Optional.of(Map.of()));
     }
@@ -187,6 +192,29 @@ class CarritoServiceTest {
                     .isInstanceOfSatisfying(ProductoNoAgregableException.class,
                             e -> assertThat(e.motivo()).isEqualTo(Motivo.NO_DISPONIBLE));
             verifyNoInteractions(carritoRepository);
+        }
+
+        @Test
+        @DisplayName("auditoria 30-sep · RF-CAR-004: lo que el jugador ya tiene no entra, y el carrito ni se toca")
+        void yaAdquirido() {
+            when(catalogo.producto(ESPADA)).thenReturn(Optional.of(enVenta(ESPADA, "ARMA", "10000")));
+            when(propios.alDia(USUARIO)).thenReturn(Set.of(ESPADA));
+
+            assertThatThrownBy(() -> carritoService.agregarProducto(USUARIO, pedir(ESPADA, 1)))
+                    .isInstanceOfSatisfying(ProductoNoAgregableException.class,
+                            e -> assertThat(e.motivo()).isEqualTo(Motivo.YA_ADQUIRIDO));
+            verifyNoInteractions(carritoRepository, transacciones);
+        }
+
+        @Test
+        @DisplayName("si el inventario no sabe decir que tiene (vacio), el producto entra: como la vitrina")
+        void inventarioSinRespuesta() {
+            carritoExistente();
+            guardarDevuelveLoMismo();
+            when(catalogo.producto(ESPADA)).thenReturn(Optional.of(enVenta(ESPADA, "ARMA", "10000")));
+            when(propios.alDia(USUARIO)).thenReturn(Set.of());
+
+            assertThat(carritoService.agregarProducto(USUARIO, pedir(ESPADA, 1)).items()).hasSize(1);
         }
 
         @Test

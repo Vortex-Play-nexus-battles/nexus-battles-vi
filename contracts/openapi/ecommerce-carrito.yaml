@@ -14,7 +14,10 @@ info:
   # campos opcionales (moneda, filtros, marcas, disponibilidad por linea) y los
   # errores nuevos se declaran por `type`. Nada desaparece ni se vuelve
   # obligatorio en una peticion: sube la menor.
-  version: 1.4.0
+  # 1.5.0 (auditoria de DEV del 30-sep): POST /carrito/items rechaza con 409
+  # `producto-ya-adquirido` lo que el jugador ya tiene (RF-CAR-004, excepcion
+  # «producto ya adquirido por el cliente»). Un error mas declarado: aditivo.
+  version: 1.5.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -248,6 +251,13 @@ paths:
 
         1.4.0: la linea no pasa de 20 unidades ni de las que le quedan al
         producto; la respuesta lleva los precios en la `moneda` pedida.
+
+        1.5.0 (RF-CAR-004, excepcion «producto ya adquirido por el cliente»):
+        lo que el inventario dice que el jugador ya tiene no entra al carrito
+        (409 `urn:nexus:problema:producto-ya-adquirido`). Es la misma fuente
+        que la marca `esPropio` de la vitrina; si el inventario no responde no
+        se puede saber, y el producto entra (como la vitrina, que sale sin la
+        marca): una caida del inventario no deja la tienda sin vender.
       parameters:
         - $ref: "#/components/parameters/Moneda"
       requestBody:
@@ -298,7 +308,8 @@ paths:
             `urn:nexus:problema:tiraje-insuficiente` (1.4.0: la linea pasaria
             de las unidades que quedan; `disponibles` las dice) o
             `urn:nexus:problema:cantidad-maxima-por-linea` (1.4.0: la linea
-            pasaria de 20). El carrito no cambia.
+            pasaria de 20) o `urn:nexus:problema:producto-ya-adquirido` (1.5.0:
+            el jugador ya lo tiene en su inventario). El carrito no cambia.
           content:
             application/problem+json:
               schema:

@@ -87,6 +87,8 @@ public class ManejadorDeErrores {
             case SIN_PRECIO_EN_MONEDA_REAL -> problema(HttpStatus.UNPROCESSABLE_CONTENT,
                     "producto-sin-precio-en-moneda-real", "Producto sin precio en moneda real", detalle, peticion,
                     HttpHeaders.EMPTY);
+            case YA_ADQUIRIDO -> problema(HttpStatus.CONFLICT, "producto-ya-adquirido",
+                    "Producto ya adquirido", detalle, peticion, HttpHeaders.EMPTY);
         };
     }
 

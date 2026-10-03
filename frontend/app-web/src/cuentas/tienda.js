@@ -93,6 +93,7 @@ import {
 } from './tienda-catalogo.js';
 import {
   MODOS,
+  apagarAnadirPorPropio,
   bloqueDeCompra,
   distintivoDePropiedad,
   tarjetaDeProducto,
@@ -145,8 +146,9 @@ const MOTIVOS_DE_CANTIDAD = Object.freeze({
  *
  * La clave es el `type` del problem detail: la interfaz decide por él y nunca
  * por el texto del servidor, que puede cambiar de redacción sin aviso
- * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco son los que declara
- * `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0.
+ * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco primeros son los que
+ * declara `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0; el sexto,
+ * lo ya adquirido, llegó en la 1.5.0.
  */
 const MOTIVOS_DEL_CARRITO = Object.freeze({
   'urn:nexus:problema:producto-inexistente': {
@@ -168,6 +170,11 @@ const MOTIVOS_DEL_CARRITO = Object.freeze({
   [TIPO_CATALOGO_NO_DISPONIBLE]: {
     titulo: 'La tienda no puede consultar el catálogo ahora mismo',
     detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+  },
+  // ecommerce-carrito 1.5.0 — RF-CAR-004: lo ya adquirido no entra a la cesta.
+  'urn:nexus:problema:producto-ya-adquirido': {
+    titulo: 'Ya tienes este producto',
+    detalle: 'Está en tu inventario: la tienda no lo vende dos veces.',
   },
 });
 
@@ -589,6 +596,10 @@ function marcarPropias(doc) {
       continue;
     }
     tarjeta.dataset.propio = 'si';
+    const anadir = tarjeta.querySelector('.btn-add');
+    if (anadir) {
+      apagarAnadirPorPropio(anadir);
+    }
     let zona = tarjeta.querySelector('.product-card__distintivos');
     if (!zona) {
       zona = h('div', { clase: 'product-card__distintivos' });

@@ -649,6 +649,8 @@ describe('R16 - un «Añadir» rechazado se le dice al jugador', () => {
     [409, 'urn:nexus:problema:producto-no-disponible', /no está a la venta/i],
     [422, 'urn:nexus:problema:producto-inexistente', /ya no está en el catálogo/i],
     [422, 'urn:nexus:problema:producto-sin-precio-en-moneda-real', /no se vende con dinero real/i],
+    // ecommerce-carrito 1.5.0 — RF-CAR-004, auditoría del 30-sep.
+    [409, 'urn:nexus:problema:producto-ya-adquirido', /ya tienes este producto/i],
   ])(
     '%i %s: aviso de advertencia que lleva a actualizar la tienda',
     async (estado, tipo, texto) => {
@@ -1201,6 +1203,10 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(tarjeta.dataset.propio).toBe('si');
     expect(tarjeta.querySelector('.producto-propio').textContent).toBe('Tienes 2');
     expect(document.querySelector('[data-id-producto="p-1"] .producto-propio')).toBeNull();
+    // RF-CAR-004 (auditoría del 30-sep): lo que ya tienes no se ofrece para añadir.
+    expect(tarjeta.querySelector('.btn-add').disabled).toBe(true);
+    expect(tarjeta.querySelector('.btn-add').dataset.producto).toBeUndefined();
+    expect(document.querySelector('[data-id-producto="p-1"] .btn-add').disabled).toBe(false);
     // El inventario viaja con la identidad en su cabecera, no en la ruta.
     const [, opciones] = globalThis.fetch.mock.calls.find(([url]) =>
       String(url).includes('/inventario/elementos'),

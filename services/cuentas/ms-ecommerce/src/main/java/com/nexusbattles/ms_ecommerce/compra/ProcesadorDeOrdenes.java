@@ -7,6 +7,7 @@ import com.nexusbattles.ms_ecommerce.integracion.correo.ClienteDeCorreo;
 import com.nexusbattles.ms_ecommerce.integracion.finanzas.ClienteDeFinanzas;
 import com.nexusbattles.ms_ecommerce.integracion.identidad.ClienteDeIdentidad;
 import com.nexusbattles.ms_ecommerce.integracion.inventario.ClienteDeInventario;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
 import com.nexusbattles.ms_ecommerce.compra.pago.PasarelaSimulada;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,11 +79,16 @@ public class ProcesadorDeOrdenes {
     private final PropiedadesDeLaTienda propiedades;
     private final Clock reloj;
     private final TransactionTemplate transaccion;
+    private final ProductosPropios propios;
 
+    /**
+     * @param propios la copia de lo que tiene cada jugador (marca «propio» de
+     *     la vitrina y RF-CAR-004): una compra entregada la olvida
+     */
     public ProcesadorDeOrdenes(OrdenRepository ordenes, ReservasDeTiraje reservas, ClienteDeInventario inventario,
                                ClienteDeFinanzas finanzas, ClienteDeIdentidad identidad, ClienteDeCorreo correo,
                                PasarelaSimulada pasarela, PropiedadesDeLaTienda propiedades, Clock reloj,
-                               PlatformTransactionManager gestorDeTransacciones) {
+                               PlatformTransactionManager gestorDeTransacciones, ProductosPropios propios) {
         this.ordenes = ordenes;
         this.reservas = reservas;
         this.inventario = inventario;
@@ -93,6 +99,7 @@ public class ProcesadorDeOrdenes {
         this.propiedades = propiedades;
         this.reloj = reloj;
         this.transaccion = new TransactionTemplate(gestorDeTransacciones);
+        this.propios = Objects.requireNonNull(propios);
     }
 
     /**
@@ -150,6 +157,9 @@ public class ProcesadorDeOrdenes {
             o.setEstado(EstadoOrden.ENTREGADA);
             o.setEntregadaEn(reloj.instant());
         });
+        // Lo comprado ya es suyo: la vitrina no puede seguir 30 s sin marcarlo
+        // ni ofreciendo «Añadir» de lo que acaba de pagar (RF-CAR-004).
+        propios.olvidar(orden.getUsuarioId());
         log.info("Orden {}: entregada al inventario", orden.getId());
         return true;
     }
