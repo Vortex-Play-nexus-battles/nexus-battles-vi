@@ -281,7 +281,10 @@ class CompraDeExtremoAExtremoIT {
         long cobros = pasarela.cobrosAprobados();
         int reservas = SERVICIOS.llamadasDeReserva.get();
 
-        alCarrito(ESPADA, 1); // el carrito vuelve a tener algo: la clave sigue siendo la misma compra
+        // El carrito vuelve a tener algo: la clave sigue siendo la misma compra.
+        // Otro producto: la espada ya es suya y no se puede volver a añadir
+        // (RF-CAR-004, contrato 1.5.0).
+        alCarrito(ESCUDO, 1);
         ResponseEntity<String> repetida = pagar("clave-repetida-0001", TARJETA_APROBADA);
 
         assertThat(repetida.getStatusCode().value()).isEqualTo(200);

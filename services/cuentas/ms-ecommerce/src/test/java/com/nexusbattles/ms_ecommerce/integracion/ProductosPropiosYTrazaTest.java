@@ -64,6 +64,34 @@ class ProductosPropiosYTrazaTest {
     }
 
     @Test
+    @DisplayName("RF-CAR-004: para decidir se pregunta al inventario ahora, sin la copia, y la respuesta la renueva")
+    void alDiaSinCopia() {
+        ClienteDeInventario inventario = mock(ClienteDeInventario.class);
+        when(inventario.productosDe("uid")).thenReturn(Set.of("a")).thenReturn(Set.of("a", "b"));
+        ProductosPropios propios = new ProductosPropios(inventario, credencial(true), RELOJ);
+
+        assertThat(propios.de("uid")).containsExactly("a");
+        // Lo acaba de comprar: la copia de la vitrina no lo sabe, la consulta al dia si.
+        assertThat(propios.alDia("uid")).containsExactlyInAnyOrder("a", "b");
+        assertThat(propios.de("uid")).containsExactlyInAnyOrder("a", "b");
+
+        verify(inventario, times(2)).productosDe("uid");
+    }
+
+    @Test
+    @DisplayName("al dia y con el inventario caido, o sin credencial: nada, sin excepcion")
+    void alDiaSinInventario() {
+        ClienteDeInventario caido = mock(ClienteDeInventario.class);
+        when(caido.productosDe("uid")).thenThrow(new ServicioNoDisponibleException("inventario", "caido"));
+        ClienteDeInventario sinUsar = mock(ClienteDeInventario.class);
+
+        assertThat(new ProductosPropios(caido, credencial(true), RELOJ).alDia("uid")).isEmpty();
+        assertThat(new ProductosPropios(sinUsar, credencial(false), RELOJ).alDia("uid")).isEmpty();
+        assertThat(new ProductosPropios(sinUsar, credencial(true), RELOJ).alDia(null)).isEmpty();
+        verifyNoInteractions(sinUsar);
+    }
+
+    @Test
     @DisplayName("inventario caido: nada marcado, sin excepcion")
     void inventarioCaido() {
         ClienteDeInventario inventario = mock(ClienteDeInventario.class);

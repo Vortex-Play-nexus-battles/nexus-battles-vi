@@ -6,6 +6,7 @@ import com.nexusbattles.ms_ecommerce.catalogo.CopiaDelCatalogo;
 import com.nexusbattles.ms_ecommerce.catalogo.ProductoDelCatalogo;
 import com.nexusbattles.ms_ecommerce.dto.AgregarItemRequest;
 import com.nexusbattles.ms_ecommerce.dto.CarritoDto;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
 import com.nexusbattles.ms_ecommerce.model.Carrito;
 import com.nexusbattles.ms_ecommerce.model.ItemCarrito;
 import com.nexusbattles.ms_ecommerce.precios.CalculadoraDePrecios;
@@ -68,10 +69,16 @@ public class CarritoService {
     private final CotizadorDelCarrito cotizador;
     private final Clock reloj;
     private final TransactionTemplate transaccion;
+    private final ProductosPropios propios;
 
+    /**
+     * @param propios lo que cada jugador ya tiene (inventario), la misma
+     *     fuente que la marca {@code esPropio} de la vitrina: RF-CAR-004 no deja
+     *     añadir a la cesta un producto ya adquirido (contrato 1.5.0)
+     */
     public CarritoService(CarritoRepository carritoRepository, CatalogoMaestro catalogo, CopiaDelCatalogo copia,
                           TasasDeCambio tasas, CotizadorDelCarrito cotizador, Clock reloj,
-                          PlatformTransactionManager gestorDeTransacciones) {
+                          PlatformTransactionManager gestorDeTransacciones, ProductosPropios propios) {
         this.carritoRepository = carritoRepository;
         this.catalogo = catalogo;
         this.copia = copia;
@@ -79,6 +86,7 @@ public class CarritoService {
         this.cotizador = cotizador;
         this.reloj = reloj;
         this.transaccion = new TransactionTemplate(gestorDeTransacciones);
+        this.propios = Objects.requireNonNull(propios);
     }
 
     /**
@@ -108,7 +116,8 @@ public class CarritoService {
      *
      * @throws CantidadNoPermitidaException si pasa de 20 por linea o de las
      *         unidades que le quedan al producto
-     * @throws ProductoNoAgregableException si el catalogo no lo tiene o no lo vende
+     * @throws ProductoNoAgregableException si el catalogo no lo tiene o no lo vende, o el jugador ya lo
+     *         tiene en su inventario (RF-CAR-004, contrato 1.5.0)
      * @throws CatalogoNoDisponibleException si el catalogo no se pudo consultar
      * @throws MonedaNoDisponibleException si se pide USD o EUR sin tasa
      */
@@ -120,6 +129,7 @@ public class CarritoService {
         Tarifa tarifa = tasas.tarifa(moneda);
         ProductoDelCatalogo producto = productoQueSePuedeAgregar(request.getProductoId());
         String referencia = Objects.requireNonNullElse(producto.id(), request.getProductoId());
+        exigirQueNoLoTenga(usuarioId, referencia);
         Instant ahora = reloj.instant();
         BigDecimal precioEnPesos = precioEnPesos(producto, ahora);
         CarritoLeido leido = transaccion.execute(estado -> {
@@ -251,6 +261,20 @@ public class CarritoService {
                         "El producto no existe en el catalogo."));
         exigirQueSeVenda(producto);
         return producto;
+    }
+
+    /**
+     * RF-CAR-004: un producto ya adquirido no entra a la cesta. Lo dice el
+     * inventario, antes de abrir la transaccion (es una llamada HTTP). Si el
+     * inventario no responde no se puede saber y el producto entra, igual que
+     * la vitrina sale sin la marca: una caida del inventario no deja la
+     * tienda sin vender.
+     */
+    private void exigirQueNoLoTenga(String usuarioId, String referencia) {
+        if (propios.alDia(usuarioId).contains(referencia)) {
+            throw new ProductoNoAgregableException(Motivo.YA_ADQUIRIDO,
+                    "Ya tienes este producto en tu inventario.");
+        }
     }
 
     private static void exigirQueSeVenda(ProductoDelCatalogo producto) {

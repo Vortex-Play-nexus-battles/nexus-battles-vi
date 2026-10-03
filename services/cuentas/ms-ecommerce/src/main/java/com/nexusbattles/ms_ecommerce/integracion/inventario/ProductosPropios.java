@@ -66,6 +66,24 @@ public class ProductosPropios {
                 return copia.productos();
             }
         }
+        return preguntar(uid, ahora, "La vitrina sale sin la marca de lo propio: {}");
+    }
+
+    /**
+     * Como {@link #de(String)}, pero preguntando ahora al inventario. Para
+     * decidir —no añadir a la cesta lo ya adquirido (RF-CAR-004)— una copia de
+     * hace 30 s no vale: el jugador puede haberlo comprado justo antes. La
+     * respuesta renueva la copia. Si el inventario no responde, lo mismo que
+     * la vitrina: nada (no se puede saber, y la tienda no deja de vender).
+     */
+    public Set<String> alDia(String uid) {
+        if (uid == null || uid.isBlank() || !credencial.configurada()) {
+            return Set.of();
+        }
+        return preguntar(uid, reloj.instant(), "No se pudo saber que tiene el jugador; el producto entra: {}");
+    }
+
+    private Set<String> preguntar(String uid, Instant ahora, String siCae) {
         try {
             Set<String> productos = inventario.productosDe(uid);
             synchronized (copias) {
@@ -73,7 +91,7 @@ public class ProductosPropios {
             }
             return productos;
         } catch (ServicioNoDisponibleException caido) {
-            log.warn("La vitrina sale sin la marca de lo propio: {}", caido.getMessage());
+            log.warn(siCae, caido.getMessage());
             return Set.of();
         }
     }
