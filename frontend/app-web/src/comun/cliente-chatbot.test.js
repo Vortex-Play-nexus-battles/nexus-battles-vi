@@ -130,14 +130,54 @@ describe('operaciones', () => {
     expect(respuesta).toEqual(bot);
   });
 
-  test('enviarMensaje incluye la URL de la captura solo si la hay', async () => {
+  test('enviarMensaje manda la vista solo si la hay', async () => {
     const fetch = jest.fn(async () => respuestaJson({}));
-    await cliente({ fetch }).enviarMensaje('mira esto', 'https://img.example/captura.png');
+    const chat = cliente({ fetch });
+
+    await chat.enviarMensaje('como pujo', { vista: 'SUBASTAS' });
+    await chat.enviarMensaje('hola', { vista: null });
 
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({
-      contenido: 'mira esto',
-      adjuntoUrl: 'https://img.example/captura.png',
+      contenido: 'como pujo',
+      vista: 'SUBASTAS',
     });
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ contenido: 'hola' });
+  });
+
+  test('obtenerHistorial pide una página solo si se le dan límite o cursor', async () => {
+    const fetch = jest.fn(async () => respuestaJson([]));
+    const chat = cliente({ fetch });
+
+    await chat.obtenerHistorial();
+    await chat.obtenerHistorial({ limite: 30 });
+    await chat.obtenerHistorial({ antesDe: 'm-40', limite: 30 });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/historial');
+    expect(fetch.mock.calls[1][0]).toBe('/api/v1/chat/historial?limite=30');
+    expect(fetch.mock.calls[2][0]).toBe('/api/v1/chat/historial?antesDe=m-40&limite=30');
+  });
+
+  test('preferencias usa GET y guardarPreferencias manda el par completo con PUT', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' }))
+      .mockResolvedValueOnce(respuestaJson({ idioma: 'EN', nivelDetalle: 'BREVE' }));
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.preferencias()).toEqual({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' });
+    expect(await chat.guardarPreferencias({ idioma: 'EN', nivelDetalle: 'BREVE' })).toEqual({
+      idioma: 'EN',
+      nivelDetalle: 'BREVE',
+    });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/preferencias');
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+    expect(fetch.mock.calls[1][1].method).toBe('PUT');
+    expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({
+      idioma: 'EN',
+      nivelDetalle: 'BREVE',
+    });
+    expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer token-del-jugador');
   });
 
   test('limpiarHistorial usa DELETE y un 204 devuelve null', async () => {
@@ -161,6 +201,72 @@ describe('operaciones', () => {
       comentario: 'no era eso',
     });
     expect(JSON.parse(fetch.mock.calls[1][1].body)).toEqual({ util: true });
+  });
+
+  test('abrirTicket manda categoría, asunto y mensaje con el token del jugador', async () => {
+    const fetch = jest.fn(async () => respuestaJson({ ticketId: 't-1', estado: 'ABIERTO' }, 201));
+
+    const ticket = await cliente({ fetch, sesion: JUGADOR }).abrirTicket({
+      categoria: 'SOPORTE_TECNICO',
+      asunto: 'No carga',
+      mensaje: 'Se queda cargando',
+    });
+
+    const [url, opciones] = fetch.mock.calls[0];
+    expect(url).toBe('/api/v1/chat/tickets');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.headers.Authorization).toBe('Bearer token-del-jugador');
+    expect(JSON.parse(opciones.body)).toEqual({
+      categoria: 'SOPORTE_TECNICO',
+      asunto: 'No carga',
+      mensaje: 'Se queda cargando',
+    });
+    expect(ticket.estado).toBe('ABIERTO');
+  });
+
+  test('misTickets devuelve la lista, o vacía si no llega cuerpo', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ ticketId: 't-1' }]))
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => null });
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.misTickets()).toEqual([{ ticketId: 't-1' }]);
+    expect(await chat.misTickets()).toEqual([]);
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/tickets');
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+  });
+
+  test('sugerencias arma la consulta solo con lo que hay y devuelve la lista', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ clave: 'k-1' }]))
+      .mockResolvedValueOnce(respuestaJson([]));
+    const chat = cliente({ fetch });
+
+    expect(await chat.sugerencias()).toEqual([{ clave: 'k-1' }]);
+    await chat.sugerencias({ q: '  cómo  ', categoria: 'PRODUCTO', limite: 3 });
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/sugerencias?limite=6');
+    expect(fetch.mock.calls[1][0]).toBe(
+      '/api/v1/chat/sugerencias?q=c%C3%B3mo&categoria=PRODUCTO&limite=3',
+    );
+    expect(fetch.mock.calls[0][1].method).toBe('GET');
+  });
+
+  test('un 409 al abrir un ticket conserva el motivo del servidor', async () => {
+    const fetch = jest.fn(async () =>
+      respuestaJson({ title: 'Ya tienes un ticket abierto', motivo: 'TICKET_ABIERTO' }, 409),
+    );
+
+    const error = await cliente({ fetch, sesion: JUGADOR })
+      .abrirTicket({ categoria: 'FAQ_GENERAL', asunto: 'a', mensaje: 'b' })
+      .catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDelChatbot);
+    expect(error.estado).toBe(409);
+    expect(error.problema.motivo).toBe('TICKET_ABIERTO');
+    expect(error.noDisponible).toBe(false);
   });
 });
 

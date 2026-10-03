@@ -1,9 +1,13 @@
 package com.nexusbattles.ms_chatbot.chat.analitica;
 
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PalabraClave;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PuntoDeTendencia;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.ResumenDeTickets;
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TemaFrecuente;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TicketsPorCategoria;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Locale;
 
 // HU-CHA-012: exportacion del tablero de analiticas ("exportables", RF-CHA-012).
@@ -14,8 +18,8 @@ import java.util.Locale;
 //   - UTF-8 con BOM (sin la marca, Excel muestra mal las tildes);
 //   - lineas CRLF (RFC 4180) y celdas con ';', comillas o saltos de linea
 //     entre comillas dobles.
-// Tres bloques separados por una linea en blanco: resumen, temas frecuentes y
-// tendencia diaria.
+// Bloques separados por una linea en blanco: resumen, temas frecuentes,
+// tendencia diaria y, desde 1.3.7, solicitudes de soporte y palabras clave.
 final class ExportadorCsvAnaliticas {
 
     private static final String SEPARADOR = ";";
@@ -55,6 +59,29 @@ final class ExportadorCsvAnaliticas {
         for (PuntoDeTendencia punto : analitica.tendencia()) {
             fila(csv, punto.dia(), punto.conversaciones(), punto.preguntas(), punto.respuestas(), punto.escalamientos());
         }
+        csv.append(FIN_DE_LINEA);
+
+        ResumenDeTickets tickets = analitica.tickets() == null ? ResumenDeTickets.VACIO : analitica.tickets();
+        fila(csv, "Solicitudes de soporte");
+        fila(csv, "Indicador", "Valor");
+        fila(csv, "Abiertas en el periodo", tickets.total());
+        fila(csv, "Sin atender", tickets.abiertos());
+        fila(csv, "En revision", tickets.enProceso());
+        fila(csv, "Respondidas", tickets.resueltos());
+        fila(csv, "Cerradas", tickets.cerrados());
+        fila(csv, "Horas promedio de atencion", decimal(tickets.horasPromedioDeAtencion()));
+        fila(csv, "Categoria", "Solicitudes");
+        for (TicketsPorCategoria categoria : tickets.porCategoria()) {
+            fila(csv, categoria.categoria(), categoria.tickets());
+        }
+        csv.append(FIN_DE_LINEA);
+
+        List<PalabraClave> palabras = analitica.palabrasClave() == null ? List.of() : analitica.palabrasClave();
+        fila(csv, "Palabras clave");
+        fila(csv, "Palabra", "Preguntas", "Conversaciones");
+        for (PalabraClave palabra : palabras) {
+            fila(csv, palabra.palabra(), palabra.preguntas(), palabra.conversaciones());
+        }
 
         return csv.toString();
     }
@@ -80,6 +107,10 @@ final class ExportadorCsvAnaliticas {
     // Vacio cuando no hay datos, igual que el null del JSON: "sin datos" no es 0 %.
     private static String porcentaje(Double proporcion) {
         return proporcion == null ? "" : String.format(Locale.ROOT, "%.1f", proporcion * 100);
+    }
+
+    private static String decimal(Double valor) {
+        return valor == null ? "" : String.format(Locale.ROOT, "%.1f", valor);
     }
 
     private static String entero(Double valor) {

@@ -51,7 +51,11 @@ class AnaliticaChatbotControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.conversaciones").value(2))
             .andExpect(jsonPath("$.tasaResolucion").value(0.75))
-            .andExpect(jsonPath("$.temasFrecuentes[0].titulo").value("Subastas; pujas y ofertas"));
+            .andExpect(jsonPath("$.temasFrecuentes[0].titulo").value("Subastas; pujas y ofertas"))
+            // 1.3.7: sin tickets ni palabras clave, salen vacios (no faltan).
+            .andExpect(jsonPath("$.tickets.total").value(0))
+            .andExpect(jsonPath("$.tickets.horasPromedioDeAtencion").doesNotExist())
+            .andExpect(jsonPath("$.palabrasClave").isEmpty());
     }
 
     @Test
@@ -94,7 +98,9 @@ class AnaliticaChatbotControllerTest {
             .andExpect(content().string(containsString("Tasa de resolucion (%);75.0")))
             .andExpect(content().string(containsString("2026-09-09;1;2;2;0")))
             // Un titulo con ';' va entre comillas para no partir la columna.
-            .andExpect(content().string(containsString("\"Subastas; pujas y ofertas\"")));
+            .andExpect(content().string(containsString("\"Subastas; pujas y ofertas\"")))
+            .andExpect(content().string(containsString("Solicitudes de soporte")))
+            .andExpect(content().string(containsString("Palabras clave")));
     }
 
     @Test

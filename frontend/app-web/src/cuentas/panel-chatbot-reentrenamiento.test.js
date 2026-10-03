@@ -9,6 +9,8 @@ import { ErrorDelChatbot } from '../comun/cliente-chatbot.js';
 import {
   DEBE_ESCALAR,
   editarCasoEnDialogo,
+  fechaLocalParaCampo,
+  instanteDeFechaLocal,
   montarReentrenamiento,
   nombreDeTema,
   resultadoDeEvaluacion,
@@ -61,6 +63,11 @@ function clienteFalso(sobrescribir = {}) {
     evaluarCandidata: jest.fn(async () => ({ ...PEOR, candidataApta: false })),
     desplegarCandidata: jest.fn(async () => ({ ...CANDIDATA, estado: 'PRODUCCION' })),
     revertir: jest.fn(async () => PRODUCCION),
+    programarDespliegue: jest.fn(async (desplegarEn) => ({
+      ...CANDIDATA,
+      despliegueProgramadoEn: desplegarEn,
+    })),
+    cancelarProgramacion: jest.fn(async () => CANDIDATA),
     crearCaso: jest.fn(async () => CASOS[0]),
     editarCaso: jest.fn(async () => CASOS[0]),
     eliminarCaso: jest.fn(async () => null),
@@ -150,6 +157,102 @@ describe('con candidata', () => {
     vista.raiz.querySelector('[data-accion="evaluar"]').click();
     await esperar();
     expect(nota(vista.raiz)).toContain('al menos un caso de evaluación activo');
+  });
+});
+
+// 1.3.8 (7.4.10): publicación programada de la candidata.
+describe('publicación programada', () => {
+  const EN_DOS_HORAS = () => new Date(Date.now() + 2 * 60 * 60 * 1000);
+
+  test('instanteDeFechaLocal pasa la hora local a ISO; vacío o inválido es null', () => {
+    const local = fechaLocalParaCampo(new Date(2026, 9, 1, 10, 5));
+    expect(local).toBe('2026-10-01T10:05');
+    expect(instanteDeFechaLocal(local)).toBe(new Date(2026, 9, 1, 10, 5).toISOString());
+    expect(instanteDeFechaLocal('')).toBeNull();
+    expect(instanteDeFechaLocal('no es fecha')).toBeNull();
+  });
+
+  test('sin fecha no programa y lo dice en el campo', async () => {
+    const vista = await montar();
+    const zona = vista.raiz.querySelector('[data-zona="programacion"]');
+
+    zona.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(vista.cliente.programarDespliegue).not.toHaveBeenCalled();
+    expect(zona.textContent).toContain('Elige la fecha y la hora.');
+  });
+
+  test('con una fecha futura la programa y avisa cuándo se publicará', async () => {
+    const vista = await montar();
+    const zona = vista.raiz.querySelector('[data-zona="programacion"]');
+    const cuando = EN_DOS_HORAS();
+    zona.querySelector('input[name="desplegarEn"]').value = fechaLocalParaCampo(cuando);
+
+    zona.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    const enviado = vista.cliente.programarDespliegue.mock.calls[0][0];
+    expect(Math.abs(new Date(enviado).getTime() - cuando.getTime())).toBeLessThan(60_000);
+    expect(nota(vista.raiz)).toContain('La versión 2 se publicará sola el');
+  });
+
+  test('una fecha en el pasado no se envía', async () => {
+    const vista = await montar();
+    const zona = vista.raiz.querySelector('[data-zona="programacion"]');
+    zona.querySelector('input[name="desplegarEn"]').value = fechaLocalParaCampo(
+      new Date(Date.now() - 60 * 60 * 1000),
+    );
+
+    zona.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(vista.cliente.programarDespliegue).not.toHaveBeenCalled();
+    expect(zona.textContent).toContain('al menos un minuto en el futuro');
+  });
+
+  test('con la candidata programada muestra la fecha y permite cancelar', async () => {
+    const programada = { ...CANDIDATA, despliegueProgramadoEn: EN_DOS_HORAS().toISOString() };
+    const vista = await montar({
+      cliente: clienteFalso({ listarVersiones: jest.fn(async () => [programada, PRODUCCION]) }),
+    });
+    const zona = vista.raiz.querySelector('[data-zona="programacion"]');
+    expect(zona.querySelector('[data-zona="programada"]').textContent).toContain(
+      'se publicará sola el',
+    );
+    expect(zona.querySelector('form')).toBeNull();
+
+    zona.querySelector('[data-accion="cancelar-programacion"]').click();
+    await esperar();
+
+    expect(vista.cliente.cancelarProgramacion).toHaveBeenCalledTimes(1);
+    expect(nota(vista.raiz)).toBe('Se canceló la publicación programada.');
+  });
+
+  test('si una publicación programada fue rechazada, lo avisa', async () => {
+    const rechazada = { ...CANDIDATA, programacionRechazadaEn: '2026-09-28T15:00:00Z' };
+    const vista = await montar({
+      cliente: clienteFalso({ listarVersiones: jest.fn(async () => [rechazada, PRODUCCION]) }),
+    });
+    const aviso = vista.raiz.querySelector('[data-zona="programacion"] .aviso--advertencia');
+    expect(aviso.textContent).toContain('La publicación programada no se hizo');
+  });
+
+  test('un 400 del servicio se explica', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        programarDespliegue: jest.fn(async () => {
+          throw new ErrorDelChatbot({ title: 'Bad Request' }, 400);
+        }),
+      }),
+    });
+    const zona = vista.raiz.querySelector('[data-zona="programacion"]');
+    zona.querySelector('input[name="desplegarEn"]').value = fechaLocalParaCampo(EN_DOS_HORAS());
+
+    zona.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(nota(vista.raiz)).toContain('entre un minuto y 90 días');
   });
 });
 

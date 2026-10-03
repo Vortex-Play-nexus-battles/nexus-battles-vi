@@ -12,7 +12,9 @@ public record VersionResponse(
     EstadoVersion estado,
     String descripcion,
     Instant fechaCreacion,
-    Instant fechaDespliegue
+    Instant fechaDespliegue,
+    Instant despliegueProgramadoEn,
+    Instant programacionRechazadaEn
 ) {
 
     public static VersionResponse desde(VersionBaseConocimiento version) {
@@ -22,6 +24,8 @@ public record VersionResponse(
             version.getEstado(),
             version.getDescripcion(),
             version.getFechaCreacion(),
-            version.getFechaDespliegue());
+            version.getFechaDespliegue(),
+            version.getDespliegueProgramadoEn(),
+            version.getProgramacionRechazadaEn());
     }
 }
