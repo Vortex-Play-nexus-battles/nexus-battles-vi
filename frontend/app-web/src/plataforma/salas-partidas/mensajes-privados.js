@@ -73,7 +73,7 @@ export function motivoDeBloqueo(estado, apodo) {
       return {
         titulo: `La cuenta de ${apodo} está sancionada`,
         detalle:
-          'Mientras dure la sanción no puede recibir mensajes. Lo que ya os escribisteis sigue aquí.',
+          'Mientras dure la sanción no puede recibir mensajes. Lo que ya se escribieron sigue aquí.',
         distintivo: 'Cuenta sancionada',
       };
     default:
@@ -832,7 +832,7 @@ export async function montarMensajesPrivados(
         pintarEstado(
           zonaEstado,
           estadoVacio({
-            titulo: 'Todavía no os habéis escrito',
+            titulo: 'Todavía no se han escrito',
             detalle: `Escribe el primer mensaje a ${resumen.con.apodo}.`,
           }),
         );

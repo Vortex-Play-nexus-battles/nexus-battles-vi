@@ -344,20 +344,22 @@ describe('montarCrearSala', () => {
     expect(aviso.textContent).not.toContain('esperando jugadores');
   });
 
-  test('R18 · tras crear, el formulario vuelve entero a su modalidad por omision', async () => {
+  test('R18 · tras crear, el formulario vuelve a sus valores y lo que depende de la modalidad la acompaña', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest
       .fn()
-      .mockResolvedValue({ id: 'x', maximoParticipantes: 2, recompensaCreditos: 0 });
+      .mockResolvedValue({ id: 'x', maximoParticipantes: 6, recompensaCreditos: 0 });
     montarCrearSala(formulario, { crearSalaImpl, irALaSala: jest.fn() });
-    elegir(formulario, 'CONTRA_IA');
-    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+    elegir(formulario, 'UNO_CONTRA_UNO');
+    elegir(formulario, 'HASTA_SEIS');
+    formulario.querySelector('[name="maximoParticipantes"]').value = '6';
 
     formulario.dispatchEvent(new Event('submit'));
     await asentar();
 
-    // El HTML de la prueba trae «hasta seis» y 4 como valores iniciales: el
-    // reset vuelve a ellos, y la nota y la pista tienen que acompanarlos.
+    // El HTML de la prueba trae 4 participantes: el reset vuelve a ese valor,
+    // la modalidad elegida se conserva (auditoría del 30-sep) y la nota y la
+    // pista tienen que acompañarla.
     expect(formulario.querySelector('[value="HASTA_SEIS"]').checked).toBe(true);
     expect(formulario.querySelector('[name="maximoParticipantes"]').value).toBe('4');
     expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
@@ -600,6 +602,31 @@ describe('montarCrearSala · sección degradada (HU-DIS-003)', () => {
 
     expect(formulario.querySelector('.seccion-degradada')).toBeNull();
     expect(document.querySelector('.aviso--error')).not.toBeNull();
+  });
+});
+
+describe('auditoría de DEV del 30-sep: la modalidad elegida no se pierde al crear', () => {
+  test('tras crear contra la IA, el formulario sigue en «Contra la IA» y el resto vuelve a su valor', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockResolvedValue({
+      id: 's-ia',
+      modalidad: 'CONTRA_IA',
+      maximoParticipantes: 2,
+      ocupacion: 2,
+      recompensaCreditos: 0,
+    });
+    montarCrearSala(formulario, { crearSalaImpl });
+    elegir(formulario, 'CONTRA_IA');
+    formulario.querySelector('[name="recompensaCreditos"]').value = '5';
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(crearSalaImpl).toHaveBeenCalledWith(expect.objectContaining({ modalidad: 'CONTRA_IA' }));
+    expect(formulario.querySelector('[value="CONTRA_IA"]').checked).toBe(true);
+    expect(formulario.querySelector('[value="HASTA_SEIS"]').checked).toBe(false);
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+    expect(formulario.querySelector('[name="recompensaCreditos"]').value).toBe('0');
   });
 });
 

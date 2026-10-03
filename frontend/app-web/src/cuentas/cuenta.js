@@ -115,8 +115,12 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   const textos = h('div', { clase: 'pila pila--ajustada' });
   textos.append(
     h('h3', { clase: 'tarjeta__titulo', texto: perfil?.apodo ?? sesion.apodo ?? 'Sin apodo' }),
-    h('p', { clase: 't-meta', texto: perfil?.email ?? '' }),
   );
+  // El perfil (ms-identidad-perfiles.yaml) no publica el correo: un párrafo
+  // vacío no dice nada. Si algún día llega, se enseña.
+  if (perfil?.email) {
+    textos.append(h('p', { clase: 't-meta', texto: perfil.email }));
+  }
   cabeza.append(textos);
   if (sesion.rol) {
     cabeza.append(

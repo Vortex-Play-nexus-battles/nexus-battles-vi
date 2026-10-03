@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus Battles VI - Tienda</title>
+    <title>Tienda · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
@@ -192,6 +192,18 @@
                   name="soloPromocion"
                 />
                 <span class="casilla__etiqueta">Solo en promoción</span>
+              </label>
+              <!-- Auditoría de DEV del 30-sep: el corazón guardaba y se
+                   anunciaba, pero no había dónde ver la lista. Solo con sesión
+                   (la vitrina marca `enListaDeseos`); tienda.js lo destapa. -->
+              <label class="casilla filtros-tienda__deseos" data-zona="filtro-deseos" hidden>
+                <input
+                  class="casilla__entrada"
+                  type="checkbox"
+                  id="solo-deseos"
+                  name="soloDeseos"
+                />
+                <span class="casilla__etiqueta">Solo mi lista de deseos</span>
               </label>
               <button
                 type="reset"

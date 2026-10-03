@@ -156,7 +156,7 @@ describe('Tus batallas — GET /partidas/mias', () => {
     );
   });
 
-  test('cada fila dice resultado, héroe, modalidad y jugadores; en curso se puede volver', async () => {
+  test('cada fila dice resultado, héroe, modalidad y jugadores; en curso se puede volver y la terminada se puede ver', async () => {
     const zona = document.createElement('div');
     const fetchImpl = fetchFalso({
       '/api/v1/partidas/mias': respuesta(pagina([VICTORIA, EN_CURSO])),
@@ -170,7 +170,13 @@ describe('Tus batallas — GET /partidas/mias', () => {
     expect(filas[0].querySelector('.distintivo').className).toContain('distintivo--victoria');
     expect(filas[0].textContent).toContain('Guerrero Tanque');
     expect(filas[0].textContent).toContain('1 contra 1');
-    expect(filas[0].querySelector('a')).toBeNull();
+    // Auditoría de DEV del 30-sep: la columna «Acción» salía vacía en las
+    // terminadas. Ahora lleva a verlas, con su desenlace.
+    const ver = filas[0].querySelector('a');
+    expect(ver.textContent).toBe('Ver resultado');
+    expect(ver.getAttribute('href')).toBe(
+      '../plataforma/salas-partidas/sala-batalla.html?sala=s-1&partida=p-1',
+    );
 
     expect(filas[1].querySelector('.distintivo').textContent).toBe('En curso');
     expect(filas[1].textContent).toContain('Hasta seis');
@@ -183,6 +189,19 @@ describe('Tus batallas — GET /partidas/mias', () => {
     const region = zona.querySelector('.tabla-envoltorio');
     expect(region.getAttribute('tabindex')).toBe('0');
     expect(region.getAttribute('role')).toBe('region');
+  });
+
+  test('una partida sin sala a la que ir no deja la celda vacía: lo dice', async () => {
+    const zona = document.createElement('div');
+    const fetchImpl = fetchFalso({
+      '/api/v1/partidas/mias': respuesta(pagina([{ ...DERROTA, idSala: null }])),
+    });
+
+    await pintarPartidas(zona, { fetchImpl });
+
+    const celda = zona.querySelector('tbody tr td:last-child');
+    expect(celda.querySelector('a')).toBeNull();
+    expect(celda.querySelector('[aria-label="Sin acción"]').textContent).toBe('—');
   });
 
   test('sin partidas: qué es, por qué está vacío y qué hacer', async () => {

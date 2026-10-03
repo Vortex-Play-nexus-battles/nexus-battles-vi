@@ -26,6 +26,7 @@ import {
   montarTienda,
   leerCriterios,
   cambiarCantidad,
+  alternarDeseo,
 } from './tienda.js';
 
 const UID = '44444444-4444-4444-4444-444444444444';
@@ -826,6 +827,9 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
             <input type="number" name="precioMinimo" />
             <input type="number" name="precioMaximo" />
             <input type="checkbox" name="soloPromocion" />
+            <label data-zona="filtro-deseos" hidden>
+              <input type="checkbox" name="soloDeseos" />
+            </label>
             <select name="orden">
               <option value="catalogo">Orden del catálogo</option>
               <option value="precio-asc">Precio: de menor a mayor</option>
@@ -1096,10 +1100,69 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     const vacio = document.querySelector('#productos-grid [data-estado="vacio"]');
     expect(vacio.textContent).toMatch(/Ningún producto coincide/);
     expect(vacio.textContent).not.toMatch(/no tiene productos/);
+    // Auditoría de DEV del 30-sep: «Ningún producto coincide de 2 a la venta.»
+    expect(document.getElementById('resultado-tienda').textContent).toBe(
+      'Ningún producto coincide; hay 2 productos a la venta.',
+    );
 
     vacio.querySelector('[data-accion="limpiar-filtros"]').click();
     expect(nombres()).toHaveLength(2);
     expect(filtros().elements.namedItem('busqueda').value).toBe('');
+  });
+
+  test('auditoría 30-sep: la lista de deseos se puede ver, y lo que sale de ella deja de verse', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [
+        producto(1, { enListaDeseos: true }),
+        producto(2),
+        producto(3, { enListaDeseos: true }),
+      ],
+    });
+    await montarTienda(document);
+
+    const casilla = document.querySelector('[data-zona="filtro-deseos"]');
+    expect(casilla.hidden).toBe(false);
+
+    cambiar('soloDeseos', true);
+    expect(nombres()).toEqual(['Producto 1', 'Producto 3']);
+    expect(document.getElementById('resultado-tienda').textContent).toBe(
+      '2 productos en tu lista de deseos.',
+    );
+    expect(document.querySelector('[data-zona="resumen-filtros"]').textContent).toBe(
+      'Filtros y orden · 1 activo',
+    );
+
+    // Quitar el corazón con el filtro puesto lo saca de la vista.
+    globalThis.fetch.mockImplementationOnce(async () => ({
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+      headers: { get: () => null },
+    }));
+    await alternarDeseo('p-1', document);
+    expect(nombres()).toEqual(['Producto 3']);
+  });
+
+  test('una lista de deseos vacía lo dice y ofrece volver a toda la tienda', async () => {
+    globalThis.fetch = servicios({ vitrina: [producto(1), producto(2)] });
+    await montarTienda(document);
+
+    cambiar('soloDeseos', true);
+    const vacio = document.querySelector('#productos-grid [data-estado="vacio"]');
+    expect(vacio.textContent).toMatch(/Tu lista de deseos está vacía/);
+    expect(vacio.textContent).not.toMatch(/Ningún producto coincide/);
+
+    vacio.querySelector('[data-accion="limpiar-filtros"]').click();
+    expect(nombres()).toHaveLength(2);
+    expect(filtros().elements.namedItem('soloDeseos').checked).toBe(false);
+  });
+
+  test('sin sesión no se ofrece la lista de deseos: la vitrina no la marca', async () => {
+    sessionStorage.clear();
+    globalThis.fetch = servicios({ vitrina: [producto(1)] });
+    await montarTienda(document);
+
+    expect(document.querySelector('[data-zona="filtro-deseos"]').hidden).toBe(true);
   });
 
   test('un rango de precio al revés se explica', async () => {

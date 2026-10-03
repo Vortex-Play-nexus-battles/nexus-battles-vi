@@ -262,7 +262,7 @@ describe('con servicio de misiones', () => {
     });
     await esperar();
 
-    expect(document.title).toBe('El Templo Olvidado · Misiones · Nexus Battles VI');
+    expect(document.title).toBe('El Templo Olvidado · Misiones · The Nexus Battles VI');
     const iniciar = document.querySelector('[data-accion="iniciar-mision"]');
     expect(iniciar.getAttribute('aria-disabled')).toBe('true');
 

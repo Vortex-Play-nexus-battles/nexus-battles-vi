@@ -78,8 +78,17 @@
         sessionStorage y se muestra una sola vez.
       -->
       <div class="aviso" data-zona="aviso-sala" role="status" hidden>
-        <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
-        <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+        <div class="aviso__cuerpo">
+          <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+          <p class="aviso__detalle" data-zona="aviso-sala-detalle"></p>
+        </div>
+        <button
+          class="boton boton--secundario boton--pequeno"
+          type="button"
+          data-accion="cerrar-aviso-sala"
+        >
+          Entendido
+        </button>
       </div>
 
       <!-- RNF-USA-003: cargando, vacio y error comparten esta zona. -->

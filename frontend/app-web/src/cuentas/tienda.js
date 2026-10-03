@@ -459,6 +459,26 @@ export function pintarCatalogo(doc = document) {
     const { precioMinimo, precioMaximo } = vista.criterios;
     const rangoAlReves =
       Number.isFinite(precioMinimo) && Number.isFinite(precioMaximo) && precioMinimo > precioMaximo;
+    if (soloLaListaDeDeseos(vista.criterios)) {
+      // La lista de deseos vacía no es «ningún producto coincide»: es que
+      // todavía no se guardó nada, y se dice cómo.
+      pintarEn(
+        rejilla,
+        estadoVacio({
+          titulo: 'Tu lista de deseos está vacía',
+          detalle: 'Pulsa el corazón de un producto para guardarlo aquí y encontrarlo después.',
+          icono: '♡',
+          accion: {
+            texto: 'Ver toda la tienda',
+            nombre: 'limpiar-filtros',
+            alPulsar: () => limpiarFiltros(doc),
+          },
+        }),
+      );
+      pintarResultado(doc, 'Tu lista de deseos está vacía.');
+      pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
+      return;
+    }
     pintarEn(
       rejilla,
       estadoVacio({
@@ -474,7 +494,12 @@ export function pintarCatalogo(doc = document) {
         },
       }),
     );
-    pintarResultado(doc, `Ningún producto coincide de ${vista.productos.length} a la venta.`);
+    // Auditoría de DEV del 30-sep: «Ningún producto coincide de 56 a la
+    // venta.» sonaba raro.
+    pintarResultado(
+      doc,
+      `Ningún producto coincide; hay ${textoDeUnidades(vista.productos.length)} a la venta.`,
+    );
     pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
     return;
   }
@@ -492,15 +517,34 @@ export function pintarCatalogo(doc = document) {
   );
 
   const total = vista.productos.length;
-  let resumen = hayCriterios(vista.criterios)
-    ? `${encontrados.length} de ${total} productos coinciden.`
-    : `${textoDeUnidades(total)} a la venta.`;
+  let resumen;
+  if (soloLaListaDeDeseos(vista.criterios)) {
+    resumen =
+      encontrados.length === 1
+        ? '1 producto en tu lista de deseos.'
+        : `${encontrados.length} productos en tu lista de deseos.`;
+  } else {
+    resumen = hayCriterios(vista.criterios)
+      ? `${encontrados.length} de ${total} productos coinciden.`
+      : `${textoDeUnidades(total)} a la venta.`;
+  }
   if (!vista.completo) {
     resumen +=
       ' Hay más en el catálogo de los que se cargan de una vez: busca o filtra por tipo para encontrarlos.';
   }
   pintarResultado(doc, resumen);
   pintarPaginacion(doc, { paginaActual: vista.pagina, totalPaginas });
+}
+
+/**
+ * ¿Se está mirando solo la lista de deseos, sin más criterios? Entonces la
+ * vista habla de «tu lista» y no de coincidencias.
+ *
+ * @param {import('./tienda-catalogo.js').Criterios} criterios
+ * @returns {boolean}
+ */
+function soloLaListaDeDeseos(criterios = {}) {
+  return Boolean(criterios.soloDeseos) && !hayCriterios({ ...criterios, soloDeseos: false });
 }
 
 /** La línea de resultados (`role="status"`), si la vista la tiene. */
@@ -575,6 +619,7 @@ export function leerCriterios(formulario) {
     precioMinimo: numero('precioMinimo'),
     precioMaximo: numero('precioMaximo'),
     soloPromocion: Boolean(formulario.elements.namedItem('soloPromocion')?.checked),
+    soloDeseos: Boolean(formulario.elements.namedItem('soloDeseos')?.checked),
     orden: formulario.elements.namedItem('orden')?.value ?? 'catalogo',
   };
 }
@@ -596,6 +641,7 @@ function pintarResumenDeFiltros(formulario, criterios) {
     Number.isFinite(criterios.precioMinimo),
     Number.isFinite(criterios.precioMaximo),
     criterios.soloPromocion,
+    criterios.soloDeseos,
   ].filter(Boolean).length;
   let texto = 'Filtros y orden';
   if (activos === 1) {
@@ -1009,6 +1055,10 @@ export async function alternarDeseo(productoId, doc = document) {
     texto = desear
       ? `«${nombre}» está en tu lista de deseos.`
       : `«${nombre}» salió de tu lista de deseos.`;
+    // Mirando la lista de deseos, lo que sale de ella deja de verse.
+    if (!desear && vista.criterios?.soloDeseos) {
+      pintarCatalogo(doc);
+    }
   } else {
     texto = textoDelFalloDeDeseo(resultado, desear);
   }
@@ -1511,6 +1561,12 @@ export function montarTienda(doc = document) {
   doc.getElementById('btn-mis-compras')?.addEventListener('click', () => abrirMisCompras());
 
   vista.cajon = montarCajonDelCarrito(doc);
+  // La lista de deseos es de la cuenta: sin sesión la vitrina no la marca y
+  // el filtro no tendría nada que enseñar.
+  const filtroDeDeseos = doc.querySelector('[data-zona="filtro-deseos"]');
+  if (filtroDeDeseos) {
+    filtroDeDeseos.hidden = !haySesion();
+  }
   montarFiltros(doc);
   montarMoneda(doc);
 

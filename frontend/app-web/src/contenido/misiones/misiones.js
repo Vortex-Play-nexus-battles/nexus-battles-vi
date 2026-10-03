@@ -46,7 +46,7 @@ export const SECCIONES_DE_MISIONES = Object.freeze([
   { id: 'estrategia', etiqueta: 'Estrategia' },
 ]);
 
-const TITULO_BASE = 'Misiones · Nexus Battles VI';
+const TITULO_BASE = 'Misiones · The Nexus Battles VI';
 
 /**
  * Las direcciones que usa la vista, relativas a la propia página: el tablón,

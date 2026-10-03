@@ -82,6 +82,15 @@ export function mostrarAvisoDeSala(raiz, aviso) {
     detalle.hidden = !aviso.detalle;
   }
   zona.hidden = false;
+  // Auditoría de DEV del 30-sep: «Cancelaste la sala.» se quedaba en pantalla
+  // para siempre. Se cierra con «Entendido» (el aviso es de una sola vez).
+  const cerrar = zona.querySelector('[data-accion="cerrar-aviso-sala"]');
+  if (cerrar && !cerrar.dataset.enganchado) {
+    cerrar.dataset.enganchado = 'si';
+    cerrar.addEventListener('click', () => {
+      zona.hidden = true;
+    });
+  }
   return true;
 }
 
@@ -103,10 +112,22 @@ export function metaDeLaSala(sala) {
 /**
  * Texto del subtitulo, con el numero real de salas.
  *
+ * Con un filtro puesto, el total que da el servicio es el de las que
+ * coinciden, no el de todas: decir «0 salas abiertas ahora mismo» con un
+ * filtro sin resultados era falso (auditoría de DEV del 30-sep). Se dice lo
+ * que se cuenta.
+ *
  * @param {number} total
+ * @param {{filtrada?: boolean}} [opciones]
  * @returns {string}
  */
-export function subtituloDeSalas(total) {
+export function subtituloDeSalas(total, { filtrada = false } = {}) {
+  if (filtrada) {
+    if (total === 0) {
+      return 'Ninguna sala con estos filtros';
+    }
+    return total === 1 ? '1 sala con estos filtros' : `${total} salas con estos filtros`;
+  }
   return total === 1 ? '1 sala abierta ahora mismo' : `${total} salas abiertas ahora mismo`;
 }
 
@@ -379,14 +400,42 @@ export function montarBatallas(raiz, puertos = {}) {
     }
   }
 
+  /** ¿Hay algún filtro puesto? Entonces el listado no son «todas». */
+  function hayFiltros() {
+    return Boolean(filtroModalidad?.value || filtroEstado?.value);
+  }
+
+  function quitarFiltros() {
+    for (const filtro of [filtroModalidad, filtroEstado]) {
+      if (filtro) {
+        filtro.value = '';
+      }
+    }
+    paginaActual = 0;
+    refrescar();
+  }
+
   function pintar(pagina) {
     zonaEstado.hidden = true;
     zonaSalas.hidden = false;
     vaciar(zonaSalas);
 
-    subtitulo.textContent = subtituloDeSalas(pagina.totalElementos);
+    const filtrada = hayFiltros();
+    subtitulo.textContent = subtituloDeSalas(pagina.totalElementos, { filtrada });
 
     if (pagina.contenido.length === 0) {
+      if (filtrada) {
+        // Vacío por el filtro, no porque nadie juegue: decir «nadie tiene
+        // una sala esperando» con un filtro puesto era mentir.
+        mostrarEstado(
+          'estado-vista--vacio',
+          'Ninguna sala coincide con los filtros',
+          'Prueba con otra modalidad u otro estado, o quítalos para ver todas las salas.',
+          { texto: 'Quitar filtros', alPulsar: quitarFiltros },
+        );
+        subtitulo.textContent = subtituloDeSalas(0, { filtrada });
+        return;
+      }
       mostrarEstado(
         'estado-vista--vacio',
         'No hay batallas abiertas',
