@@ -113,7 +113,23 @@ info:
     `jugador-sancionado`, `destinatario-inexistente`, `contenido-bloqueado`,
     `demasiados-mensajes` con `Retry-After`, `moderacion-no-disponible`),
     los mismos motivos que `EnvioRechazado` del AsyncAPI.
-  version: 1.7.0
+
+    Cambios 1.8.0 (auditoria de DEV del 30-sep, aditivo — D-40 provisional):
+    bloquear a un jugador en los mensajes privados. La interfaz ofrecia
+    «Bloquear» y el servicio no lo tenia.
+    - `PUT` / `DELETE` / `GET /mensajes-directos/conversaciones/{uidOtro}/bloqueo`:
+      bloquear, desbloquear (ambas idempotentes) y consultar, siempre en
+      nombre del dueno del token. Devuelven `EstadoDeConversacion`.
+    - `ResumenDeConversacion` gana `estado`: `ACTIVA`, `BLOQUEADA` (quien
+      mira bloqueo al otro) o `NO_ADMITE` (el otro bloqueo a quien mira; no
+      se le dice que fue un bloqueo).
+    - Con un bloqueo en cualquier sentido nadie escribe por privado: el `POST`
+      de `.../mensajes` responde `409` `conversacion-bloqueada` a quien
+      bloqueo y `403` `destinatario-no-admite` a quien fue bloqueado (los
+      mismos motivos `CONVERSACION_BLOQUEADA` y `NO_ADMITE` del AsyncAPI
+      1.1.0). El historial se conserva para los dos y el chat general, el de
+      sala y las partidas no cambian.
+  version: 1.8.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -701,12 +717,22 @@ paths:
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
-          description: Remitente sancionado.
+          description: |
+            Remitente sancionado (`jugador-sancionado`), o el destinatario lo
+            tiene bloqueado (`destinatario-no-admite`, 1.8.0).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '404':
           description: El destinatario no existe o no esta activo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            Quien escribe tiene bloqueado al destinatario
+            (`conversacion-bloqueada`, 1.8.0): para escribirle, primero lo
+            desbloquea.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -744,6 +770,81 @@ paths:
           description: Hecho (idempotente). Con el propio `uid`, no hay nada que marcar.
         '400':
           description: '`uidOtro` no es un UUID (1.6.1).'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
+  # 1.8.0 — Bloquear a un jugador en los mensajes privados (D-40 provisional)
+  /mensajes-directos/conversaciones/{uidOtro}/bloqueo:
+    parameters:
+      - $ref: '#/components/parameters/UidOtro'
+    get:
+      tags: [Mensajes]
+      operationId: estadoDeConversacionDirecta
+      summary: Si el jugador puede escribirle a otro por privado (1.8.0)
+      description: |
+        No hace falta que haya mensajes entre los dos: la interfaz lo pregunta
+        al abrir una conversacion nueva desde la busqueda.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Estado de la conversacion para el dueno del token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+    put:
+      tags: [Mensajes]
+      operationId: bloquearJugadorEnMensajes
+      summary: Bloquea a un jugador en los mensajes privados (1.8.0)
+      description: |
+        Idempotente. Mientras dure, ninguno de los dos se escribe por privado.
+        No borra el historial ni afecta al chat general, al de sala ni a las
+        partidas.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Bloqueado; `estado` es `BLOQUEADA`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+    delete:
+      tags: [Mensajes]
+      operationId: desbloquearJugadorEnMensajes
+      summary: Desbloquea a un jugador en los mensajes privados (1.8.0)
+      description: |
+        Idempotente. Si el otro tambien lo tiene bloqueado, el estado queda en
+        `NO_ADMITE`.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Desbloqueado; `estado` es `ACTIVA` o `NO_ADMITE`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -913,6 +1014,25 @@ components:
         apodoOtro: { type: [string, 'null'] }
         ultimoMensaje: { $ref: '#/components/schemas/MensajeDirecto' }
         noLeidos: { type: integer, minimum: 0 }
+        estado:
+          $ref: '#/components/schemas/EstadoDeConversacionValor'
+
+    EstadoDeConversacionValor:
+      type: string
+      enum: [ACTIVA, BLOQUEADA, NO_ADMITE]
+      description: |
+        (1.8.0, D-40) Si quien mira puede escribir en la conversacion.
+        `BLOQUEADA`: el bloqueo al otro (puede deshacerlo). `NO_ADMITE`: el
+        otro lo bloqueo a el; no se le dice por que.
+
+    EstadoDeConversacion:
+      type: object
+      description: (1.8.0, D-40) Respuesta de `/mensajes-directos/conversaciones/{uidOtro}/bloqueo`.
+      required: [uidOtro, estado]
+      properties:
+        uidOtro: { type: string, format: uuid }
+        estado:
+          $ref: '#/components/schemas/EstadoDeConversacionValor'
 
 
     # -- Formato de error comun a los 20 modulos (regla 4) --------------------

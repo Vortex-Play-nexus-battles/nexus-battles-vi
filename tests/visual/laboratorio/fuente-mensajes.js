@@ -12,8 +12,9 @@
  * En producción esa fuente es, desde B6, el adaptador del servicio de
  * mensajes privados (salas-partidas); si el servicio no responde dice
  * `disponible: false` y la pestaña lo cuenta. Algunos estados de aquí la vista
- * los sabe pintar pero el servicio de hoy no los produce —bloquear, «Leído»,
- * tu silencio, la cuenta del otro sancionada—: ver `fuente-mensajes.js`.
+ * los sabe pintar pero el servicio de hoy no los produce —«Leído», tu
+ * silencio, la cuenta del otro sancionada—: ver `fuente-mensajes.js`.
+ * Bloquear sí existe desde la auditoría de DEV del 30-sep (D-40).
  * Todos los apodos y textos de aquí son DATOS DE LABORATORIO.
  *
  * El escenario elige la variante con `?laboratorio=` en la URL de la vista:

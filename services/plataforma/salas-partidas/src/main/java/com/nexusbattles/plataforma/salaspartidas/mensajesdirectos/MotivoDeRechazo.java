@@ -36,6 +36,20 @@ public enum MotivoDeRechazo {
     TEXTO_NO_PERMITIDO(422, "contenido-bloqueado", "Mensaje bloqueado",
             "El mensaje contiene términos que no están permitidos y no se entregó."),
 
+    /**
+     * Quien escribe tiene bloqueado al destinatario (D-40): para volver a
+     * escribirle, primero lo desbloquea.
+     */
+    CONVERSACION_BLOQUEADA(409, "conversacion-bloqueada", "Bloqueaste a este jugador",
+            "Desbloquéalo si quieres volver a escribirle."),
+
+    /**
+     * El destinatario tiene bloqueado a quien escribe (D-40). No se dice que
+     * lo bloqueo: solo que no recibe sus mensajes.
+     */
+    NO_ADMITE(403, "destinatario-no-admite", "Este jugador no recibe tus mensajes",
+            "No puedes enviarle mensajes privados."),
+
     DEMASIADO_RAPIDO(429, "demasiados-mensajes", "Vas demasiado rápido",
             "Espera unos segundos antes de enviar otro mensaje."),
 

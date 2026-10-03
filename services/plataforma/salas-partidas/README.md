@@ -32,6 +32,8 @@ Los errores salen como problem details (RFC 7807) y la interfaz decide por
 | `GET /api/v1/partidas/{id}` solo para participantes y roles de operación (`403 partida-ajena`); `GET /api/v1/partidas/mias` (historial) | Implementado (1.7.0) | RF-JUE-017 |
 | La máquina: héroe aleatorio del catálogo sin sanadores en el nivel del anfitrión (D-B7-11) y política simple y determinista del motor (D-B7-12). El «aprendizaje profundo» del §7.6 **no** está implementado (D-B7-13) | Implementado | HU-SAL-004 |
 | Tiempo por turno: parámetro `salas.partidas.segundos-por-turno` de admin-parametros, nace sin valor = sin límite (D-B7-14); `ConfiguracionDelCombate.VencimientoDeTurnos` pasa los turnos agotados | Implementado | §6.1.3 |
+| Mensajes privados entre jugadores: envío por STOMP (`/app/mensajes-directos/{uid}`) y `POST` de respaldo con las mismas reglas del chat (lista negra, sanción, frecuencia, fallo cerrado), historial y conversaciones por REST (`/api/v1/mensajes-directos/**`) | Implementado (V13, contrato 1.6.1, AsyncAPI `mensajes-directos.yaml`) | Feedback del profesor (no es RF) |
+| Bloquear a un jugador en los mensajes privados: `PUT`/`DELETE`/`GET .../conversaciones/{uid}/bloqueo`; con un bloqueo en cualquier sentido nadie se escribe (409 `conversacion-bloqueada` / 403 `destinatario-no-admite`), cada conversación dice su `estado` y el historial se conserva | Implementado (V15, contrato 1.8.0, AsyncAPI 1.1.0); reglas **provisionales** D-40 | Auditoría de DEV del 30-sep |
 
 ## Canal en tiempo real
 

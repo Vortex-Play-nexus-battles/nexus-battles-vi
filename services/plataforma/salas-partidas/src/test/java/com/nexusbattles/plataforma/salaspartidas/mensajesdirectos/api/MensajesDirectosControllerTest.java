@@ -1,9 +1,11 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.api;
 
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.BandejaDeMensajesDirectos;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.BloqueosDeMensajes;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.ConsultaInvalida;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.Conversacion;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.EnviarMensajeDirecto;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.EstadoDeConversacion;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.MensajeDirecto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.MensajeDirectoRechazado;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.MotivoDeRechazo;
@@ -32,15 +34,17 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * La via REST de los mensajes privados — B6, {@code /mensajes-directos/**} de
- * {@code salas-partidas.yaml} 1.6.x.
+ * {@code salas-partidas.yaml} 1.6.x; el bloqueo (D-40), 1.8.0.
  *
  * <p>Se prueba lo que solo se puede probar aqui: la seguridad por rol, que el
  * uid propio sale del token y no de la ruta, las formas del contrato y la
@@ -63,6 +67,9 @@ class MensajesDirectosControllerTest {
 
     @MockitoBean
     private BandejaDeMensajesDirectos bandeja;
+
+    @MockitoBean
+    private BloqueosDeMensajes bloqueos;
 
     /** Token de ms-identidad tras ADR-002: el sub es el apodo, el uid va aparte. */
     private static RequestPostProcessor como(UUID uid, String apodo, String rol) {
@@ -95,11 +102,16 @@ class MensajesDirectosControllerTest {
     @Test
     @DisplayName("mis conversaciones: las del uid del token, con el esquema ResumenDeConversacion")
     void misConversaciones() throws Exception {
+        UUID carla = UUID.fromString("33333333-3333-3333-3333-333333333333");
         when(bandeja.conversacionesDe(ANA)).thenReturn(List.of(
-                new ResumenDeConversacion(BRUNO, "bruno", mensaje(BRUNO, ANA, "hola ana", null), 3)));
+                new ResumenDeConversacion(BRUNO, "bruno", mensaje(BRUNO, ANA, "hola ana", null), 3),
+                new ResumenDeConversacion(carla, "carla", mensaje(ANA, BRUNO, "otra", null), 0,
+                        EstadoDeConversacion.NO_ADMITE)));
 
         mockMvc.perform(get(BASE).with(como(ANA, "ana", "JUGADOR")))
                 .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].estado").value("ACTIVA"))
+                .andExpect(jsonPath("$[1].estado").value("NO_ADMITE"))
                 .andExpect(jsonPath("$[0].uidOtro").value(BRUNO.toString()))
                 .andExpect(jsonPath("$[0].apodoOtro").value("bruno"))
                 .andExpect(jsonPath("$[0].noLeidos").value(3))
@@ -197,6 +209,10 @@ class MensajesDirectosControllerTest {
                 .thenThrow(new MensajeDirectoRechazado(MotivoDeRechazo.SANCIONADO, null));
         when(enviarMensajeDirecto.enviar(any(), eq(BRUNO), eq("caido"), any()))
                 .thenThrow(new MensajeDirectoRechazado(MotivoDeRechazo.MODERACION_NO_DISPONIBLE, null));
+        when(enviarMensajeDirecto.enviar(any(), eq(BRUNO), eq("bloqueado"), any()))
+                .thenThrow(new MensajeDirectoRechazado(MotivoDeRechazo.CONVERSACION_BLOQUEADA, null));
+        when(enviarMensajeDirecto.enviar(any(), eq(BRUNO), eq("noadmite"), any()))
+                .thenThrow(new MensajeDirectoRechazado(MotivoDeRechazo.NO_ADMITE, null));
 
         mockMvc.perform(enviarTexto("feo"))
                 .andExpect(status().is(422))
@@ -213,6 +229,14 @@ class MensajesDirectosControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(header().doesNotExist("Retry-After"))
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/moderacion-no-disponible"));
+        mockMvc.perform(enviarTexto("bloqueado"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/conversacion-bloqueada"))
+                .andExpect(jsonPath("$.title").value("Bloqueaste a este jugador"));
+        mockMvc.perform(enviarTexto("noadmite"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/destinatario-no-admite"))
+                .andExpect(jsonPath("$.title").value("Este jugador no recibe tus mensajes"));
     }
 
     private org.springframework.test.web.servlet.RequestBuilder enviarTexto(String texto) {
@@ -239,6 +263,56 @@ class MensajesDirectosControllerTest {
         mockMvc.perform(post(BASE + "/" + BRUNO + "/leido").with(como(ANA, "ana", "JUGADOR")))
                 .andExpect(status().isNoContent());
         verify(bandeja).marcarLeida(ANA, BRUNO);
+    }
+
+    @Test
+    @DisplayName("D-40: GET del bloqueo dice si puedo escribirle, sin que haga falta una conversacion")
+    void estadoDelBloqueo() throws Exception {
+        when(bloqueos.estado(ANA, BRUNO)).thenReturn(EstadoDeConversacion.NO_ADMITE);
+
+        mockMvc.perform(get(BASE + "/" + BRUNO + "/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uidOtro").value(BRUNO.toString()))
+                .andExpect(jsonPath("$.estado").value("NO_ADMITE"));
+    }
+
+    @Test
+    @DisplayName("D-40: PUT bloquea y DELETE desbloquea, siempre en nombre del token, con el estado resultante")
+    void bloquearYDesbloquear() throws Exception {
+        when(bloqueos.bloquear(ANA, BRUNO)).thenReturn(EstadoDeConversacion.BLOQUEADA);
+        when(bloqueos.desbloquear(ANA, BRUNO)).thenReturn(EstadoDeConversacion.ACTIVA);
+
+        mockMvc.perform(put(BASE + "/" + BRUNO + "/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uidOtro").value(BRUNO.toString()))
+                .andExpect(jsonPath("$.estado").value("BLOQUEADA"));
+        mockMvc.perform(delete(BASE + "/" + BRUNO + "/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("ACTIVA"));
+        verify(bloqueos).bloquear(ANA, BRUNO);
+        verify(bloqueos).desbloquear(ANA, BRUNO);
+    }
+
+    @Test
+    @DisplayName("D-40: nadie se bloquea a si mismo ni a un uid mal formado; un token de servicio no bloquea")
+    void bloqueoRechazado() throws Exception {
+        when(bloqueos.bloquear(ANA, ANA))
+                .thenThrow(new MensajeDirectoRechazado(MotivoDeRechazo.DESTINATARIO_PROPIO, null));
+
+        mockMvc.perform(put(BASE + "/" + ANA + "/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/destinatario-propio"));
+        mockMvc.perform(get(BASE + "/" + ANA + "/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/destinatario-propio"));
+        mockMvc.perform(delete(BASE + "/nadie/bloqueo").with(como(ANA, "ana", "JUGADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errores[0].campo").value("uidOtro"));
+        mockMvc.perform(put(BASE + "/" + BRUNO + "/bloqueo").with(como(ANA, "x", "SERVICIO")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(BASE + "/" + BRUNO + "/bloqueo")).andExpect(status().isUnauthorized());
+        verify(bloqueos, never()).bloquear(ANA, BRUNO);
+        verify(bloqueos, never()).estado(any(), any());
     }
 
     @Test

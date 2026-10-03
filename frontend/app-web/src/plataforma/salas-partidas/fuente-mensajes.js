@@ -14,9 +14,10 @@
  * rutas ni de STOMP. Lo que se exporta ahora es un adaptador que la cumple
  * contra tres contratos:
  *
- *   - `contracts/openapi/salas-partidas.yaml` 1.6.1, `/mensajes-directos/**`:
- *     bandeja, historial paginado hacia atrás, envío de respaldo y leído;
- *   - `contracts/websocket/mensajes-directos.yaml` 1.0.1: envío por
+ *   - `contracts/openapi/salas-partidas.yaml` 1.8.0, `/mensajes-directos/**`:
+ *     bandeja, historial paginado hacia atrás, envío de respaldo, leído y
+ *     bloqueo;
+ *   - `contracts/websocket/mensajes-directos.yaml` 1.1.0: envío por
  *     `/app/mensajes-directos/{uid}` con `idCliente`, y mensajes y rechazos
  *     por la cola de usuario `/usuario/cola/mensajes-directos`;
  *   - `contracts/openapi/ms-identidad-perfiles.yaml` 1.1.0,
@@ -45,16 +46,28 @@
  *     pone al día: lo que llegó entre la primera bandeja y la suscripción no
  *     se pierde.
  *
+ * ## Bloquear (D-40, provisional)
+ *
+ *   - `bloquear(uid, true)` hace `PUT …/{uid}/bloqueo` y `bloquear(uid,
+ *     false)`, `DELETE`; las dos devuelven la conversación con el `estado`
+ *     que dice el servidor (`BLOQUEADA`, `ACTIVA` o, si el otro también
+ *     bloqueó, `NO_ADMITE`).
+ *   - El `estado` de cada conversación viene en la bandeja. Una conversación
+ *     nueva (desde la búsqueda) lo pregunta con `GET …/{uid}/bloqueo`.
+ *   - Si un envío se rechaza por un bloqueo (`CONVERSACION_BLOQUEADA`,
+ *     `NO_ADMITE`), el fallo trae el `estadoDeConversacion` nuevo para que la
+ *     vista deje de ofrecer el campo: pasa si te bloquean con la
+ *     conversación abierta.
+ *
  * ## Lo que el servicio no tiene, y cómo se dice
  *
- *   - **Bloquear jugadores**: es una decisión del PO pendiente y no hay ruta.
- *     `bloquear` rechaza con un `detalle` que lo dice y no cambia nada.
  *   - **Acuse de lectura del otro**: el servidor no lo publica (el `leido` de
  *     un mensaje propio es «leído por quien consulta»). Lo tuyo se queda en
  *     «Enviado»: nunca se pinta un «Leído» que nadie confirmó, y no hay
  *     eventos `leido`.
- *   - **Estado de la conversación**: siempre `ACTIVA`. Un destinatario que no
- *     existe o no está activo lo dice el rechazo al escribirle.
+ *   - **Cuenta del otro sancionada** (`CUENTA_SANCIONADA`): el servicio no
+ *     la expone en la bandeja; un destinatario que no existe o no está activo
+ *     lo dice el rechazo al escribirle.
  *   - **Tu silencio** (`restriccion`): el servicio no lo expone; es `null`, y
  *     si escribes con una sanción activa lo dice el rechazo `SANCIONADO`.
  *
@@ -90,7 +103,7 @@ import { conectarChat } from './cliente-chat.js';
  *   ACTIVA: se puede escribir. BLOQUEADA: bloqueaste tú al otro jugador.
  *   NO_ADMITE: el otro no recibe mensajes tuyos (no se dice por qué).
  *   CUENTA_SANCIONADA: la cuenta del otro está suspendida o baneada.
- *   El adaptador del servicio solo produce ACTIVA (ver arriba).
+ *   El adaptador del servicio produce ACTIVA, BLOQUEADA y NO_ADMITE (D-40).
  */
 
 /**
@@ -136,8 +149,12 @@ import { conectarChat } from './cliente-chat.js';
  * Lo que rechaza una operación de la fuente. La vista lee `detalle` (lo que
  * se enseña) y `reintentable` (si ofrecer «Reintentar» tiene sentido).
  *
+ * Si el rechazo dice que la conversación ya no admite mensajes (un bloqueo),
+ * `estadoDeConversacion` trae su estado nuevo.
+ *
  * @typedef {Error & {detalle: string, motivo: string|null, estado: number,
- *   reintentable: boolean, reintentarEnSegundos: number|null}} FalloDeLaFuente
+ *   reintentable: boolean, reintentarEnSegundos: number|null,
+ *   estadoDeConversacion: EstadoDeConversacion|null}} FalloDeLaFuente
  */
 
 /**
@@ -155,6 +172,7 @@ import { conectarChat } from './cliente-chat.js';
  *   rechaza con un `FalloDeLaFuente`
  * @property {(conversacionId: string) => Promise<void>} marcarLeida
  * @property {(jugadorId: string, bloquear: boolean) => Promise<ResumenDeConversacion>} bloquear
+ *   bloquea (`true`) o desbloquea (`false`) y devuelve la conversación con su estado
  * @property {(alEvento: (evento: EventoDeMensajes) => void) => () => void} escuchar
  *   devuelve cómo dejar de escuchar
  * @property {() => void} [reintentar] otra ronda de conexión, a mano
@@ -244,8 +262,6 @@ const SIN_RESPUESTA =
 const SIN_ENVIO = 'No pudimos enviarlo. Revisa tu conexión e inténtalo de nuevo.';
 const SIN_BUSQUEDA = 'La búsqueda de jugadores no responde. Inténtalo de nuevo en un momento.';
 const SESION_NO_VALIDA = 'Tu sesión ya no es válida: vuelve a iniciar sesión.';
-const SIN_BLOQUEO =
-  'Bloquear a un jugador todavía no está disponible: sus mensajes te siguen llegando.';
 const CONVERSACION_INEXISTENTE = 'Esa conversación no existe.';
 
 /**
@@ -286,10 +302,40 @@ export const RECHAZOS = Object.freeze({
       'No pudimos revisar tu mensaje y no sale sin revisar. Inténtalo de nuevo en un momento.',
     reintentable: true,
   },
+  CONVERSACION_BLOQUEADA: {
+    detalle: 'Bloqueaste a este jugador: desbloquéalo si quieres volver a escribirle.',
+    reintentable: false,
+  },
+  NO_ADMITE: {
+    detalle: 'Este jugador no recibe mensajes tuyos.',
+    reintentable: false,
+  },
 });
 
 /**
- * El motivo de cada `type` de la vía REST (salas-partidas.yaml 1.6.1). Se
+ * El estado en que queda la conversación cuando un envío se rechaza por un
+ * bloqueo (D-40): la vista deja de ofrecer el campo.
+ */
+const ESTADO_POR_RECHAZO = Object.freeze({
+  CONVERSACION_BLOQUEADA: 'BLOQUEADA',
+  NO_ADMITE: 'NO_ADMITE',
+});
+
+/** Los `estado` que puede mandar el servicio (`EstadoDeConversacionValor`, 1.8.0). */
+const ESTADOS_DEL_SERVICIO = new Set(['ACTIVA', 'BLOQUEADA', 'NO_ADMITE']);
+
+/**
+ * Un `estado` del servicio, o null si no es uno del contrato.
+ *
+ * @param {unknown} valor
+ * @returns {EstadoDeConversacion|null}
+ */
+function estadoDe(valor) {
+  return ESTADOS_DEL_SERVICIO.has(valor) ? /** @type {EstadoDeConversacion} */ (valor) : null;
+}
+
+/**
+ * El motivo de cada `type` de la vía REST (salas-partidas.yaml 1.8.0). Se
  * decide por el `type`, nunca por el texto (MAPEO-ERRORES, regla de oro).
  */
 const MOTIVO_POR_TIPO = Object.freeze({
@@ -300,6 +346,8 @@ const MOTIVO_POR_TIPO = Object.freeze({
   'contenido-bloqueado': 'TEXTO_NO_PERMITIDO',
   'demasiados-mensajes': 'DEMASIADO_RAPIDO',
   'moderacion-no-disponible': 'MODERACION_NO_DISPONIBLE',
+  'conversacion-bloqueada': 'CONVERSACION_BLOQUEADA',
+  'destinatario-no-admite': 'NO_ADMITE',
 });
 
 /**
@@ -309,11 +357,18 @@ export class FalloDeMensajes extends Error {
   /**
    * @param {string} detalle lo que se enseña al jugador
    * @param {{motivo?: string|null, estado?: number, reintentable?: boolean,
-   *   reintentarEnSegundos?: number|null}} [datos]
+   *   reintentarEnSegundos?: number|null,
+   *   estadoDeConversacion?: EstadoDeConversacion|null}} [datos]
    */
   constructor(
     detalle,
-    { motivo = null, estado = 0, reintentable = true, reintentarEnSegundos = null } = {},
+    {
+      motivo = null,
+      estado = 0,
+      reintentable = true,
+      reintentarEnSegundos = null,
+      estadoDeConversacion = null,
+    } = {},
   ) {
     super(detalle);
     this.name = 'FalloDeMensajes';
@@ -322,6 +377,7 @@ export class FalloDeMensajes extends Error {
     this.estado = estado;
     this.reintentable = reintentable;
     this.reintentarEnSegundos = reintentarEnSegundos;
+    this.estadoDeConversacion = estadoDeConversacion;
   }
 }
 
@@ -348,6 +404,7 @@ export function falloPorMotivo(motivo, { estado = 0, reintentarEnSegundos = null
     estado,
     reintentable: rechazo.reintentable,
     reintentarEnSegundos,
+    estadoDeConversacion: ESTADO_POR_RECHAZO[motivo] ?? null,
   });
 }
 
@@ -581,10 +638,48 @@ export function fuenteHttpDeMensajes({
         ? { texto: ultimo.texto, enviadoEn: ultimo.fecha, deMi: ultimo.remitente === yo }
         : null,
       noLeidos: Math.max(0, Math.floor(Number(crudo.noLeidos) || 0)),
-      estado: 'ACTIVA',
+      // Un servicio anterior a 1.8.0 no lo manda: sin bloqueos, ACTIVA.
+      estado: estadoDe(crudo.estado) ?? 'ACTIVA',
     };
     resumenes.set(uid, resumen);
     return resumen;
+  }
+
+  /** Una conversación sin mensajes todavía: existe en cuanto hay uno. */
+  function conversacionVacia(uid) {
+    return {
+      id: uid,
+      con: { id: uid, apodo: apodos.get(uid) ?? 'Jugador' },
+      ultimo: null,
+      noLeidos: 0,
+      estado: 'ACTIVA',
+    };
+  }
+
+  /** Anota el estado nuevo de una conversación y la devuelve. */
+  function cambiarEstado(uid, estado) {
+    const resumen = { ...(resumenes.get(uid) ?? conversacionVacia(uid)), estado };
+    resumenes.set(uid, resumen);
+    return resumen;
+  }
+
+  /**
+   * El estado de una conversación que todavía no está en la bandeja. Si el
+   * servicio no lo dice, ACTIVA: escribir dirá el rechazo si lo hay, y no se
+   * deja sin abrir una conversación por una consulta que falló.
+   */
+  async function preguntarEstado(uid) {
+    try {
+      const respuesta = await fetchImpl(`${rutaDe(uid)}/bloqueo`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (!respuesta.ok) {
+        return 'ACTIVA';
+      }
+      return estadoDe((await respuesta.json())?.estado) ?? 'ACTIVA';
+    } catch {
+      return 'ACTIVA';
+    }
   }
 
   /** El `uid` del otro de una conversación del puerto, o un fallo claro. */
@@ -1065,16 +1160,10 @@ export function fuenteHttpDeMensajes({
         return conocida;
       }
       // El servicio no tiene «crear conversación»: existe en cuanto hay un
-      // mensaje. Hasta entonces es esta, vacía.
-      const nueva = {
-        id: uid,
-        con: { id: uid, apodo: apodos.get(uid) ?? 'Jugador' },
-        ultimo: null,
-        noLeidos: 0,
-        estado: 'ACTIVA',
-      };
-      resumenes.set(uid, nueva);
-      return nueva;
+      // mensaje. Hasta entonces es esta, vacía, con el estado que diga el
+      // bloqueo (D-40).
+      const estado = await preguntarEstado(uid);
+      return resumenes.get(uid) ?? cambiarEstado(uid, estado);
     },
 
     async hilo(conversacionId, { antesDe = null, limite = TAMANO_DE_PAGINA } = {}) {
@@ -1108,6 +1197,9 @@ export function fuenteHttpDeMensajes({
         if (error?.reintentable !== false) {
           porReintentar.set(clave, idCliente);
         }
+        if (error?.estadoDeConversacion) {
+          cambiarEstado(uid, error.estadoDeConversacion);
+        }
         throw error;
       }
     },
@@ -1124,10 +1216,34 @@ export function fuenteHttpDeMensajes({
       }
     },
 
-    async bloquear() {
-      // Decisión del PO pendiente: el servicio no tiene bloqueo. Se dice, y
-      // nada cambia de estado.
-      throw new FalloDeMensajes(SIN_BLOQUEO, { reintentable: false });
+    async bloquear(jugadorId, bloquear) {
+      const uid = uidDe(jugadorId);
+      if (!uid) {
+        throw new FalloDeMensajes('Ese jugador no existe.', { reintentable: false });
+      }
+      if (uid === yo) {
+        throw falloPorMotivo('DESTINATARIO_PROPIO');
+      }
+      const respuesta = await pedir(
+        `${rutaDe(uid)}/bloqueo`,
+        { method: bloquear ? 'PUT' : 'DELETE', headers: { Accept: 'application/json' } },
+        SIN_RESPUESTA,
+      );
+      if (!respuesta.ok) {
+        throw falloDeLectura(respuesta, SIN_RESPUESTA);
+      }
+      let estado = null;
+      try {
+        estado = estadoDe((await respuesta.json())?.estado);
+      } catch {
+        estado = null;
+      }
+      if (!estado) {
+        // Sin el estado del contrato no se sabe en qué quedó: no se pinta un
+        // bloqueo que nadie confirmó.
+        throw new FalloDeMensajes(SIN_RESPUESTA, { estado: respuesta.status });
+      }
+      return cambiarEstado(uid, estado);
     },
 
     escuchar(alEvento) {
