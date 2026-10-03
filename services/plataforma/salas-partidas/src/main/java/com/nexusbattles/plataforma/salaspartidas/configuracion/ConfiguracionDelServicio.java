@@ -227,6 +227,21 @@ public class ConfiguracionDelServicio {
     }
 
     /**
+     * Cierra las salas y partidas abandonadas y devuelve su apuesta (auditoria
+     * de DEV del 30-sep). El plazo es el vencimiento de la reserva en
+     * ms-finanzas, 72 h: una sala no vive mas que la reserva que la respalda
+     * (D-39). La cadencia la pone {@code CierreDeAbandonadasProgramado}.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.CerrarAbandonadas cerrarAbandonadas(
+            RepositorioDeSalas salas, RepositorioDePartidas partidas, CancelarSala cancelar,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta, CanalDePartida canal,
+            @org.springframework.beans.factory.annotation.Value("${salas.abandono.horas:72}") long horas) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.CerrarAbandonadas(
+                salas, partidas, cancelar, apuesta, canal, Clock.systemUTC(), Duration.ofHours(horas));
+    }
+
+    /**
      * Cliente hacia el libro de creditos (ms-finanzas, contrato
      * {@code contracts/openapi/creditos.yaml}) — HU-JUE-014.
      *

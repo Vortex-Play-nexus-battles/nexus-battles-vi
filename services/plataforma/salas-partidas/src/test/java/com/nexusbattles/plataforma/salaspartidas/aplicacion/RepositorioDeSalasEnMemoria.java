@@ -62,4 +62,13 @@ class RepositorioDeSalasEnMemoria implements RepositorioDeSalas {
     int cuantasHay() {
         return almacen.size();
     }
+
+    @Override
+    public List<Sala> sinEmpezarDesde(java.time.Instant limite, int lote) {
+        return almacen.values().stream()
+                .filter(sala -> sala.estado().apareceEnElListado())
+                .filter(sala -> !sala.creadaEn().isAfter(limite))
+                .limit(lote)
+                .toList();
+    }
 }

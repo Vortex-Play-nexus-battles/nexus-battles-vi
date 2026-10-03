@@ -562,6 +562,26 @@ public final class Sala {
     }
 
     /**
+     * La cierra el sistema porque nadie la llego a jugar —
+     * {@link MotivoDeCancelacion#INACTIVIDAD}, auditoria de DEV del 30-sep.
+     *
+     * <p>Sin anfitrion que lo pida: una sala abierta (o llena, o privada) que
+     * pasa el plazo de abandono sin empezar retenia para siempre la apuesta de
+     * quienes estaban dentro. Solo desde un estado sin partida: una sala EN
+     * JUEGO se cierra terminando su partida, y una ya cancelada o finalizada
+     * no cambia.
+     *
+     * @return true si la sala paso a CANCELADA
+     */
+    public boolean cerrarPorAbandono() {
+        if (estado != EstadoSala.ABIERTA && estado != EstadoSala.LLENA && estado != EstadoSala.PRIVADA) {
+            return false;
+        }
+        estado = EstadoSala.CANCELADA;
+        return true;
+    }
+
+    /**
      * Arranca el combate — HU-SAL-004, RF-JUE-017.
      *
      * <p>Solo el anfitrion, y solo una vez: al pasar a {@link EstadoSala#EN_JUEGO}

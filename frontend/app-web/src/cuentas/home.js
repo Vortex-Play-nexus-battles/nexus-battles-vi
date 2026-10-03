@@ -160,7 +160,10 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar, cabecera = null) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: distintivoDeCreditos(saldo.saldoReservado, { tam: 'grande' }),
-      detalle: 'Vuelve si la sala se cancela',
+      // Auditoría de DEV del 30-sep: el jugador veía créditos apartados sin
+      // saber cuándo vuelven. Los tres caminos son del servidor (salas-partidas
+      // y ms-finanzas, D-39): cancelar, terminar o 72 h sin jugarse.
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   return caja;
