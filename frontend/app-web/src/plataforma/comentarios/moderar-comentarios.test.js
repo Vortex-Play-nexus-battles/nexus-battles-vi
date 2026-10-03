@@ -49,9 +49,9 @@ function vista() {
     <main data-vista="moderar-comentarios">
       <div data-zona="aviso" hidden></div>
       <select data-zona="filtro">
-        <option value="en-revision">En revisión</option>
+        <option value="en-revision">Pendientes de revisión</option>
         <option value="marcados">Marcados para seguimiento</option>
-        <option value="sin-marcar">En revisión sin marcar</option>
+        <option value="sin-marcar">Pendientes sin marcar</option>
       </select>
       <div data-zona="cola"></div>
       <div data-zona="detalle-contenedor"></div>

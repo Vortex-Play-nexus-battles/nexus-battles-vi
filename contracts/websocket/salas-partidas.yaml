@@ -34,9 +34,20 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.5.0
+  version: 1.6.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    **1.6.0 (auditoria de DEV del 30-sep) — chat sin dibujos ni inundaciones.
+    Aditivo.** Ningun destino ni esquema cambia. Antes de la lista negra, el
+    texto de `enviarChat` y `enviarChatGeneral` se depura (Unicode NFKC, sin
+    caracteres de control ni de formato invisibles, los saltos de linea en
+    una sola forma) y se rechaza con `errorDeCanal` `type` `mensaje-invalido`
+    (400) si tiene demasiadas lineas, una racha larga del mismo caracter o, en
+    un texto largo, casi solo simbolos; el `detail` explica cual. Y quien
+    escribe mas deprisa de lo admitido recibe `errorDeCanal` `type`
+    `demasiados-mensajes` (429), el mismo de los mensajes privados. Los
+    valores son provisionales (D-37) y viven en la configuracion del servicio.
 
     **1.5.0 (B7, BACKEND-09) — combate contractual. Aditivo.** El combate usa
     el heroe real y las reglas de la seccion 6: `codigoAccion` admite las
@@ -183,8 +194,9 @@ channels:
       de HU-ADM-002.
 
       Los errores de envio (jugador silenciado, contenido bloqueado, filtro
-      no disponible, mensaje invalido) no se difunden: vuelven a quien
-      escribio por /usuario/cola/salas como errorDeCanal (CA-03).
+      no disponible, mensaje invalido, demasiados mensajes) no se difunden:
+      vuelven a quien escribio por /usuario/cola/salas como errorDeCanal
+      (CA-03).
     parameters:
       idSala:
         description: Identificador de la sala

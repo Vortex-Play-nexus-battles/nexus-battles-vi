@@ -117,6 +117,54 @@ class DetectorDeTerminosTest {
         }
     }
 
+    @Nested
+    @DisplayName("plural y genero de los insultos (auditoria de DEV del 30-sep)")
+    class PluralYGenero {
+
+        private final List<TerminoActivo> insultos = List.of(
+                termino("puta", CategoriaDeTermino.OFENSIVO),
+                termino("perra", CategoriaDeTermino.OFENSIVO, ModoDeCoincidencia.PALABRA),
+                termino("maricón", CategoriaDeTermino.OFENSIVO, ModoDeCoincidencia.PALABRA),
+                termino("malparido", CategoriaDeTermino.OFENSIVO),
+                termino("pendejo", CategoriaDeTermino.OFENSIVO),
+                termino("mierda", CategoriaDeTermino.OFENSIVO),
+                termino("shakira", CategoriaDeTermino.CELEBRIDAD),
+                termino("messi", CategoriaDeTermino.CELEBRIDAD, ModoDeCoincidencia.PALABRA));
+
+        private List<String> en(String texto) {
+            return DetectorDeTerminos.coincidencias(NormalizadorDeTexto.normalizar(texto), insultos).stream()
+                    .map(TerminoActivo::termino).toList();
+        }
+
+        @ParameterizedTest(name = "rechaza «{0}»")
+        @ValueSource(strings = {"eres una puta", "son unas putas", "PUTAS", "p u t a s", "putas69",
+                "malparida", "malparidos", "unos malparidas", "pendeja", "pendejos", "PENDEJAS",
+                "maricones", "mierdas", "perras"})
+        void pasabanEnElChatYYaNo(String texto) {
+            assertThat(en(texto)).isNotEmpty();
+        }
+
+        @ParameterizedTest(name = "acepta «{0}»")
+        @ValueSource(strings = {"disputas", "mi perro", "mi perrita", "perrito", "reputaciones",
+                "computadoras", "pendiente", "malpar", "messis", "shakir"})
+        void loCorrienteSigueEntrando(String texto) {
+            assertThat(en(texto)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("una marca o una persona no se declinan: el plural de messi y la raiz de shakira no casan")
+        void lasPersonasNoSeDeclinan() {
+            assertThat(DetectorDeTerminos.conPlural("puta")).containsExactlyInAnyOrder("puta", "putas");
+            assertThat(DetectorDeTerminos.conPlural("maricon")).containsExactlyInAnyOrder("maricon", "maricones");
+            assertThat(DetectorDeTerminos.raizSinGenero("malparido")).isEqualTo("malparid");
+            assertThat(DetectorDeTerminos.raizSinGenero("mierda")).isEqualTo("mierd");
+            assertThat(DetectorDeTerminos.raizSinGenero("perra")).as("menos de seis letras: no se recorta").isNull();
+            assertThat(DetectorDeTerminos.raizSinGenero("cabron")).as("no acaba en o ni en a").isNull();
+            assertThat(en("Messi")).containsExactly("messi");
+            assertThat(en("shakira")).containsExactly("shakira");
+        }
+    }
+
     @Test
     @DisplayName("varias coincidencias salen todas, en el orden de la lista y sin repetir")
     void varias() {

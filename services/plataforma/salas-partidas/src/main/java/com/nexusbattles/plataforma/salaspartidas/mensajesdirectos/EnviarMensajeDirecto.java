@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos;
 
 import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
+import com.nexusbattles.plataforma.salaspartidas.chat.PoliticaDeTexto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores.CuentaDeJugador;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores.DirectorioNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.RepositorioDeMensajesDirectos.Guardado;
@@ -77,11 +78,27 @@ public class EnviarMensajeDirecto {
     private final EntregaDeMensajesDirectos entrega;
     private final AvisoDeMensajeDirecto aviso;
     private final Clock reloj;
+    private final PoliticaDeTexto.Limites limitesDeTexto;
 
     public EnviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio, SancionesDelJugador sanciones,
                                 DirectorioDeJugadores directorio, FiltroDeMensajesPrivados filtro,
                                 LimiteDeFrecuencia limite, EntregaDeMensajesDirectos entrega,
                                 AvisoDeMensajeDirecto aviso, Clock reloj) {
+        this(repositorio, sanciones, directorio, filtro, limite, entrega, aviso, reloj,
+                PoliticaDeTexto.Limites.POR_OMISION);
+    }
+
+    /**
+     * @param limitesDeTexto los del chat ({@link PoliticaDeTexto}, D-37): un
+     *     mensaje privado tampoco puede ser un dibujo de simbolos ni una
+     *     inundacion de lineas (auditoria de DEV del 30-sep)
+     */
+    public EnviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio, SancionesDelJugador sanciones,
+                                DirectorioDeJugadores directorio, FiltroDeMensajesPrivados filtro,
+                                LimiteDeFrecuencia limite, EntregaDeMensajesDirectos entrega,
+                                AvisoDeMensajeDirecto aviso, Clock reloj,
+                                PoliticaDeTexto.Limites limitesDeTexto) {
+        this.limitesDeTexto = Objects.requireNonNull(limitesDeTexto);
         this.repositorio = Objects.requireNonNull(repositorio);
         this.sanciones = Objects.requireNonNull(sanciones);
         this.directorio = Objects.requireNonNull(directorio);
@@ -158,12 +175,13 @@ public class EnviarMensajeDirecto {
         return idCliente;
     }
 
-    private static String textoValido(String texto, String idCliente) {
-        if (texto == null || texto.isBlank()) {
-            throw new MensajeDirectoRechazado(MotivoDeRechazo.TEXTO_INVALIDO, idCliente);
-        }
-        String limpio = texto.strip();
-        if (limpio.length() > LARGO_MAXIMO) {
+    private String textoValido(String texto, String idCliente) {
+        // Lo mismo que el chat (PoliticaDeTexto): se guarda el texto depurado
+        // —NFKC, sin invisibles— y un dibujo de simbolos o una inundacion de
+        // lineas no es un mensaje (auditoria de DEV del 30-sep).
+        String limpio = PoliticaDeTexto.depurar(texto);
+        if (limpio.isEmpty() || limpio.length() > LARGO_MAXIMO
+                || PoliticaDeTexto.problema(limpio, limitesDeTexto).isPresent()) {
             throw new MensajeDirectoRechazado(MotivoDeRechazo.TEXTO_INVALIDO, idCliente);
         }
         return limpio;

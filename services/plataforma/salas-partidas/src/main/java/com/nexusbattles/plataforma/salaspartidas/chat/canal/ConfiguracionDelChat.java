@@ -3,14 +3,19 @@ package com.nexusbattles.plataforma.salaspartidas.chat.canal;
 import com.nexusbattles.plataforma.salaspartidas.chat.EnviarMensaje;
 import com.nexusbattles.plataforma.salaspartidas.chat.FiltroDeContenido;
 import com.nexusbattles.plataforma.salaspartidas.chat.HistorialDeChat;
+import com.nexusbattles.plataforma.salaspartidas.chat.LimiteDeEnvios;
+import com.nexusbattles.plataforma.salaspartidas.chat.PoliticaDeTexto;
 import com.nexusbattles.plataforma.salaspartidas.chat.PublicadorDeChat;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.LimiteDeFrecuenciaEnMemoria;
 import com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
+import java.time.Duration;
 
 /**
  * Beans del chat de HU-JUE-015.
@@ -31,8 +36,39 @@ public class ConfiguracionDelChat {
 
     @Bean
     public EnviarMensaje enviarMensaje(HistorialDeChat historial, FiltroDeContenido filtro,
-            SancionesDelJugador sanciones, PublicadorDeChat publicador) {
-        return new EnviarMensaje(historial, filtro, sanciones, publicador, Clock.systemUTC());
+            SancionesDelJugador sanciones, PublicadorDeChat publicador,
+            PoliticaDeTexto.Limites limitesDeTexto, LimiteDeEnvios limiteDelChat) {
+        return new EnviarMensaje(historial, filtro, sanciones, publicador, Clock.systemUTC(),
+                limitesDeTexto, limiteDelChat);
+    }
+
+    /**
+     * Lo que un mensaje tiene que ser para publicarse, ademas de pasar la lista
+     * negra (auditoria de DEV del 30-sep). Lo usan el chat y los mensajes
+     * privados. PROVISIONAL, D-37: ningun requisito fija estos numeros.
+     */
+    @Bean
+    public PoliticaDeTexto.Limites limitesDeTextoDelChat(
+            @Value("${chat.texto.maximo-de-lineas:6}") int maximoDeLineas,
+            @Value("${chat.texto.maxima-repeticion:15}") int maximaRepeticion,
+            @Value("${chat.texto.largo-para-mirar-simbolos:40}") int largoParaMirarSimbolos,
+            @Value("${chat.texto.minimo-de-letras-por-ciento:50}") int minimoDeLetrasPorCiento) {
+        return new PoliticaDeTexto.Limites(maximoDeLineas, maximaRepeticion, largoParaMirarSimbolos,
+                minimoDeLetrasPorCiento);
+    }
+
+    /**
+     * Cuantos mensajes seguidos admite el chat general y el de sala por autor.
+     * El chat no tenia ninguno (auditoria de DEV del 30-sep); el adaptador es
+     * el de los mensajes privados, con sus propios valores. PROVISIONAL, D-37.
+     */
+    @Bean
+    public LimiteDeEnvios limiteDelChat(
+            @Value("${chat.limite.mensajes:5}") int mensajes,
+            @Value("${chat.limite.ventana-segundos:10}") long ventanaSegundos) {
+        LimiteDeFrecuenciaEnMemoria limite = new LimiteDeFrecuenciaEnMemoria(mensajes,
+                Duration.ofSeconds(ventanaSegundos), Clock.systemUTC());
+        return limite::registrar;
     }
 
     /**

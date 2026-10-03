@@ -200,6 +200,14 @@
      para que nadie tenga que adivinarlo. */
   --cabecera-alto: 64px;
 
+  /* Capa de los modales: la ficha de producto y los diálogos (velo). Comparten
+     una sola y entre ellos manda el orden del DOM, así que lo que se abre
+     después queda encima — la confirmación de «Eliminar tu comentario» quedaba
+     DETRÁS de la ficha cuando cada uno iba por su lado (auditoría de DEV del
+     30-sep). Por encima de los menús de la cabecera (30) y del desenlace del
+     combate (40); por debajo de los avisos flotantes, que se ven siempre. */
+  --capa-modal: 50;
+
   /* UX-R2.9 — estas cuatro subieron a 44 px, el objetivo tactil minimo.
      Venian de la maqueta, donde un boton pequeno eran 32 px y un campo 40.
      Sobre el papel se ven bien; en el laboratorio visual daban **327

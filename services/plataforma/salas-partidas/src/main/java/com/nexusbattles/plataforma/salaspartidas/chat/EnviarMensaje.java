@@ -24,6 +24,12 @@ import java.util.UUID;
  * logro (CA-02), su mision y su titulo. Cada uno se verifica por separado,
  * porque unidos en un solo texto el final de uno y el principio del otro
  * podrian formar un termino que ninguno contiene (HU-COM-007).
+ *
+ * <p>Auditoria de DEV del 30-sep: antes de todo eso, el texto se depura y se
+ * mira que sea un mensaje y no un dibujo de simbolos o una inundacion
+ * ({@link PoliticaDeTexto}), y el autor no puede escribir mas deprisa de lo
+ * que admite {@link LimiteDeEnvios} (429). Las dos van antes que las consultas
+ * a otros servicios: rechazar lo evidente no debe costar una llamada de red.
  */
 public class EnviarMensaje {
 
@@ -34,18 +40,33 @@ public class EnviarMensaje {
     private final SancionesDelJugador sanciones;
     private final PublicadorDeChat publicador;
     private final Clock reloj;
+    private final PoliticaDeTexto.Limites limites;
+    private final LimiteDeEnvios limite;
 
+    /** Sin limite de frecuencia y con los limites de texto por omision: lo usan las pruebas. */
     public EnviarMensaje(HistorialDeChat historial, FiltroDeContenido filtro,
             SancionesDelJugador sanciones, PublicadorDeChat publicador, Clock reloj) {
+        this(historial, filtro, sanciones, publicador, reloj,
+                PoliticaDeTexto.Limites.POR_OMISION, LimiteDeEnvios.SIN_LIMITE);
+    }
+
+    public EnviarMensaje(HistorialDeChat historial, FiltroDeContenido filtro,
+            SancionesDelJugador sanciones, PublicadorDeChat publicador, Clock reloj,
+            PoliticaDeTexto.Limites limites, LimiteDeEnvios limite) {
         this.historial = historial;
         this.filtro = filtro;
         this.sanciones = sanciones;
         this.publicador = publicador;
         this.reloj = reloj;
+        this.limites = limites;
+        this.limite = limite;
     }
 
     public MensajeDeChat enviar(Canal canal, Autor autor, String texto, LogroCompartido logro) {
-        String limpio = validar(texto);
+        String limpio = validar(texto, limites);
+        limite.registrar(autor.id()).ifPresent(espera -> {
+            throw new DemasiadosMensajes(espera);
+        });
         if (sanciones.tieneSancionActiva(autor.id())) {
             throw new JugadorSilenciado();
         }
@@ -80,14 +101,17 @@ public class EnviarMensaje {
         throw new FiltroNoDisponible();
     }
 
-    private static String validar(String texto) {
-        if (texto == null || texto.isBlank()) {
-            throw new MensajeInvalido("El mensaje no puede estar vacio.");
+    private static String validar(String texto, PoliticaDeTexto.Limites limites) {
+        String limpio = PoliticaDeTexto.depurar(texto);
+        if (limpio.isEmpty()) {
+            throw new MensajeInvalido("El mensaje no puede estar vacío.");
         }
-        String limpio = texto.strip();
         if (limpio.length() > LARGO_MAXIMO) {
             throw new MensajeInvalido("El mensaje no puede superar " + LARGO_MAXIMO + " caracteres.");
         }
+        PoliticaDeTexto.problema(limpio, limites).ifPresent(explicacion -> {
+            throw new MensajeInvalido(explicacion);
+        });
         return limpio;
     }
 }

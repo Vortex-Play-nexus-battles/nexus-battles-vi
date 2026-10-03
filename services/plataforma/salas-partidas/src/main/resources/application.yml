@@ -180,6 +180,18 @@ chat:
     # (`chat.historial.tamano`, D-16). Esto es lo que se aplica si el catalogo
     # no esta configurado o no responde.
     tamano: ${CHAT_HISTORIAL_TAMANO:50}
+  # Auditoria de DEV del 30-sep: en el chat general entro un bloque de ASCII
+  # art y nada limitaba la frecuencia. PROVISIONAL, decision del PO pendiente
+  # (D-37): ningun requisito fija estos numeros. Los limites de texto valen
+  # tambien para los mensajes privados.
+  limite:
+    mensajes: ${CHAT_LIMITE_MENSAJES:5}
+    ventana-segundos: ${CHAT_LIMITE_VENTANA_SEGUNDOS:10}
+  texto:
+    maximo-de-lineas: ${CHAT_TEXTO_MAXIMO_LINEAS:6}
+    maxima-repeticion: ${CHAT_TEXTO_MAXIMA_REPETICION:15}
+    largo-para-mirar-simbolos: ${CHAT_TEXTO_LARGO_PARA_MIRAR_SIMBOLOS:40}
+    minimo-de-letras-por-ciento: ${CHAT_TEXTO_MINIMO_LETRAS_POR_CIENTO:50}
 
 # B6 — Mensajes privados entre jugadores (FEEDBACK DEL PROFESOR, no requisito
 # del documento: el 7.6 pide chat en las salas y en la vista general). Van sobre

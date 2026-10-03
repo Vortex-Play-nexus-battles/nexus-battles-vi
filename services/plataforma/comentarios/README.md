@@ -8,7 +8,7 @@ cinco estrellas, incluyendo el hilo de comentarios... Los usuarios solo pueden
 calificar un producto una vez, pero podrán agregar o retirar tantos
 comentarios como sea de su agrado».
 
-El contrato vive en `contracts/openapi/comentarios.yaml` (1.7.1).
+El contrato vive en `contracts/openapi/comentarios.yaml` (1.8.0).
 
 ## Qué hace
 
@@ -36,6 +36,13 @@ El contrato vive en `contracts/openapi/comentarios.yaml` (1.7.1).
 - **Moderación**: cola priorizada, reportes, APROBAR/OCULTAR/ELIMINAR/RESTAURAR
   y, desde B3, EDITAR (texto anterior en el asiento), MARCAR/DESMARCAR (lista
   de seguimiento con `marcado=true`) y la IP de origen en cada asiento.
+- **Un reporte encola, no oculta** (contrato 1.8.0, auditoría de DEV del
+  30-sep): el comentario reportado sigue publicado y entra en la cola por sus
+  reportes pendientes (los posteriores a la última APROBAR, OCULTAR, ELIMINAR,
+  RESTAURAR o EDITAR). APROBAR vale también desde PUBLICADO para cerrarlos.
+  Solo con `comentarios.reportes.umbral-ocultamiento` > 0 (D-36, pendiente del
+  PO; 0 por omisión = nunca) el reporte que alcanza el umbral lo saca del hilo
+  mientras se revisa.
 - **Filtro automático** con la lista negra (`contexto: COMENTARIO`): lo que la
   política manda a `REVISION` —o todo, si la lista negra no responde— queda
   EN_REVISION (202).

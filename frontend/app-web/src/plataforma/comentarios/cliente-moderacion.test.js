@@ -17,6 +17,7 @@ import {
   CATEGORIAS,
   FILTROS_DE_COLA,
   accionesDesde,
+  hayReportesPendientes,
   consultarCola,
   consultarDetalle,
   historialDelAutor,
@@ -224,6 +225,40 @@ describe('la tabla de acciones', () => {
     // ELIMINADO es terminal: ninguna accion sale de ahi, ni editar ni marcar.
     expect(accionesDesde('ELIMINADO')).toEqual([]);
     expect(accionesDesde('ELIMINADO', true)).toEqual([]);
+  });
+
+  test('1.8.0: aprobar uno PUBLICADO solo se ofrece con reportes pendientes (sin ellos es 409)', () => {
+    expect(
+      accionesDesde('PUBLICADO', false, { reportesPendientes: true }).map((a) => a.valor),
+    ).toEqual(['APROBAR', 'OCULTAR', 'ELIMINAR', 'EDITAR', 'MARCAR']);
+    expect(accionesDesde('PUBLICADO').map((a) => a.valor)).not.toContain('APROBAR');
+    expect(accionesDesde('EN_REVISION').map((a) => a.valor)).toContain('APROBAR');
+  });
+
+  test('1.8.0: un reporte está pendiente si es posterior a la última decisión que atiende reportes', () => {
+    const reporte = { fecha: '2026-10-02T10:00:00Z' };
+    expect(hayReportesPendientes({ reportes: [], historial: [] })).toBe(false);
+    expect(hayReportesPendientes({ reportes: [reporte], historial: [] })).toBe(true);
+    expect(
+      hayReportesPendientes({
+        reportes: [reporte],
+        historial: [{ accion: 'APROBAR', fecha: '2026-10-02T10:05:00Z' }],
+      }),
+    ).toBe(false);
+    // Marcar es una nota interna: no atiende el reporte.
+    expect(
+      hayReportesPendientes({
+        reportes: [reporte],
+        historial: [{ accion: 'MARCAR', fecha: '2026-10-02T10:05:00Z' }],
+      }),
+    ).toBe(true);
+    // Uno nuevo después de la decisión vuelve a estar pendiente.
+    expect(
+      hayReportesPendientes({
+        reportes: [reporte, { fecha: '2026-10-02T11:00:00Z' }],
+        historial: [{ accion: 'APROBAR', fecha: '2026-10-02T10:05:00Z' }],
+      }),
+    ).toBe(true);
   });
 
   test('la marca decide entre MARCAR y DESMARCAR: nunca se ofrece la que daria 409', () => {

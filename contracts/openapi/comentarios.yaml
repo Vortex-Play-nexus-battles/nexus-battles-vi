@@ -87,7 +87,24 @@ info:
     1.7.1 (HU-COM-005, #519): solo se quita la marca `x-implementacion` de
     `historialDelAutor`, porque el servicio ya la implementa. No cambia la API.
     Es un parche.
-  version: 1.7.1
+
+    1.8.0 (HU-COM-006 CA-01/CA-04, auditoria de DEV del 30-sep): encolar no es
+    ocultar. Hasta la 1.7.1 el PRIMER reporte pasaba el comentario a
+    EN_REVISION y lo sacaba del hilo para todos (en DEV, un solo reporte bajo
+    el contador de un producto de 28 a 27 opiniones). Ahora el reporte se
+    registra, se agrupa y pone el comentario en la cola SIN cambiar su estado:
+    sigue PUBLICADO y a la vista hasta que un moderador decida. La cola trae,
+    ademas de los EN_REVISION, los PUBLICADOS con reportes pendientes
+    (posteriores a la ultima decision que los atiende: APROBAR, OCULTAR,
+    ELIMINAR, RESTAURAR o EDITAR), y APROBAR vale tambien desde PUBLICADO
+    para cerrar esos reportes (409 `TRANSICION_INVALIDA` si ya no le queda
+    ninguno pendiente; no se avisa al autor, porque para el no cambio nada).
+    Solo si el Product Owner fija un umbral de ocultamiento
+    (`comentarios.reportes.umbral-ocultamiento`, D-36; 0 = nunca, el valor por
+    omision) el comentario sale del hilo al alcanzarlo, como antes. Ningun
+    esquema cambia: `estadoDelComentario` del reporte sigue siendo el estado
+    real del comentario. Es menor.
+  version: 1.8.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -309,9 +326,14 @@ paths:
         quien manda la peticion.
 
 
-        El primer reporte pasa el comentario a EN_REVISION y lo pone en la cola
-        del moderador. Los reportes siguientes sobre el mismo comentario se
-        agrupan: suben su prioridad en la cola, no crean otra entrada.
+        1.8.0 — el reporte pone el comentario en la cola del moderador SIN
+        ocultarlo: sigue PUBLICADO y a la vista hasta que un moderador decida
+        (RF-COM-006, CA-01 y CA-04: «incorpora el comentario a la cola» y queda
+        «sujeto a revision»). Los reportes siguientes sobre el mismo comentario
+        se agrupan: suben su prioridad en la cola, no crean otra entrada. Solo
+        con un umbral de ocultamiento configurado (D-36; 0 = nunca) el reporte
+        que lo alcanza pasa el comentario a EN_REVISION y lo saca del hilo
+        mientras se revisa. `estadoDelComentario` dice el estado en que quedo.
 
 
         1.6.0 — cuando los reportes del comentario alcanzan el umbral de
@@ -404,9 +426,14 @@ paths:
         1.5.0 — con `marcado=true` es la lista de seguimiento especial (7.3.3,
         «Marcar: senalar comentarios para seguimiento especial»): los marcados
         en cualquier estado salvo ELIMINADO, tambien los ya publicados, con la
-        misma prioridad. Con `marcado=false`, los EN_REVISION sin marcar. Sin el
+        misma prioridad. Con `marcado=false`, lo pendiente sin marcar. Sin el
         parametro, la cola de siempre. En estas respuestas cada comentario trae
         `marcado`.
+
+
+        1.8.0 — lo pendiente son los EN_REVISION y los PUBLICADOS con reportes
+        pendientes (posteriores a la ultima decision que los atiende). Un
+        comentario reportado sigue a la vista mientras espera aqui.
       security:
         - bearerAuth: []
       parameters:
@@ -566,6 +593,12 @@ paths:
         El motivo es obligatorio en todas las acciones, incluida APROBAR: "por
         que se dejo pasar" es tan parte de la trazabilidad como "por que se
         retiro".
+
+
+        1.8.0 — APROBAR vale tambien desde PUBLICADO, para cerrar los reportes
+        pendientes de un comentario que siguio a la vista: el estado no cambia,
+        queda el asiento y no se avisa al autor. Sin reportes pendientes es 409
+        `TRANSICION_INVALIDA` (otro moderador ya lo atendio).
 
 
         1.4.0/1.5.0 — EDITAR, MARCAR y DESMARCAR no cambian el estado del

@@ -53,6 +53,7 @@ import { esIdDeImagen, textoAlternativo } from '../../comun/ui/comunidad/comenta
 import {
   accionesDesde,
   consultarCola,
+  hayReportesPendientes,
   consultarDetalle,
   historialDelAutor,
   imagenParaModeracion,
@@ -537,7 +538,11 @@ export function panelDeDetalle(
   }
 
   // --------------------------------------------------------------- decision
-  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true);
+  // 1.8.0: uno PUBLICADO con reportes pendientes sigue a la vista y se puede
+  // aprobar (cierra sus reportes) ademas de ocultar, eliminar o editar.
+  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true, {
+    reportesPendientes: hayReportesPendientes(detalle),
+  });
   if (posibles.length === 0) {
     panel.append(
       h('p', {
