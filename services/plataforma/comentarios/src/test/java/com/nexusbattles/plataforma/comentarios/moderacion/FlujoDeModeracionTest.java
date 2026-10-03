@@ -86,7 +86,7 @@ class FlujoDeModeracionTest {
         filasDeReportes = new ArrayList<>();
         filasDeAsientos = new ArrayList<>();
         comentarios = comentariosEnMemoria(filasDeComentarios);
-        reportes = reportesEnMemoria(filasDeReportes);
+        reportes = reportesEnMemoria(filasDeReportes, filasDeAsientos);
         asientos = asientosEnMemoria(filasDeAsientos);
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
@@ -96,6 +96,14 @@ class FlujoDeModeracionTest {
     }
 
     private ServicioDeModeracion servicioConUmbral(int umbral) {
+        return servicioConUmbrales(umbral, 0, Clock.fixed(AHORA, ZoneOffset.UTC));
+    }
+
+    /**
+     * @param prioridad    umbral de prioridad elevada (CA-02)
+     * @param ocultamiento umbral de ocultamiento (1.8.0, D-36); 0 = nunca
+     */
+    private ServicioDeModeracion servicioConUmbrales(int prioridad, int ocultamiento, Clock reloj) {
         return new ServicioDeModeracion(
                 comentarios, reportes, asientos,
                 (comentario, asiento) -> {
@@ -103,8 +111,17 @@ class FlujoDeModeracionTest {
                     return true;
                 },
                 asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
-                Clock.fixed(AHORA, ZoneOffset.UTC),
-                3, umbral);
+                reloj,
+                3, prioridad, ocultamiento);
+    }
+
+    /** Un comentario que el filtro automatico retuvo al publicarlo (RF-COM-007). */
+    private Comentario retenido(String id, String autor) {
+        Comentario c = new Comentario(id, PRODUCTO, autor, "apodo-" + autor,
+                "texto", List.of(), AHORA.minusSeconds(3600),
+                Comentario.Estado.EN_REVISION);
+        comentarios.save(RegistroDeComentario.desde(c));
+        return c;
     }
 
     private Comentario publicar(String id, String autor) {
@@ -134,8 +151,10 @@ class FlujoDeModeracionTest {
         ServicioDeModeracion.Reportado reportado = servicio.reportar(
                 PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, "me insulta");
 
-        assertEquals(Comentario.Estado.EN_REVISION, reportado.comentario().estado(),
-                "el primer reporte tiene que encolarlo");
+        // Contrato 1.8.0 (auditoria de DEV del 30-sep): encolar no es ocultar.
+        assertEquals(Comentario.Estado.PUBLICADO, reportado.comentario().estado(),
+                "un reporte lo encola sin sacarlo del hilo");
+        assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
         assertEquals(1, reportado.totales());
 
         // 2. aparece en la cola del moderador
@@ -158,7 +177,7 @@ class FlujoDeModeracionTest {
         assertEquals("mod-1", asiento.moderadorId());
         assertEquals("moderadora", asiento.apodoModerador());
         assertEquals("acoso confirmado", asiento.motivo());
-        assertEquals(Comentario.Estado.EN_REVISION, asiento.estadoAnterior());
+        assertEquals(Comentario.Estado.PUBLICADO, asiento.estadoAnterior());
         assertEquals(Comentario.Estado.OCULTO, asiento.estadoNuevo());
         assertEquals(AHORA, asiento.fecha());
         assertEquals(IP, asiento.ipOrigen());
@@ -187,7 +206,7 @@ class FlujoDeModeracionTest {
         }
 
         @Test
-        @DisplayName("varias personas distintas suman, y el comentario no se reencola")
+        @DisplayName("varias personas distintas suman, en una sola entrada, y sin umbral el comentario sigue a la vista")
         void variosReportantes() {
             publicar("c-1", "autor-1");
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
@@ -195,7 +214,35 @@ class FlujoDeModeracionTest {
                     PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
 
             assertEquals(2, segundo.totales());
-            assertEquals(Comentario.Estado.EN_REVISION, segundo.comentario().estado());
+            assertEquals(Comentario.Estado.PUBLICADO, segundo.comentario().estado());
+            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "agrupados: una sola entrada");
+        }
+
+        @Test
+        @DisplayName("1.8.0: con umbral de ocultamiento 2, el primero no oculta y el segundo saca el comentario del hilo")
+        void umbralDeOcultamiento() {
+            servicio = servicioConUmbrales(0, 2, Clock.fixed(AHORA, ZoneOffset.UTC));
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado primero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            assertEquals(Comentario.Estado.PUBLICADO, primero.comentario().estado(), "1 < 2: sigue a la vista");
+
+            ServicioDeModeracion.Reportado segundo = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            assertEquals(Comentario.Estado.EN_REVISION, segundo.comentario().estado(), "el umbral es inclusivo");
+            assertEquals(Comentario.Estado.EN_REVISION, leido("c-1").estado());
+            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "sigue siendo una sola entrada");
+        }
+
+        @Test
+        @DisplayName("1.8.0: sin umbral (0) ningun numero de reportes saca el comentario del hilo")
+        void sinUmbralNuncaOculta() {
+            publicar("c-1", "autor-1");
+            for (String jugador : List.of("a", "b", "c", "d", "e")) {
+                servicio.reportar(PRODUCTO, "c-1", "jugador-" + jugador, CategoriaDeReporte.SPAM, null);
+            }
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
         }
 
         @Test
@@ -461,13 +508,67 @@ class FlujoDeModeracionTest {
 
             servicio.resolver("c-1", "mod-1", "primera", AccionDeModeracion.APROBAR, "es legitimo", null, IP);
 
-            // La segunda llega tarde: APROBAR solo vale desde EN_REVISION.
+            // La segunda llega tarde: el comentario ya no tiene reportes pendientes.
             assertThrows(ServicioDeModeracion.TransicionInvalida.class, () ->
                     servicio.resolver("c-1", "mod-2", "segunda",
                             AccionDeModeracion.APROBAR, "yo tambien lo veo bien", null, IP));
 
             assertEquals(1, filasDeAsientos.size(),
                     "el intento fallido no deja asiento: nada cambio");
+        }
+
+        @Test
+        @DisplayName("1.8.0: aprobar uno reportado que sigue publicado cierra sus reportes, sin avisar al autor")
+        void aprobarUnoPublicado() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Resuelto resuelto = resolver("c-1", AccionDeModeracion.APROBAR, "es una opinion");
+
+            assertEquals(Comentario.Estado.PUBLICADO, resuelto.comentario().estado());
+            assertEquals(Comentario.Estado.PUBLICADO, resuelto.asiento().estadoAnterior());
+            assertFalse(resuelto.autorNotificado(), "para el autor nada cambio: avisarle solo diria que lo reportaron");
+            assertTrue(avisos.isEmpty());
+            assertEquals(List.of("c-1:APROBAR"), auditados, "pero queda auditado");
+            assertEquals(0, servicio.cola(null, null, 0, 20).total(), "ya no tiene reportes pendientes");
+        }
+
+        @Test
+        @DisplayName("1.8.0: aprobar uno publicado SIN reportes pendientes es 409 y no deja asiento")
+        void aprobarSinReportesPendientes() {
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.TransicionInvalida error = assertThrows(ServicioDeModeracion.TransicionInvalida.class,
+                    () -> resolver("c-1", AccionDeModeracion.APROBAR, "nada que aprobar"));
+            assertTrue(error.getMessage().contains("reportes pendientes"), error.getMessage());
+            assertTrue(filasDeAsientos.isEmpty());
+        }
+
+        @Test
+        @DisplayName("1.8.0: un reporte posterior a la decision lo devuelve a la cola; uno anterior no")
+        void reportePosteriorALaDecision() {
+            java.util.concurrent.atomic.AtomicReference<Instant> ahora = new java.util.concurrent.atomic.AtomicReference<>(AHORA);
+            Clock movil = new Clock() {
+                @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+                @Override public Clock withZone(java.time.ZoneId zona) { return this; }
+                @Override public Instant instant() { return ahora.get(); }
+            };
+            servicio = servicioConUmbrales(0, 0, movil);
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ahora.set(AHORA.plusSeconds(60));
+            resolver("c-1", AccionDeModeracion.APROBAR, "es una opinion");
+            assertEquals(0, servicio.cola(null, null, 0, 20).total());
+
+            ahora.set(AHORA.plusSeconds(120));
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "el reporte nuevo esta pendiente");
+
+            // MARCAR es una nota interna: no atiende el reporte.
+            ahora.set(AHORA.plusSeconds(180));
+            resolver("c-1", AccionDeModeracion.MARCAR, "vigilar");
+            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "marcar no cierra reportes");
         }
 
         @Test
@@ -496,7 +597,7 @@ class FlujoDeModeracionTest {
                     comentarios, reportes, asientos,
                     (c, a) -> false,
                     asiento -> { },
-                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0);
+                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0, 0);
 
             publicar("c-1", "autor-1");
             conAvisoCaido.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
@@ -534,7 +635,7 @@ class FlujoDeModeracionTest {
         @Test
         @DisplayName("EDITAR cambia el texto, lo deja editado, no mueve el estado y registra antes y despues")
         void editar() {
-            publicar("c-1", "autor-1");
+            retenido("c-1", "autor-1");
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.CONTENIDO_OFENSIVO, null);
 
             ServicioDeModeracion.Resuelto resuelto = servicio.resolver("c-1", "mod-1", "moderadora",
@@ -783,8 +884,9 @@ class FlujoDeModeracionTest {
                             AccionDeModeracion.MARCAR, AccionDeModeracion.DESMARCAR),
                     AccionDeModeracion.desde(Comentario.Estado.EN_REVISION));
 
+            // 1.8.0: APROBAR tambien desde PUBLICADO (cierra los reportes pendientes).
             assertEquals(
-                    java.util.Set.of(AccionDeModeracion.OCULTAR, AccionDeModeracion.ELIMINAR,
+                    java.util.Set.of(AccionDeModeracion.APROBAR, AccionDeModeracion.OCULTAR, AccionDeModeracion.ELIMINAR,
                             AccionDeModeracion.EDITAR, AccionDeModeracion.MARCAR, AccionDeModeracion.DESMARCAR),
                     AccionDeModeracion.desde(Comentario.Estado.PUBLICADO));
 
@@ -897,11 +999,41 @@ class FlujoDeModeracionTest {
                     return filtrados(datos, c -> c.marcado() && estados.contains(c.estado())
                             && c.productoId().equals(producto));
                 });
+        when(repo.findByIdInAndEstadoOrderByFechaPublicacionAsc(anyCollection(), any())).thenAnswer(inv -> {
+            Collection<String> ids = inv.getArgument(0);
+            Comentario.Estado estado = inv.getArgument(1);
+            return filtrados(datos, c -> ids.contains(c.id()) && c.estado() == estado);
+        });
         return repo;
     }
 
-    private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
+    /**
+     * Pendiente es lo que dice la JPQL de {@link ReporteRepository}: un reporte
+     * sin ninguna decision que atienda reportes en la misma fecha o despues.
+     */
+    private static boolean pendiente(RegistroDeReporte reporte, List<AsientoDeModeracion> asientos,
+            Collection<AccionDeModeracion> resolutivas) {
+        return asientos.stream().noneMatch(a -> a.comentarioId().equals(reporte.comentarioId())
+                && !a.fecha().isBefore(reporte.fecha())
+                && resolutivas.contains(a.accion()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos,
+            List<AsientoDeModeracion> asientos) {
         ReporteRepository repo = mock(ReporteRepository.class);
+
+        when(repo.contarPendientes(anyString(), anyCollection())).thenAnswer(inv -> {
+            String comentario = inv.getArgument(0);
+            Collection<AccionDeModeracion> resolutivas = inv.getArgument(1);
+            return datos.stream().filter(r -> r.comentarioId().equals(comentario)
+                    && pendiente(r, asientos, resolutivas)).count();
+        });
+        when(repo.comentariosConReportesPendientes(anyCollection())).thenAnswer(inv -> {
+            Collection<AccionDeModeracion> resolutivas = inv.getArgument(0);
+            return datos.stream().filter(r -> pendiente(r, asientos, resolutivas))
+                    .map(RegistroDeReporte::comentarioId).distinct().toList();
+        });
 
         when(repo.saveAndFlush(any(RegistroDeReporte.class))).thenAnswer(inv -> {
             RegistroDeReporte r = inv.getArgument(0);

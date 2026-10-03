@@ -42,16 +42,33 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <pre>
  *   jugador reporta (RF-COM-006)
- *     -> comentario a EN_REVISION
- *     -> aparece en la cola (RF-COM-005)
+ *     -> se agrupa con los demas reportes del comentario
+ *     -> aparece en la cola (RF-COM-005), SIGUIENDO PUBLICADO
  *     -> el moderador lo abre con su contexto
- *     -> decide (RF-COM-008)
+ *     -> decide (RF-COM-008): aprobar, ocultar, eliminar, editar...
  *     -> queda el asiento
  *     -> se avisa al autor
  * </pre>
  *
  * <p>Por eso viven en un solo servicio: implementarlas por separado habria
  * dejado otra vez una cola sin salida o una accion sin cola.
+ *
+ * <h2>Encolar no es ocultar (contrato 1.8.0, auditoria de DEV del 30-sep)</h2>
+ *
+ * Hasta la 1.7.0 el PRIMER reporte pasaba el comentario a EN_REVISION y lo
+ * sacaba del hilo para todos: en DEV un solo reporte bajo el contador de
+ * «Espada de una mano» de 28 a 27 opiniones. La ficha (RF-COM-006, CA-01 y
+ * CA-04) pide otra cosa: registrar el reporte, agruparlo e incorporar el
+ * comentario a la cola, «sujeto a revision». Ocultar es una decision del
+ * moderador (RF-COM-008), no el efecto de una sola persona pulsando un boton.
+ *
+ * <p>Ahora el comentario reportado sigue a la vista y entra en la cola por
+ * sus reportes PENDIENTES (los posteriores a la ultima decision que los
+ * atiende). Solo si el Product Owner fija un umbral de ocultamiento
+ * ({@code comentarios.reportes.umbral-ocultamiento}, D-36; 0 = nunca) y los
+ * reportes pendientes lo alcanzan, el comentario se retira de la vista
+ * mientras se revisa. Lo que el filtro automatico retiene al publicar
+ * (RF-COM-007) sigue entrando en EN_REVISION, como siempre.
  */
 @Service
 public class ServicioDeModeracion {
@@ -89,6 +106,7 @@ public class ServicioDeModeracion {
     private final Clock reloj;
     private final int limiteDiarioDeReportes;
     private final int umbralDePrioridad;
+    private final int umbralDeOcultamiento;
 
     public ServicioDeModeracion(
             ComentarioRepository comentarios,
@@ -98,7 +116,8 @@ public class ServicioDeModeracion {
             RegistroDeAuditoria auditoria,
             Clock reloj,
             @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes,
-            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad) {
+            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad,
+            @Value("${comentarios.reportes.umbral-ocultamiento:0}") int umbralDeOcultamiento) {
         this.comentarios = comentarios;
         this.reportes = reportes;
         this.asientos = asientos;
@@ -107,6 +126,18 @@ public class ServicioDeModeracion {
         this.reloj = reloj;
         this.limiteDiarioDeReportes = limiteDiarioDeReportes;
         this.umbralDePrioridad = umbralDePrioridad;
+        this.umbralDeOcultamiento = umbralDeOcultamiento;
+    }
+
+    /**
+     * Contrato 1.8.0: cuantos reportes PENDIENTES retiran el comentario de la
+     * vista mientras se revisa. La ficha no fija ninguno, asi que nace en 0 =
+     * nunca: el comentario reportado sigue publicado y es el moderador quien
+     * decide (D-36, pendiente del Product Owner). Mismo criterio que
+     * {@link #elevaLaPrioridad}: 0 o menos no oculta nunca.
+     */
+    private boolean seOcultaPorReportes(long reportesPendientes) {
+        return umbralDeOcultamiento > 0 && reportesPendientes >= umbralDeOcultamiento;
     }
 
     /**
@@ -180,9 +211,12 @@ public class ServicioDeModeracion {
             throw new ReporteDuplicado(comentarioId);
         }
 
-        // El primer reporte encola; los siguientes solo suben la prioridad.
+        // Contrato 1.8.0: el reporte ya lo pone en la cola por si solo (tiene un
+        // reporte pendiente) y el comentario SIGUE PUBLICADO. Solo un umbral de
+        // ocultamiento fijado por el PO lo retira de la vista mientras se revisa.
         Comentario resultante = comentario;
-        if (comentario.estaPublicado()) {
+        if (comentario.estaPublicado() && umbralDeOcultamiento > 0
+                && seOcultaPorReportes(reportes.contarPendientes(comentarioId, AccionDeModeracion.RESUELVEN_REPORTES))) {
             resultante = comentario.con(Comentario.Estado.EN_REVISION);
             comentarios.save(RegistroDeComentario.desde(resultante));
         }
@@ -220,11 +254,12 @@ public class ServicioDeModeracion {
      *
      * <p>{@code marcado} (B3, 7.3.3) elige que se mira:
      * <ul>
-     *   <li>sin filtro: la cola de siempre, los EN_REVISION;</li>
+     *   <li>sin filtro: la cola de siempre, los EN_REVISION y, desde la 1.8.0,
+     *       los PUBLICADOS con reportes pendientes;</li>
      *   <li>{@code true}: la lista de seguimiento especial, los marcados en
      *       cualquier estado salvo ELIMINADO —un comentario aprobado pero
      *       marcado sigue necesitando que alguien lo mire—;</li>
-     *   <li>{@code false}: los EN_REVISION sin marcar.</li>
+     *   <li>{@code false}: lo mismo que sin filtro, pero sin los marcados.</li>
      * </ul>
      *
      * <p>Los reportes de todos los comentarios de la cola se leen en una sola
@@ -276,17 +311,45 @@ public class ServicioDeModeracion {
                     : comentarios.findByMarcadoTrueAndEstadoInAndProductoIdOrderByFechaPublicacionAsc(
                             ESTADOS_CON_SEGUIMIENTO, productoId);
         }
+        List<RegistroDeComentario> enRevision;
         if (Boolean.FALSE.equals(marcado)) {
-            return productoId == null
+            enRevision = productoId == null
                     ? comentarios.findByEstadoAndMarcadoOrderByFechaPublicacionAsc(
                             Comentario.Estado.EN_REVISION, false)
                     : comentarios.findByEstadoAndMarcadoAndProductoIdOrderByFechaPublicacionAsc(
                             Comentario.Estado.EN_REVISION, false, productoId);
+        } else {
+            enRevision = productoId == null
+                    ? comentarios.findByEstadoOrderByFechaPublicacionAsc(Comentario.Estado.EN_REVISION)
+                    : comentarios.findByEstadoAndProductoIdOrderByFechaPublicacionAsc(
+                            Comentario.Estado.EN_REVISION, productoId);
         }
-        return productoId == null
-                ? comentarios.findByEstadoOrderByFechaPublicacionAsc(Comentario.Estado.EN_REVISION)
-                : comentarios.findByEstadoAndProductoIdOrderByFechaPublicacionAsc(
-                        Comentario.Estado.EN_REVISION, productoId);
+
+        List<RegistroDeComentario> reportadosALaVista = publicadosConReportesPendientes(productoId, marcado);
+        if (reportadosALaVista.isEmpty()) {
+            return enRevision;
+        }
+        List<RegistroDeComentario> todos = new ArrayList<>(enRevision);
+        todos.addAll(reportadosALaVista);
+        return todos;
+    }
+
+    /**
+     * Contrato 1.8.0: los PUBLICADOS con algun reporte posterior a la ultima
+     * decision que atiende reportes. Siguen a la vista del jugador y esperan
+     * igual la decision del moderador (RF-COM-006 CA-01: «incorpora el
+     * comentario a la cola de moderacion»).
+     */
+    private List<RegistroDeComentario> publicadosConReportesPendientes(String productoId, Boolean marcado) {
+        List<String> pendientes = reportes.comentariosConReportesPendientes(AccionDeModeracion.RESUELVEN_REPORTES);
+        if (pendientes.isEmpty()) {
+            return List.of();
+        }
+        return comentarios.findByIdInAndEstadoOrderByFechaPublicacionAsc(pendientes, Comentario.Estado.PUBLICADO)
+                .stream()
+                .filter(r -> productoId == null || productoId.equals(r.getProductoId()))
+                .filter(r -> !Boolean.FALSE.equals(marcado) || !r.aDominio().marcado())
+                .toList();
     }
 
     /** Un comentario en revision con todo lo que el moderador necesita para decidir. */
@@ -368,6 +431,15 @@ public class ServicioDeModeracion {
             // este miraba la pantalla. Nada cambia.
             throw new TransicionInvalida(accion, comentario);
         }
+        // Contrato 1.8.0: aprobar uno que sigue publicado solo sirve para cerrar
+        // sus reportes pendientes. Si ya no tiene ninguno, otro moderador se
+        // adelanto (CA-03): el mismo 409, sin asiento.
+        boolean cierraReportesALaVista = accion == AccionDeModeracion.APROBAR
+                && anterior == Comentario.Estado.PUBLICADO;
+        if (cierraReportesALaVista
+                && reportes.contarPendientes(comentarioId, AccionDeModeracion.RESUELVEN_REPORTES) == 0) {
+            throw new TransicionInvalida(accion, comentario);
+        }
 
         Comentario resultante = accion.aplicarA(comentario, textoNuevo);
         comentarios.save(RegistroDeComentario.desde(resultante));
@@ -381,7 +453,10 @@ public class ServicioDeModeracion {
                 ipOrigen);
         asientos.save(asiento);
 
-        boolean avisado = accion.seAvisaAlAutor() && aviso.notificar(resultante, asiento);
+        // Aprobar uno que siguio a la vista no cambia nada para su autor: avisarle
+        // solo le diria que alguien lo reporto. Queda el asiento y la auditoria.
+        boolean avisado = accion.seAvisaAlAutor() && !cierraReportesALaVista
+                && aviso.notificar(resultante, asiento);
         auditoria.registrar(asiento);
 
         return new Resuelto(resultante, asiento, avisado);
@@ -478,6 +553,9 @@ public class ServicioDeModeracion {
             }
             if (accion == AccionDeModeracion.DESMARCAR && !actual.marcado()) {
                 return "El comentario no esta marcado";
+            }
+            if (accion == AccionDeModeracion.APROBAR && actual.estaPublicado()) {
+                return "El comentario sigue publicado y ya no tiene reportes pendientes";
             }
             return "No se puede " + accion + " un comentario que esta en " + actual.estado();
         }

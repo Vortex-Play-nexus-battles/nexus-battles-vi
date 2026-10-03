@@ -9,8 +9,9 @@
  *     otro (RF-COM-006). Las dos acciones son excluyentes a propósito: un
  *     reporte a uno mismo no significa nada, y «Eliminar» sobre uno ajeno
  *     sería una promesa que el servicio contesta con 403;
- *   - en qué estado quedó cuando él lo reportó: «En revisión», porque el
- *     primer reporte lo saca del hilo público hasta que un moderador decide;
+ *   - en qué estado quedó cuando él lo reportó: «Reportado». Desde
+ *     comentarios.yaml 1.8.0 un reporte lo pone en la cola de moderación sin
+ *     sacarlo del hilo: ocultarlo es decisión de un moderador;
  *   - si un moderador cambió su texto (`editado`, comentarios.yaml 1.5.0):
  *     quien lo lee tiene que saber que no es exactamente lo que escribió su
  *     autor (7.3.3, «Editar ... con registro de la edición»).
@@ -52,7 +53,7 @@ export const LADO_DE_MINIATURA = 96;
 
 /** Estados que la vista le pone a un comentario tras una acción de quien mira. */
 export const ESTADO_LOCAL = Object.freeze({
-  /** Quien mira lo reportó: el servicio lo pasó a revisión. */
+  /** Quien mira lo reportó: el servicio lo puso en la cola de moderación. */
   REPORTADO: 'REPORTADO',
 });
 
@@ -330,7 +331,7 @@ function pieDelComentario({ comentario, apodo, esMio, yo, estadoLocal, alElimina
         }),
         h('span', {
           clase: 'comentario__estado-texto',
-          texto: 'Un moderador lo revisará; mientras tanto no se muestra a nadie más.',
+          texto: 'Un moderador lo revisará. Mientras tanto sigue a la vista.',
         }),
       ],
     });
