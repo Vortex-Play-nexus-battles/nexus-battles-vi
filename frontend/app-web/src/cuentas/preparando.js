@@ -297,7 +297,7 @@ export function montarPreparacion(
     z.titulo.textContent = '¡Tu cuenta está lista!';
     decir('Todo listo: ya puedes jugar.');
     if (documento) {
-      documento.title = 'Tu cuenta está lista — NEXUS BATTLES VI';
+      documento.title = 'Tu cuenta está lista · The Nexus Battles VI';
     }
     // El foco va al título, que ahora lo anuncia: quien usa lector de
     // pantalla se entera sin tener que recorrer la página buscando qué cambió.
