@@ -108,6 +108,13 @@ a su nombre, con la referencia de la reserva y la clave `consumo-{reservaId}`:
 el ganador ve su ingreso en `GET /creditos/{uid}/movimientos`, una sola vez
 aunque el consumo se repita.
 
+**Apuestas vencidas (auditoría de DEV del 30-sep, D-39).** Toda reserva nace
+con `expira_en` = creación + 72 h. `VencimientoDeApuestas` libera cada 10 min
+(`FINANZAS_APUESTAS_VENCIMIENTO_MS`, 600000) las reservas `apuesta-sala` que
+siguen ACTIVAS pasado ese vencimiento, con la misma operación idempotente que
+usa salas-partidas; las de subastas y torneos no se tocan. Se apaga con
+`FINANZAS_APUESTAS_VENCER_RESERVAS=false`.
+
 ms-subastas ya declara el cliente hacia este servicio en el instance
 `creditos` de Resilience4j (ver su `application.properties`). El SLA de
 latencia de los endpoints de `/creditos/*` se acuerda con Andrés (HU-SUB-004)
