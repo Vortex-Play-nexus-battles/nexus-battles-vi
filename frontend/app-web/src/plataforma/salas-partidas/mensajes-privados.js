@@ -730,6 +730,16 @@ export async function montarMensajesPrivados(
         });
         anunciar(`Tu mensaje no se envió. ${detalleDeFallo(error)}`);
       }
+      // D-40: si el rechazo es un bloqueo (te bloquearon con la conversación
+      // abierta), la conversación cambia de estado y el campo deja de estar.
+      if (error?.estadoDeConversacion) {
+        actualizarResumenSinMover(id, { estado: error.estadoDeConversacion });
+        if (abierta?.id === id) {
+          abierta.resumen = { ...abierta.resumen, estado: error.estadoDeConversacion };
+          pintarCabecera();
+          aplicarBloqueo();
+        }
+      }
       return reintentable;
     }
     if (abierta?.id === id) {
