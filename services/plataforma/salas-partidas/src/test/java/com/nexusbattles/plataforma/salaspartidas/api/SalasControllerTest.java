@@ -894,7 +894,7 @@ class SalasControllerTest {
                 // El motivo concreto: la vista distingue «equipa un heroe» de
                 // «tu heroe esta en otra batalla» sin leer el texto.
                 .andExpect(jsonPath("$.detail").value(
-                        org.hamcrest.Matchers.containsString("Equipa un heroe")));
+                        org.hamcrest.Matchers.containsString("Equipa un héroe")));
     }
 
     @Test

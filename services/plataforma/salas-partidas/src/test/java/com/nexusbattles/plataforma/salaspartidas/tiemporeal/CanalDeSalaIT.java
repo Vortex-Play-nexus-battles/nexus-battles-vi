@@ -301,7 +301,7 @@ class CanalDeSalaIT {
                 () -> assertTrue(aviso.contains("\"idJugador\":\"" + ID_VISITANTE + "\""), aviso),
                 () -> assertTrue(aviso.contains("\"ocupacion\":{\"actual\":2,\"maximo\":4}"), aviso),
                 // El contrato se recorto en esta historia: ni heroe ni apodo.
-                () -> assertTrue(!aviso.contains("heroe") && !aviso.contains("apodo"), aviso));
+                () -> assertTrue(!aviso.contains("heroe") && !aviso.contains("héroe") && !aviso.contains("apodo"), aviso));
     }
 
     @Test
