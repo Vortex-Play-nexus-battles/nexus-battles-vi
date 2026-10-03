@@ -827,8 +827,8 @@ test.describe('R17 · la prueba del profesor', () => {
 
       // Ningún error de página en todo el recorrido, y ningún 5xx fuera de los
       // servicios que el catálogo declara fuera de DEV (`desplegableDev:
-      // false`) o sin acceso desde el borde (`accesoPendiente`: hoy subastas y
-      // misiones, a la espera del grupo de seguridad del Grupo 2), cuya vista
+      // false`) o sin acceso desde el borde (`accesoPendiente`; ninguno desde el 2-oct,
+      // cuando el grupo de seguridad del Grupo 2 admitió 8092 y 8105), cuya vista
       // dice que no están —se comprobó arriba—. Al quitar la marca, su 5xx cuenta.
       const graves = bitacora.incidencias.filter((i) => {
         if (i.tipo === 'pagina') return true;

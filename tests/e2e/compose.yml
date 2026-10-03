@@ -898,6 +898,7 @@ services:
             -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
             -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
             -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
+            -e 's|34\.193\.90\.11:8092|srv-ms-subastas:8092|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
         # comentarios a proposito, para explicar de donde sale, y un guardian
@@ -912,11 +913,11 @@ services:
         # vea, y la dejaba vacia ("The esperado variable is not set"). Un
         # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
         # siempre sin mirar nada.
-        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080; do
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080 srv-ms-subastas:8092; do
           grep -q "$$esperado" /salida/default.conf || {
             echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
-        echo "Borde adaptado al banco: heroes, inventario, productos y misiones son locales."
+        echo "Borde adaptado al banco: heroes, inventario, productos, misiones y subastas son locales."
 
   srv-borde:
     image: nginx:1.27-alpine
