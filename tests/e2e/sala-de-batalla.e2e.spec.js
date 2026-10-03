@@ -240,7 +240,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     const problema = await r.json();
     // El texto nombra el caso concreto: «no puedes entrar» a secas obligaria a
     // adivinar si falta equipar un heroe o si el suyo esta en otra batalla.
-    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un heroe equipado/i);
+    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un héroe equipado/i);
     expect(problema.detail).toMatch(/equipa un heroe en tu inventario/i);
     expect(problema.type).toMatch(/heroe/i);
   });

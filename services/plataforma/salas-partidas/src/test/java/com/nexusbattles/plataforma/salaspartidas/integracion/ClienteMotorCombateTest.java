@@ -249,7 +249,7 @@ class ClienteMotorCombateTest {
                         .contentType(MediaType.APPLICATION_PROBLEM_JSON)
                         .body("""
                                 { "type": "https://nexusbattles.local/errores/accion-no-permitida",
-                                  "title": "La accion no se puede jugar ahora", "status": 409,
+                                  "title": "La acción no se puede jugar ahora", "status": 409,
                                   "detail": "Golpe con escudo está en carga: vuelve a estar disponible dentro de 1 turno.",
                                   "motivo": "EN_CARGA" }
                                 """));

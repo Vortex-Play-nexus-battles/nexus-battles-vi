@@ -26,8 +26,8 @@ public class JugadorSancionado extends ErrorDeNegocio {
             URI.create("https://nexusbattles.local/errores/jugador-sancionado");
 
     public JugadorSancionado() {
-        super(TIPO, "Tienes una sancion activa", 403,
-                "Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas."
+        super(TIPO, "Tienes una sanción activa", 403,
+                "Mientras la sanción siga vigente no puedes crear salas ni entrar a batallas."
                         + " Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».");
     }
 }

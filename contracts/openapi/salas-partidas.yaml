@@ -129,7 +129,15 @@ info:
       mismos motivos `CONVERSACION_BLOQUEADA` y `NO_ADMITE` del AsyncAPI
       1.1.0). El historial se conserva para los dos y el chat general, el de
       sala y las partidas no cambian.
-  version: 1.8.0
+
+    Cambios 1.8.1 (auditoria de DEV del 30-sep, sin cambio de forma): los
+    `title` y `detail` de los problem details llevan tildes y plurales
+    correctos («Créditos insuficientes», «No tienes un héroe equipado»,
+    «1 crédito»). El de `creditos-insuficientes` vale para crear y para
+    entrar: «Tienes 80 créditos y la apuesta de esta sala es de 150.» (antes
+    decía «para crear esta sala» tambien a quien entraba). La interfaz decide
+    por `type`, nunca por el texto.
+  version: 1.8.1
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -214,15 +222,15 @@ paths:
                     type: 'https://nexusbattles.local/errores/creditos-insuficientes'
                     title: 'Creditos insuficientes'
                     status: 422
-                    detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
+                    detail: 'Tienes 240 créditos y la apuesta de esta sala es de 400.'
                     instance: '/api/v1/salas'
                 heroeNoEquipado:
                   summary: RF-JUE-003 — sin personaje equipado
                   value:
                     type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
+                    title: 'No tienes un héroe equipado'
                     status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
                     instance: '/api/v1/salas'
         '503':
           $ref: '#/components/responses/DependenciaNoDisponible'
@@ -397,9 +405,9 @@ paths:
                   summary: HU-USR-005/006 — sancion activa
                   value:
                     type: 'https://nexusbattles.local/errores/jugador-sancionado'
-                    title: 'Tienes una sancion activa'
+                    title: 'Tienes una sanción activa'
                     status: 403
-                    detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
+                    detail: 'Mientras la sanción siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
         '409':
@@ -428,13 +436,13 @@ paths:
                     type: 'https://nexusbattles.local/errores/creditos-insuficientes'
                     title: 'Creditos insuficientes'
                     status: 422
-                    detail: 'Tienes 80 creditos y necesitas 150 para crear esta sala.'
+                    detail: 'Tienes 80 créditos y la apuesta de esta sala es de 150.'
                 heroeNoEquipado:
                   value:
                     type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
+                    title: 'No tienes un héroe equipado'
                     status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
         '503':
           $ref: '#/components/responses/DependenciaNoDisponible'
 
@@ -884,16 +892,16 @@ components:
               summary: RF-JUE-003 — sin personaje equipado
               value:
                 type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                title: 'No tienes un heroe equipado'
+                title: 'No tienes un héroe equipado'
                 status: 422
-                detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
             heroeOcupado:
               summary: RF-JUE-003 — heroe comprometido en otra partida
               value:
                 type: 'https://nexusbattles.local/errores/heroe-ocupado'
-                title: 'Tu heroe esta en otra partida'
+                title: 'Tu héroe está en otra partida'
                 status: 422
-                detail: 'Sombra de Vael esta combatiendo en Caceria nocturna. Elige otro heroe.'
+                detail: 'Sombra de Vael está combatiendo en Caceria nocturna. Elige otro héroe.'
 
     NoAutenticado:
       description: Falta el token o esta caducado
@@ -910,7 +918,7 @@ components:
         - `seccion-no-disponible` (HU-DIS-003): la dependencia **no responde**
           —conexion, tiempo agotado, 5xx— o su corta circuitos esta abierto.
           Trae `seccion` (que funcion queda limitada: «Inventario», «Motor de
-          combate», «Apuesta de creditos»), `reintentarEnSegundos` y la cabecera
+          combate», «Apuesta de créditos»), `reintentarEnSegundos` y la cabecera
           `Retry-After`; `dependencia` es el nombre interno, para la bitacora, y
           no se muestra al jugador. La interfaz pinta `Seccion degradada` en el
           hueco de esa seccion (MAPEO-ERRORES §5.5) y el resto de la vista sigue.
@@ -949,9 +957,9 @@ components:
               summary: HU-JUE-014 CA-06 — el libro contesto algo que no sirve
               value:
                 type: 'https://nexusbattles.local/errores/creditos-no-disponibles'
-                title: 'El libro de creditos no esta disponible ahora mismo'
+                title: 'El libro de créditos no está disponible ahora mismo'
                 status: 503
-                detail: 'No se pudieron comprometer los creditos de la apuesta: el libro rechazo la reserva con 400. Nada quedo reservado; vuelve a intentarlo en unos segundos.'
+                detail: 'No se pudieron comprometer los créditos de la apuesta: el libro rechazo la reserva con 400. Nada quedó reservado; vuelve a intentarlo en unos segundos.'
                 instance: '/api/v1/salas'
     # HU-USR-005/006 (R10.2) — la sancion dejo de ser solo un silencio en el chat.
     JugadorSancionado:
@@ -974,9 +982,9 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
           example:
             type: 'https://nexusbattles.local/errores/jugador-sancionado'
-            title: 'Tienes una sancion activa'
+            title: 'Tienes una sanción activa'
             status: 403
-            detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
+            detail: 'Mientras la sanción siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
             instance: '/api/v1/salas'
     SalaNoEncontrada:
       description: La sala no existe o ya fue cerrada
