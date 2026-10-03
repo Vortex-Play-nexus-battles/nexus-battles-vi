@@ -43,8 +43,11 @@ class AlertasCatalogoApiTest {
 
     @BeforeEach
     void preparar() {
-        when(consultas.findById("jugador-7")).thenReturn(Optional.empty());
-        when(alertas.findByImplementadaEnAfterAndImplementadaEnLessThanEqualOrderByImplementadaEnAsc(
+        // jugador-7 ya inicio sesion antes: tiene linea base y recibe lo posterior.
+        when(consultas.findById("jugador-7")).thenReturn(Optional.of(
+                new ConsultaAlertasJugador("jugador-7", Instant.parse("2026-09-20T00:00:00Z"))));
+        when(consultas.findById("jugador-nuevo")).thenReturn(Optional.empty());
+        when(alertas.buscarImplementadasEntre(
                 any(),
                 any()))
                 .thenReturn(List.of(new AlertaCatalogo(
@@ -71,5 +74,13 @@ class AlertasCatalogoApiTest {
                 .andExpect(jsonPath("$[0].productoId").value("producto-1"))
                 .andExpect(jsonPath("$[0].tipo").value("CAMBIO_BALANCE"))
                 .andExpect(jsonPath("$[0].implementadaEn").value("2026-09-27T15:30:00Z"));
+    }
+
+    @Test
+    @DisplayName("el primer inicio de sesion de un jugador responde una lista vacia")
+    void primerInicioDeSesionNoEntregaHistorial() throws Exception {
+        mvc.perform(get(RUTA).with(jwt().jwt(token -> token.subject("jugador-nuevo"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
     }
 }
