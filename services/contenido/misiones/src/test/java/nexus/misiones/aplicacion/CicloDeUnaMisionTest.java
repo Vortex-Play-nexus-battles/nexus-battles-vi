@@ -1,6 +1,7 @@
 package nexus.misiones.aplicacion;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Clock;
@@ -11,6 +12,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionNoEncontrada;
 import nexus.misiones.dominio.Epica;
@@ -21,6 +23,11 @@ import nexus.misiones.dominio.Misiones;
 import nexus.misiones.dominio.ParametrosDeRecompensa;
 import nexus.misiones.dominio.PasoDeLiquidacion;
 import nexus.misiones.dominio.TransicionNoPermitida;
+import nexus.misiones.dominio.simulacion.Combatiente;
+import nexus.misiones.dominio.simulacion.EstadisticasDeCombate;
+import nexus.misiones.dominio.simulacion.EventoDeCombate;
+import nexus.misiones.dominio.simulacion.Formula;
+import nexus.misiones.dominio.simulacion.TurnoParaDecidir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,12 +66,16 @@ class CicloDeUnaMisionTest {
     private Dobles.Inventario inventario;
     private Dobles.Heroes heroes;
     private Dobles.Motor motor;
+    private Dobles.Eventos eventos;
+    private Dobles.Productos productos;
     private Dobles.Libro libro;
     private Dobles.Correo correo;
     private Dobles.Directorio directorio;
     private MatricularHeroe matricular;
     private TrabajoDeMisiones trabajo;
     private CancelarEjecucion cancelar;
+    private Dobles.Catalogo catalogoDePrueba;
+    private ParametrosDeMisiones parametrosDePrueba;
 
     private static final EpicaDeTabla20 ARMAS_SEGURA = new EpicaDeTabla20("Guerrero Armas",
             new Epica("Segundo impulso", "Recupera 1d4 de vida", "+3 a la vida", "4481eb34-384a-3fa0-ba9a-1aac9562c38f"),
@@ -78,10 +89,11 @@ class CicloDeUnaMisionTest {
     private void prepararCon(List<EpicaDeTabla20> tabla20) {
         ejecuciones = new Dobles.Ejecuciones();
         inventario = new Dobles.Inventario().conHeroe("h-1", JUGADOR, "p-armas", true);
-        Dobles.Productos productos = new Dobles.Productos();
+        productos = new Dobles.Productos();
         productos.prototipos.put("p-armas", "Guerrero Armas");
         heroes = new Dobles.Heroes();
         motor = new Dobles.Motor();
+        eventos = new Dobles.Eventos();
         libro = new Dobles.Libro();
         correo = new Dobles.Correo();
         directorio = new Dobles.Directorio();
@@ -90,9 +102,13 @@ class CicloDeUnaMisionTest {
                 true, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
         Dobles.Catalogo catalogo = new Dobles.Catalogo(List.of(Misiones.templo(),
                 Misiones.historia("prueba-corta", List.of())), tabla20);
+        catalogoDePrueba = catalogo;
+        parametrosDePrueba = parametros;
         matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
                 heroes, parametros, reloj, () -> 7L);
-        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, heroes, motor, parametros, reloj);
+        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametros, reloj);
         LiquidarEjecucion liquidar = new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio,
                 correo, parametros, reloj);
         trabajo = new TrabajoDeMisiones(ejecuciones, simular, liquidar, parametros, reloj);
@@ -301,5 +317,164 @@ class CicloDeUnaMisionTest {
 
         assertThat(ejecuciones.buscar(primera.id()).orElseThrow().recompensas().creditos()).isEqualTo(7);
         assertThat(ejecuciones.buscar(segunda.id()).orElseThrow().recompensas().creditos()).isEqualTo(5);
+    }
+
+    // ------------------------------------------------------------- HU-SIM-003
+
+    @Test
+    @DisplayName("una mision de 19 encuentros se simula entera en una sola vuelta, sin esperar tiempo real")
+    void simulacionEnLote() {
+        Ejecucion ejecucion = enviar("templo-olvidado");
+        ahora.set(INICIO.plus(Duration.ofHours(12)));
+
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> trabajo.ejecutar());
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(terminada.resultado().encuentrosCompletados()).isGreaterThanOrEqualTo(19);
+        // El reloj no se movio mientras se simulaba: el tiempo de la mision solo decide CUANDO se puede ver.
+        assertThat(ahora.get()).isEqualTo(INICIO.plus(Duration.ofHours(12)));
+        // Y todo se resolvio con el motor de las batallas en linea: turnos y acciones, nunca golpes sueltos.
+        assertThat(motor.llamadas).isNotEmpty().allMatch(l -> l.startsWith("turnos ") || l.startsWith("acciones "));
+    }
+
+    @Test
+    @DisplayName("cada turno resuelto queda registrado en orden, con la ejecucion y la mision")
+    void eventosDeLaEjecucion() {
+        Ejecucion ejecucion = enviar("templo-olvidado");
+        ahora.set(INICIO.plus(Duration.ofHours(12)));
+
+        trabajo.ejecutar();
+
+        List<EventoDeCombate> registrados = eventos.de(ejecucion.id());
+        assertThat(registrados).isNotEmpty();
+        assertThat(registrados).extracting(EventoDeCombate::secuencia)
+                .containsExactlyElementsOf(IntStream.rangeClosed(1, registrados.size()).boxed().toList());
+        assertThat(registrados).allSatisfy(e -> {
+            assertThat(e.ejecucionId()).isEqualTo(ejecucion.id());
+            assertThat(e.misionId()).isEqualTo("templo-olvidado");
+        });
+        assertThat(registrados).extracting(EventoDeCombate::encuentro).contains(1, 19);
+        // Los eventos son uno por turno de un combatiente: el motor recibio una accion por cada uno con jugada.
+        long accionesPedidas = motor.llamadas.stream().filter(l -> l.startsWith("acciones ")).count();
+        assertThat(registrados.stream().filter(e -> e.jugada() != null).count()).isEqualTo(accionesPedidas);
+    }
+
+    @Test
+    @DisplayName("el heroe entra al motor con lo que lleva: estadisticas con equipo, equipo puesto y epicas")
+    void elHeroeRealEntraAlMotor() {
+        EstadisticasDeCombate esperadas = new EstadisticasDeCombate(12, 60, 14, new Formula(11, 1, 6),
+                new Formula(3, 1, 4), null);
+        inventario.estadisticasDelHeroe = new InventarioDeHeroes.EstadisticasDelHeroe(12, 60, 14,
+                new Formula(11, 1, 6), new Formula(3, 1, 4), null);
+        inventario.equipoDelHeroe = new InventarioDeHeroes.EquipoDelHeroe(List.of("p-espada", "p-armadura"),
+                List.of("p-epica"));
+        productos.nombres.put("p-espada", "Espada de una mano");
+        productos.nombres.put("p-armadura", "Peto de cuero");
+        productos.nombres.put("p-epica", "Golpe de defensa");
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Combatiente heroe = motor.recibidos.getFirst().stream().filter(c -> c.id().equals("heroe")).findFirst()
+                .orElseThrow();
+        assertThat(heroe.prototipo()).isEqualTo("Guerrero Armas");
+        assertThat(heroe.nivel()).isEqualTo(1);
+        assertThat(heroe.estadisticas()).isEqualTo(esperadas);
+        assertThat(heroe.equipamiento()).containsExactly("Espada de una mano", "Peto de cuero");
+        assertThat(heroe.epicas()).containsExactly("Golpe de defensa");
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+    }
+
+    @Test
+    @DisplayName("si el motor no responde no se guarda nada; al reintentar los eventos se escriben una sola vez")
+    void motorCaidoNoDejaEventos() {
+        motor.fallar = Dobles.caido("motor-combate");
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        assertThat(eventos.escrituras).isZero();
+
+        motor.fallar = null;
+        trabajo.ejecutar();
+
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(eventos.escrituras).isEqualTo(1);
+        assertThat(eventos.de(ejecucion.id())).isNotEmpty();
+    }
+
+    @Test
+    @DisplayName("si no se pueden guardar los turnos tampoco se da por terminada la ejecucion: se reintenta")
+    void sinEventosNoHayEjecucionTerminada() {
+        eventos.fallarAlGuardar = Dobles.caido("mongo");
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+
+        eventos.fallarAlGuardar = null;
+        trabajo.ejecutar();
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+    }
+
+    @Test
+    @DisplayName("si el inventario ya no conoce al heroe, pelea con las estadisticas del catalogo en vez de quedarse sin simular")
+    void heroeSinInventario() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        inventario.fallarAlPedirEstadisticas = new HeroeNoEncontrado();
+        inventario.fallarAlPedirEquipo = new HeroeNoEncontrado();
+
+        trabajo.ejecutar();
+
+        Combatiente heroe = motor.recibidos.getFirst().stream().filter(c -> c.id().equals("heroe")).findFirst()
+                .orElseThrow();
+        assertThat(heroe.estadisticas()).isNull();
+        assertThat(heroe.equipamiento()).isEmpty();
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+    }
+
+    @Test
+    @DisplayName("los enemigos sin estrategia propia pelean con la rotacion por defecto de su prototipo")
+    void enemigosConRotacionPorDefecto() {
+        heroes.habilidadesValidas = List.of("Golpe con escudo", "Ataque básico");
+        motor.danoDelHeroe = 1;
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        List<TurnoParaDecidir> deEnemigos = heroes.decisiones.stream()
+                .filter(t -> t.prototipo().equals("Guerrero Tanque")).toList();
+        assertThat(deEnemigos).isNotEmpty();
+        assertThat(deEnemigos).allSatisfy(t -> assertThat(t.rotaciones()).containsExactly(List.of("Golpe con escudo")));
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isNotEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    @Test
+    @DisplayName("la simulacion usa el decisor que se le da (el de la IA con modelo cuando esta encendido), no solo el de heroes")
+    void usaElDecisorQueSeLeDa() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        java.util.List<nexus.misiones.dominio.simulacion.TurnoParaDecidir> vistos = new java.util.ArrayList<>();
+        nexus.misiones.dominio.simulacion.DecisorDeTurno espia = turno -> {
+            vistos.add(turno);
+            return heroes.decidir(turno);
+        };
+        SimularEjecucion simular = new SimularEjecucion(catalogoDePrueba, ejecuciones, eventos, heroes, espia, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametrosDePrueba, reloj);
+
+        simular.simular(ejecuciones.buscar(ejecucion.id()).orElseThrow());
+
+        // Todo lo que se le pregunta al decisor lleva el contexto del duelo (lo que necesita el modelo).
+        assertThat(vistos).isNotEmpty();
+        assertThat(vistos).allSatisfy(t -> assertThat(t.contexto()).isNotNull());
     }
 }

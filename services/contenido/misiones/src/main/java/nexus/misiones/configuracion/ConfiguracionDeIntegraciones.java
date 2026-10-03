@@ -13,7 +13,7 @@ import nexus.misiones.aplicacion.DirectorioDeJugadores;
 import nexus.misiones.aplicacion.InventarioDeHeroes;
 import nexus.misiones.aplicacion.LibroDeCreditos;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
-import nexus.misiones.dominio.simulacion.ResolutorDeGolpes;
+import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.integracion.ClienteCorreo;
 import nexus.misiones.integracion.ClienteCreditos;
 import nexus.misiones.integracion.ClienteHeroes;
@@ -107,7 +107,7 @@ public class ConfiguracionDeIntegraciones {
     }
 
     @Bean
-    public ResolutorDeGolpes resolutorDeGolpes(RestClient restClientDeMisiones,
+    public MotorDeCombate motorDeCombate(RestClient restClientDeMisiones,
                                                @Value("${misiones.motor.url}") String url,
                                                Umbrales umbrales, RegistroDeDegradacion registro) {
         return new ClienteMotor(restClientDeMisiones, url, umbrales.para("motor-combate", "Motor de combate", registro));
