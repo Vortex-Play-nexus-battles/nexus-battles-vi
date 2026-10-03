@@ -104,6 +104,12 @@ describe('textos de la pantalla', () => {
     expect(subtituloDeSalas(1)).toBe('1 sala abierta ahora mismo');
   });
 
+  test('auditoría 30-sep: con filtros cuenta las que coinciden y lo dice, no «0 salas abiertas»', () => {
+    expect(subtituloDeSalas(0, { filtrada: true })).toBe('Ninguna sala con estos filtros');
+    expect(subtituloDeSalas(1, { filtrada: true })).toBe('1 sala con estos filtros');
+    expect(subtituloDeSalas(7, { filtrada: true })).toBe('7 salas con estos filtros');
+  });
+
   test('la paginacion dice cuantos de cuantos, como exige el componente', () => {
     expect(textoDePaginacion({ contenido: new Array(16), totalElementos: 38 })).toBe(
       'Mostrando 16 de 38 salas',
@@ -177,6 +183,43 @@ describe('montarBatallas', () => {
     expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(true);
     expect(raiz.querySelector('[data-zona="estado"]').textContent).toContain(
       'No hay batallas abiertas',
+    );
+  });
+
+  test('auditoría 30-sep: vacío por un filtro no dice que nadie juega, y «Quitar filtros» vuelve a todas', async () => {
+    const raiz = preparar();
+    const listar = jest
+      .fn()
+      .mockResolvedValueOnce(pagina([sala()]))
+      .mockResolvedValueOnce(pagina([]))
+      .mockResolvedValueOnce(pagina([sala()], { totalElementos: 25 }));
+    montarBatallas(raiz, { listar });
+    await asentar();
+
+    const modalidad = raiz.querySelector('[name="modalidad"]');
+    modalidad.value = 'CONTRA_IA';
+    modalidad.dispatchEvent(new Event('change'));
+    await asentar();
+
+    const estado = raiz.querySelector('[data-zona="estado"]');
+    expect(estado.textContent).toContain('Ninguna sala coincide con los filtros');
+    expect(estado.textContent).not.toContain('Nadie tiene una sala esperando');
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      'Ninguna sala con estos filtros',
+    );
+
+    const quitar = [...estado.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Quitar filtros',
+    );
+    quitar.click();
+    await asentar();
+
+    expect(modalidad.value).toBe('');
+    expect(listar).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pagina: 0, modalidad: '', estado: '' }),
+    );
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      '25 salas abiertas ahora mismo',
     );
   });
 
@@ -530,8 +573,11 @@ describe('canal en tiempo real en el listado', () => {
 describe('mostrarAvisoDeSala', () => {
   const ZONA = `
     <div class="aviso" data-zona="aviso-sala" hidden>
-      <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
-      <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+      <div class="aviso__cuerpo">
+        <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+        <p class="aviso__detalle" data-zona="aviso-sala-detalle"></p>
+      </div>
+      <button type="button" data-accion="cerrar-aviso-sala">Entendido</button>
     </div>
   `;
 
@@ -566,6 +612,18 @@ describe('mostrarAvisoDeSala', () => {
     const zona = document.querySelector('[data-zona="aviso-sala"]');
     expect(zona.className).toBe('aviso aviso--info');
     expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').hidden).toBe(true);
+  });
+
+  test('auditoría 30-sep: «Cancelaste la sala.» no se queda para siempre; «Entendido» lo cierra', () => {
+    document.body.innerHTML = ZONA;
+    mostrarAvisoDeSala(document, { tono: 'info', titulo: 'Cancelaste la sala.' });
+    // Mostrarlo dos veces no engancha dos escuchas.
+    mostrarAvisoDeSala(document, { tono: 'info', titulo: 'Cancelaste la sala.' });
+
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(zona.hidden).toBe(false);
+    zona.querySelector('[data-accion="cerrar-aviso-sala"]').click();
+    expect(zona.hidden).toBe(true);
   });
 });
 

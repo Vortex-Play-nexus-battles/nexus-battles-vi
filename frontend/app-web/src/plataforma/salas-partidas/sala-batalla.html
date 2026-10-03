@@ -155,7 +155,10 @@
         no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
         empezar cuando la suposicion falle.
       -->
-        <div class="fila" data-zona="arranque" hidden>
+        <!-- Auditoría de DEV del 30-sep: en pantalla ancha «Iniciar combate» y
+             «Cancelar sala» se estiraban (`.fila` reparte 280 px a cada hijo)
+             y quedaban descolocados. `fila--acciones`: miden su texto. -->
+        <div class="fila fila--acciones" data-zona="arranque" hidden>
           <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
             Iniciar combate
           </button>
@@ -175,7 +178,7 @@
           codigo se generaba, se guardaba y no llegaba a ninguna pantalla: una
           sala privada era una sala a la que no podia entrar nadie.
         -->
-        <div class="fila fila--invitacion" data-zona="invitacion" hidden>
+        <div class="fila fila--acciones fila--invitacion" data-zona="invitacion" hidden>
           <span class="t-meta">Código para invitar:</span>
           <code class="codigo-invitacion" data-zona="codigo-invitacion"></code>
           <button class="boton boton--secundario" type="button" data-accion="copiar-codigo">
@@ -187,7 +190,7 @@
           <span class="t-meta" data-zona="acuse-copia" role="status" aria-live="polite"></span>
         </div>
 
-        <div class="fila" data-zona="espera" hidden>
+        <div class="fila fila--acciones" data-zona="espera" hidden>
           <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
           <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
             Salir de la sala
