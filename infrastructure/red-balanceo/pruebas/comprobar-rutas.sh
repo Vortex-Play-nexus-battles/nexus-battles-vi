@@ -100,6 +100,10 @@ comprobar PUT  /api/v1/auth/preguntas-seguridad \
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
+# Auditoria de DEV del 30-sep: la foto de perfil la sirve ms-identidad fuera
+# de /api (devuelve `/avatares-subidos/<archivo>`) y por el borde solo se lee.
+comprobar GET  /avatares-subidos/a.png     "identidad GET /avatares-subidos/a.png"
+codigo    POST /avatares-subidos/a.png     403
 # R8.4 — la que llevaba dos semanas cayendo en IDENTIDAD por la regex de
 # /admin. Si alguien quita el `^~` de borde-dev.conf, esta linea se pone roja.
 comprobar GET  /api/v1/admin/auditoria     "cumplimiento GET /api/v1/admin/auditoria"
