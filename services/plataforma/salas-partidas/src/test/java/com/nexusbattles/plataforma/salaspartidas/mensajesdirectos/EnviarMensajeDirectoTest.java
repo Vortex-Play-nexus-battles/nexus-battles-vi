@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos;
 
+import com.nexusbattles.plataforma.salaspartidas.chat.PoliticaDeTexto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores.CuentaDeJugador;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores.DirectorioNoDisponible;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.FiltroDeMensajesPrivados.Veredicto;
@@ -272,6 +273,97 @@ class EnviarMensajeDirectoTest {
                     () -> assertEquals(503, r.estado()),
                     () -> assertTrue(r.reintentarEnSegundos().isEmpty()),
                     () -> assertTrue(repositorio.guardados.isEmpty()));
+        }
+    }
+
+    @Nested
+    @DisplayName("bloqueos (D-40): con un bloqueo de por medio no sale nada, en ningun sentido")
+    class ConBloqueos {
+
+        private final RepositorioDeBloqueosEnMemoria bloqueados = new RepositorioDeBloqueosEnMemoria();
+        private final BloqueosDeMensajes bloqueos =
+                new BloqueosDeMensajes(bloqueados, Clock.fixed(AHORA, ZoneOffset.UTC));
+        private final EnviarMensajeDirecto conBloqueos = new EnviarMensajeDirecto(repositorio, sanciones,
+                directorio, filtro, limite, entrega, aviso, Clock.fixed(AHORA, ZoneOffset.UTC),
+                PoliticaDeTexto.Limites.POR_OMISION, bloqueos);
+
+        @Test
+        @DisplayName("sin bloqueos se entrega como siempre")
+        void sinBloqueos() {
+            MensajeDirecto mensaje = conBloqueos.enviar(REMITENTE, BRUNO, "hola", null);
+            assertEquals(List.of(mensaje), entrega.entregados);
+        }
+
+        @Test
+        @DisplayName("si el destinatario bloqueo al remitente: NO_ADMITE (403) y no se guarda, entrega ni avisa")
+        void elDestinatarioLoBloqueo() {
+            bloqueos.bloquear(BRUNO, ANA);
+
+            MensajeDirectoRechazado r = rechazo(() -> conBloqueos.enviar(REMITENTE, BRUNO, "hola", "c7"));
+
+            assertAll(
+                    () -> assertEquals(MotivoDeRechazo.NO_ADMITE, r.motivo()),
+                    () -> assertEquals(403, r.estado()),
+                    () -> assertEquals("c7", r.idCliente(), "la interfaz sabe que envio fallo"),
+                    () -> assertTrue(repositorio.guardados.isEmpty()),
+                    () -> assertTrue(entrega.entregados.isEmpty()),
+                    () -> assertTrue(aviso.avisados.isEmpty(), "ni un aviso que delate al que escribe"),
+                    () -> assertTrue(filtro.revisados.isEmpty(), "lo que no va a salir no se revisa"));
+        }
+
+        @Test
+        @DisplayName("si el remitente bloqueo al destinatario: CONVERSACION_BLOQUEADA (409) hasta que lo desbloquee")
+        void elRemitenteLoBloqueo() {
+            bloqueos.bloquear(ANA, BRUNO);
+
+            MensajeDirectoRechazado r = rechazo(() -> conBloqueos.enviar(REMITENTE, BRUNO, "hola", null));
+            assertAll(
+                    () -> assertEquals(MotivoDeRechazo.CONVERSACION_BLOQUEADA, r.motivo()),
+                    () -> assertEquals(409, r.estado()),
+                    () -> assertTrue(repositorio.guardados.isEmpty()));
+
+            bloqueos.desbloquear(ANA, BRUNO);
+            MensajeDirecto mensaje = conBloqueos.enviar(REMITENTE, BRUNO, "ya puedo", null);
+            assertEquals(List.of(mensaje), entrega.entregados);
+        }
+
+        @Test
+        @DisplayName("el limite de frecuencia va antes: insistir contra un bloqueo no martillea la base de datos")
+        void antesElLimite() {
+            bloqueos.bloquear(BRUNO, ANA);
+            bloqueados.consultas = 0;
+            limite.espera = Duration.ofSeconds(2);
+
+            assertAll(
+                    () -> assertEquals(MotivoDeRechazo.DEMASIADO_RAPIDO,
+                            rechazo(() -> conBloqueos.enviar(REMITENTE, BRUNO, "hola", null)).motivo()),
+                    () -> assertEquals(0, bloqueados.consultas));
+        }
+
+        @Test
+        @DisplayName("el bloqueo va antes que moderacion: no se consulta la sancion de quien no va a poder escribir")
+        void antesQueModeracion() {
+            bloqueos.bloquear(BRUNO, ANA);
+            sanciones.caidas = true;
+
+            assertAll(
+                    () -> assertEquals(MotivoDeRechazo.NO_ADMITE,
+                            rechazo(() -> conBloqueos.enviar(REMITENTE, BRUNO, "hola", null)).motivo()),
+                    () -> assertEquals(0, sanciones.consultas),
+                    () -> assertEquals(0, directorio.consultas));
+        }
+
+        @Test
+        @DisplayName("un reintento de lo que ya se envio antes del bloqueo devuelve lo guardado y no entrega otra vez")
+        void reintentoDeAntes() {
+            MensajeDirecto antes = conBloqueos.enviar(REMITENTE, BRUNO, "hola", "cli-1");
+            bloqueos.bloquear(BRUNO, ANA);
+
+            MensajeDirecto reintento = conBloqueos.enviar(REMITENTE, BRUNO, "hola", "cli-1");
+
+            assertAll(
+                    () -> assertSame(antes, reintento),
+                    () -> assertEquals(List.of(antes), entrega.entregados, "a Bruno no le llega nada nuevo"));
         }
     }
 

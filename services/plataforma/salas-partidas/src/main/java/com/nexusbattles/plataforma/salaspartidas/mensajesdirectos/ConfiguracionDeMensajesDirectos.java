@@ -81,6 +81,12 @@ public class ConfiguracionDeMensajesDirectos {
         return new EntregaStomp(plantilla, registro);
     }
 
+    /** Bloquear a un jugador en los mensajes privados (auditoria de DEV del 30-sep, D-40). */
+    @Bean
+    public BloqueosDeMensajes bloqueosDeMensajes(RepositorioDeBloqueos repositorio) {
+        return new BloqueosDeMensajes(repositorio, Clock.systemUTC());
+    }
+
     @Bean
     public EnviarMensajeDirecto enviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio,
                                                      SancionesDelJugador sanciones,
@@ -89,13 +95,15 @@ public class ConfiguracionDeMensajesDirectos {
                                                      LimiteDeFrecuencia limite,
                                                      EntregaDeMensajesDirectos entrega,
                                                      AvisoDeMensajeDirecto aviso,
-                                                     PoliticaDeTexto.Limites limitesDeTexto) {
+                                                     PoliticaDeTexto.Limites limitesDeTexto,
+                                                     BloqueosDeMensajes bloqueos) {
         return new EnviarMensajeDirecto(repositorio, sanciones, directorio, filtro, limite, entrega, aviso,
-                Clock.systemUTC(), limitesDeTexto);
+                Clock.systemUTC(), limitesDeTexto, bloqueos);
     }
 
     @Bean
-    public BandejaDeMensajesDirectos bandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio) {
-        return new BandejaDeMensajesDirectos(repositorio, Clock.systemUTC());
+    public BandejaDeMensajesDirectos bandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio,
+                                                               BloqueosDeMensajes bloqueos) {
+        return new BandejaDeMensajesDirectos(repositorio, Clock.systemUTC(), bloqueos);
     }
 }

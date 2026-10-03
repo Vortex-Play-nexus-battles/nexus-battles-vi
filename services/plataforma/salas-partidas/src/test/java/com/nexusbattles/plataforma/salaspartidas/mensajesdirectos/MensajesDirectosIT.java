@@ -326,10 +326,13 @@ class MensajesDirectosIT {
 
     // ------------------------------------------------------------------ casos
 
-    /** Los no leidos de la conversacion con {@code uidOtro} en la respuesta de «mis conversaciones». */
+    /**
+     * Los no leidos de la conversacion con {@code uidOtro} en la respuesta de
+     * «mis conversaciones». Desde 1.8.0 la fila sigue con {@code estado} (D-40).
+     */
     private static int noLeidosCon(String cuerpo, UUID uidOtro) {
         Matcher fila = Pattern
-                .compile("\\{\"uidOtro\":\"" + uidOtro + "\".*?\"noLeidos\":(\\d+)}")
+                .compile("\\{\"uidOtro\":\"" + uidOtro + "\".*?\"noLeidos\":(\\d+)[,}]")
                 .matcher(cuerpo);
         assertTrue(fila.find(), "no hay conversacion con " + uidOtro + ": " + cuerpo);
         return Integer.parseInt(fila.group(1));
@@ -487,6 +490,51 @@ class MensajesDirectosIT {
         String inexistente = colaDeHugo.poll(10, TimeUnit.SECONDS);
         assertNotNull(inexistente);
         assertTrue(inexistente.contains("\"motivo\":\"DESTINATARIO_INEXISTENTE\""), inexistente);
+    }
+
+    @Test
+    @DisplayName("D-40: con un bloqueo nadie se escribe, por ninguna via, y desbloquear lo deshace")
+    void bloqueo() throws Exception {
+        UUID idFede = JUGADORES.get("fede");
+        UUID idGala = JUGADORES.get("gala");
+        String bloqueoDeGala = conversaciones() + "/" + idGala + "/bloqueo";
+
+        HttpResponse<String> bloqueado = rest("PUT", bloqueoDeGala, "fede", null);
+        assertAll(
+                () -> assertEquals(200, bloqueado.statusCode(), bloqueado.body()),
+                () -> assertTrue(bloqueado.body().contains("\"estado\":\"BLOQUEADA\""), bloqueado.body()),
+                () -> assertTrue(rest("GET", conversaciones() + "/" + idFede + "/bloqueo", "gala", null).body()
+                        .contains("\"estado\":\"NO_ADMITE\"")));
+
+        StompSession gala = conectar("gala", new Registro());
+        BlockingQueue<String> colaDeGala = escucharSuCola("gala", gala);
+        escribir(gala, "fede", "por STOMP", "cli-b1");
+        String rechazo = colaDeGala.poll(10, TimeUnit.SECONDS);
+        assertNotNull(rechazo);
+        HttpResponse<String> porRest = rest("POST", conversaciones() + "/" + idFede + "/mensajes", "gala",
+                "{\"texto\":\"por REST\"}");
+        HttpResponse<String> deQuienBloqueo = rest("POST", conversaciones() + "/" + idGala + "/mensajes", "fede",
+                "{\"texto\":\"yo tampoco\"}");
+        assertAll(
+                () -> assertTrue(rechazo.contains("\"motivo\":\"NO_ADMITE\""), rechazo),
+                () -> assertTrue(rechazo.contains("\"idCliente\":\"cli-b1\""), rechazo),
+                () -> assertEquals(403, porRest.statusCode(), porRest.body()),
+                () -> assertTrue(porRest.body().contains("destinatario-no-admite"), porRest.body()),
+                () -> assertEquals(409, deQuienBloqueo.statusCode(), deQuienBloqueo.body()),
+                () -> assertTrue(deQuienBloqueo.body().contains("conversacion-bloqueada"), deQuienBloqueo.body()),
+                () -> assertEquals("[]", rest("GET", conversaciones() + "/" + idGala + "/mensajes", "fede", null)
+                        .body(), "nada de eso se guardo"));
+
+        HttpResponse<String> desbloqueado = rest("DELETE", bloqueoDeGala, "fede", null);
+        assertTrue(desbloqueado.body().contains("\"estado\":\"ACTIVA\""), desbloqueado.body());
+        HttpResponse<String> deVuelta = rest("POST", conversaciones() + "/" + idFede + "/mensajes", "gala",
+                "{\"texto\":\"de vuelta\"}");
+        assertAll(
+                () -> assertEquals(201, deVuelta.statusCode(), deVuelta.body()),
+                () -> assertTrue(rest("GET", conversaciones(), "fede", null).body()
+                        .contains("\"estado\":\"ACTIVA\""), "la conversacion dice que se puede escribir"),
+                () -> assertEquals(400, rest("PUT", conversaciones() + "/" + idFede + "/bloqueo", "fede", null)
+                        .statusCode(), "nadie se bloquea a si mismo"));
     }
 
     @Test

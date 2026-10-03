@@ -39,6 +39,9 @@ import java.util.UUID;
  *   <li>el remitente no va demasiado rapido ({@link MotivoDeRechazo#DEMASIADO_RAPIDO});
  *       el limite va antes que las consultas a otros servicios para que
  *       insistir no sirva para martillearlos;</li>
+ *   <li>ninguno de los dos tiene bloqueado al otro
+ *       ({@link MotivoDeRechazo#CONVERSACION_BLOQUEADA},
+ *       {@link MotivoDeRechazo#NO_ADMITE}; D-40);</li>
  *   <li>el remitente no tiene una sancion activa ({@link MotivoDeRechazo#SANCIONADO});</li>
  *   <li>el destinatario existe y su cuenta esta activa
  *       ({@link MotivoDeRechazo#DESTINATARIO_INEXISTENTE});</li>
@@ -79,6 +82,7 @@ public class EnviarMensajeDirecto {
     private final AvisoDeMensajeDirecto aviso;
     private final Clock reloj;
     private final PoliticaDeTexto.Limites limitesDeTexto;
+    private final BloqueosDeMensajes bloqueos;
 
     public EnviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio, SancionesDelJugador sanciones,
                                 DirectorioDeJugadores directorio, FiltroDeMensajesPrivados filtro,
@@ -98,6 +102,21 @@ public class EnviarMensajeDirecto {
                                 LimiteDeFrecuencia limite, EntregaDeMensajesDirectos entrega,
                                 AvisoDeMensajeDirecto aviso, Clock reloj,
                                 PoliticaDeTexto.Limites limitesDeTexto) {
+        this(repositorio, sanciones, directorio, filtro, limite, entrega, aviso, reloj, limitesDeTexto,
+                BloqueosDeMensajes.sinBloqueos());
+    }
+
+    /**
+     * @param bloqueos quien bloqueo a quien (D-40, auditoria de DEV del
+     *     30-sep): entre dos jugadores con un bloqueo de por medio no se
+     *     entrega nada, en ningun sentido
+     */
+    public EnviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio, SancionesDelJugador sanciones,
+                                DirectorioDeJugadores directorio, FiltroDeMensajesPrivados filtro,
+                                LimiteDeFrecuencia limite, EntregaDeMensajesDirectos entrega,
+                                AvisoDeMensajeDirecto aviso, Clock reloj,
+                                PoliticaDeTexto.Limites limitesDeTexto, BloqueosDeMensajes bloqueos) {
+        this.bloqueos = Objects.requireNonNull(bloqueos);
         this.limitesDeTexto = Objects.requireNonNull(limitesDeTexto);
         this.repositorio = Objects.requireNonNull(repositorio);
         this.sanciones = Objects.requireNonNull(sanciones);
@@ -140,6 +159,7 @@ public class EnviarMensajeDirecto {
             throw new MensajeDirectoRechazado(MotivoDeRechazo.DEMASIADO_RAPIDO, id, espera);
         });
 
+        comprobarBloqueo(remitente.id(), destinatario, id);
         comprobarSancion(remitente, id);
         CuentaDeJugador cuenta = cuentaActiva(destinatario, id);
         comprobarTexto(limpio, id);
@@ -185,6 +205,17 @@ public class EnviarMensajeDirecto {
             throw new MensajeDirectoRechazado(MotivoDeRechazo.TEXTO_INVALIDO, idCliente);
         }
         return limpio;
+    }
+
+    /** D-40: con un bloqueo de por medio, en cualquier sentido, no sale nada. */
+    private void comprobarBloqueo(UUID remitente, UUID destinatario, String idCliente) {
+        switch (bloqueos.estado(remitente, destinatario)) {
+            case BLOQUEADA -> throw new MensajeDirectoRechazado(MotivoDeRechazo.CONVERSACION_BLOQUEADA, idCliente);
+            case NO_ADMITE -> throw new MensajeDirectoRechazado(MotivoDeRechazo.NO_ADMITE, idCliente);
+            case ACTIVA -> {
+                // se puede escribir
+            }
+        }
     }
 
     private void comprobarSancion(Remitente remitente, String idCliente) {
