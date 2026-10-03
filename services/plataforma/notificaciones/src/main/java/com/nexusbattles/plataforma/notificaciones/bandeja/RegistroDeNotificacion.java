@@ -29,7 +29,7 @@ public class RegistroDeNotificacion {
     @Column(name = "usuario_id", nullable = false, length = 64)
     private String usuarioId;
 
-    @Column(name = "aviso_id", nullable = false, length = 64)
+    @Column(name = "aviso_id", nullable = false, length = 200)
     private String avisoId;
 
     @Column(nullable = false, length = 40)
