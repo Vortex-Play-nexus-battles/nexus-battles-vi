@@ -127,7 +127,14 @@ test.describe('número de la campana', () => {
     const deBruno = { headers: conToken(bruno.token) };
 
     // Punto de partida limpio: lo que Bruno tuviera sin leer (de una corrida
-    // anterior) se lee antes de empezar. Son sus avisos y de nadie más.
+    // anterior o de un reintento) se lee antes de empezar. Son sus avisos y de
+    // nadie más. La conversación también: salas-partidas avisa una vez por
+    // racha de no leídos del mismo remitente, y una racha abierta no avisaría.
+    const conversacion = await api.post(
+      `/api/v1/mensajes-directos/conversaciones/${ana.claims.uid}/leido`,
+      deBruno,
+    );
+    expect(conversacion.status(), await conversacion.text()).toBe(204);
     const previa = await api.get(bandeja, deBruno);
     expect(previa.status(), await previa.text()).toBe(200);
     for (const aviso of (await previa.json()).avisos.filter((a) => !a.leida)) {
