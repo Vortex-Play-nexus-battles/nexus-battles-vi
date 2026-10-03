@@ -96,14 +96,6 @@ export function fraseDelRecuento(partidas) {
  */
 function filaDePartida(partida) {
   const cuando = partida.finalizadaEn ?? partida.iniciadaEn;
-  const accion =
-    partida.estado === 'EN_CURSO' && partida.idSala
-      ? h('a', {
-          clase: 'boton boton--secundario boton--pequeno',
-          texto: 'Volver a la partida',
-          atributos: { href: `${RUTA_SALA}?sala=${encodeURIComponent(partida.idSala)}` },
-        })
-      : null;
   return h('tr', {
     datos: { partida: partida.id, estado: partida.estado ?? '' },
     hijos: [
@@ -114,9 +106,35 @@ function filaDePartida(partida) {
         texto: Number.isInteger(partida.participantes) ? numero(partida.participantes) : '—',
       }),
       h('td', { clase: 't-meta', texto: cuando ? fechaHora(cuando) : '—' }),
-      h('td', { hijos: accion ? [accion] : [] }),
+      h('td', { hijos: [accionDePartida(partida)] }),
     ],
   });
+}
+
+/**
+ * Qué se puede hacer con una partida desde la tabla: volver a la que sigue en
+ * curso, o ver cómo terminó la que ya acabó (el campo de combate la pinta con
+ * su desenlace). Auditoría de DEV del 30-sep: la columna «Acción» salía vacía
+ * en las terminadas.
+ *
+ * @param {object} partida `ResumenDePartida`
+ * @returns {HTMLElement}
+ */
+export function accionDePartida(partida) {
+  if (partida.idSala && (partida.estado === 'EN_CURSO' || partida.estado === 'FINALIZADA')) {
+    const enCurso = partida.estado === 'EN_CURSO';
+    const consulta = new URLSearchParams({ sala: partida.idSala });
+    if (!enCurso && partida.id) {
+      consulta.set('partida', partida.id);
+    }
+    return h('a', {
+      clase: 'boton boton--secundario boton--pequeno',
+      texto: enCurso ? 'Volver a la partida' : 'Ver resultado',
+      atributos: { href: `${RUTA_SALA}?${consulta}` },
+    });
+  }
+  // Sin sala a la que ir no hay acción, y se dice en vez de dejar la celda vacía.
+  return h('span', { clase: 't-meta', texto: '—', atributos: { 'aria-label': 'Sin acción' } });
 }
 
 /**

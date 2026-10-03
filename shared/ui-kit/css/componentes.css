@@ -1272,6 +1272,19 @@ html.con-modal {
   white-space: nowrap;
 }
 
+/* Auditoria de DEV del 30-sep: a 375 px las cinco pestanas de «Mi cuenta»
+   seguian sin caber y las ultimas quedaban fuera de la vista (habia que
+   adivinar que la tira se desplazaba). En pantalla estrecha pasan a dos
+   filas: todas a la vista y ninguna escondida. */
+@media (max-width: 480px) {
+  .pestanas {
+    flex-wrap: wrap;
+    column-gap: var(--e-2);
+    row-gap: 0;
+    overflow-x: visible;
+  }
+}
+
 .pestana {
   display: flex;
   flex-direction: column;
