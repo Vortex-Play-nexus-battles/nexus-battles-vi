@@ -150,15 +150,16 @@ en cero.
 ### Auditoría de DEV del 30-sep (2 de octubre de 2026)
 
 El informe de revisión de Santiago sobre AWS DEV encontró tres huecos de
-moderación que el código resolvía con un valor que nadie había decidido. Se
-corrigen sin escribir ninguna cifra de producto en el código: lo que no fija
-ningún documento queda aquí, con su valor provisional a la vista.
+moderación y uno de créditos que el código resolvía con un valor que nadie había
+decidido. Se corrigen sin escribir ninguna cifra de producto en el código: lo
+que no fija ningún documento queda aquí, con su valor provisional a la vista.
 
 | # | Qué falta decidir | Qué hace hoy el sistema | Dónde se cambia |
 |---|---|---|---|
 | **D-36** · PO | **¿Cuántos reportes ocultan un comentario mientras se revisa?** RF-COM-006 (CA-01, CA-04) pide registrar el reporte, agruparlo y encolar el comentario «sujeto a revisión»; no dice que un reporte lo oculte. Hasta la 1.7.1 el primero lo sacaba del hilo para todos (en DEV, «Espada de una mano» bajó de 28 a 27 opiniones con un solo reporte). | **0 = nunca**: el reportado sigue publicado y a la vista; entra en la cola por sus reportes pendientes y es el moderador quien lo oculta, lo elimina o lo aprueba (comentarios.yaml 1.8.0). Con un valor > 0, el reporte que lo alcanza lo pasa a EN_REVISION. | `comentarios.reportes.umbral-ocultamiento` (comentarios). |
 | **D-37** · PO | **Límites anti-abuso del chat** (7.3.3 y HU-COM-007, «patrones sospechosos»). En el chat general entró un bloque enorme de ASCII art y nada limitaba la frecuencia (los mensajes privados sí: 5 cada 10 s desde B6). | **Provisional:** 5 mensajes cada 10 s por autor en el chat general y de sala (429 `demasiados-mensajes`); y en chat, sala y privados, como mucho 6 líneas, 15 veces seguidas el mismo carácter, y desde 40 caracteres visibles al menos la mitad letras o cifras (400 `mensaje-invalido` con la explicación). El texto se guarda en NFKC y sin caracteres invisibles. | `chat.limite.*` y `chat.texto.*` de salas-partidas (`CHAT_LIMITE_*`, `CHAT_TEXTO_*`). |
 | **D-38** · PO | **La lista real de términos** (ya preguntado en #786, pregunta 6). En DEV pasaban «putas», «malparida», «pendeja», «gonorrea» o «marica». | El detector declina los insultos (categoría OFENSIVO): plural en PALABRA, raíz de género y número en SUBCADENA de 6+ letras; marcas y personas no se declinan. La semilla **provisional** se amplía con 20 insultos corrientes (V9 de moderacion-sanciones), apagables o borrables desde la consola sin desplegar. | Vista «Lista negra» de la consola; `V9__semilla_provisional_insultos_comunes.sql`. |
+| **D-39** · PO | **¿Cuánto vive una sala que nadie juega, y qué pasa con su apuesta?** Ningún requisito fija un plazo de inactividad (`MotivoDeCancelacion.INACTIVIDAD` estaba declarado sin productor). En DEV quedaron 500 créditos apartados en una apuesta del 28 de septiembre, sin sala visible ni forma de recuperarlos. | **72 h**, que no es un número nuevo: es el vencimiento (`expira_en`) con que ms-finanzas crea toda reserva de apuesta desde el principio. Pasado ese plazo, salas-partidas cancela por INACTIVIDAD la sala que nadie empezó y da por terminada **sin ganador** la partida que nadie terminó (cada uno recupera lo suyo; no hay recompensa por jugar), y ms-finanzas libera cualquier reserva `apuesta-sala` vencida que siga ACTIVA. | `salas.abandono.horas` (`SALAS_ABANDONO_HORAS`) y `finanzas.apuestas.vencer-reservas`; el vencimiento de la reserva, en ms-finanzas. |
 
 ---
 

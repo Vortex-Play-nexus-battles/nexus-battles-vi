@@ -8,6 +8,7 @@ import {
   narrarTurno,
   nombreDe,
   nombreDeAccion,
+  nombreDeLaAccion,
 } from './narracion.js';
 
 const YO = 'u-yo';
@@ -49,6 +50,25 @@ describe('nombres', () => {
   test('el ataque basico se dice en español', () => {
     expect(nombreDeAccion('ATAQUE_BASICO')).toBe('Ataque básico');
     expect(nombreDeAccion('')).toBe('una acción');
+  });
+
+  test('un código del motor sin nombre conocido se dice legible; un nombre, tal cual', () => {
+    expect(nombreDeAccion('MANO_DE_PIEDRA')).toBe('Mano de piedra');
+    expect(nombreDeAccion('Golpe con escudo')).toBe('Golpe con escudo');
+  });
+
+  test('el nombre de una acción sale del estado de combate de quien la juega', () => {
+    const conAcciones = [
+      {
+        jugador: { id: YO },
+        heroe: {
+          nombre: 'Aquiles',
+          acciones: [{ codigo: 'SANACION_BASICA', nombre: 'Sanación básica' }],
+        },
+      },
+    ];
+    expect(nombreDeLaAccion('SANACION_BASICA', YO, conAcciones)).toBe('Sanación básica');
+    expect(nombreDeLaAccion('BOLA_DE_HIELO', YO, conAcciones)).toBe('Bola de hielo');
   });
 });
 
@@ -212,7 +232,76 @@ describe('narrarAccion', () => {
       participantes,
       YO,
     );
-    expect(lineas[0].texto).toBe('Aquiles (tú) se cura: +5 de vida (45/52).');
+    expect(lineas.at(-1).texto).toBe('Aquiles (tú) se cura: +5 de vida (45/52).');
+  });
+
+  /* Auditoría de DEV del 30-sep: «los especiales no se narran en el registro». */
+
+  test('una sanación dice qué acción fue, con el nombre que da el servidor', () => {
+    const conAcciones = [
+      {
+        jugador: { id: YO },
+        heroe: {
+          nombre: 'Aquiles',
+          acciones: [{ codigo: 'SANACION_BASICA', nombre: 'Sanación básica' }],
+        },
+      },
+      participantes[1],
+    ];
+    const { lineas } = narrarAccion(
+      {
+        ...aviso('SANACION_BASICA', [
+          { idJugador: YO, vidaActual: 45, vidaMaxima: 52, diferencia: 5 },
+        ]),
+        accion: { codigo: 'SANACION_BASICA', nombre: 'SANACION_BASICA', tipo: 'SANACION' },
+      },
+      conAcciones,
+      YO,
+    );
+    expect(lineas.map((l) => l.texto)).toEqual([
+      'Aquiles (tú) usa Sanación básica.',
+      'Aquiles (tú) se cura: +5 de vida (45/52).',
+    ]);
+  });
+
+  test('una sanación de grupo se nombra una sola vez', () => {
+    const { lineas } = narrarAccion(
+      {
+        ...aviso('CURA_EN_GRUPO', [
+          { idJugador: YO, vidaActual: 45, vidaMaxima: 52, diferencia: 3 },
+          { idJugador: RIVAL, vidaActual: 50, vidaMaxima: 60, diferencia: 3 },
+        ]),
+        accion: { codigo: 'CURA_EN_GRUPO', nombre: 'CURA_EN_GRUPO', tipo: 'SANACION_GRUPAL' },
+      },
+      participantes,
+      YO,
+    );
+    expect(lineas.filter((l) => l.texto.includes('usa Cura en grupo'))).toHaveLength(1);
+    expect(lineas).toHaveLength(3);
+  });
+
+  test('un ataque especial con código del motor se nombra con el nombre de la acción', () => {
+    const conAcciones = [
+      {
+        jugador: { id: YO },
+        heroe: {
+          nombre: 'Aquiles',
+          acciones: [{ codigo: 'GOLPE_CON_ESCUDO', nombre: 'Golpe con escudo' }],
+        },
+      },
+      participantes[1],
+    ];
+    const { lineas } = narrarAccion(
+      {
+        ...aviso('CAUSAR_DANO', [
+          { idJugador: RIVAL, vidaActual: 50, vidaMaxima: 60, diferencia: -10 },
+        ]),
+        accion: { codigo: 'GOLPE_CON_ESCUDO', nombre: 'CAUSAR_DANO', tipo: 'ATAQUE' },
+      },
+      conAcciones,
+      YO,
+    );
+    expect(lineas[0].texto).toBe('Aquiles (tú) usa Golpe con escudo.');
   });
 });
 

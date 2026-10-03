@@ -215,7 +215,7 @@
           motor no las resuelva: un boton que parece funcionar y no lo hace
           seria peor que no tenerlo.
         -->
-        <div class="combate__mando">
+        <div class="combate__mando" data-zona="mando">
           <section class="combate__grupo" aria-labelledby="titulo-ataque">
             <h2 class="combate__grupo-titulo" id="titulo-ataque">Ataque básico</h2>
             <div
@@ -401,6 +401,13 @@
           turnoDe: partida.turnoActual?.idJugador,
           numeroTurno: partida.turnoActual?.numeroTurno ?? null,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
+          // Auditoria de DEV del 30-sep: recargar una partida terminada la
+          // pintaba como en curso. Terminada, los controles nacen cerrados y
+          // se ensena el desenlace.
+          partidaFinalizada: partida.estado === 'FINALIZADA' ? partida : null,
+          // Recien empezada (no una recarga): si ya no es el turno 1, el
+          // registro cuenta quien abrio y lo que dejo.
+          recienEmpezada: presentar,
           // R17.4 — el desenlace tapa la pantalla entera, barra incluida: lleva
           // sus propias salidas, o quien acaba de jugar no tiene adónde ir.
           salidas: [

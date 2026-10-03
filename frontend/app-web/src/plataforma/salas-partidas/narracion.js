@@ -58,7 +58,17 @@ export function categoriaDe(accion) {
   return null;
 }
 
-/** Nombre legible de un código de acción (`ATAQUE_BASICO` → «Ataque básico»). */
+/** `codigo` de un efecto que actuó al empezar un turno (canal 1.5.0). */
+export const EFECTO_POR_TURNO = 'EFECTO_POR_TURNO';
+
+/**
+ * Nombre legible de un código de acción (`ATAQUE_BASICO` → «Ataque básico»).
+ *
+ * Un código del motor sin nombre conocido (`MANO_DE_PIEDRA`) se dice en
+ * minúsculas y con espacios («Mano de piedra»): la auditoría de DEV del 30-sep
+ * vio el registro con códigos en mayúsculas. Un nombre ya legible se deja tal
+ * cual.
+ */
 export function nombreDeAccion(codigo) {
   const texto = String(codigo ?? '').trim();
   if (!texto) {
@@ -67,7 +77,46 @@ export function nombreDeAccion(codigo) {
   if (texto.toUpperCase() === 'ATAQUE_BASICO') {
     return 'Ataque básico';
   }
+  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(texto)) {
+    const frase = texto.toLowerCase().replaceAll('_', ' ');
+    return frase.charAt(0).toUpperCase() + frase.slice(1);
+  }
   return texto;
+}
+
+/**
+ * El nombre de una acción como lo da el estado de combate del héroe que la
+ * juega (`heroe.acciones[].nombre`, REST 1.7.0 y canal 1.5.0, calculado por el
+ * motor); si no se conoce, el código legible.
+ *
+ * @param {string} codigo
+ * @param {string|null} idEjecutor
+ * @param {Array<object>} participantes
+ * @returns {string}
+ */
+export function nombreDeLaAccion(codigo, idEjecutor, participantes) {
+  const heroe = (participantes ?? []).find((p) => p.jugador?.id === idEjecutor)?.heroe;
+  const acciones = Array.isArray(heroe?.acciones) ? heroe.acciones : [];
+  const conocida = acciones.find((a) => a?.codigo === codigo);
+  const nombre = typeof conocida?.nombre === 'string' ? conocida.nombre.trim() : '';
+  return nombre || nombreDeAccion(codigo);
+}
+
+/**
+ * Lo que se jugó, con nombre. Una defensa o una sanación llegan con el código
+ * también en `nombre`; un efecto por turno, con el nombre del efecto.
+ *
+ * @param {object} aviso
+ * @param {Array<object>} participantes
+ * @returns {string}
+ */
+function nombreDeLoJugado(aviso, participantes) {
+  const codigo = aviso?.accion?.codigo;
+  const nombre = aviso?.accion?.nombre;
+  if (codigo && codigo !== EFECTO_POR_TURNO && (!nombre || nombre === codigo)) {
+    return nombreDeLaAccion(codigo, aviso?.idEjecutor, participantes);
+  }
+  return nombreDeAccion(nombre ?? codigo);
 }
 
 /**
@@ -99,7 +148,7 @@ export function narrarAccion(aviso, participantes, yo) {
   const impactos = [];
   const ejecutor = nombreDe(aviso?.idEjecutor, participantes, yo);
   const categoria = categoriaDe(aviso?.accion);
-  const accion = categoria ? null : nombreDeAccion(aviso?.accion?.nombre ?? aviso?.accion?.codigo);
+  const accion = categoria ? null : nombreDeLoJugado(aviso, participantes);
   const todos = Array.isArray(aviso?.afectados) ? aviso.afectados : [];
   // Desde B7 (canal 1.5.0) el aviso trae tambien al ejecutor aunque su vida no
   // cambie: viaja para llevar su poder, sus cargas y sus efectos. Eso no se
@@ -116,7 +165,7 @@ export function narrarAccion(aviso, participantes, yo) {
     const pedida = aviso.accion.accionPedida;
     lineas.push({
       texto: pedida
-        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeAccion(pedida)}: ataca con su valor base.`
+        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeLaAccion(pedida, aviso.idEjecutor, participantes)}: ataca con su valor base.`
         : `A ${ejecutor} no le alcanza el poder: ataca con su valor base.`,
       tono: 'sistema',
       icono: 'rayo',
@@ -135,7 +184,7 @@ export function narrarAccion(aviso, participantes, yo) {
   const codigo = aviso?.accion?.codigo;
   if (categoria && codigo && codigo !== 'ATAQUE_BASICO' && !categoriaDe({ codigo })) {
     lineas.push({
-      texto: `${ejecutor} usa ${nombreDeAccion(codigo)}.`,
+      texto: `${ejecutor} usa ${nombreDeLaAccion(codigo, aviso?.idEjecutor, participantes)}.`,
       tono: 'sistema',
       icono: 'rayo',
     });
@@ -152,6 +201,10 @@ export function narrarAccion(aviso, participantes, yo) {
     return { lineas, impactos };
   }
 
+  // Una sanación con nombre propio se dice una vez antes de contar a quién
+  // curó: antes el registro solo decía «se cura: +5» y no qué acción fue
+  // (auditoría de DEV del 30-sep: «los especiales no se narran»).
+  let curacionNombrada = false;
   for (const afectado of afectados) {
     const objetivo = nombreDe(afectado.idJugador, participantes, yo);
     const diferencia = Number.isFinite(afectado.diferencia) ? afectado.diferencia : null;
@@ -161,6 +214,10 @@ export function narrarAccion(aviso, participantes, yo) {
         : '';
 
     if (diferencia !== null && diferencia > 0) {
+      if (accion && !curacionNombrada) {
+        curacionNombrada = true;
+        lineas.push({ texto: `${ejecutor} usa ${accion}.`, tono: 'sistema', icono: 'rayo' });
+      }
       const aSiMismo = afectado.idJugador === aviso?.idEjecutor;
       lineas.push({
         texto: aSiMismo

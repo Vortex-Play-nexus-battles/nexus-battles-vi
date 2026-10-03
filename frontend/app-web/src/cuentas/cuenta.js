@@ -166,6 +166,8 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: formatoCreditos(saldo.datos.saldoReservado),
+      // Cuándo vuelve (auditoría de DEV del 30-sep, D-39).
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   vaciar(zonaSaldo).append(rejilla);

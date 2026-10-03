@@ -212,6 +212,29 @@ export function montarInvitacion(raiz, { sala, origen = '', copiar } = {}) {
   return true;
 }
 
+/** Lo que exige el servidor para empezar (`Sala.iniciarPartida`): dos, contando a la IA. */
+export const MINIMO_PARA_EMPEZAR = 2;
+
+/** Por que todavia no se puede empezar, dicho como lo dice el servidor. */
+export const MOTIVO_SIN_RIVAL =
+  'Hace falta al menos un rival para empezar: invita a alguien o crea la sala con héroe de la IA.';
+
+/**
+ * Por que el anfitrion no puede empezar todavia, o null si puede.
+ *
+ * Auditoria de DEV del 30-sep: con 1 de 2 el boton «Iniciar combate» se podia
+ * pulsar y solo entonces llegaba el rechazo. La regla es la del servidor (la
+ * ocupacion cuenta a la IA) y el servidor sigue siendo quien decide: esto solo
+ * evita ofrecer un boton que se sabe que va a rechazar.
+ *
+ * @param {{actual: number}} ocupacion
+ * @returns {string|null}
+ */
+export function motivoParaNoEmpezar(ocupacion) {
+  const actual = Number(ocupacion?.actual ?? 0);
+  return actual < MINIMO_PARA_EMPEZAR ? MOTIVO_SIN_RIVAL : null;
+}
+
 /**
  * Monta la sala de espera sobre `[data-zona="espera"]`.
  *
@@ -237,6 +260,8 @@ export function montarSalaDeEspera(
   const aviso = raiz.querySelector('[data-zona="aviso-espera"]');
   const botonSalir = raiz.querySelector('[data-accion="salir-de-sala"]');
   const botonCancelar = raiz.querySelector('[data-accion="cancelar-sala"]');
+  const botonIniciar = raiz.querySelector('[data-accion="iniciar-partida"]');
+  const avisoArranque = raiz.querySelector('[data-zona="aviso-arranque"]');
 
   const esAnfitrion = Boolean(yo) && sala?.idAnfitrion === yo;
   let ocupacionActual = {
@@ -247,6 +272,24 @@ export function montarSalaDeEspera(
   const pintarOcupacion = () => {
     if (ocupacion) {
       ocupacion.textContent = textoDeOcupacion(ocupacionActual);
+    }
+    // El arranque es del anfitrion: se cierra con su motivo mientras falte
+    // rival y se abre en cuanto entra alguien (el canal avisa).
+    if (botonIniciar && esAnfitrion) {
+      const motivo = motivoParaNoEmpezar(ocupacionActual);
+      botonIniciar.disabled = motivo !== null;
+      if (motivo) {
+        botonIniciar.title = motivo;
+        botonIniciar.setAttribute('aria-describedby', 'motivo-arranque');
+      } else {
+        botonIniciar.removeAttribute('title');
+        botonIniciar.removeAttribute('aria-describedby');
+      }
+      if (avisoArranque && (motivo || avisoArranque.dataset.motivo === 'ocupacion')) {
+        avisoArranque.id = 'motivo-arranque';
+        avisoArranque.textContent = motivo ?? '';
+        avisoArranque.dataset.motivo = motivo ? 'ocupacion' : '';
+      }
     }
   };
 

@@ -110,4 +110,12 @@ public class RepositorioSalasJpa implements RepositorioDeSalas {
                 resultado.getTotalElements(),
                 resultado.getTotalPages());
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.List<Sala> sinEmpezarDesde(java.time.Instant limite, int lote) {
+        return datos.creadasAntesDe(EstadoSala.delListado(), limite, PageRequest.of(0, lote)).stream()
+                .map(SalaEntidad::aDominio)
+                .toList();
+    }
 }

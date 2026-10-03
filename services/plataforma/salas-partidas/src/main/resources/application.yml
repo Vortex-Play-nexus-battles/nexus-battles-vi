@@ -117,6 +117,14 @@ salas:
     url: ${PARAMETROS_URL:}
     cache-segundos: ${SALAS_PARAMETROS_CACHE_SEGUNDOS:30}
 
+  # Auditoria de DEV del 30-sep: una sala que nadie empieza o una partida que
+  # nadie termina retenia la apuesta para siempre. Pasado este plazo se cierran
+  # y la apuesta vuelve a cada uno (CerrarAbandonadas). 72 h es el vencimiento
+  # con que ms-finanzas crea la reserva de la apuesta: una sala no vive mas que
+  # la reserva que la respalda. Decision pendiente del PO (D-39).
+  abandono:
+    horas: ${SALAS_ABANDONO_HORAS:72}
+    cada-ms: ${SALAS_ABANDONO_CADA_MS:600000}
   apuestas:
     # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
     reintento-ms: ${APUESTAS_REINTENTO_MS:60000}

@@ -90,8 +90,11 @@ resto de la vista sigue. Probado apagando contenedores de verdad en
 `SALAS_WS_ENDPOINT`, `SALAS_WS_ORIGENES`, `LISTA_NEGRA_VERIFICAR_URL`,
 `CHAT_WS_ORIGENES`, `CHAT_HISTORIAL_TAMANO`, `PARAMETROS_URL`,
 `SALAS_PARTIDAS_SEGUNDOS_POR_TURNO` (respaldo del tiempo por turno; 0 = sin
-límite, B7) y `SALAS_PARTIDAS_VENCIMIENTO_MS` (cada cuánto se buscan turnos
-agotados; 5000). Ningún valor real en el repo
+límite, B7), `SALAS_PARTIDAS_VENCIMIENTO_MS` (cada cuánto se buscan turnos
+agotados; 5000), `SALAS_ABANDONO_HORAS` (pasado este plazo una sala que nadie
+empezó se cancela por INACTIVIDAD y una partida que nadie terminó se da por
+terminada sin ganador, devolviendo la apuesta; 72, el vencimiento de la
+reserva en ms-finanzas, D-39) y `SALAS_ABANDONO_CADA_MS` (600000). Ningún valor real en el repo
 (regla 10); los valores tras `:` en `application.yml` son los del entorno local.
 
 ## Pruebas

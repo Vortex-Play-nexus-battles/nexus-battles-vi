@@ -40,9 +40,52 @@ import { h, vaciar } from '../dom.js';
 import { retratoDeHeroe } from './heroe.js';
 
 /**
+ * Quien abrio el combate.
+ *
+ * `turnoActual` es el turno EN CURSO, no el primero: quien pulsa «Iniciar
+ * combate» recibe la partida ya avanzada si abrio la maquina, que juega en el
+ * mismo instante. Auditoria de DEV del 30-sep: la presentacion decia «Abres
+ * tu» y el registro empezaba en «Turno 2» con la vida ya mermada. Pasado el
+ * turno 1, quien abrio es el primero de `participantes`, que van en el orden
+ * de los turnos (salas-partidas.yaml 1.7.0).
+ *
+ * @param {Array<object>} participantes
+ * @param {{idJugador: string, numeroTurno?: number}|null} turnoActual
+ * @returns {string|null}
+ */
+export function quienAbrio(participantes, turnoActual) {
+  if (!turnoActual?.idJugador) {
+    return null;
+  }
+  const numero = turnoActual.numeroTurno;
+  if (Number.isInteger(numero) && numero > 1) {
+    return participantes[0]?.jugador?.id ?? null;
+  }
+  return turnoActual.idJugador;
+}
+
+/**
+ * La frase de quien abre, o de quien abrio y a quien le toca ahora.
+ *
+ * @returns {string}
+ */
+function textoDeApertura(conHeroe, turnoActual, yo) {
+  const nombre = (id) => conHeroe.find((p) => p.jugador?.id === id)?.heroe?.nombre ?? null;
+  const abrio = quienAbrio(conHeroe, turnoActual);
+  const ahora = turnoActual.idJugador;
+  if (!abrio || abrio === ahora) {
+    return ahora === yo ? 'Abres tú' : `Abre ${nombre(ahora) ?? 'el otro bando'}`;
+  }
+  const quienAbrioTexto = abrio === yo ? 'Abriste tú' : `Abrió ${nombre(abrio) ?? 'el otro bando'}`;
+  const quienSigue =
+    ahora === yo ? 'ahora te toca a ti' : `ahora juega ${nombre(ahora) ?? 'el otro bando'}`;
+  return `${quienAbrioTexto}; ${quienSigue}`;
+}
+
+/**
  * Construye la presentacion de los heroes de una partida.
  *
- * @param {{participantes: Array<object>, turnoActual?: {idJugador: string}|null,
+ * @param {{participantes: Array<object>, turnoActual?: {idJugador: string, numeroTurno?: number}|null,
  *          yo?: string|null, alCerrar?: Function}} opciones
  * @returns {HTMLElement|null} null si no hay nada que presentar.
  */
@@ -83,6 +126,7 @@ export function presentacionDeHeroes({
   }
 
   const campo = h('div', { clase: 'presentacion__bandos' });
+  const abridor = quienAbrio(conHeroe, turnoActual);
   const claves = [...bandos.keys()].sort((a, b) => a - b);
   claves.forEach((clave, indice) => {
     if (indice > 0) {
@@ -91,24 +135,20 @@ export function presentacionDeHeroes({
     }
     const bando = h('div', { clase: 'presentacion__bando' });
     for (const p of bandos.get(clave)) {
-      bando.append(fichaDeHeroe(p, { yo, abre: turnoActual?.idJugador === p.jugador?.id }));
+      bando.append(fichaDeHeroe(p, { yo, abre: abridor !== null && abridor === p.jugador?.id }));
     }
     campo.append(bando);
   });
   capa.append(campo);
 
   if (turnoActual?.idJugador) {
-    const quien = conHeroe.find((p) => p.jugador?.id === turnoActual.idJugador);
     capa.append(
       h('p', {
         clase: 'presentacion__turno',
         // `aria-live`: quien no ve la pantalla igual tiene que enterarse de
         // quien abre, porque decide si le toca actuar ya.
         atributos: { role: 'status', 'aria-live': 'polite' },
-        texto:
-          turnoActual.idJugador === yo
-            ? 'Abres tú'
-            : `Abre ${quien?.heroe?.nombre ?? 'el otro bando'}`,
+        texto: textoDeApertura(conHeroe, turnoActual, yo),
       }),
     );
   }
