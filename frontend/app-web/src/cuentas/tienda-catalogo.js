@@ -189,10 +189,12 @@ export function coincideBusqueda(producto, busqueda) {
 }
 
 /**
- * Criterios de la vista, con sus valores neutros.
+ * Criterios de la vista, con sus valores neutros. `soloDeseos` es la lista de
+ * deseos (RF-CAR-004/005): lo que el servicio marca con `enListaDeseos`.
  *
  * @typedef {{busqueda?: string, tipo?: string, precioMinimo?: number|null,
- *   precioMaximo?: number|null, soloPromocion?: boolean, orden?: string}} Criterios
+ *   precioMaximo?: number|null, soloPromocion?: boolean, soloDeseos?: boolean,
+ *   orden?: string}} Criterios
  */
 
 /**
@@ -209,6 +211,7 @@ export function filtrarProductos(productos, criterios = {}) {
     precioMinimo = null,
     precioMaximo = null,
     soloPromocion = false,
+    soloDeseos = false,
     orden = ORDENES.CATALOGO,
   } = criterios;
 
@@ -234,6 +237,9 @@ export function filtrarProductos(productos, criterios = {}) {
     // pinta el distintivo (`tienda-adaptador.js`): un `enPromocion` sin rebaja
     // no cuenta.
     if (soloPromocion && producto.precioAnterior === null) {
+      return false;
+    }
+    if (soloDeseos && !producto.enListaDeseos) {
       return false;
     }
     return coincideBusqueda(producto, busqueda);
@@ -286,7 +292,8 @@ export function hayCriterios(criterios = {}) {
     criterios.tipo ||
     Number.isFinite(criterios.precioMinimo) ||
     Number.isFinite(criterios.precioMaximo) ||
-    criterios.soloPromocion,
+    criterios.soloPromocion ||
+    criterios.soloDeseos,
   );
 }
 

@@ -239,7 +239,8 @@
 
 /* `tema-cuentas.css` pone todo `label` en columna y separa con margen los
    hijos directos de un formulario: la casilla vuelve a su fila. */
-.filtros-tienda .filtros-tienda__promocion {
+.filtros-tienda .filtros-tienda__promocion,
+.filtros-tienda .filtros-tienda__deseos {
   flex-direction: row;
   align-items: center;
   min-height: var(--campo-alto);
