@@ -300,6 +300,26 @@ describe('sesión vigilada y preparación de la cuenta (R17)', () => {
     expect(vigilar).toHaveBeenCalledWith(expect.objectContaining({ almacen: sessionStorage }));
   });
 
+  test('auditoría 30-sep: con sesión, la campana de cualquier vista enciende su contador', () => {
+    const avisos = jest.fn();
+    montar({ vista: 'home', avisos });
+    expect(avisos).not.toHaveBeenCalled();
+
+    conSesion();
+    document.body.innerHTML = '';
+    const { elemento } = montar({ vista: 'home', avisos });
+    expect(avisos).toHaveBeenCalledTimes(1);
+    expect(avisos).toHaveBeenCalledWith({ raiz: elemento });
+    expect(elemento.querySelector('[data-zona="contador"]')).not.toBeNull();
+  });
+
+  test('en la vista de notificaciones no: esa monta su propia bandeja', () => {
+    conSesion();
+    const avisos = jest.fn();
+    montar({ vista: 'notificaciones', avisos });
+    expect(avisos).not.toHaveBeenCalled();
+  });
+
   test('«Preparando tu cuenta» es portal (sin navegación), pero ofrece salir', () => {
     conSesion();
     const navegar = jest.fn();

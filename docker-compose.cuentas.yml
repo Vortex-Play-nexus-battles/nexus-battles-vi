@@ -167,6 +167,16 @@ services:
       # aqui reabre la escalada sin token: solo para una demo local y a
       # sabiendas. Nunca en un host compartido.
       RBAC_PERMITIR_HEADER_ROL: ${RBAC_PERMITIR_HEADER_ROL:-false}
+      # Auditoria de DEV del 30-sep: las fotos de perfil se guardaban en el
+      # disco efimero del contenedor (`./avatares-subidos` bajo /app) y cada
+      # despliegue las borraba; la cuenta seguia apuntando a un archivo que ya
+      # no existia. Ahora van a un volumen con nombre, como la base.
+      AVATARES_RUTA: /app/avatares-subidos
+    volumes:
+      - identidad-avatares:/app/avatares-subidos
 
 volumes:
   identidad-db-datos:
+  # Fotos de perfil (ver AVATARES_RUTA): sobreviven al redespliegue y al
+  # apagado nocturno del host.
+  identidad-avatares:

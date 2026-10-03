@@ -35,7 +35,9 @@ import { vaciar } from '../../comun/ui/dom.js';
  *     rojo es para lo que esta roto.
  */
 const TEXTO_CONEXION = Object.freeze({
-  [ESTADO_CANAL.ESTABLE]: 'Notificaciones al instante',
+  // Auditoría de DEV del 30-sep: «Notificaciones al instante» se leía como un
+  // interruptor. Es un estado, y lo dice.
+  [ESTADO_CANAL.ESTABLE]: 'Conectado: los avisos llegan al instante',
   [ESTADO_CANAL.RECONECTANDO]: 'Reconectando…',
   [ESTADO_CANAL.SIN_CONEXION]: 'Los avisos pueden tardar un poco en llegar',
 });

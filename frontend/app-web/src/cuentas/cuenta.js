@@ -30,6 +30,7 @@ import { h, vaciar } from '../comun/ui/dom.js';
 import { creditos as formatoCreditos, fechaHora } from '../comun/ui/formato.js';
 import { boton, conCarga } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { fotoDeCuenta } from '../comun/ui/avatar.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
@@ -127,12 +128,9 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   }
   identidad.append(cabeza);
   if (perfil?.avatar) {
-    identidad.append(
-      h('img', {
-        clase: 'avatar-vista-previa',
-        atributos: { src: perfil.avatar, alt: `Avatar de ${perfil.apodo ?? ''}` },
-      }),
-    );
+    // Si la foto no carga queda la inicial, no el texto alternativo suelto
+    // (auditoría de DEV del 30-sep).
+    identidad.append(fotoDeCuenta({ url: perfil.avatar, apodo: perfil.apodo ?? sesion.apodo }));
   }
   zona.append(identidad);
 
@@ -373,6 +371,11 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       llenarFormulario(formulario, perfil);
     }
     if (vistaAvatar && perfil?.avatar) {
+      // Auditoría de DEV del 30-sep: una foto que no carga no deja el texto
+      // alternativo en medio del formulario; se retira y se puede subir otra.
+      vistaAvatar.onerror = () => {
+        vistaAvatar.hidden = true;
+      };
       vistaAvatar.src = perfil.avatar;
       vistaAvatar.hidden = false;
     }
