@@ -28,8 +28,27 @@ import java.util.Set;
  * </ul>
  * Asi «computadora», «disputa» o «vehiculo» no caen por contener un termino
  * corto. Su limite es el reves: «xXmessiXx» no casa con «messi» en este modo.
+ *
+ * <p><b>Plural y genero de los insultos</b> (auditoria de DEV del 30-sep: en
+ * el chat general pasaron «putas», «malparida» y «pendeja» con «puta»,
+ * «malparido» y «pendejo» en la lista). Solo para la categoria OFENSIVO —una
+ * marca o una persona no se declinan—:
+ * <ul>
+ *   <li>PALABRA tambien casa con el plural: «putas», «culos», «idiotas»
+ *       ({@code +s} tras vocal, {@code +es} tras consonante). No se cambia el
+ *       genero ni se forman diminutivos: «perra» no puede atrapar a «perro» ni
+ *       «perrita» a la mascota de nadie. Un femenino que haga falta se da de
+ *       alta como termino propio («puta» y «puto» van por separado).</li>
+ *   <li>SUBCADENA de seis letras o mas que acaba en «o» o «a» casa tambien con
+ *       su raiz sin esa vocal: «malparid» atrapa malparido, malparida,
+ *       malparidos y malparidas. Las de menos letras no se recortan: la raiz
+ *       seria tan corta que apareceria entre palabras corrientes.</li>
+ * </ul>
  */
 public final class DetectorDeTerminos {
+
+    /** Una SUBCADENA se recorta a su raiz solo desde este largo (normalizado). */
+    static final int LARGO_MINIMO_PARA_RAIZ = 6;
 
     private DetectorDeTerminos() {
     }
@@ -53,18 +72,51 @@ public final class DetectorDeTerminos {
 
     private static boolean aparece(NormalizadorDeTexto.FormaNormalizada texto, TerminoActivo termino) {
         String forma = termino.normalizado();
+        boolean seDeclina = termino.categoria() == CategoriaDeTermino.OFENSIVO;
         if (termino.modo() == ModoDeCoincidencia.SUBCADENA) {
-            return texto.compacta().contains(forma);
+            if (texto.compacta().contains(forma)) {
+                return true;
+            }
+            String raiz = seDeclina ? raizSinGenero(forma) : null;
+            return raiz != null && texto.compacta().contains(raiz);
         }
-        if (texto.compacta().equals(forma)) {
+        Set<String> formas = seDeclina ? conPlural(forma) : Set.of(forma);
+        if (formas.contains(texto.compacta())) {
             return true;
         }
         for (NormalizadorDeTexto.Palabra palabra : texto.palabras()) {
-            if (palabra.es(forma)) {
-                return true;
+            for (String unaForma : formas) {
+                if (palabra.es(unaForma)) {
+                    return true;
+                }
             }
         }
         return palabrasSeguidas(texto.palabras(), NormalizadorDeTexto.normalizar(termino.termino()).palabras());
+    }
+
+    /**
+     * La forma y su plural: {@code +s} si acaba en vocal, {@code +es} si no.
+     * Nada mas (ver la cabecera: ni genero ni diminutivos en PALABRA).
+     */
+    static Set<String> conPlural(String forma) {
+        if (forma.isEmpty()) {
+            return Set.of(forma);
+        }
+        char ultima = forma.charAt(forma.length() - 1);
+        String plural = "aeiou".indexOf(ultima) >= 0 ? forma + "s" : forma + "es";
+        return Set.of(forma, plural);
+    }
+
+    /**
+     * La raiz comun a genero y numero de una SUBCADENA ofensiva larga que acaba
+     * en «o» o «a» («pendejo» → «pendej»), o {@code null} si no se recorta.
+     */
+    static String raizSinGenero(String forma) {
+        if (forma.length() < LARGO_MINIMO_PARA_RAIZ) {
+            return null;
+        }
+        char ultima = forma.charAt(forma.length() - 1);
+        return ultima == 'o' || ultima == 'a' ? forma.substring(0, forma.length() - 1) : null;
     }
 
     /** Las palabras del termino (dos o mas) aparecen seguidas y enteras en el texto. */
