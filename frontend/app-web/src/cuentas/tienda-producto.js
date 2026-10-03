@@ -77,6 +77,25 @@ export function precioDeProducto(producto, { grande = false } = {}) {
  * @param {number} unidades cuántas tiene el jugador (≥ 1)
  * @returns {HTMLElement}
  */
+/** Por qué no se ofrece «Añadir» de lo que ya se tiene (RF-CAR-004, ecommerce-carrito 1.5.0). */
+export const MOTIVO_YA_LO_TIENES =
+  'Ya lo tienes en tu inventario: la tienda no lo vende dos veces.';
+
+/**
+ * Apaga «Añadir» de un producto que el jugador ya tiene. RF-CAR-004 pone
+ * «producto ya adquirido por el cliente» entre las excepciones de añadir a la
+ * cesta, y el servicio lo rechaza (409 `producto-ya-adquirido`): ofrecerlo
+ * sería invitar a un rechazo seguro (auditoría de DEV del 30-sep).
+ *
+ * @param {HTMLButtonElement} boton
+ */
+export function apagarAnadirPorPropio(boton) {
+  boton.disabled = true;
+  boton.title = MOTIVO_YA_LO_TIENES;
+  boton.dataset.motivo = 'propio';
+  delete boton.dataset.producto;
+}
+
 export function distintivoDePropiedad(unidades) {
   return h('span', {
     clase: 'distintivo distintivo--activo producto-propio',
@@ -275,6 +294,9 @@ export function tarjetaDeProducto(
     } else {
       anadir.dataset.producto = String(producto.id);
       anadir.setAttribute('aria-label', `Añadir ${producto.nombre} al carrito`);
+      if (unidadesPropias > 0 || producto.esPropio) {
+        apagarAnadirPorPropio(anadir);
+      }
     }
     acciones.push(anadir);
     // B5 — «añadir a la lista de deseos» en el área de cada producto (§7.5).
@@ -354,6 +376,8 @@ export function bloqueDeCompra(
   { modo = MODOS.TIENDA, unidadesPropias = 0, alAnadir, alDesear, alEntrar } = {},
 ) {
   const producto = aProductoDeVitrina(dto);
+  // Lo que dice el inventario o, si aún no contestó, la marca de la vitrina.
+  const propias = Math.max(unidadesPropias, producto.esPropio ? 1 : 0);
   const idMotivo = `deseos-motivo-${String(producto.id ?? 'sin-id')}`;
   const resultado = h('p', {
     clase: 'compra-producto__resultado',
@@ -370,16 +394,16 @@ export function bloqueDeCompra(
       ],
     }),
   ];
-  if (unidadesPropias > 0) {
+  if (propias > 0) {
     hijos.push(
       h('p', {
         clase: 'compra-producto__propio',
         hijos: [
-          distintivoDePropiedad(unidadesPropias),
+          distintivoDePropiedad(propias),
           h('span', {
             texto:
-              unidadesPropias > 1
-                ? ` Ya tienes ${unidadesPropias} en tu inventario.`
+              propias > 1
+                ? ` Ya tienes ${propias} en tu inventario.`
                 : ' Ya tienes uno en tu inventario.',
           }),
         ],
@@ -398,8 +422,13 @@ export function bloqueDeCompra(
         h('span', { texto: 'Añadir al carrito' }),
       ],
     });
+    if (propias > 0 && producto.id !== null) {
+      anadir.disabled = true;
+      anadir.title = MOTIVO_YA_LO_TIENES;
+      anadir.dataset.motivo = 'propio';
+    }
     anadir.addEventListener('click', async () => {
-      if (!alAnadir || producto.id === null) {
+      if (!alAnadir || producto.id === null || anadir.disabled) {
         return;
       }
       ocupado(anadir, true);
