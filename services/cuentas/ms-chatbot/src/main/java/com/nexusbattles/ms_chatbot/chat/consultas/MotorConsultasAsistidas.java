@@ -4,6 +4,7 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MisionActivaDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
@@ -14,6 +15,8 @@ import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -21,7 +24,8 @@ import java.util.UUID;
 // HU-CHA-008: consultas y acciones asistidas para usuarios autenticados.
 // Este motor es INDEPENDIENTE de MotorRespuestas (HU-CHA-004): mientras ese
 // busca en una base de conocimiento estatica (temas_conocimiento), este
-// consulta datos EN VIVO (inventario, subastas, notificaciones), resuelve
+// consulta datos EN VIVO (inventario, subastas, notificaciones, creditos,
+// torneos y misiones), resuelve
 // navegacion asistida hacia secciones del sitio, arma un informe de
 // actividad combinando las consultas en vivo, y solo aplica cuando hay un
 // usuario autenticado. ChatService lo intenta primero; si no encuentra una
@@ -110,9 +114,8 @@ public class MotorConsultasAsistidas {
         "activity report", "my activity report", "summary of my activity"
     );
 
-    private static final String MENSAJE_MISIONES_EN_CONSTRUCCION =
-        "La consulta de tu progreso en misiones todavia esta en construccion. "
-            + "Pronto podras preguntarme por el estado de tus misiones directamente aqui.";
+    private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_MISIONES =
+        "No pude consultar tus misiones en este momento porque el servicio no esta disponible. Intenta de nuevo en unos minutos.";
     private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_TORNEOS =
         "No pude consultar los torneos en este momento porque el servicio no esta disponible. Intenta de nuevo en unos minutos.";
     private static final String MENSAJE_SERVICIO_NO_DISPONIBLE_MOVIMIENTOS =
@@ -142,21 +145,28 @@ public class MotorConsultasAsistidas {
     // Cuantos torneos recientes se revisan buscando el equipo del jugador.
     private static final int TORNEOS_A_REVISAR = 3;
     private static final int MOVIMIENTOS_A_MOSTRAR = 5;
+    private static final int MISIONES_A_MOSTRAR = 3;
+    // La hora de fin se le dice al jugador en hora de Colombia, igual que las
+    // analiticas del panel.
+    private static final DateTimeFormatter HORA_DE_FIN =
+        DateTimeFormatter.ofPattern("dd/MM 'a las' HH:mm").withZone(ZoneId.of("America/Bogota"));
 
     private final InventarioClient inventarioClient;
     private final SubastasClient subastasClient;
     private final NotificacionesClient notificacionesClient;
     private final TorneosClient torneosClient;
     private final FinanzasClient finanzasClient;
+    private final MisionesClient misionesClient;
 
     public MotorConsultasAsistidas(InventarioClient inventarioClient, SubastasClient subastasClient,
                                    NotificacionesClient notificacionesClient, TorneosClient torneosClient,
-                                   FinanzasClient finanzasClient) {
+                                   FinanzasClient finanzasClient, MisionesClient misionesClient) {
         this.inventarioClient = inventarioClient;
         this.subastasClient = subastasClient;
         this.notificacionesClient = notificacionesClient;
         this.torneosClient = torneosClient;
         this.finanzasClient = finanzasClient;
+        this.misionesClient = misionesClient;
     }
 
     public Optional<ResultadoMotor> generarRespuesta(String mensajeUsuario, String tokenBearer, String uid) {
@@ -198,7 +208,7 @@ public class MotorConsultasAsistidas {
             return Optional.of(consultarMovimientos(tokenBearer, uid));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_MISIONES)) {
-            return Optional.of(ResultadoMotor.deTema(MENSAJE_MISIONES_EN_CONSTRUCCION, null, TipoRespuesta.DIRECTA));
+            return Optional.of(consultarMisiones(tokenBearer));
         }
         if (contieneAlguna(mensajeNormalizado, PALABRAS_TORNEOS)) {
             return Optional.of(consultarTorneos(uid));
@@ -242,9 +252,9 @@ public class MotorConsultasAsistidas {
         TorneoResumenDto primero = activos.get(0);
         return "No estas en ningun torneo activo. El torneo «" + primero.nombre() + "» "
             + ("EN_CURSO".equals(primero.estado())
-                ? "ya esta en curso."
-                : "tiene inscripciones abiertas (" + primero.equiposInscritos() + " de " + primero.cupos()
-                    + " equipos, inscripcion de " + primero.costoInscripcion() + " creditos).")
+            ? "ya esta en curso."
+            : "tiene inscripciones abiertas (" + primero.equiposInscritos() + " de " + primero.cupos()
+            + " equipos, inscripcion de " + primero.costoInscripcion() + " creditos).")
             + " " + MENSAJE_NAVEGACION_TORNEOS;
     }
 
@@ -267,6 +277,48 @@ public class MotorConsultasAsistidas {
             .ifPresentOrElse(
                 e -> texto.append(" Tu proximo encuentro es el ").append(e.numero()).append(" y ya esta listo para jugarse."),
                 () -> texto.append(" Tu equipo sigue en carrera; tu proximo encuentro espera a que se jueguen los anteriores."));
+        return texto.toString();
+    }
+
+    // 7.4.4 (ms-chatbot.yaml 1.3.0) — misiones en curso, con el token del propio
+    // jugador. Antes respondia "en construccion" porque misiones no tenia
+    // servicio; desde misiones.yaml 1.0.0 (#748) ya lo tiene.
+    private ResultadoMotor consultarMisiones(String tokenBearer) {
+        try {
+            return ResultadoMotor.deTema(construirTextoMisiones(tokenBearer), null, TipoRespuesta.CONTEXTUAL);
+        } catch (RestClientException excepcion) {
+            return ResultadoMotor.deTema(MENSAJE_SERVICIO_NO_DISPONIBLE_MISIONES, null, TipoRespuesta.DIRECTA);
+        }
+    }
+
+    private String construirTextoMisiones(String tokenBearer) {
+        List<MisionActivaDto> misiones = misionesClient.enCurso(tokenBearer);
+        if (misiones == null || misiones.isEmpty()) {
+            return "No tienes misiones en curso. " + MENSAJE_NAVEGACION_MISIONES;
+        }
+        String lista = misiones.stream()
+            .limit(MISIONES_A_MOSTRAR)
+            .map(MotorConsultasAsistidas::textoDeLaMision)
+            .reduce((a, b) -> a + "; " + b)
+            .orElse("");
+        return "Tienes " + misiones.size() + " mision(es) en curso: " + lista + ".";
+    }
+
+    private static String textoDeLaMision(MisionActivaDto mision) {
+        StringBuilder texto = new StringBuilder("«").append(mision.nombre()).append("»");
+        MisionActivaDto.Heroe heroe = mision.heroe();
+        if (heroe != null && heroe.nombre() != null && !heroe.nombre().isBlank()) {
+            texto.append(" con ").append(heroe.nombre());
+            if (heroe.nivel() != null) {
+                texto.append(" (nivel ").append(heroe.nivel()).append(")");
+            }
+        }
+        if (mision.progreso() != null) {
+            texto.append(", ").append(Math.round(mision.progreso() * 100)).append(" % completada");
+        }
+        if (mision.terminaEn() != null) {
+            texto.append(", termina el ").append(HORA_DE_FIN.format(mision.terminaEn()));
+        }
         return texto.toString();
     }
 
@@ -340,8 +392,9 @@ public class MotorConsultasAsistidas {
         }
     }
 
-    // Informe de actividad: compone en un solo mensaje las 3 consultas en
-    // vivo que ya existian por separado. Si alguna falla, se muestra el
+    // Informe de actividad: compone en un solo mensaje las consultas en vivo
+    // que ya existian por separado (inventario, subastas, notificaciones,
+    // creditos y, desde 1.3.0, misiones). Si alguna falla, se muestra el
     // aviso de "no disponible" solo para esa parte y se sigue con las demas,
     // en vez de fallar el informe completo por un solo servicio caido.
     private ResultadoMotor generarInformeActividad(String tokenBearer, String uid) {
@@ -349,9 +402,18 @@ public class MotorConsultasAsistidas {
             + "Inventario: " + obtenerTextoInventarioOFallo(tokenBearer) + System.lineSeparator() + System.lineSeparator()
             + "Subastas: " + obtenerTextoSubastasOFallo(tokenBearer) + System.lineSeparator() + System.lineSeparator()
             + "Notificaciones: " + obtenerTextoNotificacionesOFallo(tokenBearer, uid) + System.lineSeparator() + System.lineSeparator()
-            + "Creditos: " + obtenerTextoMovimientosOFallo(tokenBearer, uid);
+            + "Creditos: " + obtenerTextoMovimientosOFallo(tokenBearer, uid) + System.lineSeparator() + System.lineSeparator()
+            + "Misiones: " + obtenerTextoMisionesOFallo(tokenBearer);
 
         return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL);
+    }
+
+    private String obtenerTextoMisionesOFallo(String tokenBearer) {
+        try {
+            return construirTextoMisiones(tokenBearer);
+        } catch (RestClientException excepcion) {
+            return MENSAJE_SERVICIO_NO_DISPONIBLE_MISIONES;
+        }
     }
 
     private String obtenerTextoMovimientosOFallo(String tokenBearer, String uid) {
