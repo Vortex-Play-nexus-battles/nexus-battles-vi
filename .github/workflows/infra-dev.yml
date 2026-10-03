@@ -40,9 +40,12 @@
 #               cambio de la carpeta de PLATAFORMA (el plan aprobado en el PR
 #               es la confirmacion humana). Sobre contenido NUNCA corre sola.
 #               A mano exige escribir "apply" en `confirmar`.
-#   start    -> enciende la instancia (tambien por cron lun-vie 07:00 Colombia).
-#   stop     -> apaga la instancia (tambien por cron todos los dias 23:00 Colombia).
-#               Apagada solo factura la IP elastica (3,60 USD/mes) y el disco.
+#   start    -> enciende la instancia. Programado: plataforma, EventBridge
+#               Scheduler lun-vie 06:47 Colombia (plataforma/horario.tf);
+#               contenido, cron lun-vie 06:47, 07:17 y 07:47 Colombia.
+#   stop     -> apaga la instancia. Programado: todos los dias 23:23 Colombia
+#               (EventBridge para plataforma, cron 23:23 y 00:23 para
+#               contenido). Apagada solo factura la IP elastica y el disco.
 #   destroy  -> borra TODO lo de esa carpeta, incluida la IP. Exige "destroy".
 #               Nunca corre sola.
 #   reglas-sg -> SOLO contenido, y solo con vars.AWS_ROLE_ARN_CONTENIDO: aplica
@@ -50,10 +53,9 @@
 #               reglas-entrada.json (cada puerto solo desde plataforma; revoca
 #               lo que esos puertos tuvieran abierto al mundo; el 22 no se toca).
 #
-# Limite de GitHub: el boton "Run workflow" y los `cron` solo existen cuando el
-# archivo esta en la rama por defecto (`main`). Hasta que develop se promueva a
-# main, el apagado nocturno no corre solo y start/stop se piden a un
-# administrador. El apply por fusion en develop NO tiene esa limitacion.
+# Limite de GitHub: el boton "Run workflow" y los `cron` solo existen en la
+# rama por defecto del repositorio. Desde septiembre es `develop`, asi que el
+# horario corre solo (hay corridas `schedule` a diario, aunque con retraso).
 #
 # Politica de la cuenta (Free Plan, USD 0 de bolsillo): ver
 # infrastructure/entornos/plataforma/README.md.
@@ -109,18 +111,35 @@ on:
   #
   # R9.3: estos mismos crones cubren ahora LOS DOS hosts (matriz). No se
   # cambia ni un horario: se aplica el vigente al host que no lo tenia.
+  #
+  # 29-sep — el host de PLATAFORMA lo apaga y enciende EventBridge Scheduler
+  # (infrastructure/entornos/plataforma/horario.tf), a la hora exacta y en
+  # hora de Colombia: el planificador de GitHub llego hasta siete horas tarde
+  # el 27 y el 28-sep. Estos crones siguen para el host de CONTENIDO y como
+  # respaldo del de plataforma: el paso "Encender o apagar la instancia" no
+  # toca plataforma mientras sus horarios de EventBridge esten activos.
+  #
+  # Las horas se escriben en hora de Colombia con la zona IANA de GitHub
+  # (`timezone`, marzo 2026); Colombia no tiene horario de verano. Y como el
+  # retraso no lo arregla la zona, "Resolver la accion" descarta un apagado
+  # que llega de dia y un encendido que llega de noche.
   schedule:
-    # Apagar: 04:23 y 05:23 UTC = 23:23 y 00:23 Colombia, todos los dias.
-    # El segundo intento importa mas que el primero: una noche sin apagar se
-    # come credito del Free Plan.
-    - cron: "23 4 * * *"
-    - cron: "23 5 * * *"
-    # Encender: 12:17 y 13:17 UTC = 07:17 y 08:17 Colombia, de lunes a viernes.
-    # Los fines de semana los hosts quedan apagados a proposito, por coste;
-    # quien necesite desplegar un sabado no tiene que hacer nada: el propio CD
-    # los enciende (ver "Asegurar que el host esta encendido" en cd.yml).
-    - cron: "17 12 * * 1-5"
-    - cron: "17 13 * * 1-5"
+    # Apagar: 23:23 y 00:23 hora de Colombia, todos los dias. El segundo
+    # intento importa mas que el primero: una noche sin apagar se come credito.
+    - cron: "23 23 * * *"
+      timezone: "America/Bogota"
+    - cron: "23 0 * * *"
+      timezone: "America/Bogota"
+    # Encender: 06:47, 07:17 y 07:47 hora de Colombia, de lunes a viernes. Los
+    # fines de semana los hosts quedan apagados a proposito, por coste; quien
+    # necesite desplegar un sabado no tiene que hacer nada: el propio CD los
+    # enciende (ver "Asegurar que el host esta encendido" en cd.yml).
+    - cron: "47 6 * * 1-5"
+      timezone: "America/Bogota"
+    - cron: "17 7 * * 1-5"
+      timezone: "America/Bogota"
+    - cron: "47 7 * * 1-5"
+      timezone: "America/Bogota"
 
 permissions:
   id-token: write
@@ -198,10 +217,26 @@ jobs:
               # Dejarlo caer en start dejaria el host encendido gastando
               # credito sin que nadie se entere.
               case "${{ github.event.schedule }}" in
-                "23 4 * * *"|"23 5 * * *")       accion=stop ;;
-                "17 12 * * 1-5"|"17 13 * * 1-5") accion=start ;;
+                "23 23 * * *"|"23 0 * * *")                     accion=stop ;;
+                "47 6 * * 1-5"|"17 7 * * 1-5"|"47 7 * * 1-5")   accion=start ;;
                 *) echo "::error::Cron no reconocido: '${{ github.event.schedule }}'. Revisa el bloque schedule de este workflow."; exit 1 ;;
-              esac ;;
+              esac
+              # El planificador de GitHub llega tarde, a veces horas (28-sep:
+              # apagado de las 23:23 a las 05:58). Una accion programada solo
+              # vale dentro de su ventana, en hora de Colombia: apagar de 22:00
+              # a 05:59 y encender de 06:00 a 20:59. Fuera de ella se anota y
+              # no se hace nada: apagar el entorno en plena jornada, o
+              # encenderlo de madrugada para toda la noche, es peor que no
+              # hacer nada. A mano (workflow_dispatch) no hay ventana.
+              hora=$((10#$(TZ=America/Bogota date +%H)))
+              if [ "$accion" = "stop" ] && [ "$hora" -ge 6 ] && [ "$hora" -lt 22 ]; then
+                echo "::warning::El apagado programado llego a las $(TZ=America/Bogota date +%H:%M) (Colombia), fuera de la noche: no se apaga en horario de trabajo."
+                accion=omitir
+              fi
+              if [ "$accion" = "start" ] && { [ "$hora" -lt 6 ] || [ "$hora" -ge 21 ]; }; then
+                echo "::warning::El encendido programado llego a las $(TZ=America/Bogota date +%H:%M) (Colombia), de noche: no se enciende para dejarlo encendido hasta la manana."
+                accion=omitir
+              fi ;;
             push)
               # R9.1: el apply automatico al fusionar es SOLO para plataforma.
               # El estado de contenido nace vacio y un apply ahi crearia una
@@ -359,6 +394,24 @@ jobs:
         working-directory: .
         run: |
           accion="${{ steps.accion.outputs.accion }}"
+          # 29-sep — el horario de plataforma es de EventBridge Scheduler
+          # (infrastructure/entornos/plataforma/horario.tf). Mientras sus dos
+          # horarios existan y esten activos, el cron no lo toca: un solo
+          # planificador por host. Si faltan o se desactivan (horario_activo =
+          # false, o un apply que no llego a crearlos), actua el cron como
+          # antes. A mano (workflow_dispatch) siempre actua.
+          if [ "${{ github.event_name }}" = "schedule" ] && [ "${{ matrix.host }}" = "plataforma" ]; then
+            activos=0
+            for nombre in nexus-plataforma-apagar nexus-plataforma-encender; do
+              estado=$(aws scheduler get-schedule --name "$nombre" --query State --output text 2>/dev/null || echo "NO")
+              [ "$estado" = "ENABLED" ] && activos=$((activos + 1))
+            done
+            if [ "$activos" -eq 2 ]; then
+              echo "Plataforma la enciende y apaga EventBridge Scheduler (horario.tf), en hora de Colombia: el cron no hace nada."
+              exit 0
+            fi
+            echo "::warning::Los horarios de EventBridge de plataforma no estan activos ($activos de 2): actua el cron de respaldo."
+          fi
           id=$(aws ec2 describe-instances \
             --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
             --query 'Reservations[].Instances[].InstanceId' --output text)
@@ -487,6 +540,32 @@ jobs:
             exit 1
           fi
           echo "Sin destroy ni replace sobre recursos criticos."
+
+      # 28-sep (opcion E de CAPACIDAD.md) — cambiar el tipo de instancia es
+      # parar, modificar y encender. Si el tipo nuevo no se ofrece en la zona
+      # del host, el modify falla con la instancia YA parada y el host se queda
+      # apagado. Se comprueba antes de aplicar, con la zona real de la
+      # instancia (no todas las zonas de us-east-1 tienen todos los tipos).
+      - name: Compuerta — el tipo de instancia nuevo se ofrece en la zona del host
+        if: matrix.host == 'plataforma' && steps.accion.outputs.accion == 'apply'
+        run: |
+          set -euo pipefail
+          nuevo=$(grep -oE 'instance_type *= *"[^"]+" *-> *"[^"]+"' plan.txt | head -1 | sed -E 's/.*-> *"([^"]+)".*/\1/' || true)
+          if [ -z "$nuevo" ]; then
+            echo "El plan no cambia el tipo de instancia."
+            exit 0
+          fi
+          zona=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text)
+          ofrecido=$(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+            --filters "Name=location,Values=$zona" "Name=instance-type,Values=$nuevo" \
+            --query 'InstanceTypeOfferings[].InstanceType' --output text)
+          if [ "$ofrecido" != "$nuevo" ]; then
+            echo "::error::$nuevo no se ofrece en $zona: el host se quedaria parado a mitad del cambio. NO SE APLICA."
+            exit 1
+          fi
+          echo "$nuevo se ofrece en $zona: el cambio es parar, modificar y encender, con la misma IP elastica y el mismo disco."
 
       - name: Publicar el plan en el PR
         if: github.event_name == 'pull_request'

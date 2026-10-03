@@ -1,23 +1,28 @@
 # Validacion con Postman del servicio de productos
 
+Para HU-PRD-014 importa `alertas-catalogo.postman_collection.json`, configura
+un JWT de administrador en la variable `token` y ejecuta la colección completa
+en orden. Con `docker-compose.contenido.yml`, el `baseUrl` local es
+`http://localhost:8103`.
+
 Coleccion con **aserciones** para lo que HU-PRD-002 (tiraje limitado) expone
 por API hoy: el registro del tiraje al crear un producto.
 
 | Criterio de HU-PRD-002 | ¿Probable por HTTP? |
 |---|---|
 | -1 identifica disponibilidad ilimitada; N > 0 son unidades exactas | **Si**: peticiones 3 a 7 |
-| Un producto agotado no se puede adquirir e informa que esta agotado | **No**: no existe endpoint de adquisicion |
-| Dos adquisiciones simultaneas de la ultima unidad: solo una prospera | **No**: mismo motivo |
+| Un producto agotado no se puede adquirir e informa que esta agotado | **Si**: `POST /{id}/adquisiciones` |
+| Dos adquisiciones simultaneas de la ultima unidad: solo una prospera | **Si**: prueba de integración en Mongo |
 
-HU-PRD-004 (suspension y reactivacion) tampoco expone endpoint: `suspender` y
-`reactivar` existen solo en el dominio (`CatalogoProductos`). Cuando se
-publiquen, agregar aqui sus peticiones.
+HU-PRD-004 expone `PUT /{id}/suspender` y `PUT /{id}/reactivar`. La colección
+de HU-PRD-014 usa ambas operaciones para verificar sus alertas.
 
 ## Archivos
 
 | Archivo | Que es |
 |---|---|
 | `productos.postman_collection.json` | 11 peticiones |
+| `alertas-catalogo.postman_collection.json` | flujo completo de HU-PRD-014 |
 | `local.postman_environment.json` | `baseUrl` y `token` |
 
 ## Requisitos

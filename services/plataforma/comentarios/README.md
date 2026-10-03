@@ -8,7 +8,7 @@ cinco estrellas, incluyendo el hilo de comentarios... Los usuarios solo pueden
 calificar un producto una vez, pero podrán agregar o retirar tantos
 comentarios como sea de su agrado».
 
-El contrato vive en `contracts/openapi/comentarios.yaml` (1.5.0).
+El contrato vive en `contracts/openapi/comentarios.yaml` (1.7.1).
 
 ## Qué hace
 

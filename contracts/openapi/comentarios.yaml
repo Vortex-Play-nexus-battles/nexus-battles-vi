@@ -67,7 +67,27 @@ info:
     decimal; y una segunda calificacion al comentar no es 409 sino
     `calificacionDescartada`. Publicar con nombres de archivo en `imagenes`
     ya no responde 422 sino 400, como fijaba la 1.4.0.
-  version: 1.5.0
+
+    1.6.0 (HU-COM-006): `prioridadElevada` (boolean) en la respuesta del reporte
+    y en cada entrada de la cola, y el 400 `REPORTE_INVALIDO` de `POST
+    .../reportes`, que el servicio ya respondia sin que el contrato lo
+    declarara. Es menor: solo anade un campo y documenta un error existente.
+    `prioridadElevada` es `false` mientras no haya umbral configurado; el valor
+    del umbral lo fija el Product Owner y no se escribe aqui.
+
+    1.7.0 (HU-COM-005, #519): `GET /comentarios/moderacion/autores/{autorId}/comentarios`,
+    el historial de comentarios de un autor para el moderador. Se sirve con los
+    datos de este servicio, sin llamar a otros. Es solo lectura, paginado con el
+    mismo tope que la cola, y devuelve solo lo necesario para decidir sobre el
+    autor: sin imagenes, reportes, asientos ni marca de seguimiento. Incluye los
+    comentarios OCULTO y ELIMINADO, con su `estado`, porque moderacion los
+    conserva. La operacion esta implementada en el servicio. Es menor: solo
+    anade una operacion.
+
+    1.7.1 (HU-COM-005, #519): solo se quita la marca `x-implementacion` de
+    `historialDelAutor`, porque el servicio ya la implementa. No cambia la API.
+    Es un parche.
+  version: 1.7.1
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -294,6 +314,12 @@ paths:
         agrupan: suben su prioridad en la cola, no crean otra entrada.
 
 
+        1.6.0 — cuando los reportes del comentario alcanzan el umbral de
+        prioridad elevada, `prioridadElevada` es `true` en la respuesta y en su
+        entrada de la cola. Sin umbral configurado es siempre `false`. El valor
+        del umbral lo fija el Product Owner, no este contrato.
+
+
         El limite de reportes por usuario lo exige la ficha sin fijar su valor
         ("[LIMITE DE REPORTES POR USUARIO POR DEFINIR]"). Se resuelve por
         parametro administrable (`comentarios.reportes.maximo-por-usuario-por-dia`),
@@ -316,6 +342,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReporteResponse"
+        "400":
+          description: >
+            1.6.0 — el reporte no es valido: categoria ausente o descripcion de
+            mas de 500 caracteres (`motivo: REPORTE_INVALIDO`). Una categoria
+            fuera de las seis definidas tambien es 400.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -455,6 +490,60 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "404":
           description: No existe.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/autores/{autorId}/comentarios:
+    get:
+      summary: Historial de comentarios de un autor (RF-COM-005)
+      operationId: historialDelAutor
+      description: >
+        1.7.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Los
+        comentarios del autor, del mas reciente al mas antiguo, en cualquier
+        estado: tambien los OCULTO y los ELIMINADO (este ultimo incluye los
+        que retiro el propio autor), que se distinguen por `estado`. Es lo que
+        el moderador necesita para decidir sobre el autor sin salir de la cola.
+
+
+        Solo lectura. Un autor sin comentarios es `200` con lista vacia y
+        `total: 0`, no un 404. No trae imagenes, reportes ni asientos de
+        moderacion: para eso esta el detalle del comentario.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AutorId"
+        - name: pagina
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: tamano
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: Pagina del historial (puede venir vacia).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HistorialDelAutorResponse"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
           content:
             application/problem+json:
               schema:
@@ -805,6 +894,13 @@ components:
       schema:
         type: string
       description: Identificador del comentario.
+    AutorId:
+      name: autorId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Identificador del autor (el `autorId` de sus comentarios).
   responses:
     ProductoInexistente:
       description: >
@@ -1041,6 +1137,12 @@ components:
           description: >
             Cuantos reportes acumula el comentario despues de este. Es lo que
             ordena la cola del moderador.
+        prioridadElevada:
+          type: boolean
+          description: >
+            1.6.0 — presente en la respuesta del POST; no aplica en el detalle
+            de moderacion. `true` si el comentario alcanzo el umbral de
+            prioridad elevada; `false` si no o si no hay umbral configurado.
 
     EstadoDeComentario:
       type: string
@@ -1160,12 +1262,18 @@ components:
         - comentario
         - reportes
         - primerReporte
+        - prioridadElevada
       properties:
         comentario:
           $ref: "#/components/schemas/ComentarioResponse"
         reportes:
           type: integer
           description: Cuantas personas distintas lo reportaron.
+        prioridadElevada:
+          type: boolean
+          description: >
+            1.6.0 — siempre presente. `true` si el comentario alcanzo el umbral
+            de prioridad elevada; `false` si no o si no hay umbral configurado.
         porCategoria:
           type: object
           additionalProperties:
@@ -1191,6 +1299,60 @@ components:
         total:
           type: integer
           description: Cuantos comentarios hay en revision en total, no en esta pagina.
+        pagina:
+          type: integer
+        tamano:
+          type: integer
+
+    ItemDelHistorial:
+      type: object
+      description: >
+        1.7.0 — un comentario del autor, con lo minimo para decidir. Sin
+        imagenes, estrellas ni marca de seguimiento.
+      required:
+        - id
+        - productoId
+        - texto
+        - fechaPublicacion
+        - estado
+        - editado
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+        texto:
+          type: string
+        fechaPublicacion:
+          type: string
+          format: date-time
+        estado:
+          $ref: "#/components/schemas/EstadoDeComentario"
+        editado:
+          type: boolean
+          description: Si un moderador cambio el texto.
+
+    HistorialDelAutorResponse:
+      type: object
+      required:
+        - autorId
+        - comentarios
+        - total
+        - pagina
+        - tamano
+      properties:
+        autorId:
+          type: string
+        apodoAutor:
+          type: string
+          description: Ausente si el autor no tiene comentarios.
+        comentarios:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDelHistorial"
+        total:
+          type: integer
+          description: Cuantos comentarios tiene el autor en total, no en esta pagina.
         pagina:
           type: integer
         tamano:

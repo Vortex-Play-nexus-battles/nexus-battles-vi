@@ -320,6 +320,74 @@ bajar_imagenes() {
   done
 }
 
+# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
+#
+# Se generan UNA vez en el host y se persisten en secretos-servicios.env (fuera
+# del .env efimero), de modo que cada despliegue reparta los mismos valores al
+# emisor (ms-identidad lee AUTH_CLIENTES_SERVICIO) y a cada cliente
+# (SECRETO_SERVICIO_<CLIENTE>, que los compose inyectan como
+# DIRECTORIO_ACTIVO_CLIENT_SECRET del servicio). Nunca se imprimen.
+#
+# 28-sep — un cliente que vive en OTRO host que el emisor. El emisor esta en
+# el host de plataforma; misiones y ms-subastas pasan al de contenido. Cada
+# host generaba su propio valor, asi que el cliente de contenido presentaba un
+# secreto que el emisor no conocia (401 en cada token). Si llega la variable de
+# entorno SECRETO_SERVICIO_<CLIENTE> (un secret del entorno dev de GitHub que
+# cd.yml pasa a los DOS jobs de dev), manda ella en los dos hosts y el archivo
+# del host se alinea con ella. Sin la variable, todo sigue como antes.
+#
+# Rotar: la de un cliente de un solo host, borrando su linea del archivo y
+# volviendo a desplegar; la de uno compartido, cambiando el secret de GitHub y
+# desplegando los dos hosts.
+#
+# La lista de clientes vive en una linea propia, a la izquierda, porque el
+# guardian scripts/cd/comprobar-catalogo-servicios.sh la lee con grep.
+CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce misiones"
+
+#   $1 = archivo persistente del host, $2 = .env al que se anaden las lineas.
+# Deja AUTH_CLIENTES_SERVICIO en el shell. Devuelve 1 si una variable de
+# entorno trae un valor que no se puede repartir (vacio no cuenta).
+repartir_credenciales_de_servicio() {
+  local archivo="$1" destino="$2" cliente clave valor guardado lista=""
+  (umask 077 && touch "$archivo")
+  chmod 600 "$archivo"
+  for cliente in $CLIENTES_DE_SERVICIO; do
+    clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
+    valor="${!clave:-}"
+    guardado=$(grep "^${clave}=" "$archivo" | head -n1 | cut -d= -f2- || true)
+    if [ -n "$valor" ]; then
+      # AUTH_CLIENTES_SERVICIO separa clientes con ";" y nombre y valor con
+      # "=": un valor con esos caracteres, espacios o saltos de linea partiria
+      # la lista del emisor. Se exige ademas un minimo de longitud.
+      if ! [[ "$valor" =~ ^[A-Za-z0-9._~-]{16,}$ ]]; then
+        echo "::error::$clave llega del entorno con un valor que no se puede repartir (16 o mas caracteres de [A-Za-z0-9._~-]). No se imprime."
+        return 1
+      fi
+      if [ "$valor" != "$guardado" ]; then
+        (umask 077 && { grep -v "^${clave}=" "$archivo" || true; } > "$archivo.nuevo")
+        printf '%s=%s\n' "$clave" "$valor" >> "$archivo.nuevo"
+        mv "$archivo.nuevo" "$archivo"
+        chmod 600 "$archivo"
+        echo "  credencial de servicio de $cliente: la del entorno (compartida entre hosts); el archivo del host se alinea con ella"
+      fi
+    elif [ -n "$guardado" ]; then
+      valor="$guardado"
+    else
+      if command -v openssl >/dev/null 2>&1; then
+        valor=$(openssl rand -hex 24)
+      else
+        valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
+      fi
+      printf '%s=%s\n' "$clave" "$valor" >> "$archivo"
+      echo "  credencial de servicio generada para $cliente"
+    fi
+    printf '%s=%s\n' "$clave" "$valor" >> "$destino"
+    lista="${lista:+${lista};}${cliente}=${valor}"
+  done
+  printf 'AUTH_CLIENTES_SERVICIO=%s\n' "$lista" >> "$destino"
+  AUTH_CLIENTES_SERVICIO="$lista"
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -403,36 +471,12 @@ for variable in SMTP_PORT SMTP_TLS SMTP_AUTENTICA MAIL_FROM CORREO_RESPONDER_A P
 done
 chmod 600 .env
 
-# Credenciales de servicio (ADR-001 via el emisor transitorio de ADR-005).
-#
-# No son secrets de GitHub: se generan UNA vez en el host y se persisten en
-# secretos-servicios.env (fuera del .env efimero), de modo que cada
-# despliegue reparta los mismos valores al emisor (ms-identidad lee
-# AUTH_CLIENTES_SERVICIO) y a cada cliente (SECRETO_SERVICIO_<CLIENTE>, que
-# docker-compose.deploy.yml inyecta como DIRECTORIO_ACTIVO_CLIENT_SECRET del
-# servicio correspondiente). Rotar uno = borrar su linea de ese archivo y
-# volver a desplegar. Nunca se imprimen.
+# Credenciales de servicio: ver repartir_credenciales_de_servicio, arriba.
 SECRETOS_SERVICIOS="$DIRECTORIO/secretos-servicios.env"
-CLIENTES_DE_SERVICIO="salas-partidas comentarios notificaciones ms-subastas ms-finanzas moderacion-sanciones torneos admin-parametros ms-ecommerce"
-touch "$SECRETOS_SERVICIOS"
-chmod 600 "$SECRETOS_SERVICIOS"
 AUTH_CLIENTES_SERVICIO=""
-for cliente in $CLIENTES_DE_SERVICIO; do
-  clave="SECRETO_SERVICIO_$(echo "$cliente" | tr 'a-z-' 'A-Z_')"
-  valor=$(grep "^${clave}=" "$SECRETOS_SERVICIOS" | head -n1 | cut -d= -f2- || true)
-  if [ -z "$valor" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-      valor=$(openssl rand -hex 24)
-    else
-      valor=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
-    fi
-    echo "${clave}=${valor}" >> "$SECRETOS_SERVICIOS"
-    echo "  credencial de servicio generada para $cliente"
-  fi
-  echo "${clave}=${valor}" >> .env
-  AUTH_CLIENTES_SERVICIO="${AUTH_CLIENTES_SERVICIO:+${AUTH_CLIENTES_SERVICIO};}${cliente}=${valor}"
-done
-echo "AUTH_CLIENTES_SERVICIO=${AUTH_CLIENTES_SERVICIO}" >> .env
+if ! repartir_credenciales_de_servicio "$SECRETOS_SERVICIOS" .env; then
+  exit 1
+fi
 # El emisor de esas credenciales es ms-identidad dentro de la red de compose
 # (ADR-005), SIEMPRE, mientras ese ADR este vigente: en este host no hay
 # Keycloak. El secret de GitHub DIRECTORIO_ACTIVO_URL viene de ADR-001 (la URL

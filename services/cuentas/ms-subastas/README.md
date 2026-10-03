@@ -271,7 +271,8 @@ Reglas nuevas en el dominio:
   simultaneas: gana una sola); cobra la penalizacion en ms-finanzas
   (`refId sub-cancelacion-{id}`, idempotente) y libera el producto; si algo
   falla despues, se compensan los dos.
-- **Recordatorio de 1 hora** a quien pujo o sigue la subasta, una sola vez.
+- **Recordatorio de 1 hora** a quien pujo o sigue la subasta y al vendedor
+  (RF-NOT-003: «a ambos»), una sola vez cada uno.
 
 Avisos (7.7.8): `notificaciones/AvisosDeSubasta` decide quien se entera de que;
 el outbox es idempotente por evento (id UUID v3 de la clave del hecho,
@@ -284,6 +285,11 @@ momento (`GET /internal/usuarios/{uid}/contacto`) y no se guardan; la
 `Idempotency-Key` es el id del aviso. Reintentos con espera exponencial hasta
 FALLIDO. **Esa ruta de ms-identidad figura como pendiente (B2)**: sin ella el
 correo no sale y termina FALLIDO (no se descarta en silencio).
+
+Al vender (cierre con ganador o compra inmediata), el vendedor recibe ademas
+`CREDITOS_RECIBIDOS` (7.7.8, «Confirmacion de transferencia de creditos
+recibidos»; HU-NOT-003) con el monto que le movio ms-finanzas. Va solo a la
+bandeja: el correo de la venta sale en el mismo instante y ya lo dice.
 
 Tiempo real: ademas de `/topic/subastas/listado` (publico), cada cambio se
 publica en `/topic/subastas/{subastaId}`, que exige sesion en el CONNECT. Un
@@ -346,8 +352,32 @@ No se implementaron en B8 y no se fingen:
 
 ## Despliegue en DEV: plan (B8)
 
-`desplegableDev` sigue en `false` y **B8 no lo cambia**. Lo que sigue es el
-plan para desplegarlo sin tumbar nada, con lo que hay que comprobar en cada
+**28-sep — ejecutado en la topologia, fase 1.** El catalogo lo declara con
+`claseHost: "contenido"` y `desplegableDev: true`; `docker-compose.ms-subastas.yml`
+trae los valores por omision de ese host (inventario y catalogo por nombre en
+su red; identidad, finanzas por el 8093, notificaciones, sanciones y parametros
+por la IP elastica de plataforma); el job `desplegar-contenido-dev` de `cd.yml`
+copia su compose, le pasa la base, los origenes y la credencial, y corre la
+compuerta de capacidad. La credencial ya no se copia a mano (paso 4 de abajo):
+es el secret `SECRETO_SERVICIO_MS_SUBASTAS` del entorno `dev`, que los dos jobs
+reciben y `desplegar.sh` prefiere al valor generado en cada host.
+
+Queda **una** cosa, y no es nuestra: que el grupo de seguridad de contenido
+(cuenta del Grupo 2) admita el 8092 desde `35.168.124.119/32`
+(`infrastructure/entornos/contenido/reglas-entrada.json`). Con eso, un PR
+pequeno cambia en `borde-dev.conf` `srv-ms-subastas:8092` por
+`34.193.90.11:8092` en las dos `location` (REST y `ws-subastas`), con su
+sustitucion en los dos bancos y su comprobacion de fichero en
+`comprobar-rutas.sh`. Antes de eso el borde sigue apuntando al nombre, que da
+502 al instante; apuntar ya a la IP con el puerto cerrado daria 504 a los 5 s,
+y el smoke de dev solo admite 200, 502 o 503.
+
+El plan original, con sus comprobaciones, sigue abajo como se escribio en B8
+(27-sep): los pasos 1-3 y 5-8 aplican tal cual; el 4 lo sustituye el secret
+compartido.
+
+*(B8)* `desplegableDev` seguia en `false` y B8 no lo cambiaba. Lo que sigue es
+el plan para desplegarlo sin tumbar nada, con lo que hay que comprobar en cada
 paso. No lo activa nadie por accidente: hace falta cambiar el catalogo, el CD,
 el borde y dos grupos de seguridad, y cada cambio esta escrito abajo.
 
@@ -455,7 +485,7 @@ no esta en el repo y B9 dejo escrito que correo no se alcanza. Por eso el paso
 
 ### Datos
 
-El Postgres de contenido nace vacio (Flyway V1-V10). En plataforma quedo el
+El Postgres de contenido nace vacio (Flyway V1-V11). En plataforma quedo el
 volumen de los pocos minutos que ms-subastas estuvo desplegado el 24-sep
 (CAPACIDAD.md: se retiro «conservando su volumen»): no hay nada que migrar, y
 tampoco se borra.

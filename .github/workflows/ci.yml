@@ -415,6 +415,14 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/emisor-de-credenciales.sh
 
+      # 28-sep (topologia, fase 1): misiones y ms-subastas pasan al host de
+      # contenido y su emisor sigue en el de plataforma. Cada host generaba su
+      # propia credencial y el emisor no reconocia la del otro. Con archivos
+      # temporales; segundos.
+      - name: Comprobar las credenciales de servicio compartidas entre hosts
+        shell: bash
+        run: bash scripts/cd/pruebas/credenciales-de-servicio.sh
+
       # Paso 3b de desplegar.sh: imagenes de una en una y con reintentos (28-sep,
       # B7: con el host saturado, bajar tres a la vez se corto y luego no
       # termino en los diez minutos de la sesion SSH). Con docker falso; segundos.

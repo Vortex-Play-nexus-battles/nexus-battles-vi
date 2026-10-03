@@ -48,6 +48,10 @@ motor:
     # B7: la ficha de combate de un prototipo en un nivel se guarda estos
     # segundos (es un dato del catalogo que no cambia entre turnos). 0 = sin cache.
     cache-segundos: ${MOTOR_HEROES_CACHE_SEGUNDOS:300}
+  productos:
+    url: ${PRODUCTOS_URL:http://localhost:8092}
+  inventario:
+    url: ${INVENTARIO_URL:http://localhost:8091}
   # B7, §6.1.4 y D-B7-01: el indice de la tabla de 8.000 filas sigue una normal.
   # El documento no fija media ni desviacion; por omision la tabla centrada
   # (4000.5) y cubierta a tres desviaciones por lado (8000 / 6).

@@ -2,11 +2,10 @@
  * Lo que DEV no despliega, leído del catálogo de servicios.
  *
  * `infrastructure/despliegue/servicios.json` dice qué servicio NO se levanta en
- * DEV (`desplegableDev: false`) y por qué (`motivoFueraDeDev`): hoy ms-subastas
- * y ms-chatbot por capacidad del host de plataforma, y misiones porque en el
- * host de contenido le falta su credencial de servicio (README de misiones,
- * «Despliegue»). Sus rutas en el borde responden 502 o 504, y eso es la verdad
- * de ese entorno, no un fallo nuevo.
+ * DEV (`desplegableDev: false`) y por qué (`motivoFueraDeDev`). Desde el 29-sep
+ * (plataforma en c7i-flex.large, ms-chatbot encendido) ninguno lo está; la
+ * lista queda por si otro vuelve a no caber. Sus rutas en el borde responden
+ * 502 o 504, y eso es la verdad de ese entorno, no un fallo nuevo.
  *
  * Las pruebas contra DEV (canarios, prueba del profesor) no deben ponerse rojas
  * por ellas —la vista tiene que decirlo, y eso se comprueba aparte—, pero
@@ -15,6 +14,13 @@
  *
  * El prefijo de cada servicio sale de su `pruebaBorde` (la ruta con la que el
  * borde lo prueba): los tres primeros segmentos, `/api/v1/<recurso>`.
+ *
+ * 29-sep (topología, fase 1): un servicio también puede estar desplegado y
+ * sano en su host sin que el borde le llegue todavía —misiones y ms-subastas
+ * en el host de contenido, a la espera de que el grupo de seguridad de la
+ * cuenta del Grupo 2 admita sus puertos—. El catálogo lo dice con
+ * `accesoPendiente` (el motivo), y su 5xx se anota igual que el de un servicio
+ * fuera de DEV. Al quitar ese campo, su 5xx vuelve a contar solo.
  */
 
 import fs from 'node:fs';
@@ -28,7 +34,8 @@ const AQUI =
 const CATALOGO = path.resolve(AQUI, '../../../infrastructure/despliegue/servicios.json');
 
 /**
- * Prefijos `/api/v1/<recurso>` de los servicios que DEV no despliega.
+ * Prefijos `/api/v1/<recurso>` de los servicios que DEV no despliega o a los
+ * que el borde todavía no llega (`accesoPendiente`).
  *
  * @param {string} [catalogo] ruta del catálogo (para las pruebas del ayudante)
  * @returns {{servicio: string, prefijo: string}[]}
@@ -37,7 +44,11 @@ export function rutasNoDesplegadasEnDev(catalogo = CATALOGO) {
   const servicios = JSON.parse(fs.readFileSync(catalogo, 'utf8'));
   const lista = Array.isArray(servicios) ? servicios : (servicios.servicios ?? []);
   return lista
-    .filter((s) => s.desplegableDev === false && typeof s.pruebaBorde === 'string')
+    .filter(
+      (s) =>
+        (s.desplegableDev === false || typeof s.accesoPendiente === 'string') &&
+        typeof s.pruebaBorde === 'string',
+    )
     .map((s) => ({
       servicio: s.nombre,
       prefijo: s.pruebaBorde.split('?')[0].split('/').slice(0, 4).join('/'),

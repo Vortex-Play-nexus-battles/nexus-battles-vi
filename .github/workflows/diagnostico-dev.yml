@@ -47,6 +47,40 @@ jobs:
           role-session-name: diagnostico-${{ github.run_id }}
           aws-region: ${{ inputs.ambiente == 'contenido' && (vars.AWS_REGION_CONTENIDO || 'us-east-1') || vars.AWS_REGION }}
 
+      # 28-sep — cualquier decision de capacidad con coste (la opcion E de
+      # CAPACIDAD.md: pasar plataforma a c7i-flex.large) se paga con los
+      # creditos del Free Plan. Hasta hoy el saldo solo se veia en la consola
+      # (Billing > Credits), y la decision se tomaba sin el. La API de Free
+      # Tier es gratuita y de solo lectura (a diferencia de Cost Explorer, que
+      # cobra por peticion). Solo informa: si la CLI del runner no la trae o
+      # el rol no puede leerla, lo dice y el diagnostico sigue.
+      - name: Creditos del Free Plan de la cuenta
+        if: steps.aws.outcome == 'success'
+        env:
+          NOMBRE_INSTANCIA: ${{ inputs.ambiente == 'contenido' && (vars.NOMBRE_INSTANCIA_CONTENIDO || 'nexus-contenido-dev') || 'nexus-plataforma-dev' }}
+        run: |
+          set -uo pipefail
+          if salida=$(aws freetier get-account-plan-state --region us-east-1 --output json 2>&1); then
+            # Tal cual, sin el numero de cuenta: plan, estado, creditos
+            # restantes y fecha de vencimiento.
+            printf '%s\n' "$salida" | jq 'del(.accountId)' 2>/dev/null || printf '%s\n' "$salida" | head -20
+          else
+            echo "  No se pudo leer el estado del plan: $(printf '%s' "$salida" | head -3)"
+            echo "  (el saldo sigue en la consola: Billing and Cost Management > Credits)"
+          fi
+          # Y si el tipo de la opcion E existe en la zona del host: cambiar de
+          # tipo es parar, modificar y encender, y en una zona que no lo
+          # ofrece el host se quedaria parado a mitad del cambio.
+          zona=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=$NOMBRE_INSTANCIA" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+            --query 'Reservations[0].Instances[0].Placement.AvailabilityZone' --output text 2>/dev/null || true)
+          if [ -n "$zona" ] && [ "$zona" != "None" ]; then
+            ofrecidos=$(aws ec2 describe-instance-type-offerings --location-type availability-zone \
+              --filters "Name=location,Values=$zona" "Name=instance-type,Values=t3.small,c7i-flex.large,m7i-flex.large" \
+              --query 'InstanceTypeOfferings[].InstanceType' --output text 2>/dev/null || echo "?")
+            echo "  zona del host: $zona; tipos del Free Plan que ofrece: ${ofrecidos:-ninguno de los consultados}"
+          fi
+
       # Lo primero, porque es la causa mas probable y la mas barata de
       # descartar: si la instancia esta apagada, todo lo demas sobra.
       - name: Estado de la instancia en EC2
@@ -81,8 +115,9 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           # La lista "servicio:puerto" que se consulta al final cambia segun
-          # el host: plataforma publica 8081-8091, contenido 8101-8104.
-          PARES_SALUD: ${{ inputs.ambiente == 'contenido' && 'heroes:8101 inventario:8102 productos:8103 motor-combate:8104' || 'comentarios:8081 correo:8082 torneos:8083 salas-partidas:8084 notificaciones:8085 moderacion-sanciones:8086 metricas-plataforma:8087 admin-parametros:8088 ms-identidad:8089' }}
+          # el host: plataforma publica 8081-8091, contenido 8101-8105 (y
+          # 8092, ms-subastas, desde la topologia del 28-sep).
+          PARES_SALUD: ${{ inputs.ambiente == 'contenido' && 'heroes:8101 inventario:8102 productos:8103 motor-combate:8104 misiones:8105' || 'comentarios:8081 correo:8082 torneos:8083 salas-partidas:8084 notificaciones:8085 moderacion-sanciones:8086 metricas-plataforma:8087 admin-parametros:8088 ms-identidad:8089' }}
         with:
           host: ${{ inputs.ambiente == 'contenido' && secrets.DEPLOY_HOST_CONTENIDO_DEV || secrets.DEPLOY_HOST_DEV }}
           username: ${{ inputs.ambiente == 'contenido' && secrets.SSH_USER_CONTENIDO_DEV || secrets.SSH_USER_DEV }}
@@ -243,14 +278,60 @@ jobs:
             # contenido (SG, cidr_servicios). Desde contenido, el JWKS de
             # ms-identidad (:8089) y el libro de creditos (:8093) tienen que
             # contestar; desde cualquier otro sitio, no. Solo codigos HTTP.
+            #
+            # 28-sep (topologia, fase 1): misiones y ms-subastas llaman desde
+            # contenido tambien a notificaciones (8085), sanciones (8086),
+            # parametros (8088) y correo (8082). Y en sentido contrario, el
+            # borde de plataforma tiene que llegar a lo que se publica en
+            # contenido: 8101-8105 y, segun la fase, 8092, 8090 y 8094. Esos los
+            # abre el grupo 2 en SU grupo de seguridad (reglas-entrada.json);
+            # "000" es un puerto que el grupo de seguridad todavia no admite o
+            # un servicio que no corre.
             if ! sudo docker ps --format '{{.Names}}' | grep -q '^srv-ms-identidad$'; then
-              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health"; do
+              for destino in "http://35.168.124.119:8089/api/v1/auth/jwks" "http://35.168.124.119:8093/api/v1/actuator/health" \
+                             "http://35.168.124.119:8085/actuator/health" "http://35.168.124.119:8086/actuator/health" \
+                             "http://35.168.124.119:8088/actuator/health" "http://35.168.124.119:8082/actuator/health"; do
                 r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$destino" || echo "---")
                 printf '    %-55s %s\n' "$destino" "$r"
               done
             else
-              echo "    (host de plataforma: la comprobacion se hace desde el de contenido)"
+              echo "    desde el borde hacia el host de contenido:"
+              for destino in "http://34.193.90.11:8101/actuator/health" "http://34.193.90.11:8102/actuator/health" \
+                             "http://34.193.90.11:8103/actuator/health" "http://34.193.90.11:8104/actuator/health" \
+                             "http://34.193.90.11:8105/actuator/health" "http://34.193.90.11:8092/api/v1/actuator/health" \
+                             "http://34.193.90.11:8090/ecommerce/actuator/health" "http://34.193.90.11:8094/api/v1/actuator/health"; do
+                r=$(curl -s -o /dev/null -w '%{http_code}' --max-time 6 "$destino" || echo "---")
+                printf '    %-55s %s\n' "$destino" "$r"
+              done
             fi
+
+            echo
+            echo "===================== CREDENCIALES DE SERVICIO =============="
+            # 28-sep (topologia, fase 1) — misiones y ms-subastas piden su
+            # token a un emisor que vive en OTRO host, con un secreto que tiene
+            # que ser el mismo en los dos (secret compartido de GitHub). Un
+            # desajuste no se ve en la salud: el servicio arranca y responde,
+            # y lo que falla es cada llamada suya a otro servicio. Aqui cada
+            # contenedor que presenta credencial la prueba contra su emisor
+            # (grant client_credentials) y se ensena SOLO el codigo HTTP: 200
+            # es aceptada, 401 es un secreto que el emisor no conoce. El
+            # secreto va a curl por la entrada estandar (-K -), nunca por la
+            # linea de ordenes, que `ps` ensena a cualquiera en el host; el
+            # token que devuelve el emisor se descarta sin mirarlo.
+            for c in $(sudo docker ps --format '{{.Names}}' | sort); do
+              entorno=$(sudo docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' "$c" 2>/dev/null || true)
+              cliente=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_CLIENT_ID=//p' | head -1)
+              [ -n "$cliente" ] || continue
+              emisor=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_URL=//p' | head -1)
+              # Desde el host el nombre del contenedor no resuelve: en el host
+              # de plataforma el emisor se publica en su 8089.
+              emisor=$(printf '%s' "$emisor" | sed 's#//srv-ms-identidad:#//localhost:#')
+              codigo=$(printf '%s\n' "$entorno" | sed -n 's/^DIRECTORIO_ACTIVO_CLIENT_SECRET=//p' | head -1 \
+                | { read -r s; printf 'user = "%s:%s"\n' "$cliente" "$s"; } \
+                | curl -s -o /dev/null -w '%{http_code}' --max-time 10 -K - \
+                    -d grant_type=client_credentials "$emisor" || echo "---")
+              printf '    %-28s %-24s %s\n' "$c" "$cliente" "$codigo"
+            done
 
             echo
             echo "===================== CORREO: ENTREGAS DE 7 DIAS ============"

@@ -1,0 +1,270 @@
+{
+  "info": {
+    "name": "HU-PRD-014 - Alertas de cambios del catalogo",
+    "_postman_id": "89e0ce47-3f3c-4f56-a3ec-014014014014",
+    "description": "Comprueba autenticacion, creacion, modificacion general, balance, suspension, reactivacion y no repeticion de alertas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Salud del servicio",
+      "request": { "method": "GET", "url": "{{baseUrl}}/actuator/health" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('servicio disponible', () => pm.response.to.have.status(200));",
+              "pm.test('estado UP', () => pm.expect(pm.response.json().status).to.eql('UP'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Alertas sin token se rechazan",
+      "request": { "method": "GET", "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion" },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('responde 401', () => pm.response.to.have.status(401));",
+              "pm.test('usa Problem Details', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/problem+json'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Crear producto",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.collectionVariables.set('nombreProducto', `Espada alerta ${Date.now()}`);"]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('producto creado', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('productoId', pm.response.json().id);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"nombre\":\"{{nombreProducto}}\",\"imagen\":\"productos/espada-alerta.webp\",\"descripcion\":\"Producto para validar HU-PRD-014\",\"tipo\":\"ARMA\",\"tiraje\":25,\"precioCreditos\":250,\"premium\":false,\"poderDeAtaque\":30,\"tasaDeCaida\":5}"
+        },
+        "url": "{{baseUrl}}/api/v1/productos"
+      }
+    },
+    {
+      "name": "04 - Recibir alerta de producto nuevo",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const alertas = pm.response.json();",
+              "pm.test('responde 200', () => pm.response.to.have.status(200));",
+              "pm.test('incluye NUEVO_PRODUCTO', () => pm.expect(alertas.some(a => a.productoId === pm.collectionVariables.get('productoId') && a.tipo === 'NUEVO_PRODUCTO')).to.eql(true));",
+              "pm.test('informa descripcion y fecha', () => { const a = alertas.find(x => x.productoId === pm.collectionVariables.get('productoId')); pm.expect(a.descripcion).to.be.a('string').and.not.empty; pm.expect(a.implementadaEn).to.be.a('string').and.not.empty; });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Modificar descripcion",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\"descripcion\":\"Descripcion actualizada desde Postman\"}"
+        },
+        "url": "{{baseUrl}}/api/v1/productos/{{productoId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('producto modificado', () => pm.response.to.have.status(200));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Recibir alerta de modificacion general",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const alertas = pm.response.json();",
+              "pm.test('incluye PRODUCTO_MODIFICADO', () => pm.expect(alertas.some(a => a.productoId === pm.collectionVariables.get('productoId') && a.tipo === 'PRODUCTO_MODIFICADO')).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Modificar atributo de balance",
+      "request": {
+        "method": "PATCH",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{token}}" },
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": { "mode": "raw", "raw": "{\"poderDeAtaque\":37}" },
+        "url": "{{baseUrl}}/api/v1/productos/{{productoId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('balance modificado', () => pm.response.to.have.status(200));"]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Recibir alerta de balance",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const alertas = pm.response.json();",
+              "pm.test('incluye CAMBIO_BALANCE', () => pm.expect(alertas.some(a => a.productoId === pm.collectionVariables.get('productoId') && a.tipo === 'CAMBIO_BALANCE')).to.eql(true));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 - Suspender y reactivar producto",
+      "item": [
+        {
+          "name": "Suspender",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/v1/productos/{{productoId}}/suspender"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('estado SUSPENDIDO', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().estado).to.eql('SUSPENDIDO'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reactivar",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/v1/productos/{{productoId}}/reactivar"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('recupera estado ACTIVO', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().estado).to.eql('ACTIVO'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Recibir ambas alertas",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+            "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const alertas = pm.response.json().filter(a => a.productoId === pm.collectionVariables.get('productoId'));",
+                  "pm.test('incluye suspension', () => pm.expect(alertas.some(a => a.tipo === 'PRODUCTO_SUSPENDIDO')).to.eql(true));",
+                  "pm.test('incluye reactivacion', () => pm.expect(alertas.some(a => a.tipo === 'PRODUCTO_REACTIVADO')).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - No repetir alertas entregadas",
+      "request": {
+        "method": "GET",
+        "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }],
+        "url": "{{baseUrl}}/api/v1/productos/alertas/inicio-sesion"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": ["pm.test('lista vacia', () => pm.expect(pm.response.json()).to.eql([]));"]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8103" },
+    { "key": "token", "value": "" },
+    { "key": "productoId", "value": "" },
+    { "key": "nombreProducto", "value": "" }
+  ]
+}

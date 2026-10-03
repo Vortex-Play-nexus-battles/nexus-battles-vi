@@ -7,6 +7,7 @@ import java.util.stream.Collectors;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController.ComentarioResponse;
+import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
 import jakarta.servlet.http.HttpServletRequest;
 
@@ -79,6 +80,20 @@ public class ModeracionController {
         return DetalleResponse.desde(servicio.detalle(commentId));
     }
 
+    /**
+     * Los comentarios de un autor, en cualquier estado, para decidir sobre el
+     * (1.7.0). Solo lectura. La pagina fuera de rango no es un error: el
+     * servicio la corrige.
+     */
+    @GetMapping("/autores/{autorId}/comentarios")
+    public HistorialDelAutorResponse historialDelAutor(
+            @PathVariable String autorId,
+            @RequestParam(defaultValue = "0") int pagina,
+            @RequestParam(defaultValue = "20") int tamano) {
+        return HistorialDelAutorResponse.desde(
+                servicio.historialDelAutor(autorId, pagina, Math.min(tamano, 100)));
+    }
+
     /** La decision. El motivo es obligatorio, incluida APROBAR; EDITAR exige textoNuevo. */
     @PostMapping("/{commentId}/decision")
     public ResponseEntity<DecisionResponse> resolver(
@@ -133,7 +148,7 @@ public class ModeracionController {
     }
 
     public record EntradaResponse(ComentarioResponse comentario, int reportes,
-            Map<String, Long> porCategoria, String primerReporte) {
+            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada) {
 
         static EntradaResponse desde(ServicioDeModeracion.Entrada e) {
             return new EntradaResponse(
@@ -141,7 +156,8 @@ public class ModeracionController {
                     e.reportes(),
                     e.porCategoria().entrySet().stream()
                             .collect(Collectors.toMap(x -> x.getKey().name(), Map.Entry::getValue)),
-                    e.primerReporte().toString());
+                    e.primerReporte().toString(),
+                    e.prioridadElevada());
         }
     }
 
@@ -162,6 +178,32 @@ public class ModeracionController {
                     ComentarioResponse.paraModeracion(d.comentario()),
                     d.reportes().stream().map(ReporteResponse::desde).toList(),
                     d.historial().stream().map(AsientoResponse::desde).toList());
+        }
+    }
+
+    /**
+     * {@code ItemDelHistorial} del contrato: lo minimo para decidir sobre el
+     * autor. Sin imagenes, estrellas ni marca de seguimiento, y sin el autor,
+     * que ya es el de la respuesta.
+     */
+    public record ItemDelHistorialResponse(String id, String productoId, String texto,
+            String fechaPublicacion, String estado, boolean editado) {
+
+        static ItemDelHistorialResponse desde(ResumenDeComentario r) {
+            return new ItemDelHistorialResponse(r.id(), r.productoId(), r.texto(),
+                    r.fechaPublicacion().toString(), r.estado().name(), r.editado());
+        }
+    }
+
+    /** {@code apodoAutor} no sale si el autor no tiene comentarios. */
+    public record HistorialDelAutorResponse(String autorId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String apodoAutor,
+            List<ItemDelHistorialResponse> comentarios, long total, int pagina, int tamano) {
+
+        static HistorialDelAutorResponse desde(ServicioDeModeracion.Historial h) {
+            return new HistorialDelAutorResponse(h.autorId(), h.apodoAutor(),
+                    h.comentarios().stream().map(ItemDelHistorialResponse::desde).toList(),
+                    h.total(), h.pagina(), h.tamano());
         }
     }
 

@@ -256,6 +256,25 @@ Con el rol puesto:
   semana. Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
   `ec2:StopInstances`.
 
+### Lo que ya está en este host antes del paso A, y lo que queda después
+
+Desde la fase 1 de la topología (28-sep), **misiones** y **ms-subastas** se
+despliegan aquí aunque el paso A no esté hecho: arrancan, responden su salud y
+hablan con plataforma (8085-8089 y 8093 ya admiten a `34.193.90.11/32`). Lo que
+el paso A desbloquea es la **entrada** desde el borde. Después, Grupo 6 sigue
+sin nadie más:
+
+1. `diagnostico-dev.yml` con `ambiente=dev` → sección «RED ENTRE HOSTS»: 8105 y
+   8092 dejan de dar `000`. `/api/v1/misiones` empieza a responder en ese
+   momento (el borde ya apunta a `34.193.90.11:8105`).
+2. Un PR pequeño lleva el borde de ms-subastas de `srv-ms-subastas:8092` a
+   `34.193.90.11:8092` (REST y `/api/v1/ws-subastas`); hasta entonces el borde
+   da 502 al instante, y apuntar antes a la IP con el puerto cerrado daría 504.
+3. Smoke, canarios y prueba del profesor en dev.
+4. Fase 2 (ms-ecommerce, 8090, con su base por volcado y restauración) y fase
+   3 (ms-chatbot, 8094) solo si la compuerta de capacidad de este host lo
+   permite (`../../despliegue/CAPACIDAD.md`).
+
 ## Cómo se levantó (histórico)
 
 ```bash

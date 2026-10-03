@@ -795,7 +795,7 @@ echo "Que promete el borde que dev hoy no puede dar (inventario de 502)"
 CATALOGO="${CATALOGO:-$(dirname "$0")/../../despliegue/servicios.json}"
 if [ -f "$CATALOGO" ] && command -v jq >/dev/null 2>&1; then
     for servicio in $(grep -oE 'srv-[a-z-]+:[0-9]+' "$CONF" | sed 's/^srv-//;s/:[0-9]*$//' | sort -u); do
-        entrada=$(jq -r --arg s "$servicio" '.servicios[] | select(.nombre == $s) | "\(.desplegableDev)"' "$CATALOGO")
+        entrada=$(jq -r --arg s "$servicio" '.servicios[] | select(.nombre == $s) | if (.accesoPendiente | type) == "string" then "acceso-pendiente" else "\(.desplegableDev)" end' "$CATALOGO")
         prefijos=$(grep -B4 "srv-${servicio}:" "$CONF" | grep -oE 'location [^{]+' | sed 's/location //' | tr -d ' ' | tr '\n' ' ')
         if [ -z "$entrada" ]; then
             printf '  FALLA %-22s el borde lo enruta y NO esta en el catalogo de despliegue\n' "$servicio"
@@ -803,6 +803,9 @@ if [ -f "$CATALOGO" ] && command -v jq >/dev/null 2>&1; then
             fallos=$((fallos + 1))
         elif [ "$entrada" = "false" ]; then
             printf '  502   %-22s fuera del host de dev por capacidad -> sus rutas dan 502\n' "$servicio"
+            printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
+        elif [ "$entrada" = "acceso-pendiente" ]; then
+            printf '  502   %-22s desplegado en su host, pero el borde aun no le llega (accesoPendiente en el catalogo)\n' "$servicio"
             printf '        rutas afectadas: %s\n' "${prefijos:-(no identificadas)}"
         else
             printf '  ok    %-22s desplegable en dev\n' "$servicio"

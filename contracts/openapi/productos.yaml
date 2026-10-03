@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.4.0
+  version: 1.5.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
     respaldo (HU-PRD-003) y suspensión lógica con reactivación
-    (HU-PRD-004). Contrato publicado antes de la
+    (HU-PRD-004), además de alertas de cambios al iniciar sesión
+    (HU-PRD-014). Contrato publicado antes de la
     implementación, conforme a la regla de plataforma "contrato primero".
 
     1.2.0 (R16): se añade GET /api/v1/productos, el listado público y
@@ -56,11 +57,44 @@ info:
     (5) Marcas de la semilla versionada (`origen`, `semillaVersion`) y autor
     de la ultima edicion (`modificadoPor`, uid del token) en la vista
     completa. Todo lo demas es aditivo.
+
+    1.5.0 (HU-PRD-014): se añade
+    GET /api/v1/productos/alertas/inicio-sesion. La operación autenticada
+    devuelve los cambios del catálogo posteriores al último cambio entregado
+    al jugador y registra el nuevo punto de lectura. Cambio aditivo: versión
+    menor.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
 
 paths:
+  /api/v1/productos/alertas/inicio-sesion:
+    get:
+      summary: Consulta cambios del catálogo al iniciar sesión
+      operationId: consultarAlertasCatalogoAlIniciarSesion
+      description: >
+        Devuelve, en orden cronológico, los cambios del catálogo posteriores
+        al último cambio entregado al jugador autenticado. Al completar la
+        respuesta, el servidor avanza ese cursor para no repetir las alertas
+        sin perder un cambio que se registre al mismo tiempo que la consulta.
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Alertas pendientes del jugador, o una lista vacía si no hay cambios
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertaCambioCatalogo"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
   /api/v1/productos/estadisticas:
     get:
       summary: Consulta el estado del catálogo
@@ -1069,6 +1103,41 @@ components:
           type: integer
           minimum: 0
           description: Total de páginas para ese tamaño; vale 0 si no hay productos.
+
+    AlertaCambioCatalogo:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - productoId
+        - productoNombre
+        - tipo
+        - descripcion
+        - implementadaEn
+      properties:
+        id:
+          type: string
+          format: uuid
+        productoId:
+          type: string
+          format: uuid
+        productoNombre:
+          type: string
+          minLength: 1
+        tipo:
+          type: string
+          enum:
+            - NUEVO_PRODUCTO
+            - PRODUCTO_MODIFICADO
+            - PRODUCTO_SUSPENDIDO
+            - PRODUCTO_REACTIVADO
+            - CAMBIO_BALANCE
+        descripcion:
+          type: string
+          minLength: 1
+        implementadaEn:
+          type: string
+          format: date-time
 
     DetalleDeProblema:
       type: object

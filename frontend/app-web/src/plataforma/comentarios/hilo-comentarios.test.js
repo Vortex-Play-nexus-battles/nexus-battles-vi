@@ -573,7 +573,7 @@ describe('reportar lo ajeno', () => {
     dialogo.querySelector('form').requestSubmit();
     await esperar();
 
-    expect(dialogo.textContent).toMatch(/límite de reportes de hoy/);
+    expect(dialogo.textContent).toMatch(/límite de reportes/);
     dialogo.querySelector('[data-accion="cancelar"]').click();
     await esperar();
     expect(zona.querySelector('.comentario').dataset.estado).toBeUndefined();

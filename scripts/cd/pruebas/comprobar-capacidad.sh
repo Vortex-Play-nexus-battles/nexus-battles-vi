@@ -145,6 +145,30 @@ else
   fallo "sin apunte debia aplicar umbrales (codigo $codigo): $(cat "$TMP/salida")"
 fi
 
+# 28-sep — el host de contenido tiene su propio nucleo (NUCLEO_MVP): alli no hay
+# borde ni ms-identidad, y lo que no puede caer son los servicios del combate.
+NUCLEO_CONTENIDO="heroes:8101:/actuator/health inventario:8102:/actuator/health productos:8103:/actuator/health motor-combate:8104:/actuator/health"
+
+printf '\n' > "$TMP/nuevos.txt"
+correr despues FALSO_DISPONIBLE=300 FALSO_SWAP_LIBRE=300 FALSO_EN_MARCHA="srv-heroes srv-inventario" \
+  FALSO_CAIDO=8089 NUCLEO_MVP="$NUCLEO_CONTENIDO"
+codigo=$?
+if [ "$codigo" -eq 0 ] && grep -q "inventario" "$TMP/salida" && ! grep -q "ms-identidad" "$TMP/salida"; then
+  ok "en contenido se mira su nucleo, no el de plataforma (sin 8089 alli no pasa nada)"
+else
+  fallo "el nucleo de contenido debia pasar sin mirar ms-identidad (codigo $codigo): $(cat "$TMP/salida")"
+fi
+
+printf '\n' > "$TMP/nuevos.txt"
+correr despues FALSO_DISPONIBLE=300 FALSO_SWAP_LIBRE=300 FALSO_EN_MARCHA="srv-heroes srv-inventario" \
+  FALSO_CAIDO=8102 NUCLEO_MVP="$NUCLEO_CONTENIDO"
+codigo=$?
+if [ "$codigo" -ne 0 ] && grep -q "inventario no contesta" "$TMP/salida"; then
+  ok "en contenido, inventario caido tras el despliegue se detecta"
+else
+  fallo "inventario caido debia fallar en contenido (codigo $codigo): $(cat "$TMP/salida")"
+fi
+
 echo
 if [ "$FALLOS" -gt 0 ]; then
   echo "::error::$FALLOS caso(s) de la compuerta de capacidad fallaron."

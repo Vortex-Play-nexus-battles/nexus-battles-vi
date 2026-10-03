@@ -78,9 +78,15 @@ export const ACCIONES_SIN_CAMBIO_DE_ESTADO = Object.freeze(['EDITAR', 'MARCAR', 
  */
 export const ACCIONES_INTERNAS = Object.freeze(['MARCAR', 'DESMARCAR']);
 
-/** Motivos de rechazo que enumera el contrato 1.3.0 en `ProblemDetail.motivo`. */
+/**
+ * Motivos de rechazo que enumera el contrato 1.3.0 en `ProblemDetail.motivo`.
+ *
+ * `REPORTE_INVALIDO` (400 de reportar) lo emite el servicio pero el contrato
+ * todavía no lo enumera: la vista lo reconoce y, además, decide por `estado`.
+ */
 export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_DUPLICADO: 'REPORTE_DUPLICADO',
+  REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
 });
@@ -208,6 +214,32 @@ export async function consultarDetalle(
 ) {
   return pedir(
     `${rutaDeModeracion()}/${encodeURIComponent(comentarioId)}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * Los comentarios de un autor, del mas reciente al mas antiguo y en cualquier
+ * estado (HU-COM-005, comentarios.yaml 1.7.0). Solo roles de moderacion.
+ *
+ * Un autor sin comentarios es `200` con lista vacia y `total: 0`, no un 404.
+ *
+ * @param {string} autorId
+ * @param {{pagina?: number, tamano?: number}} [paginacion] `tamano` hasta 100
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{autorId: string, apodoAutor?: string, comentarios: object[],
+ *   total: number, pagina: number, tamano: number}>}
+ * @throws {ErrorDeApi} 401 sin sesion, 403 si el rol no modera
+ */
+export async function historialDelAutor(
+  autorId,
+  { pagina = 0, tamano = 20 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  return pedir(
+    `${rutaDeModeracion()}/autores/${encodeURIComponent(autorId)}/comentarios?${parametros}`,
     { method: 'GET', headers: { Accept: 'application/json' } },
     fetchImpl,
   );

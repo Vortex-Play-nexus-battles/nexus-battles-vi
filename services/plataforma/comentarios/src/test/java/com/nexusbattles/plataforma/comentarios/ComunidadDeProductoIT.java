@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -20,9 +22,12 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
@@ -31,12 +36,15 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -50,6 +58,7 @@ import com.nexusbattles.plataforma.comentarios.imagenes.ServicioDeImagenes;
 import com.nexusbattles.plataforma.comentarios.imagenes.TipoDeImagen;
 import com.nexusbattles.plataforma.comentarios.moderacion.AsientoDeModeracion;
 import com.nexusbattles.plataforma.comentarios.moderacion.AsientoRepository;
+import com.nexusbattles.plataforma.comentarios.moderacion.ReporteRepository;
 
 import jakarta.persistence.EntityManagerFactory;
 
@@ -119,6 +128,13 @@ class ComunidadDeProductoIT {
 
     @Autowired
     private AsientoRepository asientos;
+
+    @Autowired
+    private JdbcTemplate jdbc;
+
+    /** Espia del repositorio real: solo la carrera forzada le pone comportamiento (se limpia tras cada test). */
+    @MockitoSpyBean
+    private ReporteRepository reportesEspiados;
 
     private final HttpClient http = HttpClient.newHttpClient();
     private final EmisorDeTokensDePrueba emisor = EmisorDeTokensDePrueba.emisor();
@@ -572,6 +588,111 @@ class ComunidadDeProductoIT {
         }
     }
 
+    // ------------------------------------------------------------------ reportes
+
+    /**
+     * HU-COM-006 (#520): la carrera del duplicado con la base real.
+     *
+     * <p>Los tests unitarios solo SIMULAN la carrera ({@code doThrow} sobre
+     * {@code saveAndFlush}). Lo que solo se comprueba aqui es que el indice unico
+     * de V4 y el {@code saveAndFlush} del servicio funcionan juntos: el segundo
+     * INSERT falla dentro del {@code try} y llega al cliente como 409 con
+     * {@code motivo: REPORTE_DUPLICADO}, no como el 409 generico de
+     * {@code manejarCarrera} (sin motivo) ni como un 500.
+     */
+    @Nested
+    @DisplayName("reportes (HU-COM-006)")
+    class Reportes {
+
+        private String[] comentarioPublicado() throws Exception {
+            String producto = productoNuevo();
+            HttpResponse<String> r = comentar(producto, jugador(UUID.randomUUID()), "para reportar", null);
+            assertEquals(201, r.statusCode(), r.body());
+            return new String[] {producto, leer(r, "$.id")};
+        }
+
+        private HttpResponse<String> reportar(String producto, String comentario, String token) throws Exception {
+            return pedir("POST", "/api/v1/products/" + producto + "/comments/" + comentario + "/reportes",
+                    token, "{\"categoria\":\"SPAM\"}");
+        }
+
+        private int reportesDe(String comentario, UUID reportante) {
+            Integer filas = jdbc.queryForObject(
+                    "select count(*) from comentarios.comentario_reportes where comentario_id = ? and reportante_id = ?",
+                    Integer.class, comentario, reportante.toString());
+            return filas == null ? -1 : filas;
+        }
+
+        /** Afirma el desenlace de la carrera: un 201, un 409 con motivo, y una sola fila. */
+        private void afirmarUnGanador(String etiqueta, List<HttpResponse<String>> respuestas,
+                String comentario, UUID reportante) {
+            String detalle = etiqueta + ": " + respuestas.stream()
+                    .map(r -> r.statusCode() + " " + r.body()).toList();
+
+            assertEquals(1, respuestas.stream().filter(r -> r.statusCode() == 201).count(), detalle);
+            assertEquals(respuestas.size() - 1,
+                    respuestas.stream().filter(r -> r.statusCode() == 409).count(), detalle);
+            for (HttpResponse<String> r : respuestas) {
+                if (r.statusCode() == 409) {
+                    // Sin motivo seria el 409 generico de manejarCarrera: la regresion que se vigila.
+                    assertEquals("REPORTE_DUPLICADO", leer(r, "$.motivo"), detalle);
+                }
+            }
+            assertEquals(1, reportesDe(comentario, reportante), detalle + " (filas en comentario_reportes)");
+        }
+
+        @Test
+        @Timeout(60)
+        @DisplayName("dos reportes simultaneos del mismo usuario: uno es 201, el otro 409 REPORTE_DUPLICADO, y queda una fila")
+        void dosReportesSimultaneosDelMismoUsuario() throws Exception {
+            // Calentamiento: la primera peticion autenticada de la clase paga el JWKS.
+            pedir("GET", "/api/v1/products/" + productoNuevo() + "/rating/mia", jugador(UUID.randomUUID()), null);
+
+            for (int ronda = 0; ronda < 5; ronda++) {
+                String[] c = comentarioPublicado();
+                UUID reportante = UUID.randomUUID();
+                String token = jugador(reportante);
+
+                List<HttpResponse<String>> respuestas = aLaVez(2, () -> reportar(c[0], c[1], token));
+
+                afirmarUnGanador("ronda " + ronda, respuestas, c[1], reportante);
+            }
+        }
+
+        /**
+         * Sin esto, el 409 podria venir del pre-chequeo de cortesia (una peticion
+         * termina antes de que la otra compruebe) y el test pasaria sin haber
+         * tocado el indice. La barrera retiene a las dos dentro del
+         * {@code existsBy...} hasta que ambas lo han pasado: el 409 solo puede
+         * salir del indice unico y del {@code saveAndFlush}.
+         */
+        @Test
+        @Timeout(60)
+        @DisplayName("con las dos ya dentro del pre-chequeo, el 409 lo da el indice unico y no la cortesia")
+        void carreraForzadaPastaElPreChequeo() throws Exception {
+            String[] c = comentarioPublicado();
+            UUID reportante = UUID.randomUUID();
+            String token = jugador(reportante);
+            CyclicBarrier ambasComprobaron = new CyclicBarrier(2);
+            AtomicInteger comprobaciones = new AtomicInteger();
+
+            // callRealMethod() no vale aqui: el espia envuelve el proxy del repositorio
+            // y Mockito lo toma por un metodo abstracto. La respuesta honesta de
+            // existsBy... es «hay una fila», que se lee de la tabla.
+            doAnswer(llamada -> {
+                boolean existe = reportesDe(llamada.getArgument(0), UUID.fromString(llamada.getArgument(1))) > 0;
+                comprobaciones.incrementAndGet();
+                ambasComprobaron.await(10, TimeUnit.SECONDS);
+                return existe;
+            }).when(reportesEspiados).existsByComentarioIdAndReportanteId(anyString(), anyString());
+
+            List<HttpResponse<String>> respuestas = aLaVez(2, () -> reportar(c[0], c[1], token));
+
+            afirmarUnGanador("carrera forzada", respuestas, c[1], reportante);
+            assertEquals(2, comprobaciones.get(), "las dos peticiones pasaron por el pre-chequeo");
+        }
+    }
+
     // ---------------------------------------------------------------- moderacion
 
     @Nested
@@ -626,6 +747,110 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"DESMARCAR\",\"motivo\":\"ya no hace falta\"}").statusCode());
             assertEquals(0, (Integer) leer(pedir("GET",
                     "/api/v1/comentarios/moderacion?marcado=true&productoId=" + producto, moderadora(), null), "$.total"));
+        }
+    }
+
+    // ------------------------------------------------- historial del autor
+
+    @Nested
+    @DisplayName("historial de comentarios del autor (HU-COM-005)")
+    class HistorialDelAutor {
+
+        private String historial(UUID autor, String consulta) {
+            return "/api/v1/comentarios/moderacion/autores/" + autor + "/comentarios" + consulta;
+        }
+
+        @Test
+        @DisplayName("PostgreSQL pagina y ordena: mas reciente primero, sin repetir ni perder, con OCULTO y ELIMINADO a la vista")
+        void recorreElHistorial() throws Exception {
+            String producto = productoNuevo();
+            UUID autor = UUID.randomUUID();
+            UUID otro = UUID.randomUUID();
+            List<String> suyos = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                suyos.add(leer(comentar(producto, jugador(autor), "comentario " + i, null), "$.id"));
+                // Fechas distintas: el orden que se afirma es el de publicacion.
+                Thread.sleep(5);
+            }
+            String ajeno = leer(comentar(producto, jugador(otro), "de otra persona", null), "$.id");
+
+            // Uno oculto y otro eliminado por moderacion, y otro retirado por su propio autor.
+            assertEquals(200, pedir("POST", "/api/v1/comentarios/moderacion/" + suyos.get(0) + "/decision",
+                    moderadora(), "{\"accion\":\"OCULTAR\",\"motivo\":\"prueba de historial\"}").statusCode());
+            assertEquals(200, pedir("POST", "/api/v1/comentarios/moderacion/" + suyos.get(1) + "/decision",
+                    moderadora(), "{\"accion\":\"ELIMINAR\",\"motivo\":\"prueba de historial\"}").statusCode());
+            assertEquals(204, pedir("DELETE", "/api/v1/products/" + producto + "/comments/" + suyos.get(2),
+                    jugador(autor), null).statusCode());
+
+            HttpResponse<String> primera = pedir("GET", historial(autor, "?pagina=0&tamano=2"), moderadora(), null);
+            HttpResponse<String> segunda = pedir("GET", historial(autor, "?pagina=1&tamano=2"), moderadora(), null);
+            HttpResponse<String> tercera = pedir("GET", historial(autor, "?pagina=2&tamano=2"), moderadora(), null);
+            HttpResponse<String> despues = pedir("GET", historial(autor, "?pagina=9&tamano=2"), moderadora(), null);
+            assertEquals(200, primera.statusCode(), primera.body());
+
+            List<String> vistos = new ArrayList<>();
+            vistos.addAll(leer(primera, "$.comentarios[*].id"));
+            vistos.addAll(leer(segunda, "$.comentarios[*].id"));
+            vistos.addAll(leer(tercera, "$.comentarios[*].id"));
+            List<String> esperados = new ArrayList<>(suyos);
+            java.util.Collections.reverse(esperados);
+            assertEquals(esperados, vistos, "del mas reciente al mas antiguo, sin repetir ni perder");
+            assertFalse(vistos.contains(ajeno), "el comentario de otra persona no es de este historial");
+
+            assertEquals(autor.toString(), leer(primera, "$.autorId"));
+            assertEquals(5, (Integer) leer(primera, "$.total"));
+            assertEquals(2, (Integer) leer(primera, "$.tamano"));
+            assertEquals(List.of(), leer(despues, "$.comentarios"));
+            assertEquals(5, (Integer) leer(despues, "$.total"), "el total no depende de la pagina pedida");
+
+            // Los estados retirados se ven, con su estado: es lo que el moderador necesita.
+            HttpResponse<String> todos = pedir("GET", historial(autor, ""), moderadora(), null);
+            List<String> estados = leer(todos, "$.comentarios[*].estado");
+            assertEquals(List.of("PUBLICADO", "PUBLICADO", "ELIMINADO", "ELIMINADO", "OCULTO"), estados);
+        }
+
+        @Test
+        @DisplayName("solo trae lo necesario para decidir y el tamano se recorta a 100")
+        void camposYTope() throws Exception {
+            String producto = productoNuevo();
+            UUID autor = UUID.randomUUID();
+            comentar(producto, jugador(autor), "un comentario", null);
+
+            HttpResponse<String> r = pedir("GET", historial(autor, "?tamano=5000"), moderadora(), null);
+
+            assertEquals(200, r.statusCode(), r.body());
+            assertEquals(100, (Integer) leer(r, "$.tamano"));
+            assertEquals("un comentario", leer(r, "$.comentarios[0].texto"));
+            assertEquals(producto, leer(r, "$.comentarios[0].productoId"));
+            assertEquals(false, leer(r, "$.comentarios[0].editado"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].imagenes"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].marcado"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].estrellas"));
+        }
+
+        @Test
+        @DisplayName("un autor sin comentarios es 200 con lista vacia y total 0; una jugadora no lo ve (403) ni sin token (401)")
+        void vacioYRoles() throws Exception {
+            UUID nadie = UUID.randomUUID();
+
+            HttpResponse<String> vacio = pedir("GET", historial(nadie, ""), moderadora(), null);
+            assertEquals(200, vacio.statusCode(), vacio.body());
+            assertEquals(List.of(), leer(vacio, "$.comentarios"));
+            assertEquals(0, (Integer) leer(vacio, "$.total"));
+
+            assertEquals(403, pedir("GET", historial(nadie, ""), jugador(UUID.randomUUID()), null).statusCode());
+            assertEquals(401, pedir("GET", historial(nadie, ""), null, null).statusCode());
+        }
+
+        @Test
+        @DisplayName("V6 crea el indice por autor con las columnas y el orden de la consulta")
+        void indiceDeV6() {
+            String definicion = jdbc.queryForObject(
+                    "select indexdef from pg_indexes where tablename = 'comentarios' "
+                            + "and indexname = 'idx_comentarios_por_autor'",
+                    String.class);
+
+            assertTrue(definicion.contains("(autor_id, fecha_publicacion DESC, id DESC)"), definicion);
         }
     }
 
