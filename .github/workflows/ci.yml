@@ -81,6 +81,12 @@ jobs:
           # servicio de tercer nivel: services/<equipo>/<servicio>/...
           ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
           CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/[^/]+/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+          # D-42: el equilibrio de las misiones se comprueba con el motor de
+          # combate real (BalanceDeMisionesTest, en motor-combate). Si cambia
+          # una semilla de misiones, tambien corre la CI de motor-combate.
+          if echo "$ARCHIVOS" | grep -qE '^services/contenido/misiones/src/main/resources/semilla/'; then
+            CARPETAS=$(printf '%s\nservices/contenido/motor-combate\n' "$CARPETAS" | grep -v '^$' | sort -u)
+          fi
 
           # 3) Para cada carpeta, decidir la herramienta de build mirando si
           # existe build.gradle (Gradle) o pom.xml (Maven) ahi mismo. Una

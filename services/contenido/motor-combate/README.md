@@ -78,6 +78,13 @@ gasta el azar de la partida, y el mismo estado da la misma decisión.
 | `NORMAL` | 12 | no | nunca |
 | `DIFICIL` | 24 | sí | nunca |
 
+**Equilibrio de las misiones** (D-42). `BalanceDeMisionesTest` juega cada
+misión publicada por el servicio de misiones —lee sus semillas como datos, no
+su código— con este motor, como la simulación de ese servicio (encuentros en
+orden, vida arrastrada, poder y cargas de cero en cada duelo, 100 rondas por
+duelo, enemigos en el nivel recomendado). La CI de motor-combate corre también
+cuando cambia una semilla de misiones.
+
 **Simulaciones** (`SimuladorDeCombates`, partidas completas contra el motor
 real). `SimulacionDeLaMaquinaTest` corre en CI con semillas fijas: matriz 8×8
 de prototipos en niveles 1 y 8, 3 contra 3 con sanadores en las tres

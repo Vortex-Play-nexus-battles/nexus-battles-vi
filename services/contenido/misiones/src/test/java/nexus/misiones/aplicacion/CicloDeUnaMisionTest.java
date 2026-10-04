@@ -150,6 +150,32 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
+    @DisplayName("D-42: los enemigos pelean en el nivel recomendado de la misión (7.8.13), no en el del héroe")
+    void enemigosEnElNivelDeLaMision() {
+        // El heroe es de nivel 1 y el Templo recomienda el 8.
+        enviar("templo-olvidado");
+        ahora.set(INICIO.plus(Duration.ofHours(12)));
+
+        trabajo.ejecutar();
+
+        // Guardianes y Espectros (y el jefe) se piden en el nivel 8; ninguno en el 1.
+        assertThat(heroes.nivelesPedidos).contains("Guerrero Tanque@8", "Mago Fuego@8")
+                .doesNotContain("Guerrero Tanque@1", "Mago Fuego@1");
+    }
+
+    @Test
+    @DisplayName("D-42: una misión sin nivel recomendado (la provisional de DEV) pelea en el nivel del héroe")
+    void sinNivelRecomendadoElDelHeroe() {
+        enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        // El jefe de prueba (Guerrero Tanque) en el nivel del heroe, 1.
+        assertThat(heroes.nivelesPedidos).contains("Guerrero Tanque@1");
+    }
+
+    @Test
     @DisplayName("si el heroe cae la mision queda Fallida: sin creditos, con la experiencia de lo que derroto")
     void fallida() {
         motor.danoDeLosEnemigos = 1000;
