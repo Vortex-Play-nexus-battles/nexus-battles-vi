@@ -7,12 +7,12 @@ const INCIERTO =
 
 // B8 — desde ms-subastas-publicar.yaml 1.0.0 los rechazos de negocio llevan
 // `motivo`, un código estable: manda sobre el texto. El incremento sin
-// configurar no es una avería ni un resultado incierto: es una decisión del PO
-// pendiente, y se dice así.
+// configurar no es una avería ni un resultado incierto: falta un parámetro de
+// administración (D-43 lo fija en 5 créditos), y se dice así.
 const MOTIVOS = new Map([
   [
     'INCREMENTO_MINIMO_NO_CONFIGURADO',
-    'DECISIÓN PO pendiente: el incremento mínimo entre pujas todavía no está configurado en administración. No se pueden publicar subastas hasta que un administrador lo fije.',
+    'El incremento mínimo entre pujas no está configurado en administración: no se pueden publicar subastas hasta que un administrador lo fije.',
   ],
   [
     'LIMITE_PUBLICACIONES_ACTIVAS',

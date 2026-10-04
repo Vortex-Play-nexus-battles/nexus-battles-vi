@@ -110,5 +110,6 @@ entorno — falta la superficie de administración real.
 `backend-spring.md` y el charter son explícitos: ante una decisión pendiente, **parar y preguntar,
 no asumir**. Las asunciones ya tomadas están listadas en el `README.md` de este servicio (guerra
 entre pujas automáticas resuelta de forma iterativa, saldo validado al configurar, anti-sniping no
-implementado) y el valor por defecto del incremento mínimo sigue `POR DEFINIR` (RF-SUB-004).
+implementado). El incremento mínimo ya no está por definir: D-43 lo fija en 5 créditos en
+admin-parametros (migración V5); el servicio lo lee de ahí y nunca lo escribe en el código.
 Validarlas con el Product Owner antes de construir encima.

@@ -4679,25 +4679,26 @@ export class ControladorSubastas {
   }
 
   /**
-   * B8 — el incremento minimo, dicho con honestidad: el de esta subasta si se
-   * sabe, y si administracion todavia no lo fijo, que es una decision del PO
-   * pendiente (RF-SUB-002). Nunca una cifra inventada.
+   * B8 / D-43 — el incremento minimo, el que dice el servidor: el de esta
+   * subasta (el que regia al publicarse) o, si no se sabe, el vigente de
+   * GET /subastas/reglas (5 creditos en admin-parametros). Nunca una cifra
+   * escrita aqui. Sin configurar, se dice que falta, sin inventar uno.
    */
   generarHtmlNotaIncremento(sub) {
     const propio =
       sub.incrementoMinimo === null || sub.incrementoMinimo === undefined
         ? null
         : Number(sub.incrementoMinimo);
-    const sinConfigurar = this.reglas && !this.reglas.incrementoMinimoConfigurado;
-    if (sinConfigurar) {
-      return `<p class="texto-pista" data-decision-po="incremento-minimo">Incremento mínimo entre pujas: <strong>DECISIÓN PO pendiente</strong> (sin configurar en administración).${
-        propio === null
-          ? ''
-          : ` Esta subasta usa ${formatearCreditos(propio)} cr, el que regía al publicarse.`
-      }</p>`;
+    const vigente =
+      this.reglas?.incrementoMinimoConfigurado && this.reglas.incrementoMinimo !== null
+        ? Number(this.reglas.incrementoMinimo)
+        : null;
+    const incremento = propio ?? vigente;
+    if (incremento !== null && Number.isFinite(incremento)) {
+      return `<p class="texto-pista" data-incremento-minimo>Incremento mínimo: ${formatearCreditos(incremento)} ${incremento === 1 ? 'crédito' : 'créditos'}</p>`;
     }
-    if (propio !== null) {
-      return `<p class="texto-pista">Incremento mínimo entre pujas en esta subasta: ${formatearCreditos(propio)} cr.</p>`;
+    if (this.reglas && !this.reglas.incrementoMinimoConfigurado) {
+      return '<p class="texto-pista" data-incremento-minimo="sin-configurar">El incremento mínimo entre pujas no está configurado en administración.</p>';
     }
     return '';
   }
