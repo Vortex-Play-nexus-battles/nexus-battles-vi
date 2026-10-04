@@ -798,6 +798,30 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
         );
         expect(despues.nivel).toBe(reporte.heroe.nivelAlcanzado ?? heroe.nivel);
 
+        // RF-NOT-004 (misiones.yaml 1.2.0, «Avisos»): el final de la misión
+        // llega a la bandeja de la jugadora, una vez, con su tipo y su detalle.
+        let aviso;
+        await expect
+          .poll(
+            async () => {
+              const r = await api.get(`/api/v1/users/${jugadora.claims.uid}/notifications`, {
+                headers: conToken(jugadora.token),
+              });
+              if (r.status() !== 200) {
+                return `HTTP ${r.status()}`;
+              }
+              aviso = ((await r.json()).avisos ?? []).find(
+                (a) => a.id === `mision-${ejecucionId}-aviso`,
+              );
+              return aviso ? 'en la bandeja' : 'todavía no';
+            },
+            { timeout: 90_000, message: 'el aviso de la misión no llegó a la bandeja' },
+          )
+          .toBe('en la bandeja');
+        expect(aviso.tipo).toBe('MISION');
+        expect(aviso.titulo).toContain(`«${reporte.mision.nombre}» terminó`);
+        expect(aviso.cuerpo).toContain('puntos de experiencia');
+
         // Sin callejón sin salida.
         const historia = await tablonDe(api, jugadora, 'HISTORIA');
         let siguiente;
@@ -837,7 +861,7 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           `«${reporte.mision.nombre}» (nivel 1) con «${reporte.heroe.nombre}» ` +
           `nivel 1: ${reporte.resultado} en ${reporte.combate.encuentros} encuentros ` +
           `(${minutos} min); +${Math.round(experiencia)} de experiencia en el inventario ` +
-          `(nivel ${despues.nivel}); ${siguiente}`
+          `(nivel ${despues.nivel}); aviso «${aviso.titulo}» en la bandeja; ${siguiente}`
         );
       });
 

@@ -114,9 +114,11 @@ public final class Dobles {
                     .filter(e -> !e.iniciadaEn().isBefore(desde)).count();
         }
 
+        /** Como Mongo: las listas para simular, la de plazo mas antiguo primero. */
         @Override
         public List<Ejecucion> vencidas(Instant ahora, int limite) {
-            return todas().stream().filter(e -> e.estado() == EstadoEjecucion.EN_PROGRESO && e.vencida(ahora))
+            return todas().stream().filter(e -> e.listaParaSimular(ahora))
+                    .sorted(Comparator.comparing(Ejecucion::terminaEn))
                     .limit(limite).toList();
         }
 
@@ -589,6 +591,33 @@ public final class Dobles {
                 throw fallar.get();
             }
             enviados.putIfAbsent(clave, asunto + " | " + mensaje);
+        }
+    }
+
+    /**
+     * La bandeja del jugador: guarda el aviso por su id y, como el servicio de
+     * verdad, un id repetido no crea un segundo aviso (alli es un 409 que el
+     * cliente da por entregado). {@code intentos} cuenta tambien los repetidos.
+     */
+    public static final class Avisos implements AvisosDeMisiones {
+        public final Map<String, String> enBandeja = new LinkedHashMap<>();
+        public final Map<String, String> destinatarios = new LinkedHashMap<>();
+        public final Map<String, Instant> creadas = new LinkedHashMap<>();
+        public final List<String> intentos = new ArrayList<>();
+        public final AtomicReference<RuntimeException> fallar = new AtomicReference<>();
+        /** Si no es nulo, falla solo a partir de este numero de avisos ya dados en la vuelta. */
+        public Integer fallarDespuesDe;
+
+        @Override
+        public void avisar(String jugadorUid, String id, String titulo, String cuerpo, Instant creadaEn) {
+            intentos.add(id);
+            if (fallar.get() != null && (fallarDespuesDe == null || enBandeja.size() >= fallarDespuesDe)) {
+                throw fallar.get();
+            }
+            if (enBandeja.putIfAbsent(id, titulo + " | " + cuerpo) == null) {
+                destinatarios.put(id, jugadorUid);
+                creadas.put(id, creadaEn);
+            }
         }
     }
 

@@ -9,8 +9,12 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
 import nexus.misiones.dominio.Ejecucion;
@@ -22,6 +26,8 @@ import nexus.misiones.dominio.EstadoEjecucion;
 import nexus.misiones.dominio.Misiones;
 import nexus.misiones.dominio.ParametrosDeRecompensa;
 import nexus.misiones.dominio.PasoDeLiquidacion;
+import nexus.misiones.dominio.RecompensasDeEjecucion;
+import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 import nexus.misiones.dominio.TransicionNoPermitida;
 import nexus.misiones.dominio.simulacion.Combatiente;
 import nexus.misiones.dominio.simulacion.EstadisticasDeCombate;
@@ -70,7 +76,11 @@ class CicloDeUnaMisionTest {
     private Dobles.Productos productos;
     private Dobles.Libro libro;
     private Dobles.Correo correo;
+    private Dobles.Avisos avisos;
     private Dobles.Directorio directorio;
+    private Dobles.Catalogo catalogo;
+    private ParametrosDeMisiones parametros;
+    private LiquidarEjecucion liquidar;
     private MatricularHeroe matricular;
     private TrabajoDeMisiones trabajo;
     private CancelarEjecucion cancelar;
@@ -85,8 +95,13 @@ class CicloDeUnaMisionTest {
     }
 
     private void prepararCon(List<EpicaDeTabla20> tabla20) {
+        prepararCon(tabla20, 20);
+    }
+
+    private void prepararCon(List<EpicaDeTabla20> tabla20, int lote) {
         ejecuciones = new Dobles.Ejecuciones();
-        inventario = new Dobles.Inventario().conHeroe("h-1", JUGADOR, "p-armas", true);
+        inventario = new Dobles.Inventario().conHeroe("h-1", JUGADOR, "p-armas", true)
+                .conHeroe("h-2", JUGADOR, "p-armas", true);
         productos = new Dobles.Productos();
         productos.prototipos.put("p-armas", "Guerrero Armas");
         heroes = new Dobles.Heroes();
@@ -94,26 +109,46 @@ class CicloDeUnaMisionTest {
         eventos = new Dobles.Eventos();
         libro = new Dobles.Libro();
         correo = new Dobles.Correo();
+        avisos = new Dobles.Avisos();
         directorio = new Dobles.Directorio();
         directorio.contactos.put(JUGADOR, new DirectorioDeJugadores.Contacto("vorn@ejemplo.com", "vorn"));
-        ParametrosDeMisiones parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20,
-                true, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
-        Dobles.Catalogo catalogo = new Dobles.Catalogo(List.of(Misiones.templo(),
-                Misiones.historia("prueba-corta", List.of())), tabla20);
+        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), lote,
+                true, true, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
+        // «tras-la-corta» y «otra-tras-la-corta» piden «prueba-corta» (la historia se desbloquea en orden, 7.8.2).
+        catalogo = new Dobles.Catalogo(List.of(Misiones.templo(),
+                Misiones.historia("prueba-corta", List.of()),
+                Misiones.historiaTrasDe("tras-la-corta", "prueba-corta"),
+                Misiones.historiaTrasDe("otra-tras-la-corta", "prueba-corta")), tabla20);
         matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
                 heroes, parametros, reloj, () -> 7L);
-        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
-                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
-                new RotacionesPorDefectoDeEnemigos(heroes), parametros, reloj);
-        LiquidarEjecucion liquidar = new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio,
-                correo, parametros, reloj);
-        trabajo = new TrabajoDeMisiones(ejecuciones, simular, liquidar, parametros, reloj);
+        liquidar = new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio,
+                correo, avisos, parametros, reloj);
+        trabajo = new TrabajoDeMisiones(ejecuciones, simulador(Set.of()), liquidar, parametros, reloj);
         cancelar = new CancelarEjecucion(ejecuciones, liquidar, reloj);
     }
 
+    /** La simulacion de verdad, salvo para las ejecuciones «envenenadas», que heroes rechaza siempre. */
+    private SimularEjecucion simulador(Set<UUID> envenenadas) {
+        return new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametros, reloj) {
+            @Override
+            public Optional<Ejecucion> simular(Ejecucion ejecucion) {
+                if (envenenadas.contains(ejecucion.id())) {
+                    throw new RechazoDelServicio("heroes", 404, "No existe ese prototipo");
+                }
+                return super.simular(ejecucion);
+            }
+        };
+    }
+
     private Ejecucion enviar(String mision) {
+        return enviar(mision, "h-1");
+    }
+
+    private Ejecucion enviar(String mision, String heroe) {
         return matricular.matricular(JUGADOR,
-                new SolicitudDeMatricula(mision, "h-1", List.of(), null, null)).ejecucion();
+                new SolicitudDeMatricula(mision, heroe, List.of(), null, null)).ejecucion();
     }
 
     @Test
@@ -268,18 +303,30 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
-    @DisplayName("si heroes o el motor no responden, la simulacion espera a la siguiente vuelta")
+    @DisplayName("si heroes o el motor no responden, la simulacion se aplaza y se repite al cumplirse la espera")
     void simulacionReintentable() {
         heroes.fallarAlDecidir = Dobles.caido("heroes");
         Ejecucion ejecucion = enviar("prueba-corta");
-        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        Instant vence = INICIO.plus(Duration.ofHours(1));
+        ahora.set(vence);
 
         trabajo.ejecutar();
-        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        Ejecucion aplazada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(aplazada.estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        assertThat(aplazada.proximoIntento()).isEqualTo(vence.plusSeconds(30));
+        assertThat(aplazada.ultimoError()).isNotBlank();
 
         heroes.fallarAlDecidir = null;
         trabajo.ejecutar();
-        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado())
+                .as("antes de la espera no se vuelve a intentar").isEqualTo(EstadoEjecucion.EN_PROGRESO);
+
+        ahora.set(vence.plusSeconds(30));
+        trabajo.ejecutar();
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(terminada.liquidacionPendiente()).isFalse();
+        assertThat(terminada.ultimoError()).as("el error de la simulacion ya no aplica").isNull();
     }
 
     @Test
@@ -422,6 +469,7 @@ class CicloDeUnaMisionTest {
         assertThat(eventos.escrituras).isZero();
 
         motor.fallar = null;
+        ahora.set(INICIO.plus(Duration.ofHours(1)).plusSeconds(30));
         trabajo.ejecutar();
 
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
@@ -441,6 +489,7 @@ class CicloDeUnaMisionTest {
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
 
         eventos.fallarAlGuardar = null;
+        ahora.set(INICIO.plus(Duration.ofHours(1)).plusSeconds(30));
         trabajo.ejecutar();
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
     }
@@ -477,5 +526,274 @@ class CicloDeUnaMisionTest {
         assertThat(deEnemigos).isNotEmpty();
         assertThat(deEnemigos).allSatisfy(t -> assertThat(t.rotaciones()).containsExactly(List.of("Golpe con escudo")));
         assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().estado()).isNotEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    // ------------------------------------------------- avisos (RF-NOT-004)
+
+    @Test
+    @DisplayName("RF-NOT-004: al terminar, la bandeja del jugador recibe la finalizacion con el detalle de cada recompensa")
+    void avisoDeFinalizacion() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        String id = "mision-" + ejecucion.id() + "-aviso";
+        assertThat(avisos.enBandeja).containsKey(id);
+        assertThat(avisos.enBandeja.get(id))
+                .startsWith("Tu misión «Misión prueba-corta» terminó con éxito | ")
+                .contains("Ganó 7 créditos", "puntos de experiencia", "El reporte completo está en Misiones");
+        assertThat(avisos.destinatarios).containsEntry(id, JUGADOR);
+        assertThat(avisos.creadas).as("la hora del hecho, igual en cada reintento").containsEntry(id,
+                terminada.terminadaEn());
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.AVISO)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(terminada.liquidacionPendiente()).isFalse();
+    }
+
+    @Test
+    @DisplayName("RF-NOT-004: la primera vez que se completa avisa de las misiones que desbloquea; la segunda ya no")
+    void avisoDeMisionesDesbloqueadas() {
+        Ejecucion primera = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        trabajo.ejecutar();
+
+        assertThat(avisos.enBandeja).containsKeys(
+                "mision-" + primera.id() + "-aviso-desbloqueo-tras-la-corta",
+                "mision-" + primera.id() + "-aviso-desbloqueo-otra-tras-la-corta");
+        assertThat(avisos.enBandeja.get("mision-" + primera.id() + "-aviso-desbloqueo-tras-la-corta"))
+                .isEqualTo("Nueva misión disponible: «Misión tras-la-corta» | Completaste «Misión prueba-corta»: "
+                        + "ya puedes enviar un héroe a «Misión tras-la-corta».");
+        // Ni el Templo ni la propia misión se dan por desbloqueados: no la piden.
+        assertThat(avisos.enBandeja.keySet()).noneMatch(k -> k.endsWith("-templo-olvidado")
+                || k.endsWith("-aviso-desbloqueo-prueba-corta"));
+
+        ahora.set(INICIO.plus(Duration.ofHours(2)));
+        Ejecucion segunda = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(3)));
+        trabajo.ejecutar();
+
+        assertThat(avisos.enBandeja).containsKey("mision-" + segunda.id() + "-aviso");
+        assertThat(avisos.enBandeja.keySet()).noneMatch(k -> k.startsWith("mision-" + segunda.id() + "-aviso-desbloqueo"));
+        assertThat(ejecuciones.buscar(segunda.id()).orElseThrow().estadoDe(PasoDeLiquidacion.AVISO_DESBLOQUEO))
+                .as("ni siquiera queda el paso: solo la primera vez desbloquea").isNull();
+    }
+
+    @Test
+    @DisplayName("RF-NOT-004: una mision fallida avisa de su final y no desbloquea nada")
+    void avisoDeMisionFallida() {
+        motor.danoDeLosEnemigos = 1000;
+        motor.danoDelHeroe = 0;
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso"))
+                .startsWith("Tu misión «Misión prueba-corta» terminó: Vorn fue derrotado | ");
+        assertThat(avisos.enBandeja.keySet()).noneMatch(k -> k.contains("-aviso-desbloqueo-"));
+    }
+
+    @Test
+    @DisplayName("RF-NOT-004: la epica de Master obtenida tiene su propio aviso")
+    void avisoDeEpica() {
+        prepararCon(List.of(ARMAS_SEGURA));
+        heroes.vidaDeLosEnemigos = 5;
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso-epica"))
+                .startsWith("Obtuviste la épica «Segundo impulso» | ")
+                .endsWith("Ya está en tu inventario.");
+        assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso"))
+                .contains("Aprendió la épica «Segundo impulso».");
+    }
+
+    @Test
+    @DisplayName("si la bandeja no responde, el aviso se reintenta despues sin repetir ninguna entrega")
+    void avisoReintentable() {
+        avisos.fallar.set(Dobles.caido("notificaciones"));
+        Ejecucion ejecucion = enviar("prueba-corta");
+        Instant vence = INICIO.plus(Duration.ofHours(1));
+        ahora.set(vence);
+
+        trabajo.ejecutar();
+
+        Ejecucion pendiente = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(pendiente.estadoDe(PasoDeLiquidacion.LIBERACION)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(pendiente.estadoDe(PasoDeLiquidacion.CREDITOS)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(pendiente.estadoDe(PasoDeLiquidacion.AVISO)).isEqualTo(EstadoDePaso.PENDIENTE);
+        assertThat(pendiente.proximoIntento()).isEqualTo(vence.plusSeconds(30));
+
+        avisos.fallar.set(null);
+        ahora.set(vence.plusSeconds(30));
+        trabajo.ejecutar();
+
+        Ejecucion liquidada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(liquidada.liquidacionPendiente()).isFalse();
+        assertThat(avisos.enBandeja).containsKey("mision-" + ejecucion.id() + "-aviso");
+        assertThat(libro.acreditado).hasSize(1);
+        assertThat(inventario.llamadas.stream().filter(l -> l.startsWith("liberar"))).hasSize(1);
+        assertThat(correo.enviados).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("un rechazo definitivo de la bandeja no se reintenta ni toca lo ya entregado")
+    void avisoRechazado() {
+        avisos.fallar.set(new RechazoDelServicio("notificaciones", 400, "El titulo pasa de 200 caracteres"));
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.AVISO)).isEqualTo(EstadoDePaso.FALLIDO);
+        assertThat(terminada.motivoDe(PasoDeLiquidacion.AVISO)).contains("400");
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.CREDITOS)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(terminada.liquidacionPendiente()).isFalse();
+    }
+
+    @Test
+    @DisplayName("si la vuelta se corta a mitad de los avisos de desbloqueo, el reintento no duplica los ya dados")
+    void avisosDeDesbloqueoSinDuplicar() {
+        Ejecucion ejecucion = enviar("prueba-corta");
+        Instant vence = INICIO.plus(Duration.ofHours(1));
+        ahora.set(vence);
+        // Llegan la finalizacion y el primer desbloqueo; el segundo encuentra la bandeja caida.
+        avisos.fallar.set(Dobles.caido("notificaciones"));
+        avisos.fallarDespuesDe = 2;
+
+        trabajo.ejecutar();
+        assertThat(avisos.enBandeja).hasSize(2);
+
+        avisos.fallar.set(null);
+        ahora.set(vence.plusSeconds(30));
+        trabajo.ejecutar();
+
+        String primero = "mision-" + ejecucion.id() + "-aviso-desbloqueo-tras-la-corta";
+        assertThat(avisos.enBandeja).hasSize(3).containsKeys(primero,
+                "mision-" + ejecucion.id() + "-aviso-desbloqueo-otra-tras-la-corta");
+        assertThat(avisos.intentos.stream().filter(primero::equals))
+                .as("se repitio la peticion, con el mismo id, y la bandeja no lo duplico").hasSize(2);
+        assertThat(ejecuciones.buscar(ejecucion.id()).orElseThrow().liquidacionPendiente()).isFalse();
+    }
+
+    // ------------------------------------------------ endurecimiento (FASE 2)
+
+    @Test
+    @DisplayName("una ejecucion que no se puede simular se aplaza y deja pasar a las demas: no bloquea la cola")
+    void simulacionImposibleNoBloqueaLaCola() {
+        prepararCon(List.of(), 1);
+        Ejecucion envenenada = enviar("prueba-corta", "h-1");
+        Ejecucion sana = enviar("templo-olvidado", "h-2");
+        trabajo = new TrabajoDeMisiones(ejecuciones, simulador(Set.of(envenenada.id())), liquidar, parametros, reloj);
+        Instant despues = INICIO.plus(Duration.ofHours(12));
+        ahora.set(despues);
+
+        // Lote de uno: la envenenada vence antes, asi que es la primera de la cola.
+        trabajo.ejecutar();
+        trabajo.ejecutar();
+
+        assertThat(ejecuciones.buscar(sana.id()).orElseThrow().estado())
+                .as("la segunda vuelta ya no se la come la envenenada").isNotEqualTo(EstadoEjecucion.EN_PROGRESO);
+        Ejecucion aplazada = ejecuciones.buscar(envenenada.id()).orElseThrow();
+        assertThat(aplazada.estado()).isEqualTo(EstadoEjecucion.EN_PROGRESO);
+        assertThat(aplazada.proximoIntento()).isEqualTo(despues.plusSeconds(30));
+        assertThat(aplazada.ultimoError()).contains("404");
+        assertThat(inventario.bloqueados).as("su heroe sigue en mision: el jugador la puede cancelar")
+                .containsKey("h-1").doesNotContainKey("h-2");
+
+        // Y el jugador la puede cancelar: el heroe vuelve.
+        cancelar.cancelar(JUGADOR, envenenada.id());
+        assertThat(inventario.bloqueados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("la espera entre intentos de simular crece y tiene un tope corto (cinco minutos)")
+    void esperaDeLaSimulacionConTope() {
+        Ejecucion envenenada = enviar("prueba-corta");
+        trabajo = new TrabajoDeMisiones(ejecuciones, simulador(Set.of(envenenada.id())), liquidar, parametros, reloj);
+        Instant momento = INICIO.plus(Duration.ofHours(1));
+        List<Duration> esperas = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            ahora.set(momento);
+            trabajo.ejecutar();
+            Instant siguiente = ejecuciones.buscar(envenenada.id()).orElseThrow().proximoIntento();
+            esperas.add(Duration.between(momento, siguiente));
+            momento = siguiente;
+        }
+
+        assertThat(esperas).containsExactly(Duration.ofSeconds(30), Duration.ofSeconds(60), Duration.ofSeconds(120),
+                Duration.ofSeconds(240), Ejecucion.ESPERA_MAXIMA_ANTES_DE_SIMULAR,
+                Ejecucion.ESPERA_MAXIMA_ANTES_DE_SIMULAR);
+    }
+
+    @Test
+    @DisplayName("reproducible: una simulacion cortada y repetida da el mismo resultado que una sin cortes (misma semilla)")
+    void simulacionReproducible() {
+        Ejecucion limpia = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        trabajo.ejecutar();
+        Ejecucion sinCortes = ejecuciones.buscar(limpia.id()).orElseThrow();
+
+        prepararCon(List.of());
+        ahora.set(INICIO);
+        Ejecucion cortada = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        motor.fallar = Dobles.caido("motor-combate");
+        trabajo.ejecutar();
+        motor.fallar = null;
+        ahora.set(INICIO.plus(Duration.ofHours(1)).plusSeconds(30));
+        trabajo.ejecutar();
+        Ejecucion repetida = ejecuciones.buscar(cortada.id()).orElseThrow();
+
+        assertThat(repetida.semilla()).isEqualTo(sinCortes.semilla());
+        ResultadoDeMision resultado = repetida.resultado();
+        assertThat(resultado).isEqualTo(sinCortes.resultado());
+        RecompensasDeEjecucion recompensas = repetida.recompensas();
+        assertThat(recompensas).isEqualTo(sinCortes.recompensas());
+    }
+
+    @Test
+    @DisplayName("una mision completada se puede repetir y su experiencia se vuelve a sumar al heroe")
+    void repetibleConExperienciaAcumulada() {
+        Ejecucion primera = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+        trabajo.ejecutar();
+        double tras1 = inventario.experienciaSumada.get("h-1");
+
+        ahora.set(INICIO.plus(Duration.ofHours(2)));
+        Ejecucion segunda = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(3)));
+        trabajo.ejecutar();
+
+        assertThat(segunda.id()).isNotEqualTo(primera.id());
+        assertThat(ejecuciones.buscar(segunda.id()).orElseThrow().estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(inventario.experienciaSumada.get("h-1"))
+                .isEqualTo(tras1 + ejecuciones.buscar(segunda.id()).orElseThrow().recompensas().experiencia());
+        assertThat(inventario.bloqueados).isEmpty();
+    }
+
+    @Test
+    @DisplayName("con los avisos apagados no hay pasos de aviso: lo demas se liquida igual")
+    void sinAvisos() {
+        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20,
+                true, false, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
+        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
+                new PerfilDeCombateDelHeroe(inventario, productos, heroes),
+                new RotacionesPorDefectoDeEnemigos(heroes), parametros, reloj);
+        trabajo = new TrabajoDeMisiones(ejecuciones, simular, liquidar, parametros, reloj);
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.pasos()).doesNotContainKeys(PasoDeLiquidacion.AVISO, PasoDeLiquidacion.AVISO_EPICA,
+                PasoDeLiquidacion.AVISO_DESBLOQUEO);
+        assertThat(avisos.enBandeja).isEmpty();
+        assertThat(terminada.liquidacionPendiente()).isFalse();
     }
 }

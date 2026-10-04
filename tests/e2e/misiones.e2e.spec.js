@@ -384,6 +384,42 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     expect(prueba).toMatchObject({ estado: 'COMPLETADA', ultimaEjecucionId: ejecucionId });
   });
 
+  test('4b · RF-NOT-004: la bandeja de la jugadora recibe el aviso de la misión con sus recompensas', async () => {
+    // misiones lo deja en notificaciones al liquidar (misiones.yaml 1.2.0,
+    // «Avisos»): tipo MISION, id estable por ejecución, título y detalle.
+    let aviso;
+    await expect
+      .poll(
+        async () => {
+          const r = await api.get(`/api/v1/users/${jugadora.claims.uid}/notifications`, {
+            headers: conToken(jugadora.token),
+          });
+          if (r.status() !== 200) {
+            return `HTTP ${r.status()}`;
+          }
+          aviso = ((await r.json()).avisos ?? []).find(
+            (a) => a.id === `mision-${ejecucionId}-aviso`,
+          );
+          return aviso ? 'en la bandeja' : 'todavía no';
+        },
+        { timeout: 30_000, message: 'el aviso de la misión no llegó a la bandeja' },
+      )
+      .toBe('en la bandeja');
+
+    expect(aviso).toMatchObject({ tipo: 'MISION', leida: false });
+    expect(aviso.titulo).toBe(`Tu misión «${PRUEBA.nombre}» terminó con éxito`);
+    expect(aviso.cuerpo).toContain(`Ganó ${CREDITOS_DE_PRUEBA} créditos`);
+    expect(aviso.cuerpo).toContain('puntos de experiencia');
+    // Un solo aviso por ejecución, aunque el trabajo haya dado varias vueltas.
+    const r = await api.get(`/api/v1/users/${jugadora.claims.uid}/notifications`, {
+      headers: conToken(jugadora.token),
+    });
+    const deEstaMision = ((await r.json()).avisos ?? []).filter((a) =>
+      a.id.startsWith(`mision-${ejecucionId}-aviso`),
+    );
+    expect(deEstaMision.map((a) => a.id)).toEqual([`mision-${ejecucionId}-aviso`]);
+  });
+
   test('5 · la pestaña Estrategia carga la guardada del héroe y la vuelve a guardar', async ({
     page,
   }) => {

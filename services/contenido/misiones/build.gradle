@@ -2,7 +2,8 @@ plugins {
     id 'nexus.spring-conventions'
     // Servidor de recursos contra el JWKS de ms-identidad (ADR-002/ADR-005)
     // y credencial de servicio por client_credentials para hablar con
-    // heroes, motor, inventario, ms-finanzas, correo e identidad (ADR-001).
+    // heroes, motor, inventario, ms-finanzas, correo, notificaciones e
+    // identidad (ADR-001).
     // Las reglas de ruta viven en nexus/misiones/configuracion/SeguridadConfig.
     id 'nexus.seguridad-conventions'
 }
@@ -13,7 +14,7 @@ version = '0.0.1-SNAPSHOT'
 // La pila comun (Boot 4.1, Java 21, webmvc, actuator, JUnit 5, JaCoCo y la
 // instrumentacion de plataforma-observabilidad) baja de las convenciones.
 // Aqui solo lo propio de misiones: su base documental (MongoDB, como el resto
-// de contenido) y la degradacion controlada de sus siete llamadas salientes.
+// de contenido) y la degradacion controlada de sus ocho llamadas salientes.
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
     implementation 'org.springframework.boot:spring-boot-starter-validation'

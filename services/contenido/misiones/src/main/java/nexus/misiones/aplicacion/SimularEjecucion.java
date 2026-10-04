@@ -142,7 +142,7 @@ public class SimularEjecucion {
                 resultado, primeraVez, parametros.recompensas(), azar);
 
         eventos.reemplazar(ejecucion.id(), simulacion.eventos());
-        ejecucion.terminar(resultado, recompensas, parametros.correoActivo(), ahora);
+        ejecucion.terminar(resultado, recompensas, parametros.correoActivo(), parametros.avisosActivos(), ahora);
         Ejecucion guardada = ejecuciones.guardar(ejecucion);
         BITACORA.info("Ejecucion {} simulada: {} en {} turnos, {} enemigos derrotados, {} de experiencia",
                 guardada.id(), guardada.estado(), resultado.turnos(), resultado.encuentrosCompletados(),

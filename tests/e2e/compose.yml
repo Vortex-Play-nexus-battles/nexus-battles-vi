@@ -347,7 +347,8 @@ services:
   # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
   # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
   # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
-  # mision dura dos segundos. Sin correo en este banco: va apagado.
+  # mision dura dos segundos. Sin correo en este banco: va apagado. Los avisos
+  # (RF-NOT-004) si: van a la bandeja real de notificaciones.
   srv-misiones:
     build:
       context: ../..
@@ -366,7 +367,9 @@ services:
       MOTOR_COMBATE_URL: http://srv-motor-combate:8080
       CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
       IDENTIDAD_URL: http://srv-ms-identidad:8089
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
       MISIONES_CORREO_ACTIVO: "false"
+      MISIONES_AVISOS_ACTIVO: "true"
       MISIONES_SEMILLA_PROVISIONAL: "true"
       MISIONES_SEMILLA_DE_PRUEBAS: "7"
       MISIONES_SEGUNDOS_POR_HORA: "2"
@@ -380,6 +383,7 @@ services:
       srv-productos: { condition: service_healthy }
       srv-motor-combate: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
       interval: 5s
