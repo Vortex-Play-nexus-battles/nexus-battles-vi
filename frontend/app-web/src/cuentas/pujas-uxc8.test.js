@@ -466,6 +466,82 @@ describe('el historial del detalle', () => {
   });
 });
 
+describe('G5 — la ficha dice lo de 7.7.9 y si es tuya, sin el uid del vendedor', () => {
+  const ficha = (extra = {}) => ({
+    id: 'sub-1',
+    estado: 'ACTIVA',
+    precioInicial: '1000',
+    ofertaVigente: '1350',
+    pujaMinimaSiguiente: '1355',
+    incrementoMinimo: '5',
+    compraInmediataDisponible: true,
+    cantidadPujas: 3,
+    fechaFin: '2026-10-09T15:30:00Z',
+    esMaestroDeJuego: false,
+    metodoPago: 'CREDITOS',
+    vendedorId: null,
+    vendedorApodo: 'forjador',
+    reputacionVendedor: null,
+    vistas: 4,
+    esPropia: false,
+    ...extra,
+  });
+
+  test('precio mínimo, método de pago y fecha de fin, y la puja que va ganando marcada', async () => {
+    const api = apiFalsa({
+      ficha: jest.fn(async () => ficha()),
+      historial: jest.fn(async () => [
+        {
+          id: 'p2',
+          monto: '1350',
+          tipo: 'MANUAL',
+          estado: 'ACTIVA',
+          creadaEn: '2026-09-25T10:05:00Z',
+          esTuya: false,
+          postor: 'b***a',
+        },
+        {
+          id: 'p1',
+          monto: '1300',
+          tipo: 'MANUAL',
+          estado: 'SUPERADA',
+          creadaEn: '2026-09-25T10:00:00Z',
+          esTuya: true,
+          postor: 'y***o',
+        },
+      ]),
+    });
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    await esperar();
+
+    const datos = contenedor.querySelector('.datos-subasta');
+    expect(datos.querySelector('[data-zona="precio-minimo"] dd').textContent).toMatch(/1\.000 cr/);
+    expect(datos.querySelector('[data-zona="metodo-pago"] dd').textContent).toBe(
+      'Créditos del juego',
+    );
+    expect(datos.querySelector('[data-zona="fecha-fin"] dd').textContent).not.toBe('');
+    const filas = contenedor.querySelectorAll('.item-historial');
+    expect(filas[0].dataset.ganadora).toBe('si');
+    expect(filas[0].querySelector('.historial-ganadora').textContent).toBe('Va ganando');
+    expect(filas[1].dataset.ganadora).toBeUndefined();
+    ctrl.destruir();
+  });
+
+  test('si la ficha dice que es tuya, no se ofrece pujar aunque el listado no lo supiera', async () => {
+    const api = apiFalsa({ ficha: jest.fn(async () => ficha({ esPropia: true })) });
+    const { contenedor, ctrl } = montar({ api });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    await esperar();
+
+    expect(contenedor.querySelector('.aviso-subasta-propia')).not.toBeNull();
+    expect(contenedor.querySelector('#btn-pujar-manual').disabled).toBe(true);
+    ctrl.destruir();
+  });
+});
+
 describe('repintar no roba el foco', () => {
   test('quien escribe un monto sigue en el campo tras un repintado', async () => {
     const { contenedor, ctrl } = montar({ api: apiFalsa() });

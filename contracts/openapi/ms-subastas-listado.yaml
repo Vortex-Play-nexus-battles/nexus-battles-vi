@@ -23,7 +23,18 @@ info:
       (`contracts/websocket/subastas.yaml`). El vendedor sigue siendo el `uid`
       estable del token (ADR-002): la decisión de identificador que el
       borrador dejaba abierta ya está tomada.
-  version: "1.1.1"
+
+    - 1.2.0 (G5, continuación técnica del 4-oct): privacidad y 7.7.9. El
+      listado, la ficha y el canal en vivo los lee cualquiera, también sin
+      cuenta, y llevaban el `uid` del vendedor (`vendedorId`; la ficha, junto
+      a su apodo): permitía seguir a un jugador por todo lo que vende. Desde
+      ahora `vendedorId` va siempre a null (se conserva en la forma para no
+      romper a quien lo leía) y el servidor dice `esPropia`, comparando con
+      el token de quien pide el listado o la ficha si lo trae (sin token,
+      false). `ordenarPor` gana `TIEMPO_RESTANTE_DESC` («finaliza último») y
+      `FECHA_PUBLICACION_ASC` («más antiguos»), los dos sentidos que 7.7.9
+      pide y faltaban. Todo aditivo o un campo que pasa a admitir null: menor.
+  version: "1.2.0"
   x-historia: HU-SUB-011, HU-SUB-001, HU-SUB-004 (7.7.9)
 
 paths:
@@ -90,8 +101,12 @@ paths:
           in: query
           schema:
             type: string
-            enum: [PRECIO_ASC, PRECIO_DESC, TIEMPO_RESTANTE, PUJAS, FECHA_PUBLICACION, POPULARIDAD]
+            enum: [PRECIO_ASC, PRECIO_DESC, TIEMPO_RESTANTE, TIEMPO_RESTANTE_DESC, PUJAS, FECHA_PUBLICACION, FECHA_PUBLICACION_ASC, POPULARIDAD]
             default: FECHA_PUBLICACION
+          description: >
+            `TIEMPO_RESTANTE` finaliza primero; `TIEMPO_RESTANTE_DESC` (1.2.0)
+            finaliza último. `FECHA_PUBLICACION` más recientes (con el Maestro
+            de Juego primero); `FECHA_PUBLICACION_ASC` (1.2.0) más antiguos.
       responses:
         '200':
           description: Página de subastas activas.
@@ -236,8 +251,19 @@ components:
         fechaFin: { type: string, format: date-time }
         esMaestroDeJuego: { type: boolean }
         vendedorId:
-          type: string
-          description: El `uid` estable del vendedor (claim `uid` del token, ADR-002).
+          type: [string, 'null']
+          deprecated: true
+          description: >
+            Hasta 1.1.1, el `uid` del vendedor. Desde 1.2.0 siempre null: el
+            listado y el canal son públicos y el `uid` permitía seguir a un
+            jugador. Para saber si es tuya, `esPropia`.
+        esPropia:
+          type: boolean
+          description: >
+            1.2.0 — true si quien pide el listado (por su token, si manda uno de
+            usuario) es el vendedor; false sin token. No viaja en el canal en
+            vivo, que va a todos: la interfaz relee el listado al recibir un
+            cambio.
 
     PaginaDeSubastas:
       type: object
@@ -343,7 +369,16 @@ components:
         metodoPago:
           type: string
           enum: [CREDITOS, DINERO_REAL]
-        vendedorId: { type: string, format: uuid }
+        vendedorId:
+          type: [string, 'null']
+          format: uuid
+          deprecated: true
+          description: >
+            Hasta 1.1.1, el `uid` del vendedor (junto a su apodo). Desde 1.2.0
+            siempre null; para saber si es tuya, `esPropia`.
+        esPropia:
+          type: boolean
+          description: 1.2.0 — true si quien pide la ficha (por su token) es el vendedor.
         vendedorApodo:
           type: [string, 'null']
           description: Apodo del vendedor en el momento de publicar.

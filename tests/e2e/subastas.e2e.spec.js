@@ -540,6 +540,25 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     expect(Number(detalle.pujaMinimaSiguiente)).toBe(10);
     expect(detalle.compraInmediataDisponible).toBe(true);
     expect(detalle.reputacionVendedor).toBeTruthy();
+
+    // G5 (listado 1.2.0): ni la ficha ni el listado públicos llevan el uid de
+    // la vendedora; si es suya lo dice el servidor con el token de quien mira.
+    const uid = vendedora.claims.uid;
+    const anonima = await (await api.get(`/api/v1/subastas/${subastaId}`)).text();
+    expect(anonima).not.toContain(uid);
+    expect(JSON.parse(anonima)).toMatchObject({ vendedorId: null, esPropia: false });
+    const suya = await (
+      await api.get(`/api/v1/subastas/${subastaId}`, { headers: conToken(vendedora.token) })
+    ).json();
+    expect(suya.esPropia).toBe(true);
+    const listado = await (
+      await api.get('/api/v1/subastas?page=0&size=50&ordenarPor=FECHA_PUBLICACION', {
+        headers: conToken(vendedora.token),
+      })
+    ).text();
+    expect(listado).not.toContain(uid);
+    const fila = JSON.parse(listado).contenido.find((s) => s.id === subastaId);
+    expect(fila).toMatchObject({ esPropia: true, vendedorId: null });
   });
 
   test('seguirla la pone en la lista de seguimiento de la compradora', async () => {

@@ -85,7 +85,13 @@ public class MotorPujasService {
      */
     public Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
                       ContextoParticipacion contexto, String idempotencyKey, TipoPuja tipo) {
-        validarReglasDeParticipacion(subasta, jugadorId, monto, contexto);
+        // G5 (7.7.10, 50 pujas activas): subir la propia puja vigente la
+        // reemplaza (pasa a SUPERADA), no suma una activa mas. Sin descontarla,
+        // con exactamente 50 activas no se podia mejorar ni la que ya se iba
+        // ganando.
+        boolean reemplazaLaPropia = pujaVigente != null && jugadorId.equals(pujaVigente.getJugadorId());
+        validarReglasDeParticipacion(subasta, jugadorId, monto,
+                reemplazaLaPropia ? contexto.sinContarUnaActiva() : contexto);
 
         ReservaCredito reserva = creditoClient.reservar(jugadorId, monto, subasta.getId(), idempotencyKey);
 

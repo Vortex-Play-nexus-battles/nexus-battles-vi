@@ -559,6 +559,24 @@ body {
   color: var(--texto-2);
 }
 
+/* G5 (7.7.9): precio mínimo, método de pago y fecha de fin, bajo el reloj. */
+.datos-subasta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+}
+
+.datos-subasta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.historial-ganadora {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
 /* Historial */
 .lista-historial {
   list-style: none;
