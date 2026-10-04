@@ -150,7 +150,9 @@ class PujaAutomaticaApplicationServiceTest {
         creditoClient.acreditar(jugador, new BigDecimal("1000"));
         when(subastaRepository.findById(subasta.getId())).thenReturn(Optional.of(subasta));
 
-        // La siguiente oferta valida es 110; un limite de 105 no alcanza nunca.
+        // Ya hay una oferta de 100 de otro: la siguiente valida es 110, y un
+        // limite de 105 no alcanza nunca.
+        subasta.setMejorPostorId(UUID.randomUUID());
         PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
                 () -> servicio.configurar(subasta.getId(), jugador, new BigDecimal("105")));
 

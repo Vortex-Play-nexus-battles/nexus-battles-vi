@@ -12,12 +12,70 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* UX-GAME-1 — el fondo del `body` se propaga al lienzo y se posiciona
+     respecto a la raiz. Una vista corta (un dialogo sobre nada, como la
+     verificacion de heroe) dejaba la raiz de 40 px de alto y la atmosfera
+     se repetia en bandas. Con la raiz de al menos una pantalla, el degradado
+     cubre siempre la ventana entera. */
+  min-height: 100%;
+}
+
+/* =======================================================================
+   Tinta contextual — UX-GAME-1
+   -----------------------------------------------------------------------
+   Desde UX-GAME-1 la pagina entera vive sobre la atmosfera del Nexo (indigo
+   oscuro con halos), y las tarjetas, dialogos y tablas siguen siendo claras.
+   El mismo texto tiene, por tanto, dos colores posibles segun donde caiga:
+   claro sobre la atmosfera, oscuro sobre una superficie.
+
+   Eso no se resuelve cambiando `--texto`: `--texto` es la paleta, y la paleta
+   se redefine en alto contraste. Se resuelve con una capa por encima, la
+   TINTA: cinco variables de contexto que cada superficie clara vuelve a
+   poner en oscuro (`componentes.css`, «Superficies claras»). Los titulos,
+   `.t-meta`, los enlaces y las etiquetas leen la tinta, no la paleta, y asi
+   salen bien en los dos sitios sin saber en cual estan.
+
+   Son variables de CONTEXTO y no de paleta: apuntan siempre a un token, nunca
+   a un color; por eso viven aqui y no en tokens.css, y por eso una hoja de
+   vista PUEDE ponerlas sobre una superficie propia (`--tinta: var(--texto)`)
+   sin tapar la paleta ni el alto contraste. */
+:root {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
 }
 
 body {
   margin: 0;
-  background: var(--fondo);
-  color: var(--texto);
+  /* La atmosfera del Nexo, antes solo del portal de entrada. Color plano
+     primero: si `color-mix` no esta disponible, queda el cromo y sigue siendo
+     correcto. Los halos son porcentajes del cuerpo, asi que en una pagina
+     larga se estiran en vez de repetirse; no hay `background-attachment:
+     fixed`, que en movil repinta la pagina entera en cada desplazamiento. */
+  background: var(--cromo);
+  background-image:
+    radial-gradient(
+      120% 80% at 15% 0%,
+      color-mix(in srgb, var(--acento-relleno) 38%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      90% 70% at 100% 100%,
+      color-mix(in srgb, var(--primaria) 30%, transparent),
+      transparent 55%
+    ),
+    linear-gradient(180deg, var(--cromo-elevado), var(--cromo) 55%);
+  background-repeat: no-repeat;
+  /* Sobre la atmosfera la tinta es clara. Las superficies la devuelven a
+     oscuro; ver arriba. */
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  --tinta-enlace: var(--enlace-sobre-cromo);
+  --tinta-enlace-hover: var(--texto-sobre-color);
+  color: var(--tinta);
   font-family: var(--t-cuerpo-familia);
   font-size: var(--t-cuerpo-tam);
   font-weight: var(--t-cuerpo-peso);
@@ -126,7 +184,7 @@ h1, .t-titulo {
   font-size: var(--t-titulo-tam);
   font-weight: var(--t-titulo-peso);
   line-height: var(--t-titulo-alto);
-  color: var(--texto);
+  color: var(--tinta);
 }
 
 h2, .t-subtitulo {
@@ -135,7 +193,7 @@ h2, .t-subtitulo {
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-subtitulo-peso);
   line-height: var(--t-subtitulo-alto);
-  color: var(--texto);
+  color: var(--tinta);
 }
 
 .t-etiqueta {
@@ -157,7 +215,7 @@ h2, .t-subtitulo {
   font-size: var(--t-meta-tam);
   font-weight: var(--t-meta-peso);
   line-height: var(--t-meta-alto);
-  color: var(--texto-3);
+  color: var(--tinta-3);
 }
 
 p { margin: 0 0 var(--e-3); }
@@ -166,12 +224,13 @@ p:last-child { margin-bottom: 0; }
 /* --- Enlaces ------------------------------------------------------- */
 
 a {
-  color: var(--primaria);
+  color: var(--tinta-enlace);
   text-decoration: underline;
   text-underline-offset: 2px;
+  transition: color var(--transicion);
 }
 
-a:hover { color: var(--primaria-relleno); }
+a:hover { color: var(--tinta-enlace-hover); }
 
 /* --- Foco ---------------------------------------------------------- */
 /* Un unico estilo de foco, y solo cuando se navega con teclado.       */

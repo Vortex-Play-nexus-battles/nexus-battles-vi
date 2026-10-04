@@ -16,12 +16,23 @@ variable "instance_type" {
       t4g.small 2 GiB  arm64 USD 0,0168/h  ->  12,1 USD/mes 24x7,  5,0 con apagado nocturno
       c7i-flex.large 4 GiB   USD 0,0848/h  ->  61,1 USD/mes 24x7, 25,4 con apagado nocturno
       m7i-flex.large 8 GiB   USD 0,0958/h  ->  69,0 USD/mes 24x7, 28,7 con apagado nocturno
-    t3.small por defecto: x86 como las imagenes que ya publica cd.yml (sin
-    buildx multi-arquitectura) y 2 GiB, que con los limites de memoria de
-    docker-compose.deploy.yml alcanzan para el perfil de la demo del Sprint 2.
+    Hasta el 28-sep: t3.small (x86 como las imagenes que publica cd.yml, sin
+    buildx multi-arquitectura; 2 GiB).
+    Desde la opcion E de infrastructure/despliegue/CAPACIDAD.md: c7i-flex.large.
+    Medido el 28-sep, 15 min despues de un reinicio limpio: 3305 MiB de
+    demanda (12 JVM + 5 Postgres) sobre 1910 MiB de RAM, swap de 2 GB lleno y
+    cinco servicios sin salud en 5 s; el smoke de dev fallaba por eso. 4 GiB,
+    tambien x86 (misma AMI, mismas imagenes), del Free Plan; el cambio de tipo
+    es en caliente (parar, cambiar, encender) con la misma IP elastica y el
+    mismo disco. Se paga con creditos del Free Plan (autorizado por el
+    responsable del bloque el 29-sep, con USD 113,75 de saldo; el saldo lo
+    muestra diagnostico-dev.yml).
+    Volver a t3.small: revertir el PR que puso este valor. Es el mismo cambio
+    en caliente al reves, y la compuerta de infra-dev.yml comprueba antes que
+    el tipo se ofrece en la zona del host.
   EOT
   type        = string
-  default     = "t3.small"
+  default     = "c7i-flex.large"
 
   validation {
     condition     = contains(["t3.micro", "t3.small", "t4g.micro", "t4g.small", "c7i-flex.large", "m7i-flex.large"], var.instance_type)
@@ -42,9 +53,21 @@ variable "cidr_ssh" {
 }
 
 variable "cidr_servicios" {
-  description = "Origenes admitidos en los puertos de los servicios de plataforma (8081-8088, docker-compose.yml y puerto_de() en cd.yml)."
+  description = <<-EOT
+    Origenes admitidos en los puertos directos de los servicios de plataforma
+    (8081-8089, docker-compose.yml y puerto_de() en cd.yml). B12: solo el host
+    de contenido (IP elastica 34.193.90.11, cuenta del grupo 2), que es el
+    unico que llama a un puerto directo: sus servicios validan tokens contra
+    el JWKS de ms-identidad en :8089 (IDENTIDAD_JWKS_URL en
+    docker-compose.contenido.yml). El publico entra SOLO por el borde (:80);
+    las llamadas entre servicios de este host van por la red de Docker y no
+    pasan por aqui. Hasta B12 era 0.0.0.0/0: cualquiera llegaba a /actuator y
+    a las rutas internas de cada servicio sin pasar por el borde.
+    Para depurar desde un portatil se anade la IP propia a proposito y
+    temporalmente, en un PR, nunca a mano en la consola.
+  EOT
   type        = list(string)
-  default     = ["0.0.0.0/0"]
+  default     = ["34.193.90.11/32"]
 }
 
 variable "correo_alertas" {
@@ -64,9 +87,38 @@ variable "credito_total_usd" {
 }
 
 variable "tope_mensual_usd" {
-  description = "Tope de gasto bruto mensual (antes de credito). Con un t3.small, su IP y su disco 24x7 el consumo real es ~20 USD/mes; el tope avisa antes de que un recurso olvidado se coma el credito."
+  description = <<-EOT
+    Tope de gasto bruto mensual (antes de credito). Su trabajo es avisar de lo
+    que NO esta previsto (una segunda instancia, un volumen huerfano) antes de
+    que se coma el credito, asi que tiene que quedar por encima del gasto
+    previsto y no mucho mas: si el gasto normal lo supera, sus avisos pasan a
+    ser ruido y nadie los lee.
+    Con t3.small, IP y disco 24x7 el gasto era ~20 USD/mes (tope 30). Con
+    c7i-flex.large (opcion E, 29-sep) y el apagado programado (~83 h por
+    semana), ~36 USD/mes (instancia ~30,5 + IP 3,65 + disco 1,60); 24x7
+    serian ~67. Tope 50: el pronostico avisa si el host se queda encendido de
+    noche o los fines de semana.
+  EOT
   type        = number
-  default     = 30
+  default     = 50
+}
+
+variable "horario_activo" {
+  description = "Apagado nocturno y encendido programados del host (horario.tf). false los desactiva sin borrarlos: por ejemplo, la semana de la demo si hace falta el entorno 24 h. Con c7i-flex.large cada noche encendida cuesta ~0,65 USD de credito."
+  type        = bool
+  default     = true
+}
+
+variable "horario_apagar" {
+  description = "Cuando se apaga el host, en hora de Colombia (America/Bogota), con la sintaxis cron de EventBridge Scheduler: minutos horas dia-del-mes mes dia-de-la-semana ano. Por omision, todos los dias a las 23:23."
+  type        = string
+  default     = "cron(23 23 * * ? *)"
+}
+
+variable "horario_encender" {
+  description = "Cuando se enciende el host, en hora de Colombia (America/Bogota), sintaxis cron de EventBridge Scheduler. Por omision, de lunes a viernes a las 06:47: las JVM arrancan por turnos (unos 5 minutos) y el entorno queda listo antes de la jornada. Los fines de semana no se enciende solo; el CD lo enciende si hace falta desplegar."
+  type        = string
+  default     = "cron(47 6 ? * MON-FRI *)"
 }
 
 variable "recordatorios" {

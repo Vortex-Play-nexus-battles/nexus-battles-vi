@@ -17,6 +17,11 @@
 import { construirCarga, construirError } from './estados-vista.js';
 import { consultarProducto as leerDelCatalogo } from './cliente-productos.js';
 import { construirDetalleDeHeroe } from './detalle-heroe.js';
+import { icono } from '../../comun/ui/icono.js';
+import { ICONO_DEL_TIPO } from './vitrina.js';
+import { identidadDePrototipo } from '../../comun/ui/juego/prototipos.js';
+import { NOMBRE_DEL_TIPO } from '../../comun/ui/formato.js';
+import { bloquearDesplazamiento, esElModalDeArriba } from '../../comun/ui/dialogo.js';
 
 /**
  * Atributos visibles de cada tipo, en el orden en que se muestran.
@@ -31,16 +36,16 @@ export const ATRIBUTOS_POR_TIPO = Object.freeze({
   ],
   ARMA: [
     ['poderDeAtaque', 'Poder de ataque'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   ARMADURA: [
     ['defensa', 'Defensa'],
     ['parte', 'Parte'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   ITEM: [
     ['efecto', 'Efecto'],
-    ['tasaDeCaida', 'Tasa de caida'],
+    ['tasaDeCaida', 'Tasa de caída'],
   ],
   EPICA: [
     ['turnosRecarga', 'Turnos de recarga'],
@@ -49,15 +54,8 @@ export const ATRIBUTOS_POR_TIPO = Object.freeze({
   ],
 });
 
-/** Etiqueta legible de cada tipo del catalogo. */
-const NOMBRE_DEL_TIPO = {
-  HEROE: 'Héroe',
-  HABILIDAD: 'Habilidad',
-  ARMA: 'Arma',
-  ARMADURA: 'Armadura',
-  ITEM: 'Ítem',
-  EPICA: 'Épica',
-};
+/** Etiqueta legible de cada tipo del catalogo: vive en `comun/ui/formato.js` (UXC-8). */
+export { NOMBRE_DEL_TIPO };
 
 let secuencia = 0;
 
@@ -67,34 +65,60 @@ let secuencia = 0;
  * @param {object} producto tal como lo devuelve el servicio de productos.
  * @returns {HTMLElement} dialogo listo para insertar en el documento.
  */
-export function construirFicha(producto) {
+export function construirFicha(producto, { nombrePropio = null, contexto = 'inventario' } = {}) {
   if (!producto || typeof producto !== 'object') {
     throw new TypeError('La ficha necesita un producto del catálogo');
   }
+  // UXC-1 — la ficha de un heroe PROPIO se titula con su nombre («Aquiles») y
+  // dice debajo de que prototipo sale; el simbolo del prototipo ocupa el hueco
+  // de la imagen si el catalogo no la tiene.
+  const esHeroePropio = producto.tipo === 'HEROE' && Boolean(nombrePropio);
+  const identidad = producto.tipo === 'HEROE' ? identidadDePrototipo(producto.prototipo) : null;
 
   const ficha = document.createElement('article');
   ficha.className = 'ficha';
   ficha.setAttribute('role', 'dialog');
   ficha.setAttribute('aria-modal', 'true');
+  // UXC-1 — con las cifras y las acciones en cartas la ficha se desplaza, y
+  // una region que se desplaza tiene que alcanzarse con el teclado (axe:
+  // scrollable-region-focusable).
+  ficha.setAttribute('tabindex', '0');
 
   const idNombre = `ficha-nombre-${(secuencia += 1)}`;
   ficha.setAttribute('aria-labelledby', idNombre);
 
-  const imagen = document.createElement('img');
-  imagen.className = 'ficha__imagen';
-  imagen.src = producto.imagen ?? '';
-  // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
-  // que producto esta mirando (RNF-ACC-002).
-  imagen.alt = producto.nombre ?? '';
+  let imagen;
+  if (producto.imagen) {
+    imagen = document.createElement('img');
+    imagen.className = 'ficha__imagen';
+    imagen.src = producto.imagen;
+    // El texto alternativo es el nombre: quien no ve la imagen sigue sabiendo
+    // que producto esta mirando (RNF-ACC-002).
+    imagen.alt = producto.nombre ?? '';
+  } else {
+    // UX-GAME-3 — sin imagen en el catalogo no se pinta un `<img src="">`,
+    // que el navegador ensena como icono roto con el nombre al lado. Va el
+    // icono del tipo sobre la misma superficie que ocuparia la imagen.
+    imagen = document.createElement('div');
+    imagen.className = 'ficha__imagen ficha__imagen--ausente';
+    const simbolo = identidad?.conocido
+      ? identidad.icono
+      : (ICONO_DEL_TIPO[producto.tipo] ?? 'estrella');
+    imagen.append(icono(simbolo, { clase: 'ficha__icono-tipo', etiqueta: null }));
+  }
 
   const nombre = document.createElement('h2');
   nombre.className = 'ficha__nombre';
   nombre.id = idNombre;
-  nombre.textContent = producto.nombre ?? '';
+  nombre.textContent = esHeroePropio ? nombrePropio : (producto.nombre ?? '');
 
   const tipo = document.createElement('p');
   tipo.className = 'ficha__tipo';
-  tipo.textContent = NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo ?? '';
+  const nombreDelTipo = NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo ?? '';
+  tipo.textContent =
+    identidad?.conocido && producto.tipo === 'HEROE'
+      ? `${nombreDelTipo} · ${identidad.nombre}${identidad.sanador ? ' · Sanador' : ''}`
+      : nombreDelTipo;
 
   // Texto que escribe el administrador: entra por textContent, nunca por
   // innerHTML.
@@ -109,7 +133,7 @@ export function construirFicha(producto) {
   // poseen**. El flujo alternativo de la ficha pide mostrarla con el
   // indicador de no disponible, no ocultarla ni responder que no existe.
   if (producto.estado === 'SUSPENDIDO') {
-    ficha.appendChild(construirNoDisponible());
+    ficha.appendChild(construirNoDisponible(contexto));
   }
 
   ficha.append(descripcion, construirAtributos(producto));
@@ -134,14 +158,17 @@ export function construirFicha(producto) {
  * adquirir, y que el suyo no desaparece. Sin la segunda, el aviso se lee
  * como una perdida.
  */
-function construirNoDisponible() {
+function construirNoDisponible(contexto = 'inventario') {
   const aviso = document.createElement('p');
   aviso.className = 'ficha__no-disponible';
   // Se anuncia a los lectores de pantalla sin interrumpir (RNF-ACC-002).
   aviso.setAttribute('role', 'status');
+  // UXC-4 — desde la tienda o la portada no se habla de «tu inventario»: quien
+  // mira quizá no lo tiene. Lo que importa ahí es que ahora no se vende.
   aviso.textContent =
-    'No disponible para nuevas adquisiciones. Sigue en tu inventario ' +
-    'y puedes seguir usandolo.';
+    contexto === 'inventario'
+      ? 'No disponible para nuevas adquisiciones. Sigue en tu inventario y puedes seguir usándolo.'
+      : 'Este producto no está a la venta ahora mismo.';
   return aviso;
 }
 
@@ -207,7 +234,18 @@ export async function abrirFicha(
     // sin ellos se comporta como antes.
     elementoId = null,
     identidad = null,
+    nombrePropio = null,
+    // UXC-9 — el nivel que guarda el inventario (1.5.0): con él, la ficha dice
+    // qué acciones ya aprendió y cuál es su épica afín.
+    nivel = null,
     detalleDeHeroe = construirDetalleDeHeroe,
+    // UXC-3/UXC-4 — lo que cada vista añade al final de la ficha: las
+    // opiniones de la comunidad, el bloque de compra de la tienda. Cada uno es
+    // `(producto, {ficha}) => Node|null`; uno que falle no tumba la ficha.
+    complementos = [],
+    // «inventario» (por omision), «tienda» o «portada»: cambia solo las frases
+    // que hablan de lo que el jugador tiene.
+    contexto = 'inventario',
   } = {},
 ) {
   cerrarFicha();
@@ -219,13 +257,16 @@ export async function abrirFicha(
   capa.appendChild(construirCarga('Cargando el producto...'));
   document.body.appendChild(capa);
 
+  // Auditoría de DEV del 30-sep: con una confirmación abierta desde la ficha
+  // («Eliminar tu comentario»), Escape cerraba las dos. Ahora solo actúa la
+  // ficha si es el modal de más arriba; si no, la tecla es de la confirmación.
   const alPulsarTecla = (evento) => {
-    if (evento.key === 'Escape') {
+    if (evento.key === 'Escape' && esElModalDeArriba(capa)) {
       cerrarFicha();
     }
   };
   document.addEventListener('keydown', alPulsarTecla);
-  abierta = { capa, devolverFocoA, alPulsarTecla };
+  abierta = { capa, devolverFocoA, alPulsarTecla, soltarDesplazamiento: bloquearDesplazamiento() };
 
   // El foco entra en la ficha para que el teclado no se quede en la vista
   // de atras (RNF-ACC-002).
@@ -246,7 +287,9 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa) {
     return; // Se cerro mientras se consultaba.
   }
-  reemplazarContenido(capa, construirFicha(producto));
+  const ficha = construirFicha(producto, { nombrePropio, contexto });
+  reemplazarContenido(capa, ficha);
+  const zonaDeComplementos = anadirComplementos(ficha, producto, complementos);
 
   // Y despues, sin hacer esperar a la ficha: son dos servicios mas y el detalle
   // del producto ya es util sin ellos. Mismo criterio que los retratos de la
@@ -260,6 +303,7 @@ export async function abrirFicha(
       identidad,
       heroeId: elementoId,
       prototipo: producto.prototipo ?? null,
+      nivel,
     });
   } catch (fallo) {
     console.error('No se pudo completar el detalle del héroe', fallo);
@@ -268,7 +312,41 @@ export async function abrirFicha(
   if (abierta === null || abierta.capa !== capa || bloques.length === 0) {
     return; // Se cerro mientras se consultaba, o no llego nada que pintar.
   }
-  capa.querySelector('.ficha')?.append(...bloques);
+  // Las cifras y las acciones del heroe van antes que los complementos (la
+  // compra, las opiniones): primero que es, despues que opinan de el.
+  if (zonaDeComplementos) {
+    zonaDeComplementos.before(...bloques);
+  } else {
+    ficha.append(...bloques);
+  }
+}
+
+/**
+ * Pinta los complementos al final de la ficha, dentro de una zona propia.
+ *
+ * @param {HTMLElement} ficha
+ * @param {object} producto
+ * @param {Array<(producto: object, contexto: {ficha: HTMLElement}) => Node|null>} complementos
+ * @returns {HTMLElement|null} la zona, o `null` si no hay ninguno
+ */
+function anadirComplementos(ficha, producto, complementos) {
+  if (!Array.isArray(complementos) || complementos.length === 0) {
+    return null;
+  }
+  const zona = document.createElement('div');
+  zona.className = 'ficha__complementos';
+  ficha.append(zona);
+  for (const complemento of complementos) {
+    try {
+      const nodo = complemento(producto, { ficha });
+      if (nodo) {
+        zona.append(nodo);
+      }
+    } catch (fallo) {
+      console.error('No se pudo completar la ficha', fallo);
+    }
+  }
+  return zona;
 }
 
 /** Cierra la ficha abierta y devuelve el foco a donde estaba. */
@@ -276,10 +354,11 @@ export function cerrarFicha() {
   if (abierta === null) {
     return;
   }
-  const { capa, devolverFocoA, alPulsarTecla } = abierta;
+  const { capa, devolverFocoA, alPulsarTecla, soltarDesplazamiento } = abierta;
   abierta = null;
   document.removeEventListener('keydown', alPulsarTecla);
   capa.remove();
+  soltarDesplazamiento?.();
   if (devolverFocoA && typeof devolverFocoA.focus === 'function') {
     devolverFocoA.focus();
   }

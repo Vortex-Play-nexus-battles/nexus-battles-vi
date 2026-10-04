@@ -71,9 +71,18 @@ export function tarjeta({
     // lee «Puja actual, 120 creditos» en vez de dos textos sueltos.
     const lista = h('dl', { clase: 'tarjeta__datos' });
     for (const dato of datos) {
+      // Cada par va en su propio `<div>` (HTML lo permite dentro de `<dl>`):
+      // asi la rejilla coloca PARES, y la etiqueta nunca se separa de su
+      // valor. Con dt/dd sueltos, tres pares en cuatro columnas ponian «200»
+      // debajo de «Equipos» (UX-GAME-3).
       lista.append(
-        h('dt', { clase: 't-meta', texto: dato.etiqueta }),
-        h('dd', { texto: dato.valor }),
+        h('div', {
+          clase: 'tarjeta__dato',
+          hijos: [
+            h('dt', { clase: 't-meta', texto: dato.etiqueta }),
+            h('dd', { texto: dato.valor }),
+          ],
+        }),
       );
     }
     caja.append(lista);

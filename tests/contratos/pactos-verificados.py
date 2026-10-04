@@ -55,6 +55,11 @@ PACTOS = pathlib.Path("contracts/pactos")
 ARBOLES = "services/*/*/src/test/java/**/*.java"
 
 PROVEEDOR = re.compile(r'@Provider\s*\(\s*"([^"]+)"\s*\)')
+# B9: un proveedor puede tener varios consumidores con pacto (ms-inventario los
+# tiene de ms-subastas y de misiones), cada uno verificado por su clase con
+# `@Consumer("...")`. Una clase sin `@Consumer` verifica todos los pactos de su
+# proveedor, como hasta ahora.
+CONSUMIDOR = re.compile(r'@Consumer\s*\(\s*"([^"]+)"\s*\)')
 ESTADO = re.compile(r'@State\s*\(\s*"([^"]+)"\s*\)')
 
 
@@ -72,9 +77,9 @@ def estados_del_pacto(documento: dict) -> set[str]:
     return encontrados
 
 
-def verificadores() -> dict[str, tuple[pathlib.Path, set[str]]]:
-    """{proveedor: (archivo, estados cubiertos)} de las clases @Provider."""
-    encontrados: dict[str, tuple[pathlib.Path, set[str]]] = {}
+def verificadores() -> dict[tuple[str, str | None], tuple[pathlib.Path, set[str]]]:
+    """{(proveedor, consumidor o None): (archivo, estados cubiertos)} de las clases @Provider."""
+    encontrados: dict[tuple[str, str | None], tuple[pathlib.Path, set[str]]] = {}
     for ruta in pathlib.Path(".").glob(ARBOLES):
         try:
             texto = ruta.read_text(encoding="utf-8")
@@ -85,8 +90,15 @@ def verificadores() -> dict[str, tuple[pathlib.Path, set[str]]]:
         nombre = PROVEEDOR.search(texto)
         if not nombre:
             continue
-        encontrados[nombre.group(1)] = (ruta, set(ESTADO.findall(texto)))
+        consumidor = CONSUMIDOR.search(texto)
+        clave = (nombre.group(1), consumidor.group(1) if consumidor else None)
+        encontrados[clave] = (ruta, set(ESTADO.findall(texto)))
     return encontrados
+
+
+def verificador_de(clases: dict, proveedor: str, consumidor: str):
+    """La clase que verifica ese pacto: la de su consumidor, o la del proveedor sin @Consumer."""
+    return clases.get((proveedor, consumidor)) or clases.get((proveedor, None))
 
 
 def main() -> int:
@@ -115,11 +127,12 @@ def main() -> int:
         proveedor = (documento.get("provider") or {}).get("name", "?")
         estados = estados_del_pacto(documento)
 
-        if proveedor not in clases:
+        verificador = verificador_de(clases, proveedor, consumidor)
+        if verificador is None:
             sin_verificar.append((archivo, consumidor, proveedor, estados))
             continue
 
-        ruta_clase, cubiertos = clases[proveedor]
+        ruta_clase, cubiertos = verificador
         huerfanos = sorted(estados - cubiertos)
         if huerfanos:
             print(f"::error file={ruta_clase}::el pacto {archivo.name} declara estados sin @State:")

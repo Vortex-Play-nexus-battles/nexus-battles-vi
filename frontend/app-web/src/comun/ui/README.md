@@ -14,18 +14,19 @@ esto:
 
 ## Qué hay
 
-| Módulo            | Para qué                                                                                                              |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `dom.js`          | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML`                                     |
-| `formato.js`      | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`) |
-| `aviso.js`        | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4)                              |
-| `estado-vista.js` | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()`                                               |
-| `esqueleto.js`    | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()`                                                   |
-| `boton.js`        | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto                                              |
-| `distintivo.js`   | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()`                                                              |
-| `tarjeta.js`      | `tarjeta()`, `tarjetaDeCifra()`                                                                                       |
-| `dialogo.js`      | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto                                                |
-| `pagina.js`       | `encabezadoDePagina()`, `encabezadoDeSeccion()`                                                                       |
+| Módulo                 | Para qué                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dom.js`               | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML`                                                                      |
+| `formato.js`           | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`)                                  |
+| `aviso.js`             | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4)                                                               |
+| `estado-vista.js`      | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()`                                                                                |
+| `esqueleto.js`         | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()`                                                                                    |
+| `boton.js`             | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto                                                                               |
+| `formulario-seguro.js` | `formularioListo()`, `sinCredencialesEnLaDireccion()` — G1: un formulario con credenciales nunca se envía de forma nativa (`sin-envio-nativo.test.js`) |
+| `distintivo.js`        | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()`                                                                                               |
+| `tarjeta.js`           | `tarjeta()`, `tarjetaDeCifra()`                                                                                                                        |
+| `dialogo.js`           | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto                                                                                 |
+| `pagina.js`            | `encabezadoDePagina()`, `encabezadoDeSeccion()`                                                                                                        |
 
 ## Reglas
 

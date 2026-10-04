@@ -54,6 +54,15 @@ public class Puja {
     @Column(length = 128)
     private String idempotencyKey;
 
+    /**
+     * Apodo del postor al pujar (claim {@code sub}; en las automaticas, el que
+     * tenia al configurarla). Se guarda completo y se muestra anonimizado:
+     * «Usuario que realizo cada puja (anonimizado parcialmente)», 7.7.9. Nulo
+     * en las pujas anteriores a B8.
+     */
+    @Column(length = 60)
+    private String apodoPostor;
+
     public Puja(UUID id, UUID subastaId, UUID jugadorId, BigDecimal monto, TipoPuja tipo,
                 EstadoPuja estado, Instant creadaEn, String reservaCreditoId) {
         this.id = id;

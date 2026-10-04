@@ -33,6 +33,16 @@ services:
       - "8081:8081"
     env_file:
       - .env
+    environment:
+      # B3: comentar y calificar comprueban el producto en el catalogo
+      # (GET {PRODUCTOS_URL}/api/v1/productos/{id}). En local productos vive en
+      # el compose de contenido, publicado en el 8103 del host; dentro de este
+      # contenedor localhost es el propio servicio, asi que se sale por el host
+      # de Docker. Se sobreescribe con PRODUCTOS_URL en el .env.
+      PRODUCTOS_URL: ${PRODUCTOS_URL:-http://host.docker.internal:8103}
+    # host.docker.internal existe solo en Docker Desktop; en Linux lo da esto.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - plataforma-db
 
@@ -45,6 +55,23 @@ services:
       - "8082:8082"
     env_file:
       - .env
+    environment:
+      # Las direcciones reservadas para pruebas (@nexus.test, @example.com...)
+      # van al Mailpit de este mismo compose, sea cual sea el servidor
+      # principal (SMTP_HOST). Con un proveedor real configurado, las cuentas
+      # que crean los canarios en cada despliegue rebotarian en el proveedor;
+      # asi siguen llegando a un buzon que las pruebas pueden leer. Ver
+      # correo.buzon-de-pruebas en el application.yml del servicio.
+      CORREO_BUZON_PRUEBAS_HOST: mailpit
+      CORREO_BUZON_PRUEBAS_PUERTO: "1025"
+      # B1 — correo durable: cada correo aceptado se guarda en el esquema
+      # `correo` de plataforma-db antes de responder 202, asi que sin base no
+      # hay correo (503). Remitente y base de los enlaces por entorno; por
+      # omision un remitente del dominio reservado .test, que nunca sale a
+      # Internet, y los enlaces a la maquina local.
+      DB_RELACIONAL_URL: ${DB_RELACIONAL_URL:-jdbc:postgresql://plataforma-db:5432/plataformadb}
+      MAIL_FROM: ${MAIL_FROM:-The Nexus Battles VI <no-reply@nexusbattles.test>}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
     depends_on:
       - plataforma-db
       - mailpit
@@ -95,6 +122,14 @@ services:
       - "8086:8086"
     env_file:
       - .env
+    environment:
+      # 7.3.2 (B2): cada sancion se proyecta sobre la cuenta en ms-identidad
+      # (estado-sancion) y se avisa por correo, con la credencial de servicio
+      # DIRECTORIO_ACTIVO_* del .env. Sin /api/v1: la ruta ya lo lleva. Si el
+      # destino no esta levantado, las salidas esperan en la cola y se
+      # reintentan; la sancion se registra igual.
+      IDENTIDAD_URL: ${IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      CORREO_URL: ${CORREO_URL:-http://srv-correo:8082}
     depends_on:
       - plataforma-db
       - plataforma-cache

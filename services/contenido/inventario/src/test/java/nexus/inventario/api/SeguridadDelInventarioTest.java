@@ -125,28 +125,91 @@ class SeguridadDelInventarioTest {
     }
 
     @Test
-    @DisplayName("un jugador crea y equipa en su propio inventario, sin cabecera")
+    @DisplayName("un jugador equipa en su propio inventario, sin cabecera")
     void elJugadorOperaSobreLoSuyo() throws Exception {
         UUID uid = UUID.randomUUID();
         String propietario = uid.toString();
-        when(gestion.crear(eq(propietario), anyString(), org.mockito.ArgumentMatchers.any(), anyString(),
-                org.mockito.ArgumentMatchers.any()))
-                .thenReturn(new ElementoInventario("e-1", "p", TipoElementoInventario.ITEM, "x"));
         when(equipamiento.equipar(propietario, "heroe-1", "arma-1"))
                 .thenReturn(EquipamientoHeroe.vacio("heroe-1"));
 
         String token = "Bearer " + EMISOR.tokenDeJugador("lyra_roja", uid);
-        mvc.perform(post(VITRINA).header(HttpHeaders.AUTHORIZATION, token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
-                .andExpect(status().isCreated());
         mvc.perform(put("/api/v1/inventario/heroes/heroe-1/equipamiento/arma-1")
                         .header(HttpHeaders.AUTHORIZATION, token))
                 .andExpect(status().isOk());
 
-        verify(gestion).crear(eq(propietario), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
-                org.mockito.ArgumentMatchers.any());
         verify(equipamiento).equipar(propietario, "heroe-1", "arma-1");
+    }
+
+    @Test
+    @DisplayName("B4: un JUGADOR ya no se crea elementos: 403 con problem detail y no se guarda nada")
+    void elJugadorNoSeCreaElementos() throws Exception {
+        String token = "Bearer " + EMISOR.tokenDeJugador("lyra_roja", UUID.randomUUID());
+
+        mvc.perform(post(VITRINA).header(HttpHeaders.AUTHORIZATION, token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Acceso denegado"))
+                .andExpect(jsonPath("$.status").value(403));
+        // Tampoco un moderador: no es un canal de propiedad.
+        mvc.perform(post(VITRINA)
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + EMISOR.tokenDeUsuario("mod_1", UUID.randomUUID(), "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(gestion);
+    }
+
+    @Test
+    @DisplayName("B4: un servicio crea por el jugador que declara (el paquete inicial de ms-identidad sigue funcionando)")
+    void elServicioCreaPorElJugador() throws Exception {
+        String jugador = UUID.randomUUID().toString();
+        when(gestion.crear(eq(jugador), anyString(), org.mockito.ArgumentMatchers.any(), anyString(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ElementoInventario("e-1", "p", TipoElementoInventario.ITEM, "x"));
+
+        mvc.perform(post(VITRINA)
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeServicio("ms-identidad"))
+                        .header("X-User-Name", jugador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
+                .andExpect(status().isCreated());
+
+        verify(gestion).crear(eq(jugador), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    @DisplayName("B4: un ADMINISTRADOR o SUPER_ADMINISTRADOR si puede crear (alta manual), en su propio inventario")
+    void elAdministradorPuedeCrear() throws Exception {
+        UUID admin = UUID.randomUUID();
+        UUID superAdmin = UUID.randomUUID();
+        when(gestion.crear(anyString(), anyString(), org.mockito.ArgumentMatchers.any(), anyString(),
+                org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new ElementoInventario("e-1", "p", TipoElementoInventario.ITEM, "x"));
+
+        mvc.perform(post(VITRINA)
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + EMISOR.tokenDeUsuario("admin_1", admin, "ADMINISTRADOR"))
+                        .header("X-User-Name", "otro-jugador")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
+                .andExpect(status().isCreated());
+        mvc.perform(post(VITRINA)
+                        .header(HttpHeaders.AUTHORIZATION,
+                                "Bearer " + EMISOR.tokenDeUsuario("super_1", superAdmin, "SUPER_ADMINISTRADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productoId\":\"p\",\"tipo\":\"ITEM\",\"nombrePropio\":\"x\"}"))
+                .andExpect(status().isCreated());
+
+        // La cabecera de un usuario se ignora: el alta va a su propio inventario.
+        verify(gestion).crear(eq(admin.toString()), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
+                org.mockito.ArgumentMatchers.any());
+        verify(gestion).crear(eq(superAdmin.toString()), eq("p"), org.mockito.ArgumentMatchers.any(), eq("x"),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test

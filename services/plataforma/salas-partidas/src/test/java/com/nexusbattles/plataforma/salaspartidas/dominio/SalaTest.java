@@ -488,7 +488,7 @@ class SalaTest {
 
             assertAll(
                     () -> assertEquals(403, error.estado(), "lo fija el contrato"),
-                    () -> assertTrue(error.detalle().toLowerCase().contains("invitacion"),
+                    () -> assertTrue(error.detalle().toLowerCase().contains("invitación"),
                             "el motivo tiene que nombrar la invitacion, no dejar adivinar"));
         }
 
@@ -687,7 +687,7 @@ class SalaTest {
             SalidaNoPermitida error = assertThrows(SalidaNoPermitida.class,
                     () -> sala.abandonar(VISITANTE));
 
-            assertTrue(error.detalle().toLowerCase().contains("comenzo"));
+            assertTrue(error.detalle().toLowerCase().contains("comenzó"));
         }
 
         @Test
@@ -765,6 +765,45 @@ class SalaTest {
                     () -> assertNull(sala.idReservaCreditos(), "la original no se toca"),
                     () -> assertThrows(IllegalStateException.class,
                             () -> conReserva.conReserva(UUID.randomUUID())));
+        }
+    }
+
+    @Nested
+    @DisplayName("B7 · la sala termina con su partida (salas-partidas.yaml 1.7.0)")
+    class FinDeLaPartida {
+
+        @Test
+        @DisplayName("una sala en juego pasa a FINALIZADA cuando termina su partida")
+        void enJuegoPasaAFinalizada() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+
+            assertAll(
+                    () -> assertTrue(sala.terminarPartida()),
+                    () -> assertEquals(EstadoSala.FINALIZADA, sala.estado()));
+        }
+
+        @Test
+        @DisplayName("repetir el aviso de fin no es un error: la sala sigue FINALIZADA y no cambia")
+        void esIdempotente() {
+            Sala sala = enEstado(EstadoSala.EN_JUEGO);
+            sala.terminarPartida();
+
+            assertAll(
+                    () -> assertTrue(!sala.terminarPartida(), "la segunda vez no cambia nada"),
+                    () -> assertEquals(EstadoSala.FINALIZADA, sala.estado()));
+        }
+
+        @Test
+        @DisplayName("una sala que nunca se jugo no se da por terminada por una partida ajena")
+        void soloDesdeEnJuego() {
+            Sala abierta = Sala.crear(validos(), ANFITRION);
+            Sala cancelada = enEstado(EstadoSala.CANCELADA);
+
+            assertAll(
+                    () -> assertTrue(!abierta.terminarPartida()),
+                    () -> assertEquals(EstadoSala.ABIERTA, abierta.estado()),
+                    () -> assertTrue(!cancelada.terminarPartida()),
+                    () -> assertEquals(EstadoSala.CANCELADA, cancelada.estado()));
         }
     }
 

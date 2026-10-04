@@ -1,8 +1,16 @@
 openapi: 3.1.0
 info:
   title: Servicio de héroes
-  version: 1.1.0
+  version: 1.2.0
   description: >
+    **1.2.0 (B7, BACKEND-09) — la acción como dato.** Aditivo: cada `Accion`
+    (en la ficha y en la vista por nivel) trae, además del texto de la Tabla 7,
+    su coste como número (`costoPoder`, nulo cuando cuesta «todos los puntos de
+    poder»), `todoElPoder`, `turnosDeCarga` (§6.1.2: «tiene un turno de carga»)
+    y `nivelRequerido` (RC-01: 1, 4 y 8). Es lo que el motor de combate
+    necesita para validar una acción sin parsear el texto del coste.
+
+
     Catálogo de prototipos de héroe de THE NEXUS BATTLES VI (HU-HER-001, HU-HER-002).
     Contrato publicado antes de consumir, conforme a la regla de plataforma
     "contrato primero".
@@ -422,6 +430,26 @@ components:
         nombre: { type: string, example: Golpe con escudo }
         costo: { type: string, example: 2 puntos de poder }
         efecto: { type: string, example: +2 al ataque }
+        costoPoder:
+          type: [integer, "null"]
+          minimum: 0
+          example: 2
+          description: El coste como número (1.2.0). Nulo cuando cuesta «todos los puntos de poder».
+        todoElPoder:
+          type: boolean
+          example: false
+          description: Verdadero si la acción consume todo el poder (Reanimación del Médico).
+        turnosDeCarga:
+          type: integer
+          minimum: 0
+          example: 1
+          description: Turnos de carga tras usarla (§6.1.2), en turnos propios del héroe.
+        nivelRequerido:
+          type: integer
+          minimum: 1
+          maximum: 8
+          example: 1
+          description: Nivel desde el que el héroe la tiene (RC-01, 1.2.0).
     SolicitudDeComposicion:
       type: object
       required: [heroes]

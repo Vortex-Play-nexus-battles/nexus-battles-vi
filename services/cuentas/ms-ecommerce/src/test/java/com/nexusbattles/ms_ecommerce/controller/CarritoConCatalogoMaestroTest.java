@@ -6,7 +6,12 @@ import com.nexusbattles.ms_ecommerce.model.Carrito;
 import com.nexusbattles.ms_ecommerce.repository.CarritoRepository;
 import com.nexusbattles.ms_ecommerce.seguridad.SeguridadConfig;
 import com.nexusbattles.ms_ecommerce.seguridad.TokensDePrueba;
-import com.nexusbattles.ms_ecommerce.service.CarritoMapper;
+import com.nexusbattles.ms_ecommerce.catalogo.CopiaDelCatalogo;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
+import com.nexusbattles.ms_ecommerce.precios.Moneda;
+import com.nexusbattles.ms_ecommerce.precios.Tarifa;
+import com.nexusbattles.ms_ecommerce.precios.TasasDeCambio;
+import com.nexusbattles.ms_ecommerce.service.CotizadorDelCarrito;
 import com.nexusbattles.ms_ecommerce.service.CarritoService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,8 +31,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.PlatformTransactionManager;
 
+import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESPADA;
@@ -53,7 +60,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * el codigo HTTP y el {@code type} de problem details de cada regla.
  */
 @WebMvcTest(CarritoController.class)
-@Import({SeguridadConfig.class, TokensDePrueba.Decodificador.class, CarritoService.class, CarritoMapper.class,
+@Import({SeguridadConfig.class, TokensDePrueba.Decodificador.class, CarritoService.class, CotizadorDelCarrito.class,
         CarritoConCatalogoMaestroTest.CatalogoSimulado.class})
 @DisplayName("Agregar al carrito contra el catalogo maestro: codigos y problem details")
 class CarritoConCatalogoMaestroTest {
@@ -76,6 +83,11 @@ class CarritoConCatalogoMaestroTest {
         CatalogoMaestro catalogoMaestro() {
             return catalogo.cliente();
         }
+
+        @Bean
+        Clock reloj() {
+            return Clock.systemUTC();
+        }
     }
 
     @Autowired
@@ -90,6 +102,17 @@ class CarritoConCatalogoMaestroTest {
     @MockitoBean
     private PlatformTransactionManager transacciones;
 
+    /** La copia de 30 s del listado: aqui, catalogo caido para la copia; el producto se lee por su id. */
+    @MockitoBean
+    private CopiaDelCatalogo copia;
+
+    @MockitoBean
+    private TasasDeCambio tasas;
+
+    /** Lo que el jugador ya tiene, segun el inventario (RF-CAR-004, contrato 1.5.0). */
+    @MockitoBean
+    private ProductosPropios propios;
+
     private final String token = "Bearer " + TokensDePrueba.deJugador("lyra", UID);
 
     @BeforeEach
@@ -99,7 +122,11 @@ class CarritoConCatalogoMaestroTest {
         carrito.setUsuarioId(UID.toString());
         carrito.setItems(new ArrayList<>());
         when(carritoRepository.findByUsuarioId(UID.toString())).thenReturn(Optional.of(carrito));
+        when(carritoRepository.bloquear(UID.toString())).thenReturn(Optional.of(carrito));
         when(carritoRepository.save(any(Carrito.class))).thenAnswer(i -> i.getArguments()[0]);
+        when(tasas.tarifa(Moneda.COP)).thenReturn(Tarifa.enPesos());
+        when(copia.siDisponible()).thenReturn(Optional.empty());
+        when(propios.alDia(any())).thenReturn(Set.of());
     }
 
     @AfterEach
@@ -159,7 +186,21 @@ class CarritoConCatalogoMaestroTest {
     }
 
     @Test
-    @DisplayName("un producto sin precio en moneda real: 422 producto-sin-precio-en-moneda-real")
+    @DisplayName("auditoria 30-sep · RF-CAR-004: un producto que el jugador ya tiene: 409 producto-ya-adquirido")
+    void yaAdquiridoEs409() throws Exception {
+        catalogoResponde(ESPADA, json(ESPADA, "Espada", "ARMA", "ACTIVO", -1, "6000"));
+        when(propios.alDia(UID.toString())).thenReturn(Set.of(ESPADA));
+
+        agregar("{\"productoId\":\"" + ESPADA + "\",\"cantidad\":1}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:nexus:problema:producto-ya-adquirido"))
+                .andExpect(jsonPath("$.title").value("Producto ya adquirido"))
+                .andExpect(jsonPath("$.detail").value("Ya tienes este producto en tu inventario."));
+        verifyNoInteractions(carritoRepository);
+    }
+
+    @Test
+    @DisplayName("un premium sin precio en moneda real (sin ningun precio): 422 producto-sin-precio-en-moneda-real")
     void sinPrecioEnMonedaRealEs422() throws Exception {
         catalogoResponde(ESPADA, json(ESPADA, "Espada", "ARMA", "ACTIVO", -1, null));
 
@@ -195,9 +236,9 @@ class CarritoConCatalogoMaestroTest {
                 .andExpect(jsonPath("$.items[0].producto.nombre").value("Espada de fuego"))
                 .andExpect(jsonPath("$.items[0].producto.moneda").value("COP"))
                 .andExpect(jsonPath("$.items[0].cantidad").value(2))
-                .andExpect(jsonPath("$.items[0].precioUnitario").value(6000.00))
-                .andExpect(jsonPath("$.items[0].subtotal").value(12000.00))
-                .andExpect(jsonPath("$.total").value(12000.00))
+                .andExpect(jsonPath("$.items[0].precioUnitario").value(6000))
+                .andExpect(jsonPath("$.items[0].subtotal").value(12000))
+                .andExpect(jsonPath("$.total").value(12000))
                 .andExpect(jsonPath("$.moneda").value("COP"));
     }
 

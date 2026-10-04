@@ -10,6 +10,6 @@ public class ContenidoBloqueado extends ErrorDeNegocio {
     public static final URI TIPO = URI.create("https://nexusbattles.local/errores/contenido-bloqueado");
 
     public ContenidoBloqueado() {
-        super(TIPO, "Mensaje bloqueado", 422, "El mensaje contiene terminos que no estan permitidos y no se entrego al canal.");
+        super(TIPO, "Mensaje bloqueado", 422, "El mensaje contiene términos que no están permitidos y no se entregó al canal.");
     }
 }

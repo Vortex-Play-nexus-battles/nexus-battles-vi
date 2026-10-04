@@ -45,7 +45,9 @@ function conSesion({
 function montar(opciones = {}) {
   const raiz = document.createElement('div');
   document.body.appendChild(raiz);
-  return montarArmazon(raiz, { base: BASE, navegar: jest.fn(), ...opciones });
+  // `vigilar` falso: el vigilante real deja temporizadores y oyentes en la
+  // página, y aquí se prueba el armazón, no el vigilante (tiene sus pruebas).
+  return montarArmazon(raiz, { base: BASE, navegar: jest.fn(), vigilar: jest.fn(), ...opciones });
 }
 
 function etiquetas(elemento) {
@@ -155,17 +157,27 @@ describe('armazón de jugador', () => {
     expect(activos[0].getAttribute('aria-current')).toBe('page');
   });
 
-  test('el destino pendiente lo dice sin destapar el backlog', () => {
-    // Decía «Todavía no publicada: HU-MIS (grupo-2)»: el número de una
-    // historia y el nombre de un equipo interno, a la vista de cualquiera.
-    // RF-INV-008 exige informar; no exige informar de esto.
+  test('Misiones lleva a su vista, que es la que dice si hay misiones (UXC-5)', () => {
+    // Antes era el único destino sin pantalla: deshabilitado y con un
+    // «Misiones llegará en una próxima actualización» en el `title`. Ahora la
+    // vista existe y cuenta desde dentro qué hay y qué se puede hacer ya. Y,
+    // como antes, nada de la barra destapa el backlog (decía «Todavía no
+    // publicada: HU-MIS (grupo-2)» hace dos bloques).
     conSesion();
     const { elemento } = montar({ vista: 'home' });
     const misiones = elemento.querySelector('[data-seccion="misiones"]');
-    expect(misiones.hasAttribute('href')).toBe(false);
-    expect(misiones.getAttribute('aria-disabled')).toBe('true');
-    expect(misiones.title).toBe('Misiones llegará en una próxima actualización');
+    expect(misiones.getAttribute('href')).toMatch(/contenido\/misiones\/misiones\.html$/);
+    expect(misiones.hasAttribute('aria-disabled')).toBe(false);
+    expect(misiones.title).toBe('');
+    expect(elemento.querySelectorAll('.cabecera__destino[aria-disabled="true"]')).toHaveLength(0);
     expect(elemento.innerHTML).not.toMatch(/HU-|grupo-\d|RF-|Sprint/);
+  });
+
+  test('sin sesión, Misiones pide entrar y vuelve a la vista', () => {
+    const { elemento } = montar({ vista: 'torneos' });
+    const misiones = elemento.querySelector('[data-seccion="misiones"]');
+    expect(misiones.dataset.exigeSesion).toBe('');
+    expect(new URL(misiones.href).searchParams.get('volver')).toMatch(/misiones\.html$/);
   });
 
   test('funciona igual servido desde src/ que desde el borde', () => {
@@ -268,30 +280,165 @@ describe('armazón de jugador', () => {
     for (const clave of Object.values(CLAVES)) {
       expect(sessionStorage.getItem(clave)).toBeNull();
     }
+    // R17 — el login dice «Cerraste sesión» en vez de aparecer sin más.
     expect(navegar).toHaveBeenCalledWith(
-      'http://localhost:8099/frontend/app-web/src/cuentas/login.html',
+      'http://localhost:8099/frontend/app-web/src/cuentas/login.html?motivo=cerrada',
     );
   });
 });
 
-describe('buscador solo donde aplica', () => {
-  test('por omisión no hay buscador', () => {
+describe('sesión vigilada y preparación de la cuenta (R17)', () => {
+  test('con sesión, el armazón deja puesto el vigilante; sin sesión, no', () => {
+    const vigilar = jest.fn();
+    montar({ vista: 'login', vigilar });
+    expect(vigilar).not.toHaveBeenCalled();
+
     conSesion();
-    expect(montar({ vista: 'home' }).elemento.querySelector('[role="search"]')).toBeNull();
+    document.body.innerHTML = '';
+    montar({ vista: 'home', vigilar });
+    expect(vigilar).toHaveBeenCalledTimes(1);
+    expect(vigilar).toHaveBeenCalledWith(expect.objectContaining({ almacen: sessionStorage }));
   });
 
-  test('con buscador, enviar entrega el texto a la vista', () => {
+  test('auditoría 30-sep: con sesión, la campana de cualquier vista enciende su contador', () => {
+    const avisos = jest.fn();
+    montar({ vista: 'home', avisos });
+    expect(avisos).not.toHaveBeenCalled();
+
     conSesion();
-    const alBuscar = jest.fn();
-    const { elemento } = montar({
-      vista: 'inventario',
-      buscador: { placeholder: 'Buscar productos', alBuscar },
-    });
-    elemento.querySelector('input[type="search"]').value = '  espada  ';
+    document.body.innerHTML = '';
+    const { elemento } = montar({ vista: 'home', avisos });
+    expect(avisos).toHaveBeenCalledTimes(1);
+    expect(avisos).toHaveBeenCalledWith({ raiz: elemento });
+    expect(elemento.querySelector('[data-zona="contador"]')).not.toBeNull();
+  });
+
+  test('en la vista de notificaciones no: esa monta su propia bandeja', () => {
+    conSesion();
+    const avisos = jest.fn();
+    montar({ vista: 'notificaciones', avisos });
+    expect(avisos).not.toHaveBeenCalled();
+  });
+
+  test('«Preparando tu cuenta» es portal (sin navegación), pero ofrece salir', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'preparando', navegar });
+
+    expect(elemento.dataset.armazon).toBe('publico');
+    expect(elemento.querySelector('.cabecera__nav')).toBeNull();
+    expect(elemento.textContent).not.toContain('Crear cuenta');
+    expect(elemento.textContent).not.toContain('Iniciar sesión');
+
+    elemento.querySelector('[data-zona="cerrar-sesion"]').click();
+    expect(sessionStorage.getItem(CLAVES.token)).toBeNull();
+    expect(new URL(navegar.mock.calls[0][0]).searchParams.get('motivo')).toBe('cerrada');
+  });
+});
+
+describe('la búsqueda de productos de la barra (RF-INV-008)', () => {
+  // UXC-9 — antes esto decía «por omisión no hay buscador», y ninguna vista lo
+  // pedía: la barra no tenía búsqueda en ninguna parte. RF-INV-008 (estado
+  // «Confirmado») la pide en la barra: «una barra de navegación que incluya la
+  // búsqueda de productos», y §3.1.1 la llama «permanente». La prueba vieja
+  // protegía lo contrario de lo que pide el requisito; se reescribe con él.
+  function enviar(elemento, texto) {
+    elemento.querySelector('input[type="search"]').value = texto;
     elemento
       .querySelector('[role="search"]')
       .dispatchEvent(new Event('submit', { cancelable: true }));
+  }
+
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  test('con sesión, la barra del jugador la lleva siempre, con su nombre', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+
+    const formulario = elemento.querySelector('form[role="search"]');
+    expect(formulario).not.toBeNull();
+    expect(formulario.getAttribute('aria-label')).toBe('Buscar productos');
+    const campo = formulario.querySelector('input[type="search"]');
+    expect(campo.getAttribute('minlength')).toBe('4');
+    expect(formulario.querySelector('label').textContent).toBe('Buscar productos');
+  });
+
+  test('buscar lleva a la tienda con lo escrito', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'home', navegar });
+
+    enviar(elemento, '  espada  ');
+
+    const destino = new URL(navegar.mock.calls[0][0]);
+    expect(destino.pathname).toMatch(/cuentas\/tienda\.html$/);
+    expect(destino.searchParams.get('busqueda')).toBe('espada');
+  });
+
+  test('con menos de cuatro letras no navega y lo dice en español', () => {
+    conSesion();
+    const navegar = jest.fn();
+    const { elemento } = montar({ vista: 'home', navegar });
+
+    enviar(elemento, 'esp');
+
+    expect(navegar).not.toHaveBeenCalled();
+    expect(elemento.querySelector('input[type="search"]').validationMessage).toBe(
+      'Escribe al menos cuatro letras para buscar.',
+    );
+  });
+
+  test('recuerda las últimas búsquedas como sugerencias del campo', () => {
+    conSesion();
+    enviar(montar({ vista: 'home' }).elemento, 'Espada de hielo');
+    document.body.innerHTML = '';
+
+    const { elemento } = montar({ vista: 'home' });
+    const campo = elemento.querySelector('input[type="search"]');
+    const sugerencias = [...elemento.querySelectorAll(`#${campo.getAttribute('list')} option`)];
+    expect(sugerencias.map((o) => o.value)).toEqual(['Espada de hielo']);
+  });
+
+  test('sin sitio para el campo, la lupa lleva a la búsqueda de la tienda', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+
+    const atajo = elemento.querySelector('.cabecera__buscador-atajo');
+    expect(atajo.getAttribute('aria-label')).toBe('Buscar productos');
+    const destino = new URL(atajo.href);
+    expect(destino.pathname).toMatch(/cuentas\/tienda\.html$/);
+    expect(destino.hash).toBe('#busqueda-tienda');
+  });
+
+  test('una vista que filtra en el sitio se queda el texto (la tienda)', () => {
+    conSesion();
+    const alBuscar = jest.fn();
+    const navegar = jest.fn();
+    const { elemento } = montar({
+      vista: 'tienda',
+      navegar,
+      buscador: { placeholder: 'Buscar productos', alBuscar },
+    });
+
+    enviar(elemento, '  espada  ');
+
     expect(alBuscar).toHaveBeenCalledWith('espada');
+    expect(navegar).not.toHaveBeenCalled();
+  });
+
+  test('una vista puede quitarla', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home', buscador: null });
+    expect(elemento.querySelector('[role="search"]')).toBeNull();
+    expect(elemento.querySelector('.cabecera__buscador-atajo')).toBeNull();
+  });
+
+  test('un visitante no la ve: la tienda pide sesión', () => {
+    const { elemento } = montar({ vista: 'subastas' });
+    expect(elemento.dataset.armazon).toBe('jugador');
+    expect(elemento.querySelector('[role="search"]')).toBeNull();
   });
 
   test('el portal nunca lleva buscador, aunque se lo pidan', () => {
@@ -334,7 +481,7 @@ describe('armazón de consola', () => {
     expect(elemento.querySelector('[data-zona="creditos"]')).toBeNull();
   });
 
-  test('el super administrador ve las ocho herramientas', () => {
+  test('el super administrador ve todas las herramientas', () => {
     expect(etiquetas(consolaDe('SUPER_ADMINISTRADOR'))).toEqual(
       SECCIONES_CONSOLA.map((s) => s.etiqueta),
     );
@@ -344,7 +491,28 @@ describe('armazón de consola', () => {
     expect(etiquetas(consolaDe('ADMINISTRADOR'))).not.toContain('Auditoría');
 
     document.body.innerHTML = '';
-    expect(etiquetas(consolaDe('MODERADOR'))).toEqual(['Resumen', 'Sanciones', 'Lista negra']);
+    expect(etiquetas(consolaDe('MODERADOR'))).toEqual([
+      'Resumen',
+      'Comentarios',
+      'Sanciones',
+      'Lista negra',
+    ]);
+  });
+
+  test('B3: «Comentarios» lleva a la cola de comentarios reportados y se marca activa allí', () => {
+    conSesion({ rol: 'MODERADOR' });
+    const raiz = document.createElement('div');
+    document.body.appendChild(raiz);
+    const { elemento } = montarArmazonAdmin(raiz, {
+      sesion: leerSesion(sessionStorage),
+      base: BASE,
+      navegar: jest.fn(),
+      seccionActiva: 'comentarios',
+    });
+
+    const destino = elemento.querySelector('[data-seccion="comentarios"]');
+    expect(destino.href).toMatch(/plataforma\/comentarios\/moderar-comentarios\.html$/);
+    expect(destino.getAttribute('aria-current')).toBe('page');
   });
 
   test('enseña el rol, para que «esa opción no me aparece» tenga respuesta', () => {

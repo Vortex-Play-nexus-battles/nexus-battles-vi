@@ -5,6 +5,14 @@ spring:
   mvc:
     problemdetails:
       enabled: true
+  # B3 — imagenes de comentario: el contrato 1.4.0 fija 2 MB por imagen. Spring
+  # corta aqui lo que se pase (413 imagen-demasiado-grande) antes de leerlo
+  # entero, y ExaminadorDeImagenes lo vuelve a comprobar. La peticion admite
+  # algo mas que el archivo por la envoltura multipart; el borde la corta a 3m.
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
   # Clave publica con la que se verifican los tokens de usuario (ADR-002).
   # Hoy la publica ms-identidad; con Keycloak solo cambia la URL, por
   # variable de entorno. Los roles y el uid los traduce ConversorRolesJwt
@@ -53,10 +61,36 @@ comentarios:
   # una linea AUDITORIA_MODERACION (regla 6).
   auditoria:
     url: ${AUDITORIA_URL:}
-  # Los formatos de imagen admitidos estan pendientes de definir con el
-  # Product Owner (issue 34); mientras tanto se configuran por variable de
-  # entorno y el valor local por defecto es el que usan las pruebas.
-  formatos-imagen: ${COMENTARIOS_FORMATOS_IMAGEN:jpg,png,webp}
+  # B3 — el catalogo de productos (contenido/productos), por su API publica:
+  # GET {url}/api/v1/productos/{id}. Publicar, calificar y leer el resumen de
+  # un producto que no existe responde 404; si el catalogo no contesta, las
+  # escrituras responden 503 (no se acepta a ciegas) y el resumen se sirve con
+  # lo que hay. El valor local es el puerto del compose de contenido; en AWS
+  # lo fija docker-compose.deploy.yml (host de contenido).
+  productos:
+    url: ${PRODUCTOS_URL:http://localhost:8103}
+    timeout-conexion: ${PRODUCTOS_TIMEOUT_CONEXION:1s}
+    timeout-lectura: ${PRODUCTOS_TIMEOUT_LECTURA:2s}
+    # Cuanto se recuerda cada respuesta: la de «existe» 5 min, la de «no
+    # existe» solo 30 s (el producto puede darse de alta justo despues).
+    cache-positivos: 5m
+    cache-negativos: 30s
+  # B3 — tiempos de los clientes hacia lista negra, sanciones, notificaciones
+  # y auditoria. Sin ellos un servicio colgado dejaba la publicacion esperando
+  # y el respaldo (retener en revision, 503) no llegaba a actuar.
+  http:
+    timeout-conexion: 2s
+    timeout-lectura: 5s
+  imagenes:
+    # Los formatos admitidos estaban pendientes de definir con el Product
+    # Owner (issue 34); el contrato 1.4.0 los fija en JPEG, PNG y WebP, y esta
+    # variable solo puede acotarlos a un subconjunto de esos tres.
+    formatos: ${COMENTARIOS_FORMATOS_IMAGEN:jpg,png,webp}
+    # Contrato 1.4.0: «las no usadas en 24 h se borran». La tarea corre cada
+    # hora (ISO-8601, que es lo que @Scheduled entiende siempre).
+    retencion-pendientes: 24h
+    limpieza-cada: PT1H
+    limpieza-retraso-inicial: PT10M
 
 # Regla 3 de plataforma: todo servicio expone salud Y metricas. Hasta el
 # 2026-09-21 este servicio solo exponia health (valor por omision de Actuator)

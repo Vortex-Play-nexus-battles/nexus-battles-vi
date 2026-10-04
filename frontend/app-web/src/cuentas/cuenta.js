@@ -18,6 +18,7 @@
  * | Historial | `GET /api/v1/creditos/{uid}/movimientos`    | ms-finanzas   |
  * | Historial | `GET /api/v1/transacciones/mi-historial`    | ms-finanzas   |
  * | Resumen   | `GET /api/v1/creditos/{uid}/saldo`          | ms-finanzas   |
+ * | Resumen   | `GET /api/v1/sanciones/usuarios/{uid}`      | moderación    |
  *
  * Nada de eso se inventa: si el servicio no está en el entorno, la zona lo
  * dice con su nombre y ofrece reintentar.
@@ -29,16 +30,21 @@ import { h, vaciar } from '../comun/ui/dom.js';
 import { creditos as formatoCreditos, fechaHora } from '../comun/ui/formato.js';
 import { boton, conCarga } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { fotoDeCuenta } from '../comun/ui/avatar.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { confirmar } from '../comun/ui/dialogo.js';
+import { estadoDeCuenta } from '../comun/ui/sancion.js';
+import { vigilarCuentasAtras } from '../comun/ui/cuenta-atras.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
 import {
   estadoDeCarga,
   estadoDeError,
   estadoVacio,
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const PERFILES = '/api/v1/perfiles';
 
@@ -90,6 +96,9 @@ export function nombreDelConcepto(concepto) {
     'recompensa-victoria': 'Recompensa por ganar',
     'recompensa-participacion': 'Recompensa por jugar',
     'inscripcion-torneo': 'Inscripción a un torneo',
+    // R17 — el abono con el que empieza toda cuenta nueva (ms-identidad lo
+    // pide a finanzas con este concepto al completar el alta).
+    'bono-registro': 'Créditos de bienvenida',
     'DEBITO-DIRECTO': 'Cobro',
     'CREDITO-PARTIDA': 'Créditos de una partida',
   };
@@ -106,8 +115,12 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   const textos = h('div', { clase: 'pila pila--ajustada' });
   textos.append(
     h('h3', { clase: 'tarjeta__titulo', texto: perfil?.apodo ?? sesion.apodo ?? 'Sin apodo' }),
-    h('p', { clase: 't-meta', texto: perfil?.email ?? '' }),
   );
+  // El perfil (ms-identidad-perfiles.yaml) no publica el correo: un párrafo
+  // vacío no dice nada. Si algún día llega, se enseña.
+  if (perfil?.email) {
+    textos.append(h('p', { clase: 't-meta', texto: perfil.email }));
+  }
   cabeza.append(textos);
   if (sesion.rol) {
     cabeza.append(
@@ -119,14 +132,17 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   }
   identidad.append(cabeza);
   if (perfil?.avatar) {
-    identidad.append(
-      h('img', {
-        clase: 'avatar-vista-previa',
-        atributos: { src: perfil.avatar, alt: `Avatar de ${perfil.apodo ?? ''}` },
-      }),
-    );
+    // Si la foto no carga queda la inicial, no el texto alternativo suelto
+    // (auditoría de DEV del 30-sep).
+    identidad.append(fotoDeCuenta({ url: perfil.avatar, apodo: perfil.apodo ?? sesion.apodo }));
   }
   zona.append(identidad);
+
+  // UXC-7 — el estado de la cuenta, con la cuenta atrás si una sanción la
+  // restringe. Va antes que el saldo: si no puedes jugar, es lo primero.
+  const zonaEstado = h('div', { datos: { zona: 'resumen-estado' } });
+  zona.append(zonaEstado);
+  pintarEstadoDeLaCuenta(zonaEstado, { sesion, fetchImpl });
 
   const zonaSaldo = h('div', { datos: { zona: 'resumen-saldo' } });
   zona.append(zonaSaldo);
@@ -152,9 +168,42 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: formatoCreditos(saldo.datos.saldoReservado),
+      // Cuándo vuelve (auditoría de DEV del 30-sep, D-39).
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   vaciar(zonaSaldo).append(rejilla);
+}
+
+/**
+ * «Estado de tu cuenta» en el resumen (SanctionCountdown).
+ *
+ * @param {HTMLElement} zona
+ * @param {{sesion: object, fetchImpl: Function}} opciones
+ */
+async function pintarEstadoDeLaCuenta(zona, { sesion, fetchImpl }) {
+  pintarEstado(zona, estadoDeCarga({ filas: 1, etiqueta: 'Consultando el estado de tu cuenta…' }));
+  const historial = await leer(
+    `/api/v1/sanciones/usuarios/${encodeURIComponent(sesion.uid)}`,
+    fetchImpl,
+  );
+  if (!historial.ok) {
+    vaciar(zona).append(
+      estadoDeError({
+        titulo: 'No pudimos consultar el estado de tu cuenta',
+        detalle: 'No significa que tengas una sanción: significa que no lo sabemos ahora mismo.',
+        alReintentar: () => pintarEstadoDeLaCuenta(zona, { sesion, fetchImpl }),
+      }),
+    );
+    return;
+  }
+  vaciar(zona).append(
+    estadoDeCuenta(Array.isArray(historial.datos) ? historial.datos : [], {
+      hrefSanciones: resolver(RUTAS.misSanciones),
+      titulo: 'Estado de tu cuenta',
+    }),
+  );
+  vigilarCuentasAtras(zona);
 }
 
 // ---------------------------------------------------------------- historial
@@ -199,15 +248,17 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
     return;
   }
 
-  const tabla = h('table', { clase: 'tabla', datos: { zona: 'movimientos' } });
+  // `tabla--datos`: la <table> lleva sus propias reglas de celda (shared/ui-kit);
+  // el importe, como toda cifra, a la derecha en el encabezado y en la celda.
+  const tabla = h('table', { clase: 'tabla tabla--datos', datos: { zona: 'movimientos' } });
   const cabecera = h('thead');
   cabecera.append(
     h('tr', {
       hijos: [
-        h('th', { texto: 'Concepto' }),
-        h('th', { texto: 'Importe' }),
-        h('th', { texto: 'Estado' }),
-        h('th', { texto: 'Cuándo' }),
+        h('th', { texto: 'Concepto', atributos: { scope: 'col' } }),
+        h('th', { clase: 'tabla__numero', texto: 'Importe', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Estado', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Cuándo', atributos: { scope: 'col' } }),
       ],
     }),
   );
@@ -220,7 +271,7 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
         hijos: [
           h('td', { texto: nombreDelConcepto(movimiento.concepto) }),
           h('td', {
-            clase: 'movimiento__importe',
+            clase: 'movimiento__importe tabla__numero',
             texto: importe.texto,
             datos: { tono: importe.tono },
           }),
@@ -326,6 +377,11 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       llenarFormulario(formulario, perfil);
     }
     if (vistaAvatar && perfil?.avatar) {
+      // Auditoría de DEV del 30-sep: una foto que no carga no deja el texto
+      // alternativo en medio del formulario; se retira y se puede subir otra.
+      vistaAvatar.onerror = () => {
+        vistaAvatar.hidden = true;
+      };
       vistaAvatar.src = perfil.avatar;
       vistaAvatar.hidden = false;
     }
@@ -383,8 +439,14 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
         }
         pintarAviso(zonaAviso, {
           tono: tonoPorEstado(respuesta.status),
-          titulo: problema?.title ?? 'No pudimos guardar los cambios',
-          detalle: problema?.detail ?? 'Revisa los datos e inténtalo otra vez.',
+          titulo: 'No pudimos guardar los cambios',
+          detalle: textoDelServidor(
+            problema,
+            respuesta.status,
+            respuesta.status >= 500
+              ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
+              : 'Revisa los datos e inténtalo otra vez.',
+          ),
         });
         return;
       }
@@ -445,10 +507,17 @@ export function montarAccionesDeSesion(raiz, { sesion, alCerrarSesion }) {
   vaciar(zona);
   const lista = h('dl', { clase: 'tarjeta__datos' });
   lista.append(
-    h('dt', { clase: 't-meta', texto: 'Identificador' }),
-    h('dd', { texto: sesion.uid ?? '—' }),
-    h('dt', { clase: 't-meta', texto: 'Rol' }),
-    h('dd', { texto: sesion.rol ?? '—' }),
+    h('div', {
+      clase: 'tarjeta__dato',
+      hijos: [
+        h('dt', { clase: 't-meta', texto: 'Identificador' }),
+        h('dd', { texto: sesion.uid ?? '—' }),
+      ],
+    }),
+    h('div', {
+      clase: 'tarjeta__dato',
+      hijos: [h('dt', { clase: 't-meta', texto: 'Rol' }), h('dd', { texto: sesion.rol ?? '—' })],
+    }),
   );
   zona.append(
     lista,

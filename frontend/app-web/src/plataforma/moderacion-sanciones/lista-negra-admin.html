@@ -3,22 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Lista negra de términos — The Nexus Battles VI</title>
+    <title>Lista negra de términos · The Nexus Battles VI</title>
     <!--
-      UX-R3.3 — aquí había 150 líneas de CSS embebido con SU PROPIA PALETA:
-      trece colores en hexadecimal (`--color-cromo: #1c2340`, `--color-accion:
-      #2244bf`…) que son los mismos que `tokens.css` ya declara, redeclarados
-      con otro nombre dentro de un `<style>` de una sola vista. Dos de ellos ya
-      se habían separado del kit.
-
-      Esa hoja daba fondo de cromo al `<header>` de la página — que aquí no es
-      la barra de navegación sino el encabezado del contenido— y lo dejaba con
-      el texto oscuro del kit encima: título ilegible en la primera línea de la
-      pantalla. También estilaba `button`, `input` y `ul` a pelo, así que
-      cualquier control nuevo heredaba una apariencia que no es la del
-      producto.
-
-      Ahora esta vista carga los tres archivos del kit, como las otras treinta.
+      UX-R3.3 — esta vista carga los tres archivos del kit, como las otras
+      treinta, sin hoja propia: las clases de la lista (`lista-terminos*`), los
+      distintivos y los campos ya están en `componentes.css`.
     -->
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
@@ -28,65 +17,114 @@
     <div data-cabecera-app></div>
 
     <!--
-      UX-R3.3 — esta vista no había adoptado el sistema de diseño.
-
-      Tenía un `<header>` suelto con la frase «Panel de administración — Lista
-      negra de términos» como único texto, un `<main>` sin contenedor de
-      página, un `<input>` y un `<button>` sin las clases del kit, y tres
-      `<div>` de estado sueltos. Se veía como un formulario de 1998 dentro de
-      un producto que sí tiene sistema. Los identificadores NO cambian: el
-      módulo `lista-negra-admin.js` los busca por `getElementById` y esto es
-      solo el envoltorio.
+      B2 (moderacion-lista-negra.yaml 2.0.x) — cada término lleva su categoría
+      del 7.1.1, su modo de coincidencia, si está activo y quién lo dio de
+      alta. La vista la monta `montarListaNegra` sobre las zonas
+      `[data-zona=...]`, igual que las de sanciones.
     -->
     <main class="pagina consola pila" data-vista="lista-negra-admin">
       <header class="encabezado-pagina">
         <div class="pila pila--ajustada">
           <h1>Lista negra de términos</h1>
           <p class="t-meta">
-            Palabras que el registro rechaza en un apodo. Se aplica al crear la cuenta y al cambiar
-            de apodo, y cada alta queda en el registro de auditoría.
+            Palabras ofensivas y nombres de políticos, celebridades, dirigentes o marcas registradas
+            que no se aceptan en apodos, nombres de equipo, torneo o sala, comentarios y chat. Se
+            comparan sin mayúsculas, tildes, separadores ni sustituciones como «sp1der-man».
           </p>
         </div>
       </header>
 
-      <section class="tarjeta pila pila--compacta">
-        <h2 class="t-subtitulo">Añadir un término</h2>
-        <!-- `.fila` reparte el ancho a partes iguales entre sus hijos, y el
-             botón crecía hasta media pantalla. `.formulario-en-linea` deja que
-             crezca el campo y que el botón mida lo que mide su texto. -->
-        <form id="form-agregar-termino" class="formulario-en-linea">
-          <div class="campo">
-            <label class="campo__etiqueta" for="input-termino">Término prohibido</label>
-            <input
-              class="campo__control"
-              type="text"
-              id="input-termino"
-              placeholder="Escribe el término"
-              required
-            />
+      <section class="tarjeta pila pila--compacta" aria-labelledby="titulo-alta">
+        <h2 class="t-subtitulo" id="titulo-alta">Añadir un término</h2>
+        <form class="pila pila--compacta" data-zona="alta">
+          <div class="fila">
+            <div class="campo">
+              <label class="campo__etiqueta" for="alta-termino">Término prohibido</label>
+              <input
+                class="campo__control"
+                type="text"
+                id="alta-termino"
+                name="termino"
+                maxlength="120"
+                placeholder="Escribe el término"
+                required
+              />
+            </div>
+            <div class="campo">
+              <label class="campo__etiqueta" for="alta-categoria">Categoría</label>
+              <select class="campo__control desplegable" id="alta-categoria" name="categoria">
+                <option value="OFENSIVO">Ofensivo</option>
+                <option value="MARCA">Marca registrada</option>
+                <option value="CELEBRIDAD">Celebridad</option>
+                <option value="POLITICO">Político</option>
+                <option value="DIRIGENTE">Dirigente</option>
+                <option value="OTRO" selected>Otro</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label class="campo__etiqueta" for="alta-modo">Cómo se busca</label>
+              <select
+                class="campo__control desplegable"
+                id="alta-modo"
+                name="modo"
+                aria-describedby="alta-modo-pista"
+              >
+                <option value="" selected>Automático</option>
+                <option value="SUBCADENA">Dentro de otras palabras</option>
+                <option value="PALABRA">Palabra entera</option>
+              </select>
+              <p class="campo__pista" id="alta-modo-pista">
+                Automático: los de 5 letras o más se buscan dentro de otras palabras; los más
+                cortos, solo como palabra entera.
+              </p>
+            </div>
           </div>
-          <button type="submit" id="boton-agregar" class="boton boton--primario">Agregar</button>
+          <div class="fila fila--acciones">
+            <button type="submit" class="boton boton--primario">Agregar</button>
+          </div>
         </form>
       </section>
 
-      <div id="estado-exito" role="status"></div>
+      <div data-zona="aviso" hidden></div>
 
-      <section class="tarjeta pila pila--compacta">
-        <h2 class="t-subtitulo">Términos vetados</h2>
-        <div id="estado-carga" class="t-meta">Cargando términos…</div>
-        <div id="estado-error" role="alert"></div>
-        <div id="estado-vacio" class="t-meta">
-          Todavía no hay términos en la lista negra. Mientras esté vacía, el registro solo aplica
-          sus validaciones de formato.
-        </div>
-        <ul id="lista-terminos" class="lista-terminos"></ul>
+      <section class="tarjeta pila pila--compacta" aria-labelledby="titulo-terminos">
+        <h2 class="t-subtitulo" id="titulo-terminos">Términos vetados</h2>
+        <form class="formulario-en-linea" data-zona="filtros" role="search">
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-buscar">Buscar</label>
+            <input class="campo__control" type="search" id="filtro-buscar" name="buscar" />
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-categoria">Categoría</label>
+            <select class="campo__control desplegable" id="filtro-categoria" name="categoria">
+              <option value="" selected>Todas</option>
+              <option value="OFENSIVO">Ofensivo</option>
+              <option value="MARCA">Marca registrada</option>
+              <option value="CELEBRIDAD">Celebridad</option>
+              <option value="POLITICO">Político</option>
+              <option value="DIRIGENTE">Dirigente</option>
+              <option value="OTRO">Otro</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-activo">Estado</label>
+            <select class="campo__control desplegable" id="filtro-activo" name="activo">
+              <option value="" selected>Todos</option>
+              <option value="true">Activos</option>
+              <option value="false">Inactivos</option>
+            </select>
+          </div>
+          <button type="submit" class="boton boton--secundario">Filtrar</button>
+        </form>
+        <div class="pila pila--compacta" data-zona="terminos" aria-live="polite"></div>
+        <div data-zona="paginacion"></div>
       </section>
     </main>
 
-    <script type="module" src="./lista-negra-admin.js"></script>
     <script type="module">
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { exigirAcceso } from '../../comun/acceso.js';
+      import { montarListaNegra } from './lista-negra-admin.js';
 
       if (!exigirAcceso('lista-negra-admin')) {
         throw new Error('sin sesion: redirigiendo al login');
@@ -96,6 +134,7 @@
         vista: 'lista-negra-admin',
         seccionActiva: 'lista-negra',
       });
+      montarListaNegra(document);
     </script>
   </body>
 </html>

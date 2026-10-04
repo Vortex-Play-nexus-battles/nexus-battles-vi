@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mi cuenta — NEXUS BATTLES VI</title>
+    <title>Mi cuenta · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
@@ -17,14 +17,16 @@
       <header class="encabezado-pagina">
         <div class="pila pila--ajustada">
           <h1>Mi cuenta</h1>
-          <p class="t-cuerpo">Tus datos, tu seguridad y todo lo que movió tus créditos.</p>
+          <p class="t-cuerpo">
+            Tus datos, cómo te va en el juego, tu seguridad y todo lo que movió tus créditos.
+          </p>
         </div>
       </header>
 
       <!-- Aviso global de la pantalla: guardado, rechazo del servicio. -->
       <div data-zona="aviso" hidden></div>
 
-      <!-- Las cuatro cosas que esta pantalla hace de verdad. La navegación
+      <!-- Las cinco cosas que esta pantalla hace de verdad. La navegación
            por pestañas la monta `comun/ui/pestanas.js` (patrón ARIA tabs). -->
       <div data-zona="pestanas"></div>
 
@@ -33,68 +35,143 @@
         <div class="pila" data-zona="contenido"></div>
       </section>
 
+      <!-- ---------------------------------------------- Estadísticas -->
+      <!-- UXC-9 — §7.1.1 «estadísticas y logros del jugador». Lo pinta
+           `estadisticas-cuenta.js` con lo que publican salas-partidas
+           (`GET /partidas/mias`) y misiones (`GET /misiones/historial`). -->
+      <section data-zona="panel-estadisticas" hidden>
+        <div class="pila">
+          <section class="tarjeta pila" aria-labelledby="titulo-mis-batallas">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-mis-batallas">Tus batallas</h2>
+                <p class="t-meta">Cada partida que jugaste, con su resultado.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-partidas"></div>
+          </section>
+
+          <section class="tarjeta pila" aria-labelledby="titulo-mis-misiones">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-mis-misiones">Tus misiones</h2>
+                <p class="t-meta">Lo que tus héroes consiguieron fuera de las batallas.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-misiones"></div>
+          </section>
+
+          <section class="tarjeta pila" aria-labelledby="titulo-torneos-logros">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-torneos-logros">Torneos y logros</h2>
+                <p class="t-meta">Dónde se ve hoy lo que no tiene resumen en tu cuenta.</p>
+              </div>
+            </div>
+            <div class="pila" data-zona="estadisticas-pendiente"></div>
+          </section>
+        </div>
+      </section>
+
       <!-- ---------------------------------------------------- Perfil -->
       <section data-zona="panel-perfil" hidden>
-        <form id="formulario-perfil" class="tarjeta pila" novalidate>
-          <div class="encabezado-seccion">
+        <div class="pila">
+          <form id="formulario-perfil" class="tarjeta pila" novalidate>
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo">Información personal</h2>
+                <p class="t-meta">Así te ven el resto de jugadores.</p>
+              </div>
+            </div>
+
+            <div class="fila">
+              <div class="campo">
+                <label class="campo__etiqueta" for="nombres">Nombres</label>
+                <input class="campo__control" type="text" id="nombres" name="nombres" required />
+              </div>
+              <div class="campo">
+                <label class="campo__etiqueta" for="apellidos">Apellidos</label>
+                <input
+                  class="campo__control"
+                  type="text"
+                  id="apellidos"
+                  name="apellidos"
+                  required
+                />
+              </div>
+            </div>
+
+            <div class="campo">
+              <label class="campo__etiqueta" for="apodo">Apodo</label>
+              <input class="campo__control" type="text" id="apodo" name="apodo" />
+              <p class="campo__pista">
+                Cambiarlo pide confirmación: es el nombre con el que te ven en las salas, el chat y
+                los comentarios.
+              </p>
+            </div>
+
+            <div class="campo">
+              <label class="campo__etiqueta" for="preferencias">Preferencias</label>
+              <textarea
+                class="campo__control campo--area"
+                id="preferencias"
+                name="preferencias"
+                rows="4"
+              ></textarea>
+            </div>
+
             <div class="pila pila--ajustada">
-              <h2 class="t-subtitulo">Información personal</h2>
-              <p class="t-meta">Así te ven el resto de jugadores.</p>
+              <p class="campo__etiqueta">Avatar</p>
+              <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
+              <img class="avatar-vista-previa" data-zona="avatar-previo" alt="Tu avatar" hidden />
+              <input
+                class="campo__control"
+                type="file"
+                id="avatar"
+                name="avatar"
+                accept="image/jpeg,image/png,image/webp"
+              />
             </div>
-          </div>
 
-          <div class="fila">
-            <div class="campo">
-              <label class="campo__etiqueta" for="nombres">Nombres</label>
-              <input class="campo__control" type="text" id="nombres" name="nombres" required />
+            <div class="tarjeta__acciones">
+              <button type="button" class="boton boton--secundario" data-accion="descartar-perfil">
+                Descartar cambios
+              </button>
+              <button type="submit" class="boton boton--primario" data-accion="guardar-perfil">
+                Guardar cambios
+              </button>
             </div>
-            <div class="campo">
-              <label class="campo__etiqueta" for="apellidos">Apellidos</label>
-              <input class="campo__control" type="text" id="apellidos" name="apellidos" required />
+          </form>
+
+          <!-- UXC-9 — §7.3.6 (portal de privacidad: portabilidad y derecho al
+             olvido). Ningún contrato publica todavía la descarga de los datos
+             ni el cierre de la cuenta; aquí se dice qué se puede hacer hoy
+             y qué no, en vez de una pestaña vacía o ninguna. -->
+          <section class="tarjeta pila" aria-labelledby="titulo-tus-datos">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-tus-datos">Tus datos personales</h2>
+                <p class="t-meta">Qué puedes hacer hoy con ellos.</p>
+              </div>
             </div>
-          </div>
-
-          <div class="campo">
-            <label class="campo__etiqueta" for="apodo">Apodo</label>
-            <input class="campo__control" type="text" id="apodo" name="apodo" />
-            <p class="campo__pista">
-              Cambiarlo pide confirmación: es el nombre con el que te ven en las salas, el chat y
-              los comentarios.
-            </p>
-          </div>
-
-          <div class="campo">
-            <label class="campo__etiqueta" for="preferencias">Preferencias</label>
-            <textarea
-              class="campo__control campo--area"
-              id="preferencias"
-              name="preferencias"
-              rows="4"
-            ></textarea>
-          </div>
-
-          <div class="pila pila--ajustada">
-            <p class="campo__etiqueta">Avatar</p>
-            <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
-            <img class="avatar-vista-previa" data-zona="avatar-previo" alt="Tu avatar" hidden />
-            <input
-              class="campo__control"
-              type="file"
-              id="avatar"
-              name="avatar"
-              accept="image/jpeg,image/png,image/webp"
-            />
-          </div>
-
-          <div class="tarjeta__acciones">
-            <button type="button" class="boton boton--secundario" data-accion="descartar-perfil">
-              Descartar cambios
-            </button>
-            <button type="submit" class="boton boton--primario" data-accion="guardar-perfil">
-              Guardar cambios
-            </button>
-          </div>
-        </form>
+            <dl class="cuenta-notas" data-zona="privacidad">
+              <div class="cuenta-notas__nota">
+                <dt>Consultarlos y corregirlos</dt>
+                <dd>
+                  Tus nombres, apellidos, apodo, avatar y preferencias se ven y se corrigen en este
+                  formulario. El correo con el que entras no se muestra ni se cambia desde aquí.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Descargarlos o cerrar tu cuenta</dt>
+                <dd>
+                  Todavía no se puede desde el juego: el servicio de privacidad que atenderá la
+                  descarga de tus datos y el cierre de la cuenta aún no está publicado.
+                </dd>
+              </div>
+            </dl>
+          </section>
+        </div>
       </section>
 
       <!-- ---------------------------------------------------- Seguridad -->
@@ -109,7 +186,10 @@
               </div>
             </div>
 
-            <form autocomplete="off" class="pila">
+            <!-- G1 — las contraseñas nunca en la dirección: `method="post"` y el
+                 botón desactivado hasta que cambiar-password.js escucha
+                 `submit` (comun/ui/formulario-seguro.js). -->
+            <form autocomplete="off" class="pila" method="post">
               <div class="campo">
                 <label class="campo__etiqueta" for="passwordActual">Contraseña actual</label>
                 <input
@@ -163,8 +243,203 @@
                 >
                   Cancelar
                 </button>
-                <button type="submit" class="boton boton--primario" data-accion="guardar-password">
+                <button
+                  type="submit"
+                  class="boton boton--primario"
+                  data-accion="guardar-password"
+                  disabled
+                  data-espera-guion
+                >
                   Cambiar contraseña
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <!-- B1 (7.1.1) — preguntas de seguridad para recuperar la cuenta. Las
+               escribe la persona: el juego no propone ninguna. Lo monta
+               `preguntas-seguridad.js`. -->
+          <section
+            class="tarjeta pila"
+            data-zona="preguntas-seguridad"
+            aria-labelledby="tituloPreguntasSeguridad"
+          >
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="tituloPreguntasSeguridad">Preguntas de seguridad</h2>
+                <p class="t-meta">
+                  Junto con el código del correo, sirven para recuperar tu cuenta. Las escribes tú:
+                  el juego no propone ninguna.
+                </p>
+              </div>
+            </div>
+
+            <p class="t-meta" data-zona="estado-preguntas" role="status">
+              Consultando tus preguntas de seguridad…
+            </p>
+            <ol class="pila pila--ajustada" data-zona="lista-preguntas" hidden></ol>
+            <div data-zona="aviso-preguntas" tabindex="-1" hidden></div>
+
+            <div class="tarjeta__acciones" data-zona="acciones-preguntas">
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="configurar-preguntas"
+                hidden
+              >
+                Configurar preguntas
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="reintentar-preguntas"
+                hidden
+              >
+                Reintentar
+              </button>
+            </div>
+
+            <!-- G1 — ni la contraseña ni las respuestas en la dirección: igual
+                 que el formulario de arriba, con preguntas-seguridad.js. -->
+            <form class="pila" data-zona="formulario-preguntas" method="post" novalidate hidden>
+              <p class="campo__pista">
+                Escribe preguntas cuya respuesta solo sepas tú y no cambie con el tiempo. Las
+                respuestas no distinguen mayúsculas ni tildes.
+              </p>
+
+              <div class="pila" data-pregunta="1">
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad1">Pregunta 1</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad1"
+                    name="preguntaSeguridad1"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad1">Respuesta 1</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad1"
+                    name="respuestaSeguridad1"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="pila" data-pregunta="2">
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad2">Pregunta 2</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad2"
+                    name="preguntaSeguridad2"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad2">Respuesta 2</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad2"
+                    name="respuestaSeguridad2"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="pila" data-pregunta="3" hidden>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="preguntaSeguridad3">Pregunta 3</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="preguntaSeguridad3"
+                    name="preguntaSeguridad3"
+                    data-campo="texto"
+                    maxlength="200"
+                    autocomplete="off"
+                  />
+                </div>
+                <div class="campo">
+                  <label class="campo__etiqueta" for="respuestaSeguridad3">Respuesta 3</label>
+                  <input
+                    class="campo__control"
+                    type="text"
+                    id="respuestaSeguridad3"
+                    name="respuestaSeguridad3"
+                    data-campo="respuesta"
+                    maxlength="100"
+                    autocomplete="off"
+                    autocapitalize="off"
+                    spellcheck="false"
+                  />
+                </div>
+              </div>
+
+              <div class="tarjeta__acciones">
+                <button type="button" class="boton boton--secundario" data-accion="anadir-pregunta">
+                  Añadir una tercera pregunta
+                </button>
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="quitar-pregunta"
+                  hidden
+                >
+                  Quitar la tercera pregunta
+                </button>
+              </div>
+
+              <div class="campo">
+                <label class="campo__etiqueta" for="passwordActualPreguntas"
+                  >Contraseña actual</label
+                >
+                <input
+                  class="campo__control"
+                  type="password"
+                  id="passwordActualPreguntas"
+                  name="passwordActualPreguntas"
+                  autocomplete="current-password"
+                />
+                <p class="campo__pista">
+                  Para cambiar las preguntas hace falta tu contraseña, no solo la sesión abierta.
+                </p>
+              </div>
+
+              <div class="tarjeta__acciones">
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="cancelar-preguntas"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  class="boton boton--primario"
+                  data-accion="guardar-preguntas"
+                  disabled
+                  data-espera-guion
+                >
+                  Guardar preguntas
                 </button>
               </div>
             </form>
@@ -195,6 +470,41 @@
             </a>
           </div>
           <div data-zona="contenido"></div>
+
+          <!-- UXC-9 — §7.1.1 «administración de suscripciones y métodos de
+               pago». Ningún contrato publica suscripciones ni guarda
+               tarjetas (ecommerce-carrito: el número se valida y se
+               descarta; solo quedan los cuatro últimos dígitos), así que
+               aquí se dice eso, con adónde ir, en vez de una sección vacía. -->
+          <section class="tarjeta pila" aria-labelledby="titulo-suscripciones-pagos">
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-suscripciones-pagos">
+                  Suscripciones y métodos de pago
+                </h2>
+                <p class="t-meta">Qué guarda tu cuenta de tus pagos.</p>
+              </div>
+            </div>
+            <dl class="cuenta-notas" data-zona="suscripciones-pagos">
+              <div class="cuenta-notas__nota">
+                <dt>Suscripciones</dt>
+                <dd>
+                  No tienes ninguna: el juego todavía no ofrece suscripciones. Los productos se
+                  compran uno a uno en la tienda.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Métodos de pago</dt>
+                <dd>
+                  No se guarda ninguna tarjeta: la escribes en cada compra, se comprueba y se
+                  descarta. Con el pago solo quedan sus cuatro últimos dígitos.
+                </dd>
+              </div>
+            </dl>
+            <div class="tarjeta__acciones">
+              <a class="boton boton--secundario" href="./tienda.html">Ir a la tienda</a>
+            </div>
+          </section>
         </div>
       </section>
     </main>

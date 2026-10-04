@@ -113,6 +113,12 @@ describe('con todos los servicios disponibles', () => {
     expect(enlaces).toHaveLength(ACCESOS.length);
     expect(enlaces[0].getAttribute('href')).toBe(ACCESOS[0].destino);
   });
+
+  test('auditoría 30-sep: «Comunidad» lleva a donde están las opiniones, no a un formulario sin producto', () => {
+    const comunidad = ACCESOS.find((acceso) => acceso.titulo === 'Comunidad');
+    expect(comunidad.destino).toBe('./tienda.html');
+    expect(ACCESOS.some((acceso) => acceso.destino.includes('publicar-comentario'))).toBe(false);
+  });
 });
 
 describe('cuando un servicio no está en este entorno', () => {

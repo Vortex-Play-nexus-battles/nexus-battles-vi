@@ -24,7 +24,8 @@ import java.util.UUID;
 /**
  * Criterios de aceptacion de HU-JUE-015 sobre el caso de uso, sin Spring:
  * CA-01 camino feliz, CA-02 logro de mision, CA-03 contenido prohibido o
- * jugador silenciado. Mas la regla de que nada sale sin verificar.
+ * jugador silenciado. Mas la regla de que nada sale sin verificar, y la de
+ * HU-COM-007: el logro compartido pasa por el mismo filtro que el texto.
  */
 class EnviarMensajeTest {
 
@@ -36,9 +37,23 @@ class EnviarMensajeTest {
     private final List<MensajeDeChat> publicados = new ArrayList<>();
     private final Set<UUID> silenciados = new HashSet<>();
     private Veredicto veredicto = Veredicto.LIMPIO;
+    /** Un texto para el que el filtro no contesta, aunque los demas si. */
+    private String sinRespuestaPara;
+    /** Lo que se le pidio verificar al filtro, y en que canal. */
+    private final List<String> verificados = new ArrayList<>();
+    private final List<Canal> canalesVerificados = new ArrayList<>();
 
+    /** Doble del filtro: senala lo que contiene «prohibida»; el resto, segun {@code veredicto}. */
     private EnviarMensaje casoDeUso() {
-        return new EnviarMensaje(historial, texto -> veredicto, silenciados::contains,
+        FiltroDeContenido filtro = (texto, canal) -> {
+            verificados.add(texto);
+            canalesVerificados.add(canal);
+            if (texto.equals(sinRespuestaPara)) {
+                return Veredicto.SIN_VERIFICAR;
+            }
+            return texto.contains("prohibida") ? Veredicto.SENALADO : veredicto;
+        };
+        return new EnviarMensaje(historial, filtro, silenciados::contains,
                 publicados::add, Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
@@ -102,6 +117,105 @@ class EnviarMensajeTest {
         assertThrows(MensajeInvalido.class, () -> casoDeUso().enviar(SALA, ANA, "   ", null));
         assertThrows(MensajeInvalido.class, () -> casoDeUso().enviar(SALA, ANA, "x".repeat(501), null));
         assertTrue(publicados.isEmpty());
+    }
+
+    // --- Auditoria de DEV del 30-sep: ASCII art en el chat general y sin limite de frecuencia ---
+
+    @Test
+    @DisplayName("un dibujo de simbolos no se publica ni se consulta a la lista negra: 400 con su explicacion")
+    void unDibujoNoSePublica() {
+        String dibujo = String.join("\n", " /\\_/\\ ", "( o.o )", " > ^ < ", "/|   |\\", "(_| |_)", " || || ",
+                " '' '' ");
+
+        MensajeInvalido error = assertThrows(MensajeInvalido.class,
+                () -> casoDeUso().enviar(Canal.general(), ANA, dibujo, null));
+
+        assertTrue(error.detalle().contains("líneas"), error.detalle());
+        assertTrue(publicados.isEmpty());
+        assertTrue(verificados.isEmpty(), "rechazar lo evidente no cuesta una llamada a la lista negra");
+    }
+
+    @Test
+    @DisplayName("lo que se publica es el texto depurado: sin invisibles y en NFKC")
+    void sePublicaDepurado() {
+        MensajeDeChat m = casoDeUso().enviar(Canal.general(), ANA, "ｈｏｌａ​ equipo‮", null);
+
+        assertEquals("hola equipo", m.texto());
+        assertEquals(List.of("hola equipo"), verificados, "la lista negra ve lo mismo que se publica");
+    }
+
+    @Test
+    @DisplayName("quien escribe mas deprisa de lo admitido recibe 429 y su mensaje no sale")
+    void limiteDeFrecuencia() {
+        List<UUID> contados = new ArrayList<>();
+        EnviarMensaje conLimite = new EnviarMensaje(historial, (texto, canal) -> Veredicto.LIMPIO,
+                silenciados::contains, publicados::add, Clock.fixed(AHORA, ZoneOffset.UTC),
+                PoliticaDeTexto.Limites.POR_OMISION,
+                autor -> {
+                    contados.add(autor);
+                    return contados.size() > 2 ? java.util.Optional.of(java.time.Duration.ofMillis(4200))
+                            : java.util.Optional.empty();
+                });
+
+        conLimite.enviar(Canal.general(), ANA, "uno", null);
+        conLimite.enviar(Canal.general(), ANA, "dos", null);
+        DemasiadosMensajes error = assertThrows(DemasiadosMensajes.class,
+                () -> conLimite.enviar(Canal.general(), ANA, "tres", null));
+
+        assertEquals(429, error.estado());
+        assertEquals("Espera 5 segundos antes de enviar otro mensaje.", error.detalle());
+        assertEquals(2, publicados.size());
+        assertEquals(List.of(ANA.id(), ANA.id(), ANA.id()), contados, "el limite es por autor");
+    }
+
+    // --- HU-COM-007 (RF-COM-007): el logro tambien se publica, asi que tambien se filtra ---
+
+    @Test
+    @DisplayName("HU-COM-007: un logro con un termino prohibido en el titulo se bloquea y no queda en el historial")
+    void logroConTituloProhibidoSeBloquea() {
+        LogroCompartido logro = new LogroCompartido("mision-7", "palabra prohibida");
+
+        assertThrows(ContenidoBloqueado.class, () -> casoDeUso().enviar(SALA, ANA, "lo logre", logro));
+        assertTrue(publicados.isEmpty());
+        assertTrue(historial.ultimos(SALA, 10).isEmpty());
+    }
+
+    @Test
+    @DisplayName("HU-COM-007: la mision del logro tambien pasa por el filtro")
+    void logroConMisionProhibidaSeBloquea() {
+        LogroCompartido logro = new LogroCompartido("mision prohibida", "Cazador de dragones");
+
+        assertThrows(ContenidoBloqueado.class, () -> casoDeUso().enviar(Canal.general(), ANA, "lo logre", logro));
+        assertTrue(publicados.isEmpty());
+    }
+
+    @Test
+    @DisplayName("HU-COM-007: el texto y cada campo del logro se verifican por separado, con el canal del mensaje")
+    void cadaTextoSeVerificaConSuCanal() {
+        casoDeUso().enviar(SALA, ANA, "lo logre", new LogroCompartido("mision-7", "Cazador de dragones"));
+
+        assertEquals(List.of("lo logre", "mision-7", "Cazador de dragones"), verificados);
+        assertEquals(List.of(SALA, SALA, SALA), canalesVerificados);
+    }
+
+    @Test
+    @DisplayName("HU-COM-007: un campo vacio del logro no se manda a verificar")
+    void campoVacioDelLogroNoSeVerifica() {
+        casoDeUso().enviar(Canal.general(), ANA, "lo logre", new LogroCompartido("mision-7", null));
+
+        assertEquals(List.of("lo logre", "mision-7"), verificados);
+        assertEquals(List.of(Canal.general(), Canal.general()), canalesVerificados);
+    }
+
+    @Test
+    @DisplayName("HU-COM-007: si el filtro no responde para el logro, el mensaje no sale y se pide reintentar")
+    void logroSinVerificarNoSale() {
+        sinRespuestaPara = "Cazador de dragones";
+
+        assertThrows(FiltroNoDisponible.class, () -> casoDeUso().enviar(SALA, ANA, "lo logre",
+                new LogroCompartido("mision-7", "Cazador de dragones")));
+        assertTrue(publicados.isEmpty());
+        assertTrue(historial.ultimos(SALA, 10).isEmpty());
     }
 
     /** Historial en memoria, el mismo papel que RepositorioDeSalasEnMemoria. */

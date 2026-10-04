@@ -13,8 +13,7 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--fondo);
-  color: var(--texto);
+  /* UX-GAME-1: fondo y color de la pagina los pone el kit (base.css). */
   font-family:
     'Inter',
     system-ui,
@@ -72,7 +71,9 @@ body {
 
 .texto-pista {
   font-size: 13px;
-  color: var(--texto-3);
+  /* Tinta y no paleta: aparece tanto dentro de un panel como sobre la
+     atmosfera (UX-GAME-1). */
+  color: var(--tinta-3);
 }
 
 /* Contenedor Principal */
@@ -439,8 +440,9 @@ body {
 /* Vista Detalle */
 .barra-volver {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
   font-size: 14px;
 }
 
@@ -454,7 +456,9 @@ body {
 
 .detalle-grid {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  /* Mínimo 0: sin él, una columna crece hasta el contenido más ancho que
+     no se puede partir y el detalle desborda en móvil. */
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 28px;
 }
 
@@ -474,6 +478,7 @@ body {
 
 .objeto-badges {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -554,6 +559,24 @@ body {
   color: var(--texto-2);
 }
 
+/* G5 (7.7.9): precio mínimo, método de pago y fecha de fin, bajo el reloj. */
+.datos-subasta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+}
+
+.datos-subasta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.historial-ganadora {
+  margin-left: 4px;
+  font-size: 11px;
+}
+
 /* Historial */
 .lista-historial {
   list-style: none;
@@ -563,10 +586,39 @@ body {
 
 .item-historial {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr;
+  grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(0, 1fr));
+  gap: 4px 8px;
   padding: 8px 12px;
   font-size: 13px;
   border-bottom: 1px solid var(--borde-tenue);
+}
+
+.historial-monto {
+  text-align: right;
+}
+
+/* En móvil, cada puja en dos líneas: quién y cuánto; cómo y cuándo. */
+@media (max-width: 600px) {
+  .item-historial {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .historial-postor {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .historial-monto {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .historial-tipo,
+  .historial-cuando {
+    grid-row: 2;
+    color: var(--texto-3);
+  }
+  .historial-cuando {
+    grid-column: 2;
+    text-align: right;
+  }
 }
 
 .item-historial:last-child {
@@ -636,13 +688,24 @@ body {
 
 .campo-con-boton {
   display: flex;
+  /* UXC-9 — la fila de la puja automática (etiqueta, campo y botón) no
+     cabía a 375 px y empujaba «Activar» fuera de la pantalla. */
+  flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   margin-top: 6px;
   margin-bottom: 4px;
 }
 
+@media (max-width: 600px) {
+  .campo-con-boton > .etiqueta-sm {
+    flex: 1 1 100%;
+  }
+}
+
 .input-estandar {
   flex: 1;
+  min-width: 0;
   padding: 10px 12px;
   border: 1px solid var(--borde-int);
   border-radius: 6px;
@@ -827,7 +890,7 @@ body {
 /* Responsive */
 @media (max-width: 1024px) {
   .detalle-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .panel-puja {
     position: static;
@@ -1152,6 +1215,25 @@ body {
 .fila-mi-subasta:hover {
   transform: translateY(-1px);
   box-shadow: var(--sombra-2);
+}
+
+/* B8 — «Productos pendientes de recoger» (7.7.9). Tres columnas propias
+   (producto y monto, vencimiento, boton): la rejilla de .fila-mi-subasta es de
+   cinco y metia el nombre en la columna de 56 px de la miniatura. La fila no
+   se abre al pulsarla —lo unico accionable es «Recoger»—, asi que no finge ser
+   un enlace. Va antes del @media de 900 px, que la deja en una columna. */
+.fila-pendiente {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 240px) 150px;
+  cursor: default;
+}
+
+.fila-pendiente:hover {
+  transform: none;
+  box-shadow: var(--sombra-1);
+}
+
+.btn-recoger-todo {
+  margin-left: auto;
 }
 
 .borde-ganando {
@@ -1679,4 +1761,401 @@ body {
   font-size: 16px;
   font-weight: 600;
   color: var(--advertencia);
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.panel-resumen,
+.tarjeta-subasta,
+.tarjeta-finanzas,
+.panel-objeto,
+.panel-historial,
+.panel-puja,
+.modal-tarjeta,
+.estado-contenedor,
+.panel-creditos-segmentada,
+.tarjeta-credito-total,
+.tarjeta-credito-retenido,
+.tarjeta-credito-libre,
+.bloque-compra-inmediata,
+.bloque-automatica,
+.alerta-advertencia,
+.alerta-exito-suave,
+.alerta-exito-cierre,
+.alerta-error,
+.alerta-informativa,
+.tarjeta-tope,
+.fila-mi-subasta,
+.panel-cierre-multiple,
+.caja-neto,
+.caja-consejo-tactico,
+.toast-cruzado-flotante,
+.cierre-victoria,
+.resumen-historial__dato,
+.tabla-historial-marco,
+.opiniones-subasta {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
+/* =======================================================================
+   UXC-8 — lo tuyo, dicho con lo que el servidor sabe
+   -----------------------------------------------------------------------
+   «Tu subasta» lleva borde e icono además del color, para no confundirse con
+   una rareza (la «rara» también es azul). Las notas de alcance y de saldo
+   explican por qué falta un dato; el vacío compacto va dentro de una sección
+   y no necesita los 64 px del vacío de página entera.
+   ======================================================================= */
+
+.badge-propia {
+  gap: 4px;
+  border: 1px solid var(--primaria);
+  background: var(--superficie);
+  color: var(--primaria);
+}
+
+.nota-alcance,
+.nota-saldo,
+.nota-publicaciones {
+  margin: 0 0 var(--e-3);
+}
+
+.nota-saldo {
+  margin-top: var(--e-3);
+}
+
+.estado-vacio--compacto {
+  padding: var(--e-5) var(--e-4);
+}
+
+.acciones-vacio {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--e-3);
+  margin-top: var(--e-4);
+}
+
+.aviso-subasta-propia {
+  margin: var(--e-3) 0 0;
+}
+
+.fila-publicacion {
+  grid-template-columns: 56px minmax(0, 1fr) 150px 150px;
+}
+
+.seccion-mis-subastas + .seccion-mis-subastas {
+  margin-top: var(--e-6);
+}
+
+@media (max-width: 900px) {
+  .fila-publicacion {
+    grid-template-columns: 1fr;
+  }
+  .encabezado-mis-subastas {
+    flex-wrap: wrap;
+  }
+}
+
+/* UXC-8 — lo que va directamente sobre la atmósfera lee la tinta, no la
+   paleta: el título de «Mis subastas» (`.titulo-grande` de tema-cuentas es
+   oscuro) y la barra de volver del detalle («← Volver…», lo retenido). El
+   laboratorio no cubría estas dos pantallas y los dos quedaban por debajo de
+   2:1 sobre el cromo. */
+.mis-subastas-cabecera .titulo-grande {
+  color: var(--tinta);
+  text-align: left;
+}
+
+.barra-volver .btn-texto {
+  color: var(--tinta-enlace);
+}
+
+.barra-volver .btn-texto:hover {
+  color: var(--tinta-enlace-hover);
+}
+
+.barra-volver .separador-pipe {
+  color: var(--tinta-3);
+}
+
+/* En móvil la barra parte en líneas: el separador quedaría colgando. */
+@media (max-width: 600px) {
+  .barra-volver .separador-pipe {
+    display: none;
+  }
+}
+
+.barra-volver .saldo-contextual {
+  color: var(--tinta-2);
+}
+
+.barra-volver .saldo-contextual strong {
+  color: var(--tinta);
+}
+
+/* =======================================================================
+   UXC-8 — el panel personal de «Mis subastas» (ms-subastas-panel.yaml)
+   -----------------------------------------------------------------------
+   Índice de partes, tus publicaciones en cualquier estado, lo que sigues y
+   el historial con su balance. Lo que va sobre la atmósfera (índice,
+   «Ver todas») lee la tinta; resumen, tabla y opiniones son superficies
+   claras. El signo de cada cifra va escrito: el color solo lo acompaña.
+   ======================================================================= */
+
+.badge-info {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.indice-mis-subastas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1) var(--e-4);
+  margin: 0 0 var(--e-5);
+}
+
+.indice-mis-subastas__enlace {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  color: var(--tinta-enlace);
+  font-weight: 600;
+}
+
+.indice-mis-subastas__enlace:hover {
+  color: var(--tinta-enlace-hover);
+}
+
+.seccion-mis-subastas {
+  scroll-margin-top: calc(64px + var(--e-4));
+}
+
+.aviso-panel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+  margin: 0 0 var(--e-3);
+}
+
+.fila-publicacion__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: var(--e-1) 0 0;
+}
+
+.fila-publicacion__acciones {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--e-2);
+}
+
+.fila-publicacion__cierre {
+  margin: 0;
+}
+
+.subtitulo-mis-subastas {
+  margin: var(--e-5) 0 var(--e-3);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.seccion-mis-subastas > .btn-ver-todo {
+  margin-top: var(--e-3);
+  color: var(--tinta-enlace);
+}
+
+.seccion-mis-subastas > .btn-ver-todo:hover {
+  color: var(--tinta-enlace-hover);
+}
+
+.resumen-historial {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--e-3);
+  margin: 0 0 var(--e-4);
+}
+
+.resumen-historial__dato {
+  margin: 0;
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.resumen-historial dt {
+  font-size: 13px;
+  color: var(--texto-2);
+}
+
+.resumen-historial dd {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.resumen-historial .resumen-historial__pista {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--texto-3);
+}
+
+.monto-entra {
+  color: var(--exito);
+}
+
+.monto-sale {
+  color: var(--texto);
+}
+
+.resumen-historial__dato--balance .monto-sale {
+  color: var(--error);
+}
+
+.tabla-historial-marco {
+  overflow-x: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.tabla-historial {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tabla-historial th,
+.tabla-historial td {
+  padding: var(--e-2) var(--e-3);
+  border-bottom: 1px solid var(--borde);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.tabla-historial th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+}
+
+.tabla-historial tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.tabla-historial .tabla-historial__monto {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ficha-subasta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-1) var(--e-4);
+  margin: var(--e-2) 0 0;
+}
+
+.ficha-subasta__dato {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Las opiniones van fuera de `#subastas-app` (que se repinta): se alinean
+   con su ancho útil y se acercan al detalle, que ya deja 64 px debajo. */
+.opiniones-subasta {
+  box-sizing: border-box;
+  width: calc(100% - 64px);
+  max-width: 1376px;
+  margin: -40px auto 64px;
+  padding: var(--e-5);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+@media (max-width: 900px) {
+  .resumen-historial {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* En móvil cada movimiento es una ficha de dos líneas (objeto y monto;
+   fecha y tipo) en vez de cuatro columnas apretadas. Los `role` del marcado
+   mantienen la tabla para el lector de pantalla aunque cambie el `display`. */
+@media (max-width: 600px) {
+  .tabla-historial thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .tabla-historial tbody,
+  .tabla-historial tr {
+    display: block;
+  }
+  .tabla-historial tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px var(--e-3);
+    padding: var(--e-2) var(--e-3);
+    border-bottom: 1px solid var(--borde);
+  }
+  .tabla-historial tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .tabla-historial td {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+  .tabla-historial .tabla-historial__objeto {
+    grid-column: 1;
+    grid-row: 1;
+    font-weight: 600;
+  }
+  .tabla-historial .tabla-historial__monto {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .tabla-historial .tabla-historial__fecha {
+    grid-column: 1;
+    grid-row: 2;
+    font-size: 13px;
+    color: var(--texto-3);
+  }
+  .tabla-historial .tabla-historial__tipo {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
+
+@media (max-width: 480px) {
+  .resumen-historial {
+    grid-template-columns: 1fr;
+  }
+  .opiniones-subasta {
+    padding: var(--e-4);
+  }
 }

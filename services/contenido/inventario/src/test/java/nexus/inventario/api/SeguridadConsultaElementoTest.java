@@ -65,6 +65,30 @@ class SeguridadConsultaElementoTest {
                 .andExpect(jsonPath("$.propietarioUid").value(propietarioUid.toString()));
     }
 
+    /** 1.6.0 (B9): misiones consulta el heroe antes de matricularlo, con su credencial de servicio. */
+    @Test
+    void consultaInternaAceptaAlServicioDeMisiones() throws Exception {
+        UUID productoId = UUID.randomUUID();
+        UUID propietarioUid = UUID.randomUUID();
+        UUID ejecucion = UUID.randomUUID();
+        when(consultaElemento.consultar("heroe-1")).thenReturn(new DetalleElementoInventario(
+                "heroe-1", productoId, propietarioUid, false, false, null,
+                nexus.inventario.dominio.TipoElementoInventario.HEROE, "Vorn", 2, 12.5, ejecucion));
+
+        mvc.perform(get("/api/v1/inventario/elementos/heroe-1")
+                        .with(jwt().jwt(token -> token.claim("azp", "misiones"))
+                                .authorities(new org.springframework.security.core.authority.SimpleGrantedAuthority(
+                                        "ROLE_SERVICIO"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tipo").value("HEROE"))
+                .andExpect(jsonPath("$.nivel").value(2))
+                .andExpect(jsonPath("$.ejecucionMisionId").value(ejecucion.toString()));
+
+        mvc.perform(get("/api/v1/inventario/elementos/heroe-1")
+                        .with(jwt().jwt(token -> token.claim("azp", "misiones"))))
+                .andExpect(status().isForbidden());
+    }
+
     @Test
     void consultaInternaRechazaTokenDeOtroCliente() throws Exception {
         mvc.perform(get("/api/v1/inventario/elementos/elemento-1")

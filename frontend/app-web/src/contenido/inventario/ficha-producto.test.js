@@ -56,7 +56,7 @@ describe('Ficha de detalle del producto', () => {
 
     expect(atributos(ficha)).toEqual([
       ['Poder de ataque', '42'],
-      ['Tasa de caida', '0.15'],
+      ['Tasa de caída', '0.15'],
     ]);
   });
 

@@ -1,6 +1,8 @@
 /** HU-PRD-008 - Panel de estado del catálogo. */
 import { consultarEstadisticasCatalogo } from './cliente-productos.js';
+import { montarCatalogoAdmin } from './catalogo-admin.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 const TIPOS = [
   ['HEROE', 'Héroes'],
@@ -147,7 +149,41 @@ function crearVista() {
     hijos: [encabezado, mensaje, resumen, distribucion],
   });
 
-  return [cabecera, panel];
+  // UXC-7 — debajo de las cifras, los productos: verlos, modificarlos,
+  // suspenderlos y reactivarlos (la ficha de gestión de cada uno).
+  const catalogo = h('section', {
+    clase: 'panel-catalogo catalogo-admin',
+    datos: { zona: 'catalogo-admin' },
+  });
+
+  // UXC-9 — lo que §7.2.3 y §7.2.4 piden y ningún contrato publica todavía.
+  // Se dice aquí, donde lo buscaría quien administra el catálogo, en vez de
+  // callarlo.
+  const pendiente = h('section', {
+    clase: 'panel-catalogo panel-catalogo--pendiente',
+    datos: { zona: 'catalogo-pendiente' },
+    atributos: { 'aria-labelledby': 'panel-pendiente-titulo' },
+    hijos: [
+      h('h2', {
+        texto: 'Lo que el catálogo todavía no ofrece',
+        atributos: { id: 'panel-pendiente-titulo' },
+      }),
+      h('ul', {
+        hijos: [
+          h('li', {
+            texto:
+              'Diseñador visual con vista previa, historial de versiones, importar y exportar: el servicio de productos no los publica. Cada modificación sí guarda en el servidor la versión anterior como respaldo.',
+          }),
+          h('li', {
+            texto:
+              'Avisos de cambios del catálogo al iniciar sesión y banner rotativo de anuncios: todavía no hay un servicio que los publique.',
+          }),
+        ],
+      }),
+    ],
+  });
+
+  return [cabecera, panel, catalogo, pendiente];
 }
 
 function mostrarMensaje(raiz, texto, tipo) {
@@ -182,7 +218,7 @@ function mensajeDeError(fallo) {
     return 'No tienes permiso para consultar el estado del catálogo.';
   }
 
-  return fallo?.message || 'No se pudieron cargar las cifras del catálogo.';
+  return textoDeError(fallo, 'No se pudieron cargar las cifras del catálogo.');
 }
 
 /**
@@ -191,7 +227,10 @@ function mensajeDeError(fallo) {
  * @param {HTMLElement} raiz contenedor de la vista.
  * @param {{consultar?: Function}} dependencias inyectables para pruebas.
  */
-export function montarPanelCatalogo(raiz, { consultar = consultarEstadisticasCatalogo } = {}) {
+export function montarPanelCatalogo(
+  raiz,
+  { consultar = consultarEstadisticasCatalogo, fetchImpl, conCatalogo = true } = {},
+) {
   vaciar(raiz).append(...crearVista());
   const botonActualizar = raiz.querySelector('[data-actualizar-panel]');
 
@@ -219,5 +258,15 @@ export function montarPanelCatalogo(raiz, { consultar = consultarEstadisticasCat
 
   const cargaInicial = actualizar();
 
-  return { actualizar, cargaInicial };
+  const zonaCatalogo = raiz.querySelector('[data-zona="catalogo-admin"]');
+  const catalogo =
+    conCatalogo && zonaCatalogo
+      ? montarCatalogoAdmin(zonaCatalogo, {
+          fetchImpl,
+          // Suspender o modificar cambia las cifras de arriba.
+          alCambiarCatalogo: () => void actualizar(),
+        })
+      : null;
+
+  return { actualizar, cargaInicial, catalogo };
 }

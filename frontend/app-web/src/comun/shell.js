@@ -53,7 +53,11 @@ import {
   VEREDICTO,
 } from './acceso.js';
 import { cerrarSesion, leerSesion, resolver, RUTAS } from './sesion.js';
+import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
+import { vigilarSesion } from './vigilante-sesion.js';
+import { vigilarRed } from './ui/aviso-de-red.js';
+import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
 const BASE_RUTAS = import.meta.url;
 
@@ -68,11 +72,17 @@ const BASE_RUTAS = import.meta.url;
  * aplicación) y **cómo** se agrupan.
  *
  * `vista` enlaza con `MATRIZ` para saber si el destino es visible para quien
- * mira; `pendiente` marca los módulos que todavía no tienen pantalla.
+ * mira.
+ *
+ * UXC-5 — «Misiones» era el único destino sin pantalla: se pintaba
+ * deshabilitado con un «llegará en una próxima actualización». Ahora lleva a
+ * su vista, que cuenta la verdad desde dentro —si hay misiones o no, y qué se
+ * puede hacer ya (preparar la estrategia del héroe)—, en vez de un aviso mudo
+ * en la barra.
  */
 export const SECCIONES = Object.freeze([
   { id: 'jugar', etiqueta: 'Jugar online', vista: 'batallas', icono: 'espadas' },
-  { id: 'misiones', etiqueta: 'Misiones', pendiente: true, icono: 'mapa' },
+  { id: 'misiones', etiqueta: 'Misiones', vista: 'misiones', icono: 'mapa' },
   { id: 'torneo', etiqueta: 'Torneo', vista: 'torneos', icono: 'trofeo' },
   { id: 'inventario', etiqueta: 'Mi inventario', vista: 'inventario', icono: 'mochila' },
   { id: 'subasta', etiqueta: 'Subasta', vista: 'subastas', icono: 'martillo' },
@@ -90,11 +100,22 @@ export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
+  // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
+  // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
+  // su dirección. Mismo nivel que Sanciones y Lista negra (la matriz dice
+  // quién la ve).
+  {
+    id: 'comentarios',
+    etiqueta: 'Comentarios',
+    vista: 'moderar-comentarios',
+    icono: 'bandera',
+  },
   { id: 'sanciones', etiqueta: 'Sanciones', vista: 'sanciones-admin', icono: 'escudo' },
   { id: 'lista-negra', etiqueta: 'Lista negra', vista: 'lista-negra-admin', icono: 'prohibido' },
   { id: 'parametros', etiqueta: 'Parámetros', vista: 'parametros-admin', icono: 'ajustes' },
   { id: 'metricas', etiqueta: 'Métricas', vista: 'panel-metricas', icono: 'grafico' },
   { id: 'tecnico', etiqueta: 'Técnico', vista: 'tablero-tecnico', icono: 'pulso' },
+  { id: 'chatbot', etiqueta: 'Asistente', vista: 'panel-chatbot', icono: 'chat' },
   { id: 'auditoria', etiqueta: 'Auditoría', vista: 'auditoria', icono: 'lista' },
 ]);
 
@@ -105,6 +126,75 @@ export const NOMBRE_DE_ROL = Object.freeze({
   ADMINISTRADOR: 'Administrador',
   SUPER_ADMINISTRADOR: 'Super administrador',
 });
+
+/**
+ * RF-INV-008 — «la búsqueda de productos» de la barra (y §3.1.1: «barra de
+ * navegación superior permanente con el buscador de productos»).
+ *
+ * Hasta UXC-9 el buscador solo salía si la vista lo pedía, y ninguna lo
+ * pedía; y a 1100 px se plegaba a una lupa que no hacía nada al pulsarla.
+ * Ahora la barra del jugador con sesión lo lleva siempre: lleva a la tienda
+ * con lo escrito (`tienda.html?busqueda=`), que busca por nombre, tipo,
+ * habilidad y precio (§7.5). Una vista puede quitarlo con `buscador: null` o
+ * quedarse el texto con `alBuscar` (la tienda, que ya tiene su búsqueda).
+ */
+export const BUSCADOR_DE_PRODUCTOS = Object.freeze({ placeholder: 'Buscar productos' });
+
+/** Cuatro letras como mínimo, como el índice de búsqueda del inventario. */
+export const MINIMO_DE_BUSQUEDA = 4;
+
+/**
+ * El «historial de búsquedas» (§3.1.1): las últimas, en este dispositivo,
+ * como sugerencias del campo. Es una comodidad de quien mira, no un dato del
+ * juego: si el navegador no deja guardar, simplemente no hay sugerencias.
+ */
+const CLAVE_BUSQUEDAS = 'nexus.busquedasRecientes';
+const MAXIMO_DE_RECIENTES = 5;
+
+function almacenLocal() {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {Storage|null} [almacen]
+ * @returns {string[]} de la más reciente a la más antigua
+ */
+export function busquedasRecientes(almacen = almacenLocal()) {
+  try {
+    const guardadas = JSON.parse(almacen?.getItem(CLAVE_BUSQUEDAS) ?? '[]');
+    return Array.isArray(guardadas)
+      ? guardadas.filter((t) => typeof t === 'string').slice(0, MAXIMO_DE_RECIENTES)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * @param {string} texto
+ * @param {Storage|null} [almacen]
+ */
+export function recordarBusqueda(texto, almacen = almacenLocal()) {
+  const limpio = String(texto ?? '').trim();
+  if (!limpio || !almacen) {
+    return;
+  }
+  const resto = busquedasRecientes(almacen).filter(
+    (t) => t.toLocaleLowerCase('es') !== limpio.toLocaleLowerCase('es'),
+  );
+  try {
+    almacen.setItem(
+      CLAVE_BUSQUEDAS,
+      JSON.stringify([limpio, ...resto].slice(0, MAXIMO_DE_RECIENTES)),
+    );
+  } catch {
+    // Almacenamiento lleno o bloqueado: la búsqueda sigue, sin recordarla.
+  }
+}
 
 /* -------------------------------------------------------------------------
    Piezas compartidas por los tres armazones
@@ -136,13 +226,23 @@ function enlace(texto, href, clase) {
  *
  * @param {{destino: string, sufijo?: string|null}} opciones
  */
-function marca({ destino, sufijo = null }) {
+function marca({ destino, sufijo = null, base = import.meta.url }) {
   const a = h('a', {
     clase: 'cabecera__marca',
     atributos: { 'aria-label': 'Nexus Battles VI — inicio' },
   });
   a.href = destino;
+  // UX-GAME-2 — el emblema del logotipo (el cristal que lo corona) acompaña
+  // al nombre en todas las barras. Es decorativo: `alt` vacío, el nombre
+  // accesible sigue siendo el `aria-label` del enlace. El logotipo completo
+  // solo va en el portal de entrada (login); aquí la versión compacta.
+  const emblema = h('img', {
+    clase: 'cabecera__emblema',
+    atributos: { alt: '', 'aria-hidden': 'true', width: '32', height: '30', decoding: 'async' },
+  });
+  emblema.src = resolver('../../../../shared/ui-kit/marca/emblema.webp', base);
   a.append(
+    emblema,
     h('span', { clase: 'cabecera__marca-larga', texto: 'NEXUS BATTLES VI' }),
     h('span', {
       clase: 'cabecera__marca-corta',
@@ -321,21 +421,43 @@ function alternarNavegacion(cabecera, base) {
  * en el registro y en la recuperación, «Iniciar sesión». Ofrecer las dos
  * siempre significa que una de ellas lleva a la pantalla en la que ya estás.
  *
+ * R17 — «Preparando tu cuenta» también es portal (todavía no hay juego que
+ * navegar), pero quien la ve ya entró: lo que se le ofrece es salir.
+ *
  * @param {HTMLElement} raiz
- * @param {{vista?: string, base?: string}} [opciones]
+ * @param {{vista?: string, base?: string, almacen?: Storage, navegar?: (url: string) => void}} [opciones]
  */
-export function montarArmazonPublico(raiz, { vista = 'login', base = BASE_RUTAS } = {}) {
+export function montarArmazonPublico(
+  raiz,
+  {
+    vista = 'login',
+    base = BASE_RUTAS,
+    almacen = globalThis.sessionStorage,
+    navegar = (url) => {
+      globalThis.location.href = url;
+    },
+  } = {},
+) {
   const cabecera = h('header', { clase: 'cabecera cabecera--portal' });
   cabecera.dataset.cabeceraApp = '';
   cabecera.dataset.armazon = 'publico';
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
-  grupoMarca.append(marca({ destino: resolver(RUTAS.login, base) }));
+  grupoMarca.append(marca({ destino: resolver(RUTAS.login, base), base }));
   cabecera.append(grupoMarca);
 
   const acciones = h('div', { clase: 'cabecera__acciones' });
   const zona = h('div', { clase: 'cabecera__sesion', datos: { zona: 'sesion' } });
-  if (vista === 'login') {
+  if (vista === 'preparando') {
+    const salir = h('button', {
+      clase: 'boton boton--secundario boton--pequeno',
+      texto: 'Cerrar sesión',
+      atributos: { type: 'button' },
+      datos: { zona: 'cerrar-sesion' },
+    });
+    salir.addEventListener('click', () => cerrarSesion({ almacen, navegar, base }));
+    zona.append(salir);
+  } else if (vista === 'login') {
     zona.append(
       h('span', { clase: 'cabecera__invitacion', texto: '¿Primera vez en el Nexo?' }),
       enlace(
@@ -376,7 +498,7 @@ export function montarArmazonJugador(
   raiz,
   {
     seccionActiva = null,
-    buscador = null,
+    buscador = BUSCADOR_DE_PRODUCTOS,
     sesion,
     base = BASE_RUTAS,
     almacen = globalThis.sessionStorage,
@@ -391,7 +513,7 @@ export function montarArmazonJugador(
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
   grupoMarca.append(
-    marca({ destino: resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base) }),
+    marca({ destino: resolver(sesion.autenticado ? RUTAS.inicio : RUTAS.login, base), base }),
     alternarNavegacion(cabecera, base),
   );
 
@@ -407,30 +529,21 @@ export function montarArmazonJugador(
       datos: { seccion: seccion.id },
     });
 
-    if (seccion.pendiente) {
-      // RF-INV-008, Excepciones: «módulo destino no disponible, que debe
-      // informarse al seleccionar el acceso correspondiente». Se informa —
-      // pero en el idioma del producto. Antes el título decía «Todavía no
-      // publicada: HU-MIS (grupo-2)»: el número de una historia de Jira y el
-      // nombre de un equipo interno, a la vista de cualquier jugador.
-      destino.classList.add('cabecera__destino--pendiente');
-      destino.setAttribute('aria-disabled', 'true');
-      destino.dataset.pendiente = '';
-      destino.title = 'Misiones llegará en una próxima actualización';
-    } else {
-      const { veredicto } = puedeVer(seccion.vista, sesion);
-      if (veredicto === VEREDICTO.DENEGADA) {
-        continue;
-      }
-      destino.href = urlDeVista(seccion.vista, base);
-      if (veredicto === VEREDICTO.REDIRIGE) {
-        const login = new URL(resolver(RUTAS.login, base));
-        login.searchParams.set('volver', new URL(destino.href).pathname);
-        destino.href = login.href;
-        destino.dataset.exigeSesion = '';
-        destino.classList.add('cabecera__destino--con-sesion');
-        destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
-      }
+    // RF-INV-008, Excepciones: «módulo destino no disponible, que debe
+    // informarse al seleccionar el acceso correspondiente». Hasta UXC-5
+    // Misiones se informaba aquí, deshabilitado; ahora lo informa su vista.
+    const { veredicto } = puedeVer(seccion.vista, sesion);
+    if (veredicto === VEREDICTO.DENEGADA) {
+      continue;
+    }
+    destino.href = urlDeVista(seccion.vista, base);
+    if (veredicto === VEREDICTO.REDIRIGE) {
+      const login = new URL(resolver(RUTAS.login, base));
+      login.searchParams.set('volver', new URL(destino.href).pathname);
+      destino.href = login.href;
+      destino.dataset.exigeSesion = '';
+      destino.classList.add('cabecera__destino--con-sesion');
+      destino.title = `${seccion.etiqueta}: hay que iniciar sesión`;
     }
     if (seccion.id === seccionActiva) {
       destino.classList.add('activo');
@@ -441,8 +554,11 @@ export function montarArmazonJugador(
   grupoMarca.append(nav);
   cabecera.append(grupoMarca);
 
-  if (buscador) {
-    cabecera.append(construirBuscador(buscador, base));
+  // RF-INV-008: la búsqueda de productos, para quien tiene sesión (la tienda
+  // la pide; un visitante tiene «Iniciar sesión» y «Registrarse» al lado).
+  const conBuscador = Boolean(buscador) && sesion.autenticado;
+  if (conBuscador) {
+    cabecera.append(construirBuscador(buscador, { base, navegar }));
   }
 
   const acciones = h('div', { clase: 'cabecera__acciones' });
@@ -473,6 +589,9 @@ export function montarArmazonJugador(
     );
     acciones.append(zona);
   } else {
+    if (conBuscador) {
+      acciones.append(atajoDeBusqueda(buscador, base));
+    }
     acciones.append(
       indicadorDeCreditos(base),
       campana(base),
@@ -522,32 +641,83 @@ function campana(base) {
   return enlaceCampana;
 }
 
-function construirBuscador(buscador, base) {
+/**
+ * El campo de la barra. Sin `alBuscar` lleva a la tienda con lo escrito; con
+ * él, se lo entrega a la vista (la tienda, que filtra en el sitio).
+ *
+ * @param {{placeholder?: string, alBuscar?: (texto: string) => void}} buscador
+ * @param {{base: string, navegar: (url: string) => void}} opciones
+ * @returns {HTMLFormElement}
+ */
+function construirBuscador(buscador, { base, navegar }) {
+  const nombre = buscador.placeholder ?? BUSCADOR_DE_PRODUCTOS.placeholder;
   const formulario = h('form', {
     clase: 'cabecera__buscador',
-    atributos: { role: 'search' },
+    // La validación la hace el envío (abajo): el globo nativo saldría en el
+    // idioma del navegador, no en el del juego.
+    atributos: { role: 'search', 'aria-label': nombre, novalidate: '' },
   });
   formulario.append(icono('buscar', base, 'icono icono--menudo'));
-  const etiqueta = h('label', {
-    clase: 'solo-lectores',
-    texto: buscador.placeholder ?? 'Buscar',
-  });
+  const etiqueta = h('label', { clase: 'solo-lectores', texto: nombre });
   etiqueta.htmlFor = 'cabecera-busqueda';
   const campo = h('input', {
     clase: 'cabecera__buscador-texto',
     atributos: {
       type: 'search',
       id: 'cabecera-busqueda',
-      name: 'q',
-      placeholder: buscador.placeholder ?? 'Buscar',
+      name: 'busqueda',
+      placeholder: nombre,
+      minlength: String(MINIMO_DE_BUSQUEDA),
+      maxlength: '100',
+      autocomplete: 'off',
+      list: 'cabecera-busquedas-recientes',
     },
   });
-  formulario.append(etiqueta, campo);
+  const recientes = h('datalist', {
+    atributos: { id: 'cabecera-busquedas-recientes' },
+    hijos: busquedasRecientes().map((texto) => h('option', { atributos: { value: texto } })),
+  });
+  formulario.append(etiqueta, campo, recientes);
+  campo.addEventListener('input', () => campo.setCustomValidity(''));
   formulario.addEventListener('submit', (evento) => {
     evento.preventDefault();
-    buscador.alBuscar?.(campo.value.trim());
+    const texto = campo.value.trim();
+    if (texto.length < MINIMO_DE_BUSQUEDA) {
+      campo.setCustomValidity('Escribe al menos cuatro letras para buscar.');
+      campo.reportValidity?.();
+      return;
+    }
+    recordarBusqueda(texto);
+    if (typeof buscador.alBuscar === 'function') {
+      buscador.alBuscar(texto);
+      return;
+    }
+    const destino = new URL(urlDeVista('tienda', base));
+    destino.searchParams.set('busqueda', texto);
+    navegar(destino.href);
   });
   return formulario;
+}
+
+/**
+ * Cuando la barra no tiene sitio para el campo (≤1100 px y en el teléfono),
+ * una lupa que sí lleva a algún sitio: la búsqueda de la tienda. Antes el
+ * campo se plegaba a una lupa que no hacía nada al pulsarla.
+ *
+ * @param {{placeholder?: string}} buscador
+ * @param {string} base
+ * @returns {HTMLAnchorElement}
+ */
+function atajoDeBusqueda(buscador, base) {
+  const nombre = buscador.placeholder ?? BUSCADOR_DE_PRODUCTOS.placeholder;
+  const destino = new URL(urlDeVista('tienda', base));
+  destino.hash = 'busqueda-tienda';
+  const atajo = h('a', {
+    clase: 'cabecera__buscador-atajo',
+    atributos: { href: destino.href, 'aria-label': nombre, title: nombre },
+  });
+  atajo.append(icono('buscar', base));
+  return atajo;
 }
 
 /* -------------------------------------------------------------------------
@@ -591,7 +761,7 @@ export function montarArmazonAdmin(
 
   const grupoMarca = h('div', { clase: 'cabecera__grupo-marca' });
   grupoMarca.append(
-    marca({ destino: resolver(RUTAS.consola, base), sufijo: 'Control' }),
+    marca({ destino: resolver(RUTAS.consola, base), sufijo: 'Control', base }),
     alternarNavegacion(cabecera, base),
   );
 
@@ -625,7 +795,17 @@ export function montarArmazonAdmin(
       resolver(RUTAS.inicio, base),
       'boton boton--secundario boton--pequeno cabecera__salida',
     ),
-    menuDeCuenta({ sesion, base, almacen, navegar }),
+    // UX-GAME-6 — la salida al juego tambien en el menu de cuenta: en la banda
+    // de portatil (<=1440) el boton de la barra se pliega para que los diez
+    // destinos del super administrador quepan en una fila, y la salida tiene
+    // que seguir a un toque.
+    menuDeCuenta({
+      sesion,
+      base,
+      almacen,
+      navegar,
+      opcionesExtra: [['Volver al juego', RUTAS.inicio, null]],
+    }),
   );
   cabecera.append(acciones);
 
@@ -644,10 +824,17 @@ export function montarArmazonAdmin(
  * dice, `MATRIZ`. Una vista de trastienda abierta por alguien sin rol no
  * llega hasta aquí: `exigirAcceso` la ha parado antes.
  *
+ * R17 — con sesión, además, deja puesto el vigilante (`vigilante-sesion.js`):
+ * caducidad, rechazo del token, cierre en otra pestaña y la vuelta desde la
+ * caché de páginas. Así ninguna vista tiene que acordarse de hacerlo.
+ *
  * @param {HTMLElement} raiz contenedor; se recomienda `<div data-cabecera-app>`
  * @param {object} [opciones]
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
+ * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
+ * @param {(opciones: {raiz: HTMLElement}) => unknown} [opciones.avisos]
+ *   el contador de la campana (`avisos-de-cabecera.js`); inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
  */
 export function montarArmazon(
@@ -656,7 +843,7 @@ export function montarArmazon(
     vista = null,
     armazon = null,
     seccionActiva = null,
-    buscador = null,
+    buscador = BUSCADOR_DE_PRODUCTOS,
     almacen = globalThis.sessionStorage,
     base = BASE_RUTAS,
     ahora,
@@ -664,6 +851,8 @@ export function montarArmazon(
       globalThis.location.href = url;
     },
     documento = globalThis.document,
+    vigilar = vigilarSesion,
+    avisos = montarAvisosDeCabecera,
   } = {},
 ) {
   // Página interrumpida por una guarda (§17): no se monta nada encima.
@@ -681,13 +870,24 @@ export function montarArmazon(
   const sesion = leerSesion(almacen, ahora);
   const elegido = armazon ?? armazonDeVista(vista) ?? (sesion.autenticado ? 'jugador' : 'publico');
 
+  // RF-CHA-001: el asistente está en TODAS las vistas, también para quien no
+  // ha iniciado sesión (HU-CHA-001). Se monta aquí, una vez, en lugar de en
+  // cada HTML. `montarAsistente` es idempotente.
+  montarAsistente(documento);
+
+  if (sesion.autenticado) {
+    vigilar({ almacen, ahora, documento });
+  }
+  // UXC-9 — el aviso de red transversal: en todas las vistas, una vez.
+  vigilarRed({ documento });
+
   if (elegido === 'publico') {
-    return montarArmazonPublico(raiz, { vista: vista ?? 'login', base });
+    return montarArmazonPublico(raiz, { vista: vista ?? 'login', base, almacen, navegar });
   }
   if (elegido === 'admin') {
     return montarArmazonAdmin(raiz, { seccionActiva, sesion, base, almacen, navegar });
   }
-  return montarArmazonJugador(raiz, {
+  const montado = montarArmazonJugador(raiz, {
     seccionActiva,
     buscador,
     sesion,
@@ -695,6 +895,12 @@ export function montarArmazon(
     almacen,
     navegar,
   });
+  // Auditoría de DEV del 30-sep: el contador de la campana solo se encendía
+  // en la vista de notificaciones, que monta su propia bandeja completa.
+  if (sesion.autenticado && vista !== 'notificaciones') {
+    avisos({ raiz: montado.elemento });
+  }
+  return montado;
 }
 
 export { ACCESO };

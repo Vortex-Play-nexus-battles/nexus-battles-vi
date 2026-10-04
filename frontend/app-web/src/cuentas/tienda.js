@@ -42,6 +42,33 @@
  *    dejarían de encontrar la función —tal como avisaba el comentario— así que
  *    se sustituyen por delegación de eventos.
  *
+ * ## UXC-4 — la tienda que pide §7.5
+ *
+ * 1. **Buscar y filtrar.** Por texto (nombre, tipo, habilidades y precio),
+ *    tipo, rango de precio y «solo en promoción», con orden por precio o
+ *    nombre. La vitrina no filtra así, de modo que se reúne entera y se
+ *    filtra aquí (`tienda-catalogo.js`); se pagina de dieciséis en dieciséis.
+ * 2. **El detalle.** «Ver producto» abre la ficha del catálogo con el bloque
+ *    de compra y las opiniones de la comunidad (calificación promedio e hilo).
+ * 3. **Lo que ya tienes.** Se marca con lo que dice el inventario del jugador.
+ * 4. **El carrito se minimiza.** Insignia con las unidades en la cabecera;
+ *    el panel se despliega o se recoge sin mover la vitrina
+ *    (`tienda-carrito.js`). Cada línea suma una unidad o se quita.
+ *
+ * ## B5 — comprar de verdad (ecommerce-carrito.yaml 1.4.0)
+ *
+ * 1. **La moneda.** Selector COP/USD/EUR, que empieza por la del idioma del
+ *    navegador y solo ofrece las que el servidor tiene (`tienda-moneda.js`).
+ *    Los precios los convierte el servidor; aquí solo se elige cuál pedir.
+ * 2. **La lista de deseos.** El corazón de cada tarjeta y del detalle la
+ *    guarda en la cuenta (`tienda-deseos.js`); lo deseado se distingue.
+ * 3. **La cantidad.** «−» y «+» en cada línea cambian la cantidad con
+ *    `PUT /carrito/items/{id}/cantidad`: de 1 a 20 y nunca más de lo que
+ *    queda. Una línea que ya no se puede pagar lo dice.
+ * 4. **Pagar.** Abre el resumen con el formulario de pago de §7.5 contra la
+ *    pasarela simulada, y el resultado por estado; «Mis compras» lista las
+ *    órdenes (`tienda-pago.js`).
+ *
  * @module tienda
  */
 
@@ -52,18 +79,76 @@ import { exigirSesion } from '../comun/acceso.js';
 import { olvidarSesion } from '../comun/sesion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
+import { h } from '../comun/ui/dom.js';
+import { construirPaginacion } from '../comun/paginacion.js';
+import { abrirFicha } from '../contenido/inventario/ficha-producto.js';
+import { complementoDeOpiniones } from '../plataforma/comentarios/hilo-comentarios.js';
 import { aProductoDeVitrina, aFilaDeCarrito, textoDePrecio, aImporte } from './tienda-adaptador.js';
+import {
+  PRODUCTOS_POR_PAGINA,
+  filtrarProductos,
+  hayCriterios,
+  propiedadesDelJugador,
+  reunirVitrina,
+} from './tienda-catalogo.js';
+import {
+  MODOS,
+  apagarAnadirPorPropio,
+  bloqueDeCompra,
+  distintivoDePropiedad,
+  tarjetaDeProducto,
+} from './tienda-producto.js';
+import {
+  montarCajonDelCarrito,
+  pintarInsignia,
+  textoDeUnidades,
+  unidadesDelCarrito,
+} from './tienda-carrito.js';
+import {
+  MONEDA_BASE,
+  conMoneda,
+  disponiblesDe,
+  guardarMoneda,
+  monedaAMostrar,
+  monedaPreferida,
+  notaDeMoneda,
+  pintarSelectorDeMoneda,
+} from './tienda-moneda.js';
+import { cambiarDeseo, pintarDeseo, textoDelFalloDeDeseo } from './tienda-deseos.js';
+import { abrirMisCompras, abrirPago, olvidarIntentoDePago } from './tienda-pago.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** `type` del problem detail cuando el catálogo maestro no responde (contrato 1.2.0). */
 const TIPO_CATALOGO_NO_DISPONIBLE = 'urn:nexus:problema:catalogo-no-disponible';
+
+/** `type` cuando se pide una moneda sin tasa de cambio (contrato 1.4.0). */
+const TIPO_MONEDA_NO_DISPONIBLE = 'urn:nexus:problema:moneda-no-disponible';
+
+/**
+ * Lo que se le dice al jugador cuando cambiar la cantidad de una línea no
+ * sale (`PUT /carrito/items/{id}/cantidad`, 1.4.0). Por el `type`.
+ */
+const MOTIVOS_DE_CANTIDAD = Object.freeze({
+  'urn:nexus:problema:cantidad-fuera-de-rango': () => 'La cantidad va de 1 a 20 unidades.',
+  'urn:nexus:problema:cantidad-maxima-por-linea': () =>
+    'Como mucho 20 unidades de un mismo producto.',
+  'urn:nexus:problema:tiraje-insuficiente': (problema) =>
+    Number.isInteger(problema?.disponibles)
+      ? `Solo quedan ${problema.disponibles} unidades de este producto.`
+      : 'No quedan tantas unidades de este producto.',
+  'urn:nexus:problema:linea-inexistente': () => 'Ese producto ya no estaba en tu carrito.',
+  'urn:nexus:problema:producto-agotado': () => 'Ese producto se agotó.',
+  'urn:nexus:problema:producto-no-disponible': () => 'Ese producto ya no está a la venta.',
+});
 
 /**
  * Lo que se le dice al jugador cuando «Añadir» falla por un motivo conocido.
  *
  * La clave es el `type` del problem detail: la interfaz decide por él y nunca
  * por el texto del servidor, que puede cambiar de redacción sin aviso
- * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco son los que declara
- * `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0.
+ * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco primeros son los que
+ * declara `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0; el sexto,
+ * lo ya adquirido, llegó en la 1.5.0.
  */
 const MOTIVOS_DEL_CARRITO = Object.freeze({
   'urn:nexus:problema:producto-inexistente': {
@@ -85,6 +170,11 @@ const MOTIVOS_DEL_CARRITO = Object.freeze({
   [TIPO_CATALOGO_NO_DISPONIBLE]: {
     titulo: 'La tienda no puede consultar el catálogo ahora mismo',
     detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+  },
+  // ecommerce-carrito 1.5.0 — RF-CAR-004: lo ya adquirido no entra a la cesta.
+  'urn:nexus:problema:producto-ya-adquirido': {
+    titulo: 'Ya tienes este producto',
+    detalle: 'Está en tu inventario: la tienda no lo vende dos veces.',
   },
 });
 
@@ -142,46 +232,177 @@ export function haySesion() {
 
 // --- RENDERIZADO DE PRODUCTOS (HU-CAR-001) ---
 
+/**
+ * Lo que la vista sabe de sí misma: la colección reunida, los criterios de
+ * búsqueda, la página y lo que ya tiene el jugador. Uno por documento, para
+ * que las pruebas (y cualquier vista que monte la tienda dos veces) no se
+ * pisen.
+ *
+ * B5 — y la moneda: la que se enseña (`moneda`, confirmada por el servidor),
+ * la que la persona prefiere (`preferida`), las que el servidor ofrece
+ * (`disponibles`) y las que dijo ofrecer pero luego rechazó (`vetadas`, para
+ * no volver a ellas en bucle); y el último carrito pintado, que es el que
+ * resume el pago.
+ *
+ * @type {WeakMap<Document, {productos: object[], completo: boolean, criterios: object,
+ *   pagina: number, propias: Map<string, number>, cajon: object|null, moneda: string,
+ *   preferida: string|null, porIdioma: boolean, disponibles: string[], vetadas: Set<string>,
+ *   carrito: object|null}>}
+ */
+const ESTADOS = new WeakMap();
+
+/** @param {Document} doc */
+function estadoDe(doc) {
+  if (!ESTADOS.has(doc)) {
+    ESTADOS.set(doc, {
+      productos: [],
+      completo: true,
+      criterios: {},
+      pagina: 0,
+      propias: new Map(),
+      cajon: null,
+      moneda: MONEDA_BASE,
+      preferida: null,
+      porIdioma: false,
+      disponibles: [MONEDA_BASE],
+      vetadas: new Set(),
+      carrito: null,
+    });
+  }
+  return ESTADOS.get(doc);
+}
+
+/** Las monedas que se pueden usar: las que el servidor ofrece y no ha rechazado. */
+function monedasUsables(vista) {
+  return vista.disponibles.filter((moneda) => !vista.vetadas.has(moneda));
+}
+
+/**
+ * La moneda preferida de la vista (la elegida o la del idioma) y la
+ * disponibilidad que se sepa. Sin llamar a nadie: la vitrina dirá después si
+ * el servidor la ofrece.
+ *
+ * @param {Document} doc
+ * @param {{moneda: string, porIdioma: boolean}} preferencia
+ */
+export function fijarMonedaPreferida(doc, { moneda, porIdioma }) {
+  const vista = estadoDe(doc);
+  vista.preferida = moneda;
+  vista.porIdioma = porIdioma;
+  pintarMoneda(doc);
+}
+
+/** Pinta el selector y su nota con lo que la vista sabe de la moneda. */
+function pintarMoneda(doc) {
+  const vista = estadoDe(doc);
+  const usables = monedasUsables(vista);
+  pintarSelectorDeMoneda(doc.getElementById('moneda-tienda'), {
+    actual: vista.moneda,
+    disponibles: usables,
+  });
+  const nota = doc.getElementById('nota-moneda');
+  if (nota) {
+    nota.textContent = notaDeMoneda({
+      actual: vista.moneda,
+      preferida: vista.preferida,
+      disponibles: usables,
+      porIdioma: vista.porIdioma,
+    });
+  }
+}
+
+/**
+ * La moneda en uso ya no está (422 `moneda-no-disponible`, por ejemplo
+ * porque se retiró su tasa): se veta para esta visita, se vuelve a la
+ * preferida si queda o a COP, que no depende de ninguna tasa, y el siguiente
+ * pago lleva otra clave.
+ *
+ * @param {Document} doc
+ * @param {unknown} disponibles las que dice el servidor
+ */
+function retirarMonedaEnUso(doc, disponibles) {
+  const vista = estadoDe(doc);
+  if (vista.moneda !== MONEDA_BASE) {
+    vista.vetadas.add(vista.moneda);
+  }
+  vista.disponibles = disponiblesDe({ monedasDisponibles: disponibles });
+  vista.moneda = monedaAMostrar(vista.preferida, monedasUsables(vista));
+  olvidarIntentoDePago(doc);
+  pintarMoneda(doc);
+}
+
+/**
+ * Cambia la moneda en la que se enseña la tienda y vuelve a pedir la vitrina
+ * y el carrito en ella.
+ *
+ * @param {Document} doc
+ * @param {string} moneda
+ * @returns {Promise<void>}
+ */
+export async function cambiarMoneda(doc, moneda) {
+  const vista = estadoDe(doc);
+  vista.preferida = moneda;
+  vista.porIdioma = false;
+  guardarMoneda(globalThis.localStorage ?? null, moneda);
+  const aMostrar = monedaAMostrar(moneda, monedasUsables(vista));
+  if (aMostrar === vista.moneda) {
+    pintarMoneda(doc);
+    return;
+  }
+  vista.moneda = aMostrar;
+  olvidarIntentoDePago(doc);
+  pintarMoneda(doc);
+  await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+}
+
 export async function cargarVitrina(doc = document) {
   const rejilla = doc.getElementById('productos-grid');
+  const vista = estadoDe(doc);
+  const pedida = vista.moneda;
 
   // UX-R2.8d — no habia estado de carga: el HTML traia un comentario
   // (`<!-- Cargando productos... -->`) donde deberia ir, asi que la rejilla
   // estaba en blanco hasta que llegaba la respuesta. Ahora se ve la forma de
   // lo que viene, como en el resto de la aplicacion (RNF-USA-003).
   pintarEn(rejilla, estadoDeCarga({ filas: 4, etiqueta: 'Cargando la tienda…' }));
+  pintarResultado(doc, '');
 
   try {
     // R16 — `/vitrina` y no `/productos`: ese prefijo es del catálogo maestro.
-    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/vitrina'), {
-      method: 'GET',
-      headers: cabeceras(),
-    });
-    if (!respuesta.ok) {
-      throw await errorDeRespuesta(respuesta);
-    }
-
-    const datos = await respuesta.json();
-    const productos = datos.content ?? [];
-
-    if (productos.length === 0) {
-      // Un catalogo vacio es un estado legitimo, y distinto de un fallo.
-      pintarEn(
-        rejilla,
-        estadoVacio({
-          titulo: 'La tienda no tiene productos ahora mismo',
-          detalle: 'Vuelve más tarde: el catálogo lo publica la administración.',
-          icono: '◇',
-        }),
-      );
+    // UXC-4 — entera, de cincuenta en cincuenta: buscar y filtrar trabajan
+    // sobre toda la tienda, no sobre una página (`tienda-catalogo.js`).
+    const { productos, completo, monedasDisponibles } = await reunirVitrina({ moneda: pedida });
+    if (vista.moneda !== pedida) {
+      // Mientras llegaba, se cambió de moneda: pinta la petición nueva.
       return;
     }
-
-    rejilla.replaceChildren();
-    for (const producto of productos) {
-      rejilla.appendChild(tarjetaDeProducto(producto, doc));
+    vista.disponibles = monedasDisponibles;
+    // B5 — se pidió en la moneda confirmada (COP al empezar). Si la preferida
+    // está disponible y es otra, se cambia a ella antes de pintar nada: ni un
+    // error por una preferencia ni un parpadeo de precios en pesos.
+    const aMostrar = monedaAMostrar(vista.preferida, monedasUsables(vista));
+    if (aMostrar !== pedida) {
+      vista.moneda = aMostrar;
+      pintarMoneda(doc);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+      return;
     }
+    vista.productos = productos;
+    vista.completo = completo;
+    vista.pagina = 0;
+    pintarMoneda(doc);
+    pintarCatalogo(doc);
   } catch (error) {
+    if (vista.moneda !== pedida) {
+      return;
+    }
+    // B5 — la moneda en uso dejó de estar (se retiró su tasa): a la que
+    // quede, COP como poco, y se vuelve a pedir.
+    if (error?.problema?.type === TIPO_MONEDA_NO_DISPONIBLE && pedida !== MONEDA_BASE) {
+      retirarMonedaEnUso(doc, error.problema.monedasDisponibles);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
+      return;
+    }
     // Antes esto no existía: un fallo dejaba el cargador girando para siempre.
     // `.empty-cart-msg` no existe en ningun CSS (el guardian de clases solo
     // mira el HTML, y esta estaba escrita en JavaScript): el mensaje salia con
@@ -203,8 +424,395 @@ export async function cargarVitrina(doc = document) {
         alReintentar: () => cargarVitrina(doc),
       }),
     );
+    pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
     console.error('Error al cargar la vitrina:', error);
   }
+}
+
+/**
+ * Pinta la página actual de la colección con los criterios actuales.
+ *
+ * No vuelve a pedir nada: cambiar un filtro, el orden o la página es
+ * instantáneo y no pierde lo demás (criterio 3 de HU-INV-011, aplicado aquí).
+ *
+ * @param {Document} doc
+ */
+export function pintarCatalogo(doc = document) {
+  const rejilla = doc.getElementById('productos-grid');
+  const vista = estadoDe(doc);
+
+  if (vista.productos.length === 0) {
+    // Un catalogo vacio es un estado legitimo, y distinto de un fallo.
+    pintarEn(
+      rejilla,
+      estadoVacio({
+        titulo: 'La tienda no tiene productos ahora mismo',
+        detalle:
+          'El catálogo lo publica la administración y todavía no hay nada a la venta. Mientras tanto, puedes jugar y ganar créditos.',
+        icono: '◇',
+        // UXC-9 — un vacío con salida.
+        accion: { texto: 'Jugar una batalla', href: '../plataforma/salas-partidas/batallas.html' },
+      }),
+    );
+    pintarResultado(doc, '');
+    pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
+    return;
+  }
+
+  const modelos = vista.productos.map((dto) => ({ ...aProductoDeVitrina(dto), dto }));
+  const encontrados = filtrarProductos(modelos, vista.criterios);
+
+  if (encontrados.length === 0) {
+    const { precioMinimo, precioMaximo } = vista.criterios;
+    const rangoAlReves =
+      Number.isFinite(precioMinimo) && Number.isFinite(precioMaximo) && precioMinimo > precioMaximo;
+    if (soloLaListaDeDeseos(vista.criterios)) {
+      // La lista de deseos vacía no es «ningún producto coincide»: es que
+      // todavía no se guardó nada, y se dice cómo.
+      pintarEn(
+        rejilla,
+        estadoVacio({
+          titulo: 'Tu lista de deseos está vacía',
+          detalle: 'Pulsa el corazón de un producto para guardarlo aquí y encontrarlo después.',
+          icono: '♡',
+          accion: {
+            texto: 'Ver toda la tienda',
+            nombre: 'limpiar-filtros',
+            alPulsar: () => limpiarFiltros(doc),
+          },
+        }),
+      );
+      pintarResultado(doc, 'Tu lista de deseos está vacía.');
+      pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
+      return;
+    }
+    pintarEn(
+      rejilla,
+      estadoVacio({
+        titulo: 'Ningún producto coincide',
+        detalle: rangoAlReves
+          ? 'El precio mínimo es mayor que el máximo. Corrígelo o quita el filtro de precio.'
+          : 'Prueba con otras palabras o quita algún filtro: la tienda tiene más productos.',
+        icono: '◇',
+        accion: {
+          texto: 'Limpiar filtros',
+          nombre: 'limpiar-filtros',
+          alPulsar: () => limpiarFiltros(doc),
+        },
+      }),
+    );
+    // Auditoría de DEV del 30-sep: «Ningún producto coincide de 56 a la
+    // venta.» sonaba raro.
+    pintarResultado(
+      doc,
+      `Ningún producto coincide; hay ${textoDeUnidades(vista.productos.length)} a la venta.`,
+    );
+    pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
+    return;
+  }
+
+  const totalPaginas = Math.ceil(encontrados.length / PRODUCTOS_POR_PAGINA);
+  vista.pagina = Math.min(Math.max(0, vista.pagina), totalPaginas - 1);
+  const desde = vista.pagina * PRODUCTOS_POR_PAGINA;
+  rejilla.replaceChildren(
+    ...encontrados.slice(desde, desde + PRODUCTOS_POR_PAGINA).map((modelo) =>
+      tarjetaDeProducto(modelo.dto, {
+        modo: MODOS.TIENDA,
+        unidadesPropias: modelo.id === null ? 0 : (vista.propias.get(String(modelo.id)) ?? 0),
+      }),
+    ),
+  );
+
+  const total = vista.productos.length;
+  let resumen;
+  if (soloLaListaDeDeseos(vista.criterios)) {
+    resumen =
+      encontrados.length === 1
+        ? '1 producto en tu lista de deseos.'
+        : `${encontrados.length} productos en tu lista de deseos.`;
+  } else {
+    resumen = hayCriterios(vista.criterios)
+      ? `${encontrados.length} de ${total} productos coinciden.`
+      : `${textoDeUnidades(total)} a la venta.`;
+  }
+  if (!vista.completo) {
+    resumen +=
+      ' Hay más en el catálogo de los que se cargan de una vez: busca o filtra por tipo para encontrarlos.';
+  }
+  pintarResultado(doc, resumen);
+  pintarPaginacion(doc, { paginaActual: vista.pagina, totalPaginas });
+}
+
+/**
+ * ¿Se está mirando solo la lista de deseos, sin más criterios? Entonces la
+ * vista habla de «tu lista» y no de coincidencias.
+ *
+ * @param {import('./tienda-catalogo.js').Criterios} criterios
+ * @returns {boolean}
+ */
+function soloLaListaDeDeseos(criterios = {}) {
+  return Boolean(criterios.soloDeseos) && !hayCriterios({ ...criterios, soloDeseos: false });
+}
+
+/** La línea de resultados (`role="status"`), si la vista la tiene. */
+function pintarResultado(doc, texto) {
+  const zona = doc.getElementById('resultado-tienda');
+  if (zona) {
+    zona.textContent = texto;
+  }
+}
+
+/** El control 1…10 bajo la rejilla, si la vista lo tiene. */
+function pintarPaginacion(doc, { paginaActual, totalPaginas }) {
+  const zona = doc.getElementById('paginacion-tienda');
+  if (!zona) {
+    return;
+  }
+  const control = construirPaginacion({ paginaActual, totalPaginas }, (pagina) => {
+    estadoDe(doc).pagina = pagina;
+    pintarCatalogo(doc);
+    // El foco vuelve al principio de la rejilla y la vista sube a ella: si no,
+    // quien pagina con el teclado se queda al pie de una página nueva.
+    const rejilla = doc.getElementById('productos-grid');
+    rejilla?.scrollIntoView?.({ block: 'start' });
+    rejilla?.querySelector('.product-card__ver, .btn-add')?.focus();
+  });
+  control.setAttribute('aria-label', 'Páginas de la tienda');
+  zona.replaceChildren(control);
+}
+
+/**
+ * Marca en las tarjetas ya pintadas lo que el jugador tiene, sin volver a
+ * pintarlas (el inventario puede contestar después que la vitrina, y repintar
+ * le quitaría el foco a quien ya está navegando).
+ *
+ * @param {Document} doc
+ */
+function marcarPropias(doc) {
+  const { propias } = estadoDe(doc);
+  for (const tarjeta of doc.querySelectorAll('#productos-grid .product-card[data-id-producto]')) {
+    const unidades = propias.get(tarjeta.dataset.idProducto) ?? 0;
+    if (unidades === 0 || tarjeta.querySelector('.producto-propio')) {
+      continue;
+    }
+    tarjeta.dataset.propio = 'si';
+    const anadir = tarjeta.querySelector('.btn-add');
+    if (anadir) {
+      apagarAnadirPorPropio(anadir);
+    }
+    let zona = tarjeta.querySelector('.product-card__distintivos');
+    if (!zona) {
+      zona = h('div', { clase: 'product-card__distintivos' });
+      tarjeta.querySelector('.product-card__nombre')?.after(zona);
+    }
+    zona.prepend(distintivoDePropiedad(unidades));
+  }
+}
+
+/**
+ * Criterios del formulario de filtros.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {import('./tienda-catalogo.js').Criterios}
+ */
+export function leerCriterios(formulario) {
+  const numero = (nombre) => {
+    const valor = formulario.elements.namedItem(nombre)?.value ?? '';
+    if (String(valor).trim() === '') {
+      return null;
+    }
+    const n = Number(valor);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  };
+  return {
+    busqueda: formulario.elements.namedItem('busqueda')?.value ?? '',
+    tipo: formulario.elements.namedItem('tipo')?.value ?? '',
+    precioMinimo: numero('precioMinimo'),
+    precioMaximo: numero('precioMaximo'),
+    soloPromocion: Boolean(formulario.elements.namedItem('soloPromocion')?.checked),
+    soloDeseos: Boolean(formulario.elements.namedItem('soloDeseos')?.checked),
+    orden: formulario.elements.namedItem('orden')?.value ?? 'catalogo',
+  };
+}
+
+/**
+ * «Filtros y orden · 2 activos»: con el panel recogido, que se sepa que hay
+ * filtros puestos (la búsqueda está siempre a la vista y no cuenta).
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {import('./tienda-catalogo.js').Criterios} criterios
+ */
+function pintarResumenDeFiltros(formulario, criterios) {
+  const resumen = formulario.querySelector('[data-zona="resumen-filtros"]');
+  if (!resumen) {
+    return;
+  }
+  const activos = [
+    criterios.tipo,
+    Number.isFinite(criterios.precioMinimo),
+    Number.isFinite(criterios.precioMaximo),
+    criterios.soloPromocion,
+    criterios.soloDeseos,
+  ].filter(Boolean).length;
+  let texto = 'Filtros y orden';
+  if (activos === 1) {
+    texto += ' · 1 activo';
+  } else if (activos > 1) {
+    texto += ` · ${activos} activos`;
+  }
+  resumen.textContent = texto;
+}
+
+/** Vacía los filtros y vuelve a pintar. */
+function limpiarFiltros(doc) {
+  const formulario = doc.getElementById('filtros-tienda');
+  formulario?.reset();
+  const vista = estadoDe(doc);
+  vista.criterios = formulario ? leerCriterios(formulario) : {};
+  vista.pagina = 0;
+  if (formulario) {
+    pintarResumenDeFiltros(formulario, vista.criterios);
+  }
+  pintarCatalogo(doc);
+  formulario?.elements.namedItem('busqueda')?.focus();
+}
+
+/**
+ * ¿Dicen lo mismo dos juegos de criterios? Salen los dos de `leerCriterios`,
+ * con las mismas claves en el mismo orden.
+ *
+ * @param {object} a
+ * @param {object} b
+ * @returns {boolean}
+ */
+export function mismosCriterios(a, b) {
+  return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
+}
+
+/**
+ * Engancha búsqueda, filtros y orden. El texto espera a que se deje de
+ * escribir un momento; los desplegables y la casilla, no.
+ *
+ * @param {Document} doc
+ */
+function montarFiltros(doc) {
+  const formulario = doc.getElementById('filtros-tienda');
+  const vista = estadoDe(doc);
+  // UXC-9 — RF-INV-008: la búsqueda de productos de la barra llega aquí como
+  // `?busqueda=` (desde cualquier vista) o como `#busqueda-tienda` (la lupa de
+  // la barra estrecha, que trae al campo para escribir).
+  const campoBusqueda = formulario?.elements.namedItem('busqueda');
+  const pedida = new URLSearchParams(globalThis.location?.search ?? '').get('busqueda');
+  if (campoBusqueda && pedida && !campoBusqueda.value) {
+    campoBusqueda.value = pedida.trim().slice(0, 100);
+  }
+  if (campoBusqueda && globalThis.location?.hash === '#busqueda-tienda') {
+    campoBusqueda.focus();
+  }
+  // Los criterios salen del formulario tal como está al montar: el navegador
+  // puede haberlo rellenado al volver atrás, y la vitrina debe coincidir con
+  // lo que se ve en los campos.
+  vista.criterios = formulario ? leerCriterios(formulario) : {};
+  vista.pagina = 0;
+  if (!formulario) {
+    return;
+  }
+  // En un teléfono los filtros se recogen: la búsqueda queda a mano y la
+  // vitrina no queda debajo de medio metro de campos.
+  const mas = formulario.querySelector('.filtros-tienda__mas');
+  if (mas && (globalThis.innerWidth ?? 1440) < 600) {
+    mas.open = false;
+  }
+  // La búsqueda y el precio se aplican al escribir (con espera) y además
+  // disparan `change` al perder el foco: por ejemplo, al pulsar «Añadir» en
+  // una tarjeta. Repintar la vitrina entre el `pointerdown` y el `pointerup`
+  // cambia lo que hay debajo del puntero y el clic no llega a ningún botón: el
+  // producto no se añadía (lo destapó el E2E de la tienda, que busca y pulsa
+  // enseguida). Mientras haya un botón del puntero pulsado, el repintado
+  // espera a que se suelte; el clic, que llega justo después, va primero.
+  const puntero = { pulsado: false, pendiente: false };
+  const aplicar = () => {
+    if (puntero.pulsado) {
+      puntero.pendiente = true;
+      return;
+    }
+    const criterios = leerCriterios(formulario);
+    // Si nada cambió (el `change` del blur tras la espera), no se repinta.
+    if (mismosCriterios(criterios, vista.criterios)) {
+      return;
+    }
+    vista.criterios = criterios;
+    vista.pagina = 0;
+    pintarResumenDeFiltros(formulario, vista.criterios);
+    pintarCatalogo(doc);
+  };
+  const soltar = () => {
+    if (!puntero.pulsado) {
+      return;
+    }
+    puntero.pulsado = false;
+    // Una vuelta después: el `click` se despacha tras el `pointerup`.
+    setTimeout(() => {
+      if (puntero.pendiente) {
+        puntero.pendiente = false;
+        aplicar();
+      }
+    }, 0);
+  };
+  doc.addEventListener('pointerdown', () => {
+    puntero.pulsado = true;
+  });
+  doc.addEventListener('pointerup', soltar);
+  doc.addEventListener('pointercancel', soltar);
+  let espera = null;
+  formulario.addEventListener('input', (evento) => {
+    if (evento.target?.type === 'search' || evento.target?.type === 'number') {
+      clearTimeout(espera);
+      espera = setTimeout(aplicar, 250);
+    }
+  });
+  formulario.addEventListener('change', aplicar);
+  formulario.addEventListener('submit', (evento) => {
+    evento.preventDefault();
+    clearTimeout(espera);
+    aplicar();
+  });
+  // `reset` limpia los campos DESPUÉS de este evento: se aplica en la vuelta
+  // siguiente, con los valores ya vacíos.
+  formulario.addEventListener('reset', () => {
+    clearTimeout(espera);
+    setTimeout(aplicar, 0);
+  });
+}
+
+/**
+ * «Ver producto»: la ficha del catálogo con el bloque de compra y las
+ * opiniones de la comunidad.
+ *
+ * @param {string} productoId
+ * @param {Document} doc
+ * @param {HTMLElement} [origen] adonde vuelve el foco al cerrar
+ */
+function abrirDetalle(productoId, doc, origen) {
+  const vista = estadoDe(doc);
+  const dto = vista.productos.find((producto) => String(producto.id) === productoId);
+  if (!dto) {
+    return;
+  }
+  abrirFicha(productoId, {
+    origen,
+    contexto: 'tienda',
+    complementos: [
+      () =>
+        bloqueDeCompra(dto, {
+          modo: MODOS.TIENDA,
+          unidadesPropias: vista.propias.get(productoId) ?? 0,
+          alAnadir: (id) => agregarAlCarrito(id, doc),
+          alDesear: (id) => alternarDeseo(id, doc),
+        }),
+      complementoDeOpiniones(),
+    ],
+  });
 }
 
 /**
@@ -224,112 +832,11 @@ function pintarEn(contenedor, estado) {
   contenedor.replaceChildren(estado);
 }
 
-/**
- * Tarjeta de un producto.
- *
- * El color sale del tipo, como en la maqueta. El botón NO lleva `onclick`: la
- * escucha está delegada en la rejilla (ver `montarTienda`), que es lo único que
- * funciona cuando este archivo se carga como módulo.
- */
-function tarjetaDeProducto(dto, doc) {
-  // FI-R2 — la traduccion del DTO es explicita y esta probada aparte. Antes
-  // esta funcion leia `dto.precio`, un campo que el servicio no devuelve.
-  const producto = aProductoDeVitrina(dto);
-  const tarjeta = doc.createElement('div');
-  tarjeta.className = 'product-card';
-  tarjeta.dataset.tipo = producto.tipo;
-  // UX-R2.8 — el color de la caja se interpolaba dentro de la plantilla
-  // (`background-color: ${colorCaja}`). Los dos valores eran constantes, asi
-  // que no habia agujero, pero era `innerHTML` con una interpolacion: la
-  // forma exacta que el guardian persigue, y la que alguien copia el dia que
-  // el color venga del catalogo. Ahora el marcado es fijo y el color se pone
-  // por `dataset`, con las fichas del kit.
-  tarjeta.innerHTML = `
-    <div class="product-image"></div>
-    <h4></h4>
-    <p></p>
-    <p class="habilidades"></p>
-    <div class="product-footer">
-      <span class="precio-bloque">
-        <span class="price"></span>
-        <s class="price-antes"></s>
-        <span class="badge-descuento"></span>
-      </span>
-      <button class="btn-add" type="button">Añadir</button>
-    </div>
-  `;
-  // textContent y no innerHTML: el nombre y la descripción vienen del
-  // catálogo, y un producto con `<script>` en el nombre no debe ejecutarse.
-  tarjeta.querySelector('h4').textContent = producto.nombre;
-  tarjeta.querySelector('p').textContent = producto.descripcion;
-
-  // RF-CAR-001 pide la imagen del producto. La caja de color era el marcador
-  // de posicion de la maqueta; `imagenUrl` viene en el DTO desde el principio.
-  const caja = tarjeta.querySelector('.product-image');
-  if (producto.imagenUrl) {
-    const img = doc.createElement('img');
-    img.src = producto.imagenUrl;
-    img.alt = '';
-    img.loading = 'lazy';
-    caja.appendChild(img);
-    caja.classList.add('con-imagen');
-  }
-
-  // RF-CAR-001 pide tambien las habilidades. Estaban en el DTO y no se
-  // pintaban en ningun sitio.
-  const habilidades = tarjeta.querySelector('.habilidades');
-  if (producto.habilidades) {
-    habilidades.textContent = producto.habilidades;
-  } else {
-    habilidades.remove();
-  }
-
-  // FI-R2 — sin precio no se escribe «0 COP». Cero es un precio, y decirle a
-  // alguien que un objeto es gratis cuando lo que pasa es que no llego el dato
-  // es exactamente la clase de mentira que esta ronda persigue.
-  const precio = tarjeta.querySelector('.price');
-  precio.textContent = producto.precioTexto ?? 'Precio no disponible';
-  if (producto.precioTexto === null) {
-    precio.classList.add('precio-ausente');
-  }
-
-  const antes = tarjeta.querySelector('.price-antes');
-  if (producto.precioAnteriorTexto) {
-    antes.textContent = producto.precioAnteriorTexto;
-  } else {
-    antes.remove();
-  }
-
-  const distintivo = tarjeta.querySelector('.badge-descuento');
-  if (producto.descuento !== null) {
-    distintivo.textContent = `-${producto.descuento}%`;
-  } else {
-    distintivo.remove();
-  }
-
-  if (producto.esPropio) {
-    tarjeta.dataset.propio = 'si';
-  }
-  if (producto.enListaDeseos) {
-    tarjeta.dataset.deseado = 'si';
-  }
-
-  // Sin id no hay nada que anadir al carrito: el boton se deshabilita en vez
-  // de mandar `undefined` al servicio.
-  //
-  // R16 — el id es el UUID del catalogo maestro, en texto. `dataset` guarda
-  // texto y `agregarAlCarrito` lo manda tal cual: ni `Number()` ni `parseInt`,
-  // que convertirian un UUID en `NaN` y el producto en «inexistente».
-  const boton = tarjeta.querySelector('.btn-add');
-  if (producto.id === null) {
-    boton.disabled = true;
-    boton.title = 'Este producto llegó incompleto y no se puede añadir al carrito.';
-  } else {
-    boton.dataset.producto = String(producto.id);
-  }
-
-  return tarjeta;
-}
+// La tarjeta de producto vive desde UXC-4 en `tienda-producto.js`, con el
+// precio, la marca de «propio» y «Ver producto»: la usa tambien la portada.
+// Conserva lo que esta funcion habia ganado (FI-R2: `precioFinal` y no un
+// `precio` inventado; R16: el UUID en texto hasta el carrito; UX-R2.8: nada
+// de `innerHTML` con datos).
 
 // --- CARRITO ---
 
@@ -359,19 +866,246 @@ export async function agregarAlCarrito(productoId, doc = document) {
     });
   } catch (error) {
     // Ni siquiera hubo respuesta: la red o el borde no contestaron.
-    avisarFalloAlAnadir(zona, { estado: 0, problema: null, productoId, doc });
+    const mensaje = avisarFalloAlAnadir(zona, { estado: 0, problema: null, productoId, doc });
+    desplegarCarrito(doc);
     console.error('Error al agregar item:', error);
-    return;
+    return { ok: false, ...mensaje };
   }
 
   if (!respuesta.ok) {
     const problema = await leerProblema(respuesta);
-    avisarFalloAlAnadir(zona, { estado: respuesta.status, problema, productoId, doc });
+    const mensaje = avisarFalloAlAnadir(zona, {
+      estado: respuesta.status,
+      problema,
+      productoId,
+      doc,
+    });
+    // UXC-4 — con el carrito minimizado el aviso quedaría escondido: se
+    // despliega para que se lea donde se esperaba ver el producto.
+    desplegarCarrito(doc);
     console.error('El carrito rechazó el producto:', respuesta.status, problema?.type);
-    return;
+    return { ok: false, ...mensaje };
   }
 
+  // B5 — el carrito cambió: pagarlo ahora es otra compra, con otra clave.
+  olvidarIntentoDePago(doc);
   await cargarCarrito(doc);
+  anunciarEnLaInsignia(doc, 'Añadido al carrito.');
+  return { ok: true };
+}
+
+/**
+ * Quitar una línea del carrito — `DELETE /api/v1/carrito/items/{itemId}`.
+ *
+ * El servicio devuelve el carrito ya sin la línea, y eso es lo que se pinta:
+ * el total lo recalcula él.
+ *
+ * @param {string|number} itemId el `id` de la línea
+ * @param {Document} [doc]
+ * @returns {Promise<boolean>} si se quitó
+ */
+export async function quitarDelCarrito(itemId, doc = document) {
+  const zona = zonaDeAvisoDelCarrito(doc);
+  limpiarAviso(zona);
+  const reintentar = {
+    texto: 'Reintentar',
+    nombre: 'reintentar-quitar',
+    alPulsar: () => quitarDelCarrito(itemId, doc),
+  };
+  let respuesta;
+  try {
+    // B5 — en la moneda que se enseña: la respuesta es el carrito que se pinta.
+    respuesta = await fetchWithHttpErrorInterceptor(
+      rutaDeApi(
+        conMoneda(`/carrito/items/${encodeURIComponent(String(itemId))}`, estadoDe(doc).moneda),
+      ),
+      { method: 'DELETE', headers: cabeceras() },
+    );
+  } catch (error) {
+    pintarAviso(zona, {
+      tono: 'error',
+      titulo: 'No se pudo quitar el producto',
+      detalle: 'Sigue en tu carrito. Inténtalo de nuevo en unos segundos.',
+      accion: reintentar,
+    });
+    console.error('Error al quitar item:', error);
+    return false;
+  }
+  if (!respuesta.ok) {
+    if (respuesta.status === 401) {
+      pintarAviso(zona, {
+        tono: 'advertencia',
+        titulo: 'Tu sesión ya no es válida',
+        detalle: 'Vuelve a iniciar sesión para usar el carrito.',
+        accion: {
+          texto: 'Iniciar sesión',
+          nombre: 'iniciar-sesion',
+          alPulsar: volverAIniciarSesion,
+        },
+      });
+    } else if (respuesta.status !== 403) {
+      pintarAviso(zona, {
+        tono: tonoPorEstado(respuesta.status),
+        titulo: 'No se pudo quitar el producto',
+        detalle: 'Sigue en tu carrito. Inténtalo de nuevo en unos segundos.',
+        accion: reintentar,
+      });
+    }
+    return false;
+  }
+  olvidarIntentoDePago(doc);
+  actualizarUI(await respuesta.json(), doc);
+  anunciarEnLaInsignia(doc, 'Quitado del carrito.');
+  return true;
+}
+
+/**
+ * «−» y «+» de una línea — `PUT /api/v1/carrito/items/{itemId}/cantidad`
+ * (1.4.0). El servidor comprueba el rango (1..20) y lo que queda del tiraje,
+ * recalcula el total y devuelve el carrito, que es lo que se pinta.
+ *
+ * @param {string|number} itemId el `id` de la línea
+ * @param {number} cantidad la cantidad nueva
+ * @param {Document} [doc]
+ * @returns {Promise<boolean>} si cambió
+ */
+export async function cambiarCantidad(itemId, cantidad, doc = document) {
+  const zona = zonaDeAvisoDelCarrito(doc);
+  limpiarAviso(zona);
+  const reintentar = {
+    texto: 'Reintentar',
+    nombre: 'reintentar-cantidad',
+    alPulsar: () => cambiarCantidad(itemId, cantidad, doc),
+  };
+  let respuesta;
+  try {
+    respuesta = await fetchWithHttpErrorInterceptor(
+      rutaDeApi(
+        conMoneda(
+          `/carrito/items/${encodeURIComponent(String(itemId))}/cantidad`,
+          estadoDe(doc).moneda,
+        ),
+      ),
+      { method: 'PUT', headers: cabeceras(), body: JSON.stringify({ cantidad }) },
+    );
+  } catch (error) {
+    pintarAviso(zona, {
+      tono: 'error',
+      titulo: 'No se pudo cambiar la cantidad',
+      detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+      accion: reintentar,
+    });
+    console.error('Error al cambiar la cantidad:', error);
+    return false;
+  }
+  if (!respuesta.ok) {
+    const problema = await leerProblema(respuesta);
+    if (respuesta.status === 401) {
+      pintarAviso(zona, {
+        tono: 'advertencia',
+        titulo: 'Tu sesión ya no es válida',
+        detalle: 'Vuelve a iniciar sesión para usar el carrito.',
+        accion: {
+          texto: 'Iniciar sesión',
+          nombre: 'iniciar-sesion',
+          alPulsar: volverAIniciarSesion,
+        },
+      });
+    } else if (respuesta.status !== 403) {
+      const conocido = MOTIVOS_DE_CANTIDAD[problema?.type];
+      pintarAviso(zona, {
+        tono: tonoPorEstado(respuesta.status),
+        titulo: 'No se pudo cambiar la cantidad',
+        detalle: conocido
+          ? conocido(problema)
+          : 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+        accion: conocido && respuesta.status < 500 ? null : reintentar,
+      });
+      // La línea o el producto cambiaron: lo que hay que ver es el carrito de ahora.
+      if (conocido && respuesta.status < 500) {
+        await cargarCarrito(doc);
+      }
+    }
+    desplegarCarrito(doc);
+    return false;
+  }
+  olvidarIntentoDePago(doc);
+  actualizarUI(await respuesta.json(), doc);
+  anunciarEnLaInsignia(doc, `Cantidad actualizada: ${cantidad}.`);
+  return true;
+}
+
+/**
+ * El corazón de una tarjeta o del detalle: añade el producto a la lista de
+ * deseos o lo quita, según lo que diga ahora la vista, y pinta lo que el
+ * servicio confirme.
+ *
+ * @param {string} productoId
+ * @param {Document} [doc]
+ * @returns {Promise<{ok: boolean, texto: string}>}
+ */
+export async function alternarDeseo(productoId, doc = document) {
+  const vista = estadoDe(doc);
+  const id = String(productoId);
+  const dto = vista.productos.find((producto) => String(producto.id) === id) ?? null;
+  const boton = Array.from(doc.querySelectorAll('[data-deseo]')).find(
+    (candidato) => candidato.dataset.deseo === id,
+  );
+  const deseadoAhora =
+    dto !== null ? dto.enListaDeseos === true : boton?.getAttribute('aria-pressed') === 'true';
+  const desear = !deseadoAhora;
+  const nombre = dto?.nombre || 'El producto';
+
+  const resultado = await cambiarDeseo(id, desear);
+  let texto;
+  if (resultado.ok) {
+    if (dto !== null) {
+      dto.enListaDeseos = desear;
+    }
+    pintarDeseo(doc, id, desear);
+    texto = desear
+      ? `«${nombre}» está en tu lista de deseos.`
+      : `«${nombre}» salió de tu lista de deseos.`;
+    // Mirando la lista de deseos, lo que sale de ella deja de verse.
+    if (!desear && vista.criterios?.soloDeseos) {
+      pintarCatalogo(doc);
+    }
+  } else {
+    texto = textoDelFalloDeDeseo(resultado, desear);
+  }
+  const zona = doc.getElementById('aviso-deseos');
+  if (zona) {
+    zona.textContent = texto;
+    zona.dataset.tono = resultado.ok ? 'exito' : 'advertencia';
+  }
+  return { ok: resultado.ok, texto };
+}
+
+/** Despliega el panel del carrito si la vista lo tiene minimizado. */
+function desplegarCarrito(doc) {
+  const { cajon } = estadoDe(doc);
+  if (cajon && !cajon.desplegado()) {
+    cajon.desplegar();
+  }
+}
+
+/**
+ * Lo que acaba de pasar con el carrito, junto a la insignia: se lee aunque el
+ * panel esté minimizado, y se anuncia (`role="status"`).
+ *
+ * @param {Document} doc
+ * @param {string} texto
+ */
+function anunciarEnLaInsignia(doc, texto) {
+  const zona = doc.getElementById('aviso-insignia');
+  if (!zona) {
+    return;
+  }
+  zona.textContent = texto;
+  clearTimeout(zona._temporizador);
+  zona._temporizador = setTimeout(() => {
+    zona.textContent = '';
+  }, 4000);
 }
 
 /**
@@ -419,8 +1153,11 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   if (estado === 403) {
     // El interceptor compartido ya anuncia el rechazo de permiso con su aviso
     // flotante (HU-RBAC-004). Un segundo aviso por el mismo fallo seria
-    // apilarlos.
-    return;
+    // apilarlos. Al detalle del producto se le devuelve la frase igual.
+    return {
+      titulo: 'No se pudo añadir el producto',
+      detalle: 'Tu cuenta no tiene permiso para comprar.',
+    };
   }
 
   const delSistema = estado === 0 || estado >= 500;
@@ -453,8 +1190,7 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   } else {
     // Un rechazo que el contrato no declara. El `detail`, si llega, esta
     // escrito para el jugador (MAPEO-ERRORES §3); si no, una pauta propia.
-    const delServidor =
-      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    const delServidor = textoDelServidor(problema, estado, '') || null;
     mensaje = {
       titulo: 'No se pudo añadir el producto al carrito',
       detalle:
@@ -470,6 +1206,7 @@ function avisarFalloAlAnadir(zona, { estado, problema, productoId, doc }) {
   // En pantalla estrecha el carrito queda debajo de la vitrina: sin esto, el
   // aviso existiria pero fuera de la vista de quien acaba de pulsar «Añadir».
   caja.scrollIntoView?.({ block: 'nearest' });
+  return { titulo: mensaje.titulo, detalle: mensaje.detalle };
 }
 
 /** Borra la sesión que el servicio rechazó y lleva al login con vuelta a la tienda. */
@@ -479,11 +1216,14 @@ function volverAIniciarSesion() {
 }
 
 export async function cargarCarrito(doc = document) {
+  // B5 — en la moneda que se enseña. Si mientras llega se cambia de moneda,
+  // esta respuesta ya no se pinta: la pinta la petición nueva.
+  const pedida = estadoDe(doc).moneda;
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito'), {
-      method: 'GET',
-      headers: cabeceras(),
-    });
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      rutaDeApi(conMoneda('/carrito', pedida)),
+      { method: 'GET', headers: cabeceras() },
+    );
     // R16 — el interceptor no lanza ante un 4xx o un 5xx: sin esto, el
     // problem detail de un 500 se pintaba como un carrito sin `items`, o sea
     // «vacío», que es justo lo que el `catch` de abajo dice evitar.
@@ -491,13 +1231,25 @@ export async function cargarCarrito(doc = document) {
       throw await errorDeRespuesta(respuesta);
     }
 
-    actualizarUI(await respuesta.json(), doc);
+    const carrito = await respuesta.json();
+    if (estadoDe(doc).moneda === pedida) {
+      actualizarUI(carrito, doc);
+    }
   } catch (error) {
+    if (estadoDe(doc).moneda !== pedida) {
+      return;
+    }
     // Un 404 es un carrito que todavía no existe, y eso SÍ es un carrito
     // vacío. Cualquier otro fallo no lo es: pintar «vacío» ante un 500 le
     // esconde al jugador que sus productos siguen ahí.
     if (error?.estado === 404 || error?.status === 404) {
       actualizarUI(null, doc);
+      return;
+    }
+    // B5 — la moneda en uso dejó de estar: se vuelve a la que quede.
+    if (error?.problema?.type === TIPO_MONEDA_NO_DISPONIBLE && pedida !== MONEDA_BASE) {
+      retirarMonedaEnUso(doc, error.problema.monedasDisponibles);
+      await Promise.all([cargarVitrina(doc), cargarCarrito(doc)]);
       return;
     }
     mostrarFalloDelCarrito(doc);
@@ -523,6 +1275,8 @@ function mostrarFalloDelCarrito(doc) {
     // No se paga lo que no se ha podido leer.
     botonPagar.disabled = true;
   }
+  estadoDe(doc).carrito = null;
+  pintarMotivoDePago(doc, 'Tu carrito no se pudo cargar: no se puede pagar ahora.');
 }
 
 export function actualizarUI(carrito, doc = document) {
@@ -530,76 +1284,284 @@ export function actualizarUI(carrito, doc = document) {
   const subtotal = doc.getElementById('cart-subtotal');
   const total = doc.getElementById('cart-total');
   const botonPagar = doc.getElementById('btn-pagar');
+  const unidades = doc.getElementById('cart-unidades');
 
-  contenedor.innerHTML = '';
+  // UXC-4 — la insignia de la cabecera dice cuántos productos hay, también
+  // con el panel minimizado.
+  const cuantas = unidadesDelCarrito(carrito);
+  pintarInsignia(doc.getElementById('insignia-carrito'), cuantas);
+  if (unidades) {
+    unidades.textContent = textoDeUnidades(cuantas);
+  }
+
+  estadoDe(doc).carrito = carrito && Array.isArray(carrito.items) ? carrito : null;
 
   if (!carrito || !carrito.items || carrito.items.length === 0) {
-    contenedor.innerHTML = '<p class="t-meta">Tu carrito está vacío</p>';
+    // UXC-9 — un vacío dice qué hacer: la vitrina está al lado.
+    contenedor.replaceChildren(
+      h('p', { clase: 't-meta', texto: 'Tu carrito está vacío' }),
+      h('p', {
+        clase: 't-meta carrito-vacio__siguiente',
+        texto: 'Pulsa «Añadir» en cualquier producto de la vitrina para traerlo aquí.',
+      }),
+    );
     // Un carrito vacio suma cero de verdad, pero la moneda no se sabe: la trae
     // cada producto, y aqui no hay ninguno. Se ensena la cifra sola.
     subtotal.textContent = '0';
     total.textContent = '0';
     botonPagar.disabled = true;
+    pintarMotivoDePago(doc, 'Añade productos a tu carrito para pagar.');
     return;
   }
 
-  // La moneda del carrito es la del primer producto que la declare: el DTO la
-  // trae por producto, no por carrito, y suponer COP seria decirle al jugador
-  // en que paga sin saberlo.
+  // B5 — el carrito dice su moneda (1.4.0). Sin ella, la del primer producto
+  // que la declare: suponer COP seria decirle al jugador en que paga sin
+  // saberlo.
   const moneda =
+    (typeof carrito.moneda === 'string' && carrito.moneda.trim() ? carrito.moneda : null) ||
     carrito.items.map((i) => i.producto?.moneda).find((m) => typeof m === 'string' && m.trim()) ||
     null;
 
-  for (const item of carrito.items) {
-    const fila = aFilaDeCarrito(item, moneda);
-    const nodo = doc.createElement('div');
-    nodo.className = 'cart-item';
-    nodo.innerHTML = `
-      <div class="item-info"><h5></h5><span></span></div>
-      <div class="item-price"></div>
-    `;
-    nodo.querySelector('h5').textContent = fila.nombre;
-    nodo.querySelector('span').textContent = `x${fila.cantidad}`;
-    // FI-R2 — antes salia «undefined COP» cuando el item no traia subtotal.
-    nodo.querySelector('.item-price').textContent = fila.subtotalTexto ?? 'Sin precio';
-    contenedor.appendChild(nodo);
-  }
+  contenedor.replaceChildren(...carrito.items.map((item) => lineaDelCarrito(item, moneda)));
 
-  const totalTexto = textoDePrecio(aImporte(carrito.total), moneda) ?? 'Sin total';
+  const totalTexto = textoDelTotal(carrito, moneda);
   subtotal.textContent = totalTexto;
   total.textContent = totalTexto;
-  prepararBotonDePago(botonPagar);
+  prepararBotonDePago(botonPagar, carrito, doc);
 }
 
 /**
- * El boton «Pagar» — FI-R2 / FI-R14.
+ * El total del carrito, como lo da el servidor (`total`, en dinero real).
  *
- * RF-CAR-010 («Resumen de compra y formulario de pago») y RF-PAG-001
- * («Integracion con pasarela de pagos simulada») existen, son de prioridad
- * Alta y estan confirmados. Lo que **no** existe es su implementacion:
- * `CarritoController` expone `GET /carrito`, `POST /carrito/items` y
- * `DELETE /carrito/items/{itemId}`, y nada mas; `ecommerce-carrito.yaml`
- * declara esas mismas tres rutas y ninguna de pago.
+ * G3 (1.7.0): las líneas que solo se venden en créditos no suman a ese total.
+ * Si las hay, se dice que se pagan con créditos —la cifra en créditos la da
+ * el servidor al pagar (`GET /checkout/creditos`)— en vez de enseñar «0 COP»
+ * como si no costaran nada.
  *
- * Los dos requisitos son de **Grupo de Santiago** (ver
- * `docs/gobierno/MAPA-RESPONSABILIDAD-RF.md`), asi que construir aqui la
- * pasarela seria adelantarles el Sprint, no completarlo.
+ * @param {object} carrito
+ * @param {string|null} moneda
+ * @returns {string}
+ */
+function textoDelTotal(carrito, moneda) {
+  const importe = aImporte(carrito.total);
+  const texto = textoDePrecio(importe, moneda);
+  const conCreditos = carrito.items.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
+  if (!conCreditos) {
+    return texto ?? 'Sin total';
+  }
+  return importe !== null && importe > 0
+    ? `${texto} + créditos del juego`
+    : 'Con créditos del juego';
+}
+
+/**
+ * Una línea del carrito (§7.5: imagen, nombre, precio unitario, cantidad y
+ * subtotal) con sus acciones: «−» y «+» cambian la cantidad
+ * (`PUT /carrito/items/{id}/cantidad`, 1.4.0) y «Quitar» la retira
+ * (`DELETE /carrito/items/{id}`).
  *
- * Mientras tanto el boton no puede quedarse encendido: estaba habilitado en
- * cuanto el carrito tenia algo y **no tenia ningun manejador**. Pulsarlo no
- * hacia nada, ni siquiera avisar. Un boton que se enciende es una promesa.
+ * «−» se apaga en 1 (para eso está «Quitar») y «+» en el máximo que dice el
+ * servidor: 20, o lo que quede del tiraje. Una línea que ya no se puede
+ * pagar lo dice, y solo deja bajar la cantidad si el problema es ese.
+ *
+ * @param {object} item `LineaDeCarrito` del contrato
+ * @param {string|null} moneda
+ * @returns {HTMLElement}
+ */
+function lineaDelCarrito(item, moneda) {
+  const fila = aFilaDeCarrito(item, moneda);
+  const lineaId = fila.id;
+  const acciones = [];
+  if (lineaId !== null) {
+    const soloBajar = !fila.disponible && fila.motivo === 'TIRAJE_INSUFICIENTE';
+    const puedeCambiar = fila.disponible || soloBajar;
+    acciones.push(
+      h('button', {
+        clase: 'boton boton--secundario boton--pequeno item-accion',
+        texto: '−',
+        datos: { cantidadItem: String(lineaId), cantidadNueva: String(fila.cantidad - 1) },
+        atributos: {
+          type: 'button',
+          disabled: !puedeCambiar || fila.cantidad <= 1,
+          'aria-label': `Una unidad menos de ${fila.nombre}`,
+        },
+      }),
+      h('button', {
+        clase: 'boton boton--secundario boton--pequeno item-accion',
+        texto: '+',
+        datos: { cantidadItem: String(lineaId), cantidadNueva: String(fila.cantidad + 1) },
+        atributos: {
+          type: 'button',
+          disabled: !fila.disponible || fila.cantidad >= fila.maximo,
+          'aria-label': `Una unidad más de ${fila.nombre}`,
+        },
+      }),
+      h('button', {
+        clase: 'boton boton--secundario boton--pequeno item-accion',
+        texto: 'Quitar',
+        datos: { quitarItem: String(lineaId) },
+        atributos: { type: 'button', 'aria-label': `Quitar ${fila.nombre} del carrito` },
+      }),
+    );
+  }
+  return h('div', {
+    clase: 'cart-item',
+    datos: {
+      ...(lineaId !== null ? { itemId: String(lineaId) } : {}),
+      disponible: fila.disponible ? 'si' : 'no',
+      ...(fila.soloEnCreditos ? { soloEnCreditos: 'si' } : {}),
+    },
+    hijos: [
+      fila.imagen ? imagenDeLinea(fila.imagen) : null,
+      h('div', {
+        clase: 'item-info',
+        hijos: [
+          h('h5', { texto: fila.nombre }),
+          h('span', { texto: `x${fila.cantidad}` }),
+          fila.unitarioTexto
+            ? h('span', { clase: 'item-unitario', texto: ` · ${fila.unitarioTexto} c/u` })
+            : null,
+          fila.motivoTexto ? h('p', { clase: 'item-aviso', texto: fila.motivoTexto }) : null,
+        ],
+      }),
+      h('div', {
+        clase: 'item-derecha',
+        hijos: [
+          // FI-R2 — antes salia «undefined COP» cuando el item no traia subtotal.
+          h('div', { clase: 'item-price', texto: fila.subtotalTexto ?? 'Sin precio' }),
+          acciones.length > 0 ? h('div', { clase: 'item-acciones', hijos: acciones }) : null,
+        ],
+      }),
+    ],
+  });
+}
+
+/**
+ * La miniatura de una línea del carrito. Si la imagen del catálogo no existe,
+ * se quita: una línea sin miniatura se lee igual, una imagen rota no.
+ *
+ * @param {string} src
+ * @returns {HTMLImageElement}
+ */
+function imagenDeLinea(src) {
+  const imagen = h('img', {
+    clase: 'item-imagen',
+    atributos: { src, alt: '', loading: 'lazy', decoding: 'async' },
+  });
+  imagen.addEventListener('error', () => imagen.remove(), { once: true });
+  return imagen;
+}
+
+/**
+ * El motivo por el que «Pagar» está apagado, escrito junto al botón y
+ * enlazado con `aria-describedby`; vacío cuando se puede pagar.
+ *
+ * @param {Document} doc
+ * @param {string} texto
+ */
+function pintarMotivoDePago(doc, texto) {
+  const zona = doc.getElementById('aviso-pago');
+  const boton = doc.getElementById('btn-pagar');
+  if (zona) {
+    zona.textContent = texto;
+    zona.hidden = texto === '';
+  }
+  if (boton) {
+    if (texto && zona) {
+      boton.setAttribute('aria-describedby', 'aviso-pago');
+    } else {
+      boton.removeAttribute('aria-describedby');
+    }
+  }
+}
+
+/**
+ * El boton «Pagar» — FI-R2 / FI-R14, y desde B5 con pasarela.
+ *
+ * Hasta B5 no existía ninguna ruta de pago y el botón se quedaba apagado con
+ * el motivo escrito: uno encendido y sin manejador era una promesa falsa.
+ * Ahora `POST /checkout` existe (ecommerce-carrito.yaml 1.4.0) y el botón
+ * abre el resumen con el formulario de pago. Se enciende cuando hay algo que
+ * pagar y todo lo del carrito se puede pagar; si no, dice por qué.
  *
  * @param {HTMLButtonElement|null} boton
+ * @param {object} carrito el que se acaba de pintar
+ * @param {Document} doc
  */
-function prepararBotonDePago(boton) {
+function prepararBotonDePago(boton, carrito, doc) {
   if (!boton) {
     return;
   }
-  boton.disabled = true;
-  // El identificador del requisito vive en el comentario de arriba, no en la
-  // pantalla: a quien compra no le dice nada «RF-PAG-001».
-  boton.title = 'El pago todavía no está disponible.';
-  boton.setAttribute('aria-describedby', 'aviso-pago-pendiente');
+  const lineas = Array.isArray(carrito?.items) ? carrito.items : [];
+  const total = aImporte(carrito?.total);
+  // G3 (1.7.0): una línea que solo se vende en créditos no suma al total en
+  // dinero real, pero se paga (con créditos): también es algo que pagar.
+  const hayQuePagarConCreditos = lineas.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
+  let motivo = '';
+  if (lineas.some((item) => item?.disponible === false)) {
+    motivo = 'Quita o corrige lo que ya no se puede comprar para pagar el resto.';
+  } else if (carrito?.preciosVigentes === false) {
+    motivo =
+      'No se pudieron confirmar los precios con el catálogo. Vuelve a intentarlo en unos segundos.';
+  } else if ((total === null || total <= 0) && !hayQuePagarConCreditos) {
+    motivo = 'Tu carrito no tiene un total que pagar.';
+  }
+  boton.disabled = motivo !== '';
+  boton.removeAttribute('title');
+  pintarMotivoDePago(doc, motivo);
+}
+
+/**
+ * «Pagar»: el resumen con el formulario (`tienda-pago.js`). Al terminar una
+ * compra cobrada se recargan el carrito (lo comprado ya salió de él) y lo que
+ * tiene el jugador.
+ *
+ * @param {Document} doc
+ */
+function abrirElPago(doc) {
+  const vista = estadoDe(doc);
+  if (!vista.carrito) {
+    return;
+  }
+  abrirPago({
+    doc,
+    carrito: vista.carrito,
+    moneda: vista.moneda,
+    alTerminar: () => {
+      cargarCarrito(doc);
+      if (haySesion()) {
+        propiedadesDelJugador(usuarioIdDeSesion()).then((mapa) => {
+          estadoDe(doc).propias = mapa;
+          marcarPropias(doc);
+        });
+      }
+    },
+    alCambiarCarrito: () => cargarCarrito(doc),
+    alCambiarMoneda: (disponibles) => {
+      retirarMonedaEnUso(doc, disponibles);
+      cargarVitrina(doc);
+      cargarCarrito(doc);
+    },
+    alPedirSesion: volverAIniciarSesion,
+    alVerCompras: () => abrirMisCompras(),
+  });
+}
+
+/**
+ * Engancha el selector de moneda: la preferida de entrada y, al cambiarla,
+ * la vitrina y el carrito en la nueva.
+ *
+ * @param {Document} doc
+ */
+function montarMoneda(doc) {
+  fijarMonedaPreferida(doc, monedaPreferida());
+  doc.getElementById('moneda-tienda')?.addEventListener('change', (evento) => {
+    cambiarMoneda(doc, evento.target.value);
+  });
 }
 
 /**
@@ -613,17 +1575,67 @@ function prepararBotonDePago(boton) {
  */
 export function montarTienda(doc = document) {
   const rejilla = doc.getElementById('productos-grid');
+  const vista = estadoDe(doc);
 
   rejilla?.addEventListener('click', (evento) => {
-    const boton = evento.target.closest('[data-producto]');
-    if (boton) {
-      agregarAlCarrito(boton.dataset.producto, doc);
+    const anadir = evento.target.closest('[data-producto]');
+    if (anadir) {
+      agregarAlCarrito(anadir.dataset.producto, doc);
+      return;
+    }
+    // B5 — el corazón de la tarjeta: la lista de deseos.
+    const deseo = evento.target.closest('[data-deseo]');
+    if (deseo) {
+      alternarDeseo(deseo.dataset.deseo, doc);
+      return;
+    }
+    // UXC-4 — «Ver producto»: detalle con compra y opiniones.
+    const ver = evento.target.closest('[data-ver-producto]');
+    if (ver) {
+      abrirDetalle(ver.dataset.verProducto, doc, ver);
     }
   });
 
+  // Las acciones de cada línea del carrito, también delegadas: las líneas se
+  // repintan enteras con cada respuesta del servicio.
+  doc.getElementById('cart-items')?.addEventListener('click', (evento) => {
+    const cantidad = evento.target.closest('[data-cantidad-item]');
+    if (cantidad) {
+      cambiarCantidad(cantidad.dataset.cantidadItem, Number(cantidad.dataset.cantidadNueva), doc);
+      return;
+    }
+    const quitar = evento.target.closest('[data-quitar-item]');
+    if (quitar) {
+      quitarDelCarrito(quitar.dataset.quitarItem, doc);
+    }
+  });
+
+  // B5 — pagar y ver las compras.
+  doc.getElementById('btn-pagar')?.addEventListener('click', () => abrirElPago(doc));
+  doc.getElementById('btn-mis-compras')?.addEventListener('click', () => abrirMisCompras());
+
+  vista.cajon = montarCajonDelCarrito(doc);
+  // La lista de deseos es de la cuenta: sin sesión la vitrina no la marca y
+  // el filtro no tendría nada que enseñar.
+  const filtroDeDeseos = doc.querySelector('[data-zona="filtro-deseos"]');
+  if (filtroDeDeseos) {
+    filtroDeDeseos.hidden = !haySesion();
+  }
+  montarFiltros(doc);
+  montarMoneda(doc);
+
+  // Lo que el jugador ya tiene sale de su inventario y llega cuando llega: la
+  // vitrina no lo espera, y las tarjetas se marcan al contestar.
+  const propias = haySesion()
+    ? propiedadesDelJugador(usuarioIdDeSesion()).then((mapa) => {
+        vista.propias = mapa;
+        marcarPropias(doc);
+      })
+    : Promise.resolve();
+
   // Se devuelve la promesa para que quien monte la vista pueda esperar a que
   // esté pintada. En el navegador nadie la espera; en las pruebas, sí.
-  return Promise.all([cargarVitrina(doc), cargarCarrito(doc)]).then(() => undefined);
+  return Promise.all([cargarVitrina(doc), cargarCarrito(doc), propias]).then(() => undefined);
 }
 
 // Arranque automático solo en el navegador; en las pruebas se monta a mano.

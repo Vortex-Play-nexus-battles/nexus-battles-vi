@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mis sanciones · Nexus Battles VI</title>
+    <title>Mis sanciones · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -24,6 +24,10 @@
       </p>
 
       <div data-zona="aviso" hidden></div>
+
+      <!-- UXC-7 — lo primero: si la cuenta está restringida y hasta cuándo, con
+           su cuenta atrás. Lo pinta `montarMisSanciones` con el historial. -->
+      <div data-zona="estado-cuenta"></div>
 
       <section class="tarjeta pila pila--compacta">
         <h2>Sanciones</h2>

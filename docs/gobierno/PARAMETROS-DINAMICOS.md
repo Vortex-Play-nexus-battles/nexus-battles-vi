@@ -3,23 +3,23 @@
 **HU-ADM-001 (RF-ADM-001) · catálogo en `services/plataforma/admin-parametros`, migración
 `V1__catalogo_de_parametros.sql`.**
 
-El catálogo tiene **22 claves**. Este documento dice, una por una, quién las consume hoy y por
+El catálogo tiene **27 claves** (migraciones V1 a V4). Este documento dice, una por una, quién las consume hoy y por
 qué. No es un inventario decorativo: existe porque «está en el catálogo» y «el sistema lo aplica»
 son dos cosas distintas, y confundirlas es exactamente cómo se llega a un parámetro configurable
 que ningún código lee.
 
 | Grupo | Claves |
 |---|---|
-| A · PRODUCTO — consumida por API | **5** |
+| A · PRODUCTO — consumida por API | **10** |
 | B · PRODUCTO — sin consumidor todavía | **3** |
 | C · TÉCNICA — variable de entorno, y está bien así | **2** |
 | D · INALTERABLE DEL CHARTER — quemada a propósito | **8** |
 | E · DE OTRO EQUIPO | **4** |
-| **Total** | **22** |
+| **Total** | **27** |
 
 ---
 
-## A · PRODUCTO — consumida por API (5)
+## A · PRODUCTO — consumida por API (10)
 
 El servicio pregunta al catálogo por HTTP en cada uso, con caché corta y el valor de su variable
 de entorno como **respaldo**. Cambiar el valor desde el panel de Parámetros cambia el
@@ -32,6 +32,11 @@ comportamiento sin reiniciar nada.
 | `sanciones.apelacion.plazo-dias` | `moderacion-sanciones` · `sanciones/LimitesDesdeParametros.java` | `SANCIONES_APELACION_PLAZO_DIAS` (30) | HU-USR-007 |
 | `salas.apuestas.si-gana-la-maquina` | `salas-partidas` · `aplicacion/LiquidarApuesta.java` | `APUESTAS_SI_GANA_LA_MAQUINA` (`LIBERAR`) | D-02 / HU-JUE-014 |
 | `chat.historial.tamano` | `salas-partidas` · `chat/canal/ChatController.java` | `CHAT_HISTORIAL_TAMANO` (50) | D-16 / HU-JUE-015 |
+| `jugador.creditos-iniciales` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_CREDITOS_INICIALES` — **provisional de DEV** (500 en AWS y en el banco E2E); sin él, el paso queda pendiente y lo dice | D-28 / PEN-04 |
+| `jugador.kit-inicial` | `ms-identidad` · `onboarding/service/PoliticaInicial.java` (alta del jugador, R17) | `JUGADOR_KIT_INICIAL` — **provisional de DEV** (un héroe de combate y un arma del catálogo real en AWS; `p-heroe-e2e,p-arma-e2e` en el banco) | D-29 / HU-SAL-003 |
+| `salas.partidas.segundos-por-turno` | `salas-partidas` · `configuracion/ConfiguracionDelCombate.java` (se lee en cada turno; `V4__tiempo_por_turno.sql`, B7) | `SALAS_PARTIDAS_SEGUNDOS_POR_TURNO` (0 = sin límite). Nace **sin valor**: sin límite, como hasta B7 | D-B7-14 / §6.1.3 |
+| `tienda.tasa-cop-usd` | `ms-ecommerce` · `precios/TasasDeCambio.java` (copia de 60 s y 15 min de gracia; `V3__tasas_de_la_tienda.sql`, B5) | Sin respaldo a propósito: sin valor, la tienda solo ofrece COP | D-32 / §7.5 |
+| `tienda.tasa-cop-eur` | `ms-ecommerce` · `precios/TasasDeCambio.java` (copia de 60 s y 15 min de gracia; `V3__tasas_de_la_tienda.sql`, B5) | Sin respaldo a propósito: sin valor, la tienda solo ofrece COP | D-32 / §7.5 |
 
 Las tres de sanciones se consumen desde el Sprint 3 (#580). Las dos de `salas-partidas` se
 añadieron en R12: hasta entonces estaban en el catálogo **y** en una variable de entorno, con el
@@ -125,7 +130,7 @@ nuestro** (CLAUDE.md: no modificar servicios de otro grupo sin coordinarlo).
 
 | Clave | Valor en catálogo | Origen |
 |---|---|---|
-| `subastas.incremento-minimo` | `NULL` (pendiente del PO) | RF-SUB-002 |
+| `subastas.incremento-minimo` | `5` (D-43, migración V5; antes `NULL`) | RF-SUB-002 |
 | `subastas.max-subastas-activas-por-jugador` | 10 | RF-SUB-004 |
 | `subastas.max-pujas-activas-por-jugador` | 50 | RF-SUB-004 |
 | `subastas.intervalo-minimo-segundos` | 5 | RF-SUB-004 |

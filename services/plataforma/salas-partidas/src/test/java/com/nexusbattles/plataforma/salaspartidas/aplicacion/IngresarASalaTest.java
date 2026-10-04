@@ -295,7 +295,7 @@ class IngresarASalaTest {
                 () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
         assertAll(
-                () -> assertTrue(rechazo.detalle().contains("maximo de participantes")),
+                () -> assertTrue(rechazo.detalle().contains("máximo de participantes")),
                 () -> assertTrue(canal.noAnuncioNada(), "nadie anuncia una entrada que no se guardo"),
                 () -> assertTrue(almacen.buscarPorId(sala.id()).orElseThrow()
                         .participantes().contains(ganador)),

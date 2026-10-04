@@ -24,7 +24,9 @@
         <h1>Comentarios reportados</h1>
         <p class="t-cuerpo">
           Lo más reportado va primero y, a igualdad, lo que lleva más tiempo esperando. Toda
-          decisión necesita un motivo: el autor lo recibe y queda en el historial.
+          decisión necesita un motivo: el autor lo recibe y queda en el historial. Editar cambia el
+          texto visible y guarda el anterior; marcar deja un comentario en seguimiento especial, sin
+          avisar a su autor.
         </p>
       </div>
 
@@ -41,6 +43,19 @@
       -->
       <section class="pila pila--compacta">
         <h2>Cola</h2>
+        <!--
+          B3 (comentarios.yaml 1.5.0, 7.3.3): la cola de siempre, la lista de
+          seguimiento especial (los marcados, en cualquier estado salvo
+          eliminado) o solo los que esperan revisión sin marca.
+        -->
+        <div class="campo">
+          <label class="campo__etiqueta" for="filtro-cola">Mostrar</label>
+          <select class="desplegable__control" id="filtro-cola" data-zona="filtro">
+            <option value="en-revision">Pendientes de revisión</option>
+            <option value="marcados">Marcados para seguimiento</option>
+            <option value="sin-marcar">Pendientes sin marcar</option>
+          </select>
+        </div>
         <div class="pila pila--compacta" data-zona="cola" aria-live="polite"></div>
       </section>
 
@@ -62,7 +77,7 @@
       }
       montarCabecera(document.querySelector('[data-cabecera-app]'), {
         vista: 'moderar-comentarios',
-        seccionActiva: null,
+        seccionActiva: 'comentarios',
       });
 
       const productoId = new URLSearchParams(location.search).get('producto');

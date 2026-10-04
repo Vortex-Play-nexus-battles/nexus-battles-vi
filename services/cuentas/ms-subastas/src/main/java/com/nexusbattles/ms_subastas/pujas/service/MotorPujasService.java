@@ -5,6 +5,8 @@ import com.nexusbattles.ms_subastas.pujas.creditos.ReservaCredito;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
 import com.nexusbattles.ms_subastas.pujas.model.TipoPuja;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
+import com.nexusbattles.ms_subastas.reglas.ReglasVigentes;
 import com.nexusbattles.ms_subastas.subastas.model.EstadoSubasta;
 import com.nexusbattles.ms_subastas.subastas.model.Subasta;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClient;
@@ -41,21 +43,36 @@ public class MotorPujasService {
     private final CreditoClient creditoClient;
     private final InventarioClient inventarioClient;
     private final Clock clock;
-    private final ParametrosPuja parametros;
+    private final FuenteDeReglas reglas;
 
     public MotorPujasService(CreditoClient creditoClient, Clock clock, ParametrosPuja parametros) {
-        this(creditoClient, new InventarioClientFake(), clock, parametros);
+        this(creditoClient, new InventarioClientFake(), clock, FuenteDeReglas.fijas(parametros));
     }
 
-    @Autowired
+    /** Para las pruebas: los limites de {@code parametros}, sin catalogo detras. */
     public MotorPujasService(CreditoClient creditoClient,
                              InventarioClient inventarioClient,
                              Clock clock,
                              ParametrosPuja parametros) {
+        this(creditoClient, inventarioClient, clock, FuenteDeReglas.fijas(parametros));
+    }
+
+    /**
+     * @param reglas los limites vigentes de 7.7.10. Desde B8 salen de
+     *               admin-parametros (con las variables de entorno de respaldo),
+     *               asi que se consultan en cada validacion y no se copian al
+     *               construir: un cambio desde el panel vale para la siguiente
+     *               puja sin reiniciar nada.
+     */
+    @Autowired
+    public MotorPujasService(CreditoClient creditoClient,
+                             InventarioClient inventarioClient,
+                             Clock clock,
+                             FuenteDeReglas reglas) {
         this.creditoClient = Objects.requireNonNull(creditoClient, "creditoClient no puede ser nulo");
         this.inventarioClient = Objects.requireNonNull(inventarioClient, "inventarioClient no puede ser nulo");
         this.clock = Objects.requireNonNull(clock, "clock no puede ser nulo");
-        this.parametros = Objects.requireNonNull(parametros, "parametros no puede ser nulo");
+        this.reglas = Objects.requireNonNull(reglas, "reglas no puede ser nulo");
     }
 
     /**
@@ -68,7 +85,13 @@ public class MotorPujasService {
      */
     public Puja pujar(Subasta subasta, Puja pujaVigente, UUID jugadorId, BigDecimal monto,
                       ContextoParticipacion contexto, String idempotencyKey, TipoPuja tipo) {
-        validarReglasDeParticipacion(subasta, jugadorId, monto, contexto);
+        // G5 (7.7.10, 50 pujas activas): subir la propia puja vigente la
+        // reemplaza (pasa a SUPERADA), no suma una activa mas. Sin descontarla,
+        // con exactamente 50 activas no se podia mejorar ni la que ya se iba
+        // ganando.
+        boolean reemplazaLaPropia = pujaVigente != null && jugadorId.equals(pujaVigente.getJugadorId());
+        validarReglasDeParticipacion(subasta, jugadorId, monto,
+                reemplazaLaPropia ? contexto.sinContarUnaActiva() : contexto);
 
         ReservaCredito reserva = creditoClient.reservar(jugadorId, monto, subasta.getId(), idempotencyKey);
 
@@ -120,6 +143,14 @@ public class MotorPujasService {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.SIN_COMPRA_INMEDIATA,
                     "La subasta " + subasta.getId() + " no ofrece compra inmediata");
         }
+        // B8: comprar por debajo de lo que otro jugador ya ofrecio le quitaria el
+        // producto al mejor postor, que ademas llego primero. Es una carrera
+        // (alguien pujo mientras se confirmaba la compra): 409, no 422.
+        if (!subasta.compraInmediataDisponible()) {
+            throw new PujaRechazadaException(PujaRechazadaException.Motivo.COMPRA_INMEDIATA_SUPERADA,
+                    "Una puja de " + subasta.getOfertaVigente() + " ya alcanzo la compra inmediata de "
+                            + subasta.getPrecioCompraInmediata());
+        }
 
         BigDecimal precio = subasta.getPrecioCompraInmediata();
         ReservaCredito reserva = creditoClient.reservar(jugadorId, precio, subasta.getId(), idempotencyKey);
@@ -155,7 +186,7 @@ public class MotorPujasService {
         subasta.setOfertaVigente(precio);
         subasta.setMejorPostorId(jugadorId);
         subasta.setCantidadPujas(subasta.getCantidadPujas() + 1);
-        subasta.setEstado(EstadoSubasta.ADJUDICADA);
+        subasta.cerrar(EstadoSubasta.ADJUDICADA, clock.instant());
 
         // El dinero ya cambio de manos: desde aqui no se compensa nunca. Lo
         // ultimo que queda es soltarle el bloqueo al objeto para que el
@@ -174,6 +205,14 @@ public class MotorPujasService {
      * de créditos se convierte en débito; si nadie pujó, la subasta cierra sin
      * adjudicación y se libera la reserva del producto para que el vendedor lo recupere.
      * Cubre el criterio 3 de HU-SUB-004 y la transferencia formal de propiedad.
+     *
+     * <p><b>B8 — el producto ganado queda pendiente de recoger (7.7.9).</b> Con
+     * ganador, la transferencia CONSERVA el bloqueo de la subasta: el producto
+     * ya es del ganador y ya esta pagado, pero queda en custodia hasta que lo
+     * recoja («Productos pendientes de recoger ... Tiempo limite para reclamar
+     * (7 dias)»). Lo suelta {@code PendientesService} al recogerlo, o al vencer
+     * el plazo segun el parametro del PO. La compra inmediata no pasa por aqui:
+     * 7.7.6 la transfiere «automaticamente» y suelta el bloqueo en el acto.
      */
     public void cerrarPorVencimiento(Subasta subasta, Puja pujaVigente) {
         if (!subasta.estaActiva()) {
@@ -182,7 +221,7 @@ public class MotorPujasService {
         }
 
         if (pujaVigente == null) {
-            subasta.setEstado(EstadoSubasta.SIN_ADJUDICACION);
+            subasta.cerrar(EstadoSubasta.SIN_ADJUDICACION, clock.instant());
             if (tieneInventario(subasta)) {
                 inventarioClient.liberarReserva(subasta.getElementoInventarioId(), subasta.getId(),
                         "cierre-" + subasta.getId());
@@ -212,11 +251,9 @@ public class MotorPujasService {
         }
 
         pujaVigente.setEstado(EstadoPuja.GANADORA);
-        subasta.setEstado(EstadoSubasta.ADJUDICADA);
-
-        // Igual que en la compra inmediata: el cobro ya entro, asi que esto va
-        // DESPUES del estado y su fallo no revierte nada.
-        soltarBloqueoDelComprador(subasta, claveCierre);
+        subasta.cerrar(EstadoSubasta.ADJUDICADA, clock.instant());
+        // Sin soltar el bloqueo: el producto queda pendiente de recoger (ver
+        // el javadoc). Hasta B8 se soltaba aqui mismo.
     }
 
     /**
@@ -301,30 +338,36 @@ public class MotorPujasService {
                     "El jugador " + jugadorId + " no puede pujar en su propia subasta");
         }
 
-        BigDecimal minimoValido = subasta.getOfertaVigente().add(subasta.getIncrementoMinimo());
+        // B8 (7.7.2, 7.7.6): la primera puja llega al precio minimo; las
+        // siguientes superan la oferta vigente en el incremento minimo.
+        BigDecimal minimoValido = subasta.pujaMinimaSiguiente();
         if (monto.compareTo(minimoValido) < 0) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE,
-                    "La puja de " + monto + " no supera la oferta vigente mas el incremento minimo (" + minimoValido + ")");
+                    subasta.tieneOfertas()
+                            ? "La puja de " + monto + " no supera la oferta vigente mas el incremento minimo ("
+                                    + minimoValido + ")"
+                            : "La primera puja de " + monto + " no llega al precio minimo (" + minimoValido + ")");
         }
+
+        ReglasVigentes vigentes = reglas.vigentes();
 
         if (contexto.ultimaPujaDelJugador() != null) {
             Duration transcurrido = Duration.between(contexto.ultimaPujaDelJugador(), clock.instant());
-            if (transcurrido.getSeconds() < parametros.getIntervaloMinimoSegundos()) {
+            if (transcurrido.getSeconds() < vigentes.intervaloMinimoSegundos()) {
                 throw new PujaRechazadaException(PujaRechazadaException.Motivo.INTERVALO_MINIMO_NO_CUMPLIDO,
-                        "El jugador " + jugadorId + " debe esperar " + parametros.getIntervaloMinimoSegundos()
+                        "El jugador " + jugadorId + " debe esperar " + vigentes.intervaloMinimoSegundos()
                                 + " s entre pujas (transcurrieron " + transcurrido.getSeconds() + " s)");
             }
         }
 
-        if (contexto.subastasActivasDelJugador() >= parametros.getMaxSubastasActivasPorJugador()) {
-            throw new PujaRechazadaException(PujaRechazadaException.Motivo.LIMITE_SUBASTAS_ACTIVAS,
-                    "El jugador " + jugadorId + " alcanzo el limite de " + parametros.getMaxSubastasActivasPorJugador()
-                            + " subastas activas simultaneas");
-        }
-
-        if (contexto.pujasActivasDelJugador() >= parametros.getMaxPujasActivasPorJugador()) {
+        // El tope de 10 subastas activas de 7.7.10 ya no se mira aqui: desde B8
+        // es de las publicaciones del vendedor (PublicarSubastaApplicationService).
+        // Aplicado a la participacion, el tope de 50 pujas activas no se podria
+        // alcanzar nunca, porque cada jugador tiene como mucho una puja vigente
+        // por subasta.
+        if (contexto.pujasActivasDelJugador() >= vigentes.maxPujasActivasPorJugador()) {
             throw new PujaRechazadaException(PujaRechazadaException.Motivo.LIMITE_PUJAS_ACTIVAS,
-                    "El jugador " + jugadorId + " alcanzo el limite de " + parametros.getMaxPujasActivasPorJugador()
+                    "El jugador " + jugadorId + " alcanzo el limite de " + vigentes.maxPujasActivasPorJugador()
                             + " pujas activas simultaneas");
         }
     }

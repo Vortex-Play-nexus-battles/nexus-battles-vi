@@ -156,7 +156,7 @@ export function prefijarEncuentro(formulario, encuentro) {
     nota.hidden = false;
     nota.textContent =
       `Esta sala es el encuentro ${encuentro.numeroEncuentro} del torneo. ` +
-      'Al terminar la partida, el resultado se informa al torneo automaticamente.';
+      'Al terminar la partida, el resultado se informa al torneo automáticamente.';
   }
   const hastaSeis = formulario.querySelector('[name="modalidad"][value="HASTA_SEIS"]');
   if (hastaSeis) {
@@ -289,15 +289,71 @@ function cargando(boton, activo) {
 }
 
 /**
+ * Vuelve a marcar la modalidad con la que se creó la última sala.
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {string|null|undefined} modalidad
+ */
+export function conservarModalidad(formulario, modalidad) {
+  if (!modalidad) {
+    return;
+  }
+  for (const opcion of formulario.querySelectorAll('[name="modalidad"]')) {
+    opcion.checked = opcion.value === modalidad;
+  }
+}
+
+/**
+ * A donde se entra a una sala: su sala de espera, y el combate cuando empiece.
+ *
+ * @param {string} idSala
+ * @returns {string}
+ */
+export function rutaDeLaSala(idSala) {
+  return `./sala-batalla.html?sala=${encodeURIComponent(idSala)}`;
+}
+
+/**
+ * Lo que dice el aviso de sala creada, segun quien falte por llegar.
+ *
+ * Contra la IA la sala nace completa: decir «esperando jugadores» mandaba a
+ * esperar a alguien que no iba a venir.
+ *
+ * @param {{modalidad?: string, maximoParticipantes: number, ocupacion?: number,
+ *          recompensaCreditos?: number}} sala
+ * @returns {string}
+ */
+export function textoDeSalaCreada(sala) {
+  const enJuego = sala.recompensaCreditos ? `, ${sala.recompensaCreditos} créditos en juego` : '';
+  const completa =
+    sala.modalidad === 'CONTRA_IA' ||
+    (typeof sala.ocupacion === 'number' && sala.ocupacion >= sala.maximoParticipantes);
+  if (completa) {
+    return `Tu rival ya está en la sala${enJuego}. Entra y arranca el combate.`;
+  }
+  return (
+    `Tu sala está abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
+    `participantes${enJuego}. Entra para esperarlos y arrancar el combate.`
+  );
+}
+
+/**
  * Conecta el formulario con el servicio.
  *
  * @param {HTMLFormElement} formulario
- * @param {{crearSalaImpl?: Function, alCrear?: Function, encuentro?: {torneoId: string, numeroEncuentro: number}|null}} [opciones]
+ * @param {{crearSalaImpl?: Function, alCrear?: Function, irALaSala?: (ruta: string) => void,
+ *          encuentro?: {torneoId: string, numeroEncuentro: number}|null}} [opciones]
  *   `encuentro`: HU-TOR-004, la sala juega ese encuentro de torneo (ver `encuentroDesde`)
+ *   `irALaSala`: como se navega a la sala recien creada; inyectable para las pruebas
  */
 export function montarCrearSala(
   formulario,
-  { crearSalaImpl = crearSala, alCrear, encuentro = null } = {},
+  {
+    crearSalaImpl = crearSala,
+    alCrear,
+    encuentro = null,
+    irALaSala = (ruta) => globalThis.location.assign(ruta),
+  } = {},
 ) {
   const zonaAviso = formulario.querySelector('[data-zona="aviso"]');
   // HU-DIS-003: el hueco donde se pinta `Seccion degradada` cuando el
@@ -326,17 +382,33 @@ export function montarCrearSala(
     cargando(boton, true);
 
     try {
-      const sala = await crearSalaImpl(leerFormulario(formulario));
+      const datos = leerFormulario(formulario);
+      const sala = await crearSalaImpl(datos);
 
+      // R18 — la sala se creaba y quien la creo se quedaba en este formulario
+      // sin camino a ella: contra la IA nace completa, y en el listado una
+      // sala llena no se puede pulsar. El combate solo se alcanzaba
+      // escribiendo la direccion a mano.
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Sala creada',
-        detalle:
-          `Tu sala está abierta y esperando jugadores: ${sala.maximoParticipantes} ` +
-          `participantes${sala.recompensaCreditos ? `, ${sala.recompensaCreditos} creditos en juego` : ''}.`,
+        detalle: textoDeSalaCreada(sala),
+        accion: {
+          texto: 'Entrar a la sala',
+          nombre: 'entrar-a-la-sala',
+          alPulsar: () => irALaSala(rutaDeLaSala(sala.id)),
+        },
       });
       formulario.reset();
+      // Auditoría de DEV del 30-sep: tras crear la sala la modalidad volvía a
+      // «1 contra 1» y se perdía la que se había elegido. Se conserva; el
+      // resto del formulario sí vuelve a sus valores.
+      conservarModalidad(formulario, datos.modalidad);
       prefijarEncuentro(formulario, encuentro);
+      // reset() devuelve cada campo a su valor del HTML (4 participantes,
+      // 1 contra 1) sin volver a pasar por la modalidad: quedaban «4» con
+      // «Exactamente 2 jugadores» y la nota de contra la IA a la vista.
+      ajustarPorModalidad(formulario);
       if (alCrear) {
         alCrear(sala);
       }

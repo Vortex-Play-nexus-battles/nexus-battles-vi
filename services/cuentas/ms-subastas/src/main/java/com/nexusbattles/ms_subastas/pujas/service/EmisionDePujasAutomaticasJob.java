@@ -48,7 +48,8 @@ public class EmisionDePujasAutomaticasJob {
     private final NotificacionOutbox outbox;
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${app.pujas.emision-automatica-intervalo-ms:2000}")
+    @Scheduled(fixedDelayString = "${app.pujas.emision-automatica-intervalo-ms:2000}",
+            initialDelayString = "${app.pujas.emision-automatica-intervalo-ms:2000}")
     public void emitirPujasAutomaticas() {
         for (UUID subastaId : subastaRepository.findIdsConPujaAutomaticaPendiente(clock.instant())) {
             try {

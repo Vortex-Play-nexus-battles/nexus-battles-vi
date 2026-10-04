@@ -3,6 +3,7 @@ package com.nexusbattles.ms_ecommerce.catalogo;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Set;
 
 /**
@@ -26,6 +27,9 @@ import java.util.Set;
  *                         no se vende en moneda real
  * @param estado           ACTIVO, UNICO o SUSPENDIDO
  * @param habilidades      texto, lista de textos o ausente, segun el tipo de producto
+ * @param promocion        (B5, productos.yaml 1.4.0) descuento con vigencia; ausente
+ *                         si el producto no tiene, y en la vista publica tambien si
+ *                         ya no esta vigente
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record ProductoDelCatalogo(
@@ -39,7 +43,8 @@ public record ProductoDelCatalogo(
         BigDecimal precioMonedaReal,
         Boolean premium,
         String estado,
-        Object habilidades) {
+        Object habilidades,
+        PromocionDelCatalogo promocion) {
 
     /** Tiraje de un producto sin limite de unidades. */
     public static final int TIRAJE_ILIMITADO = -1;
@@ -49,6 +54,14 @@ public record ProductoDelCatalogo(
      * (RN-PRD-004), y un estado desconocido tampoco: ante la duda, no se vende.
      */
     public static final Set<String> ESTADOS_EN_VENTA = Set.of("ACTIVO", "UNICO");
+
+    /** Un producto sin promocion: la forma que tenia el catalogo antes de 1.4.0. */
+    public ProductoDelCatalogo(String id, String nombre, String imagen, String descripcion, String tipo,
+                               Integer tiraje, Integer precioCreditos, BigDecimal precioMonedaReal,
+                               Boolean premium, String estado, Object habilidades) {
+        this(id, nombre, imagen, descripcion, tipo, tiraje, precioCreditos, precioMonedaReal, premium, estado,
+                habilidades, null);
+    }
 
     /** RN-PRD-003/004: el catalogo lo ofrece ahora mismo. */
     public boolean estaEnVenta() {
@@ -65,9 +78,15 @@ public record ProductoDelCatalogo(
         return tiraje != null && (tiraje == TIRAJE_ILIMITADO || tiraje > 0);
     }
 
+    /** El tiraje es un numero de unidades y no «ilimitado». */
+    public boolean tieneTirajeLimitado() {
+        return tiraje != null && tiraje != TIRAJE_ILIMITADO;
+    }
+
     /**
-     * RF-CAR-002 / RN-PAG-001: la tienda cobra en moneda real. Un producto sin
-     * ese precio no se vende aqui; nunca se ensena a 0.
+     * RF-CAR-002 / RN-PAG-001: lo que se cobra en moneda real. Un producto sin
+     * ese precio nunca se ensena a 0 ni se paga con tarjeta; desde G3 se vende
+     * igual si tiene precio en creditos ({@link #tieneAlgunPrecio()}).
      *
      * <p>Cero tampoco es un precio en moneda real para esta tienda: el contrato
      * del catalogo permite precioMonedaReal: 0 y los productos que solo se
@@ -77,5 +96,35 @@ public record ProductoDelCatalogo(
      */
     public boolean tienePrecioEnMonedaReal() {
         return precioMonedaReal != null && precioMonedaReal.signum() > 0;
+    }
+
+    /**
+     * D-44: se puede pagar con creditos del juego. Hace falta su
+     * {@code precioCreditos} (7.2.1: «precio en creditos del juego») y que no
+     * sea premium: un premium se ofrece unicamente en moneda real
+     * (productos.yaml). Cero tampoco es un precio: no se regala nada.
+     */
+    public boolean tienePrecioEnCreditos() {
+        return !Boolean.TRUE.equals(premium) && precioCreditos != null && precioCreditos > 0;
+    }
+
+    /**
+     * G3 (4-oct): la tienda lo puede vender de alguna forma — en dinero real o
+     * en creditos del juego. Un premium sin precio en dinero real no tiene
+     * ninguna: no se convierte a creditos (productos.yaml: un premium se ofrece
+     * unicamente en moneda real).
+     */
+    public boolean tieneAlgunPrecio() {
+        return tienePrecioEnMonedaReal() || tienePrecioEnCreditos();
+    }
+
+    /** G3: se paga solo con creditos del juego; no hay precio en dinero real que cobrar. */
+    public boolean soloEnCreditos() {
+        return !tienePrecioEnMonedaReal() && tienePrecioEnCreditos();
+    }
+
+    /** El porcentaje de la promocion si esta vigente en ese instante; null si no hay. */
+    public Integer porcentajeVigenteEn(Instant ahora) {
+        return promocion == null ? null : promocion.porcentajeVigenteEn(ahora);
     }
 }

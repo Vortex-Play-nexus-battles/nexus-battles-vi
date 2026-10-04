@@ -37,6 +37,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -227,7 +228,7 @@ class SalasControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errores[0].campo").value("heroesIA"))
                 .andExpect(jsonPath("$.errores[0].mensaje").value(
-                        org.hamcrest.Matchers.containsString("como maximo 3")));
+                        org.hamcrest.Matchers.containsString("como máximo 3")));
     }
 
     @Test
@@ -304,7 +305,7 @@ class SalasControllerTest {
                         .content(CUERPO))
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-insuficientes"))
-                .andExpect(jsonPath("$.detail").value("Tienes 240 creditos y necesitas 400 para crear esta sala."));
+                .andExpect(jsonPath("$.detail").value("Tienes 240 créditos y la apuesta de esta sala es de 400."));
     }
 
     @Test
@@ -321,9 +322,9 @@ class SalasControllerTest {
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/creditos-no-disponibles"))
-                .andExpect(jsonPath("$.title").value("El libro de creditos no esta disponible ahora mismo"))
+                .andExpect(jsonPath("$.title").value("El libro de créditos no está disponible ahora mismo"))
                 .andExpect(jsonPath("$.status").value(503))
-                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("Nada quedo reservado")))
+                .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("Nada quedó reservado")))
                 .andExpect(jsonPath("$.errores").doesNotExist());
     }
 
@@ -527,14 +528,14 @@ class SalasControllerTest {
     @DisplayName("una sala llena responde 409 diciendo el motivo")
     void salaLlena() throws Exception {
         when(ingresarASala.ejecutar(any(), any(), any()))
-                .thenThrow(new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes."));
+                .thenThrow(new IngresoNoPermitido("La sala ya alcanzó su máximo de participantes."));
 
         mockMvc.perform(post("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.type")
                         .value("https://nexusbattles.local/errores/ingreso-no-permitido"))
                 .andExpect(jsonPath("$.detail")
-                        .value("La sala ya alcanzo su maximo de participantes."));
+                        .value("La sala ya alcanzó su máximo de participantes."));
     }
 
     @Test
@@ -621,6 +622,25 @@ class SalasControllerTest {
     }
 
     @Test
+    @DisplayName("R18 · GET de una sala que ya arranco trae su partida; una que no, la trae nula")
+    void laSalaTraeSuPartida() throws Exception {
+        Sala sala = salaDeEjemplo();
+        UUID idPartida = UUID.fromString("88888888-8888-8888-8888-888888888888");
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(sala);
+        when(obtenerSala.partidaDe(sala)).thenReturn(Optional.of(idPartida));
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPartida").value(idPartida.toString()));
+
+        when(obtenerSala.partidaDe(sala)).thenReturn(Optional.empty());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idPartida").doesNotExist());
+    }
+
+    @Test
     @DisplayName("el anfitrion ve el codigo de su sala al consultarla; otro jugador no")
     void elCodigoSoloParaElAnfitrion() throws Exception {
         when(obtenerSala.ejecutar(ID_SALA)).thenReturn(unaSalaPrivadaDelJugador());
@@ -678,7 +698,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("cancelar una partida ya empezada responde 409")
     void cancelaPartidaEmpezada() throws Exception {
-        doThrow(new SalidaNoPermitida("La partida ya comenzo: la sala no se puede cancelar."))
+        doThrow(new SalidaNoPermitida("La partida ya comenzó: la sala no se puede cancelar."))
                 .when(cancelarSala).ejecutar(any(), any());
 
         mockMvc.perform(delete("/api/v1/salas/{id}", ID_SALA).with(jugador()))
@@ -710,12 +730,12 @@ class SalasControllerTest {
     @Test
     @DisplayName("el anfitrion que intenta abandonar recibe 409 diciendo que cancele")
     void elAnfitrionNoAbandona() throws Exception {
-        doThrow(new SalidaNoPermitida("El anfitrion no abandona su sala: la cancela."))
+        doThrow(new SalidaNoPermitida("El anfitrión no abandona su sala: la cancela."))
                 .when(abandonarSala).ejecutar(any(), any());
 
         mockMvc.perform(delete("/api/v1/salas/{id}/participantes", ID_SALA).with(jugador()))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.detail").value("El anfitrion no abandona su sala: la cancela."));
+                .andExpect(jsonPath("$.detail").value("El anfitrión no abandona su sala: la cancela."));
     }
 
     @Test
@@ -874,7 +894,7 @@ class SalasControllerTest {
                 // El motivo concreto: la vista distingue «equipa un heroe» de
                 // «tu heroe esta en otra batalla» sin leer el texto.
                 .andExpect(jsonPath("$.detail").value(
-                        org.hamcrest.Matchers.containsString("Equipa un heroe")));
+                        org.hamcrest.Matchers.containsString("Equipa un héroe")));
     }
 
     @Test

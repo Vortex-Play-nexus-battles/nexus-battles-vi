@@ -36,7 +36,8 @@ import static org.mockito.Mockito.when;
  * las sanciones simulados en el borde del servicio.
  */
 @Testcontainers
-@SpringBootTest(properties = "spring.jpa.hibernate.ddl-auto=validate")
+@SpringBootTest(properties = {"spring.jpa.hibernate.ddl-auto=validate", "torneos.operaciones.tarea-activa=false",
+        "torneos.operaciones.presupuesto-sincrono-ms=60000"})
 @DisplayName("Torneos · casos de uso (HU-TOR-001..005, HU-ADM-005)")
 class TorneosServiceIT {
 
@@ -59,6 +60,12 @@ class TorneosServiceIT {
     @MockitoBean
     private ConsultaDeSanciones sanciones;
 
+    @MockitoBean
+    private EntregaDeInventario inventario;
+
+    @MockitoBean
+    private AvisosAlJugador avisos;
+
     /** Reemplaza el reloj del sistema por uno que obedece a AHORA. */
     @MockitoBean
     private Clock reloj;
@@ -74,6 +81,10 @@ class TorneosServiceIT {
     private static final Actor JUGADOR2 = Actor.usuario(UUID.randomUUID(), "JUGADOR");
     private static final Actor JUGADOR3 = Actor.usuario(UUID.randomUUID(), "JUGADOR");
     private static final Actor SALAS = Actor.servicio("salas-partidas");
+
+    private static LibroDeCreditos.Reserva activa(UUID reserva) {
+        return new LibroDeCreditos.Reserva(reserva, "ACTIVA");
+    }
 
     private OffsetDateTime ahora() {
         return OffsetDateTime.ofInstant(AHORA.get(), ZoneOffset.UTC);
@@ -137,7 +148,7 @@ class TorneosServiceIT {
         void cancelar() {
             TorneosService.TorneoCompleto t = torneoNuevo(25);
             UUID reserva = UUID.randomUUID();
-            when(libro.reservar(eq(JUGADORA.id()), eq(25), anyString(), anyString())).thenReturn(reserva);
+            when(libro.reservar(eq(JUGADORA.id()), eq(25), anyString(), anyString())).thenReturn(activa(reserva));
             Equipo equipo = servicio.crearEquipo(JUGADORA, t.torneo().id(),
                     new TorneosService.SolicitudDeEquipo("Los Valientes", "avatar-1", JUGADOR2.id()));
             servicio.inscribir(JUGADORA, t.torneo().id(), equipo.id());
@@ -210,8 +221,9 @@ class TorneosServiceIT {
             UUID reserva = UUID.randomUUID();
             Equipo equipo = servicio.crearEquipo(JUGADORA, t.torneo().id(),
                     new TorneosService.SolicitudDeEquipo("Los Valientes", "avatar-1", JUGADOR2.id()));
-            when(libro.reservar(eq(JUGADOR2.id()), eq(30), eq("torneo-" + t.torneo().id() + "-equipo-" + equipo.id()),
-                    eq("torneo-" + t.torneo().id()))).thenReturn(reserva);
+            // 1.2.0: la clave es del pagador, no del equipo (el companero no reutiliza la reserva del otro).
+            when(libro.reservar(eq(JUGADOR2.id()), eq(30), eq("torneo-" + t.torneo().id() + "-jugador-" + JUGADOR2.id() + "-inscripcion"),
+                    eq("torneo-" + t.torneo().id()))).thenReturn(activa(reserva));
 
             assertThatThrownBy(() -> servicio.inscribir(JUGADOR3, t.torneo().id(), equipo.id()))
                     .isInstanceOfSatisfying(TorneoRechazado.class, ex -> assertThat(ex.motivo()).isEqualTo(Motivo.PERMISO_INSUFICIENTE));
@@ -278,7 +290,7 @@ class TorneosServiceIT {
 
             TorneosService.TorneoCompleto t = torneoNuevo(10);
             UUID reserva = UUID.randomUUID();
-            when(libro.reservar(any(), eq(10), anyString(), anyString())).thenReturn(reserva);
+            when(libro.reservar(any(), eq(10), anyString(), anyString())).thenReturn(activa(reserva));
             Equipo equipo = servicio.crearEquipo(JUGADORA, t.torneo().id(),
                     new TorneosService.SolicitudDeEquipo("Los Valientes", "avatar-1", JUGADOR2.id()));
             servicio.inscribir(JUGADORA, t.torneo().id(), equipo.id());

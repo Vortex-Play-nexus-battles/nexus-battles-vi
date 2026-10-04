@@ -28,6 +28,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { PREFIJO_WEB, VISTAS } from './vistas.js';
+import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
 import { inyectarSesion } from './identidad.js';
 import { conseguirPersonas, personasDe } from './personas.js';
 
@@ -87,6 +88,16 @@ for (const vista of VISTAS) {
                 .join('\n'),
           ),
           `${vista.id} a ${pantalla.ancho}px`,
+        ).toEqual([]);
+
+        // UX-GAME-1 — lo que axe no mide: texto directamente sobre la
+        // atmósfera (fondo degradado). Ver `contraste-atmosfera.js`.
+        const sobreAtmosfera = await textoSinContrasteSobreAtmosfera(pagina);
+        expect(
+          sobreAtmosfera.map(
+            (h) => `${h.selector} ${h.color} ${h.contraste}:1 — «${h.texto}»`,
+          ),
+          `${vista.id} a ${pantalla.ancho}px: texto sin contraste sobre la atmósfera`,
         ).toEqual([]);
       } finally {
         await contexto.close();

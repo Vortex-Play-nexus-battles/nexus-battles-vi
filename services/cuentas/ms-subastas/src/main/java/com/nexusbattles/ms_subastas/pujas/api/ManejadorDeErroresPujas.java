@@ -49,7 +49,8 @@ public class ManejadorDeErroresPujas {
      */
     private static final Set<PujaRechazadaException.Motivo> CARRERAS = EnumSet.of(
             PujaRechazadaException.Motivo.SUBASTA_NO_ACTIVA,
-            PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE);
+            PujaRechazadaException.Motivo.OFERTA_INSUFICIENTE,
+            PujaRechazadaException.Motivo.COMPRA_INMEDIATA_SUPERADA);
 
     @ExceptionHandler(TokenInvalidoException.class)
     public ProblemDetail manejarTokenInvalido(TokenInvalidoException ex, HttpServletRequest peticion) {

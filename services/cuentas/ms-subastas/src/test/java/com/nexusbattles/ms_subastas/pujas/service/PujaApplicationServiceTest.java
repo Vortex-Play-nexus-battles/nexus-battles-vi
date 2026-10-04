@@ -1,6 +1,10 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
-import com.nexusbattles.ms_subastas.notificaciones.NotificacionOutbox;
+import com.nexusbattles.ms_subastas.notificaciones.AvisosDeSubasta;
+import com.nexusbattles.ms_subastas.panel.model.PendienteDeRecoger;
+import com.nexusbattles.ms_subastas.panel.repository.PendienteDeRecogerRepository;
+import com.nexusbattles.ms_subastas.pujas.repository.PujaAutomaticaRepository;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientFake;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
@@ -55,7 +59,13 @@ class PujaApplicationServiceTest {
     private PujaRepository pujaRepository;
 
     @Mock
-    private NotificacionOutbox outbox;
+    private AvisosDeSubasta avisos;
+
+    @Mock
+    private PujaAutomaticaRepository automaticas;
+
+    @Mock
+    private PendienteDeRecogerRepository pendientes;
 
     @Mock
     private ApplicationEventPublisher eventos;
@@ -67,7 +77,8 @@ class PujaApplicationServiceTest {
     void setUp() {
         creditoClient = new CreditoClientFake();
         MotorPujasService motor = new MotorPujasService(creditoClient, Clock.fixed(AHORA, ZoneOffset.UTC), new ParametrosPuja());
-        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor, outbox, eventos);
+        servicio = new PujaApplicationService(subastaRepository, pujaRepository, motor, avisos, automaticas,
+                pendientes, FuenteDeReglas.fijas(new ParametrosPuja()), Clock.fixed(AHORA, ZoneOffset.UTC), eventos);
     }
 
     private Subasta subastaActiva() {
@@ -108,7 +119,6 @@ class PujaApplicationServiceTest {
 
         verify(pujaRepository).findFirstByJugadorIdAndSubastaIdOrderByCreadaEnDesc(jugador, subasta.getId());
         verify(pujaRepository).countByJugadorIdAndEstado(jugador, EstadoPuja.ACTIVA);
-        verify(pujaRepository).contarSubastasActivasExcluyendo(jugador, EstadoPuja.ACTIVA, subasta.getId());
     }
 
     /**
@@ -243,12 +253,13 @@ class PujaApplicationServiceTest {
         when(pujaRepository.findDistinctJugadorIdBySubastaId(subasta.getId()))
                 .thenReturn(List.of(postorPrevio, postorAntiguo));
 
-        servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
+        Puja compra = servicio.comprarAhora(subasta.getId(), comprador, claveUnica());
 
         // Incluye al postor antiguo que ya estaba SUPERADA: la historia dice
         // "notificando a quienes hubieran pujado", no solo al que iba ganando.
-        verify(outbox).avisarCierrePorCompraInmediata(subasta.getId(),
-                List.of(postorPrevio, postorAntiguo), comprador);
+        verify(avisos).compraInmediata(subasta, compra, List.of(postorPrevio, postorAntiguo));
+        // B8: las automaticas de una subasta cerrada dejan de estar activas.
+        verify(automaticas).desactivarTodas(subasta.getId());
     }
 
     @Test
@@ -284,12 +295,77 @@ class PujaApplicationServiceTest {
         when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(pujaVigente));
         when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+        when(pendientes.save(any(PendienteDeRecoger.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 
         servicio.cerrarPorVencimiento(subasta.getId());
 
         assertEquals(EstadoSubasta.ADJUDICADA, subasta.getEstado());
         assertEquals(EstadoPuja.GANADORA, pujaVigente.getEstado());
         assertEquals(new BigDecimal("890"), creditoClient.saldoDisponible(postor));
+
+        // B8 (7.7.9): lo ganado queda pendiente de recoger 7 dias, y se avisa.
+        ArgumentCaptor<PendienteDeRecoger> pendiente = ArgumentCaptor.forClass(PendienteDeRecoger.class);
+        verify(pendientes).save(pendiente.capture());
+        assertEquals(postor, pendiente.getValue().getGanadorId());
+        assertEquals(AHORA.plus(java.time.Duration.ofDays(7)), pendiente.getValue().getVenceEn());
+        assertEquals(0, new BigDecimal("110").compareTo(pendiente.getValue().getMontoPagado()));
+        verify(avisos).cerradaConGanador(subasta, pujaVigente, pendiente.getValue());
+        verify(automaticas).desactivarTodas(subasta.getId());
+    }
+
+    @Test
+    void cerrarPorVencimientoSinPujasAvisaAlVendedorYNoDejaPendiente() {
+        Subasta subasta = subastaActiva();
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+
+        servicio.cerrarPorVencimiento(subasta.getId());
+
+        verify(avisos).cerradaSinOfertas(subasta);
+        verify(pendientes, never()).save(any());
+    }
+
+    @Test
+    void laPujaGuardaElApodoDelPostorYAvisaConLaPujaSuperada() {
+        Subasta subasta = subastaActiva();
+        UUID primero = UUID.randomUUID();
+        UUID segundo = UUID.randomUUID();
+        creditoClient.acreditar(primero, new BigDecimal("1000"));
+        creditoClient.acreditar(segundo, new BigDecimal("1000"));
+        var reserva = creditoClient.reservar(primero, new BigDecimal("110"), subasta.getId(), "previa");
+        Puja vigente = new Puja(UUID.randomUUID(), subasta.getId(), primero, new BigDecimal("110"),
+                TipoPuja.MANUAL, EstadoPuja.ACTIVA, AHORA.minusSeconds(60), reserva.id().toString());
+        subasta.setMejorPostorId(primero);
+        subasta.setOfertaVigente(new BigDecimal("110"));
+
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.of(vigente));
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Puja nueva = servicio.pujar(subasta.getId(), segundo, "valkyria_99", new BigDecimal("120"), claveUnica());
+
+        assertEquals("valkyria_99", nueva.getApodoPostor());
+        verify(avisos).pujaRegistrada(subasta, nueva, vigente);
+    }
+
+    @Test
+    void laPujaAutomaticaTomaElApodoGuardadoAlConfigurarla() {
+        Subasta subasta = subastaActiva();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+        var automatica = new com.nexusbattles.ms_subastas.pujas.model.PujaAutomatica(UUID.randomUUID(),
+                subasta.getId(), jugador, new BigDecimal("300"), true);
+        automatica.setApodoJugador("lyra");
+
+        when(automaticas.findBySubastaIdAndJugadorId(subasta.getId(), jugador)).thenReturn(Optional.of(automatica));
+        when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
+        when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
+        when(pujaRepository.save(any(Puja.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        Puja emitida = servicio.pujarAutomaticamente(subasta.getId(), jugador, new BigDecimal("100"), claveUnica());
+
+        assertEquals(TipoPuja.AUTOMATICA, emitida.getTipo());
+        assertEquals("lyra", emitida.getApodoPostor());
     }
 
     /**
@@ -361,10 +437,12 @@ class PujaApplicationServiceTest {
         when(subastaRepository.findByIdParaActualizar(subasta.getId())).thenReturn(Optional.of(subasta));
         when(pujaRepository.findBySubastaIdAndEstado(subasta.getId(), EstadoPuja.ACTIVA)).thenReturn(Optional.empty());
 
+        // Por debajo del precio minimo (100): la primera puja no llega.
         assertThrows(PujaRechazadaException.class,
-                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("101"), claveUnica()));
+                () -> servicio.pujar(subasta.getId(), jugador, new BigDecimal("99"), claveUnica()));
 
         verify(eventos, never()).publishEvent(any(SubastaActualizadaEvent.class));
+        verify(avisos, never()).pujaRegistrada(any(), any(), any());
     }
 
     // --- Reproduccion idempotente -------------------------------------------
@@ -417,7 +495,7 @@ class PujaApplicationServiceTest {
         // estaba ADJUDICADA por la primera compra— y el comprador no podia
         // distinguir "ya es tuyo" de "llegaste tarde".
         verify(pujaRepository, never()).save(any(Puja.class));
-        verify(outbox, never()).avisarCierrePorCompraInmediata(any(), any(), any());
+        verify(avisos, never()).compraInmediata(any(), any(), any());
     }
 
     @Test

@@ -62,6 +62,9 @@ jobs:
           java-version: "21"
           cache: gradle
 
+      # B1 — el banco E2E levanta el correo de verdad (srv-correo + Mailpit):
+      # sin su jar el build de la imagen falla con «lstat .../correo/build/libs».
+      # B9 — lo mismo con misiones (srv-misiones). Misma lista que e2e.yml.
       - name: Construir los jars de los servicios Gradle
         run: |
           chmod +x ./gradlew
@@ -70,6 +73,7 @@ jobs:
             :services:contenido:productos:bootJar \
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
+            :services:contenido:misiones:bootJar \
             :services:cuentas:ms-finanzas:bootJar \
             :services:cuentas:ms-subastas:bootJar \
             :services:plataforma:moderacion-sanciones:bootJar \
@@ -78,6 +82,7 @@ jobs:
             :services:plataforma:metricas-plataforma:bootJar \
             :services:plataforma:admin-parametros:bootJar \
             :services:plataforma:comentarios:bootJar \
+            :services:plataforma:correo:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)

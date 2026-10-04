@@ -5,6 +5,9 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,8 +16,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.ResourceAccessException;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -24,7 +29,7 @@ import static org.mockito.Mockito.when;
 class MotorConsultasAsistidasTest {
 
     private static final String TOKEN = "token-de-prueba";
-    private static final String UID = "uid-123";
+    private static final String UID = "6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b";
 
     @Mock
     private InventarioClient inventarioClient;
@@ -32,12 +37,17 @@ class MotorConsultasAsistidasTest {
     private SubastasClient subastasClient;
     @Mock
     private NotificacionesClient notificacionesClient;
+    @Mock
+    private TorneosClient torneosClient;
+    @Mock
+    private FinanzasClient finanzasClient;
 
     private MotorConsultasAsistidas motor;
 
     @BeforeEach
     void configurar() {
-        motor = new MotorConsultasAsistidas(inventarioClient, subastasClient, notificacionesClient);
+        motor = new MotorConsultasAsistidas(inventarioClient, subastasClient, notificacionesClient,
+            torneosClient, finanzasClient);
     }
 
     @Test
@@ -83,12 +93,104 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto()).contains("en construccion");
     }
 
+    // B11 — 7.4.4 «informacion de torneos en curso»: datos publicos, el uid
+    // del token solo sirve para encontrar el equipo del jugador.
     @Test
-    void consultaDeTorneosRespondeQueEstaEnConstruccion() {
+    void consultaDeTorneosEncuentraElEquipoDelJugadorYSuProximoEncuentro() {
+        UUID torneo = UUID.randomUUID();
+        UUID equipo = UUID.randomUUID();
+        when(torneosClient.listar()).thenReturn(List.of(
+            new TorneoResumenDto(torneo, "Copa Otono", "EN_CURSO", 10, 8, 8)));
+        when(torneosClient.obtener(torneo)).thenReturn(new TorneoDetalleDto(torneo, "Copa Otono", "EN_CURSO", null,
+            List.of(new TorneoDetalleDto.Equipo(equipo, "Los Valientes", false,
+                List.of(UUID.fromString(UID), UUID.randomUUID()), true, 1, false)),
+            List.of(new TorneoDetalleDto.Encuentro(1, "JUGADO", equipo, UUID.randomUUID()),
+                new TorneoDetalleDto.Encuentro(5, "LISTO", equipo, UUID.randomUUID()))));
+
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("en que torneo estoy", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("en construccion");
+        assertThat(resultado.get().texto()).contains("Copa Otono").contains("Los Valientes").contains("encuentro es el 5");
+        verifyNoInteractions(finanzasClient);
+    }
+
+    @Test
+    void consultaDeTorneosConInscripcionesAbiertasDiceSiElEquipoYaPago() {
+        UUID torneo = UUID.randomUUID();
+        when(torneosClient.listar()).thenReturn(List.of(
+            new TorneoResumenDto(torneo, "Copa Invierno", "INSCRIPCIONES_ABIERTAS", 10, 1, 8)));
+        when(torneosClient.obtener(torneo)).thenReturn(new TorneoDetalleDto(torneo, "Copa Invierno",
+            "INSCRIPCIONES_ABIERTAS", null,
+            List.of(new TorneoDetalleDto.Equipo(UUID.randomUUID(), "Los Nuevos", false,
+                List.of(UUID.fromString(UID), UUID.randomUUID()), false, null, false)),
+            List.of()));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("estado de mi torneo", TOKEN, UID);
+
+        assertThat(resultado.get().texto()).contains("Los Nuevos").contains("todavia no se ha inscrito");
+    }
+
+    @Test
+    void consultaDeTorneosSinEquipoInvitaAlTorneoAbierto() {
+        UUID torneo = UUID.randomUUID();
+        when(torneosClient.listar()).thenReturn(List.of(
+            new TorneoResumenDto(torneo, "Copa Invierno", "INSCRIPCIONES_ABIERTAS", 25, 3, 8),
+            new TorneoResumenDto(UUID.randomUUID(), "Copa Vieja", "FINALIZADO", 0, 8, 8)));
+        when(torneosClient.obtener(torneo)).thenReturn(new TorneoDetalleDto(torneo, "Copa Invierno",
+            "INSCRIPCIONES_ABIERTAS", null, List.of(), List.of()));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("hay torneos", TOKEN, UID);
+
+        assertThat(resultado.get().texto()).contains("No estas en ningun torneo").contains("3 de 8 equipos")
+            .contains("25 creditos").contains("seccion Torneo");
+    }
+
+    @Test
+    void consultaDeTorneosSinTorneosActivosYConElServicioCaido() {
+        when(torneosClient.listar()).thenReturn(List.of());
+        assertThat(motor.generarRespuesta("mis torneos", TOKEN, UID).get().texto())
+            .contains("no hay ningun torneo");
+
+        when(torneosClient.listar()).thenThrow(new ResourceAccessException("caido"));
+        assertThat(motor.generarRespuesta("mis torneos", TOKEN, UID).get().texto())
+            .contains("no esta disponible");
+    }
+
+    @Test
+    void consultaDeTorneosDeUnTorneoEnCursoConElEquipoEliminado() {
+        UUID torneo = UUID.randomUUID();
+        when(torneosClient.listar()).thenReturn(List.of(new TorneoResumenDto(torneo, "Copa", "EN_CURSO", 0, 8, 8)));
+        when(torneosClient.obtener(torneo)).thenReturn(new TorneoDetalleDto(torneo, "Copa", "EN_CURSO", null,
+            List.of(new TorneoDetalleDto.Equipo(UUID.randomUUID(), "Los Caidos", false,
+                List.of(UUID.fromString(UID)), true, 2, true)), List.of()));
+
+        assertThat(motor.generarRespuesta("mi torneo", TOKEN, UID).get().texto()).contains("quedo eliminado");
+    }
+
+    // B11 — 7.4.4 «historial de transacciones reciente», con el token del jugador.
+    @Test
+    void consultaDeMovimientosReenviaElTokenDelJugador() {
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenReturn(new PaginaMovimientosDto(List.of(
+            new PaginaMovimientosDto.Movimiento(new BigDecimal("2.00"), "recompensa-victoria", "SUMA"),
+            new PaginaMovimientosDto.Movimiento(new BigDecimal("10"), "inscripcion-torneo", "RESTA"),
+            new PaginaMovimientosDto.Movimiento(new BigDecimal("60"), "apuesta-sala", "APARTA"),
+            new PaginaMovimientosDto.Movimiento(new BigDecimal("5"), null, "NEUTRO")), 4));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("muestrame mis movimientos", TOKEN, UID);
+
+        assertThat(resultado.get().texto()).contains("+2 (recompensa-victoria)").contains("-10 (inscripcion-torneo)")
+            .contains("60 apartados").contains("5 sin mover saldo");
+    }
+
+    @Test
+    void consultaDeMovimientosSinMovimientosYConElServicioCaido() {
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenReturn(new PaginaMovimientosDto(List.of(), 0));
+        assertThat(motor.generarRespuesta("mis transacciones", TOKEN, UID).get().texto())
+            .contains("Todavia no tienes movimientos");
+
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenThrow(new ResourceAccessException("caido"));
+        assertThat(motor.generarRespuesta("mis transacciones", TOKEN, UID).get().texto())
+            .contains("no esta disponible");
     }
 
     @Test
@@ -144,20 +246,22 @@ class MotorConsultasAsistidasTest {
         verifyNoInteractions(inventarioClient, subastasClient, notificacionesClient);
     }
 
+    // B11: las secciones Misiones y Torneo ya existen en el menu principal.
     @Test
-    void navegacionAMisionesRespondeQueEstaEnConstruccion() {
+    void navegacionAMisionesLlevaALaSeccion() {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("llevame a mis misiones", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("en construccion");
+        assertThat(resultado.get().texto()).contains("seccion Misiones");
     }
 
     @Test
-    void navegacionATorneosRespondeQueEstaEnConstruccion() {
+    void navegacionATorneosLlevaALaSeccion() {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("ir a mis torneos", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("en construccion");
+        assertThat(resultado.get().texto()).contains("seccion Torneo");
+        verifyNoInteractions(torneosClient);
     }
 
     @Test
@@ -171,6 +275,8 @@ class MotorConsultasAsistidasTest {
         when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(pagina);
         when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(resumen);
         when(notificacionesClient.consultarBandeja(TOKEN, UID)).thenReturn(bandeja);
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenReturn(new PaginaMovimientosDto(List.of(
+            new PaginaMovimientosDto.Movimiento(new BigDecimal("4"), "recompensa-victoria", "SUMA")), 1));
 
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("dame un informe de mi actividad", TOKEN, UID);
 
@@ -178,7 +284,8 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto())
             .contains("Escudo de Hierro")
             .contains("1 subasta(s)")
-            .contains("Nueva mision disponible");
+            .contains("Nueva mision disponible")
+            .contains("+4 (recompensa-victoria)");
     }
 
     @Test
@@ -186,12 +293,14 @@ class MotorConsultasAsistidasTest {
         when(inventarioClient.consultarInventario(TOKEN, 0)).thenThrow(new ResourceAccessException("caido"));
         when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0.00", "100.00", 0));
         when(notificacionesClient.consultarBandeja(TOKEN, UID)).thenReturn(new BandejaResponseDto(0, List.of()));
+        when(finanzasClient.movimientos(TOKEN, UID, 5)).thenThrow(new ResourceAccessException("caido"));
 
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("resumen de mi actividad", TOKEN, UID);
 
         assertThat(resultado).isPresent();
         assertThat(resultado.get().texto())
             .contains("no esta disponible")
-            .contains("No tienes notificaciones sin leer");
+            .contains("No tienes notificaciones sin leer")
+            .contains("movimientos de creditos en este momento");
     }
 }

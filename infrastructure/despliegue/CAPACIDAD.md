@@ -1,4 +1,4 @@
-# Capacidad de los hosts de DEV — mediciones del 23 y 24 de septiembre de 2026
+# Capacidad de los hosts de DEV — mediciones del 23, 24 y 28 de septiembre de 2026
 
 Este archivo existe porque durante semanas la decisión de «qué se despliega en
 dev» se apoyó en una frase heredada de comentario en comentario —
@@ -12,6 +12,111 @@ gh workflow run medir-memoria-servicios.yml
 gh workflow run medir-jvm-dev.yml            # RAM + swap de cada contenedor, solo lectura
 gh workflow run experimento-flags-jvm.yml    # A/B de flags en el banco E2E, con la suite como carga
 ```
+
+## 29-sep 01:57-02:50 UTC — plataforma en `c7i-flex.large` (opción E) y ms-chatbot encendido
+
+Autorizado por el responsable del bloque el 29-sep, con créditos del Free Plan
+(saldo USD 113,75). Cambio de tipo en caliente por `infra-dev.yml` (#767):
+misma instancia `i-072c81aa0b68370cf`, misma IP elástica, mismo disco; parar,
+cambiar, encender, con las compuertas de 0 destroy/replace y de oferta del
+tipo en `us-east-1f`. Apagado nocturno y encendido por EventBridge Scheduler en
+hora de Colombia (#769, `infrastructure/entornos/plataforma/horario.tf`).
+
+| Medición (`diagnostico-dev.yml`) | t3.small, 28-sep | c7i-flex.large, 22 min (36512218032) | + ms-chatbot, tras smoke/canarios/profesor (36514193941) |
+|---|--:|--:|--:|
+| RAM del host | 1910 MiB | 3816 MiB | 3816 MiB |
+| Disponible | 50-99 MiB | 427 MiB | 378 MiB |
+| Swap en uso | 2047/2047 | 933/2047 | 1360/2047 |
+| Demanda real (RAM + swap) | 3302 MiB | 3916 MiB | 4236 MiB |
+| Carga media (1 min) | host en *thrashing* | 0,11 | 0,14 |
+| Servicios sin salud en 5 s | 5 | 0 | 0 |
+| Reinicios de contenedores | — | 0 | 0 |
+
+**ms-chatbot** se desplegó a demanda (CD 36513743369) con la compuerta de
+capacidad: ANTES 282 MiB disponibles y 1025 de swap libre (umbrales 150/150),
+DESPUÉS 440 y 590 (umbrales 80/50); sano al tercer intento y el borde responde
+200 en `/api/v1/chat/historial`. Con él encendido, canarios y prueba del
+profesor en verde y el smoke 27/28 (el rojo era el 429 del borde que corrige
+#773); los veinte pasos del profesor tardaron 43 s, frente a 1,4 min antes.
+Desde aquí pasa a `desplegableDev: true`: ya no queda ningún servicio de
+plataforma fuera de DEV.
+
+El swap en uso es alto, pero son páginas frías (cada JVM topa su `mem_limit` y
+el cgroup manda lo que no toca a swap): la carga no pasa de 0,3 y ninguna
+suite se ralentizó. La siguiente mejora de memoria no es de este host: es la
+fase 2 (ms-ecommerce a contenido) cuando el Grupo 2 abra sus puertos (#771).
+
+## 28-sep 22:13-22:45 UTC — la memoria REAL por contenedor (RAM + swap) y el reparto entre los dos hosts
+
+`diagnostico-dev.yml` mide ahora cada contenedor desde su cgroup v2
+(`memory.current` + `memory.swap.current`: todos sus procesos). `docker stats`
+solo contaba la parte que estaba en RAM, y con el swap lleno eso escondia más
+de la mitad de lo que ocupa cada servicio. Corridas 36492983537 (plataforma) y
+36492986555 (contenido).
+
+**Plataforma** (t3.small, 1910 MiB): disponible **50-99 MiB**, swap
+**2047/2047 (lleno)**, 20 contenedores. Demanda real de los contenedores:
+**3302 MiB** (1369 en RAM + 1933 en swap). Cinco servicios no contestaron su
+salud en 5 s (ms-identidad, ms-finanzas, ms-ecommerce, ms-cumplimiento,
+métricas): el host está en *thrashing*. El CD de `02eb8e70` murió por el límite
+de 30 min del paso de despliegue, no por el código.
+
+| Contenedor | RAM + swap | Contenedor | RAM + swap |
+|---|--:|---|--:|
+| `srv-ms-identidad` | 303 MiB | `srv-moderacion-sanciones` | 296 MiB |
+| `srv-ms-ecommerce` | 289 MiB | `srv-salas-partidas` | 286 MiB |
+| `srv-torneos` | 276 MiB | `srv-ms-finanzas` | 272 MiB |
+| `srv-comentarios` | 245 MiB | `srv-admin-parametros` | 239 MiB |
+| `srv-notificaciones` | 235 MiB | `srv-ms-cumplimiento` | 220 MiB |
+| `srv-correo` | 208 MiB | `srv-metricas-plataforma` | 155 MiB |
+| `plataforma-db` | 117 MiB | cada Postgres de economía e identidad | 35-38 MiB |
+| Redis + Mailpit + borde | 14 MiB | **suma** | **3302 MiB** |
+
+**Contenido** (t3.small, 1910 MiB, cuenta del Grupo 2): disponible **722-740
+MiB**, swap 138 MiB. heroes 150, inventario 194, productos 189, motor 155 y
+Mongo 282 MiB: **972 MiB**. El proceso que más memoria usaba era `mongosh`
+(~230 MB): el healthcheck de `contenido-mongo` lo arrancaba cada 10 s dentro
+del propio contenedor. Desde este cambio el healthcheck abre el puerto con
+`bash /dev/tcp` y no carga nada.
+
+**Lo que dicen los números.** Entre los dos hosts hay 3,8 GB de RAM y la
+demanda, con misiones, ms-subastas y ms-chatbot encendidos, ronda 5 GB: ningún
+reparto evita el swap. Lo que sí se puede evitar es que un host lo tenga lleno.
+Reparto propuesto, por fases y midiendo entre una y otra:
+
+1. **misiones** (8105) y **ms-subastas** (8092, con su Postgres) nacen en
+   contenido: no hay datos que migrar. ~+465 MiB en contenido.
+2. **ms-ecommerce** (8090) se muda con su base (volcado y restauración; el
+   volumen viejo se conserva): -324 MiB en plataforma, que pasa de swap lleno a
+   ~1,5 GB.
+3. **ms-chatbot** (8094, con su Postgres) solo si después de 1 y 2 quedan
+   >= 250 MiB disponibles en contenido.
+
+Las llamadas de contenido a plataforma que eso añade (8089, 8093, 8088, 8082,
+8085, 8086, 8083) ya las admite el grupo de seguridad de plataforma
+(`cidr_servicios`). Lo que falta es del otro lado: el grupo de seguridad de
+contenido vive en la cuenta del Grupo 2 y hay que abrir 8105, 8092, 8090 y
+8094 **solo a `35.168.124.119/32`** (y cerrar 8101-8104 al mundo). Pasos
+exactos en `infrastructure/entornos/contenido/README.md`.
+
+Si el Grupo 2 no puede, o si tras la fase 2 plataforma sigue con el swap lleno,
+la única alternativa medida es pasar plataforma a `c7i-flex.large` (4 GiB,
+admitido por el Free Plan): ≈USD 28 de créditos hasta el 6-nov con el apagado
+nocturno. Tiene coste: solo con autorización expresa.
+
+**Fase 1 en el repositorio (28-sep).** El catálogo pone misiones y ms-subastas
+en contenido con `desplegableDev: true`; el job de contenido de `cd.yml` pasa
+la compuerta de capacidad antes y después (con el núcleo de ese host:
+heroes, inventario, productos y motor) y reparte su credencial de servicio,
+que ahora es la misma en los dos hosts (secrets `SECRETO_SERVICIO_MISIONES` y
+`SECRETO_SERVICIO_MS_SUBASTAS` del entorno `dev`). Los dos corren en contenido
+aunque el Grupo 2 no haya abierto todavía sus puertos: lo que falta es que el
+borde llegue a ellos, no que arranquen. El borde de ms-subastas sigue en su
+nombre de contenedor (502 al instante) hasta que el 8092 esté abierto; entonces
+un PR pequeño lo cambia a `34.193.90.11:8092`.
+
+Fase 1 **no** libera memoria en plataforma: ninguno de los dos corría allí. La
+que la libera es la fase 2 (ms-ecommerce).
 
 ## 24-sep 04:00-04:30 UTC — el host colgado, la tormenta de arranque y el arranque escalonado (R16.5b)
 

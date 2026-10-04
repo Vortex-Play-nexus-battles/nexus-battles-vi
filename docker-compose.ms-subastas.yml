@@ -9,9 +9,21 @@
 # "build:"; se combina con docker-compose.yml + docker-compose.deploy.yml y
 # solo cuando ms-subastas viene en la corrida.
 #
-# CAPACIDAD: desplegableDev:false. Con 12 JVM el host de plataforma ya no tiene
-# RAM ni swap libres (medido el 24-sep 03:50 UTC). Opciones en
-# infrastructure/despliegue/CAPACIDAD.md.
+# 28-sep (topologia, fase 1): VIVE EN EL HOST DE CONTENIDO. Con 12 JVM el de
+# plataforma no tiene RAM ni swap libres (CAPACIDAD.md); el de contenido si.
+# El catalogo lo declara con claseHost "contenido" y el job
+# desplegar-contenido-dev de cd.yml es el que lo levanta. Plan, comprobaciones
+# y reversion en services/cuentas/ms-subastas/README.md («Despliegue en DEV»).
+#
+# Por eso los valores por omision de abajo son los de ESE host:
+#   - inventario y catalogo, vecinos en la misma red de Compose, por nombre;
+#   - identidad (token, JWKS, contacto), finanzas, notificaciones, sanciones y
+#     parametros, en el host de plataforma, por su IP elastica y el puerto que
+#     su grupo de seguridad admite desde este host (8085-8089 y 8093, B12);
+#   - DIRECTORIO_ACTIVO_URL NO cae a la variable del mismo nombre: desplegar.sh
+#     la fija en srv-ms-identidad, un nombre que en este host no resuelve.
+# La etiqueta de la imagen es la suya (TAG_MS_SUBASTAS, la resuelve
+# resolver_etiquetas_contenido), con el TAG de la corrida de respaldo.
 
 services:
   subastas-db:
@@ -32,7 +44,7 @@ services:
       retries: 20
 
   srv-ms-subastas:
-    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-subastas:${TAG}
+    image: ghcr.io/vortex-play-nexus-battles/nexus-battles-vi-ms-subastas:${TAG_MS_SUBASTAS:-${TAG}}
     container_name: srv-ms-subastas
     restart: unless-stopped
     mem_limit: 256m
@@ -41,8 +53,34 @@ services:
     depends_on:
       subastas-db:
         condition: service_healthy
+    # Arranque escalonado del host (R16.5b): mismo script que el ancla
+    # x-arranque-escalonado de docker-compose.deploy.yml, donde esta explicado.
+    # Una ancla no cruza archivos, asi que se repite. Turno 6, el primero libre
+    # del host de plataforma. En el de contenido (28-sep) solo espera cuando
+    # ese host acaba de encender: 240 s que dejan arrancar antes a Mongo y a
+    # los cuatro servicios del combate, de los que este depende.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        proc="$${ARRANQUE_PROC:-/proc}"
+        creado="$${ARRANQUE_CREADO_EN:-9999999999}"
+        arranque=$$(awk '/^btime/ {print $$2}' "$$proc/stat" 2>/dev/null)
+        encendido=$$(cut -d. -f1 "$$proc/uptime" 2>/dev/null)
+        if [ -n "$$arranque" ] && [ -n "$$encendido" ] \
+           && [ "$$creado" -lt "$$arranque" ] 2>/dev/null \
+           && [ "$$encendido" -lt "$${ARRANQUE_VENTANA_S:-600}" ] 2>/dev/null; then
+          espera=$$(( $${ARRANQUE_TURNO:-0} * $${ARRANQUE_PASO_S:-40} ))
+          echo "arranque escalonado: el host acaba de encender (hace $${encendido}s); turno $${ARRANQUE_TURNO:-0}, espero $${espera}s"
+          trap 'exit 143' TERM INT
+          sleep "$$espera" & wait $$!
+          trap - TERM INT
+        fi
+        exec java -jar app.jar
     environment:
       JAVA_TOOL_OPTIONS: "-XX:+UseSerialGC -Xmx128m -XX:TieredStopAtLevel=1 -XX:ReservedCodeCacheSize=48m -XX:+ExitOnOutOfMemoryError"
+      ARRANQUE_TURNO: "6"
+      ARRANQUE_CREADO_EN: ${ARRANQUE_CREADO_EN:-9999999999}
       # Credencial de servicio (ADR-005). desplegar.sh genera y persiste
       # SECRETO_SERVICIO_MS_SUBASTAS en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
@@ -53,8 +91,15 @@ services:
       # ("Falta la URL del emisor (DIRECTORIO_ACTIVO_URL)"). Los servicios de
       # plataforma la heredan del .env por `env_file:` del compose base; los
       # de Cuentas NO estan en el compose base, asi que aqui hay que ponerla.
-      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
+      #
+      # B8 preparo SUBASTAS_DIRECTORIO_ACTIVO_URL para este momento: en el host
+      # de contenido el emisor esta en otra maquina y desplegar.sh impone
+      # srv-ms-identidad en DIRECTORIO_ACTIVO_URL, en el .env y en el shell,
+      # asi que esa variable no sirve alli y ya no se lee (28-sep).
+      DIRECTORIO_ACTIVO_URL: ${SUBASTAS_DIRECTORIO_ACTIVO_URL:-http://35.168.124.119:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: ms-subastas
+      # El mismo valor que conoce el emisor: secret SECRETO_SERVICIO_MS_SUBASTAS
+      # del entorno dev, que cd.yml pasa a los dos jobs (desplegar.sh).
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_MS_SUBASTAS:-}
       DB_HOST: ${MS_SUBASTAS_DB_HOST:-subastas-db}
       DB_PORT: ${MS_SUBASTAS_DB_PORT:-5432}
@@ -69,8 +114,10 @@ services:
       # NOTIFICACIONES_WS_ORIGENES en docker-compose.deploy.yml.
       SUBASTAS_WS_ORIGENES: ${SUBASTAS_WS_ORIGENES:-}
       CORS_ORIGENES: ${SUBASTAS_CORS_ORIGENES:-}
-      # Verificacion de los tokens (ADR-002/ADR-005), dentro de la red.
-      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # Verificacion de los tokens (ADR-002/ADR-005): el emisor, en el host de
+      # plataforma. El job de contenido pasa vars.IDENTIDAD_JWKS_URL_CONTENIDO,
+      # vacia salvo que el emisor se mude; vacia, manda este valor.
+      IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://35.168.124.119:8089/api/v1/auth/jwks}
       # Integraciones reales dentro de la red de despliegue. En local estos
       # apuntan a localhost y "modo: fake"; aqui se apunta a los contenedores.
       # Creditos REALES (R16.19). Hasta R16 esto valia "fake": ms-finanzas no
@@ -81,7 +128,11 @@ services:
       # se activa con "http" (CreditoClientConfig), no con "real" como decia
       # este comentario; con "real" no se crearia ningun cliente y el servicio
       # no arrancaria. Es el mismo valor que usa el banco E2E.
-      FINANZAS_BASE_URL: ${FINANZAS_BASE_URL:-http://srv-ms-finanzas:8093/api/v1}
+      # 28-sep: ms-finanzas sigue en el host de plataforma; su 8093 admite a
+      # este host (B12). Directo y no por el borde: el borde cuenta las
+      # peticiones por IP de origen, y las de este servicio se sumarian a las
+      # de cualquier otro que saliera por la misma IP.
+      FINANZAS_BASE_URL: ${FINANZAS_BASE_URL:-http://35.168.124.119:8093/api/v1}
       FINANZAS_MODO: ${FINANZAS_MODO:-http}
       # Inventario (HU-SUB-004, FI-TRANSFER-1). Ninguna de estas dos estaba
       # declarada, y la omision no era neutra: application.properties trae
@@ -89,40 +140,47 @@ services:
       # desplegado hablaba con un doble en memoria. La subasta se adjudicaba, el
       # ganador pagaba y el objeto no cambiaba de dueno, sin un solo error.
       #
-      # La URL no es el nombre del contenedor: inventario es claseHost
-      # "contenido" y ms-subastas es "plataforma"
-      # (infrastructure/despliegue/servicios.json), asi que srv-inventario no
-      # resuelve desde aqui. Se usa el puerto publicado del host de contenido,
-      # igual que docker-compose.deploy.yml para salas-partidas y
-      # docker-compose.ms-chatbot.yml para el chatbot.
+      # 28-sep: inventario y ms-subastas comparten host (claseHost "contenido"
+      # en infrastructure/despliegue/servicios.json), asi que se llaman por
+      # nombre en la red de Compose, sin salir a internet: dos viajes cruzados
+      # menos en publicar, cerrar, cancelar y recoger.
       #
       # Y el modo va en "http", igual que finanzas desde R16.19: los dos
       # servicios estan desplegados y sanos, y logica falsa en un entorno real
       # no se admite. Entre fallar al entregar y cobrar sin entregar, lo segundo
       # es lo que no se puede permitir.
-      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
+      INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://srv-inventario:8080}
       INVENTARIO_MODO: ${INVENTARIO_MODO:-http}
-      # Catalogo maestro (productos, host de contenido) para validar el producto
-      # al publicar una subasta: CatalogoProductosClientHttp pide
+      # Catalogo maestro (productos, mismo host) para validar el producto al
+      # publicar una subasta: CatalogoProductosClientHttp pide
       # GET /api/v1/productos/{id}. Sin esta linea valia http://localhost:8080,
       # el propio contenedor, y publicar fallaba con «No se pudo contactar al
-      # catalogo». Mismo destino que el borde (borde-dev.conf) y que el banco E2E.
-      CATALOGO_BASE_URL: ${CATALOGO_BASE_URL:-http://34.193.90.11:8103}
-      # El incremento minimo de las pujas (RF-SUB-004). Se declara sin valor por
-      # omision A PROPOSITO: el README de ms-subastas lo registra como la unica
-      # pregunta abierta del backlog, y ponerle una cifra aqui seria decidir una
-      # regla de producto desde un fichero de despliegue. Vacio, el servicio
-      # responde 503 con el motivo al publicar —se niega en voz alta, que es lo
-      # correcto— y las demas operaciones siguen funcionando. Cuando el PO
-      # responda, se pone aqui y deja de hacer falta el 503.
-      #
-      # Las lineas del catalogo y esta son la misma clase de defecto:
-      # publicar una subasta necesita tres ajustes y ninguno los tenia.
-      # R16.19 encontro los del catalogo y los creditos; la prueba de
-      # transferencia encontro este.
-      SUBASTAS_INCREMENTO_MINIMO: ${SUBASTAS_INCREMENTO_MINIMO:-}
-      NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
-      SANCIONES_BASE_URL: ${SANCIONES_BASE_URL:-http://srv-moderacion-sanciones:8086}
+      # catalogo».
+      CATALOGO_BASE_URL: ${CATALOGO_BASE_URL:-http://srv-productos:8080}
+      # B8 — las reglas de 7.7 que decide administracion (incremento minimo,
+      # topes, que pasa con lo que nadie recoge) salen de admin-parametros, en
+      # el host de plataforma. Hasta B8 el incremento era
+      # SUBASTAS_INCREMENTO_MINIMO, una variable vacia en DEV que nadie podia
+      # cambiar sin redesplegar; ya no se lee. Mientras el PO no fije
+      # `subastas.incremento-minimo`, publicar responde 503
+      # INCREMENTO_MINIMO_NO_CONFIGURADO y la pantalla lo dice.
+      PARAMETROS_URL: ${PARAMETROS_URL:-http://35.168.124.119:8088/api/v1}
+      # 7.7.9: que pasa con un producto ganado que nadie recoge en 7 dias.
+      # Decision del PO pendiente; ENTREGAR es el valor PROVISIONAL (queda
+      # disponible para el ganador, que ya pago). Respaldo del parametro
+      # `subastas.pendientes.al-vencer`, que aun no esta en el catalogo.
+      SUBASTAS_PENDIENTES_AL_VENCER: ${SUBASTAS_PENDIENTES_AL_VENCER:-ENTREGAR}
+      # Avisos por correo (7.7.8, POST /api/v1/correos/subasta). VACIO por
+      # omision: el contacto se pide a ms-identidad
+      # (GET /api/v1/internal/usuarios/{uid}/contacto), que figura como
+      # pendiente (B2). Con CORREO_URL puesta y esa ruta sin desplegar, los
+      # correos se reintentarian hasta FALLIDO. Se enciende con
+      # SUBASTAS_CORREO_URL=http://srv-correo:8082 cuando B2 este en develop.
+      CORREO_URL: ${SUBASTAS_CORREO_URL:-}
+      # Del host de plataforma, por su IP elastica (ver la cabecera).
+      IDENTIDAD_URL: ${IDENTIDAD_URL_INTERNA:-http://35.168.124.119:8089}
+      NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://35.168.124.119:8085/api/v1}
+      SANCIONES_BASE_URL: ${SANCIONES_BASE_URL:-http://35.168.124.119:8086}
 
 volumes:
   subastas-db-datos:

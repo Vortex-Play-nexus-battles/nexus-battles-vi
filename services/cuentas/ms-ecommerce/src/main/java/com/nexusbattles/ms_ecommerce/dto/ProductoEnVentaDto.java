@@ -12,11 +12,10 @@ import java.math.BigDecimal;
  * para que el endpoint legado {@code GET /api/v1/productos} siga devolviendo
  * exactamente lo mismo que antes.
  *
- * <p>Lo que la tienda todavia no calcula se dice tal cual, sin inventar:
- * no hay promociones ({@code precioOriginal} = {@code precioFinal},
- * {@code enPromocion} false, {@code porcentajeDescuento} nulo), no hay
- * conversion de moneda (siempre COP) y ni la propiedad ni la lista de deseos
- * se cruzan todavia (false).
+ * <p>B5 (contrato 1.4.0): los precios estan en la moneda pedida y con la
+ * promocion vigente ya aplicada, calculados por el servidor
+ * ({@code CalculadoraDePrecios}); {@code esPropio} y {@code enListaDeseos} se
+ * calculan cuando hay sesion de usuario y son false sin ella.
  */
 public record ProductoEnVentaDto(
         String id,
@@ -31,5 +30,21 @@ public record ProductoEnVentaDto(
         Boolean enPromocion,
         Integer porcentajeDescuento,
         Boolean esPropio,
-        Boolean enListaDeseos) {
+        Boolean enListaDeseos,
+        Long precioCreditos) {
+
+    /**
+     * Sin precio en creditos: la forma de antes de 1.6.0.
+     *
+     * <p>{@code precioCreditos} (D-44, contrato 1.6.0) es lo que cuesta pagado
+     * con creditos del juego, con la promocion vigente; null si no se puede
+     * pagar asi (premium o sin precio en creditos en el catalogo).
+     */
+    public ProductoEnVentaDto(String id, String nombre, String imagenUrl, String descripcion, String habilidades,
+                              String tipo, BigDecimal precioFinal, BigDecimal precioOriginal, String moneda,
+                              Boolean enPromocion, Integer porcentajeDescuento, Boolean esPropio,
+                              Boolean enListaDeseos) {
+        this(id, nombre, imagenUrl, descripcion, habilidades, tipo, precioFinal, precioOriginal, moneda, enPromocion,
+                porcentajeDescuento, esPropio, enListaDeseos, null);
+    }
 }

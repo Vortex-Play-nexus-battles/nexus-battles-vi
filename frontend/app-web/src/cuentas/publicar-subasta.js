@@ -1,15 +1,53 @@
 import { montarCabecera, leerSesion } from '../comun/cabecera-app.js';
 import { cuerpoDelToken } from '../comun/identidad.js';
-import { baseDeApi } from '../comun/base-api.js';
+import { baseDeApi, rutaDeApi } from '../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
+import { nombreDelTipo } from '../comun/ui/formato.js';
 import {
   publicarSubasta,
   crearClavePublicacion,
   ErrorPublicacion,
 } from './cliente-publicacion-subastas.js';
 
+/**
+ * Respaldo de la Tabla 25 por si las reglas del servidor no llegan. Desde B8
+ * la pantalla pide GET /subastas/reglas al montarse y usa lo que diga el
+ * servidor (duraciones, comisiones y si el incremento minimo esta
+ * configurado); estas cifras solo evitan una pantalla en blanco sin red.
+ */
 const DURACIONES = { '24H': { horas: 24, comision: 1 }, '48H': { horas: 48, comision: 3 } };
+
+/**
+ * D-43 — el incremento mínimo es una decisión tomada (5 créditos en
+ * admin-parametros). Si un entorno lo tuviera vacío, se dice qué falta sin
+ * presentarlo como una decisión pendiente.
+ */
+const SIN_INCREMENTO =
+  'El incremento mínimo entre pujas no está configurado en administración: no se pueden publicar subastas hasta que un administrador lo fije.';
+
+/** «1 crédito», «5 créditos». */
+function textoDeCreditos(cantidad) {
+  return `${cantidad} ${cantidad === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
+ * GET /subastas/reglas (ms-subastas-listado.yaml 1.1.0). Publica. Null si no
+ * responde: la pantalla sigue con el respaldo y el servidor decide al publicar.
+ */
+export async function consultarReglasDeSubastas(fetchImpl = globalThis.fetch) {
+  if (typeof fetchImpl !== 'function') {
+    return null;
+  }
+  try {
+    const respuesta = await fetchImpl(rutaDeApi('/subastas/reglas'), {
+      headers: { Accept: 'application/json' },
+    });
+    return respuesta?.ok ? await respuesta.json() : null;
+  } catch {
+    return null;
+  }
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function sesionUtilizable() {
@@ -33,9 +71,10 @@ export function validarCondiciones(elemento, duracion, inicial, inmediata) {
   }
   if (String(inmediata).trim()) {
     const compra = Number(inmediata);
-    if (!Number.isFinite(compra) || compra <= 0 || compra < precio) {
+    // B8 — 7.7.2: superior al precio minimo, no igual (el servidor tambien lo exige).
+    if (!Number.isFinite(compra) || compra <= 0 || compra <= precio) {
       errores.inmediata =
-        'La compra inmediata debe ser positiva y mayor o igual al precio inicial.';
+        'La compra inmediata debe ser superior al precio inicial (mínimo de puja).';
     }
   }
   return errores;
@@ -58,6 +97,7 @@ export async function montarPublicacion(
     consultar = consultarPagina,
     publicar = publicarSubasta,
     crearClave = crearClavePublicacion,
+    consultarReglas = consultarReglasDeSubastas,
   } = {},
 ) {
   const cabecera = document.querySelector('[data-cabecera-app]');
@@ -86,6 +126,7 @@ export async function montarPublicacion(
                 <small id="error-producto" class="campo__error"></small>
               </div>
               <p data-inventario role="status" aria-live="polite"></p>
+              <p data-sin-inventario class="publicacion__ayuda" hidden><a href="./tienda.html">Ir a la tienda</a></p>
               <nav class="publicacion__paginacion" aria-label="Páginas del inventario">
                 <button type="button" data-anterior class="boton boton--secundario">Anterior</button>
                 <span data-pagina></span>
@@ -94,6 +135,7 @@ export async function montarPublicacion(
               </nav>
             </fieldset>
             <p class="publicacion__ayuda">Los productos no disponibles aparecen deshabilitados. Al publicar se comprobarán también el uso, la propiedad y si el producto es subastable.</p>
+            <p class="publicacion__ayuda" data-incremento-minimo hidden></p>
           </section>
           <section class="publicacion__panel" aria-labelledby="titulo-condiciones">
             <h2 id="titulo-condiciones"><span class="publicacion__paso">02</span> Condiciones de publicación</h2>
@@ -101,8 +143,8 @@ export async function montarPublicacion(
               <fieldset aria-describedby="error-duracion">
                 <legend>Duración y comisión</legend>
                 <div class="publicacion__duraciones">
-                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="24H" checked required /><span>24 horas<small>Comisión: 1 crédito</small></span></label>
-                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="48H" required /><span>48 horas<small>Comisión: 3 créditos</small></span></label>
+                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="24H" checked required /><span>24 horas<small data-comision="24H">Comisión: 1 crédito</small></span></label>
+                  <label class="publicacion__duracion"><input type="radio" name="duracion" value="48H" required /><span>48 horas<small data-comision="48H">Comisión: 3 créditos</small></span></label>
                 </div>
                 <small id="error-duracion" class="campo__error"></small>
               </fieldset>
@@ -146,6 +188,12 @@ export async function montarPublicacion(
   let intento = null;
   let retenido = false;
   let sinSesion = !sesion;
+  // B8 — con el incremento minimo sin configurar el servidor no publica
+  // (503 INCREMENTO_MINIMO_NO_CONFIGURADO): se dice antes y no se deja enviar.
+  let sinIncremento = false;
+  const duraciones = Object.fromEntries(
+    Object.entries(DURACIONES).map(([codigo, valor]) => [codigo, { ...valor }]),
+  );
   const almacenamiento = globalThis.sessionStorage;
   const claveAlmacen = sesion ? `nexus.hu-sub-001.intento:${sesion.uid}` : null;
 
@@ -185,7 +233,7 @@ export async function montarPublicacion(
   function actualizar() {
     const { seleccionado, duracion, errores } = datos();
     const solicitud = retenido ? intento.solicitud : null;
-    const configuracion = DURACIONES[solicitud?.duracion ?? duracion];
+    const configuracion = duraciones[solicitud?.duracion ?? duracion];
     const nombreSeleccionado = seleccionado
       ? `${seleccionado.nombrePropio} · ${seleccionado.tipo} · ${seleccionado.id}`
       : 'Sin seleccionar';
@@ -227,6 +275,7 @@ export async function montarPublicacion(
       enviando ||
       terminado ||
       sinSesion ||
+      (!retenido && sinIncremento) ||
       (!retenido && (cargando || !aceptar.checked || Object.keys(errores).length > 0));
     enviar.textContent = retenido ? 'Reintentar misma publicación' : 'Confirmar y publicar';
     if (enviando) {
@@ -236,8 +285,10 @@ export async function montarPublicacion(
     $('[data-anterior]').disabled = cargando || pagina <= 0;
     $('[data-siguiente]').disabled = cargando || pagina + 1 >= totalPaginas;
     $('[data-referencia]').hidden = !retenido;
+    // UXC-9 — sin la clave de idempotencia a la vista: es un identificador
+    // interno. Lo que importa es que reintentar repite ESTA publicación.
     $('[data-referencia]').textContent = retenido
-      ? `Referencia del intento: ${intento.clave}. Se conservan el producto, los precios y la comisión confirmados.`
+      ? 'Guardamos este intento: al reintentar se repite la misma publicación, con el producto, los precios y la comisión que confirmaste, sin crear otra.'
       : '';
   }
   if (!sesion) {
@@ -245,6 +296,34 @@ export async function montarPublicacion(
     return;
   }
   form.hidden = false;
+  const reglas = await consultarReglas();
+  if (reglas && Array.isArray(reglas.duraciones)) {
+    for (const d of reglas.duraciones) {
+      if (Object.hasOwn(duraciones, d.codigo) && Number.isFinite(Number(d.comision))) {
+        duraciones[d.codigo] = { horas: Number(d.horas), comision: Number(d.comision) };
+        const etiqueta = $(`[data-comision="${d.codigo}"]`);
+        if (etiqueta) {
+          const comision = Number(d.comision);
+          etiqueta.textContent = `Comisión: ${comision} ${comision === 1 ? 'crédito' : 'créditos'}`;
+        }
+      }
+    }
+  }
+  // D-43 — el incremento mínimo lo dice el servidor (admin-parametros, 5
+  // créditos desde la migración V5): se muestra tal cual, sin una cifra escrita
+  // aquí. Sin configurar, no se deja publicar (el servidor respondería 503).
+  const avisoIncremento = $('[data-incremento-minimo]');
+  if (reglas && reglas.incrementoMinimoConfigurado === false) {
+    sinIncremento = true;
+    avisoIncremento.textContent = SIN_INCREMENTO;
+    avisoIncremento.hidden = false;
+  } else if (reglas && reglas.incrementoMinimo !== null && reglas.incrementoMinimo !== undefined) {
+    const incremento = Number(reglas.incrementoMinimo);
+    if (Number.isFinite(incremento)) {
+      avisoIncremento.textContent = `Incremento mínimo: ${textoDeCreditos(incremento)}`;
+      avisoIncremento.hidden = false;
+    }
+  }
   try {
     const guardado = almacenamiento.getItem(claveAlmacen);
     if (guardado) {
@@ -294,19 +373,37 @@ export async function montarPublicacion(
       pagina = respuesta.numero;
       totalPaginas = respuesta.totalPaginas;
       producto.replaceChildren(new Option('Selecciona un producto', ''));
+      // UXC-8 — la opción decía «Espada de luz · ARMA · 3f2a…»: la constante
+      // del tipo y el identificador interno del elemento. Ahora el tipo en
+      // palabras y, si hay dos iguales, cuál es cuál («copia 2»).
+      const vistos = new Map();
       for (const elemento of elementos) {
+        const copia = (vistos.get(elemento.nombrePropio) ?? 0) + 1;
+        vistos.set(elemento.nombrePropio, copia);
+        const repetido =
+          elementos.filter((e) => e.nombrePropio === elemento.nombrePropio).length > 1;
         const opcion = new Option(
-          `${elemento.nombrePropio} · ${elemento.tipo} · ${elemento.id}${elemento.disponible === false ? ' · No disponible' : ''}`,
+          `${elemento.nombrePropio} · ${nombreDelTipo(elemento.tipo)}${repetido ? ` · copia ${copia}` : ''}${elemento.disponible === false ? ' · No disponible' : ''}`,
           elemento.id,
         );
         opcion.disabled = elemento.disponible === false || !UUID.test(elemento.productoId ?? '');
         producto.appendChild(opcion);
       }
       aceptar.checked = false;
-      $('[data-inventario]').textContent = elementos.length
-        ? 'Selecciona un elemento para continuar.'
-        : 'No hay productos en esta página de tu inventario.';
-      $('[data-pagina]').textContent = `Página ${totalPaginas ? pagina + 1 : 0} de ${totalPaginas}`;
+      // UXC-9 — un inventario vacío decía «Página 0 de 0» y nada más. Ahora
+      // dice qué pasa y adónde ir; la paginación solo sale si hay páginas.
+      const vacio = totalPaginas === 0 || (elementos.length === 0 && pagina === 0);
+      let textoInventario = 'Selecciona un elemento para continuar.';
+      if (vacio) {
+        textoInventario =
+          'Tu inventario está vacío: todavía no tienes nada que poner a la venta. Consigue objetos en la tienda o en las misiones.';
+      } else if (elementos.length === 0) {
+        textoInventario = 'No hay productos en esta página de tu inventario.';
+      }
+      $('[data-inventario]').textContent = textoInventario;
+      $('[data-sin-inventario]').hidden = !vacio;
+      $('.publicacion__paginacion').hidden = vacio;
+      $('[data-pagina]').textContent = vacio ? '' : `Página ${pagina + 1} de ${totalPaginas}`;
     } catch (error) {
       // UX-R3.11 — antes esta pantalla anunciaba el MISMO fallo dos veces y casi
       // con las mismas palabras: un banner rojo arriba («No se pudo cargar el
@@ -343,7 +440,7 @@ export async function montarPublicacion(
   $('[data-recargar]').addEventListener('click', () => cargar(pagina));
   form.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    if (enviando || terminado || sinSesion) {
+    if (enviando || terminado || sinSesion || (!retenido && sinIncremento)) {
       return;
     }
     const actual = sesionUtilizable();
@@ -396,8 +493,17 @@ export async function montarPublicacion(
       almacenamiento.removeItem(claveAlmacen);
       form.hidden = true;
       avisar(
-        `Subasta publicada correctamente. Comisión cobrada: ${resultado.comisionCobrado} créditos. Identificador: ${resultado.id}. Ya puedes volver a Subastas.`,
+        `Subasta publicada. Comisión cobrada: ${resultado.comisionCobrado} créditos. Ya está en el mercado para recibir pujas.`,
       );
+      // UXC-9 — en vez del identificador, el camino: ver la subasta publicada.
+      if (resultado.id) {
+        const ver = document.createElement('a');
+        ver.href = `./pujas.html?id=${encodeURIComponent(resultado.id)}`;
+        ver.className = 'boton boton--primario';
+        ver.dataset.accion = 'ver-publicada';
+        ver.textContent = 'Ver tu subasta';
+        mensaje.after(ver);
+      }
     } catch (error) {
       // Un fallo no tipado también puede ocurrir después de que el servidor publique.
       // El guard de carga/envío impide peticiones simultáneas; controles bloqueados.

@@ -42,6 +42,6 @@ class IdempotenciaPublicacionEnMemoriaTest {
     private PublicarSubastaResponse respuesta() {
         return new PublicarSubastaResponse(UUID.randomUUID(), UUID.randomUUID(), "unidad", UUID.randomUUID(),
                 BigDecimal.TEN, BigDecimal.TEN, null, "ACTIVA", Instant.EPOCH, Instant.EPOCH.plusSeconds(86400),
-                BigDecimal.ONE, null, null, null, null, null, null);
+                BigDecimal.ONE, null, null, null, null, null, null, BigDecimal.ONE);
     }
 }

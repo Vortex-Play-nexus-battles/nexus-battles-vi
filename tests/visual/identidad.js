@@ -37,6 +37,8 @@
 
 import { randomBytes, randomUUID } from 'node:crypto';
 
+import { iniciarSesion, registrar, verificarCorreo } from '../e2e/ayudantes/cuentas.js';
+
 /** Claves que `login.js` deja en `sessionStorage`. Un solo sitio las nombra. */
 export const CLAVES = Object.freeze({
   token: 'nexus.token',
@@ -72,11 +74,12 @@ function base64url(objeto) {
  * JWT sin firma válida, solo para que el guard del navegador deje pintar la
  * vista cuando no hay backend. No autentica contra nada.
  *
- * @param {{apodo: string, rol?: string, horas?: number}} opciones
+ * @param {{apodo: string, rol?: string, horas?: number, uid?: string}} opciones
+ *   `uid` fijo cuando el escenario necesita que la sesión sea de alguien
+ *   concreto (el capitán de un equipo, el vendedor de una subasta).
  * @returns {{token: string, uid: string}}
  */
-export function sesionSintetica({ apodo, rol = 'JUGADOR', horas = 8 }) {
-  const uid = randomUUID();
+export function sesionSintetica({ apodo, rol = 'JUGADOR', horas = 8, uid = randomUUID() }) {
   const cuerpo = {
     sub: apodo,
     preferred_username: apodo,
@@ -102,24 +105,23 @@ export async function identidadReal(api, { apodo = apodoEfimero() } = {}) {
   const email = `${apodo}@nexus.test`;
 
   // Registro por el mismo multipart que manda el formulario del navegador.
-  await api.post('/api/v1/auth/registro', {
-    multipart: {
-      nombres: 'Revisión',
-      apellidos: 'Visual',
-      email,
-      password: clave,
-      apodo,
-    },
-  });
+  await registrar(api, { apodo, email, clave, nombres: 'Revisión', apellidos: 'Visual' });
 
-  const entrada = await api.post('/api/v1/auth/login', { data: { email, password: clave } });
-  if (!entrada.ok()) {
+  // B1 — la cuenta nace pendiente de verificar su correo: se confirma con el
+  // código que llega al buzón de pruebas del entorno (MAILPIT_URL, o /mailpit
+  // en la misma base), como lo haría la persona.
+  let entrada = await iniciarSesion(api, email, clave);
+  if (entrada.estado === 403 && entrada.tipo === 'cuenta-no-verificada') {
+    await verificarCorreo(api, email, { base: process.env.VISUAL_BASE });
+    entrada = await iniciarSesion(api, email, clave);
+  }
+  if (entrada.estado !== 200) {
     throw new Error(
-      `El arnés no pudo iniciar sesión como ${apodo}: ${entrada.status()}. ` +
+      `El arnés no pudo iniciar sesión como ${apodo}: ${entrada.estado}. ` +
         'Comprueba que ms-identidad responde en la base indicada.',
     );
   }
-  const cuerpo = await entrada.json();
+  const cuerpo = entrada.cuerpo;
   const claims = JSON.parse(Buffer.from(cuerpo.token.split('.')[1], 'base64url').toString('utf8'));
 
   return {

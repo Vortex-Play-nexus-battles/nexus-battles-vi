@@ -57,7 +57,12 @@ public class SeguridadConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/vitrina", "/api/v1/vitrina/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/v1/productos", "/api/v1/productos/**").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/v1/carrito/**").hasAnyRole(ROLES_DE_USUARIO)
+                        // B5: lo del jugador (carrito, lista de deseos, compra y
+                        // ordenes) es de un usuario; un token de servicio no
+                        // tiene carrito ni compra nada (403).
+                        // D-44: /checkout/creditos (cotizar y pagar con creditos) tambien.
+                        .requestMatchers("/api/v1/carrito/**", "/api/v1/lista-deseos/**", "/api/v1/checkout",
+                                "/api/v1/checkout/**", "/api/v1/ordenes/**").hasAnyRole(ROLES_DE_USUARIO)
                         .anyRequest().authenticated());
         return http.build();
     }

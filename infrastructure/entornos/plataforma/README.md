@@ -35,21 +35,32 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 
 | Recurso | Detalle | Costo oficial (us-east-1, 2026-09-15) |
 |---|---|---|
-| `aws_instance` `nexus-plataforma-dev` | `t3.small` (2 vCPU, 2 GiB, x86) por defecto; Ubuntu 22.04; Docker + Compose v2; swap 2 GB; IMDSv2; créditos de CPU `standard` | 0,0208 USD/h → 15,0 USD/mes 24×7, ~6,2 con apagado nocturno |
+| `aws_instance` `nexus-plataforma-dev` | `c7i-flex.large` (2 vCPU, 4 GiB, x86) desde el 29-sep (opción E de `../../despliegue/CAPACIDAD.md`; antes `t3.small`, 2 GiB); Ubuntu 22.04; Docker + Compose v2; swap 2 GB; IMDSv2 | 0,0848 USD/h → 61,9 USD/mes 24×7, ~30,5 con el apagado programado |
 | `aws_eip` | IP fija para `DEPLOY_HOST_DEV` | 0,005 USD/h → 3,60 USD/mes, encendida o apagada |
 | disco raíz gp3 20 GB | cifrado, se borra con la instancia | 1,60 USD/mes |
-| `aws_security_group` | 22 (cd.yml) y 8081-8088 (servicios) | 0 |
+| `aws_security_group` | 22 (cd.yml), 80 (el borde, público) y 8081-8089 **solo desde el host de contenido** (B12, ver «Red») | 0 |
 | perfil de instancia + `AmazonSSMManagedInstanceCore` | Session Manager: consola sin puerto 22 | 0 |
 | parámetro SecureString `/nexus/dev/plataforma/llave-ssh-despliegue` | llave privada del par de despliegue | 0 |
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
+| EventBridge Scheduler (`horario.tf`) | apaga el host todos los días a las 23:23 y lo enciende de lunes a viernes a las 06:47, **hora de Colombia** (`America/Bogota`), a la hora exacta; el rol del planificador solo puede encender y apagar esta instancia. `horario_activo = false` lo suspende (p. ej. la semana de la demo) | 0 (14 M invocaciones/mes gratis) |
 
-Total 24×7 ≈ **20,2 USD/mes**; con el apagado programado (23:00 → 07:00 y fines
-de semana) ≈ **11,5 USD/mes**. Estas cifras son **solo de este host**: desde el
-8-sep-2026 hay un segundo `t3.small` para el dominio de contenido
-(`../contenido/`), con su propio coste del mismo orden, así que el gasto real de
-dev es aproximadamente el doble. Aun así el crédito de USD 100 cubre el proyecto
-hasta el 6/nov con el apagado programado en los dos hosts.
+Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches y fines de
+semana, hora de Colombia) ≈ **36 USD/mes**, contra el crédito del Free Plan
+(USD 113,75 el 29-sep; `diagnostico-dev.yml` lo muestra). Con `t3.small` eran
+≈20,2 y ≈11,5.
+
+**Opción E (29-sep): de `t3.small` a `c7i-flex.large`.** Con 2 GiB el host no
+cabía: 3305 MiB de demanda, swap de 2 GB lleno a los 15 minutos de un reinicio
+limpio y el smoke en rojo. El cambio de tipo es en caliente (parar, cambiar,
+encender): misma instancia, misma IP elástica, mismo disco y mismos datos. La
+compuerta de `infra-dev.yml` comprueba antes de aplicar que el tipo nuevo se
+ofrece en la zona real del host (`us-east-1f`). **Volver atrás:** revertir el PR
+de `instance_type`; es el mismo cambio al revés, con la misma compuerta.
+
+Las cifras de arriba son **solo de este host**. El segundo host, el de
+contenido (`../contenido/`, un `t3.small` desde el 8-sep-2026), vive en la
+cuenta del Grupo 2 y gasta de su crédito, no de este.
 
 > Memoria: 2 GiB corren el perfil de plataforma con `mem_limit` por contenedor,
 > pero no dan para el monorepo entero. La salida fue **un segundo `t3.small`**,
@@ -92,6 +103,55 @@ Dónde está probado el camino completo, además del entorno:
   duplicados y el final del combate.
 - El banco E2E (`tests/e2e/compose.yml`), que juega una partida entera con los
   servicios de verdad.
+
+## Red: qué puerto está abierto y a quién (B12)
+
+| Puerto | Origen admitido | Por qué |
+|---|---|---|
+| 22 | `cidr_ssh` = `0.0.0.0/0` | `cd.yml` entra por `scp`/`ssh` desde runners de GitHub, que no tienen IP fija. Solo con llave (la AMI no acepta contraseña). |
+| 80 | `0.0.0.0/0` | El borde (`infrastructure/red-balanceo/borde-dev.conf`): **la única puerta del público**. Con HTTPS activo redirige a https salvo `/salud-borde` y el reto de ACME. |
+| 443 | `0.0.0.0/0` | 28-sep: el mismo borde en HTTPS (Let's Encrypt, `scripts/cd/certificado.sh`). Abierto antes que el certificado: mientras no haya dominio, nadie escucha ahí. |
+| 8081-8088, 8089 | `cidr_servicios` = **`34.193.90.11/32`** | Solo el host de contenido llama a un puerto directo: sus servicios validan los tokens contra el JWKS de ms-identidad en `:8089` (`IDENTIDAD_JWKS_URL` en `docker-compose.contenido.yml`). |
+| 8090-8094 | nadie | ms-ecommerce, ms-cumplimiento, ms-subastas, ms-finanzas y ms-chatbot nunca estuvieron en el grupo de seguridad: se llega a ellos por el borde. |
+
+**Hasta B12 `cidr_servicios` valía `0.0.0.0/0`.** Cualquiera llegaba a los
+puertos directos saltándose el borde: al `/actuator` de cada servicio, a rutas
+entre servicios que el borde no publica a propósito (las de envío de correo,
+`/internal/notifications`) y a todo sin las cabeceras de seguridad ni el límite
+de frecuencia del borde. Las llamadas entre servicios de ESTE host no pasan por
+aquí: van por la red de Docker (`srv-ms-identidad:8089`…), así que cerrar estos
+puertos al público no corta nada de dentro. Ningún workflow llama a un puerto
+directo (`diagnostico-dev.yml` pregunta a `localhost` por SSH).
+
+**El cambio no reemplaza nada.** En el `aws_security_group` solo cambian los
+`cidr_blocks` de dos reglas `ingress`; ni el `name` ni la `description` del
+grupo (los dos atributos que obligan a recrearlo) se tocan, y la instancia
+referencia el grupo por su `id`, que sigue igual. El plan esperado es
+`0 to add, 1 to change, 0 to destroy` (`~ aws_security_group.plataforma`,
+actualización en sitio: el proveedor revoca las dos reglas abiertas y autoriza
+las dos nuevas), así que la compuerta «0 destroy y 0 replace» de
+`infra-dev.yml` lo deja pasar y se aplica solo al fusionar en `develop`. Entre
+la revocación y la autorización hay un instante sin regla: como mucho falla una
+descarga del JWKS desde contenido, que se repite en la petición siguiente.
+
+Si la IP elástica de contenido cambia algún día, se cambian a la vez
+`cidr_servicios`, los destinos de contenido del borde y las URL de
+`srv-salas-partidas` en `docker-compose.deploy.yml`.
+
+### Depurar contra un puerto directo
+
+1. **Primero, un túnel** (no toca el grupo de seguridad): con la llave de
+   despliegue, `ssh -N -L 8089:localhost:8089 ubuntu@35.168.124.119` y
+   `http://localhost:8089/...` en el portátil; sin la llave, Session Manager
+   (`aws ssm start-session --target <id-de-la-instancia> --document-name
+   AWS-StartPortForwardingSession --parameters portNumber=8089,localPortNumber=8089`),
+   que ya está habilitado en la instancia.
+2. **Si de verdad hace falta el puerto abierto a un portátil**: un PR que añade
+   `"<ip-propia>/32"` al `default` de `cidr_servicios`, con un comentario de
+   quién, para qué y hasta cuándo. El plan del PR lo enseña y la fusión lo
+   aplica. Al terminar, otro PR que lo quita. **Nunca a mano en la consola**:
+   no queda rastro de quién lo abrió, y el siguiente `apply` lo borra sin avisar
+   (o, peor, lo deja si nadie aplica).
 
 ## Operación (todo desde GitHub → Actions → "Infra dev (AWS Free Plan)")
 

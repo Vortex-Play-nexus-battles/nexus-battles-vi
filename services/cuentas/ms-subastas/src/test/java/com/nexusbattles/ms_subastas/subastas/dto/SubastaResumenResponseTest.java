@@ -55,7 +55,8 @@ class SubastaResumenResponseTest {
         assertEquals(0, new BigDecimal("300.00").compareTo(respuesta.precioCompraInmediata()));
         assertEquals(12, respuesta.cantidadPujas());
         assertTrue(respuesta.esMaestroDeJuego());
-        assertEquals(subasta.getVendedorId().toString(), respuesta.vendedorId());
+        // Para el canal en vivo (va a todos): sin esPropia.
+        assertNull(respuesta.esPropia());
     }
 
     @Test
@@ -79,16 +80,28 @@ class SubastaResumenResponseTest {
     }
 
     @Test
-    void vendedorIdSeConvierteATextoParaNoAtarseAUnTipoTodavia() {
-        // vendedorId como String es deliberado (ver Javadoc del record):
-        // su tipo final depende de la decision pendiente sobre el
-        // identificador estable en el JWT (discusion Andres/Edwin/Santiago).
+    void g5ElListadoDiceSiEsPropiaSinPublicarElUidDelVendedor() throws Exception {
         UUID vendedorId = UUID.randomUUID();
         Subasta subasta = subastaCompleta();
         subasta.setVendedorId(vendedorId);
 
-        SubastaResumenResponse respuesta = SubastaResumenResponse.desde(subasta);
+        SubastaResumenResponse suya = SubastaResumenResponse.desde(subasta, vendedorId);
+        SubastaResumenResponse ajena = SubastaResumenResponse.desde(subasta, UUID.randomUUID());
+        SubastaResumenResponse visitante = SubastaResumenResponse.desde(subasta, null);
 
-        assertEquals(vendedorId.toString(), respuesta.vendedorId());
+        assertEquals(Boolean.TRUE, suya.esPropia());
+        assertEquals(Boolean.FALSE, ajena.esPropia());
+        assertEquals(Boolean.FALSE, visitante.esPropia());
+        // Ningun campo del JSON lleva el uid del vendedor.
+        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper()
+            .findAndRegisterModules();
+        for (SubastaResumenResponse respuesta : java.util.List.of(suya, ajena, visitante,
+                SubastaResumenResponse.desde(subasta))) {
+            String texto = json.writeValueAsString(respuesta);
+            assertFalse(texto.contains(vendedorId.toString()), texto);
+            // El campo sigue en la forma (regla 2), pero vacio.
+            assertTrue(texto.contains("\"vendedorId\":null"), texto);
+        }
+        assertFalse(json.writeValueAsString(SubastaResumenResponse.desde(subasta)).contains("esPropia"));
     }
 }

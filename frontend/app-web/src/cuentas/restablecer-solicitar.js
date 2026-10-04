@@ -1,112 +1,143 @@
 // restablecer-solicitar.js
-// Vista de solicitud de restablecimiento de contraseña — HU-COR-003.
+// «Recuperar contraseña», paso 1 — HU-COR-003; B1 (identidad 2.0.0, 7.1.1).
 //
-// La logica de red vive en solicitarRestablecimiento(), exportada y con
-// fetchImpl inyectable (mismo patron que cambiarRol en cambio-rol.js) --
-// asi se puede probar sin depender de un fetch global real. El listener
-// del formulario es solo una capa delgada que la llama y actualiza el DOM.
+// Pide el código de recuperación para un correo. Lo que se dice después es
+// SIEMPRE lo mismo, exista o no la cuenta: «Si existe una cuenta asociada,
+// recibirás instrucciones.» Lo fija la interfaz (`MENSAJE_DE_SOLICITUD`) y no
+// el texto de la respuesta, para que ningún cambio de redacción en el
+// servidor pueda acabar diciendo qué correos están registrados.
+//
+// El correo se recuerda en esta pestaña (nunca en la URL) para que la
+// pantalla del código (`/restablecer`) lo traiga escrito.
 
-import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { CLAVES_DEL_CORREO, recordado, recordar } from '../comun/codigo-de-correo.js';
+import {
+  FalloDeRecuperacion,
+  MENSAJE_DE_SOLICITUD,
+  solicitarRestablecimiento,
+} from '../comun/recuperacion.js';
+import { montarCabecera } from '../comun/cabecera-app.js';
+import { limpiarAviso, pintarAviso } from '../comun/ui/aviso.js';
+import { conCarga } from '../comun/ui/boton.js';
+import { marcarErrorDe } from '../comun/ui/campo.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 
-const URL_SOLICITAR = '/api/v1/auth/restablecer/solicitar';
+// Se reexporta con su nombre de siempre: la llamada vive en `comun/`.
+export { solicitarRestablecimiento, MENSAJE_DE_SOLICITUD };
 
 /**
- * Lee el cuerpo de una respuesta que puede venir como JSON o texto plano.
+ * Qué decir si la solicitud no se pudo hacer. Ninguno de estos casos depende
+ * de que la cuenta exista: son el límite de peticiones, un correo mal escrito
+ * o un servicio caído.
  *
- * @param {Response} response
- * @returns {Promise<{status: number, body: unknown}>}
+ * @param {unknown} error
+ * @returns {{tono: 'error'|'advertencia', titulo: string, detalle: string}}
  */
-async function cuerpoDe(response) {
-  const texto = await response.text();
-
-  if (!texto) {
-    return { status: response.status, body: null };
+export function rechazoDeLaSolicitud(error) {
+  const estado = error instanceof FalloDeRecuperacion ? error.estado : 0;
+  if (estado === 429) {
+    return {
+      tono: 'advertencia',
+      titulo: 'Demasiadas solicitudes seguidas',
+      detalle: 'Espera un momento y vuelve a intentarlo.',
+    };
   }
-
-  try {
-    return { status: response.status, body: JSON.parse(texto) };
-  } catch {
-    return { status: response.status, body: texto };
+  if (estado >= 400 && estado < 500) {
+    return {
+      tono: 'advertencia',
+      titulo: 'Revisa el correo',
+      detalle: 'Escribe la dirección completa, por ejemplo tu@correo.com.',
+    };
   }
+  return {
+    tono: 'error',
+    titulo: 'No pudimos enviar la solicitud',
+    detalle: 'Inténtalo de nuevo en unos minutos.',
+  };
 }
 
 /**
- * Pide el restablecimiento de contraseña para un correo.
+ * Monta la vista sobre el marcado de `restablecer-solicitar.html`.
  *
- * El backend responde siempre el mismo mensaje generico, exista o no la
- * cuenta (para no permitir enumerar correos registrados) -- esta funcion
- * solo propaga ese mensaje, nunca distingue el caso.
- *
- * @param {string} email
- * @param {{fetchImpl?: Function}} [opciones]
- * @returns {Promise<string>} el mensaje a mostrar al usuario
- * @throws {Error} si el backend responde con error
+ * @param {ParentNode} raiz
+ * @param {{solicitar?: typeof solicitarRestablecimiento, almacen?: Storage}} [opciones]
  */
-export async function solicitarRestablecimiento(
-  email,
-  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+export function montarSolicitud(
+  raiz,
+  { solicitar = solicitarRestablecimiento, almacen = globalThis.sessionStorage } = {},
 ) {
-  const respuesta = await fetchImpl(URL_SOLICITAR, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+  const formulario = raiz.querySelector('#formSolicitud');
+  const campoEmail = raiz.querySelector('#email');
+  const botonEnviar = raiz.querySelector('#botonEnviar');
+  const estado = raiz.querySelector('#estadoSolicitud');
+  const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
+  const siguiente = raiz.querySelector('[data-zona="siguiente"]');
+  const escribirCodigo = raiz.querySelector('[data-zona="escribir-codigo"]');
+
+  const anterior = recordado(CLAVES_DEL_CORREO.recuperacion, almacen);
+  if (anterior && !campoEmail.value) {
+    campoEmail.value = anterior;
+  }
+
+  function decir(texto) {
+    estado.textContent = texto;
+    estado.hidden = !texto;
+  }
+
+  campoEmail.addEventListener('input', () => {
+    if (campoEmail.getAttribute('aria-invalid') === 'true') {
+      marcarErrorDe(campoEmail, null);
+    }
   });
 
-  const { body } = await cuerpoDe(respuesta);
+  formulario.addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    limpiarAviso(zonaAviso);
+    siguiente.hidden = true;
+    marcarErrorDe(campoEmail, null);
 
-  if (!respuesta.ok) {
-    const mensajeServidor = typeof body === 'string' ? body : body?.detail;
-    throw new Error(mensajeServidor || 'No se pudo procesar la solicitud.');
-  }
+    const email = campoEmail.value.trim();
+    if (!email || !campoEmail.checkValidity()) {
+      marcarErrorDe(campoEmail, 'Escribe el correo con el que creaste la cuenta.');
+      campoEmail.focus();
+      return;
+    }
 
-  return typeof body === 'string'
-    ? body
-    : 'Si el correo está registrado, recibirás un mensaje con instrucciones.';
+    conCarga(botonEnviar, true, 'Enviando…');
+    decir('Enviando la solicitud…');
+    try {
+      const mensaje = await solicitar(email);
+      recordar(CLAVES_DEL_CORREO.recuperacion, email, almacen);
+      decir('');
+      pintarAviso(zonaAviso, {
+        tono: 'info',
+        titulo: mensaje,
+        detalle:
+          'El código llega al correo de la cuenta, caduca pronto y solo sirve una vez. Si no lo ves, revisa la carpeta de correo no deseado.',
+      });
+      siguiente.hidden = false;
+      escribirCodigo.focus();
+    } catch (error) {
+      decir('');
+      pintarAviso(zonaAviso, rechazoDeLaSolicitud(error));
+      zonaAviso.focus();
+    } finally {
+      conCarga(botonEnviar, false);
+    }
+  });
+
+  // G1 — la vista ya escucha `submit`: el botón se puede encender.
+  formularioListo(formulario);
 }
 
-const form = document.getElementById('formSolicitud');
-const botonEnviar = document.getElementById('botonEnviar');
-const estadoSolicitud = document.getElementById('estadoSolicitud');
+// ---------------------------------------------------------------- arranque
 
-// Referencia explicita, no acceso implicito por nombre (form.email) --
-// mismo motivo que en restablecer-confirmar.js: funciona en un navegador
-// real, pero no es confiable en el entorno de pruebas (JSDOM).
-const campoEmail = document.getElementById('email');
-
-/**
- * @param {string} texto
- * @param {'carga'|'error'|'exito'} tipo
- */
-function setEstado(texto, tipo) {
-  estadoSolicitud.textContent = texto;
-  estadoSolicitud.className = `estado ${tipo}`;
-  estadoSolicitud.hidden = false;
+if (document.body?.dataset.vista === 'restablecer-solicitar') {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra.
+  sinCredencialesEnLaDireccion();
+  montarCabecera(document.querySelector('[data-cabecera-app]'), {
+    vista: 'restablecer-solicitar',
+    seccionActiva: null,
+  });
+  montarSolicitud(document);
 }
-
-function ocultarEstado() {
-  estadoSolicitud.hidden = true;
-}
-
-form?.addEventListener('submit', async (evento) => {
-  evento.preventDefault();
-
-  ocultarEstado();
-
-  if (!form.checkValidity()) {
-    form.reportValidity();
-    return;
-  }
-
-  botonEnviar.disabled = true;
-  setEstado('Enviando…', 'carga');
-
-  try {
-    const mensaje = await solicitarRestablecimiento(campoEmail.value.trim());
-    setEstado(mensaje, 'exito');
-    form.reset();
-  } catch (error) {
-    setEstado(error.message, 'error');
-  } finally {
-    botonEnviar.disabled = false;
-  }
-});

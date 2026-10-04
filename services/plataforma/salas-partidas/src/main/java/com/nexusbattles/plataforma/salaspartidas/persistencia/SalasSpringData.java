@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -46,4 +47,14 @@ interface SalasSpringData extends JpaRepository<SalaEntidad, UUID> {
                              @Param("modalidad") Modalidad modalidad,
                              @Param("estado") EstadoSala estado,
                              Pageable paginado);
+
+    /** Salas en alguno de esos estados creadas antes del limite (abandono). */
+    @Query("""
+            SELECT s FROM SalaEntidad s
+            WHERE s.estado IN :estados AND s.creadaEn <= :limite
+            ORDER BY s.creadaEn
+            """)
+    List<SalaEntidad> creadasAntesDe(@Param("estados") Collection<EstadoSala> estados,
+                                     @Param("limite") java.time.Instant limite,
+                                     Pageable lote);
 }

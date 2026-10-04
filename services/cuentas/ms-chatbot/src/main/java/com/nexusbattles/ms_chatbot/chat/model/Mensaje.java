@@ -66,11 +66,19 @@ public class Mensaje {
     private Integer tiempoRespuestaMs;
 
     public Mensaje(Conversacion conversacion, Remitente remitente, String contenido, String adjuntoUrl) {
+        this(conversacion, remitente, contenido, adjuntoUrl, Instant.now());
+    }
+
+    // B11: el mensaje del usuario se guarda despues de generar la respuesta
+    // (ninguna llamada HTTP dentro de la transaccion), pero con la hora en que
+    // llego, para que el historial siga en orden: pregunta y luego respuesta.
+    public Mensaje(Conversacion conversacion, Remitente remitente, String contenido, String adjuntoUrl,
+                   Instant fechaEnvio) {
         this.conversacion = conversacion;
         this.remitente = remitente;
         this.contenido = contenido;
         this.adjuntoUrl = adjuntoUrl;
-        this.fechaEnvio = Instant.now();
+        this.fechaEnvio = fechaEnvio;
     }
 
     // HU-CHA-012: lo que las analiticas necesitan saber de una respuesta del

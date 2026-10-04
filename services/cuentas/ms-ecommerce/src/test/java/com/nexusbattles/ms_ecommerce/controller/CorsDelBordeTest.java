@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_ecommerce.controller;
 
+import com.nexusbattles.ms_ecommerce.precios.Moneda;
 import com.nexusbattles.ms_ecommerce.dto.AgregarItemRequest;
 import com.nexusbattles.ms_ecommerce.dto.CarritoDto;
 import com.nexusbattles.ms_ecommerce.seguridad.ConfiguracionCors;
@@ -67,7 +68,7 @@ class CorsDelBordeTest {
     @Test
     @DisplayName("desde el origen del borde, el POST del navegador llega: 200 y la cabecera CORS")
     void elBordePuedeAnadir() throws Exception {
-        when(carritoService.agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class)))
+        when(carritoService.agregarProducto(eq(UID.toString()), any(AgregarItemRequest.class), eq(Moneda.COP)))
                 .thenReturn(new CarritoDto(1L, UID.toString(), List.of(), BigDecimal.ZERO, null));
 
         mvc.perform(post("/api/v1/carrito/items")

@@ -66,11 +66,13 @@
 
         <!--
           Zona de carga del ui-kit (RF-COM-001). Es tambien un boton que abre el
-          selector de archivos; arrastrar nunca es la unica via. Los formatos
-          admitidos los decide el servicio (pendientes de definir con el PO).
+          selector de archivos; arrastrar nunca es la unica via. Desde B3
+          (comentarios.yaml 1.5.0) el servicio guarda las imagenes: JPEG, PNG o
+          WebP por la firma de sus bytes, 2 MB y 4096 px como mucho, tres por
+          comentario. Se suben al publicar y el comentario lleva sus id.
         -->
         <div class="campo">
-          <span class="campo__etiqueta" id="etiqueta-imagenes">Imagenes</span>
+          <span class="campo__etiqueta" id="etiqueta-imagenes">Imágenes</span>
           <div
             class="zona-carga"
             data-zona="carga"
@@ -83,7 +85,7 @@
               type="file"
               name="imagenes"
               id="imagenes"
-              accept="image/*"
+              accept="image/jpeg,image/png,image/webp"
               multiple
               tabindex="-1"
             />
@@ -91,7 +93,10 @@
               <use href="../../../../../shared/ui-kit/iconos/sprite.svg#mas" />
             </svg>
             <p class="zona-carga__titulo">Arrastra tus imágenes o pulsa para elegirlas</p>
-            <p class="zona-carga__ayuda">Opcional. Puedes quitar cualquiera antes de publicar.</p>
+            <p class="zona-carga__ayuda">
+              Opcional: hasta 3 imágenes JPEG, PNG o WebP de 2 MB. Puedes quitar cualquiera antes de
+              publicar.
+            </p>
             <ul class="zona-carga__miniaturas" data-zona="miniaturas" aria-live="polite"></ul>
           </div>
         </div>

@@ -20,16 +20,17 @@
  */
 
 import { armarFrame, conectarStomp, leerFrame } from '../../comun/transporte-stomp.js';
+import { textoDelServidor, tituloDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 export { armarFrame, leerFrame };
 
 /** Error de negocio recibido por la cola privada, ya interpretado. */
 export class ErrorDeCanal extends Error {
   constructor(problema) {
-    super(problema?.detail || problema?.title || 'El chat no pudo entregar el mensaje.');
+    super(textoDelServidor(problema, problema?.status, 'El chat no pudo entregar el mensaje.'));
     this.name = 'ErrorDeCanal';
     this.tipo = problema?.type ?? null;
-    this.titulo = problema?.title ?? 'No se pudo enviar';
+    this.titulo = tituloDelServidor(problema, 'No se pudo enviar');
     this.detalle = this.message;
     this.estado = problema?.status ?? 0;
   }

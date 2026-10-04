@@ -40,47 +40,16 @@
  */
 
 import { consultarEstadisticasDelHeroe } from './cliente-inventario.js';
-import { consultarFichaDeHeroe } from './cliente-heroes.js';
-
-/** Las tres cifras escalares, en el orden en que se leen. */
-const ESTADISTICAS = Object.freeze([
-  ['poder', 'Poder'],
-  ['vida', 'Vida'],
-  ['defensa', 'Defensa'],
-]);
-
-/** Y las tres que son formulas de dados. */
-const FORMULAS = Object.freeze([
-  ['ataque', 'Ataque'],
-  ['dano', 'Daño'],
-  ['sanar', 'Sanación'],
-]);
+import { consultarFichaDeHeroe, consultarVistaPorNivel } from './cliente-heroes.js';
+import { bloqueDeEstadisticas } from '../../comun/ui/juego/estadisticas.js';
+import { icono } from '../../comun/ui/icono.js';
 
 /**
- * Una formula de dados, dicha como la escribiria una persona.
- *
- * El contrato la manda descompuesta (`{base, cantidadDados, caras}`) para no
- * obligar a nadie a parsear una cadena. Aqui se vuelve a juntar para leerla:
- * `10 + 1d6`, o solo `10` si no hay dados, o solo `1d6` si no hay base.
- *
- * @param {{base?: number, cantidadDados?: number, caras?: number}|null} formula
- * @returns {string|null} `null` si no hay nada que decir.
+ * Una formula de dados, dicha como la escribiria una persona. Vive ahora en
+ * el bloque de estadisticas compartido (UXC-1); se reexporta para quien ya la
+ * importaba de aqui.
  */
-export function formulaLegible(formula) {
-  if (!formula || typeof formula !== 'object') {
-    return null;
-  }
-  const { base, cantidadDados, caras } = formula;
-  const dados =
-    Number.isFinite(cantidadDados) && Number.isFinite(caras) && cantidadDados > 0 && caras > 0
-      ? `${cantidadDados}d${caras}`
-      : null;
-  const conBase = Number.isFinite(base) && base !== 0 ? String(base) : null;
-  if (conBase && dados) {
-    return `${conBase} + ${dados}`;
-  }
-  return conBase ?? dados;
-}
+export { formulaLegible } from '../../comun/ui/juego/estadisticas.js';
 
 /**
  * El bloque de estadisticas del heroe del jugador.
@@ -89,32 +58,13 @@ export function formulaLegible(formula) {
  * @returns {HTMLElement|null} `null` si no trae ni una cifra utilizable.
  */
 export function construirEstadisticas(estadisticas) {
-  if (!estadisticas || typeof estadisticas !== 'object') {
+  // UXC-1 — el bloque compartido (StatBlock): el mismo que la carta del heroe
+  // y la cabecera del panel de equipamiento. Lo ausente no se pinta.
+  const bloque = bloqueDeEstadisticas(estadisticas);
+  if (!bloque) {
     return null;
   }
-
-  const lista = document.createElement('dl');
-  lista.className = 'ficha__atributos';
-
-  for (const [campo, etiqueta] of ESTADISTICAS) {
-    const valor = estadisticas[campo];
-    if (!Number.isFinite(valor)) {
-      continue;
-    }
-    lista.append(...parDeDatos(etiqueta, String(valor)));
-  }
-  for (const [campo, etiqueta] of FORMULAS) {
-    const legible = formulaLegible(estadisticas[campo]);
-    if (legible === null) {
-      continue;
-    }
-    lista.append(...parDeDatos(etiqueta, legible));
-  }
-
-  if (lista.children.length === 0) {
-    return null;
-  }
-  return conTitulo('Tus estadísticas', 'Con lo que llevas equipado.', lista);
+  return conTitulo('Tus estadísticas', 'Con lo que llevas equipado.', bloque);
 }
 
 /**
@@ -123,10 +73,13 @@ export function construirEstadisticas(estadisticas) {
  * @param {object} ficha respuesta del catalogo de heroes.
  * @returns {HTMLElement|null}
  */
-export function construirAccionesDelPrototipo(ficha) {
+export function construirAccionesDelPrototipo(ficha, { aprendidas = null } = {}) {
   if (!ficha || typeof ficha !== 'object') {
     return null;
   }
+  // UXC-9 — con la vista por nivel, cuáles sabe ya este héroe (las demás se
+  // desbloquean al subir de nivel; el catálogo no las da todas desde el 1).
+  const sabe = Array.isArray(aprendidas) ? new Set(aprendidas.map((a) => a?.nombre)) : null;
   const acciones = Array.isArray(ficha.acciones) ? ficha.acciones : [];
   if (acciones.length === 0) {
     return null;
@@ -138,20 +91,54 @@ export function construirAccionesDelPrototipo(ficha) {
     if (!accion?.nombre) {
       continue;
     }
+    // UXC-1 — cada accion como carta: nombre, lo que cuesta, lo que hace y su
+    // carga. El texto del coste es del catalogo y se muestra tal cual; el
+    // numero solo se destaca si el texto lo trae.
     const punto = document.createElement('li');
+    punto.className = 'ficha__accion';
+    const bloqueada = sabe !== null && !sabe.has(accion.nombre);
+    if (bloqueada) {
+      punto.classList.add('ficha__accion--bloqueada');
+    }
+    const cabeza = document.createElement('p');
+    cabeza.className = 'ficha__accion-cabeza';
+    cabeza.append(icono('rayo', { clase: 'icono ficha__accion-icono', etiqueta: null }));
     const nombre = document.createElement('strong');
     nombre.textContent = accion.nombre;
-    punto.append(nombre);
-    // El costo lo compone el servidor como texto («2 puntos de poder»): se
-    // muestra tal cual, sin volver a interpretarlo.
+    cabeza.append(nombre);
+    punto.append(cabeza);
+
+    const datos = document.createElement('p');
+    datos.className = 'ficha__accion-datos';
     if (accion.costo) {
-      punto.append(document.createTextNode(` · ${accion.costo}`));
+      const coste = document.createElement('span');
+      coste.className = 'ficha__accion-coste';
+      coste.textContent = accion.costo;
+      datos.append(coste);
     }
+    // §6.1.2: «estas acciones solo aplican en el turno, tiene un turno de
+    // carga». Es regla del documento, igual para las tres.
+    const carga = document.createElement('span');
+    carga.className = 'ficha__accion-carga';
+    carga.append(icono('reloj', { clase: 'icono', etiqueta: null }));
+    carga.append(document.createTextNode('1 turno de carga'));
+    datos.append(carga);
+    punto.append(datos);
+
     if (accion.efecto) {
       const efecto = document.createElement('p');
       efecto.className = 'ficha__accion-efecto';
       efecto.textContent = accion.efecto;
       punto.append(efecto);
+    }
+    if (bloqueada) {
+      const aviso = document.createElement('p');
+      aviso.className = 'ficha__accion-bloqueo';
+      aviso.append(icono('candado', { clase: 'icono', etiqueta: null }));
+      aviso.append(
+        document.createTextNode('Todavía no la aprendió: se desbloquea al subir de nivel.'),
+      );
+      punto.append(aviso);
     }
     lista.append(punto);
   }
@@ -159,7 +146,10 @@ export function construirAccionesDelPrototipo(ficha) {
     return null;
   }
 
-  const nota = ficha.esSanador === true ? 'Prototipo sanador.' : 'Iguales para este prototipo.';
+  const nota =
+    ficha.esSanador === true
+      ? 'Prototipo sanador. Cada acción gasta poder y el poder se recupera 2 puntos por turno durante el combate.'
+      : 'Iguales para este prototipo. Cada acción gasta poder y el poder se recupera 2 puntos por turno durante el combate.';
   return conTitulo('Acciones', nota, lista);
 }
 
@@ -180,14 +170,21 @@ export async function construirDetalleDeHeroe({
   identidad,
   heroeId,
   prototipo = null,
+  nivel = null,
   estadisticasDe = consultarEstadisticasDelHeroe,
   fichaDe = consultarFichaDeHeroe,
+  vistaDe = consultarVistaPorNivel,
 }) {
   const peticiones = [
     heroeId ? estadisticasDe(identidad, heroeId) : Promise.reject(new Error('sin heroe')),
     prototipo ? fichaDe(prototipo) : Promise.reject(new Error('sin prototipo')),
+    // UXC-9 — con el nivel del inventario, el prototipo en ese nivel.
+    prototipo && Number.isInteger(nivel)
+      ? vistaDe(prototipo, nivel)
+      : Promise.reject(new Error('sin nivel')),
   ];
-  const [estadisticas, ficha] = await Promise.allSettled(peticiones);
+  const [estadisticas, ficha, vista] = await Promise.allSettled(peticiones);
+  const enSuNivel = vista.status === 'fulfilled' ? vista.value : null;
 
   const bloques = [];
   if (estadisticas.status === 'fulfilled') {
@@ -197,37 +194,77 @@ export async function construirDetalleDeHeroe({
     }
   }
   if (ficha.status === 'fulfilled') {
-    const bloque = construirAccionesDelPrototipo(ficha.value);
+    const bloque = construirAccionesDelPrototipo(ficha.value, {
+      aprendidas: enSuNivel?.accionesDisponibles ?? null,
+    });
     if (bloque) {
       bloques.push(bloque);
     }
+  }
+  const epica = construirEpicaAfin(enSuNivel?.epica);
+  if (epica) {
+    bloques.push(epica);
   }
   return bloques;
 }
 
 /**
- * Una fila de la lista, con el mismo marcado que las filas de atributos de la
- * ficha (`ficha__atributo`, `ficha__etiqueta`, `ficha__valor`).
+ * UXC-9 — la épica afín del prototipo (§6.1.2, Tabla 20; `EpicaVista` de
+ * heroes.yaml): no gasta poder y tiene su recarga; para este héroe, además,
+ * su efecto potenciado.
  *
- * Se repite ese marcado en vez de importarlo porque `ficha-producto.js` ya
- * importa este modulo, y pedirle el constructor de vuelta cerraria un ciclo.
- * Las clases son las mismas a proposito: asi estas filas se ven exactamente
- * igual que las de arriba y no hace falta CSS nuevo para ellas.
+ * @param {{nombre: string, efectoGeneral?: string, efectoPotenciado?: string,
+ *   turnosDeRecarga?: number}|null|undefined} epica
+ * @returns {HTMLElement|null}
  */
-function parDeDatos(etiqueta, valor) {
-  const fila = document.createElement('div');
-  fila.className = 'ficha__atributo';
+export function construirEpicaAfin(epica) {
+  if (!epica?.nombre) {
+    return null;
+  }
+  const carta = document.createElement('div');
+  carta.className = 'ficha__epica';
+  const cabeza = document.createElement('p');
+  cabeza.className = 'ficha__accion-cabeza';
+  cabeza.append(icono('estrella-llena', { clase: 'icono ficha__accion-icono', etiqueta: null }));
+  const nombre = document.createElement('strong');
+  nombre.textContent = epica.nombre;
+  cabeza.append(nombre);
+  carta.append(cabeza);
 
-  const termino = document.createElement('dt');
-  termino.className = 'ficha__etiqueta';
-  termino.textContent = etiqueta;
+  const datos = document.createElement('p');
+  datos.className = 'ficha__accion-datos';
+  const coste = document.createElement('span');
+  coste.className = 'ficha__accion-coste';
+  coste.textContent = 'Sin coste de poder';
+  datos.append(coste);
+  if (Number.isInteger(epica.turnosDeRecarga)) {
+    const recarga = document.createElement('span');
+    recarga.className = 'ficha__accion-carga';
+    recarga.append(icono('reloj', { clase: 'icono', etiqueta: null }));
+    recarga.append(
+      document.createTextNode(
+        `${epica.turnosDeRecarga} ${epica.turnosDeRecarga === 1 ? 'turno' : 'turnos'} de recarga`,
+      ),
+    );
+    datos.append(recarga);
+  }
+  carta.append(datos);
 
-  const dato = document.createElement('dd');
-  dato.className = 'ficha__valor';
-  dato.textContent = valor;
-
-  fila.append(termino, dato);
-  return [fila];
+  for (const [clase, texto] of [
+    ['ficha__accion-efecto', epica.efectoGeneral],
+    [
+      'ficha__accion-efecto',
+      epica.efectoPotenciado ? `Para este héroe: ${epica.efectoPotenciado}` : null,
+    ],
+  ]) {
+    if (texto) {
+      const parrafo = document.createElement('p');
+      parrafo.className = clase;
+      parrafo.textContent = texto;
+      carta.append(parrafo);
+    }
+  }
+  return conTitulo('Épica afín', 'La épica que mejor le va a este prototipo.', carta);
 }
 
 function conTitulo(texto, nota, contenido) {

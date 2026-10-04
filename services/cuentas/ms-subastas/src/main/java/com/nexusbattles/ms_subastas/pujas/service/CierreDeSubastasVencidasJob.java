@@ -31,7 +31,8 @@ public class CierreDeSubastasVencidasJob {
     private final PujaApplicationService pujaApplicationService;
     private final Clock clock;
 
-    @Scheduled(fixedDelayString = "${app.subastas.cierre-intervalo-ms:30000}")
+    @Scheduled(fixedDelayString = "${app.subastas.cierre-intervalo-ms:30000}",
+            initialDelayString = "${app.subastas.cierre-intervalo-ms:30000}")
     public void cerrarVencidas() {
         for (UUID subastaId : subastaRepository.findIdsDeActivasVencidas(clock.instant())) {
             try {

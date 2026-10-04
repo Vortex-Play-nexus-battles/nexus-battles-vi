@@ -1,0 +1,370 @@
+{
+  "consumer": {
+    "name": "ms-ecommerce"
+  },
+  "interactions": [
+    {
+      "description": "el reintento de una entrega ya hecha",
+      "providerStates": [
+        {
+          "name": "la entrega con esa clave ya se hizo con el mismo cuerpo"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "COMPRA",
+          "productos": [
+            {
+              "cantidad": 2,
+              "productoId": "5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a"
+            }
+          ],
+          "referencia": "8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d",
+          "uid": "7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f-]{36}"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "status": 200
+      }
+    },
+    {
+      "description": "la entrega de una compra cobrada",
+      "providerStates": [
+        {
+          "name": "los productos de la entrega existen y no estan suspendidos"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "COMPRA",
+          "productos": [
+            {
+              "cantidad": 2,
+              "productoId": "5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a"
+            }
+          ],
+          "referencia": "8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d",
+          "uid": "7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f-]{36}"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "status": 201
+      }
+    },
+    {
+      "description": "la entrega de una compra con un producto suspendido",
+      "providerStates": [
+        {
+          "name": "un producto de la entrega esta suspendido"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "COMPRA",
+          "productos": [
+            {
+              "cantidad": 2,
+              "productoId": "5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a"
+            }
+          ],
+          "referencia": "8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d",
+          "uid": "7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f-]{36}"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "status": 409
+      }
+    },
+    {
+      "description": "la entrega de una compra con un producto que no existe",
+      "providerStates": [
+        {
+          "name": "un producto de la entrega no existe en el catalogo"
+        }
+      ],
+      "request": {
+        "body": {
+          "origen": "COMPRA",
+          "productos": [
+            {
+              "cantidad": 2,
+              "productoId": "5b0a3c1e-8d7f-4e2a-9c6b-1f0e2d3c4b5a"
+            }
+          ],
+          "referencia": "8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d",
+          "uid": "7a1e1c4e-2d2b-4b6e-9a0f-0d1c2b3a4f55"
+        },
+        "headers": {
+          "Content-Type": "application/json",
+          "Idempotency-Key": "orden-8f14e45f-ceea-467a-a8a1-6a6d1e1b0c3d"
+        },
+        "matchingRules": {
+          "body": {
+            "$.productos": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.productos[*].cantidad": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "integer"
+                }
+              ]
+            },
+            "$.productos[*].productoId": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.referencia": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f-]{36}"
+                }
+              ]
+            },
+            "$.uid": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+                }
+              ]
+            }
+          },
+          "header": {
+            "Idempotency-Key": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "regex",
+                  "regex": "orden-[0-9a-f-]{36}"
+                }
+              ]
+            }
+          }
+        },
+        "method": "POST",
+        "path": "/api/v1/inventario/entregas"
+      },
+      "response": {
+        "status": 422
+      }
+    }
+  ],
+  "metadata": {
+    "pact-jvm": {
+      "version": "4.6.17"
+    },
+    "pactSpecification": {
+      "version": "3.0.0"
+    }
+  },
+  "provider": {
+    "name": "inventario"
+  }
+}

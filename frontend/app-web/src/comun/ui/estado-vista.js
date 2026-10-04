@@ -61,7 +61,18 @@ export function estadoDeCarga({ filas = 3, etiqueta = 'Cargando…' } = {}) {
     clase: 'estado-vista estado-vista--cargando',
     datos: { estado: 'cargando' },
     // `polite`: avisa al lector de pantalla sin cortar lo que este leyendo.
-    atributos: { 'aria-busy': 'true', 'aria-live': 'polite', 'aria-label': etiqueta },
+    //
+    // R17.4 — `role="status"`, como los otros dos estados. Un `div` sin rol es
+    // genérico y ARIA le prohíbe el nombre: axe marcaba `aria-prohibited-attr`
+    // (serio) en cada zona que seguía cargando, y en AWS el inicio de la
+    // primera sesión lo enseñaba cuatro veces. `status` sí admite nombre, y es
+    // lo que esto es: un aviso de estado.
+    atributos: {
+      role: 'status',
+      'aria-busy': 'true',
+      'aria-live': 'polite',
+      'aria-label': etiqueta,
+    },
   });
   caja.append(esqueletoDeLista(filas));
   return caja;

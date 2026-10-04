@@ -135,3 +135,26 @@ function aFecha(valor) {
   const fechaValor = valor instanceof Date ? valor : new Date(valor);
   return Number.isNaN(fechaValor.getTime()) ? null : fechaValor;
 }
+
+/**
+ * Nombre de cada tipo de producto del catálogo (`TipoProducto`, el mismo enum
+ * en productos, inventario y subastas). UXC-8 — había cuatro copias de esta
+ * tabla (ficha de producto, catálogo de la consola, subastas, publicar); una
+ * sola aquí, y las demás la importan.
+ */
+export const NOMBRE_DEL_TIPO = Object.freeze({
+  HEROE: 'Héroe',
+  HABILIDAD: 'Habilidad',
+  ARMA: 'Arma',
+  ARMADURA: 'Armadura',
+  ITEM: 'Ítem',
+  EPICA: 'Épica',
+});
+
+/**
+ * @param {string|null|undefined} tipo la constante del contrato
+ * @returns {string} el nombre para leer; «Objeto» si no vino ninguno
+ */
+export function nombreDelTipo(tipo) {
+  return NOMBRE_DEL_TIPO[tipo] ?? (tipo ? String(tipo) : 'Objeto');
+}

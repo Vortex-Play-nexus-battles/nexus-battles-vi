@@ -6,6 +6,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,8 +39,12 @@ import com.nexusbattles.ms_finanzas.partidas.ResultadoPartidaResponse.Acreditaci
  *       (por si por alguna razón la fila {@code partida_procesada} se
  *       creara pero fallara la acreditación después — ese refId nunca
  *       aplicaría dos veces).</li>
- *   <li>Llama a {@link CofreService} para que el jugador acumule los
- *       créditos ganados de la semana y reciba el cofre si corresponde.</li>
+ *   <li>Llama a {@link CofreService} con los créditos de los GANADORES —
+ *       §7.6: «veinte (20) créditos en juegos ganados»; el crédito de
+ *       participar no cuenta (cofres.yaml 1.1.0, B7)— para que acumulen hacia
+ *       su cofre y lo reciban si completan la cuota.</li>
+ *   <li>Los cofres ganados se entregan al inventario DESPUÉS de confirmar la
+ *       transacción ({@link EntregaDeCofres}), nunca dentro.</li>
  * </ol>
  *
  * <p>Nota: {@code CreditoService} vive en el mismo módulo Java, así que se
@@ -58,16 +63,19 @@ public class AcreditacionPartidaService {
     private final PartidaProcesadaRepository partidaProcesadaRepositorio;
     private final CreditoService creditoService;
     private final CofreService cofreService;
+    private final EntregaDeCofres entregaDeCofres;
     private final Clock reloj;
 
     public AcreditacionPartidaService(
             PartidaProcesadaRepository partidaProcesadaRepositorio,
             CreditoService creditoService,
             CofreService cofreService,
+            EntregaDeCofres entregaDeCofres,
             Clock reloj) {
         this.partidaProcesadaRepositorio = partidaProcesadaRepositorio;
         this.creditoService = creditoService;
         this.cofreService = cofreService;
+        this.entregaDeCofres = entregaDeCofres;
         this.reloj = reloj;
     }
 
@@ -80,6 +88,7 @@ public class AcreditacionPartidaService {
 
         List<AcreditacionAplicada> acreditaciones = new ArrayList<>();
         List<String> sancionadosExcluidos = new ArrayList<>();
+        List<UUID> cofresGanados = new ArrayList<>();
         List<String> ganadores = req.ganadores();
 
         for (ParticipantePartidaRequest participante : req.participantes()) {
@@ -96,8 +105,12 @@ public class AcreditacionPartidaService {
             creditoService.acreditar(new AcreditarRequest(
                     participante.uid(), BigDecimal.valueOf(monto), refId, concepto));
 
-            Optional<CofreEntregado> cofre = cofreService.registrarCreditosGanados(
-                    participante.uid(), monto);
+            // Solo los créditos de una partida GANADA cuentan para el cofre
+            // (§7.6); el de participar no (cofres.yaml 1.1.0).
+            Optional<CofreEntregado> cofre = esGanador
+                    ? cofreService.registrarCreditosGanados(participante.uid(), monto)
+                    : Optional.empty();
+            cofre.map(CofreEntregado::getId).ifPresent(cofresGanados::add);
 
             acreditaciones.add(new AcreditacionAplicada(
                     participante.uid(), monto, esGanador,
@@ -109,6 +122,7 @@ public class AcreditacionPartidaService {
         marca.setProcesadoEn(Instant.now(reloj));
         partidaProcesadaRepositorio.save(marca);
 
+        entregaDeCofres.entregarTrasConfirmar(cofresGanados);
         return new ResultadoPartidaResponse(req.partidaId(), acreditaciones, sancionadosExcluidos);
     }
 

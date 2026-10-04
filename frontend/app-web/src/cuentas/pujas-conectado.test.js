@@ -48,7 +48,7 @@ function apiFalsa(sobrescribir = {}) {
         vasGanando: false,
         teSuperaron: false,
         tuOfertaVigente: null,
-        retenidoAqui: '0',
+        creditosRetenidos: '0',
         limiteAutomatico: null,
         automaticaActiva: false,
         segundosParaVolverAPujar: 0,
@@ -208,7 +208,8 @@ describe('datos propios del detalle', () => {
         vasGanando: true,
         teSuperaron: false,
         tuOfertaVigente: '1450',
-        retenidoAqui: '1450',
+        // B8 — el nombre del contrato (ms-subastas-pujas.yaml).
+        creditosRetenidos: '1450',
         limiteAutomatico: '2000',
         automaticaActiva: true,
         segundosParaVolverAPujar: 3,
@@ -782,5 +783,414 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
 
     expect(falso.cliente.cerrar).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------- B8
+
+describe('B8 — las reglas las dice el servidor', () => {
+  const REGLAS = {
+    duraciones: [
+      { codigo: '24H', horas: 24, comision: '1' },
+      { codigo: '48H', horas: 48, comision: '3' },
+    ],
+    incrementoMinimo: '25',
+    incrementoMinimoConfigurado: true,
+    maxSubastasActivasPorJugador: 10,
+    maxPujasActivasPorJugador: 40,
+    intervaloMinimoSegundos: 7,
+    penalizacionCancelacionPorcentaje: 50,
+    cancelacionProhibidaUltimasHoras: 6,
+    recordatorioMinutosAntesDelCierre: 60,
+    diasParaRecoger: 7,
+    alVencerPendientes: 'ENTREGAR',
+  };
+
+  test('aplica el incremento, el intervalo y el tope de pujas de GET /subastas/reglas', async () => {
+    const api = apiFalsa({ reglas: jest.fn(async () => REGLAS) });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+
+    await ctrl.iniciar();
+
+    expect(api.reglas).toHaveBeenCalled();
+    expect(ctrl.config.incrementoMinimo).toBe(25);
+    expect(ctrl.config.intervaloSegundos).toBe(7);
+    expect(ctrl.config.maxPujasActivas).toBe(40);
+    ctrl.destruir();
+  });
+
+  test('sin incremento configurado no inventa uno y el detalle dice que falta configurarlo', async () => {
+    const api = apiFalsa({
+      reglas: jest.fn(async () => ({
+        ...REGLAS,
+        incrementoMinimo: null,
+        incrementoMinimoConfigurado: false,
+      })),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api });
+    await ctrl.iniciar();
+
+    ctrl.abrirDetalle('sub-1');
+    await ctrl.cargarDetalle('sub-1');
+
+    expect(ctrl.config.incrementoMinimo).toBeNull();
+    expect(caja.querySelector('[data-incremento-minimo="sin-configurar"]').textContent).toContain(
+      'no está configurado',
+    );
+    expect(caja.textContent).not.toContain('DECISIÓN PO');
+    expect(caja.textContent).not.toContain('(+50)');
+    ctrl.destruir();
+  });
+
+  test('si las reglas no llegan se sigue con el respaldo, sin incremento', async () => {
+    const api = apiFalsa({
+      reglas: jest.fn(async () => {
+        throw new Error('sin red');
+      }),
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+
+    await ctrl.iniciar();
+
+    expect(ctrl.config.incrementoMinimo).toBeNull();
+    expect(ctrl.config.intervaloSegundos).toBe(5);
+    ctrl.destruir();
+  });
+});
+
+describe('B8 — la ficha de la subasta (GET /subastas/{id})', () => {
+  test('la puja minima y el incremento de ESTA subasta salen de la ficha', async () => {
+    const api = apiFalsa({
+      ficha: jest.fn(async () => ({
+        id: 'sub-1',
+        estado: 'ACTIVA',
+        ofertaVigente: '1350',
+        pujaMinimaSiguiente: '1360',
+        incrementoMinimo: '10',
+        compraInmediataDisponible: true,
+        cantidadPujas: 3,
+        vendedorApodo: 'forjador',
+      })),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api });
+    await ctrl.iniciar();
+
+    ctrl.abrirDetalle('sub-1');
+    await ctrl.cargarDetalle('sub-1');
+
+    expect(api.ficha).toHaveBeenCalledWith('sub-1');
+    const atajo = caja.querySelector('.btn-atajo');
+    expect(atajo.getAttribute('data-monto')).toBe('1360');
+    expect(atajo.textContent).toContain('(+10)');
+    expect(caja.textContent).toContain('Incremento mínimo: 10 créditos');
+    ctrl.destruir();
+  });
+
+  test('la primera puja es el precio minimo, sin incremento', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => [subastaDelServidor({ oferta: 100, rivales: 0 })]),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api });
+    await ctrl.iniciar();
+
+    ctrl.abrirDetalle('sub-1');
+
+    const atajo = caja.querySelector('.btn-atajo');
+    expect(atajo.getAttribute('data-monto')).toBe('100');
+    expect(atajo.textContent).toContain('precio mínimo');
+    ctrl.destruir();
+  });
+
+  test('una compra inmediata superada por una puja se ofrece desactivada y lo explica', async () => {
+    const api = apiFalsa({
+      ficha: jest.fn(async () => ({
+        id: 'sub-1',
+        estado: 'ACTIVA',
+        compraInmediataDisponible: false,
+      })),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api });
+    await ctrl.iniciar();
+
+    ctrl.abrirDetalle('sub-1');
+    await ctrl.cargarDetalle('sub-1');
+
+    const boton = caja.querySelector('#btn-solicitar-compra');
+    expect(boton.disabled).toBe(true);
+    expect(boton.textContent).toContain('Ya no disponible');
+    ctrl.destruir();
+  });
+});
+
+describe('B8 — seguimiento, cancelación y pendientes de recoger', () => {
+  const YO = 'aaaaaaaa-0000-0000-0000-00000000000a';
+
+  /** Espera a que termine la operacion en curso (el clic la lanza sin await). */
+  async function esperarOperacion(ctrl) {
+    for (let i = 0; i < 50 && ctrl.enviando; i++) {
+      await new Promise((resolver) => setTimeout(resolver, 0));
+    }
+  }
+
+  function conSesion(extra = {}) {
+    return {
+      leerToken: () => 'token-de-prueba',
+      leerUid: () => YO,
+      ...extra,
+    };
+  }
+
+  test('seguir y dejar de seguir llaman al servidor segun lo que diga mi participacion', async () => {
+    const api = apiFalsa({
+      seguir: jest.fn(async () => null),
+      dejarDeSeguir: jest.fn(async () => null),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    await ctrl.cargarDetalle('sub-1');
+
+    caja.querySelector('#btn-seguir').click();
+    await esperarOperacion(ctrl);
+    expect(api.seguir).toHaveBeenCalledWith('sub-1');
+
+    api.miParticipacion.mockResolvedValue({ vasGanando: false, siguiendo: true });
+    await ctrl.cargarDetalle('sub-1');
+    expect(caja.querySelector('#btn-seguir').textContent).toContain('Dejar de seguir');
+    await ctrl.alternarSeguimiento();
+    expect(api.dejarDeSeguir).toHaveBeenCalledWith('sub-1');
+    ctrl.destruir();
+  });
+
+  test('sin sesion no se ofrece seguir ni cancelar', async () => {
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api: apiFalsa(),
+      leerToken: () => null,
+    });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+
+    expect(caja.querySelector('#btn-seguir')).toBeNull();
+    expect(caja.querySelector('#btn-cancelar-subasta')).toBeNull();
+    ctrl.destruir();
+  });
+
+  /** Una subasta propia que todavia se puede cancelar: sin pujas y a mas de 6 h del cierre. */
+  const CANCELABLE = { vendedor: YO, rivales: 0, segundosRestantes: 7 * 3600 };
+
+  test('el vendedor puede cancelar su subasta tras confirmar la penalizacion', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => [subastaDelServidor(CANCELABLE)]),
+      cancelar: jest.fn(async () => ({ estado: 'CANCELADA', penalizacionCobrada: '1.50' })),
+      reglas: jest.fn(async () => ({
+        duraciones: [
+          { codigo: '24H', horas: 24, comision: '1' },
+          { codigo: '48H', horas: 48, comision: '3' },
+        ],
+        incrementoMinimoConfigurado: false,
+        penalizacionCancelacionPorcentaje: 50,
+        cancelacionProhibidaUltimasHoras: 6,
+      })),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+
+    caja.querySelector('#btn-cancelar-subasta').click();
+    const modal = caja.querySelector('#modal-cancelar-subasta');
+    expect(modal).not.toBeNull();
+    expect(modal.textContent).toContain('50 %');
+    expect(modal.textContent).toMatch(/0[.,]5 cr si era de 24 h/);
+    expect(api.cancelar).not.toHaveBeenCalled();
+
+    await ctrl.confirmarCancelacion();
+
+    expect(api.cancelar).toHaveBeenCalledWith('sub-1');
+    ctrl.destruir();
+  });
+
+  test('una subasta ajena no ofrece cancelar', async () => {
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api: apiFalsa(), ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+
+    expect(caja.querySelector('#btn-cancelar-subasta')).toBeNull();
+    ctrl.destruir();
+  });
+
+  test('con pujas registradas, cancelar se ofrece desactivado y dice por que', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => [subastaDelServidor({ ...CANCELABLE, rivales: 2 })]),
+      cancelar: jest.fn(),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+
+    const boton = caja.querySelector('#btn-cancelar-subasta');
+    expect(boton.disabled).toBe(true);
+    expect(boton.getAttribute('aria-describedby')).toBe('motivo-no-cancelable');
+    expect(caja.querySelector('#motivo-no-cancelable').textContent).toMatch(/no se puede cancelar/);
+    boton.click();
+    expect(caja.querySelector('#modal-cancelar-subasta')).toBeNull();
+    expect(api.cancelar).not.toHaveBeenCalled();
+    ctrl.destruir();
+  });
+
+  test('en las ultimas 6 horas cancelar se ofrece desactivado', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => [
+        subastaDelServidor({ ...CANCELABLE, segundosRestantes: 5 * 3600 }),
+      ]),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+
+    expect(caja.querySelector('#btn-cancelar-subasta').disabled).toBe(true);
+    expect(caja.querySelector('#motivo-no-cancelable').textContent).toContain('últimas 6 horas');
+    ctrl.destruir();
+  });
+
+  test('si el servidor rechaza la cancelacion, el motivo se ve en pantalla', async () => {
+    // La carrera: la pantalla la veia cancelable, pero alguien pujo entre medias.
+    const api = apiFalsa({
+      listar: jest.fn(async () => [subastaDelServidor(CANCELABLE)]),
+      cancelar: jest.fn(async () => {
+        throw new ErrorDeSubastas('Ya hay pujas registradas: la subasta no se puede cancelar.', {
+          estado: 409,
+          motivo: 'CANCELACION_CON_PUJAS',
+        });
+      }),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+    ctrl.abrirDetalle('sub-1');
+    ctrl.solicitarCancelacion();
+
+    await ctrl.confirmarCancelacion();
+
+    expect(ctrl.mensajeError).toContain('no se puede cancelar');
+    ctrl.destruir();
+  });
+
+  test('los pendientes de recoger se ven en Mis subastas y se recogen uno a uno o todos', async () => {
+    const pendiente = {
+      subastaId: 'sub-ganada',
+      nombreProducto: 'Hacha de Obsidiana',
+      montoPagado: '1350',
+      venceEn: '2026-10-01T12:00:00Z',
+      estado: 'PENDIENTE',
+    };
+    const api = apiFalsa({
+      pendientes: jest.fn(async () => [pendiente]),
+      recoger: jest.fn(async () => ({ ...pendiente, estado: 'RECOGIDO' })),
+      recogerTodo: jest.fn(async () => ({ recogidos: [pendiente], fallidos: [] })),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+
+    ctrl.abrirMisSubastas();
+    expect(caja.textContent).toContain('Pendientes de recoger');
+    expect(caja.textContent).toContain('Hacha de Obsidiana');
+
+    caja.querySelector('.btn-recoger-pendiente').click();
+    await esperarOperacion(ctrl);
+    expect(api.recoger).toHaveBeenCalledWith('sub-ganada');
+
+    await ctrl.recogerTodosLosPendientes();
+    expect(api.recogerTodo).toHaveBeenCalled();
+    ctrl.destruir();
+  });
+
+  test('«recoger todo» con fallos lo dice: lo que no se recogio sigue pendiente', async () => {
+    const api = apiFalsa({
+      pendientes: jest.fn(async () => []),
+      recogerTodo: jest.fn(async () => ({
+        recogidos: [],
+        fallidos: [{ subastaId: 'x', detalle: 'no' }],
+      })),
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api, ...conSesion() });
+    await ctrl.iniciar();
+
+    await ctrl.recogerTodosLosPendientes();
+
+    expect(ctrl.mensajeError).toContain('siguen pendientes');
+    ctrl.destruir();
+  });
+
+  test('sin subastas en curso los pendientes siguen a la vista', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => []),
+      pendientes: jest.fn(async () => [
+        {
+          subastaId: 'sub-ganada',
+          nombreProducto: 'Arco',
+          montoPagado: '90',
+          venceEn: '2026-10-01T12:00:00Z',
+          estado: 'PENDIENTE',
+        },
+      ]),
+      recoger: jest.fn(async () => ({})),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+
+    expect(ctrl.estadoDatos).toBe('vacio');
+    expect(caja.textContent).toContain('Pendientes de recoger');
+    caja.querySelector('.btn-recoger-pendiente').click();
+    await esperarOperacion(ctrl);
+    expect(api.recoger).toHaveBeenCalledWith('sub-ganada');
+    ctrl.destruir();
+  });
+
+  test('el nombre de un pendiente se pinta como texto, sin interpretar HTML', async () => {
+    const api = apiFalsa({
+      listar: jest.fn(async () => []),
+      pendientes: jest.fn(async () => [
+        {
+          subastaId: 'sub-ganada',
+          nombreProducto: '<img src=x onerror=alert(1)>',
+          montoPagado: '90',
+          venceEn: '2026-10-01T12:00:00Z',
+          estado: 'PENDIENTE',
+        },
+      ]),
+    });
+    const caja = contenedor();
+    const ctrl = new ControladorSubastas({ contenedor: caja, api, ...conSesion() });
+    await ctrl.iniciar();
+
+    expect(caja.querySelector('img')).toBeNull();
+    expect(caja.textContent).toContain('<img src=x onerror=alert(1)>');
+    ctrl.destruir();
+  });
+
+  test('el retenido acepta todavia el nombre viejo de un servidor sin actualizar', async () => {
+    const api = apiFalsa({
+      miParticipacion: jest.fn(async () => ({ vasGanando: true, retenidoAqui: '300' })),
+    });
+    const ctrl = new ControladorSubastas({ contenedor: contenedor(), api });
+    await ctrl.iniciar();
+
+    await ctrl.cargarDetalle('sub-1');
+
+    expect(ctrl.subastas[0].retenido).toBe(300);
+    ctrl.destruir();
   });
 });

@@ -10,6 +10,6 @@ public class JugadorSilenciado extends ErrorDeNegocio {
     public static final URI TIPO = URI.create("https://nexusbattles.local/errores/jugador-silenciado");
 
     public JugadorSilenciado() {
-        super(TIPO, "No puedes escribir en el chat", 403, "Tienes una sancion activa de silencio. Mientras dure, tus mensajes no salen al canal.");
+        super(TIPO, "No puedes escribir en el chat", 403, "Tienes una sanción activa de silencio. Mientras dure, tus mensajes no salen al canal.");
     }
 }

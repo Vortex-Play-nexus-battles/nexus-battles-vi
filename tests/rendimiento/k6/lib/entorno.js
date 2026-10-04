@@ -20,8 +20,54 @@
 
 import { PERFILES, TECHO_DE_VUS_POR_OMISION } from './perfiles.js';
 
-/** Escenarios de la suite, en el orden en que se ejecutan. */
-export const CLAVES_DE_ESCENARIO = ['login', 'listar_salas', 'crear_sala', 'busqueda_inventario'];
+/** Todos los escenarios de la suite, en el orden en que se ejecutan. */
+export const TODOS_LOS_ESCENARIOS = [
+  'login',
+  'listar_salas',
+  'crear_sala',
+  'busqueda_inventario',
+  'tienda',
+  'comentarios',
+];
+
+/**
+ * Los escenarios de ESTA corrida: todos, o los que diga `ESCENARIOS`
+ * (separados por comas), siempre en el orden de la suite.
+ *
+ * Existe por el limite de frecuencia del borde (B12): `POST /api/v1/auth/login`
+ * admite 30 por minuto y direccion. Desde el banco E2E eso no aplica (origen
+ * privado), pero una medicion contra DEV desde un runner es UNA direccion
+ * publica, y el escenario `login` mediria los 429 del borde en vez del login.
+ * Contra DEV se deja fuera; el resto sigue igual.
+ *
+ * @returns {string[]}
+ */
+function escenariosElegidos() {
+  const crudo = String(__ENV.ESCENARIOS === undefined ? '' : __ENV.ESCENARIOS).trim();
+  if (crudo === '') {
+    return TODOS_LOS_ESCENARIOS.slice();
+  }
+  const pedidos = crudo
+    .split(',')
+    .map((clave) => clave.trim())
+    .filter((clave) => clave !== '');
+  const desconocidos = pedidos.filter((clave) => TODOS_LOS_ESCENARIOS.indexOf(clave) < 0);
+  if (desconocidos.length > 0 || pedidos.length === 0) {
+    throw new Error(
+      'ESCENARIOS="' +
+        crudo +
+        '" no vale' +
+        (desconocidos.length > 0 ? ' (no existen: ' + desconocidos.join(', ') + ')' : '') +
+        '. Los escenarios son: ' +
+        TODOS_LOS_ESCENARIOS.join(', ') +
+        '.',
+    );
+  }
+  return TODOS_LOS_ESCENARIOS.filter((clave) => pedidos.indexOf(clave) >= 0);
+}
+
+/** Escenarios de esta corrida, en el orden en que se ejecutan. */
+export const CLAVES_DE_ESCENARIO = escenariosElegidos();
 
 /**
  * Lee una variable obligatoria o detiene la corrida con un mensaje util.
@@ -163,6 +209,7 @@ if (percentil < 1 || percentil > 99) {
  *   tamanoPagina: number,
  *   paginas: number,
  *   criterioBusqueda: string,
+ *   productoComentarios: string,
  *   limpiarSalas: boolean,
  *   resumenTxt: string,
  *   resumenJson: string
@@ -202,6 +249,11 @@ export const CONFIG = {
   // siembra `tests/e2e/sembrar.sh` («Guerrero de prueba»), asi que la busqueda
   // devuelve filas y mide el camino indexado y no el del resultado vacio.
   criterioBusqueda: texto('CRITERIO_BUSQUEDA', 'prueba'),
+
+  // El producto cuyo hilo lee el escenario `comentarios`. `p-heroe-e2e` es el
+  // heroe que siembra `tests/e2e/sembrar.sh`: existe en el banco. Contra otro
+  // entorno, un producto de ese entorno (en DEV, uno del catalogo oficial).
+  productoComentarios: texto('PRODUCTO_COMENTARIOS', 'p-heroe-e2e'),
 
   // La sala creada se cancela inmediatamente despues de medirla. Sin esto, una
   // corrida `load` deja miles de salas abiertas en el listado del entorno.

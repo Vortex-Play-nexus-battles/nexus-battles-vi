@@ -34,9 +34,44 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.4.0
+  version: 1.7.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    **1.7.0 (auditoria del 4-oct) — cada golpe dice a quien y por que.
+    Aditivo.** `accionResuelta` gana `idObjetivo` (a quien apunto la accion) y,
+    en cada afectado, `causas`: por que cambio su vida, tal como lo anoto el
+    motor (`DANO`, `REFLEJO`, `SANACION`, `DANO_POR_TURNO`...). Un jugador veia
+    bajar su propia barra en el mismo aviso de su ataque —el contragolpe de la
+    maquina llega en la misma rafaga, y los Pinchos de escudo o Toma y lleva le
+    devuelven dano— y el registro lo contaba como «X golpea a X»: parecia que
+    atacar le hacia dano a si mismo. Con `REFLEJO` y su `origen`, la vista dice
+    quien se lo devolvio. El servidor, ademas, entrega los avisos de una sesion
+    en el orden en que se publicaron.
+
+    **1.6.0 (auditoria de DEV del 30-sep) — chat sin dibujos ni inundaciones.
+    Aditivo.** Ningun destino ni esquema cambia. Antes de la lista negra, el
+    texto de `enviarChat` y `enviarChatGeneral` se depura (Unicode NFKC, sin
+    caracteres de control ni de formato invisibles, los saltos de linea en
+    una sola forma) y se rechaza con `errorDeCanal` `type` `mensaje-invalido`
+    (400) si tiene demasiadas lineas, una racha larga del mismo caracter o, en
+    un texto largo, casi solo simbolos; el `detail` explica cual. Y quien
+    escribe mas deprisa de lo admitido recibe `errorDeCanal` `type`
+    `demasiados-mensajes` (429), el mismo de los mensajes privados. Los
+    valores son provisionales (D-37) y viven en la configuracion del servicio.
+
+    **1.5.0 (B7, BACKEND-09) — combate contractual. Aditivo.** El combate usa
+    el heroe real y las reglas de la seccion 6: `codigoAccion` admite las
+    acciones de la Tabla 7 y las epicas de la Tabla 20 por su nombre, y el
+    servidor valida poder, carga y objetivo (un rechazo llega por la cola
+    privada como `errorDeCanal` con `type` `accion-no-permitida`). Los mensajes
+    del combate ganan campos opcionales: poder, cargas, acciones disponibles y
+    efectos activos (`turnoCambiado`, `accionResuelta`, `partidaIniciada`),
+    el detalle auditable de la tirada (`accionResuelta.accion.ataque`) y el
+    `resultado` formal del final. El orden de turnos se sortea al empezar.
+    Los efectos que actuan al empezar un turno (sangrados, sanaciones por
+    turno) se anuncian como `accionResuelta` con `accion.codigo`
+    `EFECTO_POR_TURNO`.
 
     Convenciones:
       - Prefijo de suscripcion (servidor → cliente): `/tema`
@@ -49,6 +84,17 @@ info:
     Los errores que viajan por el canal usan el mismo formato problem details
     que la API HTTP (regla 4), para que la interfaz los pinte con el mismo
     componente `Aviso`. Ver `shared/ui-kit/MAPEO-ERRORES.md`.
+
+    1.4.1 (B6, autorizacion del broker; ningun destino ni mensaje cambia): el
+    servidor solo acepta `SEND` a destinos `/app/**` (un `SEND` directo a
+    `/tema/**`, `/cola/**` o `/usuario/**` se rechaza con un frame `ERROR`:
+    antes el broker lo reenviaba sin pasar por lista negra, sancion ni
+    historial) y solo admite `SUBSCRIBE` a los destinos de este documento, a
+    `/usuario/cola/**` y a los de `mensajes-directos.yaml`, en forma canonica
+    (sin comodines `*`/`**`, sin `//` ni `..`). La regla de sala privada de
+    `salaEstado` se aplica tambien al `SEND` de `enviarChat` y a la
+    suscripcion de `historialDeSala`; las salas publicas no cambian.
+    `partidaEstado` solo lo siguen los participantes de la partida.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -105,6 +151,10 @@ channels:
     description: |
       Estado del combate turno a turno. Es el canal que pinta la vista de
       batalla: vida, turno en curso y efectos activos.
+
+      Desde 1.4.1 solo se suscriben los participantes de la partida; a
+      cualquier otro, o a una partida que no existe, el servidor le responde
+      con un frame `ERROR` y la suscripcion no se registra.
     parameters:
       idPartida:
         description: Identificador de la partida
@@ -155,8 +205,9 @@ channels:
       de HU-ADM-002.
 
       Los errores de envio (jugador silenciado, contenido bloqueado, filtro
-      no disponible, mensaje invalido) no se difunden: vuelven a quien
-      escribio por /usuario/cola/salas como errorDeCanal (CA-03).
+      no disponible, mensaje invalido, demasiados mensajes) no se difunden:
+      vuelven a quien escribio por /usuario/cola/salas como errorDeCanal
+      (CA-03).
     parameters:
       idSala:
         description: Identificador de la sala
@@ -367,13 +418,19 @@ components:
         migracion V7. Se dice con null en vez de inventar una vida: una barra a
         100/100 falsa es peor que una barra que no se pinta.
 
-        La IA SI trae heroe: el del anfitrion a plena vida. No se le inventa uno
-        -con que heroe juega la maquina no lo fija ninguna HU- sino que se usa
-        el unico dato de combate que la partida ya conoce, y de paso la pelea
-        queda pareja.
+        La IA SI trae heroe. Desde 1.5.0 es un HEROE ALEATORIO del catalogo
+        (§7.6: «si se incluye un heroe aleatorio controlado por la IA»), sin
+        sanadores, en el nivel del heroe del anfitrion y sin equipamiento
+        (D-B7-11); si el catalogo no responde al empezar, combate con una copia
+        del heroe del anfitrion, como antes.
 
-        `posicionEnCampo` sigue sin emitirse: RF-JUE-017 la quiere aleatoria y
-        quien la decide es el motor de combate, fuera de este bloque.
+        `ordenDeTurnos` (1.5.0) es un SORTEO entre todos los participantes al
+        empezar (§6.1.3: «El orden de los turnos para la primera ronda se
+        determina aleatoriamente entre todos los participantes y se mantiene
+        invariable hasta la conclusion del combate»), con una semilla que la
+        partida guarda. Ya no abre siempre el anfitrion.
+
+        `posicionEnCampo` sigue sin emitirse (D-B7-19).
       payload:
         type: object
         required: [tipo, idSala, idPartida, ordenDeTurnos, turnoActual, participantes]
@@ -402,6 +459,11 @@ components:
     TurnoCambiado:
       name: turnoCambiado
       title: Cambio el turno
+      description: |
+        Desde 1.5.0 trae el estado de quien juega ahora YA con lo que ocurre al
+        empezar su turno (+2 de poder, efectos por turno): su poder, sus
+        cargas, sus efectos y las acciones que puede jugar, calculadas por el
+        motor de combate.
       payload:
         type: object
         required: [tipo, idPartida, idJugador, numeroTurno]
@@ -412,7 +474,25 @@ components:
           numeroTurno: { type: integer, minimum: 1 }
           segundosParaJugar:
             type: [integer, 'null']
-            description: Cuenta atras del turno, si la modalidad la impone.
+            description: |
+              Cuenta atras del turno. Nula mientras el Product Owner no fije
+              `salas.partidas.segundos-por-turno` (D-B7-14).
+          motivo:
+            type: [string, 'null']
+            enum: [ACCION, TIEMPO_AGOTADO, TURNO_PERDIDO, null]
+            description: (1.5.0) Por que paso el turno. `TIEMPO_AGOTADO` si se acabo el tiempo sin accion.
+          poderActual: { type: [integer, 'null'], minimum: 0 }
+          poderMaximo: { type: [integer, 'null'], minimum: 0 }
+          recargas:
+            type: object
+            additionalProperties: { type: integer, minimum: 1 }
+          efectosActivos:
+            type: array
+            items: { $ref: '#/components/schemas/Efecto' }
+          acciones:
+            type: array
+            description: (1.5.0) Lo que puede jugar quien tiene el turno, y por que no lo demas.
+            items: { $ref: '#/components/schemas/EstadoDeAccion' }
 
     AccionResuelta:
       name: accionResuelta
@@ -430,15 +510,63 @@ components:
           tipo: { const: 'partida.accion.resuelta' }
           idPartida: { type: string, format: uuid }
           idEjecutor: { type: string, format: uuid }
+          idObjetivo:
+            type: [string, 'null']
+            format: uuid
+            description: |
+              (1.7.0) A quien apunto la accion: el rival de un ataque, el
+              companero de una sanacion. Nulo en un efecto por turno
+              (`EFECTO_POR_TURNO`) o si el motor no lo dijo. Un ataque nunca
+              apunta a su ejecutor ni a un companero de su equipo (§6.1.3).
           accion:
             type: object
             required: [codigo, nombre]
             properties:
-              codigo: { type: string }
-              nombre: { type: string }
+              codigo:
+                type: string
+                description: |
+                  La accion que SE JUGO: la que pidio el jugador
+                  (`EjecutarAccion.codigoAccion`) o `ATAQUE_BASICO` si no pidio
+                  ninguna. Desde 1.5.0 puede ser distinta de la pedida
+                  (`accionPedida`) cuando falto poder y el turno se jugo con
+                  el valor base (§6.1.1). `EFECTO_POR_TURNO` cuando no es una
+                  accion sino un efecto que actuo al empezar un turno
+                  (sangrado, sanacion por turno); entonces `idEjecutor` es
+                  quien lo causo y `nombre` el efecto.
+              nombre:
+                type: string
+                description: |
+                  En un ataque, la categoria que sorteo el motor
+                  (`CategoriaEfecto` de motor-combate.yaml: CAUSAR_DANO,
+                  CAUSAR_DANO_CRITICO, EVADIR_EL_GOLPE, RESISTIR_EL_GOLPE,
+                  ESCAPAR_AL_GOLPE, SIN_EFECTO). La interfaz la reconoce por su
+                  valor y la narra (UXC-2). En una defensa, una sanacion o un
+                  efecto por turno, el nombre de la accion o del efecto.
               icono:
                 type: [string, 'null']
                 description: Todos los efectos y controles se representan con icono (RF-JUE-017).
+              accionPedida:
+                type: [string, 'null']
+                description: (1.5.0) La que pidio el jugador, si no es la que se jugo.
+              enValorBase:
+                type: boolean
+                description: '(1.5.0) Falto poder, la accion no se ejecuto y el ataque se redujo a su valor base (§6.1.1).'
+              tipo:
+                type: [string, 'null']
+                enum: [ATAQUE, DEFENSA, SANACION, SANACION_GRUPAL, REANIMACION, APOYO, EFECTO, null]
+              esEpica: { type: boolean }
+              potenciada:
+                type: boolean
+                description: (1.5.0) Epica jugada por su tipo de heroe afin (efecto epico de la Tabla 20).
+              ataque:
+                type: [object, 'null']
+                description: (1.5.0) La tirada, para que el combate sea auditable.
+                properties:
+                  ataqueResuelto: { type: integer }
+                  defensaObjetivo: { type: integer }
+                  acierta: { type: boolean }
+                  indiceTabla: { type: [integer, 'null'] }
+                  porcentajeDano: { type: [integer, 'null'] }
           afectados:
             type: array
             items:
@@ -454,6 +582,40 @@ components:
                 efectosActivos:
                   type: array
                   items: { $ref: '#/components/schemas/Efecto' }
+                poderActual:
+                  type: [integer, 'null']
+                  minimum: 0
+                  description: (1.5.0) Poder tras la accion (el ejecutor gasta; algunas epicas y objetos quitan poder).
+                poderMaximo: { type: [integer, 'null'], minimum: 0 }
+                recargas:
+                  type: object
+                  additionalProperties: { type: integer, minimum: 1 }
+                  description: (1.5.0) Acciones en carga y turnos propios que les faltan.
+                causas:
+                  type: array
+                  description: |
+                    (1.7.0) Por que cambio la vida de este afectado, en el
+                    orden en que lo anoto el motor (esquema `Evento` de
+                    motor-combate.yaml). Vacia si no cambio. Una `diferencia`
+                    negativa del propio `idEjecutor` en un ataque solo puede
+                    venir de un `REFLEJO`: el dano que le devolvio el
+                    objetivo (Pinchos de escudo, Toma y lleva), nunca de su
+                    propio golpe.
+                  items:
+                    type: object
+                    required: [tipo]
+                    properties:
+                      tipo:
+                        type: string
+                        enum: [DANO, REFLEJO, SANACION, DANO_POR_TURNO, SANACION_POR_TURNO, REANIMACION]
+                      origen:
+                        type: [string, 'null']
+                        format: uuid
+                        description: Quien lo causo (el atacante de un DANO, el defensor de un REFLEJO)
+                      efecto:
+                        type: [string, 'null']
+                        description: La accion, el objeto o la epica que lo causo
+                      cantidad: { type: [integer, 'null'], minimum: 0 }
 
     PartidaFinalizada:
       name: partidaFinalizada
@@ -492,10 +654,15 @@ components:
           ganadores:
             type: array
             description: |
-              Quienes quedaron en pie: uno, o —en el modo cooperativo de
-              RF-JUE-004 (HU-SAL-004, 1.2.0)— todos los del equipo ganador.
-              Vacio si nadie quedo en pie (empate; el desempate es del PO).
+              Quien gano: el heroe en pie o —en el modo cooperativo de
+              RF-JUE-004 (HU-SAL-004, 1.2.0)— todos los del equipo ganador,
+              desde 1.5.0 tambien los que cayeron (gana el equipo, D-B7-15).
+              Vacio si nadie quedo en pie (empate).
             items: { type: string, format: uuid }
+          resultado:
+            type: string
+            enum: [GANADOR, EMPATE]
+            description: (1.5.0) El final formal de la partida.
           equipoGanador:
             type: integer
             minimum: 1
@@ -546,11 +713,26 @@ components:
     EjecutarAccion:
       name: ejecutarAccion
       title: El jugador ejecuta su accion
+      description: |
+        El cliente solo elige accion y objetivo; el servidor valida todo lo
+        demas (1.5.0): que sea su turno, que la accion sea de su heroe y este
+        desbloqueada en su nivel, que no este en carga, que el objetivo valga
+        (nunca un companero en un ataque) y que un sanador no ataque. Sin poder
+        suficiente la accion no se ejecuta y el turno se juega con el valor
+        base (§6.1.1). Un rechazo vuelve por la cola privada con `type`
+        `accion-no-permitida` y el turno sigue siendo del jugador. Dos acciones
+        simultaneas del mismo turno aplican una sola: la otra recibe `type`
+        `partida-modificada` (bloqueo optimista).
       payload:
         type: object
         required: [codigoAccion]
         properties:
-          codigoAccion: { type: string }
+          codigoAccion:
+            type: string
+            description: |
+              `ATAQUE_BASICO`, `SANACION_BASICA` (sanadores), el nombre de una
+              accion de la Tabla 7 o de una epica de la Tabla 20, tal como
+              aparece en `acciones` del heroe.
           idObjetivo:
             type: [string, 'null']
             format: uuid
@@ -671,6 +853,25 @@ components:
         nombre: { type: string }
         icono: { type: [string, 'null'] }
         turnosRestantes: { type: [integer, 'null'] }
+        tipo:
+          type: [string, 'null']
+          description: (1.5.0) Tipo de efecto del motor de combate (BONO_DEFENSA, DANO_POR_TURNO...).
+        valor: { type: [integer, 'null'] }
+
+    EstadoDeAccion:
+      type: object
+      description: (1.5.0) Una accion jugable y su disponibilidad, calculada por el motor de combate.
+      required: [codigo, nombre, disponible]
+      properties:
+        codigo: { type: string, description: Lo que se manda como codigoAccion }
+        nombre: { type: string }
+        tipo: { type: [string, 'null'] }
+        esEpica: { type: boolean }
+        costoPoder: { type: [integer, 'null'], description: Nulo si cuesta todo el poder }
+        turnosDeCarga: { type: [integer, 'null'] }
+        nivelRequerido: { type: [integer, 'null'] }
+        disponible: { type: boolean }
+        motivo: { type: [string, 'null'] }
 
     Participante:
       type: object
@@ -693,6 +894,15 @@ components:
             efectosActivos:
               type: array
               items: { $ref: '#/components/schemas/Efecto' }
+            prototipo:
+              type: [string, 'null']
+              description: (1.5.0) Tipo de heroe del catalogo («Mago Hielo»).
+            poderActual: { type: [integer, 'null'], minimum: 0 }
+            poderMaximo: { type: [integer, 'null'], minimum: 0 }
+            acciones:
+              type: array
+              description: (1.5.0) Acciones jugables y su disponibilidad al empezar.
+              items: { $ref: '#/components/schemas/EstadoDeAccion' }
         esIA: { type: boolean }
         equipo: { type: [integer, 'null'] }
         posicionEnCampo:

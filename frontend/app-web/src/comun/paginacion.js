@@ -55,11 +55,21 @@ export function calcularVentana(paginaActual, totalPaginas, maximo = CASILLAS_VI
  * monta, que vuelve a consultar con los mismos criterios cambiando solo la
  * pagina (criterio 3).
  *
+ * UXC-9 — el nombre del control lo da quien lo monta. Antes todas las vistas
+ * que lo reutilizan (tienda, tablón de misiones, catálogo) anunciaban
+ * «Paginacion del inventario» a quien usa lector de pantalla, estuviera donde
+ * estuviera.
+ *
  * @param {{paginaActual: number, totalPaginas: number}} estado
  * @param {(pagina: number) => void} alCambiarPagina
+ * @param {{etiqueta?: string}} [opciones] nombre accesible del control
  * @returns {HTMLElement} nav listo para insertar; oculto si no hay que paginar
  */
-export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPagina) {
+export function construirPaginacion(
+  { paginaActual, totalPaginas },
+  alCambiarPagina,
+  { etiqueta = 'Paginación' } = {},
+) {
   if (!Number.isInteger(totalPaginas) || totalPaginas < 0) {
     throw new RangeError(
       `paginacion: totalPaginas debe ser un entero no negativo y llego ${totalPaginas}`,
@@ -80,7 +90,7 @@ export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPag
 
   const control = document.createElement('nav');
   control.className = 'paginacion';
-  control.setAttribute('aria-label', 'Paginacion del inventario');
+  control.setAttribute('aria-label', etiqueta);
 
   // Una sola pagina no se pagina. Se devuelve el nodo oculto en lugar de null
   // para que el llamador lo inserte una vez y solo cambie su contenido.
@@ -100,7 +110,7 @@ export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPag
 
   if (inicio > 0) {
     paginas.appendChild(
-      construirFlecha('anterior', '‹', 'Pagina anterior', () => alCambiarPagina(paginaActual - 1)),
+      construirFlecha('anterior', '‹', 'Página anterior', () => alCambiarPagina(paginaActual - 1)),
     );
   }
 
@@ -110,7 +120,7 @@ export function construirPaginacion({ paginaActual, totalPaginas }, alCambiarPag
 
   if (fin < totalPaginas) {
     paginas.appendChild(
-      construirFlecha('siguiente', '›', 'Pagina siguiente', () =>
+      construirFlecha('siguiente', '›', 'Página siguiente', () =>
         alCambiarPagina(paginaActual + 1),
       ),
     );

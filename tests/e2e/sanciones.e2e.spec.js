@@ -26,6 +26,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
@@ -33,21 +35,13 @@ const JUGADORA = process.env.E2E_SANCIONADA ?? 'sancionada_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 const VISTAS = '/frontend/app-web/src/plataforma/moderacion-sanciones';
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, apodo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -76,10 +70,18 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
   let advertencia;
   let suspension;
   let apelacion;
-  const producto = `producto-sanciones-${Date.now()}`;
+  // B3 — comentar exige un producto del catalogo: lo da de alta el
+  // administrador en beforeAll (igual que la tienda), no se inventa.
+  let producto;
 
+  /**
+   * Consulta 1.4.0 (B2): la sancion activa ya no es publica. La jugadora
+   * pregunta por la suya con su token; sin token seria 401.
+   */
   async function activa() {
-    const r = await api.get(`/api/v1/sanciones/usuarios/${jugadora.claims.uid}/activa`);
+    const r = await api.get(`/api/v1/sanciones/usuarios/${jugadora.claims.uid}/activa`, {
+      headers: conToken(jugadora.token),
+    });
     expect(r.status(), await r.text()).toBe(200);
     return r.json();
   }
@@ -138,6 +140,23 @@ test.describe('Sanciones y apelaciones (HU-USR-004/005/006/007, HU-NOT-005)', ()
     expect(moderadora.claims.rol, 'sembrar.sh deja a la moderadora con su rol').toBe('MODERADOR');
     expect(admin.claims.rol, 'sembrar.sh deja al administrador con su rol').toBe('ADMINISTRADOR');
     expect(jugadora.claims.rol).toBe('JUGADOR');
+
+    const alta = await api.post('/api/v1/productos', {
+      headers: conToken(admin.token),
+      data: {
+        nombre: `Producto de sanciones E2E ${Date.now()}`,
+        imagen: '/frontend/app-web/src/cuentas/avatares/arquero-cazador.jpg',
+        descripcion: 'Producto de prueba del E2E de sanciones: sobre el se comenta.',
+        tipo: 'ARMA',
+        tiraje: -1,
+        premium: false,
+        precioCreditos: 10,
+        poderDeAtaque: 5,
+        tasaDeCaida: 10,
+      },
+    });
+    expect(alta.status(), await alta.text()).toBe(201);
+    producto = (await alta.json()).id;
   });
 
   test.afterAll(async () => {

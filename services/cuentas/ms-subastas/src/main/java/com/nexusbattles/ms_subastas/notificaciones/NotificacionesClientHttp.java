@@ -2,8 +2,11 @@ package com.nexusbattles.ms_subastas.notificaciones;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
+import com.nexusbattles.ms_subastas.seguridad.PortadorDeServicio;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -20,6 +23,13 @@ import java.time.format.DateTimeFormatter;
  * Adaptador de {@code POST /internal/notifications}. Mismo estilo que
  * {@code CatalogoProductosClientHttp}: HttpClient del JDK y constructor
  * inyectable para poder probarlo sin levantar el otro servicio.
+ *
+ * <p><b>Con credencial de servicio (B2/B8).</b> Notificaciones atiende
+ * {@code /internal/**} solo con {@code ROLE_SERVICIO}. Este adaptador era el
+ * unico de ms-subastas que salia sin {@code Authorization}: cada aviso recibia
+ * 401 y el outbox lo reintentaba para siempre (auditoria contractual, B8).
+ * Ahora firma cada peticion con {@link PortadorDeServicio}, igual que
+ * creditos e inventario.
  */
 @Component
 public class NotificacionesClientHttp implements NotificacionesClient {
@@ -30,27 +40,36 @@ public class NotificacionesClientHttp implements NotificacionesClient {
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final Duration timeout;
+    private final PortadorDeServicio portador;
 
     @Autowired
     public NotificacionesClientHttp(
             @Value("${app.notificaciones.base-url:http://localhost:8085/api/v1}") String baseUrl,
             @Value("${app.notificaciones.timeout-ms:3000}") long timeoutMs,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ObjectProvider<TokenDeServicio> tokenDeServicio) {
         this(URI.create(baseUrl),
                 HttpClient.newBuilder().connectTimeout(Duration.ofMillis(timeoutMs)).build(),
-                objectMapper, Duration.ofMillis(timeoutMs));
+                objectMapper, Duration.ofMillis(timeoutMs),
+                portadorDe(tokenDeServicio));
     }
 
     public NotificacionesClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout) {
+        this(baseUri, httpClient, objectMapper, timeout, PortadorDeServicio.ninguno());
+    }
+
+    public NotificacionesClientHttp(URI baseUri, HttpClient httpClient, ObjectMapper objectMapper, Duration timeout,
+                                    PortadorDeServicio portador) {
         this.baseUri = baseUri;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
         this.timeout = timeout;
+        this.portador = portador;
     }
 
     @Override
     public void entregar(Aviso aviso) {
-        HttpRequest peticion = HttpRequest.newBuilder(URI.create(baseUri + "/internal/notifications"))
+        HttpRequest peticion = portador.firmar(HttpRequest.newBuilder(URI.create(baseUri + "/internal/notifications")))
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
                 .timeout(timeout)
@@ -83,9 +102,15 @@ public class NotificacionesClientHttp implements NotificacionesClient {
 
         // 400 es culpa de este servicio (payload mal armado) y reintentarlo no
         // lo va a arreglar, pero tampoco se descarta en silencio un aviso que
-        // la historia exige: se deja sin marcar y visible en el log.
+        // la historia exige: queda visible en el log. Desde B8 se marca como
+        // definitivo, para que el drenador lo aparte y no bloquee la cola: antes
+        // cortaba el lote en el y los avisos de detras no salian nunca. 401 y
+        // 403 no son definitivos: son la credencial, que se arregla sin tocar
+        // el aviso; y 5xx es una averia que pasa.
+        int estado = respuesta.statusCode();
+        boolean definitivo = estado >= 400 && estado < 500 && estado != 401 && estado != 403 && estado != 429;
         throw new NotificacionesClientException(
-                "Respuesta inesperada del modulo de notificaciones: " + respuesta.statusCode());
+                "Respuesta inesperada del modulo de notificaciones: " + estado, definitivo);
     }
 
     private String cuerpoDe(Aviso aviso) {
@@ -108,4 +133,15 @@ public class NotificacionesClientHttp implements NotificacionesClient {
     /** Campos exactos que exige el contrato de notificaciones 1.0.0. */
     private record AvisoJson(String usuarioId, String id, String tipo,
                              String titulo, String cuerpo, String creadaEn) { }
+
+    /**
+     * La credencial si esta configurada. Sin ella la peticion sale sin
+     * {@code Authorization} y el destino responde 401, que este adaptador trata
+     * como fallo (nunca como exito): el error se ve en la bitacora y en la
+     * prueba de humo, no se esconde.
+     */
+    private static PortadorDeServicio portadorDe(ObjectProvider<TokenDeServicio> proveedor) {
+        TokenDeServicio token = proveedor.getIfAvailable();
+        return token == null ? PortadorDeServicio.ninguno() : PortadorDeServicio.de(token);
+    }
 }

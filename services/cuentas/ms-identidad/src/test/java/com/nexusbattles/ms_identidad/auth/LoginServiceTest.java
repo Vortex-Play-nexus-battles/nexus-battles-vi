@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth;
 
+import com.nexusbattles.ms_identidad.auth.codigos.IgualadorDeTiempo;
 import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.dto.LoginRequest;
 import com.nexusbattles.ms_identidad.auth.dto.LoginResponse;
@@ -7,6 +8,7 @@ import com.nexusbattles.ms_identidad.auth.exception.CredencialesInvalidasExcepti
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBloqueadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
+import com.nexusbattles.ms_identidad.auth.exception.CuentaNoVerificadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaSuspendidaException;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -16,7 +18,11 @@ import com.nexusbattles.ms_identidad.auth.service.AuditoriaLoginClient;
 import com.nexusbattles.ms_identidad.auth.service.IntentosFallidosService;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
+import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
+import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
+import com.nexusbattles.ms_identidad.sanciones.ProyeccionDeSancionService;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +32,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -52,15 +59,29 @@ class LoginServiceTest {
     @Mock
     private AuditoriaLoginClient auditoriaLoginClient;
 
+    @Mock
+    private AuditoriaDeCuenta auditoriaDeCuenta;
+
+    @Mock
+    private OnboardingService onboardingService;
+
+    @Mock
+    private IgualadorDeTiempo igualador;
+
+    @Mock
+    private ProyeccionDeSancionService proyecciones;
+
     @InjectMocks
     private LoginService loginService;
 
     private static final String PASSWORD_PLANA = "MiClave123!";
+    private static final UUID UID = UUID.fromString("6f1c2a7e-3d6b-4b9a-8f0e-1c2d3e4f5a6b");
     private final BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
 
     private Usuario usuarioActivo() {
         Usuario usuario = new Usuario();
         usuario.setId(1L);
+        usuario.setPublicId(UID);
         usuario.setApodo("cristianc");
         usuario.setEmail("cristian@test.com");
         usuario.setPassword(encoder.encode(PASSWORD_PLANA));
@@ -80,10 +101,16 @@ class LoginServiceTest {
         return datos;
     }
 
+    private void dispositivoConocido(Usuario usuario) {
+        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
+            .thenReturn(Optional.of(new DispositivoConocido()));
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+    }
+
     @Test
     void debeRechazarSiCorreoNoExiste() {
 
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.empty());
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.empty());
 
         CredencialesInvalidasException exception = assertThrows(
             CredencialesInvalidasException.class,
@@ -96,13 +123,16 @@ class LoginServiceTest {
             "cristian@test.com",
             "127.0.0.1"
         );
+        // B1: un correo que no existe cuesta lo mismo que uno que si (un BCrypt).
+        verify(igualador).comparar(PASSWORD_PLANA);
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
     }
 
     @Test
     void debeRechazarYRegistrarIntentoSiContrasenaIncorrecta() {
 
         Usuario usuario = usuarioActivo();
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         LoginRequest datos = datosValidos();
         datos.setPassword("ClaveIncorrecta1!");
@@ -118,6 +148,7 @@ class LoginServiceTest {
             "cristian@test.com",
             "127.0.0.1"
         );
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
     }
 
     @Test
@@ -125,7 +156,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("BANEADA");
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaBaneadaException exception = assertThrows(
             CuentaBaneadaException.class,
@@ -141,7 +172,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("INACTIVO");
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaInactivaException exception = assertThrows(
             CuentaInactivaException.class,
@@ -157,7 +188,7 @@ class LoginServiceTest {
         Usuario usuario = usuarioActivo();
         usuario.setEstado("SUSPENDIDA");
         usuario.setSuspendidoHasta(LocalDateTime.now().plusHours(3));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaSuspendidaException exception = assertThrows(
             CuentaSuspendidaException.class,
@@ -165,26 +196,74 @@ class LoginServiceTest {
         );
 
         assertTrue(exception.getMessage().contains("Tiempo restante"));
+        // 7.3.2: el fin viaja aparte para el contador visible.
+        assertEquals(usuario.getSuspendidoHasta(), exception.getHasta().toLocalDateTime());
+        verifyNoInteractions(proyecciones);
     }
 
     @Test
     void debePermitirLoginSiSuspensionYaVencio() {
-        // Comportamiento actual documentado: al vencer suspendidoHasta, el
-        // login no queda bloqueado, aunque el campo "estado" siga en
-        // SUSPENDIDA (nadie lo revierte a ACTIVO automáticamente aquí).
+        // B2: al vencer suspendidoHasta la persona entra y la proyeccion se
+        // limpia (ProyeccionDeSancionService.levantarSiVencida).
 
         Usuario usuario = usuarioActivo();
         usuario.setEstado("SUSPENDIDA");
         usuario.setSuspendidoHasta(LocalDateTime.now().minusMinutes(1));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
-        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
-            .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(proyecciones.levantarSiVencida(usuario)).thenReturn("ACTIVO");
+        dispositivoConocido(usuario);
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
         assertNotNull(respuesta);
         assertEquals("cristianc", respuesta.getApodo());
+        verify(proyecciones).levantarSiVencida(usuario);
+    }
+
+    @Test
+    @DisplayName("B1: cuenta sin verificar con la contraseña correcta: 403 cuenta-no-verificada, y el alta no arranca")
+    void cuentaNoVerificada() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("PENDIENTE_VERIFICACION");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+
+        assertThrows(CuentaNoVerificadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+
+        verify(intentosFallidosService, never()).registrarIntentoFallido(anyLong());
+        verify(jwtService, never()).generarToken(anyString(), anyString(), anyInt(), any());
+        verifyNoInteractions(onboardingService, auditoriaDeCuenta);
+    }
+
+    @Test
+    @DisplayName("B1: con la contraseña INCORRECTA el estado no se revela: 401 generico y cuenta el intento")
+    void elEstadoNoSeRevelaSinLaContrasena() {
+        for (String estado : new String[] {"PENDIENTE_VERIFICACION", "BANEADO", "BANEADA", "SUSPENDIDO", "INACTIVO"}) {
+            Usuario usuario = usuarioActivo();
+            usuario.setEstado(estado);
+            usuario.setSuspendidoHasta(LocalDateTime.now().plusDays(1));
+            when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+            LoginRequest datos = datosValidos();
+            datos.setPassword("Otra.Clave-9");
+
+            assertThrows(CredencialesInvalidasException.class,
+                () -> loginService.iniciarSesion(datos, "127.0.0.1", "agente"), estado);
+        }
+        verify(intentosFallidosService, times(5)).registrarIntentoFallido(1L);
+        verifyNoInteractions(proyecciones);
+    }
+
+    @Test
+    @DisplayName("B2: una suspension vencida de una cuenta que nunca verifico su correo la deja pendiente otra vez")
+    void suspensionVencidaSinVerificar() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("SUSPENDIDO");
+        usuario.setSuspendidoHasta(LocalDateTime.now().minusMinutes(1));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        when(proyecciones.levantarSiVencida(usuario)).thenReturn("PENDIENTE_VERIFICACION");
+
+        assertThrows(CuentaNoVerificadaException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
     }
 
     @Test
@@ -192,7 +271,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setBloqueadoHasta(LocalDateTime.now().plusMinutes(10));
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
 
         CuentaBloqueadaException exception = assertThrows(
             CuentaBloqueadaException.class,
@@ -207,7 +286,7 @@ class LoginServiceTest {
 
         Usuario usuario = usuarioActivo();
         usuario.setIntentosFallidos(3);
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
         when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
             .thenReturn(Optional.empty());
         when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
@@ -232,15 +311,59 @@ class LoginServiceTest {
     void debeIniciarSesionSinMarcarDispositivoNuevoSiYaEsConocido() {
 
         Usuario usuario = usuarioActivo();
-        when(usuarioRepository.findByEmail(anyString())).thenReturn(Optional.of(usuario));
-        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
-            .thenReturn(Optional.of(new DispositivoConocido()));
-        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any())).thenReturn("token-de-prueba");
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        dispositivoConocido(usuario);
 
         LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
 
         assertFalse(respuesta.isDispositivoNuevo());
         verify(dispositivoConocidoRepository, never()).save(any());
         verify(correoClient, never()).enviarAvisoAcceso(any());
+    }
+
+    @Test
+    @DisplayName("R17: el login devuelve el uid y si el alta ya termino, y relanza la que quedo a medias")
+    void devuelveUidYEstadoDelAltaYLaReanuda() {
+        Usuario usuario = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        dispositivoConocido(usuario);
+        when(onboardingService.listo(UID)).thenReturn(false);
+
+        LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
+
+        assertEquals(UID.toString(), respuesta.getUid());
+        assertFalse(respuesta.isOnboardingListo(), "con el alta a medias la interfaz va a «Preparando tu cuenta»");
+        verify(onboardingService).reanudarSiHaceFalta(UID);
+    }
+
+    @Test
+    @DisplayName("R17: el primer acceso de una cuenta queda en la auditoria; los siguientes no")
+    void auditaSoloElPrimerAcceso() {
+        Usuario nuevo = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(nuevo));
+        dispositivoConocido(nuevo);
+
+        loginService.iniciarSesion(datosValidos(), "10.0.0.7", "agente");
+        verify(auditoriaDeCuenta).primerAcceso(UID, "10.0.0.7");
+        assertNotNull(nuevo.getUltimoAcceso(), "el sello de ultima entrada se escribe en el acceso correcto");
+
+        clearInvocations(auditoriaDeCuenta);
+        loginService.iniciarSesion(datosValidos(), "10.0.0.7", "agente");
+        verify(auditoriaDeCuenta, never()).primerAcceso(any(), any());
+    }
+
+    @Test
+    @DisplayName("R17: una cuenta anterior sin uid entra igual y no rompe nada")
+    void cuentaSinUidEntraIgual() {
+        Usuario antiguo = usuarioActivo();
+        antiguo.setPublicId(null);
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(antiguo));
+        dispositivoConocido(antiguo);
+        when(onboardingService.listo(null)).thenReturn(true);
+
+        LoginResponse respuesta = loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente");
+
+        assertNull(respuesta.getUid());
+        assertTrue(respuesta.isOnboardingListo());
     }
 }

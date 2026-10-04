@@ -39,6 +39,7 @@ on:
       - "tests/e2e/**"
       - ".github/workflows/e2e.yml"
       - "frontend/app-web/playwright.e2e.config.js"
+      - "frontend/app-web/playwright.profesor.config.js"
   workflow_dispatch:
 
 concurrency:
@@ -52,7 +53,8 @@ jobs:
   corte-vertical:
     name: Sala de batalla de punta a punta
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # R17 — 30 → 40: la prueba del profesor añade unos siete minutos.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +76,7 @@ jobs:
             :services:contenido:productos:bootJar \
             :services:contenido:inventario:bootJar \
             :services:contenido:motor-combate:bootJar \
+            :services:contenido:misiones:bootJar \
             :services:cuentas:ms-finanzas:bootJar \
             :services:cuentas:ms-subastas:bootJar \
             :services:plataforma:moderacion-sanciones:bootJar \
@@ -82,6 +85,7 @@ jobs:
             :services:plataforma:metricas-plataforma:bootJar \
             :services:plataforma:admin-parametros:bootJar \
             :services:plataforma:comentarios:bootJar \
+            :services:plataforma:correo:bootJar \
             :services:plataforma:salas-partidas:bootJar
 
       - name: Construir el jar de ms-identidad (Maven)
@@ -102,7 +106,13 @@ jobs:
       - name: Levantar el entorno
         run: docker compose -f tests/e2e/compose.yml up -d --build --wait
 
+      # B1 — las cuentas nuevas nacen pendientes de verificar su correo: la
+      # semilla y las pruebas leen el codigo en el Mailpit del banco, que el
+      # borde sirve en /mailpit/ (la misma ruta que en DEV). Sin credenciales:
+      # el buzon del banco no las pide.
       - name: Sembrar el inventario y comprobar el camino de la verificacion
+        env:
+          MAILPIT_URL: http://localhost:8099/mailpit
         run: |
           chmod +x tests/e2e/sembrar.sh
           ./tests/e2e/sembrar.sh
@@ -132,14 +142,57 @@ jobs:
         working-directory: frontend/app-web
         env:
           E2E_BORDE: http://localhost:8099
+          MAILPIT_URL: http://localhost:8099/mailpit
         run: npx playwright test --config=playwright.e2e.config.js
+
+      # R17 — la prueba del profesor, en el banco: el mismo recorrido que se
+      # hace contra AWS despues de cada despliegue (prueba-del-profesor.yml),
+      # aqui con todos los servicios, subastas incluidas. Registro por la
+      # interfaz, alta real, partida contra la IA, cierre y vuelta. Si el
+      # banco no lo pasa, AWS tampoco lo va a pasar. Desde PR-F incluye la
+      # regresion del feedback del 4-oct (regresion-feedback.profesor.spec.js):
+      # portada, compra con creditos, subasta +5, IA sin auto-dano y mision
+      # de nivel 1, con cuentas nuevas, igual que en DEV.
+      - name: La prueba del profesor en el banco
+        working-directory: frontend/app-web
+        env:
+          PROFESOR_URL: http://localhost:8099
+          MAILPIT_URL: http://localhost:8099/mailpit
+        run: npx playwright test --config=playwright.profesor.config.js
+
+      # G1 (4-oct) — la contraseña nunca en una dirección, tampoco en la
+      # bitácora del borde. Después de todas las pruebas (cientos de entradas
+      # y registros por la interfaz), ninguna línea del borde puede tener un
+      # parámetro `*password*=` ni la marca G1-NoDebeQuedar, que
+      # login-sin-envio-nativo.e2e.spec.js pide a propósito en la dirección
+      # (lo que haría una página vieja en caché). Esas peticiones SÍ tienen que
+      # constar, con la consulta retirada: si no, el paso no miraría nada. Lo
+      # que se imprime de una fuga sale con el valor tapado.
+      - name: El borde no registró ninguna contraseña
+        run: |
+          set -uo pipefail
+          bitacora="$(docker compose -f tests/e2e/compose.yml logs --no-color srv-borde 2>&1)"
+          patron='G1-NoDebeQuedar|[?&][^=& ]*password[^=& ]*='
+          fugas="$(printf '%s\n' "$bitacora" | grep -Eci "$patron" || true)"
+          retiradas="$(printf '%s\n' "$bitacora" | grep -c 'consulta retirada\]' || true)"
+          echo "Lineas del borde con una credencial: $fugas"
+          echo "Lineas del borde con la consulta retirada: $retiradas"
+          if [ "$fugas" != "0" ]; then
+            printf '%s\n' "$bitacora" | grep -Ei "$patron" \
+              | sed -E 's/(password[^=& ]*=)[^& "]*/\1<tapado>/Ig; s/G1-NoDebeQuedar[^& "]*/<marca>/g' | head -20
+            exit 1
+          fi
+          if [ "$retiradas" -lt 1 ]; then
+            echo "La prueba G1 pide direcciones con la marca: el borde debia registrarlas sin la consulta." >&2
+            exit 1
+          fi
 
       # Cuando esto falla, lo que hace falta es el log del servicio que fallo,
       # no el de Playwright. Sin este paso habria que reproducirlo a mano.
       - name: Logs de los servicios si algo fallo
         if: failure()
         run: |
-          for s in srv-ms-identidad srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
+          for s in srv-ms-identidad srv-correo mailpit srv-ms-finanzas srv-ms-subastas srv-ms-ecommerce srv-comentarios srv-heroes srv-productos srv-inventario \
                    srv-motor-combate srv-moderacion-sanciones srv-notificaciones srv-torneos srv-metricas-plataforma srv-admin-parametros srv-salas-partidas srv-borde; do
             echo "=============== $s ==============="
             # Primero la cabecera de las excepciones: con `--tail` a secas se
@@ -160,6 +213,8 @@ jobs:
           path: |
             frontend/app-web/playwright-report/**
             frontend/app-web/test-results/**
+            frontend/app-web/playwright-report-profesor/**
+            frontend/app-web/test-results-profesor/**
           retention-days: 7
           if-no-files-found: ignore
 

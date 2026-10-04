@@ -87,7 +87,7 @@ async function prepararInventario(page) {
 
 async function abrirVitrina(page) {
   await prepararPagina(page);
-  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}`);
+  await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}#objetos`);
   await expect(page.locator('.vitrina__producto')).toHaveCount(PRODUCTOS.length);
 }
 
@@ -139,7 +139,10 @@ test('Una búsqueda válida puede no tener coincidencias', async ({ page }) => {
   await formulario.getByRole('searchbox').fill('inexistente');
   await formulario.getByRole('button', { name: 'Buscar', exact: true }).click();
 
-  await expect(page.locator('.estado-vacio')).toContainText(/no encontramos productos/i);
+  // UXC-1 — el vacío de la búsqueda es el de la vitrina de «Objetos».
+  await expect(page.locator('.inventario__contenido .estado-vacio')).toContainText(
+    /no encontramos productos/i,
+  );
   await expect(page.locator('.inventario__mensaje')).toContainText('0 resultados');
   await expect(page.locator('.estado-error')).toHaveCount(0);
 });

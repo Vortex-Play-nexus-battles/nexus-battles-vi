@@ -1,6 +1,8 @@
 /** HU-PRD-001 - Formulario accesible de creación de productos. */
 import { crearProducto } from './cliente-productos.js';
 import {
+  CAMPOS_DE_PROMOCION,
+  LIMITES_DE_PROMOCION,
   construirSolicitudProducto,
   PARTES_ARMADURA,
   PROTOTIPOS,
@@ -8,6 +10,7 @@ import {
 } from './solicitud-producto.js';
 
 import { h, vaciar } from '../../comun/ui/dom.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
 const ETIQUETAS_TIPO = {
   HEROE: 'Héroe',
@@ -337,6 +340,48 @@ function crearVista() {
     ],
   });
 
+  // UXC-9 — §7.2.4 y §7.5: la promoción del producto (productos.yaml 1.4.0),
+  // opcional. O los tres campos o ninguno; el servidor dice si está vigente.
+  const promocion = h('section', {
+    clase: 'producto-seccion',
+    atributos: { 'aria-labelledby': 'datos-promocion' },
+    hijos: [
+      h('h2', { texto: 'Promoción (opcional)', atributos: { id: 'datos-promocion' } }),
+      h('p', {
+        texto: 'Un descuento con fecha de inicio y de fin. Déjalo vacío si el producto no tiene.',
+      }),
+      h('div', {
+        clase: 'producto-rejilla',
+        hijos: [
+          campo(
+            'Descuento (%) ',
+            control('input', CAMPOS_DE_PROMOCION.porcentaje, {
+              type: 'number',
+              min: LIMITES_DE_PROMOCION.minimo,
+              max: LIMITES_DE_PROMOCION.maximo,
+              step: 1,
+            }),
+            {
+              adicionales: [
+                h('small', {
+                  texto: `Entre ${LIMITES_DE_PROMOCION.minimo} y ${LIMITES_DE_PROMOCION.maximo}.`,
+                }),
+              ],
+            },
+          ),
+          campo(
+            'Empieza ',
+            control('input', CAMPOS_DE_PROMOCION.desde, { type: 'datetime-local' }),
+          ),
+          campo(
+            'Termina ',
+            control('input', CAMPOS_DE_PROMOCION.hasta, { type: 'datetime-local' }),
+          ),
+        ],
+      }),
+    ],
+  });
+
   const estadoProhibido = h('div', {
     clase: 'producto-estado producto-estado--error',
     atributos: { id: 'nexus-rbac-forbidden', role: 'alert', hidden: true },
@@ -368,7 +413,7 @@ function crearVista() {
   const formulario = h('form', {
     clase: 'producto-formulario',
     atributos: { novalidate: true },
-    hijos: [datosGenerales, atributosTipo, estadoProhibido, estado, acciones],
+    hijos: [datosGenerales, atributosTipo, promocion, estadoProhibido, estado, acciones],
   });
 
   const precioReal = formulario.querySelector('[data-precio="real"]');
@@ -417,9 +462,9 @@ function mensajeFallo(fallo) {
     return 'No tienes permiso para crear productos.';
   }
   if (fallo?.status === 400) {
-    return fallo.message || 'Revisa los datos ingresados.';
+    return textoDeError(fallo, 'Revisa los datos ingresados.');
   }
-  return fallo?.message || 'No pudimos crear el producto. Inténtalo nuevamente.';
+  return textoDeError(fallo, 'No pudimos crear el producto. Inténtalo nuevamente.');
 }
 
 /** Monta la vista de creación y delega la autenticación al interceptor común. */

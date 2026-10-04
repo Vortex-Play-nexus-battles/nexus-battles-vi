@@ -21,7 +21,7 @@ cuerpo. Está definido en `contracts/openapi/rbac.yaml` y en
   "type":     "https://nexusbattles.local/errores/creditos-insuficientes",
   "title":    "Créditos insuficientes",
   "status":   422,
-  "detail":   "Tienes 240 créditos y necesitas 400 para crear esta sala.",
+  "detail":   "Tienes 240 créditos y la apuesta de esta sala es de 400.",
   "instance": "/api/v1/salas",
   "errores":  [ { "campo": "recompensaCreditos", "mensaje": "Supera tu saldo." } ]
 }

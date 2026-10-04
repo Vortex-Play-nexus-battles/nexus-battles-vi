@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_ecommerce.catalogo;
 
+import com.nexusbattles.ms_ecommerce.traza.InterceptorDeTraza;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,8 +49,10 @@ public class ConfiguracionDelCatalogo {
         SimpleClientHttpRequestFactory fabrica = new SimpleClientHttpRequestFactory();
         fabrica.setConnectTimeout(propiedades.timeoutConexion());
         fabrica.setReadTimeout(propiedades.timeoutLectura());
+        // B5 — la traza viaja tambien en las lecturas del catalogo (regla 5).
         return RestClient.builder()
                 .baseUrl(propiedades.url())
-                .requestFactory(fabrica);
+                .requestFactory(fabrica)
+                .requestInterceptor(new InterceptorDeTraza());
     }
 }

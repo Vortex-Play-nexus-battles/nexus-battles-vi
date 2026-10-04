@@ -1,85 +1,101 @@
 /**
- * Pruebas del botón flotante del asistente (HU-CHA-001 #505, CA-03).
+ * Pruebas del botón flotante del asistente (HU-CHA-001, RF-CHA-001).
  *
- * Lo que se afirma aquí es justo lo que antes no pasaba: que pulsarlo **hace
- * algo**, que lo que dice es verdad (el asistente no existe todavía) y que
- * ofrece la vía alternativa que exige el criterio.
+ * El botón abre y cierra la ventana del asistente. La ventana se inyecta: sus
+ * propias pruebas están en `ventana-chatbot.test.js`.
  */
 
 import { jest } from '@jest/globals';
 
-import { AVISO_SIN_ASISTENTE, montarAsistente } from './asistente.js';
+import { montarAsistente } from './asistente.js';
+
+const esperar = () => new Promise((resolver) => setTimeout(resolver, 0));
+
+function ventanaFalsa() {
+  const elemento = document.createElement('section');
+  elemento.id = 'chatbot-ventana-prueba';
+  let abierta = false;
+  return {
+    elemento,
+    alternar: jest.fn(() => {
+      abierta = !abierta;
+    }),
+    abierta: () => abierta,
+  };
+}
 
 beforeEach(() => {
-  document.body.innerHTML = '';
+  document.body.replaceChildren();
 });
 
 describe('montarAsistente()', () => {
-  test('monta el boton flotante con nombre accesible', () => {
-    const boton = montarAsistente(document);
+  test('monta el botón flotante con nombre accesible, cerrado', () => {
+    const boton = montarAsistente(document, { crearVentana: ventanaFalsa });
 
     expect(boton.classList.contains('chatbot-flotante')).toBe(true);
     expect(boton.getAttribute('aria-label')).toBe('Abrir el asistente');
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
     expect(boton.type).toBe('button');
     expect(document.body.contains(boton)).toBe(true);
   });
 
   test('reutiliza el botón que la vista ya traiga en su HTML, sin duplicarlo', () => {
-    document.body.innerHTML =
-      '<button class="chatbot-flotante" type="button" aria-label="Abrir el asistente">IA</button>';
+    const previo = document.createElement('button');
+    previo.className = 'chatbot-flotante';
+    previo.type = 'button';
+    document.body.append(previo);
 
-    montarAsistente(document);
+    const boton = montarAsistente(document, { crearVentana: ventanaFalsa });
 
+    expect(boton).toBe(previo);
     expect(document.querySelectorAll('.chatbot-flotante')).toHaveLength(1);
   });
 
-  test('pulsarlo ya NO es un control muerto: abre un dialogo', () => {
-    const boton = montarAsistente(document);
+  // Lo monta el armazón y todavía lo montaban algunas vistas: montarlo dos
+  // veces no puede enganchar dos clics (la ventana se abriría y cerraría).
+  test('montarlo dos veces no duplica el botón ni el comportamiento', async () => {
+    const crearVentana = jest.fn(ventanaFalsa);
+    const primero = montarAsistente(document, { crearVentana });
+    const segundo = montarAsistente(document, { crearVentana });
+
+    expect(segundo).toBe(primero);
+    primero.click();
+    await esperar();
+    expect(crearVentana).toHaveBeenCalledTimes(1);
+    expect(primero.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  test('el primer clic crea la ventana y la abre; el segundo la cierra', async () => {
+    const ventana = ventanaFalsa();
+    const crearVentana = jest.fn(() => ventana);
+    const boton = montarAsistente(document, { crearVentana });
 
     boton.click();
+    await esperar();
+    expect(crearVentana).toHaveBeenCalledTimes(1);
+    expect(ventana.alternar).toHaveBeenCalledWith(boton);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(boton.getAttribute('aria-label')).toBe('Cerrar el asistente');
+    expect(boton.getAttribute('aria-controls')).toBe('chatbot-ventana-prueba');
 
-    const dialogo = document.querySelector('[role="dialog"]');
-    expect(dialogo).not.toBeNull();
-    expect(dialogo.getAttribute('aria-modal')).toBe('true');
-  });
-
-  test('dice la verdad sobre el estado del asistente (CA-03)', () => {
-    montarAsistente(document).click();
-
-    const dialogo = document.querySelector('[role="dialog"]');
-    expect(dialogo.textContent).toContain(AVISO_SIN_ASISTENTE.titulo);
-    expect(dialogo.textContent).toContain('entrega posterior');
-  });
-
-  test('ofrece la via alternativa de contacto, que es el chat general', () => {
-    montarAsistente(document).click();
-
-    const enlace = document.querySelector('[data-accion="ir-al-chat"]');
-    expect(enlace).not.toBeNull();
-    expect(enlace.getAttribute('href')).toContain('chat.html');
-  });
-
-  test('con el servicio disponible llama a quien lo abra y no avisa de nada', () => {
-    const abrir = jest.fn();
-
-    montarAsistente(document, { disponible: true, alAbrir: abrir }).click();
-
-    expect(abrir).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
-  });
-
-  test('con disponible pero sin alAbrir sigue avisando en vez de no hacer nada', () => {
-    montarAsistente(document, { disponible: true }).click();
-
-    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-  });
-
-  test('el dialogo se puede cerrar y devuelve la pantalla a su sitio', () => {
-    const boton = montarAsistente(document);
     boton.click();
+    await esperar();
+    expect(crearVentana).toHaveBeenCalledTimes(1);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+  });
 
-    document.querySelector('.dialogo__cerrar').click();
+  test('si la ventana se cierra sola (Escape, ×), el botón vuelve a «Abrir»', async () => {
+    const boton = montarAsistente(document, { crearVentana: ventanaFalsa });
+    boton.click();
+    await esperar();
 
-    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    document.body.dispatchEvent(new CustomEvent('chatbot:cerrada', { bubbles: true }));
+
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(boton.getAttribute('aria-label')).toBe('Abrir el asistente');
+  });
+
+  test('sin dónde colgarlo no falla', () => {
+    expect(montarAsistente(null, { crearVentana: ventanaFalsa })).toBeNull();
   });
 });

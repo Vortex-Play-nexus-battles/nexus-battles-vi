@@ -34,6 +34,8 @@ import path from 'node:path';
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const ANFITRION = process.env.E2E_ANFITRION ?? 'anfitriona_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -112,21 +114,13 @@ async function encender(servicio) {
 
 // ------------------------------------------------------------------ api
 
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: { nombres: 'Jugadora', apellidos: 'De Prueba', email, password: CLAVE, apodo },
-  });
-  expect([200, 201, 400, 409]).toContain(registro.status());
-  const login = await api.post('/api/v1/auth/login', { data: { email, password: CLAVE } });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+/**
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
+ */
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
@@ -303,6 +297,22 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
     const boton = page.locator('[data-zona="acciones"] [data-atacar]').first();
     await expect(boton).toBeEnabled({ timeout: 20_000 });
 
+    // Desde B7 el orden de los turnos se sortea (§6.1.3): si abrio la maquina,
+    // ya jugo su turno. Lo que se afirma es relativo al turno de la anfitriona
+    // en el que se apaga el motor, no al turno 1.
+    await expect
+      .poll(
+        async () => {
+          partida = await partidaDe(api, anfitriona, partida.id);
+          return partida.turnoActual.idJugador === anfitriona.claims.uid;
+        },
+        { timeout: 25_000, message: 'la maquina no devolvio el turno' },
+      )
+      .toBe(true);
+    const turnoAntes = partida.turnoActual.numeroTurno;
+    const laMaquina = () => partida.participantes.find((p) => p.esIA);
+    const vidaDeLaMaquinaAntes = laMaquina().heroe.vidaActual;
+
     apagar('srv-motor-combate');
 
     await boton.click();
@@ -313,11 +323,9 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
     await expect(boton).toBeEnabled();
     partida = await partidaDe(api, anfitriona, partida.id);
     expect(partida.estado).toBe('EN_CURSO');
-    expect(partida.turnoActual.numeroTurno).toBe(1);
+    expect(partida.turnoActual.numeroTurno).toBe(turnoAntes);
     expect(partida.turnoActual.idJugador).toBe(anfitriona.claims.uid);
-    expect(partida.participantes[1].heroe.vidaActual).toBe(
-      partida.participantes[1].heroe.vidaMaxima,
-    );
+    expect(laMaquina().heroe.vidaActual).toBe(vidaDeLaMaquinaAntes);
 
     await encender('srv-motor-combate');
     // Retry-After ya paso de sobra mientras el motor arrancaba.
@@ -327,7 +335,7 @@ test.describe('Degradacion controlada con inyeccion de fallos (HU-DIS-003)', () 
       .poll(
         async () => {
           partida = await partidaDe(api, anfitriona, partida.id);
-          return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > 1;
+          return partida.estado !== 'EN_CURSO' || partida.turnoActual.numeroTurno > turnoAntes;
         },
         { timeout: 30_000, message: 'el golpe reintentado no se resolvio' },
       )
