@@ -61,6 +61,11 @@ tasks.named('test') {
     // de depender de DOCKER_API_VERSION (variable que este docker-java NO
     // lee) o de tocar la maquina de cada developer.
     systemProperty 'api.version', '1.41'
+
+    // D-41: el informe de la IA (InformeDeSimulacionTest) se pide a mano con
+    // -Dsimulacion.informe=true y sus companeras. Gradle no pasa los -D a la
+    // JVM de las pruebas por su cuenta: se reenvian solo las de este prefijo.
+    systemProperties System.getProperties().findAll { k, v -> k.toString().startsWith('simulacion.') }
 }
 
 jacocoTestReport {
