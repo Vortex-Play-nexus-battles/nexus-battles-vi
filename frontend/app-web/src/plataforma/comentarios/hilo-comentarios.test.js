@@ -488,6 +488,25 @@ describe('retirar lo propio', () => {
     expect(zona.querySelector('.hilo-comentarios__aviso .aviso--exito')).not.toBeNull();
   });
 
+  test('G4 (comentarios.yaml 1.9.0): sin autorId en el hilo, `propio` del servidor decide Eliminar o Reportar', async () => {
+    const delHilo = (i, propio) => {
+      const sinUid = { ...comentario(i), propio };
+      delete sinUid.autorId;
+      return sinUid;
+    };
+    const { zona } = montar({ consultarImpl: servidor([delHilo(1, true), delHilo(2, false)]) });
+    await esperar();
+
+    const [mio, ajeno] = zona.querySelectorAll('.comentario');
+    expect(mio.querySelector('.comentario__propio').textContent).toBe('Tú');
+    expect(mio.querySelector('[data-accion="eliminar-comentario"]')).not.toBeNull();
+    expect(mio.querySelector('[data-accion="reportar-comentario"]')).toBeNull();
+    expect(ajeno.querySelector('.comentario__propio')).toBeNull();
+    expect(ajeno.querySelector('[data-accion="reportar-comentario"]')).not.toBeNull();
+    // Nada en la vista lleva el uid de un autor: no lo tiene.
+    expect(zona.innerHTML).not.toMatch(/uid-\d/);
+  });
+
   test('«Conservar» no elimina nada', async () => {
     const eliminarImpl = jest.fn();
     const { zona } = montar({

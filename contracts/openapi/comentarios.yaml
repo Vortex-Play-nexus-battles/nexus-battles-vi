@@ -104,7 +104,22 @@ info:
     omision) el comentario sale del hilo al alcanzarlo, como antes. Ningun
     esquema cambia: `estadoDelComentario` del reporte sigue siendo el estado
     real del comentario. Es menor.
-  version: 1.8.0
+
+    1.9.0 (G4, continuacion tecnica del 4-oct, privacidad): el hilo publico
+    (GET /products/{productId}/comments) ya no publica el `uid` de nadie. Lo
+    lee cualquiera, tambien sin cuenta, y el `autorId` de cada comentario
+    permitia seguir a un jugador por todos los productos en los que opino. De
+    su autor solo sale `apodoAutor`, que RN-CMT-001 manda ensenar. Lo que el
+    cliente hacia con el `uid` —reconocer sus propios comentarios para
+    ofrecer «Eliminar» en vez de «Reportar»— lo dice ahora el servidor en
+    `propio`, comparando con el token de quien mira si lo trae (sin token, o
+    con uno que no es de usuario, nada es propio). `autorId` sigue en la
+    respuesta de publicar (es el `uid` de quien publica) y en las de
+    moderacion, que lo necesitan para el historial del autor. Nunca hubo
+    correo en estas respuestas. Campo nuevo opcional y un campo que deja de
+    viajar en una respuesta publica cuyo unico consumidor (la tienda, la
+    ficha, la portada) se actualiza en el mismo cambio: menor.
+  version: 1.9.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -130,6 +145,14 @@ paths:
         estado normal de un producto, no un error, y la ficha lo pinta como
         estado vacio. Leer el hilo no pregunta al catalogo: sigue funcionando
         aunque el servicio de productos no responda.
+
+        1.9.0 (G4): cada comentario del hilo trae el apodo de su autor pero no
+        su `autorId`, y trae `propio`: true si quien lee (por el token que
+        manda, si manda uno de usuario) es su autor. El token es opcional;
+        uno caducado o mal firmado responde 401 como en el resto de rutas.
+      security:
+        - {}
+        - bearerAuth: []
       parameters:
         - name: productId
           in: path
@@ -1009,7 +1032,6 @@ components:
       required:
         - id
         - productoId
-        - autorId
         - apodoAutor
         - texto
         - fechaPublicacion
@@ -1021,8 +1043,22 @@ components:
           type: string
         autorId:
           type: string
+          description: >
+            El `uid` (ADR-002) de su autor. Viaja en la respuesta de publicar
+            (es el de quien publica) y en las de moderacion (historial del
+            autor). Desde 1.9.0 (G4) NO viaja en el hilo publico: lo lee
+            cualquiera y permitia seguir a un jugador por sus comentarios.
         apodoAutor:
           type: string
+          description: El apodo visible de su autor (RN-CMT-001); es lo unico de su identidad que es publico.
+        propio:
+          type: boolean
+          description: >
+            1.9.0 (G4) — true si quien lee es su autor: en el hilo, comparando
+            con el token de quien lo pide (sin token, o con uno que no es de
+            usuario, siempre false); en la respuesta de publicar, siempre true.
+            No viaja en las respuestas de moderacion. Es lo que el cliente usa
+            para ofrecer «Eliminar» en los suyos y «Reportar» en los ajenos.
         texto:
           type: string
         imagenes:
