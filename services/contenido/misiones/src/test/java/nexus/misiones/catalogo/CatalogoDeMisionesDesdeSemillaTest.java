@@ -442,6 +442,31 @@ class CatalogoDeMisionesDesdeSemillaTest {
                 .hasMessageContaining("Frío concentrado");
     }
 
+    /** Una mision de progresion (D-42): nivel recomendado, de historia, con los Master que se digan (la real no trae). */
+    private static Mision deProgresion(String id, MasterDeMision... masters) {
+        Mision base = conMasters(id, masters);
+        return new Mision(id, Origen.PROGRESION, base.nombre(), base.categoria(), base.descripcionBreve(), null,
+                base.dificultad(), 1, 3, List.of(), "n", null, base.objetivos(), base.enemigos(), base.jefe(),
+                List.of(masters), base.recompensas(), false, null, null);
+    }
+
+    @Test
+    @DisplayName("la exclusividad se comprueba sobre todas las semillas juntas: la de progresion, sin Master, no estorba; con uno repetido, si")
+    void epicaExclusivaEntreSemillas() {
+        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(),
+                List.of(conMasters("del-documento", master("Sombra del Olvido", VELO))));
+        SemillaDeMisiones progresionSinMaster = new SemillaDeMisiones("1", List.of(), List.of(),
+                List.of(deProgresion("de-progresion")));
+        SemillaDeMisiones progresionConElMismoVelo = new SemillaDeMisiones("1", List.of(), List.of(),
+                List.of(deProgresion("de-progresion", master("Eco de la Niebla", VELO))));
+
+        assertThat(CatalogoDeMisionesDesdeSemilla.desde(documento, progresionSinMaster, null).todas()).hasSize(2);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, progresionConElMismoVelo, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Velo de Sombras")
+                .hasMessageContaining("Eco de la Niebla");
+    }
+
     @Test
     @DisplayName("las semillas publicadas cumplen la regla: cada Master suelta una epica distinta")
     void lasSemillasPublicadasCumplen() {

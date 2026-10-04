@@ -90,7 +90,7 @@ class MasterReforzadoTest {
         eventos = new Dobles.Eventos();
         inventario = new Dobles.Inventario();
         productos = new Dobles.Productos();
-        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, null, null,
+        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, true, null, null,
                 new ParametrosDeRecompensa(Map.of(), Map.of(), false));
     }
 
@@ -165,6 +165,47 @@ class MasterReforzadoTest {
         }
     }
 
+    /**
+     * D-42: los regulares pelean en el nivel recomendado de la mision, con la vida y la defensa de la semilla (las del
+     * Templo, provisionales), y el Master sigue en heroe + 2 (RG-107). El piso se compara con lo que los regulares
+     * llevan DE VERDAD al combate, no con lo que tendrian en el nivel del heroe.
+     */
+    @Test
+    @DisplayName("Criterio 1 con D-42: en el Templo (regulares de nivel 8) un heroe de nivel 3 enfrenta a un Master de nivel 5 que aun asi los supera")
+    void criterio1_temploConRegularesDeNivel8() {
+        for (Escalon escalon : List.of(Escalon.NORMAL, Escalon.HEROICO, Escalon.LEGENDARIO)) {
+            preparar();
+            simular(3, escalon, temploConMaster(sombra()));
+            Map<String, Combatiente> rivales = rivalesQueLlegaronAlMotor();
+            Combatiente master = rivales.get(MASTER);
+            String donde = "escalón " + escalon;
+
+            // El Master es el de siempre: dos niveles por encima del heroe (RG-107), no «nivel de la mision + 2».
+            assertThat(master.nivel()).as("nivel del Master, " + donde).isEqualTo(5);
+            for (String regular : REGULARES) {
+                Combatiente contra = rivales.get(regular);
+                assertThat(contra.nivel()).as("nivel de " + regular + ", " + donde).isEqualTo(8);
+                assertThat(master.estadisticas().vida()).as("vida frente a " + regular + ", " + donde)
+                        .isGreaterThan(contra.estadisticas().vida());
+                assertThat(master.estadisticas().defensa()).as("defensa frente a " + regular + ", " + donde)
+                        .isGreaterThan(contra.estadisticas().defensa());
+                assertThat(master.estadisticas().ataque().esperado()).as("ataque frente a " + regular + ", " + donde)
+                        .isGreaterThan(contra.estadisticas().ataque().esperado());
+                assertThat(master.estadisticas().dano().esperado()).as("daño frente a " + regular + ", " + donde)
+                        .isGreaterThan(contra.estadisticas().dano().esperado());
+            }
+        }
+    }
+
+    /** Como «El Templo Olvidado» de la semilla 1.1.0: nivel 8 y la vida y la defensa provisionales de los regulares. */
+    private static Mision temploConMaster(MasterDeMision master) {
+        return Misiones.conEnemigosYMastersEnNivel("templo-con-master", 8, List.of(
+                new GrupoDeEnemigos("Sombras Corrompidas", 2, null, "Guerrero Armas", 18, 70, List.of()),
+                new GrupoDeEnemigos("Guardianes de Piedra", 2, null, "Guerrero Tanque", 30, 84, List.of()),
+                new GrupoDeEnemigos("Espectros Ancestrales", 1, null, "Mago Fuego", 12, 70, List.of())),
+                new Jefe("El Guardián Eterno", "Pícaro Machete", 100, null, null, List.of()), List.of(master));
+    }
+
     // ------------------------------------------------------------------ criterio 2
 
     @Test
@@ -237,7 +278,7 @@ class MasterReforzadoTest {
         Dobles.Directorio directorio = new Dobles.Directorio();
         directorio.contactos.put(JUGADOR, new DirectorioDeJugadores.Contacto("jugador@nexus.test", "Jugador"));
         return new LiquidarEjecucion(ejecuciones, new Dobles.Catalogo(List.of(mision), List.of()), inventario, libro,
-                directorio, new Dobles.Correo(), parametros, reloj);
+                directorio, new Dobles.Correo(), new Dobles.Avisos(), parametros, reloj);
     }
 
     @Test
