@@ -19,15 +19,29 @@ import java.util.UUID;
  * tipo, si es epica y la tirada; y cada afectado su poder, sus recargas y sus
  * efectos activos, que alimenta el motor de combate.
  *
+ * <p>Desde 1.7.0 trae a quien apunto la accion ({@code idObjetivo}) y, por cada
+ * afectado, por que cambio su vida ({@code causas}): un reflejo de los Pinchos
+ * de escudo deja de parecer un golpe que el atacante se dio a si mismo.
+ *
  * <p>Vive en {@code tiemporeal} y no en el dominio por lo mismo que
  * {@link AvisoDeIngreso}: es formato de cable. Publico, con records anidados
  * publicos, para que la serializacion no tenga que forzar accesos.
  */
 public record AvisoDeAccionResuelta(String tipo, UUID idPartida, UUID idEjecutor,
-                                    Accion accion, List<Afectado> afectados) {
+                                    Accion accion, List<Afectado> afectados, UUID idObjetivo) {
 
     /** Valor constante del discriminador, fijado por el contrato. */
     public static final String TIPO = "partida.accion.resuelta";
+
+    /** Sin el objetivo de 1.7.0. */
+    public AvisoDeAccionResuelta(String tipo, UUID idPartida, UUID idEjecutor, Accion accion,
+                                 List<Afectado> afectados) {
+        this(tipo, idPartida, idEjecutor, accion, afectados, null);
+    }
+
+    /** Por que cambio la vida de un afectado (1.7.0), tal como lo anoto el motor. */
+    public record Causa(String tipo, UUID origen, String efecto, Integer cantidad) {
+    }
 
     /** Esquema {@code accion}: {@code icono} puede ser null, como permite el contrato. */
     public record Accion(String codigo, String nombre, String icono, String accionPedida, boolean enValorBase,
@@ -47,11 +61,19 @@ public record AvisoDeAccionResuelta(String tipo, UUID idPartida, UUID idEjecutor
     /** Un elemento de {@code afectados}. */
     public record Afectado(UUID idJugador, int vidaActual, int vidaMaxima, int diferencia,
                            List<EfectoEnCable> efectosActivos, Integer poderActual, Integer poderMaximo,
-                           Map<String, Integer> recargas) {
+                           Map<String, Integer> recargas, List<Causa> causas) {
+
+        /** Sin las causas de 1.7.0. */
+        public Afectado(UUID idJugador, int vidaActual, int vidaMaxima, int diferencia,
+                        List<EfectoEnCable> efectosActivos, Integer poderActual, Integer poderMaximo,
+                        Map<String, Integer> recargas) {
+            this(idJugador, vidaActual, vidaMaxima, diferencia, efectosActivos, poderActual, poderMaximo, recargas,
+                    List.of());
+        }
 
         /** Sin los campos de 1.5.0. */
         public Afectado(UUID idJugador, int vidaActual, int vidaMaxima, int diferencia) {
-            this(idJugador, vidaActual, vidaMaxima, diferencia, List.of(), null, null, Map.of());
+            this(idJugador, vidaActual, vidaMaxima, diferencia, List.of(), null, null, Map.of(), List.of());
         }
     }
 
@@ -69,7 +91,10 @@ public record AvisoDeAccionResuelta(String tipo, UUID idPartida, UUID idEjecutor
                 resultado.afectados().stream()
                         .map(a -> new Afectado(a.idJugador(), a.vidaActual(), a.vidaMaxima(), a.diferencia(),
                                 EfectoEnCable.de(a.efectosActivos()), a.poderActual(), a.poderMaximo(),
-                                a.recargas()))
-                        .toList());
+                                a.recargas(), a.causas().stream()
+                                        .map(c -> new Causa(c.tipo(), c.origen(), c.efecto(), c.cantidad()))
+                                        .toList()))
+                        .toList(),
+                resultado.idObjetivo());
     }
 }

@@ -130,6 +130,27 @@ public record HeroeDeCombate(
         return conVida(vidaMaxima);
     }
 
+    /**
+     * Un rival de la maquina del mismo prototipo y nivel que este heroe, como
+     * los del catalogo (D-B7-11): su propio identificador, el nombre del
+     * prototipo, sin retrato y sin equipo ni epicas ({@link PerfilDeCombate#delCatalogo}).
+     *
+     * <p>Es el respaldo cuando el catalogo de heroes no contesta al empezar.
+     * Antes la maquina combatia con una COPIA exacta del heroe del anfitrion
+     * —mismo nombre, mismo retrato y su equipo, Pinchos de escudo incluidos— y
+     * el registro decia «Aquiles golpea a Aquiles (tu)»: el jugador veia que su
+     * ataque le quitaba vida a el mismo.
+     */
+    public HeroeDeCombate comoRivalDeLaMaquina() {
+        int nivelDelRival = nivelDeCombate();
+        String nombreDelRival = prototipo != null && !prototipo.isBlank() ? prototipo : NOMBRE_DE_LA_MAQUINA;
+        return new HeroeDeCombate(java.util.UUID.randomUUID().toString(), nombreDelRival, prototipo, null,
+                nivelDelRival, vidaMaxima, vidaMaxima, defensa, PerfilDeCombate.delCatalogo(nivelDelRival));
+    }
+
+    /** Nombre del rival de la maquina cuando no se conoce su prototipo. */
+    public static final String NOMBRE_DE_LA_MAQUINA = "Rival de la máquina";
+
     /** El mismo heroe con lo que lleva al combate (B7). */
     public HeroeDeCombate conPerfil(PerfilDeCombate perfil) {
         return new HeroeDeCombate(id, nombre, prototipo, retratoUrl,

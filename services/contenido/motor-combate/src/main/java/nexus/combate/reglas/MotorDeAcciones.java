@@ -53,14 +53,28 @@ public final class MotorDeAcciones {
     private final CatalogoDeCombate catalogo;
     private final IndiceNormal indice;
     private final Reglamento reglamento = new Reglamento();
+    private final DificultadDeLaMaquina dificultad;
 
     public MotorDeAcciones(CatalogoDeCombate catalogo, IndiceNormal indice) {
+        this(catalogo, indice, DificultadDeLaMaquina.NORMAL);
+    }
+
+    /**
+     * @param dificultad como decide la maquina con {@code DECISION_DE_LA_MAQUINA}
+     *                   (D-41, {@code MOTOR_IA_DIFICULTAD})
+     */
+    public MotorDeAcciones(CatalogoDeCombate catalogo, IndiceNormal indice, DificultadDeLaMaquina dificultad) {
         this.catalogo = Objects.requireNonNull(catalogo, "Sin catalogo de heroes no hay combate.");
         this.indice = Objects.requireNonNull(indice, "Sin indice no hay tabla de efectos.");
+        this.dificultad = Objects.requireNonNull(dificultad, "La IA necesita su dificultad.");
     }
 
     public Reglamento reglamento() {
         return reglamento;
+    }
+
+    public DificultadDeLaMaquina dificultad() {
+        return dificultad;
     }
 
     // =====================================================================
@@ -85,12 +99,35 @@ public final class MotorDeAcciones {
         String accion = solicitud.accion().trim();
         String objetivoPedido = solicitud.objetivo();
         if (Reglamento.DECISION_DE_LA_MAQUINA.equalsIgnoreCase(accion)) {
+            // La maquina decide SIN el generador de la partida: ensaya con el
+            // suyo (D-41). Asi no ve las tiradas que van a salir ni las gasta.
             PoliticaDeLaMaquina.Decision decision =
-                    PoliticaDeLaMaquina.decidir(idEjecutor, mesa, porEquipos, reglamento);
+                    new PoliticaDeLaMaquina(this, dificultad).decidir(idEjecutor, mesa, porEquipos);
             accion = decision.accion();
             objetivoPedido = decision.objetivo();
         }
 
+        Jugada jugada = jugar(mesa, idEjecutor, accion, objetivoPedido, porEquipos, azar);
+        Plan plan = jugada.plan();
+        Contendiente objetivo = jugada.objetivo();
+        return new ResultadoDeAccion(
+                accion, plan.codigo(), jugada.enValorBase(), idEjecutor, objetivo == null ? null : objetivo.id(),
+                plan.tipo(), plan.esEpica(), plan.potenciada(), jugada.detalle(), mesa.afectados(), mesa.eventos(),
+                mesa.todos(), accionesDe(mesa), recargasDe(mesa));
+    }
+
+    /** Lo que se jugo: el plan, si fue en valor base, contra quien y la tirada del golpe. */
+    private record Jugada(Plan plan, boolean enValorBase, Contendiente objetivo, DetalleDeAtaque detalle) {
+    }
+
+    /**
+     * Una accion sobre una mesa, de principio a fin. Es el UNICO camino: lo
+     * recorren la accion de un jugador, la de la maquina y los ensayos con los
+     * que la maquina decide ({@link #ensayar}). Por eso la maquina no puede
+     * elegir una jugada que el reglamento no deje hacer.
+     */
+    private Jugada jugar(Mesa mesa, String idEjecutor, String accion, String objetivoPedido, boolean porEquipos,
+                         RandomGenerator azar) {
         Contendiente ejecutor = mesa.de(idEjecutor);
         Plan pedido = reglamento.planPara(accion, ejecutor, mesa.ficha(idEjecutor));
         exigirQueNoEsteEnCarga(ejecutor, pedido);
@@ -118,11 +155,22 @@ public final class MotorDeAcciones {
                     TipoDeEfecto.VINCULO_REANIMACION, Mesa.PORCENTAJE_DE_REANIMACION_DEL_VINCULO, 0, idEjecutor));
         }
         cerrarTurnoDelEjecutor(mesa, idEjecutor, plan, enValorBase, azar);
+        return new Jugada(plan, enValorBase, objetivo, detalle);
+    }
 
-        return new ResultadoDeAccion(
-                accion, plan.codigo(), enValorBase, idEjecutor, objetivo == null ? null : objetivo.id(),
-                plan.tipo(), plan.esEpica(), plan.potenciada(), detalle, mesa.afectados(), mesa.eventos(),
-                mesa.todos(), accionesDe(mesa), recargasDe(mesa));
+    /**
+     * Ensaya una jugada sobre una COPIA de la mesa con el generador de quien
+     * ensaya: la mesa de la partida no cambia y su azar no se toca (D-41).
+     *
+     * @return la copia, con el estado y los eventos que dejaria la jugada
+     * @throws AccionNoPermitida si la jugada no vale: el mismo reglamento que
+     *                           una de verdad
+     */
+    Mesa ensayar(Mesa mesa, String idEjecutor, String accion, String objetivo, boolean porEquipos,
+                 RandomGenerator azar) {
+        Mesa copia = mesa.copia();
+        jugar(copia, idEjecutor, accion, objetivo, porEquipos, azar);
+        return copia;
     }
 
     private void exigirQueNoEsteEnCarga(Contendiente ejecutor, Plan plan) {

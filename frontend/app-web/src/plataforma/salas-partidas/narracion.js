@@ -131,7 +131,62 @@ function nombreDeLoJugado(aviso, participantes) {
 export function nombreDe(idJugador, participantes, yo) {
   const participante = (participantes ?? []).find((p) => p.jugador?.id === idJugador);
   const nombre = participante?.heroe?.nombre ?? (participante?.esIA ? 'la máquina' : 'un rival');
-  return idJugador && idJugador === yo ? `${nombre} (tú)` : nombre;
+  if (idJugador && idJugador === yo) {
+    return `${nombre} (tú)`;
+  }
+  // Auditoría del 4-oct («cuando ataco, me hago daño»): el rival de la
+  // máquina lleva el nombre de su prototipo, que puede ser el de tu héroe.
+  // Sin la marca, «Mago Fuego golpea a Mago Fuego (tú)» parecía un golpe propio.
+  return participante?.esIA && participante?.heroe?.nombre ? `${nombre} (IA)` : nombre;
+}
+
+/**
+ * La línea de un daño que le devolvieron a quien atacaba: los Pinchos de
+ * escudo o Toma y lleva del objetivo (§6.1.2), que el servidor anuncia como
+ * causa `REFLEJO` con quién la causó (canal 1.7.0). Nunca «X golpea a X»: un
+ * ataque no le quita vida a quien lo lanza.
+ *
+ * @param {object} afectado
+ * @param {Array<object>} participantes
+ * @param {string|null} yo
+ * @param {string} vida «(41/44)» o vacío
+ * @returns {string}
+ */
+function textoDeDanoDevuelto(afectado, participantes, yo, vida) {
+  const cantidad = Math.abs(afectado.diferencia);
+  const causas = Array.isArray(afectado.causas) ? afectado.causas : [];
+  const reflejo = causas.find((c) => c?.tipo === 'REFLEJO');
+  const esYo = afectado.idJugador === yo;
+  const quien = nombreDe(afectado.idJugador, participantes, yo);
+  if (reflejo) {
+    const devuelve = reflejo.origen ? nombreDe(reflejo.origen, participantes, yo) : 'su rival';
+    const quienDevuelve = reflejo.efecto ? `${reflejo.efecto} de ${devuelve}` : devuelve;
+    return esYo
+      ? `${quienDevuelve} te devuelve ${cantidad} de daño${vida}.`
+      : `${quienDevuelve} le devuelve ${cantidad} de daño a ${quien}${vida}.`;
+  }
+  return esYo
+    ? `Recibes ${cantidad} de daño de vuelta${vida}.`
+    : `${quien} recibe ${cantidad} de daño de vuelta${vida}.`;
+}
+
+/**
+ * La línea de un efecto por turno que quita vida. Si lo causó el mismo héroe
+ * (la Empuñadura de Furia, §6.1.2, Tabla 16: «el guerrero pierde 1 de vida»),
+ * se dice que es suyo: antes salía «X (tú) usa Empuñadura de Furia sobre X (tú)».
+ *
+ * @returns {string}
+ */
+function textoDeEfectoQueQuitaVida(aviso, afectado, efecto, participantes, yo, vida) {
+  const cantidad = Math.abs(afectado.diferencia);
+  const objetivo = nombreDe(afectado.idJugador, participantes, yo);
+  if (afectado.idJugador === aviso?.idEjecutor) {
+    return afectado.idJugador === yo
+      ? `Pierdes ${cantidad} de vida por tu ${efecto}${vida}.`
+      : `${objetivo} pierde ${cantidad} de vida por su ${efecto}${vida}.`;
+  }
+  const causante = nombreDe(aviso?.idEjecutor, participantes, yo);
+  return `${efecto} de ${causante}: ${objetivo} pierde ${cantidad} de vida${vida}.`;
 }
 
 /**
@@ -205,6 +260,7 @@ export function narrarAccion(aviso, participantes, yo) {
   // curó: antes el registro solo decía «se cura: +5» y no qué acción fue
   // (auditoría de DEV del 30-sep: «los especiales no se narran»).
   let curacionNombrada = false;
+  const esEfectoPorTurno = aviso?.accion?.codigo === EFECTO_POR_TURNO;
   for (const afectado of afectados) {
     const objetivo = nombreDe(afectado.idJugador, participantes, yo);
     const diferencia = Number.isFinite(afectado.diferencia) ? afectado.diferencia : null;
@@ -213,7 +269,33 @@ export function narrarAccion(aviso, participantes, yo) {
         ? ` (${afectado.vidaActual}/${afectado.vidaMaxima})`
         : '';
 
-    if (diferencia !== null && diferencia > 0) {
+    if (diferencia !== null && diferencia < 0 && esEfectoPorTurno) {
+      lineas.push({
+        texto: textoDeEfectoQueQuitaVida(aviso, afectado, accion, participantes, yo, vida),
+        tono: 'dano',
+        icono: 'gota',
+      });
+      impactos.push({
+        idJugador: afectado.idJugador,
+        cifra: `${diferencia}`.replace('-', '−'),
+        etiqueta: accion,
+        tono: 'dano',
+      });
+    } else if (diferencia !== null && diferencia < 0 && afectado.idJugador === aviso?.idEjecutor) {
+      // Auditoría del 4-oct: la vida de quien atacó bajó en su propio aviso.
+      // No es su golpe: se lo devolvió el objetivo (REFLEJO).
+      lineas.push({
+        texto: textoDeDanoDevuelto(afectado, participantes, yo, vida),
+        tono: 'dano',
+        icono: 'escudo',
+      });
+      impactos.push({
+        idJugador: afectado.idJugador,
+        cifra: `${diferencia}`.replace('-', '−'),
+        etiqueta: 'Devuelto',
+        tono: 'dano',
+      });
+    } else if (diferencia !== null && diferencia > 0) {
       if (accion && !curacionNombrada) {
         curacionNombrada = true;
         lineas.push({ texto: `${ejecutor} usa ${accion}.`, tono: 'sistema', icono: 'rayo' });

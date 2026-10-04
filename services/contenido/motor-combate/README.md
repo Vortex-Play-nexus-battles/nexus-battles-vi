@@ -50,7 +50,7 @@ servicio.
 | Tabla 7: las 24 acciones como reglas; §6.1.2 un turno de carga y multiplicador de nivel | `Reglamento` (datos en heroes, efecto aquí) | `AccionesEspecialesTest` |
 | Tabla 20: épicas, dos turnos de recarga, efecto potenciado del héroe afín | `Reglamento.tabla20` | `EpicasEnCombateTest` |
 | Tablas 8 a 19: efectos de combate de armas e ítems | `EquipoDeCombate` | `EquipoEnCombateTest` |
-| §6.1.3 cooperativo: sin daño a compañeros; mismas reglas para la IA | `MotorDeAcciones.elegirObjetivo`, `PoliticaDeLaMaquina` | `MotorDeAccionesTest`, `PoliticaDeLaMaquinaTest` |
+| §6.1.3 cooperativo: sin daño a compañeros; mismas reglas para la IA | `MotorDeAcciones.elegirObjetivo`, `PoliticaDeLaMaquina` | `MotorDeAccionesTest`, `PoliticaDeLaMaquinaTest`, `MatrizDeAccionesTest`, `SimulacionDeLaMaquinaTest` |
 | §6.1.1 el sanador no inflige daño | `Reglamento.exigirQueAtaque` | `AccionesEspecialesTest`, `AccionesDisponiblesTest` |
 
 **Datos contra reglas.** El nombre, el coste, la carga y el nivel de
@@ -58,9 +58,45 @@ desbloqueo de cada acción son datos del catálogo de héroes (heroes.yaml 1.2.0
 lo que la acción HACE es una regla y vive una sola vez en `Reglamento`. El
 catálogo se consulta por `CatalogoDeCombateHttp`, con caché.
 
-**La IA** (`DECISION_DE_LA_MAQUINA`) juega con las mismas reglas y una política
-simple y determinista (D-B7-12). El «aprendizaje profundo» del §7.6 queda fuera
-de este bloque (D-B7-13): no se simula.
+**La IA** (`DECISION_DE_LA_MAQUINA`) es una **IA táctica por reglas** (D-41,
+auditoría del 4-oct; sustituye a la política fija de D-B7-12). No es una IA
+entrenada: el «aprendizaje profundo» del §7.6 queda fuera de este bloque
+(D-B7-13) y no se simula.
+
+`PoliticaDeLaMaquina` enumera cada acción disponible con cada objetivo que esa
+acción admite (un ataque, solo rivales en pie), la ensaya con
+`MotorDeAcciones.ensayar` —el mismo código que resuelve una jugada de verdad,
+sobre una copia de la mesa— y juega la de mejor puntaje esperado: vida de cada
+bando a escala √ (rematar y curar al que está en apuros valen más), seguir en
+pie, efectos activos, poder útil y, en DIFÍCIL, la respuesta esperada de los
+rivales. Los ensayos usan un generador propio sembrado con el estado: no ve ni
+gasta el azar de la partida, y el mismo estado da la misma decisión.
+
+| Dificultad | Ensayos por jugada | Anticipa la respuesta | Descuidos |
+|---|---|---|---|
+| `FACIL` | 4 | no | 40 % de las veces, una de sus 3 mejores |
+| `NORMAL` | 12 | no | nunca |
+| `DIFICIL` | 24 | sí | nunca |
+
+**Simulaciones** (`SimuladorDeCombates`, partidas completas contra el motor
+real). `SimulacionDeLaMaquinaTest` corre en CI con semillas fijas: matriz 8×8
+de prototipos en niveles 1 y 8, 3 contra 3 con sanadores en las tres
+dificultades, y la IA contra la regla fija anterior. El informe completo, con
+cientos de partidas, se pide a mano:
+
+```powershell
+./gradlew :services:contenido:motor-combate:test --tests '*InformeDeSimulacionTest' `
+    "-Dsimulacion.informe=true" "-Dsimulacion.partidas=16" "-Dsimulacion.tope=150"
+```
+
+Resultado del 4-oct (4.896 partidas): **0 jugadas ilegales, 0 auto-daño y 0
+fuego amigo**. En espejo (mismo prototipo y nivel), NORMAL gana el 68 % contra
+la regla fija (21 % pierde, el resto tablas), DIFÍCIL el 61 % y FÁCIL el 59 %;
+NORMAL gana el 61 % contra FÁCIL y DIFÍCIL el 49 % contra NORMAL (33 %).
+Decidir cuesta de media 0,3 ms en un duelo (NORMAL) y 8 ms en un 3 contra 3 de
+nivel 8 (DIFÍCIL). Las tablas son de las propias reglas: un sanador no puede
+ganar un duelo (§6.1.1) y el espejo de Guerrero Tanque desde el nivel 4 no se
+hace daño en 150 turnos (en partida real cierra el tope de 6 minutos).
 
 ### Configuración (regla 10, todas con valor por omisión seguro)
 
@@ -70,6 +106,7 @@ de este bloque (D-B7-13): no se simula.
 | `MOTOR_HEROES_CACHE_SEGUNDOS` | `300` | Vigencia de la ficha de combate en caché; `0` la desactiva |
 | `MOTOR_INDICE_MEDIA` | `4000.5` | Media del índice normal (D-B7-01, el documento no la fija) |
 | `MOTOR_INDICE_DESVIACION` | `1333.3333333333333` | Desviación del índice normal (D-B7-01) |
+| `MOTOR_IA_DIFICULTAD` | `NORMAL` | Cómo decide la IA (D-41): `FACIL`, `NORMAL` o `DIFICIL`; una mal escrita no arranca |
 
 Con el índice normal, el porcentaje de FILAS de un efecto no es su
 probabilidad: con los valores por omisión, el 60 % de filas de «causar daño»
