@@ -29,7 +29,7 @@ public final class Misiones {
     public static Mision templo() {
         return new Mision("templo-olvidado", Origen.DOCUMENTO, "El Templo Olvidado", Categoria.HISTORIA,
                 "En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados.",
-                null, Dificultad.NORMAL, 12, 15, List.of(),
+                null, Dificultad.NORMAL, 12, 8, List.of(),
                 "En las profundidades del Bosque Sombrío yace un antiguo templo...", null,
                 List.of(
                         new Objetivo("Derrotar al Guardián del Templo (Jefe final).", true,
