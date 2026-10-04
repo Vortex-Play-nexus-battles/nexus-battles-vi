@@ -1716,7 +1716,8 @@ describe('auditoría de DEV del 30-sep · combate', () => {
   test('recién empezada en el turno 2, el registro cuenta quién abrió y lo que dejó', () => {
     montar({ participantes: enLaPartida({ vidaDeAna: 34 }), recienEmpezada: true });
 
-    expect(registro()).toContain('Turno 1: abrió Mago Fuego.');
+    // Desde el 4-oct la máquina se marca con «(IA)» en el registro.
+    expect(registro()).toContain('Turno 1: abrió Mago Fuego (IA).');
     expect(registro()).toContain('Guerrero Tanque (tú) recibió 10 de daño en el turno 1 (34/44).');
   });
 

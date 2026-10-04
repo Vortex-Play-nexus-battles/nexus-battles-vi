@@ -291,6 +291,7 @@
         textoDeCancelacion,
       } from './canal-sala.js';
       import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
+      import { suscripcionConRitmo } from './ritmo-de-combate.js';
       import {
         baseDeApi,
         iniciarPartida,
@@ -432,7 +433,15 @@
         // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
         // los turnos y el final. El registro evita que una reconexion vuelva a
         // disparar el final o duplique el historial.
-        canal.suscribir(`/tema/partidas/${partida.id}`, (aviso) => {
+        //
+        // Auditoria del 4-oct: por la MISMA suscripcion con ritmo que el panel
+        // (`suscribir`), asi el registro y las barras ven el contragolpe de la
+        // maquina a la vez, y despues de tu golpe, no pegado a el.
+        const escuchar =
+          typeof suscribir === 'function'
+            ? suscribir
+            : (alRecibir) => canal.suscribir(`/tema/partidas/${partida.id}`, alRecibir);
+        escuchar((aviso) => {
           if (!registro.yaVisto(aviso)) {
             controles.recibir(aviso);
           }
@@ -647,9 +656,24 @@
         }
       }
 
-      /** Engancha el panel de vidas al canal de la partida que este en pantalla. */
+      /**
+       * Engancha el panel de vidas (y los controles) al canal de la partida que
+       * este en pantalla. Una sola suscripcion por partida, con ritmo: la
+       * accion de otro (la maquina, un rival) espera un momento tras la tuya
+       * para que cada golpe se vea por separado (auditoria del 4-oct).
+       */
+      const canalesConRitmo = new Map();
       function suscripcionActual() {
-        return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
+        if (!canal || !partida) {
+          return undefined;
+        }
+        if (!canalesConRitmo.has(partida.id)) {
+          canalesConRitmo.set(
+            partida.id,
+            suscripcionConRitmo(suscripcionDePartida(canal, partida.id), { yo }),
+          );
+        }
+        return canalesConRitmo.get(partida.id);
       }
 
       // Quien espera en la sala se entera por el canal de la SALA: aqui todavia
