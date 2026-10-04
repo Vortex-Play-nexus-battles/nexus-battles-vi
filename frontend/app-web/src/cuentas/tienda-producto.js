@@ -45,6 +45,9 @@ export const MODOS = Object.freeze({ TIENDA: 'tienda', PORTADA: 'portada' });
  * @returns {HTMLElement}
  */
 export function precioDeProducto(producto, { grande = false } = {}) {
+  if (producto.soloEnCreditos) {
+    return precioSoloEnCreditos(producto, { grande });
+  }
   const cifra = h('span', {
     clase: clases('price', producto.precioTexto === null && 'precio-ausente'),
     texto: producto.precioTexto ?? 'Precio no disponible',
@@ -82,11 +85,30 @@ export function precioDeProducto(producto, { grande = false } = {}) {
 }
 
 /**
- * «Ya lo tienes» (OwnedBadge).
+ * G3 (ecommerce-carrito 1.7.0): un producto que solo se vende en créditos del
+ * juego. Su precio ES el de créditos —va en `.price`, con `data-precio-creditos`
+ * como el «o N créditos» de los que tienen los dos— y se dice que con tarjeta
+ * no se paga. Nunca «Precio no disponible» ni «0 COP».
  *
- * @param {number} unidades cuántas tiene el jugador (≥ 1)
+ * @param {ReturnType<typeof aProductoDeVitrina>} producto
+ * @param {{grande?: boolean}} [opciones]
  * @returns {HTMLElement}
  */
+function precioSoloEnCreditos(producto, { grande = false } = {}) {
+  return h('span', {
+    clase: clases('precio-bloque', 'precio-bloque--creditos', grande && 'precio-bloque--grande'),
+    datos: { soloEnCreditos: 'si' },
+    hijos: [
+      h('span', {
+        clase: 'price precio-creditos--principal',
+        texto: producto.precioCreditosTexto,
+        datos: { precioCreditos: String(producto.precioCreditos) },
+      }),
+      h('span', { clase: 'precio-solo-creditos', texto: 'Solo con créditos del juego' }),
+    ],
+  });
+}
+
 /** Por qué no se ofrece «Añadir» de lo que ya se tiene (RF-CAR-004, ecommerce-carrito 1.5.0). */
 export const MOTIVO_YA_LO_TIENES =
   'Ya lo tienes en tu inventario: la tienda no lo vende dos veces.';
@@ -106,6 +128,12 @@ export function apagarAnadirPorPropio(boton) {
   delete boton.dataset.producto;
 }
 
+/**
+ * «Ya lo tienes» (OwnedBadge).
+ *
+ * @param {number} unidades cuántas tiene el jugador (≥ 1)
+ * @returns {HTMLElement}
+ */
 export function distintivoDePropiedad(unidades) {
   return h('span', {
     clase: 'distintivo distintivo--activo producto-propio',

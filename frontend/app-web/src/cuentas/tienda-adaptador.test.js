@@ -209,4 +209,73 @@ describe('aFilaDeCarrito', () => {
     expect(fila.productoId).toBe('p-1');
     expect(aFilaDeCarrito({ producto: { imagen: '  ' } }).imagen).toBeNull();
   });
+
+  test('G3: una línea solo en créditos enseña los créditos del servidor, nunca «Sin precio» ni «0 COP»', () => {
+    const fila = aFilaDeCarrito(
+      {
+        id: 3,
+        cantidad: 2,
+        precioUnitario: null,
+        subtotal: null,
+        precioCreditos: 120,
+        subtotalCreditos: 240,
+        soloEnCreditos: true,
+        disponible: true,
+        producto: { id: 'p-3', nombre: 'Amuleto', moneda: null },
+      },
+      'COP',
+    );
+    expect(fila.soloEnCreditos).toBe(true);
+    expect(fila.unitarioTexto).toBe('120 créditos');
+    expect(fila.subtotalTexto).toBe('240 créditos');
+    expect(fila.subtotal).toBeNull();
+    expect(fila.subtotalCreditos).toBe(240);
+  });
+
+  test('G3: una línea con los dos precios sigue en dinero real; sin dato de créditos no se inventa', () => {
+    const ambos = aFilaDeCarrito(
+      { precioUnitario: 6000, subtotal: 6000, precioCreditos: 300, subtotalCreditos: 300 },
+      'COP',
+    );
+    expect(ambos.soloEnCreditos).toBe(false);
+    expect(ambos.subtotalTexto).toBe('6.000 COP');
+    expect(ambos.unitarioTexto).toBe('6.000 COP');
+
+    const sinCifra = aFilaDeCarrito({ soloEnCreditos: true, subtotalCreditos: null }, 'COP');
+    expect(sinCifra.subtotalTexto).toBeNull();
+    expect(sinCifra.unitarioTexto).toBeNull();
+  });
+
+  test('G3: sin ningún precio el motivo lo dice así (ya no es «no se vende con dinero real»)', () => {
+    expect(
+      aFilaDeCarrito({ disponible: false, motivo: 'SIN_PRECIO_EN_MONEDA_REAL' }).motivoTexto,
+    ).toBe('Ya no tiene precio de venta. Quítalo para pagar.');
+  });
+});
+
+describe('G3 — producto que solo se vende en créditos', () => {
+  test('sin precio en dinero real y con créditos: se vende en créditos', () => {
+    const vm = aProductoDeVitrina({
+      precioFinal: null,
+      precioOriginal: null,
+      moneda: null,
+      precioCreditos: 120,
+    });
+    expect(vm.soloEnCreditos).toBe(true);
+    expect(vm.precio).toBeNull();
+    expect(vm.precioTexto).toBeNull();
+    expect(vm.precioCreditosTexto).toBe('120 créditos');
+  });
+
+  test('con los dos precios, solo dinero real, o ninguno: no es «solo en créditos»', () => {
+    expect(aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP', precioCreditos: 300 })).toEqual(
+      expect.objectContaining({ soloEnCreditos: false }),
+    );
+    expect(aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP' }).soloEnCreditos).toBe(false);
+    expect(aProductoDeVitrina({ precioFinal: null, precioCreditos: null }).soloEnCreditos).toBe(
+      false,
+    );
+    // Un cero en créditos no es un precio (el contrato: mínimo 1).
+    expect(aProductoDeVitrina({ precioFinal: null, precioCreditos: 0 }).soloEnCreditos).toBe(false);
+  });
 });

@@ -174,6 +174,8 @@ export function coincideBusqueda(producto, busqueda) {
       producto.habilidades,
       NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo,
       producto.precioTexto,
+      // G3: el precio de uno que solo se vende en créditos es el de créditos.
+      producto.soloEnCreditos ? producto.precioCreditosTexto : null,
     ].join(' '),
   );
   if (texto.includes(termino)) {
@@ -182,8 +184,9 @@ export function coincideBusqueda(producto, busqueda) {
   // Una búsqueda hecha solo de cifras («45000», «45 000», «$45.000») se
   // compara con el precio sin separadores. Una con letras no: «espada 2» no
   // debe traer todo lo que cuesta algo con un 2.
-  if (/^[\d\s.,$]+$/.test(String(busqueda).trim()) && producto.precio !== null) {
-    return soloCifras(String(Math.round(producto.precio))).includes(soloCifras(busqueda));
+  const precio = producto.soloEnCreditos ? producto.precioCreditos : producto.precio;
+  if (/^[\d\s.,$]+$/.test(String(busqueda).trim()) && precio !== null && precio !== undefined) {
+    return soloCifras(String(Math.round(precio))).includes(soloCifras(busqueda));
   }
   return false;
 }

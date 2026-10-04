@@ -495,11 +495,18 @@ export function interpretarPago({ estado, orden, problema }, { moneda = 'COP' } 
     tipo === 'tiraje-insuficiente' ||
     tipo === 'cantidad-fuera-de-rango'
   ) {
+    let titulo = 'Tu carrito cambió';
+    if (tipo === 'carrito-vacio') {
+      titulo = 'Tu carrito está vacío';
+    } else if (tipo === 'producto-sin-precio-en-moneda-real') {
+      // G3 (1.7.0): algo del carrito solo se vende en créditos del juego.
+      titulo = 'Hay algo que solo se paga con créditos';
+    }
     return {
       ...base,
       tipo: 'carrito',
       conservarClave: true,
-      titulo: tipo === 'carrito-vacio' ? 'Tu carrito está vacío' : 'Tu carrito cambió',
+      titulo,
       detalle: delServidor ?? 'Revisa tu carrito antes de pagar. No se cobró nada.',
     };
   }
@@ -871,8 +878,12 @@ export function abrirPago({
   });
 
   // D-44 — «¿Cómo quieres pagar?»: créditos del juego o el pago simulado de
-  // siempre, que sigue siendo el que viene marcado.
-  const formas = selectorDeFormaDePago(id);
+  // siempre, que sigue siendo el que viene marcado. G3 (1.7.0): si algo del
+  // carrito solo se vende en créditos, con tarjeta no hay nada que cobrar por
+  // ello (el servidor respondería 422): se paga con créditos y el pago
+  // simulado se apaga diciendo por qué.
+  const soloConCreditos = productosSoloEnCreditos(carrito);
+  const formas = selectorDeFormaDePago(id, { soloConCreditos });
   const zonaTarjeta = h('div', {
     clase: 'pago__zona',
     datos: { zona: 'tarjeta' },
@@ -1093,6 +1104,11 @@ export function abrirPago({
   };
   formas.creditos.addEventListener('change', () => cambiarForma(FORMAS_DE_PAGO.CREDITOS));
   formas.tarjeta.addEventListener('change', () => cambiarForma(FORMAS_DE_PAGO.TARJETA));
+  if (soloConCreditos.length > 0) {
+    // G3: se abre ya en créditos, con su cotización.
+    cambiarForma(FORMAS_DE_PAGO.CREDITOS);
+    formas.creditos.focus();
+  }
 
   const volverAlCarrito = (resultado) => {
     const volver = h('button', {
@@ -1265,14 +1281,33 @@ export function abrirPago({
 }
 
 /**
+ * G3 (ecommerce-carrito 1.7.0): los nombres de lo que el carrito tiene que
+ * solo se vende en créditos del juego (líneas `soloEnCreditos` que se pueden
+ * comprar). Con alguno, el pago simulado no puede cobrar el carrito.
+ *
+ * @param {object} carrito `Carrito` del contrato
+ * @returns {string[]}
+ */
+export function productosSoloEnCreditos(carrito) {
+  return (Array.isArray(carrito?.items) ? carrito.items : [])
+    .filter((item) => item?.soloEnCreditos === true && item?.disponible !== false)
+    .map((item) => item.producto?.nombre || 'Un producto');
+}
+
+/**
  * D-44 — «¿Cómo quieres pagar?»: créditos del Nexo o el pago simulado. Un
  * grupo de dos radios con su leyenda; el pago simulado viene marcado.
  *
+ * G3 — si el carrito tiene algo que solo se vende en créditos, vienen marcados
+ * los créditos y el pago simulado se apaga con el motivo en su pista.
+ *
  * @param {(nombre: string) => string} id
+ * @param {{soloConCreditos?: string[]}} [opciones]
  * @returns {{elemento: HTMLElement, creditos: HTMLInputElement, tarjeta: HTMLInputElement}}
  */
-function selectorDeFormaDePago(id) {
-  const opcion = (valor, nombre, pista, marcada) => {
+function selectorDeFormaDePago(id, { soloConCreditos = [] } = {}) {
+  const sinTarjeta = soloConCreditos.length > 0;
+  const opcion = (valor, nombre, pista, marcada, apagada = false) => {
     const control = h('input', {
       atributos: {
         type: 'radio',
@@ -1280,6 +1315,7 @@ function selectorDeFormaDePago(id) {
         value: valor,
         id: id(`forma-${valor.toLowerCase()}`),
         checked: marcada,
+        disabled: apagada,
       },
     });
     const elemento = h('label', {
@@ -1297,14 +1333,22 @@ function selectorDeFormaDePago(id) {
     FORMAS_DE_PAGO.CREDITOS,
     'Créditos del Nexo',
     'Con el saldo de créditos del juego.',
-    false,
+    sinTarjeta,
   );
   const tarjeta = opcion(
     FORMAS_DE_PAGO.TARJETA,
     'Pago simulado',
-    'Con tarjeta, en la pasarela simulada.',
-    true,
+    sinTarjeta
+      ? `No disponible: ${soloConCreditos.map((nombre) => `«${nombre}»`).join(', ')} solo se ${
+          soloConCreditos.length > 1 ? 'venden' : 'vende'
+        } con créditos del juego.`
+      : 'Con tarjeta, en la pasarela simulada.',
+    !sinTarjeta,
+    sinTarjeta,
   );
+  if (sinTarjeta) {
+    tarjeta.elemento.dataset.motivo = 'solo-creditos';
+  }
   const elemento = h('fieldset', {
     clase: 'pago__formas',
     hijos: [

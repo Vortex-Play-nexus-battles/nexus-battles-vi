@@ -19,12 +19,15 @@
  *      `productos` para todos los métodos): uno con precio en créditos Y en
  *      dinero real, otro solo en créditos;
  *   2. una jugadora recién registrada ve el primero en la vitrina, con su
- *      UUID, su precio en dinero real y COP; el segundo no aparece, porque la
- *      tienda solo vende lo que tiene precio en dinero real;
+ *      UUID, su precio en dinero real y COP; desde G3 (ecommerce-carrito
+ *      1.7.0) el segundo también, sin precio en dinero real (null, nunca
+ *      «0 COP») y con su precio en créditos: se vende lo que tiene precio en
+ *      dinero real O en créditos;
  *   3. `POST /api/v1/carrito/items` con ese UUID responde 200 y una línea con
- *      su nombre y su subtotal;
+ *      su nombre y su subtotal; el de créditos también entra, marcado
+ *      `soloEnCreditos` y sin sumar al total en dinero real;
  *   4. la vista: la tarjeta lleva el nombre y el precio en COP, y «Añadir» lo
- *      pone en el panel del carrito.
+ *      pone en el panel del carrito; la del de créditos dice «80 créditos».
  *   5. (UXC-3, B3) el detalle trae la calificación y las opiniones del servicio
  *      real: se opina con una imagen de verdad (se sube al elegirla y el
  *      comentario viaja con su id) y la imagen se ve en el hilo; se califica
@@ -220,16 +223,16 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     expect(jugadoraCrea.status()).toBe(403);
   });
 
-  test('la vitrina proyecta el catálogo: el de dinero real está, con su UUID y en COP; el de créditos no', async () => {
+  test('la vitrina proyecta el catálogo: el de dinero real con su UUID y en COP; el de créditos, con sus créditos (G3)', async () => {
     // La vitrina guarda una copia del catálogo 30 s (VitrinaDelCatalogoService):
-    // es lo que puede tardar en verse un alta. Se pregunta hasta que aparece,
+    // es lo que puede tardar en verse un alta. Se pregunta hasta que aparecen,
     // con un techo que cubre la copia entera y algo de margen.
     let vitrina = [];
     await expect
       .poll(
         async () => {
           vitrina = await vitrinaCompleta(api, compradora.token);
-          return vitrina.some((p) => p.id === idEnDineroReal);
+          return [idEnDineroReal, idSoloCreditos].every((id) => vitrina.some((p) => p.id === id));
         },
         { timeout: 45_000, intervals: [1_000, 2_000, 5_000] },
       )
@@ -244,9 +247,14 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     expect(enVenta.enPromocion).toBe(false);
     expect(enVenta.tipo).toBe('ARMA');
 
-    // Misma copia, así que si el de créditos se vendiera estaría aquí.
-    expect(vitrina.some((p) => p.id === idSoloCreditos)).toBe(false);
-    expect(vitrina.some((p) => p.nombre === soloCreditos.nombre)).toBe(false);
+    // G3: el que solo tiene precio en créditos se vende, sin inventarse un
+    // precio en dinero real.
+    const deCreditos = vitrina.find((p) => p.id === idSoloCreditos);
+    expect(deCreditos.nombre).toBe(soloCreditos.nombre);
+    expect(deCreditos.precioCreditos).toBe(soloCreditos.precioCreditos);
+    expect(deCreditos.precioFinal).toBeNull();
+    expect(deCreditos.precioOriginal).toBeNull();
+    expect(deCreditos.moneda).toBeNull();
   });
 
   test('añadir al carrito por el UUID: 200 y una línea con su nombre y su subtotal', async () => {
@@ -266,15 +274,22 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
     expect(Number(linea.subtotal)).toBe(PRECIO_EN_DINERO_REAL);
     expect(carrito.moneda).toBe('COP');
 
-    // Y el que solo se vende en créditos no entra por la puerta de atrás.
+    // G3: el que solo se vende en créditos también entra, sin precio en
+    // dinero real y sin sumar al total en dinero real.
     const deCreditos = await api.post('/api/v1/carrito/items', {
       headers: conToken(compradora.token),
       data: { productoId: idSoloCreditos, cantidad: 1 },
     });
-    expect(deCreditos.status()).toBe(422);
-    expect((await deCreditos.json()).type).toBe(
-      'urn:nexus:problema:producto-sin-precio-en-moneda-real',
-    );
+    expect(deCreditos.status(), await deCreditos.text()).toBe(200);
+    const conLosDos = await deCreditos.json();
+    expect(conLosDos.items.find((i) => i.producto?.id === idSoloCreditos)).toMatchObject({
+      soloEnCreditos: true,
+      disponible: true,
+      precioCreditos: soloCreditos.precioCreditos,
+      precioUnitario: null,
+      subtotal: null,
+    });
+    expect(Number(conLosDos.total)).toBe(PRECIO_EN_DINERO_REAL);
   });
 
   test('la vista: la tarjeta con su nombre y precio en COP, y «Añadir» la lleva al carrito', async ({
@@ -311,8 +326,10 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
       'data-producto',
       idEnDineroReal,
     );
-    // El de créditos no se ofrece en la tienda.
-    await expect(page.locator('.product-card', { hasText: soloCreditos.nombre })).toHaveCount(0);
+    // G3: el de créditos se ofrece, con su precio en créditos como precio.
+    const deCreditos = page.locator('.product-card', { hasText: soloCreditos.nombre });
+    await expect(deCreditos.locator('.price')).toHaveText('80 créditos');
+    await expect(deCreditos.locator('.btn-add')).toBeEnabled();
 
     // Antes de pulsar, el carrito ya cargó y está vacío.
     await expect(page.locator('#cart-items')).toContainText('vacío');

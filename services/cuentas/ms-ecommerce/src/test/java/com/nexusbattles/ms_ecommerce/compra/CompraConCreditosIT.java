@@ -529,4 +529,107 @@ class CompraConCreditosIT {
             assertThat(SERVICIOS.llamadasDeDebito.get()).isZero();
         }
     }
+
+    /**
+     * G3 (4-oct): un producto con precio solo en creditos se vende — en la
+     * vitrina, en el carrito y en la compra con creditos — y con tarjeta no,
+     * porque no hay nada que cobrar en dinero real. Como lo trae el catalogo:
+     * {@code precioMonedaReal} nulo o 0 y {@code precioCreditos} positivo.
+     */
+    @Nested
+    @DisplayName("G3: un producto solo en creditos")
+    class SoloEnCreditos {
+
+        private static final String AMULETO = "c0ffee00-0000-4000-8000-000000000003";
+        private static final String ANILLO = "c0ffee00-0000-4000-8000-000000000004";
+
+        @BeforeEach
+        void catalogo() {
+            SERVICIOS.producto(AMULETO, "Amuleto del nexo", "null", 120, false, 3, null);
+            SERVICIOS.producto(ANILLO, "Anillo de cobre", "0", 80, false, -1, null);
+        }
+
+        @Test
+        @DisplayName("la vitrina lo ensena con su precio en creditos y sin precio en dinero real")
+        void enLaVitrina() {
+            ResponseEntity<String> pagina = enviar("GET", "/vitrina", null, Map.of());
+
+            String amuleto = "$.content[?(@.id == '" + AMULETO + "')]";
+            assertThat(JsonPath.<List<Object>>read(pagina.getBody(), amuleto + ".precioCreditos"))
+                    .containsExactly(120);
+            assertThat(JsonPath.<List<Object>>read(pagina.getBody(), amuleto + ".precioFinal"))
+                    .containsExactly((Object) null);
+            assertThat(JsonPath.<List<Object>>read(pagina.getBody(),
+                    "$.content[?(@.id == '" + ANILLO + "')].precioFinal")).as("0 COP no es un precio")
+                    .containsExactly((Object) null);
+        }
+
+        @Test
+        @DisplayName("entra al carrito sin precio en dinero real y sin sumar al total")
+        void enElCarrito() {
+            alCarrito(AMULETO, 2);
+
+            ResponseEntity<String> carrito = get("/carrito");
+
+            assertThat(JsonPath.<Boolean>read(carrito.getBody(), "$.items[0].disponible")).isTrue();
+            assertThat(JsonPath.<Boolean>read(carrito.getBody(), "$.items[0].soloEnCreditos")).isTrue();
+            assertThat(JsonPath.<Integer>read(carrito.getBody(), "$.items[0].precioCreditos")).isEqualTo(120);
+            assertThat(JsonPath.<Integer>read(carrito.getBody(), "$.items[0].subtotalCreditos")).isEqualTo(240);
+            assertThat(JsonPath.<Object>read(carrito.getBody(), "$.items[0].precioUnitario")).isNull();
+            assertThat(numero(carrito, "$.total")).isEqualByComparingTo("0");
+        }
+
+        @Test
+        @DisplayName("con tarjeta: 422, sin orden, sin cobro y el carrito intacto")
+        void conTarjetaNo() {
+            alCarrito(AMULETO, 1);
+
+            ResponseEntity<String> respuesta = pagarConTarjeta("solo-creditos-tarjeta-01");
+
+            assertThat(respuesta.getStatusCode().value()).as(respuesta.getBody()).isEqualTo(422);
+            assertThat(texto(respuesta, "$.type"))
+                    .isEqualTo("urn:nexus:problema:producto-sin-precio-en-moneda-real");
+            assertThat(jdbc.queryForObject("select count(*) from ordenes", Integer.class)).isZero();
+            assertThat(SERVICIOS.asientos).isEmpty();
+            assertThat(lineasDelCarrito()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("un premium que se queda sin ningun precio: con tarjeta sigue siendo 409 producto-no-disponible")
+        void premiumSinNingunPrecio() {
+            String corona = "c0ffee00-0000-4000-8000-000000000005";
+            SERVICIOS.producto(corona, "Corona premium", "6000", null, true, -1, null);
+            alCarrito(corona, 1);
+            // El catalogo le quita el precio en dinero real; premium: no se convierte a creditos.
+            SERVICIOS.producto(corona, "Corona premium", "null", 90, true, -1, null);
+
+            ResponseEntity<String> respuesta = pagarConTarjeta("premium-sin-precio-01");
+
+            assertThat(respuesta.getStatusCode().value()).as(respuesta.getBody()).isEqualTo(409);
+            assertThat(texto(respuesta, "$.type")).isEqualTo("urn:nexus:problema:producto-no-disponible");
+            assertThat(jdbc.queryForObject("select count(*) from ordenes", Integer.class)).isZero();
+            assertThat(SERVICIOS.asientos).isEmpty();
+        }
+
+        @Test
+        @DisplayName("con creditos: cobra una vez el precio en creditos, descuenta el tiraje y entrega")
+        void conCreditosSi() {
+            alCarrito(AMULETO, 2);
+            alCarrito(ANILLO, 1);
+
+            ResponseEntity<String> respuesta = pagarConCreditos("solo-creditos-ok-0001");
+
+            assertThat(respuesta.getStatusCode().value()).as(respuesta.getBody()).isEqualTo(201);
+            String ordenId = texto(respuesta, "$.id");
+            assertThat(texto(respuesta, "$.estado")).isEqualTo("COMPLETA");
+            // 2 x 120 + 80 = 320
+            assertThat(numero(respuesta, "$.total")).isEqualByComparingTo("320");
+            assertThat(SERVICIOS.debitos.get("tienda-orden-" + ordenId).monto()).isEqualTo(320);
+            assertThat(SERVICIOS.debitosAplicados.get()).isEqualTo(1);
+            assertThat(SERVICIOS.saldoDe(uid)).isEqualTo(680);
+            assertThat(SERVICIOS.unidadesDescontadas.get()).as("el amuleto tiene tiraje; el anillo no").isEqualTo(2);
+            assertThat(SERVICIOS.entregasAplicadas).hasSize(1);
+            assertThat(lineasDelCarrito()).isZero();
+        }
+    }
 }

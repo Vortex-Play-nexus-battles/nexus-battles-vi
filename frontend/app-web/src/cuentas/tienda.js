@@ -1324,10 +1324,36 @@ export function actualizarUI(carrito, doc = document) {
 
   contenedor.replaceChildren(...carrito.items.map((item) => lineaDelCarrito(item, moneda)));
 
-  const totalTexto = textoDePrecio(aImporte(carrito.total), moneda) ?? 'Sin total';
+  const totalTexto = textoDelTotal(carrito, moneda);
   subtotal.textContent = totalTexto;
   total.textContent = totalTexto;
   prepararBotonDePago(botonPagar, carrito, doc);
+}
+
+/**
+ * El total del carrito, como lo da el servidor (`total`, en dinero real).
+ *
+ * G3 (1.7.0): las líneas que solo se venden en créditos no suman a ese total.
+ * Si las hay, se dice que se pagan con créditos —la cifra en créditos la da
+ * el servidor al pagar (`GET /checkout/creditos`)— en vez de enseñar «0 COP»
+ * como si no costaran nada.
+ *
+ * @param {object} carrito
+ * @param {string|null} moneda
+ * @returns {string}
+ */
+function textoDelTotal(carrito, moneda) {
+  const importe = aImporte(carrito.total);
+  const texto = textoDePrecio(importe, moneda);
+  const conCreditos = carrito.items.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
+  if (!conCreditos) {
+    return texto ?? 'Sin total';
+  }
+  return importe !== null && importe > 0
+    ? `${texto} + créditos del juego`
+    : 'Con créditos del juego';
 }
 
 /**
@@ -1385,6 +1411,7 @@ function lineaDelCarrito(item, moneda) {
     datos: {
       ...(lineaId !== null ? { itemId: String(lineaId) } : {}),
       disponible: fila.disponible ? 'si' : 'no',
+      ...(fila.soloEnCreditos ? { soloEnCreditos: 'si' } : {}),
     },
     hijos: [
       fila.imagen
@@ -1458,13 +1485,18 @@ function prepararBotonDePago(boton, carrito, doc) {
   }
   const lineas = Array.isArray(carrito?.items) ? carrito.items : [];
   const total = aImporte(carrito?.total);
+  // G3 (1.7.0): una línea que solo se vende en créditos no suma al total en
+  // dinero real, pero se paga (con créditos): también es algo que pagar.
+  const hayQuePagarConCreditos = lineas.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
   let motivo = '';
   if (lineas.some((item) => item?.disponible === false)) {
     motivo = 'Quita o corrige lo que ya no se puede comprar para pagar el resto.';
   } else if (carrito?.preciosVigentes === false) {
     motivo =
       'No se pudieron confirmar los precios con el catálogo. Vuelve a intentarlo en unos segundos.';
-  } else if (total === null || total <= 0) {
+  } else if ((total === null || total <= 0) && !hayQuePagarConCreditos) {
     motivo = 'Tu carrito no tiene un total que pagar.';
   }
   boton.disabled = motivo !== '';

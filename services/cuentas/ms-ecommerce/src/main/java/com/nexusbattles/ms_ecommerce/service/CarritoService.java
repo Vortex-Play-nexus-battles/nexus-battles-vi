@@ -162,7 +162,7 @@ public class CarritoService {
      * @throws CantidadNoPermitidaException fuera de rango o sin unidades suficientes
      * @throws LineaInexistenteException si la linea no esta en el carrito del jugador
      * @throws ProductoNoAgregableException si el producto se suspendio, se agoto
-     *         o dejo de tener precio en dinero real
+     *         o dejo de tener precio (ni en dinero real ni en creditos)
      * @throws CatalogoNoDisponibleException si el catalogo no se pudo consultar
      */
     public CarritoDto cambiarCantidad(String usuarioId, String itemId, int cantidad, Moneda moneda) {
@@ -253,7 +253,8 @@ public class CarritoService {
     /**
      * Las reglas de venta, en este orden: que exista, que el catalogo lo
      * ofrezca (RN-PRD-004), que queden unidades (RF-CAR-007, "valida
-     * existencias") y que tenga precio en moneda real (RF-CAR-002).
+     * existencias") y que tenga algun precio: en moneda real (RF-CAR-002) o,
+     * desde G3, en creditos del juego (D-44).
      */
     private ProductoDelCatalogo productoQueSePuedeAgregar(String productoId) {
         ProductoDelCatalogo producto = catalogo.producto(productoId)
@@ -286,9 +287,11 @@ public class CarritoService {
             throw new ProductoNoAgregableException(Motivo.AGOTADO,
                     "El producto esta agotado.");
         }
-        if (!producto.tienePrecioEnMonedaReal()) {
+        if (!producto.tieneAlgunPrecio()) {
+            // G3: se vende en dinero real o en creditos; sin ninguno de los dos
+            // (o premium sin precio en dinero real, que no se convierte) no.
             throw new ProductoNoAgregableException(Motivo.SIN_PRECIO_EN_MONEDA_REAL,
-                    "El producto no tiene precio en moneda real, y la tienda solo vende en moneda real.");
+                    "El producto no tiene precio: ni en moneda real ni en créditos del juego.");
         }
     }
 
@@ -299,14 +302,23 @@ public class CarritoService {
         }
     }
 
+    /** El precio en pesos de una unidad; null si solo se vende en creditos (G3). */
     private static BigDecimal precioEnPesos(ProductoDelCatalogo producto, Instant ahora) {
+        if (!producto.tienePrecioEnMonedaReal()) {
+            return null;
+        }
         return CalculadoraDePrecios.deProducto(producto, Tarifa.enPesos(), ahora).precioFinal();
     }
 
+    /**
+     * La instantanea de la linea. Un producto que solo se vende en creditos no
+     * tiene precio en pesos: la linea se guarda sin precio, sin moneda y sin
+     * subtotal, y no suma al total en dinero real (G3).
+     */
     private static void instantanea(ItemCarrito linea, ProductoDelCatalogo producto, BigDecimal precioEnPesos) {
         linea.setProductoNombre(producto.nombre());
         linea.setPrecioUnitario(precioEnPesos);
-        linea.setMoneda(MONEDA_DE_LA_TIENDA);
+        linea.setMoneda(precioEnPesos == null ? null : MONEDA_DE_LA_TIENDA);
         linea.calcularSubtotal();
     }
 

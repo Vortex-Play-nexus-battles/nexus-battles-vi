@@ -23,7 +23,16 @@ info:
   # `formaDePago` en la orden y CREDITOS como unidad de una orden pagada con
   # creditos. Nada desaparece ni se vuelve obligatorio en una peticion: sube
   # la menor.
-  version: 1.6.0
+  # 1.7.0 (G3, continuacion tecnica del 4-oct): «producto vendible si tiene
+  # precio en dinero real O precio en creditos». Un producto que solo se vende
+  # en creditos entra a la vitrina con `precioFinal`, `precioOriginal` y
+  # `moneda` a null (siguen presentes) y entra al carrito sin precio en dinero
+  # real; la linea gana `precioCreditos`, `subtotalCreditos` y `soloEnCreditos`. Con tarjeta no se
+  # paga (422 `producto-sin-precio-en-moneda-real` en POST /checkout); con
+  # creditos si. Un premium sigue vendiendose solo en dinero real: no se
+  # convierte a creditos. Campos opcionales nuevos y campos que admiten null:
+  # nada desaparece ni se vuelve obligatorio en una peticion; sube la menor.
+  version: 1.7.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -119,15 +128,24 @@ servers:
 paths:
   /vitrina:
     get:
-      summary: Vitrina paginada del catalogo maestro, lo que se vende en dinero real
+      summary: Vitrina paginada del catalogo maestro, lo que se vende en dinero real o en creditos
       operationId: vitrinaDelCatalogo
       description: >
         R16. Proyecta el catalogo maestro de contenido/productos: cada producto
         es el del catalogo, con su identificador (UUID) y sus precios. Solo
-        aparecen los que se pueden comprar con dinero real: estado ACTIVO o
-        UNICO, `precioMonedaReal` presente y tiraje distinto de cero (-1 es
-        ilimitado). Un producto que solo tiene precio en creditos no se vende
-        aqui, y uno suspendido o agotado tampoco.
+        aparecen los que se pueden comprar: estado ACTIVO o UNICO, tiraje
+        distinto de cero (-1 es ilimitado) y algun precio. Uno suspendido o
+        agotado no aparece.
+
+        1.7.0 (G3): «algun precio» es `precioMonedaReal` mayor que cero O un
+        `precioCreditos` con el que se pueda pagar (no premium, mayor que
+        cero). Un producto que solo se vende en creditos aparece con
+        `precioFinal`, `precioOriginal` y `moneda` a null —nunca «a 0»— y su
+        `precioCreditos`; su promocion vigente se ve en `enPromocion` y
+        `porcentajeDescuento`. Un premium sin precio en dinero real no
+        aparece: no se convierte a creditos. Los filtros de precio
+        (`precioMinimo`, `precioMaximo`) son de dinero real: con alguno de los
+        dos, un producto solo en creditos no entra.
 
         Publica, sin token, como la vitrina anterior. Sustituye a
         GET /productos, que leia una tabla propia de ms-ecommerce que nacia
@@ -268,9 +286,12 @@ paths:
       description: >
         Desde 1.2.0 el producto se busca en el catalogo maestro
         (contenido/productos) en el momento de agregarlo. Solo entra si se
-        vende en dinero real. Si ya habia una linea de ese producto, se suma la
-        cantidad. Los rechazos son problem details (regla 4) y se distinguen
-        por `type`, nunca por el texto.
+        vende: en dinero real o, desde 1.7.0 (G3), en creditos. Un producto
+        que solo se vende en creditos entra sin precio en dinero real: su
+        linea lleva `soloEnCreditos: true` y `precioCreditos`, y no suma al
+        `total`. Si ya habia una linea de ese producto, se suma la cantidad.
+        Los rechazos son problem details (regla 4) y se distinguen por `type`,
+        nunca por el texto.
 
         1.4.0: la linea no pasa de 20 unidades ni de las que le quedan al
         producto; la respuesta lleva los precios en la `moneda` pedida.
@@ -342,8 +363,11 @@ paths:
             El producto no se puede agregar tal como se pidio. Por `type`:
             `urn:nexus:problema:producto-inexistente` (el catalogo no lo tiene,
             o llego el entero heredado de 1.1.0),
-            `urn:nexus:problema:producto-sin-precio-en-moneda-real` (solo se
-            vende en creditos) o `urn:nexus:problema:moneda-no-disponible`
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real` (desde
+            1.7.0: no tiene ningun precio con el que venderse —ni en dinero
+            real ni en creditos—, por ejemplo un premium sin precio en dinero
+            real; el nombre del `type` es el de 1.4.0, cuando la tienda solo
+            vendia en dinero real) o `urn:nexus:problema:moneda-no-disponible`
             (1.4.0). El carrito no cambia.
           content:
             application/problem+json:
@@ -381,7 +405,11 @@ paths:
       description: >
         Fija la cantidad de la linea (no la suma). El producto se vuelve a
         consultar en el catalogo en ese momento: si se suspendio o se agoto,
-        409 y la linea no cambia.
+        409 y la linea no cambia. 1.7.0: si se quedo sin ningun precio con el
+        que venderse (ni en dinero real ni en creditos), 422
+        `urn:nexus:problema:producto-sin-precio-en-moneda-real`, con la misma
+        forma de problem details que la 422 de moneda; una linea que solo se
+        vende en creditos cambia de cantidad como cualquier otra.
       security:
         - bearerAuth: []
       parameters:
@@ -433,7 +461,15 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/ProblemDetail" }
         "422":
-          $ref: "#/components/responses/MonedaNoDisponible"
+          description: >
+            `urn:nexus:problema:moneda-no-disponible` (1.4.0, ver
+            MonedaNoDisponible) o, desde 1.7.0,
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real`: el
+            producto ya no tiene ningun precio con el que venderse (ni en
+            dinero real ni en creditos). La linea no cambia.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
         "503":
           $ref: "#/components/responses/CatalogoNoDisponible"
 
@@ -613,7 +649,18 @@ paths:
             application/problem+json:
               schema: { $ref: "#/components/schemas/ProblemDetail" }
         "422":
-          $ref: "#/components/responses/MonedaNoDisponible"
+          description: >
+            `urn:nexus:problema:moneda-no-disponible` (1.4.0, ver
+            MonedaNoDisponible) o, desde 1.7.0,
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real`: el carrito
+            tiene un producto que solo se vende en creditos del juego. Con
+            tarjeta no hay nada que cobrar por el: se paga con
+            POST /checkout/creditos o se quita del carrito. No se crea ninguna
+            orden ni se cobra nada. Un producto que ya no tiene ningun precio
+            sigue siendo el 409 `producto-no-disponible` de antes.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
         "503":
           description: >
             El catalogo no respondio (`catalogo-no-disponible`; no hay orden),
@@ -1107,9 +1154,13 @@ components:
             EUR solo si admin-parametros tiene su tasa.
     ProductoDeVitrina:
       description: >
-        Un producto del catalogo maestro que se vende en dinero real, tal como
-        lo pinta la tienda. Mismos nombres de campo que ProductoVitrina (1.1.0),
-        salvo `id`, que ahora es el UUID del catalogo.
+        Un producto del catalogo maestro que se vende, tal como lo pinta la
+        tienda. Mismos nombres de campo que ProductoVitrina (1.1.0), salvo
+        `id`, que ahora es el UUID del catalogo. Desde 1.7.0 se vende si tiene
+        precio en dinero real O precio en creditos: uno que solo se vende en
+        creditos trae `precioFinal`, `precioOriginal` y `moneda` a null (los
+        campos siguen presentes) y `precioCreditos` con su precio. Un premium
+        sigue vendiendose solo en dinero real.
       type: object
       required: [id, nombre, precioFinal, precioOriginal, moneda]
       properties:
@@ -1131,27 +1182,32 @@ components:
           type: string
           description: HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA, como en el catalogo.
         precioFinal:
-          type: number
+          type: [number, 'null']
           minimum: 0
           description: >
-            Lo que se cobra: el `precioMonedaReal` del catalogo con la
-            promocion vigente aplicada, en `moneda` (1.4.0). **No se llama
-            `precio`.** Siempre presente: un producto sin precio en dinero real
-            no entra en la vitrina.
+            Lo que se cobra en dinero real: el `precioMonedaReal` del catalogo
+            con la promocion vigente aplicada, en `moneda` (1.4.0). **No se
+            llama `precio`.** Siempre presente; desde 1.7.0 es null cuando el
+            producto solo se vende en creditos (nunca 0: cero seria gratis).
         precioOriginal:
-          type: number
+          type: [number, 'null']
           minimum: 0
           description: >
             El precio antes de la promocion, en `moneda`. Igual a `precioFinal`
-            cuando el producto no tiene una promocion vigente.
+            cuando el producto no tiene una promocion vigente; null (1.7.0)
+            cuando solo se vende en creditos.
         moneda:
-          type: string
+          type: [string, 'null']
           description: >
             La moneda pedida (1.4.0; COP por omision). El cliente la lee, no la
-            supone.
+            supone. null (1.7.0) cuando el producto solo se vende en creditos:
+            no hay precio en dinero real del que afirmar una moneda.
         enPromocion:
           type: boolean
-          description: (1.4.0) true si el catalogo trae una promocion vigente para el producto.
+          description: >
+            (1.4.0) true si el catalogo trae una promocion vigente para el
+            producto. Es la misma promocion para los dos precios; en uno que
+            solo se vende en creditos, se lee sobre `precioCreditos`.
         porcentajeDescuento:
           type: [integer, 'null']
           description: (1.4.0) El porcentaje de la promocion vigente; null sin promocion.
@@ -1162,7 +1218,8 @@ components:
             (1.6.0, D-44) Lo que cuesta pagado con creditos del juego: el
             `precioCreditos` del catalogo con la promocion vigente aplicada.
             null si no se puede pagar con creditos (producto premium, o sin
-            precio en creditos en el catalogo).
+            precio en creditos en el catalogo). Desde 1.7.0, si `precioFinal`
+            es null este campo nunca lo es: es el unico precio del producto.
         esPropio:
           type: boolean
           description: >
@@ -1261,6 +1318,9 @@ components:
           description: >
             (1.4.0) La suma de los subtotales de las lineas que se pueden
             comprar ahora (`disponible`), calculada por el servidor en `moneda`.
+            Una linea que solo se vende en creditos (`soloEnCreditos`, 1.7.0)
+            no tiene subtotal en dinero real y no suma: lo que cuesta en
+            creditos lo da GET /checkout/creditos.
         moneda:
           type: [string, 'null']
           description: >
@@ -1289,28 +1349,62 @@ components:
           $ref: "#/components/schemas/ProductoDeLinea"
         cantidad: { type: integer, minimum: 1 }
         precioUnitario:
-          type: number
+          type: [number, 'null']
           description: >
             (1.4.0) El precio que se cobraria ahora por unidad, promocion
-            incluida, en la moneda del carrito.
+            incluida, en la moneda del carrito. null (1.7.0) si el producto
+            solo se vende en creditos, o si no hay precio conocido (catalogo
+            caido y sin instantanea); nunca 0 en lugar de «no hay precio».
         precioOriginal:
-          type: number
-          description: (1.4.0) El precio unitario antes de la promocion.
+          type: [number, 'null']
+          description: (1.4.0) El precio unitario antes de la promocion; null como `precioUnitario`.
         porcentajeDescuento:
           type: [integer, 'null']
-          description: (1.4.0) El de la promocion vigente; null sin promocion.
+          description: >
+            (1.4.0) El de la promocion vigente; null sin promocion. En una
+            linea `soloEnCreditos` es el de la promocion sobre el precio en
+            creditos.
         subtotal:
-          type: number
-          description: precioUnitario por cantidad.
+          type: [number, 'null']
+          description: precioUnitario por cantidad; null cuando `precioUnitario` es null.
+        precioCreditos:
+          type: [integer, 'null']
+          minimum: 1
+          description: >
+            (1.7.0, G3) Lo que cuesta una unidad pagada con creditos del juego,
+            promocion incluida (el mismo calculo que `precioCreditos` de la
+            vitrina). null si el producto no se puede pagar con creditos
+            (premium o sin precio en creditos) o si el catalogo no respondio.
+        subtotalCreditos:
+          type: [integer, 'null']
+          minimum: 1
+          description: >
+            (1.7.0, G3) `precioCreditos` por `cantidad`, calculado por el
+            servidor (el navegador no multiplica precios); null cuando
+            `precioCreditos` es null. Lo que se cobra al pagar lo vuelve a
+            calcular POST /checkout/creditos.
+        soloEnCreditos:
+          type: boolean
+          description: >
+            (1.7.0, G3) true si el producto no tiene precio en dinero real y
+            solo se vende en creditos: la linea se paga con
+            POST /checkout/creditos; con tarjeta (POST /checkout) el carrito
+            se rechaza con 422 `producto-sin-precio-en-moneda-real`. false en
+            cualquier otro caso.
         disponible:
           type: boolean
           description: >
-            (1.4.0) Si la linea se puede comprar ahora. Una que no, sigue en el
-            carrito pero no suma al total y la compra la rechaza.
+            (1.4.0) Si la linea se puede comprar ahora (con alguna forma de
+            pago, 1.7.0). Una que no, sigue en el carrito pero no suma al
+            total y la compra la rechaza.
         motivo:
           type: [string, 'null']
           enum: [NO_DISPONIBLE, AGOTADO, SIN_PRECIO_EN_MONEDA_REAL, TIRAJE_INSUFICIENTE, null]
-          description: (1.4.0) Por que no se puede comprar; null si se puede.
+          description: >
+            (1.4.0) Por que no se puede comprar; null si se puede. Desde 1.7.0
+            SIN_PRECIO_EN_MONEDA_REAL significa que no tiene ningun precio (ni
+            en dinero real ni en creditos); una linea que solo se vende en
+            creditos no lleva motivo: es `soloEnCreditos`.
         maximo:
           type: [integer, 'null']
           description: >
@@ -1326,8 +1420,10 @@ components:
           description: Identificador del producto en el catalogo maestro.
         nombre: { type: string }
         moneda:
-          type: string
-          description: La moneda del carrito (1.4.0).
+          type: [string, 'null']
+          description: >
+            La moneda del carrito (1.4.0); null (1.7.0) en una linea que solo
+            se vende en creditos, que no tiene precio en dinero real.
         imagen:
           type: [string, 'null']
           description: (1.4.0) La imagen del producto en el catalogo; null si no se sabe.

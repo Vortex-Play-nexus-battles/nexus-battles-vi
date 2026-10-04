@@ -10,7 +10,10 @@ public enum MotivoDeLinea {
     NO_DISPONIBLE,
     /** No le quedan unidades. */
     AGOTADO,
-    /** Ya no tiene precio en dinero real. */
+    /**
+     * Ya no tiene precio con el que venderse: ni en dinero real ni en creditos
+     * (G3; el nombre es el de 1.4.0, cuando solo se vendia en dinero real).
+     */
     SIN_PRECIO_EN_MONEDA_REAL,
     /** Le quedan menos unidades que las de la linea: hay que bajar la cantidad. */
     TIRAJE_INSUFICIENTE

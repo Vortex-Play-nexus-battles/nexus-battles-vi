@@ -69,8 +69,9 @@ public class ManejadorDeErrores {
 
     /**
      * El producto no puede entrar al carrito (o comprarse). 422 cuando la
-     * peticion no se puede cumplir con ese producto tal como es (no existe, no
-     * tiene precio en moneda real); 409 cuando es su estado actual en el
+     * peticion no se puede cumplir con ese producto tal como es (no existe; no
+     * tiene precio ni en moneda real ni en creditos; o, al pagar con tarjeta,
+     * solo se vende en creditos); 409 cuando es su estado actual en el
      * catalogo el que lo impide (suspendido, agotado) y podria cambiar.
      */
     @ExceptionHandler(ProductoNoAgregableException.class)

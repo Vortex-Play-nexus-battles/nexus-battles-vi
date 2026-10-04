@@ -548,6 +548,63 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(texto).not.toContain('null');
     expect(document.getElementById('cart-total').textContent).not.toContain('undefined');
   });
+
+  /** G3 (ecommerce-carrito 1.7.0): una línea que solo se vende en créditos. */
+  const AMULETO = {
+    id: 9,
+    cantidad: 2,
+    precioUnitario: null,
+    subtotal: null,
+    precioCreditos: 120,
+    subtotalCreditos: 240,
+    soloEnCreditos: true,
+    disponible: true,
+    producto: { nombre: 'Amuleto', moneda: null },
+  };
+
+  test('G3: solo en créditos, la línea dice sus créditos y «Pagar» se enciende aunque el total sea 0', () => {
+    actualizarUI({ moneda: 'COP', total: 0, items: [AMULETO] }, document);
+
+    const linea = document.querySelector('[data-item-id="9"]');
+    expect(linea.dataset.soloEnCreditos).toBe('si');
+    expect(linea.querySelector('.item-price').textContent).toBe('240 créditos');
+    expect(linea.querySelector('.item-unitario').textContent).toBe(' · 120 créditos c/u');
+    expect(linea.textContent).not.toMatch(/Sin precio|0 COP/);
+    expect(document.getElementById('cart-total').textContent).toBe('Con créditos del juego');
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
+    expect(document.getElementById('aviso-pago').hidden).toBe(true);
+  });
+
+  test('G3: carrito mixto, el total en dinero real dice que además hay créditos', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 400,
+        items: [
+          { id: 1, cantidad: 1, subtotal: 400, disponible: true, producto: { nombre: 'Escudo' } },
+          AMULETO,
+        ],
+      },
+      document,
+    );
+
+    expect(document.getElementById('cart-total').textContent).toBe('400 COP + créditos del juego');
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
+  });
+
+  test('G3: una línea solo en créditos agotada apaga «Pagar» como cualquier otra', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 0,
+        items: [{ ...AMULETO, disponible: false, motivo: 'AGOTADO', maximo: 0 }],
+      },
+      document,
+    );
+
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    expect(document.getElementById('aviso-pago').textContent).toMatch(/ya no se puede comprar/);
+  });
 });
 
 /**

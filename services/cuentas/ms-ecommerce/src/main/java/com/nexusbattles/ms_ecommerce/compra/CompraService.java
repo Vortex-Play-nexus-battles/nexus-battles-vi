@@ -695,9 +695,15 @@ public class CompraService {
             ProductoDelCatalogo producto = catalogo.producto(linea.productoRef())
                     .orElseThrow(() -> new ProductoNoAgregableException(ProductoNoAgregableException.Motivo.NO_DISPONIBLE,
                             "«" + nombre + "» ya no está en el catálogo. Quítalo del carrito para pagar."));
-            if (!producto.estaEnVenta() || !producto.tienePrecioEnMonedaReal()) {
+            if (!producto.estaEnVenta() || !producto.tieneAlgunPrecio()) {
+                // Sin ningun precio (p. ej. un premium al que le quitaron el de dinero real): como antes de G3.
                 throw new ProductoNoAgregableException(ProductoNoAgregableException.Motivo.NO_DISPONIBLE,
                         "«" + producto.nombre() + "» ya no está a la venta. Quítalo del carrito para pagar.");
+            }
+            if (!producto.tienePrecioEnMonedaReal()) {
+                // G3: se vende, pero solo en creditos del juego; con tarjeta no hay nada que cobrar.
+                throw new ProductoNoAgregableException(ProductoNoAgregableException.Motivo.SIN_PRECIO_EN_MONEDA_REAL,
+                        "«" + producto.nombre() + "» solo se vende en créditos del juego: págalo con créditos.");
             }
             if (!producto.tieneExistencias()) {
                 throw new ProductoNoAgregableException(ProductoNoAgregableException.Motivo.AGOTADO,

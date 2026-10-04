@@ -159,6 +159,34 @@ describe('precio', () => {
     expect(sinCreditos.querySelector('.precio-creditos')).toBeNull();
   });
 
+  test('G3: solo en créditos, el precio ES el de créditos; ni «Precio no disponible» ni «0 COP»', () => {
+    const soloCreditos = aProductoDeVitrina(
+      dto({ precioFinal: null, precioOriginal: null, moneda: null, precioCreditos: 120 }),
+    );
+    const precio = precioDeProducto(soloCreditos);
+
+    const cifra = precio.querySelector('.price');
+    expect(cifra.textContent).toBe('120 créditos');
+    expect(cifra.dataset.precioCreditos).toBe('120');
+    expect(precio.querySelector('.precio-ausente')).toBeNull();
+    expect(precio.dataset.soloEnCreditos).toBe('si');
+    expect(precio.textContent).toContain('Solo con créditos del juego');
+    expect(precio.textContent).not.toMatch(/COP|o 120/);
+    // Un solo elemento con el precio en créditos: el «o N créditos» es de los que tienen dos.
+    expect(precio.querySelectorAll('[data-precio-creditos]')).toHaveLength(1);
+  });
+
+  test('G3: la tarjeta de uno solo en créditos se puede añadir al carrito', () => {
+    const tarjeta = tarjetaDeProducto(
+      dto({ precioFinal: null, precioOriginal: null, moneda: null, precioCreditos: 80 }),
+    );
+
+    expect(tarjeta.querySelector('.price').textContent).toBe('80 créditos');
+    const anadir = tarjeta.querySelector('.btn-add');
+    expect(anadir.disabled).toBe(false);
+    expect(anadir.dataset.producto).toBe(UUID);
+  });
+
   test('distintivo de propiedad en singular', () => {
     expect(distintivoDePropiedad(1).textContent).toBe('Ya lo tienes');
   });

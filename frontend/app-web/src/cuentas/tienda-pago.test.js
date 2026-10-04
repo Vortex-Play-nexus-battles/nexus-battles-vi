@@ -23,6 +23,7 @@ import {
   panelDeCreditos,
   pasaLuhn,
   pedirCotizacionEnCreditos,
+  productosSoloEnCreditos,
   tarjetaDeOrden,
   validarPago,
 } from './tienda-pago.js';
@@ -1067,5 +1068,85 @@ describe('D-44 — pagar con créditos del Nexo', () => {
       'Pagada con créditos del Nexo',
     );
     expect(tarjeta.textContent).toContain('Espada de Vorn × 2 · 600 créditos');
+  });
+
+  describe('G3 — algo del carrito solo se vende en créditos', () => {
+    const AMULETO = {
+      id: 9,
+      cantidad: 1,
+      precioUnitario: null,
+      subtotal: null,
+      precioCreditos: 120,
+      subtotalCreditos: 120,
+      soloEnCreditos: true,
+      disponible: true,
+      producto: { id: 'p-9', nombre: 'Amuleto del nexo', moneda: null },
+    };
+    const SOLO_CREDITOS = { ...CARRITO, total: 0, items: [AMULETO] };
+    const MIXTO = { ...CARRITO, items: [...CARRITO.items, AMULETO] };
+
+    test('productosSoloEnCreditos: solo las líneas que se pueden comprar', () => {
+      expect(productosSoloEnCreditos(MIXTO)).toEqual(['Amuleto del nexo']);
+      expect(productosSoloEnCreditos(CARRITO)).toEqual([]);
+      expect(productosSoloEnCreditos({ items: [{ ...AMULETO, disponible: false }] })).toEqual([]);
+      expect(productosSoloEnCreditos(null)).toEqual([]);
+    });
+
+    test('se abre ya en créditos, con la cotización, y el pago simulado apagado diciendo por qué', async () => {
+      const fetchImpl = servidor();
+      abrir(fetchImpl, { carrito: SOLO_CREDITOS });
+      await esperar();
+
+      expect(radio('CREDITOS').checked).toBe(true);
+      expect(radio('TARJETA').checked).toBe(false);
+      expect(radio('TARJETA').disabled).toBe(true);
+      const pista = radio('TARJETA').closest('.pago__forma');
+      expect(pista.dataset.motivo).toBe('solo-creditos');
+      expect(pista.textContent).toContain(
+        'No disponible: «Amuleto del nexo» solo se vende con créditos del juego.',
+      );
+      expect(gets(fetchImpl)).toHaveLength(1);
+      expect(document.querySelector('[data-zona="tarjeta"]').hidden).toBe(true);
+      expect(document.querySelector('[data-zona="creditos"]').hidden).toBe(false);
+      expect(confirmar().textContent).toBe('Confirmar compra por 850 créditos');
+    });
+
+    test('confirmar paga con créditos: un POST a /checkout/creditos y ninguno a /checkout', async () => {
+      const fetchImpl = servidor();
+      abrir(fetchImpl, { carrito: MIXTO });
+      await esperar();
+
+      confirmar().click();
+      await esperar();
+
+      expect(posts(fetchImpl)).toHaveLength(1);
+      expect(posts(fetchImpl)[0][0]).toBe('/api/v1/checkout/creditos');
+      expect(document.querySelector('.pago__resultado').textContent).toContain('Compra realizada');
+    });
+
+    test('sin líneas solo en créditos, el diálogo es el de siempre (pago simulado marcado y activo)', () => {
+      abrir(jest.fn());
+
+      expect(radio('TARJETA').checked).toBe(true);
+      expect(radio('TARJETA').disabled).toBe(false);
+      expect(radio('TARJETA').closest('.pago__forma').dataset.motivo).toBeUndefined();
+    });
+
+    test('422 producto-sin-precio-en-moneda-real con tarjeta: se dice que se paga con créditos', () => {
+      expect(
+        interpretarPago({
+          estado: 422,
+          orden: null,
+          problema: {
+            type: 'urn:nexus:problema:producto-sin-precio-en-moneda-real',
+            detail: '«Amuleto del nexo» solo se vende en créditos del juego: págalo con créditos.',
+          },
+        }),
+      ).toMatchObject({
+        tipo: 'carrito',
+        titulo: 'Hay algo que solo se paga con créditos',
+        detalle: '«Amuleto del nexo» solo se vende en créditos del juego: págalo con créditos.',
+      });
+    });
   });
 });
