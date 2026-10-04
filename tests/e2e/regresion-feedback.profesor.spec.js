@@ -765,7 +765,20 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
         const reporte = await reporteTerminado(api, jugadora, ejecucionId, 8 * 60_000);
         expect(['EXITO', 'FALLO']).toContain(reporte.resultado);
         expect(reporte).toMatchObject({ mision: { id: PRIMERA_MISION }, heroe: { nivel: 1 } });
-        expect(reporte.combate.encuentros, 'se peleó con el motor real').toBeGreaterThan(0);
+        // Que se peleó se ve en los turnos y en el daño. `encuentros` son los
+        // rivales DERROTADOS: un héroe de nivel 1 que cae en el primer combate
+        // deja 0 (FALLO) y eso también es pelear (D-29: el kit de DEV pierde
+        // a menudo en su nivel). El 4-oct falló así, con 0 y FALLO.
+        expect(reporte.combate.turnos, 'se peleó con el motor real: hubo turnos').toBeGreaterThan(
+          0,
+        );
+        expect(
+          reporte.combate.danoInfligido + reporte.combate.danoRecibido,
+          'y hubo golpes',
+        ).toBeGreaterThan(0);
+        if (reporte.resultado === 'EXITO') {
+          expect(reporte.combate.encuentros, 'ganar es derrotar a alguien').toBeGreaterThan(0);
+        }
 
         // La progresión persiste fuera de misiones: experiencia en el inventario.
         let despues = heroe;
