@@ -28,11 +28,15 @@ import tools.jackson.databind.json.JsonMapper;
  * publica exactamente lo que se reviso. Lo que si se guarda en base de datos
  * es lo de cada jugador: sus ejecuciones, estrategias y favoritas.
  *
- * <h2>Dos semillas, y la segunda marcada</h2>
+ * <h2>Tres semillas, y la provisional marcada</h2>
  *
  * <ul>
  *   <li>{@value #DEL_DOCUMENTO}: lo que dice el documento (7.8.14 y Tabla 20),
  *       siempre.</li>
+ *   <li>{@value #DE_PROGRESION}: las misiones de historia de nivel 1 a 7 que
+ *       llevan a un heroe nuevo hasta el Templo (D-42), siempre. Se exige que
+ *       su origen sea {@link Origen#PROGRESION} y que cada una diga su nivel
+ *       recomendado.</li>
  *   <li>{@value #PROVISIONAL_DE_DEV}: una mision tecnica para el banco E2E y el
  *       desarrollo local, solo si se pide ({@code MISIONES_SEMILLA_PROVISIONAL}).
  *       Se exige que su origen sea {@link Origen#PROVISIONAL_DEV} y que su
@@ -46,6 +50,8 @@ import tools.jackson.databind.json.JsonMapper;
 public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones {
 
     public static final String DEL_DOCUMENTO = "semilla/misiones-del-documento.json";
+    /** D-42: las misiones de historia de nivel 1 a 7 que llevan hasta el Templo. */
+    public static final String DE_PROGRESION = "semilla/misiones-de-progresion.json";
     public static final String PROVISIONAL_DE_DEV = "semilla/misiones-provisionales-dev.json";
     public static final String PREFIJO_PROVISIONAL = "[PROVISIONAL DE DEV]";
 
@@ -72,18 +78,27 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
      */
     public static CatalogoDeMisionesDesdeSemilla cargar(boolean conProvisional) {
         SemillaDeMisiones documento = leer(DEL_DOCUMENTO);
+        SemillaDeMisiones progresion = leer(DE_PROGRESION);
         SemillaDeMisiones provisional = conProvisional ? leer(PROVISIONAL_DE_DEV) : null;
-        return desde(documento, provisional);
+        return desde(documento, progresion, provisional);
+    }
+
+    /** El catalogo sin la semilla de progresion, como era antes de D-42. */
+    static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones provisional) {
+        return desde(documento, null, provisional);
     }
 
     /**
      * Arma el catalogo comprobando lo que el tipo no puede comprobar: ids
-     * unicos, requisitos que existen, una fila de la Tabla 20 por tipo y las
-     * marcas de la semilla provisional.
+     * unicos, requisitos que existen, una fila de la Tabla 20 por tipo, las
+     * marcas de la semilla provisional y que la de progresion sea una cadena
+     * de historia con nivel recomendado.
      *
+     * @param progresion  nula si no se carga
      * @param provisional nula si no se carga
      */
-    static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones provisional) {
+    static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones progresion,
+                                                SemillaDeMisiones provisional) {
         List<Mision> todas = new ArrayList<>();
         for (Mision mision : documento.misiones()) {
             if (mision.origen() != Origen.DOCUMENTO) {
@@ -91,6 +106,22 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
                         + mision.id() + "» dice " + mision.origen() + ".");
             }
             todas.add(mision);
+        }
+        if (progresion != null) {
+            if (!progresion.tabla20().isEmpty()) {
+                throw new IllegalStateException("La Tabla 20 es del documento: la semilla de progresion no la toca.");
+            }
+            for (Mision mision : progresion.misiones()) {
+                if (mision.origen() != Origen.PROGRESION) {
+                    throw new IllegalStateException("La semilla de progresion solo publica misiones de progresion: «"
+                            + mision.id() + "» dice " + mision.origen() + ".");
+                }
+                if (mision.nivelRecomendado() == null) {
+                    throw new IllegalStateException("La mision de progresion «" + mision.id()
+                            + "» necesita su nivel recomendado: es lo que ordena la progresion.");
+                }
+                todas.add(mision);
+            }
         }
         if (provisional != null) {
             for (Mision mision : provisional.misiones()) {

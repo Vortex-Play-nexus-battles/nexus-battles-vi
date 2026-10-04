@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Objects;
 import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.EpicaDeTabla20;
@@ -17,19 +18,94 @@ import org.junit.jupiter.api.Test;
 
 class CatalogoDeMisionesDesdeSemillaTest {
 
+    /** D-42: las misiones de historia de nivel 1 a 7, en orden. */
+    private static final List<String> PROGRESION = List.of("sendero-de-los-aprendices", "mina-abandonada",
+            "pantano-de-los-susurros", "fortaleza-quebrada", "cumbres-heladas", "volcan-dormido",
+            "ciudadela-de-las-sombras");
+
+    @Test
+    @DisplayName("D-42: la progresión publica siete misiones de historia, de nivel 1 a 7, cada una tras la anterior")
+    void progresion() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
+        List<Mision> progresion = catalogo.todas().stream().filter(m -> m.origen() == Origen.PROGRESION).toList();
+
+        assertThat(progresion).extracting(Mision::id).containsExactlyElementsOf(PROGRESION);
+        for (int i = 0; i < progresion.size(); i++) {
+            Mision m = progresion.get(i);
+            assertThat(m.nivelRecomendado()).as(m.id()).isEqualTo(i + 1);
+            assertThat(m.categoria()).as(m.id()).isEqualTo(Categoria.HISTORIA);
+            assertThat(m.requisitosPrevios()).as(m.id())
+                    .isEqualTo(i == 0 ? List.of() : List.of(progresion.get(i - 1).id()));
+            assertThat(m.jefe()).as(m.id()).isNotNull();
+            assertThat(m.encuentros()).as(m.id()).isGreaterThan(1);
+            if (i > 0) {
+                assertThat(m.duracionHoras()).as(m.id()).isGreaterThan(progresion.get(i - 1).duracionHoras());
+            }
+        }
+        // Un heroe nuevo tiene donde empezar: nivel 1 y sin requisitos.
+        assertThat(progresion.get(0).requisitosPrevios()).isEmpty();
+        // Ninguna mision del catalogo recomienda un nivel que no existe (§6.1.1).
+        assertThat(catalogo.todas()).allSatisfy(m -> assertThat(m.nivelRecomendado())
+                .isBetween(Mision.NIVEL_MINIMO, Mision.NIVEL_MAXIMO));
+    }
+
+    @Test
+    @DisplayName("D-42: una misión que recomienda un nivel fuera de 1..8 no se publica (el Templo decía 15)")
+    void nivelFueraDeRango() throws java.io.IOException {
+        String templo15 = new String(Objects.requireNonNull(getClass().getClassLoader()
+                .getResourceAsStream(CatalogoDeMisionesDesdeSemilla.DEL_DOCUMENTO)).readAllBytes(),
+                StandardCharsets.UTF_8).replace("\"nivelRecomendado\": 8,", "\"nivelRecomendado\": 15,");
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.leer(
+                new ByteArrayInputStream(templo15.getBytes(StandardCharsets.UTF_8)), "templo-15"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("15");
+        assertThatThrownBy(() -> new Mision("cero", Origen.PROGRESION, "Cero", Categoria.HISTORIA, "d", null,
+                Dificultad.FACIL, 1, 0, List.of(), "n", null, Misiones.templo().objetivos(),
+                Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(), Misiones.templo().recompensas(),
+                false, null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("6.1.1");
+    }
+
+    @Test
+    @DisplayName("D-42: la semilla de progresión solo publica misiones de progresión, con su nivel y sin Tabla 20")
+    void progresionSoloDeProgresion() {
+        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        Mision ajena = Misiones.historia("ajena", List.of());
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(ajena)), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ajena");
+
+        Mision sinNivel = new Mision("sin-nivel", Origen.PROGRESION, "Sin nivel", Categoria.HISTORIA, "d", null,
+                Dificultad.FACIL, 1, null, List.of(), "n", null, Misiones.templo().objetivos(),
+                Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(), Misiones.templo().recompensas(),
+                false, null, null);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(sinNivel)), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("nivel recomendado");
+
+        EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of()), null))
+                .hasMessageContaining("Tabla 20");
+    }
+
     @Test
     @DisplayName("la semilla del documento publica «El Templo Olvidado» con los datos de 7.8.14")
     void templo() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado");
+        assertThat(catalogo.todas()).extracting(Mision::id).startsWith("templo-olvidado");
         Mision templo = catalogo.buscar("templo-olvidado").orElseThrow();
         assertThat(templo.origen()).isEqualTo(Origen.DOCUMENTO);
         assertThat(templo.nombre()).isEqualTo("El Templo Olvidado");
         assertThat(templo.categoria()).isEqualTo(Categoria.HISTORIA);
         assertThat(templo.dificultad()).isEqualTo(Dificultad.NORMAL);
         assertThat(templo.duracionHoras()).isEqualTo(12);
-        assertThat(templo.nivelRecomendado()).isEqualTo(15);
+        // D-42: el documento dice 15, que ningun heroe alcanza (§6.1.1: hasta 8).
+        assertThat(templo.nivelRecomendado()).isEqualTo(Mision.NIVEL_MAXIMO);
         assertThat(templo.narrativa()).startsWith("En las profundidades del Bosque Sombrío")
                 .endsWith("un guardián milenario que protege sus secretos.");
         assertThat(templo.objetivos()).hasSize(5);
@@ -73,7 +149,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void provisional() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "dev-prueba-de-humo");
+        assertThat(catalogo.todas()).extracting(Mision::id).startsWith("templo-olvidado")
+                .endsWith("dev-prueba-de-humo").contains(PROGRESION.toArray(String[]::new));
         Mision humo = catalogo.buscar("dev-prueba-de-humo").orElseThrow();
         assertThat(humo.origen()).isEqualTo(Origen.PROVISIONAL_DEV);
         assertThat(humo.nombre()).startsWith(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);

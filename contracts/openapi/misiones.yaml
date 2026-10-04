@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de misiones
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
     RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
@@ -20,8 +20,11 @@ info:
 
     **Qué hace el servidor y qué no.** Las misiones se leen de una semilla
     versionada en el repositorio (`services/contenido/misiones/src/main/resources/semilla/`):
-    «El Templo Olvidado» es el ejemplo del documento (§7.8.14), tal cual. El
-    combate lo resuelve el motor de combate (`POST /api/v1/combate/ataques`) y
+    «El Templo Olvidado» es el ejemplo del documento (§7.8.14) y la semilla
+    de progresión (1.1.0, D-42) publica siete misiones de historia de nivel 1
+    a 7 que llevan hasta él. Los enemigos pelean en el nivel recomendado de la
+    misión (§7.8.13). El combate lo resuelve el motor de combate de las
+    batallas en línea (`POST /api/v1/combate/turnos` y `/acciones`) y
     la IA de cada turno la decide el servicio de héroes
     (`POST /api/v1/estrategias/decision`): aquí no hay un segundo motor. La
     experiencia por enemigo derrotado es 10 × 1,2^(1d8) (§6.1.1): el dado lo
@@ -524,7 +527,9 @@ components:
         DOCUMENTO: la misión es del documento del curso (§7.8.14).
         PROVISIONAL_DEV: semilla de desarrollo para demostrar el flujo, solo
         con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
-      enum: [DOCUMENTO, PROVISIONAL_DEV]
+        PROGRESION (1.1.0, D-42): misión de historia del catálogo de progresión
+        de nivel 1 a 7, diseñada por el equipo 6; contenido del juego.
+      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION]
     PaginaDeMisiones:
       type: object
       required: [misiones, total, pagina, totalPaginas, tamanio]
@@ -569,9 +574,12 @@ components:
           exclusiveMinimum: 0
         nivelRecomendado:
           type: [integer, "null"]
+          minimum: 1
+          maximum: 8
           description: >
-            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
-            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+            Sugerencia (§7.8.3), no requisito: los enemigos pelean en este nivel
+            (§7.8.13). Va de 1 a 8, los niveles que existen (§6.1.1). El ejemplo
+            del documento dice 15 y desde 1.1.0 se publica con 8 (D-42).
         recompensasDestacadas:
           type: array
           items:
@@ -631,9 +639,12 @@ components:
           exclusiveMinimum: 0
         nivelRecomendado:
           type: [integer, "null"]
+          minimum: 1
+          maximum: 8
           description: >
-            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
-            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+            Sugerencia (§7.8.3), no requisito: los enemigos pelean en este nivel
+            (§7.8.13). Va de 1 a 8, los niveles que existen (§6.1.1). El ejemplo
+            del documento dice 15 y desde 1.1.0 se publica con 8 (D-42).
         recompensasDestacadas:
           type: array
           items:

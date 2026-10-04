@@ -16,7 +16,7 @@ const TEMPLO = {
   descripcionBreve: 'Un antiguo templo custodiado por un guardián milenario.',
   dificultad: 'NORMAL',
   duracionHoras: 12,
-  nivelRecomendado: 15,
+  nivelRecomendado: 8,
   estado: 'DISPONIBLE',
   narrativa:
     'En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados.\n\nEstá custodiado por criaturas corrompidas y un guardián milenario.',

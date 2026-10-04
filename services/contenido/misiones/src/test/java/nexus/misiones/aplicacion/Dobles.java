@@ -382,8 +382,12 @@ public final class Dobles {
                     : new VeredictoDeComposicion(true, null);
         }
 
+        /** Cada vista por nivel que se pidio, como «prototipo@nivel» (D-42: el nivel de los enemigos). */
+        public final List<String> nivelesPedidos = new ArrayList<>();
+
         @Override
         public EstadisticasDeNivel enNivel(String prototipo, int nivel) {
+            nivelesPedidos.add(prototipo + "@" + nivel);
             return new EstadisticasDeNivel(10, vidaDeLosEnemigos, 5, ataqueDeNivel, danoDeNivel, null);
         }
 

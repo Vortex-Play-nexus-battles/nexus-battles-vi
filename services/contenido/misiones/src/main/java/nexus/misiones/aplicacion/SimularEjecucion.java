@@ -108,10 +108,11 @@ public class SimularEjecucion {
         double multiplicador = Optional.ofNullable(parametros.multiplicadorDeEstadisticas(ejecucion.escalon()))
                 .orElse(1.0);
         Map<String, ServicioDeHeroes.EstadisticasDeNivel> vistas = new HashMap<>();
+        int nivelDeLosEnemigos = nivelDeLosEnemigos(mision.get(), heroe);
 
         List<Rival> regulares = new ArrayList<>();
         for (GrupoDeEnemigos grupo : mision.get().enemigos()) {
-            Rival rival = rival(grupo.nombre(), TipoDeRival.REGULAR, grupo.prototipo(), heroe.nivel(),
+            Rival rival = rival(grupo.nombre(), TipoDeRival.REGULAR, grupo.prototipo(), nivelDeLosEnemigos,
                     grupo.vida(), grupo.defensa(), grupo.rotaciones(), null, multiplicador, vistas);
             for (int i = 0; i < grupo.cantidad(); i++) {
                 regulares.add(rival);
@@ -125,7 +126,7 @@ public class SimularEjecucion {
         }
         Jefe jefe = mision.get().jefe();
         Rival rivalFinal = jefe == null ? null
-                : rival(jefe.nombre(), TipoDeRival.JEFE, jefe.prototipo(), heroe.nivel(), jefe.vida(),
+                : rival(jefe.nombre(), TipoDeRival.JEFE, jefe.prototipo(), nivelDeLosEnemigos, jefe.vida(),
                         jefe.defensa(), jefe.rotaciones(), null, multiplicador, vistas);
 
         List<Rival> plan = PlanDeCombate.armar(regulares, masters, rivalFinal, azar);
@@ -147,6 +148,19 @@ public class SimularEjecucion {
                 guardada.id(), guardada.estado(), resultado.turnos(), resultado.encuentrosCompletados(),
                 String.format(java.util.Locale.ROOT, "%.2f", recompensas.experiencia()));
         return Optional.of(guardada);
+    }
+
+    /**
+     * El nivel de los enemigos regulares y del jefe — §7.8.13: «las
+     * estadisticas de enemigos deben escalar segun nivel de mision» (D-42). Es
+     * el nivel recomendado de la mision; solo la que no lo dice (la provisional
+     * de DEV) pelea en el nivel del heroe, como hasta ahora. Antes TODAS
+     * peleaban en el nivel del heroe: subir de nivel no hacia mas facil
+     * ninguna mision, y el Templo, con un nivel recomendado de 15 que ningun
+     * heroe alcanza (§6.1.1: hasta 8), no tenia nivel en el que jugarse.
+     */
+    static int nivelDeLosEnemigos(Mision mision, HeroeEnMision heroe) {
+        return mision.nivelRecomendado() != null ? mision.nivelRecomendado() : heroe.nivel();
     }
 
     /**
