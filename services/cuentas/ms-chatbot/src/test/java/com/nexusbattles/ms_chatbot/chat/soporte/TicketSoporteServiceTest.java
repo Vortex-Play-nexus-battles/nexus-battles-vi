@@ -10,6 +10,7 @@ import com.nexusbattles.ms_chatbot.chat.model.Remitente;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -177,11 +178,6 @@ class TicketSoporteServiceTest {
     void unVisitanteNoTieneTickets() {
         assertThatThrownBy(() -> servicio.misTickets(null)).isInstanceOf(SesionRequeridaException.class);
         verifyNoInteractions(tickets);
-    }
-
-    @Test
-    void laRedaccionProvisionalDevuelveElTextoTalCual() {
-        assertThat(new RedaccionProvisional().redactar("hola")).isEqualTo("hola");
     }
 
     @Test

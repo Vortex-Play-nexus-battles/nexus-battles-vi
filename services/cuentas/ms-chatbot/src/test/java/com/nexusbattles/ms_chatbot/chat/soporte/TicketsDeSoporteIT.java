@@ -87,6 +87,20 @@ class TicketsDeSoporteIT {
                 error -> assertThat(IndiceDeTicketAbierto.loIncumple(error)).isTrue());
     }
 
+    // 7.4.8: con el redactor real de plataforma (chat.privacidad), lo que se
+    // guarda ya no lleva ni la contrasena ni la tarjeta.
+    @Test
+    @DisplayName("el ticket se guarda con la contrasena y la tarjeta tapadas por el redactor real")
+    void elTicketSeGuardaRedactado() {
+        IdentidadDelChat jugador = IdentidadDelChat.usuario(UUID.randomUUID(), "token");
+
+        TicketSoporte abierto = servicio.abrir(jugador, Categoria.SOPORTE_TECNICO, "No puedo entrar",
+            "Mi contraseña: abc123 y la tarjeta 4111 1111 1111 1111");
+
+        assertThat(tickets.findById(abierto.getId())).hasValueSatisfying(guardado ->
+            assertThat(guardado.getMensaje()).isEqualTo("Mi contraseña: *** y la tarjeta [tarjeta]"));
+    }
+
     // Revision de plataforma: un texto que no cabe en su columna tambien es un
     // error de integridad, pero no es "ya tienes un ticket abierto".
     @Test

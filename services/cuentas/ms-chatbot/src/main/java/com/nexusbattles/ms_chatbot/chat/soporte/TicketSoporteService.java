@@ -5,6 +5,7 @@ import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedaccionDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.springframework.dao.DataIntegrityViolationException;
