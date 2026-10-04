@@ -19,18 +19,18 @@ import java.util.regex.Pattern;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Las siete dependencias de misiones en un solo servidor HTTP de verdad
+ * Las ocho dependencias de misiones en un solo servidor HTTP de verdad
  * (JDK HttpServer), para que los clientes REST se prueben de punta a punta:
  * serializacion, cabeceras (credencial, traza, Idempotency-Key), codigos de
  * estado y tiempos de espera. Cada una responde con la forma de su contrato:
  * inventario.yaml 1.6.0, productos.yaml, heroes.yaml 1.2.0,
- * motor-combate.yaml 1.2.0, creditos.yaml 1.4.0, correo.yaml 1.4.0 y
- * ms-identidad-admin.yaml.
+ * motor-combate.yaml 1.2.0, creditos.yaml 1.4.0, correo.yaml 1.4.0,
+ * notificaciones.yaml 1.2.0 y ms-identidad-admin.yaml.
  *
  * <p>Rutas: inventario, productos, heroes y motor cuelgan de la raiz; el libro
  * de creditos de {@code /finanzas/api/v1}, correo de {@code /correo/api/v1},
- * identidad de {@code /identidad} y el emisor de credenciales de
- * {@code /auth/token}.
+ * la bandeja de {@code /notificaciones/api/v1}, identidad de
+ * {@code /identidad} y el emisor de credenciales de {@code /auth/token}.
  */
 public final class DependenciasFalsas implements AutoCloseable {
 
@@ -87,6 +87,10 @@ public final class DependenciasFalsas implements AutoCloseable {
     public final Set<String> caidas = Collections.synchronizedSet(new HashSet<>());
     /** Contacto que da identidad; nulo = 404. */
     public volatile String correoDelJugador = "jugador@ejemplo.com";
+    /** Rutas que contestan un estado fijo (la clave es el final de la ruta), p. ej. «/liberacion» → 401. */
+    public final Map<String, Integer> forzados = new ConcurrentHashMap<>();
+    /** La bandeja falsa de notificaciones: los avisos recibidos, por id. */
+    public final Map<String, Map<String, Object>> avisos = new ConcurrentHashMap<>();
 
     public DependenciasFalsas() throws IOException {
         servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -156,6 +160,8 @@ public final class DependenciasFalsas implements AutoCloseable {
         estadisticasSinFormulas = false;
         caidas.clear();
         correoDelJugador = "jugador@ejemplo.com";
+        forzados.clear();
+        avisos.clear();
     }
 
     @Override
@@ -222,6 +228,14 @@ public final class DependenciasFalsas implements AutoCloseable {
 
     private Respuesta responder(Peticion p) {
         String ruta = p.ruta();
+        for (Map.Entry<String, Integer> forzado : forzados.entrySet()) {
+            if (ruta.endsWith(forzado.getKey())) {
+                return problema(forzado.getValue(), "Estado forzado por la prueba");
+            }
+        }
+        if (ruta.equals("/notificaciones/api/v1/internal/notifications") && p.metodo().equals("POST")) {
+            return caida("notificaciones") ? problema(500, "caido") : notificaciones(p);
+        }
         if (ruta.equals("/auth/token")) {
             return json(200, Map.of("access_token", TOKEN_DE_SERVICIO, "token_type", "Bearer", "expires_in", 3600));
         }
@@ -286,6 +300,26 @@ public final class DependenciasFalsas implements AutoCloseable {
                     "estado", "ACTIVO"));
         }
         return problema(404, "Ruta desconocida en el servidor falso: " + ruta);
+    }
+
+    /**
+     * {@code POST /internal/notifications} (notificaciones.yaml 1.2.0): 201 con
+     * la entrega; el mismo id otra vez, 409 y nada cambia.
+     */
+    private Respuesta notificaciones(Peticion p) {
+        Map<String, Object> cuerpo = p.json();
+        String id = String.valueOf(cuerpo.get("id"));
+        if (avisos.putIfAbsent(id, cuerpo) != null) {
+            return problema(409, "Ya existe un aviso con ese identificador");
+        }
+        Map<String, Object> aviso = new LinkedHashMap<>();
+        aviso.put("id", id);
+        aviso.put("tipo", cuerpo.get("tipo"));
+        aviso.put("titulo", cuerpo.get("titulo"));
+        aviso.put("cuerpo", cuerpo.get("cuerpo"));
+        aviso.put("creadaEn", cuerpo.get("creadaEn"));
+        aviso.put("leida", false);
+        return json(201, Map.of("aviso", aviso, "sesionesNotificadas", List.of()));
     }
 
     private Respuesta inventario(Peticion p) {

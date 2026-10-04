@@ -19,6 +19,14 @@ import tools.jackson.databind.json.JsonMapper;
  * circuito por tres heroes ajenos. Este envoltorio convierte el 4xx en un
  * valor para que atraviese el corta circuitos como lo que es.
  *
+ * <p><b>No todo 4xx es un «no».</b> 401, 408 y 429 son un «ahora no»: la
+ * credencial de servicio de misiones no valio (se renueva; paso con la clave
+ * de firma del emisor, #750), la peticion tardo o el otro servicio pide
+ * espacio. Tratarlos como rechazo definitivo dejaba un paso de la liquidacion
+ * FALLIDO para siempre: un heroe bloqueado en mision que ya no se liberaba y
+ * unos creditos que ya no se abonaban. Se dejan salir como falta de respuesta:
+ * el corta circuitos los cuenta y la liquidacion los reintenta.
+ *
  * @param cuerpo  lo que devolvio la llamada, si no fue un 4xx
  * @param rechazo el 4xx, si lo hubo
  */
@@ -27,8 +35,9 @@ record Contestacion<T>(T cuerpo, HttpClientErrorException rechazo) {
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
     /**
-     * @throws DependenciaDegradada si la dependencia no responde o el circuito
-     *                              esta abierto; la causa real va dentro
+     * @throws DependenciaDegradada si la dependencia no responde, el circuito
+     *                              esta abierto o contesto un 4xx pasajero; la
+     *                              causa real va dentro
      */
     static <T> Contestacion<T> protegida(CortaCircuitos corta, Supplier<T> llamada) {
         return corta.ejecutarOFallar(() -> de(llamada));
@@ -38,8 +47,17 @@ record Contestacion<T>(T cuerpo, HttpClientErrorException rechazo) {
         try {
             return new Contestacion<>(llamada.get(), null);
         } catch (HttpClientErrorException rechazo) {
+            if (pasajero(rechazo)) {
+                throw rechazo;
+            }
             return new Contestacion<>(null, rechazo);
         }
+    }
+
+    /** 401 (credencial), 408 (tiempo) y 429 (cupo): se reintenta, no es un «no» del otro servicio. */
+    static boolean pasajero(HttpClientErrorException rechazo) {
+        int estado = rechazo.getStatusCode().value();
+        return estado == 401 || estado == 408 || estado == 429;
     }
 
     boolean rechazada() {

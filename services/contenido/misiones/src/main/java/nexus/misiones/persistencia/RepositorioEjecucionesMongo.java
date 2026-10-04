@@ -109,9 +109,16 @@ public class RepositorioEjecucionesMongo implements RepositorioDeEjecuciones {
         return mongo.count(consulta, EjecucionDocumento.class);
     }
 
+    /**
+     * Las vencidas que toca simular ya: sin intento aplazado ({@code proximoIntento}
+     * ausente o nulo, que es como nace una ejecucion) o con el plazo del
+     * aplazamiento cumplido ({@link Ejecucion#simulacionAplazada}). Asi una
+     * ejecucion que no se puede simular no ocupa su sitio del lote en cada vuelta.
+     */
     @Override
     public List<Ejecucion> vencidas(Instant ahora, int limite) {
-        Query consulta = new Query(Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO).and("terminaEn").lte(ahora))
+        Query consulta = new Query(Criteria.where("estado").is(EstadoEjecucion.EN_PROGRESO).and("terminaEn").lte(ahora)
+                .orOperator(Criteria.where("proximoIntento").is(null), Criteria.where("proximoIntento").lte(ahora)))
                 .with(Sort.by(Sort.Direction.ASC, "terminaEn"))
                 .limit(limite);
         return leer(consulta);

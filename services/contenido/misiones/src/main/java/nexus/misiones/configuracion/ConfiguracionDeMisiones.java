@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
+import nexus.misiones.aplicacion.AvisosDeMisiones;
 import nexus.misiones.aplicacion.CancelarEjecucion;
 import nexus.misiones.aplicacion.CatalogoDeProductos;
 import nexus.misiones.aplicacion.ConsultarEjecuciones;
@@ -69,6 +70,7 @@ public class ConfiguracionDeMisiones {
             @Value("${misiones.reintento-segundos:30}") long reintentoSegundos,
             @Value("${misiones.trabajo.lote:20}") int lote,
             @Value("${misiones.correo.activo:true}") boolean correoActivo,
+            @Value("${misiones.avisos.activo:true}") boolean avisosActivos,
             @Value("${misiones.semilla-de-pruebas:}") String semillaDePruebas,
             @Value("${misiones.multiplicador-mitico:}") String multiplicadorMitico,
             @Value("${misiones.experiencia-por-completar.facil:0}") double xpFacil,
@@ -93,6 +95,7 @@ public class ConfiguracionDeMisiones {
                 Duration.ofSeconds(reintentoSegundos),
                 lote,
                 correoActivo,
+                avisosActivos,
                 semillaDePruebas == null || semillaDePruebas.isBlank() ? null : Long.valueOf(semillaDePruebas.trim()),
                 decimal(multiplicadorMitico),
                 new ParametrosDeRecompensa(experiencia, creditos, epicaExigeCompletar));
@@ -169,8 +172,10 @@ public class ConfiguracionDeMisiones {
     public LiquidarEjecucion liquidarEjecucion(RepositorioDeEjecuciones ejecuciones, CatalogoDeMisiones catalogo,
                                                InventarioDeHeroes inventario, LibroDeCreditos libro,
                                                DirectorioDeJugadores directorio, CorreoDeMisiones correo,
-                                               ParametrosDeMisiones parametros, Clock reloj) {
-        return new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio, correo, parametros, reloj);
+                                               AvisosDeMisiones avisos, ParametrosDeMisiones parametros,
+                                               Clock reloj) {
+        return new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio, correo, avisos,
+                parametros, reloj);
     }
 
     @Bean

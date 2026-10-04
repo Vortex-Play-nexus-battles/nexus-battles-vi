@@ -2,9 +2,12 @@ package nexus.misiones.aplicacion;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionModificadaConcurrentemente;
@@ -19,7 +22,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Lleva a los otros servicios lo que la ejecucion gano (7.8.6, «el heroe es
  * liberado y regresa al inventario», «las recompensas obtenidas se agregan al
- * inventario»; 7.8.10, «los creditos se suman al balance disponible»).
+ * inventario»; 7.8.10, «los creditos se suman al balance disponible») y se lo
+ * cuenta al jugador (7.8.9, notificaciones de misiones; RF-NOT-004).
  *
  * <p>Paso a paso, en el orden de {@link PasoDeLiquidacion}, cada uno
  * idempotente del lado de quien lo recibe:
@@ -37,24 +41,30 @@ public class LiquidarEjecucion {
     private static final Logger BITACORA = LoggerFactory.getLogger(LiquidarEjecucion.class);
     private static final Locale ESPANOL = Locale.forLanguageTag("es-CO");
 
+    /** Largo maximo del titulo de un aviso (notificaciones.yaml 1.2.0). */
+    static final int TITULO_MAXIMO = 200;
+
     private final RepositorioDeEjecuciones ejecuciones;
     private final CatalogoDeMisiones catalogo;
     private final InventarioDeHeroes inventario;
     private final LibroDeCreditos libro;
     private final DirectorioDeJugadores directorio;
     private final CorreoDeMisiones correo;
+    private final AvisosDeMisiones avisos;
     private final ParametrosDeMisiones parametros;
     private final Clock reloj;
 
     public LiquidarEjecucion(RepositorioDeEjecuciones ejecuciones, CatalogoDeMisiones catalogo,
                              InventarioDeHeroes inventario, LibroDeCreditos libro, DirectorioDeJugadores directorio,
-                             CorreoDeMisiones correo, ParametrosDeMisiones parametros, Clock reloj) {
+                             CorreoDeMisiones correo, AvisosDeMisiones avisos, ParametrosDeMisiones parametros,
+                             Clock reloj) {
         this.ejecuciones = Objects.requireNonNull(ejecuciones);
         this.catalogo = Objects.requireNonNull(catalogo);
         this.inventario = Objects.requireNonNull(inventario);
         this.libro = Objects.requireNonNull(libro);
         this.directorio = Objects.requireNonNull(directorio);
         this.correo = Objects.requireNonNull(correo);
+        this.avisos = Objects.requireNonNull(avisos);
         this.parametros = Objects.requireNonNull(parametros);
         this.reloj = Objects.requireNonNull(reloj);
     }
@@ -113,6 +123,20 @@ public class LiquidarEjecucion {
                     referencia + "-correo");
             case CORREO_EPICA -> escribir(ejecucion, asuntoDeEpica(recompensas), mensajeDeEpica(ejecucion),
                     referencia + "-correo-epica");
+            case AVISO -> avisar(ejecucion, referencia + "-aviso", asuntoDeFin(ejecucion), mensajeDeFin(ejecucion));
+            case AVISO_EPICA -> avisar(ejecucion, referencia + "-aviso-epica", asuntoDeEpica(recompensas),
+                    mensajeDeEpica(ejecucion));
+            case AVISO_DESBLOQUEO -> {
+                // Un aviso por mision desbloqueada, cada uno con su id: si la
+                // vuelta se corta a mitad, el reintento repite los ya dados y
+                // la bandeja los reconoce (409) sin duplicarlos.
+                for (Mision nueva : desbloqueadas(ejecucion)) {
+                    avisar(ejecucion, referencia + "-aviso-desbloqueo-" + nueva.id(),
+                            "Nueva misión disponible: «" + nueva.nombre() + "»",
+                            "Completaste «" + nombreDeMision(ejecucion) + "»: ya puedes enviar un héroe a «"
+                                    + nueva.nombre() + "».");
+                }
+            }
         }
     }
 
@@ -121,6 +145,35 @@ public class LiquidarEjecucion {
                 .orElseThrow(() -> new RechazoDelServicio("ms-identidad", 404,
                         "no hay contacto para el jugador: no hay a quien escribir"));
         correo.enviar(contacto, asunto, mensaje, clave);
+    }
+
+    /** El aviso lleva la hora del hecho, no la del intento: es la misma en cada reintento. */
+    private void avisar(Ejecucion ejecucion, String id, String titulo, String cuerpo) {
+        avisos.avisar(ejecucion.jugadorUid(), id, recortar(titulo, TITULO_MAXIMO), cuerpo, ejecucion.terminadaEn());
+    }
+
+    /**
+     * Las misiones que esta ejecucion desbloqueo (7.8.2, la historia «se
+     * desbloquea secuencialmente»): las vigentes que la piden como previa,
+     * cuyos demas requisitos el jugador ya cumplia, y que no ha empezado nunca.
+     * Es la misma regla con la que el tablon las deja de pintar Bloqueadas
+     * ({@code SituacionDelJugador}).
+     */
+    private List<Mision> desbloqueadas(Ejecucion ejecucion) {
+        List<Ejecucion> suyas = ejecuciones.delJugador(ejecucion.jugadorUid());
+        Set<String> completadas = suyas.stream()
+                .filter(e -> e.estado() == EstadoEjecucion.COMPLETADA)
+                .map(Ejecucion::misionId)
+                .collect(Collectors.toCollection(HashSet::new));
+        completadas.add(ejecucion.misionId());
+        Set<String> empezadas = suyas.stream().map(Ejecucion::misionId).collect(Collectors.toSet());
+        Instant ahora = reloj.instant();
+        return catalogo.todas().stream()
+                .filter(m -> m.requisitosPrevios().contains(ejecucion.misionId()))
+                .filter(m -> completadas.containsAll(m.requisitosPrevios()))
+                .filter(m -> !empezadas.contains(m.id()))
+                .filter(m -> m.vigente(ahora))
+                .toList();
     }
 
     // ------------------------------------------------------------ textos
@@ -136,6 +189,12 @@ public class LiquidarEjecucion {
                 : "Tu misión «" + mision + "» terminó: " + ejecucion.heroe().nombre() + " fue derrotado";
     }
 
+    /**
+     * El detalle de CADA recompensa (7.8.10, «notificacion detallada de cada
+     * recompensa recibida»): creditos, experiencia, nivel, cada objeto con su
+     * cantidad y la epica. Solo cuenta lo que ya esta en el reporte; no anade
+     * nada que el documento o la semilla no den.
+     */
     private String mensajeDeFin(Ejecucion ejecucion) {
         RecompensasDeEjecucion r = ejecucion.recompensas();
         StringBuilder texto = new StringBuilder();
@@ -149,6 +208,11 @@ public class LiquidarEjecucion {
         texto.append(String.format(ESPANOL, "%.1f", r.experiencia())).append(" puntos de experiencia.");
         if (ejecucion.nivelAlcanzado() != null && ejecucion.nivelAlcanzado() > ejecucion.heroe().nivel()) {
             texto.append(" ¡Subió al nivel ").append(ejecucion.nivelAlcanzado()).append("!");
+        }
+        if (!r.productos().isEmpty()) {
+            texto.append(" Objetos: ").append(r.productos().stream()
+                    .map(p -> "«" + p.nombre() + "» ×" + p.cantidad())
+                    .collect(Collectors.joining(", "))).append(".");
         }
         if (!r.epicas().isEmpty()) {
             texto.append(" Aprendió la épica «").append(r.epicas().getFirst().nombre()).append("».");
@@ -172,5 +236,9 @@ public class LiquidarEjecucion {
                 + (epica.entregable()
                         ? "Ya está en tu inventario."
                         : "Queda en tu colección de épicas de Máster.");
+    }
+
+    static String recortar(String texto, int maximo) {
+        return texto.length() <= maximo ? texto : texto.substring(0, maximo - 1) + "…";
     }
 }
