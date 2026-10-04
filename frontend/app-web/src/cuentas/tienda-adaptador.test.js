@@ -3,7 +3,50 @@
  * contrato y no contra la que el frontend suponia (FI-R2).
  */
 
-import { aImporte, textoDePrecio, aProductoDeVitrina, aFilaDeCarrito } from './tienda-adaptador.js';
+import {
+  CREDITOS,
+  aImporte,
+  textoDeCreditos,
+  textoDePrecio,
+  aProductoDeVitrina,
+  aFilaDeCarrito,
+} from './tienda-adaptador.js';
+
+describe('D-44 — créditos del juego', () => {
+  test('se escriben con separadores es-CO y en singular cuando es uno', () => {
+    expect(textoDeCreditos(1)).toBe('1 crédito');
+    expect(textoDeCreditos(300)).toBe('300 créditos');
+    expect(textoDeCreditos(1250)).toBe('1.250 créditos');
+    expect(textoDeCreditos(0)).toBe('0 créditos');
+  });
+
+  test('sin cifra no hay texto: nunca «NaN créditos»', () => {
+    expect(textoDeCreditos(null)).toBeNull();
+    expect(textoDeCreditos(undefined)).toBeNull();
+    expect(textoDeCreditos(Number.NaN)).toBeNull();
+  });
+
+  test('una orden en CREDITOS se escribe en créditos, no como una moneda', () => {
+    expect(textoDePrecio(825, CREDITOS)).toBe('825 créditos');
+    expect(textoDePrecio(825, 'COP')).toBe('825 COP');
+  });
+
+  test('la vitrina trae el precio en créditos que calculó el servidor; si no viene, null', () => {
+    const conCreditos = aProductoDeVitrina({
+      precioFinal: 6000,
+      moneda: 'COP',
+      precioCreditos: 300,
+    });
+    expect(conCreditos.precioCreditos).toBe(300);
+    expect(conCreditos.precioCreditosTexto).toBe('300 créditos');
+
+    for (const raro of [null, undefined, 0, -5, 12.5, '300']) {
+      const sin = aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP', precioCreditos: raro });
+      expect(sin.precioCreditos).toBeNull();
+      expect(sin.precioCreditosTexto).toBeNull();
+    }
+  });
+});
 
 describe('aImporte', () => {
   test('acepta el numero y la cadena con que se serializa un BigDecimal', () => {

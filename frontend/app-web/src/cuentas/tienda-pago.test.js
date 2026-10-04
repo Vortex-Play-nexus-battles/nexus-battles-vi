@@ -14,11 +14,15 @@ import {
   abrirPago,
   claveDelIntento,
   enviarPago,
+  enviarPagoConCreditos,
   interpretarPago,
+  interpretarPagoConCreditos,
   normalizarVencimiento,
   nuevaClaveDePago,
   olvidarIntentoDePago,
+  panelDeCreditos,
   pasaLuhn,
+  pedirCotizacionEnCreditos,
   tarjetaDeOrden,
   validarPago,
 } from './tienda-pago.js';
@@ -693,5 +697,375 @@ describe('Mis compras', () => {
     document.querySelector('[data-accion="reintentar-compras"]').click();
     await esperar();
     expect(document.querySelectorAll('.compra')).toHaveLength(1);
+  });
+});
+
+describe('D-44 — pagar con créditos del Nexo', () => {
+  const COTIZACION = {
+    pagable: true,
+    motivo: null,
+    lineas: [
+      {
+        productoId: 'p-1',
+        nombre: 'Espada de Vorn',
+        cantidad: 2,
+        disponible: true,
+        precioCreditos: 300,
+        subtotalCreditos: 600,
+        porcentajeDescuento: null,
+      },
+      {
+        productoId: 'p-2',
+        nombre: 'Yelmo del Alba',
+        cantidad: 1,
+        disponible: true,
+        precioCreditos: 250,
+        subtotalCreditos: 250,
+        porcentajeDescuento: null,
+      },
+    ],
+    totalCreditos: 850,
+    saldoDisponible: 1000,
+    saldoDespues: 150,
+    alcanza: true,
+  };
+
+  const ordenEnCreditos = (cambios = {}) =>
+    orden({
+      moneda: 'CREDITOS',
+      formaDePago: 'CREDITOS',
+      total: 850,
+      medioDePago: null,
+      correoConfirmacion: 'OMITIDO',
+      lineas: [{ productoId: 'p-1', nombre: 'Espada de Vorn', cantidad: 2, subtotal: 600 }],
+      ...cambios,
+    });
+
+  const confirmar = () => document.querySelector('[data-accion="confirmar-pago"]');
+  const radio = (valor) => document.querySelector(`input[name="forma-de-pago"][value="${valor}"]`);
+  const posts = (fetchImpl) => fetchImpl.mock.calls.filter(([, o]) => o?.method === 'POST');
+  const gets = (fetchImpl) => fetchImpl.mock.calls.filter(([, o]) => o?.method === 'GET');
+
+  async function elegir(valor) {
+    radio(valor).checked = true;
+    radio(valor).dispatchEvent(new Event('change'));
+    await esperar();
+  }
+
+  /** El servidor: la cotización por GET y la compra por POST. */
+  function servidor({ cotizacion = COTIZACION, pago = respuesta(201, ordenEnCreditos()) } = {}) {
+    return jest.fn(async (url, opciones = {}) => {
+      if (!String(url).endsWith('/checkout/creditos')) {
+        throw new Error(`petición inesperada: ${url}`);
+      }
+      if (opciones.method === 'POST') {
+        return typeof pago === 'function' ? pago() : pago;
+      }
+      return typeof cotizacion === 'function' ? cotizacion() : respuesta(200, cotizacion);
+    });
+  }
+
+  function abrir(fetchImpl, extra = {}) {
+    document.getElementById('btn-pagar').focus();
+    return abrirPago({ doc: document, carrito: CARRITO, moneda: 'COP', fetchImpl, ...extra });
+  }
+
+  test('«¿Cómo quieres pagar?»: Créditos del Nexo o Pago simulado; el simulado viene marcado', () => {
+    abrir(jest.fn());
+
+    const grupo = document.querySelector('.pago__formas');
+    expect(grupo.querySelector('legend').textContent).toBe('¿Cómo quieres pagar?');
+    expect(
+      Array.from(grupo.querySelectorAll('.pago__forma-nombre')).map((n) => n.textContent),
+    ).toEqual(['Créditos del Nexo', 'Pago simulado']);
+    expect(radio('TARJETA').checked).toBe(true);
+    expect(radio('CREDITOS').checked).toBe(false);
+    expect(document.querySelector('[data-zona="creditos"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="tarjeta"]').hidden).toBe(false);
+  });
+
+  test('con créditos: saldo actual, precio y saldo después tal como los da el servidor', async () => {
+    const fetchImpl = servidor();
+    abrir(fetchImpl);
+
+    await elegir('CREDITOS');
+
+    expect(gets(fetchImpl)).toHaveLength(1);
+    expect(gets(fetchImpl)[0][0]).toBe('/api/v1/checkout/creditos');
+    const zona = document.querySelector('[data-zona="creditos"]');
+    expect(zona.hidden).toBe(false);
+    expect(document.querySelector('[data-zona="tarjeta"]').hidden).toBe(true);
+    // El resumen en dinero real no se enseña: dos precios para la misma compra confunden.
+    expect(document.querySelector('.pago__resumen:not(.pago__resumen--creditos)').hidden).toBe(
+      true,
+    );
+    expect(zona.querySelector('[data-zona="saldo-actual"] dd').textContent).toBe('1.000 créditos');
+    expect(zona.querySelector('[data-zona="precio"] dd').textContent).toBe('850 créditos');
+    expect(zona.querySelector('[data-zona="saldo-despues"] dd').textContent).toBe('150 créditos');
+    expect(Array.from(zona.querySelectorAll('.pago__linea')).map((l) => l.textContent)).toEqual([
+      'Espada de Vorn × 2600 créditos',
+      'Yelmo del Alba × 1250 créditos',
+    ]);
+    expect(confirmar().disabled).toBe(false);
+    expect(confirmar().textContent).toBe('Confirmar compra por 850 créditos');
+  });
+
+  test('confirmar: POST /checkout/creditos sin cuerpo y con su clave; «Compra realizada» y «Ver inventario»', async () => {
+    const alTerminar = jest.fn();
+    const fetchImpl = servidor();
+    abrir(fetchImpl, { alTerminar });
+    await elegir('CREDITOS');
+    const clave = claveDelIntento(document);
+
+    confirmar().click();
+    await esperar();
+
+    expect(posts(fetchImpl)).toHaveLength(1);
+    const [url, peticion] = posts(fetchImpl)[0];
+    expect(url).toBe('/api/v1/checkout/creditos');
+    expect(peticion.headers['Idempotency-Key']).toBe(clave);
+    expect(peticion.body).toBeUndefined();
+    const resultado = document.querySelector('.pago__resultado');
+    expect(resultado.dataset.estado).toBe('COMPLETA');
+    expect(resultado.textContent).toContain('Compra realizada');
+    expect(resultado.textContent).toContain('Pagaste 850 créditos.');
+    const verInventario = document.querySelector('[data-accion="ver-inventario"]');
+    expect(verInventario.tagName).toBe('A');
+    expect(verInventario.getAttribute('href')).toMatch(/inventario/);
+    expect(alTerminar).toHaveBeenCalledWith(ordenEnCreditos());
+    expect(claveDelIntento(document)).not.toBe(clave);
+  });
+
+  test('doble clic: mientras se procesa no sale un segundo cobro', async () => {
+    let terminarPago;
+    const fetchImpl = servidor({
+      pago: () =>
+        new Promise((r) => {
+          terminarPago = r;
+        }),
+    });
+    abrir(fetchImpl);
+    await elegir('CREDITOS');
+
+    confirmar().click();
+    confirmar().click();
+    await esperar();
+
+    expect(posts(fetchImpl)).toHaveLength(1);
+    expect(confirmar().disabled).toBe(true);
+    terminarPago(respuesta(201, ordenEnCreditos()));
+    await esperar();
+    expect(document.querySelector('.pago__resultado').textContent).toContain('Compra realizada');
+  });
+
+  test('si no alcanza: cuánto falta, y «Confirmar» apagado', async () => {
+    const fetchImpl = servidor({
+      cotizacion: { ...COTIZACION, saldoDisponible: 700, saldoDespues: -150, alcanza: false },
+    });
+    abrir(fetchImpl);
+
+    await elegir('CREDITOS');
+    confirmar().click();
+    await esperar();
+
+    expect(document.querySelector('[data-aviso="creditos"]').textContent).toBe(
+      'No te alcanza: te faltan 150 créditos.',
+    );
+    expect(confirmar().disabled).toBe(true);
+    expect(confirmar().textContent).toBe('Confirmar compra');
+    expect(posts(fetchImpl)).toHaveLength(0);
+  });
+
+  test('algo del carrito no se vende con créditos: se dice cuál camino queda y no se confirma', async () => {
+    const fetchImpl = servidor({
+      cotizacion: {
+        ...COTIZACION,
+        pagable: false,
+        motivo: 'SIN_PRECIO_EN_CREDITOS',
+        totalCreditos: null,
+        saldoDespues: null,
+        alcanza: null,
+        lineas: [{ ...COTIZACION.lineas[0], precioCreditos: null, subtotalCreditos: null }],
+      },
+    });
+    abrir(fetchImpl);
+
+    await elegir('CREDITOS');
+
+    expect(document.querySelector('[data-aviso="creditos"]').textContent).toMatch(
+      /no se vende con créditos/,
+    );
+    expect(document.querySelector('[data-zona="creditos"] .pago__linea').textContent).toContain(
+      'No se vende con créditos',
+    );
+    expect(confirmar().disabled).toBe(true);
+  });
+
+  test('sin el saldo de ms-finanzas: se dice que no se sabe y se puede confirmar (el servidor decide)', async () => {
+    const fetchImpl = servidor({
+      cotizacion: { ...COTIZACION, saldoDisponible: null, saldoDespues: null, alcanza: null },
+    });
+    abrir(fetchImpl);
+
+    await elegir('CREDITOS');
+
+    const zona = document.querySelector('[data-zona="creditos"]');
+    expect(zona.querySelector('[data-zona="saldo-actual"] dd').textContent).toBe(
+      'No disponible ahora',
+    );
+    expect(zona.querySelector('[data-zona="saldo-despues"] dd').textContent).toBe('—');
+    expect(confirmar().disabled).toBe(false);
+  });
+
+  test('la cotización no llega: se ofrece reintentar y no se confirma a ciegas', async () => {
+    const respuestas = [respuesta(503, {}), respuesta(200, COTIZACION)];
+    const fetchImpl = servidor({ cotizacion: () => respuestas.shift() });
+    abrir(fetchImpl);
+
+    await elegir('CREDITOS');
+    expect(confirmar().disabled).toBe(true);
+    expect(document.querySelector('[data-zona="creditos"]').textContent).toMatch(
+      /No pudimos calcular el precio en créditos/,
+    );
+
+    document.querySelector('[data-accion="reintentar-cotizacion"]').click();
+    await esperar();
+    expect(confirmar().disabled).toBe(false);
+  });
+
+  test('402 saldo-insuficiente: no se cobró, otra clave, y se vuelve a pedir el saldo', async () => {
+    const fetchImpl = servidor({
+      pago: () =>
+        problema(402, 'saldo-insuficiente', {
+          ordenId: ORDEN,
+          estado: 'RECHAZADA',
+          totalCreditos: 850,
+        }),
+    });
+    abrir(fetchImpl);
+    await elegir('CREDITOS');
+    const clave = claveDelIntento(document);
+
+    confirmar().click();
+    await esperar();
+
+    const alerta = document.querySelector('.pago__alerta');
+    expect(alerta.hidden).toBe(false);
+    expect(alerta.textContent).toContain('No tienes créditos suficientes');
+    expect(alerta.textContent).toContain('No se cobró nada. La compra cuesta 850 créditos.');
+    expect(claveDelIntento(document)).not.toBe(clave);
+    expect(gets(fetchImpl)).toHaveLength(2);
+  });
+
+  test('503 creditos-no-disponibles: el reintento lleva la MISMA clave y cobra una vez', async () => {
+    const respuestas = [
+      problema(503, 'creditos-no-disponibles', { ordenId: ORDEN, estado: 'PENDIENTE' }),
+      respuesta(201, ordenEnCreditos()),
+    ];
+    const fetchImpl = servidor({ pago: () => respuestas.shift() });
+    abrir(fetchImpl);
+    await elegir('CREDITOS');
+
+    confirmar().click();
+    await esperar();
+    expect(document.querySelector('.pago__alerta').textContent).toContain(
+      'No pudimos confirmar el cobro',
+    );
+    expect(document.activeElement).toBe(confirmar());
+
+    confirmar().click();
+    await esperar();
+
+    const claves = posts(fetchImpl).map(([, o]) => o.headers['Idempotency-Key']);
+    expect(claves).toHaveLength(2);
+    expect(claves[1]).toBe(claves[0]);
+    expect(document.querySelector('.pago__resultado').textContent).toContain('Compra realizada');
+  });
+
+  test('volver a «Pago simulado» enseña la tarjeta y empieza otro intento', async () => {
+    const fetchImpl = servidor();
+    abrir(fetchImpl);
+    await elegir('CREDITOS');
+    const conCreditos = claveDelIntento(document);
+
+    await elegir('TARJETA');
+
+    expect(document.querySelector('[data-zona="tarjeta"]').hidden).toBe(false);
+    expect(document.querySelector('[data-zona="creditos"]').hidden).toBe(true);
+    expect(document.querySelector('.pago__resumen').hidden).toBe(false);
+    expect(confirmar().disabled).toBe(false);
+    expect(confirmar().textContent).toBe('Confirmar pago de 108.000 COP');
+    expect(claveDelIntento(document)).not.toBe(conCreditos);
+  });
+
+  test('el cliente HTTP: cotización por GET; compra por POST sin cuerpo; sin red, estado 0', async () => {
+    const ok = jest.fn().mockResolvedValue(respuesta(200, COTIZACION));
+    expect(await pedirCotizacionEnCreditos({ fetchImpl: ok })).toEqual({
+      estado: 200,
+      cotizacion: COTIZACION,
+    });
+    const caido = jest.fn().mockRejectedValue(new Error('sin red'));
+    expect(await pedirCotizacionEnCreditos({ fetchImpl: caido })).toEqual({
+      estado: 0,
+      cotizacion: null,
+    });
+    expect(await enviarPagoConCreditos({ clave: 'pago-12345678', fetchImpl: caido })).toEqual({
+      estado: 0,
+      orden: null,
+      problema: null,
+    });
+  });
+
+  test('interpretarPagoConCreditos: cada respuesta dice lo que pasó con los créditos', () => {
+    expect(
+      interpretarPagoConCreditos({ estado: 201, orden: ordenEnCreditos(), problema: null }),
+    ).toMatchObject({
+      tipo: 'completa',
+      titulo: 'Compra realizada',
+    });
+    expect(
+      interpretarPagoConCreditos({
+        estado: 409,
+        orden: null,
+        problema: { type: 'urn:nexus:problema:compra-reembolsada', motivo: 'Se agotó.' },
+      }),
+    ).toMatchObject({ tipo: 'reembolsada', detalle: 'Se agotó. Te devolvimos los créditos.' });
+    expect(interpretarPagoConCreditos({ estado: 0, orden: null, problema: null })).toMatchObject({
+      tipo: 'reintentar',
+      conservarClave: true,
+    });
+    expect(
+      interpretarPagoConCreditos({
+        estado: 409,
+        orden: null,
+        problema: { type: 'urn:nexus:problema:producto-sin-precio-en-creditos', detail: '«X» no.' },
+      }),
+    ).toMatchObject({ tipo: 'carrito', detalle: '«X» no.' });
+    expect(
+      interpretarPagoConCreditos({
+        estado: 409,
+        orden: null,
+        problema: { type: 'urn:nexus:problema:clave-de-idempotencia-reutilizada' },
+      }),
+    ).toMatchObject({ tipo: 'reintentar', conservarClave: false });
+    // Lo común con la tarjeta lo dice interpretarPago, igual que siempre.
+    expect(interpretarPagoConCreditos({ estado: 401, orden: null, problema: null }).tipo).toBe(
+      'sesion',
+    );
+  });
+
+  test('el panel no calcula: si el servidor no dio una cifra, se dice que no se sabe', () => {
+    const panel = panelDeCreditos({ pagable: true, lineas: [], totalCreditos: null });
+    expect(panel.querySelector('[data-zona="precio"] dd').textContent).toBe('—');
+  });
+
+  test('Mis compras: una compra con créditos dice el total en créditos y con qué se pagó', () => {
+    const tarjeta = tarjetaDeOrden(ordenEnCreditos());
+
+    expect(tarjeta.querySelector('.compra__total').textContent).toBe('Total: 850 créditos');
+    expect(tarjeta.querySelector('.compra__medio').textContent).toBe(
+      'Pagada con créditos del Nexo',
+    );
+    expect(tarjeta.textContent).toContain('Espada de Vorn × 2 · 600 créditos');
   });
 });
