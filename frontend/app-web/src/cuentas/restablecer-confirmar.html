@@ -53,8 +53,19 @@
         <p class="estado" data-zona="estado" role="status" hidden></p>
         <div data-zona="aviso" tabindex="-1" hidden></div>
 
-        <!-- Paso 1: el código. -->
-        <form id="formCodigo" class="pila" novalidate>
+        <!-- G1 — sin guion no se canjea el código, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para recuperar la cuenta hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- Paso 1: el código. G1 — ni el código ni la contraseña en la
+             dirección: los dos formularios van con `method="post"` y sus
+             botones nacen desactivados hasta que restablecer-confirmar.js
+             escucha `submit` (comun/ui/formulario-seguro.js). -->
+        <form id="formCodigo" class="pila" method="post" novalidate>
           <div class="campo">
             <label class="campo__etiqueta" for="email">Correo electrónico</label>
             <input
@@ -88,13 +99,19 @@
             </p>
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" data-accion="continuar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            data-accion="continuar"
+            disabled
+            data-espera-guion
+          >
             Continuar
           </button>
         </form>
 
         <!-- Paso 2: respuestas (si las hay) y contraseña nueva. -->
-        <form id="formClave" class="pila" novalidate hidden>
+        <form id="formClave" class="pila" method="post" novalidate hidden>
           <div class="pila pila--ajustada">
             <p class="t-meta" data-zona="resumen-codigo"></p>
             <button type="button" class="boton boton--secundario" data-accion="otro-codigo">
@@ -140,7 +157,13 @@
             />
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" data-accion="guardar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            data-accion="guardar"
+            disabled
+            data-espera-guion
+          >
             Guardar contraseña
           </button>
         </form>

@@ -120,6 +120,16 @@ describe('lo primero que se lee', () => {
 });
 
 describe('al llegar', () => {
+  test('G1 — el formulario va por POST y su botón nace apagado hasta montar', () => {
+    const boton = document.querySelector('[data-accion="confirmar"]');
+    expect(document.getElementById('formVerificacion').getAttribute('method')).toBe('post');
+    expect(boton.disabled).toBe(true);
+
+    montar();
+
+    expect(boton.disabled).toBe(false);
+  });
+
   test('desde el enlace del correo: rellena, borra el fragmento y espera un clic', () => {
     const { historial, confirmar } = montar({
       hash: '#codigo=k7qx-2m9p&correo=ana%2Bnexus%40nexus.test',

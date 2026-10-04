@@ -50,7 +50,18 @@
 
         <p class="estado" id="estadoRegistro" hidden role="status"></p>
 
-        <form id="formRegistro" class="pila" novalidate>
+        <!-- G1 — sin guion no se crea la cuenta, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para crear la cuenta hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — la contraseña nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que registro.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formRegistro" class="pila" method="post" novalidate>
           <div class="fila">
             <div class="campo">
               <label class="campo__etiqueta" for="nombres">Nombres</label>
@@ -163,7 +174,13 @@
             <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
           </fieldset>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Crear cuenta
           </button>
         </form>

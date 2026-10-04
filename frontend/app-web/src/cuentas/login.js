@@ -45,6 +45,7 @@ import { tonoPorEstado } from '../comun/ui/aviso.js';
 import { cuentaAtras, vigilarCuentasAtras } from '../comun/ui/cuenta-atras.js';
 import { h } from '../comun/ui/dom.js';
 import { fechaHora } from '../comun/ui/formato.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 import { anotarEnvio, reenviarCodigo } from '../comun/verificacion.js';
 import { VEREDICTOS, comprobarCredencial } from '../comun/vigilante-sesion.js';
 import { mostrarAlertasCatalogoAlIniciarSesion } from '../contenido/productos/alertas-catalogo.js';
@@ -294,6 +295,9 @@ export function pintarRechazo(zona, rechazo, { acciones = null, anunciar = true 
 const form = document.getElementById('formLogin');
 
 if (form) {
+  // G1 — lo que una versión vieja de esta página, ya en caché, pudo dejar en
+  // la barra con un envío nativo (`?email=…&password=…`) sale antes de nada.
+  sinCredencialesEnLaDireccion();
   iniciarVista(form);
 }
 
@@ -453,8 +457,22 @@ function iniciarVista(formulario) {
       });
   }
 
+  // G1 — un solo envío a la vez. El botón se apaga en el mismo turno que el
+  // `submit` (un segundo clic o un segundo Enter ya no encuentran botón
+  // activo), y tras entrar se queda apagado mientras la página se va: antes
+  // el `finally` lo encendía justo después de `location.assign`.
+  let enviando = false;
+  /** Tras un rechazo o un fallo de red: se puede volver a intentar. */
+  function liberarEnvio() {
+    enviando = false;
+    botonEnviar.disabled = false;
+  }
+
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
+    if (enviando) {
+      return;
+    }
 
     ocultarEstado();
     limpiarRechazo();
@@ -466,9 +484,11 @@ function iniciarVista(formulario) {
     }
 
     const email = formulario.email.value.trim();
+    enviando = true;
     botonEnviar.disabled = true;
     setEstado('Verificando tus datos…', 'carga');
 
+    let seVa = false;
     try {
       const { respuesta, body } = await pedirLogin({
         email,
@@ -503,13 +523,19 @@ function iniciarVista(formulario) {
       });
       await mostrarAlertasCatalogoAlIniciarSesion();
       globalThis.location.assign(destino);
+      seVa = true;
     } catch {
       setEstado(
         'No pudimos conectar con el servidor. Inténtalo de nuevo en unos segundos.',
         'error',
       );
     } finally {
-      botonEnviar.disabled = false;
+      if (!seVa) {
+        liberarEnvio();
+      }
     }
   });
+
+  // G1 — ahora sí: la vista ya escucha `submit`, el botón se puede encender.
+  formularioListo(formulario);
 }

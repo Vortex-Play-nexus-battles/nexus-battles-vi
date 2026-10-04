@@ -10,6 +10,7 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { h, vaciar } from '../comun/ui/dom.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 import { confirmar } from '../comun/ui/dialogo.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
@@ -45,6 +46,8 @@ function montarBarraNavegacion() {
 }
 
 function iniciar() {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra.
+  sinCredencialesEnLaDireccion();
   montarBarraNavegacion();
 
   const rolGuardado = sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
@@ -123,6 +126,8 @@ function configurarEventos() {
 
   if (formulario) {
     formulario.addEventListener('submit', manejarCreacionCuenta);
+    // G1 — la vista ya escucha `submit`: el botón se puede encender.
+    formularioListo(formulario);
   }
 
   if (selectorRol) {

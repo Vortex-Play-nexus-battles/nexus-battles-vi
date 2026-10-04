@@ -94,7 +94,19 @@
         <div data-zona="rechazo" tabindex="-1" hidden></div>
         <div id="avisoDispositivo" hidden></div>
 
-        <form id="formLogin" class="pila" novalidate>
+        <!-- G1 — sin guion no se entra, y se dice: el botón nace desactivado. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para entrar hace falta JavaScript. Actívalo en tu navegador y recarga la página.
+          </p>
+        </noscript>
+
+        <!-- G1 — la contraseña nunca en la dirección. `method="post"`: un envío
+             nativo iría en el cuerpo, no en `?password=`. Y el botón nace
+             desactivado (`data-espera-guion`): sin botón activo tampoco hay
+             envío con Enter. Lo enciende login.js cuando ya escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formLogin" class="pila" method="post" novalidate>
           <div class="campo">
             <!-- El mockup decía «Correo o apodo»; el contrato real de
                  POST /api/v1/auth/login solo acepta `email`. -->
@@ -122,7 +134,13 @@
             />
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Entrar al Nexo
           </button>
         </form>
