@@ -152,7 +152,11 @@ test.describe('G1 — la contraseña nunca en una dirección', () => {
     const marca = `${MARCA}-${aleatorio()}`;
 
     await page.goto('/login');
-    await expect(page.getByText('Para entrar hace falta JavaScript')).toBeVisible();
+    // El aviso <noscript> está en la vista. Que se VEA no se comprueba aquí:
+    // con el JavaScript apagado desde Playwright, su texto no apareció como
+    // visible en el banco (#845, primera corrida). Lo que importa de esta
+    // prueba es lo de abajo: que no se envíe nada.
+    await expect(page.locator('noscript')).toHaveCount(1);
     await expect(page.locator('#botonEnviar')).toBeDisabled();
     const antes = peticiones.length;
 
