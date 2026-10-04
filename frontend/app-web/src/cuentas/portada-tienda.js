@@ -1,9 +1,11 @@
 /**
  * La tienda en la portada pública — UXC-4 (retroalimentación del profesor).
  *
- * Quien llega a Nexus Battles VI sin cuenta aterriza en la entrada (`/` lleva
- * a `/login`). Hasta aquí solo veía un formulario: nada de lo que el juego
- * vende. §7.5 describe una vitrina, y la vitrina es pública
+ * Quien llegaba a Nexus Battles VI sin cuenta aterrizaba en la entrada y solo
+ * veía un formulario: nada de lo que el juego vende. Desde F6 (auditoría del
+ * 4-oct, cambio autorizado n.º 3) `/` es la portada pública (`portada.html`)
+ * con esta misma tienda, y la entrada (`/login`) la sigue enseñando debajo
+ * del formulario. §7.5 describe una vitrina, y la vitrina es pública
  * (`GET /api/v1/vitrina`, `security: []` en ecommerce-carrito.yaml), así que
  * la portada la enseña: productos reales, con su imagen, nombre, tipo, precio
  * y rebaja si la hay, y «Ver producto» para su detalle —el mismo del
@@ -95,14 +97,46 @@ export function rutaDeLaTienda() {
 }
 
 /**
+ * F6 — la dirección de la entrada (`/login` detrás del borde), con la vuelta
+ * si la hay. Es a donde lleva la portada pública (`/`), que no tiene
+ * formulario.
+ *
+ * @param {string|null} [volver] ruta del mismo origen a la que volver tras entrar
+ * @returns {string}
+ */
+export function urlDeEntrada(volver = null) {
+  const url = new URL(resolver(RUTAS.login));
+  if (volver) {
+    url.searchParams.set('volver', volver);
+  }
+  return url.href;
+}
+
+/** La página tiene el formulario de entrada (la entrada sí; la portada `/` no). */
+function hayFormularioDeEntrada(doc) {
+  return Boolean(doc.getElementById('email'));
+}
+
+function irA(url) {
+  globalThis.location.assign(url);
+}
+
+/**
  * Deja preparada la vuelta a la tienda y lleva al formulario de entrada.
  *
- * `login.js` lee `?volver=` al enviar el formulario, así que basta con
- * escribirla en la dirección (sin recargar) antes de que la persona entre.
+ * `login.js` lee `?volver=` al enviar el formulario, así que en la entrada
+ * basta con escribirla en la dirección (sin recargar) antes de que la persona
+ * entre. Desde la portada pública (F6), que no tiene formulario, se va a la
+ * entrada con la vuelta ya escrita.
  *
  * @param {Document} doc
+ * @param {{navegar?: (url: string) => void}} [opciones]
  */
-export function entrarParaComprar(doc = document) {
+export function entrarParaComprar(doc = document, { navegar = irA } = {}) {
+  if (!hayFormularioDeEntrada(doc)) {
+    navegar(urlDeEntrada(rutaDeLaTienda()));
+    return;
+  }
   const url = new URL(globalThis.location.href);
   url.searchParams.set('volver', rutaDeLaTienda());
   globalThis.history?.replaceState?.(null, '', url.href);
@@ -112,11 +146,16 @@ export function entrarParaComprar(doc = document) {
 /**
  * Lleva al formulario de entrada y pone el foco en el correo, sin tocar la
  * vuelta (calificar u opinar se hace desde el mismo detalle, que se puede
- * volver a abrir tras entrar).
+ * volver a abrir tras entrar). Desde la portada pública, a la entrada.
  *
  * @param {Document} doc
+ * @param {{navegar?: (url: string) => void}} [opciones]
  */
-export function llevarAlFormulario(doc = document) {
+export function llevarAlFormulario(doc = document, { navegar = irA } = {}) {
+  if (!hayFormularioDeEntrada(doc)) {
+    navegar(urlDeEntrada());
+    return;
+  }
   // Si hay una ficha abierta, se cierra: el formulario está detrás.
   doc.querySelector('.ficha__cerrar')?.click();
   const correo = doc.getElementById('email');
