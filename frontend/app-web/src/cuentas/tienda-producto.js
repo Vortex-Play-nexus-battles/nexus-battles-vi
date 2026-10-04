@@ -67,6 +67,16 @@ export function precioDeProducto(producto, { grande = false } = {}) {
             atributos: { 'aria-label': `${producto.descuento} % de descuento` },
           })
         : null,
+      // D-44: el otro precio, si se puede pagar con créditos del juego. La
+      // cifra la calculó el servidor (precioCreditos del catálogo, promoción
+      // incluida); aquí solo se escribe.
+      producto.precioCreditosTexto
+        ? h('span', {
+            clase: 'precio-creditos',
+            texto: `o ${producto.precioCreditosTexto}`,
+            datos: { precioCreditos: String(producto.precioCreditos) },
+          })
+        : null,
     ],
   });
 }

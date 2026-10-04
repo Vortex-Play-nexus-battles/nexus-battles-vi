@@ -125,6 +125,16 @@
   font-weight: var(--t-cuerpo-peso-enfasis);
 }
 
+/* D-44 — el precio en créditos del juego, debajo del de dinero real: es el
+   otro método de pago, no una rebaja. Línea propia para que no se lea como
+   parte de la cifra. */
+.precio-creditos {
+  flex-basis: 100%;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
 /* «Precio no disponible» no es una cifra: se dice en el tono de un dato que
    falta, no en el del importe que se va a cobrar. */
 .precio-ausente {

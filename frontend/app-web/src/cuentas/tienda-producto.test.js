@@ -148,6 +148,17 @@ describe('precio', () => {
     expect(precio.querySelector('.precio-ausente')).not.toBeNull();
   });
 
+  test('D-44: el otro precio, en créditos del juego, si el servidor lo da; si no, nada', () => {
+    const conCreditos = precioDeProducto(aProductoDeVitrina(dto({ precioCreditos: 300 })));
+    const sinCreditos = precioDeProducto(aProductoDeVitrina(dto({ precioCreditos: null })));
+
+    expect(conCreditos.querySelector('.precio-creditos').textContent).toBe('o 300 créditos');
+    expect(conCreditos.querySelector('.precio-creditos').dataset.precioCreditos).toBe('300');
+    // El precio en dinero real sigue siendo el principal.
+    expect(conCreditos.querySelector('.price').textContent).not.toMatch(/crédito/);
+    expect(sinCreditos.querySelector('.precio-creditos')).toBeNull();
+  });
+
   test('distintivo de propiedad en singular', () => {
     expect(distintivoDePropiedad(1).textContent).toBe('Ya lo tienes');
   });

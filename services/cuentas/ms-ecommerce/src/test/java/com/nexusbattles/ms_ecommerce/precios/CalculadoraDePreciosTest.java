@@ -140,4 +140,71 @@ class CalculadoraDePreciosTest {
         assertThat(Tarifa.enPesos().tasaParaMostrar()).isNull();
         assertThat(USD_A_4000.tasaParaMostrar()).isEqualByComparingTo("4000");
     }
+
+    // ------------------------------------------------- D-44: precio en creditos
+
+    @ParameterizedTest(name = "{0} creditos con {1} % = {2}")
+    @CsvSource({
+            "300, , 300",
+            "300, 10, 270",
+            "150, 15, 128",      // 127,5 -> 128 (mitad hacia arriba)
+            "999, 50, 500",      // 499,5 -> 500
+            "1, 99, 1"           // nunca gratis por redondeo
+    })
+    @DisplayName("D-44: el precio en creditos es el del catalogo; la promocion lo rebaja a creditos enteros")
+    void enCreditos(int base, Integer porcentaje, long esperado) {
+        assertThat(CalculadoraDePrecios.calcularEnCreditos(base, porcentaje)).isEqualTo(esperado);
+    }
+
+    @Test
+    @DisplayName("D-44: un precio en creditos que no es positivo o un porcentaje fuera de 1..99 no se calculan")
+    void enCreditosInvalido() {
+        assertThatThrownBy(() -> CalculadoraDePrecios.calcularEnCreditos(0, null))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CalculadoraDePrecios.calcularEnCreditos(100, 100))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    @DisplayName("D-44: de un producto del catalogo, su precioCreditos con la promocion si esta vigente")
+    void enCreditosDeProducto() {
+        ProductoDelCatalogo producto = new ProductoDelCatalogo("p", "P", null, null, "ARMA", -1, 500,
+                new BigDecimal("10000"), false, "ACTIVO", null,
+                new PromocionDelCatalogo(30, Instant.parse("2026-09-01T00:00:00Z"),
+                        Instant.parse("2026-09-30T00:00:00Z"), true));
+
+        PrecioEnCreditos enPromocion = CalculadoraDePrecios.enCreditos(producto, Instant.parse("2026-09-15T00:00:00Z"))
+                .orElseThrow();
+        assertThat(enPromocion.precioOriginal()).isEqualTo(500);
+        assertThat(enPromocion.precioFinal()).isEqualTo(350);
+        assertThat(enPromocion.porcentajeDescuento()).isEqualTo(30);
+        assertThat(enPromocion.subtotal(3)).isEqualTo(1050);
+
+        PrecioEnCreditos sinPromocion = CalculadoraDePrecios.enCreditos(producto, Instant.parse("2026-09-30T00:00:00Z"))
+                .orElseThrow();
+        assertThat(sinPromocion.precioFinal()).as("hasta es excluido").isEqualTo(500);
+        assertThat(sinPromocion.porcentajeDescuento()).isNull();
+    }
+
+    @Test
+    @DisplayName("D-44: sin precio en creditos no se paga con creditos: premium, nulo o cero")
+    void sinPrecioEnCreditos() {
+        Instant ahora = Instant.parse("2026-10-04T12:00:00Z");
+        ProductoDelCatalogo premium = new ProductoDelCatalogo("p", "P", null, null, "HEROE", -1, 500,
+                new BigDecimal("20000"), true, "ACTIVO", null);
+        ProductoDelCatalogo sinPrecio = new ProductoDelCatalogo("p", "P", null, null, "ARMA", -1, null,
+                new BigDecimal("6000"), false, "ACTIVO", null);
+        ProductoDelCatalogo aCero = new ProductoDelCatalogo("p", "P", null, null, "ARMA", -1, 0,
+                new BigDecimal("6000"), false, "ACTIVO", null);
+        ProductoDelCatalogo sinMarcaPremium = new ProductoDelCatalogo("p", "P", null, null, "ARMA", -1, 300,
+                null, null, "ACTIVO", null);
+
+        assertThat(premium.tienePrecioEnCreditos()).as("premium: solo moneda real (productos.yaml)").isFalse();
+        assertThat(CalculadoraDePrecios.enCreditos(premium, ahora)).isEmpty();
+        assertThat(CalculadoraDePrecios.enCreditos(sinPrecio, ahora)).isEmpty();
+        assertThat(CalculadoraDePrecios.enCreditos(aCero, ahora)).isEmpty();
+        assertThat(sinMarcaPremium.tienePrecioEnCreditos()).isTrue();
+        assertThat(CalculadoraDePrecios.enCreditos(sinMarcaPremium, ahora)).map(PrecioEnCreditos::precioFinal)
+                .contains(300L);
+    }
 }
