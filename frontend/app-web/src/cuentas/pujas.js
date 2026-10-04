@@ -839,6 +839,14 @@ export function vistaDeFicha(ficha) {
   const reputacion = ficha.reputacionVendedor;
   return {
     estado: ficha.estado || null,
+    // G5 (ms-subastas-listado 1.2.0): si es de quien mira lo dice el
+    // servidor; la ficha ya no trae el `uid` del vendedor. Null = no vino.
+    esPropia: typeof ficha.esPropia === 'boolean' ? ficha.esPropia : null,
+    // G5 (7.7.9): «método de pago aceptado», «precio mínimo establecido» y
+    // «fecha y hora de finalización», que la ficha ya traía y no se pintaban.
+    metodoPago: ficha.metodoPago || null,
+    precioInicial: numero(ficha.precioInicial),
+    fechaFin: ficha.fechaFin || null,
     pujaMinimaSiguiente: numero(ficha.pujaMinimaSiguiente),
     incrementoMinimo: numero(ficha.incrementoMinimo),
     compraInmediataDisponible: Boolean(ficha.compraInmediataDisponible),
@@ -1105,6 +1113,12 @@ function aplicarFicha(sub, guardada) {
     return;
   }
   sub.estado = guardada.estado || sub.estado;
+  if (guardada.esPropia !== null && guardada.esPropia !== undefined) {
+    sub.esPropia = guardada.esPropia;
+  }
+  sub.metodoPago = guardada.metodoPago ?? sub.metodoPago ?? null;
+  sub.precioInicial = guardada.precioInicial ?? sub.precioInicial ?? null;
+  sub.fechaFin = guardada.fechaFin ?? sub.fechaFin ?? null;
   sub.pujaMinimaSiguiente = guardada.pujaMinimaSiguiente;
   sub.incrementoMinimo = guardada.incrementoMinimo;
   sub.compraInmediataDisponible = guardada.compraInmediataDisponible;
@@ -1458,6 +1472,9 @@ export class ControladorSubastas {
           tipo: p.tipo === 'AUTOMATICA' ? 'Automática' : 'Manual',
           cuando: p.creadaEn,
           esTu: p.esTuya,
+          // G5 (7.7.9, «indicador de puja actual ganadora»): la ACTIVA es la
+          // que va ganando; la GANADORA, la que ganó al cerrar.
+          ganadora: p.estado === 'ACTIVA' || p.estado === 'GANADORA',
         })),
       });
     } else if (!this.historiales.get(id)?.lista.length) {
@@ -4405,11 +4422,11 @@ export class ControladorSubastas {
                 ${sub.historial
                   .map(
                     (p) => `
-                  <li class="item-historial ${p.esTu ? 'historial-propio' : ''}">
+                  <li class="item-historial ${p.esTu ? 'historial-propio' : ''}" ${p.ganadora ? 'data-ganadora="si"' : ''}>
                     <span class="historial-postor ${p.esTu ? 'postor-tu' : ''}">${p.esTu ? 'Tú' : esc(p.apodo)}</span>
                     <span class="historial-tipo">${esc(p.tipo)}</span>
                     <time class="historial-cuando" datetime="${esc(p.cuando)}">${esc(momentoLegible(p.cuando) || p.cuando)}</time>
-                    <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong></span>
+                    <span class="historial-monto cifra"><strong>${formatearCreditos(p.monto)} cr</strong>${p.ganadora ? ` <span class="distintivo distintivo--exito historial-ganadora">${sub.estado === 'ACTIVA' ? 'Va ganando' : 'Ganadora'}</span>` : ''}</span>
                   </li>
                 `,
                   )
@@ -4436,6 +4453,7 @@ export class ControladorSubastas {
                   </div>
                 </div>
               </div>
+              ${this.datosDeLaSubasta(sub)}
 
               ${
                 this.esMiSubasta(sub)
@@ -4662,6 +4680,41 @@ export class ControladorSubastas {
       return 'Tu puja';
     }
     return sub.rival ? `de ${esc(sub.rival)}` : 'de otro jugador';
+  }
+
+  /**
+   * G5 (7.7.9, «Información de la subasta»): precio mínimo establecido,
+   * método de pago aceptado y fecha y hora de finalización, que la ficha ya
+   * traía y no se pintaban. Lo que no vino no se escribe.
+   *
+   * @param {object} sub
+   * @returns {string} HTML (los textos escapados)
+   */
+  datosDeLaSubasta(sub) {
+    const filas = [];
+    if (Number.isFinite(sub.precioInicial)) {
+      filas.push(['Precio mínimo', `${formatearCreditos(sub.precioInicial)} cr`, 'precio-minimo']);
+    }
+    if (sub.metodoPago) {
+      filas.push([
+        'Se paga con',
+        sub.metodoPago === 'DINERO_REAL' ? 'Dinero real' : 'Créditos del juego',
+        'metodo-pago',
+      ]);
+    }
+    const termina = sub.fechaFin ? momentoLegible(sub.fechaFin) : '';
+    if (termina) {
+      filas.push(['Termina', termina, 'fecha-fin']);
+    }
+    if (filas.length === 0) {
+      return '';
+    }
+    return `<dl class="datos-subasta">${filas
+      .map(
+        ([etiqueta, valor, zona]) =>
+          `<div data-zona="${zona}"><dt class="etiqueta-sm">${esc(etiqueta)}</dt><dd>${esc(valor)}</dd></div>`,
+      )
+      .join('')}</dl>`;
   }
 
   /** Quién va delante en el detalle, con lo que se sabe. */

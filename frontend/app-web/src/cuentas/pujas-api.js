@@ -127,11 +127,15 @@ function claveDeIdempotencia() {
  *   reconocer sus propias subastas por `vendedorId`
  */
 export function aVistaDeSubasta(resumen, apodoPropio = null, uidPropio = null) {
-  // UXC-8 — `vendedorId` es un identificador interno: pintarlo era enseñar
-  // un UUID como «Vendedor». Solo se usa para saber si la subasta es tuya.
-  const esPropia = Boolean(
-    uidPropio && resumen.vendedorId && String(resumen.vendedorId) === String(uidPropio),
-  );
+  // G5 (ms-subastas-listado 1.2.0): el servidor dice `esPropia` con el token
+  // de quien pide el listado; el `uid` del vendedor ya no viaja (llega null).
+  // Sin `esPropia` (un servicio anterior), la comparación de siempre.
+  const esPropia =
+    typeof resumen.esPropia === 'boolean'
+      ? resumen.esPropia
+      : Boolean(
+          uidPropio && resumen.vendedorId && String(resumen.vendedorId) === String(uidPropio),
+        );
   const finMs = resumen.fechaFin ? new Date(resumen.fechaFin).getTime() : 0;
   const restantes = finMs ? Math.max(0, Math.round((finMs - Date.now()) / 1000)) : 0;
 
@@ -185,6 +189,8 @@ export function aVistaDeSubasta(resumen, apodoPropio = null, uidPropio = null) {
     // queda en null hasta que el detalle lo pida a GET /subastas/{id}: null es
     // «todavia no se sabe», no un valor.
     estado: resumen.estado || 'ACTIVA',
+    // G5 (7.7.9): «fecha y hora de finalización», además de la cuenta atrás.
+    fechaFin: resumen.fechaFin || null,
     precioInicial:
       resumen.precioInicial === null || resumen.precioInicial === undefined
         ? null

@@ -11,7 +11,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Subastas en tiempo real (ms-subastas)
-  version: 1.1.0
+  version: 1.2.0
   description: |
     WebSocket + STOMP de ms-subastas, en `/api/v1/ws-subastas` (el servicio
     tiene `context-path` `/api/v1`). Desde B8 el borde lo publica en la misma
@@ -37,6 +37,10 @@ info:
       documenta los campos que de verdad viajan (los del resumen del listado,
       con `estado`); `precioActual` y `finalizaEn`, que nunca se enviaron, se
       sustituyen por `ofertaVigente` y `fechaFin`.
+    - 1.2.0 (G5): el canal va a todos y llevaba el `uid` del vendedor
+      (`vendedorId`). Desde ahora va siempre a null (el campo se conserva en
+      la forma); `esPropia` no viaja aqui: quien recibe un cambio relee el
+      listado, que si lo dice con su token (`ms-subastas-listado.yaml` 1.2.0).
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -116,4 +120,6 @@ components:
           esMaestroDeJuego:
             type: boolean
           vendedorId:
-            type: string
+            type: [string, 'null']
+            deprecated: true
+            description: Siempre null desde 1.2.0 (era el `uid` del vendedor; el canal es publico).

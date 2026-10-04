@@ -139,6 +139,15 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * DECISIÓN PO se cambió por un `<p data-incremento-minimo hidden>` vacío, y
  * «Incremento mínimo: N créditos» entra después por `textContent` con la cifra
  * de `GET /subastas/reglas`.
+ *
+ * G5 (7.7.9, privacidad) — las cuatro de `pujas.js` bajan 17 líneas: la ficha
+ * guarda `esPropia`, el método de pago, el precio mínimo y la fecha de fin, y
+ * el historial marca la puja que va ganando, todo ARRIBA de `render()`.
+ * Revisadas: carga, error y vacío iguales. `contenidoHtml` gana
+ * `datosDeLaSubasta()` (etiquetas fijas; el precio por `formatearCreditos()`,
+ * la fecha por `momentoLegible()` y `esc()`, el método de pago con textos
+ * propios) y el distintivo «Va ganando»/«Ganadora», texto fijo elegido por
+ * el estado, sin ningún dato del servidor dentro.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
@@ -152,15 +161,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2780', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2798', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2797', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2815', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2824',
+    'cuentas/pujas.js:2841',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2866',
+    'cuentas/pujas.js:2883',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

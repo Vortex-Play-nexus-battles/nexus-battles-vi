@@ -37,6 +37,15 @@ public class SubastaListadoService {
     }
 
     public PaginaDeSubastasResponse listar(FiltrosSubasta filtros, int pagina, int tamano) {
+        return listar(filtros, pagina, tamano, null);
+    }
+
+    /**
+     * @param quienMira el {@code uid} de la sesion, o null sin sesion: con el se
+     *                  marca {@code esPropia} en cada fila (G5) sin publicar el
+     *                  {@code uid} del vendedor
+     */
+    public PaginaDeSubastasResponse listar(FiltrosSubasta filtros, int pagina, int tamano, java.util.UUID quienMira) {
         List<Specification<Subasta>> filtrosNoNulos = Stream.of(
             SubastaSpecifications.soloActivas(),
             SubastaSpecifications.textoLibre(filtros.q()),
@@ -55,7 +64,8 @@ public class SubastaListadoService {
         Pageable pageable = PageRequest.of(pagina, tamano, construirOrden(filtros.ordenarPor()));
 
         Page<Subasta> paginaEntidades = subastaRepository.findAll(spec, pageable);
-        Page<SubastaResumenResponse> paginaDto = paginaEntidades.map(SubastaResumenResponse::desde);
+        Page<SubastaResumenResponse> paginaDto =
+            paginaEntidades.map(subasta -> SubastaResumenResponse.desde(subasta, quienMira));
 
         return PaginaDeSubastasResponse.desde(paginaDto);
     }
@@ -91,6 +101,10 @@ public class SubastaListadoService {
             case "PRECIO_ASC" -> Sort.by(Sort.Direction.ASC, "ofertaVigente");
             case "PRECIO_DESC" -> Sort.by(Sort.Direction.DESC, "ofertaVigente");
             case "TIEMPO_RESTANTE" -> Sort.by(Sort.Direction.ASC, "fechaFin");
+            // G5 (7.7.9, «finaliza primero/ultimo» y «mas recientes/antiguos»):
+            // los dos sentidos que faltaban.
+            case "TIEMPO_RESTANTE_DESC" -> Sort.by(Sort.Direction.DESC, "fechaFin");
+            case "FECHA_PUBLICACION_ASC" -> Sort.by(Sort.Direction.ASC, "fechaPublicacion");
             case "PUJAS" -> Sort.by(Sort.Direction.DESC, "cantidadPujas");
             case "POPULARIDAD" -> Sort.by(Sort.Direction.DESC, "vistas");
             default -> Sort.by(Sort.Direction.DESC, "esMaestroDeJuego")

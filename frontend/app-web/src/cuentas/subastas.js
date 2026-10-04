@@ -369,9 +369,12 @@ function construirBarraOrden() {
 
   const opciones = [
     { valor: 'FECHA_PUBLICACION', etiqueta: 'Más recientes' },
+    // G5 (7.7.9, ms-subastas-listado 1.2.0): los dos sentidos que faltaban.
+    { valor: 'FECHA_PUBLICACION_ASC', etiqueta: 'Más antiguas' },
     { valor: 'PRECIO_ASC', etiqueta: 'Precio: menor a mayor' },
     { valor: 'PRECIO_DESC', etiqueta: 'Precio: mayor a menor' },
     { valor: 'TIEMPO_RESTANTE', etiqueta: 'Termina pronto' },
+    { valor: 'TIEMPO_RESTANTE_DESC', etiqueta: 'Termina más tarde' },
     { valor: 'PUJAS', etiqueta: 'Más pujas' },
     { valor: 'POPULARIDAD', etiqueta: 'Más popular' },
   ];
