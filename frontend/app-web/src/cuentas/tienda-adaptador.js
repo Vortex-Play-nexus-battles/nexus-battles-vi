@@ -47,6 +47,26 @@ export function aImporte(valor) {
 }
 
 /**
+ * D-44 (ecommerce-carrito.yaml 1.6.0): la unidad de una orden pagada con los
+ * créditos del juego. No es una moneda: no se convierte ni lleva decimales.
+ */
+export const CREDITOS = 'CREDITOS';
+
+/**
+ * Créditos del juego con separadores es-CO: «1 crédito», «1.250 créditos».
+ * La cifra la pone el servidor; aquí solo se escribe.
+ *
+ * @param {number|null|undefined} cantidad
+ * @returns {string|null} null si no hay cifra
+ */
+export function textoDeCreditos(cantidad) {
+  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) {
+    return null;
+  }
+  return `${cantidad.toLocaleString('es-CO')} ${Math.abs(cantidad) === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
  * Importe con separadores es-CO y su moneda, o null si falta el importe.
  *
  * Sin `moneda` se ensena la cifra sola: inventar «COP» en un producto cuyo
@@ -61,6 +81,9 @@ export function aImporte(valor) {
 export function textoDePrecio(importe, moneda) {
   if (importe === null) {
     return null;
+  }
+  if (moneda === CREDITOS) {
+    return textoDeCreditos(importe);
   }
   const cifra = importe.toLocaleString('es-CO');
   return moneda ? `${cifra} ${moneda}` : cifra;
@@ -90,12 +113,18 @@ export function textoDePrecio(importe, moneda) {
  *   descuento: number|null,
  *   esPropio: boolean,
  *   enListaDeseos: boolean,
+ *   precioCreditos: number|null,
+ *   precioCreditosTexto: string|null,
+ *   soloEnCreditos: boolean,
  * }}
  */
 export function aProductoDeVitrina(dto = {}) {
   const precio = aImporte(dto.precioFinal);
   const original = aImporte(dto.precioOriginal);
   const moneda = typeof dto.moneda === 'string' && dto.moneda.trim() ? dto.moneda.trim() : null;
+  // D-44 (1.6.0): lo que cuesta pagado con créditos, ya calculado por el
+  // servidor con la promoción vigente; null si no se puede pagar así.
+  const precioCreditos = enteroPositivo(dto.precioCreditos);
 
   // Solo hay precio anterior que tachar si el actual es realmente menor.
   const hayRebaja = precio !== null && original !== null && original > precio;
@@ -119,7 +148,22 @@ export function aProductoDeVitrina(dto = {}) {
     descuento: hayRebaja && porcentaje && porcentaje > 0 ? porcentaje : null,
     esPropio: dto.esPropio === true,
     enListaDeseos: dto.enListaDeseos === true,
+    precioCreditos,
+    precioCreditosTexto: textoDeCreditos(precioCreditos),
+    // G3 (1.7.0): se vende, pero solo con créditos del juego. Su precio es el
+    // de créditos; el de dinero real no existe (null, nunca «0 COP»).
+    soloEnCreditos: precio === null && precioCreditos !== null,
   };
+}
+
+/**
+ * Un entero mayor que cero del DTO, o null.
+ *
+ * @param {unknown} valor
+ * @returns {number|null}
+ */
+function enteroPositivo(valor) {
+  return Number.isInteger(valor) && valor > 0 ? valor : null;
 }
 
 /** Unidades por linea que admite el carrito (ecommerce-carrito.yaml 1.4.0). */
@@ -132,7 +176,8 @@ export const MAXIMO_POR_LINEA = 20;
 const MOTIVOS_DE_LINEA = Object.freeze({
   NO_DISPONIBLE: 'Ya no está a la venta. Quítalo para pagar.',
   AGOTADO: 'Se agotó. Quítalo para pagar.',
-  SIN_PRECIO_EN_MONEDA_REAL: 'Ya no se vende con dinero real. Quítalo para pagar.',
+  // Desde 1.7.0: sin ningún precio (ni en dinero real ni en créditos).
+  SIN_PRECIO_EN_MONEDA_REAL: 'Ya no tiene precio de venta. Quítalo para pagar.',
   TIRAJE_INSUFICIENTE: 'No quedan tantas unidades. Baja la cantidad para pagar.',
 });
 
@@ -161,6 +206,12 @@ export function aFilaDeCarrito(item = {}, moneda = null) {
     typeof item.producto?.imagen === 'string' && item.producto.imagen.trim()
       ? item.producto.imagen
       : null;
+  // G3 (1.7.0): una línea que solo se vende en créditos no tiene importe en
+  // dinero real; enseña el de créditos que calculó el servidor (unidad y
+  // `subtotalCreditos`), nunca «Sin precio» ni «0 COP».
+  const soloEnCreditos = item.soloEnCreditos === true;
+  const precioCreditos = enteroPositivo(item.precioCreditos);
+  const subtotalCreditos = enteroPositivo(item.subtotalCreditos);
   return {
     id: item.id ?? null,
     productoId: item.producto?.id ?? null,
@@ -174,8 +225,15 @@ export function aFilaDeCarrito(item = {}, moneda = null) {
       ? null
       : (MOTIVOS_DE_LINEA[item.motivo] ?? 'No se puede pagar ahora. Quítalo del carrito.'),
     subtotal,
-    subtotalTexto: textoDePrecio(subtotal, moneda),
+    subtotalTexto: soloEnCreditos
+      ? textoDeCreditos(subtotalCreditos)
+      : textoDePrecio(subtotal, moneda),
     unitario,
-    unitarioTexto: textoDePrecio(unitario, moneda),
+    unitarioTexto: soloEnCreditos
+      ? textoDeCreditos(precioCreditos)
+      : textoDePrecio(unitario, moneda),
+    soloEnCreditos,
+    precioCreditos,
+    subtotalCreditos,
   };
 }

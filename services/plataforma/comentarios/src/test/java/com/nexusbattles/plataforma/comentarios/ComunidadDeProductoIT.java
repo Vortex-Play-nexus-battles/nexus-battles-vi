@@ -724,6 +724,44 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"EDITAR\",\"motivo\":\"sin texto\"}").statusCode());
         }
 
+        /**
+         * Contrato 1.8.0 contra PostgreSQL real: las consultas de reportes
+         * pendientes (reporte frente a asiento) son JPQL escrito a mano, y los
+         * dobles en memoria de FlujoDeModeracionTest no las ejecutan.
+         */
+        @Test
+        @DisplayName("1.8.0: el reportado sigue en el hilo y en la cola; APROBAR lo saca de la cola; otro reporte lo devuelve")
+        void encolarNoEsOcultar() throws Exception {
+            String producto = productoNuevo();
+            String id = leer(comentar(producto, jugador(UUID.randomUUID()), "opinion discutible", null), "$.id");
+            String reportes = "/api/v1/products/" + producto + "/comments/" + id + "/reportes";
+            String cola = "/api/v1/comentarios/moderacion?productoId=" + producto;
+            String decision = "/api/v1/comentarios/moderacion/" + id + "/decision";
+
+            HttpResponse<String> reporte = pedir("POST", reportes, jugador(UUID.randomUUID()), "{\"categoria\":\"SPAM\"}");
+            assertEquals(201, reporte.statusCode(), reporte.body());
+            assertEquals("PUBLICADO", leer(reporte, "$.estadoDelComentario"), "un reporte no oculta");
+
+            HttpResponse<String> hilo = pedir("GET", "/api/v1/products/" + producto + "/comments", null, null);
+            assertEquals(List.of(id), leer(hilo, "$.comentarios[*].id"), "sigue a la vista de todos");
+            assertEquals(1, (Integer) leer(hilo, "$.total"), "y cuenta en las opiniones");
+            assertEquals(List.of(id), leer(pedir("GET", cola, moderadora(), null), "$.entradas[*].comentario.id"),
+                    "pero espera en la cola");
+
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"APROBAR\",\"motivo\":\"opinion legitima\"}").statusCode());
+            assertEquals(0, (Integer) leer(pedir("GET", cola, moderadora(), null), "$.total"),
+                    "aprobado: ya no tiene reportes pendientes");
+            assertEquals(409, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"APROBAR\",\"motivo\":\"otra vez\"}").statusCode(), "sin pendientes es 409");
+
+            Thread.sleep(5); // el reporte nuevo tiene que ser posterior al asiento
+            assertEquals(201, pedir("POST", reportes, jugador(UUID.randomUUID()),
+                    "{\"categoria\":\"ACOSO\"}").statusCode());
+            assertEquals(List.of(id), leer(pedir("GET", cola, moderadora(), null), "$.entradas[*].comentario.id"),
+                    "un reporte posterior a la decision lo vuelve a poner en la cola");
+        }
+
         @Test
         @DisplayName("MARCAR lo pone en la lista de seguimiento aunque este publicado; DESMARCAR lo saca")
         void marcar() throws Exception {
@@ -747,6 +785,110 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"DESMARCAR\",\"motivo\":\"ya no hace falta\"}").statusCode());
             assertEquals(0, (Integer) leer(pedir("GET",
                     "/api/v1/comentarios/moderacion?marcado=true&productoId=" + producto, moderadora(), null), "$.total"));
+        }
+    }
+
+    // ------------------------------------------------- historial del autor
+
+    @Nested
+    @DisplayName("historial de comentarios del autor (HU-COM-005)")
+    class HistorialDelAutor {
+
+        private String historial(UUID autor, String consulta) {
+            return "/api/v1/comentarios/moderacion/autores/" + autor + "/comentarios" + consulta;
+        }
+
+        @Test
+        @DisplayName("PostgreSQL pagina y ordena: mas reciente primero, sin repetir ni perder, con OCULTO y ELIMINADO a la vista")
+        void recorreElHistorial() throws Exception {
+            String producto = productoNuevo();
+            UUID autor = UUID.randomUUID();
+            UUID otro = UUID.randomUUID();
+            List<String> suyos = new ArrayList<>();
+            for (int i = 0; i < 5; i++) {
+                suyos.add(leer(comentar(producto, jugador(autor), "comentario " + i, null), "$.id"));
+                // Fechas distintas: el orden que se afirma es el de publicacion.
+                Thread.sleep(5);
+            }
+            String ajeno = leer(comentar(producto, jugador(otro), "de otra persona", null), "$.id");
+
+            // Uno oculto y otro eliminado por moderacion, y otro retirado por su propio autor.
+            assertEquals(200, pedir("POST", "/api/v1/comentarios/moderacion/" + suyos.get(0) + "/decision",
+                    moderadora(), "{\"accion\":\"OCULTAR\",\"motivo\":\"prueba de historial\"}").statusCode());
+            assertEquals(200, pedir("POST", "/api/v1/comentarios/moderacion/" + suyos.get(1) + "/decision",
+                    moderadora(), "{\"accion\":\"ELIMINAR\",\"motivo\":\"prueba de historial\"}").statusCode());
+            assertEquals(204, pedir("DELETE", "/api/v1/products/" + producto + "/comments/" + suyos.get(2),
+                    jugador(autor), null).statusCode());
+
+            HttpResponse<String> primera = pedir("GET", historial(autor, "?pagina=0&tamano=2"), moderadora(), null);
+            HttpResponse<String> segunda = pedir("GET", historial(autor, "?pagina=1&tamano=2"), moderadora(), null);
+            HttpResponse<String> tercera = pedir("GET", historial(autor, "?pagina=2&tamano=2"), moderadora(), null);
+            HttpResponse<String> despues = pedir("GET", historial(autor, "?pagina=9&tamano=2"), moderadora(), null);
+            assertEquals(200, primera.statusCode(), primera.body());
+
+            List<String> vistos = new ArrayList<>();
+            vistos.addAll(leer(primera, "$.comentarios[*].id"));
+            vistos.addAll(leer(segunda, "$.comentarios[*].id"));
+            vistos.addAll(leer(tercera, "$.comentarios[*].id"));
+            List<String> esperados = new ArrayList<>(suyos);
+            java.util.Collections.reverse(esperados);
+            assertEquals(esperados, vistos, "del mas reciente al mas antiguo, sin repetir ni perder");
+            assertFalse(vistos.contains(ajeno), "el comentario de otra persona no es de este historial");
+
+            assertEquals(autor.toString(), leer(primera, "$.autorId"));
+            assertEquals(5, (Integer) leer(primera, "$.total"));
+            assertEquals(2, (Integer) leer(primera, "$.tamano"));
+            assertEquals(List.of(), leer(despues, "$.comentarios"));
+            assertEquals(5, (Integer) leer(despues, "$.total"), "el total no depende de la pagina pedida");
+
+            // Los estados retirados se ven, con su estado: es lo que el moderador necesita.
+            HttpResponse<String> todos = pedir("GET", historial(autor, ""), moderadora(), null);
+            List<String> estados = leer(todos, "$.comentarios[*].estado");
+            assertEquals(List.of("PUBLICADO", "PUBLICADO", "ELIMINADO", "ELIMINADO", "OCULTO"), estados);
+        }
+
+        @Test
+        @DisplayName("solo trae lo necesario para decidir y el tamano se recorta a 100")
+        void camposYTope() throws Exception {
+            String producto = productoNuevo();
+            UUID autor = UUID.randomUUID();
+            comentar(producto, jugador(autor), "un comentario", null);
+
+            HttpResponse<String> r = pedir("GET", historial(autor, "?tamano=5000"), moderadora(), null);
+
+            assertEquals(200, r.statusCode(), r.body());
+            assertEquals(100, (Integer) leer(r, "$.tamano"));
+            assertEquals("un comentario", leer(r, "$.comentarios[0].texto"));
+            assertEquals(producto, leer(r, "$.comentarios[0].productoId"));
+            assertEquals(false, leer(r, "$.comentarios[0].editado"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].imagenes"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].marcado"));
+            assertEquals(List.of(), leer(r, "$.comentarios[*].estrellas"));
+        }
+
+        @Test
+        @DisplayName("un autor sin comentarios es 200 con lista vacia y total 0; una jugadora no lo ve (403) ni sin token (401)")
+        void vacioYRoles() throws Exception {
+            UUID nadie = UUID.randomUUID();
+
+            HttpResponse<String> vacio = pedir("GET", historial(nadie, ""), moderadora(), null);
+            assertEquals(200, vacio.statusCode(), vacio.body());
+            assertEquals(List.of(), leer(vacio, "$.comentarios"));
+            assertEquals(0, (Integer) leer(vacio, "$.total"));
+
+            assertEquals(403, pedir("GET", historial(nadie, ""), jugador(UUID.randomUUID()), null).statusCode());
+            assertEquals(401, pedir("GET", historial(nadie, ""), null, null).statusCode());
+        }
+
+        @Test
+        @DisplayName("V6 crea el indice por autor con las columnas y el orden de la consulta")
+        void indiceDeV6() {
+            String definicion = jdbc.queryForObject(
+                    "select indexdef from pg_indexes where tablename = 'comentarios' "
+                            + "and indexname = 'idx_comentarios_por_autor'",
+                    String.class);
+
+            assertTrue(definicion.contains("(autor_id, fecha_publicacion DESC, id DESC)"), definicion);
         }
     }
 

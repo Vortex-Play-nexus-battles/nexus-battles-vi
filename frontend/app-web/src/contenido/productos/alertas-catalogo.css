@@ -1,0 +1,7 @@
+.alertas-catalogo__lista {
+  max-height: min(50vh, 28rem);
+  padding: 0;
+  margin: 0;
+  overflow-y: auto;
+  list-style: none;
+}

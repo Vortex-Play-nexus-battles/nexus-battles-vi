@@ -12,6 +12,7 @@ import {
   MODOS,
   precioDeProducto,
   tarjetaDeProducto,
+  MOTIVO_YA_LO_TIENES,
 } from './tienda-producto.js';
 import { aProductoDeVitrina } from './tienda-adaptador.js';
 
@@ -74,6 +75,20 @@ describe('tarjeta en la tienda', () => {
     );
   });
 
+  test('una imagen que no carga se cambia por el símbolo del tipo: nunca una imagen rota', () => {
+    const tarjeta = tarjetaDeProducto(dto({ imagenUrl: 'espada.png' }));
+    const caja = tarjeta.querySelector('.product-image');
+    const imagen = caja.querySelector('img');
+    expect(caja.classList.contains('con-imagen')).toBe(true);
+
+    imagen.dispatchEvent(new Event('error'));
+
+    expect(caja.querySelector('img')).toBeNull();
+    expect(caja.querySelector('.product-image__simbolo')).not.toBeNull();
+    expect(caja.classList.contains('con-imagen')).toBe(false);
+    expect(caja.dataset.imagen).toBe('rota');
+  });
+
   test('lo que ya tienes lleva su marca, con las unidades', () => {
     const tarjeta = tarjetaDeProducto(dto(), { unidadesPropias: 2 });
 
@@ -81,6 +96,22 @@ describe('tarjeta en la tienda', () => {
     expect(tarjeta.querySelector('.producto-propio').textContent).toBe('Tienes 2');
     expect(tarjetaDeProducto(dto(), { unidadesPropias: 1 }).textContent).toContain('Ya lo tienes');
     expect(tarjetaDeProducto(dto()).querySelector('.producto-propio')).toBeNull();
+  });
+
+  test('auditoría 30-sep · RF-CAR-004: lo que ya tienes no se ofrece para añadir, y se dice por qué', () => {
+    for (const tarjeta of [
+      tarjetaDeProducto(dto(), { unidadesPropias: 1 }),
+      tarjetaDeProducto(dto({ esPropio: true })),
+    ]) {
+      const anadir = tarjeta.querySelector('.btn-add');
+      expect(anadir.disabled).toBe(true);
+      expect(anadir.dataset.motivo).toBe('propio');
+      expect(anadir.dataset.producto).toBeUndefined();
+      expect(anadir.title).toBe(MOTIVO_YA_LO_TIENES);
+    }
+    const nueva = tarjetaDeProducto(dto()).querySelector('.btn-add');
+    expect(nueva.disabled).toBe(false);
+    expect(nueva.dataset.producto).toBe(UUID);
   });
 
   test('solo si el servicio lo dice, «En tu lista de deseos»', () => {
@@ -129,6 +160,45 @@ describe('precio', () => {
 
     expect(precio.querySelector('.price').textContent).toBe('Precio no disponible');
     expect(precio.querySelector('.precio-ausente')).not.toBeNull();
+  });
+
+  test('D-44: el otro precio, en créditos del juego, si el servidor lo da; si no, nada', () => {
+    const conCreditos = precioDeProducto(aProductoDeVitrina(dto({ precioCreditos: 300 })));
+    const sinCreditos = precioDeProducto(aProductoDeVitrina(dto({ precioCreditos: null })));
+
+    expect(conCreditos.querySelector('.precio-creditos').textContent).toBe('o 300 créditos');
+    expect(conCreditos.querySelector('.precio-creditos').dataset.precioCreditos).toBe('300');
+    // El precio en dinero real sigue siendo el principal.
+    expect(conCreditos.querySelector('.price').textContent).not.toMatch(/crédito/);
+    expect(sinCreditos.querySelector('.precio-creditos')).toBeNull();
+  });
+
+  test('G3: solo en créditos, el precio ES el de créditos; ni «Precio no disponible» ni «0 COP»', () => {
+    const soloCreditos = aProductoDeVitrina(
+      dto({ precioFinal: null, precioOriginal: null, moneda: null, precioCreditos: 120 }),
+    );
+    const precio = precioDeProducto(soloCreditos);
+
+    const cifra = precio.querySelector('.price');
+    expect(cifra.textContent).toBe('120 créditos');
+    expect(cifra.dataset.precioCreditos).toBe('120');
+    expect(precio.querySelector('.precio-ausente')).toBeNull();
+    expect(precio.dataset.soloEnCreditos).toBe('si');
+    expect(precio.textContent).toContain('Solo con créditos del juego');
+    expect(precio.textContent).not.toMatch(/COP|o 120/);
+    // Un solo elemento con el precio en créditos: el «o N créditos» es de los que tienen dos.
+    expect(precio.querySelectorAll('[data-precio-creditos]')).toHaveLength(1);
+  });
+
+  test('G3: la tarjeta de uno solo en créditos se puede añadir al carrito', () => {
+    const tarjeta = tarjetaDeProducto(
+      dto({ precioFinal: null, precioOriginal: null, moneda: null, precioCreditos: 80 }),
+    );
+
+    expect(tarjeta.querySelector('.price').textContent).toBe('80 créditos');
+    const anadir = tarjeta.querySelector('.btn-add');
+    expect(anadir.disabled).toBe(false);
+    expect(anadir.dataset.producto).toBe(UUID);
   });
 
   test('distintivo de propiedad en singular', () => {
@@ -214,10 +284,10 @@ describe('bloque de compra del detalle', () => {
       titulo: 'Ese producto se agotó',
       detalle: 'Ya no quedan.',
     });
-    const bloque = bloqueDeCompra(dto(), { alAnadir, unidadesPropias: 1 });
+    const bloque = bloqueDeCompra(dto(), { alAnadir });
     document.body.replaceChildren(bloque);
 
-    expect(bloque.textContent).toContain('Ya tienes uno en tu inventario.');
+    expect(bloque.textContent).not.toContain('en tu inventario');
     const boton = bloque.querySelector('[data-accion="anadir-al-carrito"]');
     boton.click();
     await esperar();
@@ -232,6 +302,25 @@ describe('bloque de compra del detalle', () => {
     await esperar();
     expect(resultado.dataset.tono).toBe('advertencia');
     expect(resultado.textContent).toBe('Ese producto se agotó. Ya no quedan.');
+  });
+
+  test('auditoría 30-sep · RF-CAR-004: lo que ya tienes se dice, y «Añadir al carrito» se apaga con su motivo', async () => {
+    const alAnadir = jest.fn();
+    const bloque = bloqueDeCompra(dto(), { alAnadir, unidadesPropias: 1 });
+    document.body.replaceChildren(bloque);
+
+    expect(bloque.textContent).toContain('Ya tienes uno en tu inventario.');
+    const boton = bloque.querySelector('[data-accion="anadir-al-carrito"]');
+    expect(boton.disabled).toBe(true);
+    expect(boton.title).toBe(MOTIVO_YA_LO_TIENES);
+    boton.click();
+    await esperar();
+    expect(alAnadir).not.toHaveBeenCalled();
+
+    // Sin inventario aún, la marca de la vitrina basta.
+    const porLaVitrina = bloqueDeCompra(dto({ esPropio: true }), { alAnadir });
+    expect(porLaVitrina.querySelector('[data-accion="anadir-al-carrito"]').disabled).toBe(true);
+    expect(porLaVitrina.textContent).toContain('Ya tienes uno en tu inventario.');
   });
 
   test('en la portada: «Entra para comprar», sin carrito', () => {

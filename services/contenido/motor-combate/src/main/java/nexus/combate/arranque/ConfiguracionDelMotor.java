@@ -7,6 +7,7 @@ import nexus.combate.IndiceNormal;
 import nexus.combate.api.ResolverAtaque;
 import nexus.combate.api.ServicioDeCombate;
 import nexus.combate.reglas.CatalogoDeCombate;
+import nexus.combate.reglas.DificultadDeLaMaquina;
 import nexus.combate.reglas.MotorDeAcciones;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -70,9 +71,16 @@ public class ConfiguracionDelMotor {
         return new CatalogoDeCombateHttp(URI.create(urlDeHeroes), Duration.ofSeconds(Math.max(0, segundos)));
     }
 
+    /**
+     * El motor de las acciones, con la dificultad de la IA (D-41).
+     *
+     * @param dificultad {@code motor.ia.dificultad} ({@code MOTOR_IA_DIFICULTAD}):
+     *                   FACIL, NORMAL o DIFICIL; una mal escrita impide arrancar
+     */
     @Bean
-    public MotorDeAcciones motorDeAcciones(CatalogoDeCombate catalogo, IndiceNormal indice) {
-        return new MotorDeAcciones(catalogo, indice);
+    public MotorDeAcciones motorDeAcciones(CatalogoDeCombate catalogo, IndiceNormal indice,
+                                           @Value("${motor.ia.dificultad:NORMAL}") String dificultad) {
+        return new MotorDeAcciones(catalogo, indice, DificultadDeLaMaquina.desde(dificultad));
     }
 
     @Bean

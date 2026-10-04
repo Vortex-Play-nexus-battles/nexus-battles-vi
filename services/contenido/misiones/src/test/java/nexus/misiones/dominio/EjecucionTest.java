@@ -140,6 +140,88 @@ class EjecucionTest {
     }
 
     @Test
+    @DisplayName("con avisos: la finalizacion, la epica y, la primera vez que se completa, las desbloqueadas, al final")
+    void terminarConAvisos() {
+        Ejecucion ejecucion = enCurso();
+
+        ejecucion.terminar(exito(), recompensas(60, true), true, true, INICIO.plus(Duration.ofHours(12)));
+
+        assertThat(ejecucion.pasosPendientes()).containsExactly(
+                PasoDeLiquidacion.LIBERACION, PasoDeLiquidacion.CREDITOS, PasoDeLiquidacion.BOTIN,
+                PasoDeLiquidacion.EPICA, PasoDeLiquidacion.CORREO, PasoDeLiquidacion.CORREO_EPICA,
+                PasoDeLiquidacion.AVISO, PasoDeLiquidacion.AVISO_EPICA, PasoDeLiquidacion.AVISO_DESBLOQUEO);
+    }
+
+    @Test
+    @DisplayName("con avisos: ni una fallida ni una repetida desbloquean nada; sin epica no hay aviso de epica")
+    void avisosSegunElResultado() {
+        RecompensasDeEjecucion repetida = new RecompensasDeEjecucion(5, List.of(), List.of(), 10, List.of(),
+                List.of(), false);
+        Ejecucion completadaOtraVez = enCurso();
+        completadaOtraVez.terminar(exito(), repetida, false, true, INICIO.plus(Duration.ofHours(12)));
+        assertThat(completadaOtraVez.pasosPendientes()).containsExactly(
+                PasoDeLiquidacion.LIBERACION, PasoDeLiquidacion.CREDITOS, PasoDeLiquidacion.AVISO);
+
+        ResultadoDeMision derrota = new ResultadoDeMision(false, false, 3, false, 40, 5, 20, 0, List.of(), List.of(),
+                List.of(), 0, 30, List.of());
+        RecompensasDeEjecucion soloExperiencia = new RecompensasDeEjecucion(0, List.of(), List.of(), 30, List.of(),
+                List.of(), true);
+        Ejecucion fallida = enCurso();
+        fallida.terminar(derrota, soloExperiencia, false, true, INICIO.plus(Duration.ofHours(12)));
+        assertThat(fallida.estado()).isEqualTo(EstadoEjecucion.FALLIDA);
+        assertThat(fallida.pasosPendientes()).containsExactly(PasoDeLiquidacion.LIBERACION, PasoDeLiquidacion.AVISO);
+    }
+
+    @Test
+    @DisplayName("una simulacion aplazada espera cada vez el doble, con tope de cinco minutos, y no se ofrece antes")
+    void simulacionAplazada() {
+        Ejecucion ejecucion = enCurso();
+        Instant vence = INICIO.plus(Duration.ofHours(12));
+        assertThat(ejecucion.listaParaSimular(vence.minusSeconds(1))).isFalse();
+        assertThat(ejecucion.listaParaSimular(vence)).isTrue();
+
+        ejecucion.simulacionAplazada(vence, Duration.ofSeconds(30), "heroes no responde");
+        assertThat(ejecucion.proximoIntento()).isEqualTo(vence.plusSeconds(30));
+        assertThat(ejecucion.listaParaSimular(vence.plusSeconds(29))).isFalse();
+        assertThat(ejecucion.listaParaSimular(vence.plusSeconds(30))).isTrue();
+        assertThat(ejecucion.ultimoError()).isEqualTo("heroes no responde");
+        for (int i = 0; i < 10; i++) {
+            ejecucion.simulacionAplazada(vence, Duration.ofSeconds(30), "heroes no responde");
+        }
+        assertThat(ejecucion.proximoIntento()).isEqualTo(vence.plus(Ejecucion.ESPERA_MAXIMA_ANTES_DE_SIMULAR));
+        assertThat(ejecucion.estado()).as("el heroe sigue en mision").isEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    @Test
+    @DisplayName("al terminar, los intentos de simular no cuentan para los reintentos de la entrega")
+    void laLiquidacionEmpiezaDeCero() {
+        Ejecucion ejecucion = enCurso();
+        Instant vence = INICIO.plus(Duration.ofHours(12));
+        for (int i = 0; i < 5; i++) {
+            ejecucion.simulacionAplazada(vence, Duration.ofSeconds(30), "motor caido");
+        }
+
+        Instant terminada = vence.plus(Duration.ofMinutes(20));
+        ejecucion.terminar(exito(), recompensas(60, false), false, terminada);
+
+        assertThat(ejecucion.intentosDeLiquidacion()).isZero();
+        assertThat(ejecucion.ultimoError()).isNull();
+        assertThat(ejecucion.proximoIntento()).isEqualTo(terminada);
+        ejecucion.reintentarMasTarde(terminada, Duration.ofSeconds(30), "ms-finanzas no responde");
+        assertThat(ejecucion.proximoIntento()).isEqualTo(terminada.plusSeconds(30));
+    }
+
+    @Test
+    @DisplayName("no se aplaza la simulacion de lo que ya termino")
+    void noSeAplazaLoTerminado() {
+        Ejecucion ejecucion = enCurso();
+        ejecucion.cancelar(INICIO.plus(Duration.ofHours(1)));
+
+        assertThatThrownBy(() -> ejecucion.simulacionAplazada(INICIO, Duration.ofSeconds(30), "x"))
+                .isInstanceOf(TransicionNoPermitida.class);
+    }
+
+    @Test
     @DisplayName("la progresion que devuelve el inventario al liberar queda en la ejecucion")
     void progresion() {
         Ejecucion ejecucion = enCurso();

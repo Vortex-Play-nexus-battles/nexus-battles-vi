@@ -101,10 +101,13 @@ DB_PASSWORD=subastas_password PARAMETROS_URL=http://localhost:8088/api/v1 \
 ```
 
 Desde B8 `SUBASTAS_INCREMENTO_MINIMO` no se lee: el incremento minimo es el
-parametro `subastas.incremento-minimo` de admin-parametros, que nace sin valor
-(decision del PO). Sin admin-parametros, o sin valor en el, **publicar responde
-503 `INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar
-en subastas ya publicadas sigue funcionando (cada una guarda su incremento).
+parametro `subastas.incremento-minimo` de admin-parametros. **Desde D-43 vale 5
+creditos** (migracion V5 de admin-parametros, en todos los entornos): con 100
+vigente, 104 se rechaza (409 `OFERTA_INSUFICIENTE`) y 105 entra; de dos pujas
+iguales a la vez entra una sola (lock pesimista, `IncrementoMinimoDeCincoTest` y
+el E2E). Sin admin-parametros, o sin valor en el, **publicar responde 503
+`INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar en
+subastas ya publicadas sigue funcionando (cada una guarda su incremento).
 
 Y el frontend, en otra terminal:
 
@@ -271,7 +274,8 @@ Reglas nuevas en el dominio:
   simultaneas: gana una sola); cobra la penalizacion en ms-finanzas
   (`refId sub-cancelacion-{id}`, idempotente) y libera el producto; si algo
   falla despues, se compensan los dos.
-- **Recordatorio de 1 hora** a quien pujo o sigue la subasta, una sola vez.
+- **Recordatorio de 1 hora** a quien pujo o sigue la subasta y al vendedor
+  (RF-NOT-003: «a ambos»), una sola vez cada uno.
 
 Avisos (7.7.8): `notificaciones/AvisosDeSubasta` decide quien se entera de que;
 el outbox es idempotente por evento (id UUID v3 de la clave del hecho,
@@ -284,6 +288,11 @@ momento (`GET /internal/usuarios/{uid}/contacto`) y no se guardan; la
 `Idempotency-Key` es el id del aviso. Reintentos con espera exponencial hasta
 FALLIDO. **Esa ruta de ms-identidad figura como pendiente (B2)**: sin ella el
 correo no sale y termina FALLIDO (no se descarta en silencio).
+
+Al vender (cierre con ganador o compra inmediata), el vendedor recibe ademas
+`CREDITOS_RECIBIDOS` (7.7.8, «Confirmacion de transferencia de creditos
+recibidos»; HU-NOT-003) con el monto que le movio ms-finanzas. Va solo a la
+bandeja: el correo de la venta sale en el mismo instante y ya lo dice.
 
 Tiempo real: ademas de `/topic/subastas/listado` (publico), cada cambio se
 publica en `/topic/subastas/{subastaId}`, que exige sesion en el CONNECT. Un
@@ -313,7 +322,7 @@ Cada una tiene su mecanismo configurable; los valores son **provisionales**.
 
 | Decision | Mecanismo | Valor provisional |
 |---|---|---|
-| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **ninguno**: sin valor no se publica (503 con motivo) |
+| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **decidido (D-43): 5 creditos**, migracion V5 de admin-parametros |
 | Que pasa con un producto no recogido en 7 dias (7.7.9 fija el plazo, no la consecuencia) | `subastas.pendientes.al-vencer` (respaldo `SUBASTAS_PENDIENTES_AL_VENCER`) | `ENTREGAR`: queda disponible para el ganador, que ya pago |
 | «Calificacion del vendedor» (7.7.9) en estrellas o en otra escala | la ficha publica la tasa de exito de 7.7.12 y los recuentos | sin estrellas: no se inventa la escala |
 | Maestro de Juego (7.7.4) | `IdentidadClient.Identidad.esMaestroDeJuego` | `false`: ms-identidad no tiene ese rol (HU-SUB-010) |
@@ -479,7 +488,7 @@ no esta en el repo y B9 dejo escrito que correo no se alcanza. Por eso el paso
 
 ### Datos
 
-El Postgres de contenido nace vacio (Flyway V1-V10). En plataforma quedo el
+El Postgres de contenido nace vacio (Flyway V1-V11). En plataforma quedo el
 volumen de los pocos minutos que ms-subastas estuvo desplegado el 24-sep
 (CAPACIDAD.md: se retiro «conservando su volumen»): no hay nada que migrar, y
 tampoco se borra.

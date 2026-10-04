@@ -25,10 +25,18 @@ public class BandejaDeMensajesDirectos {
 
     private final RepositorioDeMensajesDirectos repositorio;
     private final Clock reloj;
+    private final BloqueosDeMensajes bloqueos;
 
     public BandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio, Clock reloj) {
+        this(repositorio, reloj, BloqueosDeMensajes.sinBloqueos());
+    }
+
+    /** @param bloqueos para decir en cada conversacion si se puede escribir (D-40) */
+    public BandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio, Clock reloj,
+                                     BloqueosDeMensajes bloqueos) {
         this.repositorio = Objects.requireNonNull(repositorio);
         this.reloj = Objects.requireNonNull(reloj);
+        this.bloqueos = Objects.requireNonNull(bloqueos);
     }
 
     /**
@@ -40,6 +48,7 @@ public class BandejaDeMensajesDirectos {
     public List<ResumenDeConversacion> conversacionesDe(UUID jugador) {
         Objects.requireNonNull(jugador, "Hace falta saber de quien son las conversaciones.");
         Map<UUID, Long> noLeidos = repositorio.noLeidosPorRemitente(jugador);
+        BloqueosDeMensajes.Vista vista = bloqueos.vistaDe(jugador);
         return repositorio.ultimosPorConversacion(jugador).stream()
                 .sorted(Comparator.comparing(MensajeDirecto::enviadoEn)
                         .thenComparing(m -> m.id().toString())
@@ -47,7 +56,7 @@ public class BandejaDeMensajesDirectos {
                 .map(ultimo -> {
                     UUID otro = ultimo.conversacion().otroDe(jugador);
                     return new ResumenDeConversacion(otro, ultimo.apodoDelOtro(jugador), ultimo,
-                            noLeidos.getOrDefault(otro, 0L));
+                            noLeidos.getOrDefault(otro, 0L), vista.con(otro));
                 })
                 .toList();
     }

@@ -481,6 +481,35 @@ describe('bloqueos y sanciones', () => {
     expect(raiz.querySelector('[data-zona="bloqueo"]').hidden).toBe(true);
   });
 
+  test('D-40 — si te bloquean con la conversación abierta, el rechazo lo pinta: sin campo ni «Bloquear»', async () => {
+    const fuente = fuenteFalsa();
+    fuente.enviar.mockRejectedValueOnce(
+      Object.assign(new Error('rechazado'), {
+        detalle: 'Este jugador no recibe mensajes tuyos.',
+        motivo: 'NO_ADMITE',
+        reintentable: false,
+        estadoDeConversacion: 'NO_ADMITE',
+      }),
+    );
+    const { raiz } = await montar(fuente);
+    await abrir(raiz);
+    expect(raiz.querySelector('[data-accion="bloquear"]')).not.toBeNull();
+
+    const formulario = raiz.querySelector('.redactor-mensaje');
+    formulario.elements.texto.value = 'hola';
+    formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(raiz.querySelector('[data-zona="bloqueo"]').textContent).toContain(
+      'Bruma no recibe mensajes tuyos',
+    );
+    expect(formulario.elements.texto.disabled).toBe(true);
+    expect(raiz.querySelector('[data-accion="bloquear"]')).toBeNull();
+    expect(raiz.querySelector('[data-conversacion="c-bruma"]').textContent).toContain(
+      'No admite mensajes',
+    );
+  });
+
   test('si cancelas la confirmación, no se bloquea', async () => {
     const { raiz, fuente } = await montar(fuenteFalsa(), { confirmarBloqueo: async () => false });
     await abrir(raiz);

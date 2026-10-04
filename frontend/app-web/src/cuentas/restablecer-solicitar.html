@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Recuperar contraseña — NEXUS BATTLES VI</title>
+    <title>Recuperar contraseña · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
@@ -56,7 +56,18 @@
           </a>
         </div>
 
-        <form id="formSolicitud" class="pila" novalidate>
+        <!-- G1 — sin guion no se pide el código, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para pedir el código hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — el correo nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que restablecer-solicitar.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formSolicitud" class="pila" method="post" novalidate>
           <div class="campo">
             <label class="campo__etiqueta" for="email">Correo electrónico</label>
             <input
@@ -73,7 +84,13 @@
             </p>
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Enviar código
           </button>
         </form>

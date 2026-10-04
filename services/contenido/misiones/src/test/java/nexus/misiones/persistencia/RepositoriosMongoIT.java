@@ -203,6 +203,46 @@ class RepositoriosMongoIT {
     }
 
     @Test
+    @DisplayName("una vencida con la simulacion aplazada no vuelve a la cola hasta que toca: deja pasar a las demas")
+    void simulacionAplazadaFueraDeLaCola() {
+        Ejecucion envenenada = ejecuciones.guardar(
+                nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion sana = ejecuciones.guardar(
+                nueva(JUGADOR, "m-2", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(2), null));
+        assertThat(ejecuciones.vencidas(AHORA, 1)).extracting(Ejecucion::id).containsExactly(envenenada.id());
+
+        Ejecucion aplazada = ejecuciones.buscar(envenenada.id()).orElseThrow();
+        aplazada.simulacionAplazada(AHORA, Duration.ofSeconds(30), "heroes respondio 404");
+        ejecuciones.guardar(aplazada);
+
+        assertThat(ejecuciones.vencidas(AHORA, 1)).extracting(Ejecucion::id).containsExactly(sana.id());
+        assertThat(ejecuciones.vencidas(AHORA.plusSeconds(30), 10)).extracting(Ejecucion::id)
+                .containsExactly(envenenada.id(), sana.id());
+        Ejecucion releida = ejecuciones.buscar(envenenada.id()).orElseThrow();
+        assertThat(releida.proximoIntento()).isEqualTo(AHORA.plusSeconds(30));
+        assertThat(releida.ultimoError()).isEqualTo("heroes respondio 404");
+        assertThat(releida.liquidacionPendiente()).as("aplazar no la manda a liquidar").isFalse();
+    }
+
+    @Test
+    @DisplayName("los pasos de aviso (RF-NOT-004) se guardan y se releen en su orden")
+    void pasosDeAviso() {
+        Ejecucion ejecucion = ejecuciones.guardar(nueva(JUGADOR, "m-1", AHORA, Duration.ofHours(1), null));
+        ejecucion.terminar(resultado(), recompensas(), false, true, AHORA.plus(Duration.ofHours(1)));
+        ejecuciones.guardar(ejecucion);
+
+        Ejecucion releida = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+
+        List<PasoDeLiquidacion> pendientes = releida.pasosPendientes();
+        assertThat(pendientes.getFirst()).isEqualTo(PasoDeLiquidacion.LIBERACION);
+        assertThat(pendientes).contains(PasoDeLiquidacion.AVISO);
+        assertThat(pendientes.subList(pendientes.indexOf(PasoDeLiquidacion.AVISO), pendientes.size()))
+                .as("los avisos van al final: cuentan lo ya entregado")
+                .allMatch(p -> p.name().startsWith("AVISO"));
+        assertThat(releida.estadoDe(PasoDeLiquidacion.AVISO)).isEqualTo(EstadoDePaso.PENDIENTE);
+    }
+
+    @Test
     @DisplayName("las del jugador: de la mas reciente a la mas antigua, en curso e iniciadas desde")
     void delJugador() {
         Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofDays(2)), Duration.ofHours(1), null);

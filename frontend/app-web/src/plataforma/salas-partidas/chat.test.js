@@ -21,6 +21,7 @@ import {
   tonoPara,
   pintarMensaje,
   reaccionAlError,
+  TEXTO_NO_VALIDO,
 } from './chat.js';
 import { FUENTE_SIN_SERVICIO } from './fuente-mensajes.js';
 
@@ -244,6 +245,36 @@ test('CA-03: un error que la vista no conoce se dice con el tono del mapeo', asy
   expect(aviso.textContent).toContain('Algo no salió');
   expect(tonoPara(503)).toBe('error');
   expect(reaccionAlError({ type: 'x', status: 503, title: 't' }).aviso.tono).toBe('error');
+});
+
+test('auditoría 30-sep: un dibujo que el chat rechaza dice qué regla falló y vuelve al campo', async () => {
+  const cliente = clienteFalso();
+  const contenedor = raiz();
+  await montarChat(contenedor, { canal: {}, token: 't', conectar: async () => cliente });
+  const formulario = contenedor.querySelector('form');
+  formulario.elements.texto.value = '(\\_/)\n(o.o)\n(> <)';
+  formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+  await esperar();
+
+  cliente.suscripciones['/usuario/cola/salas']({
+    type: 'https://nexusbattles.local/errores/mensaje-invalido',
+    title: 'Mensaje no válido',
+    status: 400,
+    detail: 'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+  });
+
+  const aviso = contenedor.querySelector('[data-zona="aviso"] .aviso');
+  expect(aviso.textContent).toContain('Revisa el mensaje');
+  expect(aviso.textContent).toContain('parece un dibujo hecho con símbolos');
+  expect(aviso.textContent).not.toContain('Un mensaje lleva entre 1 y 500 caracteres.');
+  expect(formulario.elements.texto.value).toBe('(\\_/)\n(o.o)\n(> <)');
+  // Sin `detail`, la explicación general, que ya no habla solo del largo.
+  expect(
+    reaccionAlError({
+      type: 'https://nexusbattles.local/errores/mensaje-invalido',
+      status: 400,
+    }).aviso.detalle,
+  ).toBe(TEXTO_NO_VALIDO);
 });
 
 test('sin token no se conecta y se pide iniciar sesion', async () => {

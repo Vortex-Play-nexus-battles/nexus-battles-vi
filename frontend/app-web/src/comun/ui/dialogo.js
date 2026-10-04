@@ -12,11 +12,59 @@
  *   - el foco entra al dialogo y no se escapa mientras esta abierto;
  *   - Escape y el clic en el velo cierran (salvo que se pida lo contrario);
  *   - al cerrar, el foco vuelve a donde estaba.
+ *
+ * Auditoría de DEV del 30-sep: «Eliminar tu comentario», abierto desde la
+ * ficha del producto, quedaba DETRÁS de la ficha. No era un z-index que
+ * faltara en un sitio: la ficha tenía capa propia (z-index 10) y el velo
+ * ninguna, así que el orden del DOM —que es lo que el kit usa para apilar—
+ * no servía. Ahora los modales (diálogos y fichas) comparten una capa,
+ * `--capa-modal`, y entre ellos manda el orden: lo que se abre después queda
+ * encima. Con varios abiertos, Escape cierra solo el de más arriba
+ * ({@link esElModalDeArriba}) y la página de atrás no se desplaza mientras
+ * haya alguno ({@link bloquearDesplazamiento}).
  */
 
 import { h } from './dom.js';
 
 let contador = 0;
+
+/** Los modales que hay en el documento: diálogos (velo) y fichas de producto. */
+const MODALES = '.velo, .ficha-capa';
+
+/**
+ * Mientras haya un modal abierto, la página de atrás no se desplaza. Se suelta
+ * cuando ya no queda ninguno EN EL DOCUMENTO —no con un contador—: con una
+ * ficha y su confirmación abiertas, cerrar la confirmación no suelta la
+ * página, y un modal que alguien quitó a mano no la deja bloqueada para
+ * siempre. Hay que llamarlo después de quitar el modal del documento.
+ *
+ * @returns {() => void} con qué soltarlo (una sola vez)
+ */
+export function bloquearDesplazamiento() {
+  document.documentElement.classList.add('con-modal');
+  let suelto = false;
+  return () => {
+    if (suelto) {
+      return;
+    }
+    suelto = true;
+    if (!document.querySelector(MODALES)) {
+      document.documentElement.classList.remove('con-modal');
+    }
+  };
+}
+
+/**
+ * Si `capa` es el modal de más arriba: el último `.velo` o `.ficha-capa` del
+ * documento (comparten capa, así que el último es el que se ve encima).
+ *
+ * @param {Element} capa el velo de un diálogo o la capa de una ficha
+ * @returns {boolean}
+ */
+export function esElModalDeArriba(capa) {
+  const modales = document.querySelectorAll(MODALES);
+  return modales.length > 0 && modales[modales.length - 1] === capa;
+}
 
 /**
  * @param {{titulo: string, cuerpo: Node|string, acciones?: Array<Node>,
@@ -51,12 +99,14 @@ export function abrirDialogo({
   caja.append(typeof cuerpo === 'string' ? h('p', { texto: cuerpo }) : cuerpo);
 
   let cerrado = false;
+  const soltarDesplazamiento = bloquearDesplazamiento();
   const cerrar = () => {
     if (cerrado) {
       return;
     }
     cerrado = true;
     velo.remove();
+    soltarDesplazamiento();
     document.removeEventListener('keydown', alTeclado);
     if (devolverFocoA instanceof HTMLElement) {
       devolverFocoA.focus();
@@ -86,6 +136,11 @@ export function abrirDialogo({
   }
 
   function alTeclado(evento) {
+    // Con otro modal encima (una confirmación abierta desde este diálogo), las
+    // teclas son suyas: Escape lo cierra a él, no a los dos.
+    if (!esElModalDeArriba(velo)) {
+      return;
+    }
     if (evento.key === 'Escape') {
       evento.preventDefault();
       cerrar();

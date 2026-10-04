@@ -7,7 +7,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 
 | Ruta | Destino |
 |---|---|
-| `/` | redirige a `/frontend/app-web/src/cuentas/login.html` |
+| `/` | **F6:** la portada pública (`cuentas/portada.html`, con `<base>` y la marca de rutas limpias): qué es el juego, cómo empezar y la tienda con productos reales. Hasta el 4-oct redirigía a `/login`; entrar sigue en `/login` y crear la cuenta en `/registro` |
 | `/frontend/app-web/src/…`, `/shared/ui-kit/…` | archivos estáticos del repo, misma jerarquía (las vistas usan `../../../../../shared/ui-kit`) |
 | `/api/v1/salas`, `/api/v1/partidas`, `/api/v1/mensajes-directos` (B6) | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |

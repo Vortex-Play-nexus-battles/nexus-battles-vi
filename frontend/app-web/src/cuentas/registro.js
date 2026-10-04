@@ -13,6 +13,11 @@ import { registrarCuenta } from '../comun/entrada.js';
 import { motivoDeContrasena } from '../comun/politica-contrasena.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { h } from '../comun/ui/dom.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
+
+// G1 — lo que un envío nativo de una versión vieja de esta página pudo dejar
+// en la barra (`?password=…`) sale antes de nada.
+sinCredencialesEnLaDireccion();
 
 const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.
 
@@ -359,3 +364,6 @@ form.addEventListener('submit', async (evento) => {
   setEstado(TRAS_CREAR[resultado.resultado] ?? TRAS_CREAR.creada, 'exito');
   window.location.href = resultado.destino;
 });
+
+// G1 — la vista ya escucha `submit`: el botón se puede encender.
+formularioListo(form);

@@ -108,6 +108,7 @@ class ServicioDeMisionesIT {
         registro.add("misiones.motor.url", FALSAS::base);
         registro.add("misiones.creditos.url", () -> FALSAS.base() + "/finanzas/api/v1");
         registro.add("misiones.correo.url", () -> FALSAS.base() + "/correo/api/v1");
+        registro.add("misiones.notificaciones.url", () -> FALSAS.base() + "/notificaciones/api/v1");
         registro.add("misiones.identidad.url", () -> FALSAS.base() + "/identidad");
         registro.add("seguridad.servicio.url", () -> FALSAS.base() + "/auth/token");
     }
@@ -222,6 +223,14 @@ class ServicioDeMisionesIT {
         assertThat(correo.cabecera("Idempotency-Key")).isEqualTo("mision-" + ejecucionId + "-correo");
         assertThat(correo.json()).containsEntry("email", "jugador@ejemplo.com")
                 .containsEntry("debeEnviarCorreo", true);
+        // RF-NOT-004: el aviso en la bandeja, con la credencial de servicio de misiones.
+        DependenciasFalsas.Peticion aviso = FALSAS.con("POST", "/notificaciones/", ejecucionId).getFirst();
+        assertThat(aviso.cabecera("Authorization")).isEqualTo("Bearer " + DependenciasFalsas.TOKEN_DE_SERVICIO);
+        assertThat(aviso.json()).containsEntry("usuarioId", jugador)
+                .containsEntry("id", "mision-" + ejecucionId + "-aviso")
+                .containsEntry("tipo", "MISION");
+        assertThat((String) aviso.json().get("titulo")).contains("terminó con éxito");
+        assertThat((String) aviso.json().get("cuerpo")).contains("Ganó 5 créditos");
 
         // Otra vuelta del trabajo no repite nada: todo quedo HECHO.
         long antes = FALSAS.cuantasCon(ejecucionId);
@@ -265,11 +274,12 @@ class ServicioDeMisionesIT {
     }
 
     @Test
-    @DisplayName("si el inventario no contesta, la entrega queda pendiente y se completa en otra vuelta")
+    @DisplayName("si el inventario no contesta al liberar, la entrega queda pendiente y se completa en otra vuelta")
     void entregaPendiente() throws Exception {
         String ejecucionId = matricular("dev-prueba-de-humo", "{\"heroeId\":\"" + heroeId + "\"}");
         Thread.sleep(20);
-        FALSAS.caidas.add("inventario");
+        // Solo la liberacion: simular al heroe ya pide sus estadisticas y su equipo al inventario.
+        FALSAS.caidas.add("liberacion");
         trabajo.ejecutar();
 
         mvc.perform(conToken(get("/api/v1/misiones/ejecuciones/{id}", ejecucionId)))

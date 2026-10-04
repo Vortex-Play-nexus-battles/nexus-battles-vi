@@ -111,6 +111,15 @@ const ROLES_POR_NIVEL = Object.freeze({
  */
 export const MATRIZ = Object.freeze({
   // --- Portal de entrada ---------------------------------------------------
+  // F6 (auditoría del 4-oct, cambio autorizado n.º 3) — la portada pública en
+  // `/`: qué es el juego, cómo empezar y la tienda con productos reales, antes
+  // de tener cuenta. Hasta aquí `/` redirigía a `/login`.
+  portada: {
+    ruta: 'cuentas/portada.html',
+    limpia: '/',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
   login: {
     ruta: 'cuentas/login.html',
     limpia: '/login',

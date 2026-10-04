@@ -32,8 +32,8 @@
  *     opinar);
  *   - uno, muchos: los más recientes primero; de cinco en cinco;
  *   - con imágenes: miniaturas reales (ver `comentario.js`);
- *   - reportado: el que quien mira acaba de reportar queda marcado «en
- *     revisión» en su sitio, en vez de desaparecer sin explicación;
+ *   - reportado: el que quien mira acaba de reportar queda marcado
+ *     «Reportado» en su sitio (sigue publicado: comentarios.yaml 1.8.0);
  *   - error: la lista no cargó, se dice y se reintenta; calificar y publicar
  *     siguen disponibles, porque no dependen de la lista;
  *   - sin sesión: se lee todo; para calificar, opinar o reportar se ofrece
@@ -315,7 +315,7 @@ export function montarHiloDeComentarios(
       reportados.add(comentario.id);
       pintarLista();
       // El botón que abrió el diálogo ya no existe (la tarjeta cambió): el
-      // foco va a la tarjeta, que ahora dice que está en revisión.
+      // foco va a la tarjeta, que ahora dice que está reportado.
       tarjetaDe(comentario.id)?.focus();
     } else if (resultado === RESULTADO_REPORTE.RETIRADO) {
       await cargarHilo();

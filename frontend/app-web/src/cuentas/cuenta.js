@@ -30,6 +30,7 @@ import { h, vaciar } from '../comun/ui/dom.js';
 import { creditos as formatoCreditos, fechaHora } from '../comun/ui/formato.js';
 import { boton, conCarga } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { fotoDeCuenta } from '../comun/ui/avatar.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
@@ -114,8 +115,12 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   const textos = h('div', { clase: 'pila pila--ajustada' });
   textos.append(
     h('h3', { clase: 'tarjeta__titulo', texto: perfil?.apodo ?? sesion.apodo ?? 'Sin apodo' }),
-    h('p', { clase: 't-meta', texto: perfil?.email ?? '' }),
   );
+  // El perfil (ms-identidad-perfiles.yaml) no publica el correo: un párrafo
+  // vacío no dice nada. Si algún día llega, se enseña.
+  if (perfil?.email) {
+    textos.append(h('p', { clase: 't-meta', texto: perfil.email }));
+  }
   cabeza.append(textos);
   if (sesion.rol) {
     cabeza.append(
@@ -127,12 +132,9 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   }
   identidad.append(cabeza);
   if (perfil?.avatar) {
-    identidad.append(
-      h('img', {
-        clase: 'avatar-vista-previa',
-        atributos: { src: perfil.avatar, alt: `Avatar de ${perfil.apodo ?? ''}` },
-      }),
-    );
+    // Si la foto no carga queda la inicial, no el texto alternativo suelto
+    // (auditoría de DEV del 30-sep).
+    identidad.append(fotoDeCuenta({ url: perfil.avatar, apodo: perfil.apodo ?? sesion.apodo }));
   }
   zona.append(identidad);
 
@@ -166,6 +168,8 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: formatoCreditos(saldo.datos.saldoReservado),
+      // Cuándo vuelve (auditoría de DEV del 30-sep, D-39).
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   vaciar(zonaSaldo).append(rejilla);
@@ -244,15 +248,17 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
     return;
   }
 
-  const tabla = h('table', { clase: 'tabla', datos: { zona: 'movimientos' } });
+  // `tabla--datos`: la <table> lleva sus propias reglas de celda (shared/ui-kit);
+  // el importe, como toda cifra, a la derecha en el encabezado y en la celda.
+  const tabla = h('table', { clase: 'tabla tabla--datos', datos: { zona: 'movimientos' } });
   const cabecera = h('thead');
   cabecera.append(
     h('tr', {
       hijos: [
-        h('th', { texto: 'Concepto' }),
-        h('th', { texto: 'Importe' }),
-        h('th', { texto: 'Estado' }),
-        h('th', { texto: 'Cuándo' }),
+        h('th', { texto: 'Concepto', atributos: { scope: 'col' } }),
+        h('th', { clase: 'tabla__numero', texto: 'Importe', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Estado', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Cuándo', atributos: { scope: 'col' } }),
       ],
     }),
   );
@@ -265,7 +271,7 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
         hijos: [
           h('td', { texto: nombreDelConcepto(movimiento.concepto) }),
           h('td', {
-            clase: 'movimiento__importe',
+            clase: 'movimiento__importe tabla__numero',
             texto: importe.texto,
             datos: { tono: importe.tono },
           }),
@@ -371,6 +377,11 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       llenarFormulario(formulario, perfil);
     }
     if (vistaAvatar && perfil?.avatar) {
+      // Auditoría de DEV del 30-sep: una foto que no carga no deja el texto
+      // alternativo en medio del formulario; se retira y se puede subir otra.
+      vistaAvatar.onerror = () => {
+        vistaAvatar.hidden = true;
+      };
       vistaAvatar.src = perfil.avatar;
       vistaAvatar.hidden = false;
     }

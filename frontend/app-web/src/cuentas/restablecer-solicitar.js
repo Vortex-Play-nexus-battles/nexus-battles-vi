@@ -20,6 +20,7 @@ import { montarCabecera } from '../comun/cabecera-app.js';
 import { limpiarAviso, pintarAviso } from '../comun/ui/aviso.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 
 // Se reexporta con su nombre de siempre: la llamada vive en `comun/`.
 export { solicitarRestablecimiento, MENSAJE_DE_SOLICITUD };
@@ -124,11 +125,16 @@ export function montarSolicitud(
       conCarga(botonEnviar, false);
     }
   });
+
+  // G1 — la vista ya escucha `submit`: el botón se puede encender.
+  formularioListo(formulario);
 }
 
 // ---------------------------------------------------------------- arranque
 
 if (document.body?.dataset.vista === 'restablecer-solicitar') {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra.
+  sinCredencialesEnLaDireccion();
   montarCabecera(document.querySelector('[data-cabecera-app]'), {
     vista: 'restablecer-solicitar',
     seccionActiva: null,

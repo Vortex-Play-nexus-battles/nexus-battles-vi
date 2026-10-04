@@ -48,11 +48,14 @@ import {
   estadoDeCarga,
 } from '../../comun/ui/estado-vista.js';
 import { fechaHora } from '../../comun/ui/formato.js';
+import { respaldoPorEstado } from '../../comun/ui/texto-de-fallo.js';
 import { esIdDeImagen, textoAlternativo } from '../../comun/ui/comunidad/comentario.js';
 import {
   accionesDesde,
   consultarCola,
+  hayReportesPendientes,
   consultarDetalle,
+  historialDelAutor,
   imagenParaModeracion,
   resolverComentario,
   ACCIONES_INTERNAS,
@@ -102,11 +105,23 @@ export const RESULTADO_DE_ACCION = Object.freeze({
  * siempre), si esta marcado para seguimiento y si moderacion edito su texto.
  *
  * @param {object} comentario `ComentarioResponse` de moderacion
- * @param {{conEstado?: boolean}} [opciones] `conEstado`: pintar tambien EN_REVISION
+ * @param {{conEstado?: boolean, prioridadElevada?: boolean}} [opciones] `conEstado`: pintar
+ *   tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo `true` pinta el
+ *   distintivo. Viene de la entrada de la cola, no del comentario: el detalle no la trae.
  * @returns {HTMLElement[]}
  */
-export function distintivosDe(comentario, { conEstado = false } = {}) {
+export function distintivosDe(comentario, { conEstado = false, prioridadElevada = false } = {}) {
   const lista = [];
+  if (prioridadElevada === true) {
+    // Con texto y no solo con color: el tono ambar no basta para quien no lo distingue.
+    lista.push(
+      h('span', {
+        clase: 'distintivo distintivo--aviso',
+        datos: { campo: 'prioridad' },
+        texto: 'Prioridad elevada',
+      }),
+    );
+  }
   if (conEstado || comentario?.estado !== 'EN_REVISION') {
     lista.push(
       h('span', {
@@ -175,7 +190,7 @@ export function tarjetaDeEntrada(entrada, alAbrir) {
           datos: { campo: 'reportes' },
           texto: `${reportes} reporte${reportes === 1 ? '' : 's'}`,
         }),
-        ...distintivosDe(comentario),
+        ...distintivosDe(comentario, { prioridadElevada: entrada.prioridadElevada }),
         h('span', {
           clase: 'tarjeta__meta',
           // En la lista de seguimiento hay marcados sin ningun reporte: para
@@ -273,6 +288,165 @@ function lineaDelHistorial(asiento) {
   return base;
 }
 
+/** Un comentario del autor en su historial: texto, fecha, producto y estado con palabras. */
+function itemDelHistorial(item, comentarioAbiertoId) {
+  return h('li', {
+    clase: 'pila pila--compacta',
+    datos: { comentarioId: item.id ?? '' },
+    hijos: [
+      h('div', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          // El estado y «editado» van con texto, no solo con color.
+          ...distintivosDe(item, { conEstado: true }),
+          h('span', {
+            clase: 't-meta',
+            datos: { campo: 'fecha' },
+            texto: fechaHora(item.fechaPublicacion),
+          }),
+          // El contrato solo trae el identificador del producto, no su nombre.
+          h('span', {
+            clase: 't-meta',
+            datos: { campo: 'producto' },
+            texto: `Producto: ${item.productoId ?? ''}`,
+          }),
+          item.id === comentarioAbiertoId
+            ? h('span', {
+                clase: 't-meta',
+                datos: { campo: 'abierto' },
+                texto: 'Este es el comentario abierto',
+              })
+            : null,
+        ],
+      }),
+      h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: item.texto ?? '' }),
+    ],
+  });
+}
+
+/**
+ * Otros comentarios del autor, bajo demanda (HU-COM-005): abrir el detalle no
+ * los pide, porque son contexto secundario y pueden ser muchos; un fallo de
+ * esta parte se queda en esta parte y el resto del detalle sigue operativo.
+ *
+ * Los errores se dicen con el texto del kit (`ErrorDeApi.detalle`), sin el
+ * numero del estado. Reintentar solo se ofrece donde puede servir: un 401, un
+ * 403 o un 404 no cambian pulsando otra vez (`shared/ui-kit/MAPEO-ERRORES.md`).
+ *
+ * @param {object} comentario el comentario abierto (`autorId`, `id`)
+ * @param {(autorId: string, paginacion: {pagina: number}) => Promise<object>} cargar
+ * @returns {HTMLElement}
+ */
+function seccionHistorialDelAutor(comentario, cargar) {
+  let pagina = 0;
+  let pintados = 0;
+  let total = 0;
+  const peticion = { activa: false };
+  let lista = null;
+
+  const boton = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver historial del autor',
+    datos: { accion: 'ver-historial-autor' },
+    atributos: { type: 'button', 'aria-expanded': 'false' },
+  });
+  const estado = h('div', {
+    datos: { zona: 'historial-autor-estado' },
+    atributos: { hidden: true },
+  });
+  const aviso = h('div', { datos: { zona: 'historial-autor-aviso' }, atributos: { hidden: true } });
+  const cuerpo = h('div', { clase: 'pila pila--compacta' });
+  const pie = h('div', { clase: 'fila' });
+  const verMas = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Ver más',
+    datos: { accion: 'ver-mas' },
+    atributos: { type: 'button' },
+  });
+
+  function problema(error, paginaPedida) {
+    const estadoHttp = error?.estado;
+    const sinCambio = [401, 403, 404].includes(estadoHttp);
+    /** @type {"advertencia"|"info"|"error"} */
+    let tono = 'advertencia';
+    if (estadoHttp === 404) {
+      tono = 'info';
+    } else if (!sinCambio) {
+      tono = 'error';
+    }
+    pintarAviso(aviso, {
+      tono,
+      titulo: 'No se pudo cargar el historial del autor',
+      detalle: error?.detalle ?? respaldoPorEstado(estadoHttp),
+      accion: sinCambio
+        ? null
+        : { texto: 'Reintentar', nombre: 'reintentar', alPulsar: () => void pedir(paginaPedida) },
+    });
+  }
+
+  function cerrarPeticion() {
+    peticion.activa = false;
+    if (pintados < total && aviso.hidden) {
+      pie.append(verMas);
+    }
+  }
+
+  async function pedir(paginaPedida) {
+    if (peticion.activa) {
+      return;
+    }
+    peticion.activa = true;
+    verMas.remove();
+    limpiarAviso(aviso);
+    if (paginaPedida === 0) {
+      pintarEstado(estado, estadoDeCarga({ filas: 2, etiqueta: 'Cargando el historial…' }));
+    }
+    try {
+      const respuesta = await cargar(comentario.autorId, { pagina: paginaPedida });
+      vaciar(estado);
+      estado.hidden = true;
+      total = respuesta.total ?? 0;
+      const items = respuesta.comentarios ?? [];
+      if (total === 0 && pintados === 0) {
+        pintarEstado(
+          estado,
+          estadoVacio({
+            titulo: 'Este autor no tiene comentarios',
+            detalle: 'Cuando publique alguno, aparecerá aquí.',
+          }),
+        );
+        return;
+      }
+      if (!lista) {
+        lista = h('ol', { clase: 'pila pila--compacta', datos: { zona: 'historial-autor-lista' } });
+        cuerpo.append(lista);
+      }
+      lista.append(...items.map((item) => itemDelHistorial(item, comentario.id)));
+      pintados += items.length;
+      pagina = paginaPedida + 1;
+    } catch (error) {
+      vaciar(estado);
+      estado.hidden = true;
+      problema(error, paginaPedida);
+    } finally {
+      cerrarPeticion();
+    }
+  }
+
+  boton.addEventListener('click', () => {
+    boton.disabled = true;
+    boton.setAttribute('aria-expanded', 'true');
+    void pedir(0);
+  });
+  verMas.addEventListener('click', () => void pedir(pagina));
+
+  return h('div', {
+    clase: 'pila pila--compacta',
+    datos: { zona: 'historial-autor' },
+    hijos: [h('h3', { texto: 'Otros comentarios del autor' }), boton, estado, aviso, cuerpo, pie],
+  });
+}
+
 /** La pista del motivo: a quien le llega depende de la accion. */
 function pistaDelMotivo(accion) {
   return ACCIONES_INTERNAS.includes(accion)
@@ -287,13 +461,22 @@ function pistaDelMotivo(accion) {
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
  * @param {{cargarImagen?: ((id: string) => Promise<Blob|null>)|null,
- *          crearUrl?: (blob: Blob) => string}} [opciones]
+ *          crearUrl?: (blob: Blob) => string,
+ *          prioridadElevada?: boolean,
+ *          cargarHistorialDelAutor?: ((autorId: string, paginacion: {pagina: number}) => Promise<object>)|null}} [opciones]
+ *   `prioridadElevada` sale de la entrada
+ *   de la cola: `DetalleDeModeracionResponse` no la trae.
  * @returns {HTMLElement}
  */
 export function panelDeDetalle(
   detalle,
   alDecidir,
-  { cargarImagen = null, crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '' } = {},
+  {
+    cargarImagen = null,
+    crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
+    prioridadElevada = false,
+    cargarHistorialDelAutor = null,
+  } = {},
 ) {
   const comentario = detalle.comentario ?? {};
   const panel = h('section', {
@@ -305,7 +488,7 @@ export function panelDeDetalle(
     h('h2', { texto: `Comentario de ${comentario.apodoAutor ?? 'alguien'}` }),
     h('p', {
       clase: 't-meta fila fila--envuelta',
-      hijos: distintivosDe(comentario, { conEstado: true }),
+      hijos: distintivosDe(comentario, { conEstado: true, prioridadElevada }),
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
@@ -349,8 +532,17 @@ export function panelDeDetalle(
         }),
   );
 
+  // ---------------------------------------------------- historial del autor
+  if (cargarHistorialDelAutor && typeof comentario.autorId === 'string' && comentario.autorId) {
+    panel.append(seccionHistorialDelAutor(comentario, cargarHistorialDelAutor));
+  }
+
   // --------------------------------------------------------------- decision
-  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true);
+  // 1.8.0: uno PUBLICADO con reportes pendientes sigue a la vista y se puede
+  // aprobar (cierra sus reportes) ademas de ocultar, eliminar o editar.
+  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true, {
+    reportesPendientes: hayReportesPendientes(detalle),
+  });
   if (posibles.length === 0) {
     panel.append(
       h('p', {
@@ -496,12 +688,16 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
     consultarDetalle,
     resolverComentario,
     imagenParaModeracion,
+    historialDelAutor,
     ...(api ?? {}),
   };
   const zonaCola = raiz.querySelector('[data-zona="cola"]');
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const filtro = raiz.querySelector('[data-zona="filtro"]');
+  // El detalle no trae `prioridadElevada`: se recuerda de la entrada de la
+  // cola desde la que se abrio. `recargar` lo rehace antes de reabrir.
+  const prioridadPorComentario = new Map();
 
   function problema(error) {
     const explicacion = EXPLICACION[error?.motivo];
@@ -538,6 +734,10 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
         tamano: TAMANO,
       });
       vaciar(zonaCola);
+      prioridadPorComentario.clear();
+      for (const { comentario, prioridadElevada } of cola.entradas ?? []) {
+        prioridadPorComentario.set(comentario?.id, prioridadElevada === true);
+      }
       if ((cola.entradas ?? []).length === 0) {
         // Cola vacia NO es un error: es la respuesta correcta cuando no hay
         // nada pendiente. Por eso estado vacio y no estado de error.
@@ -593,6 +793,9 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
       zonaDetalle.append(
         panelDeDetalle(detalle, (decision) => decidir(comentarioId, decision), {
           cargarImagen: (id) => cliente.imagenParaModeracion(id),
+          cargarHistorialDelAutor: (autorId, paginacion) =>
+            cliente.historialDelAutor(autorId, paginacion),
+          prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );

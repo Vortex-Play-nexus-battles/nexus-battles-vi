@@ -31,6 +31,14 @@ public final class Ejecucion {
     /** Tope de la espera exponencial entre reintentos de la liquidacion. */
     public static final Duration ESPERA_MAXIMA_ENTRE_INTENTOS = Duration.ofHours(1);
 
+    /**
+     * Tope de la espera entre intentos de SIMULAR una ejecucion vencida. Corto
+     * a proposito: el jugador esta esperando su reporte y, cuando vuelva el
+     * servicio que faltaba, no debe esperar una hora mas. Solo existe para que
+     * una ejecucion que no se puede simular deje paso a las demas.
+     */
+    public static final Duration ESPERA_MAXIMA_ANTES_DE_SIMULAR = Duration.ofMinutes(5);
+
     private final UUID id;
     private final String misionId;
     private final String jugadorUid;
@@ -128,6 +136,15 @@ public final class Ejecucion {
     }
 
     /**
+     * Vencida, en progreso y sin un intento de simulacion aplazado para mas
+     * tarde: es lo que el trabajo en segundo plano debe simular ahora.
+     */
+    public boolean listaParaSimular(Instant ahora) {
+        return estado == EstadoEjecucion.EN_PROGRESO && vencida(ahora)
+                && (proximoIntento == null || !proximoIntento.isAfter(ahora));
+    }
+
+    /**
      * Cancelar (7.8.7, «Abandonada: cancelada por el jugador, con
      * penalizacion»). La penalizacion provisional es perder todo lo de esta
      * ejecucion: no hay resultado ni recompensas, y solo queda liberar al heroe
@@ -139,17 +156,32 @@ public final class Ejecucion {
         terminadaEn = ahora;
         pasos.clear();
         pasos.put(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE);
-        proximoIntento = ahora;
+        empezarLiquidacion(ahora);
     }
 
     /**
      * Termina con el resultado de la simulacion y deja pendientes los pasos
-     * de entrega que hagan falta.
+     * de entrega que hagan falta, sin avisos en la bandeja.
      *
      * @param conCorreo si el correo de misiones esta activo en este entorno
      */
     public void terminar(ResultadoDeMision resultado, RecompensasDeEjecucion recompensas,
                          boolean conCorreo, Instant ahora) {
+        terminar(resultado, recompensas, conCorreo, false, ahora);
+    }
+
+    /**
+     * Termina con el resultado de la simulacion y deja pendientes los pasos
+     * de entrega que hagan falta y, si estan activos, los avisos (RF-NOT-004):
+     * el de la finalizacion siempre, el de la epica si se obtuvo alguna, y el
+     * de las misiones desbloqueadas solo la PRIMERA vez que el jugador la
+     * completa, que es la unica vez que desbloquea algo (7.8.2).
+     *
+     * @param conCorreo si el correo de misiones esta activo en este entorno
+     * @param conAvisos si los avisos en la bandeja estan activos en este entorno
+     */
+    public void terminar(ResultadoDeMision resultado, RecompensasDeEjecucion recompensas,
+                         boolean conCorreo, boolean conAvisos, Instant ahora) {
         exigirEnProgreso("terminar");
         this.resultado = Objects.requireNonNull(resultado);
         this.recompensas = Objects.requireNonNull(recompensas);
@@ -172,6 +204,41 @@ public final class Ejecucion {
                 pasos.put(PasoDeLiquidacion.CORREO_EPICA, EstadoDePaso.PENDIENTE);
             }
         }
+        if (conAvisos) {
+            pasos.put(PasoDeLiquidacion.AVISO, EstadoDePaso.PENDIENTE);
+            if (!recompensas.epicas().isEmpty()) {
+                pasos.put(PasoDeLiquidacion.AVISO_EPICA, EstadoDePaso.PENDIENTE);
+            }
+            if (estado == EstadoEjecucion.COMPLETADA && recompensas.primeraVez()) {
+                pasos.put(PasoDeLiquidacion.AVISO_DESBLOQUEO, EstadoDePaso.PENDIENTE);
+            }
+        }
+        empezarLiquidacion(ahora);
+    }
+
+    /**
+     * La simulacion de esta ejecucion vencida no se pudo hacer (un servicio no
+     * respondio, o la rechazo): se vuelve a intentar mas tarde, cada vez mas
+     * tarde y con tope de {@link #ESPERA_MAXIMA_ANTES_DE_SIMULAR}. Sin esta
+     * espera, las que no se pueden simular eran siempre las primeras de cada
+     * lote (las mas antiguas) y, con tantas como el lote, ninguna otra
+     * ejecucion se simulaba nunca. El heroe sigue en mision; el jugador puede
+     * cancelarla.
+     */
+    public void simulacionAplazada(Instant ahora, Duration esperaBase, String error) {
+        exigirEnProgreso("aplazar la simulación de");
+        intentosDeLiquidacion++;
+        proximoIntento = ahora.plus(espera(esperaBase, intentosDeLiquidacion, ESPERA_MAXIMA_ANTES_DE_SIMULAR));
+        ultimoError = error;
+    }
+
+    /**
+     * La liquidacion empieza de cero: los intentos de simular que hubiera no
+     * cuentan para la espera de sus reintentos, y su error ya no aplica.
+     */
+    private void empezarLiquidacion(Instant ahora) {
+        intentosDeLiquidacion = 0;
+        ultimoError = null;
         proximoIntento = ahora;
     }
 
@@ -189,13 +256,15 @@ public final class Ejecucion {
     /** El otro servicio no respondio: se vuelve a intentar despues, cada vez mas tarde. */
     public void reintentarMasTarde(Instant ahora, Duration esperaBase, String error) {
         intentosDeLiquidacion++;
-        long factor = 1L << Math.min(20, intentosDeLiquidacion - 1);
-        Duration espera = esperaBase.multipliedBy(factor);
-        if (espera.compareTo(ESPERA_MAXIMA_ENTRE_INTENTOS) > 0 || espera.isNegative()) {
-            espera = ESPERA_MAXIMA_ENTRE_INTENTOS;
-        }
-        proximoIntento = ahora.plus(espera);
+        proximoIntento = ahora.plus(espera(esperaBase, intentosDeLiquidacion, ESPERA_MAXIMA_ENTRE_INTENTOS));
         ultimoError = error;
+    }
+
+    /** Espera exponencial: la base en el primer intento, el doble en cada uno, con tope. */
+    private static Duration espera(Duration base, int intento, Duration tope) {
+        long factor = 1L << Math.min(20, Math.max(0, intento - 1));
+        Duration espera = base.multipliedBy(factor);
+        return espera.compareTo(tope) > 0 || espera.isNegative() ? tope : espera;
     }
 
     /** Nivel y experiencia que devolvio el inventario al liberar al heroe. */

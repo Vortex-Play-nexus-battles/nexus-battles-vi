@@ -11,6 +11,7 @@
 import { jest } from '@jest/globals';
 
 import {
+  COLUMNAS_DE_PARTIDAS,
   PARTIDAS_POR_PAGINA,
   fraseDelRecuento,
   montarEstadisticas,
@@ -156,7 +157,7 @@ describe('Tus batallas — GET /partidas/mias', () => {
     );
   });
 
-  test('cada fila dice resultado, héroe, modalidad y jugadores; en curso se puede volver', async () => {
+  test('cada fila dice resultado, héroe, modalidad y jugadores; en curso se puede volver y la terminada se puede ver', async () => {
     const zona = document.createElement('div');
     const fetchImpl = fetchFalso({
       '/api/v1/partidas/mias': respuesta(pagina([VICTORIA, EN_CURSO])),
@@ -170,7 +171,13 @@ describe('Tus batallas — GET /partidas/mias', () => {
     expect(filas[0].querySelector('.distintivo').className).toContain('distintivo--victoria');
     expect(filas[0].textContent).toContain('Guerrero Tanque');
     expect(filas[0].textContent).toContain('1 contra 1');
-    expect(filas[0].querySelector('a')).toBeNull();
+    // Auditoría de DEV del 30-sep: la columna «Acción» salía vacía en las
+    // terminadas. Ahora lleva a verlas, con su desenlace.
+    const ver = filas[0].querySelector('a');
+    expect(ver.textContent).toBe('Ver resultado');
+    expect(ver.getAttribute('href')).toBe(
+      '../plataforma/salas-partidas/sala-batalla.html?sala=s-1&partida=p-1',
+    );
 
     expect(filas[1].querySelector('.distintivo').textContent).toBe('En curso');
     expect(filas[1].textContent).toContain('Hasta seis');
@@ -183,6 +190,56 @@ describe('Tus batallas — GET /partidas/mias', () => {
     const region = zona.querySelector('.tabla-envoltorio');
     expect(region.getAttribute('tabindex')).toBe('0');
     expect(region.getAttribute('role')).toBe('region');
+  });
+
+  test('el encabezado y la celda de cada columna comparten alineación (auditoría 30-sep: no casaban)', async () => {
+    const zona = document.createElement('div');
+    const fetchImpl = fetchFalso({
+      '/api/v1/partidas/mias': respuesta(pagina([VICTORIA, EN_CURSO])),
+    });
+
+    await pintarPartidas(zona, { fetchImpl });
+
+    const tabla = zona.querySelector('table[data-zona="mis-partidas"]');
+    expect(tabla.classList.contains('tabla')).toBe(true);
+    expect(tabla.classList.contains('tabla--datos')).toBe(true);
+    const encabezados = [...tabla.querySelectorAll('thead th')];
+    expect(encabezados.map((th) => th.textContent)).toEqual(
+      COLUMNAS_DE_PARTIDAS.map((c) => c.titulo),
+    );
+    expect(encabezados.every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+    for (const fila of tabla.querySelectorAll('tbody tr')) {
+      const celdas = [...fila.children];
+      expect(celdas).toHaveLength(encabezados.length);
+      celdas.forEach((td, i) => {
+        const clase = COLUMNAS_DE_PARTIDAS[i].clase;
+        if (clase) {
+          expect(td.classList.contains(clase)).toBe(true);
+          expect(encabezados[i].classList.contains(clase)).toBe(true);
+        } else {
+          expect(td.classList.contains('tabla__numero')).toBe(false);
+          expect(td.classList.contains('tabla__accion')).toBe(false);
+        }
+      });
+    }
+    // «Jugadores» es una cifra; «Acción», el botón: los dos a la derecha.
+    expect(encabezados[3].className).toBe('tabla__numero');
+    expect(encabezados[5].className).toBe('tabla__accion');
+    // «Cuándo» conserva su tono de metadato.
+    expect(tabla.querySelector('tbody tr td:nth-child(5)').classList.contains('t-meta')).toBe(true);
+  });
+
+  test('una partida sin sala a la que ir no deja la celda vacía: lo dice', async () => {
+    const zona = document.createElement('div');
+    const fetchImpl = fetchFalso({
+      '/api/v1/partidas/mias': respuesta(pagina([{ ...DERROTA, idSala: null }])),
+    });
+
+    await pintarPartidas(zona, { fetchImpl });
+
+    const celda = zona.querySelector('tbody tr td:last-child');
+    expect(celda.querySelector('a')).toBeNull();
+    expect(celda.querySelector('[aria-label="Sin acción"]').textContent).toBe('—');
   });
 
   test('sin partidas: qué es, por qué está vacío y qué hacer', async () => {

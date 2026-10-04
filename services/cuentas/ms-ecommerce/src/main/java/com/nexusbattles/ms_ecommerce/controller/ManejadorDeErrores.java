@@ -69,8 +69,9 @@ public class ManejadorDeErrores {
 
     /**
      * El producto no puede entrar al carrito (o comprarse). 422 cuando la
-     * peticion no se puede cumplir con ese producto tal como es (no existe, no
-     * tiene precio en moneda real); 409 cuando es su estado actual en el
+     * peticion no se puede cumplir con ese producto tal como es (no existe; no
+     * tiene precio ni en moneda real ni en creditos; o, al pagar con tarjeta,
+     * solo se vende en creditos); 409 cuando es su estado actual en el
      * catalogo el que lo impide (suspendido, agotado) y podria cambiar.
      */
     @ExceptionHandler(ProductoNoAgregableException.class)
@@ -87,6 +88,8 @@ public class ManejadorDeErrores {
             case SIN_PRECIO_EN_MONEDA_REAL -> problema(HttpStatus.UNPROCESSABLE_CONTENT,
                     "producto-sin-precio-en-moneda-real", "Producto sin precio en moneda real", detalle, peticion,
                     HttpHeaders.EMPTY);
+            case YA_ADQUIRIDO -> problema(HttpStatus.CONFLICT, "producto-ya-adquirido",
+                    "Producto ya adquirido", detalle, peticion, HttpHeaders.EMPTY);
         };
     }
 
@@ -173,6 +176,13 @@ public class ManejadorDeErrores {
                     "Pasarela no disponible", detalle, peticion, reintentarEn(SEGUNDOS_PARA_REINTENTAR));
             case COMPRA_REEMBOLSADA -> problema(HttpStatus.CONFLICT, "compra-reembolsada", "Compra reembolsada",
                     detalle, peticion, HttpHeaders.EMPTY);
+            // D-44 (contrato 1.6.0): pagar con creditos del juego.
+            case SIN_PRECIO_EN_CREDITOS -> problema(HttpStatus.CONFLICT, "producto-sin-precio-en-creditos",
+                    "Producto sin precio en créditos", detalle, peticion, HttpHeaders.EMPTY);
+            case SALDO_INSUFICIENTE -> problema(HttpStatus.PAYMENT_REQUIRED, "saldo-insuficiente",
+                    "Saldo insuficiente", detalle, peticion, HttpHeaders.EMPTY);
+            case CREDITOS_NO_DISPONIBLES -> problema(HttpStatus.SERVICE_UNAVAILABLE, "creditos-no-disponibles",
+                    "Créditos no disponibles", detalle, peticion, reintentarEn(SEGUNDOS_PARA_CONSULTAR_LA_COMPRA));
         };
         OrdenDto orden = excepcion.orden();
         if (orden != null) {
@@ -180,6 +190,9 @@ public class ManejadorDeErrores {
             respuesta.getBody().setProperty("estado", orden.estado());
             if (orden.motivo() != null) {
                 respuesta.getBody().setProperty("motivo", orden.motivo());
+            }
+            if (excepcion.motivo() == CompraRechazadaException.Motivo.SALDO_INSUFICIENTE && orden.total() != null) {
+                respuesta.getBody().setProperty("totalCreditos", orden.total().longValueExact());
             }
         }
         return respuesta;

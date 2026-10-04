@@ -347,7 +347,8 @@ services:
   # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
   # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
   # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
-  # mision dura dos segundos. Sin correo en este banco: va apagado.
+  # mision dura dos segundos. Sin correo en este banco: va apagado. Los avisos
+  # (RF-NOT-004) si: van a la bandeja real de notificaciones.
   srv-misiones:
     build:
       context: ../..
@@ -366,7 +367,9 @@ services:
       MOTOR_COMBATE_URL: http://srv-motor-combate:8080
       CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
       IDENTIDAD_URL: http://srv-ms-identidad:8089
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
       MISIONES_CORREO_ACTIVO: "false"
+      MISIONES_AVISOS_ACTIVO: "true"
       MISIONES_SEMILLA_PROVISIONAL: "true"
       MISIONES_SEMILLA_DE_PRUEBAS: "7"
       MISIONES_SEGUNDOS_POR_HORA: "2"
@@ -380,6 +383,7 @@ services:
       srv-productos: { condition: service_healthy }
       srv-motor-combate: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
       interval: 5s
@@ -462,14 +466,12 @@ services:
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
       # B8 — las reglas de 7.7 salen de admin-parametros (RF-ADM-001), no de
-      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`,
-      # que nace SIN valor (decision del PO pendiente): mientras nadie lo fije,
-      # publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Hasta B8 aqui
-      # habia SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie.
-      # Ahora lo fija subastas.e2e.spec.js como ADMINISTRADOR por
-      # PUT /api/v1/parametros/subastas.incremento-minimo, que es exactamente lo
-      # que hara el PO. El valor de la prueba es una FIJACION DE PRUEBA, no una
-      # decision de producto. Cache de 1 s para que el spec vea el cambio.
+      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`:
+      # desde D-43 vale 5 creditos por la migracion V5 de admin-parametros, en
+      # todos los entornos, y el banco ya no lo fija a mano (subastas.e2e.spec.js
+      # solo espera a que /subastas/reglas lo diga). Hasta B8 aqui habia
+      # SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie. Cache
+      # de 1 s para que el spec vea el valor enseguida.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SUBASTAS_PARAMETROS_CACHE_SEGUNDOS: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080
@@ -898,6 +900,7 @@ services:
             -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
             -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
             -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
+            -e 's|34\.193\.90\.11:8092|srv-ms-subastas:8092|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
         # comentarios a proposito, para explicar de donde sale, y un guardian
@@ -912,11 +915,11 @@ services:
         # vea, y la dejaba vacia ("The esperado variable is not set"). Un
         # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
         # siempre sin mirar nada.
-        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080; do
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080 srv-ms-subastas:8092; do
           grep -q "$$esperado" /salida/default.conf || {
             echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
-        echo "Borde adaptado al banco: heroes, inventario, productos y misiones son locales."
+        echo "Borde adaptado al banco: heroes, inventario, productos, misiones y subastas son locales."
 
   srv-borde:
     image: nginx:1.27-alpine

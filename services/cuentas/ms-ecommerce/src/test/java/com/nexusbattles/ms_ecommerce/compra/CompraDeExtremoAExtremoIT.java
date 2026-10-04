@@ -281,7 +281,10 @@ class CompraDeExtremoAExtremoIT {
         long cobros = pasarela.cobrosAprobados();
         int reservas = SERVICIOS.llamadasDeReserva.get();
 
-        alCarrito(ESPADA, 1); // el carrito vuelve a tener algo: la clave sigue siendo la misma compra
+        // El carrito vuelve a tener algo: la clave sigue siendo la misma compra.
+        // Otro producto: la espada ya es suya y no se puede volver a añadir
+        // (RF-CAR-004, contrato 1.5.0).
+        alCarrito(ESCUDO, 1);
         ResponseEntity<String> repetida = pagar("clave-repetida-0001", TARJETA_APROBADA);
 
         assertThat(repetida.getStatusCode().value()).isEqualTo(200);
@@ -722,6 +725,26 @@ class CompraDeExtremoAExtremoIT {
             assertThat(enviar("DELETE", "/lista-deseos/" + ESPADA, null, Map.of()).getStatusCode().value()).isEqualTo(204);
             assertThat(enviar("DELETE", "/lista-deseos/" + ESPADA, null, Map.of()).getStatusCode().value()).isEqualTo(204);
             assertThat(JsonPath.<List<Object>>read(get("/lista-deseos").getBody(), "$")).isEmpty();
+        }
+
+        @Test
+        @DisplayName("recien comprado, sin esperar: la vitrina ya lo marca como propio y no deja añadirlo otra vez")
+        void recienCompradoEsPropio() {
+            // Añadir pregunta al inventario (RF-CAR-004) y deja la copia de antes de comprar.
+            alCarrito(ESPADA, 1);
+            assertThat(pagar("clave-recien-comprado-1", TARJETA_APROBADA).getStatusCode().value()).isEqualTo(201);
+
+            // Sin avanzar el reloj: la compra entregada olvido esa copia.
+            ResponseEntity<String> vitrina = get("/vitrina");
+            ResponseEntity<String> otraVez = enviar("POST", "/carrito/items",
+                    "{\"productoId\":\"" + ESPADA + "\",\"cantidad\":1}", Map.of());
+
+            assertThat(JsonPath.<List<Boolean>>read(vitrina.getBody(),
+                    "$.content[?(@.id=='" + ESPADA + "')].esPropio")).containsExactly(true);
+            assertThat(otraVez.getStatusCode().value()).isEqualTo(409);
+            assertThat(JsonPath.<String>read(otraVez.getBody(), "$.type"))
+                    .isEqualTo("urn:nexus:problema:producto-ya-adquirido");
+            assertThat(lineasDelCarrito()).isZero();
         }
 
         @Test

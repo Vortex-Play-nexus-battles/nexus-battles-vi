@@ -194,7 +194,7 @@ export function abrirReporteDeComentario({
       hijos: [
         h('p', {
           clase: 't-meta',
-          texto: `El comentario de ${comentario?.apodoAutor || 'este jugador'} pasará a revisión y dejará de verse hasta que un moderador decida.`,
+          texto: `Un moderador revisará el comentario de ${comentario?.apodoAutor || 'este jugador'}. Mientras tanto sigue a la vista; si incumple las normas, lo retirará.`,
         }),
         categorias,
         h('div', {

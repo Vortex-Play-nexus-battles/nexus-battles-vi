@@ -155,7 +155,10 @@
         no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
         empezar cuando la suposicion falle.
       -->
-        <div class="fila" data-zona="arranque" hidden>
+        <!-- Auditoría de DEV del 30-sep: en pantalla ancha «Iniciar combate» y
+             «Cancelar sala» se estiraban (`.fila` reparte 280 px a cada hijo)
+             y quedaban descolocados. `fila--acciones`: miden su texto. -->
+        <div class="fila fila--acciones" data-zona="arranque" hidden>
           <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
             Iniciar combate
           </button>
@@ -175,7 +178,7 @@
           codigo se generaba, se guardaba y no llegaba a ninguna pantalla: una
           sala privada era una sala a la que no podia entrar nadie.
         -->
-        <div class="fila fila--invitacion" data-zona="invitacion" hidden>
+        <div class="fila fila--acciones fila--invitacion" data-zona="invitacion" hidden>
           <span class="t-meta">Código para invitar:</span>
           <code class="codigo-invitacion" data-zona="codigo-invitacion"></code>
           <button class="boton boton--secundario" type="button" data-accion="copiar-codigo">
@@ -187,7 +190,7 @@
           <span class="t-meta" data-zona="acuse-copia" role="status" aria-live="polite"></span>
         </div>
 
-        <div class="fila" data-zona="espera" hidden>
+        <div class="fila fila--acciones" data-zona="espera" hidden>
           <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
           <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
             Salir de la sala
@@ -215,7 +218,7 @@
           motor no las resuelva: un boton que parece funcionar y no lo hace
           seria peor que no tenerlo.
         -->
-        <div class="combate__mando">
+        <div class="combate__mando" data-zona="mando">
           <section class="combate__grupo" aria-labelledby="titulo-ataque">
             <h2 class="combate__grupo-titulo" id="titulo-ataque">Ataque básico</h2>
             <div
@@ -288,6 +291,7 @@
         textoDeCancelacion,
       } from './canal-sala.js';
       import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
+      import { suscripcionConRitmo } from './ritmo-de-combate.js';
       import {
         baseDeApi,
         iniciarPartida,
@@ -401,6 +405,13 @@
           turnoDe: partida.turnoActual?.idJugador,
           numeroTurno: partida.turnoActual?.numeroTurno ?? null,
           alAtacar: (accion) => enviarAccion(canal, partida.id, accion),
+          // Auditoria de DEV del 30-sep: recargar una partida terminada la
+          // pintaba como en curso. Terminada, los controles nacen cerrados y
+          // se ensena el desenlace.
+          partidaFinalizada: partida.estado === 'FINALIZADA' ? partida : null,
+          // Recien empezada (no una recarga): si ya no es el turno 1, el
+          // registro cuenta quien abrio y lo que dejo.
+          recienEmpezada: presentar,
           // R17.4 — el desenlace tapa la pantalla entera, barra incluida: lleva
           // sus propias salidas, o quien acaba de jugar no tiene adónde ir.
           salidas: [
@@ -422,7 +433,15 @@
         // El panel de vidas ya escucha por su cuenta; esta suscripcion es para
         // los turnos y el final. El registro evita que una reconexion vuelva a
         // disparar el final o duplique el historial.
-        canal.suscribir(`/tema/partidas/${partida.id}`, (aviso) => {
+        //
+        // Auditoria del 4-oct: por la MISMA suscripcion con ritmo que el panel
+        // (`suscribir`), asi el registro y las barras ven el contragolpe de la
+        // maquina a la vez, y despues de tu golpe, no pegado a el.
+        const escuchar =
+          typeof suscribir === 'function'
+            ? suscribir
+            : (alRecibir) => canal.suscribir(`/tema/partidas/${partida.id}`, alRecibir);
+        escuchar((aviso) => {
           if (!registro.yaVisto(aviso)) {
             controles.recibir(aviso);
           }
@@ -637,9 +656,24 @@
         }
       }
 
-      /** Engancha el panel de vidas al canal de la partida que este en pantalla. */
+      /**
+       * Engancha el panel de vidas (y los controles) al canal de la partida que
+       * este en pantalla. Una sola suscripcion por partida, con ritmo: la
+       * accion de otro (la maquina, un rival) espera un momento tras la tuya
+       * para que cada golpe se vea por separado (auditoria del 4-oct).
+       */
+      const canalesConRitmo = new Map();
       function suscripcionActual() {
-        return canal && partida ? suscripcionDePartida(canal, partida.id) : undefined;
+        if (!canal || !partida) {
+          return undefined;
+        }
+        if (!canalesConRitmo.has(partida.id)) {
+          canalesConRitmo.set(
+            partida.id,
+            suscripcionConRitmo(suscripcionDePartida(canal, partida.id), { yo }),
+          );
+        }
+        return canalesConRitmo.get(partida.id);
       }
 
       // Quien espera en la sala se entera por el canal de la SALA: aqui todavia

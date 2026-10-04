@@ -9,6 +9,15 @@
 # entrada en móvil (375) y tableta (768). Cada corrida crea sus propias cuentas
 # desechables de QA (`qa_prof_…@nexus.test`); nada se prepara a mano.
 #
+# Desde PR-F (auditoría del 4-oct) la misma corrida recorre también
+# `regresion-feedback.profesor.spec.js`, en escritorio y con tres cuentas
+# nuevas (`qa_fb…@nexus.test`): la portada pública con la tienda, la compra con
+# créditos del juego (un solo cobro aunque se pulse dos veces), una subasta con
+# el incremento mínimo de 5, una batalla contra la IA sin auto-daño y la misión
+# de nivel 1 con su progreso. Es la evidencia en AWS de los cinco cambios
+# autorizados y sale en la misma tabla del resumen («feedback 4-oct»). La
+# misión de nivel 1 dura 3 minutos de verdad: la corrida tarda unos 5 más.
+#
 # ## Cuándo corre
 #
 # Después de cada despliegue a dev, igual que el smoke, y a demanda. No bloquea

@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>The Nexus Battles VI · Return of the Warriors</title>
+    <meta
+      name="description"
+      content="Juego de rol por turnos en la web: equipa a tu héroe, combate en línea y mira la tienda del Nexo antes de crear tu cuenta."
+    />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <!-- La tienda de la portada: tarjetas de producto y su detalle (la ficha
+         del catalogo, con la compra y las opiniones), igual que en la entrada. -->
+    <link rel="stylesheet" href="../contenido/inventario/ficha-producto.css" />
+    <link rel="stylesheet" href="../contenido/productos/alertas-catalogo.css" />
+    <link rel="stylesheet" href="./tienda-producto.css" />
+  </head>
+  <!-- F6 (auditoria del 4-oct, cambio autorizado n.º 3) — la portada publica.
+       Es lo primero que se ve en `/`: que es el juego, como empezar y lo que
+       se vende, con productos reales del catalogo. Ver y abrir el detalle es
+       publico; comprar, guardar en la lista de deseos, calificar y comentar
+       piden entrar, y llevan a la entrada con la vuelta preparada. -->
+  <body class="portal" data-vista="portada">
+    <div data-cabecera-app></div>
+
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
+        <p class="entrada__lema">
+          Equipa a tu héroe, entra a una sala y decide el combate turno a turno. Lo que apuestas es
+          real dentro del Nexo.
+        </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#espada" />
+            </svg>
+            <span>Duelos 1v1, contra la máquina o hasta seis en equipos</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+            </svg>
+            <span>Créditos en juego en cada batalla</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#trofeo" />
+            </svg>
+            <span>Torneos de ocho equipos con árbol de doble eliminación</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="entrada__tarjeta" aria-labelledby="titulo-acceso">
+        <div class="pila pila--ajustada">
+          <h2 id="titulo-acceso" class="entrada__titulo">Empieza en el Nexo</h2>
+          <p class="t-meta">
+            Crea tu cuenta para jugar, comprar en la tienda y guardar lo que te gusta. Mientras,
+            puedes ver todo lo que se vende aquí abajo.
+          </p>
+        </div>
+
+        <!-- Sin sesion: crear cuenta o entrar. Los enlaces los resuelve
+             portada.js a la direccion limpia (/registro, /login); sin script,
+             la ruta del fichero tambien lleva (el borde la redirige). -->
+        <div class="pila" data-zona="acciones-sin-sesion">
+          <a
+            class="boton boton--primario boton--grande"
+            data-accion="crear-cuenta"
+            href="./registro.html"
+            >Crear una cuenta</a
+          >
+          <a class="boton boton--secundario boton--grande" data-accion="entrar" href="./login.html"
+            >Ya tengo cuenta: entrar</a
+          >
+        </div>
+
+        <!-- Con sesion: a su inicio, sin pedirle que entre otra vez. -->
+        <div class="pila" data-zona="acciones-con-sesion" hidden>
+          <p data-zona="saludo"></p>
+          <a
+            class="boton boton--primario boton--grande"
+            data-accion="ir-al-inicio"
+            href="./index.html"
+            >Ir a mi inicio</a
+          >
+        </div>
+
+        <a class="entrada__enlace-tienda" href="#titulo-vitrina-publica">
+          Mira lo que se vende en el Nexo
+        </a>
+      </section>
+    </main>
+
+    <!-- La tienda publica: productos reales del catalogo (GET /api/v1/vitrina,
+         publica). La pinta portada-tienda.js; sin el, la seccion dice que esta
+         cargando. -->
+    <section
+      class="vitrina-publica"
+      aria-labelledby="titulo-vitrina-publica"
+      data-zona="vitrina-publica"
+    >
+      <div class="vitrina-publica__cabecera">
+        <h2 id="titulo-vitrina-publica" class="vitrina-publica__titulo">A la venta en el Nexo</h2>
+        <p class="vitrina-publica__lema">
+          Héroes, armas y objetos que se pueden comprar hoy. Abre cualquiera para ver su detalle y
+          lo que opina la comunidad; para comprarlo, guardarlo, calificarlo o comentarlo, entra con
+          tu cuenta.
+        </p>
+      </div>
+      <div class="vitrina-publica__rejilla" data-zona="productos-publicos"></div>
+      <p class="vitrina-publica__pie">
+        <button type="button" class="boton boton--secundario" data-accion="ver-tienda-completa">
+          Entra para ver la tienda completa
+        </button>
+        <a data-accion="crear-cuenta" href="./registro.html">¿Aún no tienes cuenta? Crea una</a>
+      </p>
+    </section>
+
+    <script type="module" src="./portada.js"></script>
+    <script type="module" src="./portada-tienda.js"></script>
+  </body>
+</html>

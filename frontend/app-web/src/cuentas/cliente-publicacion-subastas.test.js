@@ -151,7 +151,7 @@ test.each([
       motivo: 'INCREMENTO_MINIMO_NO_CONFIGURADO',
       detail: 'El incremento minimo de puja no esta configurado',
     },
-    /DECISIÓN PO pendiente/,
+    /no está configurado en administración/,
   ],
   [
     422,

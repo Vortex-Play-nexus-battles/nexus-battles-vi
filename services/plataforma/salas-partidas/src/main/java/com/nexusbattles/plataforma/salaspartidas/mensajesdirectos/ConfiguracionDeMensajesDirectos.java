@@ -1,5 +1,6 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos;
 
+import com.nexusbattles.plataforma.salaspartidas.chat.PoliticaDeTexto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.canal.EntregaStomp;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.integracion.ClienteDirectorioDeIdentidad;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.integracion.ClienteListaNegraMensajesPrivados;
@@ -80,6 +81,12 @@ public class ConfiguracionDeMensajesDirectos {
         return new EntregaStomp(plantilla, registro);
     }
 
+    /** Bloquear a un jugador en los mensajes privados (auditoria de DEV del 30-sep, D-40). */
+    @Bean
+    public BloqueosDeMensajes bloqueosDeMensajes(RepositorioDeBloqueos repositorio) {
+        return new BloqueosDeMensajes(repositorio, Clock.systemUTC());
+    }
+
     @Bean
     public EnviarMensajeDirecto enviarMensajeDirecto(RepositorioDeMensajesDirectos repositorio,
                                                      SancionesDelJugador sanciones,
@@ -87,13 +94,16 @@ public class ConfiguracionDeMensajesDirectos {
                                                      FiltroDeMensajesPrivados filtro,
                                                      LimiteDeFrecuencia limite,
                                                      EntregaDeMensajesDirectos entrega,
-                                                     AvisoDeMensajeDirecto aviso) {
+                                                     AvisoDeMensajeDirecto aviso,
+                                                     PoliticaDeTexto.Limites limitesDeTexto,
+                                                     BloqueosDeMensajes bloqueos) {
         return new EnviarMensajeDirecto(repositorio, sanciones, directorio, filtro, limite, entrega, aviso,
-                Clock.systemUTC());
+                Clock.systemUTC(), limitesDeTexto, bloqueos);
     }
 
     @Bean
-    public BandejaDeMensajesDirectos bandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio) {
-        return new BandejaDeMensajesDirectos(repositorio, Clock.systemUTC());
+    public BandejaDeMensajesDirectos bandejaDeMensajesDirectos(RepositorioDeMensajesDirectos repositorio,
+                                                               BloqueosDeMensajes bloqueos) {
+        return new BandejaDeMensajesDirectos(repositorio, Clock.systemUTC(), bloqueos);
     }
 }

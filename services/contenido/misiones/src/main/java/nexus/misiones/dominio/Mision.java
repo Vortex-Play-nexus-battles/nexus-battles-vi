@@ -43,6 +43,14 @@ public record Mision(
     public static final double EXPLORACION_MINIMA_HORAS = 24;
     public static final double EXPLORACION_MAXIMA_HORAS = 72;
 
+    /**
+     * §6.1.1: «El nivel inicial de todos los personajes es uno (1) y puede
+     * incrementarse hasta el nivel 8». Una mision que recomiende otro nivel no
+     * la puede jugar nadie (D-42: el ejemplo del documento decia 15).
+     */
+    public static final int NIVEL_MINIMO = 1;
+    public static final int NIVEL_MAXIMO = 8;
+
     /** Tambien es una ruta: `/api/v1/misiones/{misionId}`. */
     private static final Pattern IDENTIFICADOR = Pattern.compile("^[a-z0-9][a-z0-9-]{1,63}$");
 
@@ -64,6 +72,10 @@ public record Mision(
         Objects.requireNonNull(dificultad, "La mision «" + id + "» necesita dificultad.");
         if (!(duracionHoras > 0)) {
             throw new IllegalArgumentException("La mision «" + id + "» necesita una duracion positiva.");
+        }
+        if (nivelRecomendado != null && (nivelRecomendado < NIVEL_MINIMO || nivelRecomendado > NIVEL_MAXIMO)) {
+            throw new IllegalArgumentException("La mision «" + id + "» recomienda el nivel " + nivelRecomendado
+                    + ", y un heroe solo va del " + NIVEL_MINIMO + " al " + NIVEL_MAXIMO + " (seccion 6.1.1).");
         }
         if (categoria == Categoria.EXPLORACION
                 && (duracionHoras < EXPLORACION_MINIMA_HORAS || duracionHoras > EXPLORACION_MAXIMA_HORAS)) {

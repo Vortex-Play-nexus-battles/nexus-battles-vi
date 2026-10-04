@@ -239,7 +239,8 @@
 
 /* `tema-cuentas.css` pone todo `label` en columna y separa con margen los
    hijos directos de un formulario: la casilla vuelve a su fila. */
-.filtros-tienda .filtros-tienda__promocion {
+.filtros-tienda .filtros-tienda__promocion,
+.filtros-tienda .filtros-tienda__deseos {
   flex-direction: row;
   align-items: center;
   min-height: var(--campo-alto);
@@ -542,6 +543,85 @@
 .pago__formulario {
   display: grid;
   gap: var(--e-3);
+}
+
+/* D-44 — «¿Cómo quieres pagar?»: dos opciones como tarjetas, igual que la
+   duración de una subasta en publicar-subasta.css. */
+.pago__formas {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pago__forma {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--e-2);
+  align-items: center;
+  padding: var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  cursor: pointer;
+}
+
+.pago__forma:has(input:checked) {
+  border: 2px solid var(--primaria);
+  background: var(--info-insignia);
+}
+
+.pago__forma input[type='radio'] {
+  accent-color: var(--primaria);
+  width: 20px;
+  height: 20px;
+}
+
+.pago__forma-nombre {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__forma-pista {
+  grid-column: 2;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.pago__zona {
+  display: grid;
+  gap: var(--e-3);
+}
+
+/* `display: grid` le gana al `hidden` del navegador: sin esto la zona de la
+   otra forma de pago seguiría a la vista. */
+.pago__zona[hidden],
+.pago__resumen[hidden] {
+  display: none;
+}
+
+/* Saldo actual, precio y saldo después: las cifras del servidor. */
+.pago__cuentas {
+  display: grid;
+  gap: var(--e-1);
+  margin: var(--e-3) 0 0;
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde);
+}
+
+.pago__cuenta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.pago__cuenta dt,
+.pago__cuenta dd {
+  margin: 0;
+}
+
+.pago__cuenta dd {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  font-variant-numeric: var(--cifras-tabulares);
 }
 
 .pago__nota,

@@ -13,7 +13,9 @@
 import { jest } from '@jest/globals';
 
 import { montarModeracion, panelDeDetalle, tarjetaDeEntrada } from './moderar-comentarios.js';
-import { accionesDesde } from './cliente-moderacion.js';
+import { accionesDesde, ErrorDeApi } from './cliente-moderacion.js';
+import { fechaHora } from '../../comun/ui/formato.js';
+import { TEXTO_SIN_SERVICIO } from '../../comun/ui/texto-de-fallo.js';
 
 const AHORA = '2026-09-23T10:00:00Z';
 const IMAGEN = '3f1c2b4a-1111-4222-8333-944455566677';
@@ -47,9 +49,9 @@ function vista() {
     <main data-vista="moderar-comentarios">
       <div data-zona="aviso" hidden></div>
       <select data-zona="filtro">
-        <option value="en-revision">En revisión</option>
+        <option value="en-revision">Pendientes de revisión</option>
         <option value="marcados">Marcados para seguimiento</option>
-        <option value="sin-marcar">En revisión sin marcar</option>
+        <option value="sin-marcar">Pendientes sin marcar</option>
       </select>
       <div data-zona="cola"></div>
       <div data-zona="detalle-contenedor"></div>
@@ -137,6 +139,27 @@ describe('la cola', () => {
     expect(tarjeta.textContent).toMatch(/Esperando desde/);
   });
 
+  // El umbral no se asume: con el umbral en 0 el servicio manda siempre
+  // `false`, así que estas pruebas inyectan `true` a mano.
+  test('HU-COM-005: con prioridadElevada la tarjeta lo dice con texto, no solo con color', () => {
+    const tarjeta = tarjetaDeEntrada(entrada({ prioridadElevada: true }), () => {});
+
+    const distintivo = tarjeta.querySelector('[data-campo="prioridad"]');
+    expect(distintivo).not.toBeNull();
+    expect(distintivo.textContent).toBe('Prioridad elevada');
+  });
+
+  test.each([
+    ['false', { prioridadElevada: false }],
+    ['ausente', {}],
+    ['un valor que no es booleano', { prioridadElevada: 'true' }],
+  ])('HU-COM-005: con prioridadElevada %s la tarjeta no pinta nada', (_caso, campos) => {
+    const tarjeta = tarjetaDeEntrada(entrada(campos), () => {});
+
+    expect(tarjeta.querySelector('[data-campo="prioridad"]')).toBeNull();
+    expect(tarjeta.textContent).not.toContain('Prioridad elevada');
+  });
+
   test('el filtro pide la lista de seguimiento o los sin marcar, y su vacío dice lo suyo', async () => {
     const consultarCola = jest.fn().mockResolvedValue({ entradas: [], total: 0 });
     const raiz = vista();
@@ -195,6 +218,20 @@ describe('el detalle y la decision', () => {
     expect(panel.querySelector('[data-campo="estado"]').textContent).toBe('Publicado');
     expect(panel.querySelector('[data-campo="marcado"]')).not.toBeNull();
     expect(panel.querySelector('[data-campo="editado"]')).not.toBeNull();
+  });
+
+  test('HU-COM-005: el detalle pinta la prioridad elevada solo si se le indica', () => {
+    const con = panelDeDetalle(detalle(), () => {}, { prioridadElevada: true });
+    expect(con.querySelector('[data-campo="prioridad"]').textContent).toBe('Prioridad elevada');
+
+    expect(
+      panelDeDetalle(detalle(), () => {}).querySelector('[data-campo="prioridad"]'),
+    ).toBeNull();
+    expect(
+      panelDeDetalle(detalle(), () => {}, { prioridadElevada: false }).querySelector(
+        '[data-campo="prioridad"]',
+      ),
+    ).toBeNull();
   });
 
   test('EDITAR pide el texto nuevo, que empieza siendo el actual y viaja con la decisión', () => {
@@ -470,6 +507,61 @@ describe('resolver desde la vista', () => {
     );
   });
 
+  test('HU-COM-005: el detalle hereda la prioridad de la entrada de la cola (el detalle no la trae)', async () => {
+    const abrirEntrada = async (prioridadElevada) => {
+      const raiz = vista();
+      montarModeracion(raiz, {
+        api: {
+          consultarCola: jest
+            .fn()
+            .mockResolvedValue({ entradas: [entrada({ prioridadElevada })], total: 1 }),
+          consultarDetalle: jest.fn().mockResolvedValue(detalle()),
+        },
+      });
+      await asentar();
+      raiz.querySelector('[data-accion="revisar"]').click();
+      await asentar();
+      return raiz.querySelector('[data-zona="detalle"]');
+    };
+
+    const elevada = await abrirEntrada(true);
+    expect(elevada.querySelector('[data-campo="prioridad"]').textContent).toBe('Prioridad elevada');
+    expect((await abrirEntrada(false)).querySelector('[data-campo="prioridad"]')).toBeNull();
+  });
+
+  test('HU-COM-005: tras marcar, el detalle que se reabre conserva la prioridad elevada', async () => {
+    const api = apiQueResuelve({
+      comentario: { ...entrada().comentario, marcado: true },
+      asiento: { id: 'a-3' },
+      autorNotificado: false,
+    });
+    api.consultarCola = jest
+      .fn()
+      .mockResolvedValue({ entradas: [entrada({ prioridadElevada: true })], total: 1 });
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    const accion = raiz.querySelector('#accion');
+    accion.value = 'MARCAR';
+    accion.dispatchEvent(new Event('change'));
+    const motivo = raiz.querySelector('#motivo');
+    motivo.value = 'Seguimiento de este autor';
+    motivo.dispatchEvent(new Event('input'));
+    raiz
+      .querySelector('[data-zona="decision"]')
+      .dispatchEvent(new Event('submit', { cancelable: true }));
+    await asentar();
+    await asentar();
+
+    expect(api.consultarDetalle).toHaveBeenCalledTimes(2);
+    expect(raiz.querySelector('[data-zona="detalle"] [data-campo="prioridad"]').textContent).toBe(
+      'Prioridad elevada',
+    );
+  });
+
   test('si otro moderador se adelanto (409), se explica y se recarga la cola', async () => {
     const api = apiQueResuelve(null);
     api.resolverComentario = jest.fn().mockRejectedValue(
@@ -486,5 +578,297 @@ describe('resolver desde la vista', () => {
     // Dos veces: la del montaje y la de despues del conflicto. Dejar la
     // pantalla vieja seria invitar al segundo intento contra el mismo estado.
     expect(api.consultarCola).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('HU-COM-005: el historial de comentarios del autor en el detalle', () => {
+  const ZONA = '[data-zona="historial-autor"]';
+  const BOTON = '[data-accion="ver-historial-autor"]';
+  const VER_MAS = '[data-accion="ver-mas"]';
+
+  const conAutor = () => detalle({ comentario: { ...detalle().comentario, autorId: 'aut-1' } });
+
+  function item(n, sobrescribir = {}) {
+    return {
+      id: `h-${n}`,
+      productoId: 'prod-7',
+      texto: `Texto ${n}`,
+      fechaPublicacion: AHORA,
+      estado: 'PUBLICADO',
+      editado: false,
+      ...sobrescribir,
+    };
+  }
+
+  function respuestaDe(comentarios, { total = comentarios.length, pagina = 0 } = {}) {
+    return { autorId: 'aut-1', apodoAutor: 'LyraRoja', comentarios, total, pagina, tamano: 20 };
+  }
+
+  function abrirPanel(cargar, d = conAutor()) {
+    const panel = panelDeDetalle(d, () => {}, { cargarHistorialDelAutor: cargar });
+    document.body.replaceChildren(panel);
+    return panel;
+  }
+
+  const pulsar = async (panel, selector) => {
+    panel.querySelector(selector).click();
+    await asentar();
+  };
+
+  test('es bajo demanda: abrir el detalle no pide nada y ofrece el boton', () => {
+    const cargar = jest.fn();
+    const panel = abrirPanel(cargar);
+
+    expect(cargar).not.toHaveBeenCalled();
+    expect(panel.querySelector(BOTON)).not.toBeNull();
+    expect(panel.querySelector(`${ZONA} li`)).toBeNull();
+  });
+
+  test('sin autorId no hay seccion: no hay nada que pedir', () => {
+    const cargar = jest.fn();
+    const panel = abrirPanel(cargar, detalle());
+
+    expect(panel.querySelector(BOTON)).toBeNull();
+    expect(cargar).not.toHaveBeenCalled();
+  });
+
+  test('pulsar pide la pagina 0 del autor del comentario abierto, y una sola vez', async () => {
+    const cargar = jest.fn().mockResolvedValue(respuestaDe([item(1)]));
+    const panel = abrirPanel(cargar);
+
+    panel.querySelector(BOTON).click();
+    panel.querySelector(BOTON)?.click();
+    await asentar();
+
+    expect(cargar).toHaveBeenCalledTimes(1);
+    expect(cargar).toHaveBeenCalledWith('aut-1', { pagina: 0 });
+  });
+
+  test('cada elemento dice texto, fecha, producto y estado con palabras', async () => {
+    const cargar = jest
+      .fn()
+      .mockResolvedValue(
+        respuestaDe([
+          item(1, { estado: 'OCULTO' }),
+          item(2, { estado: 'ELIMINADO' }),
+          item(3, { estado: 'EN_REVISION' }),
+          item(4, { estado: 'PUBLICADO', editado: true }),
+        ]),
+      );
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const filas = panel.querySelectorAll(`${ZONA} li`);
+    expect(filas).toHaveLength(4);
+    expect(filas[0].querySelector('[data-campo="texto"]').textContent).toBe('Texto 1');
+    expect(filas[0].querySelector('[data-campo="fecha"]').textContent).toBe(fechaHora(AHORA));
+    expect(filas[0].querySelector('[data-campo="producto"]').textContent).toBe('Producto: prod-7');
+    // Con texto, no solo con color: los cuatro estados, incluido EN_REVISION.
+    const estados = [...filas].map((f) => f.querySelector('[data-campo="estado"]').textContent);
+    expect(estados).toEqual(['Oculto', 'Eliminado', 'En revisión', 'Publicado']);
+    expect(filas[3].querySelector('[data-campo="editado"]').textContent).toBe(
+      'Editado por moderación',
+    );
+    expect(filas[0].querySelector('[data-campo="editado"]')).toBeNull();
+  });
+
+  test('el texto de un comentario se pinta como texto, nunca como marcado', async () => {
+    const cargar = jest
+      .fn()
+      .mockResolvedValue(respuestaDe([item(1, { texto: '<img src=x onerror="robar()">' })]));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const texto = panel.querySelector(`${ZONA} [data-campo="texto"]`);
+    expect(texto.textContent).toBe('<img src=x onerror="robar()">');
+    expect(panel.querySelector(`${ZONA} img`)).toBeNull();
+  });
+
+  test('el comentario que se tiene abierto se reconoce con palabras', async () => {
+    const cargar = jest.fn().mockResolvedValue(respuestaDe([item(1, { id: 'com-1' }), item(2)]));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const filas = panel.querySelectorAll(`${ZONA} li`);
+    expect(filas[0].textContent).toContain('Este es el comentario abierto');
+    expect(filas[1].textContent).not.toContain('Este es el comentario abierto');
+  });
+
+  test('«Ver más» añade la pagina siguiente sin reemplazar y se va al llegar al total', async () => {
+    const cargar = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaDe([item(1), item(2)], { total: 3, pagina: 0 }))
+      .mockResolvedValueOnce(respuestaDe([item(3)], { total: 3, pagina: 1 }));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    expect(panel.querySelectorAll(`${ZONA} li`)).toHaveLength(2);
+    expect(panel.querySelector(VER_MAS)).not.toBeNull();
+
+    await pulsar(panel, VER_MAS);
+
+    expect(cargar).toHaveBeenLastCalledWith('aut-1', { pagina: 1 });
+    const textos = [...panel.querySelectorAll(`${ZONA} [data-campo="texto"]`)].map(
+      (t) => t.textContent,
+    );
+    expect(textos).toEqual(['Texto 1', 'Texto 2', 'Texto 3']);
+    expect(panel.querySelector(VER_MAS)).toBeNull();
+  });
+
+  test('con todo en la primera pagina no se ofrece «Ver más»', async () => {
+    const cargar = jest.fn().mockResolvedValue(respuestaDe([item(1)], { total: 1 }));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    expect(panel.querySelector(VER_MAS)).toBeNull();
+  });
+
+  test('un doble clic en «Ver más» no pide dos veces la misma pagina', async () => {
+    let resolver;
+    const cargar = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaDe([item(1)], { total: 2 }))
+      .mockReturnValueOnce(new Promise((ok) => (resolver = ok)));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const verMas = panel.querySelector(VER_MAS);
+    verMas.click();
+    verMas.click();
+    expect(cargar).toHaveBeenCalledTimes(2);
+    resolver(respuestaDe([item(2)], { total: 2, pagina: 1 }));
+    await asentar();
+
+    expect(panel.querySelectorAll(`${ZONA} li`)).toHaveLength(2);
+  });
+
+  test('autor sin comentarios: estado vacio, no error', async () => {
+    const cargar = jest.fn().mockResolvedValue({
+      autorId: 'aut-1',
+      comentarios: [],
+      total: 0,
+      pagina: 0,
+      tamano: 20,
+    });
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const zona = panel.querySelector(ZONA);
+    expect(zona.querySelector('[data-estado="vacio"]')).not.toBeNull();
+    expect(zona.querySelector('[data-estado="error"]')).toBeNull();
+    expect(zona.querySelector('li')).toBeNull();
+    expect(zona.textContent).toContain('Este autor no tiene comentarios');
+  });
+
+  test.each([
+    ['401', new ErrorDeApi(null, 401), 'advertencia', null],
+    ['403', new ErrorDeApi(null, 403), 'advertencia', null],
+    ['503', new ErrorDeApi(null, 503), 'error', TEXTO_SIN_SERVICIO],
+  ])(
+    '%s: un aviso del tono que dice MAPEO-ERRORES, en lenguaje de persona y sin cifras',
+    async (_nombre, error, tono, textoEsperado) => {
+      const cargar = jest.fn().mockRejectedValue(error);
+      const panel = abrirPanel(cargar);
+      await pulsar(panel, BOTON);
+
+      const aviso = panel.querySelector(`${ZONA} .aviso`);
+      expect(aviso.classList.contains(`aviso--${tono}`)).toBe(true);
+      // La vista decide por estado, y lo que se lee es el texto del kit
+      // (`respaldoPorEstado`), no uno inventado aqui.
+      expect(aviso.textContent).toContain(error.detalle);
+      if (textoEsperado) {
+        expect(aviso.textContent).toContain(textoEsperado);
+      }
+      // Ni el numero del estado ni ningun umbral o limite llegan a la pantalla.
+      expect(panel.querySelector(ZONA).textContent).not.toMatch(/\d/);
+      expect(panel.querySelector(ZONA).textContent).not.toMatch(/\b(límite|umbral)\b/i);
+    },
+  );
+
+  test('un fallo transitorio ofrece reintentar y el reintento lo arregla', async () => {
+    const cargar = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValueOnce(respuestaDe([item(1)]));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    await pulsar(panel, '[data-accion="reintentar"]');
+
+    expect(panel.querySelectorAll(`${ZONA} li`)).toHaveLength(1);
+    expect(panel.querySelector(`${ZONA} .aviso`)).toBeNull();
+  });
+
+  test('un 403 no ofrece reintentar: el permiso no va a cambiar entre dos clics', async () => {
+    const cargar = jest.fn().mockRejectedValue(new ErrorDeApi(null, 403));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    expect(panel.querySelector('[data-accion="reintentar"]')).toBeNull();
+  });
+
+  test('si falla «Ver más» se conserva lo ya pintado y se puede reintentar', async () => {
+    const cargar = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaDe([item(1)], { total: 2 }))
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValueOnce(respuestaDe([item(2)], { total: 2, pagina: 1 }));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+    await pulsar(panel, VER_MAS);
+
+    expect(panel.querySelectorAll(`${ZONA} li`)).toHaveLength(1);
+    expect(panel.querySelector(`${ZONA} .aviso--error`)).not.toBeNull();
+
+    await pulsar(panel, '[data-accion="reintentar"]');
+
+    expect(cargar).toHaveBeenLastCalledWith('aut-1', { pagina: 1 });
+    expect(panel.querySelectorAll(`${ZONA} li`)).toHaveLength(2);
+  });
+
+  test('si el historial falla, el resto del detalle sigue operativo', async () => {
+    const cargar = jest.fn().mockRejectedValue(new ErrorDeApi(null, 503));
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    expect(panel.querySelector('[data-zona="decision"]')).not.toBeNull();
+    expect(panel.querySelector('[data-zona="reportes"]')).not.toBeNull();
+  });
+
+  test('no pinta datos de perfil del autor', async () => {
+    const cargar = jest.fn().mockResolvedValue({
+      ...respuestaDe([item(1)]),
+      correo: 'lyra@example.com',
+      rol: 'JUGADOR',
+      avatar: 'https://x/y.png',
+    });
+    const panel = abrirPanel(cargar);
+    await pulsar(panel, BOTON);
+
+    const zona = panel.querySelector(ZONA);
+    expect(zona.textContent).not.toContain('lyra@example.com');
+    expect(zona.textContent).not.toContain('JUGADOR');
+    expect(zona.querySelector('img')).toBeNull();
+  });
+
+  test('montarModeracion conecta el boton con el cliente y no pide nada al abrir', async () => {
+    const historialDelAutor = jest.fn().mockResolvedValue(respuestaDe([item(1)]));
+    const api = {
+      consultarCola: jest.fn().mockResolvedValue({ entradas: [entrada()], total: 1 }),
+      consultarDetalle: jest.fn().mockResolvedValue(conAutor()),
+      historialDelAutor,
+    };
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    expect(historialDelAutor).not.toHaveBeenCalled();
+    raiz.querySelector(BOTON).click();
+    await asentar();
+
+    expect(historialDelAutor).toHaveBeenCalledWith('aut-1', { pagina: 0 });
+    expect(raiz.querySelectorAll(`${ZONA} li`)).toHaveLength(1);
   });
 });

@@ -310,13 +310,16 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
 
   await paso(1, 'Entrar a la URL pública', async () => {
     await page.goto('/');
-    await expect(page).toHaveURL(EN.login);
-    expect(new URL(page.url()).pathname, 'la dirección es la limpia, no la del fichero').toBe(
-      '/login',
-    );
-    await expect(page.locator('#formLogin')).toBeVisible();
-    // La vitrina pública (UXC-4) pinta sus productos después del formulario:
-    // se espera a que sus imágenes lleguen en vez de mirar un instante al azar
+    // F6 (auditoría del 4-oct, cambio autorizado n.º 3): la raíz es la portada
+    // pública con la tienda; ya no redirige al login.
+    expect(new URL(page.url()).pathname, 'la portada se sirve en la raíz').toBe('/');
+    await expect(page.locator('body[data-vista="portada"]')).toBeVisible();
+    // La tienda con productos reales, antes de tener cuenta, y sin «Añadir».
+    await expect(page.locator('.vitrina-publica .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+    // Se espera a que las imágenes lleguen en vez de mirar un instante al azar
     // (una vez falló a los 338 ms con las imágenes aún en camino). Una imagen
     // rota sigue fallando: nunca llega a cargar.
     await expect
@@ -325,9 +328,9 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
         timeout: 15_000,
       })
       .toBe(true);
-    const avisos = await sinBarrerasGraves(page, 'login');
-    await capturar(page, testInfo, '01-login');
-    return `/ → /login; axe sin graves (${avisos} avisos menores)`;
+    const avisos = await sinBarrerasGraves(page, 'portada');
+    await capturar(page, testInfo, '01-portada');
+    return `/ (portada pública con la tienda); axe sin graves (${avisos} avisos menores)`;
   });
 
   await paso(2, 'Pulsar «Crear cuenta»', async () => {
@@ -827,8 +830,8 @@ test.describe('R17 · la prueba del profesor', () => {
 
       // Ningún error de página en todo el recorrido, y ningún 5xx fuera de los
       // servicios que el catálogo declara fuera de DEV (`desplegableDev:
-      // false`) o sin acceso desde el borde (`accesoPendiente`: hoy subastas y
-      // misiones, a la espera del grupo de seguridad del Grupo 2), cuya vista
+      // false`) o sin acceso desde el borde (`accesoPendiente`; ninguno desde el 2-oct,
+      // cuando el grupo de seguridad del Grupo 2 admitió 8092 y 8105), cuya vista
       // dice que no están —se comprobó arriba—. Al quitar la marca, su 5xx cuenta.
       const graves = bitacora.incidencias.filter((i) => {
         if (i.tipo === 'pagina') return true;

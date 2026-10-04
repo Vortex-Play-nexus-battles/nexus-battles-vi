@@ -84,8 +84,9 @@ public record ProductoDelCatalogo(
     }
 
     /**
-     * RF-CAR-002 / RN-PAG-001: la tienda cobra en moneda real. Un producto sin
-     * ese precio no se vende aqui; nunca se ensena a 0.
+     * RF-CAR-002 / RN-PAG-001: lo que se cobra en moneda real. Un producto sin
+     * ese precio nunca se ensena a 0 ni se paga con tarjeta; desde G3 se vende
+     * igual si tiene precio en creditos ({@link #tieneAlgunPrecio()}).
      *
      * <p>Cero tampoco es un precio en moneda real para esta tienda: el contrato
      * del catalogo permite precioMonedaReal: 0 y los productos que solo se
@@ -95,6 +96,31 @@ public record ProductoDelCatalogo(
      */
     public boolean tienePrecioEnMonedaReal() {
         return precioMonedaReal != null && precioMonedaReal.signum() > 0;
+    }
+
+    /**
+     * D-44: se puede pagar con creditos del juego. Hace falta su
+     * {@code precioCreditos} (7.2.1: «precio en creditos del juego») y que no
+     * sea premium: un premium se ofrece unicamente en moneda real
+     * (productos.yaml). Cero tampoco es un precio: no se regala nada.
+     */
+    public boolean tienePrecioEnCreditos() {
+        return !Boolean.TRUE.equals(premium) && precioCreditos != null && precioCreditos > 0;
+    }
+
+    /**
+     * G3 (4-oct): la tienda lo puede vender de alguna forma — en dinero real o
+     * en creditos del juego. Un premium sin precio en dinero real no tiene
+     * ninguna: no se convierte a creditos (productos.yaml: un premium se ofrece
+     * unicamente en moneda real).
+     */
+    public boolean tieneAlgunPrecio() {
+        return tienePrecioEnMonedaReal() || tienePrecioEnCreditos();
+    }
+
+    /** G3: se paga solo con creditos del juego; no hay precio en dinero real que cobrar. */
+    public boolean soloEnCreditos() {
+        return !tienePrecioEnMonedaReal() && tienePrecioEnCreditos();
     }
 
     /** El porcentaje de la promocion si esta vigente en ese instante; null si no hay. */

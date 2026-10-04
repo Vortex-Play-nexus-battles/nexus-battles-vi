@@ -32,14 +32,30 @@
  * El precio no lo pone el navegador: el cuerpo lleva la tarjeta y la moneda,
  * y el servidor cobra lo que dice su carrito.
  *
+ * ## Pagar con créditos del Nexo (D-44, ecommerce-carrito.yaml 1.6.0)
+ *
+ * Un método adicional en el mismo diálogo: «¿Cómo quieres pagar? ○ Créditos
+ * del Nexo ○ Pago simulado». Con créditos no hay formulario: se pide la
+ * cotización al servidor (`GET /api/v1/checkout/creditos`) y se enseña tal
+ * cual —saldo actual, precio, saldo después—, sin sumar ni restar nada aquí;
+ * «Confirmar» hace `POST /api/v1/checkout/creditos`, sin cuerpo, con su
+ * `Idempotency-Key`. Las mismas reglas de la clave: se reutiliza cuando no se
+ * sabe si se cobró (sin respuesta, 503 `creditos-no-disponibles`, 409
+ * `compra-en-curso`) y se cambia al terminar o al cambiar de forma de pago.
+ * Al terminar: «Compra realizada» y «Ver inventario».
+ *
  * @module cuentas/tienda-pago
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { rutaDeApi } from '../comun/base-api.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
 import { abrirDialogo } from '../comun/ui/dialogo.js';
 import { clases, h } from '../comun/ui/dom.js';
-import { aImporte, textoDePrecio } from './tienda-adaptador.js';
+import { CREDITOS, aImporte, textoDeCreditos, textoDePrecio } from './tienda-adaptador.js';
+
+/** Las formas de pago del diálogo (`Orden.formaDePago`, contrato 1.6.0). */
+export const FORMAS_DE_PAGO = Object.freeze({ CREDITOS: 'CREDITOS', TARJETA: 'TARJETA' });
 
 /** Cómo se llama cada estado de la orden para el jugador. */
 export const ESTADOS_DE_ORDEN = Object.freeze({
@@ -218,13 +234,70 @@ export function olvidarIntentoDePago(doc = document) {
  *   `estado` 0 si no hubo respuesta
  */
 export async function enviarPago({ solicitud, clave, fetchImpl = fetchWithHttpErrorInterceptor }) {
-  let respuesta;
-  try {
-    respuesta = await fetchImpl(rutaDeApi('/checkout'), {
+  return enviarCompra(
+    '/checkout',
+    {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Idempotency-Key': clave },
       body: JSON.stringify(solicitud),
+    },
+    fetchImpl,
+  );
+}
+
+/**
+ * D-44 — `POST /api/v1/checkout/creditos`: paga el carrito con los créditos
+ * del juego. Sin cuerpo: el precio lo pone el servidor.
+ *
+ * @param {{clave: string, fetchImpl?: Function}} opciones
+ * @returns {Promise<{estado: number, orden: object|null, problema: object|null}>}
+ */
+export async function enviarPagoConCreditos({ clave, fetchImpl = fetchWithHttpErrorInterceptor }) {
+  return enviarCompra(
+    '/checkout/creditos',
+    { method: 'POST', headers: { 'Idempotency-Key': clave } },
+    fetchImpl,
+  );
+}
+
+/**
+ * D-44 — `GET /api/v1/checkout/creditos`: lo que costaría el carrito en
+ * créditos, el saldo y cómo quedaría (`CotizacionEnCreditos`).
+ *
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{estado: number, cotizacion: object|null}>} `estado` 0 sin respuesta
+ */
+export async function pedirCotizacionEnCreditos({
+  fetchImpl = fetchWithHttpErrorInterceptor,
+} = {}) {
+  let respuesta;
+  try {
+    respuesta = await fetchImpl(rutaDeApi('/checkout/creditos'), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
     });
+  } catch {
+    return { estado: 0, cotizacion: null };
+  }
+  if (!respuesta.ok) {
+    return { estado: respuesta.status, cotizacion: null };
+  }
+  try {
+    const cuerpo = await respuesta.json();
+    return {
+      estado: respuesta.status,
+      cotizacion: cuerpo && typeof cuerpo === 'object' ? cuerpo : null,
+    };
+  } catch {
+    return { estado: respuesta.status, cotizacion: null };
+  }
+}
+
+/** Una petición de compra y su lectura: la orden si salió bien, el problem detail si no. */
+async function enviarCompra(ruta, peticion, fetchImpl) {
+  let respuesta;
+  try {
+    respuesta = await fetchImpl(rutaDeApi(ruta), peticion);
   } catch {
     return { estado: 0, orden: null, problema: null };
   }
@@ -422,11 +495,18 @@ export function interpretarPago({ estado, orden, problema }, { moneda = 'COP' } 
     tipo === 'tiraje-insuficiente' ||
     tipo === 'cantidad-fuera-de-rango'
   ) {
+    let titulo = 'Tu carrito cambió';
+    if (tipo === 'carrito-vacio') {
+      titulo = 'Tu carrito está vacío';
+    } else if (tipo === 'producto-sin-precio-en-moneda-real') {
+      // G3 (1.7.0): algo del carrito solo se vende en créditos del juego.
+      titulo = 'Hay algo que solo se paga con créditos';
+    }
     return {
       ...base,
       tipo: 'carrito',
       conservarClave: true,
-      titulo: tipo === 'carrito-vacio' ? 'Tu carrito está vacío' : 'Tu carrito cambió',
+      titulo,
       detalle: delServidor ?? 'Revisa tu carrito antes de pagar. No se cobró nada.',
     };
   }
@@ -445,6 +525,209 @@ export function interpretarPago({ estado, orden, problema }, { moneda = 'COP' } 
     titulo: 'El pago no está disponible en este momento',
     detalle: 'No se cobró nada y tu carrito sigue guardado. Inténtalo de nuevo en unos minutos.',
   };
+}
+
+/** Lo que se dice cuando no se sabe si el cobro en créditos llegó. */
+const CONFIRMA_OTRA_VEZ =
+  'Vuelve a pulsar «Confirmar compra»: si el cobro llegó, no se te cobrará dos veces.';
+
+/**
+ * D-44 — qué significa una respuesta de `POST /checkout/creditos`, por el
+ * `status`, el `type` y el `estado` de la orden. Lo propio de los créditos
+ * (saldo, cobro sin confirmar, devolución) se dice aquí; lo que es igual que
+ * con tarjeta (sesión, carrito que cambió, servicio no disponible) lo dice
+ * {@link interpretarPago}.
+ *
+ * @param {{estado: number, orden: object|null, problema: object|null}} respuesta
+ * @returns {ReturnType<typeof interpretarPago>} `tipo` además puede ser `saldo`
+ */
+export function interpretarPagoConCreditos(respuesta) {
+  const { estado, orden, problema } = respuesta;
+  const base = { conservarClave: false, orden: null, campo: null, monedasDisponibles: null };
+  const motivo =
+    (typeof problema?.motivo === 'string' && problema.motivo.trim()) ||
+    (typeof orden?.motivo === 'string' && orden.motivo.trim()) ||
+    null;
+
+  if (orden) {
+    const total = textoDePrecio(aImporte(orden.total), CREDITOS);
+    switch (orden.estado) {
+      case 'COMPLETA':
+        return {
+          ...base,
+          tipo: 'completa',
+          orden,
+          titulo: 'Compra realizada',
+          detalle: `${total ? `Pagaste ${total}. ` : ''}Tus productos ya están en tu inventario.`,
+        };
+      case 'RECHAZADA':
+        return {
+          ...base,
+          tipo: 'saldo',
+          orden,
+          titulo: 'No se pudo pagar con créditos',
+          detalle: `${motivo ?? 'No se cobró nada.'} Tu carrito sigue guardado.`,
+        };
+      case 'REEMBOLSADA':
+      case 'COMPENSACION_PENDIENTE':
+        return {
+          ...base,
+          tipo: 'reembolsada',
+          orden,
+          titulo: 'No se pudo completar la compra',
+          detalle: `${motivo ?? 'No se pudo entregar.'} Te devolvemos los créditos.`,
+        };
+      case 'PENDIENTE':
+        return {
+          ...base,
+          tipo: 'reintentar',
+          conservarClave: true,
+          titulo: 'El cobro no se confirmó',
+          detalle: CONFIRMA_OTRA_VEZ,
+        };
+      default:
+        return {
+          ...base,
+          tipo: 'en-curso',
+          orden,
+          titulo: 'Compra pagada',
+          detalle:
+            'Estamos entregando tus productos: aparecerán en tu inventario en unos minutos. Puedes seguirla en «Mis compras».',
+        };
+    }
+  }
+
+  const tipo = typeof problema?.type === 'string' ? problema.type.replace(PREFIJO, '') : '';
+  if (estado === 0) {
+    return {
+      ...base,
+      tipo: 'reintentar',
+      conservarClave: true,
+      titulo: 'No hubo respuesta',
+      detalle: `Comprueba tu conexión. ${CONFIRMA_OTRA_VEZ}`,
+    };
+  }
+  if (tipo === 'saldo-insuficiente') {
+    const costaba = Number.isInteger(problema?.totalCreditos)
+      ? ` La compra cuesta ${textoDeCreditos(problema.totalCreditos)}.`
+      : '';
+    return {
+      ...base,
+      tipo: 'saldo',
+      titulo: 'No tienes créditos suficientes',
+      detalle: `No se cobró nada.${costaba} Tu carrito sigue guardado.`,
+    };
+  }
+  if (tipo === 'creditos-no-disponibles' || tipo === 'compra-en-curso') {
+    return {
+      ...base,
+      tipo: 'reintentar',
+      conservarClave: true,
+      titulo:
+        tipo === 'compra-en-curso'
+          ? 'Tu compra se está procesando'
+          : 'No pudimos confirmar el cobro',
+      detalle: CONFIRMA_OTRA_VEZ,
+    };
+  }
+  if (tipo === 'producto-sin-precio-en-creditos') {
+    return {
+      ...base,
+      tipo: 'carrito',
+      conservarClave: true,
+      titulo: 'Algo de tu carrito no se vende con créditos',
+      detalle:
+        (typeof problema?.detail === 'string' && problema.detail.trim()) ||
+        'Quítalo del carrito o paga con tarjeta. No se cobró nada.',
+    };
+  }
+  if (tipo === 'compra-reembolsada') {
+    return {
+      ...base,
+      tipo: 'reembolsada',
+      titulo: 'No se pudo completar la compra',
+      detalle: `${motivo ?? 'No se pudo entregar.'} Te devolvimos los créditos.`,
+    };
+  }
+  if (tipo === 'clave-de-idempotencia-reutilizada' || tipo === 'clave-de-idempotencia-requerida') {
+    return {
+      ...base,
+      tipo: 'reintentar',
+      titulo: 'Vuelve a confirmar la compra',
+      detalle: 'Ese intento ya no sirve para esta compra. Pulsa otra vez «Confirmar compra».',
+    };
+  }
+  return interpretarPago(respuesta);
+}
+
+/**
+ * D-44 — la cotización en créditos tal como la manda el servidor: cada línea
+ * con su subtotal, y saldo actual, precio y saldo después. Aquí no se suma ni
+ * se resta nada: si una cifra no vino, se dice que no se sabe.
+ *
+ * @param {object} cotizacion `CotizacionEnCreditos` (contrato 1.6.0)
+ * @returns {HTMLElement}
+ */
+export function panelDeCreditos(cotizacion) {
+  const cifra = (valor) => (Number.isInteger(valor) ? textoDeCreditos(valor) : null);
+  const lineas = (Array.isArray(cotizacion?.lineas) ? cotizacion.lineas : []).map((linea) =>
+    h('li', {
+      clase: 'pago__linea',
+      hijos: [
+        h('span', { texto: `${linea.nombre || 'Producto'} × ${linea.cantidad ?? 1}` }),
+        h('span', {
+          clase: 'pago__importe',
+          texto: cifra(linea.subtotalCreditos) ?? 'No se vende con créditos',
+        }),
+      ],
+    }),
+  );
+  const fila = (zona, etiqueta, valor) =>
+    h('div', {
+      clase: 'pago__cuenta',
+      datos: { zona },
+      hijos: [h('dt', { texto: etiqueta }), h('dd', { texto: valor })],
+    });
+  const saldo = cifra(cotizacion?.saldoDisponible);
+  const precio = cifra(cotizacion?.totalCreditos);
+  const despues = cifra(cotizacion?.saldoDespues);
+  const avisos = [];
+  if (cotizacion?.motivo === 'SIN_PRECIO_EN_CREDITOS') {
+    avisos.push(
+      'Algún producto de tu carrito no se vende con créditos. Quítalo o paga con el pago simulado.',
+    );
+  } else if (cotizacion?.motivo === 'PRODUCTO_NO_DISPONIBLE') {
+    avisos.push(
+      'Tu carrito cambió: algún producto ya no se puede comprar. Revísalo antes de pagar.',
+    );
+  } else if (cotizacion?.motivo === 'CARRITO_VACIO') {
+    avisos.push('Tu carrito está vacío: no hay nada que pagar.');
+  } else if (cotizacion?.alcanza === false && Number.isInteger(cotizacion?.saldoDespues)) {
+    avisos.push(`No te alcanza: te faltan ${textoDeCreditos(-cotizacion.saldoDespues)}.`);
+  } else if (saldo === null && cotizacion?.pagable) {
+    avisos.push(
+      'No pudimos consultar tu saldo ahora. Puedes confirmar igual: si no alcanza, no se cobra nada.',
+    );
+  }
+  return h('section', {
+    clase: 'pago__resumen pago__resumen--creditos',
+    atributos: { 'aria-label': 'Pago con créditos del Nexo' },
+    hijos: [
+      h('h3', { clase: 'pago__subtitulo', texto: 'Pagar con créditos del Nexo' }),
+      lineas.length > 0 ? h('ul', { clase: 'pago__lineas', hijos: lineas }) : null,
+      h('dl', {
+        clase: 'pago__cuentas',
+        hijos: [
+          fila('saldo-actual', 'Saldo actual', saldo ?? 'No disponible ahora'),
+          fila('precio', 'Precio', precio ?? '—'),
+          fila('saldo-despues', 'Saldo después', despues ?? '—'),
+        ],
+      }),
+      ...avisos.map((texto) =>
+        h('p', { clase: 'pago__nota', datos: { aviso: 'creditos' }, texto }),
+      ),
+    ],
+  });
 }
 
 // ------------------------------------------------------------- el diálogo
@@ -594,9 +877,16 @@ export function abrirPago({
     atributos: { type: 'button' },
   });
 
-  const formulario = h('form', {
-    clase: 'pago__formulario',
-    atributos: { novalidate: true, 'aria-label': 'Datos de pago' },
+  // D-44 — «¿Cómo quieres pagar?»: créditos del juego o el pago simulado de
+  // siempre, que sigue siendo el que viene marcado. G3 (1.7.0): si algo del
+  // carrito solo se vende en créditos, con tarjeta no hay nada que cobrar por
+  // ello (el servidor respondería 422): se paga con créditos y el pago
+  // simulado se apaga diciendo por qué.
+  const soloConCreditos = productosSoloEnCreditos(carrito);
+  const formas = selectorDeFormaDePago(id, { soloConCreditos });
+  const zonaTarjeta = h('div', {
+    clase: 'pago__zona',
+    datos: { zona: 'tarjeta' },
     hijos: [
       h('h3', { clase: 'pago__subtitulo', texto: 'Datos de pago' }),
       h('p', {
@@ -606,13 +896,30 @@ export function abrirPago({
       campos.titular,
       campos.numero,
       h('div', { clase: 'pago__fila', hijos: [campos.vencimiento, campos.codigo] }),
+    ],
+  });
+  const zonaCreditos = h('div', {
+    clase: 'pago__zona',
+    datos: { zona: 'creditos' },
+    atributos: { 'aria-live': 'polite' },
+  });
+  zonaCreditos.hidden = true;
+
+  const formulario = h('form', {
+    clase: 'pago__formulario',
+    atributos: { novalidate: true, 'aria-label': 'Datos de pago' },
+    hijos: [
+      formas.elemento,
+      zonaTarjeta,
+      zonaCreditos,
       alerta,
       estado,
       h('div', { clase: 'pago__acciones', hijos: [cancelar, confirmar] }),
     ],
   });
 
-  const cuerpo = h('div', { clase: 'pago', hijos: [resumenDeCompra(carrito, moneda), formulario] });
+  const resumen = resumenDeCompra(carrito, moneda);
+  const cuerpo = h('div', { clase: 'pago', hijos: [resumen, formulario] });
   const dialogo = abrirDialogo({ titulo: 'Pagar tu compra', cuerpo, cerrableFuera: false });
   dialogo.elemento.classList.add('dialogo--ancho', 'dialogo--pago');
   cancelar.addEventListener('click', () => dialogo.cerrar());
@@ -666,6 +973,19 @@ export function abrirPago({
       alVerCompras();
     });
     seguir.addEventListener('click', () => dialogo.cerrar());
+    // D-44 — lo comprado ya está en el inventario: se puede ir a verlo.
+    const entregada = ['COMPLETA', 'ENTREGADA'].includes(resultado.orden?.estado);
+    const verInventario = entregada
+      ? h('a', {
+          clase: 'boton boton--primario',
+          texto: 'Ver inventario',
+          datos: { accion: 'ver-inventario' },
+          atributos: { href: resolver(RUTAS.inventario) },
+        })
+      : null;
+    if (verInventario) {
+      seguir.className = 'boton boton--secundario';
+    }
     const titulo = h('h3', {
       clase: 'pago__resultado-titulo',
       texto: resultado.titulo,
@@ -678,32 +998,193 @@ export function abrirPago({
       hijos: [
         titulo,
         h('p', { texto: resultado.detalle }),
-        h('div', { clase: 'pago__acciones', hijos: [verCompras, seguir] }),
+        h('div', { clase: 'pago__acciones', hijos: [verCompras, seguir, verInventario] }),
       ],
     });
+    resumen.hidden = false;
     formulario.replaceWith(panel);
     titulo.focus();
   };
 
+  // ---------------------------------------------- D-44: con créditos del Nexo
+
+  let forma = FORMAS_DE_PAGO.TARJETA;
+  /** La última cotización del servidor; null mientras no hay una. */
+  let cotizacion = null;
+
+  const puedePagarConCreditos = () =>
+    cotizacion?.pagable === true &&
+    cotizacion?.alcanza !== false &&
+    Number.isInteger(cotizacion?.totalCreditos);
+
   // Un pago a la vez: mientras se procesa, el botón se apaga y otro envío
   // (Intro, doble clic) no sale.
   let enCurso = false;
-  const ocupar = () => {
+  const ocupar = (texto = 'Procesando el pago…') => {
     enCurso = true;
     confirmar.disabled = true;
     confirmar.setAttribute('aria-busy', 'true');
-    estado.textContent = 'Procesando el pago…';
+    estado.textContent = texto;
   };
   const liberar = () => {
     enCurso = false;
-    confirmar.disabled = false;
+    confirmar.disabled = forma === FORMAS_DE_PAGO.CREDITOS ? !puedePagarConCreditos() : false;
     confirmar.removeAttribute('aria-busy');
     estado.textContent = '';
+  };
+
+  const textoDeConfirmar = () => {
+    if (forma === FORMAS_DE_PAGO.CREDITOS) {
+      return puedePagarConCreditos()
+        ? `Confirmar compra por ${textoDeCreditos(cotizacion.totalCreditos)}`
+        : 'Confirmar compra';
+    }
+    return total ? `Confirmar pago de ${total}` : 'Confirmar pago';
+  };
+
+  /** Pide la cotización y la enseña tal cual; «Confirmar» solo si se puede pagar así. */
+  const cargarCotizacion = async () => {
+    cotizacion = null;
+    confirmar.disabled = true;
+    confirmar.textContent = textoDeConfirmar();
+    zonaCreditos.setAttribute('aria-busy', 'true');
+    zonaCreditos.replaceChildren(h('p', { clase: 'pago__nota', texto: 'Consultando tu saldo…' }));
+    const { estado: codigo, cotizacion: leida } = await pedirCotizacionEnCreditos({ fetchImpl });
+    if (forma !== FORMAS_DE_PAGO.CREDITOS) {
+      return;
+    }
+    zonaCreditos.setAttribute('aria-busy', 'false');
+    if (!leida) {
+      const reintentar = h('button', {
+        clase: 'boton boton--secundario',
+        texto: 'Reintentar',
+        datos: { accion: 'reintentar-cotizacion' },
+        atributos: { type: 'button' },
+      });
+      reintentar.addEventListener('click', cargarCotizacion);
+      zonaCreditos.replaceChildren(
+        h('p', {
+          clase: 'pago__nota',
+          texto:
+            codigo === 401
+              ? 'Tu sesión ya no es válida. Vuelve a iniciar sesión para pagar con créditos.'
+              : 'No pudimos calcular el precio en créditos ahora. Vuelve a intentarlo o usa el pago simulado.',
+        }),
+        reintentar,
+      );
+      return;
+    }
+    cotizacion = leida;
+    zonaCreditos.replaceChildren(panelDeCreditos(leida));
+    confirmar.disabled = !puedePagarConCreditos();
+    confirmar.textContent = textoDeConfirmar();
+  };
+
+  /** Otra forma de pago es otro intento: otra clave, sin errores del anterior. */
+  const cambiarForma = async (nueva) => {
+    if (nueva === forma || enCurso) {
+      return;
+    }
+    forma = nueva;
+    olvidarIntentoDePago(doc);
+    limpiarErrores();
+    estado.textContent = '';
+    const conCreditos = forma === FORMAS_DE_PAGO.CREDITOS;
+    zonaTarjeta.hidden = conCreditos;
+    zonaCreditos.hidden = !conCreditos;
+    // Con créditos el resumen es el del servidor, en créditos: el de dinero
+    // real no se enseña para no poner dos precios distintos a la misma compra.
+    resumen.hidden = conCreditos;
+    if (conCreditos) {
+      await cargarCotizacion();
+    } else {
+      confirmar.disabled = false;
+      confirmar.textContent = textoDeConfirmar();
+    }
+  };
+  formas.creditos.addEventListener('change', () => cambiarForma(FORMAS_DE_PAGO.CREDITOS));
+  formas.tarjeta.addEventListener('change', () => cambiarForma(FORMAS_DE_PAGO.TARJETA));
+  if (soloConCreditos.length > 0) {
+    // G3: se abre ya en créditos, con su cotización.
+    cambiarForma(FORMAS_DE_PAGO.CREDITOS);
+    formas.creditos.focus();
+  }
+
+  const volverAlCarrito = (resultado) => {
+    const volver = h('button', {
+      clase: 'boton boton--secundario',
+      texto: 'Volver al carrito',
+      datos: { accion: 'volver-al-carrito' },
+      atributos: { type: 'button' },
+    });
+    volver.addEventListener('click', () => {
+      dialogo.cerrar();
+      alCambiarCarrito();
+    });
+    avisar(resultado.titulo, resultado.detalle, [volver]);
+    volver.focus();
+  };
+
+  const pedirSesion = (resultado) => {
+    const entrar = h('button', {
+      clase: 'boton boton--primario',
+      texto: 'Iniciar sesión',
+      datos: { accion: 'iniciar-sesion' },
+      atributos: { type: 'button' },
+    });
+    entrar.addEventListener('click', () => {
+      dialogo.cerrar();
+      alPedirSesion();
+    });
+    avisar(resultado.titulo, resultado.detalle, [entrar]);
+    entrar.focus();
+  };
+
+  /** `POST /checkout/creditos` con la clave del intento, y qué significó. */
+  const pagarConCreditos = async () => {
+    if (!puedePagarConCreditos()) {
+      return;
+    }
+    ocupar('Procesando la compra…');
+    const respuesta = await enviarPagoConCreditos({ clave: claveDelIntento(doc), fetchImpl });
+    liberar();
+    const resultado = interpretarPagoConCreditos(respuesta);
+    if (!resultado.conservarClave) {
+      olvidarIntentoDePago(doc);
+    }
+    switch (resultado.tipo) {
+      case 'completa':
+      case 'en-curso':
+      case 'reembolsada':
+        terminar(resultado);
+        alTerminar(resultado.orden);
+        return;
+      case 'saldo':
+        avisar(resultado.titulo, resultado.detalle);
+        // El saldo pudo cambiar: se vuelve a preguntar y «Confirmar» se apaga si no alcanza.
+        await cargarCotizacion();
+        return;
+      case 'carrito':
+        volverAlCarrito(resultado);
+        return;
+      case 'sesion':
+        pedirSesion(resultado);
+        return;
+      default:
+        // reintentar y no-disponible: el mismo botón reintenta con la misma clave.
+        avisar(resultado.titulo, resultado.detalle);
+        confirmar.focus();
+    }
   };
 
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     if (enCurso) {
+      return;
+    }
+    if (forma === FORMAS_DE_PAGO.CREDITOS) {
+      limpiarErrores();
+      await pagarConCreditos();
       return;
     }
     limpiarErrores();
@@ -767,21 +1248,9 @@ export function abrirPago({
           confirmar.focus();
         }
         return;
-      case 'carrito': {
-        const volver = h('button', {
-          clase: 'boton boton--secundario',
-          texto: 'Volver al carrito',
-          datos: { accion: 'volver-al-carrito' },
-          atributos: { type: 'button' },
-        });
-        volver.addEventListener('click', () => {
-          dialogo.cerrar();
-          alCambiarCarrito();
-        });
-        avisar(resultado.titulo, resultado.detalle, [volver]);
-        volver.focus();
+      case 'carrito':
+        volverAlCarrito(resultado);
         return;
-      }
       case 'moneda': {
         const volver = h('button', {
           clase: 'boton boton--secundario',
@@ -797,21 +1266,9 @@ export function abrirPago({
         volver.focus();
         return;
       }
-      case 'sesion': {
-        const entrar = h('button', {
-          clase: 'boton boton--primario',
-          texto: 'Iniciar sesión',
-          datos: { accion: 'iniciar-sesion' },
-          atributos: { type: 'button' },
-        });
-        entrar.addEventListener('click', () => {
-          dialogo.cerrar();
-          alPedirSesion();
-        });
-        avisar(resultado.titulo, resultado.detalle, [entrar]);
-        entrar.focus();
+      case 'sesion':
+        pedirSesion(resultado);
         return;
-      }
       default:
         // reintentar y no-disponible: el formulario sigue relleno, y el mismo
         // botón reintenta con la misma clave.
@@ -821,6 +1278,86 @@ export function abrirPago({
   });
 
   return dialogo;
+}
+
+/**
+ * G3 (ecommerce-carrito 1.7.0): los nombres de lo que el carrito tiene que
+ * solo se vende en créditos del juego (líneas `soloEnCreditos` que se pueden
+ * comprar). Con alguno, el pago simulado no puede cobrar el carrito.
+ *
+ * @param {object} carrito `Carrito` del contrato
+ * @returns {string[]}
+ */
+export function productosSoloEnCreditos(carrito) {
+  return (Array.isArray(carrito?.items) ? carrito.items : [])
+    .filter((item) => item?.soloEnCreditos === true && item?.disponible !== false)
+    .map((item) => item.producto?.nombre || 'Un producto');
+}
+
+/**
+ * D-44 — «¿Cómo quieres pagar?»: créditos del Nexo o el pago simulado. Un
+ * grupo de dos radios con su leyenda; el pago simulado viene marcado.
+ *
+ * G3 — si el carrito tiene algo que solo se vende en créditos, vienen marcados
+ * los créditos y el pago simulado se apaga con el motivo en su pista.
+ *
+ * @param {(nombre: string) => string} id
+ * @param {{soloConCreditos?: string[]}} [opciones]
+ * @returns {{elemento: HTMLElement, creditos: HTMLInputElement, tarjeta: HTMLInputElement}}
+ */
+function selectorDeFormaDePago(id, { soloConCreditos = [] } = {}) {
+  const sinTarjeta = soloConCreditos.length > 0;
+  const opcion = (valor, nombre, pista, marcada, apagada = false) => {
+    const control = h('input', {
+      atributos: {
+        type: 'radio',
+        name: 'forma-de-pago',
+        value: valor,
+        id: id(`forma-${valor.toLowerCase()}`),
+        checked: marcada,
+        disabled: apagada,
+      },
+    });
+    const elemento = h('label', {
+      clase: 'pago__forma',
+      atributos: { for: control.id },
+      hijos: [
+        control,
+        h('span', { clase: 'pago__forma-nombre', texto: nombre }),
+        h('span', { clase: 'pago__forma-pista', texto: pista }),
+      ],
+    });
+    return { control, elemento };
+  };
+  const creditos = opcion(
+    FORMAS_DE_PAGO.CREDITOS,
+    'Créditos del Nexo',
+    'Con el saldo de créditos del juego.',
+    sinTarjeta,
+  );
+  const tarjeta = opcion(
+    FORMAS_DE_PAGO.TARJETA,
+    'Pago simulado',
+    sinTarjeta
+      ? `No disponible: ${soloConCreditos.map((nombre) => `«${nombre}»`).join(', ')} solo se ${
+          soloConCreditos.length > 1 ? 'venden' : 'vende'
+        } con créditos del juego.`
+      : 'Con tarjeta, en la pasarela simulada.',
+    !sinTarjeta,
+    sinTarjeta,
+  );
+  if (sinTarjeta) {
+    tarjeta.elemento.dataset.motivo = 'solo-creditos';
+  }
+  const elemento = h('fieldset', {
+    clase: 'pago__formas',
+    hijos: [
+      h('legend', { clase: 'pago__subtitulo', texto: '¿Cómo quieres pagar?' }),
+      creditos.elemento,
+      tarjeta.elemento,
+    ],
+  });
+  return { elemento, creditos: creditos.control, tarjeta: tarjeta.control };
 }
 
 // ------------------------------------------------------------- Mis compras
@@ -873,9 +1410,13 @@ export function tarjetaDeOrden(orden) {
       }`,
     }),
   );
-  const medio = orden?.medioDePago?.ultimos4
-    ? `${orden.medioDePago.marca ?? 'Tarjeta'} ···· ${orden.medioDePago.ultimos4}`
-    : null;
+  // D-44: una compra con créditos no tiene tarjeta; se dice con qué se pagó.
+  let medio = null;
+  if (orden?.formaDePago === FORMAS_DE_PAGO.CREDITOS) {
+    medio = 'créditos del Nexo';
+  } else if (orden?.medioDePago?.ultimos4) {
+    medio = `${orden.medioDePago.marca ?? 'Tarjeta'} ···· ${orden.medioDePago.ultimos4}`;
+  }
   const motivo =
     (orden?.estado === 'RECHAZADA' || orden?.estado === 'REEMBOLSADA') && orden?.motivo
       ? orden.motivo

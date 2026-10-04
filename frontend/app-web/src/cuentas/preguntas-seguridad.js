@@ -33,6 +33,7 @@ import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { h, vaciar } from '../comun/ui/dom.js';
+import { formularioListo } from '../comun/ui/formulario-seguro.js';
 
 /** Ruta del contrato. Literal entero: el guardián de rutas la lee. */
 export const RUTA_PREGUNTAS = '/api/v1/auth/preguntas-seguridad';
@@ -480,6 +481,9 @@ export function montarPreguntasDeSeguridad(
     });
     zonaAviso.focus();
   });
+
+  // G1 — la vista ya escucha `submit`: el botón se puede encender.
+  formularioListo(formulario);
 
   pintarVisibles();
   formulario.hidden = true;

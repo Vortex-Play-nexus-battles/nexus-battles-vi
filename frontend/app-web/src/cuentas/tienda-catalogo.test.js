@@ -141,6 +141,26 @@ describe('buscar', () => {
   test('una búsqueda con letras y cifras no se lee como precio', () => {
     expect(coincideBusqueda(espada, 'espada 4')).toBe(false);
   });
+
+  test('G3: uno solo en créditos se encuentra por su precio en créditos', () => {
+    const [amuleto] = modelos([
+      dto(7, {
+        nombre: 'Amuleto',
+        precioFinal: null,
+        precioOriginal: null,
+        moneda: null,
+        precioCreditos: 1250,
+      }),
+    ]);
+    expect(coincideBusqueda(amuleto, '1250')).toBe(true);
+    expect(coincideBusqueda(amuleto, '1.250')).toBe(true);
+    expect(coincideBusqueda(amuleto, 'créditos')).toBe(true);
+    expect(coincideBusqueda(amuleto, '7000')).toBe(false);
+    // Uno con los dos precios se sigue buscando por el de dinero real.
+    const [conLosDos] = modelos([dto(3, { precioCreditos: 150 })]);
+    expect(coincideBusqueda(conLosDos, '3000')).toBe(true);
+    expect(coincideBusqueda(conLosDos, '150')).toBe(false);
+  });
 });
 
 describe('filtrar y ordenar', () => {

@@ -75,6 +75,15 @@ class RepositorioDePartidasEnMemoria implements RepositorioDePartidas {
                 .toList();
     }
 
+    @Override
+    public List<Partida> enCursoDesde(Instant limite, int lote) {
+        return almacen.values().stream()
+                .filter(p -> p.estado() == EstadoPartida.EN_CURSO && !p.iniciadaEn().isAfter(limite))
+                .limit(lote)
+                .map(RepositorioDePartidasEnMemoria::copia)
+                .toList();
+    }
+
     /** Cada lectura es una copia, como lo seria una fila leida de la base. */
     private static Partida copia(Partida p) {
         return Partida.rehidratar(p.id(), p.idSala(), p.estado(), p.participantes(), p.turnoActual(),

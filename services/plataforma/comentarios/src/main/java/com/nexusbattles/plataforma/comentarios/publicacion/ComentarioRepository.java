@@ -58,6 +58,24 @@ public interface ComentarioRepository extends JpaRepository<RegistroDeComentario
             Collection<Comentario.Estado> estados, String productoId);
 
     /**
+     * Los reportados que siguen a la vista (contrato 1.8.0): la cola los pide
+     * por id —los que tienen reportes pendientes— y en un estado concreto.
+     */
+    List<RegistroDeComentario> findByIdInAndEstadoOrderByFechaPublicacionAsc(
+            Collection<String> ids, Comentario.Estado estado);
+
+    /**
+     * Una pagina del historial de un autor — HU-COM-005, contrato 1.7.0.
+     *
+     * <p>En cualquier estado, tambien OCULTO y ELIMINADO: moderacion los conserva
+     * y son justo lo que el moderador quiere ver del autor. El orden lo pone el
+     * {@link Pageable} (fecha descendente y luego id) y lo sirve
+     * {@code idx_comentarios_por_autor} de V6. Devuelve la proyeccion, no la
+     * entidad, para no cargar las imagenes que el historial no muestra.
+     */
+    Page<ResumenDeComentario> findByAutorId(String autorId, Pageable pagina);
+
+    /**
      * Solo el estado de un comentario, sin cargarlo: es lo unico que hace falta
      * para decidir si una de sus imagenes es publica.
      */

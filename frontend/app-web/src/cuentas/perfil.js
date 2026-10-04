@@ -16,6 +16,12 @@ import { montarEstadisticas } from './estadisticas-cuenta.js';
 import { montarCambioDePassword } from './cambiar-password.js';
 import { montarPreguntasDeSeguridad } from './preguntas-seguridad.js';
 import { mejorarContrasena } from '../comun/ui/campo.js';
+import { sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
+
+// G1 — antes que nada, y antes de `exigirAcceso`: sin sesión, la dirección
+// actual viaja al login como `?volver=`, y con ella lo que un envío nativo de
+// una versión vieja de esta página hubiera dejado (`?passwordActual=…`).
+sinCredencialesEnLaDireccion();
 
 const sesion = exigirAcceso('perfil');
 

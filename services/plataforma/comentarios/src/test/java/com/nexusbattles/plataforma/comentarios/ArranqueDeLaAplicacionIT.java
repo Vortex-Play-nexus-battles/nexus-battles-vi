@@ -25,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -142,6 +143,18 @@ class ArranqueDeLaAplicacionIT {
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, hilo.statusCode(), "leer el hilo es publico");
         assertTrue(hilo.body().contains("\"productoId\":\"espada-it\""), hilo.body());
+        // G4 (1.9.0): el hilo publico dice el apodo, nunca el uid de la autora.
+        assertTrue(hilo.body().contains("\"apodoAutor\":\"Lyra_IT\""), hilo.body());
+        assertFalse(hilo.body().contains("autorId"), "el hilo publico no lleva autorId: " + hilo.body());
+        assertFalse(hilo.body().contains(uid.toString()), "ni el uid en ningun campo: " + hilo.body());
+        assertTrue(hilo.body().contains("\"propio\":false"), "sin token nada es propio: " + hilo.body());
+
+        HttpResponse<String> suyo = http.send(
+                HttpRequest.newBuilder(URI.create(ruta)).header("Authorization", "Bearer " + token).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, suyo.statusCode(), suyo.body());
+        assertTrue(suyo.body().contains("\"propio\":true"), "con su token, el suyo es propio: " + suyo.body());
+        assertFalse(suyo.body().contains(uid.toString()), "ni siquiera a ella se le repite el uid: " + suyo.body());
     }
 
     @Test

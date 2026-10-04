@@ -7,6 +7,7 @@ import com.nexusbattles.ms_ecommerce.repository.CarritoRepository;
 import com.nexusbattles.ms_ecommerce.seguridad.SeguridadConfig;
 import com.nexusbattles.ms_ecommerce.seguridad.TokensDePrueba;
 import com.nexusbattles.ms_ecommerce.catalogo.CopiaDelCatalogo;
+import com.nexusbattles.ms_ecommerce.integracion.inventario.ProductosPropios;
 import com.nexusbattles.ms_ecommerce.precios.Moneda;
 import com.nexusbattles.ms_ecommerce.precios.Tarifa;
 import com.nexusbattles.ms_ecommerce.precios.TasasDeCambio;
@@ -33,6 +34,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESPADA;
@@ -107,6 +109,10 @@ class CarritoConCatalogoMaestroTest {
     @MockitoBean
     private TasasDeCambio tasas;
 
+    /** Lo que el jugador ya tiene, segun el inventario (RF-CAR-004, contrato 1.5.0). */
+    @MockitoBean
+    private ProductosPropios propios;
+
     private final String token = "Bearer " + TokensDePrueba.deJugador("lyra", UID);
 
     @BeforeEach
@@ -120,6 +126,7 @@ class CarritoConCatalogoMaestroTest {
         when(carritoRepository.save(any(Carrito.class))).thenAnswer(i -> i.getArguments()[0]);
         when(tasas.tarifa(Moneda.COP)).thenReturn(Tarifa.enPesos());
         when(copia.siDisponible()).thenReturn(Optional.empty());
+        when(propios.alDia(any())).thenReturn(Set.of());
     }
 
     @AfterEach
@@ -179,7 +186,21 @@ class CarritoConCatalogoMaestroTest {
     }
 
     @Test
-    @DisplayName("un producto sin precio en moneda real: 422 producto-sin-precio-en-moneda-real")
+    @DisplayName("auditoria 30-sep · RF-CAR-004: un producto que el jugador ya tiene: 409 producto-ya-adquirido")
+    void yaAdquiridoEs409() throws Exception {
+        catalogoResponde(ESPADA, json(ESPADA, "Espada", "ARMA", "ACTIVO", -1, "6000"));
+        when(propios.alDia(UID.toString())).thenReturn(Set.of(ESPADA));
+
+        agregar("{\"productoId\":\"" + ESPADA + "\",\"cantidad\":1}")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("urn:nexus:problema:producto-ya-adquirido"))
+                .andExpect(jsonPath("$.title").value("Producto ya adquirido"))
+                .andExpect(jsonPath("$.detail").value("Ya tienes este producto en tu inventario."));
+        verifyNoInteractions(carritoRepository);
+    }
+
+    @Test
+    @DisplayName("un premium sin precio en moneda real (sin ningun precio): 422 producto-sin-precio-en-moneda-real")
     void sinPrecioEnMonedaRealEs422() throws Exception {
         catalogoResponde(ESPADA, json(ESPADA, "Espada", "ARMA", "ACTIVO", -1, null));
 

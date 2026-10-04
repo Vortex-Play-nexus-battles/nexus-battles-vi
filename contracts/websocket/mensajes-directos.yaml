@@ -16,7 +16,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Mensajes privados (salas-partidas)
-  version: 1.0.1
+  version: 1.1.0
   description: |
     Mensajes privados 1 a 1 por WebSocket + STOMP, con historial por REST
     (`contracts/openapi/salas-partidas.yaml`, `/mensajes-directos/**`).
@@ -47,6 +47,21 @@ info:
     (id `mensaje-directo-{id del primer no leido}`: cada mensaje sin escuchar
     lo pide con ese mismo id y notificaciones descarta los repetidos con 409)
     y no lleva el texto.
+
+    1.0.2 (auditoria de DEV del 30-sep, sin cambio de forma): `TEXTO_INVALIDO`
+    cubre tambien el texto que no es un mensaje —demasiadas lineas, una racha
+    larga del mismo caracter o, en un texto largo, casi solo simbolos—, con
+    los mismos limites provisionales que el chat (D-37). El texto se guarda
+    depurado: Unicode NFKC y sin caracteres de control ni de formato
+    invisibles.
+
+    1.1.0 (auditoria de DEV del 30-sep, aditivo — D-40 provisional): bloquear
+    a un jugador (`PUT .../conversaciones/{uidOtro}/bloqueo` en
+    `salas-partidas.yaml` 1.8.0). Con un bloqueo en cualquier sentido no se
+    entrega nada: `CONVERSACION_BLOQUEADA` si quien escribe bloqueo al
+    destinatario (lo desbloquea para volver a escribirle) y `NO_ADMITE` si el
+    destinatario bloqueo a quien escribe, sin decirle que fue un bloqueo. Ni
+    uno ni otro deja aviso en la bandeja del destinatario.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -143,6 +158,6 @@ components:
             const: RECHAZO
           motivo:
             type: string
-            enum: [TEXTO_NO_PERMITIDO, SANCIONADO, DESTINATARIO_INEXISTENTE, DESTINATARIO_PROPIO, DEMASIADO_RAPIDO, TEXTO_INVALIDO, MODERACION_NO_DISPONIBLE]
+            enum: [TEXTO_NO_PERMITIDO, SANCIONADO, DESTINATARIO_INEXISTENTE, DESTINATARIO_PROPIO, DEMASIADO_RAPIDO, TEXTO_INVALIDO, MODERACION_NO_DISPONIBLE, CONVERSACION_BLOQUEADA, NO_ADMITE]
           idCliente:
             type: [string, 'null']

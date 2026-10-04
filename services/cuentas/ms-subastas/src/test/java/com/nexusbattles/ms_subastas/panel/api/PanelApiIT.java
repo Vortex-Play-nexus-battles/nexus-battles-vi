@@ -320,6 +320,38 @@ class PanelApiIT {
     }
 
     @Test
+    @DisplayName("G7: una cancelacion que falla devuelve la penalizacion; al repetirla se cobra de verdad, con otro refId")
+    void cancelacionFallidaYRepetidaCobraUnaVez() throws Exception {
+        UUID vendedor = jugadorConSaldo();
+        Subasta subasta = publicada(vendedor);
+        String base = "sub-cancelacion-" + subasta.getId();
+
+        // Inventario caido: se cobra la penalizacion, falla la liberacion y se devuelve.
+        ((InventarioClientFake) inventario).simularFallo(true);
+        HttpResponse<String> fallida;
+        try {
+            fallida = pedir("POST", "/subastas/" + subasta.getId() + "/cancelacion", null, token(vendedor));
+        } finally {
+            ((InventarioClientFake) inventario).simularFallo(false);
+        }
+        assertNotEquals(200, fallida.statusCode(), fallida.body());
+        assertEquals(EstadoSubasta.ACTIVA, subastas.findById(subasta.getId()).orElseThrow().getEstado());
+        assertEquals(List.of(base), FINANZAS.recibidas("reversar").stream().map(FinanzasFalsa.Operacion::refId).toList());
+        assertEquals(0, BigDecimal.ZERO.compareTo(FINANZAS.cobradoNeto(vendedor)), "la penalizacion se devolvio");
+
+        // Repetirla: el refId devuelto no se reutiliza (el libro respondia 200 sin cobrar).
+        HttpResponse<String> repetida = pedir("POST", "/subastas/" + subasta.getId() + "/cancelacion", null,
+                token(vendedor));
+
+        assertEquals(200, repetida.statusCode(), repetida.body());
+        assertEquals("CANCELADA", json(repetida).path("estado").asText());
+        assertEquals(List.of(base, base + "-2"),
+                FINANZAS.recibidas("debitar").stream().map(FinanzasFalsa.Operacion::refId).toList());
+        assertEquals(0, new BigDecimal("1.50").compareTo(FINANZAS.cobradoNeto(vendedor)),
+                "la cancelacion queda pagada una vez, no gratis ni dos veces");
+    }
+
+    @Test
     @DisplayName("sin sesion es 401; una subasta que no existe, 404")
     void cancelarSinSesionOInexistente() throws Exception {
         Subasta subasta = publicada(jugadorConSaldo());
@@ -484,6 +516,9 @@ class PanelApiIT {
         assertEquals(Duration.ofDays(7), Duration.between(ganada, vence));
         assertEquals(1, avisosDe(subasta.getId(), TipoNotificacion.SUBASTA_GANADA).size());
         assertEquals(1, avisosDe(subasta.getId(), TipoNotificacion.SUBASTA_VENDIDA).size());
+        // HU-NOT-003: la confirmacion de creditos pasa la restriccion de la base (V11) y va al vendedor.
+        assertEquals(List.of(vendedor), avisosDe(subasta.getId(), TipoNotificacion.CREDITOS_RECIBIDOS).stream()
+                .map(NotificacionPendiente::getDestinatarioId).toList());
 
         HttpResponse<String> ajeno = pedir("POST", "/mis-subastas/pendientes/" + subasta.getId() + "/recogida", null,
                 token(jugadorConSaldo()));
@@ -586,7 +621,7 @@ class PanelApiIT {
     // --- recordatorio (7.7.8) ---------------------------------------------------------
 
     @Test
-    @DisplayName("1 hora antes del cierre avisa a quien pujo y a quien la sigue, nunca al vendedor, y una sola vez")
+    @DisplayName("1 hora antes del cierre avisa al vendedor, a quien pujo y a quien la sigue, una sola vez (RF-NOT-003)")
     void recordatorioDeCierre() throws Exception {
         UUID vendedor = jugadorConSaldo();
         UUID postor = jugadorConSaldo();
@@ -601,7 +636,7 @@ class PanelApiIT {
 
         List<UUID> avisados = avisosDe(subasta.getId(), TipoNotificacion.RECORDATORIO_CIERRE).stream()
                 .map(NotificacionPendiente::getDestinatarioId).sorted().toList();
-        assertEquals(List.of(postor, seguidor).stream().sorted().toList(), avisados);
+        assertEquals(List.of(vendedor, postor, seguidor).stream().sorted().toList(), avisados);
         assertNotNull(subastas.findById(subasta.getId()).orElseThrow().getRecordatorioEnviadoEn());
     }
 }

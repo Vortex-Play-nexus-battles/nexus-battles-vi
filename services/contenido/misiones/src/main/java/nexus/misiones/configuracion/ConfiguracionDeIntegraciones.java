@@ -7,19 +7,21 @@ import com.nexusbattles.plataforma.resiliencia.RegistroDeDegradacion;
 import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
+import nexus.misiones.aplicacion.AvisosDeMisiones;
 import nexus.misiones.aplicacion.CatalogoDeProductos;
 import nexus.misiones.aplicacion.CorreoDeMisiones;
 import nexus.misiones.aplicacion.DirectorioDeJugadores;
 import nexus.misiones.aplicacion.InventarioDeHeroes;
 import nexus.misiones.aplicacion.LibroDeCreditos;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
-import nexus.misiones.dominio.simulacion.ResolutorDeGolpes;
+import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.integracion.ClienteCorreo;
 import nexus.misiones.integracion.ClienteCreditos;
 import nexus.misiones.integracion.ClienteHeroes;
 import nexus.misiones.integracion.ClienteIdentidad;
 import nexus.misiones.integracion.ClienteInventario;
 import nexus.misiones.integracion.ClienteMotor;
+import nexus.misiones.integracion.ClienteNotificaciones;
 import nexus.misiones.integracion.ClienteProductos;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,7 +32,7 @@ import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
- * Las siete dependencias de misiones, cada una con su cliente, su corta
+ * Las ocho dependencias de misiones, cada una con su cliente, su corta
  * circuitos (HU-DIS-003) y los mismos tiempos de espera acotados.
  *
  * <p>Todas por REST sincrono y con la credencial de servicio de misiones
@@ -71,7 +73,7 @@ public class ConfiguracionDeIntegraciones {
         return fabrica;
     }
 
-    /** Un solo cliente HTTP para las siete: traza, tiempos y credencial de servicio. */
+    /** Un solo cliente HTTP para las ocho: traza, tiempos y credencial de servicio. */
     @Bean
     public RestClient restClientDeMisiones(ClientHttpRequestFactory fabrica,
                                            ObjectProvider<InterceptorDePortadorDeServicio> credencial) {
@@ -107,7 +109,7 @@ public class ConfiguracionDeIntegraciones {
     }
 
     @Bean
-    public ResolutorDeGolpes resolutorDeGolpes(RestClient restClientDeMisiones,
+    public MotorDeCombate motorDeCombate(RestClient restClientDeMisiones,
                                                @Value("${misiones.motor.url}") String url,
                                                Umbrales umbrales, RegistroDeDegradacion registro) {
         return new ClienteMotor(restClientDeMisiones, url, umbrales.para("motor-combate", "Motor de combate", registro));
@@ -125,6 +127,15 @@ public class ConfiguracionDeIntegraciones {
                                              @Value("${misiones.correo.url}") String url,
                                              Umbrales umbrales, RegistroDeDegradacion registro) {
         return new ClienteCorreo(restClientDeMisiones, url, umbrales.para("correo", "Correo", registro));
+    }
+
+    /** La bandeja del jugador (notificaciones.yaml 1.2.0): avisos de misiones, RF-NOT-004. */
+    @Bean
+    public AvisosDeMisiones avisosDeMisiones(RestClient restClientDeMisiones,
+                                            @Value("${misiones.notificaciones.url}") String url,
+                                            Umbrales umbrales, RegistroDeDegradacion registro) {
+        return new ClienteNotificaciones(restClientDeMisiones, url,
+                umbrales.para("notificaciones", "Notificaciones", registro));
     }
 
     @Bean

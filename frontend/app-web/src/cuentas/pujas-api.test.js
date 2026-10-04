@@ -264,6 +264,25 @@ describe('listado', () => {
     expect(aVistaDeSubasta({ id: 'z', vendedorId: 'uid-mio' }).esPropia).toBe(false);
   });
 
+  test('G5 (listado 1.2.0): `esPropia` lo dice el servidor; el uid del vendedor ya no viaja', () => {
+    // Con el servicio nuevo, vendedorId llega null y esPropia decide.
+    expect(
+      aVistaDeSubasta({ id: 'a', vendedorId: null, esPropia: true }, 'yo', 'uid-mio').esPropia,
+    ).toBe(true);
+    expect(
+      aVistaDeSubasta({ id: 'b', vendedorId: null, esPropia: false }, 'yo', 'uid-mio').esPropia,
+    ).toBe(false);
+    // El servidor manda aunque un vendedorId viejo dijera otra cosa.
+    expect(
+      aVistaDeSubasta({ id: 'c', vendedorId: 'uid-mio', esPropia: false }, 'yo', 'uid-mio')
+        .esPropia,
+    ).toBe(false);
+    // La fecha de fin se conserva para escribirla (7.7.9).
+    expect(aVistaDeSubasta({ id: 'd', fechaFin: '2026-10-05T10:00:00Z' }).fechaFin).toBe(
+      '2026-10-05T10:00:00Z',
+    );
+  });
+
   test('el tiempo restante sale de fechaFin y nunca es negativo', () => {
     const vencida = aVistaDeSubasta({
       id: 'x',

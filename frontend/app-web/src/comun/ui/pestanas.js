@@ -8,7 +8,10 @@
  * avisar a quien no las ve.
  *
  * La pestaña activa se refleja en el hash de la URL para que se pueda
- * enlazar y para que recargar no devuelva siempre a la primera.
+ * enlazar y para que recargar no devuelva siempre a la primera. Y al revés:
+ * si el hash cambia con la vista abierta (se edita la dirección, se sigue un
+ * enlace `#historial` o se vuelve atrás), cambia la pestaña (auditoría de DEV
+ * del 30-sep: cambiar el `#hash` no hacía nada).
  */
 
 import { h } from './dom.js';
@@ -97,6 +100,17 @@ export function montarPestanas(
     if (alCambiar) {
       alCambiar(id);
     }
+  }
+
+  if (hash) {
+    // `mostrar` usa `replaceState`, que no dispara `hashchange`: esto solo
+    // escucha lo que cambia desde fuera de la vista.
+    window.addEventListener('hashchange', () => {
+      const pedida = window.location.hash.replace('#', '');
+      if (pedida !== actual && pestanas.some((p) => p.id === pedida)) {
+        mostrar(pedida);
+      }
+    });
   }
 
   raiz.append(lista);

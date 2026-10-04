@@ -1,0 +1,569 @@
+{
+  "version": "1.0.0",
+  "notas": [
+    "Catálogo de progresión (auditoría del 4-oct, cambio autorizado n.º 2): siete misiones de historia de nivel 1 a 7 que llevan a un héroe nuevo hasta «El Templo Olvidado» (nivel 8). Contenido del equipo 6, no del documento: el documento solo trae el ejemplo del Templo (7.8.14) y pide que cada equipo diseñe las suyas (7.8.4). El PO puede ajustar cifras y textos.",
+    "Ninguna pasa del nivel 8 (§6.1.1: «puede incrementarse hasta el nivel 8»). Cada una se desbloquea al completar la anterior (7.8.2, historia: «dificultad progresiva que se desbloquea secuencialmente») y se puede repetir para ganar experiencia.",
+    "Los enemigos pelean en el nivel recomendado de la misión (7.8.13: «las estadísticas de enemigos deben escalar según nivel de misión»). La vida y la defensa de cada enemigo las fija esta semilla; el ataque y el daño son los de su prototipo en ese nivel (el motor de combate). El jefe es el más duro de cada misión (7.8.13).",
+    "Equilibrio comprobado con el motor de combate real en motor-combate (BalanceDeMisionesTest): ninguna misión se gana ni se pierde siempre en su nivel recomendado, y un héroe nuevo llega al nivel 8 jugando la misión que le toca.",
+    "Sin Máster ni botín: la experiencia sale de los enemigos derrotados (10 × 1,2^(1d8), §6.1.1) y de la que el PO fije por completar (MISIONES_XP_COMPLETAR_*, hoy 0). Los créditos son provisionales."
+  ],
+  "tabla20": [],
+  "misiones": [
+    {
+      "id": "sendero-de-los-aprendices",
+      "origen": "PROGRESION",
+      "nombre": "El Sendero de los Aprendices",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Primera salida del campamento: limpiar el sendero de saqueadores.",
+      "imagen": null,
+      "dificultad": "FACIL",
+      "duracionHoras": 0.05,
+      "nivelRecomendado": 1,
+      "requisitosPrevios": [],
+      "narrativa": "Los aprendices del Nexo no pueden llegar al campamento: unos saqueadores con ratas amaestradas cortan el sendero del bosque. Es tu primera salida. Despeja el camino y lleva al capataz ante el consejo.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a Capataz de los saqueadores (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Ratas amaestradas",
+          "cantidad": 2,
+          "descripcion": "Rápidas y frágiles.",
+          "prototipo": "Pícaro Machete",
+          "vida": 6,
+          "defensa": 4,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "Capataz de los saqueadores",
+        "prototipo": "Guerrero Armas",
+        "vida": 22,
+        "defensa": 8,
+        "descripcion": "Un matón con una espada mellada.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 5,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 5,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "mina-abandonada",
+      "origen": "PROGRESION",
+      "nombre": "La Mina Abandonada",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Algo despertó en el fondo de la vieja mina de hierro.",
+      "imagen": null,
+      "dificultad": "FACIL",
+      "duracionHoras": 0.25,
+      "nivelRecomendado": 2,
+      "requisitosPrevios": [
+        "sendero-de-los-aprendices"
+      ],
+      "narrativa": "Los mineros huyeron de la mina de hierro cuando los túneles empezaron a moverse. Murciélagos de ceniza y golems de escombro guardan ahora la veta. Baja, abre paso y enfrenta lo que manda allá abajo.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a El Capataz de Hierro (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Murciélagos de ceniza",
+          "cantidad": 2,
+          "descripcion": "Muerden y huyen.",
+          "prototipo": "Pícaro Machete",
+          "vida": 10,
+          "defensa": 10,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Golem de escombros",
+          "cantidad": 1,
+          "descripcion": "Lento y resistente.",
+          "prototipo": "Guerrero Tanque",
+          "vida": 26,
+          "defensa": 16,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "El Capataz de Hierro",
+        "prototipo": "Guerrero Armas",
+        "vida": 38,
+        "defensa": 18,
+        "descripcion": "Un golem mayor forjado con los raíles de la mina.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 8,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 5,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "pantano-de-los-susurros",
+      "origen": "PROGRESION",
+      "nombre": "El Pantano de los Susurros",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Voces en la niebla atraen a los viajeros al fondo del pantano.",
+      "imagen": null,
+      "dificultad": "NORMAL",
+      "duracionHoras": 0.5,
+      "nivelRecomendado": 3,
+      "requisitosPrevios": [
+        "mina-abandonada"
+      ],
+      "narrativa": "En el pantano del este la niebla habla con la voz de quien uno extraña. Los viajeros que la siguen no vuelven. Cruza entre los sapos venenosos y encuentra a la bruja que presta su voz a la niebla.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a La Bruja del Pantano (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Sapos de la niebla",
+          "cantidad": 2,
+          "descripcion": "Escupen agua helada.",
+          "prototipo": "Mago Hielo",
+          "vida": 20,
+          "defensa": 18,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Tortuga del fango",
+          "cantidad": 1,
+          "descripcion": "Caparazón duro.",
+          "prototipo": "Guerrero Tanque",
+          "vida": 22,
+          "defensa": 22,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "La Bruja del Pantano",
+        "prototipo": "Mago Hielo",
+        "vida": 55,
+        "defensa": 24,
+        "descripcion": "Congela el agua bajo los pies de sus presas.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 12,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 8,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "fortaleza-quebrada",
+      "origen": "PROGRESION",
+      "nombre": "La Fortaleza Quebrada",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Una guarnición caída se levanta cada noche en las ruinas del paso.",
+      "imagen": null,
+      "dificultad": "NORMAL",
+      "duracionHoras": 1,
+      "nivelRecomendado": 4,
+      "requisitosPrevios": [
+        "pantano-de-los-susurros"
+      ],
+      "narrativa": "La fortaleza del paso cayó hace cien años, pero su guarnición sigue en pie: soldados que no saben que han muerto y un comandante que aún espera refuerzos. Recupera el paso para el Nexo.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a El Comandante Roto (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Soldados caídos",
+          "cantidad": 3,
+          "descripcion": "Pelean en formación.",
+          "prototipo": "Guerrero Armas",
+          "vida": 34,
+          "defensa": 28,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Hechicero de la guarnición",
+          "cantidad": 1,
+          "descripcion": "Lanza hielo desde la torre.",
+          "prototipo": "Mago Hielo",
+          "vida": 24,
+          "defensa": 26,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "El Comandante Roto",
+        "prototipo": "Guerrero Armas",
+        "vida": 90,
+        "defensa": 34,
+        "descripcion": "Su espada nunca se rindió.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 16,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 10,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "cumbres-heladas",
+      "origen": "PROGRESION",
+      "nombre": "Las Cumbres Heladas",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "La ventisca no amaina desde que alguien robó el fuego del refugio.",
+      "imagen": null,
+      "dificultad": "NORMAL",
+      "duracionHoras": 2,
+      "nivelRecomendado": 5,
+      "requisitosPrevios": [
+        "fortaleza-quebrada"
+      ],
+      "narrativa": "En las cumbres, el refugio de los pastores se quedó sin su fuego eterno y la ventisca no ha parado desde entonces. Lobos de escarcha y elementales de hielo guardan el camino hasta el señor que lo apagó.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a El Señor del Invierno (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Lobos de escarcha",
+          "cantidad": 3,
+          "descripcion": "Cazan en manada.",
+          "prototipo": "Guerrero Armas",
+          "vida": 40,
+          "defensa": 34,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Elementales de hielo",
+          "cantidad": 2,
+          "descripcion": "Su toque congela.",
+          "prototipo": "Mago Hielo",
+          "vida": 30,
+          "defensa": 36,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "El Señor del Invierno",
+        "prototipo": "Mago Hielo",
+        "vida": 100,
+        "defensa": 42,
+        "descripcion": "Guarda el fuego robado en un cofre de hielo.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 20,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 10,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "volcan-dormido",
+      "origen": "PROGRESION",
+      "nombre": "El Volcán Dormido",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "El volcán despierta y las salamandras bajan hacia los pueblos.",
+      "imagen": null,
+      "dificultad": "DIFICIL",
+      "duracionHoras": 4,
+      "nivelRecomendado": 6,
+      "requisitosPrevios": [
+        "cumbres-heladas"
+      ],
+      "narrativa": "El volcán que duerme sobre el valle empezó a latir. Las salamandras bajan por las grietas y los guardianes de obsidiana cierran el cráter. En el fondo late un corazón de magma que hay que calmar antes de que despierte.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a El Corazón de Magma (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Salamandras",
+          "cantidad": 2,
+          "descripcion": "Escupen fuego y mueren rápido.",
+          "prototipo": "Mago Fuego",
+          "vida": 14,
+          "defensa": 40,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Guardianes de obsidiana",
+          "cantidad": 2,
+          "descripcion": "Muy alta defensa.",
+          "prototipo": "Guerrero Tanque",
+          "vida": 54,
+          "defensa": 52,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "El Corazón de Magma",
+        "prototipo": "Mago Hielo",
+        "vida": 110,
+        "defensa": 46,
+        "descripcion": "Cada latido derrama lava.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 25,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 15,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "ciudadela-de-las-sombras",
+      "origen": "PROGRESION",
+      "nombre": "La Ciudadela de las Sombras",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "La antesala del Bosque Sombrío: nadie entra al templo sin cruzarla.",
+      "imagen": null,
+      "dificultad": "DIFICIL",
+      "duracionHoras": 6,
+      "nivelRecomendado": 7,
+      "requisitosPrevios": [
+        "volcan-dormido"
+      ],
+      "narrativa": "Antes del Bosque Sombrío se alza una ciudadela sin puertas. Sus asesinos velados y sus caballeros negros sirven a un regente que juró que nadie llegaría al templo de los Dioses Olvidados. Ábrete paso: el Templo te espera.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar a El Regente Sombrío (jefe final).",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Superar todos los encuentros.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Completar la misión sin que la vida del héroe baje del 50%.",
+          "principal": false,
+          "tipo": "VIDA_MINIMA",
+          "valor": 50,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Caballeros negros",
+          "cantidad": 2,
+          "descripcion": "Armadura pesada.",
+          "prototipo": "Guerrero Armas",
+          "vida": 52,
+          "defensa": 50,
+          "rotaciones": []
+        },
+        {
+          "nombre": "Asesinos velados",
+          "cantidad": 2,
+          "descripcion": "Golpean desde las sombras.",
+          "prototipo": "Pícaro Veneno",
+          "vida": 20,
+          "defensa": 50,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "El Regente Sombrío",
+        "prototipo": "Guerrero Armas",
+        "vida": 140,
+        "defensa": 56,
+        "descripcion": "Señor de la ciudadela y guardián del camino al Templo.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 35,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 15,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
+}

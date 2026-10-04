@@ -45,6 +45,9 @@ export const MODOS = Object.freeze({ TIENDA: 'tienda', PORTADA: 'portada' });
  * @returns {HTMLElement}
  */
 export function precioDeProducto(producto, { grande = false } = {}) {
+  if (producto.soloEnCreditos) {
+    return precioSoloEnCreditos(producto, { grande });
+  }
   const cifra = h('span', {
     clase: clases('price', producto.precioTexto === null && 'precio-ausente'),
     texto: producto.precioTexto ?? 'Precio no disponible',
@@ -67,8 +70,62 @@ export function precioDeProducto(producto, { grande = false } = {}) {
             atributos: { 'aria-label': `${producto.descuento} % de descuento` },
           })
         : null,
+      // D-44: el otro precio, si se puede pagar con créditos del juego. La
+      // cifra la calculó el servidor (precioCreditos del catálogo, promoción
+      // incluida); aquí solo se escribe.
+      producto.precioCreditosTexto
+        ? h('span', {
+            clase: 'precio-creditos',
+            texto: `o ${producto.precioCreditosTexto}`,
+            datos: { precioCreditos: String(producto.precioCreditos) },
+          })
+        : null,
     ],
   });
+}
+
+/**
+ * G3 (ecommerce-carrito 1.7.0): un producto que solo se vende en créditos del
+ * juego. Su precio ES el de créditos —va en `.price`, con `data-precio-creditos`
+ * como el «o N créditos» de los que tienen los dos— y se dice que con tarjeta
+ * no se paga. Nunca «Precio no disponible» ni «0 COP».
+ *
+ * @param {ReturnType<typeof aProductoDeVitrina>} producto
+ * @param {{grande?: boolean}} [opciones]
+ * @returns {HTMLElement}
+ */
+function precioSoloEnCreditos(producto, { grande = false } = {}) {
+  return h('span', {
+    clase: clases('precio-bloque', 'precio-bloque--creditos', grande && 'precio-bloque--grande'),
+    datos: { soloEnCreditos: 'si' },
+    hijos: [
+      h('span', {
+        clase: 'price precio-creditos--principal',
+        texto: producto.precioCreditosTexto,
+        datos: { precioCreditos: String(producto.precioCreditos) },
+      }),
+      h('span', { clase: 'precio-solo-creditos', texto: 'Solo con créditos del juego' }),
+    ],
+  });
+}
+
+/** Por qué no se ofrece «Añadir» de lo que ya se tiene (RF-CAR-004, ecommerce-carrito 1.5.0). */
+export const MOTIVO_YA_LO_TIENES =
+  'Ya lo tienes en tu inventario: la tienda no lo vende dos veces.';
+
+/**
+ * Apaga «Añadir» de un producto que el jugador ya tiene. RF-CAR-004 pone
+ * «producto ya adquirido por el cliente» entre las excepciones de añadir a la
+ * cesta, y el servicio lo rechaza (409 `producto-ya-adquirido`): ofrecerlo
+ * sería invitar a un rechazo seguro (auditoría de DEV del 30-sep).
+ *
+ * @param {HTMLButtonElement} boton
+ */
+export function apagarAnadirPorPropio(boton) {
+  boton.disabled = true;
+  boton.title = MOTIVO_YA_LO_TIENES;
+  boton.dataset.motivo = 'propio';
+  delete boton.dataset.producto;
 }
 
 /**
@@ -197,20 +254,32 @@ function conmutadorDeTarjeta(producto) {
  */
 function imagenDeProducto(producto) {
   const caja = h('div', { clase: 'product-image' });
+  const simbolo = () =>
+    icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
+      clase: 'icono product-image__simbolo',
+      etiqueta: null,
+    });
   if (producto.imagenUrl) {
     caja.classList.add('con-imagen');
-    caja.append(
-      h('img', {
-        atributos: { src: producto.imagenUrl, alt: '', loading: 'lazy', decoding: 'async' },
-      }),
+    const imagen = h('img', {
+      atributos: { src: producto.imagenUrl, alt: '', loading: 'lazy', decoding: 'async' },
+    });
+    // La imagen la escribe quien da de alta el producto y puede no existir
+    // (en DEV hay productos con «espada.png», una ruta que no sirve nadie):
+    // una imagen rota no se enseña, se cambia por el símbolo del tipo, igual
+    // que cuando el catálogo no trae ninguna.
+    imagen.addEventListener(
+      'error',
+      () => {
+        caja.classList.remove('con-imagen');
+        caja.dataset.imagen = 'rota';
+        imagen.replaceWith(simbolo());
+      },
+      { once: true },
     );
+    caja.append(imagen);
   } else {
-    caja.append(
-      icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
-        clase: 'icono product-image__simbolo',
-        etiqueta: null,
-      }),
-    );
+    caja.append(simbolo());
   }
   return caja;
 }
@@ -275,6 +344,9 @@ export function tarjetaDeProducto(
     } else {
       anadir.dataset.producto = String(producto.id);
       anadir.setAttribute('aria-label', `Añadir ${producto.nombre} al carrito`);
+      if (unidadesPropias > 0 || producto.esPropio) {
+        apagarAnadirPorPropio(anadir);
+      }
     }
     acciones.push(anadir);
     // B5 — «añadir a la lista de deseos» en el área de cada producto (§7.5).
@@ -354,6 +426,8 @@ export function bloqueDeCompra(
   { modo = MODOS.TIENDA, unidadesPropias = 0, alAnadir, alDesear, alEntrar } = {},
 ) {
   const producto = aProductoDeVitrina(dto);
+  // Lo que dice el inventario o, si aún no contestó, la marca de la vitrina.
+  const propias = Math.max(unidadesPropias, producto.esPropio ? 1 : 0);
   const idMotivo = `deseos-motivo-${String(producto.id ?? 'sin-id')}`;
   const resultado = h('p', {
     clase: 'compra-producto__resultado',
@@ -370,16 +444,16 @@ export function bloqueDeCompra(
       ],
     }),
   ];
-  if (unidadesPropias > 0) {
+  if (propias > 0) {
     hijos.push(
       h('p', {
         clase: 'compra-producto__propio',
         hijos: [
-          distintivoDePropiedad(unidadesPropias),
+          distintivoDePropiedad(propias),
           h('span', {
             texto:
-              unidadesPropias > 1
-                ? ` Ya tienes ${unidadesPropias} en tu inventario.`
+              propias > 1
+                ? ` Ya tienes ${propias} en tu inventario.`
                 : ' Ya tienes uno en tu inventario.',
           }),
         ],
@@ -398,8 +472,13 @@ export function bloqueDeCompra(
         h('span', { texto: 'Añadir al carrito' }),
       ],
     });
+    if (propias > 0 && producto.id !== null) {
+      anadir.disabled = true;
+      anadir.title = MOTIVO_YA_LO_TIENES;
+      anadir.dataset.motivo = 'propio';
+    }
     anadir.addEventListener('click', async () => {
-      if (!alAnadir || producto.id === null) {
+      if (!alAnadir || producto.id === null || anadir.disabled) {
         return;
       }
       ocupado(anadir, true);

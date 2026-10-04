@@ -21,7 +21,7 @@ public class PartidaModificadaConcurrentemente extends ErrorDeNegocio {
 
     public PartidaModificadaConcurrentemente(UUID idPartida) {
         super(TIPO, "La partida acaba de cambiar", 409,
-                "Otra accion de esta partida se aplico a la vez que la tuya y la tuya no se aplico.");
+                "Otra acción de esta partida se aplicó a la vez que la tuya y la tuya no se aplicó.");
         this.idPartida = idPartida;
     }
 

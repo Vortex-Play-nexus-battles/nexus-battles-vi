@@ -19,6 +19,19 @@ import {
 const DURACIONES = { '24H': { horas: 24, comision: 1 }, '48H': { horas: 48, comision: 3 } };
 
 /**
+ * D-43 — el incremento mínimo es una decisión tomada (5 créditos en
+ * admin-parametros). Si un entorno lo tuviera vacío, se dice qué falta sin
+ * presentarlo como una decisión pendiente.
+ */
+const SIN_INCREMENTO =
+  'El incremento mínimo entre pujas no está configurado en administración: no se pueden publicar subastas hasta que un administrador lo fije.';
+
+/** «1 crédito», «5 créditos». */
+function textoDeCreditos(cantidad) {
+  return `${cantidad} ${cantidad === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
  * GET /subastas/reglas (ms-subastas-listado.yaml 1.1.0). Publica. Null si no
  * responde: la pantalla sigue con el respaldo y el servidor decide al publicar.
  */
@@ -122,7 +135,7 @@ export async function montarPublicacion(
               </nav>
             </fieldset>
             <p class="publicacion__ayuda">Los productos no disponibles aparecen deshabilitados. Al publicar se comprobarán también el uso, la propiedad y si el producto es subastable.</p>
-            <p class="publicacion__ayuda" data-decision-po hidden></p>
+            <p class="publicacion__ayuda" data-incremento-minimo hidden></p>
           </section>
           <section class="publicacion__panel" aria-labelledby="titulo-condiciones">
             <h2 id="titulo-condiciones"><span class="publicacion__paso">02</span> Condiciones de publicación</h2>
@@ -177,7 +190,7 @@ export async function montarPublicacion(
   let sinSesion = !sesion;
   // B8 — con el incremento minimo sin configurar el servidor no publica
   // (503 INCREMENTO_MINIMO_NO_CONFIGURADO): se dice antes y no se deja enviar.
-  let pendientePO = false;
+  let sinIncremento = false;
   const duraciones = Object.fromEntries(
     Object.entries(DURACIONES).map(([codigo, valor]) => [codigo, { ...valor }]),
   );
@@ -262,7 +275,7 @@ export async function montarPublicacion(
       enviando ||
       terminado ||
       sinSesion ||
-      (!retenido && pendientePO) ||
+      (!retenido && sinIncremento) ||
       (!retenido && (cargando || !aceptar.checked || Object.keys(errores).length > 0));
     enviar.textContent = retenido ? 'Reintentar misma publicación' : 'Confirmar y publicar';
     if (enviando) {
@@ -296,12 +309,20 @@ export async function montarPublicacion(
       }
     }
   }
+  // D-43 — el incremento mínimo lo dice el servidor (admin-parametros, 5
+  // créditos desde la migración V5): se muestra tal cual, sin una cifra escrita
+  // aquí. Sin configurar, no se deja publicar (el servidor respondería 503).
+  const avisoIncremento = $('[data-incremento-minimo]');
   if (reglas && reglas.incrementoMinimoConfigurado === false) {
-    pendientePO = true;
-    const aviso = $('[data-decision-po]');
-    aviso.textContent =
-      'DECISIÓN PO pendiente: el incremento mínimo entre pujas todavía no está configurado en administración. No se pueden publicar subastas hasta que un administrador lo fije.';
-    aviso.hidden = false;
+    sinIncremento = true;
+    avisoIncremento.textContent = SIN_INCREMENTO;
+    avisoIncremento.hidden = false;
+  } else if (reglas && reglas.incrementoMinimo !== null && reglas.incrementoMinimo !== undefined) {
+    const incremento = Number(reglas.incrementoMinimo);
+    if (Number.isFinite(incremento)) {
+      avisoIncremento.textContent = `Incremento mínimo: ${textoDeCreditos(incremento)}`;
+      avisoIncremento.hidden = false;
+    }
   }
   try {
     const guardado = almacenamiento.getItem(claveAlmacen);
@@ -419,7 +440,7 @@ export async function montarPublicacion(
   $('[data-recargar]').addEventListener('click', () => cargar(pagina));
   form.addEventListener('submit', async (evento) => {
     evento.preventDefault();
-    if (enviando || terminado || sinSesion || (!retenido && pendientePO)) {
+    if (enviando || terminado || sinSesion || (!retenido && sinIncremento)) {
       return;
     }
     const actual = sesionUtilizable();

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mi cuenta — NEXUS BATTLES VI</title>
+    <title>Mi cuenta · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
@@ -159,7 +159,7 @@
                 <dt>Consultarlos y corregirlos</dt>
                 <dd>
                   Tus nombres, apellidos, apodo, avatar y preferencias se ven y se corrigen en este
-                  formulario. El correo con el que entras aparece en el resumen.
+                  formulario. El correo con el que entras no se muestra ni se cambia desde aquí.
                 </dd>
               </div>
               <div class="cuenta-notas__nota">
@@ -186,7 +186,10 @@
               </div>
             </div>
 
-            <form autocomplete="off" class="pila">
+            <!-- G1 — las contraseñas nunca en la dirección: `method="post"` y el
+                 botón desactivado hasta que cambiar-password.js escucha
+                 `submit` (comun/ui/formulario-seguro.js). -->
+            <form autocomplete="off" class="pila" method="post">
               <div class="campo">
                 <label class="campo__etiqueta" for="passwordActual">Contraseña actual</label>
                 <input
@@ -240,7 +243,13 @@
                 >
                   Cancelar
                 </button>
-                <button type="submit" class="boton boton--primario" data-accion="guardar-password">
+                <button
+                  type="submit"
+                  class="boton boton--primario"
+                  data-accion="guardar-password"
+                  disabled
+                  data-espera-guion
+                >
                   Cambiar contraseña
                 </button>
               </div>
@@ -290,7 +299,9 @@
               </button>
             </div>
 
-            <form class="pila" data-zona="formulario-preguntas" novalidate hidden>
+            <!-- G1 — ni la contraseña ni las respuestas en la dirección: igual
+                 que el formulario de arriba, con preguntas-seguridad.js. -->
+            <form class="pila" data-zona="formulario-preguntas" method="post" novalidate hidden>
               <p class="campo__pista">
                 Escribe preguntas cuya respuesta solo sepas tú y no cambie con el tiempo. Las
                 respuestas no distinguen mayúsculas ni tildes.
@@ -421,7 +432,13 @@
                 >
                   Cancelar
                 </button>
-                <button type="submit" class="boton boton--primario" data-accion="guardar-preguntas">
+                <button
+                  type="submit"
+                  class="boton boton--primario"
+                  data-accion="guardar-preguntas"
+                  disabled
+                  data-espera-guion
+                >
                   Guardar preguntas
                 </button>
               </div>

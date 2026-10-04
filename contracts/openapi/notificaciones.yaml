@@ -18,7 +18,15 @@ info:
       de servicio (`ROLE_SERVICIO`); un token de usuario responde 403. El
       `usuarioId` del cuerpo es el destinatario, un dato de negocio, no
       quien llama.
-  version: 1.1.0
+
+    1.2.0 (auditoria de DEV del 30-sep) — el alta de un aviso declara el
+    largo de lo que la bandeja guarda: `id` hasta 200 caracteres (antes la
+    columna era de 64 sin decirlo, y los identificadores de torneos, de mas
+    de 100, se perdian), `tipo` hasta 40 y `titulo` hasta 200. Lo que no cabe
+    responde 400; el 409 queda solo para un `id` ya recibido, que es lo que
+    el emisor entiende por «ya estaba». Compatible: ningun emisor valido deja
+    de serlo.
+  version: 1.2.0
 servers:
   - url: http://localhost:8085/api/v1
     description: Entorno local de desarrollo
@@ -179,13 +187,17 @@ components:
           description: Jugador destinatario del aviso
         id:
           type: string
+          maxLength: 200
           description: >
             Identificador del evento que da origen al aviso. Lo pone el modulo
-            que emite, para que un reintento no duplique el aviso.
+            que emite, para que un reintento no duplique el aviso. Hasta 200
+            caracteres (1.2.0).
         tipo:
           type: string
+          maxLength: 40
         titulo:
           type: string
+          maxLength: 200
         cuerpo:
           type: string
         creadaEn:

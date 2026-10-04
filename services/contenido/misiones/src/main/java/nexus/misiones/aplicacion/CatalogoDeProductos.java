@@ -12,4 +12,12 @@ public interface CatalogoDeProductos {
      * @throws HeroeNoEncontrado si el producto no existe
      */
     String prototipoDe(String productoId);
+
+    /**
+     * El nombre de un producto (un arma, una armadura, un item, una epica), que es
+     * como lo conoce el motor de combate para aplicar sus efectos.
+     *
+     * @return el nombre, o nulo si el producto ya no existe en el catalogo
+     */
+    String nombreDe(String productoId);
 }

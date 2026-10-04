@@ -58,7 +58,17 @@ export function categoriaDe(accion) {
   return null;
 }
 
-/** Nombre legible de un código de acción (`ATAQUE_BASICO` → «Ataque básico»). */
+/** `codigo` de un efecto que actuó al empezar un turno (canal 1.5.0). */
+export const EFECTO_POR_TURNO = 'EFECTO_POR_TURNO';
+
+/**
+ * Nombre legible de un código de acción (`ATAQUE_BASICO` → «Ataque básico»).
+ *
+ * Un código del motor sin nombre conocido (`MANO_DE_PIEDRA`) se dice en
+ * minúsculas y con espacios («Mano de piedra»): la auditoría de DEV del 30-sep
+ * vio el registro con códigos en mayúsculas. Un nombre ya legible se deja tal
+ * cual.
+ */
 export function nombreDeAccion(codigo) {
   const texto = String(codigo ?? '').trim();
   if (!texto) {
@@ -67,7 +77,46 @@ export function nombreDeAccion(codigo) {
   if (texto.toUpperCase() === 'ATAQUE_BASICO') {
     return 'Ataque básico';
   }
+  if (/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+$/.test(texto)) {
+    const frase = texto.toLowerCase().replaceAll('_', ' ');
+    return frase.charAt(0).toUpperCase() + frase.slice(1);
+  }
   return texto;
+}
+
+/**
+ * El nombre de una acción como lo da el estado de combate del héroe que la
+ * juega (`heroe.acciones[].nombre`, REST 1.7.0 y canal 1.5.0, calculado por el
+ * motor); si no se conoce, el código legible.
+ *
+ * @param {string} codigo
+ * @param {string|null} idEjecutor
+ * @param {Array<object>} participantes
+ * @returns {string}
+ */
+export function nombreDeLaAccion(codigo, idEjecutor, participantes) {
+  const heroe = (participantes ?? []).find((p) => p.jugador?.id === idEjecutor)?.heroe;
+  const acciones = Array.isArray(heroe?.acciones) ? heroe.acciones : [];
+  const conocida = acciones.find((a) => a?.codigo === codigo);
+  const nombre = typeof conocida?.nombre === 'string' ? conocida.nombre.trim() : '';
+  return nombre || nombreDeAccion(codigo);
+}
+
+/**
+ * Lo que se jugó, con nombre. Una defensa o una sanación llegan con el código
+ * también en `nombre`; un efecto por turno, con el nombre del efecto.
+ *
+ * @param {object} aviso
+ * @param {Array<object>} participantes
+ * @returns {string}
+ */
+function nombreDeLoJugado(aviso, participantes) {
+  const codigo = aviso?.accion?.codigo;
+  const nombre = aviso?.accion?.nombre;
+  if (codigo && codigo !== EFECTO_POR_TURNO && (!nombre || nombre === codigo)) {
+    return nombreDeLaAccion(codigo, aviso?.idEjecutor, participantes);
+  }
+  return nombreDeAccion(nombre ?? codigo);
 }
 
 /**
@@ -82,7 +131,62 @@ export function nombreDeAccion(codigo) {
 export function nombreDe(idJugador, participantes, yo) {
   const participante = (participantes ?? []).find((p) => p.jugador?.id === idJugador);
   const nombre = participante?.heroe?.nombre ?? (participante?.esIA ? 'la máquina' : 'un rival');
-  return idJugador && idJugador === yo ? `${nombre} (tú)` : nombre;
+  if (idJugador && idJugador === yo) {
+    return `${nombre} (tú)`;
+  }
+  // Auditoría del 4-oct («cuando ataco, me hago daño»): el rival de la
+  // máquina lleva el nombre de su prototipo, que puede ser el de tu héroe.
+  // Sin la marca, «Mago Fuego golpea a Mago Fuego (tú)» parecía un golpe propio.
+  return participante?.esIA && participante?.heroe?.nombre ? `${nombre} (IA)` : nombre;
+}
+
+/**
+ * La línea de un daño que le devolvieron a quien atacaba: los Pinchos de
+ * escudo o Toma y lleva del objetivo (§6.1.2), que el servidor anuncia como
+ * causa `REFLEJO` con quién la causó (canal 1.7.0). Nunca «X golpea a X»: un
+ * ataque no le quita vida a quien lo lanza.
+ *
+ * @param {object} afectado
+ * @param {Array<object>} participantes
+ * @param {string|null} yo
+ * @param {string} vida «(41/44)» o vacío
+ * @returns {string}
+ */
+function textoDeDanoDevuelto(afectado, participantes, yo, vida) {
+  const cantidad = Math.abs(afectado.diferencia);
+  const causas = Array.isArray(afectado.causas) ? afectado.causas : [];
+  const reflejo = causas.find((c) => c?.tipo === 'REFLEJO');
+  const esYo = afectado.idJugador === yo;
+  const quien = nombreDe(afectado.idJugador, participantes, yo);
+  if (reflejo) {
+    const devuelve = reflejo.origen ? nombreDe(reflejo.origen, participantes, yo) : 'su rival';
+    const quienDevuelve = reflejo.efecto ? `${reflejo.efecto} de ${devuelve}` : devuelve;
+    return esYo
+      ? `${quienDevuelve} te devuelve ${cantidad} de daño${vida}.`
+      : `${quienDevuelve} le devuelve ${cantidad} de daño a ${quien}${vida}.`;
+  }
+  return esYo
+    ? `Recibes ${cantidad} de daño de vuelta${vida}.`
+    : `${quien} recibe ${cantidad} de daño de vuelta${vida}.`;
+}
+
+/**
+ * La línea de un efecto por turno que quita vida. Si lo causó el mismo héroe
+ * (la Empuñadura de Furia, §6.1.2, Tabla 16: «el guerrero pierde 1 de vida»),
+ * se dice que es suyo: antes salía «X (tú) usa Empuñadura de Furia sobre X (tú)».
+ *
+ * @returns {string}
+ */
+function textoDeEfectoQueQuitaVida(aviso, afectado, efecto, participantes, yo, vida) {
+  const cantidad = Math.abs(afectado.diferencia);
+  const objetivo = nombreDe(afectado.idJugador, participantes, yo);
+  if (afectado.idJugador === aviso?.idEjecutor) {
+    return afectado.idJugador === yo
+      ? `Pierdes ${cantidad} de vida por tu ${efecto}${vida}.`
+      : `${objetivo} pierde ${cantidad} de vida por su ${efecto}${vida}.`;
+  }
+  const causante = nombreDe(aviso?.idEjecutor, participantes, yo);
+  return `${efecto} de ${causante}: ${objetivo} pierde ${cantidad} de vida${vida}.`;
 }
 
 /**
@@ -99,7 +203,7 @@ export function narrarAccion(aviso, participantes, yo) {
   const impactos = [];
   const ejecutor = nombreDe(aviso?.idEjecutor, participantes, yo);
   const categoria = categoriaDe(aviso?.accion);
-  const accion = categoria ? null : nombreDeAccion(aviso?.accion?.nombre ?? aviso?.accion?.codigo);
+  const accion = categoria ? null : nombreDeLoJugado(aviso, participantes);
   const todos = Array.isArray(aviso?.afectados) ? aviso.afectados : [];
   // Desde B7 (canal 1.5.0) el aviso trae tambien al ejecutor aunque su vida no
   // cambie: viaja para llevar su poder, sus cargas y sus efectos. Eso no se
@@ -116,7 +220,7 @@ export function narrarAccion(aviso, participantes, yo) {
     const pedida = aviso.accion.accionPedida;
     lineas.push({
       texto: pedida
-        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeAccion(pedida)}: ataca con su valor base.`
+        ? `A ${ejecutor} no le alcanza el poder para ${nombreDeLaAccion(pedida, aviso.idEjecutor, participantes)}: ataca con su valor base.`
         : `A ${ejecutor} no le alcanza el poder: ataca con su valor base.`,
       tono: 'sistema',
       icono: 'rayo',
@@ -135,7 +239,7 @@ export function narrarAccion(aviso, participantes, yo) {
   const codigo = aviso?.accion?.codigo;
   if (categoria && codigo && codigo !== 'ATAQUE_BASICO' && !categoriaDe({ codigo })) {
     lineas.push({
-      texto: `${ejecutor} usa ${nombreDeAccion(codigo)}.`,
+      texto: `${ejecutor} usa ${nombreDeLaAccion(codigo, aviso?.idEjecutor, participantes)}.`,
       tono: 'sistema',
       icono: 'rayo',
     });
@@ -152,6 +256,11 @@ export function narrarAccion(aviso, participantes, yo) {
     return { lineas, impactos };
   }
 
+  // Una sanación con nombre propio se dice una vez antes de contar a quién
+  // curó: antes el registro solo decía «se cura: +5» y no qué acción fue
+  // (auditoría de DEV del 30-sep: «los especiales no se narran»).
+  let curacionNombrada = false;
+  const esEfectoPorTurno = aviso?.accion?.codigo === EFECTO_POR_TURNO;
   for (const afectado of afectados) {
     const objetivo = nombreDe(afectado.idJugador, participantes, yo);
     const diferencia = Number.isFinite(afectado.diferencia) ? afectado.diferencia : null;
@@ -160,7 +269,37 @@ export function narrarAccion(aviso, participantes, yo) {
         ? ` (${afectado.vidaActual}/${afectado.vidaMaxima})`
         : '';
 
-    if (diferencia !== null && diferencia > 0) {
+    if (diferencia !== null && diferencia < 0 && esEfectoPorTurno) {
+      lineas.push({
+        texto: textoDeEfectoQueQuitaVida(aviso, afectado, accion, participantes, yo, vida),
+        tono: 'dano',
+        icono: 'gota',
+      });
+      impactos.push({
+        idJugador: afectado.idJugador,
+        cifra: `${diferencia}`.replace('-', '−'),
+        etiqueta: accion,
+        tono: 'dano',
+      });
+    } else if (diferencia !== null && diferencia < 0 && afectado.idJugador === aviso?.idEjecutor) {
+      // Auditoría del 4-oct: la vida de quien atacó bajó en su propio aviso.
+      // No es su golpe: se lo devolvió el objetivo (REFLEJO).
+      lineas.push({
+        texto: textoDeDanoDevuelto(afectado, participantes, yo, vida),
+        tono: 'dano',
+        icono: 'escudo',
+      });
+      impactos.push({
+        idJugador: afectado.idJugador,
+        cifra: `${diferencia}`.replace('-', '−'),
+        etiqueta: 'Devuelto',
+        tono: 'dano',
+      });
+    } else if (diferencia !== null && diferencia > 0) {
+      if (accion && !curacionNombrada) {
+        curacionNombrada = true;
+        lineas.push({ texto: `${ejecutor} usa ${accion}.`, tono: 'sistema', icono: 'rayo' });
+      }
       const aSiMismo = afectado.idJugador === aviso?.idEjecutor;
       lineas.push({
         texto: aSiMismo

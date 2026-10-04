@@ -289,6 +289,21 @@ function cargando(boton, activo) {
 }
 
 /**
+ * Vuelve a marcar la modalidad con la que se creó la última sala.
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {string|null|undefined} modalidad
+ */
+export function conservarModalidad(formulario, modalidad) {
+  if (!modalidad) {
+    return;
+  }
+  for (const opcion of formulario.querySelectorAll('[name="modalidad"]')) {
+    opcion.checked = opcion.value === modalidad;
+  }
+}
+
+/**
  * A donde se entra a una sala: su sala de espera, y el combate cuando empiece.
  *
  * @param {string} idSala
@@ -367,7 +382,8 @@ export function montarCrearSala(
     cargando(boton, true);
 
     try {
-      const sala = await crearSalaImpl(leerFormulario(formulario));
+      const datos = leerFormulario(formulario);
+      const sala = await crearSalaImpl(datos);
 
       // R18 — la sala se creaba y quien la creo se quedaba en este formulario
       // sin camino a ella: contra la IA nace completa, y en el listado una
@@ -384,6 +400,10 @@ export function montarCrearSala(
         },
       });
       formulario.reset();
+      // Auditoría de DEV del 30-sep: tras crear la sala la modalidad volvía a
+      // «1 contra 1» y se perdía la que se había elegido. Se conserva; el
+      // resto del formulario sí vuelve a sus valores.
+      conservarModalidad(formulario, datos.modalidad);
       prefijarEncuentro(formulario, encuentro);
       // reset() devuelve cada campo a su valor del HTML (4 participantes,
       // 1 contra 1) sin volver a pasar por la modalidad: quedaban «4» con

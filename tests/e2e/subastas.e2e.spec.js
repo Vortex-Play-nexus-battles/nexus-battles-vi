@@ -35,10 +35,11 @@
  * anunciado por ese canal.
  *
  * Desde B8 el incremento minimo sale de admin-parametros
- * (`subastas.incremento-minimo`, sin valor hasta que decida el PO): antes de
- * publicar, la administradora del banco lo fija. Es una FIJACION DE PRUEBA, no
- * una decision de producto; hasta B8 la hacia una variable de entorno del
- * compose (SUBASTAS_INCREMENTO_MINIMO: "1").
+ * (`subastas.incremento-minimo`). Desde D-43 (auditoria del 4-oct) vale 5
+ * creditos por su migracion V5: el banco ya no lo fija a mano, solo espera a
+ * que GET /subastas/reglas lo diga. El ultimo bloque comprueba la regla de
+ * punta a punta: con 100 vigente, 104 se rechaza, 105 entra, y de dos pujas
+ * iguales a la vez entra una sola.
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -60,9 +61,10 @@ const PRODUCTO_SUBASTABLE = 'dddddddd-0000-0000-0000-00000000000a';
 // salas, y una subasta que falla por saldo no dice nada sobre la transferencia.
 const VENDEDORA = process.env.E2E_VENDEDORA ?? 'vendedora_e2e';
 const COMPRADORA = process.env.E2E_COMPRADORA ?? 'compradora_e2e';
-// B8 — la administradora que sembrar.sh deja como ADMINISTRADOR.
-const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
-const INCREMENTO_DE_PRUEBA = '1';
+// D-43 — el incremento minimo que publica admin-parametros (migracion V5).
+const INCREMENTO_MINIMO = 5;
+// Sufijo de esta corrida, para las cuentas propias del bloque D-43.
+const SUFIJO = Date.now().toString(36);
 
 /**
  * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
@@ -163,30 +165,20 @@ test.describe('Subastas por el borde (HU-SUB-011 / HU-SUB-001 / HU-SUB-004)', ()
 // ------------------------------------------------- ayudantes del segundo corte
 
 /**
- * B8 — fija `subastas.incremento-minimo` como ADMINISTRADOR, igual que lo hara
- * el PO. Sin esto publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Cache
- * de 1 s en el banco (SUBASTAS_PARAMETROS_CACHE_SEGUNDOS), asi que se espera a
- * que GET /subastas/reglas lo diga antes de seguir.
+ * D-43 — el incremento minimo ya viene configurado (5 creditos, migracion V5
+ * de admin-parametros): no se fija a mano. Se espera a que GET /subastas/reglas
+ * lo diga, porque ms-subastas lo cachea (SUBASTAS_PARAMETROS_CACHE_SEGUNDOS).
  */
-async function fijarIncrementoMinimo(api) {
-  const admin = await sesionDe(api, ADMIN);
-  const r = await api.put('/api/v1/parametros/subastas.incremento-minimo', {
-    headers: conToken(admin.token),
-    data: {
-      valor: INCREMENTO_DE_PRUEBA,
-      motivo: 'Fijacion de prueba del banco E2E (no es decision del PO)',
-    },
-  });
-  expect(r.status(), `fijar el incremento: ${await r.text()}`).toBe(200);
+async function esperarIncrementoMinimo(api) {
   await expect
     .poll(
-      async () =>
-        (await (await api.get('/api/v1/subastas/reglas')).json()).incrementoMinimoConfigurado,
-      {
-        timeout: 15_000,
+      async () => {
+        const reglas = await (await api.get('/api/v1/subastas/reglas')).json();
+        return reglas.incrementoMinimoConfigurado ? Number(reglas.incrementoMinimo) : null;
       },
+      { timeout: 15_000, message: 'el incremento minimo de admin-parametros' },
     )
-    .toBe(true);
+    .toBe(INCREMENTO_MINIMO);
 }
 
 async function tokenDeServicio(api) {
@@ -246,7 +238,7 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
-    await fijarIncrementoMinimo(api);
+    await esperarIncrementoMinimo(api);
     vendedora = await sesionDe(api, VENDEDORA);
     compradora = await sesionDe(api, COMPRADORA);
     const servicio = await tokenDeServicio(api);
@@ -458,7 +450,7 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
 
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
-    await fijarIncrementoMinimo(api);
+    await esperarIncrementoMinimo(api);
     vendedora = await sesionDe(api, VENDEDORA);
     compradora = await sesionDe(api, COMPRADORA);
     const servicio = await tokenDeServicio(api);
@@ -502,7 +494,7 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
       ['48H', 3],
     ]);
     expect(reglas.incrementoMinimoConfigurado).toBe(true);
-    expect(Number(reglas.incrementoMinimo)).toBe(Number(INCREMENTO_DE_PRUEBA));
+    expect(Number(reglas.incrementoMinimo)).toBe(INCREMENTO_MINIMO);
     expect(reglas.penalizacionCancelacionPorcentaje).toBe(50);
     expect(reglas.cancelacionProhibidaUltimasHoras).toBe(6);
     expect(reglas.diasParaRecoger).toBe(7);
@@ -539,7 +531,7 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     expect(publicar.status(), await publicar.text()).toBe(201);
     const publicada = await publicar.json();
     subastaId = publicada.id;
-    expect(Number(publicada.incrementoMinimo)).toBe(Number(INCREMENTO_DE_PRUEBA));
+    expect(Number(publicada.incrementoMinimo)).toBe(INCREMENTO_MINIMO);
 
     const ficha = await api.get(`/api/v1/subastas/${subastaId}`);
     expect(ficha.status(), await ficha.text()).toBe(200);
@@ -548,6 +540,25 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     expect(Number(detalle.pujaMinimaSiguiente)).toBe(10);
     expect(detalle.compraInmediataDisponible).toBe(true);
     expect(detalle.reputacionVendedor).toBeTruthy();
+
+    // G5 (listado 1.2.0): ni la ficha ni el listado públicos llevan el uid de
+    // la vendedora; si es suya lo dice el servidor con el token de quien mira.
+    const uid = vendedora.claims.uid;
+    const anonima = await (await api.get(`/api/v1/subastas/${subastaId}`)).text();
+    expect(anonima).not.toContain(uid);
+    expect(JSON.parse(anonima)).toMatchObject({ vendedorId: null, esPropia: false });
+    const suya = await (
+      await api.get(`/api/v1/subastas/${subastaId}`, { headers: conToken(vendedora.token) })
+    ).json();
+    expect(suya.esPropia).toBe(true);
+    const listado = await (
+      await api.get('/api/v1/subastas?page=0&size=50&ordenarPor=FECHA_PUBLICACION', {
+        headers: conToken(vendedora.token),
+      })
+    ).text();
+    expect(listado).not.toContain(uid);
+    const fila = JSON.parse(listado).contenido.find((s) => s.id === subastaId);
+    expect(fila).toMatchObject({ esPropia: true, vendedorId: null });
   });
 
   test('seguirla la pone en la lista de seguimiento de la compradora', async () => {
@@ -676,5 +687,123 @@ test.describe('Reglas, ficha, seguimiento, cancelación y canal en vivo (B8)', (
     const ficha = await (await api.get(`/api/v1/subastas/${subastaId}`)).json();
     expect(ficha.estado).toBe('ADJUDICADA');
     expect(ficha.compraInmediataDisponible).toBe(false);
+  });
+});
+
+test.describe('D-43 — incremento mínimo de 5 créditos, de punta a punta', () => {
+  test.describe.configure({ mode: 'serial' });
+
+  /** @type {import('@playwright/test').APIRequestContext} */
+  let api;
+  let vendedor;
+  let postores;
+  let subastaId;
+
+  /** Una puja con su propia clave de idempotencia, como la mandaria un cliente. */
+  function pujar(quien, monto) {
+    return api.post(`/api/v1/subastas/${subastaId}/pujas`, {
+      headers: {
+        ...conToken(quien.token),
+        'Idempotency-Key': `e2e-d43-${quien.claims.uid}-${monto}-${Date.now()}`,
+      },
+      data: { monto: String(monto) },
+    });
+  }
+
+  test.beforeAll(async () => {
+    test.setTimeout(180_000);
+    api = await apiRequest.newContext({ baseURL: BORDE });
+    await esperarIncrementoMinimo(api);
+    // Cuentas propias de esta corrida: un vendedor nuevo no choca con el tope
+    // de 10 publicaciones activas de la vendedora compartida (7.7.10).
+    vendedor = await sesionDe(api, `vendedor_d43_${SUFIJO}`);
+    postores = [];
+    for (let i = 1; i <= 5; i += 1) {
+      postores.push(await sesionDe(api, `postor${i}_d43_${SUFIJO}`));
+    }
+    const servicio = await tokenDeServicio(api);
+    await acreditar(api, servicio, vendedor, 50, `semilla-d43-${SUFIJO}-vendedor`);
+    for (const [i, postor] of postores.entries()) {
+      await acreditar(api, servicio, postor, 500, `semilla-d43-${SUFIJO}-postor${i + 1}`);
+    }
+
+    const clave = `e2e-d43-${SUFIJO}`;
+    const entrega = await api.post('/api/v1/inventario/entregas', {
+      headers: { ...conToken(servicio), 'Idempotency-Key': clave },
+      data: {
+        uid: vendedor.claims.uid,
+        origen: 'ADMINISTRACION',
+        referencia: clave,
+        productos: [{ productoId: PRODUCTO_SUBASTABLE, cantidad: 1 }],
+      },
+    });
+    expect(entrega.status(), `entregar el objeto: ${await entrega.text()}`).toBe(201);
+    const elemento = (await entrega.json()).elementos[0].id;
+
+    const publicar = await api.post('/api/v1/subastas', {
+      headers: { ...conToken(vendedor.token), 'Idempotency-Key': `e2e-d43-publicar-${SUFIJO}` },
+      data: {
+        elementoInventarioId: elemento,
+        productoId: PRODUCTO_SUBASTABLE,
+        duracion: '24H',
+        precioInicial: 100,
+        precioCompraInmediata: 1000,
+      },
+    });
+    expect(publicar.status(), await publicar.text()).toBe(201);
+    const publicada = await publicar.json();
+    subastaId = publicada.id;
+    // El incremento con el que nace la subasta es el de admin-parametros.
+    expect(Number(publicada.incrementoMinimo)).toBe(INCREMENTO_MINIMO);
+  });
+
+  test.afterAll(async () => {
+    await api?.dispose();
+  });
+
+  test('con 100 vigente, 104 se rechaza y 105 entra', async () => {
+    const primera = await pujar(postores[0], 100);
+    expect(primera.status(), await primera.text()).toBe(201);
+
+    const corta = await pujar(postores[1], 104);
+    expect(corta.status(), await corta.text()).toBe(409);
+    expect((await corta.json()).motivo).toBe('OFERTA_INSUFICIENTE');
+
+    const justa = await pujar(postores[2], 105);
+    expect(justa.status(), await justa.text()).toBe(201);
+
+    const ficha = await (await api.get(`/api/v1/subastas/${subastaId}`)).json();
+    expect(Number(ficha.ofertaVigente)).toBe(105);
+    expect(Number(ficha.pujaMinimaSiguiente)).toBe(110);
+  });
+
+  test('dos jugadores ven 105 y pujan 110 a la vez: entra una sola', async () => {
+    const [una, otra] = await Promise.all([pujar(postores[3], 110), pujar(postores[4], 110)]);
+    const estados = [una.status(), otra.status()].sort();
+    expect(estados, `${await una.text()} | ${await otra.text()}`).toEqual([201, 409]);
+    const rechazada = una.status() === 409 ? una : otra;
+    expect((await rechazada.json()).motivo).toBe('OFERTA_INSUFICIENTE');
+
+    const ficha = await (await api.get(`/api/v1/subastas/${subastaId}`)).json();
+    expect(Number(ficha.ofertaVigente)).toBe(110);
+    expect(Number(ficha.pujaMinimaSiguiente)).toBe(115);
+  });
+
+  test('la pantalla de publicar dice «Incremento mínimo: 5 créditos» y nada de «DECISIÓN PO»', async ({
+    page,
+  }) => {
+    await page.addInitScript(
+      ([token, nombre]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+      },
+      [vendedor.token, vendedor.apodo],
+    );
+    await page.goto(`${BORDE}/frontend/app-web/src/cuentas/publicar-subasta.html`);
+    const aviso = page.locator('[data-incremento-minimo]');
+    await expect(aviso).toHaveText(`Incremento mínimo: ${INCREMENTO_MINIMO} créditos`, {
+      timeout: 15_000,
+    });
+    await expect(page.locator('body')).not.toContainText('DECISIÓN PO');
   });
 });

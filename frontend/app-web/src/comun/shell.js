@@ -57,6 +57,7 @@ import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
 import { vigilarRed } from './ui/aviso-de-red.js';
+import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
 const BASE_RUTAS = import.meta.url;
 
@@ -832,6 +833,8 @@ export function montarArmazonAdmin(
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
  * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
+ * @param {(opciones: {raiz: HTMLElement}) => unknown} [opciones.avisos]
+ *   el contador de la campana (`avisos-de-cabecera.js`); inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
  */
 export function montarArmazon(
@@ -849,6 +852,7 @@ export function montarArmazon(
     },
     documento = globalThis.document,
     vigilar = vigilarSesion,
+    avisos = montarAvisosDeCabecera,
   } = {},
 ) {
   // Página interrumpida por una guarda (§17): no se monta nada encima.
@@ -883,7 +887,7 @@ export function montarArmazon(
   if (elegido === 'admin') {
     return montarArmazonAdmin(raiz, { seccionActiva, sesion, base, almacen, navegar });
   }
-  return montarArmazonJugador(raiz, {
+  const montado = montarArmazonJugador(raiz, {
     seccionActiva,
     buscador,
     sesion,
@@ -891,6 +895,12 @@ export function montarArmazon(
     almacen,
     navegar,
   });
+  // Auditoría de DEV del 30-sep: el contador de la campana solo se encendía
+  // en la vista de notificaciones, que monta su propia bandeja completa.
+  if (sesion.autenticado && vista !== 'notificaciones') {
+    avisos({ raiz: montado.elemento });
+  }
+  return montado;
 }
 
 export { ACCESO };

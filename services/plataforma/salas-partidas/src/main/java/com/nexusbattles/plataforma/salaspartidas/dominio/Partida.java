@@ -76,7 +76,8 @@ public class Partida {
 
     /**
      * Arranca la partida de una sala en el orden de entrada, con la maquina
-     * combatiendo con una copia del heroe del anfitrion.
+     * combatiendo con un rival del mismo prototipo y nivel que el heroe del
+     * anfitrion ({@link HeroeDeCombate#comoRivalDeLaMaquina()}).
      *
      * <p>Ninguna partida real se inicia asi: {@code IniciarPartida} sortea el
      * orden (§6.1.3) y le da a la maquina un heroe aleatorio del catalogo
@@ -106,8 +107,9 @@ public class Partida {
      * @param ahora             reloj inyectado, para que las pruebas no dependan del sistema
      * @param orden             como se ordenan los turnos (sorteo con semilla, §6.1.3)
      * @param heroesDeLaMaquina un heroe por cupo de la IA (D-B7-11); los que
-     *                          falten combaten con una copia del heroe del
-     *                          anfitrion a vida completa
+     *                          falten combaten con un rival del prototipo y el
+     *                          nivel del heroe del anfitrion, sin su nombre ni
+     *                          su equipo
      */
     public static Partida iniciar(Sala sala, Instant ahora, OrdenDeTurnos orden,
                                   List<HeroeDeCombate> heroesDeLaMaquina) {
@@ -132,7 +134,9 @@ public class Partida {
             if (i < heroesIA.size() && heroesIA.get(i) != null) {
                 heroeDeLaMaquina = heroesIA.get(i);
             } else {
-                heroeDeLaMaquina = delAnfitrion == null ? null : delAnfitrion.heroe().aPlenaVida();
+                // Sin catalogo: un rival del mismo prototipo y nivel, NO una
+                // copia del heroe del anfitrion con su nombre y su equipo.
+                heroeDeLaMaquina = delAnfitrion == null ? null : delAnfitrion.heroe().comoRivalDeLaMaquina();
             }
             enCombate.add(ParticipanteDePartida.inteligenciaArtificial(
                     UUID.randomUUID(), heroeDeLaMaquina));

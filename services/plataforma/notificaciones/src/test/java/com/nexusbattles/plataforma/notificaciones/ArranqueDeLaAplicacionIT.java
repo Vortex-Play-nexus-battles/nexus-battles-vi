@@ -167,6 +167,44 @@ class ArranqueDeLaAplicacionIT {
         assertEquals(401, sinCredencial.statusCode(), "emitir sin credencial de servicio es 401");
     }
 
+    @Test
+    @DisplayName("auditoria 30-sep: un identificador de torneos (mas de 100 caracteres) se guarda y no se confunde con un duplicado")
+    void identificadorLargoDeTorneos() throws Exception {
+        UUID ana = UUID.randomUUID();
+        String id = "torneo-" + UUID.randomUUID() + "-jugador-" + ana + "-aviso-inscripcion";
+        assertTrue(id.length() > 100, "el caso real mide " + id.length());
+
+        HttpResponse<String> primera = emitir(ana, id);
+        assertEquals(201, primera.statusCode(), primera.body());
+        // El reintento del mismo evento sigue siendo el duplicado de siempre.
+        HttpResponse<String> repetida = emitir(ana, id);
+        assertEquals(409, repetida.statusCode(), repetida.body());
+        // Y lo que no cabe se rechaza como dato invalido, no como «ya estaba».
+        HttpResponse<String> enorme = emitir(ana, "x".repeat(201));
+        assertEquals(400, enorme.statusCode(), enorme.body());
+
+        HttpResponse<String> bandeja = http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + "/api/v1/users/" + ana + "/notifications"))
+                        .header("Authorization", "Bearer " + emisor.tokenDeJugador("Ana", ana)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bandeja.statusCode(), bandeja.body());
+        assertTrue(bandeja.body().contains(id), "el aviso esta en la bandeja: " + bandeja.body());
+        assertTrue(bandeja.body().contains("\"noLeidas\":1"), bandeja.body());
+    }
+
+    private HttpResponse<String> emitir(UUID destinatario, String id) throws Exception {
+        String evento = """
+                {"usuarioId":"%s","id":"%s","tipo":"TORNEO","titulo":"Inscripcion confirmada",
+                 "cuerpo":"Tu equipo quedo inscrito.","creadaEn":"2026-10-02T12:00:00Z"}
+                """.formatted(destinatario, id);
+        return http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + "/api/v1/internal/notifications"))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + emisor.tokenDeServicio("torneos"))
+                        .POST(HttpRequest.BodyPublishers.ofString(evento)).build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
     /** Un aviso, saltando los mensajes de contador que el alta y la emision tambien mandan. */
     private static String esperarAviso(BlockingQueue<String> cola) throws InterruptedException {
         long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);

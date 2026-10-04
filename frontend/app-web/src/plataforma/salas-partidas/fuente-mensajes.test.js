@@ -3,7 +3,7 @@
  *
  * La red (`fetch`) y el canal STOMP son falsos: lo que se prueba es que el
  * adaptador cumple el puerto de la vista (`FuenteDeMensajes`) hablando los
- * contratos (`salas-partidas.yaml` 1.6.1, `mensajes-directos.yaml` 1.0.1 y
+ * contratos (`salas-partidas.yaml` 1.8.0, `mensajes-directos.yaml` 1.1.0 y
  * `ms-identidad-perfiles.yaml` 1.1.0). El servidor tiene sus propias pruebas
  * con STOMP de verdad (`MensajesDirectosIT`), y el banco E2E las dos cosas.
  * Los apodos y textos son datos de prueba.
@@ -319,6 +319,30 @@ describe('la bandeja', () => {
     ]);
   });
 
+  test('D-40: cada conversación con el estado que dice el servicio; uno que no conoce, ACTIVA', async () => {
+    const red = redFalsa({
+      [`GET ${RUTA_DE_CONVERSACIONES}`]: respuesta(200, [
+        {
+          ...resumen(BRUMA, mensaje('m3', YO, BRUMA, 'adiós', '2026-09-22T15:10:00Z')),
+          estado: 'BLOQUEADA',
+        },
+        {
+          ...resumen(KAEL, mensaje('m2', KAEL, YO, 'eh', '2026-09-22T15:05:00Z')),
+          estado: 'NO_ADMITE',
+        },
+        {
+          ...resumen(NYRA, mensaje('m1', NYRA, YO, 'hola', '2026-09-22T15:00:00Z')),
+          estado: 'INVENTADO',
+        },
+      ]),
+    });
+    const { fuente } = adaptador({ red });
+
+    const { conversaciones } = await fuente.bandeja();
+
+    expect(conversaciones.map((c) => c.estado)).toEqual(['BLOQUEADA', 'NO_ADMITE', 'ACTIVA']);
+  });
+
   test('si no contesta, un fallo que se puede enseñar: sin códigos ni nombres internos', async () => {
     const red = redFalsa({ [`GET ${RUTA_DE_CONVERSACIONES}`]: respuesta(502, undefined) });
     const { fuente } = adaptador({ red });
@@ -381,9 +405,13 @@ describe('abrir una conversación', () => {
     await expect(fuente.conversacionCon(BRUMA)).resolves.toEqual(conversaciones[0]);
   });
 
-  test('con alguien de la búsqueda: vacía y con su apodo, sin tocar la red', async () => {
+  test('con alguien de la búsqueda: vacía, con su apodo y con el estado que diga su bloqueo (D-40)', async () => {
     const red = redFalsa({
       [`GET ${RUTA_DE_PERFILES_PUBLICOS}`]: respuesta(200, [{ uid: NYRA, apodo: 'Nyra' }]),
+      [`GET ${RUTA_DE_CONVERSACIONES}/${NYRA}/bloqueo`]: respuesta(200, {
+        uidOtro: NYRA,
+        estado: 'NO_ADMITE',
+      }),
     });
     const { fuente } = adaptador({ red });
     await fuente.buscarJugadores('nyr');
@@ -393,9 +421,28 @@ describe('abrir una conversación', () => {
       con: { id: NYRA, apodo: 'Nyra' },
       ultimo: null,
       noLeidos: 0,
-      estado: 'ACTIVA',
+      estado: 'NO_ADMITE',
     });
-    expect(red.llamadas).toHaveLength(1);
+    // La segunda vez ya se sabe: no se vuelve a preguntar.
+    await fuente.conversacionCon(NYRA);
+    expect(red.llamadas.map((l) => `${l.metodo} ${l.ruta}`)).toEqual([
+      `GET ${RUTA_DE_PERFILES_PUBLICOS}`,
+      `GET ${RUTA_DE_CONVERSACIONES}/${NYRA}/bloqueo`,
+    ]);
+  });
+
+  test('si la consulta del bloqueo falla, se abre ACTIVA: escribir dirá el rechazo si lo hay', async () => {
+    const red = redFalsa({
+      [`GET ${RUTA_DE_CONVERSACIONES}/${NYRA}/bloqueo`]: () => {
+        throw new TypeError('Failed to fetch');
+      },
+      [`GET ${RUTA_DE_CONVERSACIONES}/${KAEL}/bloqueo`]: respuesta(200, { estado: 'RARO' }),
+    });
+    const { fuente } = adaptador({ red });
+
+    await expect(fuente.conversacionCon(NYRA)).resolves.toMatchObject({ estado: 'ACTIVA' });
+    await expect(fuente.conversacionCon(KAEL)).resolves.toMatchObject({ estado: 'ACTIVA' });
+    await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'ACTIVA' });
   });
 
   test('contigo mismo, o con algo que no es un jugador, no', async () => {
@@ -576,6 +623,8 @@ describe('enviar', () => {
       /espera 4 segundos/,
     ],
     [503, 'moderacion-no-disponible', {}, 'MODERACION_NO_DISPONIBLE', true, /no sale sin revisar/],
+    [409, 'conversacion-bloqueada', {}, 'CONVERSACION_BLOQUEADA', false, /desbloquéalo/],
+    [403, 'destinatario-no-admite', {}, 'NO_ADMITE', false, /no recibe mensajes tuyos/],
     [500, 'otro-fallo', {}, null, true, /No pudimos enviarlo/],
   ])(
     'un %i %s por REST se explica por su motivo',
@@ -626,6 +675,72 @@ describe('enviar', () => {
       motivo: 'DESTINATARIO_PROPIO',
     });
     expect(red.fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('D-40: un rechazo por bloqueo trae el estado nuevo, y la conversación se queda con él', async () => {
+    const red = redFalsa({
+      [`POST ${RUTA_DE_CONVERSACIONES}/${BRUMA}/mensajes`]: respuesta(403, {
+        type: `${TIPO}destinatario-no-admite`,
+        status: 403,
+      }),
+    });
+    const { fuente } = adaptador({ red });
+
+    const fallo = await fuente.enviar(BRUMA, 'hola').catch((error) => error);
+
+    expect(fallo).toMatchObject({ motivo: 'NO_ADMITE', estadoDeConversacion: 'NO_ADMITE' });
+    await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'NO_ADMITE' });
+    expect(red.llamadas.filter((l) => l.ruta.endsWith('/bloqueo'))).toEqual([]);
+  });
+
+  test('D-40: por la cola, igual: CONVERSACION_BLOQUEADA deja la conversación BLOQUEADA', async () => {
+    const { fuente, broker } = adaptador();
+    await escuchando(fuente);
+
+    const enviado = fuente.enviar(BRUMA, 'hola');
+    broker.actual.entregar({
+      tipo: 'RECHAZO',
+      motivo: 'CONVERSACION_BLOQUEADA',
+      idCliente: 'id-1',
+    });
+
+    await expect(enviado).rejects.toMatchObject({
+      motivo: 'CONVERSACION_BLOQUEADA',
+      reintentable: false,
+      estadoDeConversacion: 'BLOQUEADA',
+    });
+    await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'BLOQUEADA' });
+  });
+
+  test('auditoría 30-sep: un dibujo con símbolos dice qué regla falló, no solo el largo', async () => {
+    const red = redFalsa({
+      [`POST ${RUTA_DE_CONVERSACIONES}/${BRUMA}/mensajes`]: respuesta(400, {
+        type: `${TIPO}mensaje-invalido`,
+        title: 'Mensaje no válido',
+        status: 400,
+        detail: 'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+      }),
+    });
+    const { fuente } = adaptador({ red });
+
+    const fallo = await fuente.enviar(BRUMA, '(\\_/)').catch((error) => error);
+
+    expect(fallo).toMatchObject({ motivo: 'TEXTO_INVALIDO', reintentable: false, estado: 400 });
+    expect(fallo.detalle).toBe(
+      'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+    );
+    // Por la cola el rechazo no trae `detail`: la explicación general ya no es solo el largo.
+    expect(falloPorMotivo('TEXTO_INVALIDO').detalle).toMatch(/entre 1 y 500 caracteres/);
+    expect(falloPorMotivo('TEXTO_INVALIDO').detalle).toMatch(/dibujos hechos con símbolos/);
+    // Otro motivo no toma el texto del servidor.
+    expect(
+      falloPorMotivo('TEXTO_NO_PERMITIDO', { detalleDelServidor: 'texto del servidor' }).detalle,
+    ).not.toBe('texto del servidor');
+  });
+
+  test('un rechazo que no es un bloqueo no cambia el estado de nadie', () => {
+    expect(falloPorMotivo('TEXTO_NO_PERMITIDO').estadoDeConversacion).toBeNull();
+    expect(falloPorMotivo('ALGO_NUEVO').estadoDeConversacion).toBeNull();
   });
 
   test('un motivo que no se conoce se trata como un fallo que se puede reintentar', () => {
@@ -805,16 +920,101 @@ describe('en vivo', () => {
   });
 });
 
-describe('lo que el servicio no tiene, dicho', () => {
-  test('bloquear no está disponible: lo dice y no toca nada', async () => {
-    const { fuente, red } = adaptador();
-    const fallo = await fuente.bloquear(BRUMA, true).catch((error) => error);
-    expect(fallo).toBeInstanceOf(FalloDeMensajes);
-    expect(fallo.detalle).toMatch(/todavía no está disponible/);
-    expect(fallo.reintentable).toBe(false);
-    expect(red.fetchImpl).not.toHaveBeenCalled();
+describe('bloquear (D-40)', () => {
+  test('bloquear es PUT y desbloquear DELETE de su bloqueo; la conversación queda con el estado del servidor', async () => {
+    const red = redFalsa({
+      [`GET ${RUTA_DE_CONVERSACIONES}`]: respuesta(200, [
+        resumen(BRUMA, mensaje('m1', BRUMA, YO, 'hola', '2026-09-22T15:00:00Z'), 1),
+      ]),
+      [`PUT ${RUTA_DE_CONVERSACIONES}/${BRUMA}/bloqueo`]: respuesta(200, {
+        uidOtro: BRUMA,
+        estado: 'BLOQUEADA',
+      }),
+      [`DELETE ${RUTA_DE_CONVERSACIONES}/${BRUMA}/bloqueo`]: respuesta(200, {
+        uidOtro: BRUMA,
+        estado: 'ACTIVA',
+      }),
+    });
+    const { fuente } = adaptador({ red });
+    await fuente.bandeja();
+
+    const bloqueada = await fuente.bloquear(BRUMA, true);
+    expect(bloqueada).toMatchObject({
+      id: BRUMA,
+      con: { id: BRUMA, apodo: 'Bruma' },
+      noLeidos: 1,
+      estado: 'BLOQUEADA',
+    });
+    await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'BLOQUEADA' });
+
+    await expect(fuente.bloquear(BRUMA, false)).resolves.toMatchObject({ estado: 'ACTIVA' });
+    expect(red.llamadas.map((l) => l.metodo)).toEqual(['GET', 'PUT', 'DELETE']);
   });
 
+  test('si el otro también te bloqueó, desbloquear te deja en NO_ADMITE, como dice el servidor', async () => {
+    const red = redFalsa({
+      [`DELETE ${RUTA_DE_CONVERSACIONES}/${BRUMA}/bloqueo`]: respuesta(200, {
+        uidOtro: BRUMA,
+        estado: 'NO_ADMITE',
+      }),
+    });
+    const { fuente } = adaptador({ red });
+
+    await expect(fuente.bloquear(BRUMA, false)).resolves.toMatchObject({
+      id: BRUMA,
+      ultimo: null,
+      estado: 'NO_ADMITE',
+    });
+  });
+
+  test('sin el estado del contrato no se pinta un bloqueo que nadie confirmó', async () => {
+    const red = redFalsa({
+      [`PUT ${RUTA_DE_CONVERSACIONES}/${BRUMA}/bloqueo`]: respuesta(200, { ok: true }),
+    });
+    const { fuente } = adaptador({ red });
+
+    const fallo = await fuente.bloquear(BRUMA, true).catch((error) => error);
+
+    expect(fallo).toBeInstanceOf(FalloDeMensajes);
+    expect(fallo.detalle).toMatch(/no responde/);
+    expect(fallo.reintentable).toBe(true);
+    await expect(fuente.conversacionCon(BRUMA)).resolves.toMatchObject({ estado: 'ACTIVA' });
+  });
+
+  test('sin red, o si el servicio falla, lo dice; con la sesión caducada, que vuelvas a entrar', async () => {
+    const red = redFalsa({
+      [`PUT ${RUTA_DE_CONVERSACIONES}/${BRUMA}/bloqueo`]: () => {
+        throw new TypeError('Failed to fetch');
+      },
+      [`PUT ${RUTA_DE_CONVERSACIONES}/${KAEL}/bloqueo`]: respuesta(502, undefined),
+      [`PUT ${RUTA_DE_CONVERSACIONES}/${NYRA}/bloqueo`]: respuesta(401, undefined),
+    });
+    const { fuente } = adaptador({ red });
+
+    await expect(fuente.bloquear(BRUMA, true)).rejects.toMatchObject({
+      detalle: expect.stringMatching(/no responde/),
+      reintentable: true,
+    });
+    await expect(fuente.bloquear(KAEL, true)).rejects.toMatchObject({ estado: 502 });
+    await expect(fuente.bloquear(NYRA, true)).rejects.toMatchObject({
+      detalle: expect.stringMatching(/vuelve a iniciar sesión/),
+      reintentable: false,
+    });
+  });
+
+  test('a ti mismo o a algo que no es un jugador, no, y sin tocar la red', async () => {
+    const { fuente, red } = adaptador();
+    await expect(fuente.bloquear(YO, true)).rejects.toMatchObject({
+      motivo: 'DESTINATARIO_PROPIO',
+    });
+    await expect(fuente.bloquear('dm:x:y', true)).rejects.toMatchObject({
+      detalle: 'Ese jugador no existe.',
+    });
+    expect(red.fetchImpl).not.toHaveBeenCalled();
+  });
+});
+
+describe('marcar leída', () => {
   test('marcar leída es el POST de leído de esa conversación', async () => {
     const red = redFalsa({
       [`POST ${RUTA_DE_CONVERSACIONES}/${BRUMA}/leido`]: respuesta(204, undefined),

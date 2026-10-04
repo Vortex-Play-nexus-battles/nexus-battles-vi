@@ -19,6 +19,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { formularioListo } from '../comun/ui/formulario-seguro.js';
 import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** Clave de sessionStorage donde vive el token de sesión (la misma del login). */
@@ -208,6 +209,9 @@ export function montarCambioDePassword(
     limpiar();
     decir('', '');
   });
+
+  // G1 — la vista ya escucha `submit`: el botón se puede encender.
+  formularioListo(formulario);
 
   return { leer, limpiar };
 }

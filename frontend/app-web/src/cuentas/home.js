@@ -71,11 +71,15 @@ export const ACCESOS = Object.freeze([
   // créditos solo se ganan en batalla y solo circulan en las subastas
   // (Proyecto Integrador II, §7.7.3). La propia tienda dice «Paga con moneda local».
   { id: 'tienda', titulo: 'Tienda', detalle: 'Paga en tu moneda', destino: './tienda.html' },
+  // Auditoría de DEV del 30-sep: llevaba a «Comentar un producto» sin
+  // producto, que solo dice «No hay ningún producto seleccionado». Las
+  // opiniones viven en la ficha de cada producto de la tienda (UXC-3): ahí
+  // se leen, se califica y se comenta.
   {
     id: 'comentarios',
     titulo: 'Comunidad',
-    detalle: 'Opiniones de productos',
-    destino: '../plataforma/comentarios/publicar-comentario.html',
+    detalle: 'Opiniones en cada producto',
+    destino: './tienda.html',
   },
   // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
   // vista dice ella misma que los mensajes privados aún no están abiertos.
@@ -160,7 +164,10 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar, cabecera = null) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: distintivoDeCreditos(saldo.saldoReservado, { tam: 'grande' }),
-      detalle: 'Vuelve si la sala se cancela',
+      // Auditoría de DEV del 30-sep: el jugador veía créditos apartados sin
+      // saber cuándo vuelven. Los tres caminos son del servidor (salas-partidas
+      // y ms-finanzas, D-39): cancelar, terminar o 72 h sin jugarse.
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   return caja;

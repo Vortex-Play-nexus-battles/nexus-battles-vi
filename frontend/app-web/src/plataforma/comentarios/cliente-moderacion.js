@@ -52,7 +52,15 @@ const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);
  * que manda es la suya y la vista se entera por el problem detail.
  */
 export const ACCIONES = Object.freeze([
-  { valor: 'APROBAR', etiqueta: 'Aprobar', desde: ['EN_REVISION'] },
+  // comentarios.yaml 1.8.0: un reporte encola sin ocultar, asi que se aprueba
+  // tambien uno PUBLICADO —pero solo si tiene reportes pendientes: sin ellos,
+  // el servicio contesta 409 (otro moderador ya lo atendio)—.
+  {
+    valor: 'APROBAR',
+    etiqueta: 'Aprobar',
+    desde: ['EN_REVISION', 'PUBLICADO'],
+    publicadoConReportes: true,
+  },
   { valor: 'OCULTAR', etiqueta: 'Ocultar', desde: ['EN_REVISION', 'PUBLICADO'] },
   { valor: 'ELIMINAR', etiqueta: 'Eliminar', desde: ['EN_REVISION', 'PUBLICADO', 'OCULTO'] },
   { valor: 'RESTAURAR', etiqueta: 'Restaurar', desde: ['OCULTO'] },
@@ -65,6 +73,38 @@ export const ACCIONES = Object.freeze([
     marca: true,
   },
 ]);
+
+/**
+ * Las decisiones que atienden los reportes recibidos hasta ese momento
+ * (comentarios.yaml 1.8.0, `AccionDeModeracion.RESUELVEN_REPORTES`): un
+ * reporte anterior a una de ellas ya no esta pendiente. MARCAR y DESMARCAR no.
+ */
+export const ACCIONES_QUE_RESUELVEN_REPORTES = Object.freeze([
+  'APROBAR',
+  'OCULTAR',
+  'ELIMINAR',
+  'RESTAURAR',
+  'EDITAR',
+]);
+
+/**
+ * Si el comentario tiene reportes PENDIENTES: alguno posterior a la ultima
+ * decision que atiende reportes. Es la misma regla que aplica el servicio, con
+ * lo que ya trae el detalle (sus reportes y su historial).
+ *
+ * @param {{reportes?: Array<{fecha?: string}>, historial?: Array<{accion?: string, fecha?: string}>}} detalle
+ * @returns {boolean}
+ */
+export function hayReportesPendientes(detalle) {
+  const reportes = detalle?.reportes ?? [];
+  if (reportes.length === 0) {
+    return false;
+  }
+  const ultimaDecision = (detalle?.historial ?? [])
+    .filter((a) => ACCIONES_QUE_RESUELVEN_REPORTES.includes(a.accion))
+    .reduce((max, a) => Math.max(max, Date.parse(a.fecha ?? '') || 0), 0);
+  return reportes.some((r) => (Date.parse(r.fecha ?? '') || 0) > ultimaDecision);
+}
 
 /**
  * Las que dejan el comentario en el estado en que estaba (1.5.0): tras ellas
@@ -97,24 +137,30 @@ export const MOTIVO_MAXIMO = 500;
 export const TEXTO_NUEVO_MAXIMO = 2000;
 
 /**
- * Que mirar en la cola (`marcado`, 1.5.0): sin filtro, la de siempre (los
- * EN_REVISION); `true`, la lista de seguimiento (los marcados en cualquier
- * estado salvo ELIMINADO); `false`, los EN_REVISION sin marcar.
+ * Que mirar en la cola (`marcado`, 1.5.0): sin filtro, lo pendiente —los
+ * EN_REVISION y, desde la 1.8.0, los PUBLICADOS con reportes pendientes—;
+ * `true`, la lista de seguimiento (los marcados en cualquier estado salvo
+ * ELIMINADO); `false`, lo pendiente sin marcar.
  */
 export const FILTROS_DE_COLA = Object.freeze([
-  { valor: 'en-revision', etiqueta: 'En revisión', marcado: null },
+  { valor: 'en-revision', etiqueta: 'Pendientes de revisión', marcado: null },
   { valor: 'marcados', etiqueta: 'Marcados para seguimiento', marcado: true },
-  { valor: 'sin-marcar', etiqueta: 'En revisión sin marcar', marcado: false },
+  { valor: 'sin-marcar', etiqueta: 'Pendientes sin marcar', marcado: false },
 ]);
 
 /**
  * @param {string} estado estado actual del comentario
  * @param {boolean} [marcado] si tiene la marca de seguimiento (1.5.0)
+ * @param {{reportesPendientes?: boolean}} [contexto] si tiene reportes pendientes
+ *   ({@link hayReportesPendientes}): sin ellos no se ofrece aprobar uno PUBLICADO
  * @returns {Array<{valor: string, etiqueta: string}>} acciones que tienen sentido
  */
-export function accionesDesde(estado, marcado = false) {
+export function accionesDesde(estado, marcado = false, { reportesPendientes = false } = {}) {
   return ACCIONES.filter(
-    (a) => a.desde.includes(estado) && (a.marca === undefined || a.marca === Boolean(marcado)),
+    (a) =>
+      a.desde.includes(estado) &&
+      (a.marca === undefined || a.marca === Boolean(marcado)) &&
+      !(a.publicadoConReportes && estado === 'PUBLICADO' && !reportesPendientes),
   ).map(({ valor, etiqueta }) => ({ valor, etiqueta }));
 }
 
@@ -214,6 +260,32 @@ export async function consultarDetalle(
 ) {
   return pedir(
     `${rutaDeModeracion()}/${encodeURIComponent(comentarioId)}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * Los comentarios de un autor, del mas reciente al mas antiguo y en cualquier
+ * estado (HU-COM-005, comentarios.yaml 1.7.0). Solo roles de moderacion.
+ *
+ * Un autor sin comentarios es `200` con lista vacia y `total: 0`, no un 404.
+ *
+ * @param {string} autorId
+ * @param {{pagina?: number, tamano?: number}} [paginacion] `tamano` hasta 100
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{autorId: string, apodoAutor?: string, comentarios: object[],
+ *   total: number, pagina: number, tamano: number}>}
+ * @throws {ErrorDeApi} 401 sin sesion, 403 si el rol no modera
+ */
+export async function historialDelAutor(
+  autorId,
+  { pagina = 0, tamano = 20 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
+  return pedir(
+    `${rutaDeModeracion()}/autores/${encodeURIComponent(autorId)}/comentarios?${parametros}`,
     { method: 'GET', headers: { Accept: 'application/json' } },
     fetchImpl,
   );

@@ -9,8 +9,9 @@
  *     otro (RF-COM-006). Las dos acciones son excluyentes a propósito: un
  *     reporte a uno mismo no significa nada, y «Eliminar» sobre uno ajeno
  *     sería una promesa que el servicio contesta con 403;
- *   - en qué estado quedó cuando él lo reportó: «En revisión», porque el
- *     primer reporte lo saca del hilo público hasta que un moderador decide;
+ *   - en qué estado quedó cuando él lo reportó: «Reportado». Desde
+ *     comentarios.yaml 1.8.0 un reporte lo pone en la cola de moderación sin
+ *     sacarlo del hilo: ocultarlo es decisión de un moderador;
  *   - si un moderador cambió su texto (`editado`, comentarios.yaml 1.5.0):
  *     quien lo lee tiene que saber que no es exactamente lo que escribió su
  *     autor (7.3.3, «Editar ... con registro de la edición»).
@@ -52,7 +53,7 @@ export const LADO_DE_MINIATURA = 96;
 
 /** Estados que la vista le pone a un comentario tras una acción de quien mira. */
 export const ESTADO_LOCAL = Object.freeze({
-  /** Quien mira lo reportó: el servicio lo pasó a revisión. */
+  /** Quien mira lo reportó: el servicio lo puso en la cola de moderación. */
   REPORTADO: 'REPORTADO',
 });
 
@@ -213,6 +214,24 @@ export function adjuntosDeComentario(imagenes, { urlDeImagen = null, autor = nul
 }
 
 /**
+ * ¿Es de quien mira? G4 (comentarios.yaml 1.9.0): el hilo público ya no trae
+ * el `uid` del autor; lo dice el servidor en `propio`, comparando con el token
+ * de quien lo pide. Si la respuesta no trae `propio` (un servicio anterior a
+ * 1.9.0, o la respuesta de publicar de un cliente viejo), se compara el
+ * `autorId` con el `uid` de la sesión, como antes.
+ *
+ * @param {object} comentario `ComentarioResponse`
+ * @param {string|null} yo el `uid` de quien mira
+ * @returns {boolean}
+ */
+export function esPropio(comentario, yo) {
+  if (typeof comentario?.propio === 'boolean') {
+    return comentario.propio;
+  }
+  return Boolean(yo) && comentario?.autorId === yo;
+}
+
+/**
  * Tarjeta de un comentario.
  *
  * @param {object} comentario `ComentarioResponse` del contrato
@@ -229,7 +248,7 @@ export function tarjetaDeComentario(
   { yo = null, estadoLocal = null, alEliminar = null, alReportar = null, urlDeImagen = null } = {},
 ) {
   const apodo = typeof comentario?.apodoAutor === 'string' ? comentario.apodoAutor : '';
-  const esMio = Boolean(yo) && comentario?.autorId === yo;
+  const esMio = Boolean(yo) && esPropio(comentario, yo);
 
   const autor = h('p', {
     clase: 'comentario__autor',
@@ -330,7 +349,7 @@ function pieDelComentario({ comentario, apodo, esMio, yo, estadoLocal, alElimina
         }),
         h('span', {
           clase: 'comentario__estado-texto',
-          texto: 'Un moderador lo revisará; mientras tanto no se muestra a nadie más.',
+          texto: 'Un moderador lo revisará. Mientras tanto sigue a la vista.',
         }),
       ],
     });

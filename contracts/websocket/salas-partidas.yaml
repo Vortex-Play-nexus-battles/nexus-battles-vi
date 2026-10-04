@@ -34,9 +34,31 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.5.0
+  version: 1.7.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    **1.7.0 (auditoria del 4-oct) — cada golpe dice a quien y por que.
+    Aditivo.** `accionResuelta` gana `idObjetivo` (a quien apunto la accion) y,
+    en cada afectado, `causas`: por que cambio su vida, tal como lo anoto el
+    motor (`DANO`, `REFLEJO`, `SANACION`, `DANO_POR_TURNO`...). Un jugador veia
+    bajar su propia barra en el mismo aviso de su ataque —el contragolpe de la
+    maquina llega en la misma rafaga, y los Pinchos de escudo o Toma y lleva le
+    devuelven dano— y el registro lo contaba como «X golpea a X»: parecia que
+    atacar le hacia dano a si mismo. Con `REFLEJO` y su `origen`, la vista dice
+    quien se lo devolvio. El servidor, ademas, entrega los avisos de una sesion
+    en el orden en que se publicaron.
+
+    **1.6.0 (auditoria de DEV del 30-sep) — chat sin dibujos ni inundaciones.
+    Aditivo.** Ningun destino ni esquema cambia. Antes de la lista negra, el
+    texto de `enviarChat` y `enviarChatGeneral` se depura (Unicode NFKC, sin
+    caracteres de control ni de formato invisibles, los saltos de linea en
+    una sola forma) y se rechaza con `errorDeCanal` `type` `mensaje-invalido`
+    (400) si tiene demasiadas lineas, una racha larga del mismo caracter o, en
+    un texto largo, casi solo simbolos; el `detail` explica cual. Y quien
+    escribe mas deprisa de lo admitido recibe `errorDeCanal` `type`
+    `demasiados-mensajes` (429), el mismo de los mensajes privados. Los
+    valores son provisionales (D-37) y viven en la configuracion del servicio.
 
     **1.5.0 (B7, BACKEND-09) — combate contractual. Aditivo.** El combate usa
     el heroe real y las reglas de la seccion 6: `codigoAccion` admite las
@@ -183,8 +205,9 @@ channels:
       de HU-ADM-002.
 
       Los errores de envio (jugador silenciado, contenido bloqueado, filtro
-      no disponible, mensaje invalido) no se difunden: vuelven a quien
-      escribio por /usuario/cola/salas como errorDeCanal (CA-03).
+      no disponible, mensaje invalido, demasiados mensajes) no se difunden:
+      vuelven a quien escribio por /usuario/cola/salas como errorDeCanal
+      (CA-03).
     parameters:
       idSala:
         description: Identificador de la sala
@@ -487,6 +510,14 @@ components:
           tipo: { const: 'partida.accion.resuelta' }
           idPartida: { type: string, format: uuid }
           idEjecutor: { type: string, format: uuid }
+          idObjetivo:
+            type: [string, 'null']
+            format: uuid
+            description: |
+              (1.7.0) A quien apunto la accion: el rival de un ataque, el
+              companero de una sanacion. Nulo en un efecto por turno
+              (`EFECTO_POR_TURNO`) o si el motor no lo dijo. Un ataque nunca
+              apunta a su ejecutor ni a un companero de su equipo (§6.1.3).
           accion:
             type: object
             required: [codigo, nombre]
@@ -560,6 +591,31 @@ components:
                   type: object
                   additionalProperties: { type: integer, minimum: 1 }
                   description: (1.5.0) Acciones en carga y turnos propios que les faltan.
+                causas:
+                  type: array
+                  description: |
+                    (1.7.0) Por que cambio la vida de este afectado, en el
+                    orden en que lo anoto el motor (esquema `Evento` de
+                    motor-combate.yaml). Vacia si no cambio. Una `diferencia`
+                    negativa del propio `idEjecutor` en un ataque solo puede
+                    venir de un `REFLEJO`: el dano que le devolvio el
+                    objetivo (Pinchos de escudo, Toma y lleva), nunca de su
+                    propio golpe.
+                  items:
+                    type: object
+                    required: [tipo]
+                    properties:
+                      tipo:
+                        type: string
+                        enum: [DANO, REFLEJO, SANACION, DANO_POR_TURNO, SANACION_POR_TURNO, REANIMACION]
+                      origen:
+                        type: [string, 'null']
+                        format: uuid
+                        description: Quien lo causo (el atacante de un DANO, el defensor de un REFLEJO)
+                      efecto:
+                        type: [string, 'null']
+                        description: La accion, el objeto o la epica que lo causo
+                      cantidad: { type: [integer, 'null'], minimum: 0 }
 
     PartidaFinalizada:
       name: partidaFinalizada

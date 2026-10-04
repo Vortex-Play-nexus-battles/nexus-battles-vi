@@ -76,13 +76,42 @@ test.describe('Smoke del entorno desplegado', () => {
     // del navegador. Esto detecta las rutas relativas rotas de #425.
     const fondo = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(fondo).not.toBe('rgba(0, 0, 0, 0)');
+    // G1: el formulario es POST; nunca un envío nativo por GET con la clave.
+    await expect(page.locator('#formLogin')).toHaveAttribute('method', 'post');
   });
 
-  test('la raíz lleva al login', async () => {
+  test('G1: una dirección de login con password= no se queda: 303 a /login, sin la consulta', async () => {
+    // Un marcador, no una clave: lo que se comprueba es que el borde no sirva
+    // (ni deje en el historial) una dirección con password=.
+    const r = await api.get('/login?email=smoke%40nexus.test&password=G1-marcador-smoke', {
+      maxRedirects: 0,
+    });
+    expect(r.status()).toBe(303);
+    expect(r.headers().location).toBe('/login');
+  });
+
+  test('la raíz es la portada pública con la tienda; entrar sigue en /login (F6)', async ({
+    page,
+  }) => {
+    // F6 (auditoría del 4-oct, cambio autorizado n.º 3): hasta aquí la raíz
+    // redirigía al login. Ahora se sirve la portada, sin redirección.
     const r = await api.get('/', { maxRedirects: 0 });
-    expect([301, 302]).toContain(r.status());
-    // R17.3 — la raíz lleva a la dirección limpia del login.
-    expect(r.headers().location).toMatch(/\/login(?:\.html)?$/);
+    expect(r.status()).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('data-vista="portada"');
+    expect(html).toContain('data-zona="productos-publicos"');
+
+    // Y la tienda se ve: productos reales, sin «Añadir» (no hay carrito sin cuenta).
+    await page.goto(`${AWS}/`);
+    await expect(page.locator('.vitrina-publica .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+
+    // Entrar lleva a la dirección limpia del login.
+    await page.locator('[data-accion="entrar"]').click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.locator('#formLogin')).toBeVisible();
   });
 
   // ===================================================================

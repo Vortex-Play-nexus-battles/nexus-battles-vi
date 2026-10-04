@@ -24,6 +24,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -70,15 +71,25 @@ class TurnoDeLaMaquinaTest {
     // =====================================================================
 
     @Test
-    @DisplayName("sin heroe del catalogo, la maquina entra con una copia del del anfitrion a plena vida")
+    @DisplayName("sin heroe del catalogo, la maquina entra con un rival de su prototipo y nivel, no con una copia")
     void laMaquinaTieneHeroe() {
         Partida partida = contraLaMaquina();
+        ParticipanteDePartida ana = partida.participantes().get(0);
         ParticipanteDePartida maquina = partida.participantes().get(1);
 
+        // Auditoria del 4-oct («cuando ataco me hago dano»): la copia llevaba el
+        // nombre y el equipo de Ana, y el registro decia «Arquero del Norte
+        // golpea a Arquero del Norte (tu)».
         assertAll(
                 () -> assertTrue(maquina.esIA()),
                 () -> assertNotNull(maquina.heroe(), "sin heroe no podria combatir"),
-                () -> assertEquals("Arquero del Norte", maquina.heroe().nombre()),
+                () -> assertEquals("Guerrero Armas", maquina.heroe().nombre(), "el nombre es el del prototipo"),
+                () -> assertEquals("Guerrero Armas", maquina.heroe().prototipo()),
+                () -> assertTrue(!maquina.heroe().id().equals(ana.heroe().id()), "no es el heroe de Ana"),
+                () -> assertNull(maquina.heroe().retratoUrl(), "no lleva el retrato de Ana"),
+                () -> assertTrue(maquina.heroe().perfil().equipamiento().isEmpty(), "sin el equipo de Ana"),
+                () -> assertTrue(maquina.heroe().perfil().epicas().isEmpty(), "sin las epicas de Ana"),
+                () -> assertEquals(1, maquina.heroe().nivelDeCombate(), "en el nivel de Ana"),
                 () -> assertEquals(100, maquina.heroe().vidaActual()),
                 () -> assertEquals(0, maquina.creditosApostados(), "la maquina no apuesta"));
     }

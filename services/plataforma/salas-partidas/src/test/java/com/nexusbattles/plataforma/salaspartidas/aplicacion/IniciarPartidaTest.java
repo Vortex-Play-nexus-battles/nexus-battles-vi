@@ -18,6 +18,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -290,8 +291,8 @@ class IniciarPartidaTest {
     }
 
     @Test
-    @DisplayName("si el catalogo falla al sortear el heroe de la maquina, combate con una copia del anfitrion")
-    void catalogoCaidoCopiaDelAnfitrion() {
+    @DisplayName("si el catalogo falla al sortear el heroe de la maquina, combate con un rival de su prototipo, no con una copia")
+    void catalogoCaidoRivalDelMismoPrototipo() {
         Sala conIa = salas.guardar(Sala.crear(
                 new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANFITRION,
                 new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante("Ana", heroe("h-ana"))));
@@ -301,7 +302,16 @@ class IniciarPartidaTest {
 
         Partida partida = conSemilla(3L, caido, null).ejecutar(conIa.id(), como(ANFITRION));
 
-        assertTrue(partida.participantes().stream().anyMatch(p -> p.esIA() && "h-ana".equals(p.heroe().id())));
+        // Auditoría del 4-oct: antes era una copia exacta del heroe de Ana
+        // (mismo id y nombre, su equipo): el registro decia «Heroe h-ana golpea
+        // a Heroe h-ana (tu)». Ahora es un rival propio del mismo prototipo.
+        var deLaMaquina = partida.participantes().stream().filter(p -> p.esIA()).findFirst().orElseThrow().heroe();
+        assertAll(
+                () -> assertNotEquals("h-ana", deLaMaquina.id()),
+                () -> assertEquals("Guerrero Tanque", deLaMaquina.nombre()),
+                () -> assertEquals("Guerrero Tanque", deLaMaquina.prototipo()),
+                () -> assertEquals(1, deLaMaquina.nivelDeCombate()),
+                () -> assertEquals(44, deLaMaquina.vidaMaxima()));
     }
 
     @Test

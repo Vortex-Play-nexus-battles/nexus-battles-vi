@@ -5,11 +5,13 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.EnumMap;
 import java.util.Map;
+import nexus.misiones.aplicacion.AvisosDeMisiones;
 import nexus.misiones.aplicacion.CancelarEjecucion;
 import nexus.misiones.aplicacion.CatalogoDeProductos;
 import nexus.misiones.aplicacion.ConsultarEjecuciones;
 import nexus.misiones.aplicacion.ConsultarMisiones;
 import nexus.misiones.aplicacion.CorreoDeMisiones;
+import nexus.misiones.aplicacion.EstrategiaDeEnemigos;
 import nexus.misiones.aplicacion.DirectorioDeJugadores;
 import nexus.misiones.aplicacion.GestionarEstrategias;
 import nexus.misiones.aplicacion.GestionarFavoritas;
@@ -18,6 +20,8 @@ import nexus.misiones.aplicacion.LibroDeCreditos;
 import nexus.misiones.aplicacion.LiquidarEjecucion;
 import nexus.misiones.aplicacion.MatricularHeroe;
 import nexus.misiones.aplicacion.ParametrosDeMisiones;
+import nexus.misiones.aplicacion.PerfilDeCombateDelHeroe;
+import nexus.misiones.aplicacion.RotacionesPorDefectoDeEnemigos;
 import nexus.misiones.aplicacion.ServicioDeHeroes;
 import nexus.misiones.aplicacion.SimularEjecucion;
 import nexus.misiones.aplicacion.TrabajoDeMisiones;
@@ -27,10 +31,12 @@ import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.Escalon;
 import nexus.misiones.dominio.ParametrosDeRecompensa;
 import nexus.misiones.dominio.RepositorioDeEjecuciones;
+import nexus.misiones.dominio.RepositorioDeEventosDeCombate;
 import nexus.misiones.dominio.RepositorioDeEstrategias;
 import nexus.misiones.dominio.RepositorioDeFavoritas;
-import nexus.misiones.dominio.simulacion.ResolutorDeGolpes;
+import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.persistencia.RepositorioEjecucionesMongo;
+import nexus.misiones.persistencia.RepositorioEventosDeCombateMongo;
 import nexus.misiones.persistencia.RepositorioEstrategiasMongo;
 import nexus.misiones.persistencia.RepositorioFavoritasMongo;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,6 +70,7 @@ public class ConfiguracionDeMisiones {
             @Value("${misiones.reintento-segundos:30}") long reintentoSegundos,
             @Value("${misiones.trabajo.lote:20}") int lote,
             @Value("${misiones.correo.activo:true}") boolean correoActivo,
+            @Value("${misiones.avisos.activo:true}") boolean avisosActivos,
             @Value("${misiones.semilla-de-pruebas:}") String semillaDePruebas,
             @Value("${misiones.multiplicador-mitico:}") String multiplicadorMitico,
             @Value("${misiones.experiencia-por-completar.facil:0}") double xpFacil,
@@ -88,6 +95,7 @@ public class ConfiguracionDeMisiones {
                 Duration.ofSeconds(reintentoSegundos),
                 lote,
                 correoActivo,
+                avisosActivos,
                 semillaDePruebas == null || semillaDePruebas.isBlank() ? null : Long.valueOf(semillaDePruebas.trim()),
                 decimal(multiplicadorMitico),
                 new ParametrosDeRecompensa(experiencia, creditos, epicaExigeCompletar));
@@ -102,6 +110,12 @@ public class ConfiguracionDeMisiones {
     @Bean
     public RepositorioDeEjecuciones repositorioDeEjecuciones(MongoOperations mongo) {
         return new RepositorioEjecucionesMongo(mongo);
+    }
+
+    /** Los turnos de combate de cada mision simulada (HU-SIM-003), en su propia coleccion. */
+    @Bean
+    public RepositorioDeEventosDeCombate repositorioDeEventosDeCombate(MongoOperations mongo) {
+        return new RepositorioEventosDeCombateMongo(mongo);
     }
 
     @Bean
@@ -128,19 +142,40 @@ public class ConfiguracionDeMisiones {
                 reloj, azar::nextLong);
     }
 
+    /** Lo que el heroe lleva al combate: estadisticas con equipo, equipamiento y epicas (HU-SIM-003). */
+    @Bean
+    public PerfilDeCombateDelHeroe perfilDeCombateDelHeroe(InventarioDeHeroes inventario,
+                                                           CatalogoDeProductos productos, ServicioDeHeroes heroes) {
+        return new PerfilDeCombateDelHeroe(inventario, productos, heroes);
+    }
+
+    /**
+     * La estrategia de los enemigos que la mision no trae escrita. Punto de
+     * extension de HU-SIM-004: para cambiarla basta otro bean de este tipo.
+     */
+    @Bean
+    public EstrategiaDeEnemigos estrategiaDeEnemigos(ServicioDeHeroes heroes) {
+        return new RotacionesPorDefectoDeEnemigos(heroes);
+    }
+
     @Bean
     public SimularEjecucion simularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
-                                             ServicioDeHeroes heroes, ResolutorDeGolpes motor,
-                                             ParametrosDeMisiones parametros, Clock reloj) {
-        return new SimularEjecucion(catalogo, ejecuciones, heroes, motor, parametros, reloj);
+                                             RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes,
+                                             MotorDeCombate motor, PerfilDeCombateDelHeroe perfiles,
+                                             EstrategiaDeEnemigos enemigos, ParametrosDeMisiones parametros,
+                                             Clock reloj) {
+        return new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor, perfiles, enemigos, parametros,
+                reloj);
     }
 
     @Bean
     public LiquidarEjecucion liquidarEjecucion(RepositorioDeEjecuciones ejecuciones, CatalogoDeMisiones catalogo,
                                                InventarioDeHeroes inventario, LibroDeCreditos libro,
                                                DirectorioDeJugadores directorio, CorreoDeMisiones correo,
-                                               ParametrosDeMisiones parametros, Clock reloj) {
-        return new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio, correo, parametros, reloj);
+                                               AvisosDeMisiones avisos, ParametrosDeMisiones parametros,
+                                               Clock reloj) {
+        return new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio, correo, avisos,
+                parametros, reloj);
     }
 
     @Bean

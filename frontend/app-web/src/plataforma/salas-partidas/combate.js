@@ -25,7 +25,7 @@ import {
 } from '../../comun/ui/juego/combate.js';
 import { panelDeResultado } from '../../comun/ui/juego/resultado.js';
 import { puntosDePoder } from '../../comun/heroe-propio.js';
-import { narrarAccion, narrarTurno } from './narracion.js';
+import { narrarAccion, narrarTurno, nombreDe } from './narracion.js';
 import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
 /**
@@ -201,26 +201,40 @@ export function enviarAccion(cliente, idPartida, accion = {}) {
  * historial y vuelve a disparar el final. Se descartan por identidad.
  *
  * Un aviso de acción no trae identificador propio en el contrato, así que la
- * identidad se compone de lo que sí trae y no se repite: partida, ejecutor y la
- * vida resultante de cada afectado. Dos golpes distintos que dejaran a todos
- * exactamente igual serían indistinguibles, y aplicar el segundo tampoco
- * cambiaría nada: descartarlo es correcto.
+ * identidad se compone de lo que sí trae: partida, el turno en que llegó
+ * (cada jugador hace una acción por turno, HU-JUE-002), ejecutor, la acción y
+ * la vida y el poder resultantes de cada afectado.
+ *
+ * Auditoría de DEV del 30-sep: antes no entraban ni el turno ni la acción, y
+ * una especial que no movía ninguna vida —una defensa, un apoyo— con las
+ * mismas vidas que una acción anterior del mismo jugador se descartaba como
+ * repetida: no salía en el registro.
  *
  * @returns {{yaVisto: (aviso: object) => boolean, olvidar: () => void}}
  */
 export function registroDeAvisos() {
   const vistos = new Set();
+  /** El turno del último `partida.turno.cambiado` visto: ancla de las acciones. */
+  let turno = null;
 
   return {
     yaVisto(aviso) {
-      const huella = huellaDe(aviso);
-      if (huella === null) {
-        return false;
-      }
-      if (vistos.has(huella)) {
+      const huella = huellaDe(aviso, turno);
+      if (huella !== null && vistos.has(huella)) {
         return true;
       }
-      vistos.add(huella);
+      if (huella !== null) {
+        vistos.add(huella);
+      }
+      // Solo hacia delante: un cambio de turno viejo que se reenvie no
+      // devuelve el ancla a un turno ya pasado.
+      if (
+        aviso?.tipo === TURNO_CAMBIADO &&
+        Number.isInteger(aviso.numeroTurno) &&
+        (turno === null || aviso.numeroTurno > turno)
+      ) {
+        turno = aviso.numeroTurno;
+      }
       return false;
     },
     olvidar() {
@@ -233,17 +247,19 @@ export function registroDeAvisos() {
  * Huella de un aviso, o null si no es de los que se deduplican.
  *
  * @param {object} aviso
+ * @param {number|null} [turno] turno vigente cuando llegó (ver `registroDeAvisos`)
  * @returns {string|null}
  */
-function huellaDe(aviso) {
+function huellaDe(aviso, turno = null) {
   if (!aviso || typeof aviso.tipo !== 'string') {
     return null;
   }
   if (aviso.tipo === ACCION_RESUELTA) {
     const afectados = (aviso.afectados ?? [])
-      .map((a) => `${a.idJugador}:${a.vidaActual}`)
+      .map((a) => `${a.idJugador}:${a.vidaActual}:${a.poderActual ?? ''}`)
       .join('|');
-    return `${aviso.tipo}#${aviso.idPartida}#${aviso.idEjecutor}#${afectados}`;
+    const accion = aviso.accion?.codigo ?? '';
+    return `${aviso.tipo}#${aviso.idPartida}#t${turno ?? '?'}#${aviso.idEjecutor}#${accion}#${afectados}`;
   }
   if (aviso.tipo === TURNO_CAMBIADO) {
     // El número de turno sube siempre: identifica el aviso por sí solo.
@@ -557,11 +573,34 @@ export function enlacesDeSalida(salidas) {
  *   jugar se quedaba mirando «VICTORIA» sin más camino que el botón «Atrás».
  *   La primera es la principal. Las rutas las pone la vista, que sabe si el
  *   borde sirve direcciones limpias; este módulo no conoce ninguna.
+ * @param {object|null} [opciones.partidaFinalizada]
+ *   La partida tal como la devuelve `GET /partidas/{id}` cuando ya está
+ *   FINALIZADA (auditoría de DEV del 30-sep). Recargar una partida terminada
+ *   decía «Combate en curso», reabría los botones y las especiales decían
+ *   «No es tu turno». Con esto los controles nacen cerrados y se muestra el
+ *   resultado (`ganadores`, `equipoGanador`).
+ * @param {boolean} [opciones.recienEmpezada]
+ *   La partida acaba de empezar en esta pantalla (la presentacion de los
+ *   heroes, CA-04), no es una recarga. Si cuando llega ya no es el turno 1
+ *   —contra la maquina, la IA juega en el mismo instante en que empieza—, el
+ *   registro cuenta quien abrio y lo que dejo ese primer golpe: antes empezaba
+ *   en «Turno 2» con la vida ya mermada y sin explicar por que (auditoria de
+ *   DEV del 30-sep).
  * @returns {{recibir: (aviso: object) => void, rechazar: (problema: object) => boolean}}
  */
 export function montarControlesDeCombate(
   raiz,
-  { idPartida, yo, participantes, turnoDe, numeroTurno = null, alAtacar, salidas = [] },
+  {
+    idPartida,
+    yo,
+    participantes,
+    turnoDe,
+    numeroTurno = null,
+    alAtacar,
+    salidas = [],
+    partidaFinalizada = null,
+    recienEmpezada = false,
+  },
 ) {
   const zona = raiz.querySelector('[data-zona="acciones"]');
   // UXC-2 — las zonas nuevas de la barra de mando. Todas opcionales: una
@@ -580,6 +619,10 @@ export function montarControlesDeCombate(
   // responde; y la zona para los demas rechazos de la cola privada.
   const zonaDegradacion = raiz.querySelector('[data-zona="degradacion"]');
   const zonaRechazo = raiz.querySelector('[data-zona="rechazo"]');
+  // La barra de mando entera y la salida del HUD: al terminar se retira la
+  // una y la otra deja de decir que la partida sigue en curso.
+  const zonaMando = raiz.querySelector('[data-zona="mando"]');
+  const zonaSalir = raiz.querySelector('[data-zona="salir"]');
   const registro = registroDeAvisos();
   /** La ultima accion enviada, para poder reintentarla tal cual. */
   let ultimaAccion = null;
@@ -588,7 +631,8 @@ export function montarControlesDeCombate(
   let numeroActual = Number.isInteger(numeroTurno) ? numeroTurno : null;
   /** Sin canal no se juega: lo marca `bloquear` y lo quita `sincronizar`. */
   let sinCanal = false;
-  let terminado = false;
+  // Una partida que ya llega terminada no abre nada ni un instante.
+  let terminado = Boolean(partidaFinalizada);
 
   // UXC-2 · CombatLog: lo que ha pasado, con palabras.
   const bitacora = zonaRegistro ? registroDeCombate() : null;
@@ -773,7 +817,8 @@ export function montarControlesDeCombate(
    * lo lleva, el maximo del catalogo. Sin ninguno de los dos no se toca.
    */
   function pintarPoder() {
-    if (!zonaPoder) {
+    // Terminado no hay poder que gastar: el medidor se retira con el mando.
+    if (!zonaPoder || terminado) {
       return;
     }
     const maximo = estadoPropio.poderMaximo ?? catalogo?.poderMaximo ?? null;
@@ -809,7 +854,9 @@ export function montarControlesDeCombate(
    * @param {boolean} esMiTurno
    */
   function pintarEspeciales(esMiTurno) {
-    if (!zonaEspeciales) {
+    // Terminado no se pinta nada: antes quedaban las especiales diciendo «No
+    // es tu turno» con la partida ya cerrada (auditoria de DEV del 30-sep).
+    if (!zonaEspeciales || terminado) {
       return;
     }
     if (estadoPropio.acciones.length === 0) {
@@ -915,6 +962,124 @@ export function montarControlesDeCombate(
     }
   }
 
+  /**
+   * El combate termino: nadie tiene turno, no queda nada que jugar y el HUD lo
+   * dice. Lo comparten el aviso de fin, la partida releida al volver el canal
+   * y una partida que ya estaba FINALIZADA al montar.
+   *
+   * Auditoria de DEV del 30-sep: tras terminar quedaban el poder y las
+   * especiales con «No es tu turno», y la salida del HUD seguia diciendo
+   * «la partida sigue en curso». Se retira la barra de mando entera; el
+   * registro se queda, que es la historia de la partida.
+   */
+  function cerrarControles() {
+    terminado = true;
+    accionPendiente = null;
+    habilitar(false);
+    // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
+    // creer que la partida sigue.
+    marcarTurno(null);
+    // UX-GAME-4 — el indicador no se vacia: dice que el combate termino.
+    // Es el tercer estado del turno (tuyo / del rival / finalizado), y el
+    // panel de resultado puede quedar tapado o fuera de la pantalla.
+    if (zonaTurno) {
+      zonaTurno.textContent = 'Combate finalizado';
+      zonaTurno.hidden = false;
+      zonaTurno.dataset.mio = 'false';
+      zonaTurno.dataset.fin = 'si';
+    }
+    for (const parte of [zonaMando, zona, zonaEspeciales, zonaMotivoEspeciales, zonaPoder]) {
+      if (parte) {
+        parte.hidden = true;
+      }
+    }
+    if (zonaEspeciales) {
+      vaciar(zonaEspeciales);
+    }
+    if (zonaSalir) {
+      zonaSalir.title = 'Volver a Jugar online (la partida terminó)';
+    }
+  }
+
+  /**
+   * El panel del desenlace con lo que se sepa del final.
+   *
+   * El servidor puede anunciar el final dos veces: primero sin `reparto` (el
+   * libro no respondio, CA-06) y despues con el. Cada aviso trae una parte,
+   * asi que se acumulan antes de pintar. Sin esto el segundo render perdia la
+   * recompensa que ya se habia anunciado en el primero, y el numero grande
+   * cambiaba de significado a mitad.
+   *
+   * @param {object} fuente `partida.finalizada`, o la partida FINALIZADA
+   *   releida (trae `ganadores` y `equipoGanador` desde 1.7.0, sin creditos)
+   * @param {{nota?: string}} [opciones] frase para cuando no llegan creditos
+   */
+  function pintarDesenlace(fuente, { nota = '' } = {}) {
+    if (!aviso) {
+      return;
+    }
+    // UX-R2.3 (HU-JUE-017 CA-04: «vistas de alto impacto al inicio y al
+    // final»). `--t-display-tam` estaba en `tokens.css` reservada para esto.
+    const primerAviso = desenlaceConocido === null;
+    desenlaceConocido = {
+      ...fuente,
+      reparto: mezclarPorJugador(desenlaceConocido?.reparto, fuente?.reparto),
+      recompensa: mezclarPorJugador(desenlaceConocido?.recompensa, fuente?.recompensa),
+    };
+    const desenlace = desenlaceDe(desenlaceConocido, yo, miEquipo);
+    // El final puede anunciarse dos veces (reparto tardio): se anota una.
+    if (primerAviso) {
+      anotar({
+        texto: `Combate finalizado: ${desenlace}.`,
+        tono: 'fin',
+        icono: desenlace === 'victoria' ? 'trofeo' : 'alerta',
+      });
+    }
+    // La suma de apuesta y recompensa, no solo la recompensa: ver
+    // `netoDeCreditos`. Antes quien perdia 350 creditos apostados veia un «+2».
+    const creditos = netoDeCreditos(desenlaceConocido, yo);
+    const detalle = textoDelResultado(desenlaceConocido, yo, miEquipo);
+    vaciar(aviso);
+    aviso.append(
+      panelDeResultado({
+        desenlace,
+        detalle: creditos === null && nota ? `${detalle} ${nota}` : detalle,
+        creditos,
+        acciones: enlacesDeSalida(salidas),
+      }),
+    );
+    aviso.hidden = false;
+  }
+
+  /**
+   * Lo que se movio el poder propio, dicho en el registro.
+   *
+   * Auditoria de DEV del 30-sep: «Poder 10/10 +2 por turno» parecia no
+   * moverse al usar una accion de coste 2. Se gastaban 2 y, contra la
+   * maquina, el +2 del turno propio siguiente llegaba en el mismo instante:
+   * el medidor volvia a 10/10 sin que nadie lo viera bajar. Ahora el gasto y
+   * la recuperacion quedan escritos.
+   *
+   * @param {number|null} antes poder antes del aviso
+   * @param {'gasto'|'turno'|'ajeno'} motivo por que cambio
+   */
+  function anotarPoder(antes, motivo) {
+    const despues = estadoPropio.poderActual;
+    if (!Number.isFinite(antes) || !Number.isFinite(despues) || antes === despues) {
+      return;
+    }
+    const maximo = estadoPropio.poderMaximo ?? catalogo?.poderMaximo ?? null;
+    const cifra = maximo === null ? `${despues}` : `${despues}/${maximo}`;
+    const cuanto = Math.abs(despues - antes);
+    let texto = `Pierdes ${cuanto} de poder (${cifra}).`;
+    if (despues > antes) {
+      texto = `Recuperas ${cuanto} de poder (${cifra}).`;
+    } else if (motivo === 'gasto') {
+      texto = `Gastas ${cuanto} de poder (${cifra}).`;
+    }
+    anotar({ texto, tono: 'sistema', icono: 'rayo' });
+  }
+
   // Con `turnoDe` conocido se decide ya; sin él, cerrados, que es lo prudente:
   // abrir un botón que el servidor va a rechazar es peor que hacer esperar.
   habilitar(Boolean(turnoDe) && turnoDe === yo);
@@ -963,7 +1128,7 @@ export function montarControlesDeCombate(
   for (const participante of participantes ?? []) {
     pintarEfectos(participante.jugador?.id, participante.heroe?.efectosActivos);
   }
-  if (turnoDe) {
+  if (turnoDe && !partidaFinalizada) {
     const quien =
       turnoDe === yo ? 'te toca a ti.' : `${textoDelTurno(turnoDe, participantes, yo).texto}.`;
     anotar({
@@ -973,6 +1138,44 @@ export function montarControlesDeCombate(
       tono: 'sistema',
       icono: 'espada',
     });
+  }
+  if (recienEmpezada && !partidaFinalizada && Number.isInteger(numeroActual) && numeroActual > 1) {
+    contarLoQueYaPaso();
+  }
+  if (partidaFinalizada) {
+    cerrarControles();
+    pintarDesenlace(partidaFinalizada, {
+      nota: 'Los créditos de la partida quedan en el historial de Mi cuenta.',
+    });
+  }
+
+  /**
+   * Lo que paso entre que empezo la partida y que esta pantalla la monto: el
+   * orden de turnos es el de `participantes` (1.7.0), asi que el primero es
+   * quien abrio; y todos empiezan a vida completa, asi que lo que falte de
+   * vida es lo que dejaron esos turnos. Nada se deduce de otra cosa.
+   */
+  function contarLoQueYaPaso() {
+    const primero = idDeJugador((participantes ?? [])[0]);
+    if (primero && primero !== yo) {
+      anotar({
+        texto: `Turno 1: abrió ${nombreDe(primero, participantes, yo)}.`,
+        tono: 'turno',
+        icono: 'reloj',
+      });
+    }
+    const cuando = numeroActual === 2 ? 'en el turno 1' : `en los turnos 1 a ${numeroActual - 1}`;
+    for (const participante of participantes ?? []) {
+      const vida = participante?.heroe?.vidaActual;
+      const maxima = participante?.heroe?.vidaMaxima;
+      if (Number.isFinite(vida) && Number.isFinite(maxima) && vida < maxima) {
+        anotar({
+          texto: `${nombreDe(idDeJugador(participante), participantes, yo)} recibió ${maxima - vida} de daño ${cuando} (${vida}/${maxima}).`,
+          tono: 'dano',
+          icono: 'espada',
+        });
+      }
+    }
   }
 
   /**
@@ -1155,26 +1358,27 @@ export function montarControlesDeCombate(
       sinCanal = false;
       if (partida?.estado === 'FINALIZADA') {
         // Termino mientras no habia canal: el aviso de fin se perdio. Se dice,
-        // se cierran los controles y se deja la salida del HUD.
+        // se cierran los controles y, si el final no se conocia, se pinta con
+        // lo que trae la partida (ganadores desde 1.7.0; los creditos no).
         if (!terminado) {
-          terminado = true;
-          habilitar(false);
-          if (zonaTurno) {
-            zonaTurno.textContent = 'Combate finalizado';
-            zonaTurno.hidden = false;
-            zonaTurno.dataset.mio = 'false';
-            zonaTurno.dataset.fin = 'si';
-          }
-          if (zona) {
-            zona.hidden = true;
-          }
+          cerrarControles();
           anotar({
             texto:
               'La partida terminó mientras se recuperaba la conexión. El resultado y los créditos quedan en el historial de Mi cuenta.',
             tono: 'fin',
             icono: 'alerta',
           });
+          if (desenlaceConocido === null && Array.isArray(partida.ganadores)) {
+            pintarDesenlace(partida, {
+              nota: 'Los créditos de la partida quedan en el historial de Mi cuenta.',
+            });
+          }
         }
+        return;
+      }
+      // Ya se sabe que termino (llego el aviso): una lectura atrasada que aun
+      // diga EN_CURSO no reabre nada.
+      if (terminado) {
         return;
       }
       turnoActual = partida?.turnoActual?.idJugador ?? turnoActual;
@@ -1219,7 +1423,9 @@ export function montarControlesDeCombate(
           anotarVida(afectado.idJugador, afectado.vidaActual);
           // B7 — el ejecutor gasta poder, y algunas acciones se lo quitan a otro.
           if (afectado.idJugador === yo) {
+            const antes = estadoPropio.poderActual;
             actualizarEstadoPropio(afectado);
+            anotarPoder(antes, mensaje.idEjecutor === yo ? 'gasto' : 'ajeno');
           }
         }
         habilitar(turnoPropio);
@@ -1231,6 +1437,7 @@ export function montarControlesDeCombate(
         // B7 — el aviso trae el estado de quien juega ahora, ya con el +2 de
         // poder y los efectos del inicio de su turno: si es el propio, sus
         // acciones jugables. Una especial a medio elegir no pasa de turno.
+        const poderAntes = estadoPropio.poderActual;
         if (mensaje.idJugador === yo) {
           actualizarEstadoPropio(mensaje);
         }
@@ -1241,65 +1448,16 @@ export function montarControlesDeCombate(
         habilitar(mensaje.idJugador === yo);
         marcarTurno(mensaje.idJugador, numeroActual);
         anotar(narrarTurno(mensaje, participantes, yo));
+        if (mensaje.idJugador === yo) {
+          anotarPoder(poderAntes, 'turno');
+        }
         return;
       }
       if (mensaje?.tipo === PARTIDA_FINALIZADA && mensaje.idPartida === idPartida) {
-        terminado = true;
-        habilitar(false);
-        // Se acabo: ya no es el turno de nadie. Dejar la marca puesta haria
-        // creer que la partida sigue.
-        marcarTurno(null);
-        // UX-GAME-4 — el indicador no se vacia: dice que el combate termino.
-        // Es el tercer estado del turno (tuyo / del rival / finalizado), y el
-        // panel de resultado puede quedar tapado o fuera de la pantalla.
-        if (zonaTurno) {
-          zonaTurno.textContent = 'Combate finalizado';
-          zonaTurno.hidden = false;
-          zonaTurno.dataset.mio = 'false';
-          zonaTurno.dataset.fin = 'si';
+        if (!terminado) {
+          cerrarControles();
         }
-        if (zona) {
-          zona.hidden = true;
-        }
-        if (aviso) {
-          // UX-R2.3 (HU-JUE-017 CA-04: «vistas de alto impacto al inicio y al
-          // final»). Antes el final de la partida era un parrafo del mismo
-          // tamano que el resto de la pantalla. `--t-display-tam` estaba en
-          // `tokens.css` reservada para esto desde el principio.
-          // El servidor puede anunciar el final dos veces: primero sin
-          // `reparto` (el libro no respondio) y despues con el. Cada aviso trae
-          // una parte, asi que se acumulan antes de pintar. Sin esto el segundo
-          // render perdia la recompensa que ya se habia anunciado en el
-          // primero, y el numero grande cambiaba de significado a mitad.
-          const primerAviso = desenlaceConocido === null;
-          desenlaceConocido = {
-            ...mensaje,
-            reparto: mezclarPorJugador(desenlaceConocido?.reparto, mensaje.reparto),
-            recompensa: mezclarPorJugador(desenlaceConocido?.recompensa, mensaje.recompensa),
-          };
-          const desenlace = desenlaceDe(desenlaceConocido, yo, miEquipo);
-          // El final puede anunciarse dos veces (reparto tardio): se anota una.
-          if (primerAviso) {
-            anotar({
-              texto: `Combate finalizado: ${desenlace}.`,
-              tono: 'fin',
-              icono: desenlace === 'victoria' ? 'trofeo' : 'alerta',
-            });
-          }
-          vaciar(aviso);
-          aviso.append(
-            panelDeResultado({
-              desenlace: desenlaceDe(desenlaceConocido, yo, miEquipo),
-              detalle: textoDelResultado(desenlaceConocido, yo, miEquipo),
-              // La suma de apuesta y recompensa, no solo la recompensa: ver
-              // `netoDeCreditos`. Antes quien perdia 350 creditos apostados
-              // veia un «+2».
-              creditos: netoDeCreditos(desenlaceConocido, yo),
-              acciones: enlacesDeSalida(salidas),
-            }),
-          );
-          aviso.hidden = false;
-        }
+        pintarDesenlace(mensaje);
       }
     },
   };

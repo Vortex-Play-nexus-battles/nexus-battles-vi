@@ -240,8 +240,8 @@ test.describe('Sala de batalla de punta a punta', () => {
     const problema = await r.json();
     // El texto nombra el caso concreto: «no puedes entrar» a secas obligaria a
     // adivinar si falta equipar un heroe o si el suyo esta en otra batalla.
-    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un heroe equipado/i);
-    expect(problema.detail).toMatch(/equipa un heroe en tu inventario/i);
+    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un héroe equipado/i);
+    expect(problema.detail).toMatch(/equipa un héroe en tu inventario/i);
     expect(problema.type).toMatch(/heroe/i);
   });
 
@@ -395,9 +395,29 @@ test.describe('Sala de batalla de punta a punta', () => {
     return page.evaluate(() => globalThis.__frames ?? []);
   }
 
-  /** @returns {Promise<number[]>} readyState de cada socket abierto (1 = OPEN) */
+  /**
+   * @returns {Promise<{ruta: string, estado: number}[]>} cada socket que abrió
+   *   la página, con su ruta y su readyState (1 = OPEN)
+   */
   function estadoDeSockets(page) {
-    return page.evaluate(() => (globalThis.__sockets ?? []).map((s) => s.readyState));
+    return page.evaluate(() =>
+      (globalThis.__sockets ?? []).map((s) => ({
+        ruta: new URL(s.url).pathname,
+        estado: s.readyState,
+      })),
+    );
+  }
+
+  /**
+   * readyState del canal de la batalla (`/ws` de salas-partidas). No es el
+   * único socket de la página: desde la auditoría de DEV del 30-sep la
+   * cabecera escucha los avisos de la campana por `/ws/notificaciones`, que es
+   * de otro servicio y no cuenta aquí.
+   *
+   * @returns {Promise<number[]>}
+   */
+  async function estadoDelCanalDeBatalla(page) {
+    return (await estadoDeSockets(page)).filter((s) => s.ruta === '/ws').map((s) => s.estado);
   }
 
   /** Deja la sesion puesta antes de que cargue cualquier script de la vista. */
@@ -499,8 +519,10 @@ test.describe('Sala de batalla de punta a punta', () => {
     // sin esta comprobacion, un envio a un socket cerrado se ve exactamente
     // igual que una accion que el servidor ignora.
     expect(
-      await estadoDeSockets(page),
-      `sockets al atacar (1 = OPEN). Consola:\n${dicho.join('\n')}`,
+      await estadoDelCanalDeBatalla(page),
+      `canal de la batalla al atacar (1 = OPEN); todos: ${JSON.stringify(
+        await estadoDeSockets(page),
+      )}. Consola:\n${dicho.join('\n')}`,
     ).toEqual([1]);
 
     // El defecto que esto cierra: los botones nacian deshabilitados y solo los

@@ -88,6 +88,11 @@ class ConfiguracionWebSocket implements WebSocketMessageBrokerConfigurer {
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registro) {
         registro.enableSimpleBroker("/tema", "/cola");
+        // Los avisos de una partida salen en rafaga —tu golpe, el cambio de
+        // turno, el contragolpe de la maquina— y la vista los aplica en orden.
+        // Sin esto el broker puede entregarlos desordenados a una misma sesion
+        // (documentado en Spring) y la barra propia bajaba «con tu golpe».
+        registro.setPreservePublishOrder(true);
         registro.setApplicationDestinationPrefixes("/app");
         registro.setUserDestinationPrefix("/usuario");
     }

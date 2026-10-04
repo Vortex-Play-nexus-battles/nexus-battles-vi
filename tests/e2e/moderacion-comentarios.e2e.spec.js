@@ -134,7 +134,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     await api.dispose();
   });
 
-  test('1-2: se publica, se reporta y el comentario desaparece del hilo publico', async () => {
+  test('1-2: se publica, se reporta y el comentario SIGUE en el hilo: encolar no es ocultar (1.8.0)', async () => {
     const publicado = await api.post(hiloDe(), {
       headers: conToken(anfitriona.token),
       data: { texto: 'Esta espada esta claramente rota, es injugable', estrellas: 1 },
@@ -156,14 +156,17 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     });
     expect(reporte.status(), await reporte.text()).toBe(201);
     const cuerpo = await reporte.json();
-    expect(cuerpo.estadoDelComentario, 'el primer reporte encola').toBe('EN_REVISION');
+    // Auditoria de DEV del 30-sep: un solo reporte sacaba el comentario del
+    // hilo para todos. RF-COM-006 pide encolarlo «sujeto a revision», no
+    // ocultarlo: eso lo decide un moderador (D-36, umbral de ocultamiento 0).
+    expect(cuerpo.estadoDelComentario, 'el reporte encola sin ocultar').toBe('PUBLICADO');
     expect(cuerpo.reportesTotales).toBe(1);
 
     const h = await hilo();
     expect(
       h.comentarios.map((c) => c.id),
-      'un comentario en revision no se le pinta a nadie',
-    ).not.toContain(comentario.id);
+      'un solo reporte no lo saca del hilo de nadie',
+    ).toContain(comentario.id);
   });
 
   test('3-4: reportar dos veces es 409, y quien reporta no puede ver la cola', async () => {
@@ -193,7 +196,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
 
     const entrada = cola.entradas.find((e) => e.comentario.id === comentario.id);
     expect(entrada, `el comentario no aparecio en la cola: ${JSON.stringify(cola)}`).toBeTruthy();
-    expect(entrada.comentario.estado).toBe('EN_REVISION');
+    expect(entrada.comentario.estado, 'en la cola, pero a la vista').toBe('PUBLICADO');
     expect(entrada.reportes).toBe(1);
     expect(entrada.porCategoria.INFORMACION_FALSA).toBe(1);
 
@@ -210,7 +213,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
 
     expect(resuelto.comentario.estado).toBe('OCULTO');
     expect(resuelto.asiento.accion).toBe('OCULTAR');
-    expect(resuelto.asiento.estadoAnterior).toBe('EN_REVISION');
+    expect(resuelto.asiento.estadoAnterior).toBe('PUBLICADO');
     expect(resuelto.asiento.estadoNuevo).toBe('OCULTO');
     expect(resuelto.asiento.moderadorId, 'quien firma sale del token').toBe(moderadora.claims.uid);
     expect(resuelto.asiento.apodoModerador).toBe(MODERADORA);
@@ -337,7 +340,7 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
   test('13: desde la pantalla, la consola lleva a la cola; se marca, se filtra y se edita (B3)', async ({
     page,
   }) => {
-    // Otro jugador lo reporta: vuelve a la cola de revision.
+    // Otro jugador lo reporta: vuelve a la cola de revision (sin salir del hilo).
     const reportero = await sesionDe(api, `reportero_${Date.now().toString(36)}`);
     const reporte = await api.post(`${hiloDe()}/${comentario.id}/reportes`, {
       headers: conToken(reportero.token),
@@ -417,5 +420,41 @@ test.describe('Moderacion de comentarios: el comentario en revision tiene salida
     const d = await detalle();
     expect(d.comentario.texto).toBe('No me convencio, pero es cuestion de gustos');
     expect(d.comentario.marcado).toBe(true);
+  });
+  test('14: aprobar uno reportado que sigue a la vista cierra sus reportes; aprobar otra vez es 409', async () => {
+    const otro = await api.post(hiloDe(), {
+      headers: conToken(anfitriona.token),
+      data: { texto: 'Buena espada para empezar, la recomiendo' },
+    });
+    expect(otro.status(), await otro.text()).toBe(201);
+    const nuevo = await otro.json();
+    const reporte = await api.post(`${hiloDe()}/${nuevo.id}/reportes`, {
+      headers: conToken(invitado.token),
+      data: { categoria: 'SPAM' },
+    });
+    expect(reporte.status(), await reporte.text()).toBe(201);
+    expect((await reporte.json()).estadoDelComentario).toBe('PUBLICADO');
+
+    const aprobar = (motivo) =>
+      api.post(`${COLA}/${nuevo.id}/decision`, {
+        headers: conToken(moderadora.token),
+        data: { accion: 'APROBAR', motivo },
+      });
+    const aprobado = await aprobar('Es una opinion legitima');
+    expect(aprobado.status(), await aprobado.text()).toBe(200);
+    const resuelto = await aprobado.json();
+    expect(resuelto.comentario.estado).toBe('PUBLICADO');
+    expect(resuelto.asiento.estadoAnterior).toBe('PUBLICADO');
+    expect(resuelto.autorNotificado, 'nada cambio para el autor: no se le avisa').toBe(false);
+
+    const cola = await api.get(`${COLA}?productoId=${producto}`, { headers: conToken(moderadora.token) });
+    expect(
+      (await cola.json()).entradas.map((e) => e.comentario.id),
+      'aprobado: sus reportes ya no estan pendientes',
+    ).not.toContain(nuevo.id);
+
+    const otraVez = await aprobar('Yo tambien lo veo bien');
+    expect(otraVez.status(), 'sin reportes pendientes, otro moderador se adelanto').toBe(409);
+    expect((await otraVez.json()).motivo).toBe('TRANSICION_INVALIDA');
   });
 });

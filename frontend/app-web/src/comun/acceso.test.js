@@ -124,9 +124,11 @@ describe('la matriz cubre lo que hay en disco', () => {
     // jugador, es el formulario de alta del catálogo, y el servidor ya lo
     // restringía a ADMINISTRADOR (Tabla 24: «Gestionar productos»).
     // B1 — `verificar-cuenta` entra: la usa quien todavía no puede iniciar
-    // sesión, porque su correo está sin confirmar.
+    // sesión, porque su correo está sin confirmar. F6 — `portada` entra: es
+    // la raíz pública con la tienda, para quien aún no tiene cuenta.
     expect(publicas).toEqual([
       'login',
+      'portada',
       'pujas',
       'registro',
       'restablecer-confirmar',
@@ -235,11 +237,13 @@ describe('vistaDeRuta y urlDeVista', () => {
     );
   });
 
-  test('R17.3 y B1 — once direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+  test('R17.3, B1 y F6 — doce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
     const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
     // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
-    // la verificación de la cuenta y el canje del código de recuperación.
+    // la verificación de la cuenta y el canje del código de recuperación. F6
+    // suma la raíz: la portada pública con la tienda.
     expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
+      '/',
       '/cuenta',
       '/inicio',
       '/inventario',
@@ -254,8 +258,20 @@ describe('vistaDeRuta y urlDeVista', () => {
     ]);
     for (const [, entrada] of limpias) {
       expect(['publico', 'jugador']).toContain(entrada.armazon);
-      expect(entrada.limpia).toMatch(/^\/[a-z]+$/);
+      expect(entrada.limpia).toMatch(/^\/[a-z]*$/);
     }
+    // Las direcciones no se repiten: dos vistas no pueden servirse en la misma.
+    expect(new Set(limpias.map(([, v]) => v.limpia)).size).toBe(limpias.length);
+  });
+
+  test('F6 — la raíz es la portada pública, y solo la raíz', () => {
+    expect(vistaDeRuta('/')).toBe('portada');
+    expect(vistaDeRuta('/frontend/app-web/src/cuentas/portada.html')).toBe('portada');
+    expect(armazonDeVista('portada')).toBe('publico');
+    expect(puedeVer('portada', { autenticado: false }).veredicto).toBe(VEREDICTO.VISIBLE);
+    // Las demás direcciones siguen siendo de su vista.
+    expect(vistaDeRuta('/login')).toBe('login');
+    expect(vistaDeRuta('/registro')).toBe('registro');
   });
 
   test('la URL de una vista sale igual desde cualquier base servida', () => {

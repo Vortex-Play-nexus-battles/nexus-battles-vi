@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.dominio;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -50,4 +52,13 @@ public interface RepositorioDeSalas {
      * @param tamano    elementos por pagina
      */
     PaginaDeSalas listar(Modalidad modalidad, EstadoSala estado, int pagina, int tamano);
+
+    /**
+     * Las salas que nadie llego a jugar —abiertas, llenas o privadas— creadas
+     * antes de {@code limite}, como mucho {@code lote}. Las cierra
+     * {@code CerrarAbandonadas} (auditoria de DEV del 30-sep).
+     */
+    default List<Sala> sinEmpezarDesde(Instant limite, int lote) {
+        return List.of();
+    }
 }
