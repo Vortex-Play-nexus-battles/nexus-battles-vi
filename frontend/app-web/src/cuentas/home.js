@@ -361,6 +361,7 @@ export function montarHome(
   { sesion, fetchImpl = fetchWithHttpErrorInterceptor, cabecera = null },
 ) {
   const zonaSaludo = raiz.querySelector('[data-zona="saludo"]');
+  const zonaBanners = raiz.querySelector('[data-zona="bloque-banners"]');
   const zonas = {
     saldo: raiz.querySelector('[data-zona="bloque-saldo"]'),
     heroe: raiz.querySelector('[data-zona="bloque-heroe"]'),
@@ -374,6 +375,8 @@ export function montarHome(
   }
 
   pintarAccesos(zonaAccesos);
+
+  cargarBannersVigentes(zonaBanners, fetchImpl);
 
   /** Cada bloque se pide por su cuenta: uno caído no tumba la home. */
   async function cargar(clave, construir) {
@@ -412,6 +415,25 @@ export function montarHome(
 
   cargarTodo();
   return { recargar: cargarTodo };
+}
+
+/** Muestra únicamente anuncios que el servidor declara vigentes. */
+export async function cargarBannersVigentes(zona, fetchImpl = fetchWithHttpErrorInterceptor) {
+  if (!zona) {
+    return;
+  }
+  const respuesta = await pedir('/api/v1/banners/vigentes', fetchImpl);
+  const banners = respuesta.ok && Array.isArray(respuesta.datos) ? respuesta.datos : [];
+  vaciar(zona);
+  if (!banners.length) {
+    zona.hidden = true;
+    return;
+  }
+  zona.hidden = false;
+  zona.append(
+    h('p', { clase: 'home__sobretitulo', texto: 'Anuncio del Nexo' }),
+    h('p', { texto: banners[0].contenido }),
+  );
 }
 
 /** @param {HTMLElement|null} zona */

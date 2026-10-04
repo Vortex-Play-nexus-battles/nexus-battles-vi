@@ -130,6 +130,28 @@ class BannersApiTest {
         }
 
         @Test
+        @DisplayName("un administrador consulta todos los banners")
+        void administradorConsultaTodos() throws Exception {
+                when(repositorio.findAllByOrderByPublicarDesdeDesc())
+                        .thenReturn(List.of(bannerExistente()));
+
+                mvc.perform(get("/api/v1/banners")
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority("ROLE_ADMINISTRADOR"))))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$[0].id").value("banner-1"));
+        }
+
+        @Test
+        @DisplayName("un jugador no puede listar todos los banners")
+        void jugadorNoConsultaTodos() throws Exception {
+                mvc.perform(get("/api/v1/banners")
+                                .with(jwt().authorities(
+                                        new SimpleGrantedAuthority("ROLE_JUGADOR"))))
+                        .andExpect(status().isForbidden());
+        }
+
+        @Test
         @DisplayName("un administrador edita un banner")
         void administradorEditaBanner() throws Exception {
                 when(repositorio.findById("banner-1"))

@@ -57,6 +57,8 @@ public class SeguridadConfig {
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.DELETE, "/api/v1/banners/{id}")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/banners")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.GET, "/api/v1/banners/vigentes")
                                 .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")

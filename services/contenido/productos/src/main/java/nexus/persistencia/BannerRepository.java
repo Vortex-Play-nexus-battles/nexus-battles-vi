@@ -8,6 +8,8 @@ import org.springframework.data.mongodb.repository.MongoRepository;
 
 public interface BannerRepository extends MongoRepository<Banner, String> {
 
+        List<Banner> findAllByOrderByPublicarDesdeDesc();
+
         List<Banner> findByRetiradoFalseAndPublicarDesdeLessThanEqualAndVigenteHastaGreaterThanOrderByPublicarDesdeDesc(
                 Instant publicarDesde,
                 Instant vigenteHasta);

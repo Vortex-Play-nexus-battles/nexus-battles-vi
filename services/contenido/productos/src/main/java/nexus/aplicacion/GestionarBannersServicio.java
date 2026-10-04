@@ -67,6 +67,10 @@ public class GestionarBannersServicio {
                                 ahora);
         }
 
+        public List<Banner> consultarTodos() {
+                return repositorio.findAllByOrderByPublicarDesdeDesc();
+        }
+
         private Banner buscar(String id) {
                 return repositorio.findById(id)
                         .orElseThrow(() -> new BannerNoEncontradoException(id));

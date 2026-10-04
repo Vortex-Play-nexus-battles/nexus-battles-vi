@@ -45,6 +45,24 @@ paths:
                   $ref: "#/components/schemas/Banner"
 
   /api/v1/banners:
+    get:
+      summary: Lista todos los banners para administración
+      operationId: consultarTodosLosBanners
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Banners programados, vigentes, finalizados y retirados
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+        "403":
+          description: Se requiere rol de administración
     post:
       summary: Crea y programa un banner
       operationId: crearBanner

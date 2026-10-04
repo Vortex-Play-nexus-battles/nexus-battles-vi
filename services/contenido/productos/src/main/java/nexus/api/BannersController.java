@@ -33,6 +33,13 @@ public class BannersController {
                         .toList();
         }
 
+        @GetMapping
+        public List<RespuestaBanner> consultarTodos() {
+                return servicio.consultarTodos().stream()
+                        .map(RespuestaBanner::desde)
+                        .toList();
+        }
+
         @PostMapping
         public ResponseEntity<RespuestaBanner> crear(
                 @Valid @RequestBody SolicitudBanner solicitud) {

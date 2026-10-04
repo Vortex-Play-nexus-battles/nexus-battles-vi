@@ -81,6 +81,11 @@ function crearVista() {
             texto: 'Estado del catálogo',
             atributos: { href: './panel-catalogo.html' },
           }),
+          h('a', {
+            clase: 'productos-cabecera__enlace',
+            texto: 'Banners',
+            atributos: { href: './banners.html' },
+          }),
         ],
       }),
     ],
