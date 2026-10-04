@@ -52,7 +52,7 @@ Cada turno de cada duelo lo resuelve el **mismo motor de combate que las batalla
 **Precedencia**, de mayor a menor, para cada enemigo (regular, Máster o jefe):
 
 1. la rotación que **la misión escribe** para ese enemigo (`enemigos[].rotaciones` y `jefe.rotaciones` de la semilla de misiones; los Máster no tienen ese campo). Hoy ninguna misión publicada la trae, y no se valida al cargar la semilla (heroes la valida contra el nivel real al simular);
-2. la **predefinida** de su prototipo en el tramo de su nivel;
+2. la **predefinida** de su prototipo en el tramo del nivel con el que pelea de verdad: el recomendado de la misión (D-42), no el del héroe; un enemigo del Templo (nivel 8) usa la de 8 en adelante aunque el héroe sea de nivel 3;
 3. la **heurística** de antes (`RotacionesPorDefectoDeEnemigos`: una rotación por habilidad desbloqueada, la más avanzada primero), que queda solo de respaldo.
 
 **Criterio de diseño** (decisión provisional del PO, también escrita en el archivo):
