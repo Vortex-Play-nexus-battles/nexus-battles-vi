@@ -137,13 +137,19 @@ class MasterPorDificultadTest {
     }
 
     @Test
-    @DisplayName("la tabla es del documento: la semilla del equipo o la provisional no traen la suya")
+    @DisplayName("la tabla es del documento: la semilla de progresion, la del equipo o la provisional no traen la suya")
     void soloUnaTabla() {
         Mision templo = Misiones.templo();
         Mision delEquipo = delEquipo("la-del-equipo", Dificultad.NORMAL, 0.15);
         SemillaDeMisiones conTabla = new SemillaDeMisiones("1", List.of(), List.of(), MASTER_POR_DIFICULTAD,
                 List.of(delEquipo));
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documentoConTabla20(TABLA20, templo), null, conTabla, null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Máster por dificultad");
+
+        SemillaDeMisiones progresionConTabla = new SemillaDeMisiones("1", List.of(), List.of(),
+                MASTER_POR_DIFICULTAD, List.of());
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento(templo), progresionConTabla, null))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Máster por dificultad");
 
