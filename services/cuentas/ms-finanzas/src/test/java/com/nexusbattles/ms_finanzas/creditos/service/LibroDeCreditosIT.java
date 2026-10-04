@@ -63,8 +63,18 @@ class LibroDeCreditosIT {
         return libro.obtenerSaldo(uid).saldoDisponible();
     }
 
+    /**
+     * El refId es la clave de idempotencia de TODO el libro, no por jugador:
+     * cada prueba usa los suyos (con este prefijo) para no pisar los de otra.
+     */
+    private final String prefijo = "g7-" + UUID.randomUUID() + "-";
+
     private DebitarResponse debitar(String uid, int monto, String refId) {
-        return libro.debitar(new DebitarRequest(uid, BigDecimal.valueOf(monto), refId, "compra-prueba"));
+        return libro.debitar(new DebitarRequest(uid, BigDecimal.valueOf(monto), prefijo + refId, "compra-prueba"));
+    }
+
+    private String ref(String refId) {
+        return prefijo + refId;
     }
 
     @Test
@@ -92,7 +102,7 @@ class LibroDeCreditosIT {
         assertThatThrownBy(() -> debitar(uid, 80, "orden-b")).isInstanceOf(SaldoInsuficienteException.class);
         assertThat(saldo(uid)).isEqualByComparingTo("20");
         // El rechazado no dejó fila: un refId sin cobro sigue libre.
-        assertThatThrownBy(() -> libro.consultarOperacionPorRefId("orden-b"))
+        assertThatThrownBy(() -> libro.consultarOperacionPorRefId(ref("orden-b")))
                 .isInstanceOf(com.nexusbattles.ms_finanzas.common.exception.ReservaNoEncontradaException.class);
     }
 
@@ -101,7 +111,7 @@ class LibroDeCreditosIT {
     void sinReaplicacionTrasReverso() {
         String uid = jugadorCon(100);
         DebitarResponse cobro = debitar(uid, 40, "orden-x");
-        ReversarResponse devolucion = libro.reversar(new ReversarRequest("orden-x", "compra anulada"));
+        ReversarResponse devolucion = libro.reversar(new ReversarRequest(ref("orden-x"), "compra anulada"));
         assertThat(devolucion.estado()).isEqualTo("REVERSADO");
         assertThat(saldo(uid)).isEqualByComparingTo("100");
 
@@ -112,10 +122,10 @@ class LibroDeCreditosIT {
 
         assertThat(saldo(uid)).isEqualByComparingTo("100");
         assertThat(otraVez.transaccionId()).isEqualTo(cobro.transaccionId());
-        assertThat(libro.consultarOperacionPorRefId("orden-x").estado()).isEqualTo("LIBERADA");
+        assertThat(libro.consultarOperacionPorRefId(ref("orden-x")).estado()).isEqualTo("LIBERADA");
 
         // Y reversar dos veces no devuelve dos veces.
-        assertThat(libro.reversar(new ReversarRequest("orden-x", "otra vez")).estado()).isEqualTo("YA_REVERSADO");
+        assertThat(libro.reversar(new ReversarRequest(ref("orden-x"), "otra vez")).estado()).isEqualTo("YA_REVERSADO");
         assertThat(saldo(uid)).isEqualByComparingTo("100");
     }
 
@@ -128,7 +138,7 @@ class LibroDeCreditosIT {
 
         assertThat(saldo(uid)).isEqualByComparingTo("90");
         assertThat(resultados).contains(true);
-        assertThat(libro.consultarOperacionPorRefId("orden-concurrente").estado()).isEqualTo("CONSUMIDA");
+        assertThat(libro.consultarOperacionPorRefId(ref("orden-concurrente")).estado()).isEqualTo("CONSUMIDA");
     }
 
     @Test
