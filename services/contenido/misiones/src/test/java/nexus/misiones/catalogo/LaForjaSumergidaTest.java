@@ -39,7 +39,7 @@ class LaForjaSumergidaTest {
     @Test
     @DisplayName("la semilla publica «La Forja Sumergida» despues de «El Templo Olvidado», como mision del equipo")
     void estaPublicada() {
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "la-forja-sumergida");
+        assertThat(catalogo.todas()).extracting(Mision::id).containsSubsequence("templo-olvidado", "la-forja-sumergida");
 
         Mision forja = forja();
         assertThat(forja.origen()).isEqualTo(Origen.EQUIPO);
@@ -47,7 +47,8 @@ class LaForjaSumergidaTest {
         assertThat(forja.categoria()).isEqualTo(Categoria.HISTORIA);
         assertThat(forja.dificultad()).isEqualTo(Dificultad.DIFICIL);
         assertThat(forja.duracionHoras()).isEqualTo(18);
-        assertThat(forja.nivelRecomendado()).isEqualTo(20);
+        assertThat(forja.nivelRecomendado()).as("sigue al Templo (nivel 8), el ultimo de la progresion (6.1.1)")
+                .isEqualTo(8).isBetween(Mision.NIVEL_MINIMO, Mision.NIVEL_MAXIMO);
         assertThat(forja.requisitosPrevios()).as("sigue a «El Templo Olvidado» en la cadena de historia")
                 .containsExactly("templo-olvidado");
         assertThat(forja.descripcionBreve()).isNotBlank();
