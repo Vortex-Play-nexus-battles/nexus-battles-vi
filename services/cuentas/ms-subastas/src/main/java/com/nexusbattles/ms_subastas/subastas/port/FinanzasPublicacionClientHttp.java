@@ -105,23 +105,110 @@ public class FinanzasPublicacionClientHttp implements FinanzasPublicacionClient 
     /**
      * B8 (7.7.10): la penalizacion de cancelar, con su propio {@code refId}.
      * Por el refId es idempotente: repetir la cancelacion no cobra dos veces.
+     *
+     * <p><b>G7: una penalizacion devuelta no se reutiliza.</b> ms-finanzas no
+     * vuelve a descontar un {@code refId} ya registrado, tampoco si aquel debito
+     * se reverso (creditos.yaml 1.4.1, {@code debitar}: «si ya existe una
+     * operacion registrada con ese refId, no se vuelve a descontar»; responde la
+     * del primero). Una cancelacion que fallaba despues de cobrar —inventario
+     * caido— devolvia la penalizacion, y al repetirla con el mismo refId el
+     * libro contestaba 200 sin cobrar: la subasta quedaba cancelada gratis. Por
+     * eso cada penalizacion devuelta abre una generacion nueva del refId
+     * ({@code sub-cancelacion-{id}}, {@code -2}, {@code -3}...), y antes de
+     * cobrar se pregunta al libro en que quedo cada una
+     * ({@code GET /creditos/operaciones/{refId}}): libre, se cobra con ella;
+     * cobrada (una respuesta perdida), se repite con ella sin cobrar dos veces;
+     * devuelta, se pasa a la siguiente.
      */
     @Override
     public void debitarPenalizacionCancelacion(UUID jugadorUid, BigDecimal monto, UUID subastaId) {
-        debitar(jugadorUid, monto, refId(PREFIJO_CANCELACION, subastaId), CONCEPTO_CANCELACION,
+        String refId = refIdParaCobrarLaPenalizacion(subastaId);
+        debitar(jugadorUid, monto, refId, CONCEPTO_CANCELACION,
                 "Creditos insuficientes para pagar la penalizacion de cancelar");
     }
 
+    /** Devuelve la ultima generacion cobrada (la unica que puede seguir cobrada: ver arriba). */
     @Override
     public void compensarPenalizacionCancelacion(UUID subastaId, String motivo) {
         validarTexto(motivo, "motivo");
-        String refId = refId(PREFIJO_CANCELACION, subastaId);
+        String refId = refIdParaDevolverLaPenalizacion(subastaId);
         post("reversar", new Reversa(refId, motivo), refId, null);
     }
 
     static final String PREFIJO_PUBLICACION = "sub-publicacion-";
     static final String PREFIJO_CANCELACION = "sub-cancelacion-";
     static final String CONCEPTO_CANCELACION = "penalizacion-cancelacion-subasta";
+
+    /**
+     * Tope de penalizaciones devueltas de una misma subasta: mas cancelaciones
+     * fallidas seguidas que esto no es un reintento, es algo que concilia una
+     * persona.
+     */
+    static final int GENERACIONES_MAXIMAS = 20;
+
+    /** El refId de la generacion {@code n} de la penalizacion: la primera es el de siempre. */
+    static String refIdDeLaPenalizacion(UUID subastaId, int generacion) {
+        String base = refId(PREFIJO_CANCELACION, subastaId);
+        return generacion <= 1 ? base : base + "-" + generacion;
+    }
+
+    private String refIdParaCobrarLaPenalizacion(UUID subastaId) {
+        for (int generacion = 1; generacion <= GENERACIONES_MAXIMAS; generacion++) {
+            String refId = refIdDeLaPenalizacion(subastaId, generacion);
+            String estado = estadoEnElLibro(refId);
+            if (!ESTADO_DEVUELTA.equals(estado)) {
+                return refId;
+            }
+        }
+        throw new FinanzasPublicacionClientException("La subasta " + subastaId + " acumula "
+                + GENERACIONES_MAXIMAS + " penalizaciones devueltas: requiere conciliacion");
+    }
+
+    private String refIdParaDevolverLaPenalizacion(UUID subastaId) {
+        String ultima = refIdDeLaPenalizacion(subastaId, 1);
+        for (int generacion = 1; generacion <= GENERACIONES_MAXIMAS; generacion++) {
+            String refId = refIdDeLaPenalizacion(subastaId, generacion);
+            if (estadoEnElLibro(refId) == null) {
+                break;
+            }
+            ultima = refId;
+        }
+        return ultima;
+    }
+
+    /** Estado de una operacion del libro que ya fue reversada (creditos.yaml, {@code Operacion.estado}). */
+    static final String ESTADO_DEVUELTA = "LIBERADA";
+
+    /**
+     * El estado de la operacion con ese refId en el libro, o nulo si no existe
+     * (el 404 de esta consulta si significa eso, creditos.yaml). Cualquier otra
+     * respuesta es finanzas no disponible: no se cobra a ciegas.
+     */
+    private String estadoEnElLibro(String refId) {
+        HttpRequest request = firmada(HttpRequest.newBuilder(baseUri.resolve("creditos/operaciones/" + refId)))
+                .header("Accept", "application/json").timeout(timeout).GET().build();
+        final HttpResponse<String> response;
+        try {
+            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        } catch (IOException e) {
+            throw new FinanzasPublicacionClientException("No se pudo consultar " + refId + " en finanzas", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new FinanzasPublicacionClientException("No se pudo consultar " + refId + " en finanzas", e);
+        }
+        if (response.statusCode() == 404) {
+            return null;
+        }
+        if (response.statusCode() != 200) {
+            throw new FinanzasPublicacionClientException("Respuesta inesperada de finanzas al consultar " + refId
+                    + ": " + response.statusCode());
+        }
+        Resultado resultado = leerResultado(response.body(), refId);
+        if (resultado.estado() == null || resultado.estado().isBlank()) {
+            throw new FinanzasPublicacionClientException("Finanzas no dijo en que quedo " + refId);
+        }
+        return resultado.estado();
+    }
 
     private void debitar(UUID jugadorUid, BigDecimal monto, String refId, String concepto, String sinSaldo) {
         if (jugadorUid == null) throw new FinanzasPublicacionClientException("El uid del jugador es obligatorio");
