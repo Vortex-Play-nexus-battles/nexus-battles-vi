@@ -214,6 +214,24 @@ export function adjuntosDeComentario(imagenes, { urlDeImagen = null, autor = nul
 }
 
 /**
+ * ¿Es de quien mira? G4 (comentarios.yaml 1.9.0): el hilo público ya no trae
+ * el `uid` del autor; lo dice el servidor en `propio`, comparando con el token
+ * de quien lo pide. Si la respuesta no trae `propio` (un servicio anterior a
+ * 1.9.0, o la respuesta de publicar de un cliente viejo), se compara el
+ * `autorId` con el `uid` de la sesión, como antes.
+ *
+ * @param {object} comentario `ComentarioResponse`
+ * @param {string|null} yo el `uid` de quien mira
+ * @returns {boolean}
+ */
+export function esPropio(comentario, yo) {
+  if (typeof comentario?.propio === 'boolean') {
+    return comentario.propio;
+  }
+  return Boolean(yo) && comentario?.autorId === yo;
+}
+
+/**
  * Tarjeta de un comentario.
  *
  * @param {object} comentario `ComentarioResponse` del contrato
@@ -230,7 +248,7 @@ export function tarjetaDeComentario(
   { yo = null, estadoLocal = null, alEliminar = null, alReportar = null, urlDeImagen = null } = {},
 ) {
   const apodo = typeof comentario?.apodoAutor === 'string' ? comentario.apodoAutor : '';
-  const esMio = Boolean(yo) && comentario?.autorId === yo;
+  const esMio = Boolean(yo) && esPropio(comentario, yo);
 
   const autor = h('p', {
     clase: 'comentario__autor',

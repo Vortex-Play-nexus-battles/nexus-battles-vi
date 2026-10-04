@@ -47,7 +47,7 @@ import { usuarioIdDeSesion } from '../../comun/identidad.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { abrirDialogo } from '../../comun/ui/dialogo.js';
-import { adjuntosDeComentario } from '../../comun/ui/comunidad/comentario.js';
+import { adjuntosDeComentario, esPropio } from '../../comun/ui/comunidad/comentario.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
@@ -545,7 +545,9 @@ export function agregarAlHilo(
   // retirar (HU-COM-004) y sobre lo de otro se puede reportar (RF-COM-006).
   // Reportarse a uno mismo no significa nada, y «Eliminar» sobre un
   // comentario ajeno seria una promesa que el servicio contesta con 403.
-  const esMio = Boolean(yo) && comentario.autorId === yo;
+  // G4 (comentarios.yaml 1.9.0): el hilo dice `propio`; sin él (un servicio
+  // anterior), la comparación de siempre con el `uid` de la sesión.
+  const esMio = Boolean(yo) && esPropio(comentario, yo);
   if (esMio && typeof alEliminar === 'function') {
     const acciones = document.createElement('div');
     acciones.className = 'fila';
