@@ -149,7 +149,10 @@ jobs:
       # hace contra AWS despues de cada despliegue (prueba-del-profesor.yml),
       # aqui con todos los servicios, subastas incluidas. Registro por la
       # interfaz, alta real, partida contra la IA, cierre y vuelta. Si el
-      # banco no lo pasa, AWS tampoco lo va a pasar.
+      # banco no lo pasa, AWS tampoco lo va a pasar. Desde PR-F incluye la
+      # regresion del feedback del 4-oct (regresion-feedback.profesor.spec.js):
+      # portada, compra con creditos, subasta +5, IA sin auto-dano y mision
+      # de nivel 1, con cuentas nuevas, igual que en DEV.
       - name: La prueba del profesor en el banco
         working-directory: frontend/app-web
         env:
