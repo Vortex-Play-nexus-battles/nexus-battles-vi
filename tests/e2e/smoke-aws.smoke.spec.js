@@ -76,6 +76,18 @@ test.describe('Smoke del entorno desplegado', () => {
     // del navegador. Esto detecta las rutas relativas rotas de #425.
     const fondo = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(fondo).not.toBe('rgba(0, 0, 0, 0)');
+    // G1: el formulario es POST; nunca un envío nativo por GET con la clave.
+    await expect(page.locator('#formLogin')).toHaveAttribute('method', 'post');
+  });
+
+  test('G1: una dirección de login con password= no se queda: 303 a /login, sin la consulta', async () => {
+    // Un marcador, no una clave: lo que se comprueba es que el borde no sirva
+    // (ni deje en el historial) una dirección con password=.
+    const r = await api.get('/login?email=smoke%40nexus.test&password=G1-marcador-smoke', {
+      maxRedirects: 0,
+    });
+    expect(r.status()).toBe(303);
+    expect(r.headers().location).toBe('/login');
   });
 
   test('la raíz es la portada pública con la tienda; entrar sigue en /login (F6)', async ({
