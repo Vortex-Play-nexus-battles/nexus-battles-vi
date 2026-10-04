@@ -265,11 +265,12 @@ class ServicioDeMisionesIT {
     }
 
     @Test
-    @DisplayName("si el inventario no contesta, la entrega queda pendiente y se completa en otra vuelta")
+    @DisplayName("si el inventario no contesta al liberar, la entrega queda pendiente y se completa en otra vuelta")
     void entregaPendiente() throws Exception {
         String ejecucionId = matricular("dev-prueba-de-humo", "{\"heroeId\":\"" + heroeId + "\"}");
         Thread.sleep(20);
-        FALSAS.caidas.add("inventario");
+        // Solo la liberacion: simular al heroe ya pide sus estadisticas y su equipo al inventario.
+        FALSAS.caidas.add("liberacion");
         trabajo.ejecutar();
 
         mvc.perform(conToken(get("/api/v1/misiones/ejecuciones/{id}", ejecucionId)))
