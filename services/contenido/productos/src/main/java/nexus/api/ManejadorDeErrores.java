@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.dominio.BannerNoEncontradoException;
 import nexus.dominio.ProductoNoEncontradoException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -126,6 +127,19 @@ public class ManejadorDeErrores {
                         "Producto no encontrado",
                         excepcion.getMessage(),
                         "urn:nexus:problema:producto-no-encontrado",
+                        solicitud);
+        }
+
+        @ExceptionHandler(BannerNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarBannerNoEncontrado(
+                        BannerNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.NOT_FOUND,
+                        "Banner no encontrado",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:banner-no-encontrado",
                         solicitud);
         }
 

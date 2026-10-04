@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.2.1
+  version: 1.3.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002) y suspensión lógica
@@ -18,11 +18,107 @@ info:
     1.2.1 (R16): solo documentación. El borde deja de repartir la ruta
     exacta por método (#421): todo /api/v1/productos llega a este servicio.
 
+    1.3.0 (HU-PRD-013): incorpora la creación, programación, edición y
+    retiro lógico de banners, además de la consulta pública de los que se
+    encuentran vigentes.
+
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
 
 paths:
+  /api/v1/banners/vigentes:
+    get:
+      summary: Lista los banners vigentes
+      operationId: consultarBannersVigentes
+      description: >
+        Operación pública. Solo devuelve banners no retirados cuya fecha de
+        publicación ya comenzó y cuya vigencia aún no terminó.
+      responses:
+        "200":
+          description: Banners visibles en el momento de la consulta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Banner"
+
+  /api/v1/banners:
+    post:
+      summary: Crea y programa un banner
+      operationId: crearBanner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudBanner"
+      responses:
+        "201":
+          description: Banner creado
+          headers:
+            Location:
+              description: Ubicación del banner creado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+        "400":
+          description: Contenido o periodo de vigencia inválido
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+        "403":
+          description: Se requiere rol de administración
+
+  /api/v1/banners/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      summary: Edita y reprograma un banner
+      operationId: editarBanner
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudBanner"
+      responses:
+        "200":
+          description: Banner actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Banner"
+        "400":
+          description: Contenido o periodo de vigencia inválido
+        "404":
+          description: Banner inexistente
+    delete:
+      summary: Retira un banner sin eliminar su registro
+      operationId: retirarBanner
+      security:
+        - BearerAuth: []
+      responses:
+        "204":
+          description: Banner retirado
+        "404":
+          description: Banner inexistente
+
   /api/v1/productos/estadisticas:
     get:
       summary: Consulta el estado del catálogo
@@ -336,6 +432,47 @@ components:
         Token emitido por Keycloak. La creación de productos requiere el rol
         ADMINISTRADOR o SUPER_ADMINISTRADOR.
   schemas:
+    SolicitudBanner:
+      type: object
+      additionalProperties: false
+      required:
+        - contenido
+        - publicarDesde
+        - vigenteHasta
+      properties:
+        contenido:
+          type: string
+          minLength: 1
+          maxLength: 500
+        publicarDesde:
+          type: string
+          format: date-time
+        vigenteHasta:
+          type: string
+          format: date-time
+          description: Debe ser posterior a publicarDesde y estar en el futuro.
+
+    Banner:
+      allOf:
+        - $ref: "#/components/schemas/SolicitudBanner"
+        - type: object
+          required:
+            - id
+            - retirado
+            - creadoEn
+            - modificadoEn
+          properties:
+            id:
+              type: string
+            retirado:
+              type: boolean
+            creadoEn:
+              type: string
+              format: date-time
+            modificadoEn:
+              type: string
+              format: date-time
+
     SolicitudCrearProducto:
       oneOf:
         - $ref: "#/components/schemas/SolicitudCrearHeroe"
