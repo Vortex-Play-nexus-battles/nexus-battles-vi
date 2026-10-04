@@ -83,16 +83,17 @@ class LaForjaSumergidaTest {
                         tuple("Recuperar los 2 lingotes de acero frío.", false,
                                 TipoDeObjetivo.OBTENER_BOTIN, 2, "Lingote de acero frío"));
 
-        assertThat(forja.enemigos()).extracting("nombre", "cantidad", "prototipo", "descripcion")
+        // Cantidad, vida y defensa son valores de equilibrio PROVISIONALES (BalanceDeMisionesTest, motor-combate).
+        assertThat(forja.enemigos()).extracting("nombre", "cantidad", "prototipo", "descripcion", "vida", "defensa")
                 .containsExactly(
                         tuple("Autómatas de Escoria", 8, "Guerrero Tanque",
-                                "Enemigos con alta defensa."),
-                        tuple("Salamandras de la Forja", 6, "Mago Fuego",
-                                "Enemigos con ataques mágicos."),
-                        tuple("Ladrones de Lingotes", 4, "Pícaro Machete",
-                                "Enemigos con ataques rápidos."));
-        assertThat(forja.encuentrosRegulares()).isEqualTo(18);
-        assertThat(forja.encuentros()).as("regulares mas el jefe").isEqualTo(19);
+                                "Enemigos con alta defensa.", 40, 84),
+                        tuple("Salamandras de la Forja", 3, "Mago Fuego",
+                                "Enemigos con ataques mágicos.", 20, 70),
+                        tuple("Ladrones de Lingotes", 2, "Pícaro Machete",
+                                "Enemigos con ataques rápidos.", 20, 60));
+        assertThat(forja.encuentrosRegulares()).isEqualTo(13);
+        assertThat(forja.encuentros()).as("regulares mas el jefe").isEqualTo(14);
 
         assertThat(forja.jefe().nombre()).isEqualTo("El Herrero Ahogado");
         assertThat(forja.jefe().prototipo()).isEqualTo("Guerrero Armas");
