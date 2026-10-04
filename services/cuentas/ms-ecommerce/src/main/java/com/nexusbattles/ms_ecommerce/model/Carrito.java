@@ -28,9 +28,11 @@ public class Carrito {
 
     private BigDecimal total = BigDecimal.ZERO;
 
+    /** El total en dinero real: las lineas que solo se pagan con creditos (G3) no tienen subtotal y no suman. */
     public void recalcularTotal() {
         this.total = items.stream()
             .map(ItemCarrito::getSubtotal)
+            .filter(java.util.Objects::nonNull)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 }

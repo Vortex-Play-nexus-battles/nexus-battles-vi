@@ -41,6 +41,7 @@ import java.util.Set;
 
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESCUDO;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESPADA;
+import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.POCION;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conEstado;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conNombre;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conPrecio;
@@ -229,18 +230,40 @@ class CarritoServiceTest {
         }
 
         @Test
-        @DisplayName("sin precio en moneda real, o a 0: no se compra en la tienda (RF-CAR-002)")
+        @DisplayName("sin ningun precio (premium sin COP o a 0): no se compra; premium no se convierte a creditos")
         void sinPrecioEnMonedaReal() {
-            when(catalogo.producto(ESPADA)).thenReturn(Optional.of(soloEnCreditos(enVenta(ESPADA), 300)));
             when(catalogo.producto(ESCUDO)).thenReturn(Optional.of(conPrecio(enVenta(ESCUDO), BigDecimal.ZERO)));
+            when(catalogo.producto(POCION)).thenReturn(Optional.of(new ProductoDelCatalogo(POCION, "Poción", null,
+                    null, "ITEM", -1, 300, null, true, "ACTIVO", null)));
 
-            assertThatThrownBy(() -> carritoService.agregarProducto(USUARIO, pedir(ESPADA, 1)))
-                    .isInstanceOfSatisfying(ProductoNoAgregableException.class,
-                            e -> assertThat(e.motivo()).isEqualTo(Motivo.SIN_PRECIO_EN_MONEDA_REAL));
             assertThatThrownBy(() -> carritoService.agregarProducto(USUARIO, pedir(ESCUDO, 1)))
                     .isInstanceOfSatisfying(ProductoNoAgregableException.class,
                             e -> assertThat(e.motivo()).isEqualTo(Motivo.SIN_PRECIO_EN_MONEDA_REAL));
+            assertThatThrownBy(() -> carritoService.agregarProducto(USUARIO, pedir(POCION, 1)))
+                    .as("premium con precioCreditos: solo moneda real, y no la tiene")
+                    .isInstanceOfSatisfying(ProductoNoAgregableException.class,
+                            e -> assertThat(e.motivo()).isEqualTo(Motivo.SIN_PRECIO_EN_MONEDA_REAL));
             verifyNoInteractions(carritoRepository);
+        }
+
+        @Test
+        @DisplayName("G3: solo en creditos entra al carrito, sin precio en dinero real y sin sumar al total")
+        void soloEnCreditosEntra() {
+            carritoExistente();
+            guardarDevuelveLoMismo();
+            when(catalogo.producto(ESPADA)).thenReturn(Optional.of(soloEnCreditos(enVenta(ESPADA), 300)));
+
+            CarritoDto resultado = carritoService.agregarProducto(USUARIO, pedir(ESPADA, 2));
+
+            assertThat(resultado.items()).singleElement().satisfies(item -> {
+                assertThat(item.disponible()).isTrue();
+                assertThat(item.soloEnCreditos()).isTrue();
+                assertThat(item.precioCreditos()).isEqualTo(300L);
+                assertThat(item.precioUnitario()).isNull();
+                assertThat(item.subtotal()).isNull();
+            });
+            assertThat(resultado.total()).isEqualByComparingTo("0");
+            assertThat(resultado.unidades()).isEqualTo(2);
         }
 
         @Test

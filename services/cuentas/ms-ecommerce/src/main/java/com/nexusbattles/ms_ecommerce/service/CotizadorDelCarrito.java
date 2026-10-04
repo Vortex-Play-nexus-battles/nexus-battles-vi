@@ -7,6 +7,7 @@ import com.nexusbattles.ms_ecommerce.dto.MotivoDeLinea;
 import com.nexusbattles.ms_ecommerce.dto.ProductoDelItemDto;
 import com.nexusbattles.ms_ecommerce.precios.CalculadoraDePrecios;
 import com.nexusbattles.ms_ecommerce.precios.PrecioCalculado;
+import com.nexusbattles.ms_ecommerce.precios.PrecioEnCreditos;
 import com.nexusbattles.ms_ecommerce.precios.Tarifa;
 import org.springframework.stereotype.Component;
 
@@ -83,10 +84,12 @@ public class CotizadorDelCarrito {
         if (producto == null || !producto.estaEnVenta()) {
             return deInstantanea(linea, tarifa, moneda, false, MotivoDeLinea.NO_DISPONIBLE, null);
         }
-        if (!producto.tienePrecioEnMonedaReal()) {
+        if (!producto.tieneAlgunPrecio()) {
             return deInstantanea(linea, tarifa, moneda, false, MotivoDeLinea.SIN_PRECIO_EN_MONEDA_REAL, null);
         }
-        PrecioCalculado precio = CalculadoraDePrecios.deProducto(producto, tarifa, ahora);
+        PrecioEnCreditos enCreditos = CalculadoraDePrecios.enCreditos(producto, ahora).orElse(null);
+        Long precioCreditos = enCreditos == null ? null : enCreditos.precioFinal();
+        Long subtotalCreditos = ItemCarritoDto.subtotalEnCreditos(precioCreditos, linea.cantidad());
         int maximo = maximoPara(producto);
         MotivoDeLinea motivo = null;
         if (maximo == 0) {
@@ -94,10 +97,21 @@ public class CotizadorDelCarrito {
         } else if (linea.cantidad() > maximo) {
             motivo = MotivoDeLinea.TIRAJE_INSUFICIENTE;
         }
+        if (producto.soloEnCreditos()) {
+            // G3: se compra, pero solo con creditos. Sin precio en dinero real:
+            // no se ensena «a 0» y no suma al total.
+            ProductoDelItemDto delItem = new ProductoDelItemDto(linea.productoRef(), producto.nombre(), null,
+                    producto.imagen());
+            return new ItemCarritoDto(linea.id(), delItem, linea.cantidad(), null, null,
+                    enCreditos == null ? null : enCreditos.porcentajeDescuento(), null, motivo == null, motivo,
+                    maximo, precioCreditos, subtotalCreditos, true);
+        }
+        PrecioCalculado precio = CalculadoraDePrecios.deProducto(producto, tarifa, ahora);
         ProductoDelItemDto delItem = new ProductoDelItemDto(linea.productoRef(), producto.nombre(), moneda,
                 producto.imagen());
         return new ItemCarritoDto(linea.id(), delItem, linea.cantidad(), precio.precioFinal(), precio.precioOriginal(),
-                precio.porcentajeDescuento(), precio.subtotal(linea.cantidad()), motivo == null, motivo, maximo);
+                precio.porcentajeDescuento(), precio.subtotal(linea.cantidad()), motivo == null, motivo, maximo,
+                precioCreditos, subtotalCreditos, false);
     }
 
     private static ItemCarritoDto deInstantanea(CarritoLeido.Linea linea, Tarifa tarifa, String moneda,

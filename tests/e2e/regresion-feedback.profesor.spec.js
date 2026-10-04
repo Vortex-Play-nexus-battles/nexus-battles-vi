@@ -446,8 +446,10 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           `#productos-grid .product-card[data-id-producto="${producto.id}"]`,
         );
         await expect(tarjeta).toBeVisible({ timeout: 20_000 });
+        // G3 (1.7.0): si solo se vende en créditos, ese ES su precio; si tiene
+        // los dos, el de créditos va como «o N créditos».
         await expect(tarjeta.locator('[data-precio-creditos]')).toHaveText(
-          `o ${enCreditos(precio)}`,
+          producto.precioFinal === null ? enCreditos(precio) : `o ${enCreditos(precio)}`,
         );
         const alta = page.waitForResponse(
           (r) => r.url().includes('/api/v1/carrito/items') && r.request().method() === 'POST',

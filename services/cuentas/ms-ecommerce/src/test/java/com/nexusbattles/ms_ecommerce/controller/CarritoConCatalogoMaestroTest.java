@@ -200,7 +200,7 @@ class CarritoConCatalogoMaestroTest {
     }
 
     @Test
-    @DisplayName("un producto sin precio en moneda real: 422 producto-sin-precio-en-moneda-real")
+    @DisplayName("un premium sin precio en moneda real (sin ningun precio): 422 producto-sin-precio-en-moneda-real")
     void sinPrecioEnMonedaRealEs422() throws Exception {
         catalogoResponde(ESPADA, json(ESPADA, "Espada", "ARMA", "ACTIVO", -1, null));
 

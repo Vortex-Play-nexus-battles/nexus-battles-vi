@@ -19,6 +19,12 @@
  *   5. la vista: «¿Cómo quieres pagar?» → Créditos del Nexo → saldo actual,
  *      precio y saldo después → «Confirmar compra» → «Compra realizada» →
  *      «Ver inventario».
+ *   6. G3 (1.7.0): un producto que solo tiene precio en créditos se vende:
+ *      sale en la vitrina con `precioFinal`/`moneda` a null y su precio en
+ *      créditos, entra al carrito sin sumar al total en dinero real, con
+ *      tarjeta es 422 `producto-sin-precio-en-moneda-real` sin orden, y con
+ *      créditos se paga una vez y llega al inventario; en la vista, «Pagar»
+ *      abre ya en créditos con el pago simulado apagado.
  *
  * El saldo de cada jugadora se siembra con la credencial de servicio del
  * banco (`POST /creditos/acreditar`, como en subastas.e2e.spec.js): un
@@ -140,6 +146,20 @@ test.describe('D-44 — comprar con créditos del juego', () => {
     tasaDeCaida: 50,
   });
 
+  /**
+   * G3 (ecommerce-carrito 1.7.0): «vendible si tiene precio en dinero real O
+   * en créditos». Este no tiene precio en dinero real: solo se vende en
+   * créditos (no es premium, así que el alta lo admite sin él).
+   */
+  const PRECIO_SOLO_CREDITOS = 70;
+  const soloEnCreditos = () => ({
+    ...producto('amuleto', PRECIO_SOLO_CREDITOS),
+    nombre: `Amuleto solo en créditos E2E ${sufijo}`,
+    descripcion: 'Arma de prueba del E2E (G3): solo tiene precio en créditos.',
+    // Sin precio en dinero real: JSON no escribe un campo undefined.
+    precioMonedaReal: undefined,
+  });
+
   test.beforeAll(async () => {
     api = await apiRequest.newContext({ baseURL: BORDE });
     admin = await sesionDe(api, process.env.E2E_ADMIN ?? ADMIN);
@@ -153,6 +173,13 @@ test.describe('D-44 — comprar con créditos del juego', () => {
       ids[clave] = (await r.json()).id;
       expect(ids[clave]).toMatch(UUID);
     }
+    const alta = await api.post('/api/v1/productos', {
+      headers: conToken(admin.token),
+      data: soloEnCreditos(),
+    });
+    expect(alta.status(), await alta.text()).toBe(201);
+    ids.soloCreditos = (await alta.json()).id;
+    expect(ids.soloCreditos).toMatch(UUID);
     // La vitrina guarda una copia del catálogo 30 s: se espera a que estén.
     await expect
       .poll(
@@ -354,5 +381,128 @@ test.describe('D-44 — comprar con créditos del juego', () => {
     await expect(page).toHaveURL(/inventario/);
     const elementos = await inventarioDe(api, jugadora);
     expect(elementos.filter((e) => e.productoId === ids.lanza)).toHaveLength(1);
+  });
+
+  test('G3 — solo en créditos: en la vitrina con su precio en créditos y sin precio en dinero real', async () => {
+    const amuleto = (await vitrinaCompleta(api)).find((p) => p.id === ids.soloCreditos);
+
+    expect(amuleto, 'se vende: tiene precio en créditos').toBeTruthy();
+    expect(amuleto.precioCreditos).toBe(PRECIO_SOLO_CREDITOS);
+    // Nunca «0 COP»: sin precio en dinero real los campos van a null.
+    expect(amuleto.precioFinal).toBeNull();
+    expect(amuleto.precioOriginal).toBeNull();
+    expect(amuleto.moneda).toBeNull();
+  });
+
+  test('G3 — solo en créditos: al carrito; con tarjeta 422 y sin orden; con créditos, un cobro y al inventario', async () => {
+    const jugadora = await sesionDe(api, `creditos_solo_${sufijo}`);
+    await acreditar(api, servicio, jugadora, 1000, `e2e-semilla-solo-${sufijo}`);
+    const antes = await saldoDe(api, jugadora);
+    await alCarrito(api, jugadora, ids.soloCreditos);
+
+    const carrito = await (
+      await api.get('/api/v1/carrito', { headers: conToken(jugadora.token) })
+    ).json();
+    expect(carrito.items).toEqual([
+      expect.objectContaining({
+        disponible: true,
+        soloEnCreditos: true,
+        precioCreditos: PRECIO_SOLO_CREDITOS,
+        subtotalCreditos: PRECIO_SOLO_CREDITOS,
+        precioUnitario: null,
+        subtotal: null,
+      }),
+    ]);
+    expect(Number(carrito.total), 'no suma en dinero real').toBe(0);
+
+    // Con tarjeta no hay nada que cobrar por él: 422, sin orden y sin cobro.
+    const conTarjeta = await api.post('/api/v1/checkout', {
+      headers: { ...conToken(jugadora.token), 'Idempotency-Key': `e2e-solo-tarjeta-${sufijo}` },
+      data: {
+        titular: 'Compradora E2E',
+        numeroTarjeta: '4242 4242 4242 4242',
+        vencimiento: '12/39',
+        codigoSeguridad: '123',
+        moneda: 'COP',
+      },
+    });
+    expect(conTarjeta.status(), await conTarjeta.text()).toBe(422);
+    expect((await conTarjeta.json()).type).toBe(
+      'urn:nexus:problema:producto-sin-precio-en-moneda-real',
+    );
+    const sinOrdenes = await (
+      await api.get('/api/v1/ordenes', { headers: conToken(jugadora.token) })
+    ).json();
+    expect(sinOrdenes).toHaveLength(0);
+
+    // Con créditos: el precio del catálogo, una vez.
+    const pago = await pagarConCreditos(api, jugadora, `e2e-solo-creditos-${sufijo}`);
+    expect(pago.status(), await pago.text()).toBe(201);
+    expect(await pago.json()).toMatchObject({
+      estado: 'COMPLETA',
+      formaDePago: 'CREDITOS',
+      total: PRECIO_SOLO_CREDITOS,
+    });
+    expect(await saldoDe(api, jugadora)).toBe(antes - PRECIO_SOLO_CREDITOS);
+    const elementos = await inventarioDe(api, jugadora);
+    expect(elementos.filter((e) => e.productoId === ids.soloCreditos)).toHaveLength(1);
+  });
+
+  test('G3 — la vista: «N créditos» en la tarjeta, al carrito, y «Pagar» abre ya en créditos', async ({
+    page,
+  }) => {
+    const jugadora = await sesionDe(api, `creditos_solo_ui_${sufijo}`);
+    await acreditar(api, servicio, jugadora, 1000, `e2e-semilla-solo-ui-${sufijo}`);
+    const antes = await saldoDe(api, jugadora);
+    await page.addInitScript(
+      ([token, nombre, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', nombre);
+        sessionStorage.setItem('nexus.rolActual', 'JUGADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [jugadora.token, jugadora.apodo, jugadora.claims.uid],
+    );
+    await page.goto(`${BORDE}${VISTA}`);
+    const formato = (n) => `${n.toLocaleString('es-CO')} créditos`;
+
+    await expect(page.locator('#productos-grid .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await page.locator('#busqueda-tienda').fill(`Amuleto solo en créditos E2E ${sufijo}`);
+    const tarjeta = page.locator(`.product-card[data-id-producto="${ids.soloCreditos}"]`);
+    await expect(tarjeta).toBeVisible({ timeout: 20_000 });
+    await expect(tarjeta.locator('.price')).toHaveText(formato(PRECIO_SOLO_CREDITOS));
+    await expect(tarjeta).not.toContainText('Precio no disponible');
+    await expect(tarjeta).not.toContainText('COP');
+
+    const alta = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/carrito/items') && r.request().method() === 'POST',
+    );
+    await tarjeta.locator('.btn-add').click();
+    expect((await alta).status()).toBe(200);
+    const linea = page.locator(`#cart-items .cart-item[data-solo-en-creditos="si"]`);
+    await expect(linea.locator('.item-price')).toHaveText(formato(PRECIO_SOLO_CREDITOS));
+    await expect(page.locator('#cart-total')).toHaveText('Con créditos del juego');
+
+    const pagar = page.locator('#btn-pagar');
+    await expect(pagar).toBeEnabled();
+    await pagar.click();
+    const dialogo = page.getByRole('dialog', { name: 'Pagar tu compra' });
+    await expect(dialogo.getByLabel(/Créditos del Nexo/)).toBeChecked();
+    await expect(dialogo.getByLabel(/Pago simulado/)).toBeDisabled();
+    await expect(dialogo.locator('[data-motivo="solo-creditos"]')).toContainText(
+      'solo se vende con créditos del juego',
+    );
+    const confirmar = dialogo.locator('[data-accion="confirmar-pago"]');
+    await expect(confirmar).toHaveText(`Confirmar compra por ${formato(PRECIO_SOLO_CREDITOS)}`);
+
+    const cobro = page.waitForResponse(
+      (r) => r.url().includes('/api/v1/checkout/creditos') && r.request().method() === 'POST',
+    );
+    await confirmar.click();
+    expect((await cobro).status()).toBe(201);
+    await expect(dialogo.locator('.pago__resultado')).toContainText('Compra realizada');
+    expect(await saldoDe(api, jugadora)).toBe(antes - PRECIO_SOLO_CREDITOS);
   });
 });
