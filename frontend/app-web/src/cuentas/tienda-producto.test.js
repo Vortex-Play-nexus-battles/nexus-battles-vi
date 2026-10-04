@@ -75,6 +75,20 @@ describe('tarjeta en la tienda', () => {
     );
   });
 
+  test('una imagen que no carga se cambia por el símbolo del tipo: nunca una imagen rota', () => {
+    const tarjeta = tarjetaDeProducto(dto({ imagenUrl: 'espada.png' }));
+    const caja = tarjeta.querySelector('.product-image');
+    const imagen = caja.querySelector('img');
+    expect(caja.classList.contains('con-imagen')).toBe(true);
+
+    imagen.dispatchEvent(new Event('error'));
+
+    expect(caja.querySelector('img')).toBeNull();
+    expect(caja.querySelector('.product-image__simbolo')).not.toBeNull();
+    expect(caja.classList.contains('con-imagen')).toBe(false);
+    expect(caja.dataset.imagen).toBe('rota');
+  });
+
   test('lo que ya tienes lleva su marca, con las unidades', () => {
     const tarjeta = tarjetaDeProducto(dto(), { unidadesPropias: 2 });
 

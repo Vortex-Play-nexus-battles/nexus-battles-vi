@@ -1414,12 +1414,7 @@ function lineaDelCarrito(item, moneda) {
       ...(fila.soloEnCreditos ? { soloEnCreditos: 'si' } : {}),
     },
     hijos: [
-      fila.imagen
-        ? h('img', {
-            clase: 'item-imagen',
-            atributos: { src: fila.imagen, alt: '', loading: 'lazy', decoding: 'async' },
-          })
-        : null,
+      fila.imagen ? imagenDeLinea(fila.imagen) : null,
       h('div', {
         clase: 'item-info',
         hijos: [
@@ -1441,6 +1436,22 @@ function lineaDelCarrito(item, moneda) {
       }),
     ],
   });
+}
+
+/**
+ * La miniatura de una línea del carrito. Si la imagen del catálogo no existe,
+ * se quita: una línea sin miniatura se lee igual, una imagen rota no.
+ *
+ * @param {string} src
+ * @returns {HTMLImageElement}
+ */
+function imagenDeLinea(src) {
+  const imagen = h('img', {
+    clase: 'item-imagen',
+    atributos: { src, alt: '', loading: 'lazy', decoding: 'async' },
+  });
+  imagen.addEventListener('error', () => imagen.remove(), { once: true });
+  return imagen;
 }
 
 /**

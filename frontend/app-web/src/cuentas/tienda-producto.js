@@ -254,20 +254,32 @@ function conmutadorDeTarjeta(producto) {
  */
 function imagenDeProducto(producto) {
   const caja = h('div', { clase: 'product-image' });
+  const simbolo = () =>
+    icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
+      clase: 'icono product-image__simbolo',
+      etiqueta: null,
+    });
   if (producto.imagenUrl) {
     caja.classList.add('con-imagen');
-    caja.append(
-      h('img', {
-        atributos: { src: producto.imagenUrl, alt: '', loading: 'lazy', decoding: 'async' },
-      }),
+    const imagen = h('img', {
+      atributos: { src: producto.imagenUrl, alt: '', loading: 'lazy', decoding: 'async' },
+    });
+    // La imagen la escribe quien da de alta el producto y puede no existir
+    // (en DEV hay productos con «espada.png», una ruta que no sirve nadie):
+    // una imagen rota no se enseña, se cambia por el símbolo del tipo, igual
+    // que cuando el catálogo no trae ninguna.
+    imagen.addEventListener(
+      'error',
+      () => {
+        caja.classList.remove('con-imagen');
+        caja.dataset.imagen = 'rota';
+        imagen.replaceWith(simbolo());
+      },
+      { once: true },
     );
+    caja.append(imagen);
   } else {
-    caja.append(
-      icono(ICONO_DEL_TIPO[producto.tipo] ?? 'estrella', {
-        clase: 'icono product-image__simbolo',
-        etiqueta: null,
-      }),
-    );
+    caja.append(simbolo());
   }
   return caja;
 }

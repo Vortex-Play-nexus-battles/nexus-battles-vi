@@ -537,6 +537,33 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(document.getElementById('aviso-pago').textContent).toMatch(/Añade productos/);
   });
 
+  test('la miniatura de una línea que no carga se quita: ninguna imagen rota en el carrito', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 400,
+        items: [
+          {
+            id: 1,
+            cantidad: 1,
+            subtotal: 400,
+            disponible: true,
+            producto: { nombre: 'Escudo', imagen: 'casco.png' },
+          },
+        ],
+      },
+      document,
+    );
+    const linea = document.querySelector('[data-item-id="1"]');
+    const imagen = linea.querySelector('img.item-imagen');
+    expect(imagen).not.toBeNull();
+
+    imagen.dispatchEvent(new Event('error'));
+
+    expect(linea.querySelector('img')).toBeNull();
+    expect(linea.querySelector('.item-price').textContent).toBe('400 COP');
+  });
+
   test('un item sin subtotal no escribe «undefined» en el carrito', () => {
     actualizarUI(
       { total: null, items: [{ cantidad: 1, producto: { nombre: 'Escudo' } }] },
