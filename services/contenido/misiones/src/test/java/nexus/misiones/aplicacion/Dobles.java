@@ -244,7 +244,13 @@ public final class Dobles {
         public RuntimeException fallarAlEntregar;
 
         public Inventario conHeroe(String id, String duenoUid, String productoId, boolean equipado) {
-            heroes.put(id, new HeroeDelInventario(id, productoId, duenoUid, "HEROE", "Vorn", true, null, null, 1, 0.0));
+            return conHeroeEnNivel(id, duenoUid, productoId, equipado, 1);
+        }
+
+        public Inventario conHeroeEnNivel(String id, String duenoUid, String productoId, boolean equipado,
+                                          int nivel) {
+            heroes.put(id, new HeroeDelInventario(id, productoId, duenoUid, "HEROE", "Vorn", true, null, null, nivel,
+                    0.0));
             if (equipado) {
                 equipados.add(id);
             }

@@ -84,7 +84,7 @@ class EnemigosConEstrategiaTest {
         motor = new Dobles.Motor();
         motor.danoDelHeroe = 30;
         eventos = new Dobles.Eventos();
-        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, null, null,
+        parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, true, null, null,
                 new ParametrosDeRecompensa(Map.of(), Map.of(), false));
     }
 
@@ -194,6 +194,50 @@ class EnemigosConEstrategiaTest {
                 .map(TurnoParaDecidir::rotaciones).filter(r -> !r.isEmpty()).distinct().toList();
         assertThat(distintas).as("rotaciones con las que se pregunto por " + prototipo).hasSize(1);
         return distintas.getFirst();
+    }
+
+    // ---------------------------------------------------------------- el tramo sale del nivel con el que pelea el enemigo
+
+    @Test
+    @DisplayName("el tramo de la estrategia es el del nivel recomendado de la mision (D-42): un enemigo del Templo, de nivel 8, "
+            + "usa la de 8 en adelante aunque el heroe sea de nivel 3")
+    void tramoDelNivelDeLaMision() {
+        inventario.conHeroeEnNivel("h-1", JUGADOR, "p-armas", true, 3);
+        heroes.habilidadesValidas = List.of("Vulcano", "Ataque básico");
+
+        List<EventoDeCombate> turnos = simular(predefinidas(),
+                Misiones.conEnemigosEnNivel("templo-8", 8, enemigos(), JEFE));
+
+        assertThat(deEnemigo(turnos, "Espectro")).isNotEmpty()
+                .allSatisfy(e -> assertThat(e.jugada().estrategiaId()).isEqualTo("mago-fuego-n8"));
+        assertThat(deEnemigo(turnos, "El Guardián Eterno")).isNotEmpty()
+                .allSatisfy(e -> assertThat(e.jugada().estrategiaId()).isEqualTo("guerrero-tanque-n8"));
+    }
+
+    @Test
+    @DisplayName("la mision de nivel 2 pone a sus enemigos en el tramo 1 a 3 aunque el heroe sea de nivel 8")
+    void tramoBajoConHeroeAlto() {
+        inventario.conHeroeEnNivel("h-1", JUGADOR, "p-armas", true, 8);
+
+        List<EventoDeCombate> turnos = simular(predefinidas(),
+                Misiones.conEnemigosEnNivel("basica-2", 2, enemigos(), JEFE));
+
+        assertThat(deEnemigo(turnos, "Espectro")).isNotEmpty()
+                .allSatisfy(e -> assertThat(e.jugada().estrategiaId()).isEqualTo("mago-fuego-n1"));
+        assertThat(deEnemigo(turnos, "El Guardián Eterno")).isNotEmpty()
+                .allSatisfy(e -> assertThat(e.jugada().estrategiaId()).isEqualTo("guerrero-tanque-n1"));
+    }
+
+    @Test
+    @DisplayName("la mision sin nivel recomendado (la provisional de DEV) elige el tramo con el nivel del heroe")
+    void tramoSinNivelRecomendado() {
+        inventario.conHeroeEnNivel("h-1", JUGADOR, "p-armas", true, 5);
+
+        List<EventoDeCombate> turnos = simular(predefinidas(),
+                Misiones.conEnemigosEnNivel("sin-nivel", null, enemigos(), JEFE));
+
+        assertThat(deEnemigo(turnos, "Espectro")).isNotEmpty()
+                .allSatisfy(e -> assertThat(e.jugada().estrategiaId()).isEqualTo("mago-fuego-n4"));
     }
 
     // ---------------------------------------------------------------- una predefinida invalida no rompe nada
