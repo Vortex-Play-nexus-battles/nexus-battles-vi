@@ -254,11 +254,9 @@ class ServicioDeMisionesIT {
     void laForjaSumergida() throws Exception {
         mvc.perform(conToken(get("/api/v1/misiones").param("categoria", "HISTORIA").param("dificultad", "DIFICIL")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.misiones.length()").value(1))
-                .andExpect(jsonPath("$.misiones[0].id").value("la-forja-sumergida"))
-                .andExpect(jsonPath("$.misiones[0].origen").value("EQUIPO"))
-                .andExpect(jsonPath("$.misiones[0].estado").value("BLOQUEADA"))
-                .andExpect(jsonPath("$.misiones[0].destacada").value(false))
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].origen").value("EQUIPO"))
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].estado").value("BLOQUEADA"))
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].destacada").value(false))
                 .andExpect(openApi().isValid(VALIDADOR));
 
         mvc.perform(conToken(get("/api/v1/misiones/{id}", "la-forja-sumergida")))

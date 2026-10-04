@@ -91,6 +91,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
                 new SemillaDeMisiones("1", List.of(), List.of(fila), Map.of(), List.of()), null))
                 .hasMessageContaining("Tabla 20");
+    }
+
     /** Las cifras del PO (provisionales): lo que la semilla del documento declara. */
     static final Map<Dificultad, Double> MASTER_POR_DIFICULTAD = Map.of(
             Dificultad.FACIL, 0.10, Dificultad.NORMAL, 0.15, Dificultad.DIFICIL, 0.20, Dificultad.EXTREMO, 0.25);
