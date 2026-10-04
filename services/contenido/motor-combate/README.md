@@ -82,8 +82,11 @@ gasta el azar de la partida, y el mismo estado da la misma decisión.
 misión publicada por el servicio de misiones —lee sus semillas como datos, no
 su código— con este motor, como la simulación de ese servicio (encuentros en
 orden, vida arrastrada, poder y cargas de cero en cada duelo, 100 rondas por
-duelo, enemigos en el nivel recomendado). La CI de motor-combate corre también
-cuando cambia una semilla de misiones.
+duelo, enemigos en el nivel recomendado). Los enemigos juegan la estrategia
+predefinida de su prototipo y tramo de nivel (`estrategias-de-enemigos.json`,
+HU-SIM-004) con la regla de rotaciones del héroe; sin ese archivo, su ataque
+más fuerte al alcance. La CI de motor-combate corre también cuando cambia una
+semilla de misiones.
 
 **Simulaciones** (`SimuladorDeCombates`, partidas completas contra el motor
 real). `SimulacionDeLaMaquinaTest` corre en CI con semillas fijas: matriz 8×8
