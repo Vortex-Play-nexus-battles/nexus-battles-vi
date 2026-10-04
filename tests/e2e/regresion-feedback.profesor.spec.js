@@ -744,9 +744,16 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           timeout: 30_000,
         });
         // La vista navega en cuanto la matrícula contesta: se lee al pasar.
+        // La ruta no se quita (como en misiones.e2e): `page.unroute` justo
+        // cuando la vista navega se quedó colgado hasta agotar la prueba en el
+        // banco (corrida 37218867745, 14 min en esta línea). Solo toca el POST
+        // de esta misión; cualquier otra petición sigue de largo (`fallback`).
         let matricula = null;
-        const ruta = `**/api/v1/misiones/${PRIMERA_MISION}/ejecuciones`;
-        await page.route(ruta, async (r) => {
+        await page.route(`**/api/v1/misiones/${PRIMERA_MISION}/ejecuciones`, async (r) => {
+          if (r.request().method() !== 'POST') {
+            await r.fallback();
+            return;
+          }
           const respuesta = await r.fetch();
           matricula = {
             status: respuesta.status(),
@@ -757,7 +764,6 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
         await page.locator('[data-accion="iniciar-mision"]').click();
         await page.locator('[role="dialog"] [data-accion="confirmar"]').click();
         await expect.poll(() => matricula?.status, { timeout: 30_000 }).toBeTruthy();
-        await page.unroute(ruta);
         expect(matricula.status, JSON.stringify(matricula.cuerpo)).toBe(201);
         const ejecucionId = matricula.cuerpo.ejecucionId;
         const salida = Date.now();
