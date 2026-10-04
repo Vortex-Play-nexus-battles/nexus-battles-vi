@@ -235,6 +235,17 @@ describe('rechazoDelCanje', () => {
 // -------------------------------------------------------------------- vista
 
 describe('al llegar', () => {
+  test('G1 — los dos formularios van por POST y sus botones nacen apagados hasta montar', () => {
+    const botones = [$('[data-accion="continuar"]'), $('[data-accion="guardar"]')];
+    expect($('#formCodigo').getAttribute('method')).toBe('post');
+    expect($('#formClave').getAttribute('method')).toBe('post');
+    expect(botones.map((boton) => boton.disabled)).toEqual([true, true]);
+
+    montar();
+
+    expect(botones.map((boton) => boton.disabled)).toEqual([false, false]);
+  });
+
   test('desde el enlace del correo: rellena, borra el fragmento y espera un clic', () => {
     const { historial, consultar } = montar({
       hash: '#codigo=k7qx-2m9p&correo=ana%40nexus.test',

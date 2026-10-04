@@ -50,7 +50,10 @@
           </div>
         </div>
 
-        <form id="form-crear-cuenta" class="pila">
+        <!-- G1 — la contraseña nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que crear-cuenta-admin.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="form-crear-cuenta" class="pila" method="post">
           <div class="rejilla-formulario">
             <div class="campo">
               <label class="campo__etiqueta" for="nombres">Nombres</label>
@@ -165,6 +168,8 @@
               type="submit"
               class="boton boton--primario"
               data-has-permission="CREAR_ADMIN_MODERADOR"
+              disabled
+              data-espera-guion
             >
               Crear cuenta
             </button>
