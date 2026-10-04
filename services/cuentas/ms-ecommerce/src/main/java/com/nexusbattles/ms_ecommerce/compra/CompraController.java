@@ -39,6 +39,24 @@ public class CompraController {
         return ResponseEntity.status(resultado.creada() ? HttpStatus.CREATED : HttpStatus.OK).body(resultado.orden());
     }
 
+    /** D-44 (contrato 1.6.0): lo que costaria pagar el carrito con creditos del juego, y el saldo. */
+    @GetMapping("/api/v1/checkout/creditos")
+    public ResponseEntity<CotizacionEnCreditos> cotizarEnCreditos(@AuthenticationPrincipal Jwt usuario) {
+        return ResponseEntity.ok(compras.cotizarEnCreditos(ConversorDeRoles.identificadorDe(usuario)));
+    }
+
+    /**
+     * D-44 (contrato 1.6.0): paga el carrito con creditos del juego. Sin cuerpo:
+     * el precio lo pone el servidor con el carrito y el catalogo.
+     */
+    @PostMapping("/api/v1/checkout/creditos")
+    public ResponseEntity<OrdenDto> pagarConCreditos(@AuthenticationPrincipal Jwt usuario,
+                                                     @RequestHeader(name = "Idempotency-Key", required = false)
+                                                     String clave) {
+        ResultadoDeCompra resultado = compras.pagarConCreditos(ConversorDeRoles.identificadorDe(usuario), clave);
+        return ResponseEntity.status(resultado.creada() ? HttpStatus.CREATED : HttpStatus.OK).body(resultado.orden());
+    }
+
     @GetMapping("/api/v1/ordenes")
     public ResponseEntity<List<OrdenDto>> misOrdenes(@AuthenticationPrincipal Jwt usuario) {
         return ResponseEntity.ok(compras.ordenesDe(ConversorDeRoles.identificadorDe(usuario)));

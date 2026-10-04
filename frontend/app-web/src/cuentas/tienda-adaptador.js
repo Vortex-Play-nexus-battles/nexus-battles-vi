@@ -47,6 +47,26 @@ export function aImporte(valor) {
 }
 
 /**
+ * D-44 (ecommerce-carrito.yaml 1.6.0): la unidad de una orden pagada con los
+ * créditos del juego. No es una moneda: no se convierte ni lleva decimales.
+ */
+export const CREDITOS = 'CREDITOS';
+
+/**
+ * Créditos del juego con separadores es-CO: «1 crédito», «1.250 créditos».
+ * La cifra la pone el servidor; aquí solo se escribe.
+ *
+ * @param {number|null|undefined} cantidad
+ * @returns {string|null} null si no hay cifra
+ */
+export function textoDeCreditos(cantidad) {
+  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) {
+    return null;
+  }
+  return `${cantidad.toLocaleString('es-CO')} ${Math.abs(cantidad) === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
  * Importe con separadores es-CO y su moneda, o null si falta el importe.
  *
  * Sin `moneda` se ensena la cifra sola: inventar «COP» en un producto cuyo
@@ -61,6 +81,9 @@ export function aImporte(valor) {
 export function textoDePrecio(importe, moneda) {
   if (importe === null) {
     return null;
+  }
+  if (moneda === CREDITOS) {
+    return textoDeCreditos(importe);
   }
   const cifra = importe.toLocaleString('es-CO');
   return moneda ? `${cifra} ${moneda}` : cifra;
@@ -90,12 +113,18 @@ export function textoDePrecio(importe, moneda) {
  *   descuento: number|null,
  *   esPropio: boolean,
  *   enListaDeseos: boolean,
+ *   precioCreditos: number|null,
+ *   precioCreditosTexto: string|null,
  * }}
  */
 export function aProductoDeVitrina(dto = {}) {
   const precio = aImporte(dto.precioFinal);
   const original = aImporte(dto.precioOriginal);
   const moneda = typeof dto.moneda === 'string' && dto.moneda.trim() ? dto.moneda.trim() : null;
+  // D-44 (1.6.0): lo que cuesta pagado con créditos, ya calculado por el
+  // servidor con la promoción vigente; null si no se puede pagar así.
+  const precioCreditos =
+    Number.isInteger(dto.precioCreditos) && dto.precioCreditos > 0 ? dto.precioCreditos : null;
 
   // Solo hay precio anterior que tachar si el actual es realmente menor.
   const hayRebaja = precio !== null && original !== null && original > precio;
@@ -119,6 +148,8 @@ export function aProductoDeVitrina(dto = {}) {
     descuento: hayRebaja && porcentaje && porcentaje > 0 ? porcentaje : null,
     esPropio: dto.esPropio === true,
     enListaDeseos: dto.enListaDeseos === true,
+    precioCreditos,
+    precioCreditosTexto: textoDeCreditos(precioCreditos),
   };
 }
 

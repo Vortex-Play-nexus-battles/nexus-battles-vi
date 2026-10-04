@@ -4,6 +4,7 @@ import com.nexusbattles.ms_ecommerce.catalogo.ReservasDeTiraje;
 import com.nexusbattles.ms_ecommerce.integracion.PropiedadesDeLaTienda;
 import com.nexusbattles.ms_ecommerce.integracion.ServicioNoDisponibleException;
 import com.nexusbattles.ms_ecommerce.integracion.correo.ClienteDeCorreo;
+import com.nexusbattles.ms_ecommerce.integracion.finanzas.ClienteDeCreditos;
 import com.nexusbattles.ms_ecommerce.integracion.finanzas.ClienteDeFinanzas;
 import com.nexusbattles.ms_ecommerce.integracion.identidad.ClienteDeIdentidad;
 import com.nexusbattles.ms_ecommerce.integracion.inventario.ClienteDeInventario;
@@ -55,6 +56,13 @@ import java.util.stream.Collectors;
  *
  * <p>Quien llama tiene que tener la concesion de la orden
  * ({@link OrdenRepository#tomar}); cada escritura de aqui la renueva.
+ *
+ * <p><b>D-44 — pagada con creditos.</b> Los mismos pasos. Una orden con
+ * creditos nace con el asiento NO_APLICA (el debito ya esta en el libro de
+ * creditos de ms-finanzas) y el correo OMITIDO, asi que ENTREGADA pasa a
+ * COMPLETA sin mas; y compensar es devolver los creditos
+ * ({@code POST /creditos/reversar} con el mismo {@code refId}), que espera y
+ * reintenta si ms-finanzas no responde.
  */
 @Component
 public class ProcesadorDeOrdenes {
@@ -80,15 +88,19 @@ public class ProcesadorDeOrdenes {
     private final Clock reloj;
     private final TransactionTemplate transaccion;
     private final ProductosPropios propios;
+    private final ClienteDeCreditos creditos;
 
     /**
-     * @param propios la copia de lo que tiene cada jugador (marca «propio» de
+     * @param propios  la copia de lo que tiene cada jugador (marca «propio» de
      *     la vitrina y RF-CAR-004): una compra entregada la olvida
+     * @param creditos el libro de creditos de ms-finanzas: devolver una compra
+     *     pagada con creditos que no se pudo entregar (D-44)
      */
     public ProcesadorDeOrdenes(OrdenRepository ordenes, ReservasDeTiraje reservas, ClienteDeInventario inventario,
                                ClienteDeFinanzas finanzas, ClienteDeIdentidad identidad, ClienteDeCorreo correo,
                                PasarelaSimulada pasarela, PropiedadesDeLaTienda propiedades, Clock reloj,
-                               PlatformTransactionManager gestorDeTransacciones, ProductosPropios propios) {
+                               PlatformTransactionManager gestorDeTransacciones, ProductosPropios propios,
+                               ClienteDeCreditos creditos) {
         this.ordenes = ordenes;
         this.reservas = reservas;
         this.inventario = inventario;
@@ -100,6 +112,7 @@ public class ProcesadorDeOrdenes {
         this.reloj = reloj;
         this.transaccion = new TransactionTemplate(gestorDeTransacciones);
         this.propios = Objects.requireNonNull(propios);
+        this.creditos = Objects.requireNonNull(creditos);
     }
 
     /**
@@ -281,9 +294,36 @@ public class ProcesadorDeOrdenes {
     }
 
     private boolean pasoCompensar(Orden orden) {
+        if (orden.pagadaConCreditos()) {
+            return devolverCreditos(orden);
+        }
         String reembolso = pasarela.reembolsar(orden.getReferenciaPasarela(), orden.getTotal(), orden.getMoneda());
         actualizar(orden.getId(), o -> o.setEstado(EstadoOrden.REEMBOLSADA));
         log.info("Orden {}: reembolsada ({})", orden.getId(), reembolso);
+        return false;
+    }
+
+    /**
+     * D-44: devuelve los creditos de una compra que no se pudo entregar, con el
+     * mismo {@code refId} del cobro. Repetirlo no devuelve dos veces
+     * (YA_REVERSADO); si ms-finanzas no responde, la orden sigue por compensar
+     * y se reintenta.
+     */
+    private boolean devolverCreditos(Orden orden) {
+        ClienteDeCreditos.Devolucion devolucion;
+        try {
+            devolucion = creditos.reversar(orden.referenciaDeCreditos(),
+                    Objects.requireNonNullElse(orden.getMotivo(), "Compra no entregada"));
+        } catch (ServicioNoDisponibleException averia) {
+            programarReintento(orden.getId(), averia);
+            return false;
+        }
+        if (devolucion == ClienteDeCreditos.Devolucion.NADA_QUE_DEVOLVER) {
+            log.warn("Orden {}: ms-finanzas no tiene el cobro {}; no habia creditos que devolver", orden.getId(),
+                    orden.referenciaDeCreditos());
+        }
+        actualizar(orden.getId(), o -> o.setEstado(EstadoOrden.REEMBOLSADA));
+        log.info("Orden {}: creditos devueltos ({})", orden.getId(), devolucion);
         return false;
     }
 

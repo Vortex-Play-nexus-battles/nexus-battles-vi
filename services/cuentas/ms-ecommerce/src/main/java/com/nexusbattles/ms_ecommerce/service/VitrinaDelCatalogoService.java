@@ -11,6 +11,7 @@ import com.nexusbattles.ms_ecommerce.precios.CalculadoraDePrecios;
 import com.nexusbattles.ms_ecommerce.precios.Moneda;
 import com.nexusbattles.ms_ecommerce.precios.MonedaNoDisponibleException;
 import com.nexusbattles.ms_ecommerce.precios.PrecioCalculado;
+import com.nexusbattles.ms_ecommerce.precios.PrecioEnCreditos;
 import com.nexusbattles.ms_ecommerce.precios.Tarifa;
 import com.nexusbattles.ms_ecommerce.precios.TasasDeCambio;
 import org.springframework.stereotype.Service;
@@ -94,7 +95,8 @@ public class VitrinaDelCatalogoService {
                 .filter(cotizado -> busqueda.vacia()
                         || busqueda.coincide(textoIndexado(cotizado.producto()), cotizado.precio().precioFinal()))
                 .map(cotizado -> aProductoEnVenta(cotizado.producto(), cotizado.precio(),
-                        suyos.contains(cotizado.producto().id()), enLaLista.contains(cotizado.producto().id())))
+                        suyos.contains(cotizado.producto().id()), enLaLista.contains(cotizado.producto().id()),
+                        ahora))
                 .toList();
         List<String> disponibles = tasas.disponibles().stream().sorted().map(Moneda::name).toList();
         return PaginaDeVitrina.de(enVenta, consulta.numero(), consulta.tamano(), tarifa.moneda().name(), disponibles);
@@ -138,8 +140,17 @@ public class VitrinaDelCatalogoService {
                 .collect(Collectors.joining(" "));
     }
 
+    /**
+     * La tarjeta de la vitrina. {@code precioCreditos} (D-44, contrato 1.6.0)
+     * sale del {@code precioCreditos} del catalogo con la promocion vigente en
+     * el mismo instante que el precio en dinero real; null si el producto no se
+     * puede pagar con creditos.
+     */
     static ProductoEnVentaDto aProductoEnVenta(ProductoDelCatalogo producto, PrecioCalculado precio,
-                                               boolean propio, boolean deseado) {
+                                               boolean propio, boolean deseado, Instant ahora) {
+        Long precioCreditos = CalculadoraDePrecios.enCreditos(producto, ahora)
+                .map(PrecioEnCreditos::precioFinal)
+                .orElse(null);
         return new ProductoEnVentaDto(
                 producto.id(),
                 producto.nombre(),
@@ -153,7 +164,8 @@ public class VitrinaDelCatalogoService {
                 precio.enPromocion(),
                 precio.porcentajeDescuento(),
                 propio,
-                deseado);
+                deseado,
+                precioCreditos);
     }
 
     /**

@@ -97,6 +97,16 @@ public record ProductoDelCatalogo(
         return precioMonedaReal != null && precioMonedaReal.signum() > 0;
     }
 
+    /**
+     * D-44: se puede pagar con creditos del juego. Hace falta su
+     * {@code precioCreditos} (7.2.1: «precio en creditos del juego») y que no
+     * sea premium: un premium se ofrece unicamente en moneda real
+     * (productos.yaml). Cero tampoco es un precio: no se regala nada.
+     */
+    public boolean tienePrecioEnCreditos() {
+        return !Boolean.TRUE.equals(premium) && precioCreditos != null && precioCreditos > 0;
+    }
+
     /** El porcentaje de la promocion si esta vigente en ese instante; null si no hay. */
     public Integer porcentajeVigenteEn(Instant ahora) {
         return promocion == null ? null : promocion.porcentajeVigenteEn(ahora);
