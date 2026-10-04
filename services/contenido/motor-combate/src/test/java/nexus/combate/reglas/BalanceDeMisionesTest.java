@@ -92,6 +92,36 @@ class BalanceDeMisionesTest {
         assertTrue(ganadasDeLosQuePegan >= 60, "de 100 ganan " + ganadasDeLosQuePegan);
     }
 
+    /**
+     * El Guerrero Tanque es el heroe del kit PROVISIONAL de DEV (D-29), asi que
+     * es con el que empieza todo jugador nuevo alli. Por su fila de la Tabla 21
+     * casi no hace dano: en su nivel no gana la mision de nivel 1 (verificacion
+     * del 4-oct: 0 %, en el banco y en AWS DEV). Lo que se exige es que no se
+     * quede atascado: con la experiencia de los enemigos que derrota al fallar
+     * sube al nivel 2 en pocas ejecuciones, y entonces la gana. Si el PO cambia
+     * el kit (D-29), esta prueba sigue valiendo para quien elija el Tanque.
+     */
+    @Test
+    @DisplayName("el Guerrero Tanque del kit de DEV no se atasca en la misión de nivel 1: sube al 2 fallando y entonces la gana")
+    void tanqueDelKitNoSeAtasca() {
+        Mision primera = catalogo.stream()
+                .filter(m -> m.nivelRecomendado() == 1 && m.requisitos().isEmpty())
+                .findFirst().orElseThrow(() -> new AssertionError("no hay mision de nivel 1 sin requisitos"));
+        int enNivelUno = ganadas(primera, "Guerrero Tanque", 1, 20);
+        int enNivelDos = ganadas(primera, "Guerrero Tanque", 2, 20);
+        Campana c = sim.campana(catalogo, "Guerrero Tanque", Juego.ROTACION, 80, "Guerrero Tanque".hashCode());
+        int hastaNivelDos = 0;
+        while (hastaNivelDos < c.recorrido().size() && c.recorrido().get(hastaNivelDos).endsWith("@1-")) {
+            hastaNivelDos++;
+        }
+        System.out.println("Guerrero Tanque en «" + primera.nombre() + "»: nivel 1 " + enNivelUno * 5 + " %, nivel 2 "
+                + enNivelDos * 5 + " %; " + hastaNivelDos + " intentos fallidos antes de subir al nivel 2");
+        final int intentos = hastaNivelDos;
+        assertAll(
+                () -> assertTrue(intentos <= 6, "el Tanque necesita " + intentos + " intentos para subir al nivel 2"),
+                () -> assertTrue(enNivelDos >= 15, "en nivel 2 gana " + enNivelDos + " de 20"));
+    }
+
     @Test
     @DisplayName("en su nivel recomendado ninguna misión se gana ni se pierde siempre, y un nivel menos cuesta más")
     void niSiempreNiNunca() {
