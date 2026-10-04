@@ -223,13 +223,23 @@ function cuerposStomp(texto) {
 /**
  * Entra por el formulario y espera a estar en `destino` (se mira la ruta, no la
  * dirección entera: la vuelta `?volver=…tienda.html` ya va en la del login).
+ *
+ * Antes de escribir se espera a que la página de entrada termine de cargar:
+ * se llega a ella navegando desde la portada, y `toHaveURL` vuelve en cuanto
+ * cambia la dirección, no cuando `login.js` ya escucha el envío. Sin esa
+ * espera, en DEV el clic llegó antes que el guion (4-oct, corrida
+ * 37194290879): el formulario se envió solo, por GET, y la página volvió a
+ * empezar en blanco.
+ *
  * El borde admite 30 entradas por minuto y dirección; en DEV, la prueba del
  * profesor acaba de usar unas cuantas desde el mismo runner. Si lo que frena es
  * ese límite, se espera y se vuelve a intentar, como lo haría una persona;
- * cualquier otro rechazo, falla.
+ * cualquier otro rechazo, falla diciendo dónde se quedó.
  */
 async function entrarPorElFormulario(page, cuenta, destino) {
   for (let intento = 1; intento <= 3; intento += 1) {
+    await page.waitForLoadState('load');
+    await expect(page.locator('#formLogin')).toBeVisible();
     await page.fill('#email', cuenta.email);
     await escribirSecreto(page.locator('#password'), cuenta.clave);
     await page.click('#botonEnviar');
@@ -241,7 +251,8 @@ async function entrarPorElFormulario(page, cuenta, destino) {
       return intento;
     }
     const estado = (await page.locator('#estadoLogin').textContent()) ?? '';
-    expect(estado, 'la entrada no avanzó y no fue por el límite del borde').toMatch(
+    const donde = new URL(page.url()).pathname;
+    expect(estado, `la entrada no avanzó (en ${donde}) y no fue por el límite del borde`).toMatch(
       /demasiad|espera/i,
     );
     await page.waitForTimeout(30_000);
