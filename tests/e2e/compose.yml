@@ -462,14 +462,12 @@ services:
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
       # B8 — las reglas de 7.7 salen de admin-parametros (RF-ADM-001), no de
-      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`,
-      # que nace SIN valor (decision del PO pendiente): mientras nadie lo fije,
-      # publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Hasta B8 aqui
-      # habia SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie.
-      # Ahora lo fija subastas.e2e.spec.js como ADMINISTRADOR por
-      # PUT /api/v1/parametros/subastas.incremento-minimo, que es exactamente lo
-      # que hara el PO. El valor de la prueba es una FIJACION DE PRUEBA, no una
-      # decision de producto. Cache de 1 s para que el spec vea el cambio.
+      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`:
+      # desde D-43 vale 5 creditos por la migracion V5 de admin-parametros, en
+      # todos los entornos, y el banco ya no lo fija a mano (subastas.e2e.spec.js
+      # solo espera a que /subastas/reglas lo diga). Hasta B8 aqui habia
+      # SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie. Cache
+      # de 1 s para que el spec vea el valor enseguida.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SUBASTAS_PARAMETROS_CACHE_SEGUNDOS: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080

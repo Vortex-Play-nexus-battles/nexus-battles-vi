@@ -23,7 +23,7 @@ info:
       (`contracts/websocket/subastas.yaml`). El vendedor sigue siendo el `uid`
       estable del token (ADR-002): la decisión de identificador que el
       borrador dejaba abierta ya está tomada.
-  version: "1.1.0"
+  version: "1.1.1"
   x-historia: HU-SUB-011, HU-SUB-001, HU-SUB-004 (7.7.9)
 
 paths:
@@ -383,7 +383,9 @@ components:
         incrementoMinimo:
           type: [string, 'null']
           format: decimal
-          description: Nulo mientras el Product Owner no fije `subastas.incremento-minimo`.
+          description: >
+            El de `subastas.incremento-minimo` en admin-parametros: 5 créditos
+            desde 1.1.1 (D-43, migración V5). Nulo solo si un entorno lo tuviera vacío.
         incrementoMinimoConfigurado: { type: boolean }
         maxSubastasActivasPorJugador:
           type: integer

@@ -169,10 +169,12 @@ test('B8: las comisiones salen de las reglas del servidor, no de la pantalla', a
   expect($('[data-comision="24H"]').textContent).toBe('Comisión: 2 créditos');
   marcar('[value="48H"]');
   expect($('[data-resumen-comision]').textContent).toBe('5 créditos');
-  expect($('[data-decision-po]').hidden).toBe(true);
+  // D-43 — el incremento lo dice el servidor y se muestra tal cual.
+  expect($('[data-incremento-minimo]').hidden).toBe(false);
+  expect($('[data-incremento-minimo]').textContent).toBe('Incremento mínimo: 5 créditos');
 });
 
-test('B8: sin incremento configurado (DECISIÓN PO) se dice antes y no se deja publicar', async () => {
+test('B8: sin incremento configurado se dice antes y no se deja publicar', async () => {
   const consultarReglas = jest.fn().mockResolvedValue({
     duraciones: [
       { codigo: '24H', horas: 24, comision: '1' },
@@ -182,8 +184,11 @@ test('B8: sin incremento configurado (DECISIÓN PO) se dice antes y no se deja p
     incrementoMinimo: null,
   });
   const { publicar } = await montar({ consultarReglas });
-  expect($('[data-decision-po]').hidden).toBe(false);
-  expect($('[data-decision-po]').textContent).toMatch(/DECISIÓN PO pendiente/);
+  expect($('[data-incremento-minimo]').hidden).toBe(false);
+  expect($('[data-incremento-minimo]').textContent).toMatch(
+    /no está configurado en administración/,
+  );
+  expect($('[data-incremento-minimo]').textContent).not.toMatch(/DECISIÓN PO/);
   completar();
   expect($('[type="submit"]').disabled).toBe(true);
   submit();

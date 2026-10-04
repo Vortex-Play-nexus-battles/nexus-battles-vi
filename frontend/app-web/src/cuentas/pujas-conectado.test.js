@@ -819,7 +819,7 @@ describe('B8 — las reglas las dice el servidor', () => {
     ctrl.destruir();
   });
 
-  test('sin incremento configurado no inventa uno y el detalle dice DECISIÓN PO pendiente', async () => {
+  test('sin incremento configurado no inventa uno y el detalle dice que falta configurarlo', async () => {
     const api = apiFalsa({
       reglas: jest.fn(async () => ({
         ...REGLAS,
@@ -835,9 +835,10 @@ describe('B8 — las reglas las dice el servidor', () => {
     await ctrl.cargarDetalle('sub-1');
 
     expect(ctrl.config.incrementoMinimo).toBeNull();
-    expect(caja.querySelector('[data-decision-po="incremento-minimo"]').textContent).toContain(
-      'DECISIÓN PO pendiente',
+    expect(caja.querySelector('[data-incremento-minimo="sin-configurar"]').textContent).toContain(
+      'no está configurado',
     );
+    expect(caja.textContent).not.toContain('DECISIÓN PO');
     expect(caja.textContent).not.toContain('(+50)');
     ctrl.destruir();
   });
@@ -883,7 +884,7 @@ describe('B8 — la ficha de la subasta (GET /subastas/{id})', () => {
     const atajo = caja.querySelector('.btn-atajo');
     expect(atajo.getAttribute('data-monto')).toBe('1360');
     expect(atajo.textContent).toContain('(+10)');
-    expect(caja.textContent).toContain('Incremento mínimo entre pujas en esta subasta: 10 cr');
+    expect(caja.textContent).toContain('Incremento mínimo: 10 créditos');
     ctrl.destruir();
   });
 

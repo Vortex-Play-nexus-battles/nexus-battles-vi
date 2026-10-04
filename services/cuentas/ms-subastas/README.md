@@ -101,10 +101,13 @@ DB_PASSWORD=subastas_password PARAMETROS_URL=http://localhost:8088/api/v1 \
 ```
 
 Desde B8 `SUBASTAS_INCREMENTO_MINIMO` no se lee: el incremento minimo es el
-parametro `subastas.incremento-minimo` de admin-parametros, que nace sin valor
-(decision del PO). Sin admin-parametros, o sin valor en el, **publicar responde
-503 `INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar
-en subastas ya publicadas sigue funcionando (cada una guarda su incremento).
+parametro `subastas.incremento-minimo` de admin-parametros. **Desde D-43 vale 5
+creditos** (migracion V5 de admin-parametros, en todos los entornos): con 100
+vigente, 104 se rechaza (409 `OFERTA_INSUFICIENTE`) y 105 entra; de dos pujas
+iguales a la vez entra una sola (lock pesimista, `IncrementoMinimoDeCincoTest` y
+el E2E). Sin admin-parametros, o sin valor en el, **publicar responde 503
+`INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar en
+subastas ya publicadas sigue funcionando (cada una guarda su incremento).
 
 Y el frontend, en otra terminal:
 
@@ -319,7 +322,7 @@ Cada una tiene su mecanismo configurable; los valores son **provisionales**.
 
 | Decision | Mecanismo | Valor provisional |
 |---|---|---|
-| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **ninguno**: sin valor no se publica (503 con motivo) |
+| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **decidido (D-43): 5 creditos**, migracion V5 de admin-parametros |
 | Que pasa con un producto no recogido en 7 dias (7.7.9 fija el plazo, no la consecuencia) | `subastas.pendientes.al-vencer` (respaldo `SUBASTAS_PENDIENTES_AL_VENCER`) | `ENTREGAR`: queda disponible para el ganador, que ya pago |
 | «Calificacion del vendedor» (7.7.9) en estrellas o en otra escala | la ficha publica la tasa de exito de 7.7.12 y los recuentos | sin estrellas: no se inventa la escala |
 | Maestro de Juego (7.7.4) | `IdentidadClient.Identidad.esMaestroDeJuego` | `false`: ms-identidad no tiene ese rol (HU-SUB-010) |
