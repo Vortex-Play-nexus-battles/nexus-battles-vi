@@ -132,10 +132,17 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * (7.7.9) entra ARRIBA de `render()`. Lo único nuevo en `contenidoHtml` es el
  * botón «Compartir», marcado fijo sin ningún dato; el enlace se arma con
  * `encodeURIComponent` y viaja por la API del navegador, no por el HTML.
+ *
+ * D-43 — la de `publicar-subasta.js` bajó 13 líneas: el texto neutro para un
+ * incremento sin configurar y `textoDeCreditos()` entran ARRIBA de la
+ * plantilla. Revisada: sigue sin una sola interpolación; el aviso de
+ * DECISIÓN PO se cambió por un `<p data-incremento-minimo hidden>` vacío, y
+ * «Incremento mínimo: N créditos» entra después por `textContent` con la cifra
+ * de `GET /subastas/reglas`.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:95', 'plantilla fija del formulario, sin interpolación'],
+  ['cuentas/publicar-subasta.js:108', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
