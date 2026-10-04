@@ -103,8 +103,15 @@ public final class Misiones {
     /** Una mision minima con los enemigos, el jefe y los Master que la prueba necesita (para ver contra quien pelea). */
     public static Mision conEnemigosYMasters(String id, List<GrupoDeEnemigos> enemigos, Jefe jefe,
                                              List<MasterDeMision> masters) {
+        return conEnemigosYMastersEnNivel(id, null, enemigos, jefe, masters);
+    }
+
+    /** Igual, con el nivel recomendado de la mision (D-42: en ese nivel pelean los enemigos regulares y el jefe). */
+    public static Mision conEnemigosYMastersEnNivel(String id, Integer nivelRecomendado,
+                                                    List<GrupoDeEnemigos> enemigos, Jefe jefe,
+                                                    List<MasterDeMision> masters) {
         return new Mision(id, Origen.PROVISIONAL_DEV, "Misión " + id, Categoria.HISTORIA, "Descripción de " + id, null,
-                Dificultad.FACIL, 1, null, List.of(), "Narrativa de " + id, null,
+                Dificultad.FACIL, 1, nivelRecomendado, List.of(), "Narrativa de " + id, null,
                 List.of(new Objetivo("Derrotar al jefe.", true, TipoDeObjetivo.DERROTAR_JEFE, null, null)),
                 enemigos, jefe, masters,
                 new RecompensasDeMision(5, List.of(), List.of(), List.of(),
