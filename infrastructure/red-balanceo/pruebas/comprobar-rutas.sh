@@ -344,7 +344,13 @@ cabecera() {
     fi
 }
 
-redirige /                                            "/login"
+# F6 (auditoria del 4-oct, cambio autorizado n.º 3) — la raiz ya no redirige
+# al login: es la portada publica con la tienda, servida como las direcciones
+# limpias (su <base> y la marca). La ruta del fichero lleva a la raiz.
+sirve /  "la portada publica, con base y marca de rutas limpias" \
+    '<head><base href="/frontend/app-web/src/cuentas/"><meta name="nexus-rutas" content="limpias">'
+sirve /  "la tienda publica en la portada" 'data-zona="productos-publicos"'
+redirige /frontend/app-web/src/cuentas/portada.html   "/"
 for par in \
     login:cuentas/login.html registro:cuentas/registro.html \
     preparando:cuentas/preparando.html inicio:cuentas/index.html \

@@ -11,6 +11,7 @@ import {
   pintarVitrinaPublica,
   PRODUCTOS_EN_PORTADA,
   rutaDeLaTienda,
+  urlDeEntrada,
 } from './portada-tienda.js';
 
 const esperar = () => new Promise((r) => setTimeout(r, 0));
@@ -185,5 +186,29 @@ describe('entrar desde la portada', () => {
 
     expect(alCerrar).toHaveBeenCalled();
     expect(document.activeElement).toBe(document.getElementById('email'));
+  });
+
+  test('F6 — desde la portada `/`, sin formulario: a la entrada con la vuelta a la tienda', () => {
+    document.getElementById('email')?.remove();
+    const navegar = jest.fn();
+
+    entrarParaComprar(document, { navegar });
+
+    expect(navegar).toHaveBeenCalledTimes(1);
+    const destino = new URL(navegar.mock.calls[0][0]);
+    expect(destino.pathname).toMatch(/login(\.html)?$/);
+    expect(destino.searchParams.get('volver')).toBe(rutaDeLaTienda());
+  });
+
+  test('F6 — opinar o calificar desde la portada lleva a la entrada, sin vuelta', () => {
+    document.getElementById('email')?.remove();
+    const navegar = jest.fn();
+
+    llevarAlFormulario(document, { navegar });
+
+    const destino = new URL(navegar.mock.calls[0][0]);
+    expect(destino.pathname).toMatch(/login(\.html)?$/);
+    expect(destino.searchParams.has('volver')).toBe(false);
+    expect(urlDeEntrada('/x')).toMatch(/volver=%2Fx/);
   });
 });

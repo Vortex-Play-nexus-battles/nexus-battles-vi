@@ -78,11 +78,28 @@ test.describe('Smoke del entorno desplegado', () => {
     expect(fondo).not.toBe('rgba(0, 0, 0, 0)');
   });
 
-  test('la raíz lleva al login', async () => {
+  test('la raíz es la portada pública con la tienda; entrar sigue en /login (F6)', async ({
+    page,
+  }) => {
+    // F6 (auditoría del 4-oct, cambio autorizado n.º 3): hasta aquí la raíz
+    // redirigía al login. Ahora se sirve la portada, sin redirección.
     const r = await api.get('/', { maxRedirects: 0 });
-    expect([301, 302]).toContain(r.status());
-    // R17.3 — la raíz lleva a la dirección limpia del login.
-    expect(r.headers().location).toMatch(/\/login(?:\.html)?$/);
+    expect(r.status()).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('data-vista="portada"');
+    expect(html).toContain('data-zona="productos-publicos"');
+
+    // Y la tienda se ve: productos reales, sin «Añadir» (no hay carrito sin cuenta).
+    await page.goto(`${AWS}/`);
+    await expect(page.locator('.vitrina-publica .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+
+    // Entrar lleva a la dirección limpia del login.
+    await page.locator('[data-accion="entrar"]').click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.locator('#formLogin')).toBeVisible();
   });
 
   // ===================================================================
