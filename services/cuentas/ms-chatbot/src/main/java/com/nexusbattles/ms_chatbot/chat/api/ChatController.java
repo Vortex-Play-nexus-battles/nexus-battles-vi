@@ -76,7 +76,10 @@ public class ChatController {
 
         ResolutorDeIdentidad.Resultado quien = resolutor.resolverOEmitir(authentication, idSesionAnonima,
             origenDe(peticion));
-        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), request.adjuntoUrl());
+        // 1.3.0: adjuntoUrl queda obsoleto (el cliente decidio que el chatbot no
+        // recibe imagenes). Se sigue aceptando en el cuerpo para no romper a
+        // quien lo mande, pero no llega al servicio ni se guarda.
+        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), null);
 
         ResponseEntity.BodyBuilder ok = ResponseEntity.ok();
         if (quien.sesionEmitida() != null) {

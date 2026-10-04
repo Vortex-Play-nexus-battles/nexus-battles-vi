@@ -2825,11 +2825,6 @@ button.tarjeta--partida:disabled {
   resize: vertical;
 }
 
-.chatbot-ventana__herramientas {
-  display: flex;
-  gap: var(--e-2);
-}
-
 /* Calificación de cada respuesta del bot (HU-CHA-011) */
 
 .chatbot-calificacion {

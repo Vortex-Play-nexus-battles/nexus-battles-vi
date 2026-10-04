@@ -11,8 +11,8 @@ import org.springframework.web.client.RestClient;
 
 import java.time.Duration;
 
-// Clientes HTTP hacia inventario, subastas, notificaciones, finanzas, torneos
-// y la lista negra (HU-CHA-008, B11).
+// Clientes HTTP hacia inventario, subastas, notificaciones, finanzas, torneos,
+// misiones y la lista negra (HU-CHA-008, B11, 7.4).
 //
 // Por que el RestClient.Builder se arma aqui a mano: en Spring Boot 4 el
 // builder autoconfigurado vive en el modulo spring-boot-restclient, que este
@@ -81,6 +81,15 @@ public class ClientesExternosConfig {
     @Bean
     public RestClient torneosRestClient(RestClient.Builder builder,
                                         @Value("${app.torneos.url}") String url) {
+        return builder.baseUrl(url).build();
+    }
+
+    // 7.4.4 (ms-chatbot.yaml 1.3.0): misiones en curso del propio jugador, con
+    // su token. Base del servicio SIN /api/v1, igual que inventario: las rutas
+    // de misiones.yaml ya lo llevan.
+    @Bean
+    public RestClient misionesRestClient(RestClient.Builder builder,
+                                         @Value("${app.misiones.url}") String url) {
         return builder.baseUrl(url).build();
     }
 

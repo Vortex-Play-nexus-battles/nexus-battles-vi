@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -94,6 +95,24 @@ class ChatControllerTest {
         verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
         assertThat(identidad.getValue().autenticado()).isFalse();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
+    }
+
+    // 1.3.0: adjuntoUrl esta obsoleto. Se acepta en el cuerpo (200, no 400)
+    // pero no llega al servicio: nunca se guarda.
+    @Test
+    void enviarMensaje_conAdjuntoUrl_loAceptaPeroNoLoGuarda() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
+        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"Hola\",\"adjuntoUrl\":\"https://img.example/captura.png\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
+
+        verify(chatService).enviarMensaje(any(), eq("Hola"), isNull());
     }
 
     // 1.2.0 (#708): el asistente de la interfaz manda su propio identificador,

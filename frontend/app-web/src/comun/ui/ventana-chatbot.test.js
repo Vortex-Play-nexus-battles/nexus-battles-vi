@@ -191,7 +191,7 @@ describe('enviar', () => {
     const vista = await montar();
     await enviar(vista, '  como pujo  ');
 
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo', null);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo');
     const mensajes = vista.mensajes();
     expect(mensajes).toHaveLength(2);
     expect(mensajes[0].textContent).toContain('como pujo');
@@ -217,30 +217,23 @@ describe('enviar', () => {
 
     vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await esperar();
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('hola', null);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('hola');
   });
 
-  test('la URL de captura se valida y se envía con el mensaje', async () => {
-    const vista = await montar();
-    vista.el.querySelector('[data-accion="adjuntar-captura"]').click();
-    const url = vista.el.querySelector('input[name="adjuntoUrl"]');
+  test('no pide capturas, pero el historial sigue enlazando las que ya había', async () => {
+    const conCaptura = { ...USUARIO, adjuntoUrl: 'https://img.example/captura.png' };
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [conCaptura, BOT]) }),
+    });
 
-    url.value = URL_JAVASCRIPT;
-    await enviar(vista, 'mira');
-    expect(vista.cliente.enviarMensaje).not.toHaveBeenCalled();
-    expect(vista.el.querySelector('.chatbot-ventana__captura').textContent).toContain(
-      TEXTOS.adjuntoInvalido,
-    );
-
-    url.value = 'https://img.example/captura.png';
-    await enviar(vista, 'mira');
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith(
-      'mira',
-      'https://img.example/captura.png',
-    );
+    expect(vista.el.querySelector('input[name="adjuntoUrl"]')).toBeNull();
+    expect(vista.el.querySelector('[data-accion="adjuntar-captura"]')).toBeNull();
     expect(vista.el.querySelector('.chatbot-ventana__adjunto').getAttribute('href')).toBe(
       'https://img.example/captura.png',
     );
+
+    await enviar(vista, 'mira');
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('mira');
   });
 
   test('si falla, avisa y conserva lo que escribió', async () => {
