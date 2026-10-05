@@ -25,9 +25,17 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Perfil del jugador (ms-identidad)
-  version: 1.2.1
+  version: 1.3.0
   description: |
     Consulta y edicion del perfil propio (HU-USR-001).
+
+    **1.3.0 (RFINAL-03):** el `400` de `PUT /api/v1/perfiles/{usuario}` es
+    un problem details discriminable (`apodo-no-permitido`, `apodo-en-uso`,
+    `perfil-invalido`) para quien lo pide con `Accept:
+    application/problem+json`; el texto plano se conserva para el resto.
+    La unicidad del apodo nuevo deja de distinguir mayusculas, como el
+    registro. Y la sesion sigue valida tras cambiar de apodo: el interceptor
+    busca al titular por el `uid` del token, no por el `sub` viejo. Aditivo.
 
     **1.2.1 (B6):** implementada `GET /api/v1/perfiles/publicos` (sin
     cambios de forma): prefijo del apodo sin distinguir mayusculas, `%` y `_`
@@ -139,8 +147,27 @@ paths:
               schema:
                 $ref: '#/components/schemas/PerfilUsuario'
         '400':
-          description: Apodo en uso o en la lista negra; el cuerpo es el motivo en texto.
+          description: |
+            Apodo en la lista negra, apodo en uso u otro dato invalido.
+
+            **1.3.0 (RFINAL-03):** quien manda `Accept: application/problem+json`
+            recibe un problem details cuyo `type` dice el motivo:
+
+            * `.../errors/apodo-no-permitido` — el apodo coincide con la lista
+              negra (HU-ADM-002, 7.1.1). Lleva `campo: apodo`. El `detail` es la
+              frase generica de moderacion: nunca nombra el termino ni su
+              categoria.
+            * `.../errors/apodo-en-uso` — otra cuenta ya usa ese apodo, sin
+              distinguir mayusculas (igual que el registro). Lleva `campo: apodo`.
+              Cambiar solo las mayusculas del apodo propio no cuenta.
+            * `.../errors/perfil-invalido` — cualquier otro dato rechazado.
+
+            Sin ese `Accept`, el cuerpo sigue siendo el motivo en texto plano,
+            como en 1.2.x (compatible).
           content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailDeCampo'
             text/plain:
               schema:
                 type: string
@@ -301,3 +328,14 @@ components:
           type: string
         instance:
           type: string
+
+    ProblemDetailDeCampo:
+      description: 1.3.0 — el 400 del cambio de perfil, con el campo que fallo.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          properties:
+            campo:
+              type: string
+              enum: [apodo]
+              description: Solo en `apodo-no-permitido` y `apodo-en-uso`.

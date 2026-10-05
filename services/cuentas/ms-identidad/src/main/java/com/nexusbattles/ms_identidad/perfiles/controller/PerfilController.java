@@ -1,18 +1,23 @@
 package com.nexusbattles.ms_identidad.perfiles.controller;
 
+import com.nexusbattles.ms_identidad.auth.validation.ApodoNoPermitidoException;
 import com.nexusbattles.ms_identidad.perfiles.dto.ActualizarPerfilRequest;
 import com.nexusbattles.ms_identidad.perfiles.dto.PerfilUsuarioResponse;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
+import com.nexusbattles.ms_identidad.perfiles.service.ApodoEnUsoException;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.net.URI;
 import java.util.UUID;
 import java.util.regex.Pattern;
 
@@ -72,8 +77,56 @@ public class PerfilController {
                 datos.getAvatar(), datos.getPreferencias(), datos.getApodo());
             return ResponseEntity.ok(PerfilUsuarioResponse.from(actualizado));
         } catch (IllegalArgumentException e) {
+            return rechazo(e, request);
+        }
+    }
+
+    /** Raiz de los {@code type} de error de identidad (la misma del registro). */
+    static final String TIPOS = "https://nexusbattles.upb.edu.co/errors/";
+
+    /**
+     * El 400 del cambio de perfil. Quien pide {@code application/problem+json}
+     * recibe un problem details con un {@code type} que dice por que
+     * (ms-identidad-perfiles.yaml 1.3.0, RFINAL-03); quien no, el texto plano de
+     * siempre.
+     *
+     * <p>Antes solo existia el texto, y «Mi cuenta» lee JSON: el motivo se
+     * perdia y la vista decia «Revisa los datos e inténtalo otra vez» ante un
+     * apodo prohibido (informe del jugador del 4-oct, «batman»). El {@code type}
+     * no revela que termino de la lista negra salto ni su categoria: el detalle
+     * es la frase generica de moderacion.
+     */
+    static ResponseEntity<?> rechazo(IllegalArgumentException e, HttpServletRequest request) {
+        if (!pideProblemDetails(request)) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
         }
+        String motivo;
+        String titulo;
+        if (e instanceof ApodoNoPermitidoException) {
+            motivo = "apodo-no-permitido";
+            titulo = "El apodo no está permitido";
+        } else if (e instanceof ApodoEnUsoException) {
+            motivo = "apodo-en-uso";
+            titulo = "El apodo ya está en uso";
+        } else {
+            motivo = "perfil-invalido";
+            titulo = "Los datos del perfil no son válidos";
+        }
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+        problema.setType(URI.create(TIPOS + motivo));
+        problema.setTitle(titulo);
+        problema.setInstance(URI.create(request.getRequestURI()));
+        if (!"perfil-invalido".equals(motivo)) {
+            problema.setProperty("campo", "apodo");
+        }
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+            .contentType(MediaType.APPLICATION_PROBLEM_JSON)
+            .body(problema);
+    }
+
+    private static boolean pideProblemDetails(HttpServletRequest request) {
+        String acepta = request.getHeader("Accept");
+        return acepta != null && acepta.toLowerCase(java.util.Locale.ROOT).contains("application/problem+json");
     }
 
     /**

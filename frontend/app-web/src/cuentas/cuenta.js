@@ -45,8 +45,55 @@ import {
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
 import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
+import { tipoDelProblema } from '../comun/codigo-de-correo.js';
 
 const PERFILES = '/api/v1/perfiles';
+
+/**
+ * RFINAL-03 — lo que se le dice a quien guarda su perfil cuando el servidor
+ * lo rechaza, por el `type` estable del problem details
+ * (ms-identidad-perfiles.yaml 1.3.0). El servidor decide —aquí no se
+ * comprueba ninguna lista negra—; solo se explica su respuesta sin revelar
+ * qué término saltó. `campo` es el control que se marca, si lo hay.
+ *
+ * Antes el 400 llegaba en texto plano, `json()` fallaba y «batman» se
+ * despedía con «Revisa los datos e inténtalo otra vez» (informe del jugador
+ * del 4-oct).
+ */
+export const MOTIVOS_DEL_PERFIL = Object.freeze({
+  'apodo-no-permitido': { campo: 'apodo', texto: 'Ese apodo no está permitido. Elige otro.' },
+  'apodo-en-uso': { campo: 'apodo', texto: 'Ese apodo ya lo usa otro jugador. Elige otro.' },
+  // Nada está mal en lo escrito: la lista negra no respondió y, como es
+  // fail-closed, no se guardó nada. No se marca el campo.
+  'moderacion-no-disponible': {
+    campo: null,
+    texto:
+      'No pudimos comprobar tu apodo en este momento, así que no se guardó nada. Inténtalo de nuevo en unos segundos.',
+  },
+});
+
+/**
+ * El cuerpo de un rechazo: problem details si es JSON, el texto si no (un
+ * servidor anterior a 1.3.0), `null` si no se pudo leer.
+ *
+ * @param {Response} respuesta
+ * @returns {Promise<unknown>}
+ */
+async function cuerpoDelRechazo(respuesta) {
+  try {
+    if (typeof respuesta.text !== 'function') {
+      return await respuesta.json();
+    }
+    const texto = await respuesta.text();
+    try {
+      return JSON.parse(texto);
+    } catch {
+      return texto;
+    }
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Una lectura que puede no estar disponible en este entorno.
@@ -392,6 +439,7 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
     limpiarAviso(zonaAviso);
     marcarErrorDe(formulario.elements.nombres, null);
     marcarErrorDe(formulario.elements.apellidos, null);
+    marcarErrorDe(formulario.elements.apodo, null);
 
     const nombres = formulario.elements.nombres.value.trim();
     const apellidos = formulario.elements.apellidos.value.trim();
@@ -427,26 +475,34 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       const respuesta = await fetchImpl(
         `${baseDeApi()}${PERFILES}/${encodeURIComponent(sesion.uid)}`,
         // Sin Content-Type a mano: el navegador arma el multipart con su
-        // frontera solo cuando el cuerpo es un FormData.
-        { method: 'PUT', body: cuerpo },
+        // frontera solo cuando el cuerpo es un FormData. El Accept pide el
+        // problem details con motivo (perfiles 1.3.0).
+        {
+          method: 'PUT',
+          headers: { Accept: 'application/problem+json, application/json' },
+          body: cuerpo,
+        },
       );
       if (!respuesta.ok) {
-        let problema = null;
-        try {
-          problema = await respuesta.json();
-        } catch {
-          problema = null;
+        const problema = await cuerpoDelRechazo(respuesta);
+        const conocido = MOTIVOS_DEL_PERFIL[tipoDelProblema(problema)];
+        if (conocido?.campo) {
+          const control = formulario.elements.namedItem(conocido.campo);
+          marcarErrorDe(control, conocido.texto);
+          control?.focus();
         }
         pintarAviso(zonaAviso, {
           tono: tonoPorEstado(respuesta.status),
           titulo: 'No pudimos guardar los cambios',
-          detalle: textoDelServidor(
-            problema,
-            respuesta.status,
-            respuesta.status >= 500
-              ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
-              : 'Revisa los datos e inténtalo otra vez.',
-          ),
+          detalle:
+            conocido?.texto ??
+            textoDelServidor(
+              problema,
+              respuesta.status,
+              respuesta.status >= 500
+                ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
+                : 'Revisa los datos e inténtalo otra vez.',
+            ),
         });
         return;
       }

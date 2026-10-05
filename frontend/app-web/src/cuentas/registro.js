@@ -9,8 +9,10 @@
 // código que acaba de salir. El correo viaja en `sessionStorage`, nunca en la
 // URL. Si el servicio todavía crea la cuenta ya activa, se entra solo como en
 // R17 (`registrarCuenta` lo decide por el `estado` que devuelve el registro).
+import { destinoTrasEntrar } from '../comun/alta.js';
 import { registrarCuenta } from '../comun/entrada.js';
 import { motivoDeContrasena } from '../comun/politica-contrasena.js';
+import { leerSesion } from '../comun/sesion.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
 import { h } from '../comun/ui/dom.js';
 import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
@@ -18,6 +20,13 @@ import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formu
 // G1 — lo que un envío nativo de una versión vieja de esta página pudo dejar
 // en la barra (`?password=…`) sale antes de nada.
 sinCredencialesEnLaDireccion();
+
+// RFINAL-03 (informe del superadministrador del 4-oct): con la sesión
+// abierta, /registro seguía ofreciendo crear otra cuenta. Como hace el login,
+// quien ya entró va a su inicio. Una sesión caducada no cuenta.
+if (leerSesion().autenticado) {
+  globalThis.location.replace(destinoTrasEntrar(null));
+}
 
 const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.
 

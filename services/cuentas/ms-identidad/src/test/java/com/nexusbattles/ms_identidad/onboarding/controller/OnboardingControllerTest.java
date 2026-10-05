@@ -58,6 +58,8 @@ class OnboardingControllerTest {
         profe.setApodo("profe");
         profe.setVersionToken(0);
         when(usuarios.findByApodo("profe")).thenReturn(Optional.of(profe));
+        // RFINAL-03: el interceptor busca al titular por el uid del token.
+        when(usuarios.findByPublicId(uid)).thenReturn(Optional.of(profe));
 
         servicio = mock(OnboardingService.class);
         SecurityInterceptor interceptor = new SecurityInterceptor(
@@ -104,6 +106,30 @@ class OnboardingControllerTest {
                 .andExpect(header().string("Cache-Control", "no-store"));
 
         verify(servicio).solicitarReintento(uid);
+    }
+
+    @Test
+    @DisplayName("RFINAL-03: tras cambiar de apodo, el token viejo (sub con el apodo anterior) sigue valiendo por su uid")
+    void trasCambiarDeApodo() throws Exception {
+        when(servicio.estadoDe(uid)).thenReturn(enProceso());
+        // El token se emitio cuando el jugador se llamaba «profe-de-antes»; en
+        // la base ya se llama «profe». Antes el interceptor buscaba por el apodo
+        // del sub, no encontraba a nadie y respondia 403 hasta volver a entrar.
+        String tokenViejo = "Bearer " + jwtService.generarToken("profe-de-antes", "JUGADOR", 0, uid);
+
+        mockMvc.perform(get("/api/v1/auth/onboarding").header("Authorization", tokenViejo))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.estado").value("EN_PROCESO"));
+    }
+
+    @Test
+    @DisplayName("un token con un uid que no es de nadie no vale aunque su sub sea un apodo existente")
+    void uidDeNadie() throws Exception {
+        String ajeno = "Bearer " + jwtService.generarToken("profe", "JUGADOR", 0, UUID.randomUUID());
+
+        mockMvc.perform(get("/api/v1/auth/onboarding").header("Authorization", ajeno))
+                .andExpect(status().isForbidden());
+        verify(servicio, never()).estadoDe(any());
     }
 
     @Test
