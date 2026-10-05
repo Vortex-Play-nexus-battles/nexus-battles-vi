@@ -946,10 +946,12 @@ export function abrirPago({
   };
 
   const avisar = (titulo, detalle, acciones = []) => {
+    // RFINAL-07 — sin acciones no se pasa `null`: `replaceChildren` lo pintaría
+    // como el texto «null» debajo del aviso.
     alerta.replaceChildren(
       h('p', { clase: 'pago__alerta-titulo', texto: titulo }),
       h('p', { texto: detalle }),
-      acciones.length > 0 ? h('div', { clase: 'pago__acciones', hijos: acciones }) : null,
+      ...(acciones.length > 0 ? [h('div', { clase: 'pago__acciones', hijos: acciones })] : []),
     );
     alerta.hidden = false;
   };
