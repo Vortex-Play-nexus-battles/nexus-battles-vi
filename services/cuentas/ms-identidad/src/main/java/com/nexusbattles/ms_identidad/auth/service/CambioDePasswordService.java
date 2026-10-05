@@ -103,6 +103,19 @@ public class CambioDePasswordService {
      */
     @Transactional
     public CambioDePasswordResponse cambiar(String apodo, CambiarPasswordRequest datos, String ipOrigen) {
+        return cambiar(apodo, datos, ipOrigen, List.of());
+    }
+
+    /**
+     * HU-AUT-007 — como {@link #cambiar(String, CambiarPasswordRequest, String)},
+     * sabiendo como se autentico la sesion que pide el cambio ({@code amr} de su
+     * token): si fue con segundo factor, el token nuevo lo conserva. Sin esto, un
+     * administrador con doble factor perderia su sesion de doble factor por
+     * cambiar la contrasena.
+     */
+    @Transactional
+    public CambioDePasswordResponse cambiar(String apodo, CambiarPasswordRequest datos, String ipOrigen,
+                                            List<String> metodosDeLaSesion) {
         Usuario usuario = usuarioRepository.findByApodo(apodo)
                 .orElseThrow(() -> new IllegalStateException("No existe el usuario " + apodo));
 
@@ -143,9 +156,14 @@ public class CambioDePasswordService {
         usuarioRepository.save(usuario);
 
         // CA-04: esta sesión sigue válida con un token de la versión nueva.
-        String tokenNuevo = jwtService.generarToken(
-                usuario.getApodo(), usuario.getRol().getNombre(),
-                usuario.getVersionToken(), usuario.getPublicId());
+        // HU-AUT-007: y con el mismo segundo factor que tenía (amr).
+        String tokenNuevo = JwtService.conSegundoFactor(metodosDeLaSesion)
+                ? jwtService.generarToken(
+                        usuario.getApodo(), usuario.getRol().getNombre(),
+                        usuario.getVersionToken(), usuario.getPublicId(), JwtService.AMR_CON_SEGUNDO_FACTOR)
+                : jwtService.generarToken(
+                        usuario.getApodo(), usuario.getRol().getNombre(),
+                        usuario.getVersionToken(), usuario.getPublicId());
 
         avisarPorCorreo(usuario, ipOrigen);
         auditar(usuario, ipOrigen);

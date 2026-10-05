@@ -112,6 +112,23 @@ class CambioDePasswordControllerTest {
     }
 
     @Test
+    @DisplayName("HU-AUT-007: una sesion con segundo factor (amr pwd+otp) se lo pasa al servicio para no perderlo")
+    void conservaElSegundoFactorDeLaSesion() throws Exception {
+        when(servicio.cambiar(eq("ana"), any(), any(), eq(JwtService.AMR_CON_SEGUNDO_FACTOR)))
+                .thenReturn(new CambioDePasswordResponse("token-nuevo-2fa", "Contraseña actualizada."));
+        String conSegundoFactor = jwtService.generarToken("ana", "JUGADOR", 2, uid, JwtService.AMR_CON_SEGUNDO_FACTOR);
+
+        mockMvc.perform(put("/api/v1/auth/password")
+                        .header("Authorization", "Bearer " + conSegundoFactor)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(CUERPO))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").value("token-nuevo-2fa"));
+
+        verify(servicio, never()).cambiar(any(), any(), any());
+    }
+
+    @Test
     @DisplayName("sin token no se entra (fail-closed del interceptor) y el servicio ni se llama")
     void sinToken() throws Exception {
         mockMvc.perform(put("/api/v1/auth/password")

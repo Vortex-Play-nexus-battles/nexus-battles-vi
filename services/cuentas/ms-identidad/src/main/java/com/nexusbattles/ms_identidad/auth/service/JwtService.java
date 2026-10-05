@@ -6,8 +6,11 @@ import io.jsonwebtoken.Jwts;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -23,6 +26,15 @@ import java.util.UUID;
  */
 @Service
 public class JwtService {
+
+    /** {@code amr} de una sesion abierta solo con la contrasena (RFC 8176 §2: «pwd»). */
+    public static final List<String> AMR_CONTRASENA = List.of("pwd");
+
+    /**
+     * {@code amr} de una sesion con segundo factor: contrasena y un codigo de un
+     * solo uso (TOTP o de recuperacion; RFC 8176 §2: «otp»).
+     */
+    public static final List<String> AMR_CON_SEGUNDO_FACTOR = List.of("pwd", "otp");
 
     private final ClavesDeFirma claves;
 
@@ -56,13 +68,26 @@ public class JwtService {
      *        para negarle el acceso al suyo.
      */
     public String generarToken(String apodo, String rol, int versionToken, UUID identificadorPublico) {
+        return generarToken(apodo, rol, versionToken, identificadorPublico, AMR_CONTRASENA);
+    }
+
+    /**
+     * HU-AUT-007 — como {@link #generarToken(String, String, int, UUID)}, con
+     * los metodos de autenticacion de la sesion en el claim {@code amr} (RFC
+     * 8176): {@link #AMR_CONTRASENA} o {@link #AMR_CON_SEGUNDO_FACTOR}. Es lo
+     * que leen los servicios que exigen doble factor (D-09: ms-cumplimiento
+     * con {@code AUDITORIA_EXIGIR_2FA=true} busca {@code otp}).
+     */
+    public String generarToken(String apodo, String rol, int versionToken, UUID identificadorPublico,
+                               List<String> metodos) {
         Date ahora = new Date();
         Date expiracion = new Date(ahora.getTime() + horasExpiracion * 3600_000L);
 
         JwtBuilder constructor = Jwts.builder()
             .subject(apodo)
             .claim("rol", rol)
-            .claim("ver", versionToken);
+            .claim("ver", versionToken)
+            .claim("amr", metodos == null || metodos.isEmpty() ? AMR_CONTRASENA : List.copyOf(metodos));
 
         if (identificadorPublico != null) {
             constructor.claim("uid", identificadorPublico.toString());
@@ -101,5 +126,23 @@ public class JwtService {
     public boolean esVersionVigente(Claims claims, int versionActualDelUsuario) {
         Integer versionDelToken = claims.get("ver", Integer.class);
         return versionDelToken != null && versionDelToken == versionActualDelUsuario;
+    }
+
+    /**
+     * Los metodos de autenticacion de un token ya validado ({@code amr}). Un
+     * token anterior a HU-AUT-007 no lo trae: lista vacia, que equivale a
+     * «sin segundo factor».
+     */
+    public static List<String> metodosDe(Claims claims) {
+        Object amr = claims == null ? null : claims.get("amr");
+        if (amr instanceof Collection<?> lista) {
+            return lista.stream().filter(Objects::nonNull).map(String::valueOf).toList();
+        }
+        return List.of();
+    }
+
+    /** Si esos metodos incluyen un segundo factor ({@code otp}). */
+    public static boolean conSegundoFactor(List<String> metodos) {
+        return metodos != null && metodos.contains("otp");
     }
 }
