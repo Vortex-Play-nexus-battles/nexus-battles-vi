@@ -15,6 +15,7 @@ import { montarCuenta, montarAccionesDeSesion } from './cuenta.js';
 import { montarEstadisticas } from './estadisticas-cuenta.js';
 import { montarCambioDePassword } from './cambiar-password.js';
 import { montarPreguntasDeSeguridad } from './preguntas-seguridad.js';
+import { montarSegundoFactor } from './segundo-factor-cuenta.js';
 import { mejorarContrasena } from '../comun/ui/campo.js';
 import { sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 
@@ -47,6 +48,8 @@ if (sesion) {
   montarEstadisticas(document);
   montarCambioDePassword(document);
   montarPreguntasDeSeguridad(document);
+  // HU-AUT-007 — verificación en dos pasos, en la misma pestaña Seguridad.
+  montarSegundoFactor(document);
   montarAccionesDeSesion(document, { sesion, alCerrarSesion: () => cerrarSesion() });
 
   for (const nombre of [
@@ -54,6 +57,7 @@ if (sesion) {
     'nuevaPassword',
     'confirmacion',
     'passwordActualPreguntas',
+    'passwordActualSegundoFactor',
   ]) {
     mejorarContrasena(document.getElementById(nombre));
   }

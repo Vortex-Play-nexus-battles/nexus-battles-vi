@@ -12,6 +12,8 @@
     <link rel="stylesheet" href="../contenido/inventario/ficha-producto.css" />
     <link rel="stylesheet" href="../contenido/productos/alertas-catalogo.css" />
     <link rel="stylesheet" href="./tienda-producto.css" />
+    <!-- HU-AUT-007 — la clave y los códigos del enrolamiento obligatorio. -->
+    <link rel="stylesheet" href="./segundo-factor.css" />
   </head>
   <body class="portal">
     <div data-cabecera-app></div>
@@ -77,22 +79,25 @@
 
       <!-- Columna del formulario -->
       <section class="entrada__tarjeta">
-        <div class="pila pila--ajustada">
+        <!-- HU-AUT-007 — lo marcado `data-paso="primero"` se aparta mientras
+             se pide el segundo factor (login-segundo-paso.js) y vuelve tal
+             como estaba con «Volver a empezar». -->
+        <div class="pila pila--ajustada" data-paso="primero">
           <h2 class="entrada__titulo">Entra al Nexo</h2>
           <p class="t-meta">Usa el correo con el que creaste tu cuenta.</p>
         </div>
 
         <!-- Por qué se llega aquí (sesión terminada, cerrada, cuenta recién
              creada). Lo rellena `login.js` a partir de `?motivo=`. -->
-        <p class="aviso" id="avisoMotivo" hidden role="status"></p>
+        <p class="aviso" id="avisoMotivo" hidden role="status" data-paso="primero"></p>
 
         <!-- Estado global de la operación: cargando, sin conexión. -->
-        <p class="estado" id="estadoLogin" hidden role="status"></p>
+        <p class="estado" id="estadoLogin" hidden role="status" data-paso="primero"></p>
         <!-- B1 — el rechazo del servidor, explicado por su `type`: credenciales,
              correo sin confirmar (con sus dos salidas), suspensión con el tiempo
              restante, baneo. Enfocable para llevar ahí el foco. -->
-        <div data-zona="rechazo" tabindex="-1" hidden></div>
-        <div id="avisoDispositivo" hidden></div>
+        <div data-zona="rechazo" tabindex="-1" hidden data-paso="primero"></div>
+        <div id="avisoDispositivo" hidden data-paso="primero"></div>
 
         <!-- G1 — sin guion no se entra, y se dice: el botón nace desactivado. -->
         <noscript>
@@ -106,7 +111,7 @@
              desactivado (`data-espera-guion`): sin botón activo tampoco hay
              envío con Enter. Lo enciende login.js cuando ya escucha `submit`
              (comun/ui/formulario-seguro.js). -->
-        <form id="formLogin" class="pila" method="post" novalidate>
+        <form id="formLogin" class="pila" method="post" novalidate data-paso="primero">
           <div class="campo">
             <!-- El mockup decía «Correo o apodo»; el contrato real de
                  POST /api/v1/auth/login solo acepta `email`. -->
@@ -145,7 +150,143 @@
           </button>
         </form>
 
-        <div class="entrada__pie">
+        <!-- HU-AUT-007 — segundo paso: con la verificación en dos pasos activa,
+             el login responde con un desafío en vez de la sesión y aquí se
+             canjea por el código de la aplicación o por uno de recuperación.
+             G1 — el código tampoco va nunca en la dirección: POST y botón
+             apagado hasta que login.js escucha `submit`. -->
+        <section class="pila" data-zona="segundo-paso" aria-labelledby="tituloSegundoPaso" hidden>
+          <div class="pila pila--ajustada">
+            <h2 class="entrada__titulo" id="tituloSegundoPaso">Verificación en dos pasos</h2>
+            <p class="t-meta" data-zona="explicacion-segundo-paso">
+              Escribe el código de 6 dígitos que muestra ahora tu aplicación de autenticación.
+            </p>
+          </div>
+          <div data-zona="rechazo-segundo-paso" tabindex="-1" hidden></div>
+
+          <form id="formSegundoPaso" class="pila" method="post" novalidate>
+            <div class="campo" data-modo="aplicacion">
+              <label class="campo__etiqueta" for="codigoSegundoPaso">Código de verificación</label>
+              <input
+                class="campo__control"
+                type="text"
+                id="codigoSegundoPaso"
+                name="codigo"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="7"
+                spellcheck="false"
+              />
+            </div>
+            <div class="campo" data-modo="recuperacion" hidden>
+              <label class="campo__etiqueta" for="codigoRecuperacionSegundoPaso">
+                Código de recuperación
+              </label>
+              <input
+                class="campo__control"
+                type="text"
+                id="codigoRecuperacionSegundoPaso"
+                name="codigoRecuperacion"
+                autocomplete="off"
+                autocapitalize="characters"
+                maxlength="11"
+                spellcheck="false"
+              />
+            </div>
+            <button
+              type="submit"
+              class="boton boton--primario boton--grande"
+              data-accion="verificar-segundo-paso"
+              disabled
+              data-espera-guion
+            >
+              Verificar y entrar
+            </button>
+          </form>
+
+          <div class="fila fila--envuelta" data-zona="alternativas-segundo-paso">
+            <button type="button" class="boton boton--secundario" data-accion="usar-recuperacion">
+              Usar un código de recuperación
+            </button>
+            <button
+              type="button"
+              class="boton boton--secundario"
+              data-accion="volver-al-primer-paso"
+            >
+              Volver a empezar
+            </button>
+          </div>
+        </section>
+
+        <!-- HU-AUT-007 — enrolamiento obligatorio: si el rol de la cuenta
+             exige el segundo factor y todavía no lo tiene, se activa aquí
+             antes de entrar a la Consola (clave para la aplicación, código y
+             códigos de recuperación). -->
+        <section
+          class="pila"
+          data-zona="enrolamiento-obligatorio"
+          aria-labelledby="tituloEnrolamientoObligatorio"
+          hidden
+        >
+          <div class="pila pila--ajustada">
+            <h2 class="entrada__titulo" id="tituloEnrolamientoObligatorio" tabindex="-1">
+              Activa la verificación en dos pasos
+            </h2>
+            <p class="t-meta">
+              Tu cuenta tiene un rol administrativo y, para entrar, necesita un código de una
+              aplicación de autenticación además de la contraseña.
+            </p>
+          </div>
+          <div data-zona="rechazo-enrolamiento" tabindex="-1" hidden></div>
+
+          <div class="fila fila--envuelta" data-zona="inicio-enrolamiento">
+            <button type="button" class="boton boton--primario" data-accion="generar-clave">
+              Generar mi clave
+            </button>
+          </div>
+          <div class="pila" data-zona="clave-obligatoria" hidden></div>
+
+          <form id="formEnrolamientoObligatorio" class="pila" method="post" novalidate hidden>
+            <div class="campo">
+              <label class="campo__etiqueta" for="codigoEnrolamiento">
+                Código que muestra tu aplicación
+              </label>
+              <input
+                class="campo__control"
+                type="text"
+                id="codigoEnrolamiento"
+                name="codigo"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="7"
+                spellcheck="false"
+              />
+            </div>
+            <button
+              type="submit"
+              class="boton boton--primario boton--grande"
+              data-accion="activar-y-entrar"
+              disabled
+              data-espera-guion
+            >
+              Activar y entrar
+            </button>
+          </form>
+
+          <div class="pila" data-zona="codigos-obligatorios" hidden></div>
+
+          <div class="fila fila--envuelta">
+            <button
+              type="button"
+              class="boton boton--secundario"
+              data-accion="volver-al-primer-paso"
+            >
+              Volver a empezar
+            </button>
+          </div>
+        </section>
+
+        <div class="entrada__pie" data-paso="primero">
           <a href="./restablecer-solicitar.html">¿Olvidaste tu contraseña?</a>
           <a href="./registro.html">Crear una cuenta</a>
         </div>
