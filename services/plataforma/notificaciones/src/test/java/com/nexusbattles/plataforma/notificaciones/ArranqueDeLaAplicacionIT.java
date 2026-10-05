@@ -3,6 +3,8 @@ package com.nexusbattles.plataforma.notificaciones;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.plataforma.notificaciones.bandeja.CanalDeNotificaciones;
 import com.nexusbattles.plataforma.notificaciones.bandeja.NotificacionesController;
+import com.nexusbattles.plataforma.notificaciones.catalogo.CursorCatalogoRepository;
+import com.nexusbattles.plataforma.notificaciones.catalogo.RegistroDeCursorCatalogo;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,6 +32,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -91,6 +94,10 @@ class ArranqueDeLaAplicacionIT {
 
     @Autowired
     private ApplicationContext contexto;
+
+    /** HU-NOT-001: la tabla de V3 y sus dos escrituras, contra PostgreSQL real. */
+    @Autowired
+    private CursorCatalogoRepository cursores;
 
     @LocalServerPort
     private int puerto;
@@ -274,6 +281,31 @@ class ArranqueDeLaAplicacionIT {
         assertEquals(3, marcadas, "entre todas marcan los tres, ni uno mas");
         HttpResponse<String> bandeja = bandejaDe(ana, tokenDeAna);
         assertTrue(bandeja.body().contains("\"noLeidas\":0"), bandeja.body());
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001 (V3): el cursor de avisos del catalogo se crea, solo avanza y anota la consulta, contra PostgreSQL")
+    void cursorDeAvisosDelCatalogo() {
+        String uid = UUID.randomUUID().toString();
+        Instant base = Instant.parse("2026-10-05T12:00:00.123Z");
+
+        assertEquals(1, cursores.guardar(uid, base, base), "el primer cursor se inserta");
+        // Una sesion que llega tarde con un hasta anterior no lo hace retroceder.
+        cursores.guardar(uid, base.minusSeconds(60), base.plusSeconds(5));
+        RegistroDeCursorCatalogo cursor = cursores.findById(uid).orElseThrow();
+        assertEquals(base, cursor.getHasta(), "GREATEST: el cursor no retrocede");
+        assertEquals(base.plusSeconds(5), cursor.getConsultadoEn());
+
+        cursores.guardar(uid, base.plusSeconds(60), base.plusSeconds(10));
+        assertEquals(base.plusSeconds(60), cursores.findById(uid).orElseThrow().getHasta(), "y avanza");
+
+        // Anotar una consulta fallida solo toca consultado_en.
+        assertEquals(1, cursores.marcarConsulta(uid, base.plusSeconds(99)));
+        RegistroDeCursorCatalogo anotado = cursores.findById(uid).orElseThrow();
+        assertEquals(base.plusSeconds(60), anotado.getHasta());
+        assertEquals(base.plusSeconds(99), anotado.getConsultadoEn());
+        assertEquals(0, cursores.marcarConsulta(UUID.randomUUID().toString(), base),
+                "sin cursor no hay nada que anotar");
     }
 
     private HttpRequest peticionMarcarTodas(UUID dueno, String token) {
