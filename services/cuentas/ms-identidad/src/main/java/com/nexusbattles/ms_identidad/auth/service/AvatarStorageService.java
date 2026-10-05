@@ -51,6 +51,37 @@ public class AvatarStorageService {
         return "/avatares-subidos/" + nombreUnico;
     }
 
+    /**
+     * RFINAL-05 (derecho al olvido) — borra del disco el archivo de un avatar
+     * guardado por {@link #guardarAvatar}. Solo acepta la forma que esa
+     * funcion devuelve ({@code /avatares-subidos/<nombre>}, sin carpetas): una
+     * URL ajena o con {@code ..} no borra nada fuera de la carpeta. Sin
+     * archivo, no hace nada.
+     *
+     * @return {@code true} si habia archivo y se borro
+     */
+    public boolean borrarAvatar(String url) {
+        if (url == null || !url.startsWith(PREFIJO_URL)) {
+            return false;
+        }
+        String nombre = url.substring(PREFIJO_URL.length());
+        if (nombre.isBlank() || nombre.contains("/") || nombre.contains("\\") || nombre.contains("..")) {
+            return false;
+        }
+        Path carpeta = Path.of(rutaAlmacenamiento).toAbsolutePath().normalize();
+        Path archivo = carpeta.resolve(nombre).normalize();
+        if (!archivo.startsWith(carpeta)) {
+            return false;
+        }
+        try {
+            return Files.deleteIfExists(archivo);
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo borrar la imagen del avatar.", e);
+        }
+    }
+
+    private static final String PREFIJO_URL = "/avatares-subidos/";
+
     private void validarArchivo(MultipartFile archivo) {
         if (!TIPOS_PERMITIDOS.contains(archivo.getContentType())) {
             throw new IllegalArgumentException(

@@ -100,6 +100,7 @@ class MigracionesIT {
             jdbc.execute("DROP TABLE onboarding_paso");
             jdbc.execute("DROP TABLE onboarding_jugador");
             jdbc.execute("DROP TABLE preguntas_seguridad");
+            jdbc.execute("DROP TABLE solicitudes_cierre_cuenta");
             jdbc.execute("ALTER TABLE tokens_credencial DROP COLUMN codigo_hash, DROP COLUMN intentos_fallidos,"
                     + " DROP COLUMN anulado_en, DROP COLUMN creado_en, DROP COLUMN usado_en");
             jdbc.execute("ALTER TABLE tokens_credencial ALTER COLUMN token SET NOT NULL");
@@ -128,8 +129,35 @@ class MigracionesIT {
                 + " AND indexname = 'ix_usuarios_apodo_prefijo'", Integer.class);
     }
 
+    /**
+     * RFINAL-05 — V6: como mucho un cierre PROGRAMADO por cuenta, y el plazo de
+     * 30 dias (RN-USR-011) tambien lo exige la base.
+     */
+    private static void comprobarCierresDeCuenta(JdbcTemplate jdbc, UUID uid) {
+        String alta = "INSERT INTO solicitudes_cierre_cuenta (id, usuario_uid, estado, solicitada_en,"
+                + " programada_para) VALUES (?, ?, ?, ?, ?)";
+        LocalDateTime solicitada = LocalDateTime.of(2026, 10, 5, 14, 30);
+        jdbc.update(alta, UUID.randomUUID(), uid, "PROGRAMADA", Timestamp.valueOf(solicitada),
+                Timestamp.valueOf(solicitada.plusDays(30)));
+        // Un segundo cierre programado de la misma cuenta: el indice unico parcial lo impide...
+        assertThatThrownBy(() -> jdbc.update(alta, UUID.randomUUID(), uid, "PROGRAMADA",
+                Timestamp.valueOf(solicitada), Timestamp.valueOf(solicitada.plusDays(30))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // ...pero no los ya cancelados o ejecutados.
+        jdbc.update(alta, UUID.randomUUID(), uid, "CANCELADA", Timestamp.valueOf(solicitada),
+                Timestamp.valueOf(solicitada.plusDays(30)));
+        // Otro plazo que no sea el del requisito: rechazado.
+        assertThatThrownBy(() -> jdbc.update(alta, UUID.randomUUID(), uid, "CANCELADA",
+                Timestamp.valueOf(solicitada), Timestamp.valueOf(solicitada.plusDays(7))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+        // Y no hay cierre de una cuenta que no existe.
+        assertThatThrownBy(() -> jdbc.update(alta, UUID.randomUUID(), UUID.randomUUID(), "CANCELADA",
+                Timestamp.valueOf(solicitada), Timestamp.valueOf(solicitada.plusDays(30))))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
     @Test
-    @DisplayName("base vacia: V1 a V4 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V4 y V6 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -140,7 +168,8 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("1", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("6", "SQL"));
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
@@ -150,11 +179,14 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name IN ('onboarding_jugador','onboarding_paso')",
                     Integer.class)).isEqualTo(2);
+            // V6 (RFINAL-05): la tabla de cierres y su indice unico parcial.
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM pg_indexes WHERE tablename = 'solicitudes_cierre_cuenta'"
+                    + " AND indexname = 'ux_cierre_programado_por_cuenta'", Integer.class)).isEqualTo(1);
         }
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V4 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V6 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -167,7 +199,10 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("1", "BASELINE"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("6", "SQL"));
+            // V6 sobre la cuenta heredada: el cierre se programa con su uid.
+            comprobarCierresDeCuenta(jdbc, veterana);
             // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
@@ -225,7 +260,7 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            assertThat(historial(jdbc)).hasSize(4);
+            assertThat(historial(jdbc)).hasSize(5);
         }
     }
 }
