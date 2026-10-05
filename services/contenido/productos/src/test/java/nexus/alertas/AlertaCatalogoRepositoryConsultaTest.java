@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.mongodb.core.DbCallback;
 import org.springframework.data.mongodb.core.ExecutableFindOperation.ExecutableFind;
 import org.springframework.data.mongodb.core.ExecutableFindOperation.FindWithQuery;
@@ -97,5 +98,26 @@ class AlertaCatalogoRepositoryConsultaTest {
         assertEquals(
                 new Document("implementadaEn", 1),
                 enviada.getValue().getSortObject());
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: la lectura por lotes arma el mismo criterio, ascendente y con el tope de la pagina")
+    void laLecturaPorLotesLimitaLaConsulta() {
+        repositorio.buscarPrimerasImplementadasEntre(
+                DESDE,
+                HASTA,
+                PageRequest.of(0, 51));
+
+        ArgumentCaptor<Query> enviada = ArgumentCaptor.forClass(Query.class);
+        verify(busqueda).matching(enviada.capture());
+        assertEquals(
+                new Document("implementadaEn", new Document("$gt", Date.from(DESDE))
+                        .append("$lte", Date.from(HASTA))),
+                enviada.getValue().getQueryObject());
+        assertEquals(
+                new Document("implementadaEn", 1),
+                enviada.getValue().getSortObject());
+        assertEquals(51, enviada.getValue().getLimit());
+        assertEquals(0, enviada.getValue().getSkip());
     }
 }
