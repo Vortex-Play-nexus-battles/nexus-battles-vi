@@ -37,6 +37,7 @@ import { h, vaciar } from '../../comun/ui/dom.js';
 import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
+import { urlDeVista } from '../../comun/acceso.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
 import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 
@@ -454,6 +455,7 @@ export function pintarDirectorio(datos, estado, recargar) {
     jugador.bloqueada ? 'BLOQUEADA' : (jugador.estado ?? '--'),
     formatearFecha(jugador.creadoEn),
     jugador.ultimoAcceso ? formatearFecha(jugador.ultimoAcceso) : 'Nunca ha entrado',
+    enlaceAFicha(jugador),
     enlaceAGestion(jugador),
     enlaceASanciones(jugador),
   ]);
@@ -469,6 +471,7 @@ export function pintarDirectorio(datos, estado, recargar) {
       'Estado',
       'Registro',
       'Última entrada',
+      'Ficha',
       'Gestión',
       'Sanciones',
     ],
@@ -530,6 +533,32 @@ function enlaceASanciones(jugador) {
       'aria-label': `Ver las sanciones de ${jugador.apodo ?? 'esta cuenta'}`,
     },
     datos: { accion: 'ver-sanciones' },
+  });
+}
+
+/**
+ * HU-USR-010 — de la fila a la ficha administrativa de esa cuenta: lo que cada
+ * servicio publica de ella, con su línea de tiempo y la consulta auditada. Va
+ * por la clave de la cuenta (`id`, la tienen todas); sin ella, por el `uid`.
+ *
+ * @param {{id?: number, uid?: string|null, apodo?: string}} jugador
+ * @returns {HTMLAnchorElement|string}
+ */
+function enlaceAFicha(jugador) {
+  const clave = Number(jugador?.id);
+  const cuenta = Number.isInteger(clave) && clave > 0 ? String(clave) : jugador?.uid;
+  if (!cuenta) {
+    return SIN_DATO;
+  }
+  const destino = new URL(urlDeVista('ficha-usuario'));
+  destino.searchParams.set('usuario', cuenta);
+  return h('a', {
+    texto: 'Ver ficha',
+    atributos: {
+      href: destino.href,
+      'aria-label': `Ver la ficha de ${jugador.apodo ?? 'esta cuenta'}`,
+    },
+    datos: { accion: 'ver-ficha' },
   });
 }
 
