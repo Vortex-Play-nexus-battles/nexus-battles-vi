@@ -271,6 +271,37 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
     }
   });
 
+  // ------------------------------- lo que el despliegue tiene que traer puesto
+
+  test('la verificacion en dos pasos esta disponible: el host tiene su clave', async () => {
+    // HU-AUT-007. Solo lectura: no enrola nada. `disponible` es false si
+    // ms-identidad arranco sin IDENTIDAD_2FA_CLAVE, que genera y conserva el
+    // despliegue en el host (scripts/cd/desplegar.sh). Sin ella, activarla
+    // desde «Mi cuenta > Seguridad» responderia 503 y nadie lo veria hasta
+    // intentarlo.
+    const respuesta = await api.get('/api/v1/auth/segundo-factor', {
+      headers: conToken(sesion.token),
+    });
+    expect(respuesta.status()).toBe(200);
+    const estado = await respuesta.json();
+    expect(estado.disponible, 'sin clave en el host nadie puede activar el segundo factor').toBe(
+      true,
+    );
+    expect(estado.activo).toBe(false);
+    // D-09: lo exige solo un rol administrativo, y la obligatoriedad viene apagada.
+    expect(estado.obligatorio).toBe(false);
+  });
+
+  test('la home puede pedir sus banners: la ruta del borde llega a productos', async () => {
+    // HU-NOT-002. Publica, como la pide la home. Una lista, aunque este vacia:
+    // un 404 seria la ruta del borde sin desplegar y un 502 productos caido.
+    const respuesta = await api.get('/api/v1/banners/vigentes', {
+      headers: { Accept: 'application/json' },
+    });
+    expect(respuesta.status()).toBe(200);
+    expect(Array.isArray(await respuesta.json())).toBe(true);
+  });
+
   // ----------------------------------------------- todo sigue ahi al volver
 
   test('salir y volver a entrar conserva creditos, heroe y alta', async () => {
