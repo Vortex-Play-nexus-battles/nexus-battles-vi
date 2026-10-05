@@ -131,6 +131,13 @@ services:
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      # RFINAL-05 (HU-PRV-005) — antes de programar el cierre de una cuenta,
+      # ms-identidad pregunta a ms-subastas, con el token de la persona, si
+      # tiene subastas activas o pujas vigentes. ms-subastas vive en el host de
+      # contenido como inventario y productos: su IP elastica y su puerto, el
+      # mismo destino que usa el borde. Sin respuesta, el cierre no se programa
+      # (503, fail-closed).
+      IDENTIDAD_SUBASTAS_URL: ${IDENTIDAD_SUBASTAS_URL:-http://34.193.90.11:8092/api/v1}
       # RESPALDO PROVISIONAL DE DEV — no es decision de producto (D-28, D-29).
       # Solo se aplica mientras `jugador.creditos-iniciales` y
       # `jugador.kit-inicial` sigan SIN VALOR en admin-parametros; en cuanto un
