@@ -18,6 +18,7 @@ const HTML = `
     <div data-zona="emergentes" aria-live="polite"></div>
     <section id="panel" data-zona="panel" hidden>
       <span class="conexion conexion--sin-conexion" data-zona="conexion"></span>
+      <button type="button" data-zona="marcar-todas" disabled>Marcar todas como leídas</button>
       <p data-zona="lista-vacia">Todavia no tienes notificaciones.</p>
       <ul data-zona="lista"></ul>
     </section>
@@ -34,12 +35,13 @@ const aviso = (id, extra = {}) => ({
   ...extra,
 });
 
-function preparar() {
+function preparar({ alError } = {}) {
   document.body.innerHTML = HTML;
   let callbacks;
   const bandeja = {
     iniciar: jest.fn(),
     marcarLeida: jest.fn(async () => 0),
+    marcarTodasLeidas: jest.fn(async () => 0),
     detener: jest.fn(),
   };
   const fabrica = jest.fn((cb) => {
@@ -47,9 +49,11 @@ function preparar() {
     return bandeja;
   });
   const programar = jest.fn();
-  const montado = montarCampana(document, { fabrica, programar, duracionEmergente: 5000 });
+  const montado = montarCampana(document, { fabrica, programar, duracionEmergente: 5000, alError });
   return { ...montado, callbacks: () => callbacks, bandeja, programar };
 }
+
+const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('montarCampana', () => {
   test('arranca la bandeja y pinta el estado inicial: sin contador, sin canal', () => {
@@ -86,6 +90,10 @@ describe('montarCampana', () => {
     expect(items[0].dataset.avisoId).toBe('n-2');
     expect(items[0].querySelector('.tarjeta__titulo').textContent).toBe('Titulo n-2');
     expect(items[1].querySelector('[data-accion="marcar-leida"]')).toBeNull();
+    expect(items[0].querySelector('[data-accion="marcar-leida"]').textContent).toBe(
+      'Marcar como leída',
+    );
+    expect(items[1].querySelector('span.tarjeta__meta').textContent).toBe('Leída');
 
     items[0].querySelector('[data-accion="marcar-leida"]').click();
     expect(bandeja.marcarLeida).toHaveBeenCalledWith('n-2');
@@ -127,6 +135,72 @@ describe('montarCampana', () => {
 
     emergente.querySelector('[data-accion="cerrar-emergente"]').click();
     expect(document.querySelector('[data-zona="emergentes"] .aviso--info')).toBeNull();
+  });
+
+  test('HU-NOT-001 CA-02: «Marcar todas como leídas» está deshabilitado sin no leídas', () => {
+    const { callbacks } = preparar();
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+    expect(marcarTodas.disabled).toBe(true);
+
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 2, avisos: [aviso('n-1')] });
+    expect(marcarTodas.disabled).toBe(false);
+
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 0,
+      avisos: [aviso('n-1', { leida: true })],
+    });
+    expect(marcarTodas.disabled).toBe(true);
+  });
+
+  test('al pulsarlo marca todas una sola vez y la vista queda leída y sin contador', async () => {
+    const { callbacks, bandeja } = preparar();
+    let responder;
+    bandeja.marcarTodasLeidas.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          responder = resolve;
+        }),
+    );
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 2,
+      avisos: [aviso('n-2'), aviso('n-1')],
+    });
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+
+    marcarTodas.click();
+    // Mientras el servidor responde no se puede lanzar otra.
+    expect(marcarTodas.disabled).toBe(true);
+    marcarTodas.click();
+    expect(bandeja.marcarTodasLeidas).toHaveBeenCalledTimes(1);
+
+    // La bandeja publica el resultado: todo leído y la cuenta en 0.
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 0,
+      avisos: [aviso('n-2', { leida: true }), aviso('n-1', { leida: true })],
+    });
+    responder(0);
+    await asentar();
+
+    expect(marcarTodas.disabled).toBe(true);
+    expect(document.querySelectorAll('[data-accion="marcar-leida"]')).toHaveLength(0);
+    expect(document.querySelector('[data-zona="contador"]').hidden).toBe(true);
+  });
+
+  test('si marcar todas falla, el error no se calla y el botón vuelve a estar disponible', async () => {
+    const alError = jest.fn();
+    const { callbacks, bandeja } = preparar({ alError });
+    bandeja.marcarTodasLeidas.mockRejectedValueOnce(new Error('sin red'));
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 1, avisos: [aviso('n-1')] });
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+
+    marcarTodas.click();
+    await asentar();
+
+    expect(alError).toHaveBeenCalledWith(expect.objectContaining({ message: 'sin red' }));
+    expect(marcarTodas.disabled).toBe(false);
   });
 
   test('el boton de la campana abre y cierra el panel', () => {
