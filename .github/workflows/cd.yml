@@ -233,7 +233,19 @@ jobs:
             ARCHIVOS=$(echo "$ARCHIVOS" | tr ' ' '\n' | sed '/^$/d')
             echo "Despliegue a demanda de: ${PEDIDOS:-(nada; solo frontend y borde)}"
           else
-            ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
+            # Lo que toco CADA commit del rango, no solo la diferencia neta.
+            #
+            # El 5-oct, #858 construyo y desplego un ms-ecommerce que no
+            # arrancaba (su CD fallo) y #862 dejo el codigo como estaba antes:
+            # contra el ultimo despliegue con exito la diferencia neta era cero,
+            # nadie volvio a construirlo y DEV siguio con la imagen rota. Un
+            # servicio que algun commit del rango toco se reconstruye desde HEAD
+            # aunque el neto sea cero. Si el rango no se puede recorrer (base
+            # que no es un commit), queda la diferencia neta de siempre.
+            ARCHIVOS=$( {
+              git diff --name-only "$BASE" "$HEAD"
+              git log --format= --name-only "$BASE..$HEAD" 2>/dev/null || true
+            } | sed '/^$/d' | sort -u)
           fi
 
           # 3) Un servicio entra en esta corrida si el push (o el despliegue a
