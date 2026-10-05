@@ -665,14 +665,15 @@ test.describe('El recorrido de la auditoría del 30-sep, con un jugador limpio',
     await expect(page.locator('[data-zona="panel-seguridad"]')).toBeVisible({ timeout: 10_000 });
     await expect(estadisticas).toBeHidden();
 
-    // Privacidad: el portal es del Grupo 4 y no existe todavía. La vista lo
-    // dice con palabras, sin un fallo técnico ni un servicio caído.
+    // Privacidad: desde RFINAL-05 el portal y el cierre de la cuenta tienen su
+    // pestaña («Privacidad»); la nota del Perfil lleva hasta ella.
     await page.evaluate(() => {
       window.location.hash = '#perfil';
     });
     await expect(page.locator('[data-zona="privacidad"]')).toContainText(
       'Descargarlos o cerrar tu cuenta',
     );
+    await expect(page.locator('[data-zona="privacidad"]')).toContainText('«Privacidad»');
     expect(fallos, 'ninguna petición respondió 5xx').toEqual([]);
   });
 
