@@ -75,7 +75,20 @@ info:
     contrato (lo encontro el guardian `rutas-contrato-codigo.py`): el estado
     de cada servicio del catalogo de despliegue (OPERATIVO, CAIDO,
     NO_DESPLEGADO, NO_OBSERVABLE) para el panel de administracion. Aditivo.
-  version: 1.8.0
+
+    1.9.0 (RFINAL-08): `/admin/sistema/servicios` y `/tecnicas` dejan de
+    preguntar en serie (8440 y 7293 ms medidos en DEV el 4-oct): las sondas y
+    las recolecciones van a la vez en un ejecutor acotado, con plazos cortos
+    de conexion y de respuesta, sin reintentos y con un tope para la ronda
+    entera; la ultima ronda se reutiliza durante una vigencia corta. Todo
+    configurable por variable de entorno (sondeo.* del servicio). Aditivo:
+    el estado `LENTO` (conecto y no contesto a tiempo; no poder conectar
+    sigue siendo CAIDO), el conteo `lentos` y `desdeCache` en
+    RespuestaDelSistema, y `desdeCache` en TableroTecnico. La hora de la
+    respuesta (`instante`, `generadoEn`) es siempre la de la ronda de la que
+    sale. UP solo cuando la sonda recibe la salud de Actuator en JSON con
+    `status` UP en la raiz.
+  version: 1.9.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -262,6 +275,13 @@ paths:
     get:
       summary: Tablero de metricas tecnicas del bloque (HU-MET-004)
       operationId: tableroTecnico
+      description: >
+        Recolecta en el momento las metricas de Actuator de cada servicio del
+        bloque, todos a la vez (1.9.0). El servicio que no termina dentro del
+        plazo de la ronda sale como brecha con su motivo y no retrasa a los
+        demas. La recoleccion se reutiliza durante una vigencia corta:
+        `generadoEn` es su hora y `desdeCache` dice si es reutilizada. El
+        texto de /tecnicas/informe/texto sale de la misma recoleccion.
       responses:
         '200':
           description: Metricas por servicio, alertas y brechas de observabilidad
@@ -310,8 +330,15 @@ paths:
       operationId: estadoDeLosServicios
       description: >
         Sondea la salud de cada servicio configurado y resume cuantos estan
-        operativos, caidos, no desplegados o sin sonda. Mismo control de
-        acceso que el resto del panel tecnico.
+        operativos, caidos, lentos, no desplegados o sin sonda. Mismo control
+        de acceso que el resto del panel tecnico.
+
+        1.9.0: las sondas van a la vez (ejecutor acotado, plazos cortos, sin
+        reintentos, tope para la ronda). OPERATIVO solo si el servicio
+        contesta la salud de Actuator en JSON con `status` UP en la raiz.
+        LENTO es el que conecto y no contesto a tiempo; el que no se pudo
+        conectar es CAIDO. La ronda se reutiliza durante una vigencia corta:
+        `instante` es su hora y `desdeCache` dice si es reutilizada.
       security:
         - tokenDeAdministracion: []
       responses:
@@ -339,7 +366,7 @@ components:
   schemas:
     RespuestaDelSistema:
       type: object
-      required: [servicios, total, operativos, caidos, noDesplegados, noObservables, instante]
+      required: [servicios, total, operativos, caidos, lentos, noDesplegados, noObservables, instante, desdeCache]
       properties:
         servicios:
           type: array
@@ -351,7 +378,10 @@ components:
                 type: string
               estado:
                 type: string
-                enum: [OPERATIVO, CAIDO, NO_DESPLEGADO, NO_OBSERVABLE]
+                enum: [OPERATIVO, CAIDO, LENTO, NO_DESPLEGADO, NO_OBSERVABLE]
+                description: >
+                  LENTO (1.9.0): conecto y no contesto dentro del plazo de la
+                  sonda. No cuenta como operativo.
               detalle:
                 type: [string, 'null']
               instante:
@@ -363,6 +393,9 @@ components:
           type: integer
         caidos:
           type: integer
+        lentos:
+          type: integer
+          description: Cuantos conectaron y no contestaron a tiempo (1.9.0)
         noDesplegados:
           type: integer
         noObservables:
@@ -370,6 +403,12 @@ components:
         instante:
           type: string
           format: date-time
+          description: Hora de la ronda de sondeo de la que sale esta respuesta
+        desdeCache:
+          type: boolean
+          description: >
+            true si la respuesta reutiliza una ronda anterior aun vigente en vez
+            de sondear de nuevo (1.9.0)
 
     EstadoResponse:
       type: object
@@ -770,9 +809,10 @@ components:
 
     TableroTecnico:
       type: object
-      required: [generadoEn, servicios, alertas, brechas, umbrales]
+      required: [generadoEn, servicios, alertas, brechas, umbrales, desdeCache]
       properties:
-        generadoEn: { type: string, format: date-time }
+        generadoEn: { type: string, format: date-time, description: Hora de la recoleccion de la que sale el tablero }
+        desdeCache: { type: boolean, description: 'true si reutiliza una recoleccion anterior aun vigente (1.9.0)' }
         servicios:
           type: array
           items: { $ref: '#/components/schemas/MetricasDeServicio' }

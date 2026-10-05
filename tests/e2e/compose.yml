@@ -787,6 +787,26 @@ services:
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
       # HU-MET-001 (#527): la observabilidad es de administracion.
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # RFINAL-08 — pantalla «Sistema»: en el banco todos comparten esta red,
+      # tambien los que en DEV viven en el host de contenido (alli los fija
+      # docker-compose.deploy.yml por la IP de ese host). Los de plataforma ya
+      # salen bien con los valores de application.yml (srv-<nombre>).
+      # ms-chatbot y ms-cumplimiento no estan en el banco: se dicen
+      # NO_DESPLEGADO en vez de salir CAIDO por un nombre que aqui no existe.
+      SISTEMA_SALUD_HEROES: http://srv-heroes:8080/actuator/health
+      SISTEMA_SALUD_INVENTARIO: http://srv-inventario:8080/actuator/health
+      SISTEMA_SALUD_PRODUCTOS: http://srv-productos:8080/actuator/health
+      SISTEMA_SALUD_MOTOR_COMBATE: http://srv-motor-combate:8080/actuator/health
+      SISTEMA_SALUD_MISIONES: http://srv-misiones:8080/actuator/health
+      SISTEMA_SALUD_MS_SUBASTAS: http://srv-ms-subastas:8092/api/v1/actuator/health
+      SISTEMA_SALUD_MS_CHATBOT: NO_DESPLEGADO
+      SISTEMA_SALUD_MS_CUMPLIMIENTO: NO_DESPLEGADO
+      # Plazos del sondeo del panel tan holgados como los que tenia el
+      # recolector del tablero antes de RFINAL-08 (2 s / 3 s): el banco corre
+      # unas veinte JVM en un runner compartido y la lentitud del runner no es
+      # lo que estas pruebas miden. Los de DEV son los de application.yml.
+      SONDEO_CONEXION_MS: "2000"
+      SONDEO_RESPUESTA_MS: "3000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }

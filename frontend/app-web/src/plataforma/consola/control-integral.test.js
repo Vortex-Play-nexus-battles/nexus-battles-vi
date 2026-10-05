@@ -14,6 +14,7 @@ import { RESULTADO } from './cliente-consola.js';
 import {
   SECCIONES,
   formatearFecha,
+  formatearInstante,
   montarControlIntegral,
   pintarAlertasDeModeracion,
 } from './control-integral.js';
@@ -332,6 +333,61 @@ describe('sistema', () => {
     const otroHost = sellos.find((s) => s.textContent === 'NO OBSERVABLE');
     expect(caido.dataset.estado).toBe('malo');
     expect(otroHost.dataset.estado).toBe('neutro');
+  });
+
+  /**
+   * RFINAL-08: el servicio que conecta y no contesta a tiempo no está caído ni
+   * operativo. Va en ámbar, con su palabra, y se cuenta aparte; y el panel dice
+   * de qué hora es la medición, porque la ronda se reutiliza unos segundos.
+   */
+  test('un servicio lento va en ámbar, se cuenta aparte y se ve la hora de la medición', async () => {
+    const raiz = pagina();
+    const instante = '2026-10-05T15:04:05Z';
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/admin/sistema/servicios': conDatos({
+            total: 3,
+            operativos: 1,
+            caidos: 1,
+            lentos: 1,
+            noDesplegados: 0,
+            noObservables: 0,
+            instante,
+            desdeCache: true,
+            servicios: [
+              { servicio: 'torneos', estado: 'OPERATIVO', detalle: '' },
+              { servicio: 'misiones', estado: 'LENTO', detalle: 'sin respuesta en 1500 ms' },
+              { servicio: 'correo', estado: 'CAIDO', detalle: 'conexión rechazada' },
+            ],
+          }),
+        }),
+      },
+    );
+    await asentar();
+
+    const sistema = raiz.querySelector('[data-panel="sistema"]');
+    const lento = [...sistema.querySelectorAll('.tabla .sello-estado')].find(
+      (s) => s.textContent === 'LENTO',
+    );
+    expect(lento.dataset.estado).toBe('aviso');
+    expect(sistema.textContent).toContain('sin respuesta en 1500 ms');
+    expect(sistema.textContent).toContain('1 operativos, 1 caídos, 1 lentos');
+    expect(sistema.querySelector('[data-zona="medido"]').textContent).toBe(
+      `Medido a las ${formatearInstante(instante)}.`,
+    );
+  });
+
+  test('sin lentos no se menciona la palabra: el resumen de siempre no cambia', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="sistema"]').textContent).not.toContain('lentos');
   });
 });
 

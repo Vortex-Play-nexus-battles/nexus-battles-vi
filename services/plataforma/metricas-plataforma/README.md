@@ -26,6 +26,8 @@ Contrato: [`contracts/openapi/metricas-plataforma.yaml`](../../../contracts/open
 | `GET` | `/api/v1/consultas/informe` | Latencia de las consultas a la base de datos (HU-REN-003 CA-01) |
 | `GET` | `/api/v1/consultas/lentas` | Registro de consultas lentas (HU-REN-003 CA-03) |
 | `GET` | `/api/v1/degradacion` | Qué secciones están limitadas ahora mismo (HU-DIS-003) |
+| `GET` | `/api/v1/tecnicas` (`/informe/texto`) | Tablero técnico de HU-MET-004, recolectado en el momento (ver «Sondeo del panel») |
+| `GET` | `/api/v1/admin/sistema/servicios` | Pantalla «Sistema» de la consola: estado de los 19 servicios del catálogo |
 
 ## Cómo se mide (DEC-01)
 
@@ -57,6 +59,26 @@ entorno y lo que hay en `application.yml` son los valores de desarrollo local.
 
 Añadir un servicio al monitoreo es añadir una entrada en `disponibilidad.servicios`;
 no hay que recompilar nada.
+
+### Sondeo del panel: «Sistema» y tablero técnico (RFINAL-08)
+
+Las dos pantallas que preguntan en vivo lo hacen a la vez, no en serie (el 4-oct
+tardaban 8440 ms y 7293 ms en DEV): ejecutor acotado, plazos cortos por llamada,
+sin reintentos y un tope para la ronda entera (conexión + respuesta + 500 ms).
+Lo que no contesta a tiempo sale **LENTO** en «Sistema» (si conectó; si no pudo
+conectar es **CAIDO**) o como brecha en el tablero, con su motivo, y no retrasa
+al resto. La última ronda se reutiliza durante la vigencia y la respuesta lo dice
+(`desdeCache`, con la hora de la ronda). OPERATIVO solo si el servicio contesta
+la salud de Actuator en JSON con `status` UP en la raíz. El monitor de
+disponibilidad no usa estos plazos: la cifra de HU-DIS-001 no cambia.
+
+| Variable | Por omisión | Para qué |
+|---|---|---|
+| `SONDEO_CONEXION_MS` | `1000` | Plazo para conectar con cada servicio |
+| `SONDEO_RESPUESTA_MS` | `2000` | Plazo para que conteste una vez conectado (el que ya tenía la sonda) |
+| `SONDEO_HILOS` | `16` | Llamadas a la vez, como mucho |
+| `SONDEO_VIGENCIA_MS` | `15000` | Cuánto vale la última ronda; `0` la apaga |
+| `SISTEMA_SALUD_<SERVICIO>` | nombre de la red de despliegue, o `NO_OBSERVABLE` para los del host de contenido | Sonda de cada servicio en «Sistema». En DEV las fija `docker-compose.deploy.yml` para los 19 (contenido por la IP de su host); `SondasDelDespliegueTest` falla si dejan de coincidir con `infrastructure/despliegue/servicios.json` |
 
 ### Persistencia
 

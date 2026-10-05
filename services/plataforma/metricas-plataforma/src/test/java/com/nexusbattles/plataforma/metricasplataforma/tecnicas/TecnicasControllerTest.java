@@ -5,6 +5,8 @@ import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.Comprobacio
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.ConfiguracionDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.InformeDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.MonitorDeDisponibilidad;
+import com.nexusbattles.plataforma.metricasplataforma.sondeo.ResultadoReciente;
+import com.nexusbattles.plataforma.metricasplataforma.sondeo.RondaEnParalelo;
 import com.nexusbattles.plataforma.observabilidad.PropiedadesDeLatencia;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -59,6 +61,24 @@ class TecnicasControllerTest {
         Clock reloj() {
             return Clock.fixed(AHORA, ZoneOffset.UTC);
         }
+
+        @Bean
+        RondaEnParalelo rondaDePrueba() {
+            return RondaEnParalelo.acotada(4, Duration.ofSeconds(2));
+        }
+
+        /**
+         * El tablero real sobre el recolector y el monitor dobles. Vigencia
+         * cero: cada peticion de la prueba recolecta, y lo que se comprueba es
+         * la forma de la respuesta (la vigencia la prueba TableroEnVivoTest).
+         */
+        @Bean
+        TableroEnVivo tableroEnVivo(ConfiguracionDeDisponibilidad configuracion, RecolectorDeMetricas recolector,
+                                    MonitorDeDisponibilidad monitor, PropiedadesDeLatencia latencia,
+                                    RondaEnParalelo ronda, Clock reloj) {
+            return new TableroEnVivo(configuracion, recolector, monitor, latencia, ronda,
+                    new ResultadoReciente<>(Duration.ZERO), reloj);
+        }
     }
 
     @Autowired
@@ -85,6 +105,7 @@ class TecnicasControllerTest {
         mockMvc.perform(get("/api/v1/tecnicas"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.generadoEn").value(AHORA.toString()))
+                .andExpect(jsonPath("$.desdeCache").value(false))
                 .andExpect(jsonPath("$.servicios.length()").value(2))
                 .andExpect(jsonPath("$.servicios[0].servicio").value("salas-partidas"))
                 .andExpect(jsonPath("$.servicios[0].tasaDeError").value(0.01))

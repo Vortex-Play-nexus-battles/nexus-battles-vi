@@ -399,6 +399,43 @@ services:
       # HU-MET-001 (#527): la observabilidad exige rol administrativo; el
       # emisor de los tokens es ms-identidad, igual que en el resto del bloque.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # RFINAL-08 — pantalla «Sistema» de la consola: donde vive cada servicio
+      # del catalogo (infrastructure/despliegue/servicios.json) en DEV.
+      #
+      # Hasta el 4-oct no se fijaba aqui y mandaban los valores de
+      # application.yml: ms-subastas seguia en srv-ms-subastas despues de
+      # mudarse al host de contenido (CAIDO con las subastas cargando),
+      # ms-chatbot decia NO_DESPLEGADO corriendo aqui desde el 29-sep, y los
+      # cinco de contenido salian NO_OBSERVABLE.
+      #
+      # Plataforma: por su nombre en esta red. Contenido: por la IP elastica de
+      # su host y el puerto que publica, los mismos que usa el borde
+      # (borde-dev.conf). Su grupo de seguridad admite a este host en 8101-8105
+      # y 8092 (infrastructure/entornos/contenido/reglas-entrada.json): el
+      # diagnostico desde plataforma (diagnostico-dev.yml, corrida 37080314532
+      # del 2-oct) vio 200 en los seis. Solo cuenta UP si contesta la salud de
+      # Actuator en JSON con status UP (SondaDeActuator). La prueba
+      # SondasDelDespliegueTest de metricas-plataforma falla si una de estas
+      # lineas deja de coincidir con el catalogo.
+      SISTEMA_SALUD_COMENTARIOS: ${SISTEMA_SALUD_COMENTARIOS:-http://srv-comentarios:8081/actuator/health}
+      SISTEMA_SALUD_CORREO: ${SISTEMA_SALUD_CORREO:-http://srv-correo:8082/actuator/health}
+      SISTEMA_SALUD_TORNEOS: ${SISTEMA_SALUD_TORNEOS:-http://srv-torneos:8083/actuator/health}
+      SISTEMA_SALUD_SALAS_PARTIDAS: ${SISTEMA_SALUD_SALAS_PARTIDAS:-http://srv-salas-partidas:8084/actuator/health}
+      SISTEMA_SALUD_NOTIFICACIONES: ${SISTEMA_SALUD_NOTIFICACIONES:-http://srv-notificaciones:8085/actuator/health}
+      SISTEMA_SALUD_MODERACION: ${SISTEMA_SALUD_MODERACION:-http://srv-moderacion-sanciones:8086/actuator/health}
+      SISTEMA_SALUD_METRICAS: ${SISTEMA_SALUD_METRICAS:-http://localhost:8087/actuator/health}
+      SISTEMA_SALUD_ADMIN_PARAMETROS: ${SISTEMA_SALUD_ADMIN_PARAMETROS:-http://srv-admin-parametros:8088/actuator/health}
+      SISTEMA_SALUD_MS_IDENTIDAD: ${SISTEMA_SALUD_MS_IDENTIDAD:-http://srv-ms-identidad:8089/actuator/health}
+      SISTEMA_SALUD_MS_ECOMMERCE: ${SISTEMA_SALUD_MS_ECOMMERCE:-http://srv-ms-ecommerce:8090/ecommerce/actuator/health}
+      SISTEMA_SALUD_MS_CUMPLIMIENTO: ${SISTEMA_SALUD_MS_CUMPLIMIENTO:-http://srv-ms-cumplimiento:8091/actuator/health}
+      SISTEMA_SALUD_MS_FINANZAS: ${SISTEMA_SALUD_MS_FINANZAS:-http://srv-ms-finanzas:8093/api/v1/actuator/health}
+      SISTEMA_SALUD_MS_CHATBOT: ${SISTEMA_SALUD_MS_CHATBOT:-http://srv-ms-chatbot:8094/api/v1/actuator/health}
+      SISTEMA_SALUD_MS_SUBASTAS: ${SISTEMA_SALUD_MS_SUBASTAS:-http://34.193.90.11:8092/api/v1/actuator/health}
+      SISTEMA_SALUD_HEROES: ${SISTEMA_SALUD_HEROES:-http://34.193.90.11:8101/actuator/health}
+      SISTEMA_SALUD_INVENTARIO: ${SISTEMA_SALUD_INVENTARIO:-http://34.193.90.11:8102/actuator/health}
+      SISTEMA_SALUD_PRODUCTOS: ${SISTEMA_SALUD_PRODUCTOS:-http://34.193.90.11:8103/actuator/health}
+      SISTEMA_SALUD_MOTOR_COMBATE: ${SISTEMA_SALUD_MOTOR_COMBATE:-http://34.193.90.11:8104/actuator/health}
+      SISTEMA_SALUD_MISIONES: ${SISTEMA_SALUD_MISIONES:-http://34.193.90.11:8105/actuator/health}
 
   srv-admin-parametros:
     <<: *servicio-plataforma

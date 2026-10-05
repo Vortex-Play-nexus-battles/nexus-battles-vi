@@ -624,8 +624,8 @@ function seccionSistema(consultarApi) {
     id: 'sistema',
     titulo: 'Estado de los servicios',
     descripcion:
-      'Sondeo real de la salud de cada servicio. Caído, fuera del host y no observable ' +
-      'son tres cosas distintas.',
+      'Sondeo real de la salud de cada servicio. Caído, lento, fuera del host y no observable ' +
+      'son cuatro cosas distintas.',
     recurso: '/admin/sistema/servicios',
     consultarApi,
     pintar: (datos) => {
@@ -635,11 +635,12 @@ function seccionSistema(consultarApi) {
         selloDeServicio(s.estado),
         s.detalle ?? '--',
       ]);
-      const partes = [
-        `${datos?.operativos ?? 0} operativos`,
-        `${datos?.caidos ?? 0} caídos`,
-        `${datos?.noDesplegados ?? 0} fuera del host`,
-      ];
+      const partes = [`${datos?.operativos ?? 0} operativos`, `${datos?.caidos ?? 0} caídos`];
+      // RFINAL-08: conectó y no contestó a tiempo. Solo se nombra si hay alguno.
+      if (datos?.lentos) {
+        partes.push(`${datos.lentos} lentos`);
+      }
+      partes.push(`${datos?.noDesplegados ?? 0} fuera del host`);
       if (datos?.noObservables) {
         partes.push(`${datos.noObservables} en otro host`);
       }
@@ -647,7 +648,19 @@ function seccionSistema(consultarApi) {
         clase: 't-meta',
         texto: `${partes.join(', ')}, de ${datos?.total ?? filas.length} catalogados.`,
       });
-      return [resumen, tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas })];
+      const piezas = [resumen];
+      // La ronda se reutiliza unos segundos (desdeCache): la hora dice de cuándo es.
+      if (datos?.instante) {
+        piezas.push(
+          h('p', {
+            clase: 't-meta',
+            datos: { zona: 'medido' },
+            texto: `Medido a las ${formatearInstante(datos.instante)}.`,
+          }),
+        );
+      }
+      piezas.push(tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas }));
+      return piezas;
     },
   });
 
@@ -675,6 +688,8 @@ function selloDeServicio(estado) {
     {
       OPERATIVO: 'ok',
       CAIDO: 'malo',
+      // Conectó y no contestó a tiempo: ni verde ni rojo (RFINAL-08).
+      LENTO: 'aviso',
       NO_DESPLEGADO: 'neutro',
       // Un servicio de otro host no va en rojo: no esta roto, esta fuera del
       // alcance de la sonda.
