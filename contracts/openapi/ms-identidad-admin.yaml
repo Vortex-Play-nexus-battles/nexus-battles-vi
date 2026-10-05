@@ -19,8 +19,25 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.1.0
+  version: 1.2.0
   description: |
+    ### Cambios en 1.2.0 (RFINAL-06 — implementado, todo aditivo)
+
+    - `EntradaDeDirectorio` gana `id`: la clave interna de la cuenta, la que
+      esperan `/admin/usuarios/{usuarioId}` y `/rbac/usuarios/{usuarioId}/rol`.
+      El parametro `UsuarioId` ya decia «la del directorio», pero el
+      directorio solo publicaba el `uid`: no habia forma de abrir la ficha de
+      una fila sin conocer un numero que ninguna pantalla mostraba.
+    - `GET /admin/jugadores` admite `ocultarPruebas` (opcional, `false` por
+      omision: sin el, el directorio responde igual que en 1.1.0). Con `true`
+      excluye EN LA CONSULTA, antes de paginar, las cuentas que crean las
+      pruebas automaticas; `total` y `totalPaginas` cuentan solo las que
+      quedan.
+    - `UsuarioAdministrado.id` es la clave de la CUENTA. Se construia con la
+      clave del perfil; coincide con la de la cuenta porque el perfil la
+      comparte (`perfiles_usuario.usuario_id` es su clave primaria), pero era
+      la de otro registro y nada lo garantizaba en el contrato.
+
     ### Cambios en 1.1.0 (B2, BACKEND-02 — implementado)
 
     - 1.1.0 (B2): implementadas `PUT /internal/usuarios/{uid}/estado-sancion`
@@ -89,6 +106,9 @@ paths:
       tags: [administracion]
       operationId: listarDirectorioDeJugadores
       summary: Directorio paginado de cuentas con busqueda
+      description: |
+        Las cuentas mas nuevas primero (`id` descendente). La busqueda, el
+        filtro de pruebas automaticas y la paginacion los hace el servidor.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -98,6 +118,23 @@ paths:
           description: Texto a buscar en apodo o correo (sin distinguir mayusculas).
           schema:
             type: string
+        - name: ocultarPruebas
+          in: query
+          required: false
+          description: |
+            1.2.0 — `true` excluye las cuentas creadas por las pruebas
+            automaticas (E2E, smoke, canarios, prueba del profesor y
+            laboratorio visual). Una cuenta lo es si su correo esta en un
+            dominio reservado para pruebas o si su apodo empieza por un prefijo
+            de pruebas. Las dos listas son configuracion del servicio, no de
+            este contrato: `IDENTIDAD_DIRECTORIO_PRUEBAS_DOMINIOS` (por
+            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (por
+            omision `qa_,smoke_,canario_`), sin distinguir mayusculas. Se
+            excluyen en la consulta, antes de paginar: `total` y
+            `totalPaginas` cuentan solo las que quedan. No borra ni marca nada.
+          schema:
+            type: boolean
+            default: false
         - name: page
           in: query
           required: false
@@ -589,8 +626,15 @@ components:
 
     EntradaDeDirectorio:
       type: object
-      required: [apodo, email, estado, bloqueada]
+      required: [id, apodo, email, estado, bloqueada]
       properties:
+        id:
+          type: integer
+          format: int64
+          description: |
+            1.2.0 — clave interna de la cuenta: la que esperan
+            `/admin/usuarios/{usuarioId}` y `/rbac/usuarios/{usuarioId}/rol`.
+            Sirve para abrir la ficha desde la fila; no es un dato para leer.
         uid:
           type: [string, 'null']
           format: uuid
@@ -622,6 +666,9 @@ components:
         id:
           type: integer
           format: int64
+          description: |
+            Clave interna de la CUENTA, la misma de la ruta y del directorio
+            (1.2.0: se construia con la del perfil, ver el cambio).
         apodo:
           type: string
         email:

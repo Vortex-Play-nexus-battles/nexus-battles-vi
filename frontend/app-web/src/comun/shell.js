@@ -94,11 +94,27 @@ export const SECCIONES = Object.freeze([
  * apunta a una vista de `MATRIZ`, y `MATRIZ` se comprueba contra el disco.
  * Un moderador no ve «Parámetros» porque `puedeVer` dice que no, no porque
  * aquí haya una lista aparte.
+ *
+ * `barra: false` deja la herramienta en el aterrizaje de la consola
+ * (`consola.js`) y fuera de la barra de navegación.
  */
 export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen', vista: 'consola', icono: 'panel' },
   { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
+  // RFINAL-06 — la vista existía (RF-RBAC-003) y ninguna herramienta llevaba a
+  // ella: solo se llegaba escribiendo su dirección. La matriz la deja abrir
+  // solo al super administrador. Va en el aterrizaje y no en la barra: su
+  // vista ya marca «Usuarios» como sección activa, y la barra del super
+  // administrador está medida para caber en una fila (componentes.css,
+  // UX-GAME-6 y B3); un destino más, y tan largo, la partiría en dos.
+  {
+    id: 'crear-cuenta-admin',
+    etiqueta: 'Crear cuenta administrativa',
+    vista: 'crear-cuenta-admin',
+    icono: 'usuarios',
+    barra: false,
+  },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
   // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
   // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
@@ -770,6 +786,9 @@ export function montarArmazonAdmin(
     atributos: { id: 'cabecera-nav', 'aria-label': 'Herramientas de operación' },
   });
   for (const seccion of SECCIONES_CONSOLA) {
+    if (seccion.barra === false) {
+      continue;
+    }
     if (seccion.vista !== 'consola' && !destinoVisible(seccion.vista, sesion)) {
       continue;
     }

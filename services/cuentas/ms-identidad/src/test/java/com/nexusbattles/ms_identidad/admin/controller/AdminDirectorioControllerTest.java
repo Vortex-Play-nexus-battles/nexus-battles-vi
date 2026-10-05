@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
+import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.dto.AdminUsuarioDirectorioResponse;
 import com.nexusbattles.ms_identidad.admin.dto.PaginaAdminResponse;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -16,6 +18,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 
 import java.lang.reflect.RecordComponent;
 import java.time.LocalDateTime;
@@ -29,7 +32,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /**
@@ -48,8 +53,18 @@ class AdminDirectorioControllerTest {
     /** Sin filtro es cadena vacia, nunca null: un null sin tipo rompe la consulta. */
     private static final String SIN_FILTRO = "";
 
+    /** El criterio por omision de application.properties (RFINAL-06). */
+    private static final CuentasDePrueba CRITERIO = new CuentasDePrueba("nexus.test", "qa_,smoke_,canario_");
+
     @Mock
     private UsuarioRepository usuarioRepository;
+
+    @Mock
+    private DirectorioDeCuentas directorio;
+
+    private AdminDirectorioController controlador() {
+        return new AdminDirectorioController(usuarioRepository, directorio, CRITERIO);
+    }
 
     private static Usuario usuario(String apodo, String email, String rol) {
         Usuario usuario = new Usuario();
@@ -77,9 +92,9 @@ class AdminDirectorioControllerTest {
     @Test
     void sinFiltroConsultaTodoYUsaLaPaginaPorDefecto() {
         devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador.listar(null, 0, 20);
+        PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador.listar(null, false, 0, 20);
 
         verify(usuarioRepository).buscarParaDirectorio(eq(SIN_FILTRO), any(Pageable.class));
         Pageable usado = pageableUsado();
@@ -94,9 +109,9 @@ class AdminDirectorioControllerTest {
     @Test
     void elFiltroEnBlancoEquivaleAConsultarTodo() {
         devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        controlador.listar("   ", 0, 20);
+        controlador.listar("   ", false, 0, 20);
 
         verify(usuarioRepository).buscarParaDirectorio(eq(SIN_FILTRO), any(Pageable.class));
     }
@@ -104,9 +119,9 @@ class AdminDirectorioControllerTest {
     @Test
     void recortaLosEspaciosDelFiltro() {
         devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        controlador.listar("  Ana  ", 0, 20);
+        controlador.listar("  Ana  ", false, 0, 20);
 
         verify(usuarioRepository).buscarParaDirectorio(eq("Ana"), any(Pageable.class));
     }
@@ -118,9 +133,9 @@ class AdminDirectorioControllerTest {
     @Test
     void recortaElTamanoDePaginaAlTecho() {
         devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 100), 0));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        controlador.listar(null, 0, 10000);
+        controlador.listar(null, false, 0, 10000);
 
         assertEquals(100, pageableUsado().getPageSize());
     }
@@ -128,9 +143,9 @@ class AdminDirectorioControllerTest {
     @Test
     void normalizaPaginaNegativaYTamanoCero() {
         devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 1), 0));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        controlador.listar(null, -3, 0);
+        controlador.listar(null, false, -3, 0);
 
         Pageable usado = pageableUsado();
         assertEquals(0, usado.getPageNumber(), "una pagina negativa no existe; se atiende la primera");
@@ -147,9 +162,9 @@ class AdminDirectorioControllerTest {
         jugador.setCreadoEn(LocalDateTime.of(2026, 1, 5, 10, 0));
         jugador.setUltimoAcceso(LocalDateTime.of(2026, 9, 20, 18, 30));
         devolviendo(new PageImpl<>(List.of(jugador), PageRequest.of(0, 20), 1));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        AdminUsuarioDirectorioResponse fila = controlador.listar(null, 0, 20).contenido().get(0);
+        AdminUsuarioDirectorioResponse fila = controlador.listar(null, false, 0, 20).contenido().get(0);
 
         assertEquals("Ana", fila.apodo());
         assertEquals("ana@nexus.test", fila.email());
@@ -173,9 +188,9 @@ class AdminDirectorioControllerTest {
     void trasladaLosContadoresDeLaPagina() {
         devolviendo(new PageImpl<>(List.of(usuario("Ana", "ana@nexus.test", "JUGADOR")),
                 PageRequest.of(1, 5), 11));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador.listar(null, 1, 5);
+        PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta = controlador.listar(null, false, 1, 5);
 
         assertEquals(1, respuesta.pagina());
         assertEquals(5, respuesta.tamano());
@@ -191,9 +206,9 @@ class AdminDirectorioControllerTest {
         jugador.setBloqueadoHasta(LocalDateTime.now().plusMinutes(10));
         jugador.setSuspendidoHasta(LocalDateTime.of(2026, 12, 31, 0, 0));
         devolviendo(new PageImpl<>(List.of(jugador), PageRequest.of(0, 20), 1));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        AdminUsuarioDirectorioResponse fila = controlador.listar(null, 0, 20).contenido().get(0);
+        AdminUsuarioDirectorioResponse fila = controlador.listar(null, false, 0, 20).contenido().get(0);
 
         assertTrue(fila.bloqueada());
         assertEquals(LocalDateTime.of(2026, 12, 31, 0, 0), fila.suspendidoHasta());
@@ -205,9 +220,64 @@ class AdminDirectorioControllerTest {
         Usuario jugador = usuario("Cris", "cris@nexus.test", "JUGADOR");
         jugador.setBloqueadoHasta(LocalDateTime.now().minusMinutes(1));
         devolviendo(new PageImpl<>(List.of(jugador), PageRequest.of(0, 20), 1));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        assertFalse(controlador.listar(null, 0, 20).contenido().get(0).bloqueada());
+        assertFalse(controlador.listar(null, false, 0, 20).contenido().get(0).bloqueada());
+    }
+
+    /**
+     * RFINAL-06 — sin {@code ocultarPruebas} el directorio responde con la
+     * misma consulta de siempre: quien no manda el parametro no nota nada.
+     */
+    @Test
+    void sinOcultarPruebasLaConsultaEsLaDeSiempre() {
+        devolviendo(new PageImpl<>(List.of(), PageRequest.of(0, 20), 0));
+
+        controlador().listar("Ana", false, 0, 20);
+
+        verify(usuarioRepository).buscarParaDirectorio(eq("Ana"), any(Pageable.class));
+        verifyNoInteractions(directorio);
+    }
+
+    /**
+     * RFINAL-06 — con {@code ocultarPruebas} las cuentas de las pruebas se
+     * excluyen en la consulta: la pagina, el tamano y el orden son los mismos,
+     * y el total que llega es el de las que quedan, no el de la tabla.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void ocultarPruebasExcluyeEnLaConsultaAntesDePaginar() {
+        Usuario real = usuario("Ana", "ana@ejemplo.org", "JUGADOR");
+        when(directorio.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(real), PageRequest.of(2, 20), 41));
+
+        PaginaAdminResponse<AdminUsuarioDirectorioResponse> respuesta =
+                controlador().listar("  Ana  ", true, 2, 20);
+
+        ArgumentCaptor<Pageable> pedido = ArgumentCaptor.forClass(Pageable.class);
+        verify(directorio).findAll(any(Specification.class), pedido.capture());
+        assertEquals(2, pedido.getValue().getPageNumber());
+        assertEquals(20, pedido.getValue().getPageSize());
+        assertEquals(Sort.by(Sort.Direction.DESC, "id"), pedido.getValue().getSort());
+        verify(usuarioRepository, never()).buscarParaDirectorio(any(), any(Pageable.class));
+        assertEquals(41, respuesta.total());
+        assertEquals("Ana", respuesta.contenido().get(0).apodo());
+    }
+
+    /**
+     * RFINAL-06 — la fila lleva la clave de la cuenta: la que esperan la ficha
+     * de gestion y el cambio de rol. Sin ella no se podia abrir la ficha de una
+     * cuenta desde el directorio sin conocer un numero que nadie veia.
+     */
+    @Test
+    void laFilaLlevaLaClaveDeLaCuenta() {
+        Usuario jugador = usuario("Ana", "ana@ejemplo.org", "JUGADOR");
+        jugador.setId(42L);
+        devolviendo(new PageImpl<>(List.of(jugador), PageRequest.of(0, 20), 1));
+
+        AdminUsuarioDirectorioResponse fila = controlador().listar(null, false, 0, 20).contenido().get(0);
+
+        assertEquals(42L, fila.id());
     }
 
     /**
@@ -220,9 +290,9 @@ class AdminDirectorioControllerTest {
         Usuario jugador = usuario("SinRol", "sinrol@nexus.test", null);
         jugador.setCreadoEn(null);
         devolviendo(new PageImpl<>(List.of(jugador), PageRequest.of(0, 20), 1));
-        AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository);
+        AdminDirectorioController controlador = controlador();
 
-        AdminUsuarioDirectorioResponse fila = controlador.listar(null, 0, 20).contenido().get(0);
+        AdminUsuarioDirectorioResponse fila = controlador.listar(null, false, 0, 20).contenido().get(0);
 
         assertNull(fila.rol());
         assertNull(fila.creadoEn());

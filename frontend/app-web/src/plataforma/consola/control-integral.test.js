@@ -42,6 +42,7 @@ const conFallo = (resultado, estado, recurso) => ({
 const JUGADORES = {
   contenido: [
     {
+      id: 15,
       uid: '11111111-2222-3333-4444-555555555555',
       apodo: 'Ana',
       email: 'ana@nexus.test',
@@ -53,6 +54,7 @@ const JUGADORES = {
       bloqueada: false,
     },
     {
+      id: 16,
       uid: '22222222-2222-3333-4444-555555555555',
       apodo: 'Beto',
       email: 'beto@nexus.test',
@@ -69,6 +71,72 @@ const JUGADORES = {
   total: 42,
   totalPaginas: 3,
 };
+
+/** `TorneoResumen` de torneos.yaml 1.2.0, tal cual. */
+const TORNEO = {
+  id: '9a8b7c6d-1111-2222-3333-444455556666',
+  nombre: 'Copa Nexo',
+  estado: 'INSCRIPCIONES_ABIERTAS',
+  creadoEn: '2026-10-01T12:00:00Z',
+  inscripcionesCierranEn: '2026-10-31T23:00:00Z',
+  costoInscripcion: 0,
+  equiposInscritos: 3,
+  cupos: 8,
+  campeonEquipoId: null,
+};
+
+/** `PaginaDeSubastas` de ms-subastas-listado.yaml 1.2.0, tal cual. */
+const SUBASTAS = {
+  contenido: [
+    {
+      id: '7d1f0c2e-aaaa-bbbb-cccc-ddddeeeeffff',
+      estado: 'ACTIVA',
+      nombreProducto: 'Espada corta',
+      tipoProducto: 'ARMA',
+      rareza: null,
+      precioInicial: 50,
+      ofertaVigente: 65,
+      precioCompraInmediata: null,
+      cantidadPujas: 2,
+      fechaFin: '2026-10-06T18:00:00Z',
+      esMaestroDeJuego: false,
+      vendedorId: null,
+      esPropia: false,
+    },
+  ],
+  pagina: 0,
+  tamanoPagina: 16,
+  totalElementos: 13,
+  totalPaginas: 1,
+};
+
+/** `PaginaDeSalas` de salas-partidas.yaml: sin nombre de sala ni apodo de anfitrión. */
+const SALAS = {
+  contenido: [
+    {
+      id: '3c2b1a00-1234-4321-8888-999900001111',
+      estado: 'ABIERTA',
+      modalidad: 'UNO_CONTRA_UNO',
+      maximoParticipantes: 2,
+      ocupacion: 1,
+      recompensaCreditos: 100,
+      incluirHeroeIA: false,
+      heroesIA: 0,
+      privada: true,
+      idAnfitrion: '0f0e0d0c-5555-6666-7777-888899990000',
+      participantes: ['0f0e0d0c-5555-6666-7777-888899990000'],
+      idPartida: null,
+      creadaEn: '2026-10-04T15:00:00Z',
+    },
+  ],
+  pagina: 0,
+  tamano: 16,
+  totalElementos: 1,
+  totalPaginas: 1,
+};
+
+/** Un UUID a la vista es un dato que nadie puede leer (RFINAL-06). */
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 /** Un sistema medio caido, como el del entorno de demostracion. */
 function apiSimulada(sobrescribir = {}) {
@@ -98,7 +166,7 @@ function apiSimulada(sobrescribir = {}) {
       });
     }
     if (recurso.startsWith('/torneos')) {
-      return conDatos([{ nombre: 'Copa Nexo', estado: 'ABIERTO', fechaInicio: '2026-10-01' }]);
+      return conDatos([TORNEO]);
     }
     if (recurso.startsWith('/sanciones/metricas')) {
       return conDatos({ total: 0, apelaciones: { PENDIENTE: 0 } });
@@ -254,7 +322,9 @@ describe('directorio de jugadores', () => {
     montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
     await asentar();
 
-    const enlaces = [...raiz.querySelectorAll('[data-panel="directorio"] tbody a')];
+    const enlaces = [
+      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="ver-sanciones"]'),
+    ];
     expect(enlaces).toHaveLength(2);
     const destino = new URL(enlaces[0].href);
     expect(destino.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
@@ -287,7 +357,9 @@ describe('directorio de jugadores', () => {
       .dispatchEvent(new window.Event('submit', { cancelable: true }));
     await asentar();
 
-    expect(consultarApi.mock.calls.at(-1)[0]).toBe('/admin/jugadores?page=0&size=20&buscar=Ana');
+    expect(consultarApi.mock.calls.at(-1)[0]).toBe(
+      '/admin/jugadores?page=0&size=20&buscar=Ana&ocultarPruebas=true',
+    );
   });
 
   test('la paginacion avanza y el boton de anterior arranca deshabilitado', async () => {
@@ -303,7 +375,96 @@ describe('directorio de jugadores', () => {
     directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
     await asentar();
 
-    expect(consultarApi.mock.calls.at(-1)[0]).toBe('/admin/jugadores?page=1&size=20');
+    expect(consultarApi.mock.calls.at(-1)[0]).toBe(
+      '/admin/jugadores?page=1&size=20&ocultarPruebas=true',
+    );
+  });
+
+  /**
+   * RFINAL-06 — «las primeras veinte filas del directorio son cuentas qa_,
+   * smoke_ y canario» (revisión del 4-oct). No se borra nada: el servidor las
+   * excluye antes de paginar (ms-identidad-admin.yaml 1.2.0,
+   * `ocultarPruebas`), así que la página y el total cuadran.
+   */
+  test('RFINAL-06: abre ocultando, en el servidor, las cuentas de pruebas automáticas', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const casilla = directorio.querySelector('input[type="checkbox"][name="ocultarPruebas"]');
+    expect(casilla.checked).toBe(true);
+    expect(casilla.closest('label').textContent).toContain(
+      'Ocultar cuentas de pruebas automáticas',
+    );
+    expect(consultarApi.mock.calls.map((c) => c[0]).filter((r) => r.includes('size=20'))).toEqual([
+      '/admin/jugadores?page=0&size=20&ocultarPruebas=true',
+    ]);
+    expect(directorio.querySelector('caption').textContent).toContain(
+      'sin contar las de pruebas automáticas',
+    );
+  });
+
+  test('RFINAL-06: quitar la casilla las vuelve a pedir, desde la primera página', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    const casilla = directorio.querySelector('input[name="ocultarPruebas"]');
+    casilla.checked = false;
+    casilla.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    expect(consultarApi.mock.calls.at(-1)[0]).toBe('/admin/jugadores?page=0&size=20');
+    expect(directorio.querySelector('caption').textContent).toContain('cuentas en total');
+  });
+
+  /**
+   * RFINAL-06 — «hoy solo se edita tras buscar por ID». Cada fila abre la
+   * ficha de gestión de esa cuenta con su clave (`id`, 1.2.0), sin copiar
+   * nada; la clave no se pinta como dato.
+   */
+  test('RFINAL-06: cada cuenta abre su ficha de gestión sin copiar identificadores', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const enlaces = [
+      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="gestionar"]'),
+    ];
+    expect(enlaces).toHaveLength(2);
+    const destino = new URL(enlaces[0].href);
+    expect(destino.pathname).toMatch(/cuentas\/gestion-usuarios\.html$/);
+    expect(destino.searchParams.get('usuario')).toBe('15');
+    expect(enlaces[0].textContent).toBe('Gestionar');
+    expect(enlaces[0].getAttribute('aria-label')).toBe('Gestionar la cuenta de Ana');
+  });
+
+  test('una cuenta sin clave (servicio anterior a 1.2.0) dice «sin dato» en vez de un enlace roto', async () => {
+    const sinClave = {
+      ...JUGADORES,
+      contenido: JUGADORES.contenido.map(({ id: _id, ...resto }) => resto),
+    };
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      { consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=20': conDatos(sinClave) }) },
+    );
+    await asentar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    expect(directorio.querySelectorAll('a[data-accion="gestionar"]')).toHaveLength(0);
+    expect(directorio.textContent).toContain('sin dato');
   });
 });
 
@@ -400,9 +561,30 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     await asentar();
 
     const pedidas = consultarApi.mock.calls.map((c) => c[0]);
-    expect(pedidas).toContain('/admin/auditoria?page=0&size=15');
+    expect(pedidas.some((r) => r.startsWith('/admin/auditoria?'))).toBe(true);
     // /admin/auditoria/eventos acepta POST; a un GET responde 405.
     expect(pedidas.some((r) => r.startsWith('/admin/auditoria/eventos'))).toBe(false);
+  });
+
+  /**
+   * RFINAL-06 (revisión del 4-oct): el panel decía «últimos quince eventos» y
+   * pintaba los más antiguos (23 y 24 de septiembre), porque sin `sort` el
+   * orden lo decide la base de datos.
+   */
+  test('la bitácora pide los quince más recientes, con desempate estable', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const pedida = consultarApi.mock.calls
+      .map((c) => c[0])
+      .find((r) => r.startsWith('/admin/auditoria?'));
+    const consulta = new URLSearchParams(pedida.split('?')[1]);
+    expect(consulta.get('page')).toBe('0');
+    expect(consulta.get('size')).toBe('15');
+    expect(consulta.getAll('sort')).toEqual(['fechaHora,desc', 'id,desc']);
   });
 
   test('economia pide el historial consultable, no un libro mayor inexistente', async () => {
@@ -451,6 +633,79 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     expect(sanciones.textContent).toContain('ADVERTENCIA');
     expect(sanciones.textContent).toContain('Apelaciones pendiente');
     expect(sanciones.textContent).toContain('Moderadores activos');
+  });
+});
+
+/**
+ * RFINAL-06 — revisión del super administrador en DEV (4-oct, §3.2): «Subastas
+ * activas» con elemento y cierre «--», «Torneos» con inicio «--» y «Salas y
+ * partidas» con el id de la sala y el anfitrión «--». El panel leía campos que
+ * ningún contrato publica (`elemento.nombre`, `cierraEn`, `fechaInicio`,
+ * `anfitrion`). Ahora lee los del contrato de cada fuente, y lo que el
+ * contrato no trae se dice («sin dato»), no se rellena con un guion ni con un
+ * identificador.
+ */
+describe('cada panel lee los campos de su contrato', () => {
+  async function montarCon(sobrescribir) {
+    const raiz = pagina();
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada(sobrescribir) });
+    await asentar();
+    return raiz;
+  }
+
+  const celdas = (panel) =>
+    [...panel.querySelectorAll('tbody td')].map((td) => td.textContent.trim());
+  const encabezados = (panel) =>
+    [...panel.querySelectorAll('thead th')].map((th) => th.textContent.trim());
+
+  test('subastas: el producto, la oferta vigente, las pujas y el cierre; nunca el id', async () => {
+    const raiz = await montarCon({ '/subastas': conDatos(SUBASTAS) });
+    const panel = raiz.querySelector('[data-panel="subastas"]');
+
+    expect(encabezados(panel)).toEqual(['Elemento', 'Precio actual', 'Pujas', 'Cierra']);
+    const fila = celdas(panel);
+    expect(fila.slice(0, 3)).toEqual(['Espada corta', '65', '2']);
+    expect(fila[3]).toBe(formatearFecha('2026-10-06T18:00:00Z'));
+    expect(fila).not.toContain('--');
+    expect(panel.textContent).not.toMatch(UUID);
+    expect(panel.querySelector('caption').textContent).toContain('13');
+  });
+
+  test('torneos: equipos inscritos de los cupos y el cierre de inscripciones', async () => {
+    const raiz = await montarCon({});
+    const panel = raiz.querySelector('[data-panel="torneos"]');
+
+    expect(encabezados(panel)).toEqual(['Torneo', 'Estado', 'Equipos', 'Inscripciones hasta']);
+    const fila = celdas(panel);
+    expect(fila.slice(0, 3)).toEqual(['Copa Nexo', 'INSCRIPCIONES_ABIERTAS', '3 de 8']);
+    expect(fila[3]).toBe(formatearFecha('2026-10-31T23:00:00Z'));
+    expect(panel.textContent).not.toMatch(UUID);
+  });
+
+  test('salas: modalidad y ocupación; el anfitrión que el contrato no trae es «sin dato»', async () => {
+    const raiz = await montarCon({ '/salas': conDatos(SALAS) });
+    const panel = raiz.querySelector('[data-panel="salas"]');
+
+    expect(encabezados(panel)).toEqual(['Sala', 'Estado', 'Jugadores', 'Creada', 'Anfitrión']);
+    const fila = celdas(panel);
+    expect(fila.slice(0, 3)).toEqual(['1 contra 1 · privada', 'ABIERTA', '1 de 2']);
+    expect(fila[3]).toBe(formatearFecha('2026-10-04T15:00:00Z'));
+    expect(fila[4]).toBe('sin dato');
+    expect(panel.textContent).not.toMatch(UUID);
+  });
+
+  test('un campo que la respuesta no trae se dice «sin dato», no «--»', async () => {
+    const raiz = await montarCon({
+      '/subastas': conDatos({ contenido: [{ id: SUBASTAS.contenido[0].id }] }),
+      '/torneos': conDatos([{ id: TORNEO.id }]),
+    });
+
+    for (const id of ['subastas', 'torneos']) {
+      const fila = celdas(raiz.querySelector(`[data-panel="${id}"]`));
+      expect(fila).not.toContain('--');
+      expect(fila.join(' ')).not.toMatch(UUID);
+      expect(fila).toContain('sin dato');
+    }
   });
 });
 
