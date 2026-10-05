@@ -7,17 +7,18 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../plataforma/notificaciones/banner-rotativo.css" />
   </head>
   <body>
     <div data-cabecera-app></div>
 
     <main class="pagina home">
-      <section
-        class="home__banners"
-        data-zona="bloque-banners"
-        aria-label="Anuncios"
-        hidden
-      ></section>
+      <!--
+        RF-NOT-002 — el banner rotativo con los anuncios vigentes. Lo pinta
+        `plataforma/notificaciones/banner-rotativo.js` como su propia región
+        con nombre; sin vigentes, o sin servicio, esta zona se queda oculta.
+      -->
+      <div data-zona="bloque-banners" hidden></div>
       <!--
         UX-R3.2 — la portada del jugador.
 

@@ -1593,6 +1593,35 @@ function rutasDelCatalogo() {
   ];
 }
 
+/* ---------------------------------------------------------------------------
+   HU-PRD-013 (#854) y RF-NOT-002 (#533) — banners. DATOS DE LABORATORIO con
+   la forma del esquema `Banner` de productos.yaml 1.6.0.
+   ------------------------------------------------------------------------- */
+
+function bannerDeLaboratorio(id, contenido, cambios = {}) {
+  return {
+    id: `b0000000-0000-4000-8000-00000000000${id}`,
+    contenido,
+    publicarDesde: new Date(Date.now() - 3_600_000).toISOString(),
+    vigenteHasta: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    retirado: false,
+    creadoEn: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    modificadoEn: new Date(Date.now() - 2 * 3_600_000).toISOString(),
+    ...cambios,
+  };
+}
+
+/** Los vigentes que rota la home: dos, para que se pinte como carrusel. */
+function bannersVigentes() {
+  return [
+    bannerDeLaboratorio(
+      '1',
+      'Temporada de otoño: nuevos prototipos en la tienda hasta el domingo.',
+    ),
+    bannerDeLaboratorio('2', 'Mantenimiento programado el martes de 2:00 a 3:00 a. m.'),
+  ];
+}
+
 const UID_SANCIONADO = 'dddddddd-7777-4777-8777-000000000001';
 
 function sancionDeLaboratorio(cambios = {}) {
@@ -2132,12 +2161,18 @@ export const ESCENARIOS = [
           ],
         }),
       ],
+      // RF-NOT-002 — el banner rotativo, con dos vigentes para que se audite
+      // como carrusel (controles, puntos y región con nombre). `Banner` de
+      // productos.yaml 1.6.0.
+      ['**/api/v1/banners/vigentes', json(bannersVigentes())],
     ],
     exige: [
       '[data-zona="saldo"]',
       '[data-zona="heroe"]',
       '[data-zona="torneo"]',
       '[data-zona="avisos"]',
+      '[data-componente="banner-rotativo"] [data-banner]',
+      '[data-accion="pausar-banner"]',
     ],
   },
   {
@@ -2816,6 +2851,28 @@ export const ESCENARIOS = [
       await pagina.locator('.dialogo--hoja').waitFor({ timeout: 10_000 });
     },
     exige: ['.dialogo--hoja .hoja-producto__formulario', '[data-accion="suspender"]'],
+  },
+  {
+    // HU-PRD-013 (#854) — la gestión de banners en la consola: uno vigente y
+    // uno retirado (su «Retirar» deshabilitado), con sus fechas.
+    id: 'banners-admin',
+    titulo: 'consola: banners programados, uno vigente y uno retirado',
+    ruta: 'contenido/productos/banners.html',
+    sesion: SESION_ADMIN_CATALOGO,
+    rutas: [
+      [
+        /\/api\/v1\/banners$/,
+        json([
+          ...bannersVigentes().slice(0, 1),
+          bannerDeLaboratorio('3', 'Doble de créditos el fin de semana pasado.', {
+            publicarDesde: new Date(Date.now() - 9 * 86_400_000).toISOString(),
+            vigenteHasta: new Date(Date.now() - 7 * 86_400_000).toISOString(),
+            retirado: true,
+          }),
+        ]),
+      ],
+    ],
+    exige: ['.banners__lista article', 'form textarea[name="contenido"]'],
   },
   {
     id: 'mis-sanciones-suspendida',

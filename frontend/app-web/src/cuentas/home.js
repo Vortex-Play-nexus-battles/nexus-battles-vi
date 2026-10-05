@@ -37,6 +37,8 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
+import { listarVigentes } from '../contenido/productos/cliente-banners.js';
+import { montarBannerRotativo } from '../plataforma/notificaciones/banner-rotativo.js';
 
 /** Accesos fijos de la home. Rutas reales del repo, ninguna inventada. */
 export const ACCESOS = Object.freeze([
@@ -407,7 +409,9 @@ export function montarHome(
 
   pintarAccesos(zonaAccesos);
 
-  cargarBannersVigentes(zonaBanners, fetchImpl);
+  // RF-NOT-002: los anuncios vigentes rotan arriba; sin vigentes o sin
+  // servicio la zona sigue oculta y el resto de la home no se entera.
+  montarBannerRotativo(zonaBanners, { consultar: () => listarVigentes({ fetchImpl }) });
 
   /** Cada bloque se pide por su cuenta: uno caído no tumba la home. */
   async function cargar(clave, construir) {
@@ -446,25 +450,6 @@ export function montarHome(
 
   cargarTodo();
   return { recargar: cargarTodo };
-}
-
-/** Muestra únicamente anuncios que el servidor declara vigentes. */
-export async function cargarBannersVigentes(zona, fetchImpl = fetchWithHttpErrorInterceptor) {
-  if (!zona) {
-    return;
-  }
-  const respuesta = await pedir('/api/v1/banners/vigentes', fetchImpl);
-  const banners = respuesta.ok && Array.isArray(respuesta.datos) ? respuesta.datos : [];
-  vaciar(zona);
-  if (!banners.length) {
-    zona.hidden = true;
-    return;
-  }
-  zona.hidden = false;
-  zona.append(
-    h('p', { clase: 'home__sobretitulo', texto: 'Anuncio del Nexo' }),
-    h('p', { texto: banners[0].contenido }),
-  );
 }
 
 /** @param {HTMLElement|null} zona */
