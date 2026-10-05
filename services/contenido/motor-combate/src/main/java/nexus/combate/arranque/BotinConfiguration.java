@@ -1,6 +1,7 @@
 package nexus.combate.arranque;
 
 import java.net.URI;
+import java.util.SplittableRandom;
 import java.util.concurrent.ThreadLocalRandom;
 import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
 import nexus.combate.CatalogoBotin;
@@ -65,7 +66,10 @@ public class BotinConfiguration {
                 inventario,
                 catalogo,
                 transferidor,
-                limite -> ThreadLocalRandom.current().nextInt(limite));
+                operacionId -> {
+                    SplittableRandom azar = new SplittableRandom(operacionId.hashCode());
+                    return azar::nextInt;
+                });
     }
 
     @Bean

@@ -87,7 +87,8 @@ public class SeguridadConfig {
         http.authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/combate/ataques").hasRole("SERVICIO")
-                .requestMatchers(HttpMethod.POST, "/api/v1/combate/acciones", "/api/v1/combate/turnos")
+                .requestMatchers(HttpMethod.POST, "/api/v1/combate/acciones", "/api/v1/combate/turnos",
+                        "/api/v1/combate/botin/cierres")
                 .hasRole("SERVICIO")
                 .requestMatchers(HttpMethod.GET, "/api/v1/combate/distribuciones").authenticated()
                 .anyRequest().authenticated());

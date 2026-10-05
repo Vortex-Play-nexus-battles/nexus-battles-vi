@@ -46,7 +46,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Motor de combate
-  version: 1.2.0
+  version: 1.3.0
   description: |
     Reglas del combate de THE NEXUS BATTLES VI (seccion 6 del documento del
     curso): tirada de ataque contra la defensa, tabla de efectos de 8.000
@@ -64,6 +64,9 @@ info:
     Cambios: 1.1.0 (R8.1) cerro la resolucion a credenciales de servicio.
     1.2.0 (B7) anade `/acciones` y `/turnos`, pasa el indice a una normal
     real y corrige el dano de `/ataques` (ver el comentario de cabecera).
+    1.3.0 (#797) anade `/botin/cierres`, el borde idempotente que usa
+    `salas-partidas` al finalizar un combate para seleccionar y transferir el
+    objeto equipado de mayor tasa de caida de cada derrotado.
   license:
     name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
 
@@ -208,6 +211,47 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
 
+  /api/v1/combate/botin/cierres:
+    post:
+      tags: [Combate]
+      operationId: resolverBotinAlCerrarPartida
+      security: [{ tokenDeServicio: [] }]
+      summary: Selecciona y transfiere el equipo perdido al cerrar una partida
+      description: |
+        `salas-partidas` informa el resultado definitivo. Por cada participante
+        derrotado se considera únicamente su equipo actualmente equipado, se
+        excluyen los objetos almacenados y las habilidades épicas, y se
+        selecciona un solo objeto: el de mayor `tasaDeCaida`.
+
+        En partidas por equipos, cada objeto se asigna de forma pseudoaleatoria
+        a uno de los ganadores. La selección usa `partidaId` como semilla para
+        que un reintento produzca las mismas asignaciones. Todas las
+        transferencias se envían a inventario en una única operación con la
+        clave `botin-partida:{partidaId}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CierreBotinPartida'
+      responses:
+        '200':
+          description: Botín resuelto y transferido, o lista vacía si nadie pierde equipo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResultadoBotinPartida'
+        '400':
+          description: Cierre incompleto o composición de participantes inválida
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: Productos o inventario no permitieron resolver la transferencia
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
   /api/v1/combate/ataques:
     post:
       tags: [Combate]
@@ -326,6 +370,80 @@ components:
       description: Token de cualquier usuario autenticado (ADR-002).
 
   schemas:
+
+    CierreBotinPartida:
+      type: object
+      additionalProperties: false
+      required: [partidaId, equipoGanadorId, participantes]
+      properties:
+        partidaId:
+          type: string
+          format: uuid
+        equipoGanadorId:
+          type: string
+          minLength: 1
+        participantes:
+          type: array
+          minItems: 2
+          maxItems: 6
+          items: { $ref: '#/components/schemas/ParticipanteBotin' }
+
+    ParticipanteBotin:
+      type: object
+      additionalProperties: false
+      required: [combatienteId, equipoId, propietarioId, heroeInventarioId]
+      properties:
+        combatienteId:
+          type: string
+          minLength: 1
+        equipoId:
+          type: string
+          minLength: 1
+        propietarioId:
+          type: string
+          minLength: 1
+        heroeInventarioId:
+          type: string
+          minLength: 1
+
+    ResultadoBotinPartida:
+      type: object
+      additionalProperties: false
+      required: [partidaId, asignaciones]
+      properties:
+        partidaId:
+          type: string
+          format: uuid
+        asignaciones:
+          type: array
+          items: { $ref: '#/components/schemas/AsignacionBotin' }
+
+    AsignacionBotin:
+      type: object
+      additionalProperties: false
+      required:
+        - combatienteDerrotadoId
+        - elementoId
+        - productoId
+        - propietarioGanadorId
+        - tasaDeCaida
+      properties:
+        combatienteDerrotadoId:
+          type: string
+          minLength: 1
+        elementoId:
+          type: string
+          minLength: 1
+        productoId:
+          type: string
+          minLength: 1
+        propietarioGanadorId:
+          type: string
+          minLength: 1
+        tasaDeCaida:
+          type: number
+          minimum: 0
+          maximum: 100
 
     # ---------------------------------------------------------------- 1.2.0
     PeticionDeAccion:

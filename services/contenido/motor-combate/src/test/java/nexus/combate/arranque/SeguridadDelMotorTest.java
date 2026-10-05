@@ -128,12 +128,17 @@ class SeguridadDelMotorTest {
                   "combatientes": [ { "id": "a", "prototipo": "Guerrero Armas", "vidaActual": 44 } ] }
                 """;
 
+        private static final String BOTIN_INVALIDO = "{}";
+
         @Test
         @DisplayName("sin token: 401 en las dos rutas")
         void sinTokenEs401() throws Exception {
             mvc.perform(post("/api/v1/combate/acciones").contentType("application/json").content(ACCION))
                     .andExpect(status().isUnauthorized());
             mvc.perform(post("/api/v1/combate/turnos").contentType("application/json").content(TURNO))
+                    .andExpect(status().isUnauthorized());
+            mvc.perform(post("/api/v1/combate/botin/cierres")
+                            .contentType("application/json").content(BOTIN_INVALIDO))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -148,6 +153,9 @@ class SeguridadDelMotorTest {
             mvc.perform(post("/api/v1/combate/turnos").header("Authorization", jugador)
                             .contentType("application/json").content(TURNO))
                     .andExpect(status().isForbidden());
+            mvc.perform(post("/api/v1/combate/botin/cierres").header("Authorization", jugador)
+                            .contentType("application/json").content(BOTIN_INVALIDO))
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -160,10 +168,14 @@ class SeguridadDelMotorTest {
             int turno = mvc.perform(post("/api/v1/combate/turnos").header("Authorization", servicio)
                             .contentType("application/json").content(TURNO))
                     .andReturn().getResponse().getStatus();
+            int botin = mvc.perform(post("/api/v1/combate/botin/cierres").header("Authorization", servicio)
+                            .contentType("application/json").content(BOTIN_INVALIDO))
+                    .andReturn().getResponse().getStatus();
 
             // heroes apunta a un puerto cerrado: se espera el 503 de catalogo caido.
             org.junit.jupiter.api.Assertions.assertEquals(503, accion);
             org.junit.jupiter.api.Assertions.assertEquals(503, turno);
+            org.junit.jupiter.api.Assertions.assertEquals(400, botin);
         }
     }
 
