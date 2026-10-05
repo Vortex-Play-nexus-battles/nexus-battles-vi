@@ -119,7 +119,15 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     const previo = await antes.json();
     expect(previo.alertasConfiguradas).toBe(false);
     expect(previo.alertas).toEqual([]);
-    expect(previo.pendientes).toHaveLength(2);
+    // HU-MET-001 1.10.0: el banco tiene ms-identidad y el tablero le reenvia el
+    // token del administrador, asi que las cuentas SI llegan y «nuevos
+    // usuarios» deja de ser pendiente. Lo unico que sigue pendiente es la
+    // frecuencia de reportes (HU-COM-006 sin lectura agregada).
+    expect(previo.pendientes).toEqual(['frecuencia de reportes: HU-COM-006 #523 sin implementar']);
+    expect(previo.registroDeUsuarios, 'identidad no dio las cuentas').not.toBeNull();
+    expect(previo.registroDeUsuarios.total).toBeGreaterThanOrEqual(1);
+    expect(typeof previo.registroDeUsuarios.porEstado.ACTIVO).toBe('number');
+    expect(Array.isArray(previo.registroDeUsuarios.registros.porDia)).toBe(true);
 
     const emitida = await api.post('/api/v1/sanciones', {
       headers: { Authorization: `Bearer ${moderadora.token}`, 'Content-Type': 'application/json' },
