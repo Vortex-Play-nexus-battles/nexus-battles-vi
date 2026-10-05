@@ -175,6 +175,21 @@ describe('puedeVer (RF-RBAC-002)', () => {
     expect(puedeVer('parametros-admin', moderador).veredicto).toBe(VEREDICTO.DENEGADA);
   });
 
+  test('HU-PRD-013: los banners los gestiona la administración, como el resto del catálogo', () => {
+    // Mismo nivel que exige productos en `SeguridadConfig` para
+    // POST/PUT/DELETE /api/v1/banners y para el listado completo.
+    expect(MATRIZ.banners).toEqual({
+      ruta: 'contenido/productos/banners.html',
+      acceso: ACCESO.ADMINISTRACION,
+      armazon: 'admin',
+    });
+    expect(puedeVer('banners', admin).veredicto).toBe(VEREDICTO.VISIBLE);
+    expect(puedeVer('banners', superAdmin).veredicto).toBe(VEREDICTO.VISIBLE);
+    expect(puedeVer('banners', moderador).veredicto).toBe(VEREDICTO.DENEGADA);
+    expect(puedeVer('banners', jugador).veredicto).toBe(VEREDICTO.DENEGADA);
+    expect(vistaDeRuta('/frontend/app-web/src/contenido/productos/banners.html')).toBe('banners');
+  });
+
   test('el administrador no crea administradores ni lee la auditoría (RF-RBAC-003)', () => {
     expect(puedeVer('gestion-usuarios', admin).veredicto).toBe(VEREDICTO.VISIBLE);
     expect(puedeVer('crear-cuenta-admin', admin).veredicto).toBe(VEREDICTO.DENEGADA);

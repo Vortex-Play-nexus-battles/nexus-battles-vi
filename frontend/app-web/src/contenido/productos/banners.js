@@ -1,5 +1,24 @@
+import { confirmar as confirmarConDialogo } from '../../comun/ui/dialogo.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
+import { fechaHora } from '../../comun/ui/formato.js';
+import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 import { crearBanner, editarBanner, listarBanners, retirarBanner } from './cliente-banners.js';
+
+/**
+ * Retirar se confirma con el diálogo del kit, no con `window.confirm()`
+ * (UXC-7, `sin-dialogos-nativos.test.js`): se lee con lector de pantalla y
+ * devuelve el foco. Retirar es lógico: el registro queda en la lista.
+ *
+ * @param {{contenido: string}} banner
+ * @returns {Promise<boolean>}
+ */
+function confirmarRetiro(banner) {
+  return confirmarConDialogo({
+    titulo: '¿Retirar este banner?',
+    mensaje: `«${banner.contenido}» deja de mostrarse en la página de inicio de los jugadores desde este momento. El registro se conserva en esta lista.`,
+    textoConfirmar: 'Retirar',
+  });
+}
 
 function aLocal(instante) {
   const fecha = new Date(instante);
@@ -21,9 +40,16 @@ function estadoDe(banner) {
   return 'Vigente';
 }
 
+/**
+ * @param {HTMLElement} raiz
+ * @param {{crearBanner: Function, editarBanner: Function, listarBanners: Function,
+ *          retirarBanner: Function}} [api]
+ * @param {{confirmar?: (banner: object) => boolean|Promise<boolean>}} [opciones]
+ */
 export function montarBanners(
   raiz,
   api = { crearBanner, editarBanner, listarBanners, retirarBanner },
+  { confirmar = confirmarRetiro } = {},
 ) {
   let editando = null;
   const mensaje = h('p', { atributos: { role: 'status', 'aria-live': 'polite' } });
@@ -99,9 +125,14 @@ export function montarBanners(
           atributos: { type: 'button', disabled: banner.retirado ? true : null },
         });
         retirar.addEventListener('click', async () => {
-          if (window.confirm('¿Retirar este banner?')) {
+          if (!(await confirmar(banner))) {
+            return;
+          }
+          try {
             await api.retirarBanner(banner.id);
             await cargar();
+          } catch (error) {
+            mensaje.textContent = textoDeError(error, 'No se pudo retirar el banner.');
           }
         });
         lista.append(
@@ -111,7 +142,7 @@ export function montarBanners(
               h('strong', { texto: banner.contenido }),
               h('p', {
                 clase: 't-meta',
-                texto: `${estadoDe(banner)} · ${new Date(banner.publicarDesde).toLocaleString()} – ${new Date(banner.vigenteHasta).toLocaleString()}`,
+                texto: `${estadoDe(banner)} · ${fechaHora(banner.publicarDesde)} – ${fechaHora(banner.vigenteHasta)}`,
               }),
               h('div', { clase: 'banners__acciones', hijos: [editar, retirar] }),
             ],
@@ -120,7 +151,7 @@ export function montarBanners(
       }
       mensaje.textContent = '';
     } catch (error) {
-      mensaje.textContent = error.message;
+      mensaje.textContent = textoDeError(error, 'No se pudieron cargar los banners.');
     }
   }
   formulario.addEventListener('submit', async (evento) => {
@@ -141,7 +172,7 @@ export function montarBanners(
       mensaje.textContent = 'Banner guardado.';
       await cargar();
     } catch (error) {
-      mensaje.textContent = error.message;
+      mensaje.textContent = textoDeError(error, 'No se pudo guardar el banner.');
     }
   });
   cancelar.addEventListener('click', limpiar);

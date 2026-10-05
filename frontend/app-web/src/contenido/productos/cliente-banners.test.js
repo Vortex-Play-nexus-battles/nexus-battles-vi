@@ -1,6 +1,12 @@
 import { jest } from '@jest/globals';
 
-import { crearBanner, editarBanner, listarBanners, retirarBanner } from './cliente-banners.js';
+import {
+  crearBanner,
+  editarBanner,
+  listarBanners,
+  listarVigentes,
+  retirarBanner,
+} from './cliente-banners.js';
 
 function respuesta(cuerpo = null, status = 200) {
   return {
@@ -32,6 +38,25 @@ test('crea, edita y retira mediante el contrato HTTP', async () => {
     'PUT',
     'DELETE',
   ]);
+});
+
+test('RF-NOT-002: la home pide los vigentes a la ruta pública del contrato', async () => {
+  const vigentes = [{ id: 'b-1', contenido: 'Anuncio' }];
+  const fetchImpl = jest.fn().mockResolvedValue(respuesta(vigentes));
+  await expect(listarVigentes({ fetchImpl })).resolves.toEqual(vigentes);
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/banners/vigentes', { method: 'GET' });
+});
+
+test('la página de error de un proxy no se cuela como texto ni rompe con un SyntaxError', async () => {
+  const fetchImpl = jest.fn().mockResolvedValue({
+    ok: false,
+    status: 502,
+    text: async () => '<html><body>502 Bad Gateway</body></html>',
+  });
+  const fallo = await listarBanners({ fetchImpl }).catch((error) => error);
+  expect(fallo).not.toBeInstanceOf(SyntaxError);
+  expect(fallo.status).toBe(502);
+  expect(fallo.message).not.toMatch(/Bad Gateway|<html/);
 });
 
 test('conserva Problem Details cuando el servidor rechaza la solicitud', async () => {

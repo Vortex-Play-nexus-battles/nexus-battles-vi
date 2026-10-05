@@ -17,10 +17,12 @@
       import { exigirAcceso } from '../../comun/acceso.js';
       import { montarCabecera } from '../../comun/cabecera-app.js';
       import { montarBanners } from './banners.js';
-      const sesion = exigirAcceso('productos');
+      // Su propia entrada en la matriz (administración, como el catálogo): la
+      // consola la encuentra en «Productos», que es la sección que se marca.
+      const sesion = exigirAcceso('banners');
       if (sesion) {
         montarCabecera(document.querySelector('[data-cabecera-app]'), {
-          vista: 'productos',
+          vista: 'banners',
           seccionActiva: 'productos',
         });
         montarBanners(document.getElementById('banners-app'));

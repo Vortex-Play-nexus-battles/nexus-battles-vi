@@ -25,6 +25,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | `/api/v1/carrito…` | `srv-ms-ecommerce:8090`, reescrito a `/ecommerce/api/v1/carrito…` |
 | **`/api/v1/vitrina…`** | **`srv-ms-ecommerce:8090`**, reescrito a `/ecommerce/api/v1/vitrina…` (consulta intacta) — R16 |
 | `/api/v1/productos…` (todos los métodos) | **`34.193.90.11:8103`** (host de contenido, desde el PR #611) — un solo dueño desde R16 (#421) |
+| **`/api/v1/banners…`** (todos los métodos) | **`34.193.90.11:8103`** — el mismo servicio de productos (HU-PRD-013); `GET /vigentes` es público y alimenta el banner rotativo de la home (RF-NOT-002). Hasta #854 no tenía `location` y caía en el 404 genérico |
 | `/api/v1/{heroes,equipos,estrategias,progresion}` | **`34.193.90.11:8101`** (host de contenido) |
 | `/api/v1/inventario` | **`34.193.90.11:8102`** (host de contenido) |
 | `/ws/notificaciones` | `srv-notificaciones:8085` |
