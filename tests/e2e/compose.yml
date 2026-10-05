@@ -161,7 +161,8 @@ services:
       # ms-ecommerce: la compra (B5) reserva tiraje, entrega, asienta y pide contacto.
       # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas
+      # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -641,6 +642,16 @@ services:
       DB_PASS: plataforma
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       NOTIFICACIONES_WS_ORIGENES: http://localhost:8099
+      # HU-NOT-001: los cambios del catalogo del productos de ESTE banco llegan
+      # a la bandeja (GET /api/v1/productos/alertas/cambios, solo servicios),
+      # con la credencial registrada arriba en AUTH_CLIENTES_SERVICIO. Base sin
+      # /api/v1. Intervalo minimo de 1 s (en DEV, 60): el spec consulta dos
+      # veces seguidas y no espera un minuto.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: notificaciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-notificaciones
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      NOTIFICACIONES_CATALOGO_INTERVALO_MINIMO_S: "1"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
