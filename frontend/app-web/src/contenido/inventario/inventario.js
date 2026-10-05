@@ -33,6 +33,17 @@ import { consultarTablaDeNiveles } from './cliente-heroes.js';
 import { fuenteDeMisiones } from '../misiones/fuente-misiones.js';
 import { montarBannerDeMisiones } from '../misiones/banner-misiones.js';
 import { complementoDeOpiniones } from '../../plataforma/comentarios/hilo-comentarios.js';
+import { leerSesion } from '../../comun/sesion.js';
+
+/**
+ * Quién da de alta elementos a mano (`POST /inventario/elementos`):
+ * inventario.yaml, desde B4, solo SERVICIO, ADMINISTRADOR o
+ * SUPER_ADMINISTRADOR. RFINAL-04 (revisión de AWS DEV del 4-oct) — al
+ * jugador se le ofrecía «Agregar elemento» con campos técnicos (producto,
+ * parte de armadura) que el servidor le rechaza con 403: fuera de su flujo.
+ * Lo suyo se consigue en la tienda, las subastas y las misiones.
+ */
+export const ROLES_QUE_DAN_DE_ALTA = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
 /**
  * UXC-3 — §7.1: el detalle de un producto lleva su calificación promedio y el
@@ -387,10 +398,13 @@ export async function montarInventario(
     fuenteMisiones = fuenteDeMisiones(),
     pestanaInicial = 'heroes',
     maxPaginas,
+    rol = leerSesion().rol,
   } = {},
 ) {
   const vista = construirGestion();
   raiz.replaceChildren(...vista.elementos);
+  const daDeAlta = ROLES_QUE_DAN_DE_ALTA.includes(rol);
+  vista.botonNuevo.hidden = !daDeAlta;
 
   // RF-INV-003: sin módulo de misiones se queda oculto y no hace ninguna
   // petición; con él, las destacadas o, si no hay, la estrategia.
@@ -577,6 +591,9 @@ export async function montarInventario(
   }
 
   function abrirCreacion() {
+    if (!daDeAlta) {
+      return;
+    }
     vista.formulario.reset();
     elementoSeleccionado = null;
     vista.tituloEditor.textContent = 'Nuevo elemento';

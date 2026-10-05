@@ -54,8 +54,8 @@ async function conInventarioDe(page, totalElementos) {
   });
 }
 
-async function abrirVitrina(page) {
-  await prepararPagina(page);
+async function abrirVitrina(page, opciones) {
+  await prepararPagina(page, opciones);
   await page.goto(`/contenido/inventario/inventario.html?jugador=${JUGADOR}#objetos`);
   await page.waitForFunction(() => !document.querySelector('.estado-carga'));
 }
@@ -231,9 +231,11 @@ async function conInventarioEditable(page, iniciales = [], { rechazarModificacio
 }
 
 test.describe('Creacion y edicion del inventario propio', () => {
+  // RFINAL-04: el alta manual es de la administración (inventario.yaml: un
+  // JUGADOR recibe 403), así que la vista solo se la ofrece a esos roles.
   test('Un elemento creado se refleja en la vitrina', async ({ page }) => {
     await conInventarioEditable(page);
-    await abrirVitrina(page);
+    await abrirVitrina(page, { rol: 'ADMINISTRADOR' });
 
     await page.getByRole('button', { name: 'Agregar elemento' }).click();
     await page.getByLabel('Producto', { exact: true }).fill('producto-amuleto');
@@ -244,6 +246,14 @@ test.describe('Creacion y edicion del inventario propio', () => {
     await expect(page.locator('.vitrina__producto')).toHaveCount(1);
     await expect(page.locator('.vitrina__nombre')).toHaveText('Amuleto de Niebla');
     await expect(page.locator('.inventario__mensaje')).toHaveText('Elemento creado.');
+  });
+
+  test('Al jugador no se le ofrece agregar elementos a mano', async ({ page }) => {
+    await conInventarioEditable(page, [elemento(0)]);
+    await abrirVitrina(page);
+
+    await expect(page.locator('.vitrina__producto')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Agregar elemento' })).toHaveCount(0);
   });
 
   test('Un nombre modificado se refleja en la misma tarjeta', async ({ page }) => {
@@ -311,7 +321,8 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
 test.describe('Equipamiento del héroe con limites', () => {
   test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
     await conEquipamiento(page);
-    await abrirVitrina(page);
+    // Comprueba también el color de «Agregar elemento», que solo ve la administración.
+    await abrirVitrina(page, { rol: 'ADMINISTRADOR' });
 
     await page.locator('#pestana-heroes').click();
     await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();

@@ -119,13 +119,24 @@ export const MOTIVO_YA_LO_TIENES =
  * cesta, y el servicio lo rechaza (409 `producto-ya-adquirido`): ofrecerlo
  * sería invitar a un rechazo seguro (auditoría de DEV del 30-sep).
  *
+ * RFINAL-04 (revisión de AWS DEV del 4-oct) — además el botón lo dice:
+ * «Ya lo tienes», con aspecto de apagado (`.btn-add:disabled`). Antes seguía
+ * diciendo «Añadir» con el color de la acción principal.
+ *
  * @param {HTMLButtonElement} boton
+ * @param {string|null} [nombre] para el nombre accesible
  */
-export function apagarAnadirPorPropio(boton) {
+export function apagarAnadirPorPropio(boton, nombre = null) {
   boton.disabled = true;
   boton.title = MOTIVO_YA_LO_TIENES;
   boton.dataset.motivo = 'propio';
   delete boton.dataset.producto;
+  boton.textContent = 'Ya lo tienes';
+  if (nombre) {
+    boton.setAttribute('aria-label', `Ya tienes ${nombre}`);
+  } else {
+    boton.removeAttribute('aria-label');
+  }
 }
 
 /**
@@ -345,7 +356,7 @@ export function tarjetaDeProducto(
       anadir.dataset.producto = String(producto.id);
       anadir.setAttribute('aria-label', `Añadir ${producto.nombre} al carrito`);
       if (unidadesPropias > 0 || producto.esPropio) {
-        apagarAnadirPorPropio(anadir);
+        apagarAnadirPorPropio(anadir, producto.nombre);
       }
     }
     acciones.push(anadir);
@@ -472,10 +483,20 @@ export function bloqueDeCompra(
         h('span', { texto: 'Añadir al carrito' }),
       ],
     });
-    if (propias > 0 && producto.id !== null) {
+    // RFINAL-04 — apagado y diciéndolo («Ya lo tienes»), también cuando el
+    // servidor lo descubre al añadir (409 producto-ya-adquirido): antes, tras
+    // ese rechazo, el botón volvía a encenderse para invitar a otro igual.
+    const apagarPorPropio = () => {
       anadir.disabled = true;
       anadir.title = MOTIVO_YA_LO_TIENES;
       anadir.dataset.motivo = 'propio';
+      const texto = anadir.querySelector('span');
+      if (texto) {
+        texto.textContent = 'Ya lo tienes';
+      }
+    };
+    if (propias > 0 && producto.id !== null) {
+      apagarPorPropio();
     }
     anadir.addEventListener('click', async () => {
       if (!alAnadir || producto.id === null || anadir.disabled) {
@@ -484,6 +505,9 @@ export function bloqueDeCompra(
       ocupado(anadir, true);
       const salida = await alAnadir(String(producto.id));
       ocupado(anadir, false);
+      if (salida?.propio) {
+        apagarPorPropio();
+      }
       contarResultado(resultado, salida);
     });
     acciones.append(anadir);
