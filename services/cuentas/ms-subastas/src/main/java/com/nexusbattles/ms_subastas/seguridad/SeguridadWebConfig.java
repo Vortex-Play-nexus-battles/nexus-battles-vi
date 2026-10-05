@@ -50,7 +50,10 @@ public class SeguridadWebConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers("/ws-subastas/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/subastas", "/subastas/sugerencias").permitAll()
+                .requestMatchers(HttpMethod.GET, "/subastas", "/subastas/sugerencias", "/subastas/reglas").permitAll()
+                // B8: la ficha de una subasta es publica, igual que el listado
+                // (un segmento: /subastas/{id}; sus subrutas no entran aqui).
+                .requestMatchers(HttpMethod.GET, "/subastas/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/subastas/*/pujas").permitAll()
                 .anyRequest().hasAnyRole(ROLES_DE_USUARIO));
         return http.build();

@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Gestion de usuarios · Nexus Battles VI</title>
+    <title>Gestión de usuarios · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
@@ -15,8 +15,8 @@
     <main class="pagina consola pila" data-vista="gestion-usuarios">
       <header class="encabezado-pagina">
         <div>
-          <p class="t-etiqueta">Administracion</p>
-          <h1>Gestion de usuarios</h1>
+          <p class="t-etiqueta">Administración</p>
+          <h1>Gestión de usuarios</h1>
           <p class="t-meta">
             Perfil, rol, estado de la cuenta y restablecimiento de contraseña. Cada acción exige el
             permiso correspondiente; las que no tienes no aparecen habilitadas.
@@ -122,7 +122,7 @@
             <div class="encabezado-seccion">
               <div>
                 <h2 class="tarjeta__titulo">Rol del usuario</h2>
-                <p class="t-meta">Asigna uno de los roles validos del sistema.</p>
+                <p class="t-meta">Asigna uno de los roles válidos del sistema.</p>
               </div>
             </div>
 
@@ -256,6 +256,26 @@
                   name="suspendido-hasta"
                 />
               </div>
+
+              <!-- UXC-9 — §7.3.2 «Causales de sanción»: la causal viaja con
+                   la suspensión y con el baneo (ms-identidad-admin 1.1.0,
+                   `motivo` opcional). Sin ella, el servidor anota que vino
+                   de este panel. -->
+              <div class="campo campo--area rejilla-formulario__ancho">
+                <label class="campo__etiqueta" for="motivo-sancion">Motivo</label>
+                <textarea
+                  class="campo__control"
+                  id="motivo-sancion"
+                  name="motivo-sancion"
+                  rows="2"
+                  maxlength="1000"
+                  aria-describedby="pista-motivo-sancion"
+                ></textarea>
+                <p class="campo__pista" id="pista-motivo-sancion">
+                  Opcional. Queda en el registro de la sanción; si lo dejas vacío, se anota que vino
+                  de este panel.
+                </p>
+              </div>
             </div>
 
             <div class="tarjeta__acciones">
@@ -306,6 +326,28 @@
               >
                 Restablecer contraseña
               </button>
+            </div>
+          </section>
+
+          <!-- UXC-9 — §7.3.4 pide una ficha con actividad, transacciones,
+               comentarios, reportes e inventario. La administración de
+               cuentas (`UsuarioAdministrado`) no los publica: se dice, y se
+               dice dónde está lo que sí existe. -->
+          <section class="tarjeta pila pila--compacta" data-zona="ficha-pendiente">
+            <div class="encabezado-seccion">
+              <div>
+                <h2 class="tarjeta__titulo">Lo que esta ficha aún no muestra</h2>
+                <p class="t-meta">
+                  Actividad, transacciones, comentarios, reportes e inventario de la cuenta: la
+                  administración de cuentas todavía no los publica. La última entrada de cada cuenta
+                  está en el directorio de Control integral, y desde allí se abren sus sanciones.
+                </p>
+              </div>
+            </div>
+            <div class="tarjeta__acciones">
+              <a class="boton boton--secundario" href="../plataforma/consola/control-integral.html">
+                Ir a Control integral
+              </a>
             </div>
           </section>
         </div>

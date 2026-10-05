@@ -276,6 +276,40 @@ class ResolverAtaqueTest {
     }
 
     @Test
+    @DisplayName("el dano sale de la formula de DANO del heroe, no de la tirada de ataque (1.2.0)")
+    void elDanoSaleDeLaFormulaDeDano() {
+        // Un ataque enorme y un dano fijo de 3; con el 100 % en causarDano, el
+        // dano aplicado es 3. Hasta 1.1.0 habria sido 100: la tirada de ataque.
+        EstadisticasHeroeRespuesta heroe = new EstadisticasHeroeRespuesta(11,
+                new DetalleAtaque(100, 0, 0), new DetalleAtaque(3, 0, 0));
+        PeticionDeAtaque.Distribucion todoDano =
+                new PeticionDeAtaque.Distribucion(null, 100, 0, 0, 0, 0, 0);
+
+        RespuestaDeAtaque respuesta = new ResolverAtaque(CatalogoDeMentira.con(heroe))
+                .ejecutar(new PeticionDeAtaque("Guerrero Tanque", 0, todoDano, null, 4L));
+        RespuestaDeAtaque sinFormulaDeDano = new ResolverAtaque(CatalogoDeMentira.con(
+                new EstadisticasHeroeRespuesta(11, new DetalleAtaque(100, 0, 0))))
+                .ejecutar(new PeticionDeAtaque("Guerrero Tanque", 0, todoDano, null, 4L));
+
+        assertAll(
+                () -> assertEquals(100, respuesta.ataqueResuelto()),
+                () -> assertEquals("CAUSAR_DANO", respuesta.categoria()),
+                () -> assertEquals(3, respuesta.danoAplicado()),
+                () -> assertEquals(0, sinFormulaDeDano.danoAplicado(), "sin formula de dano no hay dano"));
+    }
+
+    @Test
+    @DisplayName("la media y la desviacion del indice se pueden configurar (D-B7-01)")
+    void indiceConfigurable() {
+        // Una normal pegada a la fila 1: siempre «causar dano» del Guerrero Tanque (1-3200).
+        RespuestaDeAtaque respuesta = new ResolverAtaque(CatalogoDeMentira.con(TANQUE),
+                new nexus.combate.IndiceNormal(1, 0.001)).ejecutar(ataque(0, 8L));
+
+        assertEquals(1, respuesta.indiceTabla());
+        assertEquals("CAUSAR_DANO", respuesta.categoria());
+    }
+
+    @Test
     @DisplayName("sin semilla el combate es aleatorio de verdad")
     void sinSemillaEsAleatorio() {
         // No se comprueba que dos tiradas difieran -podrian coincidir por azar-

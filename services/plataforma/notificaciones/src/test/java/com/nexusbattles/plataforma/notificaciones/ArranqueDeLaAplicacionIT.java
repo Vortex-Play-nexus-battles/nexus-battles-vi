@@ -30,13 +30,19 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -56,6 +62,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * emite un aviso con su credencial y el aviso llega a la cola privada del
  * jugador, y solo a la suya. Es lo que antes no se podia afirmar: la
  * identidad del canal salia de {@code ?usuario=} en la URL.
+ *
+ * <p>Y el de HU-NOT-001 CA-02, marcar todas como leidas: la sentencia en
+ * bloque solo se puede probar de verdad contra PostgreSQL.
  *
  * <p>Con {@code ddl-auto=validate}: asi Hibernate compara su mapeo contra las
  * columnas que dejo Flyway. Sin {@code disabledWithoutDocker}: una prueba de
@@ -165,6 +174,157 @@ class ArranqueDeLaAplicacionIT {
                         .POST(HttpRequest.BodyPublishers.ofString(evento)).build(),
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(401, sinCredencial.statusCode(), "emitir sin credencial de servicio es 401");
+    }
+
+    @Test
+    @DisplayName("auditoria 30-sep: un identificador de torneos (mas de 100 caracteres) se guarda y no se confunde con un duplicado")
+    void identificadorLargoDeTorneos() throws Exception {
+        UUID ana = UUID.randomUUID();
+        String id = "torneo-" + UUID.randomUUID() + "-jugador-" + ana + "-aviso-inscripcion";
+        assertTrue(id.length() > 100, "el caso real mide " + id.length());
+
+        HttpResponse<String> primera = emitir(ana, id);
+        assertEquals(201, primera.statusCode(), primera.body());
+        // El reintento del mismo evento sigue siendo el duplicado de siempre.
+        HttpResponse<String> repetida = emitir(ana, id);
+        assertEquals(409, repetida.statusCode(), repetida.body());
+        // Y lo que no cabe se rechaza como dato invalido, no como «ya estaba».
+        HttpResponse<String> enorme = emitir(ana, "x".repeat(201));
+        assertEquals(400, enorme.statusCode(), enorme.body());
+
+        HttpResponse<String> bandeja = http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + "/api/v1/users/" + ana + "/notifications"))
+                        .header("Authorization", "Bearer " + emisor.tokenDeJugador("Ana", ana)).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, bandeja.statusCode(), bandeja.body());
+        assertTrue(bandeja.body().contains(id), "el aviso esta en la bandeja: " + bandeja.body());
+        assertTrue(bandeja.body().contains("\"noLeidas\":1"), bandeja.body());
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001 CA-02 de punta a punta: marcar todas deja la bandeja sin no leidos de una vez, avisa a la sesion abierta y repetirlo marca 0")
+    void marcarTodasLeidasDePuntaAPunta() throws Exception {
+        UUID ana = UUID.randomUUID();
+        UUID otro = UUID.randomUUID();
+        String tokenDeAna = emisor.tokenDeJugador("Ana", ana);
+        String tokenDelOtro = emisor.tokenDeJugador("Otro", otro);
+
+        StompSession sesionDeAna = conectar(tokenDeAna);
+        BlockingQueue<String> colaDeAna = suscribirse(sesionDeAna);
+        sesionDeAna.send("/app/notificaciones/sesion",
+                "{\"sesionId\":\"escritorio\"}".getBytes(StandardCharsets.UTF_8));
+        assertNotNull(colaDeAna.poll(5, TimeUnit.SECONDS), "el alta de sesion responde con el contador");
+
+        for (int i = 1; i <= 3; i++) {
+            HttpResponse<String> emision = emitir(ana, "aviso-" + i + "-" + UUID.randomUUID());
+            assertEquals(201, emision.statusCode(), emision.body());
+        }
+        assertEquals(201, emitir(otro, "aviso-del-otro-" + UUID.randomUUID()).statusCode());
+        assertNotNull(esperarContador(colaDeAna, 3), "antes de marcar, Ana tiene tres sin leer");
+
+        // Los tres de una vez, y el contador en 0 llega por el canal.
+        HttpResponse<String> marcado = marcarTodas(ana, tokenDeAna);
+        assertEquals(200, marcado.statusCode(), marcado.body());
+        assertTrue(marcado.body().contains("\"marcadas\":3"), marcado.body());
+        assertTrue(marcado.body().contains("\"noLeidas\":0"), marcado.body());
+        assertNotNull(esperarContador(colaDeAna, 0), "la sesion abierta recibe el contador en 0");
+
+        // Sin estado a medias: ningun aviso de Ana queda sin leer.
+        HttpResponse<String> bandeja = bandejaDe(ana, tokenDeAna);
+        assertEquals(200, bandeja.statusCode(), bandeja.body());
+        assertTrue(bandeja.body().contains("\"noLeidas\":0"), bandeja.body());
+        assertFalse(bandeja.body().contains("\"leida\":false"), bandeja.body());
+
+        // Idempotente: la segunda vez responde igual de bien y no marca nada.
+        HttpResponse<String> otraVez = marcarTodas(ana, tokenDeAna);
+        assertEquals(200, otraVez.statusCode(), otraVez.body());
+        assertTrue(otraVez.body().contains("\"marcadas\":0"), otraVez.body());
+        assertTrue(otraVez.body().contains("\"noLeidas\":0"), otraVez.body());
+
+        // Solo la bandeja de Ana: la del otro sigue igual, y el no puede marcar la ajena.
+        HttpResponse<String> delOtro = bandejaDe(otro, tokenDelOtro);
+        assertTrue(delOtro.body().contains("\"noLeidas\":1"), delOtro.body());
+        assertEquals(403, marcarTodas(ana, tokenDelOtro).statusCode(), "la bandeja ajena no se marca");
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001 CA-02: varias sesiones que marcan todas a la vez no cuentan dos veces el mismo aviso")
+    void marcarTodasALaVezNoCuentaDosVeces() throws Exception {
+        UUID ana = UUID.randomUUID();
+        String tokenDeAna = emisor.tokenDeJugador("Ana", ana);
+        for (int i = 1; i <= 3; i++) {
+            HttpResponse<String> emision = emitir(ana, "aviso-" + i + "-" + UUID.randomUUID());
+            assertEquals(201, emision.statusCode(), emision.body());
+        }
+
+        // Seis pestanas a la vez. Si la cuenta saliera de la bandeja cargada,
+        // las que se solapan contarian los mismos avisos; con la sentencia en
+        // bloque, cada aviso lo cuenta una sola llamada.
+        List<CompletableFuture<HttpResponse<String>>> enVuelo = new ArrayList<>();
+        for (int i = 0; i < 6; i++) {
+            enVuelo.add(http.sendAsync(peticionMarcarTodas(ana, tokenDeAna), HttpResponse.BodyHandlers.ofString()));
+        }
+        int marcadas = 0;
+        for (CompletableFuture<HttpResponse<String>> llamada : enVuelo) {
+            HttpResponse<String> respuesta = llamada.get(10, TimeUnit.SECONDS);
+            assertEquals(200, respuesta.statusCode(), respuesta.body());
+            marcadas += numero(respuesta.body(), "marcadas");
+        }
+
+        assertEquals(3, marcadas, "entre todas marcan los tres, ni uno mas");
+        HttpResponse<String> bandeja = bandejaDe(ana, tokenDeAna);
+        assertTrue(bandeja.body().contains("\"noLeidas\":0"), bandeja.body());
+    }
+
+    private HttpRequest peticionMarcarTodas(UUID dueno, String token) {
+        return HttpRequest.newBuilder(URI.create(
+                        "http://localhost:" + puerto + "/api/v1/users/" + dueno + "/notifications/read"))
+                .header("Authorization", "Bearer " + token)
+                .POST(HttpRequest.BodyPublishers.noBody()).build();
+    }
+
+    private HttpResponse<String> marcarTodas(UUID dueno, String token) throws Exception {
+        return http.send(peticionMarcarTodas(dueno, token), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> bandejaDe(UUID dueno, String token) throws Exception {
+        return http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + "/api/v1/users/" + dueno + "/notifications"))
+                        .header("Authorization", "Bearer " + token).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+    }
+
+    /** Un campo entero de una respuesta JSON plana. */
+    private static int numero(String json, String campo) {
+        Matcher valor = Pattern.compile("\"" + campo + "\":(\\d+)").matcher(json);
+        assertTrue(valor.find(), "falta " + campo + " en " + json);
+        return Integer.parseInt(valor.group(1));
+    }
+
+    /** El contador con ese valor, saltando los avisos y los contadores anteriores. */
+    private static String esperarContador(BlockingQueue<String> cola, int noLeidas) throws InterruptedException {
+        String buscado = "\"noLeidas\":" + noLeidas + "}";
+        long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < limite) {
+            String mensaje = cola.poll(1, TimeUnit.SECONDS);
+            if (mensaje != null && mensaje.contains(buscado)) {
+                return mensaje;
+            }
+        }
+        return null;
+    }
+
+    private HttpResponse<String> emitir(UUID destinatario, String id) throws Exception {
+        String evento = """
+                {"usuarioId":"%s","id":"%s","tipo":"TORNEO","titulo":"Inscripcion confirmada",
+                 "cuerpo":"Tu equipo quedo inscrito.","creadaEn":"2026-10-02T12:00:00Z"}
+                """.formatted(destinatario, id);
+        return http.send(
+                HttpRequest.newBuilder(URI.create("http://localhost:" + puerto + "/api/v1/internal/notifications"))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + emisor.tokenDeServicio("torneos"))
+                        .POST(HttpRequest.BodyPublishers.ofString(evento)).build(),
+                HttpResponse.BodyHandlers.ofString());
     }
 
     /** Un aviso, saltando los mensajes de contador que el alta y la emision tambien mandan. */

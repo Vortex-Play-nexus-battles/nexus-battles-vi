@@ -114,14 +114,16 @@ DELETE /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}
   limite de contrato, inventario no importa sus clases: `heroeId` identifica la
   instancia propia almacenada en inventario y `productoId` conserva la
   referencia al catalogo.
-- `HU-PRD-001` ya publico su contrato de creacion en la rama de productos. Sus
-  tipos y las seis partes de armadura coinciden con este modelo, pero el
-  contrato solo expone `POST /api/v1/productos`: todavia no ofrece una consulta
-  por identificador. Por eso se conserva temporalmente en el elemento el tipo
-  y, para armaduras, la parte que define la ranura. Cuando productos publique
-  `GET /api/v1/productos/{productoId}`, la entrada debera obtener esos metadatos
-  del catalogo y dejar de aceptarlos como datos declarados por el cliente. Las
-  reglas de dos armas, seis partes y dos items no dependen de ese cambio.
+- Productos ya expone `GET /api/v1/productos/{productoId}` (publico). Desde el
+  contrato de inventario 1.2.0, **crear un elemento lo consulta**: el producto
+  debe existir (si no, 422 "Producto inexistente"), no estar suspendido (409
+  "Producto suspendido") y tener el mismo tipo que trae la peticion (400 "Tipo
+  no coincide"). Si productos no responde, 503 "Catalogo no disponible": nunca
+  se acepta a ciegas. Motivo: los items los crea el rol disenador (RG-074,
+  29-jul); el jugador tiene instancias con nombre propio de productos que
+  existen. El campo `tipo` se conserva en la peticion por compatibilidad; la
+  parte de la armadura sigue viniendo de la peticion. Las reglas de dos armas,
+  seis partes y dos items no dependen de esto.
 
 ## Alcance actual
 

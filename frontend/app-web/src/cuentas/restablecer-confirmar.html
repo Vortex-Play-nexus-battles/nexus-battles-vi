@@ -3,13 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Restablecer contraseña — NEXUS BATTLES VI</title>
+    <title>Restablecer contraseña · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
-  <body class="portal">
+  <body class="portal" data-vista="restablecer-confirmar">
     <div data-cabecera-app></div>
+
+    <!-- B1 (identidad 2.0.0, 7.1.1) — dos pasos en la misma tarjeta:
+         1. correo y código (del correo de recuperación o del de activación de
+            una cuenta administrativa; el enlace trae los dos en el fragmento,
+            /restablecer#codigo=...&correo=...), que se canjean por las
+            preguntas de seguridad de la cuenta;
+         2. las respuestas, si la cuenta configuró preguntas, y la contraseña
+            nueva. Lo monta `restablecer-confirmar.js`. -->
     <main class="entrada">
       <section class="entrada__identidad">
         <p class="entrada__sobretitulo">Recuperar el acceso</p>
@@ -18,36 +26,107 @@
           El código llega por correo, dura poco y solo sirve una vez. Si caducó, pide otro desde
           «Pedir otro código».
         </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
+            </svg>
+            <span>Si configuraste preguntas de seguridad, contéstalas como las escribiste</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#escudo" />
+            </svg>
+            <span>Al guardar la contraseña nueva se cierran las sesiones que tengas abiertas</span>
+          </li>
+        </ul>
       </section>
 
-      <section class="entrada__tarjeta">
+      <section class="entrada__tarjeta" aria-labelledby="tituloRestablecer">
         <div class="pila pila--ajustada">
-          <h2 class="entrada__titulo">Restablecer contraseña</h2>
-          <p class="t-meta">Código del correo y la contraseña nueva.</p>
+          <h2 class="entrada__titulo" id="tituloRestablecer">Restablecer contraseña</h2>
+          <p class="t-meta" data-zona="introduccion">
+            Escribe el correo de tu cuenta y el código que te enviamos.
+          </p>
         </div>
 
-        <p class="estado" id="estadoConfirmacion" hidden role="status"></p>
+        <p class="estado" data-zona="estado" role="status" hidden></p>
+        <div data-zona="aviso" tabindex="-1" hidden></div>
 
-        <form id="formConfirmacion" class="pila" novalidate>
+        <!-- G1 — sin guion no se canjea el código, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para recuperar la cuenta hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- Paso 1: el código. G1 — ni el código ni la contraseña en la
+             dirección: los dos formularios van con `method="post"` y sus
+             botones nacen desactivados hasta que restablecer-confirmar.js
+             escucha `submit` (comun/ui/formulario-seguro.js). -->
+        <form id="formCodigo" class="pila" method="post" novalidate>
+          <div class="campo">
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
+            <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+          </div>
+
           <div class="campo">
             <label class="campo__etiqueta" for="codigo">Código</label>
-            <!-- El backend genera codigos de 10 caracteres, mayusculas y
-             digitos, sin 0/O ni 1/I (TokenCredencialService). No se
-             fuerza mayusculas por CSS/JS: el usuario podria copiar y
-             pegar el codigo tal cual viene en el correo. -->
+            <!-- Sin maxlength: se puede pegar con espacios o guiones, o el
+                 enlace entero del correo (`normalizarCodigo`). -->
             <input
               class="campo__control"
               type="text"
               id="codigo"
               name="codigo"
               required
-              minlength="10"
-              maxlength="10"
               autocomplete="one-time-code"
-              placeholder="Ej: 82AEN4P56Z"
+              autocapitalize="characters"
+              spellcheck="false"
             />
-            <p class="campo__pista">Diez caracteres, tal como vienen en el correo.</p>
+            <p class="campo__pista">
+              Tal como llega en el correo. Da igual mayúsculas o minúsculas, y puedes pegarlo con
+              espacios o guiones.
+            </p>
           </div>
+
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            data-accion="continuar"
+            disabled
+            data-espera-guion
+          >
+            Continuar
+          </button>
+        </form>
+
+        <!-- Paso 2: respuestas (si las hay) y contraseña nueva. -->
+        <form id="formClave" class="pila" method="post" novalidate hidden>
+          <div class="pila pila--ajustada">
+            <p class="t-meta" data-zona="resumen-codigo"></p>
+            <button type="button" class="boton boton--secundario" data-accion="otro-codigo">
+              Usar otro código
+            </button>
+          </div>
+
+          <fieldset class="pila" data-zona="preguntas" hidden>
+            <legend class="campo__etiqueta">Tus preguntas de seguridad</legend>
+            <p class="campo__pista">
+              Contéstalas como las escribiste al configurarlas. No importan las mayúsculas ni las
+              tildes.
+            </p>
+            <div class="pila" data-zona="lista-preguntas"></div>
+          </fieldset>
 
           <div class="campo">
             <label class="campo__etiqueta" for="nuevaPassword">Nueva contraseña</label>
@@ -60,7 +139,7 @@
               autocomplete="new-password"
             />
             <p class="campo__pista">
-              Mínimo 9 caracteres, con mayúscula, minúscula, número y símbolo.
+              Más de 8 caracteres, con mayúscula, minúscula, número y símbolo.
             </p>
           </div>
 
@@ -78,8 +157,14 @@
             />
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
-            Restablecer contraseña
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            data-accion="guardar"
+            disabled
+            data-espera-guion
+          >
+            Guardar contraseña
           </button>
         </form>
 
@@ -91,17 +176,5 @@
     </main>
 
     <script type="module" src="./restablecer-confirmar.js"></script>
-    <script type="module">
-      import { montarCabecera } from '../comun/cabecera-app.js';
-      import { mejorarContrasena } from '../comun/ui/campo.js';
-
-      // Cabecera unica de la aplicacion (HU-UX-001).
-      montarCabecera(document.querySelector('[data-cabecera-app]'), {
-        vista: 'restablecer-confirmar',
-        seccionActiva: null,
-      });
-      mejorarContrasena(document.getElementById('nuevaPassword'));
-      mejorarContrasena(document.getElementById('confirmarPassword'));
-    </script>
   </body>
 </html>

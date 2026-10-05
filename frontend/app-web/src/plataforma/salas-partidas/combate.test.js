@@ -18,9 +18,20 @@ import {
   textoDelTurno,
   montarControlesDeCombate,
   gano,
+  empate,
+  desenlaceDe,
+  netoDeCreditos,
+  mezclarPorJugador,
+  enlacesDeSalida,
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
+  MOTIVO_ESPECIALES,
+  MOTIVOS_DE_ESPECIALES,
+  LARGO_MAXIMO_MOTIVO,
+  MOTIVO_SANADOR,
+  estadoPropioDe,
+  insigniasDe,
 } from './combate.js';
 
 const PARTIDA = '11111111-1111-1111-1111-111111111111';
@@ -674,7 +685,13 @@ describe('indicador de turno en la vista', () => {
 
     controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] });
 
-    expect(document.querySelector('[data-zona="turno"]').hidden).toBe(true);
+    // UX-GAME-4: el indicador no desaparece, pasa al tercer estado. Ya no
+    // es el turno de nadie: ni es «mio» ni hay barra marcada.
+    const turno = document.querySelector('[data-zona="turno"]');
+    expect(turno.hidden).toBe(false);
+    expect(turno.textContent).toBe('Combate finalizado');
+    expect(turno.dataset.mio).toBe('false');
+    expect(turno.dataset.fin).toBe('si');
     expect(document.querySelector(`[data-jugador="${ANA}"]`).dataset.turno).toBeUndefined();
   });
 
@@ -786,6 +803,75 @@ describe('HU-JUE-017 · presentacion del combate (UX-R2.3)', () => {
   });
 });
 
+/**
+ * R17.4 — la prueba del profesor destapó que el panel del desenlace, que ocupa
+ * toda la pantalla (barra del juego incluida), no tenía ninguna salida: quien
+ * acababa de jugar solo podía volver con «Atrás».
+ */
+describe('R17.4 · el desenlace tiene salidas', () => {
+  beforeEach(() => {
+    document.body.innerHTML = VISTA;
+  });
+
+  const SALIDAS = [
+    { id: 'volver-a-jugar', texto: 'Volver a Jugar online', href: 'http://nexus.test/jugar' },
+    { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: 'http://nexus.test/cuenta' },
+  ];
+
+  const terminar = (salidas) => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      alAtacar: () => {},
+      salidas,
+    });
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+    return document.querySelector('[data-zona="resultado"] .panel-resultado');
+  };
+
+  test('el panel lleva los enlaces que le da la vista, en su orden', () => {
+    const panel = terminar(SALIDAS);
+    const enlaces = [...panel.querySelectorAll('.panel-resultado__acciones a')];
+
+    expect(enlaces.map((a) => a.textContent)).toEqual(['Volver a Jugar online', 'Ver mi cuenta']);
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual([
+      'http://nexus.test/jugar',
+      'http://nexus.test/cuenta',
+    ]);
+    expect(enlaces[0].dataset.accion).toBe('volver-a-jugar');
+  });
+
+  test('el primero es el principal y el resto, secundarios', () => {
+    const [primero, segundo] = terminar(SALIDAS).querySelectorAll('.panel-resultado__acciones a');
+
+    expect(primero.className).toBe('boton boton--primario');
+    expect(segundo.className).toBe('boton boton--secundario');
+  });
+
+  test('sin salidas el panel sigue como antes, sin una fila de botones vacía', () => {
+    expect(terminar(undefined).querySelector('.panel-resultado__acciones')).toBeNull();
+  });
+
+  test('una salida sin destino o sin texto no se pinta: un botón que no lleva a nada es peor', () => {
+    expect(
+      enlacesDeSalida([
+        { id: 'a', texto: '', href: '/jugar' },
+        { id: 'b', texto: 'Ver mi cuenta', href: '' },
+        { id: 'c', texto: 'Volver a Jugar online', href: '/jugar' },
+      ]).map((a) => a.textContent),
+    ).toEqual(['Volver a Jugar online']);
+  });
+
+  test('el texto va como texto: un nombre con marcado no se interpreta', () => {
+    const [enlace] = enlacesDeSalida([{ id: 'x', texto: '<img src=x>', href: '/jugar' }]);
+
+    expect(enlace.textContent).toBe('<img src=x>');
+    expect(enlace.querySelector('img')).toBeNull();
+  });
+});
+
 describe('gano · la regla del desenlace, en un solo sitio', () => {
   test('gana quien esta en la lista de ganadores', () => {
     expect(gano({ ganadores: [ANA] }, ANA)).toBe(true);
@@ -806,5 +892,839 @@ describe('gano · la regla del desenlace, en un solo sitio', () => {
     const aviso = { ganadores: [ANA] };
     expect(textoDelResultado(aviso, ANA)).toContain('Has ganado');
     expect(gano(aviso, ANA)).toBe(true);
+  });
+});
+
+/* R10: lo que el panel de desenlace muestra. Tres estados, y una cifra que es
+   la que de verdad le paso al saldo del jugador. */
+
+describe('desenlaceDe · empate no es derrota', () => {
+  test('sin ganadores es empate, no la derrota de todos', () => {
+    const fin = { ganadores: [] };
+
+    expect(empate(fin)).toBe(true);
+    expect(desenlaceDe(fin, ANA)).toBe('empate');
+    expect(desenlaceDe(fin, BRUNO)).toBe('empate');
+    // Y el texto ya lo decia: era el panel el que contradecia al texto.
+    expect(textoDelResultado(fin, ANA)).toMatch(/empate/i);
+  });
+
+  test('con ganador, cada uno ve el suyo', () => {
+    const fin = { ganadores: [ANA] };
+
+    expect(empate(fin)).toBe(false);
+    expect(desenlaceDe(fin, ANA)).toBe('victoria');
+    expect(desenlaceDe(fin, BRUNO)).toBe('derrota');
+  });
+
+  test('por equipos no hay empate: el aviso trae el equipo ganador', () => {
+    const fin = { ganadores: [], equipoGanador: 2 };
+
+    expect(empate(fin)).toBe(false);
+    expect(desenlaceDe(fin, ANA, 2)).toBe('victoria');
+    expect(desenlaceDe(fin, BRUNO, 1)).toBe('derrota');
+  });
+});
+
+describe('netoDeCreditos · la cifra grande es el movimiento real', () => {
+  /*
+   * El defecto que arregla R10: el numero grande salia de `recompensa`, que
+   * nunca resta (el contrato la declara `minimum: 0`). Quien perdia una apuesta
+   * de 350 veia un «+2» enorme y la perdida solo en la frase de abajo.
+   */
+  test('quien pierde la apuesta ve un neto negativo, no la recompensa sola', () => {
+    const fin = {
+      ganadores: [BRUNO],
+      reparto: [{ idJugador: ANA, creditos: -350 }],
+      recompensa: [{ idJugador: ANA, creditos: 1, ganador: false }],
+    };
+
+    expect(netoDeCreditos(fin, ANA)).toBe(-349);
+  });
+
+  test('quien gana ve la apuesta mas la recompensa', () => {
+    const fin = {
+      ganadores: [ANA],
+      reparto: [{ idJugador: ANA, creditos: 350 }],
+      recompensa: [{ idJugador: ANA, creditos: 2, ganador: true }],
+    };
+
+    expect(netoDeCreditos(fin, ANA)).toBe(352);
+  });
+
+  test('con una sola de las dos, vale esa', () => {
+    expect(netoDeCreditos({ recompensa: [{ idJugador: ANA, creditos: 2 }] }, ANA)).toBe(2);
+    expect(netoDeCreditos({ reparto: [{ idJugador: ANA, creditos: -10 }] }, ANA)).toBe(-10);
+  });
+
+  test('sin ninguna de las dos es null: no se inventa un cero', () => {
+    expect(netoDeCreditos({ ganadores: [ANA] }, ANA)).toBeNull();
+    // Y lo de otro jugador no se cuela como propio.
+    expect(netoDeCreditos({ reparto: [{ idJugador: BRUNO, creditos: 9 }] }, ANA)).toBeNull();
+  });
+});
+
+describe('mezclarPorJugador · el final se anuncia por partes', () => {
+  /*
+   * La liquidacion tardia de la apuesta (HU-JUE-014 CA-06) llega en un segundo
+   * aviso que trae `recompensa` VACIA. Quedarse con el ultimo aviso borraria la
+   * recompensa ya anunciada, y la cifra grande cambiaria de significado a
+   * mitad.
+   */
+  test('lo que traia el primer aviso no se pierde con el segundo', () => {
+    const primero = [{ idJugador: ANA, creditos: 2, ganador: true }];
+
+    expect(mezclarPorJugador(primero, [])).toEqual(primero);
+    expect(mezclarPorJugador(primero, undefined)).toEqual(primero);
+  });
+
+  test('si el segundo trae lo del mismo jugador, manda el segundo', () => {
+    const mezclado = mezclarPorJugador(
+      [{ idJugador: ANA, creditos: 0 }],
+      [{ idJugador: ANA, creditos: 2 }],
+    );
+
+    expect(mezclado).toEqual([{ idJugador: ANA, creditos: 2 }]);
+  });
+
+  test('cada jugador conserva su entrada', () => {
+    const mezclado = mezclarPorJugador(
+      [{ idJugador: ANA, creditos: 1 }],
+      [{ idJugador: BRUNO, creditos: 2 }],
+    );
+
+    expect(mezclado).toHaveLength(2);
+  });
+});
+
+describe('UXC-2 · barra de mando, registro y reconexion', () => {
+  const MANDO = `
+    <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+    <div data-zona="vidas">
+      <div class="barra-vida" data-jugador="${ANA}"></div>
+      <div class="barra-vida" data-jugador="${BRUNO}"></div>
+    </div>
+    <div data-zona="campo">
+      <div class="campo__puesto" data-puesto="${ANA}"></div>
+      <div class="campo__puesto" data-puesto="${BRUNO}"></div>
+    </div>
+    <div data-zona="acciones"></div>
+    <div data-zona="especiales"></div>
+    <p id="motivo-especiales" data-zona="motivo-especiales"></p>
+    <div data-zona="poder" hidden></div>
+    <div data-zona="registro"></div>
+    <div data-zona="resultado" hidden></div>
+  `;
+
+  function montar(extra = {}) {
+    document.body.innerHTML = MANDO;
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      numeroTurno: 3,
+      alAtacar: () => {},
+      ...extra,
+    });
+  }
+
+  test('el turno dice su numero y el registro arranca con el estado', () => {
+    montar();
+    const turno = document.querySelector('[data-zona="turno"]');
+    expect(turno.querySelector('.turno-actual__ronda').textContent).toBe('Turno 3');
+    expect(turno.querySelector('.turno-actual__texto').textContent).toBe('Es tu turno');
+    expect(document.querySelector('[data-zona="registro"]').textContent).toContain(
+      'Combate en curso · Turno 3',
+    );
+  });
+
+  test('una accion resuelta se narra y salta sobre el heroe golpeado', () => {
+    const controles = montar();
+    controles.recibir({
+      ...accionResuelta(80),
+      accion: { codigo: 'ATAQUE_BASICO', nombre: 'CAUSAR_DANO_CRITICO' },
+      afectados: [
+        {
+          idJugador: BRUNO,
+          vidaActual: 80,
+          vidaMaxima: 90,
+          diferencia: -10,
+          efectosActivos: [{ codigo: 'VENENO', nombre: 'Veneno', turnosRestantes: 2 }],
+        },
+      ],
+    });
+    const registro = document.querySelector('[data-zona="registro"]');
+    expect(registro.querySelector('[data-tono="critico"]').textContent).toContain('¡Crítico!');
+    const puesto = document.querySelector(`[data-puesto="${BRUNO}"]`);
+    expect(puesto.querySelector('.impacto').textContent).toBe('−10Crítico');
+    // El efecto, sobre la barra (compacto) y bajo el heroe en el campo.
+    expect(document.querySelector(`[data-jugador="${BRUNO}"] .efecto--compacto`)).not.toBeNull();
+    expect(puesto.querySelector('.efecto')).not.toBeNull();
+  });
+
+  test('las especiales se ensenan deshabilitadas con el motivo, y el poder con su maximo', () => {
+    const controles = montar();
+    controles.mostrarHeroe({
+      acciones: [
+        { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+        { nombre: 'Reanimación', costo: 'Todos los puntos de poder', efecto: 'Revive' },
+      ],
+      poderMaximo: 10,
+    });
+    const especiales = document.querySelectorAll('[data-zona="especiales"] button');
+    expect(especiales).toHaveLength(2);
+    for (const boton of especiales) {
+      expect(boton.disabled).toBe(true);
+      expect(boton.getAttribute('aria-describedby')).toBe('motivo-especiales');
+      expect(boton.hasAttribute('data-atacar')).toBe(false);
+    }
+    // Sin cifra en el catalogo se muestra el texto tal cual.
+    expect(especiales[1].textContent).toContain('Todos los puntos de poder');
+    expect(document.querySelector('[data-zona="motivo-especiales"]').textContent).toBe(
+      MOTIVO_ESPECIALES,
+    );
+    const poder = document.querySelector('[data-zona="poder"]');
+    expect(poder.hidden).toBe(false);
+    expect(poder.textContent).toContain('máx. 10');
+    // Los ataques basicos no cambian: uno por rival.
+    expect(document.querySelectorAll('[data-atacar]')).toHaveLength(1);
+  });
+
+  test('sin acciones conocidas, el motivo lo dice', () => {
+    const controles = montar();
+    controles.mostrarHeroe({
+      acciones: [],
+      poderMaximo: null,
+      motivo: 'El catálogo no respondió.',
+    });
+    expect(document.querySelector('[data-zona="motivo-especiales"]').textContent).toBe(
+      'El catálogo no respondió.',
+    );
+    expect(document.querySelector('[data-zona="poder"]').hidden).toBe(true);
+  });
+
+  test('sin canal se cierra el ataque y se anota una sola vez; al volver se reconcilia', () => {
+    const controles = montar();
+    const ataque = document.querySelector('[data-atacar]');
+    expect(ataque.disabled).toBe(false);
+
+    controles.bloquear();
+    controles.bloquear();
+    expect(ataque.disabled).toBe(true);
+    const registro = document.querySelector('[data-zona="registro"]');
+    expect(registro.textContent.match(/Se perdió la conexión/g)).toHaveLength(1);
+
+    controles.sincronizar({
+      estado: 'EN_CURSO',
+      turnoActual: { idJugador: BRUNO, numeroTurno: 4 },
+    });
+    expect(ataque.disabled).toBe(true);
+    expect(document.querySelector('.turno-actual__ronda').textContent).toBe('Turno 4');
+    controles.sincronizar({ estado: 'EN_CURSO', turnoActual: { idJugador: ANA, numeroTurno: 5 } });
+    expect(ataque.disabled).toBe(false);
+    expect(registro.textContent).toContain('Conexión recuperada');
+  });
+
+  test('si termino mientras no habia canal, se dice y no se deja atacar', () => {
+    const controles = montar();
+    controles.bloquear();
+    controles.sincronizar({
+      estado: 'FINALIZADA',
+      turnoActual: { idJugador: ANA, numeroTurno: 9 },
+    });
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+    expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="registro"]').textContent).toContain(
+      'La partida terminó mientras se recuperaba la conexión',
+    );
+  });
+
+  test('el final se anota una vez aunque se anuncie dos (reparto tardio)', () => {
+    const controles = montar();
+    const fin = { tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [ANA] };
+    controles.recibir(fin);
+    controles.recibir({ ...fin, reparto: [{ idJugador: ANA, creditos: 10 }] });
+    const registro = document.querySelector('[data-zona="registro"]');
+    expect(registro.textContent.match(/Combate finalizado: victoria/g)).toHaveLength(1);
+  });
+});
+
+describe('B7 · las acciones que calcula el servidor se juegan', () => {
+  const CARLA = '44444444-4444-4444-4444-444444444444';
+  const MANDO_B7 = `
+    <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+    <div data-zona="vidas">
+      <div class="barra-vida" data-jugador="${ANA}"></div>
+      <div class="barra-vida" data-jugador="${BRUNO}"></div>
+      <div class="barra-vida" data-jugador="${CARLA}"></div>
+    </div>
+    <div data-zona="campo">
+      <div class="campo__puesto" data-puesto="${ANA}"></div>
+      <div class="campo__puesto" data-puesto="${BRUNO}"></div>
+      <div class="campo__puesto" data-puesto="${CARLA}"></div>
+    </div>
+    <div data-zona="acciones"></div>
+    <div data-zona="especiales"></div>
+    <p id="motivo-especiales" data-zona="motivo-especiales">Cargando las acciones de tu héroe…</p>
+    <div data-zona="poder" hidden></div>
+    <div data-zona="registro"></div>
+    <div data-zona="resultado" hidden></div>
+  `;
+
+  /** EstadoDeAccion (salas-partidas.yaml 1.7.0) con valores por omision. */
+  function accion(codigo, extra = {}) {
+    return {
+      codigo,
+      nombre: codigo,
+      tipo: 'ATAQUE',
+      esEpica: false,
+      costoPoder: 2,
+      todoElPoder: false,
+      turnosDeCarga: 1,
+      nivelRequerido: 1,
+      disponible: true,
+      motivo: null,
+      ...extra,
+    };
+  }
+
+  /** Las del «Guerrero Tanque» del catalogo (Tabla 7), como las calcularia el motor. */
+  const DEL_GUERRERO = [
+    accion('ATAQUE_BASICO', { nombre: 'Ataque básico', costoPoder: 0, turnosDeCarga: 0 }),
+    accion('Golpe con escudo'),
+    accion('Mano de piedra', {
+      tipo: 'DEFENSA',
+      costoPoder: 4,
+      disponible: false,
+      motivo: 'En carga: 1 turno.',
+    }),
+    accion('Defensa feroz', {
+      tipo: 'DEFENSA',
+      costoPoder: 6,
+      disponible: false,
+      motivo: 'Poder insuficiente: cuesta 6 y tienes 4.',
+    }),
+  ];
+
+  /** Las de un sanador: sin ataque basico, y una que cuesta todo el poder. */
+  const DEL_SANADOR = [
+    accion('SANACION_BASICA', {
+      nombre: 'Sanación básica',
+      tipo: 'SANACION',
+      costoPoder: 0,
+      turnosDeCarga: 0,
+    }),
+    accion('Reanimación', {
+      tipo: 'REANIMACION',
+      costoPoder: null,
+      todoElPoder: true,
+      disponible: false,
+      motivo: 'Se aprende en el nivel 3.',
+    }),
+  ];
+
+  function heroe(nombre, extra = {}) {
+    return { nombre, vidaActual: 60, vidaMaxima: 60, ...extra };
+  }
+
+  /** Ana con el estado del servidor, contra Bruno (y Carla si `contraDos`). */
+  function montar({ acciones = DEL_GUERRERO, turnoDe = ANA, contraDos = false, alAtacar } = {}) {
+    document.body.innerHTML = MANDO_B7;
+    const enLaPartida = [
+      {
+        jugador: { id: ANA },
+        heroe: heroe('Arquero del Norte', { acciones, poderActual: 4, poderMaximo: 10 }),
+      },
+      { jugador: { id: BRUNO }, heroe: heroe('Centinela') },
+    ];
+    if (contraDos) {
+      enLaPartida.push({ jugador: { id: CARLA }, heroe: heroe('Maga') });
+    }
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: enLaPartida,
+      turnoDe,
+      numeroTurno: 2,
+      alAtacar: alAtacar ?? (() => {}),
+    });
+  }
+
+  const especial = (codigo) =>
+    [...document.querySelectorAll('[data-zona="especiales"] [data-especial]')].find(
+      (b) => b.dataset.especial === codigo,
+    );
+  const rival = (id) => document.querySelector(`[data-atacar="${id}"]`);
+  const motivo = () => document.querySelector('[data-zona="motivo-especiales"]').textContent;
+
+  test('estadoPropioDe lee el heroe propio del canal y de GET /partidas/{id}', () => {
+    const delCanal = [{ jugador: { id: ANA }, heroe: { acciones: DEL_GUERRERO, poderActual: 3 } }];
+    const deLaApi = [{ jugador: ANA, heroe: { acciones: DEL_GUERRERO, poderMaximo: 10 } }];
+
+    // UXC-9 — también `recargas` (1.5.0): lo que falta de carga, por acción.
+    expect(estadoPropioDe(delCanal, ANA)).toEqual({
+      acciones: DEL_GUERRERO,
+      poderActual: 3,
+      poderMaximo: null,
+      recargas: {},
+    });
+    expect(estadoPropioDe(deLaApi, ANA).poderMaximo).toBe(10);
+    expect(estadoPropioDe([], ANA)).toEqual({
+      acciones: [],
+      poderActual: null,
+      poderMaximo: null,
+      recargas: {},
+    });
+    const enCarga = [{ jugador: ANA, heroe: { acciones: DEL_GUERRERO, recargas: { X: 2 } } }];
+    expect(estadoPropioDe(enCarga, ANA).recargas).toEqual({ X: 2 });
+  });
+
+  test('UXC-9 — insigniasDe: con `recargas`, el reloj dice lo que falta', () => {
+    const golpe = { codigo: 'GOLPE', costoPoder: 2, turnosDeCarga: 1 };
+    expect(insigniasDe(golpe).map((i) => i.texto)).toEqual(['2', '1']);
+    const enCarga = insigniasDe(golpe, { GOLPE: 2 });
+    expect(enCarga.at(-1)).toMatchObject({
+      texto: 'faltan 2',
+      enCarga: true,
+      etiqueta: 'En carga: faltan 2 turnos',
+    });
+    expect(insigniasDe({ ...golpe, esEpica: true, costoPoder: 0 })[0].texto).toBe('Épica');
+  });
+
+  test('UXC-9 — la épica y la carga que falta se ven en la carta, no solo en el título', () => {
+    montar({
+      acciones: [
+        accion('Golpe con escudo'),
+        accion('Furia ancestral', { esEpica: true, costoPoder: 0, turnosDeCarga: 2 }),
+        accion('Mano de piedra', { disponible: false, motivo: 'En carga: 2 turnos.' }),
+      ],
+    });
+    const epica = especial('Furia ancestral');
+    expect(epica.querySelector('.accion-combate__insignias').textContent).toContain('Épica');
+    expect(epica.getAttribute('aria-label')).toContain('Acción épica');
+    // Sin `recargas`, la carga es la de la acción («⟳1»); con ellas, lo que falta.
+    expect(especial('Mano de piedra').textContent).not.toContain('faltan');
+  });
+
+  test('se pintan al montar, con su disponibilidad y su motivo, y sin el ataque basico', () => {
+    montar();
+
+    const codigos = [...document.querySelectorAll('[data-especial]')].map(
+      (b) => b.dataset.especial,
+    );
+    expect(codigos).toEqual(['Golpe con escudo', 'Mano de piedra', 'Defensa feroz']);
+    expect(especial('Golpe con escudo').disabled).toBe(false);
+    expect(especial('Mano de piedra').disabled).toBe(true);
+    expect(especial('Mano de piedra').title).toContain('En carga: 1 turno.');
+    // Falta de poder: la variante «sin poder» del kit, con el motivo del servidor.
+    expect(especial('Defensa feroz').title).toContain('Poder insuficiente: cuesta 6 y tienes 4.');
+    expect(especial('Defensa feroz').classList.contains('accion-combate--sin-poder')).toBe(true);
+    // Coste y carga con su icono, y dichos con palabras.
+    expect(especial('Golpe con escudo').getAttribute('aria-label')).toContain('cuesta 2 de poder');
+    expect(especial('Golpe con escudo').getAttribute('aria-label')).toContain('Un turno de carga');
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.miTurno);
+    // El poder que lleva el servidor, no solo el maximo.
+    const poder = document.querySelector('[data-zona="poder"]');
+    expect(poder.hidden).toBe(false);
+    expect(poder.textContent).toContain('4/10');
+  });
+
+  test('fuera del turno propio todas quedan cerradas con «No es tu turno»', () => {
+    montar({ turnoDe: BRUNO });
+
+    for (const boton of document.querySelectorAll('[data-especial]')) {
+      expect(boton.disabled).toBe(true);
+      expect(boton.title).toContain('No es tu turno');
+    }
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.fueraDeTurno);
+  });
+
+  // §7.6 (80 % de la pantalla para el campo): el motivo va en la cabecera del
+  // grupo y ensancha la franja de mando. Uno largo empuja «Lo que ha pasado» a
+  // otra fila con seis participantes (laboratorio visual, campo-de-combate).
+  test('todos los motivos de la franja caben en una fila', () => {
+    for (const texto of [MOTIVO_ESPECIALES, ...Object.values(MOTIVOS_DE_ESPECIALES)]) {
+      expect(texto.length).toBeLessThanOrEqual(LARGO_MAXIMO_MOTIVO);
+    }
+  });
+
+  test('una especial de ataque con un solo rival en pie va directa contra el', () => {
+    const alAtacar = jest.fn();
+    montar({ alAtacar });
+
+    especial('Golpe con escudo').click();
+
+    expect(alAtacar).toHaveBeenCalledWith({ codigoAccion: 'Golpe con escudo', idObjetivo: BRUNO });
+  });
+
+  test('con varios rivales la especial queda elegida y el rival que se pulsa la recibe', () => {
+    const alAtacar = jest.fn();
+    montar({ contraDos: true, alAtacar });
+
+    especial('Golpe con escudo').click();
+    expect(alAtacar).not.toHaveBeenCalled();
+    expect(especial('Golpe con escudo').getAttribute('aria-pressed')).toBe('true');
+    // El nombre de la especial lo dicen su boton pulsado y cada rival.
+    expect(motivo()).toBe(MOTIVOS_DE_ESPECIALES.eligiendoRival);
+    expect(rival(CARLA).getAttribute('aria-label')).toBe('Golpe con escudo contra Maga');
+
+    rival(CARLA).click();
+    expect(alAtacar).toHaveBeenLastCalledWith({
+      idObjetivo: CARLA,
+      codigoAccion: 'Golpe con escudo',
+    });
+    // Jugada: el siguiente golpe vuelve a ser el basico.
+    expect(rival(CARLA).getAttribute('aria-label')).toBe('Atacar a Maga');
+    rival(BRUNO).click();
+    expect(alAtacar).toHaveBeenLastCalledWith({ idObjetivo: BRUNO, codigoAccion: 'ATAQUE_BASICO' });
+  });
+
+  test('pulsar otra vez la especial elegida la suelta, y el foco sigue en ella', () => {
+    montar({ contraDos: true });
+
+    especial('Golpe con escudo').focus();
+    especial('Golpe con escudo').click();
+    expect(document.activeElement).toBe(especial('Golpe con escudo'));
+
+    especial('Golpe con escudo').click();
+    expect(especial('Golpe con escudo').getAttribute('aria-pressed')).toBe('false');
+    expect(rival(BRUNO).getAttribute('aria-label')).toBe('Atacar a Centinela');
+  });
+
+  test('una especial sin objetivo (una defensa) se manda sin idObjetivo: la regla es del servidor', () => {
+    const alAtacar = jest.fn();
+    montar({
+      acciones: [accion('Mano de piedra', { tipo: 'DEFENSA', costoPoder: 4 })],
+      alAtacar,
+    });
+
+    especial('Mano de piedra').click();
+
+    expect(alAtacar).toHaveBeenCalledWith({ codigoAccion: 'Mano de piedra', idObjetivo: null });
+  });
+
+  test('un sanador no tiene ataque basico: el rival dice por que y su sanacion se juega', () => {
+    const alAtacar = jest.fn();
+    montar({ acciones: DEL_SANADOR, alAtacar });
+
+    expect(rival(BRUNO).disabled).toBe(true);
+    expect(rival(BRUNO).title).toBe(MOTIVO_SANADOR);
+    especial('SANACION_BASICA').click();
+    expect(alAtacar).toHaveBeenCalledWith({ codigoAccion: 'SANACION_BASICA', idObjetivo: null });
+  });
+
+  test('una accion que cuesta todo el poder lo dice con palabras y con su insignia', () => {
+    montar({ acciones: DEL_SANADOR });
+
+    expect(especial('Reanimación').textContent).toContain('Todo');
+    expect(especial('Reanimación').getAttribute('aria-label')).toContain('Cuesta todo tu poder');
+    expect(especial('Reanimación').title).toContain('Se aprende en el nivel 3.');
+  });
+
+  test('el turno propio trae acciones y poder nuevos', () => {
+    const controles = montar({ turnoDe: BRUNO });
+
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: ANA,
+      numeroTurno: 3,
+      poderActual: 6,
+      poderMaximo: 10,
+      acciones: [accion('Mano de piedra', { tipo: 'DEFENSA', costoPoder: 4 })],
+    });
+
+    expect(especial('Mano de piedra').disabled).toBe(false);
+    expect(especial('Golpe con escudo')).toBeUndefined();
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('6/10');
+  });
+
+  test('el poder baja con la accion resuelta y quien cae deja de ser objetivo', () => {
+    const alAtacar = jest.fn();
+    const controles = montar({ contraDos: true, alAtacar });
+
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo: 'ATAQUE_BASICO', nombre: 'CAUSAR_DANO' },
+      afectados: [
+        { idJugador: BRUNO, vidaActual: 0, vidaMaxima: 60, diferencia: -60 },
+        { idJugador: ANA, vidaActual: 60, vidaMaxima: 60, diferencia: 0, poderActual: 2 },
+      ],
+    });
+
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('2/10');
+    expect(rival(BRUNO).disabled).toBe(true);
+    expect(rival(BRUNO).title).toBe('Ya cayó');
+    // Con una sola rival en pie, la especial de ataque ya no pregunta.
+    especial('Golpe con escudo').click();
+    expect(alAtacar).toHaveBeenCalledWith({ codigoAccion: 'Golpe con escudo', idObjetivo: CARLA });
+  });
+
+  test('el catalogo solo pone la descripcion: lo que se juega sigue siendo del servidor', () => {
+    const controles = montar();
+
+    controles.mostrarHeroe({
+      acciones: [
+        { nombre: 'Golpe con escudo', costo: '2 puntos de poder', efecto: '+2 al ataque' },
+      ],
+      poderMaximo: 12,
+    });
+
+    expect(especial('Golpe con escudo').title).toContain('Efecto: +2 al ataque');
+    expect(document.querySelectorAll('[data-especial]')).toHaveLength(3);
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('4/10');
+  });
+
+  test('al reconectar, la partida releida (jugador como id) renueva poder, acciones y caidos', () => {
+    const controles = montar({ turnoDe: BRUNO });
+    controles.bloquear();
+
+    controles.sincronizar({
+      estado: 'EN_CURSO',
+      turnoActual: { idJugador: ANA, numeroTurno: 7 },
+      participantes: [
+        {
+          jugador: ANA,
+          heroe: heroe('Arquero del Norte', {
+            poderActual: 8,
+            poderMaximo: 10,
+            acciones: [accion('Golpe con escudo')],
+          }),
+        },
+        { jugador: BRUNO, heroe: heroe('Centinela', { vidaActual: 0 }) },
+      ],
+    });
+
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('8/10');
+    expect(rival(BRUNO).title).toBe('Ya cayó');
+    expect(document.querySelectorAll('[data-especial]')).toHaveLength(1);
+    expect(especial('Golpe con escudo').disabled).toBe(false);
+  });
+});
+
+describe('auditoría de DEV del 30-sep · combate', () => {
+  const MANDO = `
+    <a data-zona="salir" href="./batallas.html" title="Volver a Jugar online (la partida sigue en curso)">Jugar online</a>
+    <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+    <div data-zona="vidas">
+      <div class="barra-vida" data-jugador="${ANA}"></div>
+      <div class="barra-vida" data-jugador="${BRUNO}"></div>
+    </div>
+    <div data-zona="campo">
+      <div class="campo__puesto" data-puesto="${ANA}"></div>
+      <div class="campo__puesto" data-puesto="${BRUNO}"></div>
+    </div>
+    <div data-zona="mando">
+      <div data-zona="acciones"></div>
+      <div data-zona="especiales"></div>
+      <p id="motivo-especiales" data-zona="motivo-especiales"></p>
+      <div data-zona="poder" hidden></div>
+    </div>
+    <div data-zona="registro"></div>
+    <div data-zona="resultado" hidden></div>
+  `;
+
+  const GOLPE = { codigo: 'GOLPE_CON_ESCUDO', nombre: 'Golpe con escudo', tipo: 'ATAQUE' };
+  const MANO = { codigo: 'MANO_DE_PIEDRA', nombre: 'Mano de piedra', tipo: 'DEFENSA' };
+
+  /** Ana (Guerrero Tanque, 4/10 de poder) contra Bruno (la máquina). */
+  function enLaPartida({ vidaDeAna = 44 } = {}) {
+    return [
+      {
+        jugador: { id: BRUNO },
+        esIA: true,
+        heroe: { nombre: 'Mago Fuego', vidaActual: 40, vidaMaxima: 40 },
+      },
+      {
+        jugador: { id: ANA },
+        heroe: {
+          nombre: 'Guerrero Tanque',
+          vidaActual: vidaDeAna,
+          vidaMaxima: 44,
+          poderActual: 4,
+          poderMaximo: 10,
+          acciones: [
+            { ...GOLPE, costoPoder: 2, disponible: true },
+            { ...MANO, costoPoder: 4, disponible: true },
+          ],
+        },
+      },
+    ];
+  }
+
+  function montar(extra = {}) {
+    document.body.innerHTML = MANDO;
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: enLaPartida(),
+      turnoDe: ANA,
+      numeroTurno: 2,
+      alAtacar: () => {},
+      ...extra,
+    });
+  }
+
+  const registro = () => document.querySelector('[data-zona="registro"]').textContent;
+
+  test('una especial que no mueve ninguna vida no se descarta como repetida', () => {
+    const avisos = registroDeAvisos();
+    const defensa = (turno) => [
+      { tipo: TURNO_CAMBIADO, idPartida: PARTIDA, idJugador: ANA, numeroTurno: turno },
+      {
+        tipo: ACCION_RESUELTA,
+        idPartida: PARTIDA,
+        idEjecutor: ANA,
+        accion: { codigo: 'MANO_DE_PIEDRA', nombre: 'MANO_DE_PIEDRA' },
+        afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44, poderActual: 6 }],
+      },
+    ];
+    const [turno2, enEl2] = defensa(2);
+    const [turno4, enEl4] = defensa(4);
+
+    expect(avisos.yaVisto(turno2)).toBe(false);
+    expect(avisos.yaVisto(enEl2)).toBe(false);
+    // La misma, reenviada dentro del mismo turno, sí es la misma.
+    expect(avisos.yaVisto(enEl2)).toBe(true);
+    // La misma defensa dos turnos después es otra jugada, aunque todo quede igual.
+    expect(avisos.yaVisto(turno4)).toBe(false);
+    expect(avisos.yaVisto(enEl4)).toBe(false);
+    // Y un cambio de turno viejo reenviado no devuelve el ancla atrás.
+    expect(avisos.yaVisto(turno2)).toBe(true);
+    expect(avisos.yaVisto(enEl4)).toBe(true);
+  });
+
+  test('dos acciones distintas con las mismas vidas son dos jugadas', () => {
+    const avisos = registroDeAvisos();
+    const jugada = (codigo) => ({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo, nombre: codigo },
+      afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44 }],
+    });
+    expect(avisos.yaVisto(jugada('MANO_DE_PIEDRA'))).toBe(false);
+    expect(avisos.yaVisto(jugada('DEFENSA_FEROZ'))).toBe(false);
+  });
+
+  test('el poder que se gasta y el que se recupera quedan en el registro', () => {
+    const controles = montar();
+
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo: 'GOLPE_CON_ESCUDO', nombre: 'CAUSAR_DANO', tipo: 'ATAQUE' },
+      afectados: [
+        { idJugador: BRUNO, vidaActual: 34, vidaMaxima: 40, diferencia: -6 },
+        { idJugador: ANA, vidaActual: 44, vidaMaxima: 44, diferencia: 0, poderActual: 2 },
+      ],
+    });
+    expect(registro()).toContain('Guerrero Tanque (tú) usa Golpe con escudo.');
+    expect(registro()).toContain('Gastas 2 de poder (2/10).');
+    expect(document.querySelector('[data-zona="poder"]').textContent).toContain('2/10');
+
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: BRUNO,
+      numeroTurno: 3,
+    });
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: ANA,
+      numeroTurno: 4,
+      poderActual: 4,
+      poderMaximo: 10,
+    });
+    expect(registro()).toContain('Recuperas 2 de poder (4/10).');
+    const lineas = [...document.querySelectorAll('[data-zona="registro"] li')].map(
+      (l) => l.textContent,
+    );
+    // Primero de quién es el turno, después lo que trae.
+    expect(lineas.indexOf('Recuperas 2 de poder (4/10).')).toBeGreaterThan(
+      lineas.indexOf('Turno 4: te toca a ti.'),
+    );
+  });
+
+  test('el poder que quita una acción ajena se dice como pérdida', () => {
+    const controles = montar({ turnoDe: BRUNO });
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: BRUNO,
+      accion: { codigo: 'ROBO', nombre: 'ROBO', tipo: 'EFECTO' },
+      afectados: [{ idJugador: ANA, vidaActual: 44, vidaMaxima: 44, poderActual: 1 }],
+    });
+    expect(registro()).toContain('Pierdes 3 de poder (1/10).');
+  });
+
+  test('al terminar se retira el mando, el poder y las especiales, y la salida deja de decir «en curso»', () => {
+    const controles = montar();
+    controles.recibir({ tipo: PARTIDA_FINALIZADA, idPartida: PARTIDA, ganadores: [BRUNO] });
+
+    expect(document.querySelector('[data-zona="mando"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="especiales"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="poder"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+    const salir = document.querySelector('[data-zona="salir"]');
+    expect(salir.title).not.toContain('sigue en curso');
+    expect(salir.title).toContain('terminó');
+    // Lo que llegue después (el catálogo del héroe) no vuelve a pintar el poder.
+    controles.mostrarHeroe({ acciones: [], poderMaximo: 10 });
+    expect(document.querySelector('[data-zona="poder"]').hidden).toBe(true);
+  });
+
+  test('una partida que ya estaba FINALIZADA al montar nace cerrada y con su desenlace', () => {
+    montar({
+      partidaFinalizada: {
+        id: PARTIDA,
+        estado: 'FINALIZADA',
+        resultado: 'GANADOR',
+        ganadores: [BRUNO],
+        equipoGanador: null,
+      },
+    });
+
+    expect(registro()).not.toContain('Combate en curso');
+    expect(registro()).toContain('Combate finalizado: derrota.');
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+    expect(document.querySelector('[data-zona="mando"]').hidden).toBe(true);
+    expect(document.querySelectorAll('[data-especial]:not([disabled])')).toHaveLength(0);
+    const resultado = document.querySelector('[data-zona="resultado"]');
+    expect(resultado.hidden).toBe(false);
+    expect(resultado.textContent).toContain('DERROTA');
+    // La partida releida no trae créditos: se dice dónde están, no se inventa un cero.
+    expect(resultado.textContent).toContain('historial de Mi cuenta');
+  });
+
+  test('si terminó sin canal, la partida releída pinta el desenlace', () => {
+    const controles = montar();
+    controles.bloquear();
+    controles.sincronizar({ estado: 'FINALIZADA', ganadores: [ANA], resultado: 'GANADOR' });
+
+    expect(document.querySelector('[data-zona="resultado"]').textContent).toContain('VICTORIA');
+    // Una lectura atrasada que aún diga EN_CURSO no reabre nada.
+    controles.sincronizar({ estado: 'EN_CURSO', turnoActual: { idJugador: ANA, numeroTurno: 9 } });
+    expect(document.querySelector('[data-zona="turno"]').textContent).toBe('Combate finalizado');
+  });
+
+  test('recién empezada en el turno 2, el registro cuenta quién abrió y lo que dejó', () => {
+    montar({ participantes: enLaPartida({ vidaDeAna: 34 }), recienEmpezada: true });
+
+    // Desde el 4-oct la máquina se marca con «(IA)» en el registro.
+    expect(registro()).toContain('Turno 1: abrió Mago Fuego (IA).');
+    expect(registro()).toContain('Guerrero Tanque (tú) recibió 10 de daño en el turno 1 (34/44).');
+  });
+
+  test('al recargar a mitad de combate no se reescribe el pasado', () => {
+    montar({ participantes: enLaPartida({ vidaDeAna: 34 }), numeroTurno: 8 });
+
+    expect(registro()).not.toContain('abrió');
+    expect(registro()).not.toContain('recibió');
   });
 });

@@ -99,6 +99,182 @@ Lo que sí cambia de sitio son las colecciones de Postman de inventario y produc
 
 Para depurar contra el puerto directo desde un portátil se añade la IP propia a `cidr_servicios`, a propósito y temporalmente. No se deja puesta.
 
+## Acción humana pendiente (B12) — no se puede hacer desde este repositorio
+
+Lo de arriba es lo que **declara** `main.tf`. Pero esta carpeta no gobierna el host real (vive en la cuenta del grupo 2, ver «ANTES DE NADA»), y la realidad del 27-sep-2026 es otra: **desde internet se llega a `34.193.90.11:8102` y `:8103`**. Desde este repositorio no se toca nada de esa cuenta, a propósito: ni `tofu apply`, ni consola, ni credenciales. Quedan dos acciones para el dueño de la cuenta del grupo 2, con el equipo de infraestructura (Grupo 6) acompañando.
+
+### 1. Cerrar 8101-8104 al mundo (15 minutos, sin ventana)
+
+**Qué:** en el grupo de seguridad de `nexus-contenido-dev`, las reglas de entrada de 8101-8104 pasan de `0.0.0.0/0` a **`35.168.124.119/32`** (la IP elástica del host de plataforma). El 22 se queda como está (solo llave, lo usa `cd.yml`). Cuando misiones (B9) se despliegue en 8105, la misma regla.
+
+**Por qué:** hoy cualquiera llega a cada servicio de contenido sin pasar por el borde: `/actuator`, rutas de escritura sin el límite de frecuencia del borde y sin sus cabeceras. Los únicos clientes legítimos de esos puertos salen del host de plataforma: el borde (`/api/v1/{heroes,equipos,estrategias,progresion,inventario,productos}`) y `salas-partidas` (inventario, héroes, productos y el motor). El navegador entra por el 80 de plataforma. Es el mismo cierre que B12 hizo en plataforma (`../plataforma/README.md`, «Red»).
+
+**Cómo** (una de las dos):
+
+- **Consola** (lo directo): EC2 → *Security Groups* → el grupo de `nexus-contenido-dev` → *Inbound rules* → *Edit* → en las reglas de 8101-8104 (o 8101-8105) cambiar *Source* a `35.168.124.119/32` → *Save*. Es un cambio en sitio: no reinicia nada ni corta conexiones abiertas.
+- **OpenTofu desde la cuenta del grupo 2**: `cidr_servicios` ya vale `["35.168.124.119/32"]` en `main.tf`, pero antes hace falta la importación descrita arriba (o el `plan` propondrá crear un host nuevo). Solo si se elige la opción 1 de «¿cómo se despliega hoy?».
+
+**Comprobar** antes y después:
+
+```bash
+# desde un portatil: antes 200, despues se agota el tiempo
+curl -m 5 -s -o /dev/null -w '%{http_code}\n' http://34.193.90.11:8102/actuator/health
+# desde el host de plataforma (diagnostico-dev.yml o SSH): 200 antes y despues
+curl -m 5 -s -o /dev/null -w '%{http_code}\n' http://34.193.90.11:8102/actuator/health
+```
+
+Y el smoke de DEV (`smoke-dev.yml`) en verde: pasa por el borde y por `salas-partidas`, que son justo los dos clientes que se mantienen.
+
+### 2. Autenticación en el MongoDB de contenido (ventana de ~30 minutos)
+
+**Situación:** `contenido-mongo` corre **sin autenticación**. No publica puerto en el host (solo se llega desde la red de su compose), así que hoy no está expuesto a internet; pero cualquier contenedor de esa red, o cualquiera con una shell en el host, lee y escribe todas las bases, y un `ports:` añadido por error lo dejaría abierto al mundo. Tampoco hay aislamiento entre servicios: inventario podría escribir en la base de héroes (regla 7 de plataforma).
+
+**Plan** (lo ejecuta el grupo 2 con Grupo 6, fuera de horario de demo):
+
+1. **Respaldo** justo antes: `respaldo-dev.yml` a demanda (o `respaldar.sh --host contenido` en el host) y comprobar su simulacro en verde (`../../respaldo-dr/README.md`).
+2. **Usuarios, con la autenticación todavía apagada** (se pueden crear antes de activarla): un administrador (`root` en `admin`) y **un usuario por servicio que usa Mongo** con `readWrite` solo sobre su base: `heroes`, `inventario`, `productos` y, cuando se despliegue, `misiones` (el motor de combate no tiene base). Las claves se generan en ese momento y van **solo** a secretos del entorno `dev` de GitHub (p. ej. `MONGO_ROOT_PASSWORD`, `MONGO_HEROES_PASSWORD`…); nunca al repositorio ni a una bitácora.
+3. **Servicios con credenciales:** cada `SPRING_MONGODB_URI`/`MONGODB_URI` de `docker-compose.contenido.yml` pasa a `mongodb://<servicio>:${CLAVE}@contenido-mongo:27017/<base>?authSource=<base>`, con la clave por variable que reparte `desplegar.sh` (como hoy los secretos de plataforma). Se despliegan: con la autenticación apagada, las credenciales se aceptan igual, así que este paso no rompe nada.
+4. **Activar la autenticación:** `command: ["mongod", "--auth"]` en `contenido-mongo` y reinicio. `MONGO_INITDB_ROOT_USERNAME/PASSWORD` **no** activan nada sobre un volumen que ya tiene datos (solo actúan al inicializar uno vacío), así que el usuario administrador se crea a mano en el paso 2; esas dos variables se ponen igualmente en el contenedor, porque son las que leen `respaldar.sh` y `simulacro-restauracion.sh` para autenticarse (ya lo soportan: probado con Mongo 8.0 con autenticación).
+5. **Comprobar:** salud de los servicios de contenido, `smoke-dev.yml` en verde, un respaldo con su simulacro en verde, y que `mongosh` sin credenciales ya no lista las bases.
+6. **Marcha atrás** si algo falla: quitar `--auth` y reiniciar el contenedor. Los usuarios creados no estorban.
+
+Sin coste nuevo: es configuración del mismo contenedor, en el mismo host.
+
+## Acción humana pendiente (28-sep) — puertos para repartir carga y rol OIDC
+
+Medido el 28-sep (`diagnostico-dev.yml`, ver `../../despliegue/CAPACIDAD.md`):
+plataforma está con el swap lleno (2047/2047 MiB) y este host tiene 722-740
+MiB disponibles. El reparto propuesto trae aquí **misiones** (8105),
+**ms-subastas** (8092) y **ms-ecommerce** (8090), y **ms-chatbot** (8094) solo
+si la medición lo permite. Su único cliente es el borde del host de plataforma,
+así que los cuatro puertos se abren **solo** a su IP elástica. Lo hace el dueño
+de la cuenta `551262695144`, una vez, en la consola o en CloudShell.
+
+### Paso A · Grupo de seguridad (10 minutos, sin ventana)
+
+```text
+AWS Console (cuenta 551262695144, N. Virginia us-east-1)
+→ EC2 → Security Groups → sg-01bfe668448b037c4 → Inbound rules → Edit inbound rules
+   1) Añadir primero (para no cortar nada), todas con Source Custom 35.168.124.119/32:
+      Custom TCP 8101 "heroes desde plataforma"      Custom TCP 8105 "misiones desde plataforma"
+      Custom TCP 8102 "inventario desde plataforma"  Custom TCP 8092 "ms-subastas HTTP y WS desde el borde"
+      Custom TCP 8103 "productos desde plataforma"   Custom TCP 8090 "ms-ecommerce desde el borde"
+      Custom TCP 8104 "motor desde plataforma"       Custom TCP 8094 "ms-chatbot desde el borde"
+   2) Borrar las reglas de 8101-8104 cuyo Source sea 0.0.0.0/0
+   3) No tocar el 22. Ninguna regla nueva con 0.0.0.0/0.
+   → Save rules
+```
+
+En CloudShell de esa cuenta, lo mismo:
+
+```bash
+SG=sg-01bfe668448b037c4
+for p in 8101 8102 8103 8104 8105 8092 8090 8094; do
+  aws ec2 authorize-security-group-ingress --region us-east-1 --group-id $SG \
+    --ip-permissions "IpProtocol=tcp,FromPort=$p,ToPort=$p,IpRanges=[{CidrIp=35.168.124.119/32,Description=nexus-plataforma}]"
+done
+aws ec2 describe-security-group-rules --region us-east-1 --filters Name=group-id,Values=$SG \
+  --query "SecurityGroupRules[?IsEgress==\`false\` && CidrIpv4=='0.0.0.0/0'].[SecurityGroupRuleId,FromPort,ToPort]" --output table
+aws ec2 revoke-security-group-ingress --region us-east-1 --group-id $SG --security-group-rule-ids <sgr-de-8101-8104>
+```
+
+Lo comprueba Grupo 6 después: desde internet, 8101-8104 dejan de contestar;
+desde plataforma, 8090, 8092, 8094 y 8101-8105 contestan.
+
+### Paso B · Rol OIDC para este repositorio (15-20 minutos, recomendado)
+
+Con él, el pipeline enciende y apaga este host con el mismo horario que
+plataforma (hoy lleva semanas encendido 24 h) y los cambios de puertos
+futuros dejan de necesitar a una persona. Permisos mínimos: nada de IAM, S3,
+otras instancias ni otros grupos de seguridad.
+
+1. IAM → Identity providers → Add provider → OpenID Connect ·
+   `https://token.actions.githubusercontent.com` · audiencia `sts.amazonaws.com`
+   (si ya existe, se salta).
+2. IAM → Policies → Create policy → JSON, nombre `nexus-contenido-dev-ci`:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       { "Sid": "Leer", "Effect": "Allow",
+         "Action": ["ec2:DescribeInstances", "ec2:DescribeInstanceStatus",
+                    "ec2:DescribeSecurityGroups", "ec2:DescribeSecurityGroupRules"],
+         "Resource": "*" },
+       { "Sid": "EncenderApagarSoloContenido", "Effect": "Allow",
+         "Action": ["ec2:StartInstances", "ec2:StopInstances"],
+         "Resource": "arn:aws:ec2:us-east-1:551262695144:instance/i-0388a00d533e39039" },
+       { "Sid": "ReglasDeEntradaSoloDeEsteSG", "Effect": "Allow",
+         "Action": ["ec2:AuthorizeSecurityGroupIngress", "ec2:RevokeSecurityGroupIngress",
+                    "ec2:UpdateSecurityGroupRuleDescriptionsIngress"],
+         "Resource": ["arn:aws:ec2:us-east-1:551262695144:security-group/sg-01bfe668448b037c4",
+                      "arn:aws:ec2:us-east-1:551262695144:security-group-rule/*"] }
+     ]
+   }
+   ```
+
+3. IAM → Roles → Create role → Web identity → proveedor
+   `token.actions.githubusercontent.com`, audiencia `sts.amazonaws.com`,
+   organización `Vortex-Play-nexus-battles`, repositorio `nexus-battles-vi`,
+   rama `develop` → política `nexus-contenido-dev-ci` → nombre
+   `github-actions-nexus-contenido-dev`.
+4. Trust relationships → Edit trust policy:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Principal": { "Federated": "arn:aws:iam::551262695144:oidc-provider/token.actions.githubusercontent.com" },
+       "Action": "sts:AssumeRoleWithWebIdentity",
+       "Condition": {
+         "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+         "StringLike": { "token.actions.githubusercontent.com:sub": [
+           "repo:Vortex-Play-nexus-battles/nexus-battles-vi:environment:dev",
+           "repo:Vortex-Play-nexus-battles/nexus-battles-vi:ref:refs/heads/develop",
+           "repo:Vortex-Play-nexus-battles@317725248/nexus-battles-vi@1336530373:environment:dev",
+           "repo:Vortex-Play-nexus-battles@317725248/nexus-battles-vi@1336530373:ref:refs/heads/develop"
+         ] }
+       }
+     }]
+   }
+   ```
+
+5. El ARN (`arn:aws:iam::551262695144:role/github-actions-nexus-contenido-dev`)
+   no es un secreto: se guarda como variable de repositorio
+   `AWS_ROLE_ARN_CONTENIDO`. `cd.yml`, `diagnostico-dev.yml` e `infra-dev.yml`
+   ya lo leen. Nunca access keys estáticas.
+
+Con el rol puesto:
+
+- **El paso A lo puede hacer el pipeline:** `Actions → Infra dev → Run workflow → host
+  contenido, accion reglas-sg` aplica `reglas-entrada.json` (probado en CI con
+  `scripts/cd/pruebas/reglas-sg-contenido.sh`). Si el dueño solo hace el paso B, Grupo 6
+  hace el A desde ahí.
+- **El horario de plataforma pasa a aplicarse también a este host:** se apaga a las 23:23 y
+  se enciende a las 07:17 (hora Colombia) de lunes a viernes, y queda apagado el fin de
+  semana. Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
+  `ec2:StopInstances`.
+
+### Lo que ya está en este host antes del paso A, y lo que queda después
+
+Desde la fase 1 de la topología (28-sep), **misiones** y **ms-subastas** se
+despliegan aquí aunque el paso A no esté hecho: arrancan, responden su salud y
+hablan con plataforma (8085-8089 y 8093 ya admiten a `34.193.90.11/32`). Lo que
+el paso A desbloquea es la **entrada** desde el borde. Después, Grupo 6 sigue
+sin nadie más:
+
+1. `diagnostico-dev.yml` con `ambiente=dev` → sección «RED ENTRE HOSTS»: 8105 y
+   8092 dejan de dar `000`. `/api/v1/misiones` empieza a responder en ese
+   momento (el borde ya apunta a `34.193.90.11:8105`).
+2. Un PR pequeño lleva el borde de ms-subastas de `srv-ms-subastas:8092` a
+   `34.193.90.11:8092` (REST y `/api/v1/ws-subastas`); hasta entonces el borde
+   da 502 al instante, y apuntar antes a la IP con el puerto cerrado daría 504.
+3. Smoke, canarios y prueba del profesor en dev.
+4. Fase 2 (ms-ecommerce, 8090, con su base por volcado y restauración) y fase
+   3 (ms-chatbot, 8094) solo si la compuerta de capacidad de este host lo
+   permite (`../../despliegue/CAPACIDAD.md`).
+
 ## Cómo se levantó (histórico)
 
 ```bash

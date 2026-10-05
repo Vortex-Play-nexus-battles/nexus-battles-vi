@@ -1,0 +1,98 @@
+openapi: 3.1.0
+info:
+  title: Nexus Battles VI — Pagos con pasarela simulada (ms-finanzas)
+  version: 1.0.0
+  description: |
+    `POST /pagos/procesar` (HU-PAG-001) entro en develop con #715 sin
+    contrato publicado; el guardian `rutas-contrato-codigo.py` la encontro
+    (B0). Se documenta tal como la sirve `PagoController` / `PagoService`:
+
+    - Solo token de servicio (`ROLE_SERVICIO`): ningun navegador la llama.
+    - **Idempotente por `refId`**: si ya hay una transaccion con ese `refId`,
+      se devuelve el resultado guardado sin volver a la pasarela, sin
+      registrar otra transaccion y sin otro correo.
+    - La pasarela es un simulador en proceso (`PasarelaSimuladaClient`):
+      aprueba todo monto positivo; un `refId` que contenga `FALLO-PASARELA`
+      simula la pasarela caida (tres intentos y queda `INDETERMINADO`, para
+      conciliacion manual).
+    - Registra la transaccion en el historial (`transacciones.yaml`).
+
+    **Defectos conocidos (no se corrigen en B0, que no cambia servicios):**
+    el correo de confirmacion que envia al aprobar usa el `uid` como
+    direccion y como apodo (TODO del propio codigo), asi que correo lo
+    rechaza por formato; y el umbral de «alto valor» esta fijo en codigo.
+
+    **Relacion con la tienda (B5):** la compra de la tienda la orquesta
+    ms-ecommerce (`ecommerce-carrito.yaml`, `POST /checkout`), que registra el
+    pago con `POST /transacciones`. Esta ruta no forma parte de ese flujo.
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  - url: http://localhost:8093/api/v1
+    description: Desarrollo local (context-path /api/v1)
+
+paths:
+  /pagos/procesar:
+    post:
+      operationId: procesarPago
+      summary: Procesa un pago en la pasarela simulada y lo registra (HU-PAG-001)
+      security:
+        - tokenDeServicio: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcesarPagoRequest'
+      responses:
+        '201':
+          description: Pago procesado (aprobado, rechazado o indeterminado; mirar `estado`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcesarPagoResponse'
+        '401':
+          description: Sin token.
+        '403':
+          description: El token no es de servicio.
+
+components:
+  securitySchemes:
+    tokenDeServicio:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token `client_credentials` con rol SERVICIO (ADR-005).
+
+  schemas:
+    ProcesarPagoRequest:
+      type: object
+      properties:
+        uidUsuario:
+          type: string
+          description: Jugador que paga.
+        monto:
+          type: number
+        moneda:
+          type: string
+        concepto:
+          type: string
+        refId:
+          type: string
+          description: Clave de idempotencia del pago.
+
+    ProcesarPagoResponse:
+      type: object
+      required: [refId, estado, mensaje, marcadoParaRevisionManual]
+      properties:
+        refId:
+          type: string
+        estado:
+          type: string
+          enum: [APROBADO, RECHAZADO, INDETERMINADO]
+        mensaje:
+          type: string
+        marcadoParaRevisionManual:
+          type: boolean
+          description: Monto por encima del umbral de alto valor.

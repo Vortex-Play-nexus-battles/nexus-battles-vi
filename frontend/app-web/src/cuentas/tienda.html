@@ -3,64 +3,273 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus Battles VI - Tienda</title>
+    <title>Tienda · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
+    <!-- UXC-4 — «Ver producto» abre la ficha del catalogo (la misma del
+         inventario) con la compra y las opiniones: sus estilos van aqui. -->
+    <link rel="stylesheet" href="../contenido/inventario/ficha-producto.css" />
+    <link rel="stylesheet" href="./tienda-producto.css" />
     <link rel="stylesheet" href="tienda.css" />
   </head>
   <body>
     <!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
- mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
- usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
- componente vivo con búsqueda, secciones y panel de cuenta, servido desde
- src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
- la navegación del dominio cuentas en la misma barra que todos usan. -->
+     mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
+     usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
+     componente vivo con búsqueda, secciones y panel de cuenta, servido desde
+     src/comun/barra-navegacion.js. Cambio pedido por Santiago para unificar
+     la navegación del dominio cuentas en la misma barra que todos usan. -->
     <div id="navbar-container"></div>
 
     <script type="module">
-      import { montarCabecera, exigirSesion } from '../comun/cabecera-app.js';
+      import { montarCabecera } from '../comun/cabecera-app.js';
+      import { exigirAcceso } from '../comun/acceso.js';
 
-      if (!exigirSesion()) {
+      if (!exigirAcceso('tienda')) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
-      montarCabecera(document.getElementById('navbar-container'), { seccionActiva: 'cuenta' });
+      montarCabecera(document.getElementById('navbar-container'), {
+        vista: 'tienda',
+        seccionActiva: 'cuenta',
+        // UXC-9 — RF-INV-008: aquí la búsqueda de la barra filtra la tienda en
+        // el sitio, con el mismo campo que la vitrina, en vez de recargarla.
+        buscador: {
+          placeholder: 'Buscar productos',
+          alBuscar: (texto) => {
+            const campo = document.getElementById('busqueda-tienda');
+            if (!campo) {
+              return;
+            }
+            campo.value = texto;
+            campo.form?.requestSubmit();
+            campo.focus();
+          },
+        },
+      });
     </script>
 
-    <main class="main-container">
+    <main class="main-container" data-carrito="desplegado">
       <!-- Columna de Productos -->
-      <section class="store-section">
+      <section class="store-section" aria-labelledby="titulo-tienda">
         <div class="store-header">
-          <h2>Tienda</h2>
-          <p>Paga con moneda local (COP) usando tus métodos registrados.</p>
+          <div class="store-header__textos">
+            <h1 id="titulo-tienda">Tienda</h1>
+            <!-- UXC-4 — decia «Paga con moneda local (COP) usando tus metodos
+                 registrados»: el pago no esta disponible y no hay metodos
+                 registrados. Lo cierto es que se vende en dinero real y cada
+                 producto dice su moneda. -->
+            <p>
+              Héroes, armas y objetos del Nexo que se pagan con dinero real. Cada precio dice su
+              moneda.
+            </p>
+          </div>
+          <!-- B5 — la moneda (§7.5: COP, dólar o euro según la ubicación).
+               Empieza por la del idioma del navegador; las que el servidor
+               todavía no ofrece salen desactivadas (tienda-moneda.js). -->
+          <div class="campo selector-moneda">
+            <label class="campo__etiqueta" for="moneda-tienda">Moneda</label>
+            <select
+              class="campo__control"
+              id="moneda-tienda"
+              name="moneda"
+              aria-describedby="nota-moneda"
+            >
+              <option value="COP">COP · peso colombiano</option>
+              <option value="USD">USD · dólar estadounidense</option>
+              <option value="EUR">EUR · euro</option>
+            </select>
+            <p id="nota-moneda" class="selector-moneda__nota" aria-live="polite"></p>
+          </div>
+          <!-- UXC-4 — el carrito minimizado: icono y unidades (§7.5). Despliega
+               o recoge el panel sin mover la vitrina. -->
+          <div class="store-header__carrito">
+            <button
+              id="insignia-carrito"
+              class="insignia-carrito"
+              type="button"
+              aria-controls="panel-carrito"
+              aria-expanded="true"
+              aria-label="Carrito"
+            >
+              <svg class="icono" aria-hidden="true">
+                <use href="../../../../shared/ui-kit/iconos/sprite.svg#carrito" />
+              </svg>
+              <span class="insignia-carrito__texto" aria-hidden="true">Carrito</span>
+              <span class="insignia-carrito__cuenta" data-zona="unidades" aria-hidden="true"
+                >—</span
+              >
+            </button>
+            <p
+              id="aviso-insignia"
+              class="insignia-carrito__aviso"
+              role="status"
+              aria-live="polite"
+            ></p>
+          </div>
         </div>
 
+        <!-- UXC-4 — buscar (tambien por precio) y filtrar por tipo, precio y
+             promocion (§7.5). Se aplica al escribir; «Limpiar» lo deshace. -->
+        <form
+          id="filtros-tienda"
+          class="filtros-tienda"
+          role="search"
+          aria-label="Buscar y filtrar la tienda"
+        >
+          <div class="campo filtros-tienda__busqueda">
+            <label class="campo__etiqueta" for="busqueda-tienda">Buscar</label>
+            <input
+              class="campo__control"
+              type="search"
+              id="busqueda-tienda"
+              name="busqueda"
+              placeholder="Nombre, tipo, habilidad o precio"
+              autocomplete="off"
+            />
+          </div>
+          <!-- En pantalla estrecha se recoge (tienda.js lo cierra al montar):
+               la busqueda queda a mano y los filtros no tapan la vitrina. -->
+          <details class="filtros-tienda__mas" open>
+            <summary class="filtros-tienda__resumen" data-zona="resumen-filtros">
+              Filtros y orden
+            </summary>
+            <div class="filtros-tienda__campos">
+              <div class="campo filtros-tienda__tipo">
+                <label class="campo__etiqueta" for="tipo-tienda">Tipo</label>
+                <select class="campo__control" id="tipo-tienda" name="tipo">
+                  <option value="">Todos</option>
+                  <option value="HEROE">Héroe</option>
+                  <option value="HABILIDAD">Habilidad</option>
+                  <option value="ARMA">Arma</option>
+                  <option value="ARMADURA">Armadura</option>
+                  <option value="ITEM">Ítem</option>
+                  <option value="EPICA">Épica</option>
+                </select>
+              </div>
+              <div class="campo filtros-tienda__orden">
+                <label class="campo__etiqueta" for="orden-tienda">Ordenar</label>
+                <select class="campo__control" id="orden-tienda" name="orden">
+                  <option value="catalogo">Orden del catálogo</option>
+                  <option value="precio-asc">Precio: de menor a mayor</option>
+                  <option value="precio-desc">Precio: de mayor a menor</option>
+                  <option value="nombre">Nombre: de la A a la Z</option>
+                </select>
+              </div>
+              <fieldset class="filtros-tienda__precio">
+                <legend class="campo__etiqueta">Precio</legend>
+                <label class="solo-lectores" for="precio-minimo">Precio mínimo</label>
+                <input
+                  class="campo__control"
+                  type="number"
+                  id="precio-minimo"
+                  name="precioMinimo"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="Desde"
+                />
+                <span class="filtros-tienda__guion" aria-hidden="true">–</span>
+                <label class="solo-lectores" for="precio-maximo">Precio máximo</label>
+                <input
+                  class="campo__control"
+                  type="number"
+                  id="precio-maximo"
+                  name="precioMaximo"
+                  min="0"
+                  step="1"
+                  inputmode="numeric"
+                  placeholder="Hasta"
+                />
+              </fieldset>
+              <label class="casilla filtros-tienda__promocion">
+                <input
+                  class="casilla__entrada"
+                  type="checkbox"
+                  id="solo-promocion"
+                  name="soloPromocion"
+                />
+                <span class="casilla__etiqueta">Solo en promoción</span>
+              </label>
+              <!-- Auditoría de DEV del 30-sep: el corazón guardaba y se
+                   anunciaba, pero no había dónde ver la lista. Solo con sesión
+                   (la vitrina marca `enListaDeseos`); tienda.js lo destapa. -->
+              <label class="casilla filtros-tienda__deseos" data-zona="filtro-deseos" hidden>
+                <input
+                  class="casilla__entrada"
+                  type="checkbox"
+                  id="solo-deseos"
+                  name="soloDeseos"
+                />
+                <span class="casilla__etiqueta">Solo mi lista de deseos</span>
+              </label>
+              <button
+                type="reset"
+                class="boton boton--secundario boton--pequeno filtros-tienda__limpiar"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          </details>
+        </form>
+
+        <p id="resultado-tienda" class="resultado-tienda" role="status" aria-live="polite"></p>
+        <!-- B5 — lo que pasó al pulsar el corazón de una tarjeta (lista de deseos). -->
+        <p id="aviso-deseos" class="aviso-deseos" role="status" aria-live="polite"></p>
+
+        <h2 class="solo-lectores">Productos a la venta</h2>
         <!-- El contenedor donde JS inyectará las tarjetas -->
         <div id="productos-grid" class="products-grid">
           <!-- Cargando productos... -->
         </div>
+        <!-- UXC-4 — dieciseis por pagina, con el control 1…10 de siempre. -->
+        <div id="paginacion-tienda" class="paginacion-tienda"></div>
       </section>
 
-      <!-- Columna del Carrito -->
-      <aside class="cart-section">
+      <!-- Columna del Carrito (UXC-4: desplegable y minimizable) -->
+      <aside id="panel-carrito" class="cart-section" aria-labelledby="titulo-carrito">
         <div class="cart-card">
-          <h3>Tu carro</h3>
+          <div class="cart-card__cabecera">
+            <h2 id="titulo-carrito" data-zona="titulo-carrito" tabindex="-1">Tu carrito</h2>
+            <button
+              id="minimizar-carrito"
+              class="boton boton--secundario boton--pequeno"
+              type="button"
+              aria-controls="panel-carrito"
+            >
+              Minimizar
+            </button>
+          </div>
+
+          <!-- R16 — el aviso de «Añadir» cuando el servicio rechaza el producto
+               (agotado, suspendido, sin precio en dinero real, catálogo caído).
+               Va aquí, donde el jugador esperaba ver el producto, y fuera de
+               #cart-items, que se repinta entero. Lo rellena tienda.js. -->
+          <div id="aviso-carrito" data-zona="aviso" hidden></div>
 
           <div id="cart-items" class="cart-items-container">
             <!-- JS inyectará los items del carrito aquí -->
             <p class="t-meta">Tu carrito está vacío</p>
           </div>
 
+          <!-- UXC-4 — resumen de compra (CheckoutSummary): cuantos productos,
+               subtotal y total, con la moneda que dice el carrito. -->
           <div class="cart-summary">
             <div class="summary-row">
+              <span>Productos</span>
+              <span id="cart-unidades">—</span>
+            </div>
+            <div class="summary-row">
               <span>Subtotal</span>
-              <span id="cart-subtotal">0 COP</span>
+              <!-- Sin carrito cargado todavia no se sabe el importe: «—» y no
+                   «0 COP», que afirmaria que el carrito esta vacio. -->
+              <span id="cart-subtotal">—</span>
             </div>
             <div class="summary-row total-row">
               <span>Total a pagar</span>
-              <span id="cart-total" class="total-price">0 COP</span>
+              <span id="cart-total" class="total-price">—</span>
             </div>
           </div>
 
@@ -71,21 +280,29 @@
           </div>
 
           <!--
-        HU-CAR-010: abre el diálogo de resumen y pago. El diálogo no está
-        en este HTML: lo construye tienda.js con abrirDialogo() y campo()
-        del kit, así que sus clases y su foco son los del kit y los datos
-        de la tarjeta desaparecen de la página al cerrarlo.
-      -->
-          <button id="btn-pagar" class="btn-pagar" disabled>PAGAR</button>
+            B5 — «Pagar» abre el resumen de la compra con el formulario de pago
+            (§7.5) contra la pasarela simulada (POST /checkout, 1.4.0). Nace
+            deshabilitado hasta que el carrito carga; si no se puede pagar, el
+            motivo va escrito al lado (#aviso-pago) y enlazado al botón.
+          -->
+          <button id="btn-pagar" class="btn-pagar" type="button" disabled>Pagar</button>
+          <p id="aviso-pago" class="aviso-pago" aria-live="polite">Cargando tu carrito…</p>
+          <button
+            id="btn-mis-compras"
+            class="boton boton--secundario boton--pequeno mis-compras"
+            type="button"
+          >
+            Mis compras
+          </button>
         </div>
       </aside>
     </main>
 
     <!--
-type="module" desde P3.1: el archivo importa el interceptor
-compartido, la base de la API y la identidad de la sesion. Los
-botones ya no usan onclick -no funcionaria en un modulo-: la
-escucha esta delegada en la rejilla.
+  type="module" desde P3.1: el archivo importa el interceptor
+  compartido, la base de la API y la identidad de la sesion. Los
+  botones ya no usan onclick -no funcionaria en un modulo-: la
+  escucha esta delegada en la rejilla.
 -->
     <script type="module" src="tienda.js"></script>
   </body>

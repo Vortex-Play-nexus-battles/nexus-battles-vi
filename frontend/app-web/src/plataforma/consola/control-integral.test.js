@@ -11,7 +11,12 @@
 import { jest } from '@jest/globals';
 
 import { RESULTADO } from './cliente-consola.js';
-import { SECCIONES, formatearFecha, montarControlIntegral } from './control-integral.js';
+import {
+  SECCIONES,
+  formatearFecha,
+  montarControlIntegral,
+  pintarAlertasDeModeracion,
+} from './control-integral.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -242,6 +247,20 @@ describe('directorio de jugadores', () => {
     expect(directorio.textContent).not.toMatch(/password|hash|token|\$2a\$/i);
   });
 
+  test('UXC-9 — cada cuenta enlaza a su historial de sanciones por su uid', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const enlaces = [...raiz.querySelectorAll('[data-panel="directorio"] tbody a')];
+    expect(enlaces).toHaveLength(2);
+    const destino = new URL(enlaces[0].href);
+    expect(destino.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
+    expect(destino.searchParams.get('usuario')).toBe('11111111-2222-3333-4444-555555555555');
+    expect(enlaces[0].getAttribute('aria-label')).toBe('Ver las sanciones de Ana');
+  });
+
   test('una cuenta que nunca entro lo dice, no finge una fecha', async () => {
     const raiz = pagina();
 
@@ -376,6 +395,95 @@ describe('las consultas son las que el sistema atiende de verdad', () => {
     expect(sanciones.textContent).toContain('ADVERTENCIA');
     expect(sanciones.textContent).toContain('Apelaciones pendiente');
     expect(sanciones.textContent).toContain('Moderadores activos');
+  });
+});
+
+describe('maquetado del aviso', () => {
+  /**
+   * `.aviso` del kit es una fila: [cuerpo][accion]. Si el titulo, el motivo y
+   * el detalle cuelgan como hermanos sueltos salen como cuatro columnas
+   * estrujadas, que es como se vio en dev la primera vez.
+   */
+  test('el titulo, el motivo y el detalle van dentro de aviso__cuerpo', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const aviso = raiz.querySelector('[data-panel="subastas"] .aviso');
+    expect(aviso.children.length).toBe(2);
+    const cuerpo = aviso.querySelector('.aviso__cuerpo');
+    expect(cuerpo.querySelector('.aviso__titulo').textContent).toBe('SERVICIO DEGRADADO');
+    expect(cuerpo.querySelector('.aviso__detalle').textContent).toContain('GET /api/v1/subastas');
+    expect(aviso.lastElementChild.dataset.accion).toBe('reintentar');
+  });
+
+  test('sin permiso el aviso lleva solo el cuerpo', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const aviso = raiz.querySelector('[data-panel="auditoria"] .aviso');
+    expect(aviso.children.length).toBe(1);
+    expect(aviso.firstElementChild.className).toBe('aviso__cuerpo');
+  });
+});
+
+describe('alertas de moderación (UXC-9, §7.3.4)', () => {
+  const contenedor = (partes) => {
+    const caja = document.createElement('div');
+    caja.append(...partes);
+    return caja;
+  };
+
+  test('el panel sale de GET /api/v1/moderacion y pinta las alertas del servicio', async () => {
+    const raiz = pagina();
+    const consultarApi = apiSimulada({
+      '/moderacion': conDatos({
+        sanciones: {},
+        alertasConfiguradas: true,
+        umbralSancionesPorDia: 10,
+        alertas: ['2026-09-20: 14 sanciones (umbral 10)'],
+        pendientes: [],
+      }),
+    });
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const panelDeAlertas = raiz.querySelector('[data-panel="alertas-moderacion"]');
+    expect(panelDeAlertas.textContent).toContain('Fuente: GET /api/v1/moderacion');
+    expect(panelDeAlertas.querySelector('[data-zona="alertas"]').textContent).toContain(
+      '2026-09-20: 14 sanciones (umbral 10)',
+    );
+  });
+
+  test('sin umbral configurado lo dice, en vez de un «sin alertas» que no se evaluó', () => {
+    const caja = contenedor(
+      pintarAlertasDeModeracion({ alertasConfiguradas: false, alertas: [], pendientes: [] }),
+    );
+    expect(caja.querySelector('[data-zona="sin-umbral"]').textContent).toMatch(
+      /Sin umbral configurado/,
+    );
+    expect(caja.querySelector('[data-zona="sin-alertas"]')).toBeNull();
+  });
+
+  test('con umbral y sin días por encima, «sin alertas» con el umbral', () => {
+    const caja = contenedor(
+      pintarAlertasDeModeracion({
+        alertasConfiguradas: true,
+        umbralSancionesPorDia: 10,
+        alertas: [],
+        pendientes: ['registro de usuarios sin contrato de lectura'],
+      }),
+    );
+    expect(caja.querySelector('[data-zona="sin-alertas"]').textContent).toBe(
+      'Sin alertas: ningún día supera el umbral de 10 sanciones.',
+    );
+    expect(caja.querySelector('[data-zona="pendientes"]').textContent).toBe(
+      'Pendiente: registro de usuarios sin contrato de lectura',
+    );
   });
 });
 

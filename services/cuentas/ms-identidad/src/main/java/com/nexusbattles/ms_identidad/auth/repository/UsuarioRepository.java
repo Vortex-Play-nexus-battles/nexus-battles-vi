@@ -2,21 +2,91 @@ package com.nexusbattles.ms_identidad.auth.repository;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
+import java.util.UUID;
 
 @Repository
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     Optional<Usuario> findByEmail(String email);
     Optional<Usuario> findByApodo(String apodo);
     long countByRol(RolEntity rol);
+
+    /** B2 — la cuenta por su identificador publico (el {@code uid} del token, ADR-002). */
+    Optional<Usuario> findByPublicId(UUID publicId);
+
+    /**
+     * La cuenta bloqueada para escritura hasta el final de la transaccion.
+     * Serializa lo que no debe correr dos veces a la vez sobre la misma cuenta:
+     * dos reenvios del codigo (el limite por minuto seria «mas o menos uno»),
+     * dos proyecciones de sancion, dos cambios de preguntas.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from Usuario u where u.id = :id")
+    Optional<Usuario> bloquear(@Param("id") Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select u from Usuario u where u.publicId = :uid")
+    Optional<Usuario> bloquearPorIdentificadorPublico(@Param("uid") UUID uid);
+
+    /**
+     * B1 — la unica transicion PENDIENTE_VERIFICACION -> ACTIVO, condicionada.
+     *
+     * <p>Es un UPDATE con el estado de partida en el WHERE, no un
+     * «leer, comprobar, escribir»: dos confirmaciones simultaneas de la misma
+     * cuenta pasan las dos la comprobacion en memoria, pero solo una encuentra
+     * la fila todavia pendiente. La otra actualiza cero filas y no lanza un
+     * segundo alta del jugador (creditos, heroe, equipo).
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("update Usuario u set u.estado = :activo where u.id = :id and u.estado = :pendiente")
+    int activarSiPendiente(@Param("id") Long id, @Param("pendiente") String pendiente,
+                           @Param("activo") String activo);
+
+    /**
+     * R17 — el alta rechaza un correo o un apodo que ya existen escritos con
+     * otras mayusculas: «Profe@upb.edu.co» y «profe@upb.edu.co» son la misma
+     * persona, y «Valkiria» y «valkiria» serian dos jugadores indistinguibles
+     * en una sala. Es un recuento, no una busqueda: si una base heredada
+     * tuviera ya dos filas que solo difieren en mayusculas, no revienta.
+     */
+    boolean existsByEmailIgnoreCase(String email);
+
+    boolean existsByApodoIgnoreCase(String apodo);
+
+    /**
+     * El usuario de un correo tal como lo teclea quien inicia sesion.
+     *
+     * <p>Desde R17 el registro guarda el correo en minusculas; las cuentas
+     * anteriores lo tienen como se escribio. Se busca primero exacto (sin
+     * espacios alrededor) —asi una cuenta antigua sigue entrando igual que
+     * antes— y despues en minusculas, que es como estan las nuevas. Sin
+     * consultas «ignore case», que en una base heredada con duplicados por
+     * mayusculas devolverian dos filas.
+     */
+    default Optional<Usuario> buscarPorCorreo(String correo) {
+        if (correo == null || correo.isBlank()) {
+            return Optional.empty();
+        }
+        String limpio = correo.trim();
+        Optional<Usuario> exacto = findByEmail(limpio);
+        if (exacto.isPresent()) {
+            return exacto;
+        }
+        String minusculas = limpio.toLowerCase(Locale.ROOT);
+        return minusculas.equals(limpio) ? Optional.empty() : findByEmail(minusculas);
+    }
 
     /**
      * Usuarios que todavia no tienen identificador publico, porque se crearon

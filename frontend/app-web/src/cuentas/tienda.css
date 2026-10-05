@@ -61,122 +61,6 @@
   gap: var(--e-5);
 }
 
-.product-card {
-  background: var(--superficie);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  padding: var(--e-4);
-}
-
-.product-image {
-  width: 100%;
-  height: 120px;
-  border-radius: var(--radio-chico);
-  margin-bottom: var(--e-4);
-  /* El color de la caja se interpolaba dentro de un `innerHTML`
-     (`background-color: ${colorCaja}`). Ahora viaja en `data-tipo` y lo
-     elige el CSS, con fichas en vez de dos hex sueltos (UX-R2.8a). */
-  background-color: var(--acento-relleno);
-}
-
-.product-card[data-tipo='ARMA'] .product-image {
-  background-color: var(--info);
-}
-
-.product-card h4 {
-  margin-bottom: var(--e-1);
-  font-size: var(--t-cuerpo-tam);
-}
-
-.product-card p {
-  margin-bottom: var(--e-4);
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
-  /* Altura fija para que las tarjetas de la fila queden alineadas; con dos
-     lineas y elipsis en vez de recortar a la mitad de un renglon. */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  min-height: 2.5em;
-}
-
-.product-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--e-2);
-}
-
-.price {
-  font-weight: var(--t-cuerpo-peso-enfasis);
-  font-variant-numeric: var(--cifras-tabulares);
-}
-
-/* FI-R2 — el precio, lo que costaba antes y el porcentaje viven juntos: el
-   pie de la tarjeta es un `flex` de dos columnas y sin envolverlos el
-   distintivo se iba al otro lado del boton. */
-.precio-bloque {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--e-2);
-}
-
-.price-antes {
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
-  font-variant-numeric: var(--cifras-tabulares);
-}
-
-.badge-descuento {
-  padding: 0 var(--e-2);
-  border-radius: var(--radio-chico);
-  background: var(--exito-insignia);
-  color: var(--exito);
-  font-size: var(--t-meta-tam);
-  font-weight: var(--t-cuerpo-peso-enfasis);
-}
-
-/* «Precio no disponible» no es una cifra: se dice en el tono de un dato que
-   falta, no en el del importe que se va a cobrar. */
-.precio-ausente {
-  font-weight: normal;
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
-}
-
-.habilidades {
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
-}
-
-/* RF-CAR-001 pide la imagen del producto. La caja de color sigue estando
-   debajo como respaldo cuando el catalogo no trae `imagenUrl`. */
-.product-image.con-imagen {
-  background-color: var(--cromo);
-}
-
-.product-image img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: var(--radio-chico);
-  display: block;
-}
-
-/* RF-CAR-005 — distincion de lo que ya es tuyo y de lo que esta en la lista de
-   deseos. `ProductoVitrinaDto` trae los dos campos, pero hoy `VitrinaService`
-   los escribe siempre en `false`: el realce existe y no se activara hasta que
-   el servicio los calcule de verdad (deuda de Grupo de Santiago). */
-.product-card[data-propio='si'] {
-  border-color: var(--exito);
-}
-
-.product-card[data-deseado='si'] {
-  border-color: var(--acento-relleno);
-}
-
 /* El motivo por el que «Pagar» esta apagado, junto al boton. */
 .aviso-pago {
   margin-top: var(--e-2);
@@ -184,25 +68,201 @@
   color: var(--texto-2);
 }
 
-.btn-add {
-  min-height: var(--boton-pequeno);
-  padding: var(--e-2) var(--e-5);
-  border: none;
-  border-radius: var(--radio-chico);
-  background-color: var(--primaria-relleno);
-  color: var(--texto-sobre-color);
+/* --- UXC-4: cabecera, buscar y filtrar -------------------------------- */
+
+.store-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+}
+
+.store-header__textos {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.store-header__textos p {
+  margin: 0;
+}
+
+.store-header__carrito {
+  display: grid;
+  justify-items: end;
+  gap: var(--e-1);
+}
+
+/* La insignia: icono + unidades. Superficie clara sobre la atmosfera, como
+   las tarjetas, para que el numero se lea. */
+.insignia-carrito {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: var(--boton-mediano);
+  padding: 0 var(--e-4);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
   font: inherit;
   font-weight: var(--t-cuerpo-peso-enfasis);
   cursor: pointer;
 }
 
-.btn-add:hover {
-  background-color: var(--interaccion-foco-anillo);
+.insignia-carrito:hover {
+  border-color: var(--primaria);
 }
 
-.btn-add:focus-visible {
+.insignia-carrito:focus-visible {
   outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
   outline-offset: 2px;
+}
+
+.insignia-carrito .icono {
+  width: 20px;
+  height: 20px;
+  color: var(--primaria);
+}
+
+.insignia-carrito__texto {
+  white-space: nowrap;
+}
+
+.insignia-carrito__cuenta {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 var(--e-1);
+  border-radius: var(--radio-pildora);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-size: var(--t-meta-tam);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.insignia-carrito[aria-expanded='false'] {
+  border-color: var(--primaria);
+}
+
+.insignia-carrito__aviso {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--texto-sobre-color);
+}
+
+.filtros-tienda {
+  display: grid;
+  gap: var(--e-3);
+  margin: var(--e-5) 0 var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.filtros-tienda .campo {
+  margin: 0;
+  min-width: 0;
+}
+
+.filtros-tienda__busqueda {
+  flex: 2 1 240px;
+}
+
+/* «Filtros y orden»: abierto en escritorio, recogido en el teléfono. */
+.filtros-tienda__mas {
+  min-width: 0;
+}
+
+.filtros-tienda__resumen {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: var(--boton-pequeno);
+  width: fit-content;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  font-size: var(--t-meta-tam);
+  cursor: pointer;
+}
+
+.filtros-tienda__resumen:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.filtros-tienda__campos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3) var(--e-4);
+  margin-top: var(--e-2);
+}
+
+.filtros-tienda__tipo {
+  flex: 1 1 150px;
+}
+
+.filtros-tienda__orden {
+  flex: 1 1 200px;
+}
+
+.filtros-tienda__precio {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.filtros-tienda__precio legend {
+  float: left;
+  width: 100%;
+  margin-bottom: var(--e-1);
+}
+
+.filtros-tienda__precio .campo__control {
+  width: 7.5rem;
+}
+
+.filtros-tienda__guion {
+  color: var(--texto-2);
+}
+
+/* `tema-cuentas.css` pone todo `label` en columna y separa con margen los
+   hijos directos de un formulario: la casilla vuelve a su fila. */
+.filtros-tienda .filtros-tienda__promocion,
+.filtros-tienda .filtros-tienda__deseos {
+  flex-direction: row;
+  align-items: center;
+  min-height: var(--campo-alto);
+  margin-bottom: 0;
+}
+
+.filtros-tienda__limpiar {
+  margin-left: auto;
+}
+
+.filtros-tienda .filtros-tienda__limpiar {
+  align-self: flex-end;
+}
+
+.resultado-tienda {
+  min-height: 1.4em;
+  margin: 0 0 var(--e-3);
+  font-size: var(--t-meta-tam);
+}
+
+.paginacion-tienda {
+  margin-top: var(--e-5);
 }
 
 /* --- Carrito ---------------------------------------------------------- */
@@ -229,11 +289,58 @@
 .cart-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: var(--e-3);
   margin-bottom: var(--e-4);
   padding-bottom: var(--e-3);
   border-bottom: 1px solid var(--borde);
+}
+
+.item-info {
+  min-width: 0;
+}
+
+.item-derecha {
+  display: grid;
+  justify-items: end;
+  gap: var(--e-2);
+}
+
+.item-acciones {
+  display: flex;
+  gap: var(--e-1);
+}
+
+.item-unitario {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.carrito-vacio__siguiente {
+  margin-top: var(--e-1);
+}
+
+/* UXC-4 — cabecera del panel con «Minimizar». */
+.cart-card__cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.cart-card__cabecera h2 {
+  margin: 0;
+  font-size: var(--t-subtitulo-tam);
+}
+
+.cart-card__cabecera h2:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* Minimizado: la vitrina ocupa todo el ancho. */
+.main-container[data-carrito='minimizado'] .store-section {
+  flex-basis: 100%;
 }
 
 .item-info h5 {
@@ -305,7 +412,9 @@
 }
 
 .total-price {
-  color: var(--error);
+  /* El total a pagar no es un error: va en la primaria, como cualquier
+     cifra que manda (UX-GAME-5). */
+  color: var(--primaria);
   font-variant-numeric: var(--cifras-tabulares);
 }
 
@@ -360,12 +469,356 @@
   outline-offset: 2px;
 }
 
+/* --- B5: moneda, lista de deseos, cantidad, pagar y mis compras ------- */
+
+/* El selector va sobre la atmosfera, junto a la insignia: la etiqueta y la
+   nota usan la tinta contextual; el control, la superficie clara del kit. */
+.selector-moneda {
+  flex: 0 1 220px;
+  min-width: 180px;
+}
+
+.selector-moneda__nota {
+  min-height: 1.2em;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-2);
+}
+
+/* Lo que paso al pulsar un corazon. Sobre la atmosfera: el tono se dice con
+   el peso, no con un color que ahi no tendria contraste. */
+.aviso-deseos {
+  min-height: 1.2em;
+  margin: 0 0 var(--e-2);
+  font-size: var(--t-meta-tam);
+}
+
+.aviso-deseos[data-tono='advertencia'] {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+/* La imagen del producto en su linea (§7.5: imagen, nombre, precio unitario,
+   cantidad y subtotal). */
+.item-imagen {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radio-chico);
+}
+
+.cart-item .item-info {
+  flex: 1 1 auto;
+}
+
+/* Una linea que ya no se puede pagar: franja lateral y el motivo escrito. */
+.cart-item[data-disponible='no'] {
+  padding-left: var(--e-2);
+  border-left: 3px solid var(--advertencia);
+}
+
+.item-aviso {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--advertencia);
+}
+
+.mis-compras {
+  width: 100%;
+  margin-top: var(--e-3);
+}
+
+/* El resumen y el formulario de pago, en el dialogo del kit. */
+.dialogo--pago,
+.dialogo--compras {
+  max-height: calc(100vh - var(--e-8));
+  overflow-y: auto;
+}
+
+.pago {
+  display: grid;
+  gap: var(--e-5);
+}
+
+.pago__subtitulo {
+  margin: 0 0 var(--e-2);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__lineas {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pago__linea {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.pago__importe {
+  white-space: nowrap;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.pago__total {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+  margin: var(--e-3) 0 0;
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__formulario {
+  display: grid;
+  gap: var(--e-3);
+}
+
+/* D-44 — «¿Cómo quieres pagar?»: dos opciones como tarjetas, igual que la
+   duración de una subasta en publicar-subasta.css. */
+.pago__formas {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.pago__forma {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--e-2);
+  align-items: center;
+  padding: var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  cursor: pointer;
+}
+
+.pago__forma:has(input:checked) {
+  border: 2px solid var(--primaria);
+  background: var(--info-insignia);
+}
+
+.pago__forma input[type='radio'] {
+  accent-color: var(--primaria);
+  width: 20px;
+  height: 20px;
+}
+
+.pago__forma-nombre {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__forma-pista {
+  grid-column: 2;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.pago__zona {
+  display: grid;
+  gap: var(--e-3);
+}
+
+/* `display: grid` le gana al `hidden` del navegador: sin esto la zona de la
+   otra forma de pago seguiría a la vista. */
+.pago__zona[hidden],
+.pago__resumen[hidden] {
+  display: none;
+}
+
+/* Saldo actual, precio y saldo después: las cifras del servidor. */
+.pago__cuentas {
+  display: grid;
+  gap: var(--e-1);
+  margin: var(--e-3) 0 0;
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde);
+}
+
+.pago__cuenta {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.pago__cuenta dt,
+.pago__cuenta dd {
+  margin: 0;
+}
+
+.pago__cuenta dd {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.pago__nota,
+.pago__estado {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.pago__estado {
+  min-height: 1.2em;
+}
+
+.pago__fila {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--e-3);
+}
+
+.pago__alerta {
+  padding: var(--e-3);
+  border: 1px solid var(--advertencia);
+  border-radius: var(--radio-chico);
+  background: var(--advertencia-insignia);
+  color: var(--texto);
+}
+
+.pago__alerta p {
+  margin: 0;
+}
+
+.pago__alerta-titulo {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.pago__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--e-3);
+}
+
+.pago__alerta .pago__acciones {
+  margin-top: var(--e-2);
+}
+
+.pago__resultado {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.pago__resultado p {
+  margin: 0;
+}
+
+.pago__resultado-titulo {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+/* Mis compras. */
+.compras__lista {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.compra {
+  display: grid;
+  gap: var(--e-1);
+  padding: var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+}
+
+.compra__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.compra__fecha,
+.compra__total,
+.compra__medio,
+.compra__motivo {
+  margin: 0;
+}
+
+.compra__lineas {
+  margin: 0;
+  padding-left: var(--e-5);
+}
+
+.compra__total {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.compra__medio {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.compra__motivo {
+  color: var(--advertencia);
+}
+
 /* --- Pantallas estrechas ---------------------------------------------- */
 
 @media (max-width: 599px) {
+  .pago__fila {
+    grid-template-columns: 1fr;
+  }
+
+  .selector-moneda {
+    flex-basis: 100%;
+  }
+
   .main-container {
     padding: var(--e-4);
     gap: var(--e-5);
+  }
+
+  .store-header__carrito {
+    justify-items: start;
+  }
+
+  .filtros-tienda {
+    padding: var(--e-3);
+  }
+
+  /* Desde y hasta en la misma fila, repartida. */
+  .filtros-tienda__precio {
+    width: 100%;
+    flex-wrap: nowrap;
+  }
+
+  .filtros-tienda__precio .campo__control {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+  }
+
+  .filtros-tienda__tipo,
+  .filtros-tienda__orden {
+    flex-basis: 100%;
+  }
+
+  .filtros-tienda__resumen {
+    min-height: var(--objetivo-tactil);
+  }
+
+  .item-acciones .boton,
+  .insignia-carrito,
+  .filtros-tienda__limpiar,
+  #minimizar-carrito {
+    min-height: var(--objetivo-tactil);
+  }
+
+  .item-acciones .boton {
+    min-width: var(--objetivo-tactil);
   }
 
   .products-grid {
@@ -375,4 +828,21 @@
   .cart-card {
     padding: var(--e-4);
   }
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.cart-card,
+.warning-box,
+.filtros-tienda {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
 }

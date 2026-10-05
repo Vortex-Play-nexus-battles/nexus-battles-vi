@@ -5,10 +5,13 @@
 # el navegador. Si algo falla aqui, el diagnostico es mucho mas claro que un
 # "elemento no encontrado" a los treinta segundos de prueba.
 #
-# Se siembra a traves de la API de inventario, no insertando en Mongo: asi la
-# prueba usa el mismo camino que usaria un jugador y, de paso, comprueba que
-# ese camino funciona. La unica excepcion es la coleccion `productos`, cuya
-# alta exige rol de administrador; ahi se inserta directo.
+# Desde R17 el heroe, su equipo y los creditos iniciales de cada jugador no
+# los siembra este script: los pone el alta del jugador al registrarse, por las
+# APIs de ms-finanzas e inventario, igual que en DEV. Este script registra a
+# los jugadores por el camino normal y espera a que su alta termine, de modo
+# que cada corrida del banco prueba tambien el alta. La unica insercion directa
+# es la coleccion `productos` (su alta exige rol de administrador): el kit del
+# banco apunta a esos productos.
 #
 #   ./tests/e2e/sembrar.sh              # usa el compose de tests/e2e
 #
@@ -37,6 +40,91 @@ CLAVE="${E2E_CLAVE:-Contrasena-E2E-2026}"
 # Prototipo que el catalogo de heroes siembra solo (CatalogoEnMongo).
 PROTOTIPO="Guerrero Tanque"
 
+# B1 — la bandeja de pruebas. Desde identidad 2.0.0 una cuenta de autorregistro
+# nace pendiente de verificar su correo, y el login responde 403
+# `cuenta-no-verificada` hasta que se confirma el codigo que llega al buzon. La
+# semilla hace lo mismo que una persona: lo lee en Mailpit (el borde lo sirve en
+# /mailpit/, igual que en DEV) y lo confirma. Es la misma logica que
+# tests/e2e/ayudantes/correo.js, en bash: la semilla corre antes de que el flujo
+# de CI instale Node. Las cuentas son @nexus.test (dominio reservado): el
+# servicio de correo las entrega en Mailpit.
+MAILPIT_URL="${MAILPIT_URL:-$BORDE/mailpit}"
+AUTH_MAILPIT=()
+if [ -n "${MAILPIT_USUARIO:-}" ] && [ -n "${MAILPIT_CLAVE:-}" ]; then
+  AUTH_MAILPIT=(-u "$MAILPIT_USUARIO:$MAILPIT_CLAVE")
+fi
+
+# ids_de_correos <correo>: identificadores de los correos de esa direccion, del
+# mas nuevo al mas viejo. Mailpit busca por fragmento en `to:`: se filtra por la
+# direccion exacta.
+ids_de_correos() {
+  local correo="$1" consulta
+  consulta=$(jq -rn --arg c "to:\"$correo\"" '$c|@uri')
+  curl -sS "${AUTH_MAILPIT[@]}" "$MAILPIT_URL/api/v1/search?query=$consulta&limit=50" 2>/dev/null \
+    | jq -r --arg c "$correo" \
+      '[.messages[]? | select(any(.To[]?; ((.Address // "") | ascii_downcase) == ($c | ascii_downcase)))]
+       | sort_by(.Created) | reverse | .[].ID' 2>/dev/null || true
+}
+
+# codigo_de_verificacion <correo> <segundos> [ids a ignorar]: imprime el codigo
+# del correo de verificacion mas reciente que no este en la lista. Primero el
+# enlace de correo 1.4.0 (/verificar#codigo=...); si el correo es anterior, la
+# linea sola del codigo de un correo de confirmacion. Nunca imprime el correo.
+codigo_de_verificacion() {
+  local correo="$1" segundos="$2" ignorar="${3:-}" id detalle codigo
+  for _ in $(seq 1 "$segundos"); do
+    for id in $(ids_de_correos "$correo"); do
+      case " $ignorar " in *" $id "*) continue ;; esac
+      detalle=$(curl -sS "${AUTH_MAILPIT[@]}" "$MAILPIT_URL/api/v1/message/$id" 2>/dev/null)
+      codigo=$(printf '%s' "$detalle" | jq -r '(.Text // "") + "\n" + (.HTML // "")' 2>/dev/null \
+        | grep -oE '/verificar(\?[^#" <>]*)?#[^" <>]*codigo=[A-Za-z0-9-]+' | head -1 | sed -E 's/.*codigo=//')
+      if [ -z "$codigo" ] && printf '%s' "$detalle" \
+          | jq -e '(.Subject // "") | test("confirma|verific|activa"; "i")' >/dev/null 2>&1; then
+        codigo=$(printf '%s' "$detalle" | jq -r '.Text // ""' | tr -d '\r' \
+          | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//' | grep -E '^[A-Z0-9]{6,16}$' | head -1)
+      fi
+      if [ -n "$codigo" ]; then
+        printf '%s' "$codigo" | tr -d '-' | tr '[:lower:]' '[:upper:]'
+        return 0
+      fi
+    done
+    sleep 1
+  done
+  return 1
+}
+
+# confirmar_codigo <correo> <codigo>: imprime el codigo HTTP del canje.
+confirmar_codigo() {
+  curl -sS -o /dev/null -w '%{http_code}' -X POST "$BORDE/api/v1/auth/verificacion/confirmacion" \
+    -H "Content-Type: application/json" -H "Accept: application/problem+json, application/json" \
+    -d "{\"email\":\"$1\",\"codigo\":\"$2\"}"
+}
+
+# verificar_correo <correo>: confirma una cuenta pendiente con el codigo del
+# buzon. Si el del registro no sirve (caducado, o de una corrida anterior) o no
+# llega, pide otro y espera uno que no estuviera ya. El servidor limita los
+# reenvios (60 s por omision) sin cambiar la respuesta: de ahi la espera larga.
+verificar_correo() {
+  local correo="$1" codigo vistos
+  if codigo=$(codigo_de_verificacion "$correo" 30) \
+      && [ "$(confirmar_codigo "$correo" "$codigo")" = "200" ]; then
+    return 0
+  fi
+  vistos=$(ids_de_correos "$correo" | tr '\n' ' ')
+  curl -sS -o /dev/null -X POST "$BORDE/api/v1/auth/verificacion/reenvio" \
+    -H "Content-Type: application/json" -d "{\"email\":\"$correo\"}"
+  codigo=$(codigo_de_verificacion "$correo" 100 "$vistos") || return 1
+  [ "$(confirmar_codigo "$correo" "$codigo")" = "200" ]
+}
+
+# login_de <correo>: el cuerpo de la respuesta del login, con problem details
+# para poder leer el `type` de un rechazo.
+login_de() {
+  curl -sS -X POST "$BORDE/api/v1/auth/login" \
+    -H "Content-Type: application/json" -H "Accept: application/problem+json, application/json" \
+    -d "{\"email\":\"$1\",\"password\":\"$CLAVE\"}"
+}
+
 # Inventario ya no cree en X-User-Name a secas: un jugador es quien dice su
 # JWT. Asi que cada jugador se registra e inicia sesion en ms-identidad (el
 # mismo camino que usara el navegador) y siembra su inventario con su token.
@@ -51,12 +139,24 @@ token_de() {
       -X POST "$BORDE/api/v1/auth/registro" \
       -F "nombres=Jugadora" -F "apellidos=De Prueba" -F "email=$email" \
       -F "password=$CLAVE" -F "apodo=$apodo" >&2
-    local token
-    token=$(curl -sS -X POST "$BORDE/api/v1/auth/login" \
-      -H "Content-Type: application/json" \
-      -d "{\"email\":\"$email\",\"password\":\"$CLAVE\"}" | jq -r '.token // empty')
+    local respuesta token
+    respuesta=$(login_de "$email")
+    token=$(printf '%s' "$respuesta" | jq -r '.token // empty' 2>/dev/null || true)
+    # B1 — pendiente de verificar: se confirma con el codigo del buzon y se
+    # vuelve a entrar. Una cuenta ya verificada (otra llamada, otra corrida)
+    # entra a la primera.
+    if [ -z "$token" ] && printf '%s' "$respuesta" \
+        | jq -e '(.type // "") | endswith("/cuenta-no-verificada")' >/dev/null 2>&1; then
+      echo "  $apodo: correo sin verificar; se confirma con el codigo del buzon ($MAILPIT_URL)" >&2
+      if ! verificar_correo "$email"; then
+        echo "::error::No se pudo verificar el correo de $apodo con el buzon de pruebas ($MAILPIT_URL)" >&2
+        exit 1
+      fi
+      respuesta=$(login_de "$email")
+      token=$(printf '%s' "$respuesta" | jq -r '.token // empty' 2>/dev/null || true)
+    fi
     if [ -z "$token" ]; then
-      echo "::error::No se pudo iniciar sesion como $apodo en ms-identidad"; exit 1
+      echo "::error::No se pudo iniciar sesion como $apodo en ms-identidad" >&2; exit 1
     fi
     TOKEN_DE[$apodo]="$token"
   fi
@@ -76,7 +176,7 @@ echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
 # un numero suelto escrito desde mongosh llega como Int32 y la conversion
 # falla. De ahi `NumberDecimal`.
 $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
-  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e"] } });
+  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e", "dddddddd-0000-0000-0000-00000000000a"] } });
   const base = {
     _class: "nexus.dominio.Producto",
     imagen: null, descripcion: "Producto de prueba del E2E",
@@ -88,19 +188,43 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
     turnosCarga: null, turnosRecarga: null,
     efectoGeneral: null, efectoPotenciado: null,
     defensa: null, parte: null, efecto: null,
-    estado: "ACTIVO", version: 0,
+    // B4: `version` es el bloqueo optimista de productos (@Version). Un alta
+    // por la API nace en 1; con 0 Spring Data lo tomaria por un documento
+    // nuevo y una edicion tendria que normalizarlo antes de guardar.
+    estado: "ACTIVO", version: 1,
     creadoEn: new Date(), modificadoEn: new Date()
   };
   db.productos.insertMany([
     Object.assign({}, base, {
       _id: "p-heroe-e2e", nombre: "Guerrero de prueba", tipo: "HEROE",
       prototipo: "Guerrero Tanque",
+      // Con imagen, a diferencia de los otros dos. El retrato del heroe de
+      // combate sale de aqui (R8: producto.imagen -> HeroeDeCombate.retratoUrl),
+      // asi que con `imagen: null` el campo llegaria nulo y la prueba no podria
+      // distinguir "se propaga" de "no habia nada que propagar".
+      //
+      // La ruta la sirve el propio borde: monta ../../frontend en
+      // /srv/nexus/frontend, y el fichero existe en el repositorio. O sea que
+      // ademas de no ser nula, se puede cargar.
+      imagen: "/frontend/app-web/src/cuentas/avatares/guerrero-tanque.jpg",
       poderDeAtaque: null, tasaDeCaida: NumberDecimal("0")
     }),
     Object.assign({}, base, {
       _id: "p-arma-e2e", nombre: "Espada de prueba", tipo: "ARMA",
       prototipo: null,
       poderDeAtaque: 12, tasaDeCaida: NumberDecimal("50")
+    }),
+    // El tercero tiene un _id con forma de UUID a proposito. Los dos de arriba
+    // no sirven para subastar: PublicarSubastaRequest declara
+    // `@NotNull UUID productoId`, asi que "p-arma-e2e" se rechaza con 400 antes
+    // de llegar al negocio. Sin este producto no se puede probar la subasta de
+    // un objeto real, que es justo lo que subastas.e2e.spec.js decia que le
+    // faltaba (HU-SUB-001 CA de inventario).
+    Object.assign({}, base, {
+      _id: "dddddddd-0000-0000-0000-00000000000a",
+      nombre: "Hacha subastable de prueba", tipo: "ARMA",
+      prototipo: null,
+      poderDeAtaque: 9, tasaDeCaida: NumberDecimal("50")
     })
   ]);
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
@@ -109,7 +233,7 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
 # Comprobar YA que productos los sirve. Si esto falla, el 500 de
 # /estadisticas viene de aqui y no de inventario, y conviene saberlo antes de
 # perseguirlo en el servicio equivocado.
-for p in p-heroe-e2e p-arma-e2e; do
+for p in p-heroe-e2e p-arma-e2e dddddddd-0000-0000-0000-00000000000a; do
   codigo=$(curl -sS -o /tmp/prod-$p.json -w '%{http_code}' "$BORDE/api/v1/productos/$p")
   echo "  GET /api/v1/productos/$p -> $codigo"
   if [ "$codigo" != "200" ]; then
@@ -125,49 +249,39 @@ echo "  prototipos que publica heroes:"
 curl -sS "$BORDE/api/v1/heroes" | jq -r '.[]?.nombre // .[]?.prototipo // empty' 2>/dev/null \
   | head -8 | sed 's/^/    /' || echo "    (no se pudo leer el catalogo)"
 
-# Con jq y no con sed: la primera version sacaba el `id` con una expresion
-# regular y cogia el del ARMA cuando buscaba el del HEROE, porque el orden de
-# los campos del JSON no es el que uno supone. Un JSON se lee con un lector de
-# JSON.
-crear_elemento() {
-  local apodo="$1" producto="$2" tipo="$3" nombre="$4"
-  curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $(token_de "$apodo")" \
-    -d "{\"productoId\":\"$producto\",\"tipo\":\"$tipo\",\"nombrePropio\":\"$nombre\"}" \
-    | jq -r '.id // empty'
-}
-
-sembrar_jugador() {
-  local apodo="$1"
-  echo "== 2) Inventario de $apodo: un heroe con un arma equipada =="
-
-  local heroe arma
-  heroe=$(crear_elemento "$apodo" p-heroe-e2e HEROE "Aquiles de $apodo")
-  arma=$(crear_elemento "$apodo" p-arma-e2e ARMA "Espada de $apodo")
-
-  if [ -z "$heroe" ] || [ -z "$arma" ]; then
-    echo "::error::No se pudieron crear los elementos de $apodo. Respuesta de inventario:"
-    curl -sS -X POST "$BORDE/api/v1/inventario/elementos" \
-      -H "Content-Type: application/json" -H "Authorization: Bearer $(token_de "$apodo")" \
-      -d '{"productoId":"p-heroe-e2e","tipo":"HEROE","nombrePropio":"diagnostico"}'
+# R17 — el heroe, su arma equipada y los creditos iniciales ya NO los pone esta
+# semilla: los pone el alta del jugador (ms-identidad la orquesta contra
+# ms-finanzas, inventario y productos en cuanto se registra). Lo que hace aqui
+# la semilla es registrar a cada jugador por el camino normal y ESPERAR a que
+# su alta termine. Si no termina, el banco se pone rojo aqui, con el estado
+# del alta y la bitacora delante, y no a los treinta segundos de una prueba.
+#
+# Por eso los productos (paso 1) se siembran ANTES de registrar a nadie: el
+# kit del banco (JUGADOR_KIT_INICIAL en compose.yml) apunta a p-heroe-e2e y
+# p-arma-e2e, y el alta los busca en el catalogo.
+esperar_alta() {
+  local apodo="$1" estado="" cuerpo=""
+  echo "== 2) Alta de $apodo: creditos, heroe y equipo los pone ms-identidad =="
+  for _ in $(seq 1 60); do
+    cuerpo=$(curl -sS "$BORDE/api/v1/auth/onboarding" -H "Authorization: Bearer $(token_de "$apodo")")
+    estado=$(echo "$cuerpo" | jq -r '.estado // empty')
+    [ "$estado" = "COMPLETO" ] && break
+    sleep 1
+  done
+  if [ "$estado" != "COMPLETO" ]; then
+    echo "::error::El alta de $apodo no termino en 60 s (estado=${estado:-sin respuesta}):"
+    echo "$cuerpo" | jq . 2>/dev/null || echo "$cuerpo"
+    echo "Bitacora del alta en ms-identidad:"
+    $COMPOSE logs --tail 120 srv-ms-identidad 2>/dev/null | grep -E 'ONBOARDING|AUDITORIA_CUENTA|ERROR' | tail -40 || true
     exit 1
   fi
-
-  # Equipar es lo que hace que `estaEquipado` sea cierto. Sin esto, la puerta
-  # de heroe responde SIN_HEROE_EQUIPADO y no se puede crear una sala.
-  curl -sS -o /dev/null -w '  equipar -> %{http_code}\n' \
-    -X PUT "$BORDE/api/v1/inventario/heroes/$heroe/equipamiento/$arma" \
-    -H "Authorization: Bearer $(token_de "$apodo")"
-
-  echo "  heroe=$heroe arma=$arma"
+  echo "  $apodo: alta COMPLETA creditos=$(echo "$cuerpo" | jq -r '.creditosIniciales') heroe=$(echo "$cuerpo" | jq -r '.heroeInicial')"
 }
 
-sembrar_jugador "$ANFITRION"
-sembrar_jugador "$INVITADO"
-sembrar_jugador "$CURIOSO"
-sembrar_jugador "$POBRE"
-
+esperar_alta "$ANFITRION"
+esperar_alta "$INVITADO"
+esperar_alta "$CURIOSO"
+esperar_alta "$POBRE"
 echo "== 3) Comprobando el camino completo de la verificacion =="
 # Las mismas tres llamadas que hace ClienteInventarioHeroes, en el mismo
 # orden. Si alguna de las tres falla, la puerta de heroe responde 503 y no se
@@ -236,26 +350,40 @@ uid_de() {
   printf '%s' "$cuerpo" | base64 -d 2>/dev/null | jq -r '.uid // empty'
 }
 
-# El curioso tambien: su intento con codigo equivocado reserva antes de que
+# R17 — el saldo inicial ya no lo acredita esta semilla: lo acredito el alta de
+# cada jugador (concepto `bono-registro`, JUGADOR_CREDITOS_INICIALES=500 en el
+# banco, los mismos 500 que se sembraban antes a mano). Aqui se COMPRUEBA.
+#
+# El curioso lo necesita: su intento con codigo equivocado reserva antes de que
 # la sala lo rechace, y sin saldo recibiria 422 en vez del 409 que se prueba.
-# El pobre, a proposito, se queda sin nada.
 for apodo in "$ANFITRION" "$INVITADO" "$CURIOSO"; do
   uid=$(uid_de "$apodo")
   [ -n "$uid" ] || { echo "::error::el token de $apodo no trae uid"; exit 1; }
-  codigo=$(curl -sS -o /tmp/acreditar-$apodo.json -w '%{http_code}' \
-    -X POST "$FINANZAS/creditos/acreditar" \
-    -H "Authorization: Bearer $TOKEN_BANCO" \
-    -H "Content-Type: application/json" \
-    -d "{\"uid\":\"$uid\",\"monto\":$SALDO_INICIAL,\"refId\":\"semilla-e2e-$apodo\",\"concepto\":\"semilla-e2e\"}")
-  if [ "$codigo" != "200" ]; then
-    echo "::error::ms-finanzas no acredito a $apodo ($codigo):"; cat "/tmp/acreditar-$apodo.json"; echo; exit 1
-  fi
   # El saldo lo consulta el propio jugador: es el unico caso en que un
   # usuario (no un servicio) puede leer /creditos/{uid}/saldo, y solo el suyo.
   disponible=$(curl -sS -H "Authorization: Bearer $(token_de "$apodo")" "$FINANZAS/creditos/$uid/saldo" | jq -r '.saldoDisponible // empty')
-  echo "  $apodo: uid=$uid disponible=$disponible"
+  if [ "$(printf '%.0f' "${disponible:-0}")" -lt "$SALDO_INICIAL" ]; then
+    echo "::error::el alta de $apodo no dejo sus $SALDO_INICIAL creditos (disponible=${disponible:-?})"; exit 1
+  fi
+  echo "  $apodo: uid=$uid disponible=$disponible (bono de registro)"
 done
 
+# El pobre, a proposito, se queda sin nada: es el que prueba el 422 de
+# creditos insuficientes. Desde R17 tambien recibe su bono al registrarse, asi
+# que se le debita entero, como si lo hubiera gastado. Por el libro y con la
+# credencial del banco, no tocando la base de ms-finanzas; refId fijo, asi que
+# repetir la semilla no debita dos veces.
+uid_pobre=$(uid_de "$POBRE")
+disponible_pobre=$(curl -sS -H "Authorization: Bearer $(token_de "$POBRE")" "$FINANZAS/creditos/$uid_pobre/saldo" | jq -r '.saldoDisponible // 0')
+if [ "$(printf '%.0f' "$disponible_pobre")" -gt 0 ]; then
+  codigo=$(curl -sS -o /tmp/debitar-pobre.json -w '%{http_code}' -X POST "$FINANZAS/creditos/debitar" \
+    -H "Authorization: Bearer $TOKEN_BANCO" -H "Content-Type: application/json" \
+    -d "{\"uid\":\"$uid_pobre\",\"monto\":$disponible_pobre,\"refId\":\"semilla-e2e-vaciar-$POBRE\",\"concepto\":\"semilla-e2e\"}")
+  [ "$codigo" = "200" ] || { echo "::error::ms-finanzas no debito al pobre ($codigo):"; cat /tmp/debitar-pobre.json; echo; exit 1; }
+fi
+disponible_pobre=$(curl -sS -H "Authorization: Bearer $(token_de "$POBRE")" "$FINANZAS/creditos/$uid_pobre/saldo" | jq -r '.saldoDisponible // empty')
+[ "$(printf '%.0f' "${disponible_pobre:-1}")" -eq 0 ] || { echo "::error::el pobre sigue con saldo ($disponible_pobre)"; exit 1; }
+echo "  $POBRE: uid=$uid_pobre disponible=$disponible_pobre (bono gastado a proposito)"
 echo "== 5) Moderacion (HU-USR-004..007): una moderadora y un administrador ==="
 # ms-identidad registra a todo el mundo como JUGADOR y el unico camino para
 # crear MODERADOR/ADMINISTRADOR es el endpoint de admin, que exige... un

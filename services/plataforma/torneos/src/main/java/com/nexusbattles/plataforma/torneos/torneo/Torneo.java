@@ -67,11 +67,27 @@ public class Torneo {
     @Column(name = "motivo_cancelacion", length = 500)
     private String motivoCancelacion;
 
+    /**
+     * Premio anunciado al crear el torneo (RF-TOR-007, torneos.yaml 1.2.0).
+     * Nulo en los torneos creados antes de B10: para esos manda la
+     * configuracion vigente al jugarse la final.
+     */
+    @Column(name = "premio_creditos_por_integrante")
+    private Integer premioCreditosPorIntegrante;
+
+    @Column(name = "premio_epica_producto_id", length = 100)
+    private String premioEpicaProductoId;
+
     protected Torneo() {
     }
 
     public Torneo(UUID id, String nombre, UUID creadoPor, OffsetDateTime creadoEn,
                   OffsetDateTime inscripcionesCierranEn, int costoInscripcion) {
+        this(id, nombre, creadoPor, creadoEn, inscripcionesCierranEn, costoInscripcion, null);
+    }
+
+    public Torneo(UUID id, String nombre, UUID creadoPor, OffsetDateTime creadoEn,
+                  OffsetDateTime inscripcionesCierranEn, int costoInscripcion, PoliticaDePremio.Premio premio) {
         this.id = Objects.requireNonNull(id);
         this.nombre = Objects.requireNonNull(nombre);
         this.creadoPor = Objects.requireNonNull(creadoPor);
@@ -82,6 +98,21 @@ public class Torneo {
         }
         this.costoInscripcion = costoInscripcion;
         this.estado = Estado.INSCRIPCIONES_ABIERTAS;
+        if (premio != null) {
+            this.premioCreditosPorIntegrante = premio.creditosPorIntegrante();
+            this.premioEpicaProductoId = premio.epicaProductoId();
+        }
+    }
+
+    /**
+     * El premio de este torneo: el que se anuncio al crearlo o, si es anterior
+     * a B10 y no tiene uno, el de la configuracion vigente.
+     */
+    public PoliticaDePremio.Premio premio(PoliticaDePremio vigente) {
+        if (premioCreditosPorIntegrante == null) {
+            return vigente.premio();
+        }
+        return new PoliticaDePremio.Premio(premioCreditosPorIntegrante, premioEpicaProductoId);
     }
 
     public boolean admiteInscripciones() {

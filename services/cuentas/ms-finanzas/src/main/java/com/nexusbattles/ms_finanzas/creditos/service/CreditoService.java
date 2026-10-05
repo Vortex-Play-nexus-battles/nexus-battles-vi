@@ -122,6 +122,7 @@ public class CreditoService {
             CuentaCredito vendedor = obtenerOCrearCuenta(req.vendedorUid());
             vendedor.setSaldoBruto(vendedor.getSaldoBruto().add(reserva.getMonto()));
             cuentaRepository.save(vendedor);
+            registrarCobroDelBeneficiario(reserva, req.vendedorUid());
         }
 
         reserva.setEstado(ReservaCredito.EstadoReserva.CONSUMIDA);
@@ -131,6 +132,38 @@ public class CreditoService {
         return new ConsumirResponse(reserva.getId(), reserva.getEstado().name(), reserva.getMonto(), req.vendedorUid(), txId);
     }
 
+    /** Prefijo del concepto del movimiento del beneficiario (creditos.yaml 1.4.1). */
+    static final String PREFIJO_COBRO = "cobro-de-reserva:";
+
+    /**
+     * El beneficiario ve el ingreso — creditos.yaml 1.4.1 (B7).
+     *
+     * <p>Hasta 1.4.0 el crédito al beneficiario movía su saldo sin dejar fila:
+     * el ganador de una apuesta cobraba y no veía de dónde en
+     * {@code GET /creditos/{uid}/movimientos}. Ahora queda un movimiento
+     * {@code CREDITO} a su nombre (signo {@code SUMA}) con la referencia de la
+     * reserva y la clave {@code consumo-{reservaId}}: una sola fila por reserva
+     * aunque se consuma dos veces (el segundo consumo ni siquiera llega aquí,
+     * y si llegara la clave ya existe).
+     */
+    private void registrarCobroDelBeneficiario(ReservaCredito reserva, String beneficiarioUid) {
+        String clave = "consumo-" + reserva.getId();
+        if (reservaRepository.findByIdempotencyKey(clave).isPresent()) {
+            return;
+        }
+        String concepto = PREFIJO_COBRO + (reserva.getConcepto() == null ? "" : reserva.getConcepto());
+        reservaRepository.save(ReservaCredito.builder()
+            .jugadorUid(beneficiarioUid)
+            .monto(reserva.getMonto())
+            .concepto(concepto.length() > 128 ? concepto.substring(0, 128) : concepto)
+            .referenciaId(reserva.getReferenciaId() != null ? reserva.getReferenciaId() : reserva.getId().toString())
+            .idempotencyKey(clave)
+            .estado(ReservaCredito.EstadoReserva.CONSUMIDA)
+            .tipoOperacion(ReservaCredito.TipoOperacion.CREDITO)
+            .expiraEn(OffsetDateTime.now().plusDays(72))
+            .build());
+    }
+
     @Transactional
     public DebitarResponse debitar(DebitarRequest req) {
         // Idempotencia por refId para evitar cobros duplicados
@@ -138,7 +171,7 @@ public class CreditoService {
         if (operacionExistente.isPresent()) {
             ReservaCredito op = operacionExistente.get();
             CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
-            return new DebitarResponse("TX-DEB-" + op.getId().toString().substring(0, 8).toUpperCase(), req.refId(), "EXITOSO", op.getMonto(), cuenta.getSaldoDisponible());
+            return new DebitarResponse(transaccion(PREFIJO_DEBITO, op), req.refId(), "EXITOSO", op.getMonto(), cuenta.getSaldoDisponible());
         }
 
         CuentaCredito cuenta = obtenerOCrearCuenta(req.uid());
@@ -161,10 +194,23 @@ public class CreditoService {
             .tipoOperacion(ReservaCredito.TipoOperacion.DEBITO)
             .expiraEn(OffsetDateTime.now().plusDays(72))
             .build();
-        reservaRepository.save(registroOp);
+        ReservaCredito guardado = reservaRepository.save(registroOp);
 
-        String txId = "TX-DEB-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        return new DebitarResponse(txId, req.refId(), "EXITOSO", req.monto(), cuenta.getSaldoDisponible());
+        // G7: el transaccionId es el de la fila, como dice creditos.yaml («TX-DEB-
+        // seguido de los ocho primeros caracteres del identificador de aquella
+        // fila, que no cambia»). Antes la primera respuesta inventaba uno al azar:
+        // no coincidia con el del reintento ni con nada guardado aqui, asi que el
+        // que guardaba el llamador (la orden de la tienda) no se podia conciliar.
+        return new DebitarResponse(transaccion(PREFIJO_DEBITO, guardado), req.refId(), "EXITOSO", req.monto(),
+            cuenta.getSaldoDisponible());
+    }
+
+    static final String PREFIJO_DEBITO = "TX-DEB-";
+    static final String PREFIJO_CREDITO = "TX-ACR-";
+
+    /** El transaccionId de una operacion: su prefijo y los ocho primeros caracteres de su fila. */
+    static String transaccion(String prefijo, ReservaCredito fila) {
+        return prefijo + fila.getId().toString().substring(0, 8).toUpperCase();
     }
 
     @Transactional
@@ -270,7 +316,7 @@ public class CreditoService {
             ReservaCredito op = operacionExistente.get();
             CuentaCredito cuentaExistente = obtenerOCrearCuenta(req.uid());
             return new AcreditarResponse(
-                "TX-ACR-" + op.getId().toString().substring(0, 8).toUpperCase(),
+                transaccion(PREFIJO_CREDITO, op),
                 req.refId(),
                 "APLICADO",
                 op.getMonto(),
@@ -294,10 +340,11 @@ public class CreditoService {
             .tipoOperacion(ReservaCredito.TipoOperacion.CREDITO)
             .expiraEn(OffsetDateTime.now().plusDays(72))
             .build();
-        reservaRepository.save(registroOp);
+        ReservaCredito guardado = reservaRepository.save(registroOp);
 
-        String txId = "TX-ACR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-        return new AcreditarResponse(txId, req.refId(), "APLICADO", req.monto(), cuenta.getSaldoDisponible());
+        // G7: el de la fila, igual que en debitar (creditos.yaml).
+        return new AcreditarResponse(transaccion(PREFIJO_CREDITO, guardado), req.refId(), "APLICADO", req.monto(),
+            cuenta.getSaldoDisponible());
     }
 
     // FIX DEFECTO 2 (v2, corregido tras reporte de Andrés): Manejo de Race Condition

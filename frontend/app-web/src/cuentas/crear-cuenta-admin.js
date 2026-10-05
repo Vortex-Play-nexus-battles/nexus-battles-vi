@@ -10,7 +10,9 @@ import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.
 import { montarCabecera } from '../comun/cabecera-app.js';
 import { h, vaciar } from '../comun/ui/dom.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 import { confirmar } from '../comun/ui/dialogo.js';
+import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 const BASE_API = '/api/v1/admin/cuentas';
 const MATRIZ_RBAC_API = '/api/v1/rbac/matrix';
@@ -44,6 +46,8 @@ function montarBarraNavegacion() {
 }
 
 function iniciar() {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra.
+  sinCredencialesEnLaDireccion();
   montarBarraNavegacion();
 
   const rolGuardado = sessionStorage.getItem(CLAVE_ROL) || 'JUGADOR';
@@ -122,6 +126,8 @@ function configurarEventos() {
 
   if (formulario) {
     formulario.addEventListener('submit', manejarCreacionCuenta);
+    // G1 — la vista ya escucha `submit`: el botón se puede encender.
+    formularioListo(formulario);
   }
 
   if (selectorRol) {
@@ -316,7 +322,7 @@ async function manejarCreacionCuenta(evento) {
     // dentro de este bloque no habia forma de leer el de fuera.
     console.error('Error creando cuenta administrativa:', fallo);
 
-    mostrarError(fallo.message || 'No fue posible crear la cuenta administrativa.');
+    mostrarError(textoDeError(fallo, 'No fue posible crear la cuenta administrativa.'));
   } finally {
     cambiarEstadoBoton(false);
   }
@@ -365,24 +371,18 @@ function validarEmail(email) {
 async function obtenerMensajeError(respuesta) {
   try {
     const datos = await respuesta.clone().json();
-
-    if (typeof datos === 'string') {
-      return datos;
-    }
-
-    return datos.detail || datos.message || datos.title || `Error HTTP ${respuesta.status}`;
+    // UXC-9 — nunca «Error HTTP 502» ni la página de un proxy: el texto del
+    // servidor solo si se puede leer (comun/ui/texto-de-fallo.js).
+    return textoDelServidor(datos, respuesta.status, respaldoPorEstado(respuesta.status));
   } catch {
     try {
       const texto = await respuesta.clone().text();
-
-      if (texto) {
-        return texto;
-      }
+      return textoDelServidor(texto, respuesta.status, respaldoPorEstado(respuesta.status));
     } catch {
       // Se utiliza el mensaje genérico.
     }
 
-    return `Error HTTP ${respuesta.status}`;
+    return respaldoPorEstado(respuesta.status);
   }
 }
 

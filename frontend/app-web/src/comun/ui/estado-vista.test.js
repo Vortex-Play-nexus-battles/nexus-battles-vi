@@ -57,6 +57,16 @@ describe('estado de carga', () => {
     expect(e.getAttribute('aria-live')).toBe('polite');
     expect(e.querySelectorAll('.esqueleto')).toHaveLength(4);
   });
+
+  // R17.4 — sin rol, un `div` con `aria-label` es un nombre prohibido (axe:
+  // aria-prohibited-attr, serio). La prueba del profesor lo vio en AWS, en el
+  // inicio de la primera sesión, mientras sus bloques seguían cargando.
+  test('lleva un rol que admite nombre: el nombre no queda prohibido', () => {
+    const e = estadoDeCarga({ etiqueta: 'Cargando tus créditos…' });
+
+    expect(e.getAttribute('role')).toBe('status');
+    expect(e.getAttribute('aria-label')).toBe('Cargando tus créditos…');
+  });
 });
 
 describe('esqueletos', () => {

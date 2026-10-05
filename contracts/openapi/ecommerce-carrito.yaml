@@ -4,7 +4,35 @@ info:
   # 1.1.0 (FI-R2): se declara la forma de la respuesta de la vitrina, que hasta
   # ahora era solo una frase. Es aditivo -no se quita ni se estrecha nada-, asi
   # que sube la menor, no la mayor.
-  version: 1.1.0
+  # 1.2.0 (R16, #421): la vitrina se muda a GET /vitrina y proyecta el catalogo
+  # maestro de contenido/productos (productos.yaml 1.2.0, #687); GET /productos
+  # queda deprecado, sin quitarlo. `productoId` acepta el UUID del catalogo sin
+  # dejar de aceptar el entero, el carrito declara sus errores y la forma de sus
+  # lineas. Todo aditivo: sube la menor.
+  # 1.4.0 (B5, BACKEND-07): se implementa todo lo que la 1.3.0 anunciaba y se
+  # quitan sus marcas `pendiente`; la vitrina y el carrito ganan parametros y
+  # campos opcionales (moneda, filtros, marcas, disponibilidad por linea) y los
+  # errores nuevos se declaran por `type`. Nada desaparece ni se vuelve
+  # obligatorio en una peticion: sube la menor.
+  # 1.5.0 (auditoria de DEV del 30-sep): POST /carrito/items rechaza con 409
+  # `producto-ya-adquirido` lo que el jugador ya tiene (RF-CAR-004, excepcion
+  # «producto ya adquirido por el cliente»). Un error mas declarado: aditivo.
+  # 1.6.0 (auditoria del 4-oct, cambio autorizado n.º 5; D-44): pagar con los
+  # creditos del juego como metodo ADICIONAL al pago simulado. Operaciones
+  # nuevas (GET y POST /checkout/creditos), `precioCreditos` en la vitrina,
+  # `formaDePago` en la orden y CREDITOS como unidad de una orden pagada con
+  # creditos. Nada desaparece ni se vuelve obligatorio en una peticion: sube
+  # la menor.
+  # 1.7.0 (G3, continuacion tecnica del 4-oct): «producto vendible si tiene
+  # precio en dinero real O precio en creditos». Un producto que solo se vende
+  # en creditos entra a la vitrina con `precioFinal`, `precioOriginal` y
+  # `moneda` a null (siguen presentes) y entra al carrito sin precio en dinero
+  # real; la linea gana `precioCreditos`, `subtotalCreditos` y `soloEnCreditos`. Con tarjeta no se
+  # paga (422 `producto-sin-precio-en-moneda-real` en POST /checkout); con
+  # creditos si. Un premium sigue vendiendose solo en dinero real: no se
+  # convierte a creditos. Campos opcionales nuevos y campos que admiten null:
+  # nada desaparece ni se vuelve obligatorio en una peticion; sube la menor.
+  version: 1.7.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -17,18 +45,198 @@ info:
     token que no es de usuario (por ejemplo, de servicio) 403. La vitrina es
     publica.
 
+    Catalogo (1.2.0, R16). La tienda ya no tiene catalogo propio: GET /vitrina
+    y POST /carrito/items leen el catalogo maestro de contenido/productos por
+    su API (productos.yaml 1.2.0), nunca su base de datos (regla 7). Si ese
+    servicio no responde, las dos contestan 503
+    `urn:nexus:problema:catalogo-no-disponible` con `Retry-After`, nunca una
+    vitrina vacia: un catalogo sin productos y un catalogo caido son dos cosas
+    distintas y la tienda tiene que poder decir cual es.
+
     Este servicio declara el context-path `/ecommerce`; el borde reescribe
-    `/api/v1/carrito` y `GET /api/v1/productos` hacia el (ver
-    infrastructure/red-balanceo/borde-dev.conf y el issue #421 sobre la
-    colision de prefijo con contenido/productos).
+    `/api/v1/carrito`, `/api/v1/vitrina`, `/api/v1/lista-deseos`,
+    `/api/v1/checkout` y `/api/v1/ordenes` hacia el (ver
+    infrastructure/red-balanceo/borde-dev.conf). Desde R16 `/api/v1/productos`
+    es de contenido/productos para todos los metodos (issue #421): el
+    GET /productos de este servicio sigue existiendo, deprecado, pero el borde
+    ya no lo publica.
+
+    1.3.0 (B0/B5 — tienda publica y compra; 7.5 del documento del curso y
+    feedback del profesor «la tienda debe estar disponible desde la landing
+    page»). La vitrina sigue siendo publica y gana `moneda` (COP, USD o EUR,
+    que la interfaz elige por la ubicacion del navegador; el servidor
+    convierte con las tasas de admin-parametros y aplica la promocion: el
+    precio que se paga **siempre** lo calcula el servidor), filtros por tipo,
+    precio y promocion, y las marcas `enListaDeseos` y `esPropio` cuando hay
+    sesion. Con sesion: lista de deseos persistente, cantidad por linea y
+    compra con pasarela simulada. La compra es una orden con estados
+    (`PENDIENTE` → `COBRADA` → `ENTREGADA` → `COMPLETA`, o `RECHAZADA`, o
+    `COMPENSACION_PENDIENTE` → `REEMBOLSADA` si algo falla tras cobrar),
+    idempotente por `Idempotency-Key`: reintentar nunca cobra dos veces. Del
+    medio de pago solo se guardan los cuatro ultimos digitos y la marca;
+    nunca el numero completo ni el codigo de seguridad.
+
+    1.4.0 (B5, BACKEND-07): implementado. Lo nuevo, todo opcional:
+
+    Precio autoritativo. El precio que se ensena y el que se cobra lo calcula
+    el servidor con el catalogo: el `precioMonedaReal` del producto (COP), la
+    promocion si el catalogo la trae vigente (`promocion.porcentaje`, con
+    `desde` incluido y `hasta` excluido; productos.yaml 1.4.0) y, si se pide
+    USD o EUR, la tasa de admin-parametros (`tienda.tasa-cop-usd` y
+    `tienda.tasa-cop-eur`: pesos colombianos por una unidad de la otra
+    moneda). Redondeo explicito y siempre el mismo: el descuento en COP a
+    pesos enteros (mitad hacia arriba) y la conversion a centavos (mitad hacia
+    arriba), nunca por debajo de 0,01. El subtotal es precio unitario por
+    cantidad y el total, la suma de subtotales: no se redondea dos veces. Si
+    la tasa no esta definida (decision del PO pendiente) o admin-parametros no
+    responde, esa moneda no esta disponible: 422
+    `urn:nexus:problema:moneda-no-disponible` y la pagina de la vitrina dice
+    en `monedasDisponibles` cuales si. COP siempre lo esta.
+
+    Vitrina: `moneda`, `precioMinimo`, `precioMaximo`, `enPromocion` y
+    `busqueda` (nombre, descripcion, tipo, habilidades y precio, sin tildes ni
+    mayusculas, todas las palabras). Con sesion de usuario, `enListaDeseos` y
+    `esPropio` dejan de ser siempre false: el primero sale de la lista de
+    deseos del jugador y el segundo de su inventario (servicio inventario,
+    con la credencial de servicio de la tienda); si el inventario no responde
+    la vitrina sale igual, sin esa marca.
+
+    Carrito: una por jugador; la cantidad por linea va de 1 a 20 y nunca
+    supera las unidades que le quedan al producto; cada respuesta recalcula
+    precios y total en la `moneda` pedida y dice por linea si se puede
+    comprar ahora (`disponible`, `motivo`, `maximo`). Si el catalogo no
+    responde, el carrito se lee igual con los ultimos precios conocidos
+    (`preciosVigentes: false`) y la compra espera.
+
+    Compra: ver POST /checkout.
+
+    1.6.0 (D-44) — pagar con creditos del juego, como metodo adicional. El
+    precio en creditos de cada producto es el `precioCreditos` que el
+    catalogo maestro publica para ese producto (7.2.1 del documento: «precio
+    en creditos del juego»); no se convierte nada desde COP. Un producto
+    premium no tiene precio en creditos (productos.yaml: se ofrece solo en
+    moneda real), y uno con `precioCreditos` ausente o cero tampoco se puede
+    pagar asi. La promocion vigente del producto rebaja tambien su precio en
+    creditos, con el mismo porcentaje, a creditos enteros (mitad hacia
+    arriba) y nunca por debajo de 1. El cobro lo hace ms-finanzas
+    (creditos.yaml, `POST /creditos/debitar`, idempotente por `refId`) y la
+    entrega, inventario, igual que en el pago simulado. Ver
+    GET y POST /checkout/creditos.
 servers:
   - url: http://localhost:8090/ecommerce/api/v1
     description: Entorno local de desarrollo
 paths:
+  /vitrina:
+    get:
+      summary: Vitrina paginada del catalogo maestro, lo que se vende en dinero real o en creditos
+      operationId: vitrinaDelCatalogo
+      description: >
+        R16. Proyecta el catalogo maestro de contenido/productos: cada producto
+        es el del catalogo, con su identificador (UUID) y sus precios. Solo
+        aparecen los que se pueden comprar: estado ACTIVO o UNICO, tiraje
+        distinto de cero (-1 es ilimitado) y algun precio. Uno suspendido o
+        agotado no aparece.
+
+        1.7.0 (G3): «algun precio» es `precioMonedaReal` mayor que cero O un
+        `precioCreditos` con el que se pueda pagar (no premium, mayor que
+        cero). Un producto que solo se vende en creditos aparece con
+        `precioFinal`, `precioOriginal` y `moneda` a null —nunca «a 0»— y su
+        `precioCreditos`; su promocion vigente se ve en `enPromocion` y
+        `porcentajeDescuento`. Un premium sin precio en dinero real no
+        aparece: no se convierte a creditos. Los filtros de precio
+        (`precioMinimo`, `precioMaximo`) son de dinero real: con alguno de los
+        dos, un producto solo en creditos no entra.
+
+        Publica, sin token, como la vitrina anterior. Sustituye a
+        GET /productos, que leia una tabla propia de ms-ecommerce que nacia
+        vacia: por eso la tienda no ensenaba ningun producto.
+
+        1.4.0: precios en la `moneda` pedida, con la promocion vigente ya
+        aplicada (ver la descripcion del contrato), filtros y busqueda. El
+        token es opcional: con uno de usuario valido se marcan `enListaDeseos`
+        y `esPropio`; uno caducado o mal firmado responde 401, como en el resto
+        de rutas.
+
+        1.6.0 (D-44): cada producto trae ademas `precioCreditos`, lo que cuesta
+        pagado con creditos del juego, o null si no se puede pagar asi. Los
+        filtros de precio siguen siendo de `precioFinal`.
+      security:
+        - {}
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Numero de pagina, empezando en 0.
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          description: Productos por pagina, entre 1 y 50. Dieciseis por norma de la vista de referencia.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 16 }
+        - name: tipo
+          in: query
+          description: >
+            Si se envia, solo productos de ese tipo del catalogo (HEROE,
+            HABILIDAD, ARMA, ARMADURA, ITEM, EPICA).
+          schema: { type: string }
+        - $ref: "#/components/parameters/Moneda"
+        - name: precioMinimo
+          in: query
+          description: >
+            (1.4.0) Solo productos cuyo `precioFinal`, en la `moneda` pedida,
+            sea mayor o igual que este valor.
+          schema: { type: number, minimum: 0 }
+        - name: precioMaximo
+          in: query
+          description: >
+            (1.4.0) Solo productos cuyo `precioFinal`, en la `moneda` pedida,
+            sea menor o igual que este valor. Un rango al reves no es un error:
+            no coincide ningun producto.
+          schema: { type: number, minimum: 0 }
+        - name: enPromocion
+          in: query
+          description: (1.4.0) true = solo productos con una promocion vigente.
+          schema: { type: boolean, default: false }
+        - name: busqueda
+          in: query
+          description: >
+            (1.4.0) Texto libre. Cada palabra tiene que aparecer (sin distinguir
+            tildes ni mayusculas) en el nombre, la descripcion, las habilidades
+            o el tipo del producto; una palabra hecha solo de cifras tambien
+            casa con el precio (`45000`, `45.000`).
+          schema: { type: string, maxLength: 100 }
+      responses:
+        "200":
+          description: Una pagina de la vitrina
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeVitrinaDelCatalogo"
+        "400":
+          description: >
+            Parametros fuera de rango: `page` negativo, `size` fuera de 1..50,
+            un precio negativo o una `moneda` que no es COP, USD ni EUR. El
+            catalogo ni se consulta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Llego un token caducado o que no se puede verificar.
+        "422":
+          $ref: "#/components/responses/MonedaNoDisponible"
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
   /productos:
     get:
-      summary: Vitrina paginada del catalogo
+      summary: Vitrina paginada de la tabla propia (deprecada, usar GET /vitrina)
       operationId: vitrina
+      deprecated: true
+      description: >
+        Deprecada desde 1.2.0 (R16, issue #421). Lee la tabla propia de
+        ms-ecommerce, que no refleja el catalogo maestro; la sustituye
+        GET /vitrina. El borde ya no la publica: /api/v1/productos es de
+        contenido/productos para todos los metodos. Se conserva dentro del
+        servicio para no romper a quien la llame directamente.
       security: []
       parameters:
         - name: page
@@ -52,6 +260,12 @@ paths:
     get:
       summary: Carrito del jugador autenticado (se crea vacio si no existe)
       operationId: obtenerCarrito
+      description: >
+        1.4.0: precios y total recalculados por el servidor en la `moneda`
+        pedida, con la disponibilidad de cada linea. Si el catalogo no
+        responde, los ultimos precios conocidos y `preciosVigentes: false`.
+      parameters:
+        - $ref: "#/components/parameters/Moneda"
       responses:
         "200":
           description: El carrito del uid del token
@@ -63,10 +277,33 @@ paths:
           description: Sin token de acceso, o caducado / no verificable
         "403":
           description: El token no es de un usuario
+        "422":
+          $ref: "#/components/responses/MonedaNoDisponible"
   /carrito/items:
     post:
       summary: Agregar un producto al carrito del jugador autenticado
       operationId: agregarItem
+      description: >
+        Desde 1.2.0 el producto se busca en el catalogo maestro
+        (contenido/productos) en el momento de agregarlo. Solo entra si se
+        vende: en dinero real o, desde 1.7.0 (G3), en creditos. Un producto
+        que solo se vende en creditos entra sin precio en dinero real: su
+        linea lleva `soloEnCreditos: true` y `precioCreditos`, y no suma al
+        `total`. Si ya habia una linea de ese producto, se suma la cantidad.
+        Los rechazos son problem details (regla 4) y se distinguen por `type`,
+        nunca por el texto.
+
+        1.4.0: la linea no pasa de 20 unidades ni de las que le quedan al
+        producto; la respuesta lleva los precios en la `moneda` pedida.
+
+        1.5.0 (RF-CAR-004, excepcion «producto ya adquirido por el cliente»):
+        lo que el inventario dice que el jugador ya tiene no entra al carrito
+        (409 `urn:nexus:problema:producto-ya-adquirido`). Es la misma fuente
+        que la marca `esPropio` de la vitrina; si el inventario no responde no
+        se puede saber, y el producto entra (como la vitrina, que sale sin la
+        marca): una caida del inventario no deja la tienda sin vender.
+      parameters:
+        - $ref: "#/components/parameters/Moneda"
       requestBody:
         required: true
         content:
@@ -75,7 +312,21 @@ paths:
               type: object
               required: [productoId, cantidad]
               properties:
-                productoId: { type: integer, format: int64 }
+                productoId:
+                  description: >
+                    Identificador del producto en el catalogo maestro: el UUID
+                    que devuelve GET /vitrina. Hasta 1.1.0 era un entero de la
+                    tabla propia de ms-ecommerce; el entero se sigue aceptando
+                    para no romper a ningun cliente, pero ya no corresponde a
+                    ningun producto y se responde 422 producto-inexistente.
+                  oneOf:
+                    - type: string
+                      format: uuid
+                    - type: integer
+                      format: int64
+                      description: >
+                        Heredado de 1.1.0 (tabla propia). Se acepta y se
+                        responde 422 `urn:nexus:problema:producto-inexistente`.
                 cantidad: { type: integer, minimum: 1 }
       responses:
         "200":
@@ -85,11 +336,45 @@ paths:
               schema:
                 $ref: "#/components/schemas/Carrito"
         "400":
-          description: Cuerpo invalido
+          description: >
+            Cuerpo invalido, o (1.4.0) `cantidad` mayor que 20
+            (`urn:nexus:problema:cantidad-fuera-de-rango`).
         "401":
           description: Sin token de acceso
         "403":
           description: El token no es de un usuario
+        "409":
+          description: >
+            El producto existe en el catalogo, pero ahora no se puede vender o
+            no caben mas unidades. Por `type`:
+            `urn:nexus:problema:producto-no-disponible` (suspendido),
+            `urn:nexus:problema:producto-agotado` (tiraje 0),
+            `urn:nexus:problema:tiraje-insuficiente` (1.4.0: la linea pasaria
+            de las unidades que quedan; `disponibles` las dice) o
+            `urn:nexus:problema:cantidad-maxima-por-linea` (1.4.0: la linea
+            pasaria de 20) o `urn:nexus:problema:producto-ya-adquirido` (1.5.0:
+            el jugador ya lo tiene en su inventario). El carrito no cambia.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >
+            El producto no se puede agregar tal como se pidio. Por `type`:
+            `urn:nexus:problema:producto-inexistente` (el catalogo no lo tiene,
+            o llego el entero heredado de 1.1.0),
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real` (desde
+            1.7.0: no tiene ningun precio con el que venderse —ni en dinero
+            real ni en creditos—, por ejemplo un premium sin precio en dinero
+            real; el nombre del `type` es el de 1.4.0, cuando la tienda solo
+            vendia en dinero real) o `urn:nexus:problema:moneda-no-disponible`
+            (1.4.0). El carrito no cambia.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
   /carrito/items/{itemId}:
     delete:
       summary: Quitar un item del carrito del jugador autenticado
@@ -99,6 +384,7 @@ paths:
           in: path
           required: true
           schema: { type: integer, format: int64 }
+        - $ref: "#/components/parameters/Moneda"
       responses:
         "200":
           description: Carrito actualizado
@@ -110,6 +396,470 @@ paths:
           description: Sin token de acceso
         "403":
           description: El token no es de un usuario
+        "422":
+          $ref: "#/components/responses/MonedaNoDisponible"
+  /carrito/items/{itemId}/cantidad:
+    put:
+      summary: Cambia la cantidad de una linea del carrito (1.3.0)
+      operationId: cambiarCantidad
+      description: >
+        Fija la cantidad de la linea (no la suma). El producto se vuelve a
+        consultar en el catalogo en ese momento: si se suspendio o se agoto,
+        409 y la linea no cambia. 1.7.0: si se quedo sin ningun precio con el
+        que venderse (ni en dinero real ni en creditos), 422
+        `urn:nexus:problema:producto-sin-precio-en-moneda-real`, con la misma
+        forma de problem details que la 422 de moneda; una linea que solo se
+        vende en creditos cambia de cantidad como cualquier otra.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: itemId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: "#/components/parameters/Moneda"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cantidad]
+              properties:
+                cantidad:
+                  type: integer
+                  minimum: 1
+                  maximum: 20
+      responses:
+        "200":
+          description: Carrito actualizado (el total lo recalcula el servidor).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Carrito"
+        "400":
+          description: Cantidad fuera de rango (`urn:nexus:problema:cantidad-fuera-de-rango`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "401":
+          description: Sin sesion.
+        "404":
+          description: >
+            La linea no existe en el carrito del jugador
+            (`urn:nexus:problema:linea-inexistente`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "409":
+          description: >
+            Supera el tiraje disponible del producto
+            (`urn:nexus:problema:tiraje-insuficiente`, con `disponibles`), o el
+            producto se suspendio o se agoto (`producto-no-disponible`,
+            `producto-agotado`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "422":
+          description: >
+            `urn:nexus:problema:moneda-no-disponible` (1.4.0, ver
+            MonedaNoDisponible) o, desde 1.7.0,
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real`: el
+            producto ya no tiene ningun precio con el que venderse (ni en
+            dinero real ni en creditos). La linea no cambia.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
+
+  /lista-deseos:
+    get:
+      summary: Lista de deseos del jugador (1.3.0)
+      operationId: miListaDeDeseos
+      description: >
+        El nombre y la imagen salen del catalogo; si el catalogo no responde,
+        el nombre que tenia el producto al guardarlo y la imagen en null.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Productos en la lista, del mas reciente al mas antiguo.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EntradaListaDeseos"
+        "401":
+          description: Sin sesion.
+
+  /lista-deseos/{productoId}:
+    put:
+      summary: Anade un producto a la lista de deseos (idempotente) (1.3.0)
+      operationId: desearProducto
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: El producto esta en la lista (ya estaba o se anadio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntradaListaDeseos"
+        "401":
+          description: Sin sesion.
+        "404":
+          description: >
+            El producto no existe en el catalogo
+            (`urn:nexus:problema:producto-inexistente`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
+    delete:
+      summary: Quita un producto de la lista de deseos (1.3.0)
+      operationId: dejarDeDesearProducto
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "204":
+          description: Ya no esta en la lista (idempotente).
+        "401":
+          description: Sin sesion.
+
+  /checkout:
+    post:
+      summary: Paga el carrito con la pasarela simulada y entrega los productos (1.3.0)
+      operationId: pagarCarrito
+      description: >
+        Orquesta la compra en el servidor: valida cada producto contra el
+        catalogo (existe, activo, precio y promocion vigentes, tiraje), crea la
+        orden, cobra en la pasarela simulada, reserva el tiraje en productos,
+        registra la transaccion en ms-finanzas, entrega los productos al
+        inventario (`POST /api/v1/inventario/entregas`, origen COMPRA), envia
+        el correo de confirmacion con el detalle y el total, y vacia el
+        carrito. `Idempotency-Key` obligatoria: la misma clave devuelve la
+        misma orden sin volver a cobrar. Tarjetas de prueba de la pasarela
+        simulada: cualquiera que pase Luhn con vencimiento futuro se aprueba,
+        salvo las terminadas en `0002` (rechazo por fondos) y `0069`
+        (pasarela caida, para probar la compensacion).
+
+        1.4.0, como queda implementado:
+
+        - La clave es del jugador (dos jugadores pueden usar la misma sin
+          cruzarse). La misma clave con una orden ya cobrada, rechazada o
+          reembolsada devuelve 200 con esa orden y no repite nada; con una
+          orden PENDIENTE (la pasarela no respondio) vuelve a intentar el
+          cobro con la tarjeta que llegue, que es lo que hace reintentar
+          seguro; con otra `moneda`, 409
+          `urn:nexus:problema:clave-de-idempotencia-reutilizada`. Dos
+          peticiones simultaneas con la misma clave crean una sola orden: la
+          segunda recibe 409 `urn:nexus:problema:compra-en-curso` (con
+          `Retry-After`) o, si la primera ya termino, 200 con su orden. Un
+          jugador con un pago en proceso recibe el mismo 409 si intenta otro
+          con otra clave: dos pagos simultaneos del mismo carrito cobrarian
+          dos veces lo mismo.
+        - Orden de los pasos: validar y calcular precios, crear la orden
+          PENDIENTE, cobrar (COBRADA; lo comprado sale del carrito en ese
+          momento, para que no se pueda pagar dos veces mientras se entrega),
+          reservar una unidad de tiraje por cada unidad comprada
+          (`adquisiciones`, clave `orden-{id}-l{linea}-u{unidad}`), entregar
+          al inventario (clave `orden-{id}`; ENTREGADA), registrar la
+          transaccion (refId = id de la orden) y enviar el correo (clave
+          `compra-{id}`; COMPLETA). El asiento en ms-finanzas se escribe
+          despues de entregar porque su libro no tiene reembolsos: una orden
+          compensada no deja un APROBADO sin reverso. Un rechazo de la
+          pasarela si se registra, como RECHAZADO.
+        - Si el catalogo se niega a reservar (agotado, suspendido) o el
+          inventario a entregar (producto suspendido o inexistente), la orden
+          se compensa: reembolso simulado, REEMBOLSADA con `motivo` y 409. Si
+          algo falla despues de cobrar por una averia (un servicio que no
+          responde), la orden queda en su estado intermedio, la respuesta es
+          201 con ese estado, y una tarea programada la termina con las mismas
+          claves: nunca cobra dos veces ni entrega dos veces.
+        - Del medio de pago solo se guardan la marca y los cuatro ultimos
+          digitos; el titular, el numero completo y el codigo de seguridad no
+          se guardan ni se escriben en la bitacora.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 100
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudDePago"
+      responses:
+        "201":
+          description: Orden creada y procesada (mirar `estado`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "200":
+          description: 'La clave ya se uso: la orden original, sin volver a cobrar.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "400":
+          description: >
+            Datos de pago mal formados (Luhn, vencimiento, codigo;
+            `urn:nexus:problema:datos-de-pago-invalidos`, con `campo`), carrito
+            vacio (`urn:nexus:problema:carrito-vacio`) o sin
+            `Idempotency-Key` valida
+            (`urn:nexus:problema:clave-de-idempotencia-requerida`). No se crea
+            ninguna orden.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "401":
+          description: Sin sesion.
+        "402":
+          description: >
+            La pasarela rechazo el pago; la orden queda RECHAZADA y el carrito
+            intacto (`urn:nexus:problema:pago-rechazado`, con `ordenId`,
+            `estado` y `motivo`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "409":
+          description: >
+            Un producto se agoto, se suspendio o no tiene tantas unidades antes
+            de cobrar (`producto-agotado`, `producto-no-disponible`,
+            `tiraje-insuficiente`; no se crea orden ni se cobra), o despues de
+            cobrar y la orden se compenso (`urn:nexus:problema:compra-reembolsada`,
+            con `ordenId`, `estado` REEMBOLSADA y `motivo`). Tambien
+            `compra-en-curso` y `clave-de-idempotencia-reutilizada` (ver
+            arriba).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "422":
+          description: >
+            `urn:nexus:problema:moneda-no-disponible` (1.4.0, ver
+            MonedaNoDisponible) o, desde 1.7.0,
+            `urn:nexus:problema:producto-sin-precio-en-moneda-real`: el carrito
+            tiene un producto que solo se vende en creditos del juego. Con
+            tarjeta no hay nada que cobrar por el: se paga con
+            POST /checkout/creditos o se quita del carrito. No se crea ninguna
+            orden ni se cobra nada. Un producto que ya no tiene ningun precio
+            sigue siendo el 409 `producto-no-disponible` de antes.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          description: >
+            El catalogo no respondio (`catalogo-no-disponible`; no hay orden),
+            la pasarela no respondio (`urn:nexus:problema:pasarela-no-disponible`,
+            con `ordenId`: la orden sigue PENDIENTE, no se cobro nada y se
+            puede reintentar con la misma clave) o la tienda no tiene su
+            credencial de servicio (`urn:nexus:problema:compra-no-disponible`;
+            no hay orden). Siempre con `Retry-After`.
+          headers:
+            Retry-After:
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+  /checkout/creditos:
+    get:
+      summary: Lo que costaria pagar el carrito con creditos del juego, y el saldo (1.6.0)
+      operationId: cotizarCarritoEnCreditos
+      description: >
+        D-44. La cotizacion que la interfaz ensena antes de confirmar: cada
+        linea del carrito con su precio en creditos (el `precioCreditos` del
+        catalogo, con la promocion vigente), el total, el saldo disponible del
+        jugador en ms-finanzas y como quedaria despues. Todo lo calcula el
+        servidor; el navegador no suma ni resta nada. No cobra, no aparta
+        saldo y no crea orden: el cobro de verdad lo hace POST, que vuelve a
+        comprobar el carrito, el catalogo y el saldo.
+
+        `pagable` es false si el carrito esta vacio, si algun producto ya no
+        se puede comprar (agotado, suspendido, sin tantas unidades) o si
+        alguno no tiene precio en creditos; `motivo` dice cual. Si ms-finanzas
+        no responde, la cotizacion sale igual con `saldoDisponible`,
+        `saldoDespues` y `alcanza` en null: el saldo lo vuelve a mirar el cobro.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: La cotizacion.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CotizacionEnCreditos"
+        "401":
+          description: Sin sesion.
+        "403":
+          description: Token de servicio (un servicio no tiene carrito).
+        "503":
+          $ref: "#/components/responses/CatalogoNoDisponible"
+    post:
+      summary: Paga el carrito con creditos del juego y entrega los productos (1.6.0)
+      operationId: pagarCarritoConCreditos
+      description: >
+        D-44. La misma compra que POST /checkout, con los mismos pasos, claves
+        y garantias, salvo el cobro: en vez de la pasarela simulada, ms-finanzas
+        descuenta el total en creditos del saldo del jugador
+        (`POST /creditos/debitar`, con la credencial de servicio de la tienda y
+        `refId` = `tienda-orden-{id}`). Sin cuerpo: el precio lo pone el
+        servidor con el carrito y el catalogo de ese momento.
+
+        - Idempotencia. `Idempotency-Key` obligatoria y del jugador, como en
+          POST /checkout. La misma clave devuelve la misma orden sin volver a
+          cobrar; si la orden quedo PENDIENTE porque ms-finanzas no respondio,
+          la misma clave reintenta el cobro con el mismo `refId`, y ms-finanzas
+          no descuenta dos veces un mismo `refId`. Una clave usada para pagar
+          con tarjeta no sirve para pagar con creditos (409
+          `clave-de-idempotencia-reutilizada`). Un doble clic con la misma clave
+          crea una orden; dos claves a la vez, `compra-en-curso`.
+        - Saldo insuficiente. ms-finanzas se niega (422 `saldo-insuficiente`):
+          la orden queda RECHAZADA con el motivo, nada se cobro y el carrito
+          sigue igual. 402 `urn:nexus:problema:saldo-insuficiente`.
+        - Fallo parcial. Si despues de cobrar el catalogo no reserva o el
+          inventario no entrega, la orden se compensa devolviendo los creditos
+          (`POST /creditos/reversar` con el mismo `refId`) y queda REEMBOLSADA
+          (409 `compra-reembolsada`). Una averia deja la orden en su estado y
+          la termina la tarea programada, con las mismas claves.
+        - Una orden PENDIENTE que nadie reintenta se concilia antes de caducar:
+          si ms-finanzas tiene el debito de su `refId`, la compra sigue; si no,
+          queda RECHAZADA sin haber cobrado nada.
+        - No hay asiento en el libro de moneda real (`POST /transacciones`): el
+          movimiento queda en el libro de creditos del jugador
+          (`GET /creditos/{uid}/movimientos`). Tampoco correo de confirmacion:
+          el de compra (7.5) es del pago con pasarela y el contrato de correo
+          solo admite monedas ISO 4217 (`correoConfirmacion` OMITIDO).
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 100
+      responses:
+        "201":
+          description: Orden creada y procesada (mirar `estado`); `formaDePago` CREDITOS.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "200":
+          description: 'La clave ya se uso: la orden original, sin volver a cobrar.'
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "400":
+          description: >
+            Carrito vacio (`carrito-vacio`) o sin `Idempotency-Key` valida
+            (`clave-de-idempotencia-requerida`). No se crea orden.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "401":
+          description: Sin sesion.
+        "402":
+          description: >
+            El saldo no alcanza (`urn:nexus:problema:saldo-insuficiente`, con
+            `ordenId`, `estado` RECHAZADA, `motivo` y `totalCreditos`). Nada se
+            cobro; el carrito sigue igual.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "403":
+          description: Token de servicio (un servicio no compra).
+        "409":
+          description: >
+            Antes de cobrar, sin orden: un producto sin precio en creditos
+            (`urn:nexus:problema:producto-sin-precio-en-creditos`), agotado,
+            suspendido o sin tantas unidades (`producto-agotado`,
+            `producto-no-disponible`, `tiraje-insuficiente`). Tambien
+            `compra-en-curso`, `clave-de-idempotencia-reutilizada` y, despues de
+            cobrar, `compra-reembolsada` (con `ordenId`, `estado` REEMBOLSADA y
+            `motivo`: los creditos se devolvieron).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+        "503":
+          description: >
+            El catalogo no respondio (`catalogo-no-disponible`; no hay orden), a
+            la tienda le falta configuracion (`compra-no-disponible`; no hay
+            orden) o ms-finanzas no respondio al cobro
+            (`urn:nexus:problema:creditos-no-disponibles`, con `ordenId`: la
+            orden sigue PENDIENTE y se reintenta con la misma clave, sin cobrar
+            dos veces). Siempre con `Retry-After`.
+          headers:
+            Retry-After:
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+
+  /ordenes:
+    get:
+      summary: Ordenes del jugador (1.3.0)
+      operationId: misOrdenes
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Ordenes, de la mas reciente a la mas antigua.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Orden"
+        "401":
+          description: Sin sesion.
+
+  /ordenes/{ordenId}:
+    get:
+      summary: Una orden del jugador (1.3.0)
+      operationId: miOrden
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: ordenId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: La orden.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Orden"
+        "401":
+          description: Sin sesion.
+        "404":
+          description: >
+            No existe o es de otro jugador (`urn:nexus:problema:orden-inexistente`).
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/ProblemDetail" }
+
 security:
   - bearerAuth: []
 components:
@@ -122,7 +872,365 @@ components:
         Token de acceso emitido por ms-identidad (RS256, JWKS). El carrito es
         del claim `uid` (o del sujeto con Keycloak). Roles de usuario:
         JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR.
+  parameters:
+    ProductoId:
+      name: productoId
+      in: path
+      required: true
+      schema: { type: string }
+    Moneda:
+      name: moneda
+      in: query
+      required: false
+      description: >
+        (1.4.0) Moneda de los precios de la respuesta: COP (la del catalogo,
+        siempre disponible), USD o EUR (con la tasa de admin-parametros, si
+        esta definida).
+      schema:
+        type: string
+        enum: [COP, USD, EUR]
+        default: COP
+  responses:
+    CatalogoNoDisponible:
+      description: >
+        El catalogo maestro (contenido/productos) no respondio. `type`
+        `urn:nexus:problema:catalogo-no-disponible`. Nada cambio -ni la vitrina
+        se da por vacia ni el carrito por actualizado- y se puede reintentar
+        pasado `Retry-After`.
+      headers:
+        Retry-After:
+          description: Segundos tras los que conviene reintentar (30).
+          schema: { type: integer, minimum: 1 }
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetail"
+    MonedaNoDisponible:
+      description: >
+        (1.4.0) Se pidio USD o EUR y no hay tasa de cambio con la que
+        convertir: el parametro de admin-parametros no esta definido (decision
+        del PO pendiente) o el servicio no responde. `type`
+        `urn:nexus:problema:moneda-no-disponible`, con `monedasDisponibles`.
+        COP siempre esta disponible.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/ProblemDetail"
   schemas:
+    EntradaListaDeseos:
+      type: object
+      required: [productoId, agregadoEn]
+      properties:
+        productoId: { type: string }
+        nombre: { type: [string, "null"] }
+        imagen: { type: [string, "null"] }
+        agregadoEn: { type: string, format: date-time }
+
+    SolicitudDePago:
+      type: object
+      required: [titular, numeroTarjeta, vencimiento, codigoSeguridad]
+      properties:
+        titular:
+          type: string
+          minLength: 3
+          maxLength: 80
+        numeroTarjeta:
+          type: string
+          pattern: '^[0-9 ]{12,23}$'
+          description: Se valida con Luhn y se descarta; solo quedan los 4 ultimos digitos.
+        vencimiento:
+          type: string
+          pattern: '^(0[1-9]|1[0-2])/[0-9]{2}$'
+          description: MM/AA, no vencido.
+        codigoSeguridad:
+          type: string
+          pattern: '^[0-9]{3,4}$'
+          description: Nunca se guarda ni se registra en bitacora.
+        moneda:
+          type: string
+          enum: [COP, USD, EUR]
+          default: COP
+
+    Orden:
+      type: object
+      required: [id, estado, moneda, total, lineas, creadaEn]
+      properties:
+        id: { type: string, format: uuid }
+        estado:
+          type: string
+          enum: [PENDIENTE, COBRADA, ENTREGADA, COMPLETA, RECHAZADA, COMPENSACION_PENDIENTE, REEMBOLSADA]
+        moneda:
+          type: string
+          enum: [COP, USD, EUR, CREDITOS]
+          description: >
+            La unidad de `total`, `precioUnitario` y `subtotal`. (1.6.0)
+            CREDITOS en una orden pagada con creditos del juego: los importes
+            son creditos enteros.
+        formaDePago:
+          type: string
+          enum: [TARJETA, CREDITOS]
+          description: >
+            (1.6.0, D-44) TARJETA = pasarela simulada (POST /checkout);
+            CREDITOS = saldo de creditos del juego (POST /checkout/creditos).
+        total: { type: number }
+        tasaDeCambio:
+          type: [number, "null"]
+          description: >
+            (1.4.0) Pesos colombianos por una unidad de `moneda` con los que se
+            calculo la orden; null en COP.
+        lineas:
+          type: array
+          items:
+            type: object
+            required: [productoId, nombre, cantidad, precioUnitario, subtotal]
+            properties:
+              productoId: { type: string }
+              nombre: { type: string }
+              cantidad: { type: integer }
+              precioUnitario: { type: number }
+              precioOriginal:
+                type: number
+                description: (1.4.0) Precio unitario antes de la promocion, en `moneda`.
+              descuentoPorcentaje: { type: [integer, "null"] }
+              subtotal: { type: number }
+        medioDePago:
+          type: [object, "null"]
+          description: La tarjeta (marca y cuatro ultimos); null en una orden pagada con creditos.
+          properties:
+            marca: { type: string }
+            ultimos4: { type: string }
+        motivo:
+          type: [string, "null"]
+          description: Por que se rechazo o se compenso.
+        correoConfirmacion:
+          type: string
+          enum: [PENDIENTE, ENVIADO, OMITIDO, RECHAZADO]
+          description: >
+            (1.4.0) El correo de confirmacion: PENDIENTE (aun no se entrego al
+            servicio de correo), ENVIADO (aceptado por el servicio de correo),
+            OMITIDO (la orden no llego a entregarse, el envio esta apagado en
+            ese entorno o, desde 1.6.0, se pago con creditos) o RECHAZADO (el
+            servicio de correo no acepto los datos de la cuenta).
+        creadaEn: { type: string, format: date-time }
+        cobradaEn:
+          type: [string, "null"]
+          format: date-time
+          description: (1.4.0) Cuando la pasarela aprobo el cobro (o, 1.6.0, cuando ms-finanzas desconto los creditos).
+        actualizadaEn: { type: [string, "null"], format: date-time }
+
+    CotizacionEnCreditos:
+      type: object
+      description: >
+        (1.6.0, D-44) Lo que costaria pagar el carrito con creditos del juego,
+        calculado por el servidor. Las cifras son creditos enteros.
+      required: [pagable, lineas]
+      properties:
+        pagable:
+          type: boolean
+          description: >
+            true si el carrito se puede pagar con creditos ahora: tiene algo,
+            todo se puede comprar y todo tiene precio en creditos. No dice si
+            el saldo alcanza: eso es `alcanza`.
+        motivo:
+          type: [string, "null"]
+          enum: [CARRITO_VACIO, PRODUCTO_NO_DISPONIBLE, SIN_PRECIO_EN_CREDITOS, null]
+          description: Por que no es `pagable`; null si lo es.
+        lineas:
+          type: array
+          description: Las lineas del carrito, en su orden.
+          items:
+            type: object
+            required: [productoId, nombre, cantidad, disponible]
+            properties:
+              productoId: { type: string }
+              nombre: { type: string }
+              cantidad: { type: integer, minimum: 1 }
+              disponible:
+                type: boolean
+                description: Si la linea se puede comprar ahora (mismo criterio que el carrito).
+              precioCreditos:
+                type: [integer, "null"]
+                minimum: 1
+                description: Precio unitario en creditos, promocion incluida; null si no se vende en creditos.
+              subtotalCreditos:
+                type: [integer, "null"]
+                minimum: 1
+                description: precioCreditos por cantidad; null si no hay precio en creditos.
+              porcentajeDescuento:
+                type: [integer, "null"]
+                description: El de la promocion vigente; null sin promocion.
+        totalCreditos:
+          type: [integer, "null"]
+          minimum: 1
+          description: La suma de los subtotales; null si no es `pagable`.
+        saldoDisponible:
+          type: [integer, "null"]
+          minimum: 0
+          description: >
+            El saldo disponible del jugador en ms-finanzas (creditos enteros,
+            hacia abajo); null si ms-finanzas no respondio.
+        saldoDespues:
+          type: [integer, "null"]
+          description: >
+            saldoDisponible menos totalCreditos; null si falta alguno de los
+            dos. Negativo si no alcanza.
+        alcanza:
+          type: [boolean, "null"]
+          description: saldoDespues >= 0; null si no se sabe.
+
+    ProblemDetail:
+      type: object
+      description: >
+        Problem details (RFC 9457), el formato de error comun a los 20 modulos
+        (regla 4). La interfaz decide por `type` y `status`, nunca por el
+        texto (shared/ui-kit/MAPEO-ERRORES.md).
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: >
+            Identificador estable del error, por ejemplo
+            urn:nexus:problema:producto-agotado.
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        ordenId:
+          type: string
+          format: uuid
+          description: (1.4.0) La orden afectada, en los errores de la compra que ya la crearon.
+        estado:
+          type: string
+          description: (1.4.0) Estado de esa orden.
+        motivo:
+          type: string
+          description: (1.4.0) Por que se rechazo o se compenso.
+        campo:
+          type: string
+          description: >
+            (1.4.0) En `datos-de-pago-invalidos`: titular, numeroTarjeta,
+            vencimiento o codigoSeguridad. Nunca se devuelve el valor.
+        disponibles:
+          type: integer
+          description: (1.4.0) En `tiraje-insuficiente`, las unidades que quedan.
+        monedasDisponibles:
+          type: array
+          items: { type: string }
+          description: (1.4.0) En `moneda-no-disponible`, las monedas que si.
+        totalCreditos:
+          type: integer
+          description: (1.6.0) En `saldo-insuficiente`, lo que costaba la compra en creditos.
+    PaginaDeVitrinaDelCatalogo:
+      description: >
+        Una pagina de GET /vitrina. Misma forma de pagina que la vitrina
+        anterior (content, number, size, totalElements, totalPages, last), para
+        que la tienda no cambie de lector: lo que cambia es de donde salen los
+        productos.
+      type: object
+      required: [content, number, size, totalElements, totalPages, last]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductoDeVitrina"
+        number: { type: integer, minimum: 0, description: Pagina actual, base cero }
+        size: { type: integer, minimum: 1, maximum: 50 }
+        totalElements: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+        last: { type: boolean }
+        moneda:
+          type: string
+          description: (1.4.0) Moneda de todos los precios de la pagina.
+        monedasDisponibles:
+          type: array
+          items: { type: string, enum: [COP, USD, EUR] }
+          description: >
+            (1.4.0) Monedas que se pueden pedir ahora mismo; COP siempre, USD y
+            EUR solo si admin-parametros tiene su tasa.
+    ProductoDeVitrina:
+      description: >
+        Un producto del catalogo maestro que se vende, tal como lo pinta la
+        tienda. Mismos nombres de campo que ProductoVitrina (1.1.0), salvo
+        `id`, que ahora es el UUID del catalogo. Desde 1.7.0 se vende si tiene
+        precio en dinero real O precio en creditos: uno que solo se vende en
+        creditos trae `precioFinal`, `precioOriginal` y `moneda` a null (los
+        campos siguen presentes) y `precioCreditos` con su precio. Un premium
+        sigue vendiendose solo en dinero real.
+      type: object
+      required: [id, nombre, precioFinal, precioOriginal, moneda]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: >
+            Identificador del producto en el catalogo maestro. Es el que se
+            manda como `productoId` a POST /carrito/items.
+        nombre: { type: string }
+        imagenUrl:
+          type: [string, 'null']
+          description: La imagen del producto en el catalogo (RF-CAR-001).
+        descripcion: { type: string }
+        habilidades:
+          type: [string, 'null']
+          description: Habilidades del producto (RF-CAR-001); null si el catalogo no las trae.
+        tipo:
+          type: string
+          description: HEROE, HABILIDAD, ARMA, ARMADURA, ITEM o EPICA, como en el catalogo.
+        precioFinal:
+          type: [number, 'null']
+          minimum: 0
+          description: >
+            Lo que se cobra en dinero real: el `precioMonedaReal` del catalogo
+            con la promocion vigente aplicada, en `moneda` (1.4.0). **No se
+            llama `precio`.** Siempre presente; desde 1.7.0 es null cuando el
+            producto solo se vende en creditos (nunca 0: cero seria gratis).
+        precioOriginal:
+          type: [number, 'null']
+          minimum: 0
+          description: >
+            El precio antes de la promocion, en `moneda`. Igual a `precioFinal`
+            cuando el producto no tiene una promocion vigente; null (1.7.0)
+            cuando solo se vende en creditos.
+        moneda:
+          type: [string, 'null']
+          description: >
+            La moneda pedida (1.4.0; COP por omision). El cliente la lee, no la
+            supone. null (1.7.0) cuando el producto solo se vende en creditos:
+            no hay precio en dinero real del que afirmar una moneda.
+        enPromocion:
+          type: boolean
+          description: >
+            (1.4.0) true si el catalogo trae una promocion vigente para el
+            producto. Es la misma promocion para los dos precios; en uno que
+            solo se vende en creditos, se lee sobre `precioCreditos`.
+        porcentajeDescuento:
+          type: [integer, 'null']
+          description: (1.4.0) El porcentaje de la promocion vigente; null sin promocion.
+        precioCreditos:
+          type: [integer, 'null']
+          minimum: 1
+          description: >
+            (1.6.0, D-44) Lo que cuesta pagado con creditos del juego: el
+            `precioCreditos` del catalogo con la promocion vigente aplicada.
+            null si no se puede pagar con creditos (producto premium, o sin
+            precio en creditos en el catalogo). Desde 1.7.0, si `precioFinal`
+            es null este campo nunca lo es: es el unico precio del producto.
+        esPropio:
+          type: boolean
+          description: >
+            RF-CAR-005. (1.4.0) Con sesion de usuario, true si el jugador ya
+            tiene el producto en su inventario. Sin sesion, o si el inventario
+            no respondio, false.
+        enListaDeseos:
+          type: boolean
+          description: >
+            RF-CAR-005. (1.4.0) Con sesion de usuario, true si el producto esta
+            en su lista de deseos. Sin sesion, false.
     PaginaDeVitrina:
       description: >
         El Page de Spring Data tal cual lo serializa el controlador. Se declara
@@ -204,6 +1312,118 @@ components:
         items:
           type: array
           items:
-            type: object
+            $ref: "#/components/schemas/LineaDeCarrito"
         total:
           type: number
+          description: >
+            (1.4.0) La suma de los subtotales de las lineas que se pueden
+            comprar ahora (`disponible`), calculada por el servidor en `moneda`.
+            Una linea que solo se vende en creditos (`soloEnCreditos`, 1.7.0)
+            no tiene subtotal en dinero real y no suma: lo que cuesta en
+            creditos lo da GET /checkout/creditos.
+        moneda:
+          type: [string, 'null']
+          description: >
+            Moneda del carrito (la pedida, 1.4.0). null mientras el carrito
+            esta vacio: sin lineas no hay moneda que afirmar.
+        unidades:
+          type: integer
+          description: (1.4.0) Suma de las cantidades de todas las lineas.
+        preciosVigentes:
+          type: boolean
+          description: >
+            (1.4.0) true si los precios salen del catalogo en este momento;
+            false si el catalogo no respondio y son los ultimos conocidos (la
+            compra los volvera a calcular).
+    LineaDeCarrito:
+      description: >
+        Una linea del carrito (1.2.0). Hasta 1.1.0 se declaraba solo como
+        `type: object`.
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Identificador de la linea; es el `itemId` de DELETE /carrito/items/{itemId}.
+        producto:
+          $ref: "#/components/schemas/ProductoDeLinea"
+        cantidad: { type: integer, minimum: 1 }
+        precioUnitario:
+          type: [number, 'null']
+          description: >
+            (1.4.0) El precio que se cobraria ahora por unidad, promocion
+            incluida, en la moneda del carrito. null (1.7.0) si el producto
+            solo se vende en creditos, o si no hay precio conocido (catalogo
+            caido y sin instantanea); nunca 0 en lugar de «no hay precio».
+        precioOriginal:
+          type: [number, 'null']
+          description: (1.4.0) El precio unitario antes de la promocion; null como `precioUnitario`.
+        porcentajeDescuento:
+          type: [integer, 'null']
+          description: >
+            (1.4.0) El de la promocion vigente; null sin promocion. En una
+            linea `soloEnCreditos` es el de la promocion sobre el precio en
+            creditos.
+        subtotal:
+          type: [number, 'null']
+          description: precioUnitario por cantidad; null cuando `precioUnitario` es null.
+        precioCreditos:
+          type: [integer, 'null']
+          minimum: 1
+          description: >
+            (1.7.0, G3) Lo que cuesta una unidad pagada con creditos del juego,
+            promocion incluida (el mismo calculo que `precioCreditos` de la
+            vitrina). null si el producto no se puede pagar con creditos
+            (premium o sin precio en creditos) o si el catalogo no respondio.
+        subtotalCreditos:
+          type: [integer, 'null']
+          minimum: 1
+          description: >
+            (1.7.0, G3) `precioCreditos` por `cantidad`, calculado por el
+            servidor (el navegador no multiplica precios); null cuando
+            `precioCreditos` es null. Lo que se cobra al pagar lo vuelve a
+            calcular POST /checkout/creditos.
+        soloEnCreditos:
+          type: boolean
+          description: >
+            (1.7.0, G3) true si el producto no tiene precio en dinero real y
+            solo se vende en creditos: la linea se paga con
+            POST /checkout/creditos; con tarjeta (POST /checkout) el carrito
+            se rechaza con 422 `producto-sin-precio-en-moneda-real`. false en
+            cualquier otro caso.
+        disponible:
+          type: boolean
+          description: >
+            (1.4.0) Si la linea se puede comprar ahora (con alguna forma de
+            pago, 1.7.0). Una que no, sigue en el carrito pero no suma al
+            total y la compra la rechaza.
+        motivo:
+          type: [string, 'null']
+          enum: [NO_DISPONIBLE, AGOTADO, SIN_PRECIO_EN_MONEDA_REAL, TIRAJE_INSUFICIENTE, null]
+          description: >
+            (1.4.0) Por que no se puede comprar; null si se puede. Desde 1.7.0
+            SIN_PRECIO_EN_MONEDA_REAL significa que no tiene ningun precio (ni
+            en dinero real ni en creditos); una linea que solo se vende en
+            creditos no lleva motivo: es `soloEnCreditos`.
+        maximo:
+          type: [integer, 'null']
+          description: >
+            (1.4.0) Hasta cuantas unidades admite la linea ahora: 20, o las que
+            le quedan al producto si son menos. null si no se sabe.
+    ProductoDeLinea:
+      description: El producto de una linea, lo justo para pintarla.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Identificador del producto en el catalogo maestro.
+        nombre: { type: string }
+        moneda:
+          type: [string, 'null']
+          description: >
+            La moneda del carrito (1.4.0); null (1.7.0) en una linea que solo
+            se vende en creditos, que no tiene precio en dinero real.
+        imagen:
+          type: [string, 'null']
+          description: (1.4.0) La imagen del producto en el catalogo; null si no se sabe.

@@ -223,6 +223,48 @@ describe('Cliente de creacion y modificacion', () => {
   });
 });
 
+describe('Rechazos del servidor al crear', () => {
+  test('conserva el detalle legible del problem detail', async () => {
+    const fetchFalso = async () =>
+      respuesta(
+        {
+          title: 'Producto inexistente',
+          status: 422,
+          detail: 'El producto no existe en el catalogo.',
+        },
+        false,
+        422,
+      );
+
+    await expect(
+      crearElemento(
+        'jugador-A',
+        { productoId: 'espada-corta', tipo: 'ARMA', nombrePropio: 'Espada inventada' },
+        { fetchImpl: fetchFalso },
+      ),
+    ).rejects.toMatchObject({ status: 422, detalle: 'El producto no existe en el catalogo.' });
+  });
+
+  test('sin cuerpo legible conserva el estado y no inventa un detalle', async () => {
+    const fetchFalso = async () => ({
+      ok: false,
+      status: 502,
+      json: async () => {
+        throw new SyntaxError('no es JSON');
+      },
+    });
+
+    const fallo = await crearElemento(
+      'jugador-A',
+      { productoId: 'producto-1', tipo: 'ITEM', nombrePropio: 'Amuleto' },
+      { fetchImpl: fetchFalso },
+    ).catch((error) => error);
+
+    expect(fallo.status).toBe(502);
+    expect(fallo.detalle).toBeUndefined();
+  });
+});
+
 describe('Cliente de equipamiento', () => {
   test.each([
     ['GET', consultarEquipamiento, undefined],

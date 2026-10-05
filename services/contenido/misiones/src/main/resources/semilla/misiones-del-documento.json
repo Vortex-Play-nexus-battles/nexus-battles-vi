@@ -1,0 +1,160 @@
+{
+  "version": "1.1.0",
+  "notas": [
+    "Contenido del documento del curso, copiado sin reescribir: la mision de ejemplo de la seccion 7.8.14 («El Templo Olvidado») y la Tabla 20 (epicas y probabilidad de Master por tipo de heroe).",
+    "PROVISIONAL (decision del PO, seccion 7.8.13 «las estadisticas de enemigos deben escalar segun nivel de mision»): el documento describe a los enemigos regulares solo con palabras. Para que el motor de combate los resuelva se les asigna un prototipo del catalogo de heroes y las estadisticas de ese prototipo en el nivel del heroe: Sombras Corrompidas = Guerrero Armas («ataque moderado»), Guardianes de Piedra = Guerrero Tanque («alta defensa»), Espectros Ancestrales = Mago Fuego («ataques magicos»).",
+    "PROVISIONAL: «El Guardian Eterno» usa los 100 puntos de vida del documento y la defensa del Guerrero Tanque en el nivel del heroe; sus «habilidades potenciadas» no tienen cifra en el documento y pelea con ataque basico.",
+    "PROVISIONAL: «Explorar las 5 camaras del templo» se cumple al superar todos los encuentros regulares (el documento no reparte los 18 enemigos entre las 5 camaras).",
+    "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
+    "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
+    "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento."
+  ],
+  "tabla20": [
+    {
+      "prototipo": "Guerrero Tanque",
+      "epica": {
+        "nombre": "Golpe de defensa",
+        "efectoGeneral": "+1 al ataque",
+        "efectoPotenciado": "+4 al daño, +2% de crítico",
+        "productoId": "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d"
+      },
+      "probabilidadPorcentaje": 0.04
+    },
+    {
+      "prototipo": "Guerrero Armas",
+      "epica": {
+        "nombre": "Segundo impulso",
+        "efectoGeneral": "Recupera 1d4 de vida",
+        "efectoPotenciado": "+3 a la vida, +5% de crítico",
+        "productoId": "4481eb34-384a-3fa0-ba9a-1aac9562c38f"
+      },
+      "probabilidadPorcentaje": 0.01
+    },
+    {
+      "prototipo": "Mago Fuego",
+      "epica": {
+        "nombre": "Luz cegadora",
+        "efectoGeneral": "+1 a la vida",
+        "efectoPotenciado": "+2 al daño, +1% de crítico",
+        "productoId": "5a969684-9f1b-3dcd-b1e7-1b407aef8c09"
+      },
+      "probabilidadPorcentaje": 0.03
+    },
+    {
+      "prototipo": "Mago Hielo",
+      "epica": {
+        "nombre": "Frio concentrado",
+        "efectoGeneral": "-1 de poder al oponente",
+        "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
+        "productoId": "978446ae-c979-349b-b620-f4215852ab5f"
+      },
+      "probabilidadPorcentaje": 0.05
+    },
+    {
+      "prototipo": "Pícaro Veneno",
+      "epica": {
+        "nombre": "Toma y lleva",
+        "efectoGeneral": "+1 al ataque",
+        "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
+        "productoId": "ac841a0a-132a-392f-8cf5-5a9cfa9add0f"
+      },
+      "probabilidadPorcentaje": 0.02
+    },
+    {
+      "prototipo": "Pícaro Machete",
+      "epica": {
+        "nombre": "Intimidación sangrienta",
+        "efectoGeneral": "+1 al daño",
+        "efectoPotenciado": "+2 a la vida, +2% de crítico",
+        "productoId": "cd15a03a-57db-3159-a709-9632140db557"
+      },
+      "probabilidadPorcentaje": 0.01
+    },
+    {
+      "prototipo": "Chamán",
+      "epica": {
+        "nombre": "Té changua",
+        "efectoGeneral": null,
+        "efectoPotenciado": "Sana a todos +(4d8)",
+        "productoId": "0e616a1a-9298-3f7c-bac2-c5dcf601424a"
+      },
+      "probabilidadPorcentaje": 0.1
+    },
+    {
+      "prototipo": "Médico",
+      "epica": {
+        "nombre": "Reanimador 3000",
+        "efectoGeneral": null,
+        "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
+        "productoId": "005fb6b8-eab8-3f7f-879b-dbe7e3e6e439"
+      },
+      "probabilidadPorcentaje": 0.1
+    }
+  ],
+  "misiones": [
+    {
+      "id": "templo-olvidado",
+      "origen": "DOCUMENTO",
+      "nombre": "El Templo Olvidado",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados.",
+      "imagen": null,
+      "dificultad": "NORMAL",
+      "duracionHoras": 12,
+      "nivelRecomendado": 8,
+      "requisitosPrevios": [],
+      "narrativa": "En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados. Según las leyendas, el templo alberga poderosos artefactos y conocimientos ancestrales. Sin embargo, está custodiado por criaturas corrompidas y un guardián milenario que protege sus secretos.",
+      "escenario": null,
+      "objetivos": [
+        { "texto": "Derrotar al Guardián del Templo (Jefe final).", "principal": true, "tipo": "DERROTAR_JEFE", "valor": null, "botin": null },
+        { "texto": "Explorar las 5 cámaras del templo.", "principal": true, "tipo": "COMPLETAR_ENCUENTROS", "valor": null, "botin": null },
+        { "texto": "Completar la misión sin que la vida del héroe baje del 50%.", "principal": false, "tipo": "VIDA_MINIMA", "valor": 50, "botin": null },
+        { "texto": "Derrotar al Máster si aparece.", "principal": false, "tipo": "DERROTAR_MASTER", "valor": null, "botin": null },
+        { "texto": "Encontrar los 3 fragmentos del Sello Antiguo.", "principal": false, "tipo": "OBTENER_BOTIN", "valor": 3, "botin": "Fragmento del Sello Antiguo" }
+      ],
+      "enemigos": [
+        { "nombre": "Sombras Corrompidas", "cantidad": 10, "descripcion": "Enemigos básicos con ataque moderado.", "prototipo": "Guerrero Armas", "vida": 18, "defensa": 70, "rotaciones": [] },
+        { "nombre": "Guardianes de Piedra", "cantidad": 5, "descripcion": "Enemigos con alta defensa.", "prototipo": "Guerrero Tanque", "vida": 30, "defensa": 84, "rotaciones": [] },
+        { "nombre": "Espectros Ancestrales", "cantidad": 3, "descripcion": "Enemigos con ataques mágicos.", "prototipo": "Mago Fuego", "vida": 12, "defensa": 70, "rotaciones": [] }
+      ],
+      "jefe": {
+        "nombre": "El Guardián Eterno",
+        "prototipo": "Guerrero Tanque",
+        "vida": 100,
+        "defensa": null,
+        "descripcion": "Guerrero Tanque con 100 puntos de vida y habilidades potenciadas.",
+        "rotaciones": []
+      },
+      "masters": [
+        {
+          "nombre": "Sombra del Olvido",
+          "prototipo": "Pícaro Veneno",
+          "probabilidad": 0.15,
+          "epica": {
+            "nombre": "Velo de Sombras",
+            "efectoGeneral": "+2 a la defensa para todos los héroes.",
+            "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
+            "productoId": null
+          }
+        }
+      ],
+      "recompensas": {
+        "creditos": 50,
+        "garantizadas": [
+          { "nombre": "Cofre de Bronce", "detalle": "contiene ítems comunes", "cantidad": 1, "productoId": null }
+        ],
+        "potenciales": [
+          { "nombre": "Fragmento del Sello Antiguo", "probabilidad": 0.6, "cantidad": 3, "detalle": "60% de probabilidad c/u - 3 en total", "productoId": null },
+          { "nombre": "Armadura «Piel del Guardián»", "probabilidad": 0.2, "cantidad": 1, "detalle": null, "productoId": null },
+          { "nombre": "Arma «Espada del Templo»", "probabilidad": 0.15, "cantidad": 1, "detalle": null, "productoId": null }
+        ],
+        "porObjetivos": [],
+        "primeraVez": { "creditos": 10, "otras": ["Título «Explorador del Templo»"] }
+      },
+      "destacada": true,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
+}

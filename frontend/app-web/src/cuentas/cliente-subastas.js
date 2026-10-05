@@ -6,6 +6,8 @@
  * separacion que ya usa el proyecto (cliente-inventario.js / vitrina.js).
  */
 
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
+
 // Ruta relativa, no host absoluto.
 //
 // Antes apuntaba a http://localhost:8092. Desde un navegador que no sea el de
@@ -111,7 +113,9 @@ async function errorDesdeRespuesta(respuesta, recurso = 'subasta') {
   };
   try {
     const problema = await respuesta.json();
-    return fallo(problema.detail ?? mensajeDelFallo(respuesta.status, recurso));
+    return fallo(
+      textoDelServidor(problema, respuesta.status, mensajeDelFallo(respuesta.status, recurso)),
+    );
   } catch {
     return fallo(mensajeDelFallo(respuesta.status, recurso));
   }

@@ -46,6 +46,14 @@ export const ACCESOS = Object.freeze([
     detalle: 'Salas abiertas ahora',
     destino: '../plataforma/salas-partidas/batallas.html',
   },
+  // UXC-5 — el recorrido del jugador pasa por las misiones (§7.8). La vista
+  // dice si hay misiones abiertas; lo que funciona ya es la estrategia.
+  {
+    id: 'misiones',
+    titulo: 'Misiones',
+    detalle: 'Estrategia de tu héroe',
+    destino: '../contenido/misiones/misiones.html',
+  },
   {
     id: 'inventario',
     titulo: 'Inventario',
@@ -59,12 +67,27 @@ export const ACCESOS = Object.freeze([
     destino: '../plataforma/torneos/torneos.html',
   },
   { id: 'subastas', titulo: 'Subastas', detalle: 'Pujas en vivo', destino: './subastas.html' },
-  { id: 'tienda', titulo: 'Tienda', detalle: 'Compra con créditos', destino: './tienda.html' },
+  // R18 — decia «Compra con créditos», y la tienda cobra en dinero real: los
+  // créditos solo se ganan en batalla y solo circulan en las subastas
+  // (Proyecto Integrador II, §7.7.3). La propia tienda dice «Paga con moneda local».
+  { id: 'tienda', titulo: 'Tienda', detalle: 'Paga en tu moneda', destino: './tienda.html' },
+  // Auditoría de DEV del 30-sep: llevaba a «Comentar un producto» sin
+  // producto, que solo dice «No hay ningún producto seleccionado». Las
+  // opiniones viven en la ficha de cada producto de la tienda (UXC-3): ahí
+  // se leen, se califica y se comenta.
   {
     id: 'comentarios',
     titulo: 'Comunidad',
-    detalle: 'Opiniones de productos',
-    destino: '../plataforma/comentarios/publicar-comentario.html',
+    detalle: 'Opiniones en cada producto',
+    destino: './tienda.html',
+  },
+  // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
+  // vista dice ella misma que los mensajes privados aún no están abiertos.
+  {
+    id: 'chat',
+    titulo: 'Chat',
+    detalle: 'General y mensajes privados',
+    destino: '../plataforma/salas-partidas/chat.html',
   },
 ]);
 
@@ -141,7 +164,10 @@ async function bloqueDeSaldo(uid, fetchImpl, alReintentar, cabecera = null) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: distintivoDeCreditos(saldo.saldoReservado, { tam: 'grande' }),
-      detalle: 'Vuelve si la sala se cancela',
+      // Auditoría de DEV del 30-sep: el jugador veía créditos apartados sin
+      // saber cuándo vuelven. Los tres caminos son del servidor (salas-partidas
+      // y ms-finanzas, D-39): cancelar, terminar o 72 h sin jugarse.
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   return caja;
@@ -326,8 +352,13 @@ async function bloqueDeAvisos(uid, fetchImpl, alReintentar) {
       alReintentar,
     });
   }
-  const bandeja = respuesta.datos?.contenido ?? respuesta.datos?.content;
-  const avisos = Array.isArray(bandeja) ? bandeja : [];
+  // `BandejaResponse` (notificaciones.yaml) trae la lista en `avisos`, del
+  // más antiguo al más reciente. Antes se leía `contenido`/`content`, que
+  // ningún contrato publica: con el servicio vivo este bloque decía «Nada
+  // nuevo» siempre (UX-GAME-3). Se conservan los alias por si un entorno
+  // sirve la forma paginada.
+  const bandeja = respuesta.datos?.avisos ?? respuesta.datos?.contenido ?? respuesta.datos?.content;
+  const avisos = Array.isArray(bandeja) ? bandeja.slice(-3).reverse() : [];
   if (avisos.length === 0) {
     return estadoVacio({
       titulo: 'Nada nuevo por ahora',
@@ -335,13 +366,13 @@ async function bloqueDeAvisos(uid, fetchImpl, alReintentar) {
     });
   }
   const lista = h('ul', { clase: 'pila pila--ajustada', datos: { zona: 'avisos' } });
-  for (const aviso of avisos.slice(0, 3)) {
+  for (const aviso of avisos) {
     lista.append(
       h('li', {
         clase: 'tarjeta pila pila--ajustada',
         hijos: [
           h('strong', { texto: aviso.titulo ?? aviso.title ?? 'Aviso' }),
-          h('p', { clase: 't-meta', texto: aviso.mensaje ?? aviso.cuerpo ?? '' }),
+          h('p', { clase: 't-meta', texto: aviso.cuerpo ?? aviso.mensaje ?? '' }),
         ],
       }),
     );

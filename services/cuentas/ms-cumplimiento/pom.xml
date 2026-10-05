@@ -97,11 +97,16 @@
       <groupId>org.flywaydb</groupId>
       <artifactId>flyway-database-postgresql</artifactId>
     </dependency>
-		<dependency>
-			<groupId>org.projectlombok</groupId>
-			<artifactId>lombok</artifactId>
-			<optional>true</optional>
-		</dependency>
+    <!-- HU-AUD-004: genera el PDF de la exportación del registro de
+     auditoría. Ninguna otra parte del proyecto generaba PDFs
+     todavía (confirmado con grep en pom.xml/build.gradle de
+     todos los servicios), así que esta es la primera vez que
+     se elige una librería para esto en el monorepo. -->
+    <dependency>
+      <groupId>org.apache.pdfbox</groupId>
+      <artifactId>pdfbox</artifactId>
+      <version>3.0.3</version>
+    </dependency>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>

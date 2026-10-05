@@ -22,13 +22,18 @@ import java.util.UUID;
  * @param esIA              si lo controla la inteligencia artificial
  * @param equipo            numero de equipo en modalidad cooperativa, o {@code null}
  * @param creditosApostados creditos que este participante puso en juego
+ * @param combate           su estado en el combate tal como lo devolvio el
+ *                          motor (poder, cargas, efectos, acciones...), o
+ *                          {@code null} antes de la primera respuesta del motor
+ *                          (B7)
  */
 public record ParticipanteDePartida(
         UUID idJugador,
         HeroeDeCombate heroe,
         boolean esIA,
         Integer equipo,
-        int creditosApostados) {
+        int creditosApostados,
+        EstadoDeCombate combate) {
 
     public ParticipanteDePartida {
         Objects.requireNonNull(idJugador, "Un participante sin identificador no se puede anunciar.");
@@ -37,15 +42,25 @@ public record ParticipanteDePartida(
         }
     }
 
-    /** Participante humano sin heroe conocido todavia. */
+    /** Sin estado de combate todavia: recien sentado a la partida. */
+    public ParticipanteDePartida(UUID idJugador, HeroeDeCombate heroe, boolean esIA, Integer equipo,
+                                 int creditosApostados) {
+        this(idJugador, heroe, esIA, equipo, creditosApostados, null);
+    }
+
     /** El mismo participante con su heroe actualizado tras recibir un golpe. */
     public ParticipanteDePartida conHeroe(HeroeDeCombate heroe) {
-        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados, combate);
     }
 
     /** El mismo participante, asignado a un equipo del modo cooperativo (HU-SAL-004). */
     public ParticipanteDePartida conEquipo(Integer equipo) {
-        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados);
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados, combate);
+    }
+
+    /** El mismo participante con el estado de combate que devolvio el motor (B7). */
+    public ParticipanteDePartida conCombate(EstadoDeCombate combate) {
+        return new ParticipanteDePartida(idJugador, heroe, esIA, equipo, creditosApostados, combate);
     }
 
     /**
@@ -77,15 +92,13 @@ public record ParticipanteDePartida(
     /**
      * Participante controlado por la IA, con el heroe con el que combatira.
      *
-     * <p><b>De donde sale ese heroe: es el mismo del anfitrion, a vida
-     * completa.</b> Ni el Product Backlog ni ningun contrato dicen con que
-     * heroe juega la maquina, y no se inventa uno: se usa el unico dato de
-     * combate que esta partida ya conoce. Ademas hace justa la partida contra
-     * la IA —mismas estadisticas para los dos— que es lo minimo compatible con
-     * RF-JUE-004, donde la modalidad se elige por comodidad y no por ventaja.
-     *
-     * <p>Queda anotado como decision funcional pendiente: si el PO fija que la
-     * IA use un heroe propio del catalogo, se cambia aqui y en ningun sitio mas.
+     * <p><b>De donde sale ese heroe (B7, D-B7-11).</b> §7.6 habla de «un heroe
+     * aleatorio controlado por la IA»: {@code IniciarPartida} sortea un
+     * prototipo del catalogo de heroes, sin sanadores (no podrian ganar: no
+     * infligen dano, §6.1.1), en el nivel del heroe del anfitrion y sin
+     * equipamiento. Si el catalogo no responde al empezar, la maquina combate
+     * con una copia del heroe del anfitrion a vida completa, que es lo que
+     * hacia antes de B7.
      *
      * <p>No apuesta creditos: la maquina no tiene bolsa (RF-JUE-014).
      */

@@ -13,12 +13,69 @@
    Tarjeta — base de casi todo
    ======================================================================= */
 
+/* =======================================================================
+   Superficies claras — UX-GAME-1
+   -----------------------------------------------------------------------
+   Todo lo que pinta `--superficie` o `--superficie-2` devuelve la tinta a
+   oscuro (ver «Tinta contextual» en base.css). Va ANTES que cualquier regla
+   de componente, con la misma especificidad, para que un `color` propio del
+   componente siga ganando. Si una superficie nueva no esta en esta lista, su
+   texto sale claro sobre blanco: axe lo canta en el laboratorio visual.
+   ======================================================================= */
+.tarjeta,
+.dialogo,
+.estado-vista,
+.tabla,
+.menu,
+.resultado,
+.transmision,
+.chatbot__tarjeta,
+.chatbot-ventana,
+.metrica,
+.encuentro,
+.panel-resultado,
+.combate__controles,
+.interrupcion__tarjeta,
+.entrada__tarjeta,
+.codigo-invitacion,
+.modalidad__cara,
+.accion-combate,
+.zona-carga--con-archivos,
+.zona-carga--cargando,
+.lista-terminos__fila,
+.campo__control,
+.desplegable__control,
+.campo-numerico__caja,
+.boton--secundario,
+.paginacion__pagina,
+.tecla,
+.elegir-objeto__opcion,
+.casilla--caja,
+.radio__entrada,
+.distintivo--privada,
+.sello-estado[data-estado='neutro'] {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
+/* La tarjeta: la superficie base del Nexo. Desde UX-GAME-1 lleva el filo de
+   energia que coronaba la tarjeta de entrada —tres pixeles de `--energia` en
+   el borde superior— y una sombra pensada para la atmosfera oscura; la de
+   capa 1 no se veia sobre indigo. El filo va como capa de fondo y no como
+   pseudoelemento para no reservar `::before` en un contenedor que lo usan
+   muchas vistas. */
 .tarjeta {
-  background: var(--superficie);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   padding: var(--e-4);
-  box-shadow: var(--sombra-1);
+  box-shadow: var(--sombra-atmosfera);
 }
 
 .tarjeta--hundida {
@@ -44,9 +101,22 @@
     box-shadow var(--transicion);
 }
 
+.tarjeta--pulsable {
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion),
+    transform var(--transicion);
+}
+
 .tarjeta--pulsable:hover {
-  border-color: var(--borde-int);
-  box-shadow: var(--sombra-2);
+  border-color: var(--primaria);
+  box-shadow: var(--sombra-atmosfera), var(--brillo-primaria);
+  transform: translateY(-2px);
+}
+
+.tarjeta--pulsable:active {
+  transform: translateY(0);
+  transition-duration: var(--duracion-instantaneo);
 }
 
 /* =======================================================================
@@ -73,9 +143,38 @@
      Crear sala) no debe heredar el subrayado ni el azul de `a` en base.css. */
   text-decoration: none;
   cursor: pointer;
+  /* La luz del borde del primario es un pseudoelemento que vive dentro del
+     boton; `isolation` evita que su capa se mezcle con lo de fuera. */
+  position: relative;
+  isolation: isolate;
   transition:
     background var(--transicion),
-    border-color var(--transicion);
+    border-color var(--transicion),
+    color var(--transicion),
+    transform var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/* Respuesta de videojuego: el boton se acerca un poco al pasar el cursor, se
+   hunde al pulsarlo y vuelve. Son dos por ciento y un pixel: se sienten sin
+   verse. Los deshabilitados no responden a nada, que es lo que significan.
+   Bajo `prefers-reduced-motion` los desplazamientos se quitan mas abajo; el
+   cambio de color y de sombra se queda, porque comunica estado y no se mueve. */
+.boton:hover:not([disabled]):not([aria-disabled='true']) {
+  transform: translateY(-1px) scale(1.02);
+  box-shadow: var(--sombra-2);
+}
+
+.boton:active:not([disabled]):not([aria-disabled='true']) {
+  transform: translateY(0) scale(0.98);
+  box-shadow: var(--sombra-1);
+  transition-duration: var(--duracion-instantaneo);
+}
+
+/* El anillo de foco global de base.css sigue mandando; aqui solo se separa un
+   pixel mas para que no se pise con el brillo del hover. */
+.boton:focus-visible {
+  outline-offset: 3px;
 }
 
 /* Atacar, Confirmar, Pagar */
@@ -100,12 +199,80 @@
   color: var(--texto-sobre-color);
 }
 
+.boton--primario:hover:not([disabled]):not([aria-disabled='true']) {
+  box-shadow: var(--brillo-primaria);
+}
+
+/* La luz que recorre el borde del boton principal — una vez, al entrar el
+   cursor, y se apaga. Es un anillo de un pixel pintado con un gradiente conico
+   y recortado con una mascara para que solo quede el contorno; el angulo del
+   gradiente es lo que se anima. Sin `@property` el angulo no interpola y el
+   anillo simplemente no aparece: el boton sigue siendo el mismo boton. */
+@property --angulo-luz {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+.boton--primario::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--angulo-luz),
+    transparent 0deg,
+    transparent 250deg,
+    color-mix(in srgb, var(--texto-sobre-color) 85%, var(--primaria)) 300deg,
+    transparent 360deg
+  );
+  -webkit-mask:
+    linear-gradient(var(--texto-sobre-color) 0 0) content-box,
+    linear-gradient(var(--texto-sobre-color) 0 0);
+  mask:
+    linear-gradient(var(--texto-sobre-color) 0 0) content-box,
+    linear-gradient(var(--texto-sobre-color) 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .boton--primario:hover:not([disabled]):not([aria-disabled='true'])::after {
+    animation: luz-del-borde 900ms var(--curva-salida) 1;
+  }
+}
+
+@keyframes luz-del-borde {
+  0% {
+    opacity: 0;
+    --angulo-luz: 0deg;
+  }
+  15% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    --angulo-luz: 360deg;
+  }
+}
+
 .boton--acento {
   background: var(--acento-relleno);
   color: var(--texto-sobre-color);
 }
 .boton--acento:hover {
   color: var(--texto-sobre-color);
+}
+
+.boton--acento:hover:not([disabled]):not([aria-disabled='true']) {
+  box-shadow: var(--brillo-acento);
 }
 
 .boton--secundario {
@@ -142,10 +309,73 @@
   color: var(--texto-sobre-color);
 }
 
+.boton--exito {
+  background: var(--exito);
+  color: var(--texto-sobre-color);
+}
+.boton--exito:hover {
+  color: var(--texto-sobre-color);
+}
+
+/* Boton de solo icono: cuadrado, con el nombre de la accion en `aria-label`
+   o en un `.solo-lectores` dentro. El area tactil es la del boton mediano. */
+.boton--icono {
+  padding: 0;
+  width: var(--boton-mediano);
+  min-width: var(--boton-mediano);
+  aspect-ratio: 1;
+}
+
 .boton[disabled],
 .boton[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* Cargando — UX-GAME-1. `aria-busy` es el estado, y lo pone el modulo que
+   lanzo la peticion; esto solo lo pinta. El texto se queda donde estaba, con
+   un indicador delante: cambiar la etiqueta por «Cargando…» hace que el boton
+   salte de ancho y que quien mira pierda de vista que accion pulso. Mientras
+   dure, el boton no responde al cursor. */
+.boton[aria-busy='true'] {
+  pointer-events: none;
+  position: relative;
+  color: transparent;
+}
+
+.boton[aria-busy='true']::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 1.1em;
+  height: 1.1em;
+  border: 2px solid color-mix(in srgb, currentColor 30%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  /* El color del indicador es el del texto que se oculto: lo toma del
+     modificador (`--primario` blanco, `--secundario` oscuro). */
+  color: var(--texto-sobre-color);
+  animation: giro-de-carga 700ms linear infinite;
+}
+
+.boton--secundario[aria-busy='true']::before,
+.boton--contorno[aria-busy='true']::before {
+  color: var(--texto);
+}
+
+@keyframes giro-de-carga {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Sin giro: el indicador se queda como un arco quieto, que sigue diciendo
+     «esperando» sin moverse. */
+  .boton[aria-busy='true']::before {
+    animation: none;
+  }
 }
 
 /* =======================================================================
@@ -163,7 +393,9 @@
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
-  color: var(--texto);
+  /* Tinta y no paleta: los filtros de Batallas van directamente sobre la
+     atmosfera y los de un formulario, dentro de una tarjeta. */
+  color: var(--tinta);
 }
 
 .campo__control {
@@ -175,12 +407,38 @@
   font-family: var(--t-cuerpo-familia);
   font-size: var(--t-cuerpo-tam);
   color: var(--texto);
+  transition:
+    border-color var(--transicion),
+    box-shadow var(--transicion);
+}
+
+/* UX-GAME-1: el campo responde antes de recibir el foco, y al recibirlo el
+   borde se enciende en la primaria ademas del anillo global. Invalido y
+   deshabilitado se dicen con borde y fondo, no solo con color. */
+.campo__control:hover:not(:disabled):not([aria-invalid='true']) {
+  border-color: color-mix(in srgb, var(--primaria) 60%, var(--borde-int));
+}
+
+.campo__control:focus-visible {
+  border-color: var(--primaria);
+}
+
+.campo__control[aria-invalid='true'] {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--error) 22%, transparent);
+}
+
+.campo__control:disabled {
+  background: var(--superficie-2);
+  color: var(--texto-3);
+  cursor: not-allowed;
 }
 
 .campo__pista {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  /* Tinta contextual (UX-GAME-1): una pista puede ir fuera de una tarjeta. */
+  color: var(--tinta-3);
 }
 
 /* Estado inválido. El criterio de aceptación de HU-SAL-001 pide que se
@@ -289,6 +547,10 @@
   font-size: var(--t-meta-tam);
   font-weight: 600;
   white-space: nowrap;
+  /* Dentro de una rejilla, el distintivo mide lo que su texto: estirado a la
+     celda parecia una barra (cola de moderacion, salas). UX-GAME-6. */
+  justify-self: start;
+  width: fit-content;
 }
 
 .distintivo--abierta {
@@ -440,6 +702,7 @@
   height: 12px;
   background: var(--pista);
   border: 1px solid var(--borde);
+  box-shadow: inset 0 1px 2px color-mix(in srgb, var(--cromo) 18%, transparent);
   border-radius: var(--radio-chico);
   overflow: hidden;
 }
@@ -470,14 +733,15 @@
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
   font-variant-numeric: var(--cifras-tabulares);
-  color: var(--texto-2);
+  /* Tinta contextual: la barra vive en el HUD oscuro y en tarjetas claras. */
+  color: var(--tinta-2);
 }
 
 .barra-vida__nombre {
   font-family: var(--t-subtitulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-subtitulo-peso);
-  color: var(--texto);
+  color: var(--tinta);
 }
 
 /* =======================================================================
@@ -497,13 +761,28 @@
   padding: 0 var(--e-6);
   background: var(--cromo);
   color: var(--texto-sobre-color);
+  /* UX-GAME-1: sobre la atmosfera, que arranca en el cromo elevado, la barra
+     se fundia con la pagina. Una linea de energia al 45 % la separa sin
+     anadir un borde solido. */
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--primaria) 45%, transparent);
 }
 
 .cabecera__marca {
+  gap: var(--e-2);
   font-family: var(--t-titulo-familia);
   font-size: var(--t-subtitulo-tam);
   font-weight: var(--t-titulo-peso);
   letter-spacing: 0.02em;
+}
+
+/* UX-GAME-2 — el emblema compacto del logotipo (ver `marca/`), 32 px de
+   ancho. Lleva un halo azul tenue, el mismo gesto que el logotipo grande del
+   portal con `--sombra-marca`, a la escala de una barra. */
+.cabecera__emblema {
+  width: 32px;
+  height: auto;
+  flex: 0 0 auto;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--primaria) 60%, transparent));
 }
 
 /* =======================================================================
@@ -702,9 +981,18 @@
 .velo {
   position: fixed;
   inset: 0;
+  /* Misma capa que la ficha de producto (tokens.css, --capa-modal): el orden
+     del DOM decide quién queda encima. */
+  z-index: var(--capa-modal);
   background: var(--interaccion-velo-modal);
   display: grid;
   place-items: center;
+}
+
+/* Con un modal abierto, la página de atrás no se desplaza (comun/ui/dialogo.js,
+   bloquearDesplazamiento). */
+html.con-modal {
+  overflow: hidden;
 }
 
 /* La Pantalla 4 atenúa el contenido pero deja la cabecera legible y usable:
@@ -722,9 +1010,32 @@
   flex-direction: column;
   gap: var(--e-4);
   padding: var(--e-6);
-  background: var(--superficie);
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
   border-radius: var(--radio);
   box-shadow: var(--sombra-4);
+}
+
+/* UX-GAME-1: el dialogo entra, no aparece. Seis pixeles y un fundido en
+   `--duracion-normal`; sin rebote ni zoom. Bajo movimiento reducido las
+   duraciones ya valen cero por tokens.css y solo queda el fundido, que
+   tambien vale cero. */
+@media (prefers-reduced-motion: no-preference) {
+  .dialogo {
+    animation: entrar-dialogo var(--duracion-normal) var(--curva-salida) both;
+  }
+}
+
+@keyframes entrar-dialogo {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .dialogo__encabezado {
@@ -779,6 +1090,28 @@
   gap: var(--e-3);
 }
 
+/* UXC-7 — ConfirmCritical (§7.3.9): lo que va a pasar, en una lista, y la
+   palabra que hay que escribir para poder confirmar. */
+.confirmacion-critica {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.confirmacion-critica p {
+  margin: 0;
+}
+
+.confirmacion-critica__consecuencias {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: var(--e-3) var(--e-3) var(--e-3) var(--e-6);
+  border-left: 3px solid var(--error);
+  border-radius: var(--radio-chico);
+  background: var(--error-insignia);
+  color: var(--texto);
+}
+
 /* =======================================================================
    Paginación — RNF-USA-001, dieciséis por página
    ======================================================================= */
@@ -796,7 +1129,7 @@
 .paginacion__info {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  color: var(--tinta-3);
 }
 
 .paginacion__paginas {
@@ -910,6 +1243,63 @@
   color: var(--primaria);
 }
 
+/* --- Tabla de datos con <table> -------------------------------------------
+   Mi cuenta pinta «Tus batallas» y los movimientos de créditos con una
+   <table> semántica (encabezados con scope, una fila por partida), no con
+   filas .tabla__fila. Sin reglas de celda, el navegador centraba los
+   encabezados y dejaba las celdas a la izquierda y sin aire: las columnas no
+   casaban (auditoría de DEV del 30-sep, «Tus batallas»). El encabezado y la
+   celda de una columna llevan la misma clase de alineación. */
+
+.tabla--datos {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tabla--datos th,
+.tabla--datos td {
+  padding: var(--e-3) var(--e-4);
+  text-align: start;
+  vertical-align: middle;
+}
+
+.tabla--datos thead th {
+  background: var(--fondo);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-3);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.tabla--datos tbody td {
+  border-top: 1px solid var(--borde);
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+/* Cifras y acciones, a la derecha: se comparan de un vistazo y el botón no
+   baila con el ancho del texto de las otras columnas. */
+.tabla--datos .tabla__numero,
+.tabla--datos .tabla__accion {
+  text-align: end;
+}
+
+.tabla--datos .tabla__accion {
+  white-space: nowrap;
+}
+
+/* A 375 px la tabla de partidas se desplaza dentro de su tarjeta
+   (.tabla-envoltorio); la de movimientos cabe con menos aire lateral. */
+@media (max-width: 480px) {
+  .tabla--datos th,
+  .tabla--datos td {
+    padding: var(--e-2) var(--e-3);
+  }
+}
+
 /* =======================================================================
    Pestañas
    La activa se marca con color Y con la línea, nunca solo con color.
@@ -939,6 +1329,19 @@
   white-space: nowrap;
 }
 
+/* Auditoria de DEV del 30-sep: a 375 px las cinco pestanas de «Mi cuenta»
+   seguian sin caber y las ultimas quedaban fuera de la vista (habia que
+   adivinar que la tira se desplazaba). En pantalla estrecha pasan a dos
+   filas: todas a la vista y ninguna escondida. */
+@media (max-width: 480px) {
+  .pestanas {
+    flex-wrap: wrap;
+    column-gap: var(--e-2);
+    row-gap: 0;
+    overflow-x: visible;
+  }
+}
+
 .pestana {
   display: flex;
   flex-direction: column;
@@ -947,9 +1350,15 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--texto-2);
+  /* Tinta: en «Mi cuenta» las pestanas van directamente sobre la atmosfera. */
+  color: var(--tinta-2);
   cursor: pointer;
   font: inherit;
+  transition: color var(--transicion);
+}
+
+.pestana:hover {
+  color: var(--tinta);
 }
 
 .pestana__cara {
@@ -969,7 +1378,7 @@
 }
 
 .pestana[aria-selected='true'] {
-  color: var(--primaria);
+  color: var(--tinta-enlace);
 }
 .pestana[aria-selected='true'] .pestana__linea {
   background: var(--primaria);
@@ -1577,6 +1986,39 @@
   pointer-events: none;
 }
 
+/* Tarjeta de partida/sala (UX-GAME-4): es un boton, asi que hereda estilos
+   de agente de usuario que hay que apagar; el texto va a la izquierda y el
+   titulo lleva la modalidad. La sala en la que se puede entrar lleva el
+   acento lateral azul; la llena, ninguno. */
+button.tarjeta--partida {
+  width: 100%;
+  font: inherit;
+  color: var(--texto);
+  text-align: left;
+  cursor: pointer;
+  border-left: 3px solid var(--primaria);
+}
+
+button.tarjeta--partida:disabled {
+  cursor: not-allowed;
+  border-left-color: var(--borde);
+}
+
+.tarjeta--partida[data-estado='PRIVADA'] {
+  border-left-color: var(--acento-relleno);
+}
+
+.tarjeta--partida .tarjeta__cabecera {
+  width: 100%;
+  align-items: center;
+}
+
+.tarjeta--partida .tarjeta__titulo {
+  font-size: var(--t-etiqueta-tam);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* =======================================================================
    Panel de métrica
    RF-PRD-001 · RF-MET-001 · RF-MET-002 · RF-MET-003 · RF-MET-004 · RF-CHA-012
@@ -2010,7 +2452,9 @@
 
 .encuentro__cabecera {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
+  gap: var(--e-1) var(--e-3);
   padding: var(--e-2) var(--e-3);
   background: var(--fondo);
   font-family: var(--t-meta-familia);
@@ -2038,10 +2482,17 @@
   border-top: 1px solid var(--borde);
 }
 
-/* El ganador no se distingue solo por color: cambia el peso del texto. */
+/* El ganador no se distingue solo por color: cambia el peso del texto y lleva
+   el acento lateral azul (UX-GAME-5), que se ve igual sin color. */
 .encuentro__equipo--ganador {
   font-weight: var(--t-cuerpo-peso-enfasis);
   color: var(--texto);
+  box-shadow: inset 3px 0 0 var(--primaria);
+  background: color-mix(in srgb, var(--primaria) 6%, var(--superficie));
+}
+
+.encuentro--en-curso {
+  box-shadow: var(--sombra-1), var(--brillo-primaria);
 }
 
 .encuentro__equipo--ganador .encuentro__marcador {
@@ -2192,6 +2643,323 @@
   font-size: var(--t-meta-tam);
 }
 
+/* -----------------------------------------------------------------------
+   Ventana del asistente (comun/ui/ventana-chatbot.js)
+   HU-CHA-001: chat para visitantes y jugadores · HU-CHA-011: calificar
+   -----------------------------------------------------------------------
+   Panel flotante NO modal, anclado sobre el botón `.chatbot-flotante`.
+   Sin z-index a propósito: se cuelga al final del <body>, así que queda
+   sobre el contenido de la vista, y el `.velo` de una confirmación (que se
+   cuelga después) queda sobre él.
+   ----------------------------------------------------------------------- */
+
+.chatbot-ventana {
+  position: fixed;
+  right: var(--e-6);
+  bottom: calc(56px + var(--e-6) + var(--e-3));
+  width: min(380px, calc(100vw - var(--e-8)));
+  max-height: min(600px, calc(100vh - 56px - var(--e-16)));
+  display: flex;
+  flex-direction: column;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-3);
+  overflow: hidden;
+}
+
+.chatbot-ventana__cabecera {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  column-gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  background: var(--superficie-2);
+  border-bottom: 1px solid var(--borde-tenue);
+}
+
+.chatbot-ventana__titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.chatbot-ventana__estado {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-ventana__acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  flex: 0 0 auto;
+}
+
+/* Acciones secundarias (borrar, adjuntar): texto, no botón sólido, para
+   no competir con «Enviar». Mantienen el alto táctil mínimo. */
+.chatbot-ventana__accion {
+  min-height: var(--objetivo-tactil);
+  padding: 0 var(--e-1);
+  border: 0;
+  background: transparent;
+  color: var(--primaria);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.chatbot-ventana__accion:disabled {
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.chatbot-ventana__cerrar {
+  width: var(--objetivo-tactil);
+  height: var(--objetivo-tactil);
+  border: 0;
+  border-radius: var(--radio);
+  background: transparent;
+  color: var(--texto-2);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.chatbot-ventana__cerrar:hover {
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.chatbot-ventana__registro {
+  flex: 1 1 auto;
+  min-height: 160px;
+  margin: 0;
+  padding: var(--e-4);
+  list-style: none;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  background: var(--fondo);
+}
+
+.chatbot-ventana__mensaje {
+  max-width: 85%;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-1);
+}
+
+.chatbot-ventana__mensaje--bot {
+  align-self: flex-start;
+  background: var(--superficie);
+  border: 1px solid var(--borde-tenue);
+}
+
+.chatbot-ventana__mensaje--usuario {
+  align-self: flex-end;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.chatbot-ventana__texto {
+  margin: 0;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.chatbot-ventana__meta {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.chatbot-ventana__mensaje--usuario .chatbot-ventana__meta,
+.chatbot-ventana__mensaje--usuario .chatbot-ventana__adjunto {
+  color: var(--texto-sobre-color);
+}
+
+.chatbot-ventana__adjunto {
+  display: inline-block;
+  margin-top: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--primaria);
+}
+
+.chatbot-ventana__escribiendo,
+.chatbot-ventana__cargando {
+  align-self: flex-start;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-ventana__aviso {
+  padding: 0 var(--e-4) var(--e-3);
+  background: var(--fondo);
+}
+
+.chatbot-ventana__formulario {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border-top: 1px solid var(--borde-tenue);
+  background: var(--superficie);
+}
+
+.chatbot-ventana__fila {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-2);
+}
+
+.chatbot-ventana__entrada {
+  flex: 1 1 auto;
+  min-height: 2.75rem;
+  max-height: 8rem;
+  resize: vertical;
+}
+
+.chatbot-ventana__herramientas {
+  display: flex;
+  gap: var(--e-2);
+}
+
+/* Calificación de cada respuesta del bot (HU-CHA-011) */
+
+.chatbot-calificacion {
+  margin-top: var(--e-2);
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde-tenue);
+}
+
+.chatbot-calificacion__pregunta {
+  margin: 0 0 var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-calificacion__botones {
+  display: flex;
+  gap: var(--e-2);
+}
+
+.chatbot-calificacion__boton {
+  min-height: 2rem;
+  padding: 0 var(--e-3);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
+  font-size: var(--t-meta-tam);
+  cursor: pointer;
+}
+
+.chatbot-calificacion__boton:hover {
+  background: var(--superficie-2);
+}
+
+.chatbot-calificacion__boton:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.chatbot-calificacion__comentario {
+  margin-top: var(--e-2);
+}
+
+.chatbot-calificacion__nota,
+.chatbot-calificacion__gracias {
+  margin: var(--e-1) 0 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.chatbot-calificacion__nota:empty {
+  display: none;
+}
+
+/* UXC-9 — minimizada: queda la barra de título; la conversación sigue ahí.
+   `!important` gana al alto que puso el asa (estilo en línea). */
+.chatbot-ventana.chatbot-ventana--minimizada {
+  height: auto !important;
+}
+
+.chatbot-ventana--minimizada .chatbot-ventana__registro,
+.chatbot-ventana--minimizada .chatbot-ventana__aviso,
+.chatbot-ventana--minimizada .chatbot-ventana__formulario,
+.chatbot-ventana--minimizada .chatbot-ventana__estado,
+.chatbot-ventana--minimizada .chatbot-ventana__asa {
+  display: none;
+}
+
+/* UXC-9 — el asa del tamaño. La ventana cuelga de la esquina inferior
+   derecha, así que se agarra por la superior izquierda. Tiene objetivo táctil
+   de 24 px y foco visible: con las flechas también cambia el tamaño. */
+.chatbot-ventana__asa {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radio) 0 var(--radio-chico) 0;
+  background: transparent;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.chatbot-ventana__asa::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 9px;
+  height: 9px;
+  border-top: 2px solid var(--borde-int);
+  border-left: 2px solid var(--borde-int);
+  border-top-left-radius: 2px;
+}
+
+.chatbot-ventana__asa:hover {
+  background: var(--superficie-2);
+}
+
+/* El título empieza donde acaba el asa, para que agarrarla no sea pulsar
+   sobre «Asistente». */
+.chatbot-ventana__cabecera {
+  padding-left: var(--e-6);
+}
+
+/* En el teléfono ocupa el ancho, pero sigue por encima del botón flotante:
+   si lo tapara, no habría cómo cerrarla con un toque sobre el mismo botón. */
+@media (max-width: 480px) {
+  .chatbot-ventana__asa {
+    display: none;
+  }
+
+  .chatbot-ventana__cabecera {
+    padding-left: var(--e-4);
+  }
+
+  .chatbot-ventana {
+    right: var(--e-2);
+    left: var(--e-2);
+    /* UXC-9 — el tamaño elegido con el asa es de pantalla ancha (estilo en
+       línea): en el teléfono manda la pantalla. */
+    width: auto !important;
+    height: auto !important;
+    max-height: min(600px, calc(100vh - 56px - var(--e-16))) !important;
+  }
+}
+
 /* =======================================================================
    Cabecera — navegación completa
    RF-INV-008: seis destinos y búsqueda de productos
@@ -2229,7 +2997,11 @@
 /* El destino en curso se marca aquí, no con una variante de Figma. */
 .cabecera__destino.activo,
 .cabecera__destino[aria-current='page'] {
-  border-bottom-color: var(--texto-sobre-color);
+  /* El destino activo lleva el filo de energia, no una linea blanca: es el
+     mismo gesto que corona las tarjetas. */
+  border-bottom-color: transparent;
+  border-image: var(--energia) 1;
+  border-image-width: 0 0 2px 0;
 }
 
 /* Destino cuya pantalla todavía no existe. Se conserva —RF-INV-008 exige los
@@ -2242,6 +3014,10 @@
 
 .cabecera__buscador {
   flex: 1 1 auto;
+  /* Ni una barra de 1200 px en una pantalla ancha ni un campo que empuje los
+     destinos a otra línea: crece hasta aquí y encoge lo que haga falta. */
+  max-width: 22rem;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--e-2);
@@ -2268,6 +3044,40 @@
   opacity: 1;
 }
 
+/* El campo recibe el foco sin contorno propio (no tiene borde): el anillo va
+   en la caja entera, que es lo que se ve. */
+.cabecera__buscador:focus-within {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+}
+
+.cabecera__buscador-texto:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+/* RF-INV-008 — la lupa que lleva a la búsqueda de la tienda cuando la barra
+   no tiene sitio para el campo (ver la regla de 1100 px). */
+.cabecera__buscador-atajo {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: var(--radio);
+  color: inherit;
+  transition: background-color var(--transicion);
+}
+
+.cabecera__buscador-atajo:hover {
+  background: var(--cromo-elevado);
+}
+
+.cabecera__buscador-atajo:focus-visible {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+}
+
 .cabecera__acciones {
   display: flex;
   align-items: center;
@@ -2284,7 +3094,8 @@
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
-  color: var(--credito-oro);
+  /* Sobre el cromo, el oro claro (ver tokens.css). */
+  color: var(--credito-oro-sobre-cromo);
 }
 
 /* -----------------------------------------------------------------------
@@ -2372,19 +3183,46 @@
   color: var(--pista);
 }
 
-/* A 1024 px el buscador se repliega a icono. Nunca se quita un destino. */
+/* A 1024 px la marca pasa a la corta (el buscador, ver la regla de 1300 px).
+   Nunca se quita un destino. */
 @media (max-width: 1100px) {
   .cabecera__nav {
     gap: var(--e-4);
   }
-  .cabecera__buscador {
-    flex: 0 0 auto;
-    width: 32px;
-    padding: 0;
-    justify-content: center;
-  }
-  .cabecera__buscador .cabecera__buscador-texto {
+
+  /* UX-GAME-2: con el emblema, la marca larga ya no cabe junto a los seis
+     destinos y las acciones a 1024; va la corta (el nombre accesible es el
+     mismo). Con `.cabecera` delante para ganar a la regla base, que va mas
+     abajo en esta hoja y la dejaba sin texto. */
+  .cabecera .cabecera__marca-larga {
     display: none;
+  }
+
+  .cabecera .cabecera__marca-corta {
+    display: inline;
+  }
+}
+
+/* UXC-9 — el campo de búsqueda cabe junto a la marca, los seis destinos y la
+   cuenta desde unos 1300 px (1366 y 1440 lo muestran). Por debajo, la lupa
+   lleva a la búsqueda de la tienda. Antes el campo se plegaba a 1100 px a una
+   lupa de 32 px que no hacía nada, y entre 1100 y 1300 empujaba «Mi Cuenta» a
+   una tercera línea de la barra. */
+@media (max-width: 1300px) {
+  .cabecera .cabecera__buscador {
+    display: none;
+  }
+  .cabecera .cabecera__buscador-atajo {
+    display: inline-flex;
+  }
+}
+
+/* Con el campo a la vista, lo que encoge es el campo, no los destinos: sin
+   esto, a 1366 px el reparto de espacio encogía también la navegación y
+   «Mi Cuenta» saltaba de línea. */
+@media (min-width: 1301px) {
+  .cabecera--jugador .cabecera__grupo-marca {
+    flex-shrink: 0;
   }
 }
 
@@ -2401,9 +3239,13 @@
   background: var(--info-insignia);
   color: var(--info);
 }
+/* UXC-5 — estos dos pintaban `--texto-3` sobre `--pista`: 4,11:1, por debajo
+   del 4,5:1 que pide un texto de 13 px. Nadie los usaba hasta las misiones
+   (Bloqueada, Abandonada) y axe lo cantó en su primer escenario. Con
+   `--texto-2`, 5,18:1. */
 .distintivo--no-disponible {
   background: var(--pista);
-  color: var(--texto-3);
+  color: var(--texto-2);
 }
 .distintivo--activo {
   background: var(--exito-insignia);
@@ -2415,7 +3257,7 @@
 }
 .distintivo--bloqueada {
   background: var(--pista);
-  color: var(--texto-3);
+  color: var(--texto-2);
 }
 .distintivo--en-progreso {
   background: var(--info-insignia);
@@ -2453,6 +3295,21 @@
   background: var(--rareza-epica-insignia);
   color: var(--rareza-epica);
 }
+/* UXC-9 — el resultado de una partida en «Mi cuenta». La palabra dice el
+   resultado; el color solo lo refuerza. El empate va neutro (`--texto-2`
+   sobre `--pista`, 5,18:1): no es ni logro ni fallo. */
+.distintivo--victoria {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+.distintivo--derrota {
+  background: var(--error-insignia);
+  color: var(--error);
+}
+.distintivo--empate {
+  background: var(--pista);
+  color: var(--texto-2);
+}
 
 /* =======================================================================
    Tabla — selección múltiple y encabezado ordenable
@@ -2461,6 +3318,16 @@
 
 .tabla__fila--seleccionada {
   background: var(--info-insignia);
+}
+
+/* UX-GAME-1: la fila responde al cursor. Solo las de datos: el encabezado no
+   es una fila que se pueda elegir. */
+.tabla__fila:not(.tabla__fila--encabezado) {
+  transition: background var(--transicion);
+}
+
+.tabla__fila:not(.tabla__fila--encabezado):not(.tabla__fila--seleccionada):hover {
+  background: var(--interaccion-velo-hover);
 }
 
 .tabla__encabezado--ordenable {
@@ -2553,8 +3420,13 @@
   flex-direction: column;
   align-items: center;
   gap: var(--e-1);
-  width: var(--boton-grande);
-  padding: var(--e-2);
+  /* UX-GAME-4: una accion de combate es un objetivo de juego, no un boton
+     de formulario. Minimo 96 px de ancho, y la etiqueta cabe en dos lineas
+     sin salirse de la caja. */
+  min-width: 96px;
+  max-width: 160px;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-2) var(--e-3);
   background: var(--superficie);
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
@@ -2563,11 +3435,25 @@
   cursor: pointer;
   transition:
     border-color var(--transicion),
-    background var(--transicion);
+    background var(--transicion),
+    box-shadow var(--transicion),
+    transform var(--transicion);
 }
 
-.accion-combate:hover {
+.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(.accion-combate--sin-poder) {
+  border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde-int));
+  box-shadow: var(--sombra-1);
+}
+
+.accion-combate:hover:not(:disabled) {
   background: var(--interaccion-velo-hover);
+  box-shadow: var(--sombra-2), var(--brillo-primaria);
+  transform: translateY(-1px);
+}
+
+.accion-combate:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+  transition-duration: var(--duracion-instantaneo);
 }
 
 .accion-combate:focus-visible {
@@ -2581,8 +3467,13 @@
 }
 
 .accion-combate__etiqueta {
-  font-family: var(--t-meta-familia);
+  font-family: var(--t-etiqueta-familia);
   font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  line-height: 1.25;
+  text-align: center;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .accion-combate--secundaria {
@@ -2832,8 +3723,15 @@
   border-radius: var(--radio);
 }
 
+.cabecera__destino {
+  transition:
+    color var(--transicion),
+    border-color var(--transicion);
+}
+
 .cabecera__destino:hover:not(.cabecera__destino--pendiente) {
-  border-bottom-color: var(--pista);
+  border-bottom-color: var(--enlace-sobre-cromo);
+  color: var(--enlace-sobre-cromo);
 }
 
 /* Sin sesión: dos botones y, si la sesión caducó, la razón. */
@@ -2868,12 +3766,18 @@
   cursor: pointer;
 }
 
+.cabecera__cuenta-boton {
+  transition: background-color var(--transicion);
+}
+
 .cabecera__cuenta-boton:hover,
 .cabecera__cuenta-boton[aria-expanded='true'] {
   background: var(--cromo-elevado);
 }
 
-/* El avatar sin imagen muestra la inicial del apodo. */
+/* El avatar sin imagen muestra la inicial del apodo. UX-GAME-2: relleno de
+   energia (azul a violeta) y un anillo fino separado del cromo, que es lo
+   que lo hace leerse como un retrato y no como un punto morado. */
 .cabecera__avatar {
   display: inline-grid;
   place-items: center;
@@ -2881,6 +3785,33 @@
   font-family: var(--t-etiqueta-familia);
   font-weight: var(--t-etiqueta-peso);
   font-size: var(--t-etiqueta-tam);
+  background: var(--energia);
+  box-shadow:
+    0 0 0 2px var(--cromo),
+    0 0 0 3px color-mix(in srgb, var(--primaria) 60%, transparent);
+  transition: box-shadow var(--transicion);
+}
+
+.cabecera__cuenta-boton:hover .cabecera__avatar,
+.cabecera__cuenta-boton[aria-expanded='true'] .cabecera__avatar {
+  box-shadow:
+    0 0 0 2px var(--cromo-elevado),
+    0 0 0 3px var(--enlace-sobre-cromo);
+}
+
+/* La campana es un objetivo con estado propio: relleno al pasar, y el
+   contador con un borde de cromo para que no se funda con el icono. */
+.cabecera__campana {
+  border-radius: var(--radio);
+  transition: background-color var(--transicion);
+}
+
+.cabecera__campana:hover {
+  background: var(--cromo-elevado);
+}
+
+.cabecera__contador {
+  box-shadow: 0 0 0 2px var(--cromo);
 }
 
 .cabecera__menu {
@@ -2890,6 +3821,26 @@
   z-index: 30;
   color: var(--texto);
   text-transform: none;
+  box-shadow: var(--sombra-atmosfera);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* El menu entra como el dialogo: 6 px y opacidad, una sola vez. `hidden`
+     lo saca del arbol, asi que la animacion arranca cada vez que se abre. */
+  .cabecera__menu {
+    animation: entrar-dialogo var(--duracion-rapido) var(--curva-salida) both;
+  }
+}
+
+/* Separador entre las acciones de sesion y la cuenta, solo en escritorio:
+   en la fila de movil no hay sitio y el avatar ya se distingue solo. */
+@media (min-width: 901px) {
+  .cabecera--jugador .cabecera__cuenta,
+  .cabecera--consola .cabecera__cuenta {
+    margin-left: var(--e-1);
+    padding-left: var(--e-4);
+    border-left: 1px solid color-mix(in srgb, var(--pista) 28%, transparent);
+  }
 }
 
 .cabecera__menu .menu__grupo {
@@ -2986,7 +3937,7 @@
   justify-content: center;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 900px) {
   .cabecera {
     /* Sin `wrap`: es justo lo que producia las tres filas. */
     flex-wrap: nowrap;
@@ -3031,7 +3982,8 @@
     flex-direction: column;
     gap: 0;
     padding: var(--e-2);
-    background: var(--cromo);
+    /* UX-GAME-2: el panel remata con el filo de energia, como la consola. */
+    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -3177,6 +4129,13 @@
   margin: 0;
 }
 
+/* Un par etiqueta/valor es UNA celda de la rejilla (UX-GAME-3). */
+.tarjeta__dato {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
 .tarjeta__datos dt {
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
@@ -3259,6 +4218,17 @@
   .esqueleto {
     animation: none;
   }
+
+  /* Los botones no se desplazan ni se escalan; conservan el cambio de color y
+     de sombra, que es lo que dice «esto responde». */
+  .boton:hover:not([disabled]):not([aria-disabled='true']),
+  .boton:active:not([disabled]):not([aria-disabled='true']),
+  .tarjeta--pulsable:hover,
+  .tarjeta--pulsable:active,
+  .accion-combate:hover:not(:disabled),
+  .accion-combate:active:not(:disabled) {
+    transform: none;
+  }
 }
 
 /* =======================================================================
@@ -3333,21 +4303,8 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  /* Color plano primero: si `color-mix` no está disponible, esto es lo que
-     queda, y sigue siendo correcto. */
-  background: var(--cromo);
-  background-image:
-    radial-gradient(
-      120% 80% at 15% 0%,
-      color-mix(in srgb, var(--acento-relleno) 38%, transparent),
-      transparent 60%
-    ),
-    radial-gradient(
-      90% 70% at 100% 100%,
-      color-mix(in srgb, var(--primaria) 30%, transparent),
-      transparent 55%
-    ),
-    linear-gradient(180deg, var(--cromo-elevado), var(--cromo) 55%);
+  /* El fondo lo pone `body` desde UX-GAME-1: la atmosfera del portal paso a
+     ser la de toda la aplicacion. Aqui queda solo la maquetacion. */
   color: var(--texto-sobre-color);
 }
 
@@ -3440,6 +4397,25 @@
   line-height: 1.02;
   letter-spacing: 0.01em;
   color: var(--texto-sobre-color);
+}
+
+/* El logotipo oficial dentro del h1 de la entrada. Sustituye al texto grande
+   solo donde la vista lo pone; las vistas que siguen con `NEXUS <em>BATTLES</em>
+   VI` no cambian. Ancho acotado para que no compita con el formulario: en
+   escritorio ocupa la columna de identidad hasta 520 px; en movil, donde la
+   identidad va debajo del formulario, se queda en 320. `height: auto` con el
+   `width`/`height` del marcado evita el salto de maqueta mientras carga. */
+.entrada__logo {
+  display: block;
+  width: min(100%, 520px);
+  height: auto;
+  filter: drop-shadow(var(--sombra-marca));
+}
+
+@media (max-width: 899px) {
+  .entrada__logo {
+    width: min(100%, 320px);
+  }
 }
 
 /* El acento es del Nexo: una sola palabra, no toda la marca.
@@ -3687,6 +4663,40 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
+/* --- Mi cuenta · Estadísticas (UXC-9) ---------------------------------------
+   Las cifras de la cuenta conservan su ancho aunque haya una sola: con
+   `auto-fit`, «Partidas jugadas» sola se estiraba a lo ancho de la tarjeta. */
+.cuenta-estadisticas__cifras {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* Notas de una o dos frases con su título (torneos y logros; suscripciones y
+   métodos de pago). `.tarjeta__datos` es para datos cortos en negrita: con
+   frases largas partía el texto en columnas de 96 px a 375. */
+.cuenta-notas {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  margin: 0;
+}
+
+.cuenta-notas__nota {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+}
+
+.cuenta-notas dt {
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.cuenta-notas dd {
+  margin: 0;
+  color: var(--texto-2);
+}
+
 .home__accesos {
   display: grid;
   gap: var(--e-3);
@@ -3831,11 +4841,11 @@
   align-items: center;
   gap: var(--e-2);
   padding: var(--e-1) var(--e-3);
-  border: 1px solid var(--borde);
+  border: 1px solid color-mix(in srgb, var(--pista) 40%, transparent);
   border-radius: var(--radio-pildora);
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
-  color: var(--texto-2);
+  color: var(--tinta-2);
   white-space: nowrap;
 }
 
@@ -3843,9 +4853,31 @@
    llamada a la accion. Relleno solido con texto claro: el mismo par que usa
    `.boton--acento`, para no inventar una combinacion sin contraste medido. */
 .turno-actual[data-mio='true'] {
-  border-color: var(--acento-relleno);
-  background: var(--acento-relleno);
+  border-color: transparent;
+  background: var(--energia);
   color: var(--texto-sobre-color);
+  box-shadow: var(--brillo-primaria);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Combate finalizado: el tercer estado. Sobrio, sin brillo, sin punto. */
+.turno-actual[data-fin='si'] {
+  border-color: color-mix(in srgb, var(--pista) 40%, transparent);
+  color: var(--tinta);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.turno-actual[data-fin='si']::before {
+  background: var(--tinta-3);
+}
+
+/* Cambio de turno: el indicador entra con un pulso corto, una sola vez. */
+@media (prefers-reduced-motion: no-preference) {
+  .turno-actual[data-mio='true'] {
+    animation: entrar-dialogo var(--duracion-normal) var(--curva-salida) both;
+  }
 }
 
 .turno-actual::before {
@@ -3853,7 +4885,7 @@
   width: var(--icono-menudo);
   height: var(--icono-menudo);
   border-radius: 50%;
-  background: var(--texto-3);
+  background: var(--tinta-3);
   flex-shrink: 0;
 }
 
@@ -3864,7 +4896,7 @@
 /* La barra de quien juega, destacada. El borde y el desplazamiento no tapan
    el color de vida, que sigue diciendo lo suyo. */
 .barra-vida[data-turno='si'] {
-  border-left: 3px solid var(--acento-relleno);
+  border-left: 3px solid var(--enlace-sobre-cromo);
   padding-left: var(--e-2);
 }
 
@@ -3895,11 +4927,30 @@
    ======================================================================= */
 
 .arbol-torneo {
+  /* UXC-9 — contenedor de lo absoluto de dentro: el «(gana este encuentro)»
+     para lectores de pantalla se posicionaba contra la página y, en la
+     última ronda, la ensanchaba 2 px a 768. */
+  position: relative;
   display: flex;
   gap: var(--e-5);
   align-items: flex-start;
   overflow-x: auto;
   padding-bottom: var(--e-2);
+}
+
+/* Los equipos del torneo, en rejilla (UX-GAME-5). */
+.torneo__equipos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--e-3);
+}
+
+.torneo__equipos .tarjeta {
+  padding: var(--e-3) var(--e-4);
+}
+
+.torneo__equipos .tarjeta[data-ia='true'] {
+  border-style: dashed;
 }
 
 .arbol-torneo__ronda {
@@ -4143,6 +5194,25 @@ button.tarjeta-heroe[aria-pressed='true'] {
   text-align: center;
 }
 
+@media (prefers-reduced-motion: no-preference) {
+  /* El desenlace entra una vez, en 320 ms: es el unico momento de la
+     pantalla que se merece algo mas que un hover. */
+  .panel-resultado {
+    animation: entrar-desenlace var(--duracion-pausado) var(--curva-salida) both;
+  }
+
+  @keyframes entrar-desenlace {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
 .panel-resultado__icono {
   width: 48px;
   height: 48px;
@@ -4159,13 +5229,34 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 /* Ganar y perder no son el mismo panel con otro color: cambian la palabra, el
    icono y el borde. Quien no distinga verde de rojo lee «VICTORIA» igual. */
+/* UX-GAME-4 — la victoria es azul/violeta luminosa, la identidad del Nexo, no
+   el verde de «guardado». El filo superior lleva el gradiente de energia y el
+   panel un brillo; la palabra va en la primaria (8,5:1 sobre blanco) y el
+   detalle de creditos ganados sigue en exito, que es el color del saldo. */
 .panel-resultado--victoria {
-  border-top: 4px solid var(--exito);
+  border-top: 4px solid transparent;
+  border-image: var(--energia) 1;
+  border-image-width: 4px 0 0 0;
+  box-shadow: var(--sombra-3), var(--brillo-primaria);
 }
 
-.panel-resultado--victoria .panel-resultado__palabra,
+.panel-resultado--victoria .panel-resultado__palabra {
+  background: var(--energia);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--primaria-relleno);
+  -webkit-text-fill-color: transparent;
+}
+
 .panel-resultado--victoria .panel-resultado__icono {
-  color: var(--exito);
+  color: var(--primaria);
+}
+
+@media (prefers-contrast: more) {
+  .panel-resultado--victoria .panel-resultado__palabra {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 .panel-resultado--derrota {
@@ -4174,6 +5265,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .panel-resultado--derrota .panel-resultado__palabra,
 .panel-resultado--derrota .panel-resultado__icono {
+  color: var(--texto-2);
+}
+
+/* El empate es su propio desenlace y no una derrota con otra frase (R10).
+   Antes solo habia dos modificadores, asi que una partida en la que nadie
+   quedaba en pie se pintaba de derrota mientras el texto decia «empate». El
+   borde va en el color de advertencia y no en el de error: no se perdio nada. */
+.panel-resultado--empate {
+  border-top: 4px solid var(--advertencia);
+}
+
+.panel-resultado--empate .panel-resultado__palabra,
+.panel-resultado--empate .panel-resultado__icono {
   color: var(--texto-2);
 }
 
@@ -4268,10 +5372,20 @@ button.tarjeta-heroe[aria-pressed='true'] {
   display: grid;
   gap: var(--e-2);
   padding: var(--e-3) var(--e-4);
-  background: var(--superficie);
-  border: 1px solid var(--borde);
+  /* UX-GAME-4 — el HUD es la «cabecera de combate», el otro sitio donde la
+     paleta permite el cromo (frontend-web.md). Oscuro, con filo de energia,
+     y las barras de vida encima: verde, ambar y rojo se ven mejor sobre el
+     cromo que sobre blanco. */
+  background:
+    var(--energia) top left / 100% 2px no-repeat,
+    linear-gradient(180deg, var(--cromo-elevado), color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo)));
+  border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   border-radius: var(--radio);
-  box-shadow: var(--sombra-1);
+  box-shadow: var(--sombra-atmosfera);
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  color: var(--tinta);
   /* Tope duro: el HUD no puede comerse el campo por muchos participantes que
      haya. A partir de ahi, las barras se desplazan dentro. */
   max-height: 22vh;
@@ -4301,13 +5415,36 @@ button.tarjeta-heroe[aria-pressed='true'] {
      sin ella el contenido impone su alto y el campo desborda la ventana. */
   min-height: 0;
   border-radius: var(--radio);
-  border: 1px solid var(--borde);
-  /* Dos tonos del fondo ya existente: da profundidad sin inventar un color.
-     El campo es el unico sitio de la aplicacion donde hay superficie grande
-     vacia, y plana se veria como un error de carga. */
+  border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
+  /* UX-GAME-4 — la arena es OSCURA: el lado propio con halo azul, el rival
+     con halo violeta, y una linea de energia en el centro que separa los dos
+     bandos. Solo degradados: nada de imagenes ni de canvas. Antes era un
+     gris claro que, entre el HUD y los controles blancos, se leia como una
+     pantalla vacia. */
   background:
-    radial-gradient(circle at 50% 40%, var(--superficie) 0%, var(--fondo) 70%), var(--fondo);
+    radial-gradient(
+      55% 70% at 18% 62%,
+      color-mix(in srgb, var(--primaria) 42%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      55% 70% at 82% 38%,
+      color-mix(in srgb, var(--acento-relleno) 42%, transparent),
+      transparent 70%
+    ),
+    linear-gradient(
+      90deg,
+      transparent calc(50% - 1px),
+      color-mix(in srgb, var(--enlace-sobre-cromo) 25%, transparent) calc(50% - 1px),
+      color-mix(in srgb, var(--enlace-sobre-cromo) 25%, transparent) calc(50% + 1px),
+      transparent calc(50% + 1px)
+    ),
+    linear-gradient(180deg, var(--cromo-elevado), var(--cromo));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--texto-sobre-color) 6%, transparent);
   overflow: hidden;
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
 }
 
 .campo__puesto {
@@ -4321,24 +5458,39 @@ button.tarjeta-heroe[aria-pressed='true'] {
 }
 
 .campo__nombre {
-  font-family: var(--t-meta-familia);
-  font-size: var(--t-meta-tam);
-  color: var(--texto-2);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--tinta);
   text-align: center;
   max-width: 120px;
   overflow-wrap: break-word;
+  text-shadow: 0 1px 2px color-mix(in srgb, var(--cromo) 80%, transparent);
+}
+
+/* Sobre la arena el retrato lleva su brillo: azul el propio, violeta el
+   rival. El anillo de rareza sigue siendo el borde. */
+.combate__campo .marco-heroe__retrato {
+  box-shadow: var(--brillo-primaria);
+}
+
+.campo__puesto--rival .marco-heroe__retrato {
+  box-shadow: var(--brillo-acento);
 }
 
 /* Los rivales miran hacia el jugador. Es el truco de siempre en un juego 2D y
-   cuesta una linea. */
-.campo__puesto--rival .marco-heroe__retrato {
+   cuesta una linea. UXC-2 — solo la IMAGEN: volteando el retrato entero, la
+   inicial salia en espejo («Ɔ» por «C») y el simbolo del prototipo tambien. */
+.campo__puesto--rival .marco-heroe__imagen {
   transform: scaleX(-1);
 }
 
 /* A quien le toca, destacado. Igual que en la barra de vida: el anillo
    acompana al texto del indicador de turno, no lo sustituye. */
 .campo__puesto[data-turno='si'] .marco-heroe__retrato {
-  box-shadow: 0 0 0 4px var(--acento-relleno);
+  box-shadow:
+    0 0 0 4px var(--enlace-sobre-cromo),
+    var(--brillo-primaria);
 }
 
 .campo__puesto--caido {
@@ -4360,6 +5512,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .combate__sala > * {
   pointer-events: auto;
+}
+
+/* UX-GAME-4 — el lobby (arranque, invitacion, ocupacion) va sobre un velo
+   oscuro al pie de la arena, no suelto sobre el degradado: es un panel de
+   sala, y sus botones y el codigo de invitacion necesitan un fondo comun. */
+.combate[data-sin-partida='si'] .combate__sala {
+  padding-top: var(--e-5);
+  background: linear-gradient(
+    180deg,
+    transparent,
+    color-mix(in srgb, var(--cromo) 78%, transparent) 30%,
+    color-mix(in srgb, var(--cromo) 92%, transparent)
+  );
 }
 
 /* --- Controles, abajo (CA-01) ------------------------------------------ */
@@ -4533,6 +5698,28 @@ button.tarjeta-heroe[aria-pressed='true'] {
   height: 100%;
 }
 
+/* UX-GAME-3 — el retrato del héroe equipado va sobre un escenario oscuro con
+   un halo azul, no sobre el gris de `--fondo`: es la pieza de juego de la
+   portada y se lee como tal. El anillo del retrato recibe el brillo de la
+   primaria; la rareza, cuando la hay, sigue mandando en el color del borde. */
+.home__heroe .tarjeta__medios {
+  align-self: stretch;
+  display: grid;
+  place-items: center;
+  padding: var(--e-5) var(--e-4);
+  background:
+    radial-gradient(
+      60% 75% at 50% 45%,
+      color-mix(in srgb, var(--primaria) 45%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+}
+
+.home__heroe .marco-heroe__retrato {
+  box-shadow: var(--brillo-primaria);
+}
+
 @media (max-width: 767px) {
   /* Las dos acciones de la portada ocupan el ancho y se apilan: en 375 px,
      «Jugar ahora» y «Ver salas abiertas» en la misma fila dejaban la segunda
@@ -4574,6 +5761,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .cuenta-atras--finalizada {
   color: var(--texto-3);
   font-weight: 400;
+}
+
+/* UXC-6 — «Termina en 2d»: el rótulo a la vista, en el tono de la meta. */
+.cuenta-atras-rotulada {
+  color: var(--texto-2);
 }
 
 /* =====================================================================
@@ -4745,7 +5937,19 @@ button.tarjeta-heroe[aria-pressed='true'] {
   justify-content: center;
   gap: var(--e-6);
   padding: var(--e-6);
-  background: var(--cromo);
+  /* UX-GAME-4: la misma arena que el campo, con los dos halos. */
+  background:
+    radial-gradient(
+      50% 70% at 20% 55%,
+      color-mix(in srgb, var(--primaria) 45%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 70% at 80% 45%,
+      color-mix(in srgb, var(--acento-relleno) 45%, transparent),
+      transparent 70%
+    ),
+    var(--cromo);
   color: var(--texto-sobre-color);
   text-align: center;
   animation: presentacion-entrar var(--duracion-pausado) var(--curva-salida);
@@ -4786,9 +5990,22 @@ button.tarjeta-heroe[aria-pressed='true'] {
 
 .presentacion__versus {
   font-family: var(--fuente-titulo);
-  font-size: var(--t-titulo-tam);
+  font-size: var(--t-display-tam);
   font-weight: 700;
-  color: var(--acento-relleno);
+  /* Sobre el cromo el acento oscuro no se veia; el «VS» es energia. */
+  background: var(--energia);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: var(--enlace-sobre-cromo);
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 10px color-mix(in srgb, var(--primaria) 60%, transparent));
+}
+
+@media (prefers-contrast: more) {
+  .presentacion__versus {
+    background: none;
+    -webkit-text-fill-color: currentcolor;
+  }
 }
 
 .presentacion__heroe {
@@ -4802,7 +6019,8 @@ button.tarjeta-heroe[aria-pressed='true'] {
 /* Quien abre el combate se marca con un anillo, no solo con el texto de
    abajo: es lo primero que alguien quiere saber al entrar. */
 .presentacion__heroe--abre .marco-heroe {
-  box-shadow: 0 0 0 3px var(--acento-relleno);
+  border-radius: var(--radio);
+  box-shadow: 0 0 0 3px var(--enlace-sobre-cromo);
 }
 
 .presentacion__nombre {
@@ -4962,7 +6180,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
    navegación —es su diferencia de densidad respecto al jugador— sin tocar el
    objetivo táctil, que sigue en 44 px de alto.
 
-   Y se pliega antes. El armazón de jugador se pliega a los 860 px porque sus
+   Y se pliega antes. El armazón de jugador se pliega a los 900 px (860 hasta UX-GAME-6) porque sus
    seis destinos caben de sobra en 1024; los nueve de la consola no: el
    laboratorio los midió en **tres filas, 166 px de cabecera**, en las siete
    vistas de trastienda a 1024×768 — que es la resolución de una pantalla de
@@ -5007,8 +6225,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
     align-items: stretch;
     gap: 0;
     padding: var(--e-2) var(--e-4) var(--e-4);
-    background: var(--cromo);
-    border-bottom: 2px solid var(--acento-relleno);
+    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -5046,9 +6263,70 @@ button.tarjeta-heroe[aria-pressed='true'] {
     gap: var(--e-3);
   }
 
+  /* UX-GAME-2 sumo el emblema a la marca (32 px + separacion) y los diez
+     destinos del super administrador volvian a partirse en dos filas a
+     1440. En esta banda la consola lleva la marca corta: emblema, «NB VI»
+     y «Control». El nombre accesible no cambia (`aria-label`). */
+  .cabecera--consola .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera--consola .cabecera__marca-corta {
+    display: inline;
+  }
+
+  /* Y las separaciones bajan un escalon: con los diez destinos del super
+     administrador (Auditoria incluida) la fila sobraba por 16 px a 1440. */
+  .cabecera--consola .cabecera__grupo-marca {
+    gap: var(--e-4);
+  }
+
+  .cabecera--consola .cabecera__nav--consola {
+    gap: var(--e-2);
+  }
+
   .cabecera--consola .cabecera__destino {
     text-transform: none;
     letter-spacing: normal;
+  }
+}
+
+/* B3 — «Comentarios» (la cola de comentarios reportados) entra en la consola:
+   el administrador pasa a diez destinos y el super administrador a once. Por
+   encima de la banda de portátil ya no cabían en una fila en mayúsculas: con
+   diez la barra se partía en dos entre 1541 y ~1740 px (medido antes de este
+   cambio), y con once hasta ~1900. En esa franja, las consolas con muchos
+   destinos (nueve o más) usan la caja normal y las separaciones cortas de la
+   banda de portátil; las que tienen pocos —el moderador ve cuatro— siguen en
+   mayúsculas, porque les sobra sitio. Medido con el laboratorio (super
+   administrador, administrador y moderador) a 1366, 1440, 1540, 1541, 1560,
+   1580, 1599, 1600, 1620, 1700, 1800, 1919 y 1920 px: una fila de 64 px en
+   todos. */
+@media (min-width: 1541px) and (max-width: 1919px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__grupo-marca {
+    gap: var(--e-4);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__nav--consola {
+    gap: var(--e-2);
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__destino {
+    text-transform: none;
+    letter-spacing: normal;
+  }
+}
+
+/* Y justo por encima de la banda de portátil (1541–1599) los once destinos
+   del super administrador todavía no caben con la marca larga: ahí llevan la
+   corta, como en la banda de portátil. El nombre accesible no cambia. */
+@media (min-width: 1541px) and (max-width: 1599px) {
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-larga {
+    display: none;
+  }
+
+  .cabecera--consola:has(.cabecera__destino:nth-child(9)) .cabecera__marca-corta {
+    display: inline;
   }
 }
 
@@ -5056,7 +6334,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
    superior de la tarjeta de entrada: mismo gesto, mismo gradiente, distinto
    sitio. Marca el modo sin gastar un color nuevo. */
 .cabecera--consola {
-  border-bottom: 2px solid var(--acento-relleno);
+  /* UX-GAME-2: el filo es el gradiente de energia, el mismo de las tarjetas
+     y del destino activo; antes era el acento plano. */
+  background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
 }
 
 /* La salida al juego es secundaria, pero tiene que existir: un administrador
@@ -5065,8 +6345,10 @@ button.tarjeta-heroe[aria-pressed='true'] {
   white-space: nowrap;
 }
 
-@media (max-width: 860px) {
-  /* En móvil la salida entra en el panel plegable, no en la fila. */
+@media (max-width: 1440px) {
+  /* Hasta la banda de portatil la salida va en el menu de cuenta, no en la
+     fila: con ella, los diez destinos del super administrador se partian en
+     dos filas a 1440 y 1366 (UX-GAME-6). */
   .cabecera__salida {
     display: none;
   }
@@ -5104,7 +6386,7 @@ button.tarjeta-heroe[aria-pressed='true'] {
    en caracteres para que no se convierta en una línea de 140. */
 .consola__alcance {
   max-width: 78ch;
-  color: var(--texto-2);
+  color: var(--tinta-2);
   line-height: var(--t-cuerpo-alto);
 }
 
@@ -5424,8 +6706,12 @@ button.tarjeta-heroe[aria-pressed='true'] {
   max-width: 100%;
 }
 
-.tabla-envoltorio .tabla {
+.tabla-envoltorio .tabla,
+.tabla-envoltorio table {
   width: 100%;
+  /* Tambien las tablas `<table>` de las vistas (historial, auditoria): sin
+     ancho minimo se apretaban a 375 px hasta partir cada palabra en una
+     linea, en vez de desplazarse (UX-GAME-7). */
   min-width: 38rem;
 }
 
@@ -5446,4 +6732,2810 @@ button.tarjeta-heroe[aria-pressed='true'] {
   display: flex;
   gap: var(--e-2);
   margin-block-start: var(--e-2);
+}
+
+/* =======================================================================
+   UXC-1 — Núcleo del héroe: prototipo, StatBlock, HeroCard y su estado
+   -----------------------------------------------------------------------
+   §6.1.1 fija ocho prototipos (Tabla 6) y hasta aqui todos eran el mismo
+   circulo con una inicial. El simbolo del prototipo (sprite) sustituye a la
+   inicial cuando el prototipo se conoce, coloreado por familia; el nombre va
+   SIEMPRE escrito al lado, asi que el color solo refuerza.
+   ======================================================================= */
+
+.marco-heroe__simbolo {
+  width: 46%;
+  height: 46%;
+  color: var(--texto-2);
+}
+
+.marco-heroe__retrato[data-prototipo^='guerrero'] .marco-heroe__simbolo {
+  color: var(--primaria);
+}
+.marco-heroe__retrato[data-prototipo^='mago'] .marco-heroe__simbolo {
+  color: var(--acento-relleno);
+}
+.marco-heroe__retrato[data-prototipo^='picaro'] .marco-heroe__simbolo {
+  color: var(--advertencia);
+}
+.marco-heroe__retrato[data-prototipo='chaman'] .marco-heroe__simbolo,
+.marco-heroe__retrato[data-prototipo='medico'] .marco-heroe__simbolo {
+  color: var(--exito);
+}
+
+/* --- StatBlock: las seis cifras de la Tabla 6 --------------------------- */
+
+.stat-block {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: var(--e-2) var(--e-3);
+  margin: 0;
+}
+
+.stat-block--compacto {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--e-1) var(--e-3);
+}
+
+.stat-block__cifra {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.stat-block__etiqueta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-3);
+}
+
+.stat-block__icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.stat-block__valor {
+  margin: 0;
+  font-family: var(--fuente-titulo);
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--tinta);
+}
+
+.stat-block--compacto .stat-block__valor {
+  font-size: 1rem;
+}
+
+.stat-block__seccion {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.stat-block__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.stat-block__nota {
+  margin: 0;
+}
+
+/* --- Estado del heroe o del objeto --------------------------------------- */
+
+.sello-estado-heroe {
+  justify-self: start;
+  width: fit-content;
+  font-weight: 600;
+}
+
+.sello-estado-heroe__icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* Equipado: tono informativo, no de exito — no es un logro, es donde esta. */
+.distintivo--equipado {
+  background: var(--info-insignia);
+  color: var(--primaria-relleno);
+}
+
+/* Bloqueado: neutro y legible. Las variantes `--bloqueada` y
+   `--no-disponible` del kit ponen `--texto-3` sobre `--pista`, que no llega a
+   4,5:1 (axe con datos, UXC-1); estas dos si. */
+.distintivo--bloqueado {
+  background: var(--superficie-2);
+  border-color: var(--borde);
+  color: var(--texto-2);
+}
+
+/* No puede combatir: aviso con solucion, tono de advertencia. */
+.distintivo--aviso {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+/* --- HeroCard ------------------------------------------------------------ */
+
+.hero-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--e-4);
+}
+
+.hero-grid__celda {
+  min-width: 0;
+  display: grid;
+}
+
+.hero-card {
+  display: grid;
+  gap: var(--e-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.hero-card__cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.hero-card .marco-heroe {
+  flex: none;
+  width: auto;
+}
+
+.hero-card .marco-heroe__retrato {
+  width: 64px;
+  height: 64px;
+}
+
+.hero-card .marco-heroe__imagen {
+  width: 52px;
+  height: 52px;
+}
+
+.hero-card__identidad {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.hero-card__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--tinta);
+  overflow-wrap: anywhere;
+}
+
+.hero-card__prototipo {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: 600;
+  color: var(--tinta-2);
+}
+
+.hero-card__icono-prototipo {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.hero-card__equipo {
+  margin: 0;
+}
+
+/* UXC-9 — nivel y experiencia (inventario 1.5.0): el texto dice cuánto hay y
+   cuánto falta; la barra solo lo acompaña. */
+.hero-card__progreso {
+  display: grid;
+  gap: 4px;
+}
+
+.hero-card__nivel {
+  margin: 0;
+}
+
+.hero-card__experiencia {
+  display: block;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radio-pildora);
+  background: var(--pista);
+}
+
+.hero-card__experiencia-relleno {
+  display: block;
+  height: 100%;
+  background: var(--acento-relleno);
+}
+
+.hero-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+/* Bloqueado (en subasta): el retrato se apaga; el texto no, para que siga
+   cumpliendo contraste. El sello dice por que. */
+.hero-card[data-estado='BLOQUEADO'] .marco-heroe__retrato {
+  filter: grayscale(1);
+  opacity: 0.7;
+}
+
+/* =======================================================================
+   UXC-2 — Combate a pantalla completa, barra de mando y lo que pasa
+   -----------------------------------------------------------------------
+   §7.6: «el area de juego debe ocupar mas del 80 % de la pantalla. Los
+   menus pueden estar en la parte inferior o lateral. La barra de
+   informacion debe estar en la parte superior, con la vida de los
+   participantes y el turno». Con la barra de la aplicacion (64 px), un HUD
+   de dos filas y los controles en tarjeta, el campo medía el 56 % en
+   1366x768. En modo combate (la vista pone `data-modo` en el body cuando hay
+   partida) la barra de la aplicacion se retira —la salida vive en el HUD—, el
+   HUD es una sola franja y los controles otra: el campo pasa del 80 %. Lo
+   mide `tests/visual/campo-de-combate.spec.js`.
+   ======================================================================= */
+
+.combate__salir {
+  display: none;
+}
+
+body[data-modo='combate'] [data-cabecera-app] {
+  display: none;
+}
+
+body[data-modo='combate'] .combate {
+  height: 100dvh;
+  min-height: 0;
+  padding: 0;
+  gap: 0;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+body[data-modo='combate'] .combate__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-4);
+  padding: 4px var(--e-4);
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
+  max-height: 30vh;
+}
+
+body[data-modo='combate'] .combate__salir {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: 36px;
+  padding: 0 var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--pista) 40%, transparent);
+  border-radius: var(--radio-pildora);
+  color: var(--tinta);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+body[data-modo='combate'] .combate__salir:hover {
+  border-color: var(--enlace-sobre-cromo);
+  color: var(--tinta);
+}
+
+body[data-modo='combate'] .combate__hud-titulo {
+  flex-wrap: nowrap;
+  gap: var(--e-2);
+}
+
+/* El titulo se sigue leyendo (h1), pero no ocupa ancho del HUD: el turno y
+   las barras dicen donde se esta. Mismo patron que `.solo-lectores`. */
+body[data-modo='combate'] .combate__titulo,
+body[data-modo='combate'] .conexion__prefijo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.combate__hud-estado {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin-left: auto;
+}
+
+/* En la sala de espera (sin partida) el HUD es una sola franja: titulo a un
+   lado, canal y chat al otro. Las barras aun no existen. */
+body:not([data-modo='combate']) .combate__hud {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-4);
+}
+
+.combate__vidas:empty {
+  display: none;
+}
+
+/* Las barras, compactas: nombre y valor arriba, la pista debajo. */
+body[data-modo='combate'] .combate__vidas {
+  display: flex;
+  flex: 1 1 360px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-4);
+  min-width: 0;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  grid-template-areas:
+    'nombre efectos etiqueta valor'
+    'pista pista pista pista';
+  align-items: center;
+  gap: 2px var(--e-2);
+  flex: 1 1 110px;
+  max-width: 360px;
+  min-width: 0;
+}
+
+/* Con cuatro barras o mas (partidas de hasta seis), la etiqueta «IA · Equipo
+   2» se sigue leyendo pero deja de ocupar ancho: el campo ya separa los dos
+   bandos y los botones de ataque solo ofrecen rivales. */
+body[data-modo='combate'] .combate__vidas:has(> .barra-vida:nth-child(4)) .barra-vida__etiqueta {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__nombre {
+  grid-area: nombre;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-etiqueta-tam);
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__etiqueta {
+  grid-area: etiqueta;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida .efectos {
+  grid-area: efectos;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__pista {
+  grid-area: pista;
+  height: 8px;
+}
+
+body[data-modo='combate'] .combate__vidas .barra-vida__valor {
+  grid-area: valor;
+  min-width: 0;
+}
+
+body[data-modo='combate'] .combate__campo {
+  border-width: 0;
+  border-radius: 0;
+}
+
+body[data-modo='combate'] .combate__controles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: var(--e-2) var(--e-4);
+  /* A la derecha queda el hueco del asistente flotante, que esta en todas
+     las vistas (RNF-DIS-002) y no debe tapar el registro. */
+  padding: 6px 88px 6px var(--e-4);
+  border-width: 1px 0 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* --- La barra de mando -------------------------------------------------- */
+
+.combate__mando {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-2) var(--e-4);
+}
+
+.combate__grupo {
+  display: grid;
+  gap: 2px;
+  align-content: end;
+}
+
+.combate__grupo-cabeza {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--e-2);
+}
+
+.combate__grupo-titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--tinta-2);
+}
+
+.combate__motivo {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  line-height: 1.3;
+  color: var(--tinta-3);
+}
+
+body[data-modo='combate'] .combate__acciones {
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  gap: var(--e-2);
+}
+
+/* La carta de accion, compacta en la barra de mando: icono a la izquierda,
+   nombre y coste a la derecha. 56 px de alto. */
+body[data-modo='combate'] .accion-combate {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: var(--e-2);
+  row-gap: 2px;
+  min-width: 112px;
+  max-width: 176px;
+  min-height: 52px;
+  padding: var(--e-1) var(--e-3);
+  text-align: left;
+}
+
+body[data-modo='combate'] .accion-combate__insignias,
+body[data-modo='combate'] .accion-combate__detalle,
+body[data-modo='combate'] .accion-combate__coste {
+  grid-column: 2;
+}
+
+body[data-modo='combate'] .accion-combate__icono {
+  grid-row: 1 / span 2;
+}
+
+body[data-modo='combate'] .accion-combate__etiqueta {
+  text-align: left;
+}
+
+.accion-combate__detalle {
+  color: var(--texto-2);
+  line-height: 1.2;
+}
+
+/* Coste y carga con su icono: «⚡2 ⟳1», como en las cartas de un juego. */
+.accion-combate__insignias {
+  display: inline-flex;
+  gap: var(--e-2);
+}
+
+.accion-combate__insignia {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--texto-2);
+}
+
+.accion-combate__insignia-icono {
+  width: 12px;
+  height: 12px;
+}
+
+/* UXC-9 — la carga que falta: «faltan N» con el reloj, en ámbar (el texto
+   ya lo dice; el color acompaña). */
+.accion-combate__insignia--en-carga {
+  color: var(--advertencia);
+}
+
+/* La especial deshabilitada sigue legible: se atenua el icono, no el texto
+   (contraste); el motivo esta escrito al lado del titulo del grupo. */
+.accion-combate--especial.accion-combate--fuera-de-turno {
+  border-style: dashed;
+}
+
+/* --- Poder (PowerMeter) ------------------------------------------------ */
+
+.combate__poder {
+  display: grid;
+  align-content: end;
+}
+
+.combate__poder[hidden] {
+  display: none;
+}
+
+.medidor-poder {
+  display: grid;
+  gap: 2px;
+  min-width: 112px;
+}
+
+.medidor-poder__cabeza {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  color: var(--tinta);
+}
+
+.medidor-poder__icono {
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+}
+
+.medidor-poder__valor {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.medidor-poder__pista {
+  display: flex;
+  gap: 2px;
+}
+
+.medidor-poder__segmento {
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--pista);
+  border: 1px solid var(--borde);
+}
+
+.medidor-poder__segmento--lleno {
+  background: var(--primaria);
+  border-color: var(--primaria);
+}
+
+/* Sin seguimiento: la capacidad, rayada, para que no se lea como «lleno». */
+.medidor-poder--sin-seguimiento .medidor-poder__segmento {
+  background: repeating-linear-gradient(
+    45deg,
+    var(--pista),
+    var(--pista) 2px,
+    var(--superficie) 2px,
+    var(--superficie) 4px
+  );
+}
+
+.medidor-poder__nota {
+  margin: 0;
+}
+
+/* --- Registro del combate (CombatLog) ------------------------------------ */
+
+.combate__registro {
+  display: grid;
+  gap: 2px;
+  flex: 1 1 220px;
+  min-width: 200px;
+  align-content: end;
+}
+
+/* Con tres rivales o mas, las cartas de ataque se estrechan: el nombre del
+   rival cabe en dos lineas y la barra de mando sigue en una sola franja. */
+body[data-modo='combate'] .combate__acciones:has(> .accion-combate:nth-child(3)) .accion-combate {
+  min-width: 96px;
+  max-width: 132px;
+}
+
+body[data-modo='combate'] .combate__acciones--especiales .accion-combate {
+  max-width: 164px;
+}
+
+.registro-combate {
+  height: 50px;
+  overflow-y: auto;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  padding: 2px var(--e-2);
+}
+
+body:not([data-modo='combate']) .registro-combate {
+  height: 96px;
+}
+
+.registro-combate__lista {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.registro-combate__linea {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  line-height: 1.25;
+  color: var(--texto);
+}
+
+.registro-combate__icono {
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  flex: none;
+  color: var(--texto-2);
+}
+
+.registro-combate__linea--critico .registro-combate__icono,
+.registro-combate__linea--dano .registro-combate__icono,
+.registro-combate__linea--caida .registro-combate__icono {
+  color: var(--error);
+}
+
+.registro-combate__linea--curacion .registro-combate__icono {
+  color: var(--exito);
+}
+
+.registro-combate__linea--mitigado .registro-combate__icono {
+  color: var(--info);
+}
+
+.registro-combate__linea--critico {
+  font-weight: 700;
+}
+
+/* --- Efectos activos (EffectChip) --------------------------------------- */
+
+.efectos {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.efecto {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px var(--e-1);
+  border-radius: var(--radio-pildora);
+  background: var(--info-insignia);
+  color: var(--info);
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.efecto__icono {
+  width: 12px;
+  height: 12px;
+}
+
+.efecto--compacto {
+  padding: 1px 3px;
+}
+
+.campo__puesto .efectos {
+  justify-content: center;
+  max-width: 140px;
+}
+
+/* --- La cifra del golpe (DamageCallout) --------------------------------- */
+
+.campo__puesto {
+  /* El impacto se coloca respecto al heroe. */
+  isolation: isolate;
+}
+
+.impacto {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  display: grid;
+  justify-items: center;
+  transform: translate(-50%, -4px);
+  pointer-events: none;
+  font-family: var(--fuente-titulo);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 6px color-mix(in srgb, var(--cromo) 90%, transparent);
+  z-index: 2;
+}
+
+.impacto__cifra {
+  font-size: 2rem;
+  color: var(--texto-sobre-color);
+}
+
+.impacto__etiqueta {
+  margin-top: 2px;
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-etiqueta-familia);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+}
+
+.impacto--critico .impacto__cifra {
+  font-size: 2.5rem;
+}
+
+.impacto--critico .impacto__etiqueta {
+  background: var(--error);
+}
+
+.impacto--curacion .impacto__etiqueta {
+  background: var(--exito);
+}
+
+.impacto--mitigado .impacto__etiqueta {
+  background: var(--info);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .impacto {
+    animation: impacto-sube 1.6s var(--curva-salida) both;
+  }
+}
+
+@keyframes impacto-sube {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 8px) scale(0.9);
+  }
+  12% {
+    opacity: 1;
+    transform: translate(-50%, -4px) scale(1.08);
+  }
+  80% {
+    opacity: 1;
+    transform: translate(-50%, -18px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -26px) scale(1);
+  }
+}
+
+/* --- Por debajo del minimo ------------------------------------------------ */
+
+@media (max-width: 767px), (max-height: 520px) {
+  body[data-modo='combate'] .combate {
+    height: auto;
+    min-height: 100dvh;
+    grid-template-rows: auto auto auto;
+  }
+
+  body[data-modo='combate'] .combate__controles {
+    padding-right: var(--e-4);
+    padding-bottom: 88px;
+  }
+
+  body[data-modo='combate'] .combate__acciones {
+    flex-wrap: wrap;
+  }
+
+  body[data-modo='combate'] .combate__vidas .barra-vida {
+    max-width: none;
+  }
+}
+
+/* La pildora del canal con su «Reintentar» al lado. */
+.conexion__reintentar {
+  flex: none;
+}
+
+/* El enlace al chat de la sala, en el HUD, no crece. */
+.combate__chat {
+  flex: none;
+  white-space: nowrap;
+}
+
+/* Las especiales: su cabecera lleva el motivo de por que no se pueden usar. */
+.combate__grupo--especiales {
+  min-width: 0;
+}
+
+.combate__registro-cuerpo {
+  min-width: 0;
+}
+
+/* =======================================================================
+   UXC-3 — Comunidad: estrellas, resumen, comentarios y opiniones
+   §7.1 (calificación promedio en cinco estrellas e hilo de comentarios en
+   el detalle del producto) · RF-COM-002 · RF-COM-004 · RF-COM-006
+   -----------------------------------------------------------------------
+   Los componentes de `comun/ui/comunidad/` y `plataforma/comentarios/`
+   (hilo, redactor, reporte). Se usan dentro de la ficha del inventario, del
+   detalle de la tienda y del de la portada pública: superficies claras, así
+   que la tinta es la oscura del kit.
+   ======================================================================= */
+
+/* Superficies claras: la tinta vuelve a oscuro (ver «Tinta contextual» en
+   base.css). El hilo puede caer dentro de una ficha, de un dialogo o de una
+   vista sobre la atmosfera; asi sale legible en los tres sitios. */
+.hilo-comentarios,
+.comentario,
+.redactor-comentario {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+}
+
+/* --- Selector de estrellas (calificar) --------------------------------- */
+
+.selector-estrellas {
+  display: grid;
+  gap: var(--e-1);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.selector-estrellas__fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+}
+
+.selector-estrellas__opcion {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radio-chico);
+  cursor: pointer;
+}
+
+.selector-estrellas__opcion .estrellas__estrella {
+  width: 24px;
+  height: 24px;
+}
+
+.selector-estrellas__opcion:hover .estrellas__estrella {
+  color: var(--rareza-legendaria);
+}
+
+.selector-estrellas__cifra {
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.selector-estrellas:disabled .selector-estrellas__opcion {
+  cursor: not-allowed;
+}
+
+.selector-estrellas:disabled .estrellas__estrella {
+  opacity: 0.45;
+}
+
+.selector-estrellas:disabled .selector-estrellas__opcion:hover .estrellas__estrella {
+  color: var(--pista);
+}
+
+/* --- Resumen de la calificación ---------------------------------------- */
+
+.resumen-calificacion {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.resumen-calificacion--compacto {
+  gap: var(--e-2);
+}
+
+.resumen-calificacion__cifra {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto);
+}
+
+.resumen-calificacion__cuerpo {
+  display: grid;
+  gap: 2px;
+}
+
+.resumen-calificacion__detalle {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* --- Un comentario ------------------------------------------------------ */
+
+.comentario {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.comentario:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+/* Lo propio se reconoce sin leer el apodo: filo en la primaria, como la
+   sala en la que se puede entrar. El «Tú» escrito es el canal principal. */
+.comentario--propio {
+  border-left: 3px solid var(--primaria);
+}
+
+.comentario[data-estado='REPORTADO'] {
+  background: var(--superficie-2);
+}
+
+.comentario__cabecera {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-3);
+}
+
+.comentario__avatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--cromo);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+}
+
+.comentario__firma {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.comentario__autor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.comentario__apodo {
+  overflow-wrap: anywhere;
+}
+
+.comentario__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-3);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__estrellas .estrellas__estrella {
+  width: 14px;
+  height: 14px;
+}
+
+.comentario__texto {
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.comentario__adjuntos {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.comentario__adjuntos-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.comentario__adjunto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  max-width: 100%;
+  padding: var(--e-1) var(--e-2);
+  border: 1px dashed var(--borde-int);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__adjunto-icono {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+}
+
+.comentario__adjunto-nombre {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.comentario__adjuntos-nota {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* B3 — imágenes guardadas (comentarios.yaml 1.5.0): la miniatura real, del
+   lado fijo que marca `LADO_DE_MINIATURA` (96 px) para que el hilo no salte
+   al cargar, recortada sin deformar y con enlace a su tamaño completo. El
+   hueco del adjunto por nombre (borde discontinuo) no aplica: aquí hay imagen. */
+.comentario__adjunto--imagen {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.comentario__imagen-enlace {
+  display: block;
+  border-radius: var(--radio-chico);
+  line-height: 0;
+}
+
+.comentario__imagen-enlace:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.comentario__imagen {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  object-fit: cover;
+}
+
+.comentario__estado {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.comentario__estado-icono,
+.comentario__accion-icono {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+.comentario__acciones {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--e-2);
+}
+
+.comentario__accion {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+}
+
+/* --- El hilo (RatingThread) --------------------------------------------- */
+
+.hilo-comentarios {
+  display: grid;
+  gap: var(--e-4);
+  margin-top: var(--e-5);
+  padding-top: var(--e-5);
+  border-top: 1px solid var(--borde);
+  color: var(--texto);
+}
+
+.hilo-comentarios__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.hilo-comentarios__titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.hilo-comentarios__cuerpo {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.hilo-comentarios__lista {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hilo-comentarios__mas {
+  justify-self: start;
+}
+
+.hilo-comentarios__entrada {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.hilo-comentarios__entrada p {
+  margin: 0;
+  max-width: 46ch;
+}
+
+/* B3 — cuántas hay en el servidor y en qué orden: el `total` del hilo. */
+.hilo-comentarios__conteo {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* --- Calificar sin comentar (RatingControl, B3) ---------------------------
+   La calificación va aparte de la opinión (7.1: una sola vez). Mismo panel
+   anidado que el redactor, para que se lea como un acto propio. */
+
+.calificar-producto {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.calificar-producto__formulario {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.calificar-producto__acciones {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.calificar-producto__propia {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.calificar-producto__propia:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.calificar-producto__titulo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.calificar-producto__propia .campo__pista,
+.calificar-producto__estado {
+  margin: 0;
+}
+
+.calificar-producto__estado {
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+/* --- El redactor (CommentComposer) --------------------------------------- */
+
+.redactor-comentario {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.redactor-comentario__imagenes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.redactor-comentario__imagenes .campo__pista {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+.redactor-comentario__adjuntar {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-2);
+  cursor: pointer;
+}
+
+.redactor-comentario__archivo:focus-visible + .redactor-comentario__adjuntar {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.redactor-comentario__miniaturas {
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.redactor-comentario__miniatura {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-2);
+  max-width: 100%;
+  padding: var(--e-1) var(--e-2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie);
+}
+
+.redactor-comentario__miniatura img {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radio-chico);
+  object-fit: cover;
+}
+
+.redactor-comentario__nombre {
+  max-width: 18ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--t-meta-tam);
+}
+
+.redactor-comentario__pie {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* B3 — cada imagen se sube al elegirla y su miniatura dice cómo va: subiendo
+   (barra indeterminada), lista o el motivo del rechazo. El estado va escrito,
+   no solo en color. */
+.redactor-comentario__detalle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.redactor-comentario__estado {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.redactor-comentario__estado .icono {
+  width: 14px;
+  height: 14px;
+}
+
+.redactor-comentario__estado--lista {
+  color: var(--exito);
+}
+
+.redactor-comentario__estado--error {
+  max-width: 32ch;
+  color: var(--error);
+}
+
+.redactor-comentario__miniatura[data-estado='error'] {
+  border-color: var(--error);
+}
+
+.redactor-comentario__progreso {
+  width: 120px;
+  height: 6px;
+  accent-color: var(--primaria);
+}
+
+/* Con tres imágenes el selector se apaga: su etiqueta lo enseña. */
+.redactor-comentario__archivo:disabled + .redactor-comentario__adjuntar {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* --- Reportar un comentario (ReportComment) ------------------------------- */
+
+.reporte-comentario__categorias {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.reporte-comentario__opcion {
+  display: flex;
+  /* Explícito: alguna hoja de vista pone `label` en columna (tema-cuentas). */
+  flex-direction: row;
+  align-items: center;
+  gap: var(--e-2);
+  min-height: 36px;
+  cursor: pointer;
+}
+
+/* --- Imágenes de un comentario en moderación (B3) -------------------------
+   Las de un comentario en revisión no son públicas: se piden con la sesión
+   del moderador. Más grandes que en el hilo, enteras (sin recorte), porque
+   aquí se juzga lo que enseñan. */
+
+.moderacion-imagenes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.moderacion-imagenes__imagen {
+  display: block;
+  max-width: 240px;
+  max-height: 240px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background: var(--superficie-2);
+  object-fit: contain;
+}
+
+@media (max-width: 767px) {
+  /* 44×44 al dedo (WCAG 2.5.5): lo que se pulsa es la etiqueta. */
+  .selector-estrellas__opcion {
+    width: var(--objetivo-tactil);
+    height: var(--objetivo-tactil);
+  }
+
+  .reporte-comentario__opcion {
+    min-height: var(--objetivo-tactil);
+  }
+
+  .comentario {
+    padding: var(--e-3);
+  }
+}
+
+/* =======================================================================
+   UXC-5 — Banner de misiones (MissionBanner)
+   RF-MIS-001 (banner rotativo del tablón) · RF-INV-003 (banner del inventario)
+   -----------------------------------------------------------------------
+   Vive en el kit porque lo pintan dos vistas: el tablón de misiones y Mi
+   inventario. Es un panel oscuro como la portada de la home: la tinta es
+   clara dentro y se declara aquí, no se hereda por casualidad de la
+   atmósfera. Sin servicio de misiones el inventario no lo pinta (RF-INV-003,
+   Excepciones), así que en producción hoy solo se ve en el laboratorio.
+   ======================================================================= */
+
+.banner-misiones {
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  --tinta-enlace: var(--enlace-sobre-cromo);
+  --tinta-enlace-hover: var(--texto-sobre-color);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+  padding: var(--e-6);
+  border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      90% 120% at 100% 0%,
+      color-mix(in srgb, var(--acento-relleno) 42%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(110deg, var(--cromo), var(--cromo-elevado) 65%);
+  box-shadow: var(--sombra-atmosfera);
+  color: var(--tinta);
+  overflow: hidden;
+}
+
+/* El filo de energía de las tarjetas del Nexo, arriba. */
+.banner-misiones::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 3px;
+  background: var(--energia);
+}
+
+.banner-misiones__pista {
+  min-width: 0;
+}
+
+.banner-misiones__diapositiva,
+.banner-misiones--promocion {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--e-5);
+  align-items: center;
+}
+
+.banner-misiones__arte {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--primaria) 35%, var(--cromo));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+  overflow: hidden;
+}
+
+.banner-misiones__imagen {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.banner-misiones__emblema {
+  width: 48px;
+  height: 48px;
+  color: var(--enlace-sobre-cromo);
+}
+
+.banner-misiones__cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.banner-misiones__sello {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--credito-oro-sobre-cromo);
+}
+
+.banner-misiones .banner-misiones__nombre {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  color: var(--texto-sobre-color);
+  overflow-wrap: anywhere;
+}
+
+.banner-misiones__texto {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--pista);
+}
+
+.banner-misiones__datos {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-sobre-color);
+}
+
+.banner-misiones__accion {
+  margin-top: var(--e-2);
+}
+
+.banner-misiones__pie {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.banner-misiones__controles {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+/* Anterior apunta a la izquierda: es el mismo chevron, girado. */
+.banner-misiones__anterior .icono {
+  transform: rotate(180deg);
+}
+
+.banner-misiones__puntos {
+  display: flex;
+  align-items: center;
+}
+
+/* El punto se ve de 10 px, pero el objetivo es el botón entero (24×44). */
+.banner-misiones__punto {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: var(--objetivo-tactil);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.banner-misiones__punto::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--pista);
+  background: transparent;
+}
+
+/* La actual va rellena Y más ancha: no se distingue solo por el color. */
+.banner-misiones__punto[aria-current='true']::before {
+  width: 20px;
+  border-radius: var(--radio-pildora);
+  border-color: var(--texto-sobre-color);
+  background: var(--texto-sobre-color);
+}
+
+.banner-misiones__punto:focus-visible {
+  outline: var(--foco-grosor) solid var(--enlace-sobre-cromo);
+  outline-offset: -2px;
+  border-radius: var(--radio-chico);
+}
+
+.banner-misiones__tablon {
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+@media (max-width: 599px) {
+  .banner-misiones {
+    padding: var(--e-5) var(--e-4);
+  }
+
+  .banner-misiones__diapositiva,
+  .banner-misiones--promocion {
+    grid-template-columns: 1fr;
+    gap: var(--e-3);
+  }
+
+  .banner-misiones__arte {
+    width: 64px;
+    height: 64px;
+  }
+
+  .banner-misiones__emblema {
+    width: 32px;
+    height: 32px;
+  }
+
+  .banner-misiones .banner-misiones__nombre {
+    font-size: var(--t-subtitulo-tam);
+  }
+}
+
+/* =======================================================================
+   UXC-6 — Conversación: globos, hilo, redactor y mensajes privados
+   RF-JUE-015 (chat de la sala y de la vista general) · retroalimentación
+   del docente (mensajes privados)
+   -----------------------------------------------------------------------
+   Vive en el kit porque la pintan tres sitios: el chat general, el de una
+   sala y los mensajes privados (`comun/ui/conversacion/`).
+
+   Quién habla nunca es solo color (WCAG 1.4.1): el globo lleva la palabra
+   («Tú», el apodo o «Sistema»), la posición (derecha, izquierda, centro) y
+   la forma (la inicial del otro jugador; el borde discontinuo del sistema).
+   ======================================================================= */
+
+.tarjeta.conversacion {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+}
+
+.conversacion__barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--borde);
+}
+
+.conversacion__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  color: var(--texto);
+}
+
+/* El hilo y su estado comparten el hueco: posicion relativa para el aviso de
+   «Hay mensajes nuevos», que flota sobre el final de la lista. */
+.conversacion__cuerpo {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.conversacion__mensajes {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  margin: 0;
+  padding: var(--e-4);
+  list-style: none;
+  height: clamp(300px, 52vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Sin mensajes, el hueco es del estado (cargando, en silencio, sin canal). */
+.conversacion__mensajes:empty {
+  display: none;
+}
+
+.conversacion__estado > .estado-vista {
+  min-height: 300px;
+  border: 0;
+  border-radius: 0;
+}
+
+.conversacion__nuevos {
+  position: absolute;
+  bottom: var(--e-3);
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: var(--sombra-2);
+  z-index: 1;
+}
+
+/* Separador de día: «Hoy», «Ayer», «Lunes 21 de septiembre». */
+.conversacion__dia {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.conversacion__dia::before,
+.conversacion__dia::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--borde);
+}
+
+/* --- El globo ---------------------------------------------------------- */
+
+.mensaje {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  max-width: min(72ch, 86%);
+  align-self: flex-start;
+}
+
+.mensaje--yo {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.mensaje--sistema {
+  align-self: center;
+  align-items: center;
+  max-width: min(64ch, 94%);
+  text-align: center;
+}
+
+.mensaje__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+}
+
+.mensaje__autor {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.mensaje__hora {
+  color: var(--texto-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mensaje__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.mensaje__icono {
+  flex: none;
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.mensaje__globo {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-radius: 4px 14px 14px 14px;
+  background: var(--superficie-2);
+  color: var(--texto);
+}
+
+.mensaje--yo .mensaje__globo {
+  border-color: color-mix(in srgb, var(--primaria) 38%, transparent);
+  border-radius: 14px 4px 14px 14px;
+  background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
+}
+
+.mensaje--sistema .mensaje__globo {
+  border: 1px dashed var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+}
+
+.mensaje--sistema .mensaje__cabecera {
+  justify-content: center;
+  color: var(--info);
+}
+
+.mensaje--advertencia .mensaje__globo {
+  border-color: var(--advertencia);
+  background: var(--advertencia-insignia);
+}
+
+.mensaje--advertencia .mensaje__cabecera {
+  color: var(--advertencia);
+}
+
+.mensaje--exito .mensaje__globo {
+  border-color: var(--exito);
+  background: var(--exito-insignia);
+}
+
+.mensaje--exito .mensaje__cabecera {
+  color: var(--exito);
+}
+
+.mensaje__texto {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mensaje__logro {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-1) var(--e-2);
+  border-radius: var(--radio-chico);
+  background: var(--rareza-legendaria-insignia);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+}
+
+.mensaje__logro .icono {
+  color: var(--rareza-legendaria);
+}
+
+/* Entrega de lo tuyo: con palabra e icono; «No se envió» en rojo y con su
+   «Reintentar» al lado. */
+.mensaje__entrega {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.mensaje__entrega--leido {
+  color: var(--info);
+}
+
+.mensaje__entrega--fallido {
+  color: var(--error);
+  font-weight: 600;
+}
+
+.mensaje__reintentar {
+  min-height: 32px;
+}
+
+/* --- El redactor ------------------------------------------------------- */
+
+.redactor-mensaje {
+  display: grid;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4) var(--e-4);
+  border-top: 1px solid var(--borde);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.redactor-mensaje__fila {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--e-2);
+}
+
+.redactor-mensaje__campo {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+
+.redactor-mensaje__texto {
+  display: block;
+  width: 100%;
+  min-height: var(--boton-grande);
+  max-height: 160px;
+  padding: var(--e-2) var(--e-3);
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.redactor-mensaje__enviar {
+  flex: none;
+  min-height: var(--boton-grande);
+}
+
+.redactor-mensaje__pista {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--e-1) var(--e-3);
+  margin: 0;
+  color: var(--texto-3);
+}
+
+.redactor-mensaje__cuenta {
+  font-variant-numeric: tabular-nums;
+}
+
+.redactor-mensaje__cuenta--cerca {
+  color: var(--advertencia);
+  font-weight: 600;
+}
+
+.redactor-mensaje__espera {
+  flex-basis: 100%;
+  color: var(--advertencia);
+  font-weight: 600;
+}
+
+/* `list-item` (el de siempre) para no perder el triángulo que dice que se
+   despliega; el alto mínimo lo da el relleno. */
+.redactor-mensaje__logro summary {
+  width: fit-content;
+  padding: var(--e-1) 0;
+  cursor: pointer;
+}
+
+/* El asistente flotante (RNF-DIS-002) vive abajo a la derecha: el final de la
+   conversación no puede quedar debajo de él. */
+.pagina[data-vista='chat'] {
+  padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
+}
+
+.redactor-mensaje__logro .fila {
+  margin-top: var(--e-2);
+}
+
+/* Bloqueado (silencio, conversación bloqueada, sin sesión): el campo se
+   sustituye por el motivo y lo que se puede hacer. */
+.redactor-mensaje__bloqueo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde-int);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+}
+
+.redactor-mensaje--bloqueado .redactor-mensaje__fila,
+.redactor-mensaje--bloqueado .redactor-mensaje__pista,
+.redactor-mensaje--bloqueado .redactor-mensaje__logro {
+  display: none;
+}
+
+.redactor-mensaje__bloqueo-icono {
+  flex: none;
+  width: var(--icono);
+  height: var(--icono);
+  color: var(--texto-2);
+}
+
+.redactor-mensaje__bloqueo-cuerpo {
+  display: grid;
+  gap: var(--e-1);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.redactor-mensaje__bloqueo-titulo {
+  margin: 0;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.redactor-mensaje__bloqueo-detalle {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.redactor-mensaje__bloqueo-acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  align-self: center;
+}
+
+/* --- La página del chat ------------------------------------------------ */
+
+.chat__titulo-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.chat__titulo-fila h1 {
+  margin: 0;
+}
+
+.chat__pestanas {
+  display: grid;
+  gap: var(--e-4);
+}
+
+.chat__pestanas:empty {
+  display: none;
+}
+
+.chat__general {
+  min-width: 0;
+}
+
+.chat__privados {
+  min-width: 0;
+}
+
+/* --- Mensajes privados -------------------------------------------------- */
+
+.mensajes-privados {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: var(--e-4);
+  align-items: start;
+}
+
+.mensajes-privados__lateral {
+  display: grid;
+  gap: var(--e-3);
+  align-content: start;
+  min-width: 0;
+}
+
+.mensajes-privados__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+}
+
+.mensajes-privados__restriccion .aviso {
+  flex-wrap: wrap;
+}
+
+.tarjeta.mensajes-privados__hilo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 480px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.mensajes-privados__hilo > .estado-vista {
+  flex: 1 1 auto;
+  border: 0;
+  border-radius: 0;
+}
+
+.mensajes-privados__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2) var(--e-3);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--borde);
+}
+
+.mensajes-privados__con {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-subtitulo-peso);
+  overflow-wrap: anywhere;
+}
+
+/* Solo en pantalla estrecha, donde la lista y la conversación se turnan. */
+.mensajes-privados__volver {
+  display: none;
+}
+
+/* El mismo chevron que apunta a la derecha, girado: «atrás». */
+.mensajes-privados__volver-icono {
+  transform: rotate(180deg);
+}
+
+.mensajes-privados__conversacion {
+  flex: 1 1 auto;
+  border: 0;
+}
+
+.mensajes-privados__sin-abrir {
+  display: grid;
+  gap: var(--e-3);
+  justify-items: start;
+  max-width: 68ch;
+}
+
+.mensajes-privados__sin-abrir h2,
+.mensajes-privados__sin-abrir p {
+  margin: 0;
+}
+
+.mensajes-privados__sin-abrir-icono {
+  width: 40px;
+  height: 40px;
+  color: var(--primaria);
+}
+
+/* Lista de conversaciones: la activa se marca con fondo, borde y la barra
+   de la izquierda, no solo con color. */
+.conversaciones {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.conversaciones__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: 56px;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid transparent;
+  border-radius: var(--radio);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transicion);
+}
+
+.conversaciones__item:hover {
+  background: var(--superficie-2);
+}
+
+.conversaciones__item[aria-current='true'] {
+  border-color: color-mix(in srgb, var(--primaria) 40%, transparent);
+  background: color-mix(in srgb, var(--primaria) 9%, var(--superficie));
+  box-shadow: inset 3px 0 0 var(--primaria);
+}
+
+.conversaciones__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: 700;
+}
+
+.conversaciones__cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  justify-items: start;
+}
+
+.conversaciones__apodo {
+  max-width: 100%;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversaciones__item--sin-leer .conversaciones__apodo {
+  font-weight: 700;
+}
+
+.conversaciones__vista {
+  max-width: 100%;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conversaciones__lado {
+  display: grid;
+  justify-items: end;
+  gap: var(--e-1);
+}
+
+.conversaciones__cuando {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+  white-space: nowrap;
+}
+
+.conversaciones__no-leidos {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--radio-pildora);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Buscar jugador */
+.buscador-jugador {
+  display: grid;
+  gap: var(--e-2);
+}
+
+.buscador-jugador .campo {
+  margin: 0;
+}
+
+.buscador-jugador__resultados {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.buscador-jugador__lista {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding: var(--e-1);
+  list-style: none;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+}
+
+.buscador-jugador__resultado {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  width: 100%;
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-1) var(--e-2);
+  border: 0;
+  border-radius: var(--radio-chico);
+  background: none;
+  color: var(--texto);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.buscador-jugador__resultado:hover {
+  background: var(--superficie-2);
+}
+
+.buscador-jugador__apodo {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.buscador-jugador__accion {
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--primaria);
+}
+
+.buscador-jugador__estado {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.buscador-jugador__estado--error {
+  color: var(--error);
+}
+
+@media (max-width: 899px) {
+  .mensajes-privados {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .mensajes-privados[data-vista-movil='lista'] .mensajes-privados__hilo,
+  .mensajes-privados[data-vista-movil='hilo'] .mensajes-privados__lateral {
+    display: none;
+  }
+
+  .mensajes-privados__volver {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 599px) {
+  /* En la cabecera estrecha de una conversación privada, la píldora dice solo
+     el estado; «Canal en tiempo real:» se sigue leyendo. Mismo patrón que el
+     combate a pantalla completa. */
+  .mensajes-privados__cabecera .conexion__prefijo {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .conversacion__mensajes {
+    padding: var(--e-3);
+    height: clamp(280px, 58vh, 520px);
+  }
+
+  .mensaje {
+    max-width: 92%;
+  }
+
+  .redactor-mensaje {
+    padding: var(--e-3);
+  }
+}
+
+/* =======================================================================
+   UXC-7 — Estado de la cuenta (SanctionCountdown) y línea de tiempo
+   (AdminTimeline)
+   §7.3.8 (línea de tiempo de actividad del usuario) · RF-USR-004/005
+   -----------------------------------------------------------------------
+   El estado se dice con palabra e icono además del color del borde; en la
+   línea de tiempo el tono va también en la forma del marcador (círculo,
+   rombo, cuadrado) para que no dependa del color.
+   ======================================================================= */
+
+.estado-cuenta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3) var(--e-4);
+  border-left: 4px solid var(--exito);
+}
+
+/* Dentro de otra tarjeta (la consola de sanciones) no se levanta: sin sombra. */
+.tarjeta .estado-cuenta {
+  box-shadow: none;
+}
+
+.estado-cuenta--suspendida {
+  border-left-color: var(--advertencia);
+}
+
+.estado-cuenta--baneada {
+  border-left-color: var(--error);
+}
+
+.estado-cuenta__icono {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  color: var(--exito);
+}
+
+.estado-cuenta--suspendida .estado-cuenta__icono {
+  color: var(--advertencia);
+}
+
+.estado-cuenta--baneada .estado-cuenta__icono {
+  color: var(--error);
+}
+
+.estado-cuenta__cuerpo {
+  display: grid;
+  gap: var(--e-1);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.estado-cuenta__titulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: 700;
+  color: var(--texto);
+}
+
+.estado-cuenta__detalle {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.estado-cuenta__cuenta {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.linea-tiempo {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.linea-tiempo__hecho {
+  position: relative;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: var(--e-3);
+  padding-bottom: var(--e-4);
+}
+
+/* El hilo que une los hechos; el último no lo lleva. */
+.linea-tiempo__hecho::before {
+  content: '';
+  position: absolute;
+  top: 22px;
+  bottom: 0;
+  left: 9px;
+  width: 2px;
+  background: var(--borde);
+}
+
+.linea-tiempo__hecho:last-child {
+  padding-bottom: 0;
+}
+
+.linea-tiempo__hecho:last-child::before {
+  display: none;
+}
+
+.linea-tiempo__marca {
+  width: 14px;
+  height: 14px;
+  margin: 4px 3px;
+  border: 2px solid var(--texto-3);
+  border-radius: 50%;
+  background: var(--superficie);
+}
+
+.linea-tiempo__hecho--info .linea-tiempo__marca {
+  border-color: var(--info);
+  background: var(--info-insignia);
+}
+
+/* Advertencia: rombo. */
+.linea-tiempo__hecho--advertencia .linea-tiempo__marca {
+  border-color: var(--advertencia);
+  border-radius: 2px;
+  background: var(--advertencia-insignia);
+  transform: rotate(45deg);
+}
+
+/* Error (un baneo): cuadrado relleno. */
+.linea-tiempo__hecho--error .linea-tiempo__marca {
+  border-color: var(--error);
+  border-radius: 2px;
+  background: var(--error);
+}
+
+/* Éxito (revertida): círculo relleno. */
+.linea-tiempo__hecho--exito .linea-tiempo__marca {
+  border-color: var(--exito);
+  background: var(--exito);
+}
+
+/* Lo que todavía no ha pasado (termina el…): contorno discontinuo. */
+.linea-tiempo__hecho--futuro .linea-tiempo__marca {
+  border-style: dashed;
+  background: var(--superficie);
+}
+
+.linea-tiempo__cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.linea-tiempo__cuando {
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.linea-tiempo__titulo {
+  margin: 0;
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.linea-tiempo__detalle,
+.linea-tiempo__actor {
+  margin: 0;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+.linea-tiempo__actor {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+}
+
+/* =======================================================================
+   UXC-8 — El torneo del jugador
+   -----------------------------------------------------------------------
+   «Tu torneo» (Mi equipo, Próximo encuentro, Mi camino), el encuentro de tu
+   equipo marcado en el árbol —con texto, «Tu equipo», además del borde— y la
+   transmisión en su variante sin señal: el marco del kit, sin prometer vídeo.
+   ======================================================================= */
+
+.torneo__tarjeta-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.torneo-mio {
+  border-left: 4px solid var(--acento-relleno);
+}
+
+.torneo-mio__rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--e-4);
+}
+
+.torneo-mio__bloque {
+  padding: var(--e-3) var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+
+.torneo-mio__equipo {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+}
+
+.torneo-mio__inicial {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+}
+
+.torneo-mio__camino {
+  display: grid;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.torneo-mio__paso {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-1) var(--e-2);
+}
+
+.torneo-mio__paso--victoria .icono {
+  color: var(--exito);
+}
+
+.torneo-mio__paso--derrota .icono {
+  color: var(--error);
+}
+
+.encuentro--mio {
+  border-color: var(--acento-relleno);
+  box-shadow: var(--sombra-1), inset 0 0 0 1px var(--acento-relleno);
+}
+
+.encuentro__tuyo {
+  margin-left: auto;
+  padding: 0 var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+}
+
+.transmision--sin-senal .transmision__lienzo {
+  aspect-ratio: auto;
+  min-height: 140px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--e-3);
+  color: var(--texto-sobre-color);
+}
+
+.transmision--sin-senal .transmision__etiqueta {
+  align-self: center;
+  /* La etiqueta base (pista sobre pista) no llega a 4,5:1; sin señal se lee
+     en superficie clara, con el texto de la paleta. */
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.transmision__simbolo {
+  width: 40px;
+  height: 40px;
+}
+
+/* UXC-8 — el premio del torneo (RF-TOR-007, torneos.yaml 1.2.0): la frase
+   para todos va sobre la tinta del lugar; tu parte del premio, en «Mi
+   equipo», con el fondo tenue de su estado. Icono y texto, nunca solo color. */
+.torneo__premio {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.torneo-mio__premio {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  margin: 0;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  font-weight: 600;
+}
+
+.torneo-mio__premio .icono {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.torneo-mio__premio--exito {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.torneo-mio__premio--info {
+  background: var(--info-insignia);
+  color: var(--info);
+}
+
+.torneo-mio__premio--advertencia {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+/* =======================================================================
+   UXC-9 — Aviso de red transversal y hueco del asistente
+   -----------------------------------------------------------------------
+   `.aviso-red`: «Sin conexión» / «Conexión recuperada», arriba y centrado,
+   sin tapar la cabecera; icono y texto además del color.
+   El botón flotante del asistente (56 px, a 24 px del borde) tapaba lo
+   último de cada página: con el botón montado, el contenido principal deja
+   ese hueco al final. El combate queda fuera: es pantalla completa.
+   ======================================================================= */
+
+.aviso-red {
+  position: fixed;
+  /* Debajo de la cabecera, para no taparla; centrado sin `transform`, que
+     con `left: 50%` dejaba al aviso media pantalla de ancho en el móvil. */
+  top: calc(64px + var(--e-2));
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  width: fit-content;
+  max-width: min(560px, calc(100vw - 2 * var(--e-4)));
+  margin-inline: auto;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid currentColor;
+  border-radius: var(--radio);
+  box-shadow: var(--sombra-2);
+  font-family: var(--t-cuerpo-familia, inherit);
+  font-size: var(--t-meta-tam);
+}
+
+.aviso-red[hidden] {
+  display: none;
+}
+
+.aviso-red--sin-red {
+  background: var(--advertencia-insignia);
+  color: var(--advertencia);
+}
+
+.aviso-red--recuperada {
+  background: var(--exito-insignia);
+  color: var(--exito);
+}
+
+.aviso-red__icono {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+}
+
+.aviso-red__detalle {
+  color: var(--texto);
+}
+
+body:has(.chatbot-flotante) main:not(.combate) {
+  padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
 }

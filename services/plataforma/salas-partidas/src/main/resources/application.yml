@@ -117,6 +117,14 @@ salas:
     url: ${PARAMETROS_URL:}
     cache-segundos: ${SALAS_PARAMETROS_CACHE_SEGUNDOS:30}
 
+  # Auditoria de DEV del 30-sep: una sala que nadie empieza o una partida que
+  # nadie termina retenia la apuesta para siempre. Pasado este plazo se cierran
+  # y la apuesta vuelve a cada uno (CerrarAbandonadas). 72 h es el vencimiento
+  # con que ms-finanzas crea la reserva de la apuesta: una sala no vive mas que
+  # la reserva que la respalda. Decision pendiente del PO (D-39).
+  abandono:
+    horas: ${SALAS_ABANDONO_HORAS:72}
+    cada-ms: ${SALAS_ABANDONO_CADA_MS:600000}
   apuestas:
     # Cada cuanto se reintentan las liquidaciones que el libro dejo pendientes.
     reintento-ms: ${APUESTAS_REINTENTO_MS:60000}
@@ -127,6 +135,15 @@ salas:
     # RESPALDO, no fuente: el valor vigente lo da admin-parametros (D-02). Esto
     # es lo que se aplica si el catalogo no esta configurado o no responde.
     si-gana-la-maquina: ${APUESTAS_SI_GANA_LA_MAQUINA:LIBERAR}
+
+  # B7 · D-B7-14: tiempo por turno. El documento no fija uno, asi que el valor
+  # vigente es el parametro `salas.partidas.segundos-por-turno` de
+  # admin-parametros, que NACE SIN VALOR: sin valor no hay limite. Esto es el
+  # RESPALDO si el catalogo no esta configurado o no responde (0 = sin limite).
+  partidas:
+    segundos-por-turno: ${SALAS_PARTIDAS_SEGUNDOS_POR_TURNO:0}
+    # Cada cuanto se buscan turnos agotados (solo hay alguno si hay limite).
+    vencimiento-ms: ${SALAS_PARTIDAS_VENCIMIENTO_MS:5000}
 
 # HU-DIS-003: degradacion controlada. Cada dependencia externa (inventario,
 # motor de combate, libro de creditos) va detras de su propio corta circuitos
@@ -171,6 +188,37 @@ chat:
     # (`chat.historial.tamano`, D-16). Esto es lo que se aplica si el catalogo
     # no esta configurado o no responde.
     tamano: ${CHAT_HISTORIAL_TAMANO:50}
+  # Auditoria de DEV del 30-sep: en el chat general entro un bloque de ASCII
+  # art y nada limitaba la frecuencia. PROVISIONAL, decision del PO pendiente
+  # (D-37): ningun requisito fija estos numeros. Los limites de texto valen
+  # tambien para los mensajes privados.
+  limite:
+    mensajes: ${CHAT_LIMITE_MENSAJES:5}
+    ventana-segundos: ${CHAT_LIMITE_VENTANA_SEGUNDOS:10}
+  texto:
+    maximo-de-lineas: ${CHAT_TEXTO_MAXIMO_LINEAS:6}
+    maxima-repeticion: ${CHAT_TEXTO_MAXIMA_REPETICION:15}
+    largo-para-mirar-simbolos: ${CHAT_TEXTO_LARGO_PARA_MIRAR_SIMBOLOS:40}
+    minimo-de-letras-por-ciento: ${CHAT_TEXTO_MINIMO_LETRAS_POR_CIENTO:50}
+
+# B6 — Mensajes privados entre jugadores (FEEDBACK DEL PROFESOR, no requisito
+# del documento: el 7.6 pide chat en las salas y en la vista general). Van sobre
+# el mismo broker que el chat; la lista negra es la de arriba, con contexto
+# MENSAJE_PRIVADO. Todas las llamadas salen con la credencial de servicio.
+mensajes-directos:
+  limite:
+    # PROVISIONAL, decision del PO pendiente: cuantos mensajes privados puede
+    # mandar un jugador en la ventana. Ningun requisito lo fija.
+    mensajes: ${MENSAJES_DIRECTOS_LIMITE_MENSAJES:5}
+    ventana-segundos: ${MENSAJES_DIRECTOS_LIMITE_VENTANA_SEGUNDOS:10}
+  identidad:
+    # ms-identidad SIN /api/v1 (la ruta del contrato ya lo lleva). Comprueba
+    # que el destinatario existe y esta ACTIVO (GET /internal/usuarios/{uid}/contacto).
+    url: ${IDENTIDAD_URL:http://localhost:8089}
+    cache-segundos: ${MENSAJES_DIRECTOS_IDENTIDAD_CACHE_SEGUNDOS:30}
+  notificaciones:
+    # Con su /api/v1. Aviso en la bandeja de quien recibe sin estar conectado.
+    url: ${NOTIFICACIONES_URL:http://localhost:8085/api/v1}
 
 # Regla 3: todo servicio expone salud y metricas.
 management:

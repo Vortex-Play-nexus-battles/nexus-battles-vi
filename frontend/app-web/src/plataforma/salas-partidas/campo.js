@@ -138,7 +138,15 @@ export function pintarCampo(contenedor, participantes, yo, { caidos } = {}) {
             },
             { conNombre: false },
           ),
-          h('span', { clase: 'campo__nombre', texto: participante.heroe?.nombre ?? '' }),
+          // Auditoría del 4-oct: el rival de la máquina puede llamarse como tu
+          // héroe (mismo prototipo); en el campo se marca, como en el registro.
+          h('span', {
+            clase: 'campo__nombre',
+            texto:
+              participante.esIA && participante.heroe?.nombre
+                ? `${participante.heroe.nombre} (IA)`
+                : (participante.heroe?.nombre ?? ''),
+          }),
         ],
       }),
     );

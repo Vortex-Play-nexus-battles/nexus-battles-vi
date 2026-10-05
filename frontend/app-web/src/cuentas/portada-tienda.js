@@ -1,0 +1,267 @@
+/**
+ * La tienda en la portada pública — UXC-4 (retroalimentación del profesor).
+ *
+ * Quien llegaba a Nexus Battles VI sin cuenta aterrizaba en la entrada y solo
+ * veía un formulario: nada de lo que el juego vende. Desde F6 (auditoría del
+ * 4-oct, cambio autorizado n.º 3) `/` es la portada pública (`portada.html`)
+ * con esta misma tienda, y la entrada (`/login`) la sigue enseñando debajo
+ * del formulario. §7.5 describe una vitrina, y la vitrina es pública
+ * (`GET /api/v1/vitrina`, `security: []` en ecommerce-carrito.yaml), así que
+ * la portada la enseña: productos reales, con su imagen, nombre, tipo, precio
+ * y rebaja si la hay, y «Ver producto» para su detalle —el mismo del
+ * catálogo— con la calificación promedio y las opiniones (también públicas).
+ *
+ * Lo que necesita cuenta lo dice y lleva a ella sin salir de la página:
+ * comprar, calificar, opinar y reportar. «Entra para comprar» deja la vuelta
+ * preparada (`?volver=` a la tienda) y pone el foco en el correo.
+ *
+ * Estados: cargando, vacío (la tienda no tiene productos a la venta), error
+ * (no responde; reintentar) y parcial (un producto sin imagen enseña el
+ * símbolo de su tipo). Nunca un código HTTP ni el nombre de un servicio.
+ *
+ * @module cuentas/portada-tienda
+ */
+
+import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { rutaDeApi } from '../comun/base-api.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
+import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
+import { MODOS, bloqueDeCompra, tarjetaDeProducto } from './tienda-producto.js';
+import {
+  MONEDA_BASE,
+  conMoneda,
+  disponiblesDe,
+  monedaAMostrar,
+  monedaPreferida,
+} from './tienda-moneda.js';
+
+/** Cuántos productos enseña la portada: dos filas en escritorio. */
+export const PRODUCTOS_EN_PORTADA = 8;
+
+/** Los productos pintados en cada zona, para el manejador delegado. */
+const PINTADOS = new WeakMap();
+
+/**
+ * Pide la primera página de la vitrina.
+ *
+ * B5 — en la moneda del visitante si el servidor la ofrece (§7.5: «COP o
+ * dólar o euro dependiendo de su ubicación geográfica»; `tienda-moneda.js`).
+ * Se pregunta primero en COP, que está siempre, y solo si la página dice que
+ * la preferida está disponible se vuelve a pedir en ella; si esa segunda
+ * petición falla, se enseña lo que ya llegó en pesos.
+ *
+ * @param {{fetchImpl?: Function, cuantos?: number, preferida?: string}} [opciones]
+ * @returns {Promise<{productos: object[], total: number|null, moneda: string}>}
+ */
+export async function pedirVitrinaPublica({
+  fetchImpl = fetchWithHttpErrorInterceptor,
+  cuantos = PRODUCTOS_EN_PORTADA,
+  preferida = monedaPreferida().moneda,
+} = {}) {
+  const pedir = async (moneda) => {
+    const respuesta = await fetchImpl(rutaDeApi(conMoneda(`/vitrina?size=${cuantos}`, moneda)), {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!respuesta.ok) {
+      throw new Error(`La vitrina respondió ${respuesta.status}`);
+    }
+    return respuesta.json();
+  };
+  let datos = await pedir(MONEDA_BASE);
+  let moneda = MONEDA_BASE;
+  const aMostrar = monedaAMostrar(preferida, disponiblesDe(datos));
+  if (aMostrar !== MONEDA_BASE) {
+    try {
+      datos = await pedir(aMostrar);
+      moneda = aMostrar;
+    } catch {
+      // Se queda en pesos: mejor precios en COP que ninguno.
+    }
+  }
+  return {
+    productos: Array.isArray(datos?.content) ? datos.content : [],
+    total: Number.isFinite(datos?.totalElements) ? datos.totalElements : null,
+    moneda,
+  };
+}
+
+/**
+ * La ruta de la tienda en este sitio, para la vuelta tras entrar.
+ *
+ * @returns {string} ruta absoluta del mismo origen (`/frontend/app-web/src/cuentas/tienda.html`)
+ */
+export function rutaDeLaTienda() {
+  const url = new URL(resolver(RUTAS.tienda));
+  return `${url.pathname}${url.search}`;
+}
+
+/**
+ * F6 — la dirección de la entrada (`/login` detrás del borde), con la vuelta
+ * si la hay. Es a donde lleva la portada pública (`/`), que no tiene
+ * formulario.
+ *
+ * @param {string|null} [volver] ruta del mismo origen a la que volver tras entrar
+ * @returns {string}
+ */
+export function urlDeEntrada(volver = null) {
+  const url = new URL(resolver(RUTAS.login));
+  if (volver) {
+    url.searchParams.set('volver', volver);
+  }
+  return url.href;
+}
+
+/** La página tiene el formulario de entrada (la entrada sí; la portada `/` no). */
+function hayFormularioDeEntrada(doc) {
+  return Boolean(doc.getElementById('email'));
+}
+
+function irA(url) {
+  globalThis.location.assign(url);
+}
+
+/**
+ * Deja preparada la vuelta a la tienda y lleva al formulario de entrada.
+ *
+ * `login.js` lee `?volver=` al enviar el formulario, así que en la entrada
+ * basta con escribirla en la dirección (sin recargar) antes de que la persona
+ * entre. Desde la portada pública (F6), que no tiene formulario, se va a la
+ * entrada con la vuelta ya escrita.
+ *
+ * @param {Document} doc
+ * @param {{navegar?: (url: string) => void}} [opciones]
+ */
+export function entrarParaComprar(doc = document, { navegar = irA } = {}) {
+  if (!hayFormularioDeEntrada(doc)) {
+    navegar(urlDeEntrada(rutaDeLaTienda()));
+    return;
+  }
+  const url = new URL(globalThis.location.href);
+  url.searchParams.set('volver', rutaDeLaTienda());
+  globalThis.history?.replaceState?.(null, '', url.href);
+  llevarAlFormulario(doc);
+}
+
+/**
+ * Lleva al formulario de entrada y pone el foco en el correo, sin tocar la
+ * vuelta (calificar u opinar se hace desde el mismo detalle, que se puede
+ * volver a abrir tras entrar). Desde la portada pública, a la entrada.
+ *
+ * @param {Document} doc
+ * @param {{navegar?: (url: string) => void}} [opciones]
+ */
+export function llevarAlFormulario(doc = document, { navegar = irA } = {}) {
+  if (!hayFormularioDeEntrada(doc)) {
+    navegar(urlDeEntrada());
+    return;
+  }
+  // Si hay una ficha abierta, se cierra: el formulario está detrás.
+  doc.querySelector('.ficha__cerrar')?.click();
+  const correo = doc.getElementById('email');
+  correo?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  correo?.focus({ preventScroll: true });
+}
+
+/**
+ * Pinta la vitrina pública en su zona.
+ *
+ * @param {HTMLElement} zona `[data-zona="productos-publicos"]`
+ * @param {{pedir?: typeof pedirVitrinaPublica, abrir?: Function}} [opciones]
+ *   `abrir`: abre el detalle (por omisión, la ficha del catálogo, que se carga
+ *   al primer uso para no hacer esperar a la entrada).
+ * @returns {Promise<void>}
+ */
+export async function pintarVitrinaPublica(
+  zona,
+  { pedir = pedirVitrinaPublica, abrir = abrirDetallePublico } = {},
+) {
+  if (!zona) {
+    return;
+  }
+  zona.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Cargando la tienda…' }));
+  let productos;
+  try {
+    ({ productos } = await pedir());
+  } catch (error) {
+    zona.replaceChildren(
+      estadoDeError({
+        titulo: 'La tienda no responde ahora mismo',
+        detalle: 'Puedes entrar igualmente. Vuelve a intentarlo para ver lo que está a la venta.',
+        alReintentar: () => pintarVitrinaPublica(zona, { pedir, abrir }),
+      }),
+    );
+    console.error('No se pudo cargar la vitrina pública:', error);
+    return;
+  }
+  if (productos.length === 0) {
+    zona.replaceChildren(
+      estadoVacio({
+        titulo: 'Todavía no hay productos a la venta',
+        detalle:
+          'Cuando la administración publique el catálogo aparecerán aquí. Mientras, entra y juega.',
+        icono: '◇',
+      }),
+    );
+    return;
+  }
+  zona.replaceChildren(...productos.map((dto) => tarjetaDeProducto(dto, { modo: MODOS.PORTADA })));
+  PINTADOS.set(zona, { productos, abrir });
+  // Un solo manejador por zona, delegado: «Reintentar» vuelve a pintar las
+  // tarjetas pero no vuelve a enganchar nada.
+  if (!zona.dataset.enganchada) {
+    zona.dataset.enganchada = 'si';
+    zona.addEventListener('click', (evento) => {
+      const ver = evento.target.closest('[data-ver-producto]');
+      const pintados = PINTADOS.get(zona);
+      if (!ver || !pintados) {
+        return;
+      }
+      const dto = pintados.productos.find(
+        (producto) => String(producto.id) === ver.dataset.verProducto,
+      );
+      if (dto) {
+        pintados.abrir(dto, ver);
+      }
+    });
+  }
+}
+
+/**
+ * El detalle público: la ficha del catálogo con el bloque de compra (en modo
+ * portada) y las opiniones, de solo lectura hasta entrar.
+ *
+ * @param {object} dto
+ * @param {HTMLElement} origen
+ */
+export async function abrirDetallePublico(dto, origen) {
+  const [{ abrirFicha }, { complementoDeOpiniones }] = await Promise.all([
+    import('../contenido/inventario/ficha-producto.js'),
+    import('../plataforma/comentarios/hilo-comentarios.js'),
+  ]);
+  await abrirFicha(String(dto.id), {
+    origen,
+    contexto: 'portada',
+    complementos: [
+      () =>
+        bloqueDeCompra(dto, {
+          modo: MODOS.PORTADA,
+          alEntrar: () => entrarParaComprar(document),
+        }),
+      complementoDeOpiniones({
+        sesion: { yo: null, apodo: null },
+        alPedirEntrada: () => llevarAlFormulario(document),
+      }),
+    ],
+  });
+}
+
+// Arranque en el navegador; en las pruebas se llama a mano.
+if (globalThis.document?.addEventListener) {
+  globalThis.document.addEventListener('DOMContentLoaded', () => {
+    pintarVitrinaPublica(globalThis.document.querySelector('[data-zona="productos-publicos"]'));
+    globalThis.document
+      .querySelector('[data-accion="ver-tienda-completa"]')
+      ?.addEventListener('click', () => entrarParaComprar(globalThis.document));
+  });
+}

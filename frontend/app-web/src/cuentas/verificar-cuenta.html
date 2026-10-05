@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Confirma tu correo · The Nexus Battles VI</title>
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+  </head>
+  <body class="portal" data-vista="verificar-cuenta">
+    <div data-cabecera-app></div>
+
+    <!-- B1 (identidad 2.0.0) — una cuenta de autorregistro nace pendiente de
+         verificar el correo. Aquí se escribe el código que llegó, o se llega
+         desde el enlace del propio correo (/verificar#codigo=...&correo=...):
+         la vista lo lee, lo borra de la barra de direcciones y espera a que
+         la persona pulse «Confirmar». Lo monta `verificar-cuenta.js`. -->
+    <main class="entrada">
+      <section class="entrada__identidad">
+        <p class="entrada__sobretitulo">Activa tu cuenta</p>
+        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <p class="entrada__lema">
+          Antes de entrar al Nexo comprobamos que el correo es tuyo: te enviamos un código de un
+          solo uso y lo escribes aquí.
+        </p>
+        <ul class="entrada__puntos">
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
+            </svg>
+            <span>Solo quien lee ese correo puede activar la cuenta</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#reloj" />
+            </svg>
+            <span>El código caduca; si no llega, puedes pedir otro al cabo de un minuto</span>
+          </li>
+          <li class="entrada__punto">
+            <svg class="icono" aria-hidden="true">
+              <use href="../../../../shared/ui-kit/iconos/sprite.svg#moneda" />
+            </svg>
+            <span>Al confirmarlo recibes tus créditos de bienvenida y tu héroe inicial</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="entrada__tarjeta" aria-labelledby="tituloVerificar">
+        <div class="pila pila--ajustada">
+          <h2 class="entrada__titulo" id="tituloVerificar">Confirma tu correo</h2>
+          <p class="t-meta" data-zona="introduccion">
+            Escribe el correo con el que te registraste y el código que te enviamos.
+          </p>
+        </div>
+
+        <!-- Lo que está pasando ahora mismo (comprobando, redirigiendo). -->
+        <p class="estado" data-zona="estado" role="status" hidden></p>
+
+        <!-- Resultado de cada intento: el aviso del kit, con su rol. Se puede
+             enfocar para llevar ahí el foco cuando el fallo no es de un campo. -->
+        <div data-zona="aviso" tabindex="-1" hidden></div>
+
+        <!-- G1 — sin guion no se confirma el correo, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para confirmar el correo hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — ni el correo ni el código en la dirección: `method="post"` y
+             el botón desactivado hasta que verificar-cuenta.js escucha
+             `submit` (comun/ui/formulario-seguro.js). -->
+        <form id="formVerificacion" class="pila" method="post" novalidate>
+          <div class="campo">
+            <label class="campo__etiqueta" for="email">Correo electrónico</label>
+            <input
+              class="campo__control"
+              type="email"
+              id="email"
+              name="email"
+              required
+              autocomplete="email"
+              placeholder="tu@correo.com"
+            />
+          </div>
+
+          <div class="campo">
+            <label class="campo__etiqueta" for="codigo">Código de verificación</label>
+            <!-- Sin maxlength: se puede pegar el código con espacios o guiones,
+                 o el enlace entero del correo. La vista lo limpia antes de
+                 enviarlo (`normalizarCodigo`). -->
+            <input
+              class="campo__control"
+              type="text"
+              id="codigo"
+              name="codigo"
+              required
+              autocomplete="one-time-code"
+              autocapitalize="characters"
+              spellcheck="false"
+            />
+            <p class="campo__pista">
+              Son 8 caracteres, tal como llegan en el correo. Da igual mayúsculas o minúsculas, y
+              puedes pegarlo con espacios o guiones.
+            </p>
+          </div>
+
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            data-accion="confirmar"
+            disabled
+            data-espera-guion
+          >
+            Confirmar
+          </button>
+        </form>
+
+        <div class="pila pila--ajustada">
+          <p class="t-meta">
+            ¿No te llegó? Revisa la carpeta de correo no deseado o pide otro código: el anterior
+            deja de servir.
+          </p>
+          <button type="button" class="boton boton--secundario" data-accion="reenviar">
+            Reenviar código
+          </button>
+        </div>
+
+        <div class="entrada__pie">
+          <a href="./login.html">¿Ya confirmaste tu correo? Entra</a>
+          <a href="./registro.html">Crear otra cuenta</a>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="./verificar-cuenta.js"></script>
+  </body>
+</html>

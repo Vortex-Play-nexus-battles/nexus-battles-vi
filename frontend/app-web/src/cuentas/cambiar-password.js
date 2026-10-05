@@ -19,6 +19,8 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+import { formularioListo } from '../comun/ui/formulario-seguro.js';
+import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
 /** Clave de sessionStorage donde vive el token de sesión (la misma del login). */
 export const CLAVE_TOKEN = 'nexus.token';
@@ -42,12 +44,11 @@ const TITULOS_POR_TIPO = Object.freeze({
 /** Error del servicio, ya interpretado. La vista decide por `tipo`, no por el texto. */
 export class ErrorDeCambio extends Error {
   constructor(problema, estado) {
-    super(problema?.detail || problema?.title || 'No se pudo cambiar la contraseña.');
+    super(textoDelServidor(problema, estado, 'No se pudo cambiar la contraseña.'));
     this.name = 'ErrorDeCambio';
     this.tipo = problema?.type ?? null;
     this.estado = problema?.status ?? estado;
-    this.titulo =
-      TITULOS_POR_TIPO[this.tipo] ?? problema?.title ?? 'No se pudo cambiar la contraseña';
+    this.titulo = TITULOS_POR_TIPO[this.tipo] ?? 'No se pudo cambiar la contraseña';
     this.detalle = this.message;
   }
 }
@@ -208,6 +209,9 @@ export function montarCambioDePassword(
     limpiar();
     decir('', '');
   });
+
+  // G1 — la vista ya escucha `submit`: el botón se puede encender.
+  formularioListo(formulario);
 
   return { leer, limpiar };
 }

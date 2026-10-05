@@ -3,7 +3,50 @@
  * contrato y no contra la que el frontend suponia (FI-R2).
  */
 
-import { aImporte, textoDePrecio, aProductoDeVitrina, aFilaDeCarrito } from './tienda-adaptador.js';
+import {
+  CREDITOS,
+  aImporte,
+  textoDeCreditos,
+  textoDePrecio,
+  aProductoDeVitrina,
+  aFilaDeCarrito,
+} from './tienda-adaptador.js';
+
+describe('D-44 — créditos del juego', () => {
+  test('se escriben con separadores es-CO y en singular cuando es uno', () => {
+    expect(textoDeCreditos(1)).toBe('1 crédito');
+    expect(textoDeCreditos(300)).toBe('300 créditos');
+    expect(textoDeCreditos(1250)).toBe('1.250 créditos');
+    expect(textoDeCreditos(0)).toBe('0 créditos');
+  });
+
+  test('sin cifra no hay texto: nunca «NaN créditos»', () => {
+    expect(textoDeCreditos(null)).toBeNull();
+    expect(textoDeCreditos(undefined)).toBeNull();
+    expect(textoDeCreditos(Number.NaN)).toBeNull();
+  });
+
+  test('una orden en CREDITOS se escribe en créditos, no como una moneda', () => {
+    expect(textoDePrecio(825, CREDITOS)).toBe('825 créditos');
+    expect(textoDePrecio(825, 'COP')).toBe('825 COP');
+  });
+
+  test('la vitrina trae el precio en créditos que calculó el servidor; si no viene, null', () => {
+    const conCreditos = aProductoDeVitrina({
+      precioFinal: 6000,
+      moneda: 'COP',
+      precioCreditos: 300,
+    });
+    expect(conCreditos.precioCreditos).toBe(300);
+    expect(conCreditos.precioCreditosTexto).toBe('300 créditos');
+
+    for (const raro of [null, undefined, 0, -5, 12.5, '300']) {
+      const sin = aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP', precioCreditos: raro });
+      expect(sin.precioCreditos).toBeNull();
+      expect(sin.precioCreditosTexto).toBeNull();
+    }
+  });
+});
 
 describe('aImporte', () => {
   test('acepta el numero y la cadena con que se serializa un BigDecimal', () => {
@@ -91,6 +134,15 @@ describe('aProductoDeVitrina', () => {
     expect(vm.moneda).toBeNull();
   });
 
+  test('R16: el id UUID del catálogo se conserva tal cual, en texto', () => {
+    // Es lo que `tienda.js` manda a POST /carrito/items. Un `Number()` por el
+    // camino lo convertiría en NaN y el producto en «inexistente».
+    const uuid = '3fa85f64-5717-4562-b3fc-2c963f66afa6';
+    const vm = aProductoDeVitrina({ ...base, id: uuid });
+    expect(vm.id).toBe(uuid);
+    expect(typeof vm.id).toBe('string');
+  });
+
   test('esPropio y enListaDeseos solo son ciertos si el servicio dice true', () => {
     const vm = aProductoDeVitrina(base);
     expect(vm.esPropio).toBe(false);
@@ -122,5 +174,113 @@ describe('aFilaDeCarrito', () => {
   test('expone el id del item: lo que necesita «Quitar» para llamar DELETE /carrito/items/{itemId}', () => {
     expect(aFilaDeCarrito({ id: 42 }, 'COP').id).toBe(42);
     expect(aFilaDeCarrito({}, 'COP').id).toBeNull();
+  });
+
+  // B5 — la linea dice si se puede pagar, cuantas admite y su imagen (1.4.0).
+  test('el máximo lo dice el servidor, con el tope de 20; cero es agotado, no «sin dato»', () => {
+    expect(aFilaDeCarrito({ maximo: 3 }).maximo).toBe(3);
+    expect(aFilaDeCarrito({ maximo: 50 }).maximo).toBe(20);
+    expect(aFilaDeCarrito({ maximo: 0 }).maximo).toBe(0);
+    expect(aFilaDeCarrito({}).maximo).toBe(20);
+    expect(aFilaDeCarrito({ maximo: null }).maximo).toBe(20);
+  });
+
+  test('una línea que no se puede pagar trae su motivo, dicho para el jugador', () => {
+    const agotada = aFilaDeCarrito({ disponible: false, motivo: 'AGOTADO' });
+    expect(agotada.disponible).toBe(false);
+    expect(agotada.motivo).toBe('AGOTADO');
+    expect(agotada.motivoTexto).toBe('Se agotó. Quítalo para pagar.');
+
+    expect(
+      aFilaDeCarrito({ disponible: false, motivo: 'TIRAJE_INSUFICIENTE' }).motivoTexto,
+    ).toMatch(/Baja la cantidad/);
+    expect(aFilaDeCarrito({ disponible: false, motivo: 'NUEVO' }).motivoTexto).toMatch(
+      /Quítalo del carrito/,
+    );
+    const buena = aFilaDeCarrito({ disponible: true, motivo: 'AGOTADO' });
+    expect(buena.motivo).toBeNull();
+    expect(buena.motivoTexto).toBeNull();
+    // Un carrito anterior a 1.4.0 no dice nada: se puede pagar.
+    expect(aFilaDeCarrito({}).disponible).toBe(true);
+  });
+
+  test('la imagen del producto, si la trae; el id de la línea y del producto', () => {
+    const fila = aFilaDeCarrito({
+      id: 7,
+      producto: { id: 'p-1', nombre: 'Yelmo', imagen: '/img/yelmo.png' },
+    });
+    expect(fila.imagen).toBe('/img/yelmo.png');
+    expect(fila.id).toBe(7);
+    expect(fila.productoId).toBe('p-1');
+    expect(aFilaDeCarrito({ producto: { imagen: '  ' } }).imagen).toBeNull();
+  });
+
+  test('G3: una línea solo en créditos enseña los créditos del servidor, nunca «Sin precio» ni «0 COP»', () => {
+    const fila = aFilaDeCarrito(
+      {
+        id: 3,
+        cantidad: 2,
+        precioUnitario: null,
+        subtotal: null,
+        precioCreditos: 120,
+        subtotalCreditos: 240,
+        soloEnCreditos: true,
+        disponible: true,
+        producto: { id: 'p-3', nombre: 'Amuleto', moneda: null },
+      },
+      'COP',
+    );
+    expect(fila.soloEnCreditos).toBe(true);
+    expect(fila.unitarioTexto).toBe('120 créditos');
+    expect(fila.subtotalTexto).toBe('240 créditos');
+    expect(fila.subtotal).toBeNull();
+    expect(fila.subtotalCreditos).toBe(240);
+  });
+
+  test('G3: una línea con los dos precios sigue en dinero real; sin dato de créditos no se inventa', () => {
+    const ambos = aFilaDeCarrito(
+      { precioUnitario: 6000, subtotal: 6000, precioCreditos: 300, subtotalCreditos: 300 },
+      'COP',
+    );
+    expect(ambos.soloEnCreditos).toBe(false);
+    expect(ambos.subtotalTexto).toBe('6.000 COP');
+    expect(ambos.unitarioTexto).toBe('6.000 COP');
+
+    const sinCifra = aFilaDeCarrito({ soloEnCreditos: true, subtotalCreditos: null }, 'COP');
+    expect(sinCifra.subtotalTexto).toBeNull();
+    expect(sinCifra.unitarioTexto).toBeNull();
+  });
+
+  test('G3: sin ningún precio el motivo lo dice así (ya no es «no se vende con dinero real»)', () => {
+    expect(
+      aFilaDeCarrito({ disponible: false, motivo: 'SIN_PRECIO_EN_MONEDA_REAL' }).motivoTexto,
+    ).toBe('Ya no tiene precio de venta. Quítalo para pagar.');
+  });
+});
+
+describe('G3 — producto que solo se vende en créditos', () => {
+  test('sin precio en dinero real y con créditos: se vende en créditos', () => {
+    const vm = aProductoDeVitrina({
+      precioFinal: null,
+      precioOriginal: null,
+      moneda: null,
+      precioCreditos: 120,
+    });
+    expect(vm.soloEnCreditos).toBe(true);
+    expect(vm.precio).toBeNull();
+    expect(vm.precioTexto).toBeNull();
+    expect(vm.precioCreditosTexto).toBe('120 créditos');
+  });
+
+  test('con los dos precios, solo dinero real, o ninguno: no es «solo en créditos»', () => {
+    expect(aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP', precioCreditos: 300 })).toEqual(
+      expect.objectContaining({ soloEnCreditos: false }),
+    );
+    expect(aProductoDeVitrina({ precioFinal: 6000, moneda: 'COP' }).soloEnCreditos).toBe(false);
+    expect(aProductoDeVitrina({ precioFinal: null, precioCreditos: null }).soloEnCreditos).toBe(
+      false,
+    );
+    // Un cero en créditos no es un precio (el contrato: mínimo 1).
+    expect(aProductoDeVitrina({ precioFinal: null, precioCreditos: 0 }).soloEnCreditos).toBe(false);
   });
 });

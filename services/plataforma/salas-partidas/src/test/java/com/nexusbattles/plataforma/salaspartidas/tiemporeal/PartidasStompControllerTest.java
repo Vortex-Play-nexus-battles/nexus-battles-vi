@@ -95,8 +95,18 @@ class PartidasStompControllerTest {
                                     java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {
             }
         };
-        MotorDeCombate motorMudo = (atacante, objetivo) -> {
-            throw new IllegalStateException("no deberia llamarse");
+        MotorDeCombate motorMudo = new MotorDeCombate() {
+            @Override
+            public com.nexusbattles.plataforma.salaspartidas.dominio.ResolucionDeAccion resolverAccion(
+                    String accion, UUID ejecutor, UUID objetivo, Partida partida) {
+                throw new IllegalStateException("no deberia llamarse");
+            }
+
+            @Override
+            public com.nexusbattles.plataforma.salaspartidas.dominio.InicioDeTurno iniciarTurno(
+                    UUID combatiente, Partida partida, boolean aVidaCompleta) {
+                throw new IllegalStateException("no deberia llamarse");
+            }
         };
 
         return new EjecutarAccion(sinUso, canalMudo, motorMudo,
@@ -209,6 +219,23 @@ class PartidasStompControllerTest {
                 () -> assertEquals(MotorNoDisponible.TIPO, problema.getType()),
                 () -> assertEquals(caido.titulo(), problema.getTitle()),
                 () -> assertEquals(caido.detalle(), problema.getDetail()));
+    }
+
+    @Test
+    @DisplayName("una accion rechazada por el motor vuelve con su motivo (canal 1.5.0)")
+    void laAccionRechazadaLlegaConSuMotivo() {
+        com.nexusbattles.plataforma.salaspartidas.dominio.AccionNoPermitida rechazo =
+                new com.nexusbattles.plataforma.salaspartidas.dominio.AccionNoPermitida("EN_CARGA",
+                        "Golpe con escudo está en carga: vuelve a estar disponible dentro de 1 turno.");
+
+        ProblemDetail problema = controlador().accionNoPermitida(rechazo);
+
+        assertAll(
+                () -> assertEquals(409, problema.getStatus()),
+                () -> assertEquals(com.nexusbattles.plataforma.salaspartidas.dominio.AccionNoPermitida.TIPO,
+                        problema.getType()),
+                () -> assertEquals("EN_CARGA", problema.getProperties().get("motivo")),
+                () -> assertEquals(rechazo.detalle(), problema.getDetail()));
     }
 
     @Test

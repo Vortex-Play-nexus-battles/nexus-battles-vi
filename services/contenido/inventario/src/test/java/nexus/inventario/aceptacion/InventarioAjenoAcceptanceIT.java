@@ -1,6 +1,8 @@
 package nexus.inventario.aceptacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -13,8 +15,10 @@ import java.util.Map;
 import java.util.HashMap;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import nexus.inventario.api.ComoLlamador;
+import nexus.inventario.aplicacion.ResolutorDeProducto;
 import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +28,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.testcontainers.containers.MongoDBContainer;
@@ -51,8 +56,22 @@ class InventarioAjenoAcceptanceIT {
     @Autowired
     private RepositorioDeInventarios repositorio;
 
+    /**
+     * El inventario ahora verifica cada producto en el catalogo. Aqui el
+     * catalogo es un doble que dice que los productos de la prueba existen
+     * como ITEM activo: lo que se verifica es la propiedad, no el catalogo.
+     */
+    @MockitoBean
+    private ResolutorDeProducto productos;
+
+    @BeforeEach
+    void catalogoConLosProductosDeLaPrueba() {
+        when(productos.resolver(anyString()))
+                .thenReturn(new ResolutorDeProducto.DetalleProducto("Elemento", "ITEM", null, "ACTIVO"));
+    }
+
     @Test
-    @DisplayName("crear siempre persiste en el inventario del jugador autenticado")
+    @DisplayName("crear persiste solo en el inventario del jugador por el que actua el servicio")
     void crearSoloEnInventarioPropio() throws Exception {
         crear("jugador-creacion-B", "producto-B", "Elemento de B");
         Inventario inventarioBAntes = inventarioDe("jugador-creacion-B");
@@ -82,9 +101,31 @@ class InventarioAjenoAcceptanceIT {
         assertEquals(inventarioBAntes, inventarioDe("jugador-modificacion-B"));
     }
 
+    @Test
+    @DisplayName("B4: un jugador ya no se crea elementos, ni en su inventario ni en el de otro: 403 y nada guardado")
+    void unJugadorNoSeCreaElementos() throws Exception {
+        mvc.perform(post("/api/v1/inventario/elementos")
+                        .header("Authorization", ComoLlamador.portadorDeJugador("jugador-gratis", uidDe("jugador-gratis")))
+                        .header("X-User-Name", uidDe("jugador-gratis").toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productoId":"producto-gratis","tipo":"ITEM","nombrePropio":"Gratis"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("Acceso denegado"));
+
+        assertEquals(java.util.Optional.empty(), repositorio.buscarPorPropietario(uidDe("jugador-gratis").toString()));
+    }
+
+    /**
+     * Desde B4 crear un elemento es de un servicio (el paquete inicial de
+     * ms-identidad lo hace asi) o de un administrador: la prueba crea como
+     * servicio, declarando al jugador en X-User-Name.
+     */
     private String crear(String jugador, String producto, String nombre) throws Exception {
         MvcResult resultado = mvc.perform(post("/api/v1/inventario/elementos")
-                        .header("Authorization", ComoLlamador.portadorDeJugador(jugador, uidDe(jugador)))
+                        .header("Authorization", ComoLlamador.portadorDeServicio("ms-identidad"))
+                        .header("X-User-Name", uidDe(jugador).toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productoId":"%s","tipo":"ITEM","nombrePropio":"%s"}

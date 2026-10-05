@@ -57,6 +57,12 @@ public class SecurityConfig {
                 // entrar, verificar heroe, jugar. RF-JUE-001 la describe como
                 // accion del jugador y un administrador no juega por nadie.
                 .requestMatchers("/api/v1/salas/**").hasRole("JUGADOR")
+                // B6 (feedback del profesor): los mensajes privados son entre
+                // personas. Cualquier rol de persona de RF-RBAC-001 escribe y
+                // lee los SUYOS (el uid sale del token); un token de servicio
+                // no escribe en nombre de nadie.
+                .requestMatchers("/api/v1/mensajes-directos/**")
+                .hasAnyRole("JUGADOR", "MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                 .anyRequest().authenticated());
 
         return http.build();

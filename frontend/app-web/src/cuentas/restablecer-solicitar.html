@@ -3,12 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Recuperar contraseña — NEXUS BATTLES VI</title>
+    <title>Recuperar contraseña · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
   </head>
-  <body class="portal">
+  <body class="portal" data-vista="restablecer-solicitar">
     <div data-cabecera-app></div>
 
     <main class="entrada">
@@ -30,7 +30,7 @@
             <svg class="icono" aria-hidden="true">
               <use href="../../../../shared/ui-kit/iconos/sprite.svg#candado" />
             </svg>
-            <span>La contraseña nueva se elige desde el propio código</span>
+            <span>Si configuraste preguntas de seguridad, también te las pediremos</span>
           </li>
         </ul>
       </section>
@@ -43,7 +43,31 @@
 
         <p class="estado" id="estadoSolicitud" hidden role="status"></p>
 
-        <form id="formSolicitud" class="pila" novalidate>
+        <!-- El resultado de la solicitud. Tras enviarla dice SIEMPRE lo mismo,
+             exista o no la cuenta; y si no se pudo enviar, por qué. -->
+        <div data-zona="aviso" tabindex="-1" hidden></div>
+        <div data-zona="siguiente" hidden>
+          <a
+            class="boton boton--primario"
+            data-zona="escribir-codigo"
+            href="./restablecer-confirmar.html"
+          >
+            Escribir el código
+          </a>
+        </div>
+
+        <!-- G1 — sin guion no se pide el código, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para pedir el código hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — el correo nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que restablecer-solicitar.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formSolicitud" class="pila" method="post" novalidate>
           <div class="campo">
             <label class="campo__etiqueta" for="email">Correo electrónico</label>
             <input
@@ -60,7 +84,13 @@
             </p>
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Enviar código
           </button>
         </form>
@@ -73,13 +103,5 @@
     </main>
 
     <script type="module" src="./restablecer-solicitar.js"></script>
-    <script type="module">
-      import { montarCabecera } from '../comun/cabecera-app.js';
-
-      montarCabecera(document.querySelector('[data-cabecera-app]'), {
-        vista: 'restablecer-solicitar',
-        seccionActiva: null,
-      });
-    </script>
   </body>
 </html>

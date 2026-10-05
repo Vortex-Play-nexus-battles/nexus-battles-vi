@@ -81,7 +81,7 @@ public class ReportesController {
      */
     public record ReporteCreadoResponse(String id, String comentarioId,
             CategoriaDeReporte categoria, String descripcion, String fecha,
-            String estadoDelComentario, long reportesTotales) {
+            String estadoDelComentario, long reportesTotales, boolean prioridadElevada) {
 
         static ReporteCreadoResponse desde(ServicioDeModeracion.Reportado r) {
             return new ReporteCreadoResponse(
@@ -91,7 +91,8 @@ public class ReportesController {
                     r.reporte().descripcion(),
                     r.reporte().fecha().toString(),
                     r.comentario().estado().name(),
-                    r.totales());
+                    r.totales(),
+                    r.prioridadElevada());
         }
     }
 }

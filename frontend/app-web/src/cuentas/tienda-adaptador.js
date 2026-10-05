@@ -17,10 +17,10 @@
  *
  * ## Lo que este modulo NO hace
  *
- * No calcula descuentos. `VitrinaService` pone hoy
- * `precioFinal = precioOriginal = precioBaseCop`: el porcentaje de promocion
- * del producto nunca llega al precio. Aplicarlo aqui seria calcular en el
- * navegador lo que cobra el servidor, que es peor que no ensenarlo. Por eso el
+ * No calcula descuentos ni convierte monedas. Desde B5 (contrato 1.4.0) el
+ * servidor aplica la promocion vigente del catalogo y la tasa de cambio, y
+ * devuelve `precioFinal` ya rebajado junto al `precioOriginal`. Calcularlo
+ * aqui seria calcular en el navegador lo que cobra el servidor. Por eso el
  * distintivo de promocion solo sale cuando los dos precios **de verdad**
  * difieren: un «-20%» junto a un precio sin descuento es una promesa que el
  * carrito no va a cumplir.
@@ -47,6 +47,26 @@ export function aImporte(valor) {
 }
 
 /**
+ * D-44 (ecommerce-carrito.yaml 1.6.0): la unidad de una orden pagada con los
+ * créditos del juego. No es una moneda: no se convierte ni lleva decimales.
+ */
+export const CREDITOS = 'CREDITOS';
+
+/**
+ * Créditos del juego con separadores es-CO: «1 crédito», «1.250 créditos».
+ * La cifra la pone el servidor; aquí solo se escribe.
+ *
+ * @param {number|null|undefined} cantidad
+ * @returns {string|null} null si no hay cifra
+ */
+export function textoDeCreditos(cantidad) {
+  if (typeof cantidad !== 'number' || !Number.isFinite(cantidad)) {
+    return null;
+  }
+  return `${cantidad.toLocaleString('es-CO')} ${Math.abs(cantidad) === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
  * Importe con separadores es-CO y su moneda, o null si falta el importe.
  *
  * Sin `moneda` se ensena la cifra sola: inventar «COP» en un producto cuyo
@@ -62,16 +82,24 @@ export function textoDePrecio(importe, moneda) {
   if (importe === null) {
     return null;
   }
+  if (moneda === CREDITOS) {
+    return textoDeCreditos(importe);
+  }
   const cifra = importe.toLocaleString('es-CO');
   return moneda ? `${cifra} ${moneda}` : cifra;
 }
 
 /**
- * `ProductoVitrinaDto` -> modelo de la tarjeta.
+ * `ProductoDeVitrina` -> modelo de la tarjeta.
  *
- * @param {object} dto  tal cual lo devuelve GET /api/v1/productos
+ * R16 — el `id` es el UUID del catalogo maestro, en texto, y se devuelve tal
+ * cual: es lo que `tienda.js` manda a `POST /carrito/items`. Convertirlo en
+ * numero lo romperia (`Number('3f2a…')` es `NaN`).
+ *
+ * @param {object} dto  tal cual lo devuelve GET /api/v1/vitrina
+ *   (`ProductoDeVitrina` en ecommerce-carrito.yaml 1.2.0)
  * @returns {{
- *   id: (number|string|null),
+ *   id: (string|number|null),
  *   nombre: string,
  *   descripcion: string,
  *   habilidades: string|null,
@@ -85,12 +113,18 @@ export function textoDePrecio(importe, moneda) {
  *   descuento: number|null,
  *   esPropio: boolean,
  *   enListaDeseos: boolean,
+ *   precioCreditos: number|null,
+ *   precioCreditosTexto: string|null,
+ *   soloEnCreditos: boolean,
  * }}
  */
 export function aProductoDeVitrina(dto = {}) {
   const precio = aImporte(dto.precioFinal);
   const original = aImporte(dto.precioOriginal);
   const moneda = typeof dto.moneda === 'string' && dto.moneda.trim() ? dto.moneda.trim() : null;
+  // D-44 (1.6.0): lo que cuesta pagado con créditos, ya calculado por el
+  // servidor con la promoción vigente; null si no se puede pagar así.
+  const precioCreditos = enteroPositivo(dto.precioCreditos);
 
   // Solo hay precio anterior que tachar si el actual es realmente menor.
   const hayRebaja = precio !== null && original !== null && original > precio;
@@ -114,15 +148,46 @@ export function aProductoDeVitrina(dto = {}) {
     descuento: hayRebaja && porcentaje && porcentaje > 0 ? porcentaje : null,
     esPropio: dto.esPropio === true,
     enListaDeseos: dto.enListaDeseos === true,
+    precioCreditos,
+    precioCreditosTexto: textoDeCreditos(precioCreditos),
+    // G3 (1.7.0): se vende, pero solo con créditos del juego. Su precio es el
+    // de créditos; el de dinero real no existe (null, nunca «0 COP»).
+    soloEnCreditos: precio === null && precioCreditos !== null,
   };
 }
 
 /**
+ * Un entero mayor que cero del DTO, o null.
+ *
+ * @param {unknown} valor
+ * @returns {number|null}
+ */
+function enteroPositivo(valor) {
+  return Number.isInteger(valor) && valor > 0 ? valor : null;
+}
+
+/** Unidades por linea que admite el carrito (ecommerce-carrito.yaml 1.4.0). */
+export const MAXIMO_POR_LINEA = 20;
+
+/**
+ * Por que una linea no se puede pagar, dicho para el jugador. La clave es el
+ * `motivo` de `LineaDeCarrito` (1.4.0).
+ */
+const MOTIVOS_DE_LINEA = Object.freeze({
+  NO_DISPONIBLE: 'Ya no está a la venta. Quítalo para pagar.',
+  AGOTADO: 'Se agotó. Quítalo para pagar.',
+  // Desde 1.7.0: sin ningún precio (ni en dinero real ni en créditos).
+  SIN_PRECIO_EN_MONEDA_REAL: 'Ya no tiene precio de venta. Quítalo para pagar.',
+  TIRAJE_INSUFICIENTE: 'No quedan tantas unidades. Baja la cantidad para pagar.',
+});
+
+/**
  * Un item del carrito -> lo que pinta la fila.
  *
- * El carrito si trae los importes buenos: `ItemCarrito` persiste
- * `precioUnitario` y `subtotal`, y `Carrito` su `total`. Lo unico que hacia
- * falta era formatearlos y no escribir «undefined COP» cuando falta alguno.
+ * El carrito trae los importes del servidor: `precioUnitario`, `subtotal` y
+ * el `total` del carrito. Desde 1.4.0 ademas dice si la linea se puede pagar
+ * (`disponible`, con su `motivo`) y cuantas unidades admite (`maximo`: 20, o
+ * lo que quede del tiraje).
  *
  * `id` se expone aparte: es el mismo valor que espera
  * `DELETE /api/v1/carrito/items/{itemId}` (`ecommerce-carrito.yaml`), y sin
@@ -134,13 +199,45 @@ export function aProductoDeVitrina(dto = {}) {
 export function aFilaDeCarrito(item = {}, moneda = null) {
   const subtotal = aImporte(item.subtotal);
   const unitario = aImporte(item.precioUnitario);
+  const cantidad = Number.isFinite(item.cantidad) ? item.cantidad : 1;
+  // Cero es un maximo (agotado); sin el campo, el tope del contrato.
+  const maximo =
+    Number.isInteger(item.maximo) && item.maximo >= 0
+      ? Math.min(item.maximo, MAXIMO_POR_LINEA)
+      : MAXIMO_POR_LINEA;
+  const disponible = item.disponible !== false;
+  const imagen =
+    typeof item.producto?.imagen === 'string' && item.producto.imagen.trim()
+      ? item.producto.imagen
+      : null;
+  // G3 (1.7.0): una línea que solo se vende en créditos no tiene importe en
+  // dinero real; enseña el de créditos que calculó el servidor (unidad y
+  // `subtotalCreditos`), nunca «Sin precio» ni «0 COP».
+  const soloEnCreditos = item.soloEnCreditos === true;
+  const precioCreditos = enteroPositivo(item.precioCreditos);
+  const subtotalCreditos = enteroPositivo(item.subtotalCreditos);
   return {
     id: item.id ?? null,
+    productoId: item.producto?.id ?? null,
     nombre: item.producto?.nombre || 'Producto',
-    cantidad: Number.isFinite(item.cantidad) ? item.cantidad : 1,
+    imagen,
+    cantidad,
+    maximo,
+    disponible,
+    motivo: disponible ? null : (item.motivo ?? null),
+    motivoTexto: disponible
+      ? null
+      : (MOTIVOS_DE_LINEA[item.motivo] ?? 'No se puede pagar ahora. Quítalo del carrito.'),
     subtotal,
-    subtotalTexto: textoDePrecio(subtotal, moneda),
+    subtotalTexto: soloEnCreditos
+      ? textoDeCreditos(subtotalCreditos)
+      : textoDePrecio(subtotal, moneda),
     unitario,
-    unitarioTexto: textoDePrecio(unitario, moneda),
+    unitarioTexto: soloEnCreditos
+      ? textoDeCreditos(precioCreditos)
+      : textoDePrecio(unitario, moneda),
+    soloEnCreditos,
+    precioCreditos,
+    subtotalCreditos,
   };
 }

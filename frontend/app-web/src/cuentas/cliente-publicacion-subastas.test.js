@@ -140,3 +140,61 @@ test.each([
     publicarSubasta(solicitud, 'k', { fetchImpl: async () => valor }),
   ).rejects.toMatchObject({ incierto: true });
 });
+
+// ---------------------------------------------------------------------- B8
+
+test.each([
+  [
+    503,
+    {
+      type: 'https://nexusbattles.upb.edu.co/errors/parametro-no-configurado',
+      motivo: 'INCREMENTO_MINIMO_NO_CONFIGURADO',
+      detail: 'El incremento minimo de puja no esta configurado',
+    },
+    /no está configurado en administración/,
+  ],
+  [
+    422,
+    {
+      type: 'about:blank',
+      motivo: 'LIMITE_PUBLICACIONES_ACTIVAS',
+      detail: 'Ya tienes 10 subastas activas',
+    },
+    /10 subastas activas/,
+  ],
+  [
+    422,
+    { type: 'about:blank', motivo: 'COMPRA_INMEDIATA_NO_SUPERIOR', detail: 'x' },
+    /superior al precio mínimo/,
+  ],
+  [
+    422,
+    {
+      type: 'about:blank',
+      motivo: 'SALDO_INSUFICIENTE',
+      detail: 'Creditos insuficientes para publicar la subasta',
+    },
+    /créditos suficientes/,
+  ],
+])('B8: el motivo estable manda sobre el texto (%s)', (status, problema, esperado) => {
+  const fallo = interpretarProblema(status, problema);
+  expect(fallo.message).toMatch(esperado);
+  // Ninguno de estos dejo nada a medias: no es un resultado incierto.
+  expect(fallo.incierto).toBe(false);
+});
+
+test('B8: un motivo conocido con un type inventado no se interpreta', () => {
+  const fallo = interpretarProblema(422, {
+    type: 'https://desconocido.test/error',
+    motivo: 'LIMITE_PUBLICACIONES_ACTIVAS',
+  });
+  expect(fallo.message).toBe('No se pudo publicar la subasta. Inténtalo de nuevo más tarde.');
+});
+
+test('B8: el texto nuevo de la compra inmediata se traduce', () => {
+  const fallo = interpretarProblema(422, {
+    type: 'about:blank',
+    detail: 'El precio de compra inmediata debe ser superior al precio minimo de puja',
+  });
+  expect(fallo.message).toMatch(/superior al precio mínimo/);
+});

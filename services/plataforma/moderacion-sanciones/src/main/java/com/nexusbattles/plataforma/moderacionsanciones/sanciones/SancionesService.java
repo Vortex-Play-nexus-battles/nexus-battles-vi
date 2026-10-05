@@ -23,41 +23,46 @@ import java.util.UUID;
  * jugador no sanciona a nadie. Las apelaciones las resuelve el panel:
  * administrador o super administrador.
  *
- * <p><b>Lo que no decide este servicio:</b> el estado de la cuenta en
- * ms-identidad (rechazar el inicio de sesion, cerrar sesiones) es de Cuentas
- * (HU-AUT-004 #50); aqui queda el historial, la vigencia y la consulta
- * {@code sancionActiva} que ya usan chat, comentarios y subastas. Tampoco
- * escala advertencias a suspension (CA-05 de HU-USR-004, decision del PO).
- *
- * <p>Cada emision y cada resolucion dejan un aviso para el jugador
- * (HU-NOT-005) en la tabla de avisos pendientes; {@link EntregadorDeAvisos}
- * lo entrega y reintenta.
+ * <p><b>Fuente de verdad unica (7.3.2, B2).</b> El estado de acceso de la
+ * cuenta en ms-identidad ya no es un sistema paralelo: cada emision, cada
+ * resolucion que cambia el acceso y cada levantamiento se proyectan sobre la
+ * cuenta, y el jugador recibe el aviso en la app y el correo. Todo eso sale
+ * por {@link SalidasDeSancion}, en la misma transaccion que la sancion, y lo
+ * entrega {@link EntregadorDeSalidas} con reintento: la sancion queda
+ * registrada aunque identidad o correo esten caidos. Tampoco escala
+ * advertencias a suspension (CA-05 de HU-USR-004, decision del PO).
  */
 @Service
 public class SancionesService {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(SancionesService.class);
 
+    /** {@code minLength} del motivo de un levantamiento (moderacion-sanciones-admin.yaml 1.1.x). */
+    static final int MOTIVO_MINIMO_DEL_LEVANTAMIENTO = 3;
+
+    /** {@code maxLength} de los motivos del contrato. */
+    static final int MOTIVO_MAXIMO = 1000;
+
     private final SancionRepository sanciones;
     private final ApelacionRepository apelaciones;
-    private final AvisoPendienteRepository avisos;
+    private final SalidasDeSancion salidas;
     private final Clock reloj;
     private final LimitesDeSancion limites;
 
     @org.springframework.beans.factory.annotation.Autowired
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
-                            AvisoPendienteRepository avisos, Clock reloj, LimitesDeSancion limites) {
+                            SalidasDeSancion salidas, Clock reloj, LimitesDeSancion limites) {
         this.sanciones = Objects.requireNonNull(sanciones);
         this.apelaciones = Objects.requireNonNull(apelaciones);
-        this.avisos = Objects.requireNonNull(avisos);
+        this.salidas = Objects.requireNonNull(salidas);
         this.reloj = Objects.requireNonNull(reloj);
         this.limites = Objects.requireNonNull(limites);
     }
 
     /** Limites fijos (pruebas): rango de la suspension y plazo de apelacion de 30 dias. */
     public SancionesService(SancionRepository sanciones, ApelacionRepository apelaciones,
-                            AvisoPendienteRepository avisos, Clock reloj, long minimaHoras, long maximaDias) {
-        this(sanciones, apelaciones, avisos, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30));
+                            SalidasDeSancion salidas, Clock reloj, long minimaHoras, long maximaDias) {
+        this(sanciones, apelaciones, salidas, reloj, LimitesDeSancion.Fijos.de(minimaHoras, maximaDias, 30));
     }
 
     /**
@@ -124,7 +129,51 @@ public class SancionesService {
         sanciones.save(sancion);
         BITACORA.info("Sancion emitida: id={} tipo={} usuario={} por={} ({}) vigenteHasta={}",
                 sancion.id(), sancion.tipo(), sancion.usuarioId(), actor.id(), actor.rol(), vigenteHasta);
-        avisar(sancion.usuarioId(), "SANCION_" + sancion.tipo().name(), tituloDe(sancion), cuerpoDe(sancion), ahora);
+        salidas.emision(sancion, tituloDe(sancion), cuerpoDe(sancion), ahora);
+        return sancion;
+    }
+
+    /**
+     * Levanta una sancion vigente sin pasar por apelacion — el «reactivar» del
+     * panel de usuarios (moderacion-sanciones-admin.yaml 1.1.x,
+     * {@code POST /sanciones/{sancionId}/levantamiento}).
+     *
+     * <p>Solo ADMINISTRADOR o SUPER_ADMINISTRADOR: es la otra cara del baneo,
+     * que tampoco puede emitir un moderador (Tabla 24). La sancion no se borra:
+     * queda revertida con el motivo y el autor, igual que al revertirla una
+     * apelacion (CA-04 de HU-USR-006). Si ya no estaba vigente (revertida o
+     * suspension vencida) no hay nada que levantar: 409. Deja el aviso al
+     * jugador y, si la sancion restringia el acceso, la proyeccion sobre su
+     * cuenta ({@link SalidasDeSancion#levantamiento}).
+     *
+     * <p>Una apelacion que siguiera abierta sobre esta sancion no se toca: la
+     * resuelve el panel, que vera la sancion ya revertida.
+     */
+    @Transactional
+    public Sancion levantar(Actor actor, UUID sancionId, String motivo) {
+        if (!actor.puedeAdministrar()) {
+            throw new SancionRechazada(SancionRechazada.Motivo.PERMISO_INSUFICIENTE,
+                    "solo un administrador levanta una sancion");
+        }
+        String motivoLimpio = motivo == null ? "" : motivo.strip();
+        if (motivoLimpio.length() < MOTIVO_MINIMO_DEL_LEVANTAMIENTO || motivoLimpio.length() > MOTIVO_MAXIMO) {
+            throw new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA,
+                    "el levantamiento va motivado (de " + MOTIVO_MINIMO_DEL_LEVANTAMIENTO + " a " + MOTIVO_MAXIMO
+                            + " caracteres)");
+        }
+        Sancion sancion = sanciones.findById(sancionId).orElseThrow(() ->
+                new SancionRechazada(SancionRechazada.Motivo.NO_ENCONTRADA, "no hay ninguna sancion " + sancionId));
+        OffsetDateTime ahora = ahora();
+        if (!sancion.estaVigenteEn(ahora)) {
+            throw new SancionRechazada(SancionRechazada.Motivo.SANCION_NO_VIGENTE,
+                    "la sancion ya no esta vigente: no hay nada que levantar");
+        }
+        sancion.revertir(actor.id(), motivoLimpio, ahora);
+        sanciones.save(sancion);
+        BITACORA.info("Sancion levantada: id={} tipo={} usuario={} por={} ({})", sancion.id(), sancion.tipo(),
+                sancion.usuarioId(), actor.id(), actor.rol());
+        salidas.levantamiento(sancion, "Tu " + nombreDe(sancion.tipo()) + " fue levantada",
+                "Un administrador levanto tu " + nombreDe(sancion.tipo()) + ". Motivo: " + motivoLimpio + ".", ahora);
         return sancion;
     }
 
@@ -253,8 +302,7 @@ public class SancionesService {
         apelaciones.save(apelacion);
         BITACORA.info("Apelacion resuelta: id={} decision={} por={} sancion={}", apelacion.id(), decision,
                 actor.id(), sancion.id());
-        avisar(apelacion.usuarioId(), "APELACION_" + decision.name(),
-                "Tu apelacion fue " + decision.name().toLowerCase(),
+        salidas.resolucion(apelacion, sancion, "Tu apelacion fue " + decision.name().toLowerCase(),
                 "Decision del panel sobre tu " + sancion.tipo().name().toLowerCase() + ": " + motivo.strip()
                         + (decision == Apelacion.Estado.REDUCIDA ? " Nueva fecha fin: " + nuevaVigencia + "." : ""),
                 ahora);
@@ -283,8 +331,12 @@ public class SancionesService {
         return duracion;
     }
 
-    private void avisar(UUID usuarioId, String tipo, String titulo, String cuerpo, OffsetDateTime ahora) {
-        avisos.save(new AvisoPendiente(UUID.randomUUID(), usuarioId, tipo, titulo, cuerpo, ahora));
+    private static String nombreDe(Sancion.Tipo tipo) {
+        return switch (tipo) {
+            case ADVERTENCIA -> "advertencia";
+            case SUSPENSION -> "suspension";
+            case BANEO -> "inhabilitacion";
+        };
     }
 
     static String tituloDe(Sancion sancion) {

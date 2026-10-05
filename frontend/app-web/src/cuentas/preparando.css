@@ -1,0 +1,69 @@
+/*
+ * «Preparando tu cuenta» — R17.
+ *
+ * El kit trae el indicador de paso (`.pasos`, `.paso`, `.paso__marcador`) en
+ * horizontal, que es como lo usan las misiones. Aquí los pasos van en
+ * columna, con su estado y, si falló, su motivo debajo del título. Solo esa
+ * maquetación vive en esta hoja: colores, tipografía y marcadores son los del
+ * kit, y el estado de error se pinta con `--error`, no con un color propio.
+ */
+
+.alta-pasos {
+  display: grid;
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.paso.alta-paso {
+  align-items: flex-start;
+}
+
+.alta-paso__cuerpo {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.alta-paso__estado,
+.alta-paso__motivo {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  line-height: var(--t-meta-alto);
+  color: var(--texto-2);
+}
+
+.alta-paso--error .paso__marcador {
+  background: var(--error);
+  color: var(--texto-sobre-color);
+}
+
+.alta-paso--error .alta-paso__estado {
+  color: var(--error);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.alta-lista {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.alta-lista__titulo {
+  margin: 0;
+}
+
+.alta-lista__resumen {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--e-2) var(--e-4);
+  margin: 0;
+}
+
+.alta-lista__resumen dt {
+  color: var(--texto-2);
+}
+
+.alta-lista__resumen dd {
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}

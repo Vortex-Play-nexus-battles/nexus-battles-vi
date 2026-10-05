@@ -55,11 +55,14 @@ const PENDIENTES = Object.freeze({
   // adelgaza no es una lista de pendientes.
   'cuentas/publicar-subasta.js': 'grupo-4, ademas protegido por HU-SUB-001',
   'cuentas/pujas.js': 'grupo-4',
-  'cuentas/registro.js': 'grupo-4',
+  // R17 — `registro.js` sale de la lista: el alta del jugador reescribió su
+  // envío y, de paso, la vista previa del avatar pasó a nodos.
   // HU-CAR-010 — `tienda.js` sale de la lista: la vitrina, el carrito y el
   // nuevo dialogo de pago se construyen con `h()`/`nodo()`, `abrirDialogo()` y
   // `campo()` del kit. En esta vista importaba el doble: comparte pagina con
   // el formulario de la tarjeta.
+  // UXC-4 — `tienda.js` sale de la lista: la tarjeta de producto y las líneas
+  // del carrito se construyen con nodos (`tienda-producto.js`, `h()`).
 });
 
 function modulosDeVista() {

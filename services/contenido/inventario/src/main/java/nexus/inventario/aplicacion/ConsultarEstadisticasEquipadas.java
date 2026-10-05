@@ -1,5 +1,6 @@
 package nexus.inventario.aplicacion;
 
+import nexus.inventario.dominio.ElementoInventario;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.EstadisticasHeroe;
 import nexus.inventario.dominio.Inventario;
@@ -24,9 +25,16 @@ public class ConsultarEstadisticasEquipadas {
         this.calculo = calculo;
     }
 
-    public EstadisticasHeroe consultar(String identidad, String heroeId) {
+    /** Las estadisticas del heroe con su equipo, y el nivel en que se calcularon (B4). */
+    public record EstadisticasEnSuNivel(int nivel, EstadisticasHeroe estadisticas) {
+    }
+
+    public EstadisticasEnSuNivel consultar(String identidad, String heroeId) {
         Inventario inventario = inventarioPropio(identidad, heroeId);
-        return calculo.calcular(inventario, heroeId);
+        Integer nivel = inventario.elemento(heroeId).nivel();
+        return new EstadisticasEnSuNivel(
+                nivel == null ? ElementoInventario.NIVEL_INICIAL : nivel,
+                calculo.calcular(inventario, heroeId));
     }
 
     /** Misma regla de propiedad que {@link GestionarEquipamiento#inventarioPropio}. */

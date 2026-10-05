@@ -28,6 +28,8 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 // El libro de creditos (HU-JUE-014) no esta detras del borde: se le pregunta
 // el saldo por el puerto que expone el compose. Ningun jugador pasa por aqui;
@@ -42,45 +44,60 @@ const INVITADO = process.env.E2E_INVITADO ?? 'invitado_e2e';
 const CURIOSO = process.env.E2E_CURIOSO ?? 'curioso_e2e';
 const CLAVE = 'Contrasena-E2E-2026';
 
-/** Cuerpo de un JWT, sin verificar la firma: aquí solo se lee para afirmar. */
-function cuerpoDelToken(jwt) {
-  const base64 = jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(Buffer.from(base64, 'base64').toString('utf8'));
-}
-
 /**
- * Registra (si hace falta) e inicia sesión. El registro avisa por correo, pero
- * es fail-open: sin servicio de correo la cuenta se crea igual, y por eso este
- * banco no levanta ni correo ni mailpit.
+ * B1 — la cuenta nace pendiente de verificar su correo. Registrar, leer el
+ * codigo del buzon, confirmarlo y entrar viven en un solo sitio
+ * (`ayudantes/cuentas.js`); aqui solo se fija la contrasena de este spec.
  */
-async function sesionDe(api, apodo) {
-  const email = `${apodo}@nexus.test`;
-
-  const registro = await api.post('/api/v1/auth/registro', {
-    multipart: {
-      nombres: 'Jugadora',
-      apellidos: 'De Prueba',
-      email,
-      password: CLAVE,
-      apodo,
-    },
-  });
-  // 409/400 si ya existe de una corrida anterior: no es un fallo del flujo.
-  expect([200, 201, 400, 409]).toContain(registro.status());
-
-  const login = await api.post('/api/v1/auth/login', {
-    data: { email, password: CLAVE },
-  });
-  expect(login.status(), `login de ${apodo}: ${await login.text()}`).toBe(200);
-
-  const cuerpo = await login.json();
-  return { ...cuerpo, claims: cuerpoDelToken(cuerpo.token) };
+function sesionDe(api, apodo) {
+  return sesionDelBanco(api, apodo, { clave: CLAVE, base: BORDE });
 }
 
 function conToken(token) {
   return { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
 }
 
+/**
+ * R17: todo jugador nuevo recibe al registrarse un heroe con un arma equipada
+ * (el alta de ms-identidad, contra ms-finanzas e inventario). Los casos «sin
+ * heroe equipado» necesitan a alguien sin equipo, asi que esperan a que su alta
+ * termine y le quitan lo que se le equipo: el mismo estado en que queda quien
+ * desequipa a mano desde su inventario. Por la API del inventario y con su
+ * propio token, nunca tocando una base de datos.
+ */
+async function dejarSinEquipo(api, jugador) {
+  await expect
+    .poll(
+      async () => {
+        const r = await api.get('/api/v1/auth/onboarding', { headers: conToken(jugador.token) });
+        return r.ok() ? (await r.json()).estado : `HTTP ${r.status()}`;
+      },
+      { timeout: 30_000, message: 'el alta del jugador nuevo no termino' },
+    )
+    .toBe('COMPLETO');
+  const vitrina = await api.get('/api/v1/inventario/elementos?pagina=0', {
+    headers: conToken(jugador.token),
+  });
+  const heroes = ((await vitrina.json()).elementos ?? []).filter((e) => e.tipo === 'HEROE');
+  for (const heroe of heroes) {
+    const r = await api.get(`/api/v1/inventario/heroes/${heroe.id}/equipamiento`, {
+      headers: conToken(jugador.token),
+    });
+    const equipo = await r.json();
+    const puestos = [
+      ...(equipo.armas ?? []),
+      ...(equipo.items ?? []),
+      ...Object.values(equipo.armaduras ?? {}),
+    ];
+    for (const elemento of puestos) {
+      const quitar = await api.delete(
+        `/api/v1/inventario/heroes/${heroe.id}/equipamiento/${elemento}`,
+        { headers: conToken(jugador.token) },
+      );
+      expect(quitar.status(), `desequipar ${elemento}: ${await quitar.text()}`).toBe(200);
+    }
+  }
+}
 /** Saldo del jugador en ms-finanzas: bruto, reservado y disponible. */
 async function saldoDe(api, quien) {
   // Desde #455 el saldo es del propio jugador: se consulta con SU token.
@@ -209,8 +226,10 @@ test.describe('Sala de batalla de punta a punta', () => {
   });
 
   test('sin héroe equipado no se entra, y el error lo explica', async () => {
-    // Jugador nuevo, sin sembrar inventario: la puerta tiene que cerrarse.
+    // Jugador nuevo al que se le quita el equipo que le dio el alta (R17): la
+    // puerta tiene que cerrarse igual que con un inventario vacio.
     const sinHeroe = await sesionDe(api, `sin_heroe_${Date.now()}`);
+    await dejarSinEquipo(api, sinHeroe);
 
     const r = await api.post(`/api/v1/salas/${sala.id}/participantes`, {
       headers: conToken(sinHeroe.token),
@@ -221,8 +240,8 @@ test.describe('Sala de batalla de punta a punta', () => {
     const problema = await r.json();
     // El texto nombra el caso concreto: «no puedes entrar» a secas obligaria a
     // adivinar si falta equipar un heroe o si el suyo esta en otra batalla.
-    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un heroe equipado/i);
-    expect(problema.detail).toMatch(/equipa un heroe en tu inventario/i);
+    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un héroe equipado/i);
+    expect(problema.detail).toMatch(/equipa un héroe en tu inventario/i);
     expect(problema.type).toMatch(/heroe/i);
   });
 
@@ -376,9 +395,29 @@ test.describe('Sala de batalla de punta a punta', () => {
     return page.evaluate(() => globalThis.__frames ?? []);
   }
 
-  /** @returns {Promise<number[]>} readyState de cada socket abierto (1 = OPEN) */
+  /**
+   * @returns {Promise<{ruta: string, estado: number}[]>} cada socket que abrió
+   *   la página, con su ruta y su readyState (1 = OPEN)
+   */
   function estadoDeSockets(page) {
-    return page.evaluate(() => (globalThis.__sockets ?? []).map((s) => s.readyState));
+    return page.evaluate(() =>
+      (globalThis.__sockets ?? []).map((s) => ({
+        ruta: new URL(s.url).pathname,
+        estado: s.readyState,
+      })),
+    );
+  }
+
+  /**
+   * readyState del canal de la batalla (`/ws` de salas-partidas). No es el
+   * único socket de la página: desde la auditoría de DEV del 30-sep la
+   * cabecera escucha los avisos de la campana por `/ws/notificaciones`, que es
+   * de otro servicio y no cuenta aquí.
+   *
+   * @returns {Promise<number[]>}
+   */
+  async function estadoDelCanalDeBatalla(page) {
+    return (await estadoDeSockets(page)).filter((s) => s.ruta === '/ws').map((s) => s.estado);
   }
 
   /** Deja la sesion puesta antes de que cargue cualquier script de la vista. */
@@ -480,8 +519,10 @@ test.describe('Sala de batalla de punta a punta', () => {
     // sin esta comprobacion, un envio a un socket cerrado se ve exactamente
     // igual que una accion que el servidor ignora.
     expect(
-      await estadoDeSockets(page),
-      `sockets al atacar (1 = OPEN). Consola:\n${dicho.join('\n')}`,
+      await estadoDelCanalDeBatalla(page),
+      `canal de la batalla al atacar (1 = OPEN); todos: ${JSON.stringify(
+        await estadoDeSockets(page),
+      )}. Consola:\n${dicho.join('\n')}`,
     ).toEqual([1]);
 
     // El defecto que esto cierra: los botones nacian deshabilitados y solo los
@@ -600,7 +641,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     // (alto) -> 12/44 (bajo)—. Exigirlo pondria la prueba roja por suerte. Lo
     // que si se exige es que CADA estado pintado case con su porcentaje, y que
     // la barra salga de «alto», que es lo que demuestra que hubo daño real.
-    test.setTimeout(240000);
+    test.setTimeout(360000);
 
     /** La regla de RF-JUE-009, escrita aqui a proposito y no importada. */
     const colorEsperado = (actual, maxima) => {
@@ -614,7 +655,9 @@ test.describe('Sala de batalla de punta a punta', () => {
     const recorrido = [];
     let turnos = 0;
 
-    while (turnos < 40 && !vistos.has('bajo') && !vistos.has('medio')) {
+    // B7: con las reglas del documento el daño llega en ~3 de cada 10 golpes
+    // de un Guerrero Tanque (Tablas 21-23, D-B7-01); el tope es de la prueba.
+    while (turnos < 150 && !vistos.has('bajo') && !vistos.has('medio')) {
       const enCurso = await (
         await api.get(`/api/v1/partidas/${partida.id}`, {
           headers: conToken(anfitriona.token),
@@ -688,7 +731,9 @@ test.describe('Sala de batalla de punta a punta', () => {
   test('a fuerza de golpes alguien cae, y la vista lo dice', async ({ page }) => {
     // HU-JUE-005 / RF-JUE-017: el combate acaba de verdad. Se sigue golpeando
     // desde donde lo dejo la prueba anterior hasta que la partida cierre.
-    test.setTimeout(240000);
+    // B7: un combate real de dos Guerreros Tanque dura del orden de cien
+    // turnos (Tablas 21-23, D-B7-01); el tope es de la prueba, no de la regla.
+    test.setTimeout(480000);
 
     let enCurso = await (
       await api.get(`/api/v1/partidas/${partida.id}`, {
@@ -697,7 +742,7 @@ test.describe('Sala de batalla de punta a punta', () => {
     ).json();
 
     let turnos = 0;
-    while (enCurso.estado === 'EN_CURSO' && turnos < 40) {
+    while (enCurso.estado === 'EN_CURSO' && turnos < 300) {
       const esAnfitriona = enCurso.turnoActual.idJugador === anfitriona.claims.uid;
       const quien = esAnfitriona ? anfitriona : invitado;
 
@@ -784,6 +829,25 @@ test.describe('Sala de batalla de punta a punta', () => {
     // Al perdedor se le cobro la reserva (consumida), no se le devolvio: en
     // cualquiera de los dos casos deja de estar reservada.
     expect(delPerdedor.reservado).toBe(reservadoAlEmpezar[perdedor.claims.uid] - APUESTA);
+
+    // creditos.yaml 1.4.1 (B7): el ganador VE ese ingreso en su historial de
+    // movimientos, no solo en el saldo. Antes el cobro movia su saldo sin
+    // dejar fila a su nombre.
+    const movimientos = await api.get(
+      `${FINANZAS}/creditos/${ganador.claims.uid}/movimientos?size=50`,
+      { headers: conToken(ganador.token) },
+    );
+    expect(movimientos.status(), await movimientos.text()).toBe(200);
+    const ingresos = (await movimientos.json()).content.filter(
+      (m) =>
+        m.tipo === 'CREDITO' &&
+        m.signo === 'SUMA' &&
+        String(m.concepto).startsWith('cobro-de-reserva:'),
+    );
+    expect(
+      ingresos.some((m) => Number(m.monto) === APUESTA),
+      JSON.stringify(ingresos),
+    ).toBe(true);
 
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),

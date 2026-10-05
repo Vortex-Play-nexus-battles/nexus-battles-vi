@@ -10,9 +10,27 @@ import java.util.Objects;
  * de batalla pintan. La ficha completa del heroe pertenece al modulo de
  * contenido y no se copia aqui — este servicio no es su dueno y no la guarda.
  *
- * <p>{@code retratoUrl} y {@code nivel} pueden faltar: el inventario no los
- * publica en su vitrina, y el contrato los declara anulables justamente porque
- * quien los tiene es el catalogo de prototipos, no el inventario del jugador.
+ * <p>{@code retratoUrl} y {@code nivel} pueden faltar, y por razones
+ * distintas — conviene no confundirlas.
+ *
+ * <p>El <b>retrato</b> si existe: es {@code imagen} del producto del catalogo,
+ * a dos saltos del inventario ({@code elemento.productoId -> producto.imagen}).
+ * Desde R8 se propaga, y lo hace el servidor en la llamada a productos que ya
+ * hacia para resolver el prototipo: el navegador no pide nada de mas. Sigue
+ * siendo anulable porque productos puede no contestar, o el producto puede no
+ * tener imagen.
+ *
+ * <p>El <b>nivel</b>, desde B7, es el del elemento de inventario cuando
+ * inventario lo publica, y 1 cuando no: todo heroe empieza en el nivel 1
+ * (§6.1.1) y es el nivel con el que combate mientras nadie lo suba. Antes de
+ * B7 se dejaba nulo porque ningun servicio lo persistia y el combate no lo
+ * usaba; ahora el motor lo usa (acciones desbloqueadas y multiplicador), asi
+ * que el que se muestra es el mismo con el que se combate.
+ *
+ * <p>El <b>perfil</b> (B7) es lo que el heroe lleva al combate ademas de la
+ * vida: nivel, estadisticas con el equipo aplicado, nombres del equipamiento y
+ * epicas. Nulo en fichas anteriores a V14 y en las pruebas que no lo usan: el
+ * motor resuelve entonces con el catalogo en nivel 1 y sin equipo.
  *
  * @param id          identificador del heroe en el inventario del jugador
  * @param nombre      nombre propio que le puso su dueno
@@ -24,8 +42,10 @@ import java.util.Objects;
  *                    es lo unico que el motor de combate sabe buscar. Anulable
  *                    porque las filas anteriores a V8 no lo guardaron y porque
  *                    productos puede no contestar.
- * @param retratoUrl  retrato para la vista de batalla, o {@code null}
- * @param nivel       nivel del heroe, o {@code null} si no se conoce
+ * @param retratoUrl  retrato para la vista de batalla, o {@code null} si
+ *                    productos no contesta o el producto no tiene imagen
+ * @param nivel       nivel del heroe, o {@code null} en fichas anteriores a B7.
+ *                    Ver la nota de arriba
  * @param vidaActual  vida con la que llega a la sala
  * @param vidaMaxima  vida maxima con su equipamiento aplicado
  * @param defensa     defensa del prototipo, o {@code null} si no se conoce.
@@ -35,6 +55,7 @@ import java.util.Objects;
  *                    ningun golpe podia acertar nunca. Anulable por lo mismo
  *                    que el prototipo: filas anteriores a V8 y catalogo que no
  *                    contesta.
+ * @param perfil      lo que lleva al combate (B7), o {@code null}
  */
 public record HeroeDeCombate(
         String id,
@@ -44,7 +65,14 @@ public record HeroeDeCombate(
         Integer nivel,
         int vidaActual,
         int vidaMaxima,
-        Integer defensa) {
+        Integer defensa,
+        PerfilDeCombate perfil) {
+
+    /** El heroe sin perfil de combate: fichas anteriores a V14 y pruebas que no lo usan. */
+    public HeroeDeCombate(String id, String nombre, String prototipo, String retratoUrl, Integer nivel,
+                          int vidaActual, int vidaMaxima, Integer defensa) {
+        this(id, nombre, prototipo, retratoUrl, nivel, vidaActual, vidaMaxima, defensa, null);
+    }
 
     /**
      * El heroe sin prototipo conocido.
@@ -83,12 +111,58 @@ public record HeroeDeCombate(
      */
     public HeroeDeCombate conVida(int vidaActual) {
         return new HeroeDeCombate(id, nombre, prototipo, retratoUrl, nivel,
-                Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima, defensa);
+                Math.max(0, Math.min(vidaActual, vidaMaxima)), vidaMaxima, defensa, perfil);
+    }
+
+    /**
+     * El mismo heroe con la vida y la vida maxima que resolvio el motor (B7).
+     * La maxima puede cambiar respecto a la de la sala: el motor la calcula en
+     * el nivel del heroe, y la ficha de la sala la trae de inventario.
+     */
+    public HeroeDeCombate conVida(int vidaActual, int vidaMaxima) {
+        int maxima = Math.max(1, vidaMaxima);
+        return new HeroeDeCombate(id, nombre, prototipo, retratoUrl, nivel,
+                Math.max(0, Math.min(vidaActual, maxima)), maxima, defensa, perfil);
     }
 
     /** El mismo heroe con la vida al maximo. */
     public HeroeDeCombate aPlenaVida() {
         return conVida(vidaMaxima);
+    }
+
+    /**
+     * Un rival de la maquina del mismo prototipo y nivel que este heroe, como
+     * los del catalogo (D-B7-11): su propio identificador, el nombre del
+     * prototipo, sin retrato y sin equipo ni epicas ({@link PerfilDeCombate#delCatalogo}).
+     *
+     * <p>Es el respaldo cuando el catalogo de heroes no contesta al empezar.
+     * Antes la maquina combatia con una COPIA exacta del heroe del anfitrion
+     * —mismo nombre, mismo retrato y su equipo, Pinchos de escudo incluidos— y
+     * el registro decia «Aquiles golpea a Aquiles (tu)»: el jugador veia que su
+     * ataque le quitaba vida a el mismo.
+     */
+    public HeroeDeCombate comoRivalDeLaMaquina() {
+        int nivelDelRival = nivelDeCombate();
+        String nombreDelRival = prototipo != null && !prototipo.isBlank() ? prototipo : NOMBRE_DE_LA_MAQUINA;
+        return new HeroeDeCombate(java.util.UUID.randomUUID().toString(), nombreDelRival, prototipo, null,
+                nivelDelRival, vidaMaxima, vidaMaxima, defensa, PerfilDeCombate.delCatalogo(nivelDelRival));
+    }
+
+    /** Nombre del rival de la maquina cuando no se conoce su prototipo. */
+    public static final String NOMBRE_DE_LA_MAQUINA = "Rival de la máquina";
+
+    /** El mismo heroe con lo que lleva al combate (B7). */
+    public HeroeDeCombate conPerfil(PerfilDeCombate perfil) {
+        return new HeroeDeCombate(id, nombre, prototipo, retratoUrl,
+                perfil == null ? nivel : Integer.valueOf(perfil.nivel()), vidaActual, vidaMaxima, defensa, perfil);
+    }
+
+    /** El nivel con el que combate: el del perfil, el publicado, o 1 (§6.1.1). */
+    public int nivelDeCombate() {
+        if (perfil != null) {
+            return perfil.nivel();
+        }
+        return nivel == null ? PerfilDeCombate.NIVEL_MINIMO : nivel;
     }
 
     /** True cuando ya no puede seguir combatiendo. */
@@ -117,6 +191,18 @@ public record HeroeDeCombate(
     /** Igual, con la defensa del prototipo tambien resuelta. */
     public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
                                         int vidaMaxima, Integer defensa) {
-        return new HeroeDeCombate(id, nombre, prototipo, null, null, vidaMaxima, vidaMaxima, defensa);
+        return aPleno(id, nombre, prototipo, vidaMaxima, defensa, null);
+    }
+
+    /**
+     * Igual, con el retrato del producto (R8).
+     *
+     * <p>El {@code nivel} no se pasa aqui: llega con el perfil de combate
+     * ({@link #conPerfil}), que es donde se decide de donde sale (B7).
+     */
+    public static HeroeDeCombate aPleno(String id, String nombre, String prototipo,
+                                        int vidaMaxima, Integer defensa, String retratoUrl) {
+        return new HeroeDeCombate(
+                id, nombre, prototipo, retratoUrl, null, vidaMaxima, vidaMaxima, defensa);
     }
 }

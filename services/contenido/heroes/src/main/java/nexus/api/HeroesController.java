@@ -70,7 +70,7 @@ public class HeroesController {
             return new FichaHeroe(
                     p.nombre(), p.tipo(), p.descripcion(), p.esSanador(),
                     EstadisticasVista.de(p.estadisticasNivel1()),
-                    p.acciones().stream().map(AccionVista::de).toList());
+                    AccionVista.deTodas(p.acciones()));
         }
     }
 
@@ -95,7 +95,7 @@ public class HeroesController {
             return new VistaPorNivel(
                     p.nombre(), p.tipo(), p.esSanador(), heroe.nivel(),
                     EstadisticasVista.de(heroe.estadisticasActuales()),
-                    heroe.accionesDisponibles().stream().map(AccionVista::de).toList(),
+                    AccionVista.deTodas(heroe.accionesDisponibles()),
                     heroe.multiplicadorDeEfecto(),
                     Heroe.experienciaParaSubirDesde(heroe.nivel()),
                     EpicaVista.de(EpicasIniciales.afinA(p.nombre()), p));
@@ -138,12 +138,36 @@ public class HeroesController {
         }
     }
 
-    public record AccionVista(String nombre, String costo, String efecto) {
-        static AccionVista de(Accion a) {
+    /**
+     * Una accion de la Tabla 7. {@code costo} y {@code efecto} son el texto del
+     * documento; desde 1.2.0 (B7) viajan ademas como datos lo que el motor de
+     * combate necesita para validar una accion sin parsear ese texto: el coste
+     * en puntos (nulo, y por tanto ausente, cuando cuesta todo el poder), el
+     * turno de carga (§6.1.2) y el nivel desde el que se tiene (RC-01).
+     */
+    public record AccionVista(String nombre, String costo, String efecto,
+                              Integer costoPoder, boolean todoElPoder,
+                              int turnosDeCarga, int nivelRequerido) {
+
+        /**
+         * Las acciones en el orden de la Tabla 7: la posicion es lo que fija
+         * su nivel de desbloqueo. Sirve igual para las tres de la ficha que
+         * para las desbloqueadas de la vista por nivel, que son un prefijo de
+         * ellas.
+         */
+        static List<AccionVista> deTodas(List<Accion> acciones) {
+            return java.util.stream.IntStream.range(0, acciones.size())
+                    .mapToObj(i -> de(acciones.get(i), Heroe.nivelDeDesbloqueo(i)))
+                    .toList();
+        }
+
+        static AccionVista de(Accion a, int nivelRequerido) {
             String costo = a.cuestaTodoElPoder()
                     ? "Todos los puntos de poder"
                     : a.costoPuntos() + " puntos de poder";
-            return new AccionVista(a.nombre(), costo, a.efecto());
+            return new AccionVista(a.nombre(), costo, a.efecto(),
+                    a.costoPuntos(), a.cuestaTodoElPoder(),
+                    ControlDeRecarga.TURNOS_DE_CARGA_ACCION_ESPECIAL, nivelRequerido);
         }
     }
 }

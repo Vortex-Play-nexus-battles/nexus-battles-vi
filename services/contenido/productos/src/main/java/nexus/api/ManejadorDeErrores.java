@@ -6,13 +6,19 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.dominio.ClaveDeIdempotenciaReutilizadaException;
+import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -21,6 +27,8 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class ManejadorDeErrores {
+
+        private static final Logger BITACORA = LoggerFactory.getLogger(ManejadorDeErrores.class);
 
         @ExceptionHandler(MethodArgumentNotValidException.class)
         ResponseEntity<ProblemDetail> manejarValidacion(
@@ -116,6 +124,19 @@ public class ManejadorDeErrores {
                         solicitud);
         }
 
+        @ExceptionHandler(ModificacionProductoInvalidaException.class)
+        ResponseEntity<ProblemDetail> manejarModificacionInvalida(
+                        ModificacionProductoInvalidaException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
         @ExceptionHandler(ProductoNoEncontradoException.class)
         ResponseEntity<ProblemDetail> manejarProductoNoEncontrado(
                         ProductoNoEncontradoException excepcion,
@@ -129,10 +150,73 @@ public class ManejadorDeErrores {
                         solicitud);
         }
 
+        // B4 — suspender y reactivar trabajan con el dominio de disponibilidad,
+        // que tiene su propia excepcion de producto inexistente: mismo 404 y
+        // mismo mensaje que la consulta, para que el cliente no distinga por
+        // donde entro.
+        @ExceptionHandler(nexus.productos.dominio.ProductoNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarProductoNoEncontradoEnDisponibilidad(
+                        nexus.productos.dominio.ProductoNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return manejarProductoNoEncontrado(new ProductoNoEncontradoException(), solicitud);
+        }
+
+        // B4 — bloqueo optimista (Producto.version es @Version): otro escribio el
+        // producto entre la lectura y el guardado. No se aplico nada; releer y
+        // volver a intentar es lo correcto.
+        @ExceptionHandler(OptimisticLockingFailureException.class)
+        ResponseEntity<ProblemDetail> manejarConflictoDeVersion(
+                        OptimisticLockingFailureException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.CONFLICT,
+                        "Conflicto de edicion",
+                        "El producto cambio mientras se editaba. Vuelve a cargarlo y aplica el cambio de nuevo.",
+                        "urn:nexus:problema:conflicto-de-version",
+                        solicitud);
+        }
+
+        @ExceptionHandler(ClaveDeIdempotenciaReutilizadaException.class)
+        ResponseEntity<ProblemDetail> manejarClaveReutilizada(
+                        ClaveDeIdempotenciaReutilizadaException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.CONFLICT,
+                        "Clave de idempotencia reutilizada",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:clave-de-idempotencia-reutilizada",
+                        solicitud);
+        }
+
+        @ExceptionHandler(MissingRequestHeaderException.class)
+        ResponseEntity<ProblemDetail> manejarCabeceraAusente(
+                        MissingRequestHeaderException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.BAD_REQUEST,
+                        "Solicitud inválida",
+                        "Falta la cabecera " + excepcion.getHeaderName(),
+                        "urn:nexus:problema:solicitud-invalida",
+                        solicitud);
+        }
+
         @ExceptionHandler(Exception.class)
         ResponseEntity<ProblemDetail> manejarErrorInesperado(
                         Exception excepcion,
                         HttpServletRequest solicitud) {
+
+                // HU-PRD-014: este 500 salio en DEV en cada inicio de sesion y la
+                // bitacora no decia nada. Al cliente le basta el mensaje generico;
+                // la causa, con su traza y la ruta, va a stdout para docker logs.
+                BITACORA.error(
+                        "Error inesperado en {} {}",
+                        solicitud.getMethod(),
+                        solicitud.getRequestURI(),
+                        excepcion);
 
                 return respuesta(
                         HttpStatus.INTERNAL_SERVER_ERROR,

@@ -36,7 +36,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @SpringBootTest(properties = {
         "app.pujas.emision-automatica-intervalo-ms=3600000",
         "app.subastas.cierre-intervalo-ms=3600000",
-        "app.notificaciones.drenaje-intervalo-ms=3600000"
+        "app.notificaciones.drenaje-intervalo-ms=3600000",
+        // B8: recordatorio, pendientes y correo tambien son trabajos
+        // programados que tocan las subastas: fuera del camino de la prueba.
+        "app.subastas.recordatorio-intervalo-ms=3600000",
+        "app.subastas.pendientes-intervalo-ms=3600000",
+        "app.correo.drenaje-intervalo-ms=3600000"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class SubastaRepositoryIT {
@@ -62,7 +67,10 @@ class SubastaRepositoryIT {
     }
 
     private Subasta nuevaSubasta(String nombre, EstadoSubasta estado, int cantidadPujas) {
-        Subasta subasta = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(),
+        // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
+        // @GeneratedValue, porque publicar necesita el identificador ANTES de
+        // guardar para reservar el elemento en inventario con el.
+        Subasta subasta = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
             new BigDecimal("50.00"), new BigDecimal("5.00"), null, null,
             estado, Instant.now().plusSeconds(3600), 0L);
         // elementoInventarioId es NOT NULL desde V4 (Edwin) -- ver mismo

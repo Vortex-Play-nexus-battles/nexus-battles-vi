@@ -8,7 +8,10 @@
  * avisar a quien no las ve.
  *
  * La pestaña activa se refleja en el hash de la URL para que se pueda
- * enlazar y para que recargar no devuelva siempre a la primera.
+ * enlazar y para que recargar no devuelva siempre a la primera. Y al revés:
+ * si el hash cambia con la vista abierta (se edita la dirección, se sigue un
+ * enlace `#historial` o se vuelve atrás), cambia la pestaña (auditoría de DEV
+ * del 30-sep: cambiar el `#hash` no hacía nada).
  */
 
 import { h } from './dom.js';
@@ -85,11 +88,29 @@ export function montarPestanas(
     if (hash) {
       // `replaceState` y no `location.hash`: cambiar de pestaña no debe
       // llenar el historial del navegador.
-      window.history.replaceState(null, '', `#${id}`);
+      //
+      // R17 — con la ruta entera y no solo `#id`: una URL relativa se
+      // resuelve contra la base del documento, y detrás del borde las
+      // direcciones limpias (`/cuenta`) llevan un `<base>` que apunta a la
+      // carpeta del fichero. Con `#id` a secas la barra de direcciones saltaba
+      // de `/cuenta#perfil` a `/frontend/app-web/src/cuentas/#perfil`.
+      const { pathname, search } = window.location;
+      window.history.replaceState(null, '', `${pathname}${search}#${id}`);
     }
     if (alCambiar) {
       alCambiar(id);
     }
+  }
+
+  if (hash) {
+    // `mostrar` usa `replaceState`, que no dispara `hashchange`: esto solo
+    // escucha lo que cambia desde fuera de la vista.
+    window.addEventListener('hashchange', () => {
+      const pedida = window.location.hash.replace('#', '');
+      if (pedida !== actual && pestanas.some((p) => p.id === pedida)) {
+        mostrar(pedida);
+      }
+    });
   }
 
   raiz.append(lista);

@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth.service;
 
+import com.nexusbattles.ms_identidad.auth.servicio.CredencialPropia;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -9,6 +10,17 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+/**
+ * Registra en ms-cumplimiento cada intento de inicio de sesion fallido.
+ *
+ * <p><b>R16.20.</b> Era el unico de los cuatro clientes de auditoria de este
+ * servicio que llamaba SIN la credencial de servicio de ms-identidad
+ * ({@link CredencialPropia}, ADR-005). {@code POST /admin/auditoria/eventos}
+ * exige un token de servicio, asi que cada login fallido se rechazaba y solo
+ * quedaba un WARN en la bitacora. No se veia porque ms-cumplimiento no corria
+ * en dev. Ahora lleva la misma credencial que {@code AuditoriaEventClient} y
+ * {@code AuditoriaCambioRolClient}.
+ */
 @Component
 public class AuditoriaLoginClient {
 
@@ -18,9 +30,15 @@ public class AuditoriaLoginClient {
     private final RestClient restClient;
     private final String urlAuditoria;
 
+    /**
+     * @param urlAuditoria misma propiedad que los demas clientes de auditoria
+     * @param credencial   credencial de servicio de ms-identidad (ADR-005); nula
+     *                     solo en pruebas que no arrancan el contexto
+     */
     public AuditoriaLoginClient(
         @Value("${app.auditoria.url:http://localhost:8091/api/v1/admin/auditoria/eventos}")
-        String urlAuditoria) {
+        String urlAuditoria,
+        CredencialPropia credencial) {
 
         SimpleClientHttpRequestFactory factory =
             new SimpleClientHttpRequestFactory();
@@ -28,9 +46,12 @@ public class AuditoriaLoginClient {
         factory.setConnectTimeout(1000);
         factory.setReadTimeout(1000);
 
-        this.restClient = RestClient.builder()
-            .requestFactory(factory)
-            .build();
+        RestClient.Builder constructor = RestClient.builder()
+            .requestFactory(factory);
+        if (credencial != null) {
+            constructor.requestInterceptor(credencial);
+        }
+        this.restClient = constructor.build();
 
         this.urlAuditoria = urlAuditoria;
     }

@@ -1,54 +1,51 @@
 package com.nexusbattles.plataforma.comentarios;
 
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
-import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
-import java.util.OptionalDouble;
-import java.util.Set;
+import java.util.function.Supplier;
 
 /**
- * Hilo de opiniones de un producto. HU-COM-001, requisitos RF-COM-001 y
- * RF-COM-002.
+ * Las reglas del hilo de opiniones de un producto. HU-COM-001, requisitos RF-COM-001 y
+ * RF-COM-002; reescrito en B3 (contrato 1.5.0).
  *
  * <p>
- * Aqui viven las tres reglas que la historia describe y que no se pueden dejar
- * al
- * criterio de quien llame. La primera es que un jugador comenta cuantas veces
- * quiera
- * pero califica una sola vez: del segundo comentario en adelante el sistema lo
- * acepta
- * y le quita las estrellas, sin tratarlo como error. La segunda es que un
- * jugador
- * silenciado por sancion no publica. La tercera es que una imagen con formato
- * no
- * admitido tumba la publicacion completa.
+ * Aqui viven las reglas que la historia describe y que no se pueden dejar al
+ * criterio de quien llame: un jugador silenciado por sancion no publica, y lo
+ * que el filtro automatico senala se guarda pero queda esperando a un
+ * moderador. Retirar un comentario es cosa de su autor y de nadie mas.
  *
  * <p>
  * Hay una diferencia que conviene no perder de vista. El rechazo y la retencion
- * no
- * son lo mismo. Si el autor esta silenciado o la imagen no sirve, el comentario
- * no se
- * guarda y se le explica por que. Si el filtro automatico lo senala, si se
- * guarda,
- * pero queda esperando a un moderador. Al jugador hay que decirle cosas
- * distintas en
+ * no son lo mismo. Si el autor esta silenciado, el comentario no se guarda y se
+ * le explica por que. Si el filtro automatico lo senala, si se guarda, pero
+ * queda esperando a un moderador. Al jugador hay que decirle cosas distintas en
  * cada caso.
  *
- * <p>
- * El hilo no consulta el estado de sancion ni ejecuta el filtro: los recibe ya
- * resueltos. Esa decision viene de la regla de plataforma que prohibe que un
- * servicio
- * alcance los datos de otro, y ademas deja la clase probable sin levantar nada.
+ * <h2>Que cambio en B3 y por que</h2>
+ *
+ * <p>Hasta B3 esta clase era un hilo con estado: para publicar un comentario
+ * se traian de la base <i>todos</i> los comentarios del producto, se
+ * reconstruia el hilo en memoria y se decidia sobre el. Hacia falta para una
+ * sola regla —«califica una sola vez»—, porque las estrellas vivian dentro de
+ * cada comentario y la unica forma de saber si alguien ya habia calificado
+ * era mirarlos todos. Con la calificacion separada en su propia tabla y una
+ * restriccion unica que la protege, esa memoria sobra: cada publicacion es una
+ * decision sobre una sola solicitud, y el hilo se lee paginado desde la base.
+ *
+ * <p>Las imagenes tampoco se deciden aqui por la extension del nombre de
+ * archivo: desde B3 se suben aparte, se comprueban por su firma de bytes y el
+ * comentario solo lleva sus identificadores ({@link SolicitudDePublicacion}).
  *
  * <p>
- * Los formatos de imagen admitidos se reciben al construir el hilo porque el
- * issue
- * los deja pendientes de definir con el Product Owner. Cuando se decidan, se
- * configuran en un solo sitio y esta clase no cambia.
+ * El hilo no consulta el estado de sancion ni ejecuta el filtro: los recibe. La
+ * sancion llega resuelta y el filtro llega como un {@link Supplier}, para que
+ * el orden de las comprobaciones siga siendo decision del dominio —primero el
+ * silencio, despues el filtro— sin gastar una llamada a la lista negra en un
+ * autor que no va a publicar de todos modos.
  */
 public final class HiloDeComentarios {
+
+    /** Contrato 1.4.0: «maximo 3» imagenes por comentario. */
+    public static final int MAXIMO_DE_IMAGENES = 3;
 
     /** Situacion disciplinaria del autor, resuelta por el modulo de sanciones. */
     public enum EstadoDeAutor {
@@ -66,14 +63,10 @@ public final class HiloDeComentarios {
         SENALADO
     }
 
-    /** Motivo por el que una publicacion no llega a guardarse. */
+    /** Motivo por el que una publicacion o una calificacion no llega a guardarse. */
     public enum MotivoDeRechazo {
         /** El autor tiene una sancion activa de silencio. */
-        AUTOR_SILENCIADO,
-        /** Al menos una imagen viene en un formato que no se admite. */
-        FORMATO_DE_IMAGEN_NO_ADMITIDO,
-
-        CALIFICACION_DUPLICADA
+        AUTOR_SILENCIADO
     }
 
     /**
@@ -94,179 +87,6 @@ public final class HiloDeComentarios {
         }
     }
 
-    private final String productoId;
-    private final Set<String> formatosAdmitidos;
-    private final List<Comentario> comentarios = new ArrayList<>();
-    private final Set<String> yaCalificaron = new LinkedHashSet<>();
-    private boolean ultimaCalificacionDescartada;
-
-    private HiloDeComentarios(String productoId, Set<String> formatosAdmitidos) {
-        this.productoId = productoId;
-        this.formatosAdmitidos = formatosAdmitidos;
-    }
-
-    /**
-     * Abre el hilo de un producto.
-     *
-     * @param productoId        producto comentado
-     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto y sin
-     *                          importar
-     *                          mayusculas. Valor pendiente de definir con el
-     *                          Product Owner segun el issue
-     * @return un hilo sin comentarios
-     */
-    public static HiloDeComentarios de(String productoId, Set<String> formatosAdmitidos) {
-        if (productoId == null || productoId.isBlank()) {
-            throw new IllegalArgumentException("el identificador del producto es obligatorio");
-        }
-        Objects.requireNonNull(formatosAdmitidos, "los formatos admitidos son obligatorios");
-        if (formatosAdmitidos.isEmpty()) {
-            throw new IllegalArgumentException("hay que admitir al menos un formato de imagen");
-        }
-        Set<String> normalizados = new LinkedHashSet<>();
-        for (String formato : formatosAdmitidos) {
-            normalizados.add(formato.toLowerCase(Locale.ROOT));
-        }
-        return new HiloDeComentarios(productoId, Set.copyOf(normalizados));
-    }
-
-    /**
-     * Reconstruye el hilo a partir de los comentarios ya guardados de un producto.
-     *
-     * <p>
-     * Existe para la capa de persistencia. El hilo aplica la regla de la
-     * calificacion unica recordando quien ya califico, y esa memoria hay que
-     * recuperarla de la base de datos antes de atender cada publicacion nueva.
-     * Los comentarios retenidos tambien reservan la calificacion de su autor,
-     * igual que hace publicar, para que nadie califique dos veces aprovechando
-     * que su primer intento quedo en revision.
-     *
-     * @param productoId        producto comentado
-     * @param formatosAdmitidos extensiones de imagen aceptadas, sin punto
-     * @param existentes        comentarios ya guardados del producto, del mas
-     *                          antiguo al mas reciente
-     * @return un hilo con la historia cargada, listo para publicar el siguiente
-     */
-    public static HiloDeComentarios reconstituir(
-            String productoId, Set<String> formatosAdmitidos, List<Comentario> existentes) {
-        Objects.requireNonNull(existentes, "los comentarios existentes son obligatorios");
-        HiloDeComentarios hilo = de(productoId, formatosAdmitidos);
-        for (Comentario comentario : existentes) {
-            Objects.requireNonNull(comentario, "ningun comentario existente puede ser nulo");
-            hilo.comentarios.add(comentario);
-            if (comentario.calificacion().isPresent()) {
-                hilo.yaCalificaron.add(comentario.autorId());
-            }
-        }
-        return hilo;
-    }
-
-    /**
-     * Publica un comentario aplicando las reglas de la historia.
-     *
-     * @param solicitud       lo que envio el jugador
-     * @param estadoAutor     si el jugador puede publicar, resuelto por el modulo
-     *                        de sanciones
-     * @param resultadoFiltro veredicto del filtro automatico sobre el texto
-     * @return el comentario tal como quedo guardado, que puede venir sin estrellas
-     *         si el
-     *         jugador ya habia calificado, y en revision si el filtro lo senalo
-     * @throws PublicacionRechazada si el autor esta silenciado o alguna imagen no
-     *                              se admite
-     */
-    public Comentario publicar(
-            SolicitudDePublicacion solicitud,
-            EstadoDeAutor estadoAutor,
-            ResultadoDelFiltro resultadoFiltro) {
-
-        Objects.requireNonNull(solicitud, "la solicitud es obligatoria");
-        Objects.requireNonNull(estadoAutor, "el estado del autor es obligatorio");
-        Objects.requireNonNull(resultadoFiltro, "el resultado del filtro es obligatorio");
-
-        if (estadoAutor == EstadoDeAutor.SILENCIADO) {
-            throw new PublicacionRechazada(
-                    MotivoDeRechazo.AUTOR_SILENCIADO,
-                    "tu cuenta tiene una sancion activa y no puede publicar comentarios");
-        }
-        for (String imagen : solicitud.imagenes()) {
-            if (!formatoAdmitido(imagen)) {
-                throw new PublicacionRechazada(
-                        MotivoDeRechazo.FORMATO_DE_IMAGEN_NO_ADMITIDO,
-                        "el formato de la imagen " + imagen + " no se admite");
-            }
-        }
-
-        // RF-COM-002 / D-07: la segunda calificacion no se rechaza; el
-        // comentario entra sin estrellas y se dice (calificacionDescartada).
-        Integer estrellas = solicitud.estrellas();
-        boolean calificacionDescartada = estrellas != null && yaCalificaron.contains(solicitud.autorId());
-        if (calificacionDescartada) {
-            estrellas = null;
-        }
-
-        Comentario comentario = new Comentario(
-                solicitud.comentarioId(),
-                productoId,
-                solicitud.autorId(),
-                solicitud.apodoAutor(),
-                solicitud.texto(),
-                solicitud.imagenes(),
-                estrellas,
-                solicitud.fecha(),
-                resultadoFiltro == ResultadoDelFiltro.SENALADO
-                        ? Comentario.Estado.EN_REVISION
-                        : Comentario.Estado.PUBLICADO);
-
-        if (estrellas != null) {
-            yaCalificaron.add(solicitud.autorId());
-        }
-        comentarios.add(comentario);
-        ultimaCalificacionDescartada = calificacionDescartada;
-        return comentario;
-    }
-
-    /**
-     * Si la ultima publicacion entro sin la calificacion que traia porque el
-     * autor ya habia calificado (RF-COM-002, D-07). Para que la respuesta lo
-     * diga sin tratarlo como error.
-     */
-    public boolean ultimaCalificacionDescartada() {
-        return ultimaCalificacionDescartada;
-    }
-
-    /**
-     * Retira un comentario propio — HU-COM-004.
-     *
-     * <p>Idempotente: retirar uno ya retirado devuelve el mismo, sin error
-     * (CA-03). El de otro jugador es {@link ComentarioAjeno} (CA-02) y uno que
-     * no esta en este hilo es {@link ComentarioNoEncontrado}. Al retirarlo se
-     * libera su calificacion (ver {@link Comentario#eliminado()}).
-     *
-     * @return el comentario ya retirado
-     */
-    public Comentario eliminar(String comentarioId, String autorId) {
-        Objects.requireNonNull(autorId, "hace falta saber quien retira el comentario");
-        for (int i = 0; i < comentarios.size(); i++) {
-            Comentario comentario = comentarios.get(i);
-            if (!comentario.id().equals(comentarioId)) {
-                continue;
-            }
-            if (!comentario.esDe(autorId)) {
-                throw new ComentarioAjeno(comentarioId);
-            }
-            if (comentario.estaEliminado()) {
-                return comentario;
-            }
-            Comentario retirado = comentario.eliminado();
-            comentarios.set(i, retirado);
-            if (comentario.calificacion().isPresent()) {
-                yaCalificaron.remove(autorId);
-            }
-            return retirado;
-        }
-        throw new ComentarioNoEncontrado(comentarioId);
-    }
-
     /** El comentario no esta en este hilo (o nunca existio). */
     public static final class ComentarioNoEncontrado extends RuntimeException {
         public ComentarioNoEncontrado(String comentarioId) {
@@ -281,47 +101,79 @@ public final class HiloDeComentarios {
         }
     }
 
-    /** Si ese jugador ya gasto su unica calificacion sobre este producto. */
-    public boolean yaCalifico(String autorId) {
-        return yaCalificaron.contains(autorId);
+    /**
+     * Las imagenes que trae el comentario no se pueden adjuntar (400, contrato
+     * 1.4.0): no son identificadores de imagen, son mas de tres, se repiten, o
+     * alguna no es del autor o ya la usa otro comentario.
+     */
+    public static final class ImagenesNoValidas extends RuntimeException {
+        public ImagenesNoValidas(String explicacion) {
+            super(explicacion);
+        }
+    }
+
+    private HiloDeComentarios() {
     }
 
     /**
-     * Calificacion promedio del producto.
+     * Decide que queda de una solicitud de publicacion.
      *
-     * <p>
-     * Solo entran las calificaciones de comentarios publicados. Un comentario
-     * retenido
-     * por el filtro reserva la calificacion de su autor, para que no pueda
-     * calificar dos
-     * veces, pero no mueve el promedio mientras un moderador no lo apruebe.
-     *
-     * @return el promedio, o vacio si todavia nadie ha calificado
+     * @param productoId      producto comentado, ya comprobado contra el catalogo
+     * @param solicitud       lo que envio el jugador, ya validado en su forma
+     * @param estadoAutor     si el jugador puede publicar, resuelto por el modulo
+     *                        de sanciones
+     * @param filtro          veredicto del filtro automatico sobre el texto; solo
+     *                        se consulta si el autor puede publicar
+     * @return el comentario tal como hay que guardarlo: publicado, o en revision
+     *         si el filtro lo senalo
+     * @throws PublicacionRechazada si el autor esta silenciado
      */
-    public OptionalDouble promedio() {
-        return comentarios.stream()
-                .filter(Comentario::estaPublicado)
-                .filter(comentario -> comentario.calificacion().isPresent())
-                .mapToInt(Comentario::estrellas)
-                .average();
-    }
+    public static Comentario publicar(
+            String productoId,
+            SolicitudDePublicacion solicitud,
+            EstadoDeAutor estadoAutor,
+            Supplier<ResultadoDelFiltro> filtro) {
 
-    /** Comentarios del hilo, del mas antiguo al mas reciente. */
-    public List<Comentario> comentarios() {
-        return List.copyOf(comentarios);
-    }
+        Objects.requireNonNull(solicitud, "la solicitud es obligatoria");
+        Objects.requireNonNull(estadoAutor, "el estado del autor es obligatorio");
+        Objects.requireNonNull(filtro, "el filtro es obligatorio");
 
-    /** Comentarios visibles para los jugadores, sin los retenidos por el filtro. */
-    public List<Comentario> visibles() {
-        return comentarios.stream().filter(Comentario::estaPublicado).toList();
-    }
-
-    private boolean formatoAdmitido(String nombreDeArchivo) {
-        int punto = nombreDeArchivo.lastIndexOf(46);
-        if (punto < 0 || punto == nombreDeArchivo.length() - 1) {
-            return false;
+        if (estadoAutor == EstadoDeAutor.SILENCIADO) {
+            throw new PublicacionRechazada(
+                    MotivoDeRechazo.AUTOR_SILENCIADO,
+                    "tu cuenta tiene una sancion activa y no puede publicar comentarios");
         }
-        return formatosAdmitidos.contains(
-                nombreDeArchivo.substring(punto + 1).toLowerCase(Locale.ROOT));
+        ResultadoDelFiltro veredicto = Objects.requireNonNull(
+                filtro.get(), "el filtro tiene que dar un veredicto");
+
+        return new Comentario(
+                solicitud.comentarioId(),
+                productoId,
+                solicitud.autorId(),
+                solicitud.apodoAutor(),
+                solicitud.texto(),
+                solicitud.imagenes(),
+                solicitud.fecha(),
+                veredicto == ResultadoDelFiltro.SENALADO
+                        ? Comentario.Estado.EN_REVISION
+                        : Comentario.Estado.PUBLICADO);
+    }
+
+    /**
+     * Retira un comentario propio — HU-COM-004.
+     *
+     * <p>Idempotente: retirar uno ya retirado devuelve el mismo, sin error
+     * (CA-03). El de otro jugador es {@link ComentarioAjeno} (CA-02). La
+     * calificacion del autor no se toca (ver {@link Comentario#eliminado()}).
+     *
+     * @return el comentario ya retirado; el mismo objeto si ya lo estaba
+     */
+    public static Comentario retirar(Comentario comentario, String autorId) {
+        Objects.requireNonNull(comentario, "el comentario es obligatorio");
+        Objects.requireNonNull(autorId, "hace falta saber quien retira el comentario");
+        if (!comentario.esDe(autorId)) {
+            throw new ComentarioAjeno(comentario.id());
+        }
+        return comentario.estaEliminado() ? comentario : comentario.eliminado();
     }
 }

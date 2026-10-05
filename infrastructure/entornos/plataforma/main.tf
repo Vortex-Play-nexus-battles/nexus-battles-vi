@@ -79,6 +79,20 @@ resource "aws_security_group" "plataforma" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # 28-sep — HTTPS del mismo borde (Let's Encrypt, scripts/cd/certificado.sh).
+  # Abrirlo antes de tener certificado no expone nada: mientras no haya
+  # dominio, nginx no escucha en el 443 y la conexion se rechaza. Asi el dia
+  # que llegue el dominio no hace falta tocar el grupo de seguridad.
+  ingress {
+    description = "Borde nginx en HTTPS (Lets Encrypt): mismo origen que el 80, que redirige a este"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # B12 — los dos bloques de servicios admiten solo var.cidr_servicios (el
+  # host de contenido); el publico entra por el borde del puerto 80.
   ingress {
     description = "Servicios de plataforma: comentarios 8081 ... admin-parametros 8088"
     from_port   = local.puerto_inicio
@@ -91,6 +105,17 @@ resource "aws_security_group" "plataforma" {
     description = "ms-identidad (Cuentas) en el host de plataforma, como lo espera cd.yml"
     from_port   = 8089
     to_port     = 8089
+    protocol    = "tcp"
+    cidr_blocks = var.cidr_servicios
+  }
+
+  # B12 — misiones (host de contenido, B9) acredita las recompensas de una
+  # mision en el libro de creditos de ms-finanzas. Mismo origen que los demas:
+  # solo el host de contenido, nunca internet.
+  ingress {
+    description = "ms-finanzas (Cuentas): recompensas de misiones desde el host de contenido"
+    from_port   = 8093
+    to_port     = 8093
     protocol    = "tcp"
     cidr_blocks = var.cidr_servicios
   }

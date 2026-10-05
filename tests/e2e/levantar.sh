@@ -20,15 +20,28 @@ if [ "${1:-}" != "--solo-levantar" ]; then
   echo "== Construyendo los jars =="
   # Sin `test`: las pruebas unitarias ya corren en CI y aqui solo hacen falta
   # los jars. Construirlas otra vez son varios minutos por nada.
+  # Los mismos que construye `.github/workflows/e2e.yml`. B1 suma el correo:
+  # los codigos de verificacion y de recuperacion llegan por el, a Mailpit.
   ./gradlew --no-daemon -x test \
     :services:contenido:heroes:bootJar \
     :services:contenido:productos:bootJar \
     :services:contenido:inventario:bootJar \
     :services:contenido:motor-combate:bootJar \
+    :services:contenido:misiones:bootJar \
     :services:cuentas:ms-finanzas:bootJar \
+    :services:cuentas:ms-subastas:bootJar \
+    :services:plataforma:moderacion-sanciones:bootJar \
+    :services:plataforma:notificaciones:bootJar \
+    :services:plataforma:torneos:bootJar \
+    :services:plataforma:metricas-plataforma:bootJar \
+    :services:plataforma:admin-parametros:bootJar \
+    :services:plataforma:comentarios:bootJar \
+    :services:plataforma:correo:bootJar \
     :services:plataforma:salas-partidas:bootJar
 
   (cd services/cuentas/ms-identidad && ./mvnw -B -DskipTests package)
+  # R16 — la tienda. Su mvnw no tiene bit de ejecucion en git (ver e2e.yml).
+  (cd services/cuentas/ms-ecommerce && chmod +x ./mvnw && ./mvnw -B -DskipTests package)
 fi
 
 echo "== Levantando el entorno =="

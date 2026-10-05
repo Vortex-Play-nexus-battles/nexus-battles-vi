@@ -62,7 +62,12 @@ import static org.junit.jupiter.api.Assertions.*;
         "app.pujas.intervalo-minimo-segundos=0",
         "app.pujas.emision-automatica-intervalo-ms=3600000",
         "app.subastas.cierre-intervalo-ms=3600000",
-        "app.notificaciones.drenaje-intervalo-ms=3600000"
+        "app.notificaciones.drenaje-intervalo-ms=3600000",
+        // B8: recordatorio, pendientes y correo tambien son trabajos
+        // programados que tocan las subastas: fuera del camino de la prueba.
+        "app.subastas.recordatorio-intervalo-ms=3600000",
+        "app.subastas.pendientes-intervalo-ms=3600000",
+        "app.correo.drenaje-intervalo-ms=3600000"
 })
 @Testcontainers(disabledWithoutDocker = true)
 class PujaConcurrenciaPostgresTest {
@@ -96,14 +101,21 @@ class PujaConcurrenciaPostgresTest {
     @Autowired
     private CreditoClient creditoClientInyectado;
 
+    @Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private Subasta subasta;
 
     @BeforeEach
     void sembrarSubasta() {
-        pujaRepository.deleteAll();
-        subastaRepository.deleteAll();
+        // Desde B8 cada puja encola avisos (7.7.8) que referencian la subasta:
+        // se vacia todo lo que cuelga de subastas de una vez.
+        jdbc.execute("TRUNCATE TABLE subastas CASCADE");
 
-        Subasta nueva = new Subasta(null, UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"),
+        // El id lo asigna la aplicacion desde R10: la entidad dejo de declarar
+        // @GeneratedValue, porque publicar necesita el identificador ANTES de
+        // guardar para reservar el elemento en inventario con el.
+        Subasta nueva = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), new BigDecimal("100.00"),
                 new BigDecimal("10.00"), new BigDecimal("100000.00"), null, EstadoSubasta.ACTIVA,
                 Instant.now().plusSeconds(86400), 0L);
         nueva.setElementoInventarioId("elemento-" + UUID.randomUUID());

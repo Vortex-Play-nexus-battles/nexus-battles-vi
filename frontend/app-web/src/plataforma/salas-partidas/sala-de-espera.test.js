@@ -12,6 +12,8 @@ import { jest } from '@jest/globals';
 
 import {
   montarSalaDeEspera,
+  motivoParaNoEmpezar,
+  MOTIVO_SIN_RIVAL,
   textoDeConfirmacion,
   textoDeOcupacion,
   dejarAvisoParaElListado,
@@ -163,6 +165,67 @@ describe('montarSalaDeEspera · quien ve que', () => {
     expect(document.querySelector('[data-zona="ocupacion"]').textContent).toBe(
       '3 de 4 jugadores en la sala',
     );
+  });
+});
+
+describe('montarSalaDeEspera · «Iniciar combate» sin rival (auditoría de DEV del 30-sep)', () => {
+  const CON_ARRANQUE = `
+    <div data-zona="arranque">
+      <button type="button" data-accion="iniciar-partida">Iniciar combate</button>
+      <span data-zona="aviso-arranque" role="status"></span>
+    </div>
+    ${VISTA}
+  `;
+
+  test('la regla es la del servidor: hacen falta dos, contando a la IA', () => {
+    expect(motivoParaNoEmpezar({ actual: 1 })).toBe(MOTIVO_SIN_RIVAL);
+    expect(motivoParaNoEmpezar({ actual: 2 })).toBeNull();
+  });
+
+  test('con 1 de 2 el anfitrión ve el botón cerrado y por qué; al entrar alguien se abre', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    const espera = montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 1, maximoParticipantes: 2 }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    const boton = document.querySelector('[data-accion="iniciar-partida"]');
+    const aviso = document.querySelector('[data-zona="aviso-arranque"]');
+
+    expect(boton.disabled).toBe(true);
+    expect(boton.title).toBe(MOTIVO_SIN_RIVAL);
+    expect(aviso.textContent).toBe(MOTIVO_SIN_RIVAL);
+    expect(boton.getAttribute('aria-describedby')).toBe(aviso.id);
+
+    espera.actualizar({ ocupacion: { actual: 2, maximo: 2 } });
+
+    expect(boton.disabled).toBe(false);
+    expect(aviso.textContent).toBe('');
+    expect(boton.hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  test('con rival desde el principio (la IA cuenta) el botón nace abierto', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 2, maximoParticipantes: 2 }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+  });
+
+  test('a quien no es anfitrión no se le toca nada: el botón ni siquiera es suyo', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 1 }),
+      yo: VISITANTE,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+    expect(document.querySelector('[data-zona="aviso-arranque"]').textContent).toBe('');
   });
 });
 

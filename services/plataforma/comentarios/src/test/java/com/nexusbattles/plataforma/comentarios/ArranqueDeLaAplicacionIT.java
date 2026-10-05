@@ -2,6 +2,8 @@ package com.nexusbattles.plataforma.comentarios;
 
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +25,7 @@ import java.net.http.HttpResponse;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -48,8 +51,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * dejo Flyway, y el esquema no puede irse separando del modelo sin que nadie
  * se entere. Nada mas escribirla, esta prueba encontro que
  * {@code comentario_imagenes.orden} era SMALLINT y {@code @OrderColumn}
- * esperaba integer; se corrigio con la migracion V3. Mismo criterio que
- * RepositorioSalasJpaIT en salas-partidas.
+ * esperaba integer; se corrigio con la migracion V3. Desde B3 valida tambien
+ * las tablas de V5 (calificaciones, imagenes, columnas nuevas de moderacion).
  */
 @Testcontainers
 @SpringBootTest(
@@ -63,44 +66,35 @@ class ArranqueDeLaAplicacionIT {
     static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>("postgres:17-alpine");
 
     /**
+     * Dobles HTTP de sanciones, catalogo y lista negra, con la forma exacta
+     * de sus contratos. Desde HU-COM-001 CA-03 publicar consulta al modulo de
+     * sanciones de verdad y, sin respuesta, NO publica (503); desde B3 tampoco
+     * publica sobre un producto que el catalogo no confirma.
+     */
+    static VecinosDePrueba vecinos;
+
+    @BeforeAll
+    static void levantarVecinos() throws Exception {
+        vecinos = VecinosDePrueba.arrancar();
+        vecinos.productos.add("espada-it");
+    }
+
+    @AfterAll
+    static void apagarVecinos() {
+        if (vecinos != null) {
+            vecinos.close();
+        }
+    }
+
+    /**
      * El JWKS del que la aplicacion saca la clave publica (ADR-002) es el del
      * emisor de prueba: el mismo camino de configuracion que en produccion
      * ({@code jwk-set-uri}), con tokens firmados de verdad.
      */
     @DynamicPropertySource
-    static void jwks(DynamicPropertyRegistry registro) {
+    static void propiedades(DynamicPropertyRegistry registro) {
         EmisorDeTokensDePrueba.registrarJwks(registro);
-        registro.add("comentarios.sanciones.url", () -> "http://127.0.0.1:" + sanciones.getAddress().getPort() + "/api/v1");
-    }
-
-    /**
-     * Doble HTTP de la consulta de sancion (RF-USR-004). Desde HU-COM-001 CA-03
-     * publicar consulta al modulo de sanciones de verdad y, sin respuesta, NO
-     * publica (503). Esta IT prueba el arranque y el camino feliz, asi que el
-     * doble responde «sin sancion» con la forma exacta del contrato.
-     */
-    static com.sun.net.httpserver.HttpServer sanciones;
-
-    @org.junit.jupiter.api.BeforeAll
-    static void levantarSancionesDePrueba() throws Exception {
-        sanciones = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
-        sanciones.createContext("/api/v1/sanciones/usuarios/", intercambio -> {
-            byte[] cuerpo = "{\"sancionActiva\":false,\"motivo\":null,\"vigenteHasta\":null}"
-                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            intercambio.getResponseHeaders().add("Content-Type", "application/json");
-            intercambio.sendResponseHeaders(200, cuerpo.length);
-            try (var salida = intercambio.getResponseBody()) {
-                salida.write(cuerpo);
-            }
-        });
-        sanciones.start();
-    }
-
-    @org.junit.jupiter.api.AfterAll
-    static void apagarSancionesDePrueba() {
-        if (sanciones != null) {
-            sanciones.stop(0);
-        }
+        vecinos.registrar(registro);
     }
 
     @Autowired
@@ -139,9 +133,7 @@ class ArranqueDeLaAplicacionIT {
                         .header("Authorization", "Bearer " + token)
                         .POST(HttpRequest.BodyPublishers.ofString(cuerpo)).build(),
                 HttpResponse.BodyHandlers.ofString());
-        // 202 y no 201: aqui no hay lista negra que consultar y el filtro
-        // falla cerrado (queda en revision). Lo que se afirma es la identidad.
-        assertTrue(conToken.statusCode() == 201 || conToken.statusCode() == 202, conToken.body());
+        assertEquals(201, conToken.statusCode(), conToken.body());
         assertTrue(conToken.body().contains("\"autorId\":\"" + uid + "\""),
                 "el autor guardado es el uid del token, no el del cuerpo: " + conToken.body());
         assertTrue(conToken.body().contains("\"apodoAutor\":\"Lyra_IT\""), conToken.body());
@@ -151,14 +143,27 @@ class ArranqueDeLaAplicacionIT {
                 HttpResponse.BodyHandlers.ofString());
         assertEquals(200, hilo.statusCode(), "leer el hilo es publico");
         assertTrue(hilo.body().contains("\"productoId\":\"espada-it\""), hilo.body());
+        // G4 (1.9.0): el hilo publico dice el apodo, nunca el uid de la autora.
+        assertTrue(hilo.body().contains("\"apodoAutor\":\"Lyra_IT\""), hilo.body());
+        assertFalse(hilo.body().contains("autorId"), "el hilo publico no lleva autorId: " + hilo.body());
+        assertFalse(hilo.body().contains(uid.toString()), "ni el uid en ningun campo: " + hilo.body());
+        assertTrue(hilo.body().contains("\"propio\":false"), "sin token nada es propio: " + hilo.body());
+
+        HttpResponse<String> suyo = http.send(
+                HttpRequest.newBuilder(URI.create(ruta)).header("Authorization", "Bearer " + token).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        assertEquals(200, suyo.statusCode(), suyo.body());
+        assertTrue(suyo.body().contains("\"propio\":true"), "con su token, el suyo es propio: " + suyo.body());
+        assertFalse(suyo.body().contains(uid.toString()), "ni siquiera a ella se le repite el uid: " + suyo.body());
     }
 
     @Test
-    @DisplayName("RestClient.Builder esta disponible para el cliente de la lista negra")
+    @DisplayName("RestClient.Builder esta disponible para los clientes de lista negra, sanciones y catalogo")
     void hayClienteHttp() {
         // Comprueba justo lo que fallo en el servidor: que la autoconfiguracion
-        // de RestClient esta en el classpath y el cliente se pudo construir.
+        // de RestClient esta en el classpath y los clientes se pudieron construir.
         assertNotNull(contexto.getBean(RestClient.Builder.class));
         assertNotNull(contexto.getBean("restClientComentarios", RestClient.class));
+        assertNotNull(contexto.getBean("restClientProductos", RestClient.class));
     }
 }

@@ -54,4 +54,53 @@ class SubastaTest {
         assertTrue(subasta.estaActiva());
         assertTrue(subasta.esVendedor(vendedorId));
     }
+
+    /**
+     * El defecto de R10, en una prueba que no necesita base de datos.
+     *
+     * <p>Spring Data decide entre {@code persist} y {@code merge} preguntandole
+     * a la entidad si es nueva. Mientras {@code Subasta} no respondia,
+     * {@code JpaMetamodelEntityInformation} miraba el id, lo encontraba puesto
+     * —porque lo asigna la aplicacion, que necesita conocerlo antes de guardar
+     * para reservar el elemento en inventario— y concluia que la fila ya
+     * existia. El {@code merge} sobre una fila inexistente terminaba en
+     * {@code StaleObjectStateException}, y publicar una subasta devolvia 500
+     * <b>siempre</b> contra Postgres. Ninguna prueba lo veia porque las de
+     * publicacion usan un repositorio doble.
+     */
+    @Test
+    void unaSubastaRecienCreadaEsNuevaAunqueYaTengaId() {
+        Subasta subasta = new Subasta();
+        subasta.setId(UUID.randomUUID());
+
+        assertNotNull(subasta.getId(), "el id lo pone la aplicacion, no la base");
+        assertTrue(subasta.isNew(), "con id puesto y sin esto, Spring Data mandaria merge");
+    }
+
+    @Test
+    void dejaDeSerNuevaCuandoYaEstaEnLaBase() {
+        Subasta subasta = new Subasta();
+        subasta.setId(UUID.randomUUID());
+
+        // Lo que Hibernate invoca al cargarla o al insertarla (@PostLoad /
+        // @PostPersist). Asi una entidad ya persistida se actualiza con merge,
+        // que es lo correcto para ella.
+        subasta.yaEstaEnLaBase();
+
+        assertFalse(subasta.isNew());
+    }
+
+    /**
+     * El constructor historico de diez parametros tambien produce entidades
+     * nuevas: lo usan las pruebas que siembran subastas, y si devolviera
+     * «no es nueva» volverian al merge sobre una fila que no existe.
+     */
+    @Test
+    void elConstructorHistoricoTambienProduceEntidadesNuevas() {
+        Subasta subasta = new Subasta(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+                BigDecimal.TEN, BigDecimal.ONE, null, null,
+                EstadoSubasta.ACTIVA, Instant.now().plusSeconds(3600), 0L);
+
+        assertTrue(subasta.isNew());
+    }
 }

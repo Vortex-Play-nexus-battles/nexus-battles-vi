@@ -15,6 +15,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -27,10 +28,14 @@ import org.springframework.beans.factory.ObjectProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.nexusbattles.comun.seguridad.servicio.CredencialDeServicioNoDisponible;
 import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
+import com.nexusbattles.ms_subastas.notificaciones.NotificacionesClient;
+import com.nexusbattles.ms_subastas.notificaciones.NotificacionesClientHttp;
+import com.nexusbattles.ms_subastas.notificaciones.TipoNotificacion;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoClientHttp;
 import com.nexusbattles.ms_subastas.pujas.creditos.CreditoNoDisponibleException;
 import com.nexusbattles.ms_subastas.subastas.port.FinanzasPublicacionClientHttp;
 import com.nexusbattles.ms_subastas.subastas.port.InventarioClientHttp;
+import com.nexusbattles.ms_subastas.subastas.port.SancionesClientHttp;
 import com.sun.net.httpserver.HttpServer;
 
 /**
@@ -44,6 +49,10 @@ class CredencialDeServicioEnLosAdaptadoresTest {
     private static final UUID JUGADOR = UUID.fromString("77777777-0000-0000-0000-0000000000cc");
     private static final UUID SUBASTA = UUID.fromString("aaaaaaaa-0000-0000-0000-000000000001");
     private static final String TOKEN = "eyJ.token-de-servicio-de-subastas.firma";
+    private static final NotificacionesClient.Aviso AVISO = new NotificacionesClient.Aviso(
+            UUID.fromString("11111111-2222-3333-4444-555555555555"), JUGADOR,
+            TipoNotificacion.SUBASTA_CERRADA_POR_COMPRA_INMEDIATA, "La subasta se cerro",
+            "Otro jugador la compro de forma inmediata.", Instant.parse("2026-09-25T18:00:00Z"));
 
     private HttpServer servidor;
     private final AtomicReference<String> authorization = new AtomicReference<>();
@@ -69,10 +78,13 @@ class CredencialDeServicioEnLosAdaptadoresTest {
                             : ruta.endsWith("/debitar")
                                     ? "{\"refId\":\"sub-publicacion-" + SUBASTA + "\",\"transaccionId\":\"tx\",\"estado\":\"DEBITADO\","
                                             + "\"montoDebitado\":1,\"nuevoSaldoDisponible\":49}"
-                                    : "{}";
+                                    : ruta.endsWith("/activa")
+                                            ? "{\"sancionActiva\":false}"
+                                            : "{}";
             byte[] salida = respuesta.getBytes(StandardCharsets.UTF_8);
             intercambio.getResponseHeaders().add("Content-Type", "application/json");
-            intercambio.sendResponseHeaders(ruta.endsWith("/reservar") ? 201 : 200, salida.length);
+            intercambio.sendResponseHeaders(
+                    ruta.endsWith("/reservar") || ruta.endsWith("/internal/notifications") ? 201 : 200, salida.length);
             intercambio.getResponseBody().write(salida);
             intercambio.close();
         });
@@ -165,5 +177,28 @@ class CredencialDeServicioEnLosAdaptadoresTest {
         ObjectProvider<TokenDeServicio> conToken = mock(ObjectProvider.class);
         when(conToken.getIfAvailable()).thenReturn(() -> TOKEN);
         assertTrue(CredencialSaliente.obligatoria(conToken, "ms-finanzas").presente());
+    }
+
+    @Test
+    @DisplayName("B2: la consulta de sancion activa lleva la credencial (desde la 1.4.0 /activa exige token)")
+    void sanciones() {
+        SancionesClientHttp cliente = new SancionesClientHttp(
+                URI.create("http://localhost:" + servidor.getAddress().getPort()), HttpClient.newHttpClient(),
+                mapper, Duration.ofSeconds(2), PortadorDeServicio.de(() -> TOKEN));
+
+        assertFalse(cliente.tieneSancionActiva(JUGADOR));
+
+        assertEquals("Bearer " + TOKEN, authorization.get());
+    }
+
+    @Test
+    @DisplayName("B8: el aviso a notificaciones lleva la credencial (antes salia sin ella y recibia 401 para siempre)")
+    void notificaciones() {
+        NotificacionesClientHttp cliente = new NotificacionesClientHttp(base(), HttpClient.newHttpClient(), mapper,
+                Duration.ofSeconds(2), PortadorDeServicio.de(() -> TOKEN));
+
+        cliente.entregar(AVISO);
+
+        assertEquals("Bearer " + TOKEN, authorization.get());
     }
 }

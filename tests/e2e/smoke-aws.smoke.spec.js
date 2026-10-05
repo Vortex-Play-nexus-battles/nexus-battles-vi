@@ -22,6 +22,9 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { correosPara } from './ayudantes/correo.js';
+import { respetandoElLimite, sesionDe } from './ayudantes/cuentas.js';
+
 const AWS = process.env.E2E_AWS ?? 'http://35.168.124.119';
 const CLAVE = 'Contrasena-Smoke-2026';
 
@@ -73,37 +76,54 @@ test.describe('Smoke del entorno desplegado', () => {
     // del navegador. Esto detecta las rutas relativas rotas de #425.
     const fondo = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     expect(fondo).not.toBe('rgba(0, 0, 0, 0)');
+    // G1: el formulario es POST; nunca un envío nativo por GET con la clave.
+    await expect(page.locator('#formLogin')).toHaveAttribute('method', 'post');
   });
 
-  test('la raíz lleva al login', async () => {
+  test('G1: una dirección de login con password= no se queda: 303 a /login, sin la consulta', async () => {
+    // Un marcador, no una clave: lo que se comprueba es que el borde no sirva
+    // (ni deje en el historial) una dirección con password=.
+    const r = await api.get('/login?email=smoke%40nexus.test&password=G1-marcador-smoke', {
+      maxRedirects: 0,
+    });
+    expect(r.status()).toBe(303);
+    expect(r.headers().location).toBe('/login');
+  });
+
+  test('la raíz es la portada pública con la tienda; entrar sigue en /login (F6)', async ({
+    page,
+  }) => {
+    // F6 (auditoría del 4-oct, cambio autorizado n.º 3): hasta aquí la raíz
+    // redirigía al login. Ahora se sirve la portada, sin redirección.
     const r = await api.get('/', { maxRedirects: 0 });
-    expect([301, 302]).toContain(r.status());
-    expect(r.headers().location).toContain('login.html');
+    expect(r.status()).toBe(200);
+    const html = await r.text();
+    expect(html).toContain('data-vista="portada"');
+    expect(html).toContain('data-zona="productos-publicos"');
+
+    // Y la tienda se ve: productos reales, sin «Añadir» (no hay carrito sin cuenta).
+    await page.goto(`${AWS}/`);
+    await expect(page.locator('.vitrina-publica .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+
+    // Entrar lleva a la dirección limpia del login.
+    await page.locator('[data-accion="entrar"]').click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.locator('#formLogin')).toBeVisible();
   });
 
   // ===================================================================
   // Identidad — ms-identidad
   // ===================================================================
 
-  test('registrarse y entrar devuelve un token con la identidad de ADR-002', async () => {
-    const email = `${apodo}@nexus.test`;
-
-    const registro = await api.post('/api/v1/auth/registro', {
-      multipart: {
-        nombres: 'Smoke',
-        apellidos: 'De Prueba',
-        email,
-        password: CLAVE,
-        apodo,
-      },
-    });
-    expect([200, 201], `registro: ${await registro.text()}`).toContain(registro.status());
-
-    const login = await api.post('/api/v1/auth/login', {
-      data: { email, password: CLAVE },
-    });
-    expect(login.status(), `login: ${await login.text()}`).toBe(200);
-    jugador = await login.json();
+  test('registrarse, confirmar el correo y entrar devuelve un token con la identidad de ADR-002', async () => {
+    // B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar su correo y
+    // el login la rechaza hasta entonces. El ayudante hace lo que haria el
+    // jugador: lee el codigo en el buzon de pruebas de DEV (MAILPIT_URL, o
+    // /mailpit en este mismo host), lo confirma y entra.
+    jugador = await sesionDe(api, apodo, { clave: CLAVE, nombres: 'Smoke', base: AWS });
 
     // ADR-002: el apodo va en `sub` y el identificador estable en `uid`.
     // `JwtService` emite subject(apodo) + los claims `uid`, `rol` y `ver`.
@@ -129,9 +149,13 @@ test.describe('Smoke del entorno desplegado', () => {
   });
 
   test('una clave equivocada no entra', async () => {
-    const r = await api.post('/api/v1/auth/login', {
-      data: { email: `${apodo}@nexus.test`, password: 'no-es-esta' },
-    });
+    // Por el limite de acceso del borde (respetandoElLimite): a estas alturas
+    // la suite ya lleva decenas de altas y entradas desde la IP del runner.
+    const r = await respetandoElLimite(() =>
+      api.post('/api/v1/auth/login', {
+        data: { email: `${apodo}@nexus.test`, password: 'no-es-esta' },
+      }),
+    );
     expect([400, 401, 403]).toContain(r.status());
   });
 
@@ -184,22 +208,43 @@ test.describe('Smoke del entorno desplegado', () => {
     // decia "no configurado", y nadie podia distinguirlo desde fuera.
     //
     // Lo que se comprueba ahora es justo esa diferencia: la puerta de heroe
-    // RESPONDE. Un jugador recien registrado no tiene heroe equipado, asi que
-    // la respuesta correcta es 422 `heroe-no-equipado` (RF-JUE-003). Si
-    // volviera el 503 de seccion degradada, la cadena hacia el host de
-    // contenido esta rota otra vez - que es exactamente lo que esta prueba
-    // tiene que gritar.
+    // RESPONDE. Si volviera el 503 de seccion degradada, la cadena hacia el
+    // host de contenido esta rota otra vez - que es exactamente lo que esta
+    // prueba tiene que gritar.
+    //
+    // R17 — hasta R17 un jugador recien registrado NO tenia heroe, y la
+    // respuesta correcta era 422 `heroe-no-equipado`. Desde R17.1 el alta le
+    // da un heroe inicial equipado, asi que esa afirmacion se volvio una
+    // carrera: 422 si la sala se pedia antes de que el alta terminara, 201 si
+    // despues. Ahora se espera a que el alta termine y la respuesta correcta es
+    // 201: la puerta leyo el inventario del host de contenido y dejo pasar. Es
+    // la misma cadena, comprobada por el camino que recorre un jugador.
+    await expect
+      .poll(
+        async () => {
+          const alta = await api.get('/api/v1/auth/onboarding', {
+            headers: { Authorization: `Bearer ${jugador.token}` },
+          });
+          return alta.ok() ? (await alta.json()).estado : `HTTP ${alta.status()}`;
+        },
+        { timeout: 60_000, message: 'el alta del jugador nuevo no termino en 60 s' },
+      )
+      .toMatch(/^(COMPLETO|NO_APLICA)$/);
+
     const r = await api.post('/api/v1/salas', {
       headers: { Authorization: `Bearer ${jugador.token}`, 'Content-Type': 'application/json' },
       data: { maximoParticipantes: 2, modalidad: 'UNO_CONTRA_UNO', recompensaCreditos: 0 },
     });
 
-    const problema = await r.json();
+    const cuerpo = await r.json();
     expect(
       r.status(),
-      `si esto es 503, salas-partidas no alcanza al inventario: ${JSON.stringify(problema)}`,
-    ).toBe(422);
-    expect(problema.type).toBe('https://nexusbattles.local/errores/heroe-no-equipado');
+      `si esto es 503, salas-partidas no alcanza al inventario: ${JSON.stringify(cuerpo)}`,
+    ).toBe(201);
+    // La sala no se queda abierta en el listado de DEV.
+    await api.delete(`/api/v1/salas/${cuerpo.id}`, {
+      headers: { Authorization: `Bearer ${jugador.token}` },
+    });
   });
 
   // ===================================================================
@@ -258,7 +303,9 @@ test.describe('Smoke del entorno desplegado', () => {
     const hilo = await lectura.json();
     expect(hilo.productoId).toBe('smoke-inexistente');
     expect(Array.isArray(hilo.comentarios)).toBe(true);
-    expect(hilo.total).toBe(hilo.comentarios.length);
+    // Desde comentarios 1.5.0 (B3) el hilo se pagina y `total` cuenta todas
+    // las paginas: nunca menos que lo que trae esta.
+    expect(hilo.total).toBeGreaterThanOrEqual(hilo.comentarios.length);
     expect(typeof hilo.totalCalificaciones).toBe('number');
     // Sin calificaciones el promedio es nulo, nunca un cero que parezca nota.
     if (hilo.totalCalificaciones === 0) {
@@ -302,14 +349,24 @@ test.describe('Smoke del entorno desplegado', () => {
     });
     expect(desdeFuera.status(), 'correo no debe ser alcanzable desde el borde').toBe(404);
 
+    // B12: la bandeja tampoco. Guarda los codigos de verificacion y de
+    // recuperacion de todas las cuentas @nexus.test, y el borde solo la sirve
+    // a origenes internos. Este runner llega desde internet: 403.
+    const bandejaDesdeFuera = await api.get('/mailpit/api/v1/search', {
+      params: { query: `to:${destinatario}` },
+    });
+    expect(bandejaDesdeFuera.status(), 'Mailpit no debe ser publico (B12)').toBe(403);
+
+    // El correo se busca donde lo buscan las demas pruebas: MAILPIT_URL, que
+    // en smoke-dev.yml es el tunel SSH al propio host.
     await expect
       .poll(
         async () => {
-          const bandeja = await api.get('/mailpit/api/v1/search', {
-            params: { query: `to:${destinatario}` },
-          });
-          if (!bandeja.ok()) return 0;
-          return (await bandeja.json()).messages_count ?? 0;
+          try {
+            return (await correosPara(destinatario, { base: AWS })).length;
+          } catch {
+            return 0;
+          }
         },
         { timeout: 30000, message: 'el correo del registro no llego a Mailpit' },
       )

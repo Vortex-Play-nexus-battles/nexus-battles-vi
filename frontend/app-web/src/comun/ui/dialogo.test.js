@@ -1,6 +1,13 @@
 /** Dialogo modal accesible (PR-UX-1). */
 
-import { abrirDialogo, confirmar } from './dialogo.js';
+import {
+  abrirDialogo,
+  bloquearDesplazamiento,
+  confirmar,
+  confirmarCritico,
+  esElModalDeArriba,
+  pedirTexto,
+} from './dialogo.js';
 import { boton } from './boton.js';
 
 beforeEach(() => {
@@ -84,6 +91,30 @@ describe('confirmar', () => {
     await expect(respuesta).resolves.toBe(false);
   });
 
+  test('cerrar sin decidir (Escape, la equis) resuelve false, no deja la promesa colgada', async () => {
+    const conEscape = confirmar({ titulo: 'Cancelar la misión', mensaje: 'x' });
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await expect(conEscape).resolves.toBe(false);
+
+    const conEquis = confirmar({ titulo: 'Cancelar la misión', mensaje: 'x' });
+    document.querySelector('[data-accion="cerrar"]').click();
+    await expect(conEquis).resolves.toBe(false);
+    expect(document.querySelector('.velo')).toBeNull();
+  });
+
+  test('admite un cuerpo con más que una frase', async () => {
+    const lista = document.createElement('ul');
+    lista.append(document.createElement('li'));
+    const respuesta = confirmar({ titulo: 'Iniciar', cuerpo: lista, peligro: false });
+
+    expect(document.querySelector('.dialogo ul')).toBe(lista);
+    expect(document.querySelector('[data-accion="confirmar"]').className).toContain(
+      'boton--primario',
+    );
+    document.querySelector('[data-accion="confirmar"]').click();
+    await expect(respuesta).resolves.toBe(true);
+  });
+
   test('una accion peligrosa se pinta como peligrosa', () => {
     confirmar({ titulo: 'Banear', mensaje: 'x' });
 
@@ -91,5 +122,121 @@ describe('confirmar', () => {
     expect(document.querySelector('[data-accion="confirmar"]').className).toContain(
       'boton--peligro',
     );
+  });
+});
+
+describe('confirmarCritico (§7.3.9, UXC-7)', () => {
+  const abrir = () =>
+    confirmarCritico({
+      titulo: 'Banear definitivamente a nyx',
+      mensaje: 'Esta acción es permanente.',
+      consecuencias: ['No podrá volver a entrar con esta cuenta.'],
+      palabra: 'nyx',
+      textoConfirmar: 'Banear',
+    });
+  const escribir = (texto) => {
+    const campo = document.querySelector('[role="dialog"] input');
+    campo.value = texto;
+    campo.dispatchEvent(new Event('input'));
+    return campo;
+  };
+
+  test('lista lo que va a pasar y no deja confirmar sin escribir la palabra', async () => {
+    const promesa = abrir();
+    const caja = document.querySelector('[role="dialog"]');
+    const confirmarBoton = caja.querySelector('[data-accion="confirmar"]');
+
+    expect(caja.className).toContain('dialogo--peligro');
+    expect(caja.querySelector('label').textContent).toBe('Escribe «nyx» para confirmar');
+    expect(caja.querySelectorAll('.confirmacion-critica__consecuencias li')).toHaveLength(1);
+    expect(confirmarBoton.disabled).toBe(true);
+    escribir('NYX');
+    expect(confirmarBoton.disabled).toBe(true);
+    escribir(' nyx ');
+    expect(confirmarBoton.disabled).toBe(false);
+    confirmarBoton.click();
+    await expect(promesa).resolves.toBe(true);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+
+  test('Enter confirma solo si coincide; cerrar sin decidir es que no', async () => {
+    const promesa = abrir();
+    const campo = escribir('otra');
+    campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    await expect(promesa).resolves.toBe(false);
+  });
+});
+
+describe('pedirTexto (UXC-7, en lugar de window.prompt)', () => {
+  test('trae el valor escrito, con su etiqueta, y devuelve lo que se acepta', async () => {
+    const promesa = pedirTexto({ titulo: 'Editar «troll»', etiqueta: 'Término', valor: 'troll' });
+    const caja = document.querySelector('[role="dialog"]');
+    const campo = caja.querySelector('input');
+
+    expect(caja.querySelector(`label[for="${campo.id}"]`).textContent).toBe('Término');
+    expect(campo.value).toBe('troll');
+    campo.value = '  troll2  ';
+    campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await expect(promesa).resolves.toBe('troll2');
+  });
+
+  test('cancelar devuelve null', async () => {
+    const promesa = pedirTexto({ titulo: 'Editar', etiqueta: 'Término' });
+    document.querySelector('[data-accion="cancelar"]').click();
+    await expect(promesa).resolves.toBeNull();
+  });
+});
+
+describe('varios modales a la vez (auditoría de DEV del 30-sep)', () => {
+  /** Una capa como la de la ficha de producto, que abre una confirmación encima. */
+  function fichaAbierta() {
+    const capa = document.createElement('div');
+    capa.className = 'ficha-capa';
+    document.body.append(capa);
+    return capa;
+  }
+
+  test('la confirmación abierta desde una ficha queda encima: es el modal de más arriba', () => {
+    const capa = fichaAbierta();
+    expect(esElModalDeArriba(capa)).toBe(true);
+
+    confirmar({ titulo: 'Eliminar tu comentario', mensaje: 'No se puede deshacer.' });
+    const velo = document.querySelector('.velo');
+
+    expect(esElModalDeArriba(velo)).toBe(true);
+    expect(esElModalDeArriba(capa)).toBe(false);
+    // Comparten capa (--capa-modal): manda el orden del DOM, y el velo va después.
+    expect(capa.compareDocumentPosition(velo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('Escape cierra solo el de arriba; con otro diálogo encima, el de abajo no se entera', () => {
+    abrirDialogo({ titulo: 'Abajo', cuerpo: 'x' });
+    abrirDialogo({ titulo: 'Arriba', cuerpo: 'y' });
+    expect(document.querySelectorAll('.velo')).toHaveLength(2);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelectorAll('.velo')).toHaveLength(1);
+    expect(document.querySelector('.dialogo__titulo').textContent).toBe('Abajo');
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(document.querySelectorAll('.velo')).toHaveLength(0);
+  });
+
+  test('la página no se desplaza mientras haya un modal, y se suelta al cerrar el último', () => {
+    const capa = fichaAbierta();
+    const soltarFicha = bloquearDesplazamiento();
+    const { cerrar } = abrirDialogo({ titulo: 'x', cuerpo: 'y' });
+    expect(document.documentElement.classList.contains('con-modal')).toBe(true);
+
+    cerrar();
+    // La ficha sigue abierta: la página sigue quieta.
+    expect(document.documentElement.classList.contains('con-modal')).toBe(true);
+
+    capa.remove();
+    soltarFicha();
+    soltarFicha(); // soltar dos veces no hace nada más
+    expect(document.documentElement.classList.contains('con-modal')).toBe(false);
   });
 });

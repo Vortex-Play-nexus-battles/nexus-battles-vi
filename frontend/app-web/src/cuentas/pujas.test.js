@@ -7,6 +7,7 @@ import {
   calcularSaldoLibre,
   calcularSaldoRetenido,
   calcularMinimoPuja,
+  minimoDePuja,
   validarPuja,
   validarLimiteAuto,
   calcularComparacionHeroe,
@@ -17,6 +18,7 @@ import {
   calcularBalanceNetoCierre,
   generarConsejoTactico,
   calcularEstadoTopesConcurrencia,
+  pujasEn,
   ControladorSubastas,
   rarezaVisible,
   nivelRequeridoVisible,
@@ -55,6 +57,26 @@ describe('HU-SUB-004 - Reglas de Negocio de Subastas y Pujas', () => {
     test('calcula el incremento mínimo correctamente', () => {
       expect(calcularMinimoPuja(1000, 50)).toBe(1050);
       expect(calcularMinimoPuja(0, 50)).toBe(50);
+    });
+
+    // B8 — 7.7.2 y 7.7.6: la primera puja es el precio minimo; desde la
+    // segunda, oferta + incremento; y sin incremento conocido no se inventa.
+    test('B8: la puja minima sale de la ficha, del precio minimo o de oferta + incremento', () => {
+      expect(minimoDePuja({ oferta: 100, rivales: 3, pujaMinimaSiguiente: 125 }, 50)).toBe(125);
+      expect(minimoDePuja({ oferta: 100, rivales: 0 }, 50)).toBe(100);
+      expect(minimoDePuja({ oferta: 100, rivales: 2, incrementoMinimo: 10 }, 50)).toBe(110);
+      expect(minimoDePuja({ oferta: 100, rivales: 2 }, 50)).toBe(150);
+      expect(minimoDePuja({ oferta: 100, rivales: 2 }, null)).toBeNull();
+      expect(minimoDePuja(null, 50)).toBeNull();
+    });
+
+    test('B8: sin incremento conocido no se bloquea la puja: decide el servidor', () => {
+      const conPujas = { id: 's', oferta: 100, rivales: 2, retenido: 0, segundosRestantes: 60 };
+      expect(validarPuja(101, conPujas, 1000, null, 0).valida).toBe(true);
+      const primera = { ...conPujas, rivales: 0 };
+      const res = validarPuja(99, primera, 1000, 50, 0);
+      expect(res.valida).toBe(false);
+      expect(res.motivo).toContain('precio mínimo');
     });
   });
 
@@ -328,6 +350,14 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
   describe('Vista «Mis Subastas» - Finanzas y Concurrencia', () => {
     beforeEach(() => {
+      // UXC-8 — el saldo lo da el servidor (`MiResumen`). Sin él, el panel ya
+      // no dibuja una barra de «libre» sobre un total que no se sabe: estas
+      // pruebas ejercitan la versión con saldo, 6200 cr en total.
+      controlador.resumen = {
+        creditosRetenidos: '3750',
+        saldoDisponible: '2450',
+        subastasGanando: 2,
+      };
       controlador.abrirMisSubastas();
     });
 
@@ -343,7 +373,7 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
 
     test('renderiza medidores de topes de concurrencia y alerta reactiva al 80%', () => {
       expect(contenedor.querySelector('.grid-topes-concurrencia')).not.toBeNull();
-      expect(contenedor.textContent).toContain('Subastas en las que participas');
+      expect(contenedor.textContent).toContain('Tus publicaciones en curso');
       expect(contenedor.textContent).toContain('Pujas tuyas que van ganando');
       // Verificamos que las barras de progreso estén presentes
       const barrasProgreso = contenedor.querySelectorAll('.tope-barra-progreso');
@@ -359,8 +389,11 @@ describe('ControladorSubastas - Interacción y Flujo DOM', () => {
     });
 
     test('ordena las subastas por proximidad de vencimiento y asigna bordes de estado', () => {
+      // UXC-8 — solo donde pujas: la daga no tiene puja, ni retenido, ni
+      // automática tuya. Antes salía aquí como «tuya» por estar en el mercado.
       const filas = contenedor.querySelectorAll('.fila-mi-subasta');
-      expect(filas.length).toBe(SUBASTAS_INICIALES.length);
+      expect(filas.length).toBe(SUBASTAS_INICIALES.filter(pujasEn).length);
+      expect(contenedor.querySelector('.fila-mi-subasta[data-id="daga-hueso"]')).toBeNull();
 
       // La primera debe ser la que tiene menor tiempo restante
       const tiempoPrimero = filas[0].querySelector('.reloj-fila');
@@ -550,24 +583,30 @@ describe('HU-SUB-004 - Pruebas Unitarias de Cálculos Nuevos', () => {
   });
 
   test('calcularEstadoTopesConcurrencia genera alertas al superar el 80%', () => {
-    // 8 de 10 subastas = 80%
-    const subastas8 = Array.from({ length: 8 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado1 = calcularEstadoTopesConcurrencia(subastas8, {
-      maxSubastasSimultaneas: 10,
-      maxPujasActivas: 50,
-    });
+    // UXC-8 — el tope de 10 es de PUBLICACIONES activas (7.7.10, y
+    // ms-subastas-pujas.yaml 0.4.0: pujar ya no emite LIMITE_SUBASTAS_ACTIVAS);
+    // antes esta prueba lo fijaba sobre las subastas en las que se puja.
+    const reglas = { maxSubastasSimultaneas: 10, maxPujasActivas: 50 };
+
+    // 8 de 10 publicaciones = 80%
+    const estado1 = calcularEstadoTopesConcurrencia({ publicaciones: 8, ganando: 0 }, reglas);
     expect(estado1.subastas.alerta).toBe(true);
     expect(estado1.subastas.topeAlcanzado).toBe(false);
     expect(estado1.subastas.pista).toContain('Aviso de tope (80%)');
+    expect(estado1.subastas.pista).toContain('puedes publicar 2 más');
 
-    // 10 de 10 subastas = 100%
-    const subastas10 = Array.from({ length: 10 }, (_, i) => ({ id: `s-${i}`, ganando: false }));
-    const estado2 = calcularEstadoTopesConcurrencia(subastas10, {
-      maxSubastasSimultaneas: 10,
-      maxPujasActivas: 50,
-    });
+    // 10 de 10 publicaciones = 100%
+    const estado2 = calcularEstadoTopesConcurrencia({ publicaciones: 10, ganando: 0 }, reglas);
     expect(estado2.subastas.topeAlcanzado).toBe(true);
-    expect(estado2.subastas.pista).toContain('Has llegado al tope');
+    expect(estado2.subastas.pista).toContain('no puedes publicar otra');
+
+    // Las pujas activas: las tuyas que van ganando, con el tope del servidor.
+    const estado3 = calcularEstadoTopesConcurrencia(
+      { publicaciones: 0, ganando: 30 },
+      { maxSubastasSimultaneas: 10, maxPujasActivas: 30 },
+    );
+    expect(estado3.pujas.topeAlcanzado).toBe(true);
+    expect(estado3.pujas.pista).toContain('tope de 30 pujas activas');
   });
 
   describe('Alertas accesibles en el DOM sin alert() bloqueante (Defecto C)', () => {
@@ -672,7 +711,12 @@ describe('Accesibilidad del diálogo de compra (WCAG 2.1 AA)', () => {
   beforeEach(() => {
     contenedorA11y = document.createElement('div');
     document.body.appendChild(contenedorA11y);
-    ctrlA11y = new ControladorSubastas({ contenedor: contenedorA11y });
+    // UXC-8 — el controlador ya no arranca con datos de ejemplo por omisión
+    // (la pantalla real no debe tenerlos nunca): el banco se pide aquí.
+    ctrlA11y = new ControladorSubastas({
+      contenedor: contenedorA11y,
+      subastas: SUBASTAS_INICIALES,
+    });
     ctrlA11y.iniciar();
     ctrlA11y.abrirDetalle('hacha-obsidiana');
   });

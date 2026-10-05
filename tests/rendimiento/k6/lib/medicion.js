@@ -64,6 +64,19 @@ export const FICHAS = {
     requisito: 'HU-REN-003 CA-01',
     porQue: 'La busqueda indexada que CA-01 exige dentro del objetivo de latencia.',
   },
+  tienda: {
+    titulo: 'Vitrina de la tienda',
+    ruta: 'GET /api/v1/vitrina?page&size (sin sesion)',
+    requisito: 'RNF-REN-001',
+    porQue:
+      'La lectura publica de la tienda desde la portada: borde, ms-ecommerce y el catalogo del otro host.',
+  },
+  comentarios: {
+    titulo: 'Hilo de comentarios',
+    ruta: 'GET /api/v1/products/{id}/comments?pagina&tamano=10 (sin sesion)',
+    requisito: 'RNF-REN-001',
+    porQue: 'La lectura publica de la ficha de producto: el hilo paginado de comentarios.',
+  },
 };
 
 /** Clave de la serie agregada. */

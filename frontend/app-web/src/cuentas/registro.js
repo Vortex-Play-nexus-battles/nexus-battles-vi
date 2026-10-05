@@ -1,9 +1,32 @@
 // registro.js
 // Vista de registro — HU-AUT-001.
-import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
+//
+// R17 — los rechazos marcan el campo exacto (problem details con `campo`), y
+// la política de contraseñas se dice antes de enviar.
+//
+// B1 (identidad 2.0.0) — la cuenta nace pendiente de verificar el correo: al
+// crearla se pasa a «Confirma tu correo» (`/verificar`), donde se escribe el
+// código que acaba de salir. El correo viaja en `sessionStorage`, nunca en la
+// URL. Si el servicio todavía crea la cuenta ya activa, se entra solo como en
+// R17 (`registrarCuenta` lo decide por el `estado` que devuelve el registro).
+import { registrarCuenta } from '../comun/entrada.js';
+import { motivoDeContrasena } from '../comun/politica-contrasena.js';
+import { marcarErrorDe } from '../comun/ui/campo.js';
+import { h } from '../comun/ui/dom.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 
-const URL_REGISTRO = '/api/v1/auth/registro';
+// G1 — lo que un envío nativo de una versión vieja de esta página pudo dejar
+// en la barra (`?password=…`) sale antes de nada.
+sinCredencialesEnLaDireccion();
+
 const TAMANO_SALIDA_PX = 512; // Resolución del avatar final, cuadrado.
+
+/** Lo que se dice mientras la página se va, según adónde va (`registrarCuenta`). */
+const TRAS_CREAR = Object.freeze({
+  pendiente: '¡Cuenta creada! Ahora confirma tu correo con el código que te enviamos…',
+  dentro: '¡Cuenta creada! Preparando tu cuenta…',
+  creada: '¡Cuenta creada! Te llevamos a la entrada…',
+});
 
 /** @type {HTMLFormElement} */
 const form = document.getElementById('formRegistro');
@@ -37,28 +60,19 @@ const recorteZoom = document.getElementById('recorteZoom');
 let avatarRecortado = null;
 
 /**
- * Lee el cuerpo de una respuesta que puede venir como JSON o texto plano.
- * @param {Response} response
- * @returns {Promise<{status: number, body: unknown}>}
- */
-async function cuerpoDe(response) {
-  const texto = await response.text();
-  if (!texto) {
-    return { status: response.status, body: null };
-  }
-  try {
-    return { status: response.status, body: JSON.parse(texto) };
-  } catch {
-    return { status: response.status, body: texto };
-  }
-}
-
-/**
  * @param {string} texto
  * @param {'carga'|'error'|'exito'|'vacio'} tipo
  */
-function setEstado(texto, tipo) {
+/**
+ * @param {string} texto
+ * @param {string} tipo
+ * @param {Array<{texto: string, href: string}>} [enlaces] qué hacer, al lado del motivo
+ */
+function setEstado(texto, tipo, enlaces = []) {
   estadoRegistro.textContent = texto;
+  for (const enlace of enlaces) {
+    estadoRegistro.append(' ', h('a', { texto: enlace.texto, atributos: { href: enlace.href } }));
+  }
   estadoRegistro.className = `estado ${tipo}`;
   estadoRegistro.hidden = false;
 }
@@ -75,12 +89,47 @@ function validarConfirmacion() {
   return coincide;
 }
 
+/**
+ * Dice qué le falta a la contraseña. Al salir del campo y al enviar; mientras
+ * se escribe solo se quita el aviso cuando ya cumple, para no regañar a quien
+ * todavía no ha terminado de escribirla.
+ *
+ * @returns {boolean} si cumple la política
+ */
+function validarContrasena() {
+  const motivo = motivoDeContrasena(campoPassword.value);
+  marcarErrorDe(campoPassword, motivo);
+  return motivo === null;
+}
+
 campoConfirmar.addEventListener('input', validarConfirmacion);
 campoPassword.addEventListener('input', () => {
   if (campoConfirmar.value.length > 0) {
     validarConfirmacion();
   }
+  if (
+    campoPassword.getAttribute('aria-invalid') === 'true' &&
+    !motivoDeContrasena(campoPassword.value)
+  ) {
+    marcarErrorDe(campoPassword, null);
+  }
 });
+campoPassword.addEventListener('blur', () => {
+  if (campoPassword.value.length > 0) {
+    validarContrasena();
+  }
+});
+
+// Lo que se escribe en un campo marcado por el servidor lo desmarca: el
+// motivo se refería al valor anterior.
+for (const nombre of ['nombres', 'apellidos', 'apodo', 'email']) {
+  const control = form.elements.namedItem(nombre);
+  control?.addEventListener('input', () => {
+    if (control.getAttribute('aria-invalid') === 'true') {
+      marcarErrorDe(control, null);
+    }
+  });
+}
 
 // ---------- Recorte de avatar ----------
 
@@ -218,8 +267,12 @@ document.getElementById('botonConfirmarRecorte').addEventListener('click', () =>
     (blob) => {
       avatarRecortado = blob;
 
+      // R17 — con nodos y no con una plantilla en `innerHTML`: la URL entra
+      // como atributo y no pasa por el analizador de HTML.
       const urlVistaPrevia = URL.createObjectURL(blob);
-      avatarVistaPrevia.innerHTML = `<img src="${urlVistaPrevia}" alt="Vista previa de tu foto de perfil">`;
+      avatarVistaPrevia.replaceChildren(
+        h('img', { atributos: { src: urlVistaPrevia, alt: 'Vista previa de tu foto de perfil' } }),
+      );
       botonQuitarAvatar.hidden = false;
 
       dialogoRecorte.close();
@@ -232,7 +285,7 @@ document.getElementById('botonConfirmarRecorte').addEventListener('click', () =>
 botonQuitarAvatar.addEventListener('click', () => {
   avatarRecortado = null;
   inputAvatar.value = '';
-  avatarVistaPrevia.innerHTML = '<span class="avatar-placeholder">Sin foto</span>';
+  avatarVistaPrevia.replaceChildren(h('span', { clase: 'avatar-placeholder', texto: 'Sin foto' }));
   botonQuitarAvatar.hidden = true;
 });
 
@@ -246,17 +299,23 @@ form.addEventListener('submit', async (evento) => {
     form.reportValidity();
     return;
   }
+  if (!validarContrasena()) {
+    campoPassword.focus();
+    return;
+  }
   if (!validarConfirmacion()) {
+    campoConfirmar.focus();
     return;
   }
 
   // multipart/form-data: el navegador arma el header Content-Type con el
   // boundary correcto automáticamente — nunca se debe fijar a mano aquí.
+  const email = form.email.value.trim();
   const formData = new FormData();
   formData.append('nombres', form.nombres.value.trim());
   formData.append('apellidos', form.apellidos.value.trim());
   formData.append('apodo', form.apodo.value.trim());
-  formData.append('email', form.email.value.trim());
+  formData.append('email', email);
   formData.append('password', form.password.value);
 
   if (avatarRecortado) {
@@ -266,29 +325,45 @@ form.addEventListener('submit', async (evento) => {
   botonEnviar.disabled = true;
   setEstado('Creando tu cuenta…', 'carga');
 
+  let resultado;
   try {
-    const respuesta = await fetchWithHttpErrorInterceptor(URL_REGISTRO, {
-      method: 'POST',
-      body: formData,
-    });
-    const { body } = await cuerpoDe(respuesta);
-
-    if (respuesta.ok) {
-      setEstado('¡Cuenta creada! Redirigiendo a inicio de sesión…', 'exito');
-      setTimeout(() => {
-        window.location.href = './login.html';
-      }, 1500);
-      return;
-    }
-
-    const mensaje =
-      typeof body === 'string' ? body : body?.mensaje || 'No se pudo crear la cuenta.';
-    setEstado(mensaje, 'error');
+    resultado = await registrarCuenta(formData, { email, password: form.password.value });
   } catch {
-    // OJO: atrapa cualquier excepcion, no solo las de conexion, y siempre
-    // muestra el mismo mensaje. Ver la nota del PR de saneamiento.
-    setEstado('No pudimos conectar con el servidor. Intenta de nuevo.', 'error');
-  } finally {
+    // Solo llega aquí un fallo de red al CREAR la cuenta: no se sabe si se
+    // creó, y se dice así en vez de prometer nada.
+    setEstado(
+      'No pudimos confirmar que la cuenta se creara: la conexión falló. Prueba a entrar con ese correo antes de registrarte otra vez.',
+      'error',
+    );
     botonEnviar.disabled = false;
+    return;
   }
+
+  if (resultado.resultado === 'rechazada') {
+    // UXC-7 — si el correo ya tiene cuenta, lo útil es entrar o recuperarla.
+    setEstado(
+      resultado.mensaje,
+      'error',
+      resultado.motivo === 'correo-en-uso'
+        ? [
+            { texto: 'Entrar', href: './login.html' },
+            { texto: 'Recuperar mi contraseña', href: './restablecer-solicitar.html' },
+          ]
+        : [],
+    );
+    const control = resultado.campo ? form.elements.namedItem(resultado.campo) : null;
+    if (control instanceof HTMLElement && control.type !== 'file') {
+      marcarErrorDe(control, resultado.mensaje);
+      control.focus();
+    }
+    botonEnviar.disabled = false;
+    return;
+  }
+
+  // Cuenta creada. El botón se queda desactivado: la página ya se va.
+  setEstado(TRAS_CREAR[resultado.resultado] ?? TRAS_CREAR.creada, 'exito');
+  window.location.href = resultado.destino;
 });
+
+// G1 — la vista ya escucha `submit`: el botón se puede encender.
+formularioListo(form);

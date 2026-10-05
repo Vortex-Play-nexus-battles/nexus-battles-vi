@@ -1,0 +1,125 @@
+asyncapi: 3.0.0
+
+# =============================================================================
+# Nexus Battles VI — Subastas en tiempo real (ms-subastas) — B0/B8
+#
+# Hasta B0 este canal no tenia contrato (la auditoria lo encontro: «sin
+# AsyncAPI y no enrutado por el borde»). B0 documento lo que el codigo hacia
+# —`SubastaRealtimePublisher` publica cada cambio de una subasta en el
+# listado publico— y dejo pendiente el canal por subasta, que B8 implementa.
+# =============================================================================
+
+info:
+  title: Nexus Battles VI — Subastas en tiempo real (ms-subastas)
+  version: 1.2.0
+  description: |
+    WebSocket + STOMP de ms-subastas, en `/api/v1/ws-subastas` (el servicio
+    tiene `context-path` `/api/v1`). Desde B8 el borde lo publica en la misma
+    ruta (`location ^~ /api/v1/ws-subastas` de `borde-dev.conf`, con
+    `Upgrade`/`Connection`), igual que `/ws` y `/ws/notificaciones`.
+
+    - **Solo el servidor publica.** ms-subastas no tiene ningun
+      `@MessageMapping`: `PoliticaDelCanalDeSubastas` rechaza todo SEND del
+      cliente. Pujar, comprar ya, publicar y cancelar van por REST.
+    - **Listado publico**: `/topic/subastas/listado` admite visitantes sin
+      token; cualquier otro destino exige token en el CONNECT. Un token
+      presente pero invalido, caducado o firmado por otro rechaza el CONNECT.
+    - Cada mensaje es el mismo resumen que devuelve `GET /api/v1/subastas`
+      (`SubastaResumen` de `ms-subastas-listado.yaml` 1.1.0), con su `estado`.
+    - **Se publica despues de confirmar la transaccion** (nunca un cambio que
+      luego se deshace) en: publicacion, puja (manual o automatica), compra
+      inmediata, cierre por vencimiento y cancelacion.
+
+    Changelog:
+
+    - 1.0.0 (B0): canal del listado; canal por subasta pendiente.
+    - 1.1.0 (B8): implementado `/topic/subastas/{subastaId}`. El mensaje
+      documenta los campos que de verdad viajan (los del resumen del listado,
+      con `estado`); `precioActual` y `finalizaEn`, que nunca se enviaron, se
+      sustituyen por `ofertaVigente` y `fechaFin`.
+    - 1.2.0 (G5): el canal va a todos y llevaba el `uid` del vendedor
+      (`vendedorId`). Desde ahora va siempre a null (el campo se conserva en
+      la forma); `esPropia` no viaja aqui: quien recibe un cambio relee el
+      listado, que si lo dice con su token (`ms-subastas-listado.yaml` 1.2.0).
+  license:
+    name: Uso academico — Proyecto Integrador II, UPB Bucaramanga
+
+servers:
+  local:
+    host: localhost:8092
+    protocol: ws
+    pathname: /api/v1/ws-subastas
+  borde:
+    host: localhost:8099
+    protocol: ws
+    pathname: /api/v1/ws-subastas
+    description: El mismo canal detras del borde (banco E2E y host de DEV).
+
+channels:
+  listado:
+    address: '/topic/subastas/listado'
+    description: Una subasta cambio (nueva puja, compra inmediata, cierre, cancelacion, publicacion).
+    messages:
+      subastaActualizada:
+        $ref: '#/components/messages/SubastaActualizada'
+
+  subasta:
+    address: '/topic/subastas/{subastaId}'
+    description: |
+      B8 — los cambios de UNA subasta en vivo (la ficha de la subasta y
+      «Mis pujas»), con el mismo resumen que el listado. Exige token en el
+      CONNECT: sin sesion, el SUBSCRIBE se rechaza con un frame ERROR y la
+      interfaz sigue con el listado publico y el sondeo.
+    parameters:
+      subastaId:
+        description: Id de la subasta.
+    messages:
+      subastaActualizada:
+        $ref: '#/components/messages/SubastaActualizada'
+
+operations:
+  recibirListado:
+    action: receive
+    channel:
+      $ref: '#/channels/listado'
+  recibirSubasta:
+    action: receive
+    channel:
+      $ref: '#/channels/subasta'
+
+components:
+  messages:
+    SubastaActualizada:
+      payload:
+        type: object
+        additionalProperties: true
+        description: '`SubastaResumen` de `ms-subastas-listado.yaml`, igual que un elemento de `GET /api/v1/subastas`.'
+        required: [id, estado]
+        properties:
+          id:
+            type: string
+            format: uuid
+          estado:
+            type: string
+            enum: [ACTIVA, ADJUDICADA, SIN_ADJUDICACION, CANCELADA]
+          nombreProducto:
+            type: string
+          tipoProducto:
+            type: [string, 'null']
+          ofertaVigente:
+            type: number
+          precioInicial:
+            type: [number, 'null']
+          precioCompraInmediata:
+            type: [number, 'null']
+          cantidadPujas:
+            type: integer
+          fechaFin:
+            type: string
+            format: date-time
+          esMaestroDeJuego:
+            type: boolean
+          vendedorId:
+            type: [string, 'null']
+            deprecated: true
+            description: Siempre null desde 1.2.0 (era el `uid` del vendedor; el canal es publico).

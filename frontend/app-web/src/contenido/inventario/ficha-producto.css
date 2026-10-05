@@ -7,7 +7,10 @@
 .ficha-capa {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  /* La misma capa que los diálogos (tokens.css): una confirmación abierta
+     desde la ficha se cuelga después en el DOM y queda encima. Con z-index 10
+     propio y el velo sin ninguno, quedaba debajo (auditoría del 30-sep). */
+  z-index: var(--capa-modal, 50);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -16,6 +19,14 @@
 }
 
 .ficha {
+  /* Superficie clara: la tinta vuelve a oscuro (UX-GAME-1, base.css). Con
+     las opiniones y la compra dentro (UXC-3/UXC-4), sus etiquetas y notas la
+     leen. */
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
   position: relative;
   width: min(520px, 100%);
   max-height: 100%;
@@ -56,6 +67,27 @@
   margin-bottom: 16px;
   border-radius: 8px;
   object-fit: cover;
+}
+
+/* Sin imagen: el hueco es una ranura oscura con el icono del tipo, del
+   mismo tono que el escenario del heroe en la home (UX-GAME-3). */
+.ficha__imagen--ausente {
+  display: grid;
+  place-items: center;
+  height: 140px;
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--primaria) 40%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
+}
+
+.ficha__icono-tipo {
+  width: 48px;
+  height: 48px;
+  color: var(--texto-sobre-color);
 }
 
 .ficha__nombre {
@@ -114,6 +146,127 @@
   color: var(--texto-2);
 }
 
+/* Las dos mitades del detalle de un heroe (R5): sus estadisticas y las acciones
+   de su prototipo. Las filas reusan `.ficha__atributo`, asi que aqui solo hace
+   falta separar las secciones y rotularlas. */
+.ficha__seccion {
+  margin: 0 0 16px;
+}
+
+.ficha__seccion-titulo {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+/* La aclaracion de a quien pertenece el dato: «con lo que llevas equipado» o
+   «iguales para este prototipo». Sin ella las dos listas se leerian como una. */
+.ficha__seccion-nota {
+  margin: 2px 0 8px;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+/* UXC-1 — las acciones del prototipo como cartas: nombre, coste, carga y
+   efecto, en vez de una lista de texto. */
+.ficha__acciones {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.ficha__accion {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+}
+
+.ficha__accion-cabeza {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.ficha__accion-icono {
+  width: 16px;
+  height: 16px;
+  color: var(--primaria);
+  flex: none;
+}
+
+.ficha__accion-datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+.ficha__accion-coste {
+  font-weight: 600;
+  color: var(--texto);
+}
+
+.ficha__accion-carga {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ficha__accion-carga .icono {
+  width: 14px;
+  height: 14px;
+}
+
+.ficha__accion-efecto {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
+/* UXC-9 — la que este héroe todavía no aprendió (vista por nivel de
+   heroes.yaml): borde discontinuo y el candado con su frase, no solo gris. */
+.ficha__accion--bloqueada {
+  border-style: dashed;
+}
+
+.ficha__accion-bloqueo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--texto-2);
+}
+
+.ficha__accion-bloqueo .icono {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* La épica afín, con la misma carta que las acciones. */
+.ficha__epica {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie-2);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 /* En pantallas estrechas la ficha ocupa todo el alto disponible. */
 @media (max-width: 599px) {
   .ficha-capa {
@@ -141,4 +294,36 @@
   color: var(--advertencia);
   font-size: 0.85rem;
   line-height: 1.4;
+}
+
+/* =======================================================================
+   Superficies claras de esta vista — UX-GAME-1
+   Devuelven la tinta a oscuro sobre la atmosfera del Nexo (ver «Tinta
+   contextual» en base.css). Son variables de contexto que apuntan a tokens,
+   no una copia de la paleta: componen con el alto contraste.
+   ======================================================================= */
+.ficha {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
+/* UXC-3 — la valoracion compacta bajo el tipo y las opiniones al final. Los
+   componentes traen su estilo del kit; aqui solo se colocan en la ficha. */
+.ficha__valoracion {
+  margin: 0 0 12px;
+}
+
+.ficha__complementos {
+  display: grid;
+  gap: 16px;
+}
+
+/* Con opiniones y compra la ficha es mas larga: un poco mas ancha en
+   escritorio para que el hilo no quede en una columna estrecha. */
+.ficha:has(.ficha__complementos) {
+  width: min(600px, 100%);
 }

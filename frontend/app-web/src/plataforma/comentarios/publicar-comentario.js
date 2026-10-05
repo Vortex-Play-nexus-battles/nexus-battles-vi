@@ -12,36 +12,49 @@
  * El manejo de errores sigue `shared/ui-kit/MAPEO-ERRORES.md`:
  *
  *   - `errores[]`                       -> cada campo marcado, mensaje debajo
- *   - 422 FORMATO_DE_IMAGEN_NO_ADMITIDO -> la zona de carga en error, con el motivo
+ *   - 413 / 415 al subir una imagen     -> la zona de carga en error, con el motivo
+ *   - 400 `imagenes-no-validas`         -> la zona de carga en error, con el motivo
  *   - 403 AUTOR_SILENCIADO              -> aviso de advertencia (no es fallo del sistema)
  *   - 409                               -> aviso con salida: reintentar sin calificar
  *   - 202                               -> aviso de informacion: esta en revision, no en el hilo
  *   - 201                               -> aviso de exito y el comentario entra al hilo
  *
- * Se decide por `estado` y `motivo`, nunca comparando textos.
+ * Se decide por `estado`, `tipo` y `motivo`, nunca comparando textos.
  *
- * Lo que NO hace, porque el contrato no lo define: leer el hilo existente del
- * producto. No hay `GET` en `comentarios.yaml`; el hilo muestra lo publicado
- * en esta sesion y lo dice.
+ * B3 (comentarios.yaml 1.5.0) — las imagenes ya no viajan por su nombre (un
+ * nombre de archivo responde 400): al publicar, cada archivo elegido se sube
+ * antes (`POST /comentarios/imagenes`) y el comentario lleva sus `id`, como
+ * mucho tres. El hilo del servicio llega ya del mas reciente al mas antiguo, y
+ * sus imagenes se pintan de verdad con el componente de `comun/`. Retirar un
+ * comentario no retira la calificacion de su autor (7.1).
  */
 
 import {
   publicarComentario,
   consultarHilo,
   eliminarComentario,
+  subirImagen,
+  urlDeImagen,
   ErrorDeApi,
   MOTIVO,
+  TIPO,
   ESTADO,
+  MAXIMO_DE_IMAGENES,
 } from './cliente-comentarios.js';
 import { reportarComentario, CATEGORIAS, MOTIVO_MODERACION } from './cliente-moderacion.js';
+import { mensajeDeSubida } from './redactor-comentario.js';
 import { usuarioIdDeSesion } from '../../comun/identidad.js';
 import { pintarAviso } from '../../comun/ui/aviso.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { abrirDialogo } from '../../comun/ui/dialogo.js';
+import { adjuntosDeComentario, esPropio } from '../../comun/ui/comunidad/comentario.js';
 
 const CLAVE_APODO = 'nexus.apodoActual';
 
 const MAXIMO_ESTRELLAS = 5;
+
+/** El archivo detrás de cada miniatura: el `FileList` es inmutable y se quitan uno a uno. */
+const ARCHIVOS = new WeakMap();
 
 /**
  * Lee la identidad del jugador de esta sesion.
@@ -88,21 +101,35 @@ export function nombresDeImagenes(formulario) {
 }
 
 /**
+ * Los archivos elegidos, en el orden de sus miniaturas.
+ *
+ * @param {HTMLFormElement} formulario
+ * @returns {File[]}
+ */
+export function archivosElegidos(formulario) {
+  return Array.from(formulario.querySelectorAll('[data-zona="miniaturas"] [data-nombre]'))
+    .map((nodo) => ARCHIVOS.get(nodo))
+    .filter(Boolean);
+}
+
+/**
  * Lee el formulario y arma `PublicacionComentarioRequest` del contrato.
  *
  * `estrellas` solo viaja si la persona califico: el contrato dice «omitir si
- * no se quiere calificar», y mandar `null` no es omitir.
+ * no se quiere calificar», y mandar `null` no es omitir. `imagenes` son los
+ * `id` que devolvio la subida (desde la 1.4.0), nunca los nombres de archivo.
  *
  * @param {HTMLFormElement} formulario
  * @param {{usuarioId: string, apodo: string}} sesion
+ * @param {{imagenes?: string[]}} [subidas] los `id` de las imagenes ya subidas
  */
-export function leerFormulario(formulario, sesion) {
+export function leerFormulario(formulario, sesion, { imagenes = [] } = {}) {
   const datos = new FormData(formulario);
   const cuerpo = {
     autorId: sesion.usuarioId,
     apodoAutor: sesion.apodo,
     texto: String(datos.get('texto') ?? '').trim(),
-    imagenes: nombresDeImagenes(formulario),
+    imagenes,
   };
 
   const estrellas = Number(datos.get('estrellas'));
@@ -259,6 +286,7 @@ function pintarMiniatura(lista, archivo, alQuitar) {
   item.className = 'zona-carga__miniatura';
   item.dataset.nombre = archivo.name;
   item.title = archivo.name;
+  ARCHIVOS.set(item, archivo);
 
   // La previsualizacion real solo existe en el navegador; en las pruebas
   // (jsdom) no hay createObjectURL y la miniatura queda como caja con nombre.
@@ -314,13 +342,26 @@ function montarZonaDeCarga(formulario) {
 
   const agregar = (archivos) => {
     const existentes = new Set(nombresDeImagenes(formulario));
+    let fuera = 0;
     Array.from(archivos).forEach((archivo) => {
-      if (!existentes.has(archivo.name)) {
-        pintarMiniatura(lista, archivo, actualizarEstado);
-        existentes.add(archivo.name);
+      if (existentes.has(archivo.name)) {
+        return;
       }
+      // B3: un comentario lleva como mucho tres imagenes (comentarios.yaml).
+      if (existentes.size >= MAXIMO_DE_IMAGENES) {
+        fuera += 1;
+        return;
+      }
+      pintarMiniatura(lista, archivo, actualizarEstado);
+      existentes.add(archivo.name);
     });
     actualizarEstado();
+    if (fuera > 0) {
+      marcarZonaDeCarga(
+        formulario,
+        `Caben ${MAXIMO_DE_IMAGENES} imágenes por comentario: ${fuera === 1 ? 'una se quedó fuera' : `${fuera} se quedaron fuera`}.`,
+      );
+    }
   };
 
   entrada.addEventListener('change', () => {
@@ -489,16 +530,14 @@ export function agregarAlHilo(
   texto.textContent = comentario.texto ?? '';
   articulo.appendChild(texto);
 
-  if (Array.isArray(comentario.imagenes) && comentario.imagenes.length > 0) {
-    const imagenes = document.createElement('ul');
-    imagenes.className = 'zona-carga__miniaturas';
-    comentario.imagenes.forEach((nombre) => {
-      const item = document.createElement('li');
-      item.className = 'zona-carga__miniatura';
-      item.dataset.nombre = nombre;
-      item.title = nombre;
-      imagenes.appendChild(item);
-    });
+  // B3: las imagenes guardadas se ven de verdad; los nombres de archivo de
+  // antes de la 1.4.0 se pintan por su nombre. Es el mismo componente que el
+  // hilo de la ficha del producto.
+  const imagenes = adjuntosDeComentario(comentario.imagenes, {
+    urlDeImagen,
+    autor: comentario.apodoAutor,
+  });
+  if (imagenes) {
     articulo.appendChild(imagenes);
   }
 
@@ -506,7 +545,9 @@ export function agregarAlHilo(
   // retirar (HU-COM-004) y sobre lo de otro se puede reportar (RF-COM-006).
   // Reportarse a uno mismo no significa nada, y «Eliminar» sobre un
   // comentario ajeno seria una promesa que el servicio contesta con 403.
-  const esMio = Boolean(yo) && comentario.autorId === yo;
+  // G4 (comentarios.yaml 1.9.0): el hilo dice `propio`; sin él (un servicio
+  // anterior), la comparación de siempre con el `uid` de la sesión.
+  const esMio = Boolean(yo) && esPropio(comentario, yo);
   if (esMio && typeof alEliminar === 'function') {
     const acciones = document.createElement('div');
     acciones.className = 'fila';
@@ -599,9 +640,10 @@ export async function cargarHilo(
     lista.replaceChildren();
     pintarPromedio(zonaHilo, hilo);
     const comentarios = Array.isArray(hilo?.comentarios) ? hilo.comentarios : [];
-    // El servicio los da del mas antiguo al mas reciente; el hilo se lee al reves.
+    // Desde la 1.4.0 el servicio ya los da del mas reciente al mas antiguo:
+    // se pintan en ese orden (`alFinal`), sin darles la vuelta.
     comentarios.forEach((comentario) => {
-      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar, alReportar });
+      agregarAlHilo(zonaHilo, comentario, { yo, alEliminar, alReportar, alFinal: true });
     });
     if (vacio) {
       vacio.hidden = comentarios.length > 0;
@@ -634,6 +676,7 @@ export async function cargarHilo(
  * @param {string} [opciones.productoId] si falta, se lee de `data-producto-id`
  * @param {{usuarioId: string|null, apodo: string|null}} [opciones.sesion]
  * @param {Function} [opciones.publicarImpl] inyeccion para las pruebas
+ * @param {Function} [opciones.subirImagenImpl] inyeccion para las pruebas (B3)
  * @param {HTMLElement} [opciones.hilo] zona del hilo; si falta, se busca en el documento
  * @param {Function} [opciones.alPublicar] callback con el `ComentarioResponse` publicado
  */
@@ -643,6 +686,7 @@ export function montarPublicarComentario(
     productoId,
     sesion = leerSesion(),
     publicarImpl = publicarComentario,
+    subirImagenImpl = subirImagen,
     consultarImpl = consultarHilo,
     eliminarImpl = eliminarComentario,
     reportarImpl = reportarComentario,
@@ -672,7 +716,9 @@ export function montarPublicarComentario(
       pintarAviso(zonaAviso, {
         tono: 'exito',
         titulo: 'Comentario eliminado',
-        detalle: 'Ya no aparece en el hilo y su calificación dejo de contar.',
+        // 7.1 y comentarios.yaml 1.5.0: retirar el comentario no retira la
+        // calificacion, que va aparte y se da una sola vez.
+        detalle: 'Ya no aparece en el hilo. Tu calificación del producto se mantiene.',
       });
       await actualizarPromedio(zonaHilo, { productoId: idProducto, consultarImpl });
     } catch (error) {
@@ -704,7 +750,7 @@ export function montarPublicarComentario(
       return 'Ya reportaste este comentario';
     }
     if (error?.motivo === MOTIVO_MODERACION.LIMITE_DE_REPORTES) {
-      return 'Alcanzaste el limite de reportes por hoy';
+      return 'Alcanzaste el límite de reportes por hoy';
     }
     return deApi ? error.titulo : 'No pudimos contactar con el servicio';
   }
@@ -777,7 +823,7 @@ export function montarPublicarComentario(
         pintarAviso(zonaAviso, {
           tono: 'exito',
           titulo: 'Reporte enviado',
-          detalle: 'Un moderador lo revisara. Mientras tanto no se muestra en el hilo.',
+          detalle: 'Un moderador lo revisará. Mientras tanto no se muestra en el hilo.',
         });
       } catch (error) {
         enviar.disabled = false;
@@ -816,13 +862,37 @@ export function montarPublicarComentario(
     return;
   }
 
+  /** Una imagen que no se pudo subir: el motivo, escrito en la zona de carga. */
+  const rechazoDeImagen = (motivo) => {
+    marcarZonaDeCarga(formulario, motivo);
+    const control = marcarCampo(formulario, 'imagenes', motivo);
+    control?.focus();
+  };
+
+  /**
+   * B3 — sube los archivos elegidos y devuelve sus `id`, en su orden. Si uno
+   * falla, no se publica nada: se dice por que en la zona de carga.
+   *
+   * @param {File[]} archivos
+   * @returns {Promise<string[]|null>} `null` si alguna no se pudo subir
+   */
+  const subirElegidas = async (archivos) => {
+    try {
+      return await Promise.all(
+        archivos.map((archivo) => subirImagenImpl(archivo).then((subida) => subida.id)),
+      );
+    } catch (error) {
+      rechazoDeImagen(mensajeDeSubida(error).texto);
+      return null;
+    }
+  };
+
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     limpiarErroresDeCampo(formulario);
     ocultarAviso(zonaAviso);
 
-    const cuerpo = leerFormulario(formulario, sesion);
-    if (!cuerpo.texto) {
+    if (!leerFormulario(formulario, sesion).texto) {
       const control = marcarCampo(
         formulario,
         'texto',
@@ -834,6 +904,12 @@ export function montarPublicarComentario(
 
     cargando(boton, true);
     try {
+      const archivos = archivosElegidos(formulario);
+      const imagenes = archivos.length > 0 ? await subirElegidas(archivos) : [];
+      if (imagenes === null) {
+        return;
+      }
+      const cuerpo = leerFormulario(formulario, sesion, { imagenes });
       const { comentario, estado } = await publicarImpl(idProducto, cuerpo);
 
       if (estado === ESTADO.EN_REVISION) {
@@ -888,14 +964,16 @@ export function montarPublicarComentario(
       if (error instanceof ErrorDeApi && error.esDeFormulario) {
         const primero = marcarCampos(formulario, error.errores);
         primero?.focus();
+      } else if (error instanceof ErrorDeApi && error.tipo === TIPO.IMAGENES_NO_VALIDAS) {
+        // B3: el comentario llego con una imagen que ya no se puede adjuntar
+        // (las que no se publican en un dia se borran). Se dice en la zona.
+        rechazoDeImagen('Alguna imagen ya no se puede adjuntar: quítala y vuelve a elegirla.');
       } else if (
         error instanceof ErrorDeApi &&
         error.motivo === MOTIVO.FORMATO_DE_IMAGEN_NO_ADMITIDO
       ) {
         // El motivo va escrito en la propia zona de carga (mapeo §5.3 y ui-kit).
-        marcarZonaDeCarga(formulario, error.detalle);
-        const control = marcarCampo(formulario, 'imagenes', error.detalle);
-        control?.focus();
+        rechazoDeImagen(error.detalle);
       } else if (error instanceof ErrorDeApi && error.estado === 409) {
         // Conflicto de calificacion simultanea: el contrato dice que reintentar
         // sin estrellas publica el comentario. El aviso lleva esa salida.

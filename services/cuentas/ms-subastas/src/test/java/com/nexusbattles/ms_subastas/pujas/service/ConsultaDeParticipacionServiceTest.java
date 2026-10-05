@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_subastas.pujas.service;
 
+import com.nexusbattles.ms_subastas.panel.repository.SeguimientoRepository;
 import com.nexusbattles.ms_subastas.pujas.dto.MiParticipacionResponse;
+import com.nexusbattles.ms_subastas.reglas.FuenteDeReglas;
 import com.nexusbattles.ms_subastas.pujas.dto.PujaDelHistorialResponse;
 import com.nexusbattles.ms_subastas.pujas.model.EstadoPuja;
 import com.nexusbattles.ms_subastas.pujas.model.Puja;
@@ -61,6 +63,9 @@ class ConsultaDeParticipacionServiceTest {
     @Mock
     private PujaAutomaticaRepository pujaAutomaticaRepository;
 
+    @Mock
+    private SeguimientoRepository seguimientos;
+
     private CreditoClientFake creditoClient;
     private ConsultaDeParticipacionService servicio;
 
@@ -68,8 +73,8 @@ class ConsultaDeParticipacionServiceTest {
     void setUp() {
         creditoClient = new CreditoClientFake(BigDecimal.ZERO, false);
         servicio = new ConsultaDeParticipacionService(subastaRepository, pujaRepository,
-                pujaAutomaticaRepository, new ParametrosPuja(), Clock.fixed(AHORA, ZoneOffset.UTC),
-                creditoClient);
+                pujaAutomaticaRepository, FuenteDeReglas.fijas(new ParametrosPuja()), Clock.fixed(AHORA, ZoneOffset.UTC),
+                creditoClient, seguimientos);
     }
 
     private Subasta subastaCon(UUID mejorPostor) {
@@ -275,8 +280,8 @@ class ConsultaDeParticipacionServiceTest {
             }
         };
         ConsultaDeParticipacionService conCreditosCaidos = new ConsultaDeParticipacionService(
-                subastaRepository, pujaRepository, pujaAutomaticaRepository, new ParametrosPuja(),
-                Clock.fixed(AHORA, ZoneOffset.UTC), roto);
+                subastaRepository, pujaRepository, pujaAutomaticaRepository,
+                FuenteDeReglas.fijas(new ParametrosPuja()), Clock.fixed(AHORA, ZoneOffset.UTC), roto, seguimientos);
 
         when(pujaRepository.sumarMontoPorJugadorYEstado(YO, EstadoPuja.ACTIVA))
                 .thenReturn(new BigDecimal("300"));

@@ -55,6 +55,12 @@ public class NotificacionesController {
         return new ContadorResponse(usuarioId, servicio.marcarLeida(usuarioId, notificacionId));
     }
 
+    @PostMapping("/users/{usuarioId}/notifications/read")
+    public LecturaResponse marcarTodasLeidas(@PathVariable String usuarioId) {
+        ServicioDeNotificaciones.Lectura lectura = servicio.marcarTodasLeidas(usuarioId);
+        return new LecturaResponse(usuarioId, lectura.marcadas(), lectura.noLeidas());
+    }
+
     @PostMapping("/users/{usuarioId}/sessions/{sesionId}/pending")
     public List<AvisoResponse> entregarPendientes(
             @PathVariable String usuarioId, @PathVariable String sesionId) {
@@ -102,6 +108,10 @@ public class NotificacionesController {
 
     /** Cuenta de no leidos, igual en todas las sesiones del jugador. */
     public record ContadorResponse(String usuarioId, int noLeidas) {
+    }
+
+    /** Resultado de marcar todas: cuantos se marcaron y cuantos quedan sin leer (1.3.0). */
+    public record LecturaResponse(String usuarioId, int marcadas, int noLeidas) {
     }
 
     /** Resultado de emitir: el aviso y a que sesiones alcanzo a llegar. */

@@ -106,6 +106,10 @@ describe('nombreDelConcepto()', () => {
     expect(nombreDelConcepto('recompensa-victoria')).toBe('Recompensa por ganar');
   });
 
+  test('el abono de bienvenida de una cuenta nueva se lee como tal (R17)', () => {
+    expect(nombreDelConcepto('bono-registro')).toBe('Créditos de bienvenida');
+  });
+
   test('un concepto nuevo se muestra tal cual en vez de desaparecer', () => {
     expect(nombreDelConcepto('concepto-que-no-existia')).toBe('concepto-que-no-existia');
   });
@@ -192,6 +196,15 @@ describe('pintarHistorial() — #569', () => {
     expect(filas).toHaveLength(2);
     expect(filas[0].textContent).toContain('Apuesta de una batalla');
     expect(filas[1].querySelector('.movimiento__importe').dataset.tono).toBe('suma');
+    // Tabla de datos con sus reglas de celda; el importe, cifra, a la derecha
+    // en el encabezado y en cada fila (auditoría 30-sep: columnas que no casaban).
+    const tabla = zona.querySelector('table[data-zona="movimientos"]');
+    expect(tabla.classList.contains('tabla--datos')).toBe(true);
+    const encabezados = [...tabla.querySelectorAll('thead th')];
+    expect(encabezados.every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+    expect(encabezados[1].textContent).toBe('Importe');
+    expect(encabezados[1].classList.contains('tabla__numero')).toBe(true);
+    expect(filas[0].children[1].classList.contains('tabla__numero')).toBe(true);
   });
 
   test('sin movimientos invita a jugar en vez de dejar la tabla vacia', async () => {
@@ -249,6 +262,56 @@ describe('montarCuenta()', () => {
     const resumen = raiz.querySelector('[data-zona="panel-resumen"]');
     expect(resumen.textContent).toContain('Créditos disponibles');
     expect(sessionStorage.getItem('nexus.apodoActual')).toBe('Valkiria');
+  });
+
+  test('UXC-7 — el resumen dice el estado de la cuenta: en regla, o la suspensión con su cuenta atrás', async () => {
+    const hasta = new Date(Date.now() + 2 * 86_400_000).toISOString();
+    const raiz = montarVista();
+    const fetchImpl = fetchFalso({
+      '/perfiles/': () => respuesta(PERFIL),
+      '/sanciones/usuarios/u-1': () =>
+        respuesta([
+          {
+            id: 's-1',
+            tipo: 'SUSPENSION',
+            motivo: 'Lenguaje ofensivo',
+            vigenteHasta: hasta,
+            vigente: true,
+            emitidaEn: new Date().toISOString(),
+          },
+        ]),
+      '/saldo': () => respuesta({ saldoDisponible: 0, saldoReservado: 0 }),
+      '/movimientos': () => respuesta({ content: [] }),
+    });
+
+    const cuenta = montarCuenta(raiz, { sesion: SESION, fetchImpl });
+    await cuenta.recargar();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const estado = raiz.querySelector('[data-estado-cuenta]');
+    expect(estado.dataset.estadoCuenta).toBe('suspendida');
+    expect(estado.textContent).toContain('Suspensión activa');
+    expect(estado.textContent).toContain('Motivo: Lenguaje ofensivo');
+    expect(estado.querySelector('time.cuenta-atras').getAttribute('datetime')).toBe(hasta);
+    expect(estado.querySelector('a').getAttribute('href')).toMatch(/mis-sanciones\.html$/);
+  });
+
+  test('UXC-7 — si no se puede consultar, no se dice «en regla»', async () => {
+    const raiz = montarVista();
+    const fetchImpl = fetchFalso({
+      '/perfiles/': () => respuesta(PERFIL),
+      '/sanciones/': () => respuesta({}, { ok: false, status: 503 }),
+      '/saldo': () => respuesta({ saldoDisponible: 0, saldoReservado: 0 }),
+      '/movimientos': () => respuesta({ content: [] }),
+    });
+
+    const cuenta = montarCuenta(raiz, { sesion: SESION, fetchImpl });
+    await cuenta.recargar();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const zona = raiz.querySelector('[data-zona="resumen-estado"]');
+    expect(zona.textContent).toContain('No pudimos consultar el estado de tu cuenta');
+    expect(zona.textContent).not.toContain('en regla');
   });
 
   test('si el perfil no carga, avisa sin dejar la vista en blanco (#567)', async () => {

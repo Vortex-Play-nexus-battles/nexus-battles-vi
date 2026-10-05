@@ -1,11 +1,21 @@
 package nexus.inventario.api;
 
 import nexus.inventario.aplicacion.TransferenciaSinBloqueoException;
+import nexus.inventario.aplicacion.CatalogoNoDisponibleException;
+import nexus.inventario.aplicacion.ClaveDeEntregaReutilizadaException;
+import nexus.inventario.aplicacion.ParteNoCoincideException;
+import nexus.inventario.aplicacion.ProductoIncompletoException;
 import nexus.inventario.aplicacion.CriterioBusquedaInvalidoException;
 import nexus.inventario.aplicacion.IdentidadRequeridaException;
 import nexus.inventario.aplicacion.IdentificadorHistoricoException;
 import nexus.inventario.aplicacion.InventarioAjenoException;
+import nexus.inventario.aplicacion.ProductoInexistenteException;
 import nexus.inventario.aplicacion.ProductoNoEncontradoException;
+import nexus.inventario.aplicacion.ProductoSuspendidoException;
+import nexus.inventario.aplicacion.ProgresionNoDisponibleException;
+import nexus.inventario.aplicacion.TipoNoCoincideException;
+import nexus.inventario.dominio.HeroeEnMisionException;
+import nexus.inventario.dominio.NoEsUnHeroeException;
 import nexus.inventario.dominio.ElementoNoEncontradoException;
 import nexus.inventario.dominio.ElementoNoDisponibleException;
 import nexus.inventario.dominio.ElementoNoEquipableException;
@@ -16,6 +26,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingRequestHeaderException;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -62,9 +74,77 @@ public class ManejadorDeErrores {
         return problema(HttpStatus.CONFLICT, "Producto no disponible", error.getMessage());
     }
 
+    /** 1.6.0 (B9): el heroe esta en una mision (seccion 7.8.10). */
+    @ExceptionHandler(HeroeEnMisionException.class)
+    public ProblemDetail heroeEnMision(HeroeEnMisionException error) {
+        return problema(HttpStatus.CONFLICT, "Heroe en mision", error.getMessage());
+    }
+
+    /** 1.6.0 (B9): solo un heroe sale de mision. */
+    @ExceptionHandler(NoEsUnHeroeException.class)
+    public ProblemDetail noEsUnHeroe(NoEsUnHeroeException error) {
+        return problema(HttpStatus.BAD_REQUEST, "No es un heroe", error.getMessage());
+    }
+
+    /**
+     * 1.6.0 (B9): hay experiencia que sumar y heroes no respondio; no se aplica
+     * nada y el heroe sigue bloqueado hasta el reintento.
+     */
+    @ExceptionHandler(ProgresionNoDisponibleException.class)
+    public ProblemDetail progresionNoDisponible(ProgresionNoDisponibleException error) {
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Progresion no disponible",
+                "No se pudo calcular el nivel del heroe. Intenta nuevamente.");
+    }
+
     @ExceptionHandler(ProductoNoEncontradoException.class)
     public ProblemDetail productoNoEncontrado(ProductoNoEncontradoException error) {
         return problema(HttpStatus.NOT_FOUND, "Producto no encontrado", error.getMessage());
+    }
+
+    /**
+     * 422 y no 404: la ruta de creacion existe; lo que no existe es el
+     * producto que la peticion nombra. El 404 "Producto no encontrado" de
+     * arriba sigue siendo el de consultar estadisticas de algo ya guardado.
+     */
+    @ExceptionHandler(ProductoInexistenteException.class)
+    public ProblemDetail productoInexistente(ProductoInexistenteException error) {
+        return problema(HttpStatus.UNPROCESSABLE_ENTITY, "Producto inexistente", error.getMessage());
+    }
+
+    @ExceptionHandler(ProductoSuspendidoException.class)
+    public ProblemDetail productoSuspendido(ProductoSuspendidoException error) {
+        return problema(HttpStatus.CONFLICT, "Producto suspendido", error.getMessage());
+    }
+
+    @ExceptionHandler(TipoNoCoincideException.class)
+    public ProblemDetail tipoNoCoincide(TipoNoCoincideException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Tipo no coincide", error.getMessage());
+    }
+
+    /** B4: la parte de una armadura la decide el catalogo; como el tipo, 400. */
+    @ExceptionHandler(ParteNoCoincideException.class)
+    public ProblemDetail parteNoCoincide(ParteNoCoincideException error) {
+        return problema(HttpStatus.BAD_REQUEST, "Parte no coincide", error.getMessage());
+    }
+
+    /**
+     * B4: la misma {@code Idempotency-Key} con otro cuerpo. 409: reintentar con
+     * esa clave va a fallar igual; la entrega que nombra ya es otra.
+     */
+    @ExceptionHandler(ClaveDeEntregaReutilizadaException.class)
+    public ProblemDetail claveReutilizada(ClaveDeEntregaReutilizadaException error) {
+        return problema(HttpStatus.CONFLICT, "Clave de idempotencia reutilizada", error.getMessage());
+    }
+
+    /** B4: el catalogo describe una armadura sin parte; no hay ranura donde equiparla. */
+    @ExceptionHandler(ProductoIncompletoException.class)
+    public ProblemDetail productoIncompleto(ProductoIncompletoException error) {
+        return problema(HttpStatus.UNPROCESSABLE_ENTITY, "Producto incompleto", error.getMessage());
+    }
+
+    @ExceptionHandler(CatalogoNoDisponibleException.class)
+    public ProblemDetail catalogoNoDisponible(CatalogoNoDisponibleException error) {
+        return problema(HttpStatus.SERVICE_UNAVAILABLE, "Catalogo no disponible", error.getMessage());
     }
 
     @ExceptionHandler(LimiteEquipamientoException.class)
@@ -97,6 +177,17 @@ public class ManejadorDeErrores {
     })
     public ProblemDetail solicitudInvalida(Exception error) {
         return problema(HttpStatus.BAD_REQUEST, "Solicitud invalida", "Revisa los datos del elemento.");
+    }
+
+    /**
+     * B4: una entrega sin {@code Idempotency-Key}, o con una vacia o de mas de
+     * cien caracteres. Sin clave no hay forma de reintentar sin duplicar, asi
+     * que no se procesa.
+     */
+    @ExceptionHandler({MissingRequestHeaderException.class, HandlerMethodValidationException.class})
+    public ProblemDetail solicitudSinClaveValida(Exception error) {
+        return problema(HttpStatus.BAD_REQUEST, "Solicitud invalida",
+                "Revisa los datos de la solicitud y la cabecera Idempotency-Key (1 a 100 caracteres).");
     }
 
     private ProblemDetail problema(HttpStatus estado, String titulo, String detalle) {

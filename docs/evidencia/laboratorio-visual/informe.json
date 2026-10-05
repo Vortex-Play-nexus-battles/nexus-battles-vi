@@ -1,8 +1,71 @@
 {
-  "generado": "2026-09-23T20:29:45.458Z",
+  "generado": "2026-09-24T07:59:38.347Z",
   "modo": "sin-servicios",
-  "combinaciones": 170,
-  "conHallazgos": 0,
-  "porMotivo": {},
-  "detalle": []
+  "combinaciones": 175,
+  "conHallazgos": 5,
+  "porMotivo": {
+    "error-tecnico-visible": 5
+  },
+  "detalle": [
+    {
+      "vista": "control-integral",
+      "grupo": "admin",
+      "pantalla": "desktop",
+      "ancho": 1440,
+      "hallazgos": [
+        {
+          "motivo": "error-tecnico-visible",
+          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
+        }
+      ]
+    },
+    {
+      "vista": "control-integral",
+      "grupo": "admin",
+      "pantalla": "laptop",
+      "ancho": 1280,
+      "hallazgos": [
+        {
+          "motivo": "error-tecnico-visible",
+          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
+        }
+      ]
+    },
+    {
+      "vista": "control-integral",
+      "grupo": "admin",
+      "pantalla": "laptop-min",
+      "ancho": 1024,
+      "hallazgos": [
+        {
+          "motivo": "error-tecnico-visible",
+          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
+        }
+      ]
+    },
+    {
+      "vista": "control-integral",
+      "grupo": "admin",
+      "pantalla": "tablet",
+      "ancho": 768,
+      "hallazgos": [
+        {
+          "motivo": "error-tecnico-visible",
+          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
+        }
+      ]
+    },
+    {
+      "vista": "control-integral",
+      "grupo": "admin",
+      "pantalla": "movil",
+      "ancho": 375,
+      "hallazgos": [
+        {
+          "motivo": "error-tecnico-visible",
+          "detalle": "el texto de la pantalla contiene /\\b(?:Error|HTTP|[Ss]tatus|[Cc]ódigo|[Cc]odigo)\\s*:?\\s*\\d{3}\\b/"
+        }
+      ]
+    }
+  ]
 }

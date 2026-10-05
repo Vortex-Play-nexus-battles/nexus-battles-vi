@@ -5,8 +5,39 @@ const GENERICO = 'No se pudo publicar la subasta. Inténtalo de nuevo más tarde
 const INCIERTO =
   'No se pudo confirmar el resultado. Reintenta esta misma publicación; no inicies otra mientras se resuelve.';
 
-// ManejadorDeErroresPublicacion usa about:blank. No expone códigos funcionales:
-// solo traducimos detalles conocidos, nunca mostramos texto arbitrario del servidor.
+// B8 — desde ms-subastas-publicar.yaml 1.0.0 los rechazos de negocio llevan
+// `motivo`, un código estable: manda sobre el texto. El incremento sin
+// configurar no es una avería ni un resultado incierto: falta un parámetro de
+// administración (D-43 lo fija en 5 créditos), y se dice así.
+const MOTIVOS = new Map([
+  [
+    'INCREMENTO_MINIMO_NO_CONFIGURADO',
+    'El incremento mínimo entre pujas no está configurado en administración: no se pueden publicar subastas hasta que un administrador lo fije.',
+  ],
+  [
+    'LIMITE_PUBLICACIONES_ACTIVAS',
+    'Ya tienes 10 subastas activas, el máximo permitido. Espera a que termine alguna o cancela una sin pujas.',
+  ],
+  [
+    'COMPRA_INMEDIATA_NO_SUPERIOR',
+    'La compra inmediata debe ser superior al precio mínimo de puja.',
+  ],
+  ['SALDO_INSUFICIENTE', 'No tienes créditos suficientes para pagar la comisión.'],
+]);
+
+/** Motivos que no dejan nada a medias: el servidor no hizo ningún efecto. */
+const MOTIVOS_SIN_EFECTO = new Set([
+  'INCREMENTO_MINIMO_NO_CONFIGURADO',
+  'LIMITE_PUBLICACIONES_ACTIVAS',
+  'COMPRA_INMEDIATA_NO_SUPERIOR',
+  'SALDO_INSUFICIENTE',
+]);
+
+const TIPO_PARAMETRO_NO_CONFIGURADO =
+  'https://nexusbattles.upb.edu.co/errors/parametro-no-configurado';
+
+// ManejadorDeErroresPublicacion usa about:blank. Solo traducimos detalles
+// conocidos, nunca mostramos texto arbitrario del servidor.
 const MENSAJES = new Map([
   [
     '422|Creditos insuficientes para publicar la subasta',
@@ -30,8 +61,8 @@ const MENSAJES = new Map([
     'El producto ya no coincide con el inventario. Vuelve a seleccionarlo.',
   ],
   [
-    '422|El precio de compra inmediata debe ser mayor o igual al precio inicial',
-    'La compra inmediata debe ser mayor o igual al precio inicial.',
+    '422|El precio de compra inmediata debe ser superior al precio minimo de puja',
+    'La compra inmediata debe ser superior al precio mínimo de puja.',
   ],
   ['404|Elemento de inventario inexistente', 'El elemento ya no existe en el inventario.'],
   ['404|Producto inexistente', 'El producto ya no está disponible.'],
@@ -63,6 +94,18 @@ export class ErrorPublicacion extends Error {
 }
 
 export function interpretarProblema(status, problema = {}) {
+  const motivo = typeof problema?.motivo === 'string' ? problema.motivo : null;
+  const tipoPropio = problema?.type === TIPO_PARAMETRO_NO_CONFIGURADO;
+  if (
+    motivo &&
+    MOTIVOS.has(motivo) &&
+    (tipoPropio || !problema?.type || problema.type === 'about:blank')
+  ) {
+    return new ErrorPublicacion(MOTIVOS.get(motivo), {
+      status,
+      incierto: !MOTIVOS_SIN_EFECTO.has(motivo),
+    });
+  }
   const conocido = !problema?.type || problema.type === 'about:blank';
   const detalle = conocido ? problema?.detail : '';
   let message = MENSAJES.get(`${status}|${detalle}`) ?? GENERICO;

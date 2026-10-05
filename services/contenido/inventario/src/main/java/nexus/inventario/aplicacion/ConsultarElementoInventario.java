@@ -8,7 +8,7 @@ import nexus.inventario.dominio.Inventario;
 import nexus.inventario.dominio.RepositorioDeInventarios;
 import org.springframework.stereotype.Service;
 
-/** Consulta una unidad concreta para la integracion Inventario-Subastas. */
+/** Consulta una unidad concreta para las integraciones con Subastas y, desde 1.6.0, Misiones. */
 @Service
 public class ConsultarElementoInventario {
 
@@ -32,7 +32,14 @@ public class ConsultarElementoInventario {
                 comoUuid(inventario.propietarioId()),
                 inventario.estaEnUso(elemento.id()),
                 elemento.disponible(),
-                elemento.subastaId() == null ? null : comoUuid(elemento.subastaId()));
+                elemento.subastaId() == null ? null : comoUuid(elemento.subastaId()),
+                // 1.6.0 (B9): lo que misiones comprueba antes de matricular. El
+                // nivel y la experiencia son los de B4: presentes solo en un heroe.
+                elemento.tipo(),
+                elemento.nombrePropio(),
+                elemento.nivel(),
+                elemento.experiencia(),
+                elemento.ejecucionMisionId() == null ? null : comoUuid(elemento.ejecucionMisionId()));
     }
 
     private UUID comoUuid(String valor) {
