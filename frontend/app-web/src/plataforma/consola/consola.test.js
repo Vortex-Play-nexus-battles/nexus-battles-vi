@@ -38,6 +38,27 @@ test('el moderador encuentra la cola de comentarios entre sus herramientas', () 
   expect(comentarios.textContent).toMatch(/Comentarios reportados: aprobar, ocultar, editar/);
 });
 
+/**
+ * RFINAL-06 (revisión del super administrador en DEV, 4-oct): «Crear cuenta
+ * administrativa» existía y solo se llegaba escribiendo su dirección. La
+ * tarjeta sale de la misma matriz que la guarda de la vista (RF-RBAC-003:
+ * exclusiva del super administrador).
+ */
+test('el super administrador encuentra «Crear cuenta administrativa»; nadie más la ve', () => {
+  const delSuper = montar('SUPER_ADMINISTRADOR');
+  const ids = delSuper.map((t) => t.dataset.herramienta);
+  expect(ids.indexOf('crear-cuenta-admin')).toBe(ids.indexOf('usuarios') + 1);
+
+  const tarjeta = delSuper.find((t) => t.dataset.herramienta === 'crear-cuenta-admin');
+  expect(tarjeta.getAttribute('href')).toMatch(/cuentas\/crear-cuenta-admin\.html$/);
+  expect(tarjeta.querySelector('.tarjeta__titulo').textContent).toBe('Crear cuenta administrativa');
+  expect(tarjeta.querySelector('.t-meta').textContent).toMatch(/moderador o administrador/);
+
+  for (const rol of ['ADMINISTRADOR', 'MODERADOR']) {
+    expect(montar(rol).map((t) => t.dataset.herramienta)).not.toContain('crear-cuenta-admin');
+  }
+});
+
 test('cada herramienta que se ve lleva su descripción: ninguna tarjeta muda', () => {
   const herramientas = montar('SUPER_ADMINISTRADOR');
 

@@ -481,10 +481,31 @@ describe('armazón de consola', () => {
     expect(elemento.querySelector('[data-zona="creditos"]')).toBeNull();
   });
 
-  test('el super administrador ve todas las herramientas', () => {
+  test('el super administrador ve todas las herramientas de la barra', () => {
     expect(etiquetas(consolaDe('SUPER_ADMINISTRADOR'))).toEqual(
-      SECCIONES_CONSOLA.map((s) => s.etiqueta),
+      SECCIONES_CONSOLA.filter((s) => s.barra !== false).map((s) => s.etiqueta),
     );
+  });
+
+  /**
+   * RFINAL-06 — la herramienta existe en la consola (el aterrizaje la pinta,
+   * `consola.test.js`), pero no en la barra: su vista ya marca «Usuarios» como
+   * sección activa y la barra del super administrador está medida para caber
+   * en una fila (componentes.css).
+   */
+  test('RFINAL-06: «Crear cuenta administrativa» está en la consola, no en la barra', () => {
+    const entrada = SECCIONES_CONSOLA.find((s) => s.id === 'crear-cuenta-admin');
+    expect(entrada).toEqual(
+      expect.objectContaining({
+        etiqueta: 'Crear cuenta administrativa',
+        vista: 'crear-cuenta-admin',
+        barra: false,
+      }),
+    );
+
+    const barra = consolaDe('SUPER_ADMINISTRADOR');
+    expect(etiquetas(barra)).not.toContain('Crear cuenta administrativa');
+    expect(barra.querySelector('[data-seccion="crear-cuenta-admin"]')).toBeNull();
   });
 
   test('el administrador no ve auditoría; el moderador solo ve lo suyo', () => {
