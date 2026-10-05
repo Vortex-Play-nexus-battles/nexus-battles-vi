@@ -250,7 +250,12 @@ services:
   #     con cualquier valor: con client-id y sin secreto no arranca.
   #   - ms-finanzas (8093) e identidad (8089) del host de plataforma, por su IP
   #     elastica: los dos admiten a este host en su grupo de seguridad (B12).
-  #     El correo de misiones sigue apagado (MISIONES_CORREO_ACTIVO=false).
+  #   - el correo (8082, RF-COR-005). Encendido por omision desde el 5-oct
+  #     (RFINAL-01): el 8082 esta en el bloque 8081-8088 que el grupo de
+  #     seguridad de plataforma admite desde este host (comprobado con la
+  #     accion «inventario» de infra-dev, corrida 37264710414), y el contacto
+  #     del jugador lo da ms-identidad por su ruta interna. Apagarlo es poner
+  #     MISIONES_CORREO_ACTIVO=false en el entorno, no tocar este archivo.
   # Sus cuatro vecinos de contenido se alcanzan por nombre en esta red. Lo que
   # falta es de la cuenta del grupo 2: que su grupo de seguridad admita el
   # 8105 desde el borde (infrastructure/entornos/contenido/reglas-entrada.json).
@@ -282,7 +287,9 @@ services:
       CREDITOS_URL: ${MISIONES_CREDITOS_URL:-http://35.168.124.119:8093/api/v1}
       CORREO_URL: ${MISIONES_CORREO_URL:-http://35.168.124.119:8082/api/v1}
       IDENTIDAD_URL: ${MISIONES_IDENTIDAD_URL:-http://35.168.124.119:8089}
-      MISIONES_CORREO_ACTIVO: ${MISIONES_CORREO_ACTIVO:-false}
+      # La base del correo lleva su /api/v1: el cliente de misiones solo le
+      # anade /correos/mision.
+      MISIONES_CORREO_ACTIVO: ${MISIONES_CORREO_ACTIVO:-true}
       # RF-NOT-004: los avisos de misiones van a la bandeja del jugador. El
       # 8085 de notificaciones esta en el bloque 8081-8088 que el grupo de
       # seguridad de plataforma admite desde este host (B12).

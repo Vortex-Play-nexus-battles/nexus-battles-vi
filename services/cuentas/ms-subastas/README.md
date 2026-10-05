@@ -286,8 +286,11 @@ pendiente salen **tambien por correo** (`POST /correos/subasta`) cuando
 `CORREO_URL` esta configurada: el correo y el apodo se piden a ms-identidad en el
 momento (`GET /internal/usuarios/{uid}/contacto`) y no se guardan; la
 `Idempotency-Key` es el id del aviso. Reintentos con espera exponencial hasta
-FALLIDO. **Esa ruta de ms-identidad figura como pendiente (B2)**: sin ella el
-correo no sale y termina FALLIDO (no se descarta en silencio).
+FALLIDO. Esa ruta de ms-identidad ya esta implementada (ms-identidad-admin.yaml
+1.1.0), y desde RFINAL-01 (5-oct) el correo va **encendido por omision** en
+`docker-compose.ms-subastas.yml` (`http://35.168.124.119:8082`, sin `/api/v1`).
+Lo prueba `subastas.e2e.spec.js` («la venta le llega por correo a la
+vendedora»), con el servicio de correo real del banco y Mailpit.
 
 Al vender (cierre con ganador o compra inmediata), el vendedor recibe ademas
 `CREDITOS_RECIBIDOS` (7.7.8, «Confirmacion de transferencia de creditos
@@ -413,13 +416,13 @@ salas-partidas → inventario):
 | notificaciones | `http://35.168.124.119:8085/api/v1` | publicado por `docker-compose.yml`; 8081-8088 abiertos a `cidr_servicios` | `NOTIFICACIONES_BASE_URL` |
 | moderacion-sanciones | `http://35.168.124.119:8086` | idem | `SANCIONES_BASE_URL` |
 | admin-parametros | `http://35.168.124.119:8088/api/v1` | idem (`GET /parametros/{clave}/valor` es publica) | `PARAMETROS_URL` |
-| correo | `http://35.168.124.119:8082` | idem; **se deja vacio** hasta que ms-identidad sirva el contacto (B2) | `SUBASTAS_CORREO_URL` |
+| correo | `http://35.168.124.119:8082` | idem; encendido por omision desde RFINAL-01 (el 8082 esta en el bloque 8081-8088 que el grupo de seguridad de plataforma admite desde 34.193.90.11/32, comprobado el 5-oct). `SUBASTAS_CORREO_URL=` vacia lo apaga | `SUBASTAS_CORREO_URL` |
 | el borde → ms-subastas | `34.193.90.11:8092` (REST y `/api/v1/ws-subastas`) | el grupo de seguridad de contenido solo abre 8101-8104 al 35.168.124.119/32 | regla nueva |
 
-`cidr_servicios` de plataforma vale `0.0.0.0/0` por omision en
-`infrastructure/entornos/plataforma/variables.tf`; el valor aplicado de verdad
-no esta en el repo y B9 dejo escrito que correo no se alcanza. Por eso el paso
-2 lo comprueba antes de nada.
+`cidr_servicios` de plataforma vale `["34.193.90.11/32"]` desde B12
+(`infrastructure/entornos/plataforma/variables.tf`), y es lo aplicado: la accion
+`inventario` de infra-dev (corrida 37264710414, 5-oct) lista 8081-8088 y 8089
+abiertos solo a esa IP. El paso 2 lo vuelve a comprobar desde el host.
 
 ### Pasos, en orden, con su comprobacion
 
