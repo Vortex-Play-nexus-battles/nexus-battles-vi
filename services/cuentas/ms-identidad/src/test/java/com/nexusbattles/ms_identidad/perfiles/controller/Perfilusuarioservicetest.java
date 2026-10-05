@@ -155,13 +155,24 @@ class PerfilUsuarioServiceTest {
     void actualizar_conApodoNuevoValido_loCambia() {
         PerfilUsuario perfil = perfilConApodo("Santi");
         when(perfilUsuarioRepository.findByIdConUsuario(1L)).thenReturn(Optional.of(perfil));
-        when(usuarioRepository.findByApodo("NuevoApodo")).thenReturn(Optional.empty());
+        when(usuarioRepository.existsByApodoIgnoreCase("NuevoApodo")).thenReturn(false);
 
-        service.actualizarPerfilPropio(1L, "Nombre", "Apellido", null, "prefs", "NuevoApodo");
+        service.actualizarPerfilPropio(1L, "Nombre", "Apellido", null, "prefs", "  NuevoApodo ");
 
-        assertEquals("NuevoApodo", perfil.getUsuario().getApodo());
+        assertEquals("NuevoApodo", perfil.getUsuario().getApodo(), "se guarda sin los espacios de los bordes");
         verify(apodoBlacklistValidator).validar("NuevoApodo");
         verify(usuarioRepository).save(perfil.getUsuario());
+    }
+
+    @Test
+    void actualizar_soloCambiandoMayusculasDelPropio_sePermite() {
+        PerfilUsuario perfil = perfilConApodo("Santi");
+        when(perfilUsuarioRepository.findByIdConUsuario(1L)).thenReturn(Optional.of(perfil));
+
+        service.actualizarPerfilPropio(1L, "Nombre", "Apellido", null, "prefs", "SANTI");
+
+        assertEquals("SANTI", perfil.getUsuario().getApodo());
+        verify(usuarioRepository, never()).existsByApodoIgnoreCase(any());
     }
 
     @Test
@@ -179,10 +190,11 @@ class PerfilUsuarioServiceTest {
     void actualizar_conApodoYaEnUso_lanzaExcepcion() {
         PerfilUsuario perfil = perfilConApodo("Santi");
         when(perfilUsuarioRepository.findByIdConUsuario(1L)).thenReturn(Optional.of(perfil));
-        when(usuarioRepository.findByApodo("Ocupado")).thenReturn(Optional.of(new Usuario()));
+        // RFINAL-03: sin distinguir mayusculas, como el registro.
+        when(usuarioRepository.existsByApodoIgnoreCase("ocupado")).thenReturn(true);
 
-        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-                () -> service.actualizarPerfilPropio(1L, "Nombre", "Apellido", null, "prefs", "Ocupado"));
+        IllegalArgumentException ex = assertThrows(ApodoEnUsoException.class,
+                () -> service.actualizarPerfilPropio(1L, "Nombre", "Apellido", null, "prefs", "ocupado"));
         assertEquals("El apodo ya está en uso.", ex.getMessage());
     }
 

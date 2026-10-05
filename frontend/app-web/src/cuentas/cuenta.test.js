@@ -372,6 +372,110 @@ describe('montarCuenta()', () => {
     );
   });
 
+  describe('RFINAL-03: el rechazo del apodo dice por qué, sin revelar el término', () => {
+    /** Respuesta con cuerpo en texto, como la de un fetch real. */
+    function respuestaTexto(texto, status) {
+      return Promise.resolve({
+        ok: false,
+        status,
+        text: () => Promise.resolve(texto),
+        json: () => Promise.reject(new Error('el cuerpo ya se leyó como texto')),
+      });
+    }
+
+    const PROBLEMA = (motivo, status = 400) =>
+      JSON.stringify({
+        type: `https://nexusbattles.upb.edu.co/errors/${motivo}`,
+        title: 'Rechazado',
+        status,
+        detail: 'El apodo contiene términos prohibidos por la política de la comunidad.',
+        campo: 'apodo',
+      });
+
+    /** Monta Mi cuenta, cambia el apodo, confirma el diálogo y espera el PUT. */
+    async function cambiarApodo(apodo, alPut) {
+      const raiz = montarVista();
+      const fetchImpl = jest.fn((url, opciones = {}) => {
+        const ruta = String(url);
+        if (ruta.includes('/perfiles/')) {
+          return opciones.method === 'PUT' ? alPut() : respuesta(PERFIL);
+        }
+        if (ruta.includes('/saldo')) {
+          return respuesta({ saldoDisponible: 0, saldoReservado: 0 });
+        }
+        return respuesta({ content: [] });
+      });
+      const cuenta = montarCuenta(raiz, { sesion: SESION, fetchImpl });
+      await cuenta.recargar();
+      const formulario = raiz.querySelector('#formulario-perfil');
+      formulario.elements.apodo.value = apodo;
+
+      formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+      await new Promise((listo) => setTimeout(listo, 0));
+      document.querySelector('[data-accion="confirmar"]').click();
+      for (let vuelta = 0; vuelta < 5; vuelta += 1) {
+        await new Promise((listo) => setTimeout(listo, 0));
+      }
+      return { raiz, formulario, fetchImpl };
+    }
+
+    test.each(['spiderman', 'Spiderman', 'spider-man', 'batman'])(
+      '«%s» rechazado por la lista negra: «Ese apodo no está permitido. Elige otro.»',
+      async (apodo) => {
+        const { raiz, formulario } = await cambiarApodo(apodo, () =>
+          respuestaTexto(PROBLEMA('apodo-no-permitido'), 400),
+        );
+
+        const aviso = raiz.querySelector('[data-zona="aviso"]').textContent;
+        expect(aviso).toContain('Ese apodo no está permitido. Elige otro.');
+        expect(aviso).not.toContain('Revisa los datos');
+        expect(aviso).not.toContain('términos prohibidos');
+        expect(formulario.elements.apodo.getAttribute('aria-invalid')).toBe('true');
+      },
+    );
+
+    test('el PUT pide problem details', async () => {
+      const { fetchImpl } = await cambiarApodo('Valkiria2', () =>
+        respuestaTexto(PROBLEMA('apodo-no-permitido'), 400),
+      );
+
+      const put = fetchImpl.mock.calls.find(([, opciones]) => opciones?.method === 'PUT');
+      expect(put[1].headers.Accept).toContain('application/problem+json');
+    });
+
+    test('apodo en uso tiene su propio mensaje y marca el campo', async () => {
+      const { raiz, formulario } = await cambiarApodo('Ocupado', () =>
+        respuestaTexto(PROBLEMA('apodo-en-uso'), 400),
+      );
+
+      expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
+        'Ese apodo ya lo usa otro jugador',
+      );
+      expect(formulario.elements.apodo.getAttribute('aria-invalid')).toBe('true');
+    });
+
+    test('con la lista negra caída lo dice y NO marca el apodo como inválido', async () => {
+      const { raiz, formulario } = await cambiarApodo('Valkiria2', () =>
+        respuestaTexto(PROBLEMA('moderacion-no-disponible', 503), 503),
+      );
+
+      expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
+        'No pudimos comprobar tu apodo',
+      );
+      expect(formulario.elements.apodo.getAttribute('aria-invalid')).not.toBe('true');
+    });
+
+    test('un servidor anterior (texto plano) se sigue leyendo', async () => {
+      const { raiz } = await cambiarApodo('Ocupado', () =>
+        respuestaTexto('El apodo ya está en uso.', 400),
+      );
+
+      expect(raiz.querySelector('[data-zona="aviso"]').textContent).toContain(
+        'El apodo ya está en uso.',
+      );
+    });
+  });
+
   test('descartar devuelve el formulario a lo que hay guardado', async () => {
     const raiz = montarVista();
     const fetchImpl = fetchFalso({

@@ -69,6 +69,8 @@ class CambioDePasswordControllerTest {
         ana.setApodo("ana");
         ana.setVersionToken(2);
         when(usuarioRepository.findByApodo("ana")).thenReturn(Optional.of(ana));
+        // RFINAL-03: el interceptor busca al titular por el uid del token.
+        when(usuarioRepository.findByPublicId(uid)).thenReturn(Optional.of(ana));
 
         servicio = mock(CambioDePasswordService.class);
         // R9.5 — respaldo por cabecera APAGADO: esta clase acredita con JWT,
