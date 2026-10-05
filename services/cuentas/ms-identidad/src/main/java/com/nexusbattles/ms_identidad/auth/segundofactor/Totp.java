@@ -110,7 +110,13 @@ public final class Totp {
 
     private static byte[] hmacSha1(byte[] clave, byte[] mensaje) {
         try {
-            Mac mac = Mac.getInstance("HmacSHA1");
+            // HMAC-SHA1 es el algoritmo de TOTP (RFC 6238 §1.2 sobre HOTP, RFC 4226
+            // §5.3) y el único que leen de forma fiable las aplicaciones de
+            // autenticación (la URI otpauth no garantiza que respeten otro). En un
+            // HMAC no aplica la debilidad de SHA-1 ante colisiones (RFC 6194 §3.2):
+            // es un uso aceptado, no un resumen de contraseñas ni una firma.
+            Mac mac = Mac.getInstance("HmacSHA1"); // NOSONAR java:S4790 — TOTP RFC 6238, ver arriba
+
             mac.init(new SecretKeySpec(clave, "RAW"));
             return mac.doFinal(mensaje);
         } catch (GeneralSecurityException imposible) {
