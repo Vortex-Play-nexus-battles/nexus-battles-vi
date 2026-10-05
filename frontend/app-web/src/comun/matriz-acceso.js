@@ -334,6 +334,15 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
+  // HU-USR-010 — la ficha administrativa del usuario. Mismo nivel que la
+  // gestión de cuentas: su fuente principal (`GET /admin/usuarios/{usuario}/
+  // ficha`, ms-identidad-admin.yaml 1.4.0) pide `GESTIONAR_CUENTAS`, que la
+  // Tabla 24 da al Administrador y al Super Administrador, no al Moderador.
+  'ficha-usuario': {
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   'parametros-admin': {
     ruta: 'plataforma/admin-parametros/parametros-admin.html',
     acceso: ACCESO.ADMINISTRACION,
