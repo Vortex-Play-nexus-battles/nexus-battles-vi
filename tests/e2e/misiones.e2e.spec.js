@@ -37,6 +37,7 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
+import { correosPara } from './ayudantes/correo.js';
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
@@ -418,6 +419,30 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
       a.id.startsWith(`mision-${ejecucionId}-aviso`),
     );
     expect(deEstaMision.map((a) => a.id)).toEqual([`mision-${ejecucionId}-aviso`]);
+  });
+
+  test('4c · RF-COR-005: el correo de fin de misión llega al buzón de la jugadora, una vez', async () => {
+    // RFINAL-01: misiones liquida el paso CORREO contra el servicio de correo
+    // real del banco (POST /correos/mision, credencial de servicio y contacto
+    // de ms-identidad). Su cuenta es @nexus.test, así que la cola la entrega
+    // en Mailpit. Con el correo apagado, la entrega del reporte habría
+    // terminado igual (test 3) y aquí no llegaría nada.
+    let deLaMision = [];
+    await expect
+      .poll(
+        async () => {
+          deLaMision = (await correosPara(jugadora.email, { base: BORDE })).filter((m) =>
+            String(m.Subject ?? '').includes(PRUEBA.nombre),
+          );
+          return deLaMision.length;
+        },
+        { timeout: 60_000, message: 'el correo de fin de misión no llegó al buzón de pruebas' },
+      )
+      .toBeGreaterThan(0);
+    expect(deLaMision[0].Subject).toContain(`«${PRUEBA.nombre}» terminó con éxito`);
+    // Idempotency-Key `mision-{id}-correo`: aunque el trabajo dé varias
+    // vueltas, el servicio de correo encola uno solo.
+    expect(deLaMision).toHaveLength(1);
   });
 
   test('5 · la pestaña Estrategia carga la guardada del héroe y la vuelve a guardar', async ({
