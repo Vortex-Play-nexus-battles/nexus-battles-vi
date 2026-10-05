@@ -1,6 +1,8 @@
 package nexus.aplicacion;
 
 import java.time.Instant;
+import java.util.Arrays;
+import java.util.List;
 
 import nexus.api.ProductoCreado;
 import nexus.api.PromocionVista;
@@ -9,6 +11,7 @@ import nexus.api.SolicitudModificarProducto;
 import nexus.api.SolicitudPromocion;
 import nexus.dominio.Producto;
 import nexus.dominio.Promocion;
+import nexus.dominio.TipoProducto;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
@@ -39,6 +42,8 @@ public interface ProductoMapper {
          * con la promocion ya evaluada por {@link ProyeccionDeProductos}.
          */
         @Mapping(target = "promocion", source = "promocionVigente")
+        @Mapping(target = "rareza", expression = "java(rarezaDe(producto))")
+        @Mapping(target = "habilidades", expression = "java(habilidadesDe(producto))")
         ProductoCreado aRespuestaCompleta(Producto producto, PromocionVista promocionVigente);
 
         /**
@@ -46,12 +51,50 @@ public interface ProductoMapper {
          * JSON, que se publica con {@code non_null}, no los trae.
          */
         @Mapping(target = "promocion", source = "promocionVigente")
+        @Mapping(target = "rareza", expression = "java(rarezaDe(producto))")
+        @Mapping(target = "habilidades", expression = "java(habilidadesDe(producto))")
         @Mapping(target = "version", ignore = true)
         @Mapping(target = "tasaDeCaida", ignore = true)
         @Mapping(target = "origen", ignore = true)
         @Mapping(target = "semillaVersion", ignore = true)
         @Mapping(target = "modificadoPor", ignore = true)
         ProductoCreado aRespuestaPublica(Producto producto, PromocionVista promocionVigente);
+
+        default String rarezaDe(Producto producto) {
+                return producto.tipo() == TipoProducto.EPICA ? "EPICA" : "COMUN";
+        }
+
+        default List<String> habilidadesDe(Producto producto) {
+                return switch (producto.tipo()) {
+                        case HEROE -> List.of();
+                        case HABILIDAD -> presentes(producto.descripcion());
+                        case ARMA, ARMADURA -> presentes(efectosDe(producto.descripcion()));
+                        case ITEM -> presentes(producto.efecto());
+                        case EPICA -> presentes(producto.efectoGeneral(), producto.efectoPotenciado());
+                };
+        }
+
+        private static List<String> presentes(String... valores) {
+                return Arrays.stream(valores)
+                        .filter(valor -> valor != null && !valor.isBlank())
+                        .map(String::trim)
+                        .toList();
+        }
+
+        private static String efectosDe(String descripcion) {
+                if (descripcion == null) {
+                        return null;
+                }
+                String inicio = "Efectos: ";
+                int desde = descripcion.indexOf(inicio);
+                if (desde < 0) {
+                        return null;
+                }
+                desde += inicio.length();
+                String fin = ". Probabilidad de caída:";
+                int hasta = descripcion.indexOf(fin, desde);
+                return hasta < 0 ? descripcion.substring(desde) : descripcion.substring(desde, hasta);
+        }
 
         default SolicitudCrearProducto fusionar(Producto existente, SolicitudModificarProducto cambios) {
                 return new SolicitudCrearProducto(

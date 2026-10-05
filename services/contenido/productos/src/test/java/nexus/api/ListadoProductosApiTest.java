@@ -98,6 +98,21 @@ class ListadoProductosApiTest {
         }
 
         @Test
+        @DisplayName("el listado publica la rareza y las habilidades de cada producto")
+        void publicaRarezaYHabilidades() throws Exception {
+                when(productoRepository.findByEstadoIn(any(), any()))
+                        .thenReturn(new PageImpl<>(List.of(productoEpico()), PRIMERA_PAGINA, 1));
+
+                mvc.perform(get(LISTADO))
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.content[0].id").value("epica-1"))
+                        .andExpect(jsonPath("$.content[0].rareza").value("EPICA"))
+                        .andExpect(jsonPath("$.content[0].habilidades", hasSize(2)))
+                        .andExpect(jsonPath("$.content[0].habilidades[0]").value("Daño en área"))
+                        .andExpect(jsonPath("$.content[0].habilidades[1]").value("Duplica el daño"));
+        }
+
+        @Test
         @DisplayName("filtra por tipo sin salir de los estados que se listan por omision")
         void filtraPorTipo() throws Exception {
                 when(productoRepository.findByTipoAndEstadoIn(any(), any(), any()))
@@ -317,6 +332,37 @@ class ListadoProductosApiTest {
                         40,
                         new BigDecimal("12.5"),
                         estado,
+                        1,
+                        creadoEn,
+                        creadoEn);
+        }
+
+        private static Producto productoEpico() {
+                Instant creadoEn = Instant.parse("2026-09-20T12:00:00Z");
+                return new Producto(
+                        "epica-1",
+                        "Tormenta",
+                        "productos/epica-1.webp",
+                        "Habilidad épica",
+                        TipoProducto.EPICA,
+                        1,
+                        900,
+                        null,
+                        true,
+                        null,
+                        "heroe-1",
+                        null,
+                        null,
+                        null,
+                        2,
+                        "Daño en área",
+                        "Duplica el daño",
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        EstadoProducto.UNICO,
                         1,
                         creadoEn,
                         creadoEn);
