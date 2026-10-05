@@ -14,6 +14,7 @@ import {
   crearSala,
   listarSalas,
   ingresarASala,
+  comprobarIngreso,
   verificarHeroe,
   iniciarPartida,
   obtenerPartida,
@@ -96,6 +97,50 @@ describe('listarSalas', () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, paginaDelContrato));
 
     expect(await listarSalas({}, { fetchImpl })).toEqual(paginaDelContrato);
+  });
+});
+
+/**
+ * RFINAL-04 — «¿me dejaría entrar con este código?», sin efectos
+ * (salas-partidas.yaml 1.9.0).
+ */
+describe('comprobarIngreso', () => {
+  test('pregunta a su ruta con POST y el código en el cuerpo, nunca en la dirección', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+    const sala = await comprobarIngreso('abc', { codigoInvitacion: ' WXYZ-2345 ', fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/abc/comprobacion-de-ingreso');
+    expect(url).not.toContain('WXYZ');
+    expect(opciones.method).toBe('POST');
+    expect(JSON.parse(opciones.body)).toEqual({ codigoInvitacion: 'WXYZ-2345' });
+    expect(sala).toEqual({ id: 'abc' });
+  });
+
+  test('sin código manda un cuerpo vacío: la sala pública no lo pide', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+    await comprobarIngreso('abc', { fetchImpl });
+
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({});
+  });
+
+  test('un código que no vale llega como el 403 de sala privada que la vista ya entiende', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/sala-privada',
+        title: 'Esta sala es privada',
+        status: 403,
+      }),
+    );
+
+    const error = await comprobarIngreso('abc', { codigoInvitacion: 'ZZZZ-9999', fetchImpl }).catch(
+      (e) => e,
+    );
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(esSalaPrivada(error)).toBe(true);
   });
 });
 

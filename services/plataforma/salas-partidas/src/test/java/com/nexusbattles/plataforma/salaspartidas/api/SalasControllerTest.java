@@ -106,6 +106,57 @@ class SalasControllerTest {
     @MockitoBean
     private com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo encuentroDeTorneo;
 
+    @MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso comprobarIngreso;
+
+    // ---- RFINAL-04 · comprobarIngreso (1.9.0): el codigo primero, sin efectos ----
+
+    @Test
+    @DisplayName("RFINAL-04: comprobar con el codigo bueno devuelve 200 con la sala y no ingresa a nadie")
+    void comprobarIngresoDevuelveLaSala() throws Exception {
+        Sala sala = Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 500, false, true, null),
+                UUID.randomUUID());
+        when(comprobarIngreso.ejecutar(any(), any(), any())).thenReturn(sala);
+
+        mockMvc.perform(post("/api/v1/salas/" + sala.id() + "/comprobacion-de-ingreso")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigoInvitacion\": \"" + sala.codigoInvitacion() + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(sala.id().toString()))
+                .andExpect(jsonPath("$.recompensaCreditos").value(500))
+                // A quien no es el anfitrion no se le devuelve el codigo, ni aqui.
+                .andExpect(jsonPath("$.codigoInvitacion").doesNotExist());
+
+        verify(comprobarIngreso).ejecutar(org.mockito.ArgumentMatchers.eq(sala.id()), any(),
+                org.mockito.ArgumentMatchers.eq(sala.codigoInvitacion()));
+        org.mockito.Mockito.verifyNoInteractions(ingresarASala);
+    }
+
+    @Test
+    @DisplayName("RFINAL-04: con un codigo equivocado responde 403 sala-privada, el mismo tipo que el ingreso")
+    void comprobarIngresoConCodigoEquivocado() throws Exception {
+        when(comprobarIngreso.ejecutar(any(), any(), any())).thenThrow(new SalaPrivadaSinInvitacion());
+
+        mockMvc.perform(post("/api/v1/salas/" + UUID.randomUUID() + "/comprobacion-de-ingreso")
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"codigoInvitacion\": \"ZZZZ-9999\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/sala-privada"));
+    }
+
+    @Test
+    @DisplayName("RFINAL-04: sin sesion no se comprueba nada")
+    void comprobarIngresoSinSesion() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/" + UUID.randomUUID() + "/comprobacion-de-ingreso")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(comprobarIngreso);
+    }
+
     private static Sala salaDeEjemplo() {
         return Sala.crear(new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, false, null), JUGADOR);
     }

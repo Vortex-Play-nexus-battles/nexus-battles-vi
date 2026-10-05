@@ -300,7 +300,14 @@
         abandonarSala,
         cancelarSala,
       } from './cliente-salas.js';
-      import { montarSalaDeEspera, montarInvitacion, salidaAlListado } from './sala-de-espera.js';
+      import {
+        montarSalaDeEspera,
+        montarInvitacion,
+        salidaAlListado,
+        salaEnEspera,
+        salaCerrada,
+        pintarSalaCerrada,
+      } from './sala-de-espera.js';
       import { confirmar as confirmarDialogo } from '../../comun/ui/dialogo.js';
       import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
       import { usuarioIdDeSesion } from '../../comun/identidad.js';
@@ -536,12 +543,16 @@
             'Estás en la sala, esperando. El combate empieza cuando el anfitrión lo inicie; ' +
             'entonces esta vista pinta la vida de cada participante.';
         }
-        if (zonaArranque && token) {
-          zonaArranque.hidden = false;
-        }
         if (token) {
           try {
             sala = await obtenerSala(idSala);
+            // RFINAL-04 (revisión de AWS DEV del 4-oct) — «Iniciar combate»,
+            // el código para invitar y «Cancelar sala» solo mientras la sala
+            // espera gente. En una sala terminada se veían los tres.
+            const enEspera = salaEnEspera(sala);
+            if (zonaArranque) {
+              zonaArranque.hidden = !enEspera;
+            }
             espera = montarSalaDeEspera(document, {
               sala,
               yo,
@@ -579,7 +590,7 @@
             // R17.4 — a quien abrio la sala no se le dice «el combate empieza
             // cuando el anfitrion lo inicie»: el anfitrion es el. Se le dice
             // que lo arranca el, y con que boton.
-            if (espera.esAnfitrion && zonaVacia) {
+            if (enEspera && espera.esAnfitrion && zonaVacia) {
               zonaVacia.textContent =
                 'Esta sala es tuya. Cuando estén todos, pulsa «Iniciar combate»; ' +
                 'si cambias de idea, puedes cancelarla.';
@@ -592,6 +603,19 @@
               anotarPartidaEnLaUrl();
               ocultarLoDeLaEspera();
             }
+            // RFINAL-04 — una sala que ya no espera (terminada, cancelada) y
+            // sin partida que pintar solo ofrece lo pertinente: volver a
+            // Jugar online y, si se jugó, ir a la cuenta.
+            if (!enEspera && !partida) {
+              ocultarLoDeLaEspera();
+              pintarSalaCerrada(
+                document,
+                salaCerrada(sala, {
+                  batallas: resolver(RUTAS.batallas),
+                  cuenta: resolver(RUTAS.perfil),
+                }),
+              );
+            }
           } catch (error) {
             // Sin ficha no hay sala de espera, pero la vista sigue diciendo la
             // verdad: el mensaje del servicio (404, 401...) va donde se ve.
@@ -600,6 +624,11 @@
                 error,
                 'No pudimos traer esta sala. Vuelve al listado de salas e inténtalo otra vez.',
               );
+            }
+            // RFINAL-04 — si la sala se leyó pero ya no espera (la partida no
+            // se pudo traer), nada de arrancar, invitar ni cancelar.
+            if (sala && !salaEnEspera(sala)) {
+              ocultarLoDeLaEspera();
             }
           }
         }

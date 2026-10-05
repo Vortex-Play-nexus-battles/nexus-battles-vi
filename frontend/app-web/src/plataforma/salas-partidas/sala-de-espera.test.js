@@ -21,6 +21,9 @@ import {
   salidaAlListado,
   invitacionDe,
   montarInvitacion,
+  salaEnEspera,
+  salaCerrada,
+  pintarSalaCerrada,
   CLAVE_AVISO_DEL_LISTADO,
 } from './sala-de-espera.js';
 
@@ -538,5 +541,92 @@ describe('FI-R4 - la invitacion de una sala privada', () => {
 
     expect(acuse()).not.toMatch(/copiado/i);
     expect(acuse()).toMatch(/no se pudo copiar/i);
+  });
+
+  test('RFINAL-04: en una sala que ya terminó no se ofrece el código ni el enlace', () => {
+    const pintada = montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345', estado: 'FINALIZADA' },
+      origen: ORIGEN,
+    });
+
+    expect(pintada).toBe(false);
+    expect(zona().hidden).toBe(true);
+  });
+});
+
+/**
+ * RFINAL-04 — revisión de AWS DEV del 4-oct: tras el combate seguían a la
+ * vista «Iniciar combate», «Copiar código/enlace» y «Cancelar sala».
+ */
+describe('RFINAL-04 · una sala que ya no espera solo ofrece lo pertinente', () => {
+  const RUTAS = { batallas: '/batallas', cuenta: '/perfil' };
+
+  test.each([
+    ['ABIERTA', true],
+    ['PRIVADA', true],
+    ['LLENA', true],
+    ['EN_JUEGO', false],
+    ['FINALIZADA', false],
+    ['CANCELADA', false],
+  ])('salaEnEspera(%s) es %s', (estado, espera) => {
+    expect(salaEnEspera({ estado })).toBe(espera);
+  });
+
+  test('sin estado (una ficha vieja) se supone que espera, como hasta ahora', () => {
+    expect(salaEnEspera({})).toBe(true);
+    expect(salaCerrada({}, RUTAS)).toBeNull();
+  });
+
+  test('una sala terminada ofrece volver a Jugar online y ver la cuenta; nada más', () => {
+    const cerrada = salaCerrada({ estado: 'FINALIZADA' }, RUTAS);
+
+    expect(cerrada.titulo).toMatch(/terminó/);
+    expect(cerrada.acciones.map((a) => a.texto)).toEqual([
+      'Volver a Jugar online',
+      'Ver mi cuenta',
+    ]);
+    expect(cerrada.acciones.map((a) => a.href)).toEqual(['/batallas', '/perfil']);
+  });
+
+  test('una sala cancelada solo ofrece volver', () => {
+    const cerrada = salaCerrada({ estado: 'CANCELADA' }, RUTAS);
+
+    expect(cerrada.acciones.map((a) => a.texto)).toEqual(['Volver a Jugar online']);
+  });
+
+  test('pintarSalaCerrada cambia «Ver salas abiertas / Crear sala» por las acciones pertinentes', () => {
+    document.body.innerHTML = `
+      <div data-zona="sin-partida">
+        <p class="estado-vista__titulo">La batalla todavía no empieza</p>
+        <p class="estado-vista__detalle">Estás en la sala, esperando.</p>
+        <div class="fila">
+          <a href="./batallas.html">Ver salas abiertas</a>
+          <a href="./crear-sala.html">Crear sala</a>
+        </div>
+      </div>`;
+
+    pintarSalaCerrada(document, salaCerrada({ estado: 'FINALIZADA' }, RUTAS));
+
+    const zona = document.querySelector('[data-zona="sin-partida"]');
+    expect(zona.querySelector('.estado-vista__titulo').textContent).toMatch(/terminó/);
+    expect([...zona.querySelectorAll('.fila a')].map((a) => a.textContent)).toEqual([
+      'Volver a Jugar online',
+      'Ver mi cuenta',
+    ]);
+    expect(zona.textContent).not.toMatch(/Iniciar combate|Cancelar sala|Copiar/);
+  });
+
+  test('montarSalaDeEspera en una sala terminada no ofrece «Cancelar sala» ni «Salir»', () => {
+    const espera = montarSalaDeEspera(document, {
+      sala: sala({ estado: 'FINALIZADA' }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+
+    expect(document.querySelector('[data-accion="cancelar-sala"]').hidden).toBe(true);
+    expect(document.querySelector('[data-accion="salir-de-sala"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="espera"]').hidden).toBe(true);
+    expect(espera.esAnfitrion).toBe(true);
   });
 });

@@ -137,7 +137,20 @@ info:
     entrar: «Tienes 80 créditos y la apuesta de esta sala es de 150.» (antes
     decía «para crear esta sala» tambien a quien entraba). La interfaz decide
     por `type`, nunca por el texto.
-  version: 1.8.1
+
+    Cambios 1.9.0 (RFINAL-04, revision de AWS DEV del 4-oct), aditivos:
+
+    - Nueva `POST /salas/{idSala}/comprobacion-de-ingreso`
+      (`comprobarIngreso`): «¿me dejaria entrar esta sala con este codigo?»,
+      sin efectos. El listado la usa ANTES de mandar a verificar el heroe:
+      un codigo de invitacion equivocado («ZZZZ-9999») llevaba a la
+      verificacion y la persona lo descubria despues de elegir heroe.
+    - `ingresarASala` comprueba en este orden: sancion (403) → sala (404) →
+      la sala admite al jugador con ese codigo (403 `sala-privada`, 409) →
+      heroe (422) → creditos (422). Antes el heroe iba antes que la sala, y
+      con apuesta el libro anotaba una reserva y su devolucion por un ingreso
+      que nunca podia prosperar. Mismos codigos y tipos que en 1.8.x.
+  version: 1.9.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -355,6 +368,11 @@ paths:
       description: |
         Ingresa al jugador autenticado en la sala seleccionada (RF-JUE-002).
 
+        1.9.0 — orden de las comprobaciones: sancion → la sala existe → la
+        sala admite al jugador con su codigo (`comprobarIngreso`) → heroe →
+        creditos. Un codigo equivocado o una sala llena se dicen sin preguntar
+        al inventario ni reservar nada.
+
         Antes de admitirlo, el sistema exige que tenga su personaje equipado
         (RF-JUE-003) y que ese heroe no este comprometido en otra partida. Los
         dos rechazos posibles se distinguen por `type`, porque la interfaz
@@ -384,8 +402,10 @@ paths:
           description: |
             No puede entrar. Distinguir por `type`:
 
-            - `codigo-invitacion-invalido`: la sala es privada y el codigo
-              falta o no corresponde.
+            - `sala-privada`: la sala es privada y el codigo falta o no
+              corresponde. (1.9.0: el ejemplo decia `codigo-invitacion-invalido`,
+              un tipo que el servicio nunca emitio; el real es este, el que
+              la interfaz siempre ha leido.)
             - `jugador-sancionado` (HU-USR-005/006, R10.2): tiene una sancion
               activa. Se comprueba ANTES que el heroe y antes de reservar
               creditos, asi que un rechazo por esta via no deja nada a medias.
@@ -397,7 +417,7 @@ paths:
                 codigoInvalido:
                   summary: sala privada sin codigo valido
                   value:
-                    type: 'https://nexusbattles.local/errores/codigo-invitacion-invalido'
+                    type: 'https://nexusbattles.local/errores/sala-privada'
                     title: 'Codigo de invitacion invalido'
                     status: 403
                     detail: 'Esta sala es privada y el codigo no corresponde.'
@@ -461,6 +481,67 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # RFINAL-04 · HU-SAL-002 — El codigo primero (1.9.0), sin efectos
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/comprobacion-de-ingreso:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Salas]
+      summary: Comprobar, sin entrar, que la sala admite al jugador con su codigo
+      description: |
+        1.9.0. Responde lo mismo que respondería `ingresarASala` en todo lo que
+        no es el heroe ni los creditos: sancion, que la sala exista, el codigo
+        de invitacion de una sala privada, y que la sala admita gente (no
+        llena, no empezada, no estar ya dentro).
+
+        **No tiene efectos**: no ingresa, no reserva creditos y no pregunta al
+        inventario. Un 200 no reserva el cupo: el ingreso vuelve a comprobar, y
+        si otro ocupa el ultimo hueco en medio, ese 409 es el honesto.
+
+        El codigo viaja en el cuerpo y no en la URL, que acaba en las bitacoras
+        del borde.
+      operationId: comprobarIngreso
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngresoRequest'
+      responses:
+        '200':
+          description: |
+            La sala admitiria al jugador con ese codigo. Devuelve la sala como
+            la ve quien pregunta (sin `codigoInvitacion` salvo al anfitrion),
+            para que la interfaz sepa si hay apuesta que confirmar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sala'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            Distinguir por `type`, los mismos del ingreso:
+
+            - `.../errores/sala-privada`: la sala es privada y el codigo
+              falta o no corresponde.
+            - `.../errores/jugador-sancionado`: sancion activa.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: La sala esta llena, ya empezo o ya se esta dentro
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          # La sancion se pregunta a moderacion: fail-closed, como al entrar.
+          $ref: '#/components/responses/DependenciaNoDisponible'
 
   # ---------------------------------------------------------------------------
   # HU-SAL-003 — Verificacion previa, sin efectos secundarios
