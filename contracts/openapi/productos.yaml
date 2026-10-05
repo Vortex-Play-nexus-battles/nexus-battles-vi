@@ -65,7 +65,11 @@ info:
     menor.
     1.6.0 (HU-PRD-013): incorpora la creacion, programacion, edicion y
     retiro logico de banners, ademas de la consulta publica de los que se
-    encuentran vigentes. Cambio aditivo: version menor.
+    encuentran vigentes. Cambio aditivo: version menor. El esquema `Banner`
+    se declara completo y no como `allOf` sobre `SolicitudBanner`: esta
+    cierra sus propiedades (`additionalProperties: false`) y ninguna
+    respuesta con `id` habria cumplido la composicion. La home del jugador
+    rota los vigentes con su fecha de publicacion y su vigencia (RF-NOT-002).
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -697,21 +701,37 @@ components:
           description: Debe ser posterior a publicarDesde y estar en el futuro.
 
     Banner:
-      allOf:
-        - $ref: "#/components/schemas/SolicitudBanner"
-        - type: object
-          required: [id, retirado, creadoEn, modificadoEn]
-          properties:
-            id:
-              type: string
-            retirado:
-              type: boolean
-            creadoEn:
-              type: string
-              format: date-time
-            modificadoEn:
-              type: string
-              format: date-time
+      # Completo y no `allOf` sobre SolicitudBanner: aquella cierra sus
+      # propiedades (`additionalProperties: false`) y ninguna respuesta con
+      # `id` habria cumplido la composicion (ContratoDeBannersTest).
+      type: object
+      required:
+        [id, contenido, publicarDesde, vigenteHasta, retirado, creadoEn, modificadoEn]
+      properties:
+        id:
+          type: string
+        contenido:
+          type: string
+          minLength: 1
+          maxLength: 500
+        publicarDesde:
+          type: string
+          format: date-time
+          description: Desde cuando se muestra (RF-NOT-002 la ensena en cada mensaje).
+        vigenteHasta:
+          type: string
+          format: date-time
+          description: >
+            Hasta cuando se muestra; la home lo retira sola al llegar esta
+            hora aunque la pagina siga abierta (RF-NOT-002).
+        retirado:
+          type: boolean
+        creadoEn:
+          type: string
+          format: date-time
+        modificadoEn:
+          type: string
+          format: date-time
 
     SolicitudCrearProducto:
       oneOf:
