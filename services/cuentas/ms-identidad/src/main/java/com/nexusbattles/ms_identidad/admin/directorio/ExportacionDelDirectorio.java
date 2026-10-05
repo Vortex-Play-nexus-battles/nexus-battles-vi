@@ -14,7 +14,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * El directorio en CSV — HU-USR-008 (#561), 7.3.4 «Exportar listados de
@@ -73,8 +75,30 @@ public class ExportacionDelDirectorio {
         this.maximoFilas = maximoFilas;
     }
 
-    /** El archivo listo para descargar. */
+    /**
+     * El archivo listo para descargar. Lleva un arreglo, asi que la igualdad y
+     * el texto se definen por su contenido (SonarCloud java:S6218); el texto
+     * dice el tamano y no vuelca los datos personales del archivo.
+     */
     public record Exportacion(String nombreArchivo, byte[] contenido) {
+
+        @Override
+        public boolean equals(Object otro) {
+            return otro instanceof Exportacion(String nombre, byte[] bytes)
+                    && Objects.equals(nombreArchivo, nombre)
+                    && Arrays.equals(contenido, bytes);
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Objects.hashCode(nombreArchivo) + Arrays.hashCode(contenido);
+        }
+
+        @Override
+        public String toString() {
+            return "Exportacion[nombreArchivo=" + nombreArchivo + ", bytes="
+                    + (contenido == null ? 0 : contenido.length) + "]";
+        }
     }
 
     /**

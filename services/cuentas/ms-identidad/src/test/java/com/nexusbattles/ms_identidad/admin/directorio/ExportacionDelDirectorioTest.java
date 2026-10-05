@@ -180,4 +180,20 @@ class ExportacionDelDirectorioTest {
     void topeImposible() {
         assertThatThrownBy(() -> exportador(0)).isInstanceOf(IllegalStateException.class);
     }
+
+    @Test
+    @DisplayName("dos exportaciones son iguales por su contenido, y el texto no vuelca los datos")
+    void igualdadPorContenido() {
+        byte[] datos = "\"ada\",\"ada@nexus.test\"".getBytes(StandardCharsets.UTF_8);
+        ExportacionDelDirectorio.Exportacion una = new ExportacionDelDirectorio.Exportacion("a.csv", datos);
+        ExportacionDelDirectorio.Exportacion igual =
+                new ExportacionDelDirectorio.Exportacion("a.csv", datos.clone());
+
+        assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
+        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("b.csv", datos.clone()));
+        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("a.csv", new byte[0]));
+        assertThat(una).isNotEqualTo("a.csv");
+        assertThat(una.toString()).contains("a.csv").contains("bytes=" + datos.length).doesNotContain("ada@");
+        assertThat(new ExportacionDelDirectorio.Exportacion(null, null).toString()).contains("bytes=0");
+    }
 }
