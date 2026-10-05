@@ -151,6 +151,9 @@ services:
       # sanciones en moderacion-sanciones.
       LISTA_NEGRA_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # RFINAL-05 — el cierre de cuenta pregunta a ms-subastas (con el token de
+      # la persona) si tiene subastas o pujas abiertas; sin respuesta, 503.
+      IDENTIDAD_SUBASTAS_URL: http://srv-ms-subastas:8092/api/v1
       SERVER_PORT: "8089"
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de

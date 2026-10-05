@@ -121,6 +121,8 @@ test('el inventario encuentra los formularios de cuenta (si no, el guardián no 
       'cuentas/crear-cuenta-admin.html#form-crear-cuenta',
       'cuentas/perfil.html#cambiar-password',
       'cuentas/perfil.html#formulario-preguntas',
+      // RFINAL-05 — cerrar la cuenta pide la contraseña actual.
+      'cuentas/perfil.html#formulario-cierre',
     ]),
   );
 });

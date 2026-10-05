@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.perfiles.controller;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.perfiles.dto.ActualizarPerfilRequest;
+import com.nexusbattles.ms_identidad.perfiles.dto.PerfilUsuarioResponse;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -349,5 +350,24 @@ class PerfilControllerTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> controller.actualizarMiPerfil("1", datos, request));
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    /**
+     * RFINAL-05 (perfiles 1.4.0) — el portal de privacidad muestra el correo
+     * con el que la persona entra; solo lo recibe ella (las demás, 403 arriba).
+     */
+    @Test
+    void obtenerMiPerfil_incluyeElCorreoDeLaCuenta() {
+        PerfilController controller = new PerfilController(perfilUsuarioService);
+        PerfilUsuario perfil = perfilDe("Santi", UID_SANTI);
+        perfil.getUsuario().setEmail("santi@upb.edu.co");
+        when(perfilUsuarioService.obtenerPorIdentificadorPublico(UID_SANTI)).thenReturn(perfil);
+        when(request.getAttribute("uidActual")).thenReturn(UID_SANTI.toString());
+
+        ResponseEntity<?> response = controller.obtenerMiPerfil(UID_SANTI.toString(), request);
+
+        PerfilUsuarioResponse cuerpo = (PerfilUsuarioResponse) response.getBody();
+        assertEquals("santi@upb.edu.co", cuerpo.getEmail());
+        assertEquals("Santi", cuerpo.getApodo());
     }
 }

@@ -23,6 +23,12 @@ public final class EstadoCuenta {
     public static final String INACTIVO = "INACTIVO";
     public static final String SUSPENDIDO = "SUSPENDIDO";
     public static final String BANEADO = "BANEADO";
+    /**
+     * RFINAL-05 (HU-PRV-005) — la persona ejercio el derecho al olvido y la
+     * cuenta quedo anonimizada: sin datos personales y sin forma de entrar.
+     * Lo escribe solo {@code AnonimizadorDeCuentas}.
+     */
+    public static final String ELIMINADO = "ELIMINADO";
 
     static final String SUSPENDIDA_ANTERIOR = "SUSPENDIDA";
     static final String BANEADA_ANTERIOR = "BANEADA";

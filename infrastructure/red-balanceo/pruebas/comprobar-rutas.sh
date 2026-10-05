@@ -76,7 +76,9 @@ enConfiguracion() {
 # hubo y por que se quito.
 fueraDeConfiguracion() {
     local descripcion="$1" patron="$2"
-    if grep -v '^[[:space:]]*#' "$CONF" | grep -Eq "$patron"; then
+    # Sin tuberia hacia grep -q (ver sirve): con pipefail, un emisor que sigue
+    # escribiendo cuando grep ya encontro muere con "Broken pipe".
+    if grep -Eq "$patron" <<< "$(grep -v '^[[:space:]]*#' "$CONF")"; then
         printf '  FALLA %s\n        aparece en %s: %s\n' "$descripcion" "$CONF" "$patron"
         fallos=$((fallos + 1))
     else
@@ -329,7 +331,12 @@ sirve() {
     local cuerpo estado
     estado="$(curl -s -o /dev/null -w '%{http_code}' "$BORDE$ruta")"
     cuerpo="$(curl -s "$BORDE$ruta")"
-    if [ "$estado" = "200" ] && printf '%s' "$cuerpo" | grep -Eq "$patron"; then
+    # El cuerpo va a grep sin tuberia. Con `set -o pipefail`, `printf | grep -q`
+    # fallaba con "printf: write error: Broken pipe" en las paginas grandes:
+    # grep encuentra en el <head>, cierra la entrada y printf aun escribe
+    # (5-oct, /cuenta con la pestana de Privacidad: 34 KB). La pagina estaba
+    # bien; la comprobacion la daba por mala.
+    if [ "$estado" = "200" ] && grep -Eq "$patron" <<< "$cuerpo"; then
         printf '  ok    GET    %-40s -> 200, %s\n' "$ruta" "$descripcion"
     else
         printf '  FALLA GET    %-40s -> %s, sin %s\n' "$ruta" "$estado" "$descripcion"
@@ -349,7 +356,7 @@ cabecera() {
             printf '  FALLA %-44s no deberia llevar %s: %s\n' "$ruta" "$nombre" "$valor"
             fallos=$((fallos + 1))
         fi
-    elif printf '%s' "$valor" | grep -Eq "$patron"; then
+    elif grep -Eq "$patron" <<< "$valor"; then
         printf '  ok    %-44s %s: %s\n' "$ruta" "$nombre" "$(printf '%s' "$valor" | cut -c1-60)"
     else
         printf '  FALLA %-44s %s\n        esperado: %s\n        obtenido: %s\n' \

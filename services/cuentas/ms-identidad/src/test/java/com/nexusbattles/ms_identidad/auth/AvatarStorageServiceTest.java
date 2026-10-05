@@ -104,4 +104,35 @@ class AvatarStorageServiceTest {
 
         assertNotEquals(url1, url2);
     }
+
+    // RFINAL-05 — derecho al olvido: el archivo del avatar sale del disco.
+
+    @Test
+    void borrarAvatar_eliminaElArchivoGuardado() throws IOException {
+        MockMultipartFile foto = new MockMultipartFile("avatar", "yo.png", "image/png", "png".getBytes());
+        String url = avatarStorageService.guardarAvatar(foto);
+        Path archivo = carpetaTemporal.resolve(url.substring("/avatares-subidos/".length()));
+        assertTrue(Files.exists(archivo));
+
+        assertTrue(avatarStorageService.borrarAvatar(url));
+
+        assertFalse(Files.exists(archivo));
+        assertFalse(avatarStorageService.borrarAvatar(url), "borrar dos veces no falla: ya no esta");
+    }
+
+    @Test
+    void borrarAvatar_nuncaSaleDeLaCarpeta() throws IOException {
+        Path fuera = Files.writeString(carpetaTemporal.getParent().resolve("fuera-" + System.nanoTime() + ".txt"),
+                "no tocar");
+        try {
+            assertFalse(avatarStorageService.borrarAvatar("/avatares-subidos/../" + fuera.getFileName()));
+            assertFalse(avatarStorageService.borrarAvatar("/otra-carpeta/" + fuera.getFileName()));
+            assertFalse(avatarStorageService.borrarAvatar("/avatares-subidos/sub/archivo.png"));
+            assertFalse(avatarStorageService.borrarAvatar("/avatares-subidos/"));
+            assertFalse(avatarStorageService.borrarAvatar(null));
+            assertTrue(Files.exists(fuera));
+        } finally {
+            Files.deleteIfExists(fuera);
+        }
+    }
 }

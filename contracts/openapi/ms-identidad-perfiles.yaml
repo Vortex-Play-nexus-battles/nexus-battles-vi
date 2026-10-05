@@ -25,9 +25,30 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Perfil del jugador (ms-identidad)
-  version: 1.3.0
+  version: 1.4.0
   description: |
-    Consulta y edicion del perfil propio (HU-USR-001).
+    Consulta y edicion del perfil propio (HU-USR-001), y desde 1.4.0 el
+    cierre de la propia cuenta (derecho al olvido, HU-PRV-005).
+
+    **1.4.0 (RFINAL-05, HU-PRV-004 y HU-PRV-005, 7.3.6):** dos cambios
+    aditivos.
+
+    * `GET` y `PUT /api/v1/perfiles/{usuario}` devuelven tambien `email`, el
+      correo con el que la persona entra. Solo lo recibe el dueno del perfil
+      (es la unica persona a la que estas rutas responden). Lo necesita el
+      portal de privacidad de «Mi cuenta» (RF-PRV-004: consultar los datos
+      personales que el sistema guarda) y lo usa el Resumen, que ya lo
+      mostraba si llegaba.
+    * `GET | POST | DELETE /api/v1/perfiles/{usuario}/cierre`: consultar,
+      solicitar y cancelar el cierre de la propia cuenta (RF-PRV-005,
+      RN-USR-011). Solicitar exige la contrasena actual (verificacion de
+      identidad; un fallo cuenta como intento fallido de la cuenta,
+      RF-AUT-009) y programa la eliminacion a **30 dias**; hasta entonces se
+      puede cancelar. Se rechaza, sin cambiar nada, si la persona tiene
+      subastas activas como vendedora o pujas vigentes (ms-subastas, con su
+      propio token). Al vencer el plazo, una tarea programada de este
+      servicio anonimiza la cuenta (ver `POST`) y conserva lo que la ley
+      obliga a conservar.
 
     **1.3.0 (RFINAL-03):** el `400` de `PUT /api/v1/perfiles/{usuario}` es
     un problem details discriminable (`apodo-no-permitido`, `apodo-en-uso`,
@@ -83,6 +104,8 @@ servers:
 tags:
   - name: perfil
     description: Perfil propio del jugador (HU-USR-001)
+  - name: privacidad
+    description: Cierre de la propia cuenta — derecho al olvido (HU-PRV-005, 7.3.6)
 
 paths:
   /api/v1/perfiles/{usuario}:
@@ -252,6 +275,198 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
 
+  /api/v1/perfiles/{usuario}/cierre:
+    parameters:
+      - name: usuario
+        in: path
+        required: true
+        description: |
+          `uid` del token (UUID). Solo la propia cuenta: con el `uid` de otra
+          persona responde 403; un valor que no es un UUID, 404.
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [privacidad]
+      operationId: consultarCierreDeCuenta
+      summary: Si el cierre de la propia cuenta esta programado, y para cuando — 1.4.0
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: |
+            `PROGRAMADO` con sus fechas, o `SIN_SOLICITUD`. Nunca cachear
+            (`Cache-Control: no-store`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreDeCuenta'
+        '403':
+          description: Sin sesion valida, o la cuenta de la ruta no es la del token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: El segmento no es un UUID o no existe esa cuenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    post:
+      tags: [privacidad]
+      operationId: solicitarCierreDeCuenta
+      summary: Solicita el cierre de la propia cuenta, programado a 30 dias — 1.4.0
+      description: |
+        Verifica la identidad con la **contrasena actual** y programa la
+        eliminacion para dentro de **30 dias** (`plazoDias`, RN-USR-011: el
+        plazo es del requisito y no se configura).
+
+        Orden de las comprobaciones, cada una sin cambiar nada si falla:
+
+        1. cuenta bloqueada por intentos fallidos (RF-AUT-009): 423, sin
+           comparar la contrasena;
+        2. contrasena incorrecta: 422, y cuenta como intento fallido de la
+           cuenta (tras varios, se bloquea);
+        3. si ya hay un cierre programado: 200 con ese mismo cierre
+           (idempotente: no se programa otro ni se mueve la fecha);
+        4. subastas activas como vendedor o pujas vigentes (`GANANDO`, o una
+           puja automatica configurada en una subasta `ACTIVA`), consultadas
+           en ms-subastas con el token de quien llama: 409;
+        5. si ms-subastas no responde: 503 (fail-closed: sin poder
+           comprobarlo, no se programa).
+
+        **Al vencer el plazo** una tarea programada de ms-identidad, idempotente,
+        anonimiza la cuenta: el apodo se sustituye por un alias aleatorio que
+        no deriva del anterior; se borran el perfil (nombres, apellidos,
+        avatar y su archivo, preferencias), las preguntas de seguridad, los
+        dispositivos conocidos y los codigos de un solo uso; el correo pasa a
+        una direccion no entregable (`.invalid`) y la contrasena a un valor
+        aleatorio; la cuenta queda `ELIMINADO`, sin poder entrar, y se revocan
+        sus sesiones. Se **conservan** los registros financieros y de
+        auditoria de los demas servicios, ligados al `uid`, que ya no permite
+        saber quien era la persona. El evento queda en la auditoria
+        (ms-cumplimiento).
+
+        Desde entonces el directorio de administracion y
+        `GET /api/v1/internal/usuarios/{uid}/contacto` (ms-identidad-admin.yaml)
+        devuelven esa cuenta con estado `ELIMINADO`, el alias y el correo no
+        entregable: quien produzca correos a partir del `uid` no debe
+        escribirle.
+
+        Lo que este servicio todavia NO hace al completarse: enviar el correo
+        de confirmacion (el servicio de correo no publica una plantilla de
+        cierre de cuenta; queda en la auditoria y en la bitacora), ni
+        anonimizar las copias del apodo que guardan otros servicios
+        (comentarios, chat, mensajes privados, subastas).
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SolicitarCierre'
+      responses:
+        '201':
+          description: Cierre programado ahora.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreDeCuenta'
+        '200':
+          description: Ya habia un cierre programado; se devuelve tal cual.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreDeCuenta'
+        '400':
+          description: Cuerpo ausente o sin `passwordActual`. `type` `.../errors/datos-invalidos`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Sin sesion valida, o la cuenta de la ruta no es la del token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: El segmento no es un UUID o no existe esa cuenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: |
+            `type` `.../errors/cierre-con-operaciones-pendientes`: la persona
+            tiene subastas activas como vendedora o pujas vigentes. Lleva
+            cuantas de cada una; nada cambio.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetailDeCierre'
+        '422':
+          description: |
+            `type` `.../errors/contrasena-actual-incorrecta`. Cuenta como
+            intento fallido de la cuenta (RF-AUT-009).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '423':
+          description: |
+            `type` `.../errors/cuenta-bloqueada`: demasiados intentos fallidos;
+            no se comparo la contrasena.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            `type` `.../errors/subastas-no-disponibles`: ms-subastas no
+            respondio y no se pudo comprobar si hay subastas o pujas abiertas.
+            Nada cambio.
+          headers:
+            Retry-After:
+              description: Segundos sugeridos antes de reintentar (30).
+              schema:
+                type: integer
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+    delete:
+      tags: [privacidad]
+      operationId: cancelarCierreDeCuenta
+      summary: Cancela el cierre programado de la propia cuenta — 1.4.0
+      description: |
+        Idempotente: sin cierre programado (nunca lo hubo o ya se cancelo)
+        responde igual, `SIN_SOLICITUD`. Un cierre ya ejecutado no se puede
+        cancelar: la cuenta ya no tiene sesiones validas.
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Sin cierre programado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CierreDeCuenta'
+        '403':
+          description: Sin sesion valida, o la cuenta de la ruta no es la del token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '404':
+          description: El segmento no es un UUID o no existe esa cuenta.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
 components:
   securitySchemes:
     tokenDeUsuario:
@@ -285,6 +500,12 @@ components:
           description: Id interno del perfil. No identifica a la persona fuera de este servicio.
         apodo:
           type: string
+        email:
+          type: [string, 'null']
+          format: email
+          description: |
+            1.4.0 — el correo con el que la persona entra. Solo lo recibe el
+            dueno del perfil. No se cambia por esta ruta.
         nombres:
           type: [string, 'null']
         apellidos:
@@ -294,6 +515,46 @@ components:
           description: URL del avatar guardado, si lo hay.
         preferencias:
           type: [string, 'null']
+
+    CierreDeCuenta:
+      type: object
+      description: 1.4.0 — el cierre de la propia cuenta (HU-PRV-005).
+      required: [estado, plazoDias]
+      properties:
+        estado:
+          type: string
+          enum: [SIN_SOLICITUD, PROGRAMADO]
+        plazoDias:
+          type: integer
+          const: 30
+          description: |
+            Dias entre la solicitud y la eliminacion (RN-USR-011). Lo da el
+            servidor para que la interfaz no lo repita por su cuenta.
+        solicitadoEn:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Cuando se pidio, con su desplazamiento horario (el del servicio).
+            Nulo en `SIN_SOLICITUD`.
+        programadoPara:
+          type: [string, 'null']
+          format: date-time
+          description: |
+            Cuando se ejecutara, con su desplazamiento horario: `solicitadoEn`
+            mas `plazoDias` dias de calendario. La tarea que anonimiza pasa
+            periodicamente, asi que la ejecucion ocurre en la primera pasada
+            despues de vencer, nunca antes. Nulo en `SIN_SOLICITUD`.
+
+    SolicitarCierre:
+      type: object
+      description: 1.4.0 — verificacion de identidad para cerrar la cuenta.
+      required: [passwordActual]
+      properties:
+        passwordActual:
+          type: string
+          minLength: 1
+          maxLength: 255
+          writeOnly: true
 
     ActualizarPerfil:
       type: object
@@ -328,6 +589,25 @@ components:
           type: string
         instance:
           type: string
+
+    ProblemDetailDeCierre:
+      description: |
+        1.4.0 — el 409 `cierre-con-operaciones-pendientes`, con cuantas
+        operaciones lo impiden.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          properties:
+            subastasActivas:
+              type: integer
+              minimum: 0
+              description: Subastas propias en estado `ACTIVA`.
+            pujasVigentes:
+              type: integer
+              minimum: 0
+              description: |
+                Subastas `ACTIVA` en las que la persona va ganando o tiene una
+                puja automatica configurada.
 
     ProblemDetailDeCampo:
       description: 1.3.0 — el 400 del cambio de perfil, con el campo que fallo.
