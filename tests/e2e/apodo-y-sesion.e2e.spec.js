@@ -79,6 +79,7 @@ test.describe('RFINAL-03 · apodo prohibido y sesión tras cambiar de apodo', ()
     test.setTimeout(120_000);
     jugadora = await sesionDe(api, apodoInicial);
 
+    const detalles = new Set();
     for (const apodo of ['spiderman', 'Spiderman', 'spider-man', 'batman']) {
       const respuesta = await cambiarApodo(api, jugadora, apodo);
       const texto = await respuesta.text();
@@ -87,9 +88,13 @@ test.describe('RFINAL-03 · apodo prohibido y sesión tras cambiar de apodo', ()
       const problema = JSON.parse(texto);
       expect(problema.type, apodo).toBe(`${ERRORES}apodo-no-permitido`);
       expect(problema.campo, apodo).toBe('apodo');
-      // Sin revelar internals: ni el término, ni la categoría.
-      expect(problema.detail.toLowerCase(), apodo).not.toMatch(/spider|batman|marca|celebridad/);
+      // Sin revelar internals: el detalle no repite el término que saltó.
+      expect(problema.detail.toLowerCase(), apodo).not.toMatch(/spider|batman/);
+      detalles.add(problema.detail);
     }
+    // Y es la frase de la política, la misma para cualquier término: no dice
+    // cuál saltó ni en qué categoría está (marca, celebridad...).
+    expect([...detalles], 'el mismo detalle para los cuatro').toHaveLength(1);
 
     // Nada cambió: el apodo sigue siendo el de antes.
     const perfil = await api.get(`/api/v1/perfiles/${jugadora.claims.uid}`, {
