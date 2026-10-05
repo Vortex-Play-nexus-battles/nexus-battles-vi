@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.notificaciones.bandeja;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -22,6 +23,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.mockito.InOrder;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -69,6 +71,10 @@ class NotificacionesControllerTest {
 
     @MockitoBean
     private ServicioDeNotificaciones servicio;
+
+    /** HU-NOT-001: lo que se incorpora antes de entregar (los avisos del catalogo). */
+    @MockitoBean
+    private AvisosPorIncorporar avisos;
 
     private static Notificacion aviso(String id) {
         return new Notificacion(id, "subasta", "Tu puja fue superada",
@@ -250,6 +256,33 @@ class NotificacionesControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("evt-1"))
                 .andExpect(jsonPath("$[0].leida").value(false));
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: pending incorpora los avisos del catalogo ANTES de leer la bandeja y registrar la sesion")
+    void pendingImportaAntesDeRegistrarLaSesion() throws Exception {
+        when(servicio.consultar(JUGADOR)).thenReturn(BandejaDeNotificaciones.reconstituir(
+                JUGADOR, List.of(), Set.of(), Set.of(), Map.of()));
+        when(servicio.registrarSesion(JUGADOR, "movil")).thenReturn(List.of());
+
+        mvc.perform(post("/api/v1/users/" + JUGADOR + "/sessions/movil/pending")
+                        .header(HttpHeaders.AUTHORIZATION, comoElDueno()))
+                .andExpect(status().isOk());
+
+        InOrder orden = inOrder(avisos, servicio);
+        orden.verify(avisos).incorporar(JUGADOR);
+        orden.verify(servicio).consultar(JUGADOR);
+        orden.verify(servicio).registrarSesion(JUGADOR, "movil");
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: con el token de otro usuario no se importa nada a la bandeja ajena")
+    void pendingAjenoNoImporta() throws Exception {
+        mvc.perform(post("/api/v1/users/" + JUGADOR + "/sessions/movil/pending")
+                        .header(HttpHeaders.AUTHORIZATION, comoOtroJugador()))
+                .andExpect(status().isForbidden());
+
+        verifyNoInteractions(avisos, servicio);
     }
 
     @Test

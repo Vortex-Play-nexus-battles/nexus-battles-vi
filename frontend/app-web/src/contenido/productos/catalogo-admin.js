@@ -515,7 +515,10 @@ export function abrirHojaDeProducto(
 
   function pintarResumen() {
     const promocion = textoDePromocion(actual.promocion);
-    resumen.replaceChildren(
+    // RFINAL-07 — `replaceChildren` convierte un `null` en el texto «null»: sin
+    // promoción, la ficha lo pintaba bajo el título (revisión de DEV del 4-oct).
+    // Las líneas condicionales se filtran antes de pintarlas.
+    const lineas = [
       h('p', {
         clase: 'hoja-producto__distintivos',
         hijos: [
@@ -539,7 +542,8 @@ export function abrirHojaDeProducto(
         texto: `Versión ${actual.version ?? '—'} · modificado el ${fechaHora(actual.modificadoEn)} · creado el ${fechaHora(actual.creadoEn)}`,
       }),
       h('p', { clase: 't-meta hoja-producto__id', texto: `Identificador: ${actual.id}` }),
-    );
+    ];
+    resumen.replaceChildren(...lineas.filter(Boolean));
   }
 
   function pintarDisponibilidad() {

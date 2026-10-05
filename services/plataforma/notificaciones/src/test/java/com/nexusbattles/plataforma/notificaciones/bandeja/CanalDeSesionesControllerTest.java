@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.notificaciones.bandeja;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -37,6 +39,9 @@ class CanalDeSesionesControllerTest {
 
     @Mock
     private ServicioDeNotificaciones servicio;
+
+    @Mock
+    private AvisosPorIncorporar avisos;
 
     @InjectMocks
     private CanalDeSesionesController controlador;
@@ -101,7 +106,19 @@ class CanalDeSesionesControllerTest {
                 new CanalDeSesionesController.RegistrarSesion(null, "movil"),
                 (Principal) null, cabeceras()));
 
-        verifyNoInteractions(servicio);
+        verifyNoInteractions(servicio, avisos);
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: el alta por el canal tambien incorpora los avisos del catalogo antes de entregar lo pendiente")
+    void elAltaImportaAntesDeRegistrar() {
+        controlador.registrarSesion(
+                new CanalDeSesionesController.RegistrarSesion(null, "movil"),
+                usuarioConectado("Ana", UID), cabeceras());
+
+        InOrder orden = inOrder(avisos, servicio);
+        orden.verify(avisos).incorporar(UID.toString());
+        orden.verify(servicio).registrarSesion(UID.toString(), "movil");
     }
 
     @Test

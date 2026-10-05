@@ -204,6 +204,16 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     expect(campo('precioMonedaReal').disabled).toBe(true);
   });
 
+  test('RFINAL-07: sin promoción el resumen no escribe «null» (revisión de DEV del 4-oct)', () => {
+    abrirHojaDeProducto({ ...YELMO, promocion: null }, { fetchImpl: jest.fn() });
+
+    const resumen = ficha().querySelector('.hoja-producto__resumen');
+    expect(resumen.textContent).not.toContain('null');
+    expect(resumen.textContent).toContain('Versión 3');
+    // Solo elementos: ningún nodo de texto suelto entre las líneas del resumen.
+    expect([...resumen.childNodes].every((nodo) => nodo.nodeType === Node.ELEMENT_NODE)).toBe(true);
+  });
+
   test('guardar manda solo lo que cambió y pinta la versión nueva', async () => {
     const alCambiar = jest.fn();
     const fetchImpl = jest.fn(async (_url, opciones) =>

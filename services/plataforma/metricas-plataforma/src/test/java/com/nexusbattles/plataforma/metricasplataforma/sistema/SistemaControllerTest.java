@@ -2,140 +2,93 @@ package com.nexusbattles.plataforma.metricasplataforma.sistema;
 
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.Comprobacion;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.SondaDeSalud;
+import com.nexusbattles.plataforma.metricasplataforma.seguridad.SeguridadAbiertaDePrueba;
+import com.nexusbattles.plataforma.metricasplataforma.sondeo.ResultadoReciente;
+import com.nexusbattles.plataforma.metricasplataforma.sondeo.RondaEnParalelo;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * El estado de los servicios que ve la consola.
- *
- * ## Lo que se prueba
- *
- * Que los cuatro desenlaces son cuatro cosas distintas. Un servicio fuera del
- * host por capacidad, uno que vive en otro host y no se alcanza, uno que
- * deberia responder y no responde, y uno que responde, NO son el mismo hecho,
- * y la pantalla que dice si el sistema esta sano es el peor sitio para
- * confundirlos.
+ * {@code GET /api/v1/admin/sistema/servicios} publica lo que dice el contrato
+ * (metricas-plataforma.yaml 1.9.0): los conteos de siempre, los LENTOS y si la
+ * respuesta reutiliza la ultima ronda. Las reglas del sondeo se prueban en
+ * {@link EstadoDelSistemaTest}; aqui, la forma JSON que lee la consola.
  */
+@WebMvcTest(controllers = SistemaController.class)
+// Cadena abierta: que la ruta exija rol administrativo lo afirma
+// SeguridadDeObservabilidadTest con la cadena real.
+@Import({SistemaControllerTest.Dobles.class, SeguridadAbiertaDePrueba.class})
 class SistemaControllerTest {
 
-    private static final Instant AHORA = Instant.parse("2026-09-24T02:00:00Z");
-    private static final Clock RELOJ = Clock.fixed(AHORA, ZoneOffset.UTC);
+    private static final Instant AHORA = Instant.parse("2026-10-05T15:00:00Z");
 
-    /** Responde bien solo a las URL que se le digan. */
-    private static SondaDeSalud sondaQueAcepta(String... urlsSanas) {
-        return (servicio, url, instante) -> {
-            for (String sana : urlsSanas) {
-                if (sana.equals(url)) {
-                    return Comprobacion.disponible(servicio, instante);
-                }
-            }
-            return Comprobacion.caido(servicio, instante, "Connection refused");
-        };
+    @TestConfiguration
+    static class Dobles {
+
+        @Bean
+        RondaEnParalelo rondaDePrueba() {
+            return RondaEnParalelo.acotada(4, Duration.ofSeconds(2));
+        }
+
+        @Bean
+        EstadoDelSistema estadoDelSistema(RondaEnParalelo ronda) {
+            Map<String, String> servicios = new LinkedHashMap<>();
+            servicios.put("torneos", "http://srv-torneos:8083/actuator/health");
+            servicios.put("misiones", "http://34.193.90.11:8105/actuator/health");
+            servicios.put("ms-chatbot", ConfiguracionDelSistema.NO_DESPLEGADO);
+            SondaDeSalud sonda = (servicio, url, instante) -> "torneos".equals(servicio)
+                    ? Comprobacion.disponible(servicio, instante)
+                    : Comprobacion.sinRespuesta(servicio, instante, "sin respuesta en 1500 ms");
+            return new EstadoDelSistema(new ConfiguracionDelSistema(servicios), sonda, ronda,
+                    new ResultadoReciente<>(Duration.ofSeconds(60)), Clock.fixed(AHORA, ZoneOffset.UTC));
+        }
     }
 
-    private static ConfiguracionDelSistema configuracion(Map<String, String> servicios) {
-        return new ConfiguracionDelSistema(new LinkedHashMap<>(servicios));
-    }
+    @Autowired
+    private MockMvc mockMvc;
 
     @Test
-    void distingueLosCuatroDesenlaces() {
-        ConfiguracionDelSistema configuracion =
-                configuracion(
-                        Map.of(
-                                "torneos", "http://srv-torneos:8083/actuator/health",
-                                "ms-subastas", "http://srv-ms-subastas:8092/api/v1/actuator/health",
-                                "ms-chatbot", ConfiguracionDelSistema.NO_DESPLEGADO,
-                                "heroes", ConfiguracionDelSistema.NO_OBSERVABLE));
-        SistemaController controlador =
-                new SistemaController(
-                        configuracion,
-                        sondaQueAcepta("http://srv-torneos:8083/actuator/health"),
-                        RELOJ);
+    void publicaLosConteosLosLentosYSiReutilizaLaRonda() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/sistema/servicios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(3))
+                .andExpect(jsonPath("$.operativos").value(1))
+                .andExpect(jsonPath("$.caidos").value(0))
+                .andExpect(jsonPath("$.lentos").value(1))
+                .andExpect(jsonPath("$.noDesplegados").value(1))
+                .andExpect(jsonPath("$.noObservables").value(0))
+                .andExpect(jsonPath("$.instante").value(AHORA.toString()))
+                .andExpect(jsonPath("$.desdeCache").value(false))
+                .andExpect(jsonPath("$.servicios[0].servicio").value("torneos"))
+                .andExpect(jsonPath("$.servicios[0].estado").value("OPERATIVO"))
+                .andExpect(jsonPath("$.servicios[1].servicio").value("misiones"))
+                .andExpect(jsonPath("$.servicios[1].estado").value("LENTO"))
+                .andExpect(jsonPath("$.servicios[1].detalle").value("sin respuesta en 1500 ms"))
+                .andExpect(jsonPath("$.servicios[1].instante").value(AHORA.toString()))
+                .andExpect(jsonPath("$.servicios[2].estado").value("NO_DESPLEGADO"));
 
-        SistemaController.RespuestaDelSistema respuesta = controlador.servicios();
-
-        assertEquals(4, respuesta.total());
-        assertEquals(1, respuesta.operativos());
-        assertEquals(1, respuesta.caidos());
-        assertEquals(1, respuesta.noDesplegados());
-        assertEquals(1, respuesta.noObservables());
-        assertEquals(AHORA, respuesta.instante());
-    }
-
-    @Test
-    void cadaServicioSaleConSuNombreYSuMotivo() {
-        SistemaController controlador =
-                new SistemaController(
-                        configuracion(Map.of("ms-chatbot", ConfiguracionDelSistema.NO_DESPLEGADO)),
-                        sondaQueAcepta(),
-                        RELOJ);
-
-        EstadoDeServicio estado = controlador.servicios().servicios().get(0);
-
-        assertEquals("ms-chatbot", estado.servicio());
-        assertEquals(EstadoDeServicio.NO_DESPLEGADO, estado.estado());
-        assertTrue(estado.detalle().contains("capacidad"), "el motivo tiene que decir por que");
-    }
-
-    /**
-     * Un servicio de otro host no es un servicio caido. Salir en rojo diria
-     * que se rompio algo cuando lo unico cierto es que esta sonda no llega.
-     */
-    @Test
-    void unServicioDeOtroHostNoSePintaComoCaido() {
-        SistemaController controlador =
-                new SistemaController(
-                        configuracion(Map.of("heroes", ConfiguracionDelSistema.NO_OBSERVABLE)),
-                        sondaQueAcepta(),
-                        RELOJ);
-
-        EstadoDeServicio estado = controlador.servicios().servicios().get(0);
-
-        assertEquals(EstadoDeServicio.NO_OBSERVABLE, estado.estado());
-        assertTrue(estado.detalle().contains("otro host"));
-    }
-
-    @Test
-    void unaUrlVaciaCuentaComoNoDesplegado() {
-        SistemaController controlador =
-                new SistemaController(configuracion(Map.of("algo", "  ")), sondaQueAcepta(), RELOJ);
-
-        assertEquals(
-                EstadoDeServicio.NO_DESPLEGADO,
-                controlador.servicios().servicios().get(0).estado());
-    }
-
-    @Test
-    void elDetalleDelFalloLlegaTalCual() {
-        SistemaController controlador =
-                new SistemaController(
-                        configuracion(Map.of("torneos", "http://srv-torneos:8083/actuator/health")),
-                        sondaQueAcepta(),
-                        RELOJ);
-
-        EstadoDeServicio estado = controlador.servicios().servicios().get(0);
-
-        assertEquals(EstadoDeServicio.CAIDO, estado.estado());
-        assertEquals("Connection refused", estado.detalle());
-    }
-
-    @Test
-    void sinServiciosConfiguradosNoRevienta() {
-        SistemaController controlador =
-                new SistemaController(new ConfiguracionDelSistema(null), sondaQueAcepta(), RELOJ);
-
-        SistemaController.RespuestaDelSistema respuesta = controlador.servicios();
-
-        assertEquals(0, respuesta.total());
-        assertTrue(respuesta.servicios().isEmpty());
+        // La consola pide lo mismo dos veces al cargar (Resumen y Sistema): la
+        // segunda no vuelve a sondear y lo dice.
+        mockMvc.perform(get("/api/v1/admin/sistema/servicios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.desdeCache").value(true))
+                .andExpect(jsonPath("$.instante").value(AHORA.toString()));
     }
 }

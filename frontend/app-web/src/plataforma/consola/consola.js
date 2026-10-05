@@ -35,6 +35,7 @@ import { h } from '../../comun/ui/dom.js';
 const DESCRIPCION = Object.freeze({
   control: 'Los ocho paneles del Nexo en una sola pantalla, con datos reales.',
   usuarios: 'Perfiles, roles y estado de las cuentas.',
+  'crear-cuenta-admin': 'Alta de cuentas de moderador o administrador.',
   productos: 'Alta de héroes, armas, armaduras e ítems del catálogo.',
   comentarios: 'Comentarios reportados: aprobar, ocultar, editar o marcar para seguimiento.',
   sanciones: 'Advertencias, suspensiones y apelaciones.',

@@ -16,7 +16,12 @@ public class AdminUsuarioResumenResponse {
 
     public static AdminUsuarioResumenResponse from(PerfilUsuario perfil) {
         AdminUsuarioResumenResponse dto = new AdminUsuarioResumenResponse();
-        dto.id = perfil.getId();
+        // RFINAL-06 — la clave de la CUENTA, no la del perfil: con este numero
+        // el panel suspende, banea, reactiva, restablece la clave y cambia el
+        // rol (/admin/usuarios/{usuarioId}, /rbac/usuarios/{usuarioId}/rol).
+        // Hoy coinciden porque el perfil comparte la clave de su cuenta
+        // (@MapsId), pero eso es un detalle del esquema, no una promesa.
+        dto.id = perfil.getUsuario().getId();
         dto.apodo = perfil.getUsuario().getApodo();
         dto.email = perfil.getUsuario().getEmail();
         dto.estado = perfil.getUsuario().getEstado();
