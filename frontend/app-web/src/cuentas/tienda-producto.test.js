@@ -114,6 +114,14 @@ describe('tarjeta en la tienda', () => {
     expect(nueva.dataset.producto).toBe(UUID);
   });
 
+  test('RFINAL-04: el botón de lo que ya tienes dice «Ya lo tienes», también a quien no ve', () => {
+    const anadir = tarjetaDeProducto(dto({ esPropio: true })).querySelector('.btn-add');
+
+    expect(anadir.textContent).toBe('Ya lo tienes');
+    expect(anadir.getAttribute('aria-label')).toMatch(/^Ya tienes /);
+    expect(tarjetaDeProducto(dto()).querySelector('.btn-add').textContent).toBe('Añadir');
+  });
+
   test('solo si el servicio lo dice, «En tu lista de deseos»', () => {
     expect(tarjetaDeProducto(dto({ enListaDeseos: true })).textContent).toContain(
       'En tu lista de deseos',
@@ -321,6 +329,34 @@ describe('bloque de compra del detalle', () => {
     const porLaVitrina = bloqueDeCompra(dto({ esPropio: true }), { alAnadir });
     expect(porLaVitrina.querySelector('[data-accion="anadir-al-carrito"]').disabled).toBe(true);
     expect(porLaVitrina.textContent).toContain('Ya tienes uno en tu inventario.');
+    // RFINAL-04: y el botón lo dice, en vez de seguir ofreciendo «Añadir al carrito».
+    expect(boton.textContent).toBe('Ya lo tienes');
+  });
+
+  test('RFINAL-04: si el servicio responde que ya lo tienes, el botón queda apagado (no se reenciende)', async () => {
+    const alAnadir = jest.fn().mockResolvedValue({
+      ok: false,
+      propio: true,
+      titulo: 'Ya tienes este producto',
+      detalle: 'Está en tu inventario.',
+    });
+    const bloque = bloqueDeCompra(dto(), { alAnadir });
+    document.body.replaceChildren(bloque);
+    const boton = bloque.querySelector('[data-accion="anadir-al-carrito"]');
+    expect(boton.disabled).toBe(false);
+
+    boton.click();
+    await esperar();
+
+    expect(alAnadir).toHaveBeenCalledTimes(1);
+    expect(boton.disabled).toBe(true);
+    expect(boton.dataset.motivo).toBe('propio');
+    expect(boton.title).toBe(MOTIVO_YA_LO_TIENES);
+    expect(boton.textContent).toBe('Ya lo tienes');
+    expect(bloque.querySelector('.compra-producto__resultado').hidden).toBe(false);
+    boton.click();
+    await esperar();
+    expect(alAnadir).toHaveBeenCalledTimes(1);
   });
 
   test('en la portada: «Entra para comprar», sin carrito', () => {

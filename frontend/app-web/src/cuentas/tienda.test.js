@@ -1298,6 +1298,65 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(opciones.headers['X-User-Name']).toBe(UID);
   });
 
+  test('RFINAL-04: lo que ya tienes dice «Ya lo tienes» en el botón, no «Añadir»', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [producto(1), producto(2)],
+      inventario: [{ id: 'e1', productoId: 'p-2' }],
+    });
+
+    await montarTienda(document);
+
+    const propio = document.querySelector('[data-id-producto="p-2"] .btn-add');
+    expect(propio.textContent).toBe('Ya lo tienes');
+    expect(propio.getAttribute('aria-label')).toBe('Ya tienes Producto 2');
+    const nuevo = document.querySelector('[data-id-producto="p-1"] .btn-add');
+    expect(nuevo.textContent).toBe('Añadir');
+    expect(nuevo.getAttribute('aria-label')).toBe('Añadir Producto 1 al carrito');
+  });
+
+  test('RFINAL-04: si el servicio dice que ya lo tienes (409), la tarjeta lo aprende y se apaga', async () => {
+    const base = servicios({ vitrina: [producto(1)] });
+    globalThis.fetch = jest.fn(async (url, opciones = {}) => {
+      if (String(url).endsWith('/api/v1/carrito/items') && opciones.method === 'POST') {
+        return problema(409, 'urn:nexus:problema:producto-ya-adquirido');
+      }
+      return base(url, opciones);
+    });
+    await montarTienda(document);
+    const anadir = document.querySelector('[data-id-producto="p-1"] .btn-add');
+    expect(anadir.disabled).toBe(false);
+
+    const salida = await agregarAlCarrito('p-1', document);
+
+    // El servidor es la autoridad: la vista no lo supo por el inventario, lo supo por él.
+    expect(salida).toEqual(expect.objectContaining({ ok: false, propio: true }));
+    const tarjeta = document.querySelector('[data-id-producto="p-1"]');
+    expect(tarjeta.dataset.propio).toBe('si');
+    expect(anadir.disabled).toBe(true);
+    expect(anadir.textContent).toBe('Ya lo tienes');
+    expect(tarjeta.querySelector('.producto-propio')).not.toBeNull();
+  });
+
+  test('RFINAL-04: otro rechazo (agotado) no marca el producto como tuyo', async () => {
+    // Otro producto: el estado de la vista vive por documento y la prueba
+    // anterior ya dejó «p-1» como propio.
+    const base = servicios({ vitrina: [producto(3)] });
+    globalThis.fetch = jest.fn(async (url, opciones = {}) => {
+      if (String(url).endsWith('/api/v1/carrito/items') && opciones.method === 'POST') {
+        return problema(409, 'urn:nexus:problema:producto-agotado');
+      }
+      return base(url, opciones);
+    });
+    await montarTienda(document);
+
+    const salida = await agregarAlCarrito('p-3', document);
+
+    expect(salida.propio).toBeUndefined();
+    const tarjeta = document.querySelector('[data-id-producto="p-3"]');
+    expect(tarjeta.dataset.propio).toBeUndefined();
+    expect(tarjeta.querySelector('.btn-add').disabled).toBe(false);
+  });
+
   test('la insignia cuenta las unidades; cada línea cambia su cantidad o se quita', async () => {
     const carrito = {
       total: 3000,

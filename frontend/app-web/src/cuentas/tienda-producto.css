@@ -208,6 +208,15 @@
   outline-offset: 2px;
 }
 
+/* RFINAL-04 — apagado se ve apagado: «Ya lo tienes» (o un producto sin id)
+   no puede tener el color de la acción principal. */
+.btn-add:disabled,
+.btn-add:disabled:hover {
+  background-color: var(--superficie-2);
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
 /* --- UXC-4: tarjeta, precio, propio, deseos ---------------------------- */
 
 /* Sin imagen, el simbolo del tipo sobre la ranura oscura: dice que es antes
