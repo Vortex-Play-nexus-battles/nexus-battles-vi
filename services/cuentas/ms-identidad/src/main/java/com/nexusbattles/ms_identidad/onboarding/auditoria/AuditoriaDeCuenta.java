@@ -123,6 +123,19 @@ public class AuditoriaDeCuenta {
                 "PREGUNTAS_SEGURIDAD", ip));
     }
 
+    /**
+     * HU-AUT-007 — la persona activo o desactivo su segundo factor, o entro con
+     * un codigo de recuperacion. Nunca lleva el secreto ni ningun codigo.
+     *
+     * @param afectado   uid de la cuenta, o su clave interna si no tiene uid
+     * @param motivo     {@code SEGUNDO_FACTOR_ACTIVADO}, {@code SEGUNDO_FACTOR_DESACTIVADO}
+     *                   o {@code CODIGO_RECUPERACION_USADO}
+     * @param valorNuevo {@code totp}, {@code sin-segundo-factor} o cuantos codigos quedan
+     */
+    public void segundoFactor(String afectado, String motivo, String valorNuevo, String ip) {
+        enviar(new Evento("ACTUALIZACION", afectado, afectado, null, valorNuevo, motivo, ip));
+    }
+
     public void altaCompletada(UUID uid, String resumen) {
         enviar(new Evento("CREACION", SISTEMA, texto(uid), null, resumen, "ONBOARDING_COMPLETADO", null));
     }

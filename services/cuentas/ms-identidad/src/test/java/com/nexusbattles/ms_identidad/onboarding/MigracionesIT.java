@@ -101,6 +101,10 @@ class MigracionesIT {
             jdbc.execute("DROP TABLE onboarding_jugador");
             jdbc.execute("DROP TABLE preguntas_seguridad");
             jdbc.execute("DROP TABLE solicitudes_cierre_cuenta");
+            // RFINAL-05 (V5): las del segundo factor tampoco existen en DEV.
+            jdbc.execute("DROP TABLE segundo_factor");
+            jdbc.execute("DROP TABLE codigos_recuperacion");
+            jdbc.execute("DROP TABLE desafios_acceso");
             jdbc.execute("ALTER TABLE tokens_credencial DROP COLUMN codigo_hash, DROP COLUMN intentos_fallidos,"
                     + " DROP COLUMN anulado_en, DROP COLUMN creado_en, DROP COLUMN usado_en");
             jdbc.execute("ALTER TABLE tokens_credencial ALTER COLUMN token SET NOT NULL");
@@ -156,8 +160,14 @@ class MigracionesIT {
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
 
+    /** RFINAL-05 — V5 crea las tres tablas del segundo factor. */
+    private static int tablasDelSegundoFactor(JdbcTemplate jdbc) {
+        return jdbc.queryForObject("SELECT count(*) FROM information_schema.tables WHERE table_name IN"
+                + " ('segundo_factor','codigos_recuperacion','desafios_acceso')", Integer.class);
+    }
+
     @Test
-    @DisplayName("base vacia: V1 a V4 y V6 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V6 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -169,8 +179,10 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("5", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("6", "SQL"));
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
+            assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
                     Integer.class)).isEqualTo(1);
@@ -200,7 +212,9 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("5", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("6", "SQL"));
+            assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             // V6 sobre la cuenta heredada: el cierre se programa con su uid.
             comprobarCierresDeCuenta(jdbc, veterana);
             // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.

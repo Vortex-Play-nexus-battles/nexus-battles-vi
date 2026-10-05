@@ -19,6 +19,11 @@
 //   - `cuenta-baneada`: un aviso formal, sin salidas que no existen.
 // Y tras verificar el correo (`?motivo=verificada`) la primera entrada pasa
 // por «Preparando tu cuenta»: el alta del jugador empieza al verificar.
+//
+// HU-AUT-007 (identidad 2.2.0) — con la verificación en dos pasos activa, la
+// contraseña correcta no abre la sesión: el servidor responde 403 con un
+// desafío y `login-segundo-paso.js` pide el código (o guía la activación, si
+// el rol la exige). La entrada, cuando por fin hay sesión, es la misma.
 
 import { destinoTrasEntrar } from '../comun/alta.js';
 import { pedirSesionAOtraPestana } from '../comun/canal-sesion.js';
@@ -50,6 +55,8 @@ import { anotarEnvio, reenviarCodigo } from '../comun/verificacion.js';
 import { VEREDICTOS, comprobarCredencial } from '../comun/vigilante-sesion.js';
 import { mostrarAlertasCatalogoAlIniciarSesion } from '../contenido/productos/alertas-catalogo.js';
 import { setCurrentRole } from './directives/has-permission.directive.js';
+import { desafioDelRechazo, montarSegundoPaso } from './login-segundo-paso.js';
+import { PROBLEMAS_DEL_SEGUNDO_FACTOR } from './segundo-factor.js';
 
 // Se reexporta con su nombre de siempre: lo usan las pruebas de esta vista.
 export { identificadorDeSesion };
@@ -93,6 +100,8 @@ export const PROBLEMAS_DEL_LOGIN = Object.freeze({
   BANEADA: 'cuenta-baneada',
   INACTIVA: 'cuenta-inactiva',
   BLOQUEADA: 'cuenta-bloqueada',
+  // 2.2.0 — el rol exige segundo factor y el servicio no puede comprobarlo.
+  SEGUNDO_FACTOR_NO_DISPONIBLE: PROBLEMAS_DEL_SEGUNDO_FACTOR.NO_DISPONIBLE,
 });
 
 /**
@@ -156,6 +165,14 @@ export function rechazoDelLogin(estado, cuerpo) {
         titulo: 'Cuenta bloqueada temporalmente',
         detalle:
           'Hubo demasiados intentos fallidos. Espera unos minutos o recupera tu contraseña si no la recuerdas.',
+      };
+    case PROBLEMAS_DEL_LOGIN.SEGUNDO_FACTOR_NO_DISPONIBLE:
+      return {
+        caso: 'otro',
+        tono,
+        titulo: 'No podemos comprobar tu verificación en dos pasos ahora mismo',
+        detalle:
+          'Tu cuenta la necesita para entrar y el servicio no está disponible. Inténtalo de nuevo más tarde.',
       };
     default:
       return {
@@ -468,6 +485,63 @@ function iniciarVista(formulario) {
     botonEnviar.disabled = false;
   }
 
+  /** HU-AUT-007 — la contraseña ya cumplió: no se queda en el formulario. */
+  function olvidarContrasena() {
+    formulario.password.value = '';
+  }
+
+  /**
+   * Entra con la sesión ya emitida: la del login de siempre o la del segundo
+   * paso (HU-AUT-007), que es la misma `LoginResponse`.
+   *
+   * @param {{token: string, rol?: string, dispositivoNuevo?: boolean}} body
+   */
+  async function completarEntrada(body) {
+    if (body.dispositivoNuevo) {
+      avisoDispositivo.hidden = false;
+      avisoDispositivo.textContent = 'Detectamos un inicio de sesión desde un dispositivo nuevo.';
+    }
+
+    ocultarEstado();
+
+    // Mantener el rol en memoria para esta página.
+    setCurrentRole(body.rol);
+
+    // HU-UX-001: si se llegó al login desde una vista privada, se vuelve a
+    // ella; una cuenta recién creada pasa antes por «Preparando tu cuenta».
+    // UXC-4 — la vuelta se lee AHORA y no al cargar: «Entra para comprar»,
+    // en la tienda de la portada, la escribe en la dirección sin recargar.
+    // B1: la primera entrada tras verificar el correo pasa por «Preparando
+    // tu cuenta», siempre.
+    const destino = entrarCon(body, {
+      volver: rutaDeVuelta(globalThis.location?.search ?? '') ?? volver,
+      cuentaNueva: motivo === MOTIVOS.VERIFICADA,
+    });
+    await mostrarAlertasCatalogoAlIniciarSesion();
+    globalThis.location.assign(destino);
+  }
+
+  // HU-AUT-007 — el segundo paso (o el enrolamiento obligatorio). Al volver
+  // al primero, la contraseña se escribe otra vez; si volvió por un rechazo
+  // (desafío caducado, cuenta bloqueada o sancionada), se dice aquí arriba.
+  const segundoPaso = montarSegundoPaso(document, {
+    alEntrar: (body) => completarEntrada(body),
+    alVolver: (rechazo) => {
+      liberarEnvio();
+      olvidarContrasena();
+      if (rechazo && zonaRechazo) {
+        detenerRechazo = pintarRechazo(
+          zonaRechazo,
+          { ...rechazo, caso: 'otro' },
+          { anunciar: false },
+        );
+        zonaRechazo.focus();
+        return;
+      }
+      formulario.password.focus();
+    },
+  });
+
   formulario.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     if (enviando) {
@@ -497,32 +571,23 @@ function iniciarVista(formulario) {
 
       if (!respuesta.ok) {
         ocultarEstado();
+        // HU-AUT-007 — un 403 con desafío no es un rechazo: falta el segundo
+        // factor. La contraseña ya cumplió y no se queda en el formulario.
+        const desafio = desafioDelRechazo(respuesta.status, body);
+        if (desafio && segundoPaso) {
+          olvidarContrasena();
+          if (desafio.tipo === PROBLEMAS_DEL_SEGUNDO_FACTOR.ENROLAMIENTO_REQUERIDO) {
+            segundoPaso.enrolar(desafio);
+          } else {
+            segundoPaso.verificar(desafio);
+          }
+          return;
+        }
         mostrarRechazo(respuesta.status, body, email);
         return;
       }
 
-      if (body.dispositivoNuevo) {
-        avisoDispositivo.hidden = false;
-        avisoDispositivo.textContent = 'Detectamos un inicio de sesión desde un dispositivo nuevo.';
-      }
-
-      ocultarEstado();
-
-      // Mantener el rol en memoria para esta página.
-      setCurrentRole(body.rol);
-
-      // HU-UX-001: si se llegó al login desde una vista privada, se vuelve a
-      // ella; una cuenta recién creada pasa antes por «Preparando tu cuenta».
-      // UXC-4 — la vuelta se lee AHORA y no al cargar: «Entra para comprar»,
-      // en la tienda de la portada, la escribe en la dirección sin recargar.
-      // B1: la primera entrada tras verificar el correo pasa por «Preparando
-      // tu cuenta», siempre.
-      const destino = entrarCon(body, {
-        volver: rutaDeVuelta(globalThis.location?.search ?? '') ?? volver,
-        cuentaNueva: motivo === MOTIVOS.VERIFICADA,
-      });
-      await mostrarAlertasCatalogoAlIniciarSesion();
-      globalThis.location.assign(destino);
+      await completarEntrada(body);
       seVa = true;
     } catch {
       setEstado(

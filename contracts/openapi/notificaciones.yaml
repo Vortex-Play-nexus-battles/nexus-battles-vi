@@ -35,7 +35,23 @@ info:
     Igual que marcar uno, es idempotente y reenvia el contador a todas las
     sesiones del jugador. Compatible: solo anade una operacion y su esquema
     de respuesta.
-  version: 1.3.0
+
+    1.4.0 (HU-NOT-001 CA-01/CA-04, #532) — avisos de cambios del catalogo en
+    la bandeja. Antes de entregar lo pendiente a una sesion
+    (`entregarPendientes`, y tambien el alta de sesion por STOMP), el servicio
+    incorpora a la bandeja los cambios del catalogo posteriores al ultimo que
+    vio el jugador, leidos de productos
+    (`GET /api/v1/productos/alertas/cambios`, productos.yaml 1.6.0, con la
+    credencial de servicio de notificaciones). Cada cambio es un aviso de
+    tipo `CAMBIO_CATALOGO` con id `catalogo:{idDeAlerta}`: idempotente, dos
+    sesiones a la vez o una consulta repetida no lo duplican. El cuerpo es la
+    descripcion del cambio y su fecha de implementacion, y `creadaEn` es esa
+    fecha. La primera vez solo se fija el punto de partida (no se vuelca el
+    historial del catalogo). Si productos no responde, la entrega sigue igual
+    sin esos avisos (degradacion controlada) y se intenta en una sesion
+    siguiente. Compatible: ninguna operacion ni esquema cambia de forma; solo
+    aparece un `tipo` nuevo de aviso.
+  version: 1.4.0
 servers:
   - url: http://localhost:8085/api/v1
     description: Entorno local de desarrollo
@@ -140,6 +156,13 @@ paths:
         real no esta disponible, la interfaz puede recuperar lo pendiente por
         aqui. No reemplaza al canal como mecanismo principal, que es lo que
         prohibe la historia.
+
+        Desde la 1.4.0 (HU-NOT-001), antes de entregar, incorpora a la bandeja
+        los cambios del catalogo posteriores al ultimo que vio el jugador como
+        avisos `CAMBIO_CATALOGO` con id `catalogo:{idDeAlerta}` (idempotente).
+        Consulta productos como mucho una vez por intervalo minimo y jugador
+        (configurable). Si productos no responde, la respuesta es la misma de
+        siempre, sin esos avisos, y se reintenta en una sesion siguiente.
       parameters:
         - name: usuarioId
           in: path
@@ -253,6 +276,9 @@ components:
           type: string
         tipo:
           type: string
+          description: >
+            Origen del aviso. Desde la 1.4.0 incluye `CAMBIO_CATALOGO`: un
+            cambio del catalogo (HU-NOT-001), con id `catalogo:{idDeAlerta}`.
         titulo:
           type: string
         cuerpo:

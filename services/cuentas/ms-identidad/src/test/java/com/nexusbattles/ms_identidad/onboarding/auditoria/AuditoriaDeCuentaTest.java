@@ -110,6 +110,20 @@ class AuditoriaDeCuentaTest {
     }
 
     @Test
+    @DisplayName("HU-AUT-007: los cambios del segundo factor, sin secreto ni codigos")
+    void eventosDelSegundoFactor() {
+        auditoria.segundoFactor(UID.toString(), "SEGUNDO_FACTOR_ACTIVADO", "totp", "10.0.0.4");
+        assertThat(ultimoCuerpo()).contains("\"tipoAccion\":\"ACTUALIZACION\"")
+                .contains("\"administradorId\":\"" + UID + "\"").contains("\"afectado\":\"" + UID + "\"")
+                .contains("\"motivo\":\"SEGUNDO_FACTOR_ACTIVADO\"").contains("\"valorNuevo\":\"totp\"")
+                .contains("\"ipOrigen\":\"10.0.0.4\"");
+
+        auditoria.segundoFactor("usuario-9", "CODIGO_RECUPERACION_USADO", "codigos-restantes=9", null);
+        assertThat(ultimoCuerpo()).contains("CODIGO_RECUPERACION_USADO").contains("codigos-restantes=9")
+                .contains("\"ipOrigen\":\"DESCONOCIDA\"");
+    }
+
+    @Test
     @DisplayName("la traza del alta viaja con el evento aunque se envie desde otro hilo")
     void trazaEnOtroHilo() throws Exception {
         CountDownLatch enviado = new CountDownLatch(1);

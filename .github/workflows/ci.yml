@@ -414,6 +414,13 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
 
+      # HU-AUT-007: la clave que cifra los secretos TOTP se genera una vez en
+      # el host y se reutiliza; si cambiara, nadie con segundo factor podria
+      # entrar. Con openssl del runner; segundos.
+      - name: Comprobar la clave estable del segundo factor de ms-identidad
+        shell: bash
+        run: bash scripts/cd/pruebas/clave-de-segundo-factor.sh
+
       # 27-sep: el paso 3d recreo ms-identidad sin su clave de firma (par
       # efimero: sesiones cerradas, 401 entre servicios, registro en 503).
       # Con docker y curl falsos; segundos.

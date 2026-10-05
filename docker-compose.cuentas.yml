@@ -163,6 +163,18 @@ services:
       AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
       # Clave de firma estable (ADR-002); sin valor se genera una efimera.
       JWT_CLAVE_PRIVADA: ${JWT_CLAVE_PRIVADA:-}
+      # HU-AUT-007 — clave AES (base64 de 16, 24 o 32 bytes) que cifra el
+      # secreto TOTP de cada cuenta. Sin valor el servicio arranca igual:
+      # activar la verificacion en dos pasos responde 503 y el login de quien
+      # no la tiene no cambia. Tiene que ser ESTABLE: con otra clave los
+      # secretos guardados no se pueden leer (solo quedarian los codigos de
+      # recuperacion). Ver .env.example.
+      IDENTIDAD_2FA_CLAVE: ${IDENTIDAD_2FA_CLAVE:-}
+      # Roles que no entran sin segundo factor (RF-AUT-007:
+      # SUPER_ADMINISTRADOR,ADMINISTRADOR,MODERADOR). VACIO por omision: las
+      # pruebas automaticas entran con cuentas administrativas sin el, y
+      # encenderlo es decision humana (ver .env.example).
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ${IDENTIDAD_2FA_OBLIGATORIO_ROLES:-}
       # R9.5 — origenes CORS. Antes eran comodin escrito en WebSecurityConfig;
       # ahora son configuracion (regla 10). Vacio = la lista de desarrollo que
       # trae el servicio, que es restrictiva pero utilizable: en AWS el

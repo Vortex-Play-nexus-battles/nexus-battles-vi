@@ -135,6 +135,15 @@ test.describe('número de la campana', () => {
       deBruno,
     );
     expect(conversacion.status(), await conversacion.text()).toBe(204);
+    // HU-NOT-001: al anunciar una sesión, la bandeja trae antes los cambios del
+    // catálogo que Bruno no había visto. En un banco que se reutiliza pueden
+    // ser los de la corrida anterior y llegarían justo al abrir la vista: se
+    // traen aquí, con una entrega de pendientes, y se leen con el resto.
+    const traidos = await api.post(
+      `/api/v1/users/${bruno.claims.uid}/sessions/limpieza-campana/pending`,
+      deBruno,
+    );
+    expect(traidos.status(), await traidos.text()).toBe(200);
     const previa = await api.get(bandeja, deBruno);
     expect(previa.status(), await previa.text()).toBe(200);
     for (const aviso of (await previa.json()).avisos.filter((a) => !a.leida)) {

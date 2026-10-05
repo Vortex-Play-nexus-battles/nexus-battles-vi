@@ -2,6 +2,7 @@ package nexus.alertas;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.boot.data.mongodb.test.autoconfigure.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.testcontainers.junit.jupiter.Container;
@@ -132,6 +134,48 @@ class AlertaCatalogoRepositoryMongoTest {
         assertEquals(
                 DESDE.plusSeconds(60),
                 consultas.findById("jugador-nuevo").orElseThrow().consultadoHasta());
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: la lectura por lotes trae solo las primeras del intervalo, en orden ascendente")
+    void laLecturaPorLotesRespetaElTopeYElOrden() {
+        repositorio.saveAll(List.of(
+                alerta("cuarta", DESDE.plusSeconds(40)),
+                alerta("primera", DESDE.plusSeconds(10)),
+                alerta("fuera", HASTA.plusSeconds(1)),
+                alerta("tercera", DESDE.plusSeconds(30)),
+                alerta("segunda", DESDE.plusSeconds(20))));
+
+        List<String> ids = repositorio.buscarPrimerasImplementadasEntre(DESDE, HASTA, PageRequest.of(0, 3))
+                .stream()
+                .map(AlertaCatalogo::id)
+                .toList();
+
+        assertEquals(List.of("primera", "segunda", "tercera"), ids);
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: el lote corta sin partir el grupo de la ultima marca y no toca el cursor de inicio-sesion")
+    void loteDeCambiosContraMongoReal() {
+        Instant comun = DESDE.plusSeconds(20);
+        repositorio.saveAll(List.of(
+                alerta("a", DESDE.plusSeconds(10)),
+                alerta("b", comun),
+                alerta("c", comun),
+                alerta("d", DESDE.plusSeconds(30))));
+
+        LoteDeAlertasCatalogo lote = servicioEn(HASTA).consultarCambios(DESDE, 2);
+
+        assertEquals(
+                List.of("a", "b", "c"),
+                lote.alertas().stream().map(AlertaCatalogo::id).toList());
+        assertEquals(comun, lote.hasta());
+        assertFalse(lote.completo());
+        assertEquals(0, consultas.count(), "la lectura de otro servicio no deja cursor de jugador");
+
+        LoteDeAlertasCatalogo siguiente = servicioEn(HASTA).consultarCambios(lote.hasta(), 2);
+        assertEquals(List.of("d"), siguiente.alertas().stream().map(AlertaCatalogo::id).toList());
+        assertTrue(siguiente.completo());
     }
 
     private AlertasCatalogoServicio servicioEn(Instant ahora) {

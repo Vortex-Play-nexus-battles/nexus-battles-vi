@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="./privacidad.css" />
+    <link rel="stylesheet" href="./segundo-factor.css" />
   </head>
   <body>
     <!-- Cabecera única (HU-UX-001). Antes esta vista tenía su propio
@@ -449,6 +450,155 @@
                   data-espera-guion
                 >
                   Guardar preguntas
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <!-- HU-AUT-007 — verificación en dos pasos (TOTP, ms-identidad-auth
+               2.2.0): además de la contraseña, un código de 6 dígitos de una
+               aplicación de autenticación. Lo monta `segundo-factor-cuenta.js`.
+               La clave y los códigos de recuperación solo están en pantalla:
+               nada de esto se guarda en el navegador. -->
+          <section
+            class="tarjeta pila"
+            data-zona="segundo-factor"
+            aria-labelledby="tituloSegundoFactor"
+          >
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="tituloSegundoFactor">Verificación en dos pasos</h2>
+                <p class="t-meta">
+                  Además de tu contraseña, al entrar te pediremos un código de 6 dígitos de una
+                  aplicación de autenticación de tu teléfono.
+                </p>
+              </div>
+            </div>
+
+            <p class="t-meta" data-zona="estado-segundo-factor" role="status">
+              Consultando la verificación en dos pasos…
+            </p>
+            <div data-zona="aviso-segundo-factor" tabindex="-1" hidden></div>
+
+            <div class="tarjeta__acciones" data-zona="acciones-segundo-factor">
+              <button
+                type="button"
+                class="boton boton--primario"
+                data-accion="activar-segundo-factor"
+                hidden
+              >
+                Activar
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="desactivar-segundo-factor"
+                hidden
+              >
+                Desactivar
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="reintentar-segundo-factor"
+                hidden
+              >
+                Reintentar
+              </button>
+            </div>
+
+            <!-- Al activar: la clave para la aplicación (enlace otpauth y la
+                 clave para escribirla a mano) y la confirmación con un código. -->
+            <div class="pila" data-zona="clave-segundo-factor" hidden></div>
+            <!-- G1 — el código nunca en la dirección: POST y botón apagado
+                 hasta que el guion escucha `submit`. -->
+            <form class="pila" data-zona="formulario-activacion" method="post" novalidate hidden>
+              <div class="campo">
+                <label class="campo__etiqueta" for="codigoActivacion">
+                  Código que muestra tu aplicación
+                </label>
+                <input
+                  class="campo__control"
+                  type="text"
+                  id="codigoActivacion"
+                  name="codigo"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength="7"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="tarjeta__acciones">
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="cancelar-activacion"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  class="boton boton--primario"
+                  data-accion="confirmar-activacion"
+                  disabled
+                  data-espera-guion
+                >
+                  Activar
+                </button>
+              </div>
+            </form>
+
+            <!-- Los códigos de recuperación, la única vez que se muestran. -->
+            <div class="pila" data-zona="codigos-segundo-factor" hidden></div>
+
+            <form class="pila" data-zona="formulario-desactivacion" method="post" novalidate hidden>
+              <p class="campo__pista">
+                Para quitarla hacen falta tu contraseña y un código de tu aplicación o uno de tus
+                códigos de recuperación.
+              </p>
+              <div class="campo">
+                <label class="campo__etiqueta" for="passwordActualSegundoFactor">
+                  Contraseña actual
+                </label>
+                <input
+                  class="campo__control"
+                  type="password"
+                  id="passwordActualSegundoFactor"
+                  name="passwordActualSegundoFactor"
+                  autocomplete="current-password"
+                />
+              </div>
+              <div class="campo">
+                <label class="campo__etiqueta" for="codigoDesactivacion">
+                  Código de tu aplicación o de recuperación
+                </label>
+                <input
+                  class="campo__control"
+                  type="text"
+                  id="codigoDesactivacion"
+                  name="codigo"
+                  autocomplete="one-time-code"
+                  autocapitalize="characters"
+                  maxlength="11"
+                  spellcheck="false"
+                />
+              </div>
+              <div class="tarjeta__acciones">
+                <button
+                  type="button"
+                  class="boton boton--secundario"
+                  data-accion="cancelar-desactivacion"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  class="boton boton--peligro"
+                  data-accion="confirmar-desactivacion"
+                  disabled
+                  data-espera-guion
+                >
+                  Desactivar
                 </button>
               </div>
             </form>

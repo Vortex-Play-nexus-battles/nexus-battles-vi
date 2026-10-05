@@ -138,4 +138,41 @@ class JwtServiceTest {
         assertEquals("cristianc", claims.getSubject());
         assertNull(claims.get("uid", String.class));
     }
+
+    /**
+     * HU-AUT-007 / D-09 — el claim `amr` (RFC 8176) dice como se autentico la
+     * sesion. Con la contrasena sola, `["pwd"]`: es lo que llevan todos los
+     * tokens del login de siempre.
+     */
+    @Test
+    void elLoginDeSiempreLlevaAmrPwd() {
+        String token = jwtService.generarToken("cristianc", "JUGADOR", 0, UUID.randomUUID());
+
+        Claims claims = jwtService.validarYObtenerClaims(token);
+
+        assertEquals(java.util.List.of("pwd"), claims.get("amr", java.util.List.class));
+        assertEquals(java.util.List.of("pwd"), JwtService.metodosDe(claims));
+    }
+
+    /** Tras el segundo factor, `["pwd","otp"]`: lo que busca ms-cumplimiento con AUDITORIA_EXIGIR_2FA. */
+    @Test
+    void conSegundoFactorLlevaAmrPwdOtp() {
+        String token = jwtService.generarToken("cristianc", "ADMINISTRADOR", 2, UUID.randomUUID(),
+            JwtService.AMR_CON_SEGUNDO_FACTOR);
+
+        Claims claims = jwtService.validarYObtenerClaims(token);
+
+        assertEquals(java.util.List.of("pwd", "otp"), claims.get("amr", java.util.List.class));
+        assertEquals("ADMINISTRADOR", claims.get("rol", String.class));
+        assertTrue(jwtService.esVersionVigente(claims, 2));
+        assertTrue(JwtService.conSegundoFactor(JwtService.metodosDe(claims)));
+    }
+
+    /** Un token anterior a 2.2.0 no trae `amr`: equivale a «sin segundo factor». */
+    @Test
+    void sinAmrEquivaleASinSegundoFactor() {
+        assertEquals(java.util.List.of(), JwtService.metodosDe(null));
+        assertFalse(JwtService.conSegundoFactor(null));
+        assertFalse(JwtService.conSegundoFactor(java.util.List.of("pwd")));
+    }
 }

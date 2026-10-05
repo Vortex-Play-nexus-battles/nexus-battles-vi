@@ -119,31 +119,61 @@ management:
     health:
       show-details: always
 
+# RFINAL-08 — sondeo de las peticiones INTERACTIVAS del panel: la pantalla
+# «Sistema» (GET /admin/sistema/servicios) y el tablero tecnico (GET /tecnicas).
+#
+# Hasta el 4-oct las dos preguntaban en serie, una llamada detras de otra en el
+# hilo de la peticion: trece sondas de salud (8440 ms medidos en DEV) y
+# veintiocho lecturas de Actuator (7293 ms). Ahora:
+#   - se pregunta a todos a la vez, en un ejecutor ACOTADO (`hilos`);
+#   - cada llamada tiene plazos de conexion y de respuesta y no se reintenta:
+#     alguien esta mirando la pantalla. La respuesta conserva los 2 s que ya
+#     tenia la sonda (en DEV cada sonda tardaba ~650 ms de media: acortarla
+#     pintaria LENTO servicios sanos); lo que se acorta es la conexion, porque
+#     un host que no acepta la conexion en 1 s no esta;
+#   - la ronda entera tiene tope (conexion + respuesta + 500 ms de margen para
+#     la cola): lo que no contesta a tiempo sale LENTO en «Sistema» o como
+#     brecha en el tablero, con su motivo, y no retrasa a los demas;
+#   - la ultima ronda vale `vigencia-ms`: la consola pide el estado dos veces al
+#     cargar (Resumen y Sistema) y una recarga dentro de esa ventana reutiliza
+#     la misma ronda; la respuesta lleva su hora y `desdeCache`. 0 la apaga.
+# Son constantes tecnicas, no valores de negocio: no cambian QUE se mide, solo
+# cuanto se espera. El monitor de HU-DIS-001 NO las usa (tiene sus plazos y su
+# intervalo), asi que la cifra de disponibilidad no se mueve por esto.
+sondeo:
+  conexion-ms: ${SONDEO_CONEXION_MS:1000}
+  respuesta-ms: ${SONDEO_RESPUESTA_MS:2000}
+  hilos: ${SONDEO_HILOS:16}
+  vigencia-ms: ${SONDEO_VIGENCIA_MS:15000}
+
 # Pantalla «Sistema» de la consola administrativa: que esta encendido AHORA.
 #
 # Lista aparte de `disponibilidad.servicios` a proposito. Aquella alimenta la
 # cifra de HU-DIS-001 y DEC-01 excluye de ella a los equipos socios; meter
-# aqui los diecisiete cambiaria ese numero sin que nadie lo hubiera decidido.
+# aqui los diecinueve cambiaria ese numero sin que nadie lo hubiera decidido.
 # Son dos preguntas distintas: «¿cumplimos el acuerdo?» y «¿que hay arriba?».
 #
 # Los nombres son los del catalogo de despliegue
 # (infrastructure/despliegue/servicios.json). El valor es la URL de salud, o
-# la palabra NO_DESPLEGADO para los que ese catalogo marca fuera del host por
-# capacidad: eso no es un fallo y la consola lo dice con esas palabras en vez
-# de pintar un rojo que no corresponde.
+# una palabra reservada que la consola dice tal cual en vez de pintar un rojo
+# que no corresponde:
+#   NO_DESPLEGADO  el servicio no corre en este entorno, a proposito;
+#   NO_OBSERVABLE  vive en otro host y aqui no tiene sonda configurada.
 #
-# En el host, SISTEMA_SALUD_* llega con el nombre del contenedor en la red de
-# compose. Los de contenido viven en otra maquina y se sondean por su IP
-# publica, que es como los alcanza el borde.
+# EN DEV MANDA EL DESPLIEGUE (RFINAL-08): el bloque srv-metricas-plataforma de
+# docker-compose.deploy.yml fija SISTEMA_SALUD_* para los diecinueve, los de
+# plataforma por su nombre en la red de compose y los del host de contenido
+# por su IP elastica y el puerto que publican (los mismos que usa el borde; su
+# grupo de seguridad admite a este host, reglas-entrada.json). La prueba
+# SondasDelDespliegueTest falla si una sonda deja de apuntar a donde dice el
+# catalogo. Lo de aqui abajo es el valor sin esa variable: nunca una IP.
 sistema:
   servicios:
     # Los valores por defecto son los nombres de la red de despliegue, NO
     # localhost. Dentro de un contenedor, localhost es el propio servicio:
     # con los valores anteriores esta pantalla reportaba los diecisiete
     # servicios como CAIDO con "Connection refused" -- comprobado contra dev
-    # el 2026-09-24. A diferencia de `disponibilidad`, que el host sobrescribe
-    # con SALUD_*, aqui el valor correcto viene de serie y la variable de
-    # entorno queda solo para un entorno distinto.
+    # el 2026-09-24.
     #
     # Puertos y rutas de salud: infrastructure/despliegue/servicios.json.
     comentarios: ${SISTEMA_SALUD_COMENTARIOS:http://srv-comentarios:8081/actuator/health}
@@ -157,15 +187,19 @@ sistema:
     ms-identidad: ${SISTEMA_SALUD_MS_IDENTIDAD:http://srv-ms-identidad:8089/actuator/health}
     ms-ecommerce: ${SISTEMA_SALUD_MS_ECOMMERCE:http://srv-ms-ecommerce:8090/ecommerce/actuator/health}
     ms-cumplimiento: ${SISTEMA_SALUD_MS_CUMPLIMIENTO:http://srv-ms-cumplimiento:8091/actuator/health}
-    # Los cuatro de economia y subastas se despliegan a demanda por capacidad
-    # medida. Se sondean igual: si estan, salen OPERATIVO; si no, CAIDO, que es
-    # la verdad y no "no existe".
-    ms-subastas: ${SISTEMA_SALUD_MS_SUBASTAS:http://srv-ms-subastas:8092/api/v1/actuator/health}
     ms-finanzas: ${SISTEMA_SALUD_MS_FINANZAS:http://srv-ms-finanzas:8093/api/v1/actuator/health}
-    ms-chatbot: ${SISTEMA_SALUD_MS_CHATBOT:NO_DESPLEGADO}
-    # Contenido vive en otra cuenta de AWS y otra VPC, sin camino privado desde
-    # este host (infrastructure/despliegue/CAPACIDAD.md). Esta sonda no los
-    # alcanza; responden por el borde. Decir CAIDO seria mentir.
+    # ms-chatbot corre en el host de plataforma desde el 29-sep (desplegableDev
+    # en servicios.json; el borde lo enruta a srv-ms-chatbot:8094). Hasta
+    # RFINAL-08 aqui decia NO_DESPLEGADO y la consola lo repetia con el
+    # asistente funcionando.
+    ms-chatbot: ${SISTEMA_SALUD_MS_CHATBOT:http://srv-ms-chatbot:8094/api/v1/actuator/health}
+    # Host de contenido (claseHost "contenido"): otra cuenta de AWS y otra VPC,
+    # sin nombre en esta red. Desde el 28-sep ms-subastas vive alli tambien:
+    # su valor anterior, srv-ms-subastas, ya no existe en plataforma y la
+    # consola lo pintaba CAIDO mientras las subastas cargaban. Sin la variable
+    # (que en DEV pone docker-compose.deploy.yml) no se inventa una direccion:
+    # NO_OBSERVABLE.
+    ms-subastas: ${SISTEMA_SALUD_MS_SUBASTAS:NO_OBSERVABLE}
     heroes: ${SISTEMA_SALUD_HEROES:NO_OBSERVABLE}
     inventario: ${SISTEMA_SALUD_INVENTARIO:NO_OBSERVABLE}
     productos: ${SISTEMA_SALUD_PRODUCTOS:NO_OBSERVABLE}
