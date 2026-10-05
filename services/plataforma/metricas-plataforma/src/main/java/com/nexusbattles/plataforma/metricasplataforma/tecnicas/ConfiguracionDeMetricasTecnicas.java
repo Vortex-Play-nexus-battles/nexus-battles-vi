@@ -3,7 +3,9 @@ package com.nexusbattles.plataforma.metricasplataforma.tecnicas;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.ConfiguracionDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.disponibilidad.MonitorDeDisponibilidad;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.ClienteDeModeracion;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.ClienteDeUsuarios;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeModeracion;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeUsuarios;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.ConfiguracionDelSondeo;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.ResultadoReciente;
 import com.nexusbattles.plataforma.metricasplataforma.sondeo.RondaEnParalelo;
@@ -49,5 +51,11 @@ public class ConfiguracionDeMetricasTecnicas {
     @Bean
     FuenteDeModeracion fuenteDeModeracion(@Value("${metricas.moderacion.url}") String url) {
         return new ClienteDeModeracion(conTiempos(Duration.ofMillis(2000), Duration.ofMillis(3000)), url);
+    }
+
+    /** Cuentas por estado y altas por dia (HU-MET-001): una sola llamada a ms-identidad, con el token del administrador. */
+    @Bean
+    FuenteDeUsuarios fuenteDeUsuarios(@Value("${metricas.usuarios.url}") String url) {
+        return new ClienteDeUsuarios(conTiempos(Duration.ofMillis(2000), Duration.ofMillis(3000)), url);
     }
 }

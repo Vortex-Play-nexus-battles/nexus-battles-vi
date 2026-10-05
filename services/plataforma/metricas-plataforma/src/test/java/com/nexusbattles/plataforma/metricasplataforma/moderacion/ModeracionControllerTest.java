@@ -19,7 +19,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -49,6 +51,9 @@ class ModeracionControllerTest {
     @MockitoBean
     private FuenteDeModeracion fuente;
 
+    @MockitoBean
+    private FuenteDeUsuarios usuarios;
+
     private static FuenteDeModeracion.Agregados agregados() {
         OffsetDateTime hasta = OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC);
         return new FuenteDeModeracion.Agregados(hasta.minusDays(30), hasta, 6,
@@ -57,9 +62,20 @@ class ModeracionControllerTest {
                 Map.of("PENDIENTE", 1L, "MANTENIDA", 0L, "REDUCIDA", 0L, "REVERTIDA", 1L), 2, 1);
     }
 
+    private static FuenteDeUsuarios.Indicadores indicadores() {
+        return new FuenteDeUsuarios.Indicadores(12,
+                Map.of("ACTIVO", 8L, "PENDIENTE_VERIFICACION", 1L, "INACTIVO", 0L, "SUSPENDIDO", 2L, "BANEADO", 1L),
+                new FuenteDeUsuarios.Registros("2026-09-01", "2026-10-01", 3,
+                        List.of(new FuenteDeUsuarios.DiaDeRegistro("2026-09-30", 1),
+                                new FuenteDeUsuarios.DiaDeRegistro("2026-10-01", 2))),
+                false, OffsetDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+    }
+
     @Test
     void publicaLosAgregadosLasAlertasPorUmbralYLoPendiente() throws Exception {
         given(fuente.consultar(any(), any())).willReturn(agregados());
+        given(usuarios.consultar(any(), any(), any()))
+                .willThrow(new FuenteDeUsuarios.NoDisponible("ms-identidad no responde"));
         mockMvc.perform(get("/api/v1/moderacion"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sanciones.total").value(6))
@@ -70,6 +86,36 @@ class ModeracionControllerTest {
                 .andExpect(jsonPath("$.alertas.length()").value(1))
                 .andExpect(jsonPath("$.alertas[0]").value(org.hamcrest.Matchers.containsString("2026-09-28")))
                 .andExpect(jsonPath("$.pendientes.length()").value(2));
+    }
+
+    @Test
+    void publicaElRegistroDeUsuariosYReenviaElTokenDelAdministrador() throws Exception {
+        given(fuente.consultar(any(), any())).willReturn(agregados());
+        given(usuarios.consultar(eq("2026-09-01"), eq("2026-10-01"), eq("Bearer token-del-admin")))
+                .willReturn(indicadores());
+
+        mockMvc.perform(get("/api/v1/moderacion").header("Authorization", "Bearer token-del-admin"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.registroDeUsuarios.total").value(12))
+                .andExpect(jsonPath("$.registroDeUsuarios.porEstado.SUSPENDIDO").value(2))
+                .andExpect(jsonPath("$.registroDeUsuarios.registros.porDia[1].cuentas").value(2))
+                .andExpect(jsonPath("$.pendientes.length()").value(1))
+                .andExpect(jsonPath("$.pendientes[0]").value(org.hamcrest.Matchers.startsWith("frecuencia de reportes")));
+        verify(usuarios).consultar("2026-09-01", "2026-10-01", "Bearer token-del-admin");
+    }
+
+    @Test
+    void siIdentidadNoDaLosUsuariosElTableroSigueConLasSancionesYDiceElMotivo() throws Exception {
+        given(fuente.consultar(any(), any())).willReturn(agregados());
+        given(usuarios.consultar(any(), any(), any())).willThrow(new FuenteDeUsuarios.NoDisponible(
+                "ms-identidad nego el permiso (se necesita un administrador con GESTIONAR_CUENTAS)"));
+
+        mockMvc.perform(get("/api/v1/moderacion").header("Authorization", "Bearer de-servicio"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sanciones.total").value(6))
+                .andExpect(jsonPath("$.registroDeUsuarios").doesNotExist())
+                .andExpect(jsonPath("$.pendientes[0]")
+                        .value(org.hamcrest.Matchers.containsString("GESTIONAR_CUENTAS")));
     }
 
     @Test

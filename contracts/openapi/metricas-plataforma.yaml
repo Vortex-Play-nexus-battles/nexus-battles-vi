@@ -88,7 +88,21 @@ info:
     respuesta (`instante`, `generadoEn`) es siempre la de la ronda de la que
     sale. UP solo cuando la sonda recibe la salud de Actuator en JSON con
     `status` UP en la raiz.
-  version: 1.9.0
+
+    1.10.0 (HU-MET-001, #527): `/moderacion` publica `registroDeUsuarios`:
+    las cuentas por estado y las altas por dia que ms-identidad entrega en
+    `GET /api/v1/admin/jugadores/indicadores` (ms-identidad-admin.yaml 1.3.0).
+    Esa ruta pide el permiso GESTIONAR_CUENTAS de una persona, asi que el
+    token del administrador que consulta se REENVIA tal cual y es identidad
+    quien decide; una credencial de servicio no basta. Si identidad no
+    responde, niega el permiso o rechaza el rango, el tablero NO falla: las
+    sanciones salen igual, `registroDeUsuarios` va en null y el motivo real
+    queda en `pendientes` (CA-03). `pendientes` deja de listar siempre
+    «registro de nuevos usuarios»: solo aparece si no se pudo leer. Ademas,
+    el umbral de alta frecuencia (D-25) es «a partir de»: el PO lo fijo en 3 el
+    2026-10-05 y un dia con 3 sanciones o mas genera la alerta (antes se
+    comparaba «mas de»; no habia umbral configurado en ningun entorno). Aditivo.
+  version: 1.10.0
 servers:
   - url: http://localhost:8087/api/v1
     description: Entorno local de desarrollo
@@ -834,6 +848,47 @@ components:
             latenciaMs: { type: integer }
             disponibilidadPorcentaje: { type: number }
 
+    RegistroDeUsuarios:
+      type: object
+      description: |
+        Lo que `GET /api/v1/admin/jugadores/indicadores` de ms-identidad (1.3.0)
+        devuelve para el periodo del tablero. Identidad cuenta; este modulo no
+        recalcula nada. Campos nuevos que identidad anada se ignoran.
+      required: [total, porEstado, registros]
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: Cuentas que hay ahora (suma de `porEstado`).
+        porEstado:
+          type: object
+          description: Cuentas ahora en cada estado (ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO, BANEADO).
+          additionalProperties:
+            type: integer
+            format: int64
+        registros:
+          type: object
+          required: [desde, hasta, total, porDia]
+          properties:
+            desde: { type: string, format: date }
+            hasta: { type: string, format: date }
+            total: { type: integer, format: int64, description: Altas en el rango (suma de `porDia`). }
+            porDia:
+              type: array
+              description: Un elemento por dia del rango, en orden; los dias sin altas van con 0.
+              items:
+                type: object
+                required: [fecha, cuentas]
+                properties:
+                  fecha: { type: string, format: date }
+                  cuentas: { type: integer, format: int64 }
+        ocultarPruebas:
+          type: boolean
+          description: Si identidad dejo fuera las cuentas de pruebas automaticas.
+        calculadoEn:
+          type: string
+          format: date-time
+
     TableroDeModeracion:
       type: object
       required: [sanciones, alertasConfiguradas, alertas, pendientes]
@@ -849,4 +904,11 @@ components:
         pendientes:
           type: array
           items: { type: string }
-        registroDeUsuarios: { type: [object, 'null'], description: null hasta que ms-identidad publique un contrato de lectura }
+        registroDeUsuarios:
+          description: |
+            Cuentas por estado ahora y altas por dia del periodo, tal como las
+            publica ms-identidad (1.3.0). `null` si identidad no respondio, nego
+            el permiso o rechazo el rango; el motivo va en `pendientes`.
+          oneOf:
+            - $ref: '#/components/schemas/RegistroDeUsuarios'
+            - type: 'null'
