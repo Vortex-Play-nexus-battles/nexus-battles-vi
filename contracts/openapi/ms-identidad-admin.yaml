@@ -19,8 +19,33 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.2.0
+  version: 1.3.0
   description: |
+    ### Cambios en 1.3.0 (HU-USR-008 #561, 7.3.4 — implementado, todo aditivo)
+
+    - `GET /admin/jugadores` admite cuatro filtros OPCIONALES: `rol`,
+      `estado`, `registradoDesde` y `registradoHasta` (fecha de registro, las
+      dos inclusive). Sin ellos responde igual que en 1.2.0. `buscar` encuentra
+      ademas por los nombres y apellidos del perfil: se suman a apodo y correo,
+      asi que lo que antes aparecia sigue apareciendo. Un valor que no existe
+      (rol o estado fuera de la lista, fecha mal escrita, `registradoDesde`
+      posterior a `registradoHasta`) responde 400 `datos-invalidos` en vez de
+      una lista vacia que pareceria un resultado.
+    - `GET /admin/jugadores/exportacion` (nueva): el listado completo con los
+      mismos filtros, en CSV y con las columnas del directorio. Mismo permiso
+      que el directorio. Si pasa del tope configurado responde 422
+      `exportacion-demasiado-grande` y no entrega un archivo a medias.
+    - `GET /admin/jugadores/indicadores` (nueva): cuantas cuentas hay en total
+      y en cada estado (la foto de ahora) y cuantas se registraron cada dia de
+      un rango (serie continua: los dias sin registros van con 0). Con
+      `ocultarPruebas`, el mismo criterio de cuentas de pruebas que el
+      directorio.
+    - El «historial de sanciones» NO es filtro: este servicio solo guarda la
+      sancion vigente (el `estado` SUSPENDIDO o BANEADO, que si se filtra) y la
+      ultima que proyecto moderacion-sanciones, no el historial (sin
+      advertencias ni las anteriores a B2). El historial es de
+      moderacion-sanciones (`/sanciones/usuarios/{id}`).
+
     ### Cambios en 1.2.0 (RFINAL-06 — implementado, todo aditivo)
 
     - `EntradaDeDirectorio` gana `id`: la clave interna de la cuenta, la que
@@ -107,17 +132,26 @@ paths:
       operationId: listarDirectorioDeJugadores
       summary: Directorio paginado de cuentas con busqueda
       description: |
-        Las cuentas mas nuevas primero (`id` descendente). La busqueda, el
-        filtro de pruebas automaticas y la paginacion los hace el servidor.
+        Las cuentas mas nuevas primero (`id` descendente). La busqueda, los
+        filtros, el de pruebas automaticas y la paginacion los hace el
+        servidor. Los filtros se combinan entre si (todos a la vez).
       security:
         - tokenDeUsuario: []
       parameters:
         - name: buscar
           in: query
           required: false
-          description: Texto a buscar en apodo o correo (sin distinguir mayusculas).
+          description: |
+            Texto a buscar en apodo o correo (sin distinguir mayusculas). 1.3.0:
+            tambien en los nombres y apellidos del perfil («Ana Perez» encuentra
+            a quien se llama Ana de nombre y Perez de apellido). Una cuenta sin
+            perfil (las administrativas) se sigue encontrando por apodo o correo.
           schema:
             type: string
+        - $ref: '#/components/parameters/FiltroRol'
+        - $ref: '#/components/parameters/FiltroEstado'
+        - $ref: '#/components/parameters/RegistradoDesde'
+        - $ref: '#/components/parameters/RegistradoHasta'
         - name: ocultarPruebas
           in: query
           required: false
@@ -157,6 +191,117 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginaDeDirectorio'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/jugadores/exportacion:
+    get:
+      tags: [administracion]
+      operationId: exportarDirectorioDeJugadores
+      summary: El directorio con los filtros vigentes, en CSV (1.3.0)
+      description: |
+        Todas las cuentas que cumplen los filtros (no solo una pagina), en el
+        orden del directorio (las mas nuevas primero), leidas en una sola
+        consulta: el archivo es una foto coherente aunque alguien se registre
+        mientras se descarga.
+
+        Columnas, las que el directorio muestra y ninguna mas: `Apodo`,
+        `Correo`, `Rol`, `Estado` (`BLOQUEADA` si la cuenta tiene ahora un
+        bloqueo temporal por intentos fallidos, como en la tabla), `Registro`
+        y `Última entrada` (fecha y hora `aaaa-mm-dd hh:mm` del reloj del
+        servicio; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
+        Sin identificadores internos ni credenciales.
+
+        Formato: UTF-8 con marca de orden de bytes (para que una hoja de
+        calculo lea bien las tildes), separado por comas, fin de linea CRLF,
+        cada celda de texto entre comillas con las comillas dobladas. Una
+        celda que empiece por `=`, `+`, `-`, `@`, tabulador o retorno se
+        prefija con un apostrofo: una hoja de calculo no la ejecutara como
+        formula (inyeccion CSV).
+
+        Tope tecnico de filas: `IDENTIDAD_DIRECTORIO_EXPORTACION_MAXIMO_FILAS`
+        (por omision 10000). Por encima, 422 y ningun archivo.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/BuscarEnDirectorio'
+        - $ref: '#/components/parameters/OcultarPruebas'
+        - $ref: '#/components/parameters/FiltroRol'
+        - $ref: '#/components/parameters/FiltroEstado'
+        - $ref: '#/components/parameters/RegistradoDesde'
+        - $ref: '#/components/parameters/RegistradoHasta'
+      responses:
+        '200':
+          description: El listado en CSV.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="directorio-de-cuentas-aaaammdd-hhmm.csv"`'
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '422':
+          $ref: '#/components/responses/ExportacionDemasiadoGrande'
+
+  /api/v1/admin/jugadores/indicadores:
+    get:
+      tags: [administracion]
+      operationId: indicadoresDeCuentas
+      summary: Cuentas por estado y registros por dia (HU-USR-008, 1.3.0)
+      description: |
+        Dos cosas distintas en una respuesta:
+
+        - `total` y `porEstado`: cuantas cuentas hay AHORA, en total y en cada
+          estado. No dependen del rango (una cuenta suspendida lo esta hoy,
+          se registrara cuando se registrara).
+        - `registros`: cuantas cuentas se registraron cada dia del rango, por
+          la fecha de alta de la cuenta. La serie es continua: un dia sin
+          registros va con 0, no falta. Las cuentas anteriores al campo de
+          fecha de alta no tienen dia y no entran en la serie (si en el total).
+
+        El dia es el del reloj del servicio. Sin rango, los ultimos
+        `IDENTIDAD_INDICADORES_DIAS_POR_OMISION` dias (por omision 30) hasta
+        hoy; con solo `desde`, hasta hoy; con solo `hasta`, esos mismos dias
+        hacia atras. Un rango de mas de `IDENTIDAD_INDICADORES_DIAS_MAXIMOS`
+        dias (por omision 366) responde 400: es un tope tecnico del tamano de
+        la serie, no una regla de negocio.
+
+        Mismo permiso que el directorio. Solo lee: no cambia nada.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Primer dia de la serie (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - name: hasta
+          in: query
+          required: false
+          description: Ultimo dia de la serie (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/OcultarPruebas'
+      responses:
+        '200':
+          description: Los indicadores.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndicadoresDeCuentas'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
         '403':
           $ref: '#/components/responses/Prohibido'
 
@@ -552,6 +697,63 @@ components:
       schema:
         type: integer
         format: int64
+    BuscarEnDirectorio:
+      name: buscar
+      in: query
+      required: false
+      description: |
+        1.3.0 — el mismo texto que el directorio: apodo, correo o nombres y
+        apellidos del perfil, sin distinguir mayusculas.
+      schema:
+        type: string
+    OcultarPruebas:
+      name: ocultarPruebas
+      in: query
+      required: false
+      description: |
+        1.3.0 — el mismo criterio que `ocultarPruebas` del directorio: `true`
+        deja fuera las cuentas de las pruebas automaticas (dominio de correo
+        o prefijo de apodo configurados en el servicio).
+      schema:
+        type: boolean
+        default: false
+    FiltroRol:
+      name: rol
+      in: query
+      required: false
+      description: 1.3.0 — solo las cuentas de este rol. Otro valor, 400.
+      schema:
+        type: string
+        enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+    FiltroEstado:
+      name: estado
+      in: query
+      required: false
+      description: |
+        1.3.0 — solo las cuentas en este estado. SUSPENDIDO y BANEADO incluyen
+        las filas que el panel anterior a B2 guardo en femenino. Otro valor, 400.
+      schema:
+        type: string
+        enum: [ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO, BANEADO]
+    RegistradoDesde:
+      name: registradoDesde
+      in: query
+      required: false
+      description: |
+        1.3.0 — solo las cuentas registradas ese dia o despues (`aaaa-mm-dd`,
+        dia del reloj del servicio). Con un filtro de fecha, las cuentas sin
+        fecha de alta (anteriores al campo) quedan fuera.
+      schema:
+        type: string
+        format: date
+    RegistradoHasta:
+      name: registradoHasta
+      in: query
+      required: false
+      description: 1.3.0 — solo las cuentas registradas ese dia o antes (inclusive).
+      schema:
+        type: string
+        format: date
 
   responses:
     Prohibido:
@@ -576,6 +778,26 @@ components:
       description: |
         Datos invalidos. `type` `.../errors/datos-invalidos` (sin `sancionId`,
         estado desconocido, SUSPENDIDO sin `hasta`, JSON ilegible).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ConsultaInvalida:
+      description: |
+        1.3.0 — un filtro que no se puede aplicar: rol o estado fuera de la
+        lista, una fecha que no es `aaaa-mm-dd`, un desde posterior al hasta o
+        un rango de indicadores mas largo que el tope. `type`
+        `.../errors/datos-invalidos`; `detail` dice cual, en palabras.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ExportacionDemasiadoGrande:
+      description: |
+        1.3.0 — los filtros dejan mas cuentas que el tope de una exportacion.
+        `type` `.../errors/exportacion-demasiado-grande`; `detail` dice
+        cuantas son y cual es el tope, para acotar los filtros. No se entrega
+        ningun archivo.
       content:
         application/problem+json:
           schema:
@@ -659,6 +881,85 @@ components:
         bloqueada:
           type: boolean
           description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+
+    IndicadoresDeCuentas:
+      type: object
+      description: 1.3.0 — `GET /admin/jugadores/indicadores`.
+      required: [total, porEstado, registros, ocultarPruebas, calculadoEn]
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: |
+            Cuentas que hay ahora (sin las de pruebas automaticas si
+            `ocultarPruebas`). Es la suma de `porEstado`.
+        porEstado:
+          type: object
+          description: |
+            Cuantas cuentas hay ahora en cada estado. Trae SIEMPRE las cinco
+            claves del contrato, con 0 si no hay ninguna: un estado ausente no
+            es lo mismo que un estado sin cuentas. SUSPENDIDO y BANEADO suman
+            las filas anteriores a B2 (SUSPENDIDA, BANEADA). Un valor guardado
+            que no es ninguno de los cinco no deberia existir; si existe se
+            publica con su nombre en vez de esconderlo.
+          required: [ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO, BANEADO]
+          properties:
+            ACTIVO:
+              type: integer
+              format: int64
+            PENDIENTE_VERIFICACION:
+              type: integer
+              format: int64
+            INACTIVO:
+              type: integer
+              format: int64
+            SUSPENDIDO:
+              type: integer
+              format: int64
+            BANEADO:
+              type: integer
+              format: int64
+          additionalProperties:
+            type: integer
+            format: int64
+        registros:
+          $ref: '#/components/schemas/RegistrosPorDia'
+        ocultarPruebas:
+          type: boolean
+          description: Si se dejaron fuera las cuentas de pruebas automaticas.
+        calculadoEn:
+          type: string
+          format: date-time
+          description: Cuando se contaron.
+
+    RegistrosPorDia:
+      type: object
+      description: 1.3.0 — altas de cuentas por dia, en un rango cerrado.
+      required: [desde, hasta, total, porDia]
+      properties:
+        desde:
+          type: string
+          format: date
+        hasta:
+          type: string
+          format: date
+        total:
+          type: integer
+          format: int64
+          description: Cuentas registradas en el rango (la suma de `porDia`).
+        porDia:
+          type: array
+          description: Un elemento por dia, de `desde` a `hasta`, en orden; los dias sin altas con 0.
+          items:
+            type: object
+            required: [fecha, cuentas]
+            properties:
+              fecha:
+                type: string
+                format: date
+              cuentas:
+                type: integer
+                format: int64
 
     UsuarioAdministrado:
       type: object
