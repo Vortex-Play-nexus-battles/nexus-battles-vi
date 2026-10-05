@@ -303,6 +303,14 @@ describe('vista', () => {
         t = torneo({ equiposInscritos: 1, equipos: [equipo({ inscrito: true, posicion: 1 })] });
         return { estado: 201, cuerpo: t.equipos[0] };
       },
+      // RFINAL-04 — el compañero se busca por apodo (ms-identidad, perfiles
+      // públicos); quien busca no sale en la lista.
+      'GET /api/v1/perfiles/publicos': () => ({
+        cuerpo: [
+          { uid: UID, apodo: 'Yo mismo', avatar: null },
+          { uid: OTRO, apodo: 'Compa', avatar: null },
+        ],
+      }),
     });
     montarTorneos(document, { rol: 'JUGADOR', uid: UID, fetchImpl });
     await asentar();
@@ -322,9 +330,31 @@ describe('vista', () => {
 
     const form = detalle.querySelector('[data-zona="crear-equipo"]');
     expect(form).not.toBeNull();
+    // RFINAL-04 — ni UUID ni dirección de imagen a mano.
+    expect(form.querySelector('[name="companeroUid"]')).toBeNull();
+    expect(form.querySelector('[name="avatar"]')).toBeNull();
+    expect(form.textContent).not.toMatch(/Identificador/);
     form.querySelector('[name="nombre"]').value = 'Los Valientes';
-    form.querySelector('[name="avatar"]').value = 'avatar-1';
-    form.querySelector('[name="companeroUid"]').value = OTRO;
+    form.querySelector('[name="emblema"]').value = 'emblema-03';
+
+    // Sin elegir compañero no se envía nada: se pide elegirlo.
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await asentar();
+    expect(
+      fetchImpl.mock.calls.some(
+        (c) => String(c[0]).endsWith('/equipos') && c[1]?.method === 'POST',
+      ),
+    ).toBe(false);
+    expect(form.querySelector('[name="apodoCompanero"]').getAttribute('aria-invalid')).toBe('true');
+
+    form.querySelector('[name="apodoCompanero"]').value = 'Com';
+    form.querySelector('[data-accion="buscar-companero"]').click();
+    await asentar();
+    await asentar();
+    expect(form.querySelector(`[data-jugador="${UID}"]`)).toBeNull();
+    form.querySelector(`[data-jugador="${OTRO}"]`).click();
+    expect(form.querySelector('[data-zona="companero-elegido"]').textContent).toMatch(/Compa/);
+
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await asentar();
     await asentar();
@@ -334,7 +364,7 @@ describe('vista', () => {
     );
     expect(JSON.parse(llamada[1].body)).toEqual({
       nombre: 'Los Valientes',
-      avatar: 'avatar-1',
+      avatar: 'emblema-03',
       companeroUid: OTRO,
     });
     expect(document.querySelector('.aviso--exito').textContent).toMatch(/Equipo registrado/);
