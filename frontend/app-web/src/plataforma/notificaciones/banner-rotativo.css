@@ -10,8 +10,12 @@
    de misiones.
    ======================================================================= */
 
+/* El fondo del aviso es claro (`--info-insignia`) pero la home pinta su texto
+   sobre la atmósfera oscura: sin fijar la tinta aquí, el título heredaba el
+   color claro de la portada y no llegaba al contraste AA (axe, home-poblada). */
 .banner-rotativo {
   flex-wrap: wrap;
+  color: var(--texto);
 }
 
 .banner-rotativo .banner__cuerpo {
