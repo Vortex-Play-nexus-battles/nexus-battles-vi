@@ -39,6 +39,7 @@
  * exactamente el contenido del que hay que desconfiar.
  */
 
+import { destinoVisible, urlDeVista } from '../../comun/acceso.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
 import {
@@ -153,14 +154,47 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
 }
 
 /**
+ * HU-USR-010 (CA-02) — la dirección de la ficha administrativa del autor, por
+ * su `uid` (lo único que la cola sabe de él), o `null` si este rol no puede
+ * abrirla: la ficha es de administración (la matriz de acceso lo decide) y a
+ * un moderador no se le ofrece una puerta cerrada.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string) => string)|null}
+ */
+export function enlazadorDeFicha(rol) {
+  if (!destinoVisible('ficha-usuario', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId) => {
+    const destino = new URL(urlDeVista('ficha-usuario'));
+    destino.searchParams.set('usuario', autorId);
+    return destino.href;
+  };
+}
+
+/**
  * Una entrada de la cola, como tarjeta pulsable.
  *
  * @param {object} entrada `EntradaDeCola` del contrato
  * @param {(id: string) => void} alAbrir
+ * @param {{hrefDeFicha?: ((autorId: string) => string)|null}} [opciones] HU-USR-010:
+ *   con él, «Ver ficha» junto al autor
  * @returns {HTMLElement}
  */
-export function tarjetaDeEntrada(entrada, alAbrir) {
+export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) {
   const comentario = entrada.comentario ?? {};
+  const fichaDelAutor =
+    hrefDeFicha && typeof comentario.autorId === 'string' && comentario.autorId
+      ? h('a', {
+          texto: 'Ver ficha',
+          datos: { accion: 'ver-ficha' },
+          atributos: {
+            href: hrefDeFicha(comentario.autorId),
+            'aria-label': `Ver la ficha de ${comentario.apodoAutor || 'su autor'}`,
+          },
+        })
+      : null;
   const categorias = Object.entries(entrada.porCategoria ?? {})
     .sort((a, b) => b[1] - a[1])
     .map(([nombre, cuantos]) =>
@@ -185,6 +219,7 @@ export function tarjetaDeEntrada(entrada, alAbrir) {
           datos: { campo: 'apodo' },
           texto: comentario.apodoAutor ?? '',
         }),
+        fichaDelAutor,
         h('span', {
           clase: 'distintivo distintivo--reportado',
           datos: { campo: 'reportes' },
@@ -678,11 +713,17 @@ function filtroElegido(filtro) {
  *
  * @param {HTMLElement} raiz elemento con las zonas `cola`, `detalle` y `aviso`
  *   (y, si lo trae, el filtro `[data-zona="filtro"]`)
- * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string}} [opciones]
- *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real.
+ * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string,
+ *          rol?: string|null}} [opciones]
+ *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real. `rol`
+ *   (HU-USR-010) decide si cada autor lleva «Ver ficha».
  * @returns {{recargar: () => Promise<void>}}
  */
-export function montarModeracion(raiz, { api = null, productoId = null, crearUrl } = {}) {
+export function montarModeracion(
+  raiz,
+  { api = null, productoId = null, crearUrl, rol = null } = {},
+) {
+  const hrefDeFicha = enlazadorDeFicha(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
@@ -756,7 +797,7 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
         return;
       }
       for (const entrada of cola.entradas) {
-        zonaCola.append(tarjetaDeEntrada(entrada, (id) => abrir(id)));
+        zonaCola.append(tarjetaDeEntrada(entrada, (id) => abrir(id), { hrefDeFicha }));
       }
     } catch (error) {
       vaciar(zonaCola);

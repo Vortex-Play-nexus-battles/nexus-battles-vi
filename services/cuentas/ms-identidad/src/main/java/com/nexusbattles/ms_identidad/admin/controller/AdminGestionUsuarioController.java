@@ -157,7 +157,8 @@ public class AdminGestionUsuarioController {
         return ResponseEntity.status(respuesta).body(rechazo.getMessage());
     }
 
-    private String obtenerIpReal(HttpServletRequest request) {
+    /** La IP real tras el borde: la primera de {@code X-Forwarded-For}. La comparte la ficha (HU-USR-010). */
+    static String obtenerIpReal(HttpServletRequest request) {
         String forwarded = request.getHeader("X-Forwarded-For");
         if (forwarded != null && !forwarded.isBlank()) {
             return forwarded.split(",")[0].trim();

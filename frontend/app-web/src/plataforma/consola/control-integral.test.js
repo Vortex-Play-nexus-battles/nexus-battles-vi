@@ -468,6 +468,64 @@ describe('directorio de jugadores', () => {
     expect(enlaces[0].getAttribute('aria-label')).toBe('Gestionar la cuenta de Ana');
   });
 
+  /**
+   * HU-USR-010 — cada fila abre la ficha administrativa de esa cuenta (todo lo
+   * que los servicios publican de ella), por su clave y sin copiar nada.
+   */
+  test('HU-USR-010: cada cuenta abre su ficha administrativa por su clave', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada() });
+    await asentar();
+
+    const directorio = raiz.querySelector('[data-panel="directorio"]');
+    const cabeceras = [...directorio.querySelectorAll('thead th')].map((th) => th.textContent);
+    expect(cabeceras).toEqual([
+      'Apodo',
+      'Correo',
+      'Rol',
+      'Estado',
+      'Registro',
+      'Última entrada',
+      'Ficha',
+      'Gestión',
+      'Sanciones',
+    ]);
+    const enlaces = [...directorio.querySelectorAll('tbody a[data-accion="ver-ficha"]')];
+    expect(enlaces).toHaveLength(2);
+    const destino = new URL(enlaces[0].href);
+    expect(destino.pathname).toMatch(/plataforma\/moderacion-sanciones\/ficha-usuario\.html$/);
+    expect(destino.searchParams.get('usuario')).toBe('15');
+    expect(enlaces[0].textContent).toBe('Ver ficha');
+    expect(enlaces[0].getAttribute('aria-label')).toBe('Ver la ficha de Ana');
+  });
+
+  test('HU-USR-010: sin clave la ficha se abre por el uid, y sin ninguno dice «sin dato»', async () => {
+    const soloUid = {
+      ...JUGADORES,
+      contenido: [
+        { ...JUGADORES.contenido[0], id: undefined },
+        { ...JUGADORES.contenido[1], id: undefined, uid: null },
+      ],
+    };
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      { consultarApi: apiSimulada({ '/admin/jugadores?page=0&size=20': conDatos(soloUid) }) },
+    );
+    await asentar();
+
+    const enlaces = [
+      ...raiz.querySelectorAll('[data-panel="directorio"] tbody a[data-accion="ver-ficha"]'),
+    ];
+    expect(enlaces).toHaveLength(1);
+    expect(new URL(enlaces[0].href).searchParams.get('usuario')).toBe(
+      '11111111-2222-3333-4444-555555555555',
+    );
+  });
+
   test('una cuenta sin clave (servicio anterior a 1.2.0) dice «sin dato» en vez de un enlace roto', async () => {
     const sinClave = {
       ...JUGADORES,

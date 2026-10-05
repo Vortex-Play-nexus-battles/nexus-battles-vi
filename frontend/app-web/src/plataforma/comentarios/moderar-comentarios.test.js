@@ -12,7 +12,12 @@
 
 import { jest } from '@jest/globals';
 
-import { montarModeracion, panelDeDetalle, tarjetaDeEntrada } from './moderar-comentarios.js';
+import {
+  enlazadorDeFicha,
+  montarModeracion,
+  panelDeDetalle,
+  tarjetaDeEntrada,
+} from './moderar-comentarios.js';
 import { accionesDesde, ErrorDeApi } from './cliente-moderacion.js';
 import { fechaHora } from '../../comun/ui/formato.js';
 import { TEXTO_SIN_SERVICIO } from '../../comun/ui/texto-de-fallo.js';
@@ -158,6 +163,53 @@ describe('la cola', () => {
 
     expect(tarjeta.querySelector('[data-campo="prioridad"]')).toBeNull();
     expect(tarjeta.textContent).not.toContain('Prioridad elevada');
+  });
+
+  test('HU-USR-010 (CA-02): con permiso, «Ver ficha» junto al autor lleva a su ficha por su uid', () => {
+    const autorId = '11111111-2222-3333-4444-555555555555';
+    const conAutor = entrada({ comentario: { ...entrada().comentario, autorId } });
+    const tarjeta = tarjetaDeEntrada(conAutor, () => {}, {
+      hrefDeFicha: enlazadorDeFicha('ADMINISTRADOR'),
+    });
+
+    const enlace = tarjeta.querySelector('a[data-accion="ver-ficha"]');
+    expect(enlace).not.toBeNull();
+    expect(enlace.textContent).toBe('Ver ficha');
+    expect(enlace.getAttribute('aria-label')).toBe('Ver la ficha de LyraRoja');
+    expect(enlace.previousElementSibling.dataset.campo).toBe('apodo');
+    const destino = new URL(enlace.href);
+    expect(destino.pathname).toMatch(/plataforma\/moderacion-sanciones\/ficha-usuario\.html$/);
+    expect(destino.searchParams.get('usuario')).toBe(autorId);
+  });
+
+  test('HU-USR-010: a un moderador (o sin autor) no se le ofrece la ficha, que es de administración', () => {
+    expect(enlazadorDeFicha('MODERADOR')).toBeNull();
+    expect(enlazadorDeFicha(null)).toBeNull();
+    expect(typeof enlazadorDeFicha('SUPER_ADMINISTRADOR')).toBe('function');
+
+    const sinAutor = tarjetaDeEntrada(entrada(), () => {}, {
+      hrefDeFicha: enlazadorDeFicha('ADMINISTRADOR'),
+    });
+    expect(sinAutor.querySelector('[data-accion="ver-ficha"]')).toBeNull();
+    const conAutor = entrada({ comentario: { ...entrada().comentario, autorId: 'u-1' } });
+    expect(
+      tarjetaDeEntrada(conAutor, () => {}).querySelector('[data-accion="ver-ficha"]'),
+    ).toBeNull();
+  });
+
+  test('HU-USR-010: la cola montada con el rol enlaza cada autor a su ficha', async () => {
+    const conAutor = entrada({ comentario: { ...entrada().comentario, autorId: 'u-1' } });
+    const consultarCola = jest.fn().mockResolvedValue({ entradas: [conAutor], total: 1 });
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola }, rol: 'SUPER_ADMINISTRADOR' });
+    await asentar();
+
+    expect(raiz.querySelectorAll('[data-zona="cola"] a[data-accion="ver-ficha"]')).toHaveLength(1);
+
+    const raizModerador = vista();
+    montarModeracion(raizModerador, { api: { consultarCola }, rol: 'MODERADOR' });
+    await asentar();
+    expect(raizModerador.querySelector('[data-accion="ver-ficha"]')).toBeNull();
   });
 
   test('el filtro pide la lista de seguimiento o los sin marcar, y su vacío dice lo suyo', async () => {

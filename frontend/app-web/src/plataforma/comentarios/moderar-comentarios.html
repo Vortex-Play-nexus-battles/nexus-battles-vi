@@ -72,7 +72,8 @@
 
       // Vista privada. El permiso de verdad lo comprueba el servicio por rol
       // (403 si no es moderacion); esto solo evita entrar sin sesion.
-      if (!exigirAcceso('moderar-comentarios')) {
+      const sesion = exigirAcceso('moderar-comentarios');
+      if (!sesion) {
         throw new Error('sin sesion: redirigiendo al login');
       }
       montarCabecera(document.querySelector('[data-cabecera-app]'), {
@@ -80,9 +81,12 @@
         seccionActiva: 'comentarios',
       });
 
+      // HU-USR-010 (CA-02): con el rol, cada autor lleva «Ver ficha» si este
+      // rol puede abrirla (administración).
       const productoId = new URLSearchParams(location.search).get('producto');
       montarModeracion(document.querySelector('[data-vista="moderar-comentarios"]'), {
         productoId,
+        rol: sesion.rol,
       });
 
       montarAsistente(document);
