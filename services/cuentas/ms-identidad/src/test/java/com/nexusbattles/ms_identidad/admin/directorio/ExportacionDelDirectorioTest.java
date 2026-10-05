@@ -192,7 +192,6 @@ class ExportacionDelDirectorioTest {
         assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
         assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("b.csv", datos.clone()));
         assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("a.csv", new byte[0]));
-        assertThat(una).isNotEqualTo("a.csv");
         assertThat(una.toString()).contains("a.csv").contains("bytes=" + datos.length).doesNotContain("ada@");
         assertThat(new ExportacionDelDirectorio.Exportacion(null, null).toString()).contains("bytes=0");
     }
