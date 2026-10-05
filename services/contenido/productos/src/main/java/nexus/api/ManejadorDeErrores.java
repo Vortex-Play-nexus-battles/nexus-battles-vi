@@ -6,6 +6,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import jakarta.servlet.http.HttpServletRequest;
+import nexus.dominio.BannerNoEncontradoException;
 import nexus.dominio.ClaveDeIdempotenciaReutilizadaException;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
@@ -154,6 +155,19 @@ public class ManejadorDeErrores {
         // que tiene su propia excepcion de producto inexistente: mismo 404 y
         // mismo mensaje que la consulta, para que el cliente no distinga por
         // donde entro.
+        @ExceptionHandler(BannerNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarBannerNoEncontrado(
+                        BannerNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+
+                return respuesta(
+                        HttpStatus.NOT_FOUND,
+                        "Banner no encontrado",
+                        excepcion.getMessage(),
+                        "urn:nexus:problema:banner-no-encontrado",
+                        solicitud);
+        }
+
         @ExceptionHandler(nexus.productos.dominio.ProductoNoEncontradoException.class)
         ResponseEntity<ProblemDetail> manejarProductoNoEncontradoEnDisponibilidad(
                         nexus.productos.dominio.ProductoNoEncontradoException excepcion,

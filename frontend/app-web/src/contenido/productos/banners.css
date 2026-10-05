@@ -1,0 +1,16 @@
+.banners__fechas,
+.banners__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-4);
+}
+.banners__fechas > label {
+  flex: 1 1 16rem;
+}
+.banners__lista {
+  display: grid;
+  gap: var(--e-4);
+}
+.banners__lista .tarjeta {
+  align-items: flex-start;
+}
