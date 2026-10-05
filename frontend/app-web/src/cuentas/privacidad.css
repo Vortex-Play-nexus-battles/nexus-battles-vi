@@ -1,0 +1,97 @@
+/*
+ * «Mi cuenta» › Privacidad (RFINAL-05, §7.3.6). Hoja propia de la vista: lo
+ * demás sale del kit (tarjetas, datos, tablas, distintivos).
+ *
+ * El reporte imprimible (HU-PRV-006, «reporte completo en PDF») es una hoja
+ * aparte que nunca se ve en pantalla. Al pulsar «Reporte para imprimir»,
+ * privacidad-cuenta.js la rellena y pone `imprimiendo-privacidad` en el
+ * <body>: entonces, y solo al imprimir, se oculta todo lo demás y queda ella
+ * sola. Imprimir la página por el menú del navegador sigue imprimiendo la
+ * página tal cual.
+ */
+
+/* El detalle de cada bloque se despliega con <details>: el resumen se ve
+   siempre, las tablas largas solo si se piden. */
+.privacidad__detalle > summary {
+  cursor: pointer;
+  color: var(--primaria);
+  font-weight: var(--t-cuerpo-peso-enfasis);
+}
+
+.privacidad__detalle[open] > summary {
+  margin-bottom: var(--e-2);
+}
+
+.reporte-privacidad {
+  display: none;
+}
+
+@media print {
+  /* Sin la atmósfera oscura detrás: si se imprimen los fondos, el papel
+     sigue en blanco. */
+  body.imprimiendo-privacidad {
+    background: var(--superficie);
+  }
+
+  body.imprimiendo-privacidad > :not(.reporte-privacidad) {
+    display: none !important;
+  }
+
+  body.imprimiendo-privacidad > .reporte-privacidad {
+    display: block !important;
+    color: var(--texto);
+    background: var(--superficie);
+    font-family: var(--fuente-texto);
+    /* La hoja cuelga del <body>, cuya tinta es clara (base.css): sobre esta
+       superficie blanca los títulos y `.t-meta` vuelven a la tinta oscura,
+       como hace cada superficie clara del kit. */
+    --tinta: var(--texto);
+    --tinta-2: var(--texto-2);
+    --tinta-3: var(--texto-3);
+    --tinta-enlace: var(--primaria);
+  }
+
+  .reporte-privacidad h1 {
+    font-family: var(--fuente-titulo);
+    font-size: var(--t-titulo-tam);
+    margin: 0 0 var(--e-2);
+  }
+
+  .reporte-privacidad h2 {
+    font-family: var(--fuente-titulo);
+    font-size: var(--t-subtitulo-tam);
+    margin: var(--e-4) 0 var(--e-1);
+  }
+
+  .reporte-privacidad__bloque {
+    break-inside: avoid-page;
+    border-top: 1px solid var(--borde);
+    padding-top: var(--e-2);
+  }
+
+  .reporte-privacidad__nota {
+    color: var(--advertencia);
+    font-weight: var(--t-cuerpo-peso-enfasis);
+  }
+
+  /* En papel no hay desplazamiento: las tablas ocupan todo el ancho. */
+  .reporte-privacidad .tabla-envoltorio {
+    overflow: visible;
+  }
+
+  .reporte-privacidad table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .reporte-privacidad th,
+  .reporte-privacidad td {
+    border-bottom: 1px solid var(--borde-tenue);
+    padding: var(--e-1) var(--e-2);
+    text-align: left;
+  }
+
+  .reporte-privacidad tr {
+    break-inside: avoid;
+  }
+}

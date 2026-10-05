@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./privacidad.css" />
   </head>
   <body>
     <!-- Cabecera única (HU-UX-001). Antes esta vista tenía su propio
@@ -143,15 +144,15 @@
             </div>
           </form>
 
-          <!-- UXC-9 — §7.3.6 (portal de privacidad: portabilidad y derecho al
-             olvido). Ningún contrato publica todavía la descarga de los datos
-             ni el cierre de la cuenta; aquí se dice qué se puede hacer hoy
-             y qué no, en vez de una pestaña vacía o ninguna. -->
+          <!-- UXC-9 — §7.3.6. Desde RFINAL-05 el portal de privacidad (consultar
+             y descargar los datos, HU-PRV-004/006) y el cierre de la cuenta
+             (HU-PRV-005) viven en su propia pestaña, «Privacidad»; aquí solo
+             se dice dónde están. -->
           <section class="tarjeta pila" aria-labelledby="titulo-tus-datos">
             <div class="encabezado-seccion">
               <div class="pila pila--ajustada">
                 <h2 class="t-subtitulo" id="titulo-tus-datos">Tus datos personales</h2>
-                <p class="t-meta">Qué puedes hacer hoy con ellos.</p>
+                <p class="t-meta">Qué puedes hacer con ellos.</p>
               </div>
             </div>
             <dl class="cuenta-notas" data-zona="privacidad">
@@ -159,17 +160,25 @@
                 <dt>Consultarlos y corregirlos</dt>
                 <dd>
                   Tus nombres, apellidos, apodo, avatar y preferencias se ven y se corrigen en este
-                  formulario. El correo con el que entras no se muestra ni se cambia desde aquí.
+                  formulario. El correo con el que entras no se cambia desde aquí.
                 </dd>
               </div>
               <div class="cuenta-notas__nota">
                 <dt>Descargarlos o cerrar tu cuenta</dt>
                 <dd>
-                  Todavía no se puede desde el juego: el servicio de privacidad que atenderá la
-                  descarga de tus datos y el cierre de la cuenta aún no está publicado.
+                  En la pestaña «Privacidad» ves todo lo que la plataforma guarda de ti, lo
+                  descargas en un archivo y, si quieres, pides el cierre de tu cuenta.
                 </dd>
               </div>
             </dl>
+            <!-- Un botón y no un enlace `#privacidad`: con las direcciones
+                 limpias del borde la página lleva un <base> y un `#hash` a
+                 secas saltaría a otra dirección (ver comun/ui/pestanas.js). -->
+            <div class="tarjeta__acciones">
+              <button type="button" class="boton boton--secundario" data-accion="ir-a-privacidad">
+                Ir a Privacidad
+              </button>
+            </div>
           </section>
         </div>
       </section>
@@ -507,7 +516,168 @@
           </section>
         </div>
       </section>
+
+      <!-- -------------------------------------------------- Privacidad -->
+      <!-- RFINAL-05 — §7.3.6. «Tus datos» es el portal de privacidad
+           (HU-PRV-004) con la descarga en JSON y el reporte imprimible
+           (HU-PRV-006): lo monta privacidad-cuenta.js leyendo las API de cada
+           módulo con el token de la persona. «Cerrar mi cuenta» es el derecho
+           al olvido (HU-PRV-005): lo monta cierre-cuenta.js. Ninguno consulta
+           nada hasta que se abre esta pestaña. -->
+      <section data-zona="panel-privacidad" hidden>
+        <div class="pila">
+          <section
+            class="tarjeta pila"
+            data-zona="portal-privacidad"
+            aria-labelledby="titulo-portal-privacidad"
+          >
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-portal-privacidad">Tus datos</h2>
+                <p class="t-meta">
+                  Lo que la plataforma guarda de ti, módulo por módulo, y para qué lo usa.
+                </p>
+              </div>
+            </div>
+            <div class="tarjeta__acciones">
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="descargar-datos"
+                disabled
+              >
+                Descargar mis datos (JSON)
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="imprimir-datos"
+                disabled
+              >
+                Reporte para imprimir o guardar en PDF
+              </button>
+            </div>
+            <p class="t-meta" data-zona="resumen-portal" role="status" aria-live="polite"></p>
+            <div class="pila" data-zona="bloques-portal"></div>
+          </section>
+
+          <section
+            class="tarjeta pila"
+            data-zona="cierre-cuenta"
+            aria-labelledby="titulo-cierre-cuenta"
+          >
+            <div class="encabezado-seccion">
+              <div class="pila pila--ajustada">
+                <h2 class="t-subtitulo" id="titulo-cierre-cuenta">Cerrar mi cuenta</h2>
+                <p class="t-meta">
+                  El derecho al olvido: eliminar tu cuenta y tus datos personales.
+                </p>
+              </div>
+            </div>
+
+            <dl class="cuenta-notas" data-zona="cierre-explicacion">
+              <div class="cuenta-notas__nota">
+                <dt>Qué se elimina</dt>
+                <dd>
+                  Tu correo, tus nombres y apellidos, tu foto de perfil, tus preferencias y tus
+                  preguntas de seguridad. Tu apodo se sustituye por un alias anónimo, se cierran tus
+                  sesiones y ya no se podrá entrar con esta cuenta.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Qué se conserva</dt>
+                <dd>
+                  Lo que la ley obliga a guardar: los movimientos de créditos, los pagos y las
+                  compras, y el registro de auditoría, unidos a un identificador interno que ya no
+                  dice quién eras. Los comentarios, mensajes y subastas que publicaste conservan el
+                  apodo con el que los publicaste.
+                </dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Cuándo</dt>
+                <dd data-zona="cierre-plazo"></dd>
+              </div>
+              <div class="cuenta-notas__nota">
+                <dt>Antes de pedirlo</dt>
+                <dd>
+                  No puede haber subastas tuyas activas ni pujas tuyas vigentes: espera a que
+                  terminen o cancela tus publicaciones.
+                </dd>
+              </div>
+            </dl>
+
+            <p class="t-meta" data-zona="estado-cierre" role="status" aria-live="polite">
+              Consultando el estado de tu cuenta…
+            </p>
+            <div data-zona="aviso-cierre" tabindex="-1" hidden></div>
+
+            <div class="tarjeta__acciones" data-zona="acciones-cierre">
+              <button
+                type="button"
+                class="boton boton--peligro"
+                data-accion="solicitar-cierre"
+                hidden
+              >
+                Solicitar el cierre de mi cuenta
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="cancelar-cierre"
+                hidden
+              >
+                Cancelar solicitud
+              </button>
+              <button
+                type="button"
+                class="boton boton--secundario"
+                data-accion="reintentar-cierre"
+                hidden
+              >
+                Reintentar
+              </button>
+            </div>
+
+            <!-- G1 — la contraseña nunca en la dirección: `method="post"` y el
+                 botón apagado hasta que cierre-cuenta.js escucha `submit`. -->
+            <form class="pila" data-zona="formulario-cierre" method="post" novalidate hidden>
+              <div class="campo">
+                <label class="campo__etiqueta" for="passwordActualCierre">Contraseña actual</label>
+                <input
+                  class="campo__control"
+                  type="password"
+                  id="passwordActualCierre"
+                  name="passwordActualCierre"
+                  autocomplete="current-password"
+                />
+                <p class="campo__pista">
+                  Para confirmar que eres tú. Si la escribes mal, cuenta como un intento fallido.
+                </p>
+              </div>
+              <div class="tarjeta__acciones">
+                <button type="button" class="boton boton--secundario" data-accion="volver-cierre">
+                  No, volver
+                </button>
+                <button
+                  type="submit"
+                  class="boton boton--peligro"
+                  data-accion="confirmar-cierre"
+                  disabled
+                  data-espera-guion
+                >
+                  Programar el cierre
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      </section>
     </main>
+
+    <!-- RFINAL-05 — el reporte imprimible de «Tus datos» (HU-PRV-006). No se ve
+         en pantalla; al pulsar «Reporte para imprimir» privacidad-cuenta.js lo
+         rellena y privacidad.css imprime solo esto. -->
+    <section class="reporte-privacidad" data-zona="reporte-privacidad" hidden></section>
 
     <!--
       RF-CHA-001: el icono flotante del asistente va en todas las vistas.
