@@ -607,6 +607,59 @@ class SalaTest {
             assertThrows(IngresoNoPermitido.class,
                     () -> sala.unirse(TERCERO, sala.codigoInvitacion()));
         }
+
+        // RFINAL-04 — las mismas reglas, preguntadas antes de las puertas con
+        // efectos (heroe, apuesta) y sin cambiar nada.
+
+        @Test
+        @DisplayName("RFINAL-04: comprobar el ingreso con un codigo equivocado da 403 y no cambia nada")
+        void comprobarConCodigoEquivocado() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+
+            SalaPrivadaSinInvitacion error = assertThrows(SalaPrivadaSinInvitacion.class,
+                    () -> sala.comprobarIngreso(VISITANTE, "ZZZZ-9999"));
+
+            assertAll(
+                    () -> assertEquals(403, error.estado()),
+                    () -> assertEquals(1, sala.ocupacion()),
+                    () -> assertEquals(EstadoSala.PRIVADA, sala.estado()));
+        }
+
+        @Test
+        @DisplayName("RFINAL-04: con el codigo bueno la comprobacion pasa, y no mete a nadie")
+        void comprobarConCodigoBuenoNoEntra() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+
+            sala.comprobarIngreso(VISITANTE, sala.codigoInvitacion().toLowerCase(java.util.Locale.ROOT));
+
+            assertAll(
+                    () -> assertEquals(1, sala.ocupacion(), "comprobar no es entrar"),
+                    () -> assertTrue(!sala.participantes().contains(VISITANTE)));
+        }
+
+        @Test
+        @DisplayName("RFINAL-04: comprobar una sala llena da 409, como entrar")
+        void comprobarSalaLlena() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, true, null),
+                    ANFITRION);
+            sala.unirse(VISITANTE, sala.codigoInvitacion());
+
+            IngresoNoPermitido error = assertThrows(IngresoNoPermitido.class,
+                    () -> sala.comprobarIngreso(TERCERO, sala.codigoInvitacion()));
+
+            assertEquals(409, error.estado());
+        }
+
+        @Test
+        @DisplayName("RFINAL-04: quien ya esta dentro no «puede entrar» otra vez")
+        void comprobarYaDentro() {
+            Sala sala = Sala.crear(privados(), ANFITRION);
+            sala.unirse(VISITANTE, sala.codigoInvitacion());
+
+            assertThrows(IngresoNoPermitido.class,
+                    () -> sala.comprobarIngreso(VISITANTE, sala.codigoInvitacion()));
+        }
     }
 
     @Nested

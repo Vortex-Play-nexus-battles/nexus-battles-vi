@@ -139,14 +139,24 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
   test('B con un codigo equivocado sigue fuera, y se le dice por que', async ({ page }) => {
     await conSesion(page, invitado, INVITADO);
 
-    // Se cuentan los intentos de ingreso con su cuerpo: sin esto, un
+    // Se cuentan los envios del codigo con su cuerpo: sin esto, un
     // formulario que no llega a enviarse pasaria la prueba —la ocupacion sigue
     // en uno y el aviso sigue puesto— y el fallo quedaria escondido. La primera
     // version de esta prueba tenia justo ese agujero, y lo destapo CI.
-    const envios = [];
+    //
+    // RFINAL-04 (salas-partidas 1.9.0): el codigo se comprueba primero, sin
+    // efectos, en `/comprobacion-de-ingreso`; un codigo malo ya no llega a
+    // intentar el ingreso.
+    const comprobaciones = [];
+    const ingresos = [];
     page.on('request', (peticion) => {
-      if (peticion.url().includes('/participantes') && peticion.method() === 'POST') {
-        envios.push(peticion.postData() ?? '');
+      if (peticion.method() !== 'POST') {
+        return;
+      }
+      if (peticion.url().includes('/comprobacion-de-ingreso')) {
+        comprobaciones.push(peticion.postData() ?? '');
+      } else if (peticion.url().includes('/participantes')) {
+        ingresos.push(peticion.postData() ?? '');
       }
     });
 
@@ -160,10 +170,14 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
 
     // El codigo llego al servicio de verdad.
     await expect
-      .poll(() => envios.filter((cuerpo) => cuerpo.includes('ZZZZ-9999')).length, {
+      .poll(() => comprobaciones.filter((cuerpo) => cuerpo.includes('ZZZZ-9999')).length, {
         timeout: 20_000,
       })
       .toBeGreaterThan(0);
+    expect(
+      ingresos.filter((cuerpo) => cuerpo.includes('ZZZZ-9999')),
+      'con un codigo malo ni se intenta entrar',
+    ).toEqual([]);
 
     // Sigue pidiendo el codigo, y ahora dice que el que escribio no vale: el
     // mensaje cambia para que no haya duda de si se envio.
@@ -228,5 +242,53 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
       headers: conToken(anfitriona.token),
     });
     expect((await dentro.json()).ocupacion).toBe(2);
+  });
+
+  /**
+   * RFINAL-04 — revisión de AWS DEV del 4-oct: en una sala privada con
+   * apuesta, «ZZZZ-9999» llevaba a la verificación del héroe antes de decir
+   * que el código no valía.
+   */
+  test('RFINAL-04: con apuesta, el código se comprueba ANTES de la verificación del héroe', async ({
+    page,
+  }) => {
+    const creada = await api.post('/api/v1/salas', {
+      headers: conToken(anfitriona.token),
+      data: {
+        maximoParticipantes: 4,
+        modalidad: 'HASTA_SEIS',
+        recompensaCreditos: 10,
+        privada: true,
+      },
+    });
+    expect(creada.status(), `crear sala privada con apuesta: ${await creada.text()}`).toBe(201);
+    const conApuesta = await creada.json();
+    try {
+      // Sin efectos y por la API: el código malo es 403 sala-privada y nadie entra.
+      const malo = await api.post(`/api/v1/salas/${conApuesta.id}/comprobacion-de-ingreso`, {
+        headers: conToken(invitado.token),
+        data: { codigoInvitacion: 'ZZZZ-9999' },
+      });
+      expect(malo.status(), await malo.text()).toBe(403);
+      expect((await malo.json()).type).toMatch(/\/errores\/sala-privada$/);
+
+      // Por la vista: el enlace con el código malo se queda en el listado.
+      await conSesion(page, invitado, INVITADO);
+      await page.goto(`${LISTADO}?sala=${conApuesta.id}&codigo=ZZZZ-9999`);
+      await expect(page.locator('[data-zona="pedir-codigo"]')).toBeVisible();
+      await expect(page).not.toHaveURL(/validacion-heroe\.html/);
+
+      // Con el código bueno, entonces sí: a confirmar héroe y apuesta, con el código.
+      await page.locator('[name="codigoInvitacion"]').fill(conApuesta.codigoInvitacion);
+      await page.locator('[data-zona="pedir-codigo"] button[type="submit"]').click();
+      await page.waitForURL(/validacion-heroe\.html\?sala=.*&codigo=/, { timeout: 20_000 });
+
+      const sigue = await api.get(`/api/v1/salas/${conApuesta.id}`, {
+        headers: conToken(anfitriona.token),
+      });
+      expect((await sigue.json()).ocupacion, 'comprobar no es entrar').toBe(1);
+    } finally {
+      await api.delete(`/api/v1/salas/${conApuesta.id}`, { headers: conToken(anfitriona.token) });
+    }
   });
 });

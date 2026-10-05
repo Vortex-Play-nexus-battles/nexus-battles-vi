@@ -17,7 +17,13 @@
  * no tenerlo. Quedan los dos filtros con respaldo, modalidad y estado.
  */
 
-import { listarSalas, ingresarASala, esSalaPrivada, esHeroeNoDisponible } from './cliente-salas.js';
+import {
+  listarSalas,
+  ingresarASala,
+  comprobarIngreso,
+  esSalaPrivada,
+  esHeroeNoDisponible,
+} from './cliente-salas.js';
 import { vaciar } from '../../comun/ui/dom.js';
 import { seguirSala, estadoDesdeFicha } from './canal-sala.js';
 import {
@@ -223,7 +229,7 @@ export function fichaEnVivo(sala, estado) {
  * (solo sus participantes pueden), y pedirlo seria provocar un ERROR seguro.
  *
  * @param {HTMLElement} raiz elemento que contiene la vista
- * @param {{listar?: Function, ingresar?: Function, alEntrar?: Function,
+ * @param {{listar?: Function, ingresar?: Function, comprobar?: Function, alEntrar?: Function,
  *          conectarCanal?: () => Promise<{suscribir: Function}|null>}} [puertos]
  *        dependencias inyectables; por defecto las del cliente HTTP real y sin canal
  * @returns {{refrescar: Function}}
@@ -244,6 +250,8 @@ export function montarBatallas(raiz, puertos = {}) {
   const {
     listar = listarSalas,
     ingresar = ingresarASala,
+    // RFINAL-04 — «¿me dejaría entrar con este código?», sin efectos (1.9.0).
+    comprobar = comprobarIngreso,
     alEntrar = () => {},
     // FI-R6 — a donde se va a verificar el heroe. Inyectable para que las
     // pruebas no naveguen de verdad.
@@ -615,6 +623,22 @@ export function montarBatallas(raiz, puertos = {}) {
   async function entrarA(idSala, codigoInvitacion = null) {
     limpiarSeccionDegradada(zonaDegradacion);
 
+    // RFINAL-04 (revisión de AWS DEV del 4-oct) — en una sala privada, o en
+    // una que no está en esta página (un enlace de invitación), la sala habla
+    // primero: el código, y que la sala admita gente, se comprueban ANTES de
+    // mandar a verificar el héroe. Con «ZZZZ-9999» se llegaba a la
+    // verificación y la persona descubría que el código no valía después de
+    // elegir héroe. La comprobación no tiene efectos: ni entra ni reserva.
+    let ficha = fichas.get(idSala);
+    if (!ficha || ficha.privada) {
+      try {
+        ficha = (await comprobar(idSala, { codigoInvitacion })) ?? ficha;
+      } catch (error) {
+        tratarRechazo(error, idSala, codigoInvitacion);
+        return;
+      }
+    }
+
     // FI-R6 · RF-JUE-003 — una sala con apuesta se confirma antes de entrar.
     //
     // Entrar compromete creditos: `IngresarASala` los reserva antes de meter a
@@ -626,7 +650,6 @@ export function montarBatallas(raiz, puertos = {}) {
     // En una sala sin apuesta no hay nada que confirmar, asi que no se
     // interpone un paso: se entra, y si el servidor rechaza por el heroe, el
     // catch de abajo lleva al mismo dialogo con el veredicto ya hecho.
-    const ficha = fichas.get(idSala);
     if (Number(ficha?.recompensaCreditos ?? 0) > 0) {
       irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
       return;
@@ -647,42 +670,55 @@ export function montarBatallas(raiz, puertos = {}) {
       cerrarPeticionDeCodigo();
       alEntrar(dentro);
     } catch (error) {
-      // FI-R4 — el 403 de sala privada no es un callejon sin salida: es una
-      // puerta que pide llave. Antes se pintaba como error final («Esta sala
-      // es privada») y ahi se acababa, porque no habia donde escribir el
-      // codigo ni forma de mandarlo. El backend lo acepta desde la migracion
-      // V5; lo que faltaba estaba aqui.
-      if (esSalaPrivada(error)) {
-        pedirCodigo(idSala, error, codigoInvitacion ?? '');
-        return;
-      }
-      // FI-R6 · RF-JUE-003 — «no tienes heroe equipado» y «tu heroe esta en
-      // otra partida» no son errores del listado: son veredictos sobre tu
-      // inventario, y tienen una pantalla que los explica y lleva a
-      // arreglarlos. Pintarlos aqui como un aviso rojo mas dejaba a la persona
-      // sin saber que hacer.
-      if (esHeroeNoDisponible(error)) {
-        irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
-        return;
-      }
-      if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
-        // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
-        // no responde. El listado se queda; se dice que seccion esta limitada
-        // y se ofrece reintentar la misma sala.
-        pintarSeccionDegradada(zonaDegradacion, error.problema, {
-          alReintentar: () => entrarA(idSala),
-        });
-        return;
-      }
-      // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-
-      // llegan aqui ya interpretados por el cliente. La vista los muestra tal
-      // cual: el texto lo redacta el servicio, que es quien sabe el motivo.
-      mostrarEstado(
-        'estado-vista--error',
-        error.titulo ?? 'No pudiste entrar',
-        textoDeError(error, 'No pudimos meterte en la sala. Vuelve a intentarlo.'),
-      );
+      tratarRechazo(error, idSala, codigoInvitacion);
     }
+  }
+
+  /**
+   * Lo que se hace con un rechazo de la comprobación (RFINAL-04) o del
+   * ingreso: los dos hablan con los mismos tipos del contrato.
+   *
+   * @param {object} error un `ErrorDeApi`
+   * @param {string} idSala
+   * @param {string|null} codigoInvitacion
+   */
+  function tratarRechazo(error, idSala, codigoInvitacion) {
+    // FI-R4 — el 403 de sala privada no es un callejon sin salida: es una
+    // puerta que pide llave. Antes se pintaba como error final («Esta sala
+    // es privada») y ahi se acababa, porque no habia donde escribir el
+    // codigo ni forma de mandarlo. El backend lo acepta desde la migracion
+    // V5; lo que faltaba estaba aqui.
+    if (esSalaPrivada(error)) {
+      pedirCodigo(idSala, error, codigoInvitacion ?? '');
+      return;
+    }
+    // FI-R6 · RF-JUE-003 — «no tienes heroe equipado» y «tu heroe esta en
+    // otra partida» no son errores del listado: son veredictos sobre tu
+    // inventario, y tienen una pantalla que los explica y lleva a
+    // arreglarlos. Pintarlos aqui como un aviso rojo mas dejaba a la persona
+    // sin saber que hacer.
+    if (esHeroeNoDisponible(error)) {
+      irAVerificacion(rutaDeVerificacion(idSala, codigoInvitacion));
+      return;
+    }
+    if (zonaDegradacion && esSeccionDegradada(error?.problema)) {
+      // HU-DIS-003: no es que no se pueda entrar, es que quien lo comprueba
+      // no responde. El listado se queda; se dice que seccion esta limitada
+      // y se ofrece reintentar la misma sala, con el mismo codigo (RFINAL-04:
+      // antes el reintento lo perdia).
+      pintarSeccionDegradada(zonaDegradacion, error.problema, {
+        alReintentar: () => entrarA(idSala, codigoInvitacion),
+      });
+      return;
+    }
+    // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-
+    // llegan aqui ya interpretados por el cliente. La vista los muestra tal
+    // cual: el texto lo redacta el servicio, que es quien sabe el motivo.
+    mostrarEstado(
+      'estado-vista--error',
+      error.titulo ?? 'No pudiste entrar',
+      textoDeError(error, 'No pudimos meterte en la sala. Vuelve a intentarlo.'),
+    );
   }
 
   for (const filtro of [filtroModalidad, filtroEstado]) {

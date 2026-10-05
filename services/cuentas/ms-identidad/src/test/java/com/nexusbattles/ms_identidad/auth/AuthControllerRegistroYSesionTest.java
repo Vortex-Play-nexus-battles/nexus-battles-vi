@@ -85,6 +85,8 @@ class AuthControllerRegistroYSesionTest {
         Usuario profe = new Usuario();
         profe.setApodo("profe");
         when(usuarioRepository.findByApodo("profe")).thenReturn(Optional.of(profe));
+        // RFINAL-03: el interceptor busca al titular por el uid del token.
+        when(usuarioRepository.findByPublicId(uid)).thenReturn(Optional.of(profe));
         SecurityInterceptor interceptor = new SecurityInterceptor(
                 new RbacAuthorizationService(new RbacMatrixRepository()),
                 new AuditoriaEventClient("http://localhost:8091/api/v1/admin/auditoria/eventos", null),

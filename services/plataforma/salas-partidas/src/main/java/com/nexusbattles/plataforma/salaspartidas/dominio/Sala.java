@@ -444,6 +444,34 @@ public final class Sala {
      * @param ficha heroe y apodo con los que entra; puede ser {@code null}
      */
     public void unirse(UUID idJugador, FichaDeParticipante ficha, String codigo) {
+        comprobarIngreso(idJugador, codigo);
+
+        participantes.put(idJugador, ficha);
+
+        if (ocupacion() == maximoParticipantes) {
+            estado = EstadoSala.LLENA;
+        }
+    }
+
+    /**
+     * Lo que {@link #unirse(UUID, FichaDeParticipante, String)} exige, sin
+     * cambiar nada — RFINAL-04, salas-partidas.yaml 1.9.0.
+     *
+     * <p>Las reglas son las de siempre y viven aqui, en un solo sitio; lo nuevo
+     * es poder preguntarlas <b>antes</b> de las puertas con efectos. La
+     * revision de AWS DEV del 4-oct encontro que un codigo de invitacion
+     * equivocado llevaba igual a la verificacion del heroe: el ingreso miraba
+     * el heroe (y reservaba la apuesta) antes de que la sala dijera que el
+     * codigo no valia. Ahora el caso de uso y la comprobacion previa llaman a
+     * esto primero, y un codigo malo, una sala llena o una partida ya empezada
+     * se dicen sin tocar el inventario ni el libro de creditos.
+     *
+     * @param idJugador jugador que quiere entrar
+     * @param codigo    codigo de invitacion; se ignora si la sala es publica
+     * @throws SalaPrivadaSinInvitacion si es privada y el codigo falta o no vale (403)
+     * @throws IngresoNoPermitido       si la sala no lo admite (409)
+     */
+    public void comprobarIngreso(UUID idJugador, String codigo) {
         Objects.requireNonNull(idJugador, "Para entrar a una sala hace falta un jugador.");
 
         // La sala privada tiene su propio rechazo, con 403: el contrato lo separa
@@ -461,12 +489,6 @@ public final class Sala {
         // en un puesto que ya es de la IA.
         if (ocupacion() >= maximoParticipantes) {
             throw new IngresoNoPermitido("La sala ya alcanzó su máximo de participantes.");
-        }
-
-        participantes.put(idJugador, ficha);
-
-        if (ocupacion() == maximoParticipantes) {
-            estado = EstadoSala.LLENA;
         }
     }
 

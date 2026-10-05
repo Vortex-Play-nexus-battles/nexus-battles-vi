@@ -21,6 +21,7 @@ import org.springframework.web.servlet.HandlerInterceptor;
 
 import java.time.Instant;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Interceptor Server-Side con soporte JWT y política Fail-Closed (HU-RBAC-004).
@@ -112,7 +113,7 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     // usuario en BD — si el rol cambió después de emitir este
                     // JWT, la versión no coincidirá y se rechaza (HU-RBAC-003).
                     if (usuarioRepository != null) {
-                        Optional<Usuario> usuario = usuarioRepository.findByApodo(username);
+                        Optional<Usuario> usuario = titularDe(uid, username);
                         if (usuario.isEmpty()
                             || !jwtService.esVersionVigente(claims, usuario.get().getVersionToken())) {
                             auditBypass(username, roleName != null ? roleName : "UNKNOWN",
@@ -121,6 +122,11 @@ public class SecurityInterceptor implements HandlerInterceptor {
                                 "Token de autenticación inválido o expirado");
                             return false;
                         }
+                        // El apodo vigente, no el que el token traía al emitirse:
+                        // los controladores que buscan por `usuarioActual`
+                        // (cambiar contraseña, preguntas, onboarding) siguen
+                        // encontrando al titular tras un cambio de apodo.
+                        username = usuario.get().getApodo();
                     }
 
 
@@ -176,6 +182,29 @@ public class SecurityInterceptor implements HandlerInterceptor {
         }
 
         return true;
+    }
+
+    /**
+     * El titular del token: por su {@code uid} (ADR-002), que no cambia nunca, y
+     * por el apodo del {@code sub} solo si el token es anterior al uid.
+     *
+     * <p>RFINAL-03 (informes del 4-oct): se buscaba siempre por el apodo del
+     * {@code sub}. El {@code sub} es el apodo con que se emitió el token, así que
+     * en cuanto el jugador cambiaba de apodo desde «Mi cuenta» ya no se
+     * encontraba a nadie, y cada ruta protegida de ms-identidad respondía 403
+     * «Token de autenticación inválido o expirado» hasta volver a entrar: la
+     * relectura del perfil justo después de guardar y el vigilante de sesión
+     * entre ellas.
+     */
+    private Optional<Usuario> titularDe(String uid, String apodo) {
+        if (uid != null && !uid.isBlank()) {
+            try {
+                return usuarioRepository.findByPublicId(UUID.fromString(uid.trim()));
+            } catch (IllegalArgumentException noEsUnUuid) {
+                return Optional.empty();
+            }
+        }
+        return apodo == null ? Optional.empty() : usuarioRepository.findByApodo(apodo);
     }
 
     private void auditBypass(String username, String role, Action action, String reason, String ipOrigen) {

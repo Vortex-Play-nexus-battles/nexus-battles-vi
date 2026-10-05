@@ -117,6 +117,106 @@ export function salidaAlListado(storage, navegar, destino = './batallas.html') {
   };
 }
 
+/** Estados en los que la sala todavía espera gente (contrato de salas-partidas). */
+export const ESTADOS_DE_ESPERA = Object.freeze(['ABIERTA', 'PRIVADA', 'LLENA']);
+
+/**
+ * ¿La sala sigue esperando gente? — RFINAL-04.
+ *
+ * Solo entonces tienen sentido «Iniciar combate», el código de invitación,
+ * «Salir» y «Cancelar sala». La revisión de AWS DEV del 4-oct vio los tres
+ * en una sala ya terminada: la sala de espera se montaba sin mirar el estado.
+ * Sin estado (una ficha vieja) se supone que espera, como hasta ahora.
+ *
+ * @param {{estado?: string}|null|undefined} sala
+ * @returns {boolean}
+ */
+export function salaEnEspera(sala) {
+  return !sala?.estado || ESTADOS_DE_ESPERA.includes(sala.estado);
+}
+
+/**
+ * Lo que se ofrece en una sala que ya no espera a nadie — RFINAL-04.
+ *
+ * Solo acciones pertinentes y rutas que existen: volver a Jugar online y, si
+ * la batalla se jugó, «Ver mi cuenta» (allí está «Tus batallas», con el
+ * resultado). Nunca arrancar, invitar ni cancelar.
+ *
+ * @param {{estado?: string}|null|undefined} sala
+ * @param {{batallas: string, cuenta: string}} rutas
+ * @returns {{titulo: string, detalle: string,
+ *   acciones: Array<{texto: string, href: string, principal: boolean}>}|null}
+ *   null si la sala sigue esperando
+ */
+export function salaCerrada(sala, { batallas, cuenta }) {
+  if (salaEnEspera(sala)) {
+    return null;
+  }
+  const volver = { texto: 'Volver a Jugar online', href: batallas, principal: true };
+  if (sala.estado === 'CANCELADA') {
+    return {
+      titulo: 'Esta sala se canceló',
+      detalle: 'Aquí ya no se juega. Busca otra sala abierta o crea la tuya.',
+      acciones: [volver],
+    };
+  }
+  const miCuenta = { texto: 'Ver mi cuenta', href: cuenta, principal: false };
+  if (sala.estado === 'EN_JUEGO') {
+    return {
+      titulo: 'Esta batalla está en curso',
+      detalle: 'Ya no admite a nadie más. Si es tuya, vuelve a ella desde «Tus batallas».',
+      acciones: [volver, miCuenta],
+    };
+  }
+  return {
+    titulo: 'Esta batalla ya terminó',
+    detalle: 'El resultado queda en «Tus batallas», en tu cuenta.',
+    acciones: [volver, miCuenta],
+  };
+}
+
+/**
+ * Pinta {@link salaCerrada} en el estado vacío de la vista
+ * (`[data-zona="sin-partida"]`): título, detalle y sus acciones, en lugar de
+ * «Ver salas abiertas / Crear sala».
+ *
+ * @param {ParentNode} raiz
+ * @param {ReturnType<typeof salaCerrada>} cerrada
+ * @returns {boolean} true si pintó algo
+ */
+export function pintarSalaCerrada(raiz, cerrada) {
+  const zona = raiz.querySelector('[data-zona="sin-partida"]');
+  if (!zona || !cerrada) {
+    return false;
+  }
+  const doc = zona.ownerDocument;
+  const titulo = zona.querySelector('.estado-vista__titulo');
+  const detalle = zona.querySelector('.estado-vista__detalle');
+  if (titulo) {
+    titulo.textContent = cerrada.titulo;
+  }
+  if (detalle) {
+    detalle.textContent = cerrada.detalle;
+  }
+  let fila = zona.querySelector('.fila');
+  if (!fila) {
+    fila = doc.createElement('div');
+    fila.className = 'fila';
+    zona.append(fila);
+  }
+  fila.replaceChildren(
+    ...cerrada.acciones.map((accion) => {
+      const enlace = doc.createElement('a');
+      enlace.className = `boton ${accion.principal ? 'boton--primario' : 'boton--secundario'}`;
+      enlace.href = accion.href;
+      enlace.textContent = accion.texto;
+      return enlace;
+    }),
+  );
+  zona.dataset.sala = 'cerrada';
+  return true;
+}
+
 /**
  * La invitacion que el anfitrion puede repartir — FI-R4.
  *
@@ -138,7 +238,8 @@ export function salidaAlListado(storage, navegar, destino = './batallas.html') {
  */
 export function invitacionDe(sala, origen = '') {
   const codigo = typeof sala?.codigoInvitacion === 'string' ? sala.codigoInvitacion.trim() : '';
-  if (!codigo || !sala?.id) {
+  // RFINAL-04: invitar a una sala que ya no admite gente es invitar a nada.
+  if (!codigo || !sala?.id || !salaEnEspera(sala)) {
     return null;
   }
   const base = origen ? origen.replace(/\/[^/]*$/, '') : '';
@@ -306,7 +407,7 @@ export function montarSalaDeEspera(
   };
 
   // CA-03: en curso o cerrada no se ofrece nada.
-  const admiteSalir = !sala?.estado || ['ABIERTA', 'PRIVADA', 'LLENA'].includes(sala.estado);
+  const admiteSalir = salaEnEspera(sala);
 
   if (botonSalir) {
     botonSalir.hidden = esAnfitrion || !admiteSalir;

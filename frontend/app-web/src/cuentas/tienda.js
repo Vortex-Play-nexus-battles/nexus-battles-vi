@@ -598,7 +598,10 @@ function marcarPropias(doc) {
     tarjeta.dataset.propio = 'si';
     const anadir = tarjeta.querySelector('.btn-add');
     if (anadir) {
-      apagarAnadirPorPropio(anadir);
+      apagarAnadirPorPropio(
+        anadir,
+        tarjeta.querySelector('.product-card__nombre')?.textContent?.trim() || null,
+      );
     }
     let zona = tarjeta.querySelector('.product-card__distintivos');
     if (!zona) {
@@ -884,6 +887,14 @@ export async function agregarAlCarrito(productoId, doc = document) {
     // despliega para que se lea donde se esperaba ver el producto.
     desplegarCarrito(doc);
     console.error('El carrito rechazó el producto:', respuesta.status, problema?.type);
+    // RFINAL-04 — el servidor es la autoridad: si dice que ya lo tienes, la
+    // vista lo aprende y apaga «Añadir» de ese producto (tarjeta y detalle).
+    if (problema?.type === 'urn:nexus:problema:producto-ya-adquirido') {
+      const { propias } = estadoDe(doc);
+      propias.set(String(productoId), Math.max(1, propias.get(String(productoId)) ?? 0));
+      marcarPropias(doc);
+      return { ok: false, propio: true, ...mensaje };
+    }
     return { ok: false, ...mensaje };
   }
 
