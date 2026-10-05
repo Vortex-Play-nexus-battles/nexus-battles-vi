@@ -348,6 +348,12 @@ paths:
         saber quien era la persona. El evento queda en la auditoria
         (ms-cumplimiento).
 
+        Desde entonces el directorio de administracion y
+        `GET /api/v1/internal/usuarios/{uid}/contacto` (ms-identidad-admin.yaml)
+        devuelven esa cuenta con estado `ELIMINADO`, el alias y el correo no
+        entregable: quien produzca correos a partir del `uid` no debe
+        escribirle.
+
         Lo que este servicio todavia NO hace al completarse: enviar el correo
         de confirmacion (el servicio de correo no publica una plantilla de
         cierre de cuenta; queda en la auditoria y en la bitacora), ni
