@@ -56,6 +56,24 @@ public interface SolicitudDeCierreRepository extends JpaRepository<SolicitudDeCi
     @Query("delete from TokenCredencial t where t.usuario.id = :usuarioId")
     int borrarCodigosDe(@Param("usuarioId") Long usuarioId);
 
+    /**
+     * El segundo factor (V5, HU-AUT-007): el secreto TOTP cifrado de la cuenta,
+     * activo o pendiente de confirmar.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from SegundoFactor s where s.usuarioId = :usuarioId")
+    int borrarSegundoFactorDe(@Param("usuarioId") Long usuarioId);
+
+    /** Los resumenes de sus codigos de recuperacion del segundo factor (V5), usados o no. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from CodigoDeRecuperacion c where c.usuarioId = :usuarioId")
+    int borrarCodigosDeRecuperacionDe(@Param("usuarioId") Long usuarioId);
+
+    /** Los desafios del login en dos pasos (V5), vigentes o gastados. */
+    @Modifying(flushAutomatically = true)
+    @Query("delete from DesafioDeAcceso d where d.usuarioId = :usuarioId")
+    int borrarDesafiosDe(@Param("usuarioId") Long usuarioId);
+
     /** El perfil entero: nombres, apellidos, avatar y preferencias. Comparte clave con la cuenta. */
     @Modifying(flushAutomatically = true)
     @Query("delete from PerfilUsuario p where p.id = :usuarioId")

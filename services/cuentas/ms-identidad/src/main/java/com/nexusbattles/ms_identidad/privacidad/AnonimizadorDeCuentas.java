@@ -32,8 +32,10 @@ import java.util.UUID;
  *
  * <p><b>Que se elimina</b> (todo de la base de ms-identidad, en una sola
  * transaccion): el perfil (nombres, apellidos, avatar, preferencias), las
- * preguntas de seguridad, las huellas de los dispositivos y los codigos de
- * un solo uso. El archivo del avatar se borra del disco despues de confirmar.
+ * preguntas de seguridad, las huellas de los dispositivos, los codigos de
+ * un solo uso y el segundo factor (secreto TOTP cifrado, codigos de
+ * recuperacion y desafios de acceso, V5). El archivo del avatar se borra del
+ * disco despues de confirmar.
  *
  * <p><b>Que se sustituye</b> en la fila de la cuenta, que no se borra porque
  * su {@code uid} es la referencia de los registros que hay que conservar: el
@@ -53,9 +55,8 @@ import java.util.UUID;
  * un reinicio, no anonimizan dos veces ni cambian el alias.
  *
  * <p><b>Lo que todavia no hace</b> (queda en el informe de RFINAL-05): enviar
- * el correo de confirmacion (correo no tiene plantilla de cierre de cuenta),
- * borrar los datos del segundo factor (V5, se integra aparte) y anonimizar
- * las copias del apodo que guardan otros servicios.
+ * el correo de confirmacion (correo no tiene plantilla de cierre de cuenta) y
+ * anonimizar las copias del apodo que guardan otros servicios.
  */
 @Component
 public class AnonimizadorDeCuentas {
@@ -178,6 +179,11 @@ public class AnonimizadorDeCuentas {
         preguntas.borrarDe(id);
         solicitudes.borrarDispositivosDe(id);
         solicitudes.borrarCodigosDe(id);
+        // Segundo factor (V5): el secreto cifrado, los codigos de recuperacion y
+        // los desafios del login en dos pasos.
+        solicitudes.borrarSegundoFactorDe(id);
+        solicitudes.borrarCodigosDeRecuperacionDe(id);
+        solicitudes.borrarDesafiosDe(id);
 
         String alias = PREFIJO_ALIAS + HexFormat.of().formatHex(bytesAleatorios(6));
         cuenta.setApodo(alias);

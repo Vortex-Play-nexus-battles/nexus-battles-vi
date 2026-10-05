@@ -9,6 +9,9 @@ import com.nexusbattles.ms_identidad.auth.recuperacion.PreguntaSeguridadReposito
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.TokenCredencialRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.CodigoDeRecuperacion;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactor;
 import com.nexusbattles.ms_identidad.auth.service.AvatarStorageService;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
@@ -95,6 +98,11 @@ class CierreDeCuentaPersistenciaTest {
         preguntas.save(new PreguntaSeguridad(usuario.getId(), "¿Primera mascota?", "resumen", 2, ahora));
         dispositivos.save(new DispositivoConocido(usuario, "huella-" + apodo));
         codigos.save(new TokenCredencial(usuario, "VERIFICACION", "resumen", ahora, ahora.plusHours(1)));
+        // Segundo factor (V5): secreto cifrado, un codigo de recuperacion y un desafio.
+        entidades.persist(new SegundoFactor(usuario.getId(), "v1:cifrado-" + apodo, ahora));
+        entidades.persist(new CodigoDeRecuperacion(usuario.getId(), "resumen-" + apodo, ahora));
+        entidades.persist(new DesafioDeAcceso(usuario.getId(), "desafio-" + apodo, DesafioDeAcceso.Proposito.VERIFICAR,
+                0, ahora, ahora.plusMinutes(5)));
         return usuario;
     }
 
@@ -110,7 +118,7 @@ class CierreDeCuentaPersistenciaTest {
     }
 
     @Test
-    @DisplayName("al vencer: borra perfil, preguntas, dispositivos y codigos de esa cuenta, y solo de esa")
+    @DisplayName("al vencer: borra perfil, preguntas, dispositivos, codigos y segundo factor de esa cuenta, y solo de esa")
     void anonimizaSoloLaCuentaQueLoPidio() {
         SolicitudDeCierre solicitud = solicitudes.save(SolicitudDeCierre.programar(ada.getPublicId(),
                 ahora.minusDays(31)));
@@ -130,6 +138,9 @@ class CierreDeCuentaPersistenciaTest {
         assertThat(preguntas.countByUsuarioId(ada.getId())).isZero();
         assertThat(contar("select count(d) from DispositivoConocido d where d.usuario.id = :v", ada.getId())).isZero();
         assertThat(contar("select count(t) from TokenCredencial t where t.usuario.id = :v", ada.getId())).isZero();
+        assertThat(contar("select count(s) from SegundoFactor s where s.usuarioId = :v", ada.getId())).isZero();
+        assertThat(contar("select count(c) from CodigoDeRecuperacion c where c.usuarioId = :v", ada.getId())).isZero();
+        assertThat(contar("select count(d) from DesafioDeAcceso d where d.usuarioId = :v", ada.getId())).isZero();
         assertThat(solicitudes.findById(solicitud.getId()).orElseThrow().getEstado())
                 .isEqualTo(SolicitudDeCierre.EJECUTADA);
 
@@ -141,6 +152,12 @@ class CierreDeCuentaPersistenciaTest {
         assertThat(contar("select count(d) from DispositivoConocido d where d.usuario.id = :v", testigo.getId()))
                 .isEqualTo(1);
         assertThat(contar("select count(t) from TokenCredencial t where t.usuario.id = :v", testigo.getId()))
+                .isEqualTo(1);
+        assertThat(contar("select count(s) from SegundoFactor s where s.usuarioId = :v", testigo.getId()))
+                .isEqualTo(1);
+        assertThat(contar("select count(c) from CodigoDeRecuperacion c where c.usuarioId = :v", testigo.getId()))
+                .isEqualTo(1);
+        assertThat(contar("select count(d) from DesafioDeAcceso d where d.usuarioId = :v", testigo.getId()))
                 .isEqualTo(1);
     }
 

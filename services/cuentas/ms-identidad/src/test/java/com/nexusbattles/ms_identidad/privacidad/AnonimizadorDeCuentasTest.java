@@ -115,6 +115,9 @@ class AnonimizadorDeCuentasTest {
         verify(preguntas).borrarDe(8L);
         verify(solicitudes).borrarDispositivosDe(8L);
         verify(solicitudes).borrarCodigosDe(8L);
+        verify(solicitudes).borrarSegundoFactorDe(8L);
+        verify(solicitudes).borrarCodigosDeRecuperacionDe(8L);
+        verify(solicitudes).borrarDesafiosDe(8L);
     }
 
     @Test
