@@ -180,6 +180,14 @@ comprobar POST /api/v1/productos           "productos POST /api/v1/productos"
 comprobar GET  /api/v1/productos/p-1       "productos GET /api/v1/productos/p-1"
 comprobar GET  "/api/v1/productos?page=0&size=20" \
                                            "productos GET /api/v1/productos?page=0&size=20"
+# HU-PRD-013 / RF-NOT-002 — los banners son del mismo servicio. No tenian
+# location y la consulta publica de la home caia en el 404 generico; con el
+# mismo destino que el catalogo, el banco los devuelve al eco `srv-productos`.
+comprobar GET    /api/v1/banners/vigentes  "productos GET /api/v1/banners/vigentes"
+comprobar GET    /api/v1/banners           "productos GET /api/v1/banners"
+comprobar POST   /api/v1/banners           "productos POST /api/v1/banners"
+comprobar PUT    /api/v1/banners/b-1       "productos PUT /api/v1/banners/b-1"
+comprobar DELETE /api/v1/banners/b-1       "productos DELETE /api/v1/banners/b-1"
 
 echo
 echo "Misiones — un prefijo, un dueno; la consulta y los sufijos llegan enteros (B9)"

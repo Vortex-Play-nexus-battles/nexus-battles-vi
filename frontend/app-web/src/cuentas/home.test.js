@@ -35,7 +35,12 @@ function servicio(rutas) {
       throw new Error(`sin ruta simulada para ${ruta}`);
     }
     const { estado = 200, cuerpo = null } = rutas[clave];
-    return { ok: estado >= 200 && estado < 300, status: estado, json: async () => cuerpo };
+    return {
+      ok: estado >= 200 && estado < 300,
+      status: estado,
+      json: async () => cuerpo,
+      text: async () => (cuerpo === null ? '' : JSON.stringify(cuerpo)),
+    };
   });
 }
 
@@ -248,6 +253,78 @@ describe('cuando el servicio responde pero no hay nada', () => {
     await asentar();
 
     expect(document.querySelector('[data-zona="bloque-torneo"]').textContent).toMatch(/91 días/);
+  });
+});
+
+/**
+ * RF-NOT-002 (#533) sobre la gestión de HU-PRD-013 (#854): la home monta el
+ * banner rotativo con los vigentes de productos. Cómo rota y cómo se retira
+ * lo prueba `banner-rotativo.test.js`; aquí, que la home lo monte en su zona,
+ * con la ruta del contrato, y que su fallo no toque nada más.
+ */
+describe('el banner de anuncios de la home (RF-NOT-002)', () => {
+  const VIGENTE = {
+    id: 'b-1',
+    contenido: 'Temporada de héroes: nuevos prototipos en la tienda',
+    publicarDesde: '2026-10-01T15:00:00Z',
+    vigenteHasta: '2099-12-31T23:00:00Z',
+    retirado: false,
+    creadoEn: '2026-10-01T14:00:00Z',
+    modificadoEn: '2026-10-01T14:00:00Z',
+  };
+
+  beforeEach(() => {
+    document.body.innerHTML = `<div data-zona="bloque-banners" hidden></div>${VISTA}`;
+  });
+
+  const zona = () => document.querySelector('[data-zona="bloque-banners"]');
+
+  test('pinta los vigentes que publica productos, con su publicación y su vigencia', async () => {
+    const fetchImpl = servicio({ ...TODO_BIEN, '/api/v1/banners/vigentes': { cuerpo: [VIGENTE] } });
+    montarHome(document, { sesion: SESION, fetchImpl });
+    await asentar();
+    await asentar();
+
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/banners/vigentes', { method: 'GET' });
+    expect(zona().hidden).toBe(false);
+    expect(zona().textContent).toContain(VIGENTE.contenido);
+    expect(zona().textContent).toContain('Publicado el');
+    expect(zona().textContent).toContain('Vigente hasta el');
+    // La #854 pintaba solo `banners[0].contenido` con un rótulo propio: ahora
+    // es el componente de RF-NOT-002 el que vive en la zona.
+    expect(zona().querySelector('[data-componente="banner-rotativo"]')).not.toBeNull();
+  });
+
+  test('sin vigentes la zona sigue oculta y el resto de la home se pinta igual', async () => {
+    montarHome(document, {
+      sesion: SESION,
+      fetchImpl: servicio({ ...TODO_BIEN, '/api/v1/banners/vigentes': { cuerpo: [] } }),
+    });
+    await asentar();
+    await asentar();
+    await asentar();
+
+    expect(zona().hidden).toBe(true);
+    expect(document.querySelector('[data-zona="bloque-torneo"]').textContent).toContain(
+      'Copa Otoño',
+    );
+  });
+
+  test('si productos no responde, el banner no aparece y la home sigue entera', async () => {
+    const aviso = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    montarHome(document, {
+      sesion: SESION,
+      fetchImpl: servicio({ ...TODO_BIEN, '/api/v1/banners/vigentes': { estado: 502 } }),
+    });
+    await asentar();
+    await asentar();
+    await asentar();
+
+    expect(zona().hidden).toBe(true);
+    expect(zona().childElementCount).toBe(0);
+    expect(aviso).toHaveBeenCalled();
+    expect(document.querySelector('[data-zona="bloque-saldo"]').textContent).toContain('380');
+    aviso.mockRestore();
   });
 });
 

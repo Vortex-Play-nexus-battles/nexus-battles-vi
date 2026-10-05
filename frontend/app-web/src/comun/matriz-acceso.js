@@ -189,6 +189,15 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
+  // HU-PRD-013 (#854) — programar, editar y retirar los anuncios que la home
+  // del jugador rota (RF-NOT-002). Mismo nivel que el resto del catálogo: el
+  // servidor exige ADMINISTRADOR o SUPER_ADMINISTRADOR para gestionarlos
+  // (`SeguridadConfig` de productos); solo `GET /banners/vigentes` es público.
+  banners: {
+    ruta: 'contenido/productos/banners.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   subastas: {
     ruta: 'cuentas/subastas.html',
     limpia: '/subastas',

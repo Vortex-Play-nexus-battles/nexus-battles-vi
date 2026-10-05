@@ -37,6 +37,8 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
+import { listarVigentes } from '../contenido/productos/cliente-banners.js';
+import { montarBannerRotativo } from '../plataforma/notificaciones/banner-rotativo.js';
 
 /** Accesos fijos de la home. Rutas reales del repo, ninguna inventada. */
 export const ACCESOS = Object.freeze([
@@ -392,6 +394,7 @@ export function montarHome(
   { sesion, fetchImpl = fetchWithHttpErrorInterceptor, cabecera = null },
 ) {
   const zonaSaludo = raiz.querySelector('[data-zona="saludo"]');
+  const zonaBanners = raiz.querySelector('[data-zona="bloque-banners"]');
   const zonas = {
     saldo: raiz.querySelector('[data-zona="bloque-saldo"]'),
     heroe: raiz.querySelector('[data-zona="bloque-heroe"]'),
@@ -405,6 +408,10 @@ export function montarHome(
   }
 
   pintarAccesos(zonaAccesos);
+
+  // RF-NOT-002: los anuncios vigentes rotan arriba; sin vigentes o sin
+  // servicio la zona sigue oculta y el resto de la home no se entera.
+  montarBannerRotativo(zonaBanners, { consultar: () => listarVigentes({ fetchImpl }) });
 
   /** Cada bloque se pide por su cuenta: uno caído no tumba la home. */
   async function cargar(clave, construir) {
