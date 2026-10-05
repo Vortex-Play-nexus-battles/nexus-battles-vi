@@ -274,7 +274,8 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            assertThat(historial(jdbc)).hasSize(5);
+            // V1 (linea base) y V2 a V6: V5 es el segundo factor y V6 el cierre de cuenta.
+            assertThat(historial(jdbc)).hasSize(6);
         }
     }
 }
