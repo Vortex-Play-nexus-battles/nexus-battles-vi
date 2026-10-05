@@ -22,6 +22,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -121,10 +122,15 @@ public class AnonimizadorDeCuentas {
      */
     public boolean ejecutar(UUID solicitudId) {
         LocalDateTime ahora = LocalDateTime.now(reloj);
-        Hecho hecho = transaccion.execute(estado -> anonimizarDentro(solicitudId, ahora));
-        if (hecho == null) {
+        // Optional y no null: la transacción devuelve siempre un valor, y que
+        // no haya nada que hacer se dice con un Optional vacío (SonarCloud
+        // java:S2583 leía el null como imposible).
+        Optional<Hecho> resultado = Objects.requireNonNullElse(
+                transaccion.execute(estado -> anonimizarDentro(solicitudId, ahora)), Optional.empty());
+        if (resultado.isEmpty()) {
             return false;
         }
+        Hecho hecho = resultado.get();
         // Ya confirmado: si algo de esto falla, la cuenta sigue anonimizada.
         if (hecho.avatar() != null) {
             try {
@@ -146,10 +152,10 @@ public class AnonimizadorDeCuentas {
         return true;
     }
 
-    private Hecho anonimizarDentro(UUID solicitudId, LocalDateTime ahora) {
+    private Optional<Hecho> anonimizarDentro(UUID solicitudId, LocalDateTime ahora) {
         Optional<SolicitudDeCierre> bloqueada = solicitudes.bloquear(solicitudId);
         if (bloqueada.isEmpty() || !bloqueada.get().vencida(ahora)) {
-            return null;
+            return Optional.empty();
         }
         SolicitudDeCierre solicitud = bloqueada.get();
         UUID uid = solicitud.getUsuarioUid();
@@ -160,7 +166,7 @@ public class AnonimizadorDeCuentas {
             log.warn("Solicitud de cierre {} sin cuenta {}: se marca ejecutada", solicitudId, uid);
             solicitud.marcarEjecutada(ahora);
             solicitudes.save(solicitud);
-            return null;
+            return Optional.empty();
         }
         Usuario cuenta = encontrada.get();
         String avatar = perfiles.findByIdentificadorPublicoConUsuario(uid)
@@ -187,7 +193,7 @@ public class AnonimizadorDeCuentas {
 
         solicitud.marcarEjecutada(ahora);
         solicitudes.save(solicitud);
-        return new Hecho(uid, avatar);
+        return Optional.of(new Hecho(uid, avatar));
     }
 
     private static byte[] bytesAleatorios(int cuantos) {
