@@ -124,6 +124,10 @@ export function aProductoDeVitrina(dto = {}) {
  * `precioUnitario` y `subtotal`, y `Carrito` su `total`. Lo unico que hacia
  * falta era formatearlos y no escribir «undefined COP» cuando falta alguno.
  *
+ * `id` se expone aparte: es el mismo valor que espera
+ * `DELETE /api/v1/carrito/items/{itemId}` (`ecommerce-carrito.yaml`), y sin
+ * el la fila no puede ofrecer «Quitar».
+ *
  * @param {object} item
  * @param {string|null} moneda
  */
@@ -131,6 +135,7 @@ export function aFilaDeCarrito(item = {}, moneda = null) {
   const subtotal = aImporte(item.subtotal);
   const unitario = aImporte(item.precioUnitario);
   return {
+    id: item.id ?? null,
     nombre: item.producto?.nombre || 'Producto',
     cantidad: Number.isFinite(item.cantidad) ? item.cantidad : 1,
     subtotal,

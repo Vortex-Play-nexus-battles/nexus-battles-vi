@@ -2,9 +2,19 @@
  * Vitrina, carrito y pago — HU-CAR-001 y HU-CAR-010.
  *
  * Habla con `ms-ecommerce`: `GET /api/v1/vitrina`, `GET /api/v1/carrito`,
- * `POST /api/v1/carrito/items` y `POST /api/v1/checkout`
- * (`contracts/openapi/ecommerce-carrito.yaml`).
+ * `POST /api/v1/carrito/items`, `DELETE /api/v1/carrito/items/{itemId}` y
+ * `POST /api/v1/checkout` (`contracts/openapi/ecommerce-carrito.yaml`).
  *
+ * ## Quitar un item (P3.2)
+ *
+ * El servicio ya publicaba `DELETE /carrito/items/{itemId}`
+ * (`CarritoController.eliminarItem`, con `orphanRemoval` en `Carrito.items`:
+ * no es un borrado logico a medias) pero nada en esta vista lo llamaba — la
+ * fila del carrito no tenia boton y `aFilaDeCarrito` ni siquiera exponia el
+ * `id` del item. Un jugador que agregaba algo de mas no podia corregirlo sin
+ * recargar la pagina para perder la sesion de carrito entera.
+ *
+
  * ## Qué cambió en R16
  *
  * 1. **La vitrina tiene prefijo propio.** Antes pedía `GET /api/v1/productos`,
@@ -488,6 +498,92 @@ function volverAIniciarSesion() {
   exigirSesion();
 }
 
+/**
+ * «Quitar» — `DELETE /api/v1/carrito/items/{itemId}`.
+ *
+ * Mismo patrón que `agregarAlCarrito`: el aviso de un fallo se pinta en la
+ * zona del carrito (MAPEO-ERRORES §5.2) y no se recarga nada si el borrado no
+ * entró, para no darle a entender al jugador que su carrito cambió cuando no
+ * cambió.
+ *
+ * @param {string} itemId id de la fila del carrito, no del producto
+ * @param {Document} [doc]
+ */
+export async function quitarDelCarrito(itemId, doc = document) {
+  const zona = zonaDeAvisoDelCarrito(doc);
+  limpiarAviso(zona);
+
+  let respuesta;
+  try {
+    respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi(`/carrito/items/${itemId}`), {
+      method: 'DELETE',
+      headers: cabeceras(),
+    });
+  } catch (error) {
+    avisarFalloAlQuitar(zona, { estado: 0, problema: null, itemId, doc });
+    console.error('Error al quitar item del carrito:', error);
+    return;
+  }
+
+  if (!respuesta.ok) {
+    const problema = await leerProblema(respuesta);
+    avisarFalloAlQuitar(zona, { estado: respuesta.status, problema, itemId, doc });
+    console.error('El carrito rechazó el borrado:', respuesta.status, problema?.type);
+    return;
+  }
+
+  await cargarCarrito(doc);
+}
+
+/**
+ * Pinta el aviso de un «Quitar» que no entró. Mismos tonos y la misma regla
+ * de salida que `avisarFalloAlAnadir` (MAPEO-ERRORES §4 y §9), pero sin sus
+ * motivos de catálogo: un borrado no falla porque el producto esté agotado.
+ *
+ * @param {HTMLElement} zona
+ * @param {{estado: number, problema: object|null, itemId: string, doc: Document}} fallo
+ */
+function avisarFalloAlQuitar(zona, { estado, problema, itemId, doc }) {
+  if (estado === 403) {
+    return;
+  }
+
+  const delSistema = estado === 0 || estado >= 500;
+  const reintentar = {
+    texto: 'Reintentar',
+    nombre: 'reintentar',
+    alPulsar: () => quitarDelCarrito(itemId, doc),
+  };
+
+  let mensaje;
+  if (estado === 401) {
+    mensaje = {
+      titulo: 'Tu sesión ya no es válida',
+      detalle: 'Vuelve a iniciar sesión para usar el carrito.',
+      accion: { texto: 'Iniciar sesión', nombre: 'iniciar-sesion', alPulsar: volverAIniciarSesion },
+    };
+  } else if (estado === 404) {
+    // Ya no está: lo más probable es que otra pestaña, u otro intento de
+    // Quitar, lo haya borrado primero. Se refresca y ya.
+    mensaje = {
+      titulo: 'Ese producto ya no estaba en tu carrito',
+      detalle: 'Tu carrito se actualizó.',
+      accion: { texto: 'Actualizar', nombre: 'actualizar-carrito', alPulsar: () => cargarCarrito(doc) },
+    };
+  } else {
+    const delServidor =
+      typeof problema?.detail === 'string' && problema.detail.trim() ? problema.detail : null;
+    mensaje = {
+      titulo: 'No se pudo quitar el producto del carrito',
+      detalle: delServidor ?? 'Inténtalo de nuevo en unos segundos.',
+      accion: reintentar,
+    };
+  }
+
+  const caja = pintarAviso(zona, { tono: tonoPorEstado(estado), ...mensaje });
+  caja.scrollIntoView?.({ block: 'nearest' });
+}
+
 export async function cargarCarrito(doc = document) {
   try {
     const respuesta = await fetchWithHttpErrorInterceptor(rutaDeApi('/carrito'), {
@@ -537,11 +633,34 @@ function mostrarFalloDelCarrito(doc) {
 /**
  * Fila de un ítem del carrito; la reutiliza el resumen del pago.
  *
+ * El resumen del pago (`resumenDeCompra`) también pasa por aquí, y ese no
+ * debe ofrecer «Quitar» a mitad de un pago en curso — por eso el botón es
+ * opcional y no una parte fija de la fila.
+ *
  * @param {object} item
  * @param {string} moneda
+ * @param {{conAcciones?: boolean}} [opciones]
  */
-function filaDeCarrito(item, moneda) {
+function filaDeCarrito(item, moneda, { conAcciones = false } = {}) {
   const fila = aFilaDeCarrito(item, moneda);
+
+  // Sin id no hay qué borrar (regla ya usada por «Añadir»): el botón se
+  // deshabilita en vez de mandar un DELETE a `/carrito/items/null`.
+  const sinId = fila.id === null;
+  const boton = conAcciones
+    ? h('button', {
+        clase: 'btn-quitar',
+        texto: 'Quitar',
+        atributos: {
+          type: 'button',
+          disabled: sinId,
+          title: sinId ? 'Este item llegó incompleto y no se puede quitar.' : null,
+          'aria-label': `Quitar ${fila.nombre} del carrito`,
+        },
+        datos: sinId ? {} : { item: String(fila.id) },
+      })
+    : null;
+
   return h('div', {
     clase: 'cart-item',
     hijos: [
@@ -549,7 +668,10 @@ function filaDeCarrito(item, moneda) {
         clase: 'item-info',
         hijos: [nodo('h5', undefined, fila.nombre), nodo('span', undefined, `x${fila.cantidad}`)],
       }),
-      nodo('div', 'item-price', fila.subtotalTexto ?? '—'),
+      h('div', {
+        clase: 'item-acciones',
+        hijos: [nodo('div', 'item-price', fila.subtotalTexto ?? '—'), boton],
+      }),
     ],
   });
 }
@@ -575,7 +697,9 @@ export function actualizarUI(carrito, doc = document) {
 
   const moneda = monedaDe(carrito);
   ultimoCarrito = carrito;
-  contenedor.replaceChildren(...carrito.items.map((item) => filaDeCarrito(item, moneda)));
+  contenedor.replaceChildren(
+    ...carrito.items.map((item) => filaDeCarrito(item, moneda, { conAcciones: true })),
+  );
   subtotal.textContent = dinero(carrito.total, moneda);
   total.textContent = dinero(carrito.total, moneda);
   botonPagar.disabled = false;
@@ -1010,6 +1134,17 @@ export function montarTienda(doc = document) {
     const boton = evento.target.closest('[data-producto]');
     if (boton) {
       agregarAlCarrito(boton.dataset.producto, doc);
+    }
+  });
+
+  // «Quitar» va delegado en el contenedor del carrito por la misma razón que
+  // «Añadir» en la rejilla: las filas se repintan enteras en cada
+  // `actualizarUI` y enganchar botón por botón se perdería en el primer
+  // repintado.
+  doc.getElementById('cart-items')?.addEventListener('click', (evento) => {
+    const boton = evento.target.closest('[data-item]');
+    if (boton) {
+      quitarDelCarrito(boton.dataset.item, doc);
     }
   });
 

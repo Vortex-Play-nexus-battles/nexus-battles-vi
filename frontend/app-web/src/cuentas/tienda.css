@@ -249,6 +249,42 @@
   font-variant-numeric: var(--cifras-tabulares);
 }
 
+/* HU-CAR-00x — quitar un item ya agregado. Mismo tratamiento tipografico que
+   `.btn-add`, pero en el tono de borde: no es la accion principal de la fila
+   y no debe competir con «Pagar». */
+.item-acciones {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+}
+
+.btn-quitar {
+  min-height: var(--boton-pequeno);
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-chico);
+  background-color: transparent;
+  color: var(--texto-2);
+  font: inherit;
+  font-size: var(--t-meta-tam);
+  cursor: pointer;
+}
+
+.btn-quitar:hover {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.btn-quitar:focus-visible {
+  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
+  outline-offset: 2px;
+}
+
+.btn-quitar[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cart-summary {
   margin-bottom: var(--e-5);
   padding-top: var(--e-4);

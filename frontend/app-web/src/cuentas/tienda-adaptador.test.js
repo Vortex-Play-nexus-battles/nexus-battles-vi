@@ -102,7 +102,7 @@ describe('aProductoDeVitrina', () => {
 describe('aFilaDeCarrito', () => {
   test('formatea el subtotal y el unitario que el carrito si persiste', () => {
     const fila = aFilaDeCarrito(
-      { cantidad: 2, subtotal: 250, precioUnitario: 125, producto: { nombre: 'Pocion' } },
+      { id: 42, cantidad: 2, subtotal: 250, precioUnitario: 125, producto: { nombre: 'Pocion' } },
       'COP',
     );
     expect(fila.nombre).toBe('Pocion');
@@ -117,5 +117,10 @@ describe('aFilaDeCarrito', () => {
     expect(fila.cantidad).toBe(1);
     expect(fila.subtotalTexto).toBeNull();
     expect(fila.unitarioTexto).toBeNull();
+  });
+
+  test('expone el id del item: lo que necesita «Quitar» para llamar DELETE /carrito/items/{itemId}', () => {
+    expect(aFilaDeCarrito({ id: 42 }, 'COP').id).toBe(42);
+    expect(aFilaDeCarrito({}, 'COP').id).toBeNull();
   });
 });
