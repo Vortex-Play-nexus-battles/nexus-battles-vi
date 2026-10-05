@@ -133,6 +133,36 @@ class IngresarASalaTest {
     }
 
     @Test
+    @DisplayName("RFINAL-04: sin heroe y con un codigo equivocado, lo que se dice es el codigo (403), no el heroe")
+    void elCodigoVaAntesQueElHeroe() {
+        // Revision de AWS DEV del 4-oct: «ZZZZ-9999» llevaba a la verificacion
+        // del heroe, porque el ingreso preguntaba al inventario antes que a la sala.
+        InventarioEnMemoria sinHeroe = InventarioEnMemoria.sinHeroe();
+        ingresarASala = new IngresarASala(repositorio, canal, sinHeroe, new CreditosEnMemoria(), sanciones);
+        Sala sala = Sala.crear(
+                new ParametrosDeSala(4, Modalidad.HASTA_SEIS, 0, false, true, null), ANFITRION);
+        repositorio.guardar(sala);
+
+        SalaPrivadaSinInvitacion error = assertThrows(SalaPrivadaSinInvitacion.class,
+                () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE), "ZZZZ-9999"));
+
+        assertAll(
+                () -> assertEquals(403, error.estado()),
+                () -> assertEquals(0, sinHeroe.vecesConsultado(), "al inventario ni se le pregunta"));
+    }
+
+    @Test
+    @DisplayName("RFINAL-04: una sala que no existe da 404 aunque falte el heroe")
+    void laSalaInexistenteVaAntesQueElHeroe() {
+        InventarioEnMemoria sinHeroe = InventarioEnMemoria.sinHeroe();
+        ingresarASala = new IngresarASala(repositorio, canal, sinHeroe, new CreditosEnMemoria(), sanciones);
+
+        assertThrows(SalaNoEncontrada.class,
+                () -> ingresarASala.ejecutar(UUID.randomUUID(), como(VISITANTE)));
+        assertEquals(0, sinHeroe.vecesConsultado());
+    }
+
+    @Test
     @DisplayName("quien ya esta dentro no vuelve a entrar")
     void ingresoRepetido() {
         Sala sala = salaAbierta();
@@ -451,12 +481,22 @@ class IngresarASalaTest {
         }
 
         @Test
-        @DisplayName("si la sala no lo admite despues de reservar, la reserva vuelve al jugador")
+        @DisplayName("si otro ocupa el ultimo cupo despues de reservar, la reserva vuelve al jugador")
         void devuelveLaReservaSiNoEntra() {
+            // RFINAL-04: una sala que YA esta llena se rechaza antes de reservar
+            // (prueba de abajo). La devolucion sigue haciendo falta para la
+            // carrera: el cupo se lo lleva otro entre la reserva y el ingreso.
+            RepositorioQueSeAdelanta almacen = new RepositorioQueSeAdelanta(1);
+            ingresarASala = new IngresarASala(almacen, canal, inventario, creditos, sanciones);
             Sala sala = Sala.crear(
                     new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, APUESTA, false, false, null), ANFITRION);
-            sala.unirse(UUID.randomUUID());
-            repositorio.guardar(sala);
+            almacen.sobreescribir(sala);
+            UUID ganador = UUID.fromString("33333333-3333-3333-3333-333333333333");
+            almacen.alReleer(() -> {
+                Sala actual = almacen.leerDeFuera(sala.id()).orElseThrow();
+                actual.unirse(ganador);
+                almacen.sobreescribir(actual);
+            });
 
             assertThrows(IngresoNoPermitido.class, () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
 
@@ -464,6 +504,38 @@ class IngresarASalaTest {
                     () -> assertEquals(1, creditos.liberadas.size(), "se libero lo que se habia reservado"),
                     () -> assertEquals(0, creditos.reservadoDe(VISITANTE)),
                     () -> assertEquals(500, creditos.disponibleDe(VISITANTE)));
+        }
+
+        @Test
+        @DisplayName("RFINAL-04: una sala ya llena se rechaza sin reservar ni preguntar al inventario")
+        void salaLlenaNoReserva() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, APUESTA, false, false, null), ANFITRION);
+            sala.unirse(UUID.randomUUID());
+            repositorio.guardar(sala);
+            int consultasPrevias = inventario.vecesConsultado();
+
+            assertThrows(IngresoNoPermitido.class, () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE)));
+
+            assertAll(
+                    () -> assertTrue(creditos.llamadas.isEmpty(), "el libro ni se entera"),
+                    () -> assertEquals(consultasPrevias, inventario.vecesConsultado()));
+        }
+
+        @Test
+        @DisplayName("RFINAL-04: un codigo equivocado en una privada con apuesta no reserva nada (403)")
+        void codigoEquivocadoNoReserva() {
+            Sala sala = Sala.crear(
+                    new ParametrosDeSala(4, Modalidad.HASTA_SEIS, APUESTA, false, true, null), ANFITRION);
+            repositorio.guardar(sala);
+
+            assertThrows(SalaPrivadaSinInvitacion.class,
+                    () -> ingresarASala.ejecutar(sala.id(), como(VISITANTE), "ZZZZ-9999"));
+
+            assertAll(
+                    () -> assertTrue(creditos.llamadas.isEmpty(),
+                            "ni reserva ni devolucion: el historial del jugador queda limpio"),
+                    () -> assertTrue(creditos.liberadas.isEmpty()));
         }
 
         @Test

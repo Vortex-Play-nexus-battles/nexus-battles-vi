@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.api;
 
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
@@ -53,11 +54,14 @@ public class SalasController {
     private final VerificarHeroe verificarHeroe;
     private final IniciarPartida iniciarPartida;
     private final InformarEncuentroDeTorneo encuentroDeTorneo;
+    private final ComprobarIngreso comprobarIngreso;
 
     SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
                     ObtenerSala obtenerSala, AbandonarSala abandonarSala,
                     CancelarSala cancelarSala, VerificarHeroe verificarHeroe,
-                    IniciarPartida iniciarPartida, InformarEncuentroDeTorneo encuentroDeTorneo) {
+                    IniciarPartida iniciarPartida, InformarEncuentroDeTorneo encuentroDeTorneo,
+                    ComprobarIngreso comprobarIngreso) {
+        this.comprobarIngreso = comprobarIngreso;
         this.iniciarPartida = iniciarPartida;
         this.encuentroDeTorneo = encuentroDeTorneo;
         this.crearSala = crearSala;
@@ -131,6 +135,28 @@ public class SalasController {
 
         JugadorAutenticado jugador = jugadorDe(token);
         Sala sala = ingresarASala.ejecutar(idSala, jugador, IngresoRequest.codigoDe(peticion));
+        return SalaResponse.segunQuienPregunta(sala, jugador.id());
+    }
+
+    /**
+     * ¿Me dejaria entrar? — operacion {@code comprobarIngreso} (1.9.0, RFINAL-04).
+     *
+     * <p>Sin efectos: ni ingresa, ni reserva, ni pregunta al inventario. El
+     * listado la usa antes de mandar a verificar el heroe, para que un codigo
+     * de invitacion equivocado se diga ahi (403) y no despues de elegir heroe.
+     * Los rechazos son los del ingreso y los traduce el mismo
+     * {@code ManejadorDeErrores}. El codigo viaja en el cuerpo, no en la URL:
+     * la URL acaba en las bitacoras del borde.
+     *
+     * @return 200 con la sala, vista como la ve quien pregunta
+     */
+    @PostMapping("/{idSala}/comprobacion-de-ingreso")
+    public SalaResponse comprobarIngreso(@PathVariable UUID idSala,
+                                         @RequestBody(required = false) IngresoRequest peticion,
+                                         @AuthenticationPrincipal Jwt token) {
+
+        JugadorAutenticado jugador = jugadorDe(token);
+        Sala sala = comprobarIngreso.ejecutar(idSala, jugador, IngresoRequest.codigoDe(peticion));
         return SalaResponse.segunQuienPregunta(sala, jugador.id());
     }
 

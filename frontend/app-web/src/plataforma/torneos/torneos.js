@@ -20,6 +20,12 @@ import { distintivo } from '../../comun/ui/distintivo.js';
 import { icono } from '../../comun/ui/icono.js';
 import { fechaHora } from '../../comun/ui/formato.js';
 import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
+import {
+  emblemaDe,
+  imagenDeEmblema,
+  selectorDeCompanero,
+  selectorDeEmblema,
+} from './equipo-formulario.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -391,6 +397,24 @@ export function tarjetaDeEquipo(torneo, equipo, uid) {
   tarjeta.dataset.equipoId = equipo.id;
   if (equipo.ia) {
     tarjeta.dataset.ia = 'true';
+  }
+  // RFINAL-04 — el emblema elegido al registrar el equipo, con su imagen. Un
+  // avatar que no es uno de los emblemas (equipos de antes, la máquina) no
+  // se pinta: es texto que nadie eligió como imagen.
+  const emblema = emblemaDe(equipo.avatar);
+  if (emblema) {
+    tarjeta.appendChild(
+      h('img', {
+        clase: 'comentario__avatar',
+        atributos: {
+          src: imagenDeEmblema(emblema),
+          alt: `Emblema ${emblema.nombre}`,
+          width: 40,
+          height: 40,
+          loading: 'lazy',
+        },
+      }),
+    );
   }
   const titulo = nodo('strong', 'tarjeta__titulo', equipo.nombre);
   if (uid && equipo.integrantes.includes(uid)) {
@@ -1291,38 +1315,34 @@ export function montarTorneos(
     form.dataset.zona = 'crear-equipo';
     form.appendChild(nodo('h3', undefined, 'Registrar mi equipo'));
     // Con `campo()` en vez de innerHTML: etiqueta asociada por for/id y pista
-    // bajo el control. La del companero importa — pedir un uid a secas es
-    // pedir un dato que nadie se sabe de memoria; ahora dice donde sacarlo.
-    for (const uno of [
+    // bajo el control.
+    form.appendChild(
       campo({
         nombre: 'nombre',
         etiqueta: 'Nombre del equipo',
         requerido: true,
         atributos: { minlength: 3, maxlength: 40 },
         pista: 'Entre 3 y 40 caracteres. Pasa por la lista negra de terminos prohibidos.',
-      }),
-      campo({
-        nombre: 'avatar',
-        etiqueta: 'Avatar del equipo',
-        requerido: true,
-        atributos: { maxlength: 300 },
-        pista: 'Identificador o dirección de la imagen.',
-      }),
-      campo({
-        nombre: 'companeroUid',
-        etiqueta: 'Identificador de tu compañero',
-        requerido: true,
-        pista: 'Pídeselo a tu compañero: lo ve en Mi Cuenta, pestaña Seguridad.',
-      }),
-    ]) {
-      form.appendChild(uno.elemento);
-    }
+      }).elemento,
+    );
+    // RFINAL-04 (revisión de AWS DEV del 4-oct) — el emblema se elige de una
+    // lista con su imagen y el compañero se busca por apodo; antes se pedía
+    // escribir una dirección de imagen y pegar el UUID del compañero.
+    const emblema = selectorDeEmblema();
+    form.appendChild(emblema.elemento);
+    const companero = selectorDeCompanero({ fetchImpl, yo: uid });
+    form.appendChild(companero.elemento);
     const enviar = nodo('button', 'boton boton--primario', 'Registrar equipo');
     enviar.type = 'submit';
     form.appendChild(enviar);
     form.addEventListener('submit', async (evento) => {
       evento.preventDefault();
       const datos = new FormData(form);
+      const elegido = companero.elegido();
+      if (!elegido) {
+        companero.marcarError('Busca a tu compañero por su apodo y elígelo de la lista.');
+        return;
+      }
       const boton = form.querySelector('[type="submit"]');
       boton.disabled = true;
       try {
@@ -1330,8 +1350,8 @@ export function montarTorneos(
           torneo.id,
           {
             nombre: String(datos.get('nombre') ?? '').trim(),
-            avatar: String(datos.get('avatar') ?? '').trim(),
-            companeroUid: String(datos.get('companeroUid') ?? '').trim(),
+            avatar: emblema.elegido(),
+            companeroUid: elegido.uid,
           },
           fetchImpl,
         );

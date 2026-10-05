@@ -506,6 +506,8 @@ describe('canal en tiempo real en el listado', () => {
     });
     montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue(pagina([privada])),
+      // RFINAL-04: una privada se comprueba antes de entrar (sin efectos).
+      comprobar: jest.fn().mockResolvedValue(privada),
       ingresar: jest.fn().mockResolvedValue({ ...privada, ocupacion: 2, participantes: [JUGADOR] }),
       conectarCanal: () => Promise.resolve(canal),
     });
@@ -690,23 +692,36 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
   const formulario = () => raiz.querySelector('[data-zona="pedir-codigo"]');
   const campo = () => raiz.querySelector('[name="codigoInvitacion"]');
 
-  function montar(ingresar) {
+  /**
+   * RFINAL-04: en una privada, el codigo se comprueba (sin efectos) antes de
+   * entrar. Por omision la comprobacion acepta solo `WXYZ-2345`.
+   */
+  const CODIGO_BUENO = 'WXYZ-2345';
+  const comprobarConCodigo = () =>
+    jest.fn((id, { codigoInvitacion } = {}) =>
+      codigoInvitacion === CODIGO_BUENO
+        ? Promise.resolve(privada())
+        : Promise.reject(rechazoPrivada()),
+    );
+
+  function montar(ingresar, comprobar = comprobarConCodigo(), contenido = [privada()]) {
     document.body.innerHTML = HTML_CON_CODIGO;
     raiz = document.getElementById('vista');
     const listar = jest.fn().mockResolvedValue({
-      contenido: [privada()],
+      contenido,
       pagina: 0,
       tamano: 12,
-      totalElementos: 1,
+      totalElementos: contenido.length,
       totalPaginas: 1,
     });
     const alEntrar = jest.fn();
-    const vista = montarBatallas(raiz, { listar, ingresar, alEntrar });
-    return { vista, alEntrar, listar };
+    const irAVerificacion = jest.fn();
+    const vista = montarBatallas(raiz, { listar, ingresar, comprobar, alEntrar, irAVerificacion });
+    return { vista, alEntrar, listar, comprobar, irAVerificacion };
   }
 
   test('el 403 de sala privada pide el codigo en vez de cerrar la puerta', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    const ingresar = jest.fn();
     montar(ingresar);
     await vaciarCola();
 
@@ -717,38 +732,36 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(formulario().dataset.salaInvitada).toBe(ID);
     // Y la rejilla sigue ahi: quien se equivoco de sala elige otra sin recargar.
     expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    // RFINAL-04: sin codigo no se intenta entrar; se pregunta antes.
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
-  test('el codigo escrito se manda al servicio', async () => {
-    const ingresar = jest
-      .fn()
-      .mockRejectedValueOnce(rechazoPrivada())
-      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
-    const { alEntrar } = montar(ingresar);
+  test('el codigo escrito se comprueba y despues se manda al ingreso', async () => {
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
+    const { alEntrar, comprobar } = montar(ingresar);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
-    expect(ingresar).toHaveBeenNthCalledWith(2, ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(comprobar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
+    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
     expect(alEntrar).toHaveBeenCalledTimes(1);
   });
 
   test('un codigo aceptado cierra el formulario', async () => {
-    const ingresar = jest
-      .fn()
-      .mockRejectedValueOnce(rechazoPrivada())
-      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
     montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
@@ -756,8 +769,8 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(campo().value).toBe('');
   });
 
-  test('un codigo que no vale lo dice y deja volver a intentarlo', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+  test('un codigo que no vale lo dice, deja volver a intentarlo y no intenta entrar', async () => {
+    const ingresar = jest.fn();
     montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -773,62 +786,64 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     // envio.
     expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
     expect(campo().value).toBe('MALO-0000');
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
   test('un codigo vacio no molesta al servicio', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    const ingresar = jest.fn();
+    const { comprobar } = montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
-    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(comprobar).toHaveBeenCalledTimes(1);
 
     campo().value = '   ';
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
-    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(comprobar).toHaveBeenCalledTimes(1);
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
-  test('enviar el codigo manda UN ingreso, no dos', async () => {
+  test('enviar el codigo manda UNA comprobacion y UN ingreso, no dos', async () => {
     // El defecto que encontro CI contra el backend real: el formulario llevaba
     // `data-sala`, y la escucha de las tarjetas esta delegada en toda la vista
     // con `closest('[data-sala]')`. Pulsar «Entrar con el codigo» disparaba dos
     // ingresos —el del formulario con codigo, y el de la delegacion sin el— y
     // el 403 del segundo llegaba despues, reescribiendo el aviso con el mensaje
     // de la primera vez. En una sala con apuesta habrian sido dos reservas.
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
+    const { comprobar } = montar(ingresar);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
-    const trasAbrir = ingresar.mock.calls.length;
+    const trasAbrir = comprobar.mock.calls.length;
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().querySelector('button[type="submit"]').click();
     await vaciarCola();
 
-    expect(ingresar.mock.calls.length - trasAbrir).toBe(1);
-    expect(ingresar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(comprobar.mock.calls.length - trasAbrir).toBe(1);
+    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(ingresar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
   });
 
   test('un codigo rechazado no borra lo que la persona escribio', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    montar(jest.fn());
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = 'MALO-2345';
     formulario().querySelector('button[type="submit"]').click();
     await vaciarCola();
 
-    expect(campo().value).toBe('WXYZ-2345');
+    expect(campo().value).toBe('MALO-2345');
   });
 
   test('Cancelar cierra el formulario sin entrar a ninguna parte', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    const ingresar = jest.fn();
     const { alEntrar } = montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -840,21 +855,23 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(alEntrar).not.toHaveBeenCalled();
   });
 
-  test('una sala publica entra sin pedir nada', async () => {
-    const ingresar = jest.fn().mockResolvedValue({ ...privada(), privada: false, ocupacion: 2 });
-    const { alEntrar } = montar(ingresar);
+  test('una sala publica entra sin pedir nada (ni comprobar)', async () => {
+    const publica = { ...privada(), privada: false, estado: 'ABIERTA' };
+    const ingresar = jest.fn().mockResolvedValue({ ...publica, ocupacion: 2 });
+    const { alEntrar, comprobar } = montar(ingresar, comprobarConCodigo(), [publica]);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
+    expect(comprobar).not.toHaveBeenCalled();
     expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: null });
     expect(formulario().hidden).toBe(true);
     expect(alEntrar).toHaveBeenCalledTimes(1);
   });
 
   test('un 409 no pide codigo: escribirlo no arreglaria una sala llena', async () => {
-    const ingresar = jest
+    const llena = jest
       .fn()
       .mockRejectedValue(
         new ErrorDeApi(
@@ -862,7 +879,7 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
           409,
         ),
       );
-    montar(ingresar);
+    montar(jest.fn(), llena);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -877,10 +894,80 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     const { vista, alEntrar } = montar(ingresar);
     await vaciarCola();
 
-    await vista.entrarA(ID, 'WXYZ-2345');
+    await vista.entrarA(ID, CODIGO_BUENO);
 
-    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
     expect(alEntrar).toHaveBeenCalledTimes(1);
+  });
+
+  // ---- RFINAL-04 · revisión de AWS DEV del 4-oct: el código va antes que el héroe ----
+
+  describe('RFINAL-04 · privada con apuesta', () => {
+    const conApuesta = () => ({ ...privada(), recompensaCreditos: 500 });
+    const comprobarConApuesta = () =>
+      jest.fn((id, { codigoInvitacion } = {}) =>
+        codigoInvitacion === CODIGO_BUENO
+          ? Promise.resolve(conApuesta())
+          : Promise.reject(rechazoPrivada()),
+      );
+
+    test('al pulsarla se pide el código; NO se va a la verificación del héroe', async () => {
+      const { irAVerificacion } = montar(jest.fn(), comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      expect(formulario().hidden).toBe(false);
+      expect(irAVerificacion).not.toHaveBeenCalled();
+    });
+
+    test('«ZZZZ-9999» se rechaza en el listado; tampoco se va a la verificación', async () => {
+      const ingresar = jest.fn();
+      const { irAVerificacion } = montar(ingresar, comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      campo().value = 'ZZZZ-9999';
+      formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await vaciarCola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
+      expect(irAVerificacion).not.toHaveBeenCalled();
+      expect(ingresar).not.toHaveBeenCalled();
+    });
+
+    test('con el código bueno, entonces sí: a la verificación con el código', async () => {
+      const ingresar = jest.fn();
+      const { irAVerificacion } = montar(ingresar, comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      campo().value = CODIGO_BUENO;
+      formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await vaciarCola();
+
+      expect(irAVerificacion).toHaveBeenCalledWith(
+        `./validacion-heroe.html?sala=${ID}&codigo=${CODIGO_BUENO}`,
+      );
+      expect(ingresar).not.toHaveBeenCalled();
+    });
+
+    test('un enlace a una sala que no está en esta página también se comprueba primero', async () => {
+      const comprobar = comprobarConApuesta();
+      const { vista, irAVerificacion } = montar(jest.fn(), comprobar, []);
+      await vaciarCola();
+
+      await vista.entrarA(ID, CODIGO_BUENO);
+
+      expect(comprobar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
+      // La apuesta la dice la comprobación, no la página: se confirma antes.
+      expect(irAVerificacion).toHaveBeenCalledWith(
+        `./validacion-heroe.html?sala=${ID}&codigo=${CODIGO_BUENO}`,
+      );
+    });
   });
 });
 
@@ -974,6 +1061,8 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
     raiz = document.getElementById('vista');
     const irAVerificacion = jest.fn();
     const alEntrar = jest.fn();
+    // RFINAL-04: las privadas se comprueban antes; aqui la comprobacion acepta.
+    const comprobar = jest.fn().mockResolvedValue(salaDelCaso);
     const vista = montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue({
         contenido: [salaDelCaso],
@@ -983,10 +1072,11 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
         totalPaginas: 1,
       }),
       ingresar,
+      comprobar,
       alEntrar,
       irAVerificacion,
     });
-    return { vista, irAVerificacion, alEntrar };
+    return { vista, irAVerificacion, alEntrar, comprobar };
   }
 
   test('rutaDeVerificacion apunta a la pantalla que explica el veredicto', () => {

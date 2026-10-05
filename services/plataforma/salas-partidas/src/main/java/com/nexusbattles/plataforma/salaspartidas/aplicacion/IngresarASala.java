@@ -39,9 +39,13 @@ import java.util.UUID;
  * no responde— la reserva se libera: un jugador que no entro no puede quedarse
  * con creditos comprometidos.
  *
- * <p>Se reserva antes de comprobar el aforo y no despues porque lo contrario
- * seria duplicar aqui las reglas de la sala para «adivinar» si va a admitir. La
- * reserva y su liberacion son idempotentes y baratas; una regla duplicada no.
+ * <p><b>Orden de las puertas (RFINAL-04, 1.9.0):</b> sancion → la sala existe
+ * (404) → la sala admite a este jugador con este codigo
+ * ({@link Sala#comprobarIngreso}: 403 codigo, 409 llena o empezada) → heroe
+ * (422) → creditos (422) → ingreso. Las reglas de la sala no se duplican aqui:
+ * se le preguntan a ella antes de las puertas con efectos, y {@code unirse}
+ * las vuelve a aplicar al entrar, que es lo que resuelve la carrera por el
+ * ultimo cupo.
  *
  * <p>El codigo de invitacion se pasa tal cual al agregado: quien decide si vale
  * es {@link Sala}, no este caso de uso.
@@ -111,7 +115,18 @@ public class IngresarASala {
 
         UUID idJugador = jugador.id();
 
-        // La puerta va primero y fuera del bucle de reintentos: el veredicto del
+        // RFINAL-04 (revision de AWS DEV del 4-oct): la sala habla primero. Un
+        // codigo de invitacion equivocado llevaba a la verificacion del heroe,
+        // porque el heroe se miraba antes que la sala; y con apuesta, el libro
+        // anotaba una reserva y su devolucion por un ingreso que nunca podia
+        // prosperar. Ahora se lee la sala (404) y ella dice si admite a este
+        // jugador con este codigo (403 / 409) ANTES de preguntar al inventario
+        // y de reservar nada. Es la lectura del primer intento, no una mas.
+        Sala sala = repositorio.buscarPorId(idSala)
+                .orElseThrow(() -> new SalaNoEncontrada(idSala));
+        sala.comprobarIngreso(idJugador, codigo);
+
+        // La puerta del heroe va fuera del bucle de reintentos: el veredicto del
         // inventario no cambia porque otro jugador gane una carrera por el cupo,
         // y repetir la consulta seria castigar al inventario por una colision
         // que no es suya.
@@ -119,11 +134,9 @@ public class IngresarASala {
                 jugador.apodo(), PuertaDeHeroe.comprobar(heroes, jugador).heroe());
 
         // Los creditos se comprometen una sola vez, tambien fuera del bucle:
-        // la reserva no depende de quien mas entre. Para saber cuantos, hay que
-        // leer la sala; esa lectura es la del primer intento y sirve ademas
-        // para rechazar con 404 antes de reservar nada.
-        Sala sala = repositorio.buscarPorId(idSala)
-                .orElseThrow(() -> new SalaNoEncontrada(idSala));
+        // la reserva no depende de quien mas entre. Si entre la comprobacion y
+        // el ingreso otro ocupa el ultimo cupo, unirse lo rechaza y la reserva
+        // se devuelve (abajo).
         ReservaDeCreditos reserva = null;
         if (sala.recompensaCreditos() > 0) {
             reserva = creditos.reservar(idJugador, sala.recompensaCreditos(), idSala, sala.version());

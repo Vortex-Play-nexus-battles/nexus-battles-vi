@@ -187,6 +187,46 @@ export async function ingresarASala(
 }
 
 /**
+ * ¿Me dejaria entrar esta sala con este codigo? — `comprobarIngreso`,
+ * salas-partidas.yaml 1.9.0 (RFINAL-04).
+ *
+ * Sin efectos: ni entra, ni reserva creditos, ni pregunta al inventario. El
+ * listado la usa antes de mandar a verificar el heroe, para que un codigo de
+ * invitacion equivocado se diga en el listado y no despues de elegir heroe
+ * (revision de AWS DEV del 4-oct). Los rechazos son los del ingreso: 403
+ * `sala-privada` o sancion, 404, 409.
+ *
+ * @param {string} idSala
+ * @param {{codigoInvitacion?: string|null, fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} la sala como la ve quien pregunta
+ * @throws {ErrorDeApi}
+ */
+export async function comprobarIngreso(
+  idSala,
+  { codigoInvitacion = null, fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const codigo = typeof codigoInvitacion === 'string' ? codigoInvitacion.trim() : '';
+  // El codigo va en el cuerpo, nunca en la direccion: la direccion acaba en
+  // las bitacoras del borde.
+  const peticion = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(codigo ? { codigoInvitacion: codigo } : {}),
+  };
+
+  const respuesta = await fetchImpl(
+    ruta(`/${encodeURIComponent(idSala)}/comprobacion-de-ingreso`),
+    peticion,
+  );
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/**
  * Si este problema es el rechazo de una sala privada —403 con el tipo que
  * declara el dominio—, que es el unico que se arregla escribiendo un codigo.
  *

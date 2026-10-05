@@ -5,6 +5,7 @@ import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
@@ -54,6 +55,13 @@ public class ConfiguracionDelServicio {
                                        HeroeDelJugador heroes, CreditosDelJugador creditos,
                                        com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
         return new IngresarASala(repositorio, canal, heroes, creditos, sanciones);
+    }
+
+    /** RFINAL-04 (1.9.0): la sala dice si admite al jugador con su codigo, sin efectos. */
+    @Bean
+    public ComprobarIngreso comprobarIngreso(RepositorioDeSalas repositorio,
+                                             com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
+        return new ComprobarIngreso(repositorio, sanciones);
     }
 
     @Bean
