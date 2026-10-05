@@ -189,6 +189,10 @@ const MOTIVOS_DE_LINEA = Object.freeze({
  * (`disponible`, con su `motivo`) y cuantas unidades admite (`maximo`: 20, o
  * lo que quede del tiraje).
  *
+ * `id` se expone aparte: es el mismo valor que espera
+ * `DELETE /api/v1/carrito/items/{itemId}` (`ecommerce-carrito.yaml`), y sin
+ * el la fila no puede ofrecer «Quitar».
+ *
  * @param {object} item
  * @param {string|null} moneda
  */

@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.Instant;
@@ -185,6 +187,26 @@ class RepositorioDeBandejasTest {
         repositorio.marcarLeida(JUGADOR, "fantasma");
 
         verify(avisos, never()).save(any(RegistroDeNotificacion.class));
+    }
+
+    @Test
+    @DisplayName("marcar todas es una sola sentencia en bloque: no carga ni guarda fila por fila (HU-NOT-001 CA-02)")
+    void marcarTodasEsUnaSentencia() {
+        when(avisos.marcarTodasLeidas(JUGADOR)).thenReturn(2);
+
+        assertEquals(2, repositorio.marcarTodasLeidas(JUGADOR));
+
+        verify(avisos).marcarTodasLeidas(JUGADOR);
+        verifyNoMoreInteractions(avisos);
+        verifyNoInteractions(entregas, sesiones);
+    }
+
+    @Test
+    @DisplayName("la cuenta de no leidos se le pide a la base, no se calcula con lo cargado")
+    void contarNoLeidasPreguntaALaBase() {
+        when(avisos.countByUsuarioIdAndLeidaFalse(JUGADOR)).thenReturn(1L);
+
+        assertEquals(1, repositorio.contarNoLeidas(JUGADOR));
     }
 
     @Test

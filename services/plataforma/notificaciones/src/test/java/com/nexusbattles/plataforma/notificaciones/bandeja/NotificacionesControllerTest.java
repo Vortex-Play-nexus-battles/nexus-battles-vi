@@ -3,10 +3,13 @@ package com.nexusbattles.plataforma.notificaciones.bandeja;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,9 +37,10 @@ import com.nexusbattles.plataforma.notificaciones.Notificacion;
 import com.nexusbattles.plataforma.notificaciones.seguridad.SecurityConfig;
 
 /**
- * Pruebas del contrato HTTP de HU-NOT-006 (contrato 1.1.0): cada estado de
- * respuesta tiene su caso, y quien puede que se comprueba con tokens reales
- * —firmados y verificados contra un JWKS— no con un principal inventado.
+ * Pruebas del contrato HTTP de HU-NOT-006 (contrato 1.1.0) y de marcar todas
+ * (1.3.0, HU-NOT-001 CA-02): cada estado de respuesta tiene su caso, y quien
+ * puede que se comprueba con tokens reales —firmados y verificados contra un
+ * JWKS— no con un principal inventado.
  */
 @WebMvcTest(NotificacionesController.class)
 @Import({ManejadorErroresNotificaciones.class, SecurityConfig.class, DecodificadorDePrueba.class})
@@ -104,6 +108,23 @@ class NotificacionesControllerTest {
                     .andExpect(status().isForbidden());
             mvc.perform(post("/api/v1/users/" + JUGADOR + "/sessions/movil/pending")
                             .header(HttpHeaders.AUTHORIZATION, comoOtroJugador()))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
+        @DisplayName("marcar todas sin token, 401 (HU-NOT-001 CA-02)")
+        void marcarTodasSinToken() throws Exception {
+            mvc.perform(post(BANDEJA + "/read")).andExpect(status().isUnauthorized());
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
+        @DisplayName("marcar todas con el token de otro usuario o de un servicio, 403: nadie marca la bandeja ajena")
+        void marcarTodasAjena() throws Exception {
+            mvc.perform(post(BANDEJA + "/read").header(HttpHeaders.AUTHORIZATION, comoOtroJugador()))
+                    .andExpect(status().isForbidden());
+            mvc.perform(post(BANDEJA + "/read").header(HttpHeaders.AUTHORIZATION, comoServicio("ms-subastas")))
                     .andExpect(status().isForbidden());
             verifyNoInteractions(servicio);
         }
@@ -187,6 +208,34 @@ class NotificacionesControllerTest {
 
         mvc.perform(post(BANDEJA + "/fantasma/read").header(HttpHeaders.AUTHORIZATION, comoElDueno()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("marcar todas responde 200 con cuantos se marcaron y la cuenta que queda, la forma de LecturaResponse")
+    void marcarTodasResponde200() throws Exception {
+        when(servicio.marcarTodasLeidas(JUGADOR)).thenReturn(new ServicioDeNotificaciones.Lectura(3, 0));
+
+        mvc.perform(post(BANDEJA + "/read").header(HttpHeaders.AUTHORIZATION, comoElDueno()))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(jsonPath("$.usuarioId").value(JUGADOR))
+                .andExpect(jsonPath("$.marcadas").value(3))
+                .andExpect(jsonPath("$.noLeidas").value(0));
+        // La ruta de la bandeja no se confunde con la de un aviso que se llamara «read».
+        verify(servicio, never()).marcarLeida(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("si marcar todas falla, el error sale como problem details por el manejador de siempre")
+    void marcarTodasFallaComoProblemDetails() throws Exception {
+        when(servicio.marcarTodasLeidas(anyString()))
+                .thenThrow(new IllegalArgumentException("el identificador del usuario es obligatorio"));
+
+        mvc.perform(post(BANDEJA + "/read").header(HttpHeaders.AUTHORIZATION, comoElDueno()))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.detail").value("el identificador del usuario es obligatorio"));
     }
 
     @Test

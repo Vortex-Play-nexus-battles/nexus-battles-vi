@@ -43,6 +43,13 @@ import java.util.Set;
  *       su raiz sin esa vocal: «malparid» atrapa malparido, malparida,
  *       malparidos y malparidas. Las de menos letras no se recortan: la raiz
  *       seria tan corta que apareceria entre palabras corrientes.</li>
+ *   <li>Y el numero (RFINAL-02, informes del 4-oct: «gilipolla» pasaba con
+ *       «gilipollas» en la lista). Un termino dado de alta en plural —acaba en
+ *       «as» u «os» y su singular tiene seis letras o mas— casa tambien con su
+ *       singular y con la raiz de ese singular: «gilipollas» atrapa
+ *       gilipolla y gilipollo. Es lo que D-38 ya decia («raiz de genero y
+ *       numero en SUBCADENA») y solo se cumplia para los terminos dados de alta
+ *       en singular.</li>
  * </ul>
  */
 public final class DetectorDeTerminos {
@@ -77,8 +84,15 @@ public final class DetectorDeTerminos {
             if (texto.compacta().contains(forma)) {
                 return true;
             }
-            String raiz = seDeclina ? raizSinGenero(forma) : null;
-            return raiz != null && texto.compacta().contains(raiz);
+            if (!seDeclina) {
+                return false;
+            }
+            for (String raiz : raices(forma)) {
+                if (texto.compacta().contains(raiz)) {
+                    return true;
+                }
+            }
+            return false;
         }
         Set<String> formas = seDeclina ? conPlural(forma) : Set.of(forma);
         if (formas.contains(texto.compacta())) {
@@ -105,6 +119,40 @@ public final class DetectorDeTerminos {
         char ultima = forma.charAt(forma.length() - 1);
         String plural = "aeiou".indexOf(ultima) >= 0 ? forma + "s" : forma + "es";
         return Set.of(forma, plural);
+    }
+
+    /**
+     * Las formas recortadas con las que tambien casa una SUBCADENA ofensiva:
+     * el singular si el termino esta en plural, y la raiz sin genero del
+     * singular (o del termino). Vacia si el termino es corto o no se declina.
+     */
+    static List<String> raices(String forma) {
+        List<String> raices = new ArrayList<>(2);
+        String singular = singularDe(forma);
+        if (singular != null) {
+            raices.add(singular);
+        }
+        String raiz = raizSinGenero(singular != null ? singular : forma);
+        if (raiz != null) {
+            raices.add(raiz);
+        }
+        return raices;
+    }
+
+    /**
+     * El singular de un plural en «as» u «os» («gilipollas» → «gilipolla»,
+     * «pendejos» → «pendejo»), o {@code null} si no acaba asi o si el singular
+     * tendria menos de {@value #LARGO_MINIMO_PARA_RAIZ} letras. Los plurales en
+     * «es» («maricones») no se recortan: quitar la «s» no da su singular y
+     * quitar «es» rompe palabras como «deportes».
+     */
+    static String singularDe(String forma) {
+        int largo = forma.length();
+        if (largo < LARGO_MINIMO_PARA_RAIZ + 1 || forma.charAt(largo - 1) != 's') {
+            return null;
+        }
+        char antes = forma.charAt(largo - 2);
+        return antes == 'a' || antes == 'o' ? forma.substring(0, largo - 1) : null;
     }
 
     /**

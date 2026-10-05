@@ -26,7 +26,16 @@ info:
     responde 400; el 409 queda solo para un `id` ya recibido, que es lo que
     el emisor entiende por «ya estaba». Compatible: ningun emisor valido deja
     de serlo.
-  version: 1.2.0
+
+    1.3.0 (HU-NOT-001 CA-02, #532) — se anade
+    `POST /users/{usuarioId}/notifications/read`: marca como leidos, de una
+    sola vez, todos los avisos que esten sin leer al procesar la peticion. O
+    quedan leidos todos esos o no cambia ninguno: la bandeja nunca queda a
+    medias. Responde cuantos avisos se marcaron y cuantos quedan sin leer.
+    Igual que marcar uno, es idempotente y reenvia el contador a todas las
+    sesiones del jugador. Compatible: solo anade una operacion y su esquema
+    de respuesta.
+  version: 1.3.0
 servers:
   - url: http://localhost:8085/api/v1
     description: Entorno local de desarrollo
@@ -85,6 +94,38 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
+
+  /users/{usuarioId}/notifications/read:
+    post:
+      summary: Marcar todos los avisos como leidos
+      operationId: marcarTodasLeidas
+      description: >
+        Marca como leidos, de una sola vez, todos los avisos que esten sin leer
+        al procesar la peticion, para todo el jugador, no solo para la sesion
+        que lo pide. O quedan leidos todos esos o no cambia ninguno: la bandeja
+        nunca queda a medias. Un aviso que llegue al mismo tiempo puede quedar
+        sin leer, y entonces se cuenta en `noLeidas`.
+
+        Despues, el contador de no leidos se reenvia a todas las sesiones del
+        jugador por el canal en tiempo real (mensaje `contadorActualizado` de
+        contracts/websocket/notificaciones.yaml), igual que al marcar uno.
+
+        Es idempotente: repetirlo no cambia nada ni falla; con todo ya leido, o
+        con la bandeja vacia, responde con `marcadas` en 0. Existe desde la
+        1.3.0 (HU-NOT-001 CA-02).
+      parameters:
+        - name: usuarioId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Avisos marcados, se devuelve cuantos y la cuenta actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LecturaResponse'
 
   /users/{usuarioId}/sessions/{sesionId}/pending:
     post:
@@ -245,6 +286,26 @@ components:
         noLeidas:
           type: integer
           minimum: 0
+
+    LecturaResponse:
+      type: object
+      required: [usuarioId, marcadas, noLeidas]
+      properties:
+        usuarioId:
+          type: string
+        marcadas:
+          type: integer
+          minimum: 0
+          description: >
+            Avisos que pasan de no leidos a leidos con esta llamada. Vale 0 si
+            ya estaba todo leido, si la bandeja estaba vacia o si otra llamada
+            simultanea ya los habia marcado.
+        noLeidas:
+          type: integer
+          minimum: 0
+          description: >
+            Cuenta de no leidos al terminar. Es 0, salvo que haya llegado un
+            aviso nuevo al mismo tiempo y no haya alcanzado a marcarse.
 
     EntregaResponse:
       type: object

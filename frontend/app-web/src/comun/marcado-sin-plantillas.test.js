@@ -28,7 +28,7 @@
  * migraron aquí. La prueba falla si aparece uno nuevo o si uno de la lista se
  * arregla y nadie borra su línea: en los dos sentidos obliga a mirar.
  *
- * Los ocho que quedan son de los otros dos equipos —incluido
+ * Los que quedan son de los otros dos equipos —incluido
  * `publicar-subasta.js`, que está en la lista de módulos protegidos de la
  * auditoría HU-SUB-001— y migrarlos desde fuera de su historia sería
  * exactamente lo que el Charter prohíbe.
@@ -57,6 +57,10 @@ const PENDIENTES = Object.freeze({
   'cuentas/pujas.js': 'grupo-4',
   // R17 — `registro.js` sale de la lista: el alta del jugador reescribió su
   // envío y, de paso, la vista previa del avatar pasó a nodos.
+  // HU-CAR-010 — `tienda.js` sale de la lista: la vitrina, el carrito y el
+  // nuevo dialogo de pago se construyen con `h()`/`nodo()`, `abrirDialogo()` y
+  // `campo()` del kit. En esta vista importaba el doble: comparte pagina con
+  // el formulario de la tarjeta.
   // UXC-4 — `tienda.js` sale de la lista: la tarjeta de producto y las líneas
   // del carrito se construyen con nodos (`tienda-producto.js`, `h()`).
 });

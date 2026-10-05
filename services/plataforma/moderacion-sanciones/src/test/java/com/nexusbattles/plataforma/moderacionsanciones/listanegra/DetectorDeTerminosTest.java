@@ -165,6 +165,50 @@ class DetectorDeTerminosTest {
         }
     }
 
+    @Nested
+    @DisplayName("el singular de un insulto dado de alta en plural (informes del 4-oct, RFINAL-02)")
+    class SingularDeLosPlurales {
+
+        private final List<TerminoActivo> lista = List.of(
+                termino("gilipollas", CategoriaDeTermino.OFENSIVO),
+                termino("pendejos", CategoriaDeTermino.OFENSIVO),
+                termino("maricones", CategoriaDeTermino.OFENSIVO),
+                termino("pringles", CategoriaDeTermino.MARCA),
+                termino("simpsons", CategoriaDeTermino.MARCA));
+
+        private List<String> en(String texto) {
+            return DetectorDeTerminos.coincidencias(NormalizadorDeTexto.normalizar(texto), lista).stream()
+                    .map(TerminoActivo::termino).toList();
+        }
+
+        @ParameterizedTest(name = "rechaza «{0}»")
+        @ValueSource(strings = {"gilipolla", "eres un gilipolla", "GILIPOLLA", "g i l i p o l l a", "gil1polla",
+                "gilipollo", "gilipollas", "pendejo", "PENDEJA", "unos pendejos"})
+        void pasabanEnElChatYYaNo(String texto) {
+            assertThat(en(texto)).isNotEmpty();
+        }
+
+        @ParameterizedTest(name = "acepta «{0}»")
+        @ValueSource(strings = {"gilipo", "una polla de agua", "pendiente", "deportes", "maricon",
+                "una lata de pringle", "simpson"})
+        void loCorrienteYLasMarcasSiguenEntrando(String texto) {
+            assertThat(en(texto)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("solo se recorta el plural en «as»/«os» de seis letras o mas")
+        void comoSeRecorta() {
+            assertThat(DetectorDeTerminos.singularDe("gilipollas")).isEqualTo("gilipolla");
+            assertThat(DetectorDeTerminos.singularDe("pendejos")).isEqualTo("pendejo");
+            assertThat(DetectorDeTerminos.singularDe("maricones")).as("plural en «es»").isNull();
+            assertThat(DetectorDeTerminos.singularDe("putas")).as("singular de menos de seis letras").isNull();
+            assertThat(DetectorDeTerminos.singularDe("mierda")).as("no acaba en s").isNull();
+            assertThat(DetectorDeTerminos.raices("gilipollas")).containsExactly("gilipolla", "gilipoll");
+            assertThat(DetectorDeTerminos.raices("pendejo")).containsExactly("pendej");
+            assertThat(DetectorDeTerminos.raices("cabron")).isEmpty();
+        }
+    }
+
     @Test
     @DisplayName("varias coincidencias salen todas, en el orden de la lista y sin repetir")
     void varias() {

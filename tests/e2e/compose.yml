@@ -347,8 +347,10 @@ services:
   # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
   # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
   # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
-  # mision dura dos segundos. Sin correo en este banco: va apagado. Los avisos
-  # (RF-NOT-004) si: van a la bandeja real de notificaciones.
+  # mision dura dos segundos. Los avisos (RF-NOT-004) van a la bandeja real de
+  # notificaciones y, desde RFINAL-01, el correo de fin de mision (RF-COR-005)
+  # va al servicio de correo real del banco, que lo entrega en Mailpit: las
+  # cuentas son @nexus.test (misiones.e2e.spec.js, 4c).
   srv-misiones:
     build:
       context: ../..
@@ -368,7 +370,9 @@ services:
       CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
       IDENTIDAD_URL: http://srv-ms-identidad:8089
       NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
-      MISIONES_CORREO_ACTIVO: "false"
+      # Con su /api/v1: el cliente solo anade /correos/mision.
+      CORREO_URL: http://srv-correo:8082/api/v1
+      MISIONES_CORREO_ACTIVO: "true"
       MISIONES_AVISOS_ACTIVO: "true"
       MISIONES_SEMILLA_PROVISIONAL: "true"
       MISIONES_SEMILLA_DE_PRUEBAS: "7"
@@ -384,6 +388,7 @@ services:
       srv-motor-combate: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
       srv-notificaciones: { condition: service_healthy }
+      srv-correo: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
       interval: 5s
@@ -477,6 +482,14 @@ services:
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
+      # RFINAL-01 (RF-COR-005 / RF-NOT-003): los avisos de 7.7.8 que van por
+      # correo salen al servicio de correo real del banco (Mailpit), con el
+      # contacto que da ms-identidad por su ruta interna. Las dos bases SIN
+      # /api/v1: el cliente ya lo anade. Drenaje cada segundo para que la
+      # prueba no espere los 10 s del valor por omision.
+      CORREO_URL: http://srv-correo:8082
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      CORREO_DRENAJE_MS: "1000"
       CORS_ORIGENES: http://localhost:8099
       SPRING_JPA_SHOW_SQL: "false"
     depends_on:
@@ -490,6 +503,8 @@ services:
       srv-inventario: { condition: service_healthy }
       # B8 — las reglas (incremento minimo, limites) se leen de aqui.
       srv-admin-parametros: { condition: service_healthy }
+      # RFINAL-01 — los avisos por correo de 7.7.8.
+      srv-correo: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s

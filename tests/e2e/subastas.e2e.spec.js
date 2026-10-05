@@ -44,6 +44,7 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
+import { correosPara } from './ayudantes/correo.js';
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
@@ -336,6 +337,23 @@ test.describe('Transferencia de propiedad al ganar una subasta (HU-SUB-004)', ()
     expect(ahoraEsSuyo, 'la ganadora tiene que tener el objeto').toBeTruthy();
     expect(ahoraEsSuyo.disponible).toBe(true);
     expect(ahoraEsSuyo.subastaId).toBeFalsy();
+  });
+
+  test('RF-COR-005 / RF-NOT-003: la venta le llega por correo a la vendedora', async () => {
+    // RFINAL-01: la compra inmediata encola COMPRA_INMEDIATA_EJECUTADA para la
+    // vendedora con correo (TipoNotificacion), y el drenaje la manda al
+    // servicio de correo real del banco con el contacto de ms-identidad. Su
+    // cuenta es @nexus.test: la cola la entrega en Mailpit. Con CORREO_URL
+    // vacía (el valor de antes en DEV) el aviso se quedaba solo en la bandeja.
+    await expect
+      .poll(
+        async () =>
+          (await correosPara(vendedora.email, { base: BORDE })).filter((m) =>
+            String(m.Subject ?? '').startsWith('Compraron tu subasta de forma inmediata'),
+          ).length,
+        { timeout: 60_000, message: 'el correo de la venta no llegó al buzón de la vendedora' },
+      )
+      .toBeGreaterThan(0);
   });
 
   test('la propiedad sobrevive a cerrar sesion y volver a entrar', async () => {
