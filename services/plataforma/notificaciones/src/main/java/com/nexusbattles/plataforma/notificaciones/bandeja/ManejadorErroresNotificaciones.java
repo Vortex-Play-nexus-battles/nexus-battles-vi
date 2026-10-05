@@ -51,8 +51,12 @@ public class ManejadorErroresNotificaciones {
     /** SQLSTATE de PostgreSQL para una restriccion unica violada. */
     static final String CLAVE_REPETIDA = "23505";
 
-    /** Si en la cadena de causas hay una clave unica repetida. */
-    static boolean esClaveRepetida(Throwable error) {
+    /**
+     * Si en la cadena de causas hay una clave unica repetida. Publico desde
+     * HU-NOT-001: el importador de avisos del catalogo distingue con esto la
+     * carrera de dos sesiones (un repetido, se ignora) de otro fallo.
+     */
+    public static boolean esClaveRepetida(Throwable error) {
         for (Throwable causa = error; causa != null; causa = causa.getCause() == causa ? null : causa.getCause()) {
             if (causa instanceof DuplicateKeyException) {
                 return true;

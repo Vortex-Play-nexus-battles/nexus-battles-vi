@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.6.0
+  version: 1.7.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -63,7 +63,21 @@ info:
     devuelve los cambios del catálogo posteriores al último cambio entregado
     al jugador y registra el nuevo punto de lectura. Cambio aditivo: versión
     menor.
-    1.6.0 (HU-PRD-013): incorpora la creacion, programacion, edicion y
+
+    1.6.0 (HU-NOT-001, #532): se añade
+    GET /api/v1/productos/alertas/cambios (consultarCambiosDelCatalogo), la
+    lectura de los cambios del catálogo para otro servicio. Solo con token de
+    servicio (rol SERVICIO): un usuario, aunque sea ADMINISTRADOR, recibe 403.
+    Es de SOLO LECTURA: no mueve el cursor de inicio-sesion ni ningún otro;
+    el punto de lectura lo guarda quien consulta, con el `hasta` de cada lote.
+    Sin `desde` devuelve la línea base (ninguna alerta, `hasta` = ahora); con
+    `desde`, los cambios implementados en (desde, ahora], del más antiguo al
+    más reciente, hasta `limite` (1..200, 50 por omisión) sin partir nunca un
+    grupo de cambios con la misma marca de tiempo. La consume notificaciones
+    para llevar los avisos del catálogo a la bandeja del jugador. Cambio
+    aditivo: versión menor.
+
+    1.7.0 (HU-PRD-013): incorpora la creacion, programacion, edicion y
     retiro logico de banners, ademas de la consulta publica de los que se
     encuentran vigentes. Cambio aditivo: version menor. El esquema `Banner`
     se declara completo y no como `allOf` sobre `SolicitudBanner`: esta
@@ -215,6 +229,84 @@ paths:
                   $ref: "#/components/schemas/AlertaCambioCatalogo"
         "401":
           description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/alertas/cambios:
+    get:
+      summary: Lee los cambios del catálogo para otro servicio (1.6.0)
+      operationId: consultarCambiosDelCatalogo
+      description: >
+        Lectura de los cambios registrados en el catálogo, para un servicio
+        que los entrega por su cuenta (notificaciones los lleva a la bandeja
+        del jugador, HU-NOT-001). Solo servicios: token de servicio (rol
+        SERVICIO, ADR-005); un token de usuario, aunque sea de un
+        ADMINISTRADOR, responde 403.
+
+        Es de SOLO LECTURA: no toca el cursor por jugador de
+        GET /api/v1/productos/alertas/inicio-sesion ni guarda nada. El punto
+        de lectura lo lleva quien consulta: guarda el `hasta` de la respuesta
+        y lo envía como `desde` en la siguiente consulta.
+
+        Sin `desde` es la línea base: ninguna alerta, `hasta` = la hora del
+        servicio al responder y `completo` = true. No vuelca el historial
+        (la misma regla que el primer ingreso de inicio-sesion).
+
+        Con `desde`: los cambios con `implementadaEn` en (desde, ahora], del
+        más antiguo al más reciente. `hasta` es el `implementadaEn` del último
+        cambio entregado, o el propio `desde` si no hubo ninguno: así un
+        cambio que se registra a la vez que la consulta no se pierde, llega
+        en la siguiente.
+
+        Si hay más de `limite` cambios, el lote se corta en `limite` pero
+        nunca parte un grupo de cambios con la misma marca de tiempo: incluye
+        todos los de la última (por eso puede traer más de `limite`).
+        `completo` es false cuando quedaron cambios posteriores a `hasta` sin
+        entregar; se piden con desde=hasta.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: >
+            Punto de lectura exclusivo: el `hasta` de la respuesta anterior.
+            Sin él, la respuesta es la línea base.
+          schema:
+            type: string
+            format: date-time
+        - name: limite
+          in: query
+          required: false
+          description: Cuántos cambios como máximo por lote (sin partir un grupo con la misma marca de tiempo).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        "200":
+          description: Lote de cambios del catálogo, o la línea base si no se envió `desde`
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoteDeAlertasCatalogo"
+        "400":
+          description: "`desde` no es una fecha y hora válida o `limite` no está entre 1 y 200"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El token no es de un servicio (un usuario, aunque sea administrador)
           content:
             application/problem+json:
               schema:
@@ -679,9 +771,9 @@ components:
       description: >
         Token de ms-identidad (RS256, JWKS en /api/v1/auth/jwks; ADR-002 y
         ADR-005). Crear, modificar, suspender y reactivar requieren el rol
-        ADMINISTRADOR o SUPER_ADMINISTRADOR; reservar tiraje, un token de
-        servicio (rol SERVICIO). En las lecturas es opcional y decide la
-        proyeccion.
+        ADMINISTRADOR o SUPER_ADMINISTRADOR; reservar tiraje y leer los
+        cambios del catálogo (1.6.0), un token de servicio (rol SERVICIO). En
+        las lecturas del catálogo es opcional y decide la proyeccion.
   schemas:
     SolicitudBanner:
       type: object
@@ -1313,6 +1405,34 @@ components:
         implementadaEn:
           type: string
           format: date-time
+
+    LoteDeAlertasCatalogo:
+      type: object
+      additionalProperties: false
+      description: Respuesta de GET /api/v1/productos/alertas/cambios (1.6.0).
+      required:
+        - hasta
+        - completo
+        - alertas
+      properties:
+        hasta:
+          type: string
+          format: date-time
+          description: >
+            Hasta dónde llega este lote. Quien consulta lo guarda y lo envía
+            como `desde` la vez siguiente. En la línea base es la hora del
+            servicio; con `desde`, el `implementadaEn` del último cambio
+            entregado o el propio `desde` si no hubo ninguno.
+        completo:
+          type: boolean
+          description: >
+            false si quedaron cambios posteriores a `hasta` sin entregar
+            porque el lote se cortó en `limite`.
+        alertas:
+          type: array
+          description: Del cambio más antiguo al más reciente.
+          items:
+            $ref: "#/components/schemas/AlertaCambioCatalogo"
 
     DetalleDeProblema:
       type: object

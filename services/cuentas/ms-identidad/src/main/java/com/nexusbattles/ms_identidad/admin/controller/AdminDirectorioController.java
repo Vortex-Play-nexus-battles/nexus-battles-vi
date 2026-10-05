@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
+import com.nexusbattles.ms_identidad.admin.directorio.BusquedaDelDirectorio;
+import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
+import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.dto.AdminUsuarioDirectorioResponse;
 import com.nexusbattles.ms_identidad.admin.dto.PaginaAdminResponse;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
@@ -45,20 +48,31 @@ public class AdminDirectorioController {
     private static final int TAMANO_MAXIMO = 100;
 
     private final UsuarioRepository usuarioRepository;
+    private final DirectorioDeCuentas directorio;
+    private final CuentasDePrueba cuentasDePrueba;
 
-    public AdminDirectorioController(UsuarioRepository usuarioRepository) {
+    public AdminDirectorioController(UsuarioRepository usuarioRepository,
+                                     DirectorioDeCuentas directorio,
+                                     CuentasDePrueba cuentasDePrueba) {
         this.usuarioRepository = usuarioRepository;
+        this.directorio = directorio;
+        this.cuentasDePrueba = cuentasDePrueba;
     }
 
     /**
-     * @param buscar texto libre; compara con apodo y correo. Vacio = todos.
-     * @param page   pagina, desde 0
-     * @param size   filas por pagina, tope {@value #TAMANO_MAXIMO}
+     * @param buscar         texto libre; compara con apodo y correo. Vacio = todos.
+     * @param ocultarPruebas RFINAL-06: excluye, en la consulta y antes de
+     *                       paginar, las cuentas de las pruebas automaticas
+     *                       ({@link CuentasDePrueba}). Sin el, la consulta de
+     *                       siempre.
+     * @param page           pagina, desde 0
+     * @param size           filas por pagina, tope {@value #TAMANO_MAXIMO}
      */
     @GetMapping
     @RequirePermission(Action.GESTIONAR_CUENTAS)
     public PaginaAdminResponse<AdminUsuarioDirectorioResponse> listar(
             @RequestParam(name = "buscar", required = false) String buscar,
+            @RequestParam(name = "ocultarPruebas", defaultValue = "false") boolean ocultarPruebas,
             @RequestParam(name = "page", defaultValue = "0") int page,
             @RequestParam(name = "size", defaultValue = "20") int size) {
 
@@ -68,9 +82,12 @@ public class AdminDirectorioController {
         String filtro = (buscar == null || buscar.isBlank()) ? "" : buscar.trim();
         int pagina = Math.max(page, 0);
         int tamano = Math.min(Math.max(size, 1), TAMANO_MAXIMO);
+        PageRequest pedido = PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id"));
 
-        Page<Usuario> resultado = usuarioRepository.buscarParaDirectorio(
-                filtro, PageRequest.of(pagina, tamano, Sort.by(Sort.Direction.DESC, "id")));
+        Page<Usuario> resultado = ocultarPruebas
+                ? directorio.findAll(
+                        BusquedaDelDirectorio.buscando(filtro).and(cuentasDePrueba.excluidas()), pedido)
+                : usuarioRepository.buscarParaDirectorio(filtro, pedido);
 
         return PaginaAdminResponse.desde(resultado, AdminUsuarioDirectorioResponse::desde);
     }

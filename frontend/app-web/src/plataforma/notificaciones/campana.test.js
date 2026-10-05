@@ -121,6 +121,36 @@ describe('montarCampana', () => {
     expect(document.querySelector('[data-zona="emergentes"] .aviso--error')).toBeNull();
   });
 
+  test('HU-NOT-001: un cambio del catálogo (CAMBIO_CATALOGO) se pinta como cualquier aviso, con su descripción, su fecha y «Marcar como leída»', () => {
+    const { callbacks, bandeja } = preparar();
+    const delCatalogo = aviso('catalogo:alerta-1', {
+      tipo: 'CAMBIO_CATALOGO',
+      titulo: 'Producto modificado',
+      cuerpo:
+        'El producto Espada solar fue modificado. Fecha de implementación: 5 de octubre de 2026, 10:30.',
+      creadaEn: '2026-10-05T15:30:00Z',
+    });
+
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 1, avisos: [delCatalogo] });
+
+    const item = document.querySelector('[data-zona="lista"] li');
+    expect(item.dataset.avisoId).toBe('catalogo:alerta-1');
+    expect(item.querySelector('.tarjeta__titulo').textContent).toBe('Producto modificado');
+    expect(item.querySelector('.t-cuerpo').textContent).toBe(delCatalogo.cuerpo);
+    const fecha = item.querySelector('time');
+    expect(fecha.dateTime).toBe('2026-10-05T15:30:00Z');
+    expect(fecha.textContent).toBe(fechaLegible('2026-10-05T15:30:00Z'));
+    expect(document.querySelector('[data-zona="contador"]').textContent).toBe('1');
+
+    item.querySelector('[data-accion="marcar-leida"]').click();
+    expect(bandeja.marcarLeida).toHaveBeenCalledWith('catalogo:alerta-1');
+
+    callbacks().alAviso(delCatalogo);
+    const emergente = document.querySelector('[data-zona="emergentes"] .aviso--info');
+    expect(emergente.querySelector('.aviso__titulo').textContent).toBe('Producto modificado');
+    expect(emergente.textContent).toContain('Fecha de implementación: 5 de octubre de 2026');
+  });
+
   test('alAviso pinta una emergente no bloqueante con cierre propio y automático', () => {
     const { callbacks, programar } = preparar();
 
