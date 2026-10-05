@@ -11,6 +11,7 @@ import java.util.Optional;
 import nexus.misiones.dominio.CalculadoraDeRecompensas;
 import nexus.misiones.dominio.CatalogoDeMisiones;
 import nexus.misiones.dominio.Ejecucion;
+import nexus.misiones.dominio.EjecucionModificadaConcurrentemente;
 import nexus.misiones.dominio.EstadoEjecucion;
 import nexus.misiones.dominio.GrupoDeEnemigos;
 import nexus.misiones.dominio.HeroeEnMision;
@@ -60,6 +61,24 @@ import org.slf4j.LoggerFactory;
  * ANTES que la ejecucion y reemplazando lo que dejara un intento anterior:
  * nunca queda una ejecucion terminada sin sus turnos ni turnos de dos intentos
  * mezclados.
+ *
+ * <h2>Continuidad en segundo plano (HU-SIM-007)</h2>
+ *
+ * <ul>
+ *   <li><b>Una sola vez.</b> Antes de simular se <i>reserva</i> la ejecucion
+ *       guardandola con la version leida ({@link Ejecucion#reservarParaSimular}):
+ *       de dos barridos o dos instancias que la lean a la vez, solo uno logra
+ *       guardar y es el unico que simula. El aplazamiento de los fallos (30 s,
+ *       1, 2 y 4 min, tope 5) es el del trabajo ({@link TrabajoDeMisiones}).</li>
+ *   <li><b>Si el proceso muere</b> simulando, el arriendo vence a los
+ *       {@link Ejecucion#ARRIENDO_DE_SIMULACION} y otra vuelta la retoma; lo
+ *       unico que pudo quedar escrito son turnos, y el siguiente intento los
+ *       reemplaza. Si el arriendo ya vencio cuando la simulacion termina, no se
+ *       escribe nada: otra instancia pudo haberla tomado y sus turnos son los
+ *       que valen.</li>
+ *   <li><b>Si el jugador cancela</b> mientras se simula, manda la
+ *       cancelacion: se descartan los turnos que se alcanzaron a escribir.</li>
+ * </ul>
  */
 public class SimularEjecucion {
 
@@ -116,12 +135,41 @@ public class SimularEjecucion {
         this.reloj = Objects.requireNonNull(reloj);
     }
 
-    /** @return la ejecucion terminada y guardada, o vacio si todavia no tocaba */
-    public Optional<Ejecucion> simular(Ejecucion ejecucion) {
+    /**
+     * @param candidata la ejecucion tal como la leyo el barrido; la reserva se anota en ella misma
+     * @return la ejecucion terminada y guardada, o vacio si todavia no tocaba, si otra vuelta ya la tomo o si el
+     *         jugador la cancelo mientras se simulaba
+     * @throws RuntimeException si la simulacion falla; quien llama la aplaza ({@link TrabajoDeMisiones})
+     */
+    public Optional<Ejecucion> simular(Ejecucion candidata) {
         Instant ahora = reloj.instant();
-        if (ejecucion.estado() != EstadoEjecucion.EN_PROGRESO || !ejecucion.vencida(ahora)) {
+        if (!candidata.listaParaSimular(ahora)) {
             return Optional.empty();
         }
+        Ejecucion ejecucion = reservar(candidata, ahora);
+        if (ejecucion == null) {
+            return Optional.empty();
+        }
+        try {
+            return simularReservada(ejecucion, ahora);
+        } catch (EjecucionModificadaConcurrentemente cambio) {
+            return cambioMientrasSeSimulaba(ejecucion);
+        }
+    }
+
+    /** @return la ejecucion reservada y guardada, o nulo si otra vuelta se adelanto o ya cambio */
+    private Ejecucion reservar(Ejecucion candidata, Instant ahora) {
+        candidata.reservarParaSimular(ahora);
+        try {
+            return ejecuciones.guardar(candidata);
+        } catch (EjecucionModificadaConcurrentemente otraVuelta) {
+            BITACORA.info("La ejecucion {} ya la tomo otra vuelta o cambio de estado: aqui no se simula",
+                    candidata.id());
+            return null;
+        }
+    }
+
+    private Optional<Ejecucion> simularReservada(Ejecucion ejecucion, Instant ahora) {
         Optional<Mision> mision = catalogo.buscar(ejecucion.misionId());
         if (mision.isEmpty()) {
             // La semilla ya no publica esa mision: no hay contra que simular.
@@ -181,13 +229,50 @@ public class SimularEjecucion {
         RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(mision.get(), ejecucion.escalon(),
                 resultado, primeraVez, parametros.recompensas(), azar);
 
+        if (!ejecucion.reservaVigente(reloj.instant())) {
+            // Tardo mas que el arriendo: otra instancia pudo tomarla y escribir sus turnos, y los de este intento
+            // los pisarian sin que su resultado llegue a guardarse nunca.
+            BITACORA.warn("Ejecucion {}: la simulacion tardo mas que su arriendo ({}); se descarta y la retoma otra"
+                    + " vuelta", ejecucion.id(), Ejecucion.ARRIENDO_DE_SIMULACION);
+            return Optional.empty();
+        }
         eventos.reemplazar(ejecucion.id(), simulacion.eventos());
+        // Terminar borra los intentos fallidos y su error (empieza la liquidacion): se anotan antes para la bitacora.
+        int fallosPrevios = ejecucion.intentosDeLiquidacion();
+        String falloAnterior = ejecucion.ultimoError();
         ejecucion.terminar(resultado, recompensas, parametros.correoActivo(), parametros.avisosActivos(), ahora);
         Ejecucion guardada = ejecuciones.guardar(ejecucion);
         BITACORA.info("Ejecucion {} simulada: {} en {} turnos, {} enemigos derrotados, {} de experiencia",
                 guardada.id(), guardada.estado(), resultado.turnos(), resultado.encuentrosCompletados(),
                 String.format(java.util.Locale.ROOT, "%.2f", recompensas.experiencia()));
+        if (fallosPrevios > 0) {
+            BITACORA.info("Ejecucion {} simulada tras {} intentos fallidos: se recupero del fallo anterior ({})",
+                    guardada.id(), fallosPrevios, falloAnterior);
+        }
         return Optional.of(guardada);
+    }
+
+    /**
+     * Al guardar el final la ejecucion ya no estaba en la version reservada: o el jugador la cancelo mientras se
+     * simulaba (manda la cancelacion y los turnos escritos se descartan) o, vencido el arriendo, otra vuelta la
+     * termino por su lado y sus turnos son los que valen.
+     */
+    private Optional<Ejecucion> cambioMientrasSeSimulaba(Ejecucion ejecucion) {
+        Optional<Ejecucion> actual = ejecuciones.buscar(ejecucion.id());
+        if (actual.isEmpty() || actual.get().estado() == EstadoEjecucion.ABANDONADA) {
+            BITACORA.info("Ejecucion {}: el jugador la cancelo mientras se simulaba; se descartan los turnos",
+                    ejecucion.id());
+            try {
+                eventos.reemplazar(ejecucion.id(), List.of());
+            } catch (RuntimeException sinLimpiar) {
+                BITACORA.warn("Ejecucion {}: no se pudieron descartar los turnos de la simulacion cancelada: {}",
+                        ejecucion.id(), sinLimpiar.getMessage());
+            }
+        } else {
+            BITACORA.info("Ejecucion {} cambio mientras se simulaba ({}): se deja lo que guardo la otra vuelta",
+                    ejecucion.id(), actual.get().estado());
+        }
+        return Optional.empty();
     }
 
     /**

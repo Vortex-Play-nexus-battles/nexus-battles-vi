@@ -221,6 +221,83 @@ class EjecucionTest {
                 .isInstanceOf(TransicionNoPermitida.class);
     }
 
+    // ----------------------------------------------- reserva de la simulacion (HU-SIM-007), sobre el aplazamiento de #851
+
+    private static final Instant VENCE = INICIO.plus(Duration.ofHours(12));
+
+    @Test
+    @DisplayName("la reserva cuenta el intento y es un arriendo de cinco minutos: hasta que vence, nadie mas la ve lista para simular")
+    void reservar() {
+        Ejecucion ejecucion = enCurso();
+        assertThat(ejecucion.intentosDeSimulacion()).isZero();
+        assertThat(ejecucion.listaParaSimular(VENCE.minusSeconds(1))).as("antes del plazo").isFalse();
+        assertThat(ejecucion.listaParaSimular(VENCE)).as("vencida y libre").isTrue();
+
+        ejecucion.reservarParaSimular(VENCE);
+
+        assertThat(Ejecucion.ARRIENDO_DE_SIMULACION).isEqualTo(Duration.ofMinutes(5));
+        assertThat(ejecucion.intentosDeSimulacion()).isEqualTo(1);
+        assertThat(ejecucion.proximoIntento()).isEqualTo(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION));
+        assertThat(ejecucion.reservaVigente(VENCE.plusSeconds(10))).isTrue();
+        assertThat(ejecucion.listaParaSimular(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION).minusSeconds(1)))
+                .as("reservada por otra vuelta").isFalse();
+        assertThat(ejecucion.listaParaSimular(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION)))
+                .as("el arriendo vencio").isTrue();
+        assertThat(ejecucion.reservaVigente(VENCE.plus(Ejecucion.ARRIENDO_DE_SIMULACION))).isFalse();
+    }
+
+    @Test
+    @DisplayName("solo se reserva lo que esta en progreso")
+    void noSeReservaLoTerminado() {
+        Ejecucion ejecucion = enCurso();
+        ejecucion.cancelar(VENCE);
+
+        assertThatThrownBy(() -> ejecucion.reservarParaSimular(VENCE.plusSeconds(1)))
+                .isInstanceOf(TransicionNoPermitida.class);
+        assertThat(ejecucion.listaParaSimular(VENCE.plus(Duration.ofDays(1)))).isFalse();
+    }
+
+    @Test
+    @DisplayName("si la simulacion falla, manda el aplazamiento (30 s, 1, 2 y 4 min, tope 5): la espera reemplaza al arriendo, y la cuenta de reservas sigue")
+    void elAplazamientoReemplazaAlArriendo() {
+        Ejecucion ejecucion = enCurso();
+        Duration base = Duration.ofSeconds(30);
+
+        ejecucion.reservarParaSimular(VENCE);
+        ejecucion.simulacionAplazada(VENCE, base, "heroes no responde");
+        assertThat(ejecucion.proximoIntento()).isEqualTo(VENCE.plusSeconds(30));
+        assertThat(ejecucion.ultimoError()).isEqualTo("heroes no responde");
+
+        ejecucion.reservarParaSimular(VENCE.plusSeconds(30));
+        ejecucion.simulacionAplazada(VENCE.plusSeconds(30), base, "heroes no responde");
+        assertThat(ejecucion.proximoIntento()).isEqualTo(VENCE.plusSeconds(30).plusSeconds(60));
+        assertThat(ejecucion.intentosDeSimulacion()).isEqualTo(2);
+        assertThat(ejecucion.estado()).as("un fallo no cambia el estado de la mision")
+                .isEqualTo(EstadoEjecucion.EN_PROGRESO);
+    }
+
+    @Test
+    @DisplayName("al terminar o cancelar se suelta la reserva y se olvida el error, pero se conserva la cuenta de reservas")
+    void terminarSueltaLaReserva() {
+        Ejecucion terminada = enCurso();
+        terminada.reservarParaSimular(VENCE);
+        terminada.simulacionAplazada(VENCE, Duration.ofSeconds(30), "motor no responde");
+        terminada.reservarParaSimular(VENCE.plusSeconds(30));
+
+        terminada.terminar(exito(), recompensas(0, false), false, VENCE.plusSeconds(31));
+
+        assertThat(terminada.proximoIntento()).as("la liquidacion empieza ya, no al vencer el arriendo")
+                .isEqualTo(VENCE.plusSeconds(31));
+        assertThat(terminada.ultimoError()).isNull();
+        assertThat(terminada.intentosDeSimulacion()).isEqualTo(2);
+
+        Ejecucion cancelada = enCurso();
+        cancelada.reservarParaSimular(VENCE);
+        cancelada.cancelar(VENCE.plusSeconds(5));
+        assertThat(cancelada.proximoIntento()).isEqualTo(VENCE.plusSeconds(5));
+        assertThat(cancelada.reservaVigente(VENCE.plusSeconds(6))).isFalse();
+    }
+
     @Test
     @DisplayName("la progresion que devuelve el inventario al liberar queda en la ejecucion")
     void progresion() {

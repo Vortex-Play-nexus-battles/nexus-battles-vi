@@ -43,13 +43,49 @@ class EjecucionDocumentoTest {
                 guardado.iniciadaEn(), guardado.terminaEn(), guardado.semilla(), guardado.claveIdempotencia(),
                 guardado.estado(), guardado.terminadaEn(), guardado.resultado(), guardado.recompensas(), pasos,
                 motivos, guardado.intentosDeLiquidacion(), guardado.proximoIntento(), guardado.ultimoError(),
-                guardado.nivelAlcanzado(), guardado.experienciaAcumulada(), true, guardado.version());
+                guardado.nivelAlcanzado(), guardado.experienciaAcumulada(), true, guardado.version(),
+                guardado.intentosDeSimulacion());
 
         Ejecucion leida = conOtraVersion.aDominio();
 
         assertThat(leida.pasos()).containsExactly(Map.entry(PasoDeLiquidacion.LIBERACION, EstadoDePaso.PENDIENTE));
         assertThat(leida.motivos()).isEmpty();
         assertThat(leida.pasosPendientes()).containsExactly(PasoDeLiquidacion.LIBERACION);
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: los intentos de simulacion y el arriendo (proximoIntento) sobreviven a guardar y leer")
+    void reservaIdaYVuelta() {
+        Ejecucion ejecucion = Ejecucion.nueva(UUID.randomUUID(), "templo-olvidado", "uid-1", HEROE, List.of(),
+                Escalon.NORMAL, INICIO, Duration.ofHours(1), 99L, null);
+        Instant vence = INICIO.plus(Duration.ofHours(1));
+        ejecucion.reservarParaSimular(vence);
+
+        Ejecucion leida = EjecucionDocumento.de(ejecucion, 3).aDominio();
+
+        assertThat(leida.intentosDeSimulacion()).isEqualTo(1);
+        assertThat(leida.proximoIntento()).isEqualTo(vence.plus(Ejecucion.ARRIENDO_DE_SIMULACION));
+        assertThat(leida.reservaVigente(vence.plusSeconds(1))).isTrue();
+        assertThat(leida.version()).isEqualTo(3L);
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: una ejecucion guardada antes de este cambio, sin el campo, se lee con cero intentos y lista para simular")
+    void documentoViejo() {
+        Ejecucion ejecucion = Ejecucion.nueva(UUID.randomUUID(), "templo-olvidado", "uid-1", HEROE, List.of(),
+                Escalon.NORMAL, INICIO, Duration.ofHours(1), 99L, null);
+        EjecucionDocumento nuevo = EjecucionDocumento.de(ejecucion, 0);
+        EjecucionDocumento viejo = new EjecucionDocumento(nuevo.id(), nuevo.misionId(), nuevo.jugadorUid(),
+                nuevo.heroe(), nuevo.estrategia(), nuevo.escalon(), nuevo.iniciadaEn(), nuevo.terminaEn(),
+                nuevo.semilla(), nuevo.claveIdempotencia(), nuevo.estado(), nuevo.terminadaEn(), nuevo.resultado(),
+                nuevo.recompensas(), nuevo.pasos(), nuevo.motivos(), nuevo.intentosDeLiquidacion(),
+                nuevo.proximoIntento(), nuevo.ultimoError(), nuevo.nivelAlcanzado(), nuevo.experienciaAcumulada(),
+                nuevo.liquidacionPendiente(), nuevo.version(), null);
+
+        Ejecucion leida = viejo.aDominio();
+
+        assertThat(leida.intentosDeSimulacion()).isZero();
+        assertThat(leida.listaParaSimular(INICIO.plus(Duration.ofHours(1)))).isTrue();
     }
 
     @Test

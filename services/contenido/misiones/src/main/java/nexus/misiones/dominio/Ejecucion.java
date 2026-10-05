@@ -39,6 +39,13 @@ public final class Ejecucion {
      */
     public static final Duration ESPERA_MAXIMA_ANTES_DE_SIMULAR = Duration.ofMinutes(5);
 
+    /**
+     * Cuanto tiempo es de una vuelta la simulacion que reservo (HU-SIM-007). Una mision entera son cientos de
+     * llamadas a heroes y al motor (menos de un minuto en la practica); cinco minutos dejan margen y, si el proceso
+     * muere, la ejecucion no espera mas que eso. Es el mismo valor que el tope del aplazamiento.
+     */
+    public static final Duration ARRIENDO_DE_SIMULACION = Duration.ofMinutes(5);
+
     private final UUID id;
     private final String misionId;
     private final String jugadorUid;
@@ -61,6 +68,7 @@ public final class Ejecucion {
     private String ultimoError;
     private Integer nivelAlcanzado;
     private Double experienciaAcumulada;
+    private int intentosDeSimulacion;
     private Long version;
 
     private Ejecucion(Estado e) {
@@ -91,6 +99,7 @@ public final class Ejecucion {
         this.ultimoError = e.ultimoError;
         this.nivelAlcanzado = e.nivelAlcanzado;
         this.experienciaAcumulada = e.experienciaAcumulada;
+        this.intentosDeSimulacion = e.intentosDeSimulacion == null ? 0 : e.intentosDeSimulacion;
         this.version = e.version;
     }
 
@@ -214,6 +223,25 @@ public final class Ejecucion {
             }
         }
         empezarLiquidacion(ahora);
+    }
+
+    /**
+     * Quien va a simular una ejecucion vencida la RESERVA primero y guarda la reserva con la version que leyo: si
+     * otro barrido u otra instancia se adelanto, esa escritura falla y este no simula (HU-SIM-007). La reserva es un
+     * arriendo de {@link #ARRIENDO_DE_SIMULACION} que usa el mismo campo que el aplazamiento de un fallo
+     * ({@link #proximoIntento()}), asi que {@link #listaParaSimular} y la consulta de las vencidas ya la excluyen
+     * sin mas: si el proceso muere simulando, el arriendo vence y otra vuelta la retoma. Cada reserva suma un
+     * intento, que es lo que permite saber, despues, si la reserva que se tiene en la mano sigue siendo la vigente.
+     */
+    public void reservarParaSimular(Instant ahora) {
+        exigirEnProgreso("simular");
+        intentosDeSimulacion++;
+        proximoIntento = ahora.plus(ARRIENDO_DE_SIMULACION);
+    }
+
+    /** El arriendo o la espera de un fallo todavia no vencio: alguna vuelta la tiene o la esta esperando. */
+    public boolean reservaVigente(Instant ahora) {
+        return estado == EstadoEjecucion.EN_PROGRESO && proximoIntento != null && ahora.isBefore(proximoIntento);
     }
 
     /**
@@ -389,6 +417,11 @@ public final class Ejecucion {
         return experienciaAcumulada;
     }
 
+    /** Cuantas veces se reservo para simular, con exito o sin el: el primer intento es el 1. */
+    public int intentosDeSimulacion() {
+        return intentosDeSimulacion;
+    }
+
     public Long version() {
         return version;
     }
@@ -416,6 +449,8 @@ public final class Ejecucion {
         public String ultimoError;
         public Integer nivelAlcanzado;
         public Double experienciaAcumulada;
+        /** Nulo en lo guardado antes de HU-SIM-007: se lee como cero. */
+        public Integer intentosDeSimulacion;
         public Long version;
     }
 }

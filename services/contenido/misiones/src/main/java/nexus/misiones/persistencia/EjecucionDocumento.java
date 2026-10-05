@@ -28,7 +28,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
  *   <li>{@code jugador_inicio}: tablon, historial y matricula leen «las del
  *       jugador», de la mas reciente a la mas antigua;</li>
  *   <li>{@code vencidas} y {@code liquidacion}: la «cola» del trabajo en
- *       segundo plano (7.8.12);</li>
+ *       segundo plano (7.8.12). {@code proximoIntento} hace de arriendo de la simulacion
+ *       y de espera tras un fallo; {@code intentosDeSimulacion} es opcional: lo guardado antes de HU-SIM-007 no lo
+ *       trae;</li>
  *   <li>{@code clave_unica}: la idempotencia de la matricula;</li>
  *   <li>{@code una_en_curso_por_mision}: unico PARCIAL, solo sobre las que
  *       estan en progreso. Es la garantia en base de datos de que dos
@@ -75,7 +77,8 @@ record EjecucionDocumento(
         Integer nivelAlcanzado,
         Double experienciaAcumulada,
         boolean liquidacionPendiente,
-        long version) {
+        long version,
+        Integer intentosDeSimulacion) {
 
     /** El documento que se escribe, ya con la version siguiente. */
     static EjecucionDocumento de(Ejecucion e, long version) {
@@ -87,7 +90,7 @@ record EjecucionDocumento(
                 e.escalon(), e.iniciadaEn(), e.terminaEn(), e.semilla(), e.claveIdempotencia(), e.estado(),
                 e.terminadaEn(), e.resultado(), e.recompensas(), pasos, motivos, e.intentosDeLiquidacion(),
                 e.proximoIntento(), e.ultimoError(), e.nivelAlcanzado(), e.experienciaAcumulada(),
-                e.liquidacionPendiente(), version);
+                e.liquidacionPendiente(), version, e.intentosDeSimulacion());
     }
 
     Ejecucion aDominio() {
@@ -122,6 +125,7 @@ record EjecucionDocumento(
         s.ultimoError = ultimoError;
         s.nivelAlcanzado = nivelAlcanzado;
         s.experienciaAcumulada = experienciaAcumulada;
+        s.intentosDeSimulacion = intentosDeSimulacion;
         s.version = version;
         return Ejecucion.reconstruir(s);
     }

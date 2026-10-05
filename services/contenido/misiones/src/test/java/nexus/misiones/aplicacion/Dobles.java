@@ -53,11 +53,19 @@ public final class Dobles {
 
         private final Map<UUID, Ejecucion.Estado> guardadas = new LinkedHashMap<>();
         public RuntimeException fallarAlGuardar;
+        /** Un fallo de una sola vez, solo para las ejecuciones que cumplan la condicion (un corte de luz a mitad). */
+        public java.util.function.Predicate<Ejecucion> fallarUnaVezSi;
+        /** Mongo no contesta la consulta de las vencidas (la de las pendientes de entrega, si). */
+        public RuntimeException fallarAlConsultarVencidas;
 
         @Override
-        public Ejecucion guardar(Ejecucion ejecucion) {
+        public synchronized Ejecucion guardar(Ejecucion ejecucion) {
             if (fallarAlGuardar != null) {
                 throw fallarAlGuardar;
+            }
+            if (fallarUnaVezSi != null && fallarUnaVezSi.test(ejecucion)) {
+                fallarUnaVezSi = null;
+                throw new IllegalStateException("se cayo Mongo al guardar");
             }
             Ejecucion.Estado anterior = guardadas.get(ejecucion.id());
             long versionActual = anterior == null ? -1 : anterior.version;
@@ -80,7 +88,7 @@ public final class Dobles {
         }
 
         @Override
-        public Optional<Ejecucion> buscar(UUID id) {
+        public synchronized Optional<Ejecucion> buscar(UUID id) {
             return Optional.ofNullable(guardadas.get(id)).map(e -> Ejecucion.reconstruir(copiar(e)));
         }
 
@@ -117,6 +125,9 @@ public final class Dobles {
         /** Como Mongo: las listas para simular, la de plazo mas antiguo primero. */
         @Override
         public List<Ejecucion> vencidas(Instant ahora, int limite) {
+            if (fallarAlConsultarVencidas != null) {
+                throw fallarAlConsultarVencidas;
+            }
             return todas().stream().filter(e -> e.listaParaSimular(ahora))
                     .sorted(Comparator.comparing(Ejecucion::terminaEn))
                     .limit(limite).toList();
@@ -157,6 +168,7 @@ public final class Dobles {
             s.ultimoError = e.ultimoError();
             s.nivelAlcanzado = e.nivelAlcanzado();
             s.experienciaAcumulada = e.experienciaAcumulada();
+            s.intentosDeSimulacion = e.intentosDeSimulacion();
             s.version = e.version();
             return s;
         }
@@ -242,6 +254,8 @@ public final class Dobles {
         public RuntimeException fallarAlLiberar;
         public RuntimeException fallarAlBloquear;
         public RuntimeException fallarAlEntregar;
+        /** Falla solo las entregas cuya clave cumpla la condicion (el botin sin la epica, o al reves). */
+        public java.util.function.Predicate<String> fallarEntregaSi;
 
         public Inventario conHeroe(String id, String duenoUid, String productoId, boolean equipado) {
             return conHeroeEnNivel(id, duenoUid, productoId, equipado, 1);
@@ -324,6 +338,9 @@ public final class Dobles {
             llamadas.add("entregar " + clave);
             if (fallarAlEntregar != null) {
                 throw fallarAlEntregar;
+            }
+            if (fallarEntregaSi != null && fallarEntregaSi.test(clave)) {
+                throw caido("inventario");
             }
             if (!clavesDeEntrega.contains(clave)) {
                 clavesDeEntrega.add(clave);
@@ -596,10 +613,13 @@ public final class Dobles {
 
     public static final class Libro implements LibroDeCreditos {
         public final Map<String, Integer> acreditado = new LinkedHashMap<>();
+        /** Cada vez que se le pidio acreditar, con o sin exito: la referencia que se uso. */
+        public final List<String> intentos = new ArrayList<>();
         public RuntimeException fallar;
 
         @Override
         public void acreditar(String jugadorUid, int monto, String refId, String concepto) {
+            intentos.add(refId);
             if (fallar != null) {
                 throw fallar;
             }
@@ -618,12 +638,20 @@ public final class Dobles {
 
     public static final class Correo implements CorreoDeMisiones {
         public final Map<String, String> enviados = new LinkedHashMap<>();
+        /** Cada vez que se le pidio enviar, con o sin exito: la clave de idempotencia que se uso. */
+        public final List<String> intentos = new ArrayList<>();
         public final AtomicReference<RuntimeException> fallar = new AtomicReference<>();
+        /** Falla solo los correos cuya clave cumpla la condicion (el de la epica sin el de fin, o al reves). */
+        public java.util.function.Predicate<String> fallarClaveSi;
 
         @Override
         public void enviar(DirectorioDeJugadores.Contacto contacto, String asunto, String mensaje, String clave) {
+            intentos.add(clave);
             if (fallar.get() != null) {
                 throw fallar.get();
+            }
+            if (fallarClaveSi != null && fallarClaveSi.test(clave)) {
+                throw caido("correo");
             }
             enviados.putIfAbsent(clave, asunto + " | " + mensaje);
         }
@@ -642,10 +670,15 @@ public final class Dobles {
         public final AtomicReference<RuntimeException> fallar = new AtomicReference<>();
         /** Si no es nulo, falla solo a partir de este numero de avisos ya dados en la vuelta. */
         public Integer fallarDespuesDe;
+        /** Falla solo los avisos cuyo id cumpla la condicion (el de la epica sin el de fin, o al reves). */
+        public java.util.function.Predicate<String> fallarIdSi;
 
         @Override
         public void avisar(String jugadorUid, String id, String titulo, String cuerpo, Instant creadaEn) {
             intentos.add(id);
+            if (fallarIdSi != null && fallarIdSi.test(id)) {
+                throw caido("notificaciones");
+            }
             if (fallar.get() != null && (fallarDespuesDe == null || enBandeja.size() >= fallarDespuesDe)) {
                 throw fallar.get();
             }
