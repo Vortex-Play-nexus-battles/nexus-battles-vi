@@ -52,6 +52,21 @@ notificaciones:
   websocket:
     endpoint: ${NOTIFICACIONES_WS_ENDPOINT:/ws/notificaciones}
     origenes-permitidos: ${NOTIFICACIONES_WS_ORIGENES:http://localhost:5173,http://localhost:3000}
+  # HU-NOT-001 (#532): avisos de cambios del catalogo en la bandeja. Se leen de
+  # productos (GET /api/v1/productos/alertas/cambios, productos.yaml 1.6.0) con
+  # la credencial de servicio de notificaciones (DIRECTORIO_ACTIVO_*); sin ella
+  # la importacion queda apagada y la bandeja funciona como antes. La URL va
+  # SIN /api/v1 (la ruta ya lo lleva). Tiempos cortos y sin reintentos: la
+  # llamada ocurre al entregar lo pendiente a una sesion. Constantes tecnicas,
+  # no reglas de negocio; ver catalogo.ConfiguracionDelCatalogo.
+  catalogo:
+    activo: ${NOTIFICACIONES_CATALOGO_ACTIVO:true}
+    productos-url: ${PRODUCTOS_BASE_URL:http://localhost:8103}
+    timeout-conexion-ms: ${NOTIFICACIONES_CATALOGO_TIMEOUT_CONEXION_MS:1000}
+    timeout-lectura-ms: ${NOTIFICACIONES_CATALOGO_TIMEOUT_LECTURA_MS:2000}
+    limite: ${NOTIFICACIONES_CATALOGO_LIMITE:50}
+    intervalo-minimo-s: ${NOTIFICACIONES_CATALOGO_INTERVALO_MINIMO_S:60}
+    zona: ${NOTIFICACIONES_CATALOGO_ZONA:America/Bogota}
 
 # Regla 3: todo servicio expone salud y metricas.
 management:

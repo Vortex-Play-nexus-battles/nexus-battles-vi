@@ -332,8 +332,20 @@ services:
       # SECRETO_SERVICIO_NOTIFICACIONES en el host y se la da a ms-identidad en
       # AUTH_CLIENTES_SERVICIO; sin estas dos lineas el servicio pide el token
       # con el client_id global, que no esta registrado, y se lo niegan.
+      # El emisor, explicito como en comentarios/torneos/moderacion: hasta
+      # HU-NOT-001 llegaba solo por el env_file del compose base (el .env que
+      # desplegar.sh reescribe con el emisor de ADR-005, y que tambien exporta
+      # al shell, asi que esta interpolacion da el mismo valor).
+      DIRECTORIO_ACTIVO_URL: ${DIRECTORIO_ACTIVO_URL:-http://srv-ms-identidad:8089/api/v1/auth/token}
       DIRECTORIO_ACTIVO_CLIENT_ID: notificaciones
       DIRECTORIO_ACTIVO_CLIENT_SECRET: ${SECRETO_SERVICIO_NOTIFICACIONES:-}
+      # HU-NOT-001 (#532): los cambios del catalogo llegan a la bandeja. Se leen
+      # de productos (GET /api/v1/productos/alertas/cambios, productos.yaml
+      # 1.6.0, solo ROLE_SERVICIO) con la credencial de arriba. Productos vive
+      # en el host de contenido: misma variable y mismo valor por omision que
+      # srv-salas-partidas y srv-comentarios, para que se muevan juntas. Si no
+      # responde, la entrega de pendientes sigue sin esos avisos.
+      PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
 
   srv-moderacion-sanciones:
     <<: *servicio-plataforma
