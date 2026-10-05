@@ -10,7 +10,8 @@
  * contrato tiene su frase, decidida por `motivo` y `estado`, nunca por el
  * texto del servidor (`shared/ui-kit/MAPEO-ERRORES.md`):
  *
- *   - 201: reportado; el comentario pasa a revisión y sale del hilo público.
+ *   - 201: reportado; el comentario entra en la cola de moderación y sigue a
+ *     la vista hasta que un moderador decida (comentarios.yaml 1.8.0, D-36).
  *   - 409 REPORTE_DUPLICADO: ya lo había reportado; se dice, sin error.
  *   - 429 LIMITE_DE_REPORTES: el tope (D-27); se dice sin cifra ni plazo.
  *   - 400 REPORTE_INVALIDO: se puede corregir; el formulario se queda como está.

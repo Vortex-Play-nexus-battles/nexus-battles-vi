@@ -817,13 +817,16 @@ export function montarPublicarComentario(
           descripcion: descripcion.value.trim() || null,
         });
         cerrar();
-        // El comentario pasa a EN_REVISION y deja de verse: quitarlo del
-        // hilo aqui es lo que el servidor ya hizo, no un adelanto.
-        quitarDelHilo(zonaHilo, articulo);
+        // Desde comentarios.yaml 1.8.0 (D-36) un reporte encola sin ocultar:
+        // el comentario sigue publicado para todos y entra en la cola por sus
+        // reportes pendientes. Quitarlo aqui le hacía creer a quien reporta
+        // que había desaparecido para todos (informes del 4-oct).
+        articulo.dataset.reportado = 'si';
         pintarAviso(zonaAviso, {
           tono: 'exito',
           titulo: 'Reporte enviado',
-          detalle: 'Un moderador lo revisará. Mientras tanto no se muestra en el hilo.',
+          detalle:
+            'Un moderador lo revisará. Mientras tanto sigue a la vista; si incumple las normas, lo retirará.',
         });
       } catch (error) {
         enviar.disabled = false;

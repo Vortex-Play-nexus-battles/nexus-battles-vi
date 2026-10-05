@@ -368,6 +368,36 @@ test.describe('El recorrido de la auditoría del 30-sep, con un jugador limpio',
     }
   });
 
+  test('4b · HU-COM-007: el singular de un insulto de la semilla no pasa, y la detección trae su regla', async () => {
+    // Informes del 4-oct (RFINAL-02): «gilipolla» entraba al chat con
+    // «gilipollas» en la semilla provisional (V7). Ahora el detector declina
+    // también el número de los insultos dados de alta en plural, y quien ve el
+    // detalle recibe el id de la regla (moderacion-lista-negra.yaml 2.1.0).
+    const verificar = (texto, token) =>
+      api.post('/api/v1/lista-negra/verificar', {
+        headers: token ? conToken(token) : { 'Content-Type': 'application/json' },
+        data: { texto, contexto: 'CHAT_GENERAL' },
+      });
+
+    const anonimo = await verificar('eres un gilipolla');
+    expect(anonimo.status(), await anonimo.text()).toBe(200);
+    const sinDetalle = await anonimo.json();
+    expect(sinDetalle).toMatchObject({ aprobado: false, accion: 'BLOQUEAR' });
+    expect(sinDetalle.reglas, 'sin token no se dice qué regla saltó').toBeUndefined();
+
+    const comoAdmin = await verificar('eres un gilipolla', admin.token);
+    expect(comoAdmin.status(), await comoAdmin.text()).toBe(200);
+    const conDetalle = await comoAdmin.json();
+    expect(conDetalle).toMatchObject({ aprobado: false, categoria: 'OFENSIVO' });
+    expect(conDetalle.coincidencias).toContain('gilipollas');
+    expect(conDetalle.reglas).toHaveLength(conDetalle.coincidencias.length);
+    expect(conDetalle.reglas.every(Number.isInteger)).toBe(true);
+
+    // Y lo corriente sigue entrando (falsos positivos).
+    const limpio = await verificar('una polla de agua en el estanque', admin.token);
+    expect(await limpio.json()).toMatchObject({ aprobado: true, accion: 'PERMITIR' });
+  });
+
   test('5 · mensaje privado y «Bloquear jugador» de verdad', async ({ page }) => {
     const fallos = vigilarFallos(page);
     await conSesion(page, jugador);

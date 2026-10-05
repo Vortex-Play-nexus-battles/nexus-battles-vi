@@ -14,9 +14,14 @@ import java.util.Objects;
  * @param normalizado su forma compacta ({@link NormalizadorDeTexto})
  * @param categoria   del 7.1.1
  * @param modo        como casa
+ * @param id          el de la fila en la lista negra: la «regla» que se
+ *                    registra en cada deteccion (HU-COM-007, RFINAL-02) y que
+ *                    la respuesta de verificacion da a quien ve el detalle.
+ *                    {@code null} solo en terminos construidos fuera de la
+ *                    base (pruebas).
  */
 public record TerminoActivo(String termino, String normalizado, CategoriaDeTermino categoria,
-                            ModoDeCoincidencia modo) implements Serializable {
+                            ModoDeCoincidencia modo, Long id) implements Serializable {
 
     public TerminoActivo {
         Objects.requireNonNull(termino);
@@ -25,7 +30,14 @@ public record TerminoActivo(String termino, String normalizado, CategoriaDeTermi
         Objects.requireNonNull(modo);
     }
 
+    /** Un termino sin fila (pruebas y usos puros del detector). */
+    public TerminoActivo(String termino, String normalizado, CategoriaDeTermino categoria,
+                         ModoDeCoincidencia modo) {
+        this(termino, normalizado, categoria, modo, null);
+    }
+
     static TerminoActivo desde(TerminoProhibido termino) {
-        return new TerminoActivo(termino.termino(), termino.normalizado(), termino.categoria(), termino.modo());
+        return new TerminoActivo(termino.termino(), termino.normalizado(), termino.categoria(), termino.modo(),
+                termino.id());
     }
 }
