@@ -109,9 +109,12 @@ test.describe('RFINAL-03 · apodo prohibido y sesión tras cambiar de apodo', ()
   }) => {
     test.setTimeout(90_000);
     await conSesion(page, jugadora);
-    await page.goto(`${BORDE}${MI_CUENTA}`);
+    // «Mi cuenta» abre en «Resumen»: el formulario vive en la pestaña «Perfil»
+    // (comun/ui/pestanas.js la elige por el hash).
+    await page.goto(`${BORDE}${MI_CUENTA}#perfil`);
 
     const apodo = page.locator('#formulario-perfil [name="apodo"]');
+    await expect(apodo).toBeVisible({ timeout: 20_000 });
     await expect(apodo).toHaveValue(apodoInicial, { timeout: 20_000 });
     await apodo.fill('Spiderman');
     await page.locator('[data-accion="guardar-perfil"]').click();
