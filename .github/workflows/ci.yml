@@ -414,6 +414,13 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
 
+      # 5-oct: la deteccion de servicios del CD se saltaba en silencio los que
+      # cambiaban al principio de una lista larga (echo | grep -q con
+      # pipefail: "Broken pipe"). Sin red ni servicios; segundos.
+      - name: Comprobar que el CD detecta todos los servicios de un rango largo
+        shell: bash
+        run: bash scripts/cd/pruebas/deteccion-de-servicios.sh
+
       # HU-AUT-007: la clave que cifra los secretos TOTP se genera una vez en
       # el host y se reutiliza; si cambiara, nadie con segundo factor podria
       # entrar. Con openssl del runner; segundos.
