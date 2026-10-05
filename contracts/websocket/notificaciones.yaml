@@ -6,8 +6,10 @@ asyncapi: 3.0.0
 # Regla 1 de plataforma: contrato primero. Este documento describe los destinos
 # STOMP sobre WebSocket por los que llegan los avisos al jugador.
 #
-# Lo que NO esta aqui: consultar la bandeja, marcar leido y el contador de no
-# leidos, que son peticiones HTTP y viven en contracts/openapi/notificaciones.yaml.
+# Lo que NO esta aqui: consultar la bandeja y marcar leido (uno o todos), que
+# son peticiones HTTP y viven en contracts/openapi/notificaciones.yaml. El
+# contador de no leidos viene en esas respuestas y ademas por la cola privada
+# (canal bandejaDelUsuario, mensaje contadorActualizado).
 #
 # Trazabilidad:
 #   RF-NOT-003  Bandeja de notificaciones del jugador
@@ -17,7 +19,7 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI - Notificaciones en tiempo real
-  version: 1.1.0
+  version: 1.1.1
   description: |
     Canal WebSocket + STOMP del modulo `notificaciones`.
 
@@ -58,6 +60,11 @@ info:
     docker-compose.yml, la entrada es el endpoint interno descrito en el
     contrato HTTP. Cuando el equipo acuerde el bus, este contrato abre version
     nueva en lugar de modificar esta.
+
+    Sobre el contador de no leidos (1.1.1). Llega a todas las sesiones
+    abiertas del jugador tanto al marcar un aviso como al marcar todos de una
+    vez (`POST /users/{usuarioId}/notifications/read`, contrato HTTP 1.3.0,
+    HU-NOT-001 CA-02). Solo documentacion: ningun canal ni mensaje cambia.
   license:
     name: Uso academico - Proyecto Integrador II, UPB Bucaramanga
 
@@ -85,7 +92,10 @@ channels:
 
       Tambien viaja por aqui el contador de no leidos. Como el estado de
       lectura es del jugador y no del dispositivo, el numero es el mismo en
-      todas sus sesiones y se reenvia cada vez que cambia.
+      todas sus sesiones. Se reenvia cada vez que cambia y tras cada marcado
+      como leido, aunque no cambie: al marcar un aviso, o todos a la vez
+      (1.1.1), llega a todas las sesiones abiertas del jugador, no solo a la
+      que lo pidio.
     messages:
       avisoNuevo:
         $ref: '#/components/messages/AvisoNuevo'
