@@ -31,9 +31,32 @@ import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
+import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 
 /** Tamano de pagina del directorio. Coincide con el techo comodo del backend. */
 const FILAS_POR_PAGINA = 20;
+
+/**
+ * RFINAL-06 — lo que se pinta cuando el contrato de la fuente no trae el dato.
+ * Un guion parecia un fallo de la pantalla y un identificador no lo lee nadie;
+ * «sin dato» dice exactamente lo que pasa.
+ */
+export const SIN_DATO = 'sin dato';
+
+/** @param {*} valor */
+function oSinDato(valor) {
+  return valor === null || valor === undefined || valor === '' ? SIN_DATO : valor;
+}
+
+/** Fecha legible, o «sin dato»: nunca la de hoy, nunca un guion. */
+function fechaOSinDato(valor) {
+  return valor ? formatearFecha(valor) : SIN_DATO;
+}
+
+/** «3 de 8», solo si el servidor dio las dos cifras. */
+function deCuantos(parte, total) {
+  return Number.isFinite(parte) && Number.isFinite(total) ? `${parte} de ${total}` : SIN_DATO;
+}
 
 /**
  * Las ocho secciones, con el recurso del que se alimenta cada una.
@@ -200,7 +223,11 @@ function seccionResumen(consultarApi) {
    ------------------------------------------------------------------------- */
 
 function seccionJugadores(consultarApi) {
-  const estado = { pagina: 0, buscar: '' };
+  // RFINAL-06 — las cuentas de las pruebas automáticas se ocultan por omisión
+  // y las excluye el servidor antes de paginar (ms-identidad-admin.yaml 1.2.0,
+  // `ocultarPruebas`). Qué cuenta es de pruebas lo decide su configuración,
+  // no esta pantalla.
+  const estado = { pagina: 0, buscar: '', ocultarPruebas: true };
   const partes = panel({
     id: 'directorio',
     titulo: 'Directorio de jugadores',
@@ -227,10 +254,29 @@ function seccionJugadores(consultarApi) {
   buscador.append(campo, boton);
   partes.elemento.insertBefore(buscador, partes.zona);
 
+  const ocultarPruebas = h('input', {
+    clase: 'casilla__entrada',
+    atributos: { type: 'checkbox', name: 'ocultarPruebas' },
+  });
+  ocultarPruebas.checked = estado.ocultarPruebas;
+  partes.elemento.insertBefore(
+    h('label', {
+      clase: 'casilla',
+      hijos: [
+        ocultarPruebas,
+        h('span', {
+          clase: 'casilla__etiqueta',
+          texto: 'Ocultar cuentas de pruebas automáticas',
+        }),
+      ],
+    }),
+    partes.zona,
+  );
+
   const cargar = async () => {
     const recurso = `/admin/jugadores?page=${estado.pagina}&size=${FILAS_POR_PAGINA}${
       estado.buscar ? `&buscar=${encodeURIComponent(estado.buscar)}` : ''
-    }`;
+    }${estado.ocultarPruebas ? '&ocultarPruebas=true' : ''}`;
     const desenlace = await consultarApi(recurso);
     pintarDesenlace(partes, desenlace, (datos) => pintarDirectorio(datos, estado, cargar), {
       alReintentar: cargar,
@@ -241,6 +287,12 @@ function seccionJugadores(consultarApi) {
   buscador.addEventListener('submit', (evento) => {
     evento.preventDefault();
     estado.buscar = campo.value.trim();
+    estado.pagina = 0;
+    cargar();
+  });
+
+  ocultarPruebas.addEventListener('change', () => {
+    estado.ocultarPruebas = ocultarPruebas.checked;
     estado.pagina = 0;
     cargar();
   });
@@ -256,15 +308,28 @@ export function pintarDirectorio(datos, estado, recargar) {
     jugador.bloqueada ? 'BLOQUEADA' : (jugador.estado ?? '--'),
     formatearFecha(jugador.creadoEn),
     jugador.ultimoAcceso ? formatearFecha(jugador.ultimoAcceso) : 'Nunca ha entrado',
+    enlaceAGestion(jugador),
     enlaceASanciones(jugador),
   ]);
 
+  const cuantas = estado?.ocultarPruebas
+    ? 'cuentas sin contar las de pruebas automáticas'
+    : 'cuentas en total';
   const cuerpo = tabla({
-    columnas: ['Apodo', 'Correo', 'Rol', 'Estado', 'Registro', 'Última entrada', 'Sanciones'],
+    columnas: [
+      'Apodo',
+      'Correo',
+      'Rol',
+      'Estado',
+      'Registro',
+      'Última entrada',
+      'Gestión',
+      'Sanciones',
+    ],
     filas,
     resumen: `Página ${(datos?.pagina ?? 0) + 1} de ${datos?.totalPaginas ?? 1}, ${
       datos?.total ?? filas.length
-    } cuentas en total`,
+    } ${cuantas}`,
   });
 
   const navegacion = h('nav', {
@@ -318,6 +383,33 @@ function enlaceASanciones(jugador) {
       href: destino.href,
       'aria-label': `Ver las sanciones de ${jugador.apodo ?? 'esta cuenta'}`,
     },
+    datos: { accion: 'ver-sanciones' },
+  });
+}
+
+/**
+ * RFINAL-06 — de la fila a la ficha de gestión de esa cuenta, sin copiar su
+ * identificador: la gestión espera la clave interna de la cuenta, que el
+ * directorio publica desde ms-identidad-admin.yaml 1.2.0 (`id`). Sin ella
+ * (un servicio anterior) se dice, en vez de pintar un enlace que no abre nada.
+ *
+ * @param {{id?: number, apodo?: string}} jugador
+ * @returns {HTMLAnchorElement|string}
+ */
+function enlaceAGestion(jugador) {
+  const clave = Number(jugador?.id);
+  if (!Number.isInteger(clave) || clave <= 0) {
+    return SIN_DATO;
+  }
+  const destino = new URL(resolver(RUTAS.gestionUsuarios));
+  destino.searchParams.set('usuario', String(clave));
+  return h('a', {
+    texto: 'Gestionar',
+    atributos: {
+      href: destino.href,
+      'aria-label': `Gestionar la cuenta de ${jugador.apodo ?? 'esta cuenta'}`,
+    },
+    datos: { accion: 'gestionar' },
   });
 }
 
@@ -332,19 +424,30 @@ function seccionPartidas(consultarApi) {
     descripcion: 'Partidas y salas abiertas en este momento.',
     recurso: '/salas',
     consultarApi,
+    // `Sala` de salas-partidas.yaml: no tiene nombre («las salas no tienen
+    // nombre») y del anfitrion solo trae `idAnfitrion`, un UUID; su apodo es
+    // de identidad y no se replica alli. La sala se describe por su modalidad
+    // y el anfitrion queda «sin dato» en vez de un identificador ilegible.
     pintar: (datos) =>
       tabla({
-        columnas: ['Sala', 'Estado', 'Jugadores', 'Anfitrión'],
+        columnas: ['Sala', 'Estado', 'Jugadores', 'Creada', 'Anfitrión'],
         filas: filasDe(datos).map((sala) => [
-          sala.nombre ?? sala.idSala ?? sala.id ?? '--',
-          sala.estado ?? '--',
-          sala.participantes?.length ?? sala.jugadores ?? '--',
-          sala.anfitrion ?? sala.creador ?? '--',
+          descripcionDeSala(sala),
+          oSinDato(sala.estado),
+          deCuantos(sala.ocupacion, sala.maximoParticipantes),
+          fechaOSinDato(sala.creadaEn),
+          SIN_DATO,
         ]),
       }),
   });
 
   return [salas, panelDeMisiones()];
+}
+
+/** «1 contra 1 · privada»: lo que identifica una sala que no tiene nombre. */
+function descripcionDeSala(sala) {
+  const modalidad = nombreDeModalidad(sala?.modalidad, SIN_DATO);
+  return sala?.privada ? `${modalidad} · privada` : modalidad;
 }
 
 /**
@@ -432,18 +535,25 @@ function seccionSubastas(consultarApi) {
       descripcion: 'Publicaciones abiertas ahora mismo.',
       recurso: '/subastas',
       consultarApi,
-      pintar: (datos) =>
-        tabla({
-          columnas: ['Subasta', 'Elemento', 'Precio actual', 'Cierra'],
-          filas: filasDe(datos)
-            .slice(0, 25)
-            .map((s) => [
-              s.id ?? s.subastaId ?? '--',
-              s.elemento?.nombre ?? s.nombreElemento ?? '--',
-              s.precioActual ?? s.precioInicial ?? '--',
-              formatearFecha(s.cierraEn ?? s.fechaCierre),
-            ]),
-        }),
+      // `SubastaResumen` de ms-subastas-listado.yaml: el producto viene en
+      // `nombreProducto`, la puja mas alta en `ofertaVigente` y el cierre en
+      // `fechaFin`. El `id` es un UUID: no se pinta.
+      pintar: (datos) => {
+        const filas = filasDe(datos)
+          .slice(0, 25)
+          .map((s) => [
+            oSinDato(s.nombreProducto),
+            oSinDato(s.ofertaVigente),
+            oSinDato(s.cantidadPujas),
+            fechaOSinDato(s.fechaFin),
+          ]);
+        const total = datos?.totalElementos;
+        return tabla({
+          columnas: ['Elemento', 'Precio actual', 'Pujas', 'Cierra'],
+          filas,
+          resumen: Number.isFinite(total) ? `${filas.length} de ${total} subastas activas` : '',
+        });
+      },
     }),
   ];
 }
@@ -460,14 +570,18 @@ function seccionTorneos(consultarApi) {
       descripcion: 'Convocatorias que publica el servicio de torneos.',
       recurso: '/torneos',
       consultarApi,
+      // `TorneoResumen` de torneos.yaml: equipos en `equiposInscritos` de
+      // `cupos`. El listado no publica fecha de inicio (el inicio real lo da
+      // un administrador y solo sale en la ficha, `iniciadoEn`); lo que si
+      // trae es el cierre de inscripciones.
       pintar: (datos) =>
         tabla({
-          columnas: ['Torneo', 'Estado', 'Equipos', 'Inicio'],
+          columnas: ['Torneo', 'Estado', 'Equipos', 'Inscripciones hasta'],
           filas: filasDe(datos).map((t) => [
-            t.nombre ?? t.id ?? '--',
-            t.estado ?? '--',
-            t.equipos?.length ?? t.totalEquipos ?? '--',
-            formatearFecha(t.fechaInicio ?? t.inicio),
+            oSinDato(t.nombre),
+            oSinDato(t.estado),
+            deCuantos(t.equiposInscritos, t.cupos),
+            fechaOSinDato(t.inscripcionesCierranEn),
           ]),
         }),
     }),
@@ -485,7 +599,11 @@ function seccionModeracion(consultarApi) {
     // La ruta de LECTURA es /admin/auditoria. /admin/auditoria/eventos es la
     // de escritura: acepta POST y a un GET responde 405. Comprobado contra
     // dev con un token de administrador.
-    recurso: '/admin/auditoria?page=0&size=15',
+    //
+    // RFINAL-06: sin `sort` el orden lo decidia la base de datos y «los
+    // ultimos quince» eran los primeros que se registraron. Fecha descendente
+    // y el `id` como desempate (ms-cumplimiento-auditoria.yaml, `sort`).
+    recurso: '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
     consultarApi,
     pintar: (datos) =>
       tabla({
