@@ -19,8 +19,24 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.3.0
+  version: 1.4.0
   description: |
+    ### Cambios en 1.4.0 (HU-USR-010, RF-USR-010 — implementado, aditivo)
+
+    - Nueva `GET /admin/usuarios/{usuario}/ficha`: la ficha administrativa de
+      una cuenta (datos de la cuenta y de contacto, rol, estado, registro y
+      ultima entrada) para la vista que consolida al usuario. Acepta la clave
+      interna (`id` del directorio) o el `uid`, porque la cola de moderacion
+      de comentarios solo conoce al autor por su `uid` (CA-02).
+    - **La consulta queda en la auditoria** (observacion de la ficha oficial:
+      son datos personales): cada lectura registra en ms-cumplimiento un
+      evento `OTRO` con quien consulto, la cuenta consultada y la IP. Si la
+      bitacora no responde, la ficha se entrega igual con
+      `accesoAuditado: false` y el evento queda en la bitacora JSON del
+      servicio (regla 6): la vista lo dice, nunca en silencio.
+    - Usuario inexistente: 404 en problem details
+      (`.../errors/cuenta-no-encontrada`), no el texto plano heredado.
+
     ### Cambios en 1.3.0 (HU-USR-008 #561, 7.3.4 — implementado, todo aditivo)
 
     - `GET /admin/jugadores` admite cuatro filtros OPCIONALES: `rol`,
@@ -325,6 +341,73 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuario}/ficha:
+    get:
+      tags: [administracion]
+      operationId: consultarFichaAdministrativa
+      summary: Ficha administrativa de una cuenta; la consulta queda auditada (HU-USR-010)
+      description: |
+        1.4.0 — RF-USR-010 «Vista administrativa del perfil de usuario». Lo que
+        ms-identidad sabe de la cuenta: identidad y contacto, rol, estado
+        (con la proyeccion de la sancion vigente y el bloqueo por intentos),
+        fecha de registro y ultima entrada. Las sanciones, los comentarios y
+        el resto de la ficha los publica cada servicio dueno del dato; la
+        vista los pide con el `uid` que devuelve esta operacion.
+
+        Mismo permiso que el directorio y la gestion de cuentas
+        (`GESTIONAR_CUENTAS`: Administrador y Super Administrador).
+
+        **Auditoria del acceso.** Cada lectura registra en ms-cumplimiento
+        (`POST /api/v1/admin/auditoria/eventos`, credencial de servicio) un
+        evento `tipoAccion: OTRO` con `administradorId` = quien consulta,
+        `afectado` = la clave interna de la cuenta (como el resto de
+        acciones de este panel), `motivo` «Consulta de la ficha
+        administrativa (datos personales)» y la IP de origen. Si la bitacora
+        no responde, la ficha se entrega con `accesoAuditado: false` y el
+        evento queda en la bitacora JSON del servicio: la interfaz avisa de
+        que esa consulta no quedo en la auditoria.
+
+        La respuesta lleva `Cache-Control: no-store`: son datos personales.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: usuario
+          in: path
+          required: true
+          description: |
+            La clave interna de la cuenta (el `id` del directorio) o su
+            identificador publico (`uid`). Cualquier otro valor responde 404,
+            igual que una cuenta que no existe.
+          schema:
+            oneOf:
+              - type: string
+                pattern: '^[0-9]{1,18}$'
+              - type: string
+                format: uuid
+      responses:
+        '200':
+          description: La ficha de la cuenta.
+          headers:
+            Cache-Control:
+              description: Siempre `no-store`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaAdministrativa'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: |
+            No existe una cuenta con ese identificador (o no es ni una clave
+            ni un uid). `type` `.../errors/cuenta-no-encontrada`. No se
+            registra ningun evento de auditoria: no se consulto a nadie.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/admin/usuarios/{usuarioId}/perfil:
     put:
@@ -986,6 +1069,65 @@ components:
           type: [string, 'null']
         preferencias:
           type: [string, 'null']
+
+    FichaAdministrativa:
+      type: object
+      description: |
+        1.4.0 — lo que ms-identidad publica de una cuenta para su ficha
+        administrativa (HU-USR-010). Nunca la contrasena, su hash ni la
+        version de token.
+      required: [id, apodo, email, estado, bloqueada, accesoAuditado]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Clave interna de la cuenta (la de `/admin/usuarios/{usuarioId}`).
+        uid:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Identificador publico: con el se piden las sanciones y los
+            comentarios de la cuenta a sus servicios. Nulo en cuentas
+            anteriores al identificador publico.
+        apodo:
+          type: string
+        email:
+          type: string
+          description: Correo de contacto de la cuenta.
+        nombres:
+          type: [string, 'null']
+          description: Del perfil; nulo si la cuenta no tiene perfil (las administrativas).
+        apellidos:
+          type: [string, 'null']
+        avatar:
+          type: [string, 'null']
+        rol:
+          type: [string, 'null']
+          description: JUGADOR, MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR.
+        estado:
+          type: string
+          description: ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO o BANEADO.
+        suspendidoHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Fin de la suspension vigente, si la hay.
+        bloqueada:
+          type: boolean
+          description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+        creadoEn:
+          type: [string, 'null']
+          format: date-time
+          description: Registro de la cuenta; nulo en cuentas anteriores al campo.
+        ultimoAcceso:
+          type: [string, 'null']
+          format: date-time
+          description: Ultima entrada correcta; nulo si nunca ha entrado.
+        accesoAuditado:
+          type: boolean
+          description: |
+            `true` si esta consulta quedo registrada en la auditoria de
+            ms-cumplimiento; `false` si la bitacora no respondio (el evento
+            quedo solo en la bitacora JSON del servicio).
 
     ProyeccionDeSancion:
       type: object
