@@ -17,9 +17,6 @@ public interface CarritoRepository extends JpaRepository<Carrito, Long> {
     /** El carrito del jugador (uno como mucho desde V3). */
     Optional<Carrito> findByUsuarioId(String usuarioId);
 
-    // Usado por CheckoutService para validar que el carrito pertenece al usuario.
-    Optional<Carrito> findByIdAndUsuarioId(Long id, String usuarioId);
-
     /**
      * El carrito del jugador, bloqueado hasta el final de la transaccion
      * ({@code SELECT ... FOR UPDATE}). Lo usan todas las escrituras del carrito
