@@ -157,10 +157,16 @@ jobs:
           # pushes cancelados en medio. Los despliegues a demanda no cuentan:
           # solo levantan los servicios pedidos. Si la consulta falla, se queda
           # el comportamiento de antes.
+          #
+          # 5-oct: la consulta filtrada en el servidor (--status success) devolvio
+          # como "ultimo" un despliegue del 30-sep, con cuatro mas recientes en
+          # verde: el rango crecio a 48 commits. Ahora se piden las ultimas
+          # corridas SIN filtro de estado y se filtra y ordena aqui, por fecha.
           if [ "${{ github.event_name }}" = "push" ]; then
             ULTIMO_OK=$(gh run list --repo "${{ github.repository }}" --workflow cd.yml --branch develop \
-              --status success --limit 30 --json headSha,event \
-              --jq '[.[] | select(.event == "push")][0].headSha // empty' 2>/dev/null || true)
+              --limit 50 --json headSha,event,conclusion,createdAt \
+              --jq '[.[] | select(.event == "push" and .conclusion == "success")] | sort_by(.createdAt) | last | .headSha // empty' \
+              2>/dev/null || true)
             if [ -n "$ULTIMO_OK" ] && [ "$ULTIMO_OK" != "$HEAD" ] \
               && git merge-base --is-ancestor "$ULTIMO_OK" "$HEAD" 2>/dev/null; then
               if [ "$ULTIMO_OK" != "$BASE" ]; then
@@ -254,7 +260,12 @@ jobs:
           #    ninguna lista escrita a mano que se pueda quedar desfasada.
           MATRIZ="[]"
           while IFS=$'\t' read -r nombre ruta herramienta puerto clase; do
-            echo "$ARCHIVOS" | grep -q "^$ruta/" || continue
+            # Sin tuberia: con `set -o pipefail`, `echo | grep -q` falla cuando
+            # grep encuentra pronto y cierra la entrada mientras echo sigue
+            # escribiendo una lista larga ("write error: Broken pipe"), y el
+            # servicio se saltaba como si no hubiera cambiado. El 5-oct se
+            # quedaron asi sin desplegar productos y otros doce servicios.
+            grep -q "^$ruta/" <<< "$ARCHIVOS" || continue
 
             # El catalogo puede ir por delante del codigo (servicio declarado
             # que todavia no compila). Se comprueba contra el repositorio de

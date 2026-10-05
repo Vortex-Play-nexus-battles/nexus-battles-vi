@@ -135,6 +135,23 @@ const SALAS = {
   totalPaginas: 1,
 };
 
+/** `IndicadoresDeCuentas` de ms-identidad-admin.yaml 1.3.0 (HU-USR-008), tal cual. */
+const INDICADORES = {
+  total: 16,
+  porEstado: { ACTIVO: 10, PENDIENTE_VERIFICACION: 2, INACTIVO: 0, SUSPENDIDO: 1, BANEADO: 3 },
+  registros: {
+    desde: '2026-09-06',
+    hasta: '2026-10-05',
+    total: 4,
+    porDia: [
+      { fecha: '2026-10-04', cuentas: 1 },
+      { fecha: '2026-10-05', cuentas: 3 },
+    ],
+  },
+  ocultarPruebas: true,
+  calculadoEn: '2026-10-05T15:00:00-05:00',
+};
+
 /** Un UUID a la vista es un dato que nadie puede leer (RFINAL-06). */
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
@@ -145,6 +162,9 @@ function apiSimulada(sobrescribir = {}) {
       if (recurso.startsWith(prefijo)) {
         return typeof respuesta === 'function' ? respuesta(recurso) : respuesta;
       }
+    }
+    if (recurso.startsWith('/admin/jugadores/indicadores')) {
+      return conDatos(INDICADORES);
     }
     if (recurso.startsWith('/admin/jugadores')) {
       return conDatos(JUGADORES);
@@ -465,6 +485,228 @@ describe('directorio de jugadores', () => {
     const directorio = raiz.querySelector('[data-panel="directorio"]');
     expect(directorio.querySelectorAll('a[data-accion="gestionar"]')).toHaveLength(0);
     expect(directorio.textContent).toContain('sin dato');
+  });
+});
+
+/**
+ * HU-USR-008 (#561), §7.3.4 — «Panel: vista general»: activas, suspendidas,
+ * baneadas y los demás estados, registros por día con su gráfico, periodo y
+ * exportación, en el Resumen.
+ */
+describe('HU-USR-008 — usuarios de la comunidad en el Resumen', () => {
+  test('pinta las cuentas por estado y el gráfico de registros, ocultando las de pruebas', async () => {
+    const consultarApi = apiSimulada();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const resumen = raiz.querySelector('[data-seccion="resumen"]');
+    const panelUsuarios = resumen.querySelector('[data-panel="resumen-usuarios"]');
+    expect(panelUsuarios).not.toBeNull();
+    expect(consultarApi.mock.calls.map((c) => c[0])).toContain(
+      '/admin/jugadores/indicadores?ocultarPruebas=true',
+    );
+    const valor = (etiqueta) =>
+      panelUsuarios.querySelector(`[data-indicador="${etiqueta}"] .indicador__valor`).textContent;
+    expect(valor('activas')).toBe('10');
+    expect(valor('suspendidas')).toBe('1');
+    expect(valor('baneadas')).toBe('3');
+    expect(panelUsuarios.querySelector('svg.grafico-registros[role="img"]')).not.toBeNull();
+    expect(panelUsuarios.querySelectorAll('rect.grafico-registros__barra')).toHaveLength(2);
+  });
+
+  test('CA-03: si los indicadores fallan, lo dice ese panel y el resto del tablero sigue', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/admin/jugadores/indicadores': conFallo(
+            RESULTADO.SERVICIO_DEGRADADO,
+            503,
+            '/admin/jugadores/indicadores?ocultarPruebas=true',
+          ),
+        }),
+      },
+    );
+    await asentar();
+
+    const panelUsuarios = raiz.querySelector('[data-panel="resumen-usuarios"]');
+    expect(panelUsuarios.querySelector('.sello-estado').textContent).toBe('SERVICIO DEGRADADO');
+    expect(panelUsuarios.querySelector('[data-accion="exportar-indicadores"]').disabled).toBe(true);
+    expect(raiz.querySelector('[data-panel="torneos"] .sello-estado').textContent).toBe('EN LINEA');
+    expect(raiz.querySelector('[data-panel="directorio"]').textContent).toContain('ana@nexus.test');
+  });
+
+  test('CA-02: «Exportar indicadores» guarda en el navegador lo que se está viendo', async () => {
+    const guardar = jest.fn();
+    const raiz = pagina();
+
+    montarControlIntegral(raiz, {}, { consultarApi: apiSimulada(), guardar });
+    await asentar();
+    raiz
+      .querySelector('[data-panel="resumen-usuarios"] [data-accion="exportar-indicadores"]')
+      .dispatchEvent(new window.Event('click'));
+
+    expect(guardar).toHaveBeenCalledTimes(1);
+    const [nombre, contenido] = guardar.mock.calls[0];
+    expect(nombre).toBe('indicadores-de-usuarios-2026-09-06-a-2026-10-05.csv');
+    expect(contenido).toContain('Suspendidas,1');
+    expect(contenido).toContain('2026-10-05,3');
+  });
+});
+
+/**
+ * HU-USR-008 — «Búsqueda y filtros de usuarios» y «Exportar listados de
+ * usuarios» (§7.3.4). El filtrado lo hace el servidor; la pantalla solo pide.
+ */
+describe('HU-USR-008 — filtros y exportación del directorio', () => {
+  async function montarDirectorio(opciones = {}) {
+    const consultarApi = opciones.consultarApi ?? apiSimulada();
+    const raiz = pagina();
+    montarControlIntegral(raiz, {}, { consultarApi, ...opciones });
+    await asentar();
+    return { raiz, consultarApi, directorio: raiz.querySelector('[data-panel="directorio"]') };
+  }
+
+  const pedidasAlDirectorio = (consultarApi) =>
+    consultarApi.mock.calls.map((c) => c[0]).filter((r) => r.startsWith('/admin/jugadores?'));
+
+  test('la búsqueda dice que también encuentra por nombre', async () => {
+    const { directorio } = await montarDirectorio();
+
+    const campo = directorio.querySelector('input[name="buscar"]');
+    expect(campo.getAttribute('placeholder')).toBe('Apodo, correo o nombre');
+    expect(campo.getAttribute('aria-label')).toBe('Buscar jugador por apodo, correo o nombre');
+  });
+
+  test('elegir un rol vuelve a pedir desde la primera página, con el filtro', async () => {
+    const { consultarApi, directorio } = await montarDirectorio();
+    directorio.querySelector('[data-accion="siguiente"]').dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    const rol = directorio.querySelector('select[name="rol"]');
+    rol.value = 'MODERADOR';
+    rol.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=20&rol=MODERADOR&ocultarPruebas=true',
+    );
+  });
+
+  test('estado y fechas de registro van juntos con la búsqueda', async () => {
+    const { consultarApi, directorio } = await montarDirectorio();
+
+    directorio.querySelector('input[name="buscar"]').value = 'Ana';
+    directorio.querySelector('select[name="estado"]').value = 'SUSPENDIDO';
+    directorio.querySelector('input[name="registradoDesde"]').value = '2026-09-01';
+    directorio.querySelector('input[name="registradoHasta"]').value = '2026-09-30';
+    directorio
+      .querySelector('form')
+      .dispatchEvent(new window.Event('submit', { cancelable: true }));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi).at(-1)).toBe(
+      '/admin/jugadores?page=0&size=20&buscar=Ana&estado=SUSPENDIDO' +
+        '&registradoDesde=2026-09-01&registradoHasta=2026-09-30&ocultarPruebas=true',
+    );
+  });
+
+  test('los estados del filtro son los del contrato, con su nombre en castellano', async () => {
+    const { directorio } = await montarDirectorio();
+
+    const opciones = [...directorio.querySelectorAll('select[name="estado"] option')].map((o) => [
+      o.value,
+      o.textContent,
+    ]);
+    expect(opciones).toEqual([
+      ['', 'Todos'],
+      ['ACTIVO', 'Activas'],
+      ['PENDIENTE_VERIFICACION', 'Pendientes de verificar el correo'],
+      ['INACTIVO', 'Inactivas (administrativas sin activar)'],
+      ['SUSPENDIDO', 'Suspendidas'],
+      ['BANEADO', 'Baneadas'],
+    ]);
+  });
+
+  test('un periodo al revés no se pide: se explica', async () => {
+    const { consultarApi, directorio } = await montarDirectorio();
+    const antes = pedidasAlDirectorio(consultarApi).length;
+
+    const desde = directorio.querySelector('input[name="registradoDesde"]');
+    desde.value = '2026-10-05';
+    directorio.querySelector('input[name="registradoHasta"]').value = '2026-10-01';
+    directorio
+      .querySelector('form')
+      .dispatchEvent(new window.Event('submit', { cancelable: true }));
+    await asentar();
+
+    expect(pedidasAlDirectorio(consultarApi)).toHaveLength(antes);
+    expect(desde.getAttribute('aria-invalid')).toBe('true');
+    expect(directorio.querySelector('[data-zona="aviso-directorio"]').textContent).toMatch(
+      /posterior/,
+    );
+  });
+
+  test('«Exportar listado» descarga del servidor con los filtros aplicados', async () => {
+    const descargarApi = jest.fn(async () => ({
+      resultado: RESULTADO.DATOS,
+      contenido: 'csv',
+      nombreArchivo: 'directorio-de-cuentas-20261005-1500.csv',
+      estado: 200,
+      motivo: '',
+      recurso: '',
+    }));
+    const guardar = jest.fn();
+    const { directorio } = await montarDirectorio({ descargarApi, guardar });
+    const rol = directorio.querySelector('select[name="rol"]');
+    rol.value = 'JUGADOR';
+    rol.dispatchEvent(new window.Event('change'));
+    await asentar();
+
+    directorio
+      .querySelector('[data-accion="exportar-directorio"]')
+      .dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    expect(descargarApi).toHaveBeenCalledWith(
+      '/admin/jugadores/exportacion?rol=JUGADOR&ocultarPruebas=true',
+    );
+    expect(guardar).toHaveBeenCalledWith(
+      'directorio-de-cuentas-20261005-1500.csv',
+      'csv',
+      'text/csv;charset=utf-8',
+    );
+    expect(directorio.querySelector('[data-zona="aviso-directorio"]').textContent).toBe(
+      'Listado descargado: directorio-de-cuentas-20261005-1500.csv.',
+    );
+  });
+
+  test('si el servidor no exporta (demasiadas cuentas), se dice por qué y no se guarda nada', async () => {
+    const descargarApi = jest.fn(async () => ({
+      resultado: RESULTADO.NO_DISPONIBLE,
+      contenido: null,
+      nombreArchivo: null,
+      estado: 422,
+      motivo: 'Los filtros dejan 12000 cuentas y una exportación admite como máximo 10000.',
+      recurso: '/admin/jugadores/exportacion',
+    }));
+    const guardar = jest.fn();
+    const { directorio } = await montarDirectorio({ descargarApi, guardar });
+
+    const boton = directorio.querySelector('[data-accion="exportar-directorio"]');
+    boton.dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    expect(guardar).not.toHaveBeenCalled();
+    expect(boton.disabled).toBe(false);
+    expect(directorio.querySelector('[data-zona="aviso-directorio"]').textContent).toContain(
+      '12000 cuentas',
+    );
   });
 });
 

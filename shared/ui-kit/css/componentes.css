@@ -6734,6 +6734,74 @@ button.tarjeta-heroe[aria-pressed='true'] {
   margin-block-start: var(--e-2);
 }
 
+/* --- Usuarios: filtros, estados y registros por dia (HU-USR-008) ---------
+   Los filtros del directorio y el periodo de los indicadores van en una fila
+   que se parte en varias cuando no cabe; cada campo con su etiqueta visible.
+   El grafico es un SVG sin libreria: barras en la primaria de relleno, el
+   valor de cada una en su <title> y la misma serie en una tabla debajo. */
+
+.consola-integral__filtros {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-2) var(--e-3);
+}
+
+.consola-integral__filtros > .campo,
+.consola-integral__filtros > .desplegable {
+  flex: 1 1 10rem;
+  min-width: 0;
+}
+
+/* El desplegable separa su etiqueta mas que el campo: en la misma fila, las
+   etiquetas tienen que quedar a la misma altura. */
+.consola-integral__filtros > .desplegable {
+  gap: var(--e-1);
+}
+
+/* Dentro del buscador del directorio, los filtros van en su propia linea. */
+.consola-integral__buscador > .consola-integral__filtros {
+  flex: 1 1 100%;
+}
+
+.consola-integral__estados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr));
+  gap: var(--e-3);
+}
+
+.grafico-registros {
+  display: block;
+  width: 100%;
+  height: 160px;
+}
+
+.grafico-registros__barra {
+  fill: var(--primaria-relleno);
+}
+
+.grafico-registros__barra:hover {
+  fill: var(--acento-relleno);
+}
+
+.grafico-registros__base {
+  stroke: var(--borde);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Primer y ultimo dia de la serie, debajo de las barras. */
+.grafico-registros__eje {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--e-2);
+}
+
+.consola-integral__datos-grafico > summary {
+  cursor: pointer;
+  color: var(--primaria);
+}
+
 /* =======================================================================
    UXC-1 — Núcleo del héroe: prototipo, StatBlock, HeroCard y su estado
    -----------------------------------------------------------------------
