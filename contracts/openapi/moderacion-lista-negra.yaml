@@ -55,6 +55,24 @@ info:
       se trata como anonimo. Los 401 y 403 son problem details con `type`
       `.../no-autenticado` y `.../permiso-insuficiente`.
 
+    ### 2.1.0 (RFINAL-02, HU-COM-007) — compatible
+
+    - `VerificacionListaNegraResponse.reglas` (nuevo, opcional): los `id` de
+      los terminos que coincidieron, en el orden de `coincidencias`. Mismo
+      permiso que el detalle: solo con token de servicio o de moderacion.
+      Sirve para que quien guarda el contenido (comentarios) registre que
+      regla lo retuvo.
+    - Cada deteccion queda registrada en el origen: una linea de bitacora
+      JSON (`evento: lista-negra.deteccion`) con reglas, categorias, modos,
+      contexto, accion, largo del texto y el `trazaId` de la peticion. **El
+      texto no se registra.**
+    - Numero de los insultos (categoria OFENSIVO, modo SUBCADENA): un termino
+      dado de alta en plural en «as»/«os» casa tambien con su singular y con
+      la raiz de ese singular (`gilipollas` atrapa `gilipolla` y
+      `gilipollo`). Es lo que la regla de genero y numero ya prometia para
+      los terminos dados de alta en singular. Marcas y personas no se
+      declinan.
+
     ### Contexto y accion
 
     `contexto` dice donde va el texto; la respuesta trae la `accion` que la
@@ -79,7 +97,7 @@ info:
     detalle. El resto exige rol MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR
     (jerarquia de roles: el Super Administrador puede todo lo del
     Administrador).
-  version: 2.0.1
+  version: 2.1.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -341,6 +359,14 @@ components:
           description: Solo con token de servicio o de moderacion.
           items:
             type: string
+        reglas:
+          type: array
+          description: |
+            2.1.0. Los `id` de los terminos que coincidieron, en el orden de
+            `coincidencias`. Solo con token de servicio o de moderacion.
+          items:
+            type: integer
+            format: int64
 
     TerminoRequest:
       type: object
