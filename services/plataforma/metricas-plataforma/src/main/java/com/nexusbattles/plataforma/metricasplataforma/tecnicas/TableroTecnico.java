@@ -10,9 +10,13 @@ import java.util.List;
  * del autoescalado), 500 ms de latencia (RNF-REN-001, {@code objetivoMs}) y
  * el umbral de disponibilidad de DEC-01. No se inventa ningun umbral mas:
  * la tasa de error se publica sin alerta porque ningun documento la fija.
+ *
+ * <p>{@code desdeCache} (1.9.0, RFINAL-08): true si este tablero reutiliza
+ * una recoleccion anterior aun vigente; {@code generadoEn} es siempre la hora
+ * de esa recoleccion.
  */
 public record TableroTecnico(Instant generadoEn, List<MetricasDeServicio> servicios, List<Alerta> alertas,
-                             List<String> brechas, Umbrales umbrales) {
+                             List<String> brechas, Umbrales umbrales, boolean desdeCache) {
 
     /** Charter: «autoescalado al superar 75 % de uso de procesador». Inalterable. */
     public static final double UMBRAL_CPU = 0.75d;
@@ -51,7 +55,12 @@ public record TableroTecnico(Instant generadoEn, List<MetricasDeServicio> servic
             }
         }
         return new TableroTecnico(generadoEn, List.copyOf(recolectadas), List.copyOf(alertas), List.copyOf(brechas),
-                new Umbrales(UMBRAL_CPU, latenciaObjetivoMs, umbralDisponibilidad));
+                new Umbrales(UMBRAL_CPU, latenciaObjetivoMs, umbralDisponibilidad), false);
+    }
+
+    /** El mismo tablero, servido otra vez dentro de su vigencia: lo dice. */
+    TableroTecnico reutilizado() {
+        return new TableroTecnico(generadoEn, servicios, alertas, brechas, umbrales, true);
     }
 
     public boolean conBrechas() {
