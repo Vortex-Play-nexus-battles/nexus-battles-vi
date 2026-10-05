@@ -97,6 +97,12 @@ comprobar POST /api/v1/auth/restablecer/preguntas \
                                            "identidad POST /api/v1/auth/restablecer/preguntas"
 comprobar PUT  /api/v1/auth/preguntas-seguridad \
                                            "identidad PUT /api/v1/auth/preguntas-seguridad"
+# HU-AUT-007 (identidad 2.2.0) — verificacion en dos pasos: la seccion de «Mi
+# cuenta» y el segundo paso del login, tambien de ms-identidad por /auth.
+comprobar GET  /api/v1/auth/segundo-factor \
+                                           "identidad GET /api/v1/auth/segundo-factor"
+comprobar POST /api/v1/auth/login/segundo-factor \
+                                           "identidad POST /api/v1/auth/login/segundo-factor"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
@@ -586,6 +592,10 @@ limitada  POST /api/v1/auth/login                             30 20 2
 limitada  POST /api/v1/auth/registro                          25  0 2
 limitada  POST /api/v1/auth/verificacion/confirmacion         25  0 2
 limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
+# HU-AUT-007 — el segundo paso del login entra en la misma clase (la regex de
+# login no lleva `$`): probar codigos de 6 cifras desde internet tiene el
+# mismo cupo que probar contrasenas, ademas del bloqueo de la cuenta.
+limitada  POST /api/v1/auth/login/segundo-factor              25  0 2
 # escritura: zona propia, asi que el login agotado no la toca.
 limitada  POST /api/v1/products/p-1/comments                  80 60 1
 limitada  POST /api/v1/products/p-1/rating                    25  0 1

@@ -99,6 +99,10 @@ public class SecurityInterceptor implements HandlerInterceptor {
             // uid del token (ADR-002): el identificador que el navegador conoce.
             // Nunca sale de una cabecera, solo de un token ya validado.
             String uid = null;
+            // HU-AUT-007: como se autentico la sesion (claim amr). Lo necesita
+            // el cambio de contrasena para que el token nuevo conserve el
+            // segundo factor de la sesion que lo pide.
+            java.util.List<String> amr = null;
 
             // 1. Intentar validar JWT si viene en header Authorization: Bearer <token>
             if (authHeader != null && authHeader.startsWith("Bearer ") && jwtService != null) {
@@ -108,6 +112,7 @@ public class SecurityInterceptor implements HandlerInterceptor {
                     username = claims.getSubject();
                     roleName = claims.get("rol", String.class);
                     uid = claims.get("uid", String.class);
+                    amr = JwtService.metodosDe(claims);
 
                     // Verificar que la versión del token coincida con la del
                     // usuario en BD — si el rol cambió después de emitir este
@@ -178,6 +183,9 @@ public class SecurityInterceptor implements HandlerInterceptor {
             request.setAttribute("rolActual", roleName);
             if (uid != null) {
                 request.setAttribute("uidActual", uid);
+            }
+            if (amr != null) {
+                request.setAttribute("amrActual", amr);
             }
         }
 

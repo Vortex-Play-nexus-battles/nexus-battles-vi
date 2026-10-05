@@ -1,0 +1,36 @@
+/* Verificación en dos pasos — HU-AUT-007.
+ *
+ * Lo que pinta `segundo-factor.js`: la clave para la aplicación de
+ * autenticación y los códigos de recuperación. Hoja aparte, igual que
+ * `tienda-producto.css`, porque la cargan dos vistas: «Mi cuenta» (pestaña
+ * Seguridad) y el login (el enrolamiento obligatorio de un rol administrativo).
+ *
+ * Solo clases propias: el aspecto del código (`.codigo-invitacion`, que ya se
+ * selecciona de una pasada) y de los avisos viene del kit.
+ */
+
+.segundo-factor__pasos {
+  display: grid;
+  gap: var(--e-1);
+  margin: 0;
+  padding-inline-start: var(--e-5);
+}
+
+/* La clave son 32 caracteres en ocho grupos: en un teléfono no caben en una
+   línea, y partirla por cualquier sitio es mejor que desbordar la tarjeta. */
+.segundo-factor__secreto {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Diez códigos de once caracteres: dos columnas en un teléfono, más en un
+   escritorio. Sin viñetas: se copian tal cual. */
+.segundo-factor__codigos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

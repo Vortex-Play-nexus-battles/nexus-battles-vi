@@ -163,6 +163,15 @@ services:
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
       # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
       AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
+      # HU-AUT-007 — clave AES-256 con la que se cifra el secreto TOTP de cada
+      # cuenta. Es la del BANCO DE PRUEBAS, no la de ningun entorno: base64 de
+      # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
+      # responderia 503 y segundo-factor.e2e.spec.js no tendria que probar.
+      IDENTIDAD_2FA_CLAVE: ZTJlLWNsYXZlLTJmYS1iYW5jby1kZS1wcnVlYmFzISE=
+      # Obligatoriedad por rol APAGADA, igual que en DEV: los specs de la
+      # consola entran con cuentas administrativas sin segundo factor.
+      # Encenderla es decision humana (ver .env.example).
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ""
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:

@@ -223,6 +223,41 @@ asegurar_clave_de_firma() {
   export JWT_CLAVE_PRIVADA="$clave"
 }
 
+# HU-AUT-007 — clave AES con la que ms-identidad cifra los secretos TOTP del
+# segundo factor (CifradoDeSecretos: 16, 24 o 32 bytes en Base64).
+#
+# Mismo patron que la clave de firma: se genera UNA vez en el host, se guarda
+# en $1 (600) y cada despliegue de ms-identidad recibe la misma. Si cambiara,
+# quien ya activo la verificacion en dos pasos no podria entrar mas que con sus
+# codigos de recuperacion (el secreto guardado deja de descifrarse). Un secret
+# de GitHub IDENTIDAD_2FA_CLAVE, si existe, manda, y el archivo se alinea.
+#
+# Sin clave, ms-identidad arranca igual y la activacion responde 503; el login
+# de quien no tiene segundo factor no cambia. NUNCA va al .env (lo leen todos
+# los servicios de plataforma): solo se exporta para el environment de
+# srv-ms-identidad (docker-compose.cuentas.yml). Nunca se imprime.
+#   $1 = archivo donde se guarda.
+asegurar_clave_de_segundo_factor() {
+  local archivo="$1" clave="${IDENTIDAD_2FA_CLAVE:-}"
+  (umask 077 && touch "$archivo")
+  chmod 600 "$archivo"
+  if [ -z "$clave" ]; then
+    clave=$(grep '^IDENTIDAD_2FA_CLAVE=' "$archivo" | head -n1 | cut -d= -f2- || true)
+  fi
+  if [ -z "$clave" ] && command -v openssl >/dev/null 2>&1; then
+    clave=$(openssl rand -base64 32 2>/dev/null | tr -d '\n' || true)
+    if [ -n "$clave" ]; then
+      echo "  clave del segundo factor de ms-identidad generada y guardada en el host (no se imprime)"
+    fi
+  fi
+  if [ -z "$clave" ]; then
+    echo "  AVISO: sin secret IDENTIDAD_2FA_CLAVE ni openssl en el host: la verificacion en dos pasos queda no disponible (503) y el resto del login no cambia"
+    return 0
+  fi
+  printf 'IDENTIDAD_2FA_CLAVE=%s\n' "$clave" > "$archivo"
+  export IDENTIDAD_2FA_CLAVE="$clave"
+}
+
 # Paso 3d: el emisor de credenciales de servicio (ms-identidad, ADR-005) al dia
 # cuando esta corrida NO lo trae.
 #
@@ -259,6 +294,8 @@ sanar_emisor() {
   clientes_vigentes=$(printf '%s\n' "$entorno" | sed -n 's/^AUTH_CLIENTES_SERVICIO=//p')
   clave_vigente=$(printf '%s\n' "$entorno" | sed -n 's/^JWT_CLAVE_PRIVADA=//p')
   asegurar_clave_de_firma "$DIRECTORIO/secretos-firma.env"
+  # HU-AUT-007: si hay que recrearlo, que no pierda la clave del segundo factor.
+  asegurar_clave_de_segundo_factor "$DIRECTORIO/secretos-segundo-factor.env"
   if [ "$clientes_vigentes" != "${AUTH_CLIENTES_SERVICIO:-}" ]; then
     motivo="cambio la lista de credenciales de servicio"
   fi
@@ -701,6 +738,7 @@ case " $OVERRIDES " in
   *" docker-compose.cuentas.yml "*)
     echo "== 3.0) Clave de firma de ms-identidad =="
     asegurar_clave_de_firma "$DIRECTORIO/secretos-firma.env"
+    asegurar_clave_de_segundo_factor "$DIRECTORIO/secretos-segundo-factor.env"
     ;;
 esac
 

@@ -100,6 +100,10 @@ class MigracionesIT {
             jdbc.execute("DROP TABLE onboarding_paso");
             jdbc.execute("DROP TABLE onboarding_jugador");
             jdbc.execute("DROP TABLE preguntas_seguridad");
+            // RFINAL-05 (V5): las del segundo factor tampoco existen en DEV.
+            jdbc.execute("DROP TABLE segundo_factor");
+            jdbc.execute("DROP TABLE codigos_recuperacion");
+            jdbc.execute("DROP TABLE desafios_acceso");
             jdbc.execute("ALTER TABLE tokens_credencial DROP COLUMN codigo_hash, DROP COLUMN intentos_fallidos,"
                     + " DROP COLUMN anulado_en, DROP COLUMN creado_en, DROP COLUMN usado_en");
             jdbc.execute("ALTER TABLE tokens_credencial ALTER COLUMN token SET NOT NULL");
@@ -128,8 +132,14 @@ class MigracionesIT {
                 + " AND indexname = 'ix_usuarios_apodo_prefijo'", Integer.class);
     }
 
+    /** RFINAL-05 — V5 crea las tres tablas del segundo factor. */
+    private static int tablasDelSegundoFactor(JdbcTemplate jdbc) {
+        return jdbc.queryForObject("SELECT count(*) FROM information_schema.tables WHERE table_name IN"
+                + " ('segundo_factor','codigos_recuperacion','desafios_acceso')", Integer.class);
+    }
+
     @Test
-    @DisplayName("base vacia: V1 a V4 se aplican y las entidades validan contra ellas")
+    @DisplayName("base vacia: V1 a V5 se aplican y las entidades validan contra ellas")
     void baseVacia() throws Exception {
         String url = crearBase("nueva");
         try (ConfigurableApplicationContext contexto = arrancarComoDespliegue(url)) {
@@ -140,8 +150,10 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("1", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("5", "SQL"));
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
+            assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM information_schema.tables WHERE table_name = 'preguntas_seguridad'",
                     Integer.class)).isEqualTo(1);
@@ -154,7 +166,7 @@ class MigracionesIT {
     }
 
     @Test
-    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V4 y el jugador sigue ahi")
+    @DisplayName("base heredada con datos: se marca como V1 sin tocarla, se aplican V2 a V5 y el jugador sigue ahi")
     void baseHeredada() throws Exception {
         String url = crearBase("heredada");
         UUID veterana = baseHeredadaConUnJugador(url);
@@ -167,7 +179,9 @@ class MigracionesIT {
                             org.assertj.core.groups.Tuple.tuple("1", "BASELINE"),
                             org.assertj.core.groups.Tuple.tuple("2", "SQL"),
                             org.assertj.core.groups.Tuple.tuple("3", "SQL"),
-                            org.assertj.core.groups.Tuple.tuple("4", "SQL"));
+                            org.assertj.core.groups.Tuple.tuple("4", "SQL"),
+                            org.assertj.core.groups.Tuple.tuple("5", "SQL"));
+            assertThat(tablasDelSegundoFactor(jdbc)).isEqualTo(3);
             // V4 sobre la tabla que creo Hibernate: el indice de la busqueda existe.
             assertThat(indicesDePrefijo(jdbc)).isEqualTo(1);
             assertThat(jdbc.queryForObject("SELECT apodo FROM usuarios WHERE public_id = ?", String.class, veterana))
@@ -225,7 +239,7 @@ class MigracionesIT {
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM pg_constraint WHERE conname = 'uk_usuarios_public_id'", Integer.class))
                     .isEqualTo(1);
-            assertThat(historial(jdbc)).hasSize(4);
+            assertThat(historial(jdbc)).hasSize(5);
         }
     }
 }

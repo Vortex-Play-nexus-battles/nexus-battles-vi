@@ -16,6 +16,9 @@ import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafiosDeAcceso;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
 import com.nexusbattles.ms_identidad.onboarding.service.OnboardingService;
 import com.nexusbattles.ms_identidad.sanciones.ProyeccionDeSancionService;
@@ -53,6 +56,17 @@ import java.util.Optional;
  *
  * <p>Un correo que no existe paga el mismo BCrypt que uno que si
  * ({@link IgualadorDeTiempo}): el tiempo tampoco dice que correos hay.
+ *
+ * <p><b>HU-AUT-007 — segundo factor.</b> Con la contrasena y el estado ya
+ * comprobados, {@link DesafiosDeAcceso} dice si falta un segundo paso (la
+ * cuenta tiene TOTP, o su rol lo exige y aun no lo tiene). Entonces NO se
+ * emite la sesion: sale {@link SegundoFactorRequeridoException} con el desafio
+ * y nada de lo que hace una entrada correcta ocurre todavia —ni se ponen a
+ * cero los intentos fallidos (si no, cada contrasena correcta regalaria otra
+ * tanda de codigos por adivinar), ni se anota la ultima entrada, ni se avisa
+ * de dispositivo nuevo—. Todo eso lo hace {@link #completarAccesoConSegundoFactor}
+ * cuando el segundo paso se supera. Sin segundo factor, el login es
+ * exactamente el de siempre.
  */
 @Service
 public class LoginService {
@@ -72,6 +86,7 @@ public class LoginService {
     private final OnboardingService onboardingService;
     private final IgualadorDeTiempo igualador;
     private final ProyeccionDeSancionService proyecciones;
+    private final DesafiosDeAcceso desafios;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
@@ -86,7 +101,8 @@ public class LoginService {
                         AuditoriaDeCuenta auditoriaDeCuenta,
                         OnboardingService onboardingService,
                         IgualadorDeTiempo igualador,
-                        ProyeccionDeSancionService proyecciones) {
+                        ProyeccionDeSancionService proyecciones,
+                        DesafiosDeAcceso desafios) {
         this.usuarioRepository = usuarioRepository;
         this.dispositivoConocidoRepository = dispositivoConocidoRepository;
         this.intentosFallidosService = intentosFallidosService;
@@ -97,9 +113,15 @@ public class LoginService {
         this.onboardingService = onboardingService;
         this.igualador = igualador;
         this.proyecciones = proyecciones;
+        this.desafios = desafios;
     }
 
-    @Transactional
+    /**
+     * @throws SegundoFactorRequeridoException la contrasena es correcta pero
+     *         falta el segundo paso. No deshace la transaccion: el desafio
+     *         recien emitido tiene que quedar guardado para poder canjearse.
+     */
+    @Transactional(noRollbackFor = SegundoFactorRequeridoException.class)
     public LoginResponse iniciarSesion(LoginRequest datos, String direccionIp, String userAgent) {
 
         // R17 — mismo identificador que el registro: el correo, sin espacios
@@ -131,6 +153,32 @@ public class LoginService {
         // --- Estado de la cuenta: solo quien sabe la contraseña llega aquí ---
         exigirQuePuedaEntrar(usuario, direccionIp);
 
+        // --- HU-AUT-007: ¿falta el segundo factor? Entonces no hay sesión todavía ---
+        Optional<DesafioEmitido> desafio = desafios.exigirSegundoPaso(usuario);
+        if (desafio.isPresent()) {
+            auditLog.info("LOGIN_SEGUNDO_PASO usuarioId={} ip={} paso={}",
+                usuario.getId(), direccionIp, desafio.get().proposito());
+            throw new SegundoFactorRequeridoException(desafio.get());
+        }
+
+        return completarAcceso(usuario, direccionIp, userAgent, false);
+    }
+
+    /**
+     * HU-AUT-007 — el segundo paso ya se supero (codigo TOTP, de recuperacion o
+     * enrolamiento obligatorio confirmado): se vuelve a mirar el estado de la
+     * cuenta (una sancion pudo llegar entre los dos pasos) y se abre la sesion
+     * con {@code amr: ["pwd","otp"]}.
+     */
+    @Transactional
+    public LoginResponse completarAccesoConSegundoFactor(Usuario usuario, String direccionIp, String userAgent) {
+        exigirQuePuedaEntrar(usuario, direccionIp);
+        return completarAcceso(usuario, direccionIp, userAgent, true);
+    }
+
+    /** Lo que hace una entrada correcta, con o sin segundo factor. */
+    private LoginResponse completarAcceso(Usuario usuario, String direccionIp, String userAgent,
+                                          boolean conSegundoFactor) {
         // --- Login exitoso: resetear contadores ---
         boolean primerAcceso = usuario.getUltimoAcceso() == null;
         usuario.setIntentosFallidos(0);
@@ -165,10 +213,15 @@ public class LoginService {
         // Token JWT firmado, incluyendo la versión vigente (HU-RBAC-003) —
         // reemplaza la confianza ciega en X-User-Role. El publicId viaja como
         // claim `uid` para que otros servicios referencien al usuario sin
-        // depender del apodo, que es mutable.
-        String token = jwtService.generarToken(
-            usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken(),
-            usuario.getPublicId());
+        // depender del apodo, que es mutable. HU-AUT-007: `amr` dice si la
+        // sesión pasó el segundo factor (["pwd","otp"]) o no (["pwd"]).
+        String token = conSegundoFactor
+            ? jwtService.generarToken(
+                usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken(),
+                usuario.getPublicId(), JwtService.AMR_CON_SEGUNDO_FACTOR)
+            : jwtService.generarToken(
+                usuario.getApodo(), usuario.getRol().getNombre(), usuario.getVersionToken(),
+                usuario.getPublicId());
 
         // R17 — primer acceso a la auditoria, y si el alta del jugador quedo a
         // medias (un servicio caido cuando se registro), se relanza ahora sin

@@ -36,8 +36,64 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 2.1.0
+  version: 2.2.0
   description: |
+    ### Cambios en 2.2.0 (RFINAL-05, HU-AUT-007 #502 — segundo factor TOTP), todos aditivos
+
+    RF-AUT-007 pide segundo factor obligatorio para Moderador, Administrador y
+    Super Administrador sin fijar el mecanismo. Se usa **TOTP (RFC 6238:
+    HMAC-SHA1, 6 digitos, pasos de 30 s)**, el que entiende cualquier
+    aplicacion de autenticacion.
+
+    - **Enrolamiento de la propia cuenta** (`tokenDeUsuario`):
+      `GET /auth/segundo-factor` (estado), `POST /auth/segundo-factor/enrolamiento`
+      (secreto en base32 y URI `otpauth://` para escribirlo o escanearlo; aun
+      no protege nada), `POST /auth/segundo-factor/activacion` (un codigo de la
+      aplicacion lo confirma y devuelve los **codigos de recuperacion UNA sola
+      vez**) y `POST /auth/segundo-factor/desactivacion` (contrasena actual +
+      codigo de la aplicacion o de recuperacion).
+    - **Login en dos pasos.** Con segundo factor activo, `POST /auth/login`
+      ya **no emite el token**: con la contrasena correcta responde **403**
+      problem details `segundo-factor-requerido` con un `desafio` opaco de
+      corta vida (`DesafioDeSegundoFactor`). Es un 403 y no un 200 a proposito:
+      un cliente anterior que no lo conoce lo trata como un rechazo (y enseña
+      su `detail`), nunca como una sesion. `POST /auth/login/segundo-factor`
+      canjea `desafio` + codigo (o codigo de recuperacion) por la misma
+      `LoginResponse` de siempre.
+    - **Obligatoriedad por rol, apagada por omision**
+      (`identidad.segundo-factor.obligatorio-roles`, variable
+      `IDENTIDAD_2FA_OBLIGATORIO_ROLES`, vacia). Con un rol en la lista, el
+      login de una cuenta de ese rol sin segundo factor responde **403**
+      `segundo-factor-enrolamiento-requerido` con un `desafio`, y la cuenta se
+      enrola sin sesion: `POST /auth/login/segundo-factor/enrolamiento` y
+      `POST /auth/login/segundo-factor/activacion`, que entrega la sesion y los
+      codigos de recuperacion. Ninguna sesion de ese rol se emite sin doble
+      factor (CA-04).
+    - **Claim `amr` (RFC 8176) en el JWT de usuario**: `["pwd"]` con
+      contrasena sola, `["pwd","otp"]` tras el segundo factor. Es el que lee
+      ms-cumplimiento con `AUDITORIA_EXIGIR_2FA=true` (D-09). El token nuevo de
+      `PUT /auth/password` conserva el `amr` de la sesion que lo pide.
+    - **Almacenamiento**: el secreto TOTP se guarda cifrado con AES-GCM (clave
+      `IDENTIDAD_2FA_CLAVE`, base64 de 16, 24 o 32 bytes); sin clave, el
+      enrolamiento responde 503 `segundo-factor-no-disponible` y el login de
+      las cuentas sin segundo factor no cambia. Los codigos de recuperacion se
+      guardan con BCrypt y son de un solo uso. Se acepta el codigo del paso
+      actual y el de los pasos vecinos (±1, 30 s de holgura de reloj) y
+      **nunca dos veces el mismo paso** ni uno anterior al ultimo aceptado.
+    - **Intentos**: un codigo incorrecto en el login o en la desactivacion
+      cuenta como intento fallido de la cuenta (RF-AUT-009, la misma politica y
+      el mismo bloqueo 423 que la contrasena). Uno incorrecto al CONFIRMAR el
+      enrolamiento no cuenta: la persona prueba un secreto que acaba de
+      generar ella misma.
+    - Cifras sin valor de negocio en ningun documento, **PROVISIONALES y
+      configurables**: el desafio vive 5 min (`IDENTIDAD_2FA_MINUTOS_DESAFIO`)
+      y se entregan 10 codigos de recuperacion de 10 caracteres
+      (`IDENTIDAD_2FA_CODIGOS_RECUPERACION`, alfabeto sin 0/O/1/I/L, se
+      enseñan como `XXXXX-XXXXX`).
+    - Las rutas nuevas responden sus errores siempre como problem details.
+      `POST /auth/login/segundo-factor*` cae en el mismo limite de frecuencia
+      del borde que el login (`zone=acceso`).
+
     ### Cambios en 2.1.0 (B1, BACKEND-02 — implementado)
 
     - 2.1.0 (B1): implementadas `POST /auth/verificacion/confirmacion`,
@@ -169,6 +225,12 @@ info:
       existiera salen **sin este claim**: no poder identificar al usuario de
       cara a otros servicios no se considero razon para negarle el acceso al
       suyo. Un consumidor tiene que contemplar su ausencia.
+    - `amr` — 2.2.0, metodos de autenticacion de la sesion (RFC 8176), una
+      lista: `["pwd"]` si se entro solo con la contrasena y `["pwd","otp"]` si
+      ademas se verifico el segundo factor (TOTP o codigo de recuperacion). Un
+      servicio que exija doble factor busca `otp` (ms-cumplimiento admite
+      tambien `mfa` y `hwk`). Los tokens emitidos antes de 2.2.0 no lo traen:
+      ausente equivale a «sin segundo factor».
     - `iss` — emisor, `ms-identidad` por omision (`app.jwt.emisor`).
     - `iat` / `exp` — emision y expiracion; **24 horas** por omision
       (`app.jwt.horas-expiracion`).
@@ -188,7 +250,9 @@ info:
       (`/auth/verificacion/*`, `/auth/restablecer/*`,
       `/auth/preguntas-seguridad`) responden sus errores como **problem
       details con `type` propio**, uno por motivo de rechazo. El 503
-      `moderacion-no-disponible` del registro, tambien.
+      `moderacion-no-disponible` del registro, tambien. Desde 2.2.0, las de
+      segundo factor (`/auth/segundo-factor/*` y `/auth/login/segundo-factor*`)
+      igual.
     - `POST /auth/token` devuelve **objetos de error de OAuth2**
       (`error` / `error_description`), que no son problem details y no deben
       tratarse como tales: es el formato que exige la RFC 6749.
@@ -209,6 +273,8 @@ tags:
     description: Alta, acceso y credenciales de una persona (HU-AUT-001, HU-AUT-006)
   - name: plataforma
     description: Claves publicas y credenciales de servicio (ADR-002, ADR-005)
+  - name: segundo-factor
+    description: Segundo factor TOTP de la propia cuenta y segundo paso del login (2.2.0, HU-AUT-007)
 
 paths:
   /api/v1/auth/registro:
@@ -338,6 +404,15 @@ paths:
         inactiva) y 423 es «demasiados intentos fallidos, vuelve mas tarde».
         Los tres estados de cuenta del 403 no se distinguen por ningun campo:
         solo por el texto del cuerpo.
+
+        **2.2.0 — segundo factor.** Si la cuenta tiene segundo factor activo
+        (o su rol lo exige y aun no lo tiene), la contrasena correcta NO da la
+        sesion: responde 403 con un `desafio` (ver el 403). Hasta canjearlo no
+        se ponen a cero los intentos fallidos, no se anota la ultima entrada,
+        no se avisa de dispositivo nuevo ni se audita el primer acceso: todo
+        eso pasa cuando el segundo paso emite la sesion. Una cuenta sin
+        segundo factor (todas, mientras la obligatoriedad este apagada) entra
+        exactamente igual que en 2.1.0, ahora con `amr: ["pwd"]` en el token.
       security: []
       parameters:
         - name: X-Forwarded-For
@@ -408,13 +483,41 @@ paths:
             **2.1.0:** `suspendidoHasta` es un instante ISO-8601 en UTC
             (`2026-09-26T15:00:00Z`). Una suspension que ya vencio no da 403:
             la persona entra y la proyeccion se limpia.
+
+            **2.2.0:** dos casos mas, tambien solo con la contrasena correcta
+            y despues de comprobar el estado de la cuenta:
+
+            - `.../errors/segundo-factor-requerido` — la cuenta tiene segundo
+              factor: falta el codigo. Trae `desafio` y `expiraEn`
+              (`DesafioDeSegundoFactor`); el segundo paso es
+              `POST /api/v1/auth/login/segundo-factor`.
+            - `.../errors/segundo-factor-enrolamiento-requerido` — el rol de la
+              cuenta exige segundo factor (`IDENTIDAD_2FA_OBLIGATORIO_ROLES`) y
+              aun no lo tiene: se enrola con ese `desafio` en
+              `POST /api/v1/auth/login/segundo-factor/enrolamiento` y
+              `.../activacion`, que entrega la sesion.
+
+            El `desafio` solo viaja con `Accept: application/problem+json`;
+            en texto plano llega el `detail` («escribe el codigo de tu
+            aplicacion de autenticacion»), que es lo que un cliente anterior
+            puede enseñar. Ninguno de los dos casos trae `token`.
           content:
             text/plain:
               schema:
                 type: string
             application/problem+json:
               schema:
-                $ref: '#/components/schemas/ProblemDetail'
+                anyOf:
+                  - $ref: '#/components/schemas/ProblemDetail'
+                  - $ref: '#/components/schemas/DesafioDeSegundoFactor'
+              example:
+                type: https://nexusbattles.upb.edu.co/errors/segundo-factor-requerido
+                title: Falta el segundo factor
+                status: 403
+                detail: Esta cuenta tiene activada la verificación en dos pasos. Escribe el código de tu aplicación de autenticación para terminar de entrar.
+                instance: /api/v1/auth/login
+                desafio: q3V9Yb0n2xk7r8T1mW4cJ6pA5sD0fG2hL9zX3vB7nQe
+                expiraEn: '2026-10-08T15:05:00Z'
         '423':
           description: |
             Cuenta bloqueada temporalmente por intentos fallidos (RF-AUT-009;
@@ -426,6 +529,233 @@ paths:
             text/plain:
               schema:
                 type: string
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            2.2.0 — `.../errors/segundo-factor-no-disponible`: el rol de la
+            cuenta exige segundo factor, la cuenta aun no lo tiene y el
+            servicio no puede enrolarla (falta `IDENTIDAD_2FA_CLAVE`). No se
+            emite sesion sin el (fail-closed). Con la obligatoriedad apagada
+            (por omision) no puede ocurrir.
+          content:
+            text/plain:
+              schema:
+                type: string
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/login/segundo-factor:
+    post:
+      tags: [segundo-factor]
+      operationId: completarLoginConSegundoFactor
+      summary: Segundo paso del login — canjea el desafio y el codigo por la sesion (2.2.0)
+      description: |
+        **Ruta publica**: quien la llama todavia no tiene sesion; lo que prueba
+        que ya dio la contrasena es el `desafio` del 403
+        `segundo-factor-requerido` de `POST /auth/login`.
+
+        Lleva `codigo` (los 6 digitos que muestra la aplicacion de
+        autenticacion en ese momento) **o** `codigoRecuperacion` (uno de los
+        que se entregaron al activar; cada uno sirve una sola vez). Nunca los
+        dos.
+
+        Orden: desafio (vigente, sin usar, de una cuenta cuya version de token
+        no cambio) -> cuenta bloqueada (423, no se compara nada) -> codigo ->
+        estado de la cuenta (los mismos 403 del login: una sancion que llego
+        entre los dos pasos tambien deja fuera) -> sesion. Un codigo incorrecto
+        **cuenta como intento fallido de la cuenta** (RF-AUT-009): al llegar al
+        umbral la cuenta se bloquea igual que con la contrasena. El desafio
+        sigue sirviendo para otro intento mientras no caduque; tras canjearse,
+        ya no. Mismo par de cabeceras que el login (`X-Forwarded-For`,
+        `User-Agent`) para `dispositivoNuevo`.
+
+        La respuesta es la `LoginResponse` de siempre (el token lleva
+        `amr: ["pwd","otp"]`) y, si se entro con un codigo de recuperacion,
+        `codigosRecuperacionRestantes`.
+      security: []
+      parameters:
+        - name: X-Forwarded-For
+          in: header
+          required: false
+          description: Igual que en `POST /api/v1/auth/login`.
+          schema:
+            type: string
+        - name: User-Agent
+          in: header
+          required: false
+          description: Igual que en `POST /api/v1/auth/login`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CanjeDeDesafioRequest'
+            example:
+              desafio: q3V9Yb0n2xk7r8T1mW4cJ6pA5sD0fG2hL9zX3vB7nQe
+              codigo: '287082'
+      responses:
+        '200':
+          description: Sesion iniciada con doble factor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginConSegundoFactorResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          description: |
+            `.../errors/desafio-invalido` — el desafio no existe, caduco, ya se
+            canjeo o la cuenta cambio de contrasena entre los dos pasos: hay que
+            volver a escribir la contrasena. `.../errors/codigo-segundo-factor-invalido`
+            — el codigo no es el de este momento (o ya se uso), o el codigo de
+            recuperacion no es uno vigente; cuenta como intento fallido.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Los mismos estados de cuenta que el 403 de `POST /api/v1/auth/login` (baneada, suspendida, inactiva, sin verificar).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '423':
+          description: '`.../errors/cuenta-bloqueada` — RF-AUT-009: no se compara ningun codigo mientras dure el bloqueo.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: |
+            `.../errors/segundo-factor-no-disponible` — falta la clave con la
+            que se descifra el secreto (`IDENTIDAD_2FA_CLAVE`). Un codigo de
+            recuperacion sigue funcionando: no necesita esa clave.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/login/segundo-factor/enrolamiento:
+    post:
+      tags: [segundo-factor]
+      operationId: iniciarEnrolamientoObligatorio
+      summary: Enrolamiento obligatorio sin sesion — secreto y URI otpauth (2.2.0)
+      description: |
+        **Ruta publica**, autenticada por el `desafio` del 403
+        `segundo-factor-enrolamiento-requerido`: el rol de la cuenta exige
+        segundo factor y la cuenta no lo tiene, asi que no recibe sesion hasta
+        enrolarse. Misma respuesta que `POST /auth/segundo-factor/enrolamiento`.
+        Pedirlo otra vez reemplaza el secreto pendiente (el anterior deja de
+        valer).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesafioRequest'
+      responses:
+        '200':
+          description: 'Secreto generado, pendiente de confirmar. Con `Cache-Control: no-store`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrolamientoSegundoFactor'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          description: '`.../errors/desafio-invalido` — no existe, caduco, ya se uso o no es de enrolamiento.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: '`.../errors/segundo-factor-ya-activo` — la cuenta ya lo activo (por ejemplo en otra pestaña): basta con volver a entrar.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: '`.../errors/segundo-factor-no-disponible` — falta `IDENTIDAD_2FA_CLAVE`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/login/segundo-factor/activacion:
+    post:
+      tags: [segundo-factor]
+      operationId: activarSegundoFactorObligatorio
+      summary: Confirma el enrolamiento obligatorio y entrega la sesion (2.2.0)
+      description: |
+        **Ruta publica**, autenticada por el mismo `desafio` de enrolamiento.
+        El `codigo` de la aplicacion confirma que el secreto quedo bien
+        guardado; entonces el segundo factor queda activo, el desafio se
+        consume y se emite la sesion (`amr: ["pwd","otp"]`) junto con los
+        `codigosRecuperacion`, que **no se vuelven a mostrar**. Un codigo
+        incorrecto aqui no cuenta como intento fallido de la cuenta (la
+        persona prueba un secreto que acaba de generar).
+      security: []
+      parameters:
+        - name: X-Forwarded-For
+          in: header
+          required: false
+          description: Igual que en `POST /api/v1/auth/login`.
+          schema:
+            type: string
+        - name: User-Agent
+          in: header
+          required: false
+          description: Igual que en `POST /api/v1/auth/login`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivacionConDesafioRequest'
+      responses:
+        '200':
+          description: 'Segundo factor activo y sesion iniciada. Con `Cache-Control: no-store`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginConSegundoFactorResponse'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          description: '`.../errors/desafio-invalido`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '403':
+          description: Los mismos estados de cuenta que el 403 de `POST /api/v1/auth/login`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: '`.../errors/sin-enrolamiento-pendiente` (falta pedir el secreto) o `.../errors/segundo-factor-ya-activo`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: '`.../errors/codigo-segundo-factor-invalido` — el codigo no corresponde al secreto pendiente en este momento.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: '`.../errors/segundo-factor-no-disponible` — falta `IDENTIDAD_2FA_CLAVE`.'
+          content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetail'
@@ -843,6 +1173,12 @@ paths:
         siga usando el anterior empezara a recibir 403 en la siguiente
         llamada.
 
+        **2.2.0:** el token nuevo conserva el `amr` de la sesion que pide el
+        cambio: una sesion abierta con segundo factor sigue siendo de doble
+        factor (`["pwd","otp"]`) despues de cambiar la contrasena. Subir la
+        version de token tambien anula los desafios de segundo factor que
+        estuvieran a medio canjear.
+
         **Es la unica ruta de `/auth` que responde problem details con `type`
         propio** (CA-06). Los cinco motivos de rechazo estan abajo, cada uno
         con su URI estable bajo `https://nexusbattles.upb.edu.co/errors/`:
@@ -925,6 +1261,208 @@ paths:
             `https://nexusbattles.upb.edu.co/errors/cuenta-bloqueada`. Se
             separa de los 422 porque es transitorio: la misma peticion
             funcionara sola pasado el bloqueo.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/segundo-factor:
+    get:
+      tags: [segundo-factor]
+      operationId: consultarMiSegundoFactor
+      summary: Si la propia cuenta tiene segundo factor, y si su rol lo exige (2.2.0)
+      description: |
+        Solo lo de la cuenta que firma el token (su `uid`; el apodo en tokens
+        anteriores al `uid`). Nunca devuelve el secreto ni los codigos de
+        recuperacion: solo cuantos quedan. Con `Cache-Control: no-store`.
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Estado del segundo factor.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoSegundoFactor'
+              example:
+                activo: true
+                obligatorio: false
+                disponible: true
+                enrolamientoPendiente: false
+                activadoEn: '2026-10-05T14:30:00Z'
+                codigosRecuperacionRestantes: 9
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/segundo-factor/enrolamiento:
+    post:
+      tags: [segundo-factor]
+      operationId: iniciarEnrolamientoSegundoFactor
+      summary: Genera el secreto TOTP de la propia cuenta, aun sin activar (2.2.0)
+      description: |
+        Genera un secreto nuevo (160 bits, RFC 4226) y lo guarda **cifrado**,
+        pendiente de confirmar: todavia no se pide en el login. Devuelve el
+        secreto en base32 (para escribirlo a mano) y la URI `otpauth://` (para
+        escanearla o abrirla con la aplicacion). Es la unica vez que el
+        servidor lo entrega. Pedirlo otra vez antes de confirmar reemplaza el
+        pendiente (el anterior deja de valer). Con `Cache-Control: no-store`.
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Secreto generado, pendiente de confirmar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnrolamientoSegundoFactor'
+              example:
+                secreto: JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP
+                uriOtpauth: otpauth://totp/Nexus%20Battles%20VI:valkiria%40ejemplo.upb.edu.co?secret=JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP&issuer=Nexus%20Battles%20VI&algorithm=SHA1&digits=6&period=30
+                emisor: Nexus Battles VI
+                cuenta: valkiria@ejemplo.upb.edu.co
+                algoritmo: SHA1
+                digitos: 6
+                periodoSegundos: 30
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: '`.../errors/segundo-factor-ya-activo` — ya esta activo: para cambiar de aplicacion, primero se desactiva.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: '`.../errors/segundo-factor-no-disponible` — el servicio no tiene la clave de cifrado (`IDENTIDAD_2FA_CLAVE`).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/segundo-factor/activacion:
+    post:
+      tags: [segundo-factor]
+      operationId: activarSegundoFactor
+      summary: Confirma el secreto con un codigo y activa el segundo factor (2.2.0)
+      description: |
+        El `codigo` que muestra la aplicacion demuestra que el secreto quedo
+        bien guardado. Entonces el segundo factor queda activo (el proximo
+        login lo pedira) y se entregan los **codigos de recuperacion, una sola
+        vez**: el servidor solo guarda su resumen BCrypt y no puede volver a
+        mostrarlos. Activarlo no cierra la sesion actual. Un codigo incorrecto
+        responde 422 y no cuenta como intento fallido de la cuenta. Con
+        `Cache-Control: no-store`.
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodigoDeSegundoFactorRequest'
+            example:
+              codigo: '287082'
+      responses:
+        '200':
+          description: Activo; los codigos de recuperacion van en la respuesta y no se repiten.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivacionSegundoFactor'
+              example:
+                activo: true
+                codigosRecuperacion: [K7QX2-M9PRT, 4HNZW-8CVBE]
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: '`.../errors/sin-enrolamiento-pendiente` (no se pidio el secreto) o `.../errors/segundo-factor-ya-activo`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: '`.../errors/codigo-segundo-factor-invalido` — no es el codigo de este momento para el secreto pendiente.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: '`.../errors/segundo-factor-no-disponible`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/segundo-factor/desactivacion:
+    post:
+      tags: [segundo-factor]
+      operationId: desactivarSegundoFactor
+      summary: Quita el segundo factor de la propia cuenta, con contrasena y codigo (2.2.0)
+      description: |
+        Exige la contrasena actual **y** un codigo de la aplicacion (`codigo`)
+        o uno de recuperacion (`codigoRecuperacion`): un token robado no basta
+        para quitar el segundo factor. Borra el secreto y los codigos de
+        recuperacion; la sesion actual sigue abierta. Si el rol de la cuenta
+        lo exige, el proximo login pedira enrolarse de nuevo.
+
+        Orden: sin segundo factor activo, 409 -> cuenta bloqueada, 423 (no se
+        compara nada) -> contrasena (incorrecta: 422 y cuenta como intento
+        fallido) -> codigo (incorrecto: 422 y cuenta como intento fallido).
+      security:
+        - tokenDeUsuario: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesactivarSegundoFactorRequest'
+            example:
+              passwordActual: 'Contrasena.Valida.9'
+              codigo: '287082'
+      responses:
+        '204':
+          description: Segundo factor desactivado.
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '403':
+          description: Sin sesion valida.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '409':
+          description: '`.../errors/segundo-factor-no-activo`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '422':
+          description: '`.../errors/contrasena-actual-incorrecta` o `.../errors/codigo-segundo-factor-invalido`; los dos cuentan como intento fallido (RF-AUT-009).'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '423':
+          description: '`.../errors/cuenta-bloqueada`.'
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+        '503':
+          description: '`.../errors/segundo-factor-no-disponible` — se mando `codigo` y falta `IDENTIDAD_2FA_CLAVE` para comprobarlo; con `codigoRecuperacion` funciona.'
           content:
             application/problem+json:
               schema:
@@ -1296,6 +1834,186 @@ components:
             `true` tambien en cuentas sin alta (administracion, anteriores a
             R17). El login relanza un alta que quedo a medias.
 
+    LoginConSegundoFactorResponse:
+      description: |
+        2.2.0 — la `LoginResponse` de siempre, emitida tras el segundo factor
+        (el token lleva `amr: ["pwd","otp"]`), mas lo que solo tiene sentido
+        en ese paso. Los dos campos extra salen solo cuando aplican.
+      allOf:
+        - $ref: '#/components/schemas/LoginResponse'
+        - type: object
+          properties:
+            codigosRecuperacionRestantes:
+              type: integer
+              minimum: 0
+              description: |
+                Solo si se entro con un codigo de recuperacion: cuantos quedan
+                sin usar. Con pocos, conviene desactivar y volver a activar el
+                segundo factor para tener codigos nuevos.
+            codigosRecuperacion:
+              type: array
+              items:
+                type: string
+              description: |
+                Solo en `POST /auth/login/segundo-factor/activacion`: los codigos
+                de recuperacion recien generados. **No se vuelven a mostrar.**
+
+    DesafioDeSegundoFactor:
+      description: |
+        2.2.0 — el 403 `segundo-factor-requerido` o
+        `segundo-factor-enrolamiento-requerido` de `POST /auth/login`. El
+        `desafio` es un valor opaco y aleatorio (256 bits, base64url) que el
+        servidor solo guarda resumido (SHA-256): no es un JWT ni sirve como
+        credencial ante ningun otro servicio. Vive `IDENTIDAD_2FA_MINUTOS_DESAFIO`
+        minutos (5, provisional), se canjea una sola vez y caduca si la cuenta
+        cambia de contrasena. El cliente lo guarda en memoria, nunca en la URL
+        ni en un almacenamiento persistente.
+      allOf:
+        - $ref: '#/components/schemas/ProblemDetail'
+        - type: object
+          required: [desafio, expiraEn]
+          properties:
+            desafio:
+              type: string
+              minLength: 32
+              maxLength: 128
+            expiraEn:
+              type: string
+              format: date-time
+              description: Instante ISO-8601 en UTC.
+
+    CanjeDeDesafioRequest:
+      type: object
+      description: |
+        2.2.0 — el segundo paso del login. `codigo` o `codigoRecuperacion`,
+        exactamente uno: con los dos o con ninguno, 400 `datos-invalidos`.
+      required: [desafio]
+      properties:
+        desafio:
+          type: string
+          maxLength: 128
+        codigo:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: Los 6 digitos que muestra la aplicacion de autenticacion en este momento.
+        codigoRecuperacion:
+          type: string
+          maxLength: 32
+          description: Uno de los codigos de recuperacion; sin distinguir mayusculas y sin importar espacios ni guiones.
+
+    DesafioRequest:
+      type: object
+      required: [desafio]
+      properties:
+        desafio:
+          type: string
+          maxLength: 128
+
+    ActivacionConDesafioRequest:
+      type: object
+      required: [desafio, codigo]
+      properties:
+        desafio:
+          type: string
+          maxLength: 128
+        codigo:
+          type: string
+          pattern: '^[0-9]{6}$'
+
+    CodigoDeSegundoFactorRequest:
+      type: object
+      required: [codigo]
+      properties:
+        codigo:
+          type: string
+          pattern: '^[0-9]{6}$'
+          description: Los 6 digitos que muestra la aplicacion para el secreto pendiente.
+
+    DesactivarSegundoFactorRequest:
+      type: object
+      description: |
+        `passwordActual` y, ademas, `codigo` o `codigoRecuperacion` (exactamente
+        uno). No lleva identificador: quien desactiva es quien firma el token.
+      required: [passwordActual]
+      properties:
+        passwordActual:
+          type: string
+          format: password
+        codigo:
+          type: string
+          pattern: '^[0-9]{6}$'
+        codigoRecuperacion:
+          type: string
+          maxLength: 32
+
+    EstadoSegundoFactor:
+      type: object
+      required: [activo, obligatorio, disponible, enrolamientoPendiente]
+      properties:
+        activo:
+          type: boolean
+          description: La cuenta tiene segundo factor confirmado; el login lo pide.
+        obligatorio:
+          type: boolean
+          description: El rol de la cuenta lo exige (`IDENTIDAD_2FA_OBLIGATORIO_ROLES`).
+        disponible:
+          type: boolean
+          description: El servicio puede enrolar (tiene la clave de cifrado). Si es `false`, activar responde 503.
+        enrolamientoPendiente:
+          type: boolean
+          description: Se genero un secreto y falta confirmarlo con un codigo.
+        activadoEn:
+          type: [string, 'null']
+          format: date-time
+          description: Cuando se activo, en UTC; nulo si no esta activo.
+        codigosRecuperacionRestantes:
+          type: [integer, 'null']
+          description: Cuantos codigos de recuperacion quedan sin usar; nulo si no esta activo.
+
+    EnrolamientoSegundoFactor:
+      type: object
+      description: |
+        2.2.0 — el secreto TOTP recien generado, pendiente de confirmar. Es la
+        unica vez que sale del servidor; se guarda cifrado (AES-GCM).
+      required: [secreto, uriOtpauth, emisor, cuenta, algoritmo, digitos, periodoSegundos]
+      properties:
+        secreto:
+          type: string
+          description: El secreto en base32 (RFC 4648, sin relleno), para escribirlo a mano en la aplicacion.
+        uriOtpauth:
+          type: string
+          description: '`otpauth://totp/...` con el secreto, el emisor y los parametros; la abre o la escanea la aplicacion.'
+        emisor:
+          type: string
+          description: Nombre con el que la aplicacion muestra la cuenta (`IDENTIDAD_2FA_EMISOR`).
+        cuenta:
+          type: string
+          description: Etiqueta de la cuenta en la aplicacion (el correo).
+        algoritmo:
+          type: string
+          enum: [SHA1]
+        digitos:
+          type: integer
+          enum: [6]
+        periodoSegundos:
+          type: integer
+          enum: [30]
+
+    ActivacionSegundoFactor:
+      type: object
+      required: [activo, codigosRecuperacion]
+      properties:
+        activo:
+          type: boolean
+          enum: [true]
+        codigosRecuperacion:
+          type: array
+          items:
+            type: string
+          description: |
+            Codigos de un solo uso para entrar sin la aplicacion. **Se muestran
+            esta vez y nunca mas**: el servidor solo guarda su resumen BCrypt.
+
     OnboardingResponse:
       type: object
       description: |
@@ -1631,10 +2349,11 @@ components:
       description: |
         Problem details RFC 7807 (regla 4). Lo devuelven `PUT
         /api/v1/auth/password`, el 403 del interceptor, las rutas de B1
-        (verificacion, restablecimiento, preguntas de seguridad), el 503 del
-        registro y, con `Accept: application/problem+json`, los rechazos del
-        registro y del login. `/auth/token` responde errores de OAuth2. La
-        interfaz decide por `type`, nunca por el texto.
+        (verificacion, restablecimiento, preguntas de seguridad), las de
+        segundo factor (2.2.0), el 503 del registro y, con
+        `Accept: application/problem+json`, los rechazos del registro y del
+        login. `/auth/token` responde errores de OAuth2. La interfaz decide por
+        `type`, nunca por el texto.
       required: [type, title, status]
       properties:
         type:
