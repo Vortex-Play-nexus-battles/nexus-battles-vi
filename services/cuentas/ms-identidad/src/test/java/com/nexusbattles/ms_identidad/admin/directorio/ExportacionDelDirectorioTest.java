@@ -118,11 +118,14 @@ class ExportacionDelDirectorioTest {
         Usuario vieja = cuenta("Dani", "dani@ejemplo.org", "JUGADOR", "SUSPENDIDA");
         devolviendo(List.of(bloqueada, vieja), 2);
 
-        String[] filas = texto(exportador(100).exportar(FiltroDelDirectorio.de(null, false, null, null, null, null)))
-                .split("\r\n");
+        ExportacionDelDirectorio.Exportacion exportacion =
+                exportador(100).exportar(FiltroDelDirectorio.de(null, false, null, null, null, null));
+        String[] filas = texto(exportacion).split("\r\n");
 
         assertThat(filas[1]).contains(",\"BLOQUEADA\",");
         assertThat(filas[2]).contains(",\"SUSPENDIDO\",");
+        // HU-USR-009: lo que se audita es cuantas cuentas lleva el archivo, sin la cabecera.
+        assertThat(exportacion.filas()).isEqualTo(2);
     }
 
     @Test
@@ -173,6 +176,7 @@ class ExportacionDelDirectorioTest {
 
         assertThat(exportacion.nombreArchivo()).isEqualTo("directorio-de-cuentas-20261005-1507.csv");
         assertThat(texto(exportacion)).isEqualTo("\uFEFFApodo,Correo,Rol,Estado,Registro,Última entrada\r\n");
+        assertThat(exportacion.filas()).isZero();
     }
 
     @Test
@@ -185,14 +189,16 @@ class ExportacionDelDirectorioTest {
     @DisplayName("dos exportaciones son iguales por su contenido, y el texto no vuelca los datos")
     void igualdadPorContenido() {
         byte[] datos = "\"ada\",\"ada@nexus.test\"".getBytes(StandardCharsets.UTF_8);
-        ExportacionDelDirectorio.Exportacion una = new ExportacionDelDirectorio.Exportacion("a.csv", datos);
+        ExportacionDelDirectorio.Exportacion una = new ExportacionDelDirectorio.Exportacion("a.csv", datos, 1);
         ExportacionDelDirectorio.Exportacion igual =
-                new ExportacionDelDirectorio.Exportacion("a.csv", datos.clone());
+                new ExportacionDelDirectorio.Exportacion("a.csv", datos.clone(), 1);
 
         assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
-        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("b.csv", datos.clone()));
-        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("a.csv", new byte[0]));
-        assertThat(una.toString()).contains("a.csv").contains("bytes=" + datos.length).doesNotContain("ada@");
-        assertThat(new ExportacionDelDirectorio.Exportacion(null, null).toString()).contains("bytes=0");
+        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("b.csv", datos.clone(), 1));
+        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("a.csv", new byte[0], 1));
+        assertThat(una).isNotEqualTo(new ExportacionDelDirectorio.Exportacion("a.csv", datos.clone(), 2));
+        assertThat(una.toString()).contains("a.csv").contains("bytes=" + datos.length).contains("filas=1")
+                .doesNotContain("ada@");
+        assertThat(new ExportacionDelDirectorio.Exportacion(null, null, 0).toString()).contains("bytes=0");
     }
 }

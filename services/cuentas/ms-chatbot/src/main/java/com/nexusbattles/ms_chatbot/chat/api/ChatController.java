@@ -9,6 +9,8 @@ import com.nexusbattles.ms_chatbot.chat.service.CalificacionService;
 import com.nexusbattles.ms_chatbot.chat.service.ChatService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -19,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -40,6 +43,9 @@ public class ChatController {
     // Detras del borde, nginx fija X-Real-IP con la direccion real del cliente
     // (borde-dev.conf); sin borde, la del socket.
     private static final String CABECERA_IP_REAL = "X-Real-IP";
+
+    // ms-chatbot.yaml 1.3.5: tamano de pagina si llega 'antesDe' sin 'limite'.
+    static final int LIMITE_DE_HISTORIAL_POR_DEFECTO = 50;
 
     private static final String MENSAJE_NO_ENCONTRADO =
         "No existe una respuesta con ese identificador en tu conversacion.";
@@ -76,7 +82,11 @@ public class ChatController {
 
         ResolutorDeIdentidad.Resultado quien = resolutor.resolverOEmitir(authentication, idSesionAnonima,
             origenDe(peticion));
-        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), request.adjuntoUrl());
+        // 1.3.0: adjuntoUrl queda obsoleto (el cliente decidio que el chatbot no
+        // recibe imagenes). Se sigue aceptando en el cuerpo para no romper a
+        // quien lo mande, pero no llega al servicio ni se guarda.
+        Mensaje respuesta = chatService.enviarMensaje(quien.identidad(), request.contenido(), null,
+            request.vista());
 
         ResponseEntity.BodyBuilder ok = ResponseEntity.ok();
         if (quien.sesionEmitida() != null) {
@@ -107,14 +117,22 @@ public class ChatController {
     }
 
     // Sin identidad valida no hay conversacion propia: lista vacia.
+    // 1.3.5: con 'antesDe' o 'limite' devuelve una pagina; sin ninguno de los
+    // dos, todo el historial, igual que antes (compatibilidad).
     @GetMapping("/historial")
     public ResponseEntity<List<MensajeResponse>> obtenerHistorial(
         @RequestHeader(value = CABECERA_SESION_ANONIMA, required = false) String idSesionAnonima,
+        @RequestParam(required = false) UUID antesDe,
+        @RequestParam(required = false) @Min(1) @Max(100) Integer limite,
         Authentication authentication) {
 
+        boolean paginado = antesDe != null || limite != null;
+        int tamano = limite == null ? LIMITE_DE_HISTORIAL_POR_DEFECTO : limite;
         Optional<IdentidadDelChat> identidad = resolutor.resolver(authentication, idSesionAnonima);
         List<MensajeResponse> historial = identidad
-            .map(chatService::obtenerHistorial)
+            .map(quien -> paginado
+                ? chatService.obtenerHistorial(quien, antesDe, tamano)
+                : chatService.obtenerHistorial(quien))
             .orElseGet(List::of)
             .stream()
             .map(MensajeResponse::desde)

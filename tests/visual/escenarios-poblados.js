@@ -3540,7 +3540,8 @@ export const ESCENARIOS_UXC9 = [
       ['**/api/v1/sanciones/usuarios/*', json([])],
       ['**/api/v1/creditos/*/saldo', json({ saldoDisponible: 480, saldoReservado: 0 })],
       ['**/api/v1/creditos/*/movimientos*', json({ content: [], totalPages: 0 })],
-      ['**/api/v1/chat/historial', json(CONVERSACION_CON_EL_ASISTENTE)],
+      // Con * : la ventana pide el historial por páginas (?limite=, 7.4.6).
+      ['**/api/v1/chat/historial*', json(CONVERSACION_CON_EL_ASISTENTE)],
     ],
     interaccion: async (pagina) => {
       await pagina.locator('.chatbot-flotante').click();

@@ -14,6 +14,38 @@ class VersionBaseConocimientoTest {
 
     private static final Instant AHORA = Instant.parse("2026-09-23T20:00:00Z");
 
+    // 1.3.8: publicacion programada.
+    @Test
+    void programar_soloEnLaCandidata_yDesplegarLaQuita() {
+        VersionBaseConocimiento candidata = VersionBaseConocimiento.nuevaCandidata(2, null);
+
+        candidata.programarDespliegue(AHORA);
+        assertEquals(AHORA, candidata.getDespliegueProgramadoEn());
+        assertTrue(candidata.despliegueVencido(AHORA));
+        assertFalse(candidata.despliegueVencido(AHORA.minusSeconds(1)));
+
+        candidata.ponerEnProduccion(AHORA);
+        assertNull(candidata.getDespliegueProgramadoEn());
+        assertFalse(candidata.despliegueVencido(AHORA));
+        assertThrows(IllegalStateException.class, () -> candidata.programarDespliegue(AHORA));
+    }
+
+    @Test
+    void rechazar_quitaLaProgramacionYLaMarca_yReprogramarOlvidaElRechazo() {
+        VersionBaseConocimiento candidata = VersionBaseConocimiento.nuevaCandidata(2, null);
+        candidata.programarDespliegue(AHORA);
+
+        candidata.rechazarProgramacion(AHORA);
+        assertNull(candidata.getDespliegueProgramadoEn());
+        assertEquals(AHORA, candidata.getProgramacionRechazadaEn());
+
+        candidata.programarDespliegue(AHORA.plusSeconds(3600));
+        assertNull(candidata.getProgramacionRechazadaEn());
+
+        candidata.cancelarProgramacion();
+        assertNull(candidata.getDespliegueProgramadoEn());
+    }
+
     @Test
     void desplegarUnaCandidata_laPoneEnProduccionConFecha() {
         VersionBaseConocimiento candidata = VersionBaseConocimiento.nuevaCandidata(2, null);

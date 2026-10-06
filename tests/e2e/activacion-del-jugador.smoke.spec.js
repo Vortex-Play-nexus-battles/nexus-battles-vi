@@ -302,6 +302,35 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
     expect(Array.isArray(await respuesta.json())).toBe(true);
   });
 
+  test('la gestion de banners no es para un jugador ni para quien no tiene sesion', async () => {
+    // HU-PRD-013 en DEV. Ningun intento puede dejar nada en el entorno: el
+    // alta lleva una vigencia ya vencida (si el permiso fallara, la
+    // validacion la rechazaria con 400 y la prueba lo diria igual) y la
+    // edicion y el retiro van contra un anuncio que no existe (404 en ese
+    // mismo caso). Lo que se afirma es el rechazo del servicio, no un boton
+    // oculto en la interfaz.
+    const cuerpo = {
+      contenido: 'QA smoke: este anuncio no debe crearse',
+      publicarDesde: '2020-01-01T00:00:00Z',
+      vigenteHasta: '2020-01-02T00:00:00Z',
+    };
+    const inexistente = '/api/v1/banners/qa-smoke-inexistente';
+    const comoJugador = conToken(sesion.token);
+
+    expect(
+      (await api.post('/api/v1/banners', { headers: comoJugador, data: cuerpo })).status(),
+    ).toBe(403);
+    expect((await api.get('/api/v1/banners', { headers: comoJugador })).status()).toBe(403);
+    expect((await api.put(inexistente, { headers: comoJugador, data: cuerpo })).status()).toBe(403);
+    expect((await api.delete(inexistente, { headers: comoJugador })).status()).toBe(403);
+
+    const sinSesion = { 'Content-Type': 'application/json' };
+    expect((await api.post('/api/v1/banners', { headers: sinSesion, data: cuerpo })).status()).toBe(
+      401,
+    );
+    expect((await api.get('/api/v1/banners')).status()).toBe(401);
+  });
+
   // ----------------------------------------------- todo sigue ahi al volver
 
   test('salir y volver a entrar conserva creditos, heroe y alta', async () => {

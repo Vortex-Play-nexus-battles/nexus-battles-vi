@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
+import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
 import com.nexusbattles.ms_identidad.admin.directorio.ExportacionDelDirectorio;
@@ -10,6 +11,7 @@ import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse.RegistrosDelDia;
 import com.nexusbattles.ms_identidad.admin.dto.IndicadoresDeCuentasResponse.RegistrosPorDia;
+import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaClient;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
 import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
@@ -43,6 +45,9 @@ import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -77,6 +82,8 @@ class AdminDirectorioHttpTest {
     private DirectorioDeCuentas directorio;
     private IndicadoresDeCuentas indicadores;
     private ExportacionDelDirectorio exportacion;
+    /** ms-cumplimiento: el cliente de la bitacora, el resto de la auditoria es la de verdad. */
+    private AuditoriaClient bitacora;
     private MockMvc mvc;
 
     @BeforeEach
@@ -88,17 +95,23 @@ class AdminDirectorioHttpTest {
         directorio = mock(DirectorioDeCuentas.class);
         indicadores = mock(IndicadoresDeCuentas.class);
         exportacion = mock(ExportacionDelDirectorio.class);
+        bitacora = mock(AuditoriaClient.class);
 
         // Respaldo por cabecera APAGADO, como en cualquier entorno desplegado.
         SecurityInterceptor interceptor = new SecurityInterceptor(
                 new RbacAuthorizationService(new RbacMatrixRepository()), null, jwtService, null, false);
         AdminDirectorioController controlador = new AdminDirectorioController(usuarioRepository, directorio,
-                new CuentasDePrueba("nexus.test", "qa_"), indicadores, exportacion);
+                new CuentasDePrueba("nexus.test", "qa_"), indicadores, exportacion,
+                new AuditoriaDeExportaciones(bitacora));
         mvc = MockMvcBuilders.standaloneSetup(controlador).addInterceptors(interceptor).build();
     }
 
     private String token(String rol) {
-        return "Bearer " + jwtService.generarToken("operadora", rol, 0, UUID.randomUUID());
+        return token(rol, UUID.randomUUID());
+    }
+
+    private String token(String rol, UUID uid) {
+        return "Bearer " + jwtService.generarToken("operadora", rol, 0, uid);
     }
 
     private static IndicadoresDeCuentasResponse indicadoresDePrueba() {
@@ -181,7 +194,7 @@ class AdminDirectorioHttpTest {
     void exportacionComoArchivo() throws Exception {
         byte[] csv = "\uFEFFApodo,Correo,Rol,Estado,Registro,Última entrada\r\n".getBytes(StandardCharsets.UTF_8);
         when(exportacion.exportar(any(FiltroDelDirectorio.class)))
-                .thenReturn(new ExportacionDelDirectorio.Exportacion("directorio-de-cuentas-20261005-1500.csv", csv));
+                .thenReturn(new ExportacionDelDirectorio.Exportacion("directorio-de-cuentas-20261005-1500.csv", csv, 0));
 
         mvc.perform(get(EXPORTACION).param("buscar", "ana").param("ocultarPruebas", "true")
                         .param("rol", "JUGADOR").param("estado", "SUSPENDIDO")
@@ -198,6 +211,78 @@ class AdminDirectorioHttpTest {
         verify(exportacion).exportar(filtro.capture());
         assertThat(filtro.getValue()).isEqualTo(new FiltroDelDirectorio("ana", true, "JUGADOR", "SUSPENDIDO",
                 LocalDate.of(2026, 9, 1), LocalDate.of(2026, 9, 30)));
+    }
+
+    // ------------------------------------------- HU-USR-009: auditoria de la exportacion
+
+    private static final byte[] CSV_DE_TRES = ("\uFEFFApodo,Correo,Rol,Estado,Registro,Última entrada\r\n"
+            + "\"Ana\",\"ana@ejemplo.org\",\"JUGADOR\",\"ACTIVO\",,\r\n"
+            + "\"Beto\",\"beto@ejemplo.org\",\"JUGADOR\",\"ACTIVO\",,\r\n"
+            + "\"Cris\",\"cris@ejemplo.org\",\"JUGADOR\",\"ACTIVO\",,\r\n").getBytes(StandardCharsets.UTF_8);
+
+    private void exportandoTres() {
+        when(exportacion.exportar(any(FiltroDelDirectorio.class)))
+                .thenReturn(new ExportacionDelDirectorio.Exportacion("directorio-de-cuentas-20261006-0900.csv",
+                        CSV_DE_TRES, 3));
+    }
+
+    @Test
+    @DisplayName("ms-cumplimiento arriba: la exportacion queda auditada con quien, filtros y filas, sin el contenido")
+    void exportacionAuditada() throws Exception {
+        exportandoTres();
+        UUID uidDeLaOperadora = UUID.fromString("6f1c2d3e-4a5b-4c6d-8e9f-0a1b2c3d4e5f");
+
+        mvc.perform(get(EXPORTACION).param("buscar", "ana").param("rol", "JUGADOR").param("estado", "ACTIVO")
+                        .param("registradoDesde", "2026-09-01").param("ocultarPruebas", "true")
+                        .header("Authorization", token("ADMINISTRADOR", uidDeLaOperadora))
+                        .header("X-Forwarded-For", "203.0.113.9, 10.0.0.2"))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(CSV_DE_TRES));
+
+        ArgumentCaptor<String> metadatos = ArgumentCaptor.forClass(String.class);
+        verify(bitacora).registrar(eq("OTRO"), eq("operadora"), eq("DIRECTORIO_DE_CUENTAS"), isNull(),
+                metadatos.capture(), org.mockito.ArgumentMatchers.startsWith("EXPORTACION_JUGADORES"),
+                eq("203.0.113.9"));
+        assertThat(metadatos.getValue())
+                .contains("filas=3")
+                .contains("buscar=«ana»").contains("rol=JUGADOR").contains("estado=ACTIVO")
+                .contains("registradoDesde=2026-09-01").contains("ocultarPruebas=true")
+                .contains("administradorUid=" + uidDeLaOperadora)
+                .contains("traceId=")
+                // Nunca el contenido: ni la cabecera del CSV, ni apodos o correos exportados.
+                .doesNotContain("Apodo,Correo").doesNotContain("@ejemplo.org").doesNotContain("Beto");
+    }
+
+    @Test
+    @DisplayName("ms-cumplimiento caido: el archivo se entrega igual, entero")
+    void exportacionSinAuditoriaSeEntregaIgual() throws Exception {
+        exportandoTres();
+        doThrow(new IllegalStateException("No se pudo completar la operación: el servicio de auditoría no respondió."))
+                .when(bitacora).registrar(anyString(), anyString(), anyString(), any(), anyString(), anyString(),
+                        anyString());
+
+        mvc.perform(get(EXPORTACION).param("buscar", "ana").header("Authorization", token("SUPER_ADMINISTRADOR")))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith("text/csv"))
+                .andExpect(header().string("Cache-Control", containsString("no-store")))
+                .andExpect(content().bytes(CSV_DE_TRES));
+
+        verify(bitacora).registrar(anyString(), anyString(), anyString(), any(), anyString(), anyString(),
+                anyString());
+    }
+
+    @Test
+    @DisplayName("una exportacion rechazada no entrega archivo y no se audita")
+    void exportacionRechazadaNoSeAudita() throws Exception {
+        when(exportacion.exportar(any(FiltroDelDirectorio.class)))
+                .thenThrow(new ExportacionDemasiadoGrandeException(12000, 10000));
+
+        mvc.perform(get(EXPORTACION).header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().is(422));
+        mvc.perform(get(EXPORTACION).param("rol", "PIRATA").header("Authorization", token("ADMINISTRADOR")))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(bitacora);
     }
 
     @Test

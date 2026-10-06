@@ -4,6 +4,7 @@ import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MisionActivaDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
@@ -17,6 +18,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -41,13 +43,15 @@ class MotorConsultasAsistidasTest {
     private TorneosClient torneosClient;
     @Mock
     private FinanzasClient finanzasClient;
+    @Mock
+    private MisionesClient misionesClient;
 
     private MotorConsultasAsistidas motor;
 
     @BeforeEach
     void configurar() {
         motor = new MotorConsultasAsistidas(inventarioClient, subastasClient, notificacionesClient,
-            torneosClient, finanzasClient);
+            torneosClient, finanzasClient, misionesClient);
     }
 
     @Test
@@ -85,12 +89,75 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto()).contains("2 notificacion(es)").contains("Tu subasta fue superada");
     }
 
+    // 7.4.4 (1.3.0): las misiones en curso, con el token del propio jugador.
     @Test
-    void consultaDeMisionesRespondeQueEstaEnConstruccion() {
+    void consultaDeMisionesDevuelveLasQueEstanEnCurso() {
+        MisionActivaDto templo = new MisionActivaDto("El Templo Olvidado", "EXPLORACION",
+            new MisionActivaDto.Heroe("Guerrero Tanque", 3), Instant.parse("2026-09-28T20:30:00Z"), 0.4);
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of(templo));
+
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("cual es mi progreso en misiones", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("en construccion");
+        assertThat(resultado.get().texto())
+            .contains("1 mision(es) en curso")
+            .contains("«El Templo Olvidado» con Guerrero Tanque (nivel 3)")
+            .contains("40 % completada")
+            .contains("termina el 28/09 a las 15:30");
+    }
+
+    // 1.3.4: cada mision en curso sale ademas como tarjeta, con enlace a Misiones.
+    @Test
+    void consultaDeMisionesTraeUnaTarjetaPorMision() {
+        MisionActivaDto templo = new MisionActivaDto("El Templo Olvidado", "EXPLORACION",
+            new MisionActivaDto.Heroe("Guerrero Tanque", 3), null, 0.4);
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of(templo));
+
+        ResultadoMotor resultado = motor.generarRespuesta("mis misiones", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.enriquecido().tarjetas()).singleElement()
+            .satisfies(t -> assertThat(t.titulo()).isEqualTo("El Templo Olvidado"));
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("misiones");
+    }
+
+    // 1.3.4: la navegacion asistida lleva un enlace de verdad a la seccion.
+    @Test
+    void navegacionYConsultaTraenElEnlaceASuSeccion() {
+        assertThat(motor.generarRespuesta("llevame a mi inventario", TOKEN, UID).orElseThrow()
+            .enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("inventario");
+        assertThat(motor.generarRespuesta("ir a mis torneos", TOKEN, UID).orElseThrow()
+            .enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("torneos");
+    }
+
+    @Test
+    void consultaDeMisionesSinNingunaLlevaALaSeccion() {
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of());
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("my missions", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("No tienes misiones en curso").contains("seccion Misiones");
+    }
+
+    @Test
+    void consultaDeMisionesConDatosIncompletosNoFalla() {
+        when(misionesClient.enCurso(TOKEN)).thenReturn(List.of(
+            new MisionActivaDto("Cacería", null, null, null, null)));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("estado de mis misiones", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).isEqualTo("Tienes 1 mision(es) en curso: «Cacería».");
+    }
+
+    @Test
+    void consultaDeMisionesConElServicioCaidoLoDice() {
+        when(misionesClient.enCurso(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("mis misiones", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("No pude consultar tus misiones");
     }
 
     // B11 — 7.4.4 «informacion de torneos en curso»: datos publicos, el uid
@@ -210,6 +277,56 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto()).contains("no esta disponible");
     }
 
+    // Revision de plataforma (7.4.4): se clasifica la intencion antes de
+    // consultar. Sus datos -> inventario real; un consejo -> base de conocimiento.
+    @Test
+    void preguntarQueTieneEnSuInventarioConsultaElServicio() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(
+            List.of(new ElementoInventarioDto("Espada del Alba", "ARMA", true)), 1));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("¿Qué tengo en mi inventario?", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("Espada del Alba");
+    }
+
+    @Test
+    void pedirQueLeMuestreSusHeroesConsultaElServicio() {
+        when(inventarioClient.consultarInventario(TOKEN, 0)).thenReturn(new PaginaInventarioDto(
+            List.of(new ElementoInventarioDto("Guerrero de Hierro", "HEROE", true)), 1));
+
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("Muéstrame mis héroes", TOKEN, UID);
+
+        assertThat(resultado).isPresent();
+        assertThat(resultado.get().texto()).contains("Guerrero de Hierro");
+    }
+
+    @Test
+    void pedirConsejosParaOrganizarElInventarioNoLlamaAlServicio() {
+        Optional<ResultadoMotor> resultado =
+            motor.generarRespuesta("Dame consejos para organizar mi inventario", TOKEN, UID);
+
+        assertThat(resultado).isEmpty();
+        verifyNoInteractions(inventarioClient);
+    }
+
+    @Test
+    void pedirQueLeRecomiendeObjetosNoLlamaAlServicio() {
+        Optional<ResultadoMotor> resultado = motor.generarRespuesta("¿Qué objetos me recomiendas usar?", TOKEN, UID);
+
+        assertThat(resultado).isEmpty();
+        verifyNoInteractions(inventarioClient);
+    }
+
+    @Test
+    void preguntasDeReglasConPalabrasDeInventarioNoLlamanAlServicio() {
+        for (String pregunta : List.of("tienes consejos de inventario", "como equipo a mi heroe",
+            "pierdo mis objetos", "¿Qué es el inventario?", "how do I equip my heroes")) {
+            assertThat(motor.generarRespuesta(pregunta, TOKEN, UID)).as(pregunta).isEmpty();
+        }
+        verifyNoInteractions(inventarioClient);
+    }
+
     @Test
     void detectaNavegacionAInventarioSinConsultarElServicio() {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("llevame a mi inventario", TOKEN, UID);
@@ -285,7 +402,8 @@ class MotorConsultasAsistidasTest {
             .contains("Escudo de Hierro")
             .contains("1 subasta(s)")
             .contains("Nueva mision disponible")
-            .contains("+4 (recompensa-victoria)");
+            .contains("+4 (recompensa-victoria)")
+            .contains("Misiones: No tienes misiones en curso");
     }
 
     @Test
@@ -294,6 +412,7 @@ class MotorConsultasAsistidasTest {
         when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0.00", "100.00", 0));
         when(notificacionesClient.consultarBandeja(TOKEN, UID)).thenReturn(new BandejaResponseDto(0, List.of()));
         when(finanzasClient.movimientos(TOKEN, UID, 5)).thenThrow(new ResourceAccessException("caido"));
+        when(misionesClient.enCurso(TOKEN)).thenThrow(new ResourceAccessException("caido"));
 
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("resumen de mi actividad", TOKEN, UID);
 
@@ -301,6 +420,7 @@ class MotorConsultasAsistidasTest {
         assertThat(resultado.get().texto())
             .contains("no esta disponible")
             .contains("No tienes notificaciones sin leer")
-            .contains("movimientos de creditos en este momento");
+            .contains("movimientos de creditos en este momento")
+            .contains("No pude consultar tus misiones");
     }
 }

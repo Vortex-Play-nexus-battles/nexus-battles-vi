@@ -19,8 +19,23 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.4.0
+  version: 1.5.0
   description: |
+    ### Cambios en 1.5.0 (HU-USR-009 #562 — implementado, aditivo)
+
+    - `buscar` (directorio y exportacion) encuentra ademas la cuenta por su
+      **identificador exacto**, el mismo que acepta la ficha: su `uid`
+      (UUID completo, sin distinguir mayusculas) o su clave `id` (solo
+      cifras, hasta 18). Es un O con la busqueda de siempre: lo que antes
+      aparecia sigue apareciendo. Un texto que no es un identificador (un
+      `uid` a medias, con letras de mas) se busca como texto, sin error.
+    - **La exportacion queda auditada** (decision del PO del 5-oct, datos
+      personales §7.3.6): cada archivo entregado registra en ms-cumplimiento
+      quien exporto, con que filtros y cuantas filas, **nunca el contenido**.
+      Si la bitacora no responde, el archivo se entrega igual y el hecho
+      queda en la bitacora del servicio con su `traceId`. Sin cambios en la
+      forma de la respuesta.
+
     ### Cambios en 1.4.0 (HU-USR-010, RF-USR-010 — implementado, aditivo)
 
     - Nueva `GET /admin/usuarios/{usuario}/ficha`: la ficha administrativa de
@@ -162,6 +177,9 @@ paths:
             tambien en los nombres y apellidos del perfil («Ana Perez» encuentra
             a quien se llama Ana de nombre y Perez de apellido). Una cuenta sin
             perfil (las administrativas) se sigue encontrando por apodo o correo.
+            1.5.0: si el texto es un identificador, tambien la cuenta que lo
+            tiene, por coincidencia exacta: un `uid` completo (sin distinguir
+            mayusculas) o una clave `id` (solo cifras, hasta 18).
           schema:
             type: string
         - $ref: '#/components/parameters/FiltroRol'
@@ -216,7 +234,7 @@ paths:
     get:
       tags: [administracion]
       operationId: exportarDirectorioDeJugadores
-      summary: El directorio con los filtros vigentes, en CSV (1.3.0)
+      summary: El directorio con los filtros vigentes, en CSV (1.3.0); cada exportacion queda auditada (1.5.0)
       description: |
         Todas las cuentas que cumplen los filtros (no solo una pagina), en el
         orden del directorio (las mas nuevas primero), leidas en una sola
@@ -239,6 +257,17 @@ paths:
 
         Tope tecnico de filas: `IDENTIDAD_DIRECTORIO_EXPORTACION_MAXIMO_FILAS`
         (por omision 10000). Por encima, 422 y ningun archivo.
+
+        **Auditoria (1.5.0, HU-USR-009).** Cada archivo entregado registra en
+        ms-cumplimiento (`POST /api/v1/admin/auditoria/eventos`, credencial de
+        servicio) un evento `tipoAccion: OTRO` con `administradorId` = quien
+        exporta, `afectado` = `DIRECTORIO_DE_CUENTAS`, `motivo` que empieza
+        por `EXPORTACION_JUGADORES`, la IP de origen y en `valorNuevo` los
+        metadatos: filas, filtros usados, `uid` de quien exporta y `traceId`.
+        Nunca el contenido del archivo. Si la bitacora no responde, el
+        archivo se entrega igual y el hecho queda en la bitacora JSON del
+        servicio (`EXPORTACION_DIRECTORIO_SIN_AUDITAR`), como la ficha. Una
+        exportacion rechazada (400, 422) no entrega archivo y no se audita.
       security:
         - tokenDeUsuario: []
       parameters:
@@ -786,7 +815,8 @@ components:
       required: false
       description: |
         1.3.0 — el mismo texto que el directorio: apodo, correo o nombres y
-        apellidos del perfil, sin distinguir mayusculas.
+        apellidos del perfil, sin distinguir mayusculas. 1.5.0: tambien el
+        identificador exacto de la cuenta (`uid` completo o clave `id`).
       schema:
         type: string
     OcultarPruebas:
