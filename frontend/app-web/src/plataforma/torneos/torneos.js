@@ -4,7 +4,8 @@
  * Una sola vista: el listado de torneos y, al elegir uno, su detalle con
  * los equipos, el árbol de ocho (RF-TOR-004) y las acciones que corresponden
  * a quien mira: el espectador consulta; el jugador registra su equipo y lo
- * inscribe; el administrador crea, inicia y cancela (D-21).
+ * inscribe; el administrador crea, inicia y cancela (D-21). Al crear, el
+ * costo de inscripción se propone desde admin-parametros (HU-TOR-002 CA-03, D-23).
  *
  * Todo error llega como problem details y se decide por `motivo`, nunca
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
@@ -214,6 +215,10 @@ export const api = {
   // fallaron (administrador, RF-ADM-005).
   reintentar: (id, f) =>
     pedir(`/api/v1/torneos/${encodeURIComponent(id)}/operaciones/reintento`, { method: 'POST' }, f),
+  // HU-TOR-002 CA-03 — el costo de inscripción que fija el PO (D-23), de
+  // admin-parametros (valorVigente): {clave, valor: string|null, tipo, version}.
+  costoPorDefecto: (f) =>
+    pedir('/api/v1/parametros/torneos.costo-inscripcion-por-defecto/valor', {}, f),
 };
 
 /* ---- Presentación (puro, probado) ---- */
@@ -963,6 +968,48 @@ export function porRonda(encuentros) {
     .map(([ronda, lista]) => ({ ronda, encuentros: lista }));
 }
 
+/** El `valor` de un parámetro como entero >= 0, o null si no lo es. */
+function enteroNoNegativo(valor) {
+  if (typeof valor !== 'string' || !/^\d+$/.test(valor)) {
+    return null;
+  }
+  const numero = Number(valor);
+  return Number.isSafeInteger(numero) ? numero : null;
+}
+
+/**
+ * HU-TOR-002 CA-03 — propone en el formulario de crear el costo de inscripción
+ * que fija el PO en admin-parametros (D-23). Solo un entero >= 0 cambia algo:
+ * si el parámetro no existe (404), vale null o admin-parametros no responde,
+ * el campo se queda con su respaldo del HTML y no se avisa de nada. Una caída
+ * de admin-parametros nunca tumba la vista.
+ *
+ * Se fija `defaultValue` y no `value`: así el `reset()` que sigue a crear un
+ * torneo vuelve al propuesto y no al 0 del HTML.
+ */
+async function proponerCosto(form, fetchImpl) {
+  const control = form.querySelector('[name="costoInscripcion"]');
+  if (!control) {
+    return;
+  }
+  let parametro;
+  try {
+    parametro = await api.costoPorDefecto(fetchImpl);
+  } catch {
+    return;
+  }
+  const costo = enteroNoNegativo(parametro?.valor);
+  if (costo === null) {
+    return;
+  }
+  control.defaultValue = String(costo);
+  const ayuda = form.querySelector('[data-zona="costo-propuesto"]');
+  if (ayuda) {
+    ayuda.textContent = 'Propuesto por el catálogo de parámetros (D-23); puedes cambiarlo';
+    ayuda.hidden = false;
+  }
+}
+
 /**
  * Monta la vista completa.
  *
@@ -981,6 +1028,11 @@ export function montarTorneos(
 
   if (formCrear) {
     formCrear.hidden = !administra;
+    // Solo para quien administra: a un jugador o a un espectador nunca se le
+    // pide el parámetro.
+    if (administra) {
+      proponerCosto(formCrear, fetchImpl);
+    }
   }
 
   async function cargarListado() {

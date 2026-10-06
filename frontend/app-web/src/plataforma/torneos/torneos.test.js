@@ -545,6 +545,95 @@ describe('vista', () => {
   });
 });
 
+// HU-TOR-002 CA-03 — el campo del costo como en torneos.html: respaldo
+// value="0" y la ayuda oculta que torneos.js rellena.
+const PARAMETRO_DE_COSTO = '/api/v1/parametros/torneos.costo-inscripcion-por-defecto/valor';
+const VISTA_DE_CREAR = `
+  <div data-zona="aviso" hidden></div>
+  <form data-zona="crear-torneo" hidden>
+    <input name="nombre" /><input name="inscripcionesCierranEn" />
+    <input type="number" name="costoInscripcion" min="0" value="0" />
+    <span data-zona="costo-propuesto" hidden></span>
+    <button type="submit">Crear</button>
+  </form>
+  <div data-zona="listado"></div>
+  <section data-zona="detalle" hidden></section>`;
+
+describe('HU-TOR-002 CA-03 — el formulario de crear propone el costo que fija el PO', () => {
+  const costo = () => document.querySelector('[name="costoInscripcion"]');
+  const ayuda = () => document.querySelector('[data-zona="costo-propuesto"]');
+  const pidioElCosto = (fetchImpl) =>
+    fetchImpl.mock.calls.some((c) => new URL(c[0], 'http://x').pathname === PARAMETRO_DE_COSTO);
+  const conParametro = (respuesta) =>
+    servicio({ 'GET /api/v1/torneos': { cuerpo: [] }, [`GET ${PARAMETRO_DE_COSTO}`]: respuesta });
+  const valor = (v) => ({ cuerpo: { clave: 'torneos.costo-inscripcion-por-defecto', valor: v } });
+
+  beforeEach(() => {
+    document.body.innerHTML = VISTA_DE_CREAR;
+  });
+
+  test('(a) al administrador le propone el valor del catálogo, con su ayuda', async () => {
+    const fetchImpl = conParametro(valor('150'));
+    montarTorneos(document, { rol: 'ADMINISTRADOR', uid: 'admin', fetchImpl });
+    await asentar();
+
+    expect(costo().value).toBe('150');
+    expect(ayuda().hidden).toBe(false);
+    expect(ayuda().textContent).toBe(
+      'Propuesto por el catálogo de parámetros (D-23); puedes cambiarlo',
+    );
+    // El reset que sigue a crear un torneo vuelve al propuesto, no al 0 del HTML.
+    costo().value = '30';
+    document.querySelector('[data-zona="crear-torneo"]').reset();
+    expect(costo().value).toBe('150');
+  });
+
+  test.each([null, '-5', '2.5', 'gratis'])(
+    '(b) con valor %p, que no es un entero >= 0, se queda en 0 y sin ayuda',
+    async (v) => {
+      const fetchImpl = conParametro(valor(v));
+      montarTorneos(document, { rol: 'ADMINISTRADOR', uid: 'admin', fetchImpl });
+      await asentar();
+
+      expect(pidioElCosto(fetchImpl)).toBe(true);
+      expect(costo().value).toBe('0');
+      expect(ayuda().hidden).toBe(true);
+    },
+  );
+
+  test.each([
+    [
+      'admin-parametros no responde',
+      () => {
+        throw new TypeError('Failed to fetch');
+      },
+    ],
+    ['responde 503', { estado: 503, cuerpo: { status: 503 } }],
+    ['el parámetro no existe (404)', { estado: 404, cuerpo: { status: 404 } }],
+  ])('(c) si %s se queda en 0, sin ayuda y sin error en pantalla', async (_caso, respuesta) => {
+    const fetchImpl = conParametro(respuesta);
+    montarTorneos(document, { rol: 'ADMINISTRADOR', uid: 'admin', fetchImpl });
+    await asentar();
+
+    expect(pidioElCosto(fetchImpl)).toBe(true);
+    expect(costo().value).toBe('0');
+    expect(ayuda().hidden).toBe(true);
+    expect(document.querySelector('[data-zona="aviso"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="listado"]').textContent).toMatch(
+      /no hay ningún torneo abierto/i,
+    );
+  });
+
+  test.each(['JUGADOR', null])('(d) con rol %p no se pide el parámetro', async (rol) => {
+    const fetchImpl = conParametro(valor('150'));
+    montarTorneos(document, { rol, uid: rol ? UID : null, fetchImpl });
+    await asentar();
+
+    expect(pidioElCosto(fetchImpl)).toBe(false);
+    expect(costo().value).toBe('0');
+  });
+});
+
 describe('el árbol usa el componente Encuentro del sistema de diseno', () => {
   const equipos = [
     { id: 'eq-1', nombre: 'Los Valientes', integrantes: [UID, 'x'], inscrito: true, posicion: 1 },
