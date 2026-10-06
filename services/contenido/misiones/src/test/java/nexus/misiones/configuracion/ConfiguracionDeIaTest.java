@@ -10,6 +10,7 @@ import java.util.List;
 import nexus.misiones.dominio.simulacion.DecisionDeTurno;
 import nexus.misiones.dominio.simulacion.DecisorDeTurno;
 import nexus.misiones.ia.DecisorConModelo;
+import nexus.misiones.ia.ModeloVersionado;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -80,5 +81,14 @@ class ConfiguracionDeIaTest {
     @DisplayName("un umbral de confianza absurdo no tumba el arranque: la regla")
     void umbralAbsurdo() throws IOException {
         assertThat(ConfiguracionDeIa.elegirDecisor(REGLA, true, modeloDePrueba().toString(), 7.0)).isSameAs(REGLA);
+    }
+
+    @Test
+    @DisplayName("encendido con el modelo entrenado que viaja en la imagen: el decisor con modelo")
+    void encendidoConElModeloVersionado() {
+        DecisorDeTurno decisor = ConfiguracionDeIa.elegirDecisor(REGLA, true, ModeloVersionado.onnx().toString(), 0.6);
+
+        assertThat(decisor).isInstanceOf(DecisorConModelo.class);
+        ((DecisorConModelo) decisor).close();
     }
 }
