@@ -285,6 +285,7 @@ public final class PoliticaDeLaMaquina {
                 case INMUNE_FISICO -> mideLaRespuesta ? 0 : 0.15 * c.vidaMaxima();
                 case INMUNE_TOTAL -> mideLaRespuesta ? 0 : 0.20 * c.vidaMaxima();
                 case REFLEJA_MITAD -> mideLaRespuesta ? 0 : 0.10 * c.vidaMaxima();
+                case ENVENENA_AL_ATACANTE -> mideLaRespuesta ? 0 : 0.5 * e.valor() * e.turnos();
                 case DANO_POR_TURNO -> -1.0 * e.valor() * veces;
                 case SANACION_POR_TURNO -> e.valor() * veces;
                 case VINCULO_REANIMACION -> 0.20 * c.vidaMaxima();

@@ -49,6 +49,7 @@ servicio.
 | §6.1.1 poder: +2 por turno, coste por acción, valor base sin poder | `MotorDeAcciones` (`iniciarTurno`, `planEnValorBase`) | `InicioDeTurnoTest`, `MotorDeAccionesTest` |
 | Tabla 7: las 24 acciones como reglas; §6.1.2 un turno de carga y multiplicador de nivel | `Reglamento` (datos en heroes, efecto aquí) | `AccionesEspecialesTest` |
 | Tabla 20: épicas, dos turnos de recarga, efecto potenciado del héroe afín | `Reglamento.tabla20` | `EpicasEnCombateTest` |
+| §7.8.14: «Velo de Sombras», la épica del Máster del Templo (fuera de la Tabla 20): +2 a la defensa; el Pícaro Veneno, además, intangible un turno y con veneno (+3 por 2 turnos) para quien lo golpea | `Reglamento.tabla20`, `MotorDeAcciones.golpear` | `EpicasEnCombateTest` |
 | Tablas 8 a 19: efectos de combate de armas e ítems | `EquipoDeCombate` | `EquipoEnCombateTest` |
 | §6.1.3 cooperativo: sin daño a compañeros; mismas reglas para la IA | `MotorDeAcciones.elegirObjetivo`, `PoliticaDeLaMaquina` | `MotorDeAccionesTest`, `PoliticaDeLaMaquinaTest`, `MatrizDeAccionesTest`, `SimulacionDeLaMaquinaTest` |
 | §6.1.1 el sanador no inflige daño | `Reglamento.exigirQueAtaque` | `AccionesEspecialesTest`, `AccionesDisponiblesTest` |
