@@ -6,6 +6,7 @@ import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentariosController.ComentarioResponse;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
@@ -147,8 +148,26 @@ public class ModeracionController {
         }
     }
 
+    /**
+     * {@code DeteccionAutomatica} del contrato 1.10.0 (HU-COM-007 CA-01): por
+     * que el filtro retuvo el comentario. {@code categoria} y {@code motivo}
+     * no salen si no los hay. Nunca el texto ni los terminos coincidentes.
+     */
+    public record DeteccionResponse(String fecha, List<Long> reglas,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String categoria,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String motivo,
+            boolean servicioNoDisponible) {
+
+        static DeteccionResponse desde(DeteccionAutomatica d) {
+            return d == null ? null : new DeteccionResponse(d.fecha().toString(), d.reglas(),
+                    d.categoria(), d.motivo(), d.servicioNoDisponible());
+        }
+    }
+
+    /** {@code deteccion} (1.10.0) no sale si el comentario llego por reportes. */
     public record EntradaResponse(ComentarioResponse comentario, int reportes,
-            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada) {
+            Map<String, Long> porCategoria, String primerReporte, boolean prioridadElevada,
+            @JsonInclude(JsonInclude.Include.NON_NULL) DeteccionResponse deteccion) {
 
         static EntradaResponse desde(ServicioDeModeracion.Entrada e) {
             return new EntradaResponse(
@@ -157,7 +176,8 @@ public class ModeracionController {
                     e.porCategoria().entrySet().stream()
                             .collect(Collectors.toMap(x -> x.getKey().name(), Map.Entry::getValue)),
                     e.primerReporte().toString(),
-                    e.prioridadElevada());
+                    e.prioridadElevada(),
+                    DeteccionResponse.desde(e.deteccion()));
         }
     }
 
@@ -170,14 +190,17 @@ public class ModeracionController {
         }
     }
 
+    /** {@code deteccion} (1.10.0) no sale si el filtro no retuvo el comentario. */
     public record DetalleResponse(ComentarioResponse comentario, List<ReporteResponse> reportes,
-            List<AsientoResponse> historial) {
+            List<AsientoResponse> historial,
+            @JsonInclude(JsonInclude.Include.NON_NULL) DeteccionResponse deteccion) {
 
         static DetalleResponse desde(ServicioDeModeracion.Detalle d) {
             return new DetalleResponse(
                     ComentarioResponse.paraModeracion(d.comentario()),
                     d.reportes().stream().map(ReporteResponse::desde).toList(),
-                    d.historial().stream().map(AsientoResponse::desde).toList());
+                    d.historial().stream().map(AsientoResponse::desde).toList(),
+                    DeteccionResponse.desde(d.deteccion()));
         }
     }
 

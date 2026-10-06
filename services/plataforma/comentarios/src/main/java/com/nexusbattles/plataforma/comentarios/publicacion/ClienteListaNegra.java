@@ -1,5 +1,9 @@
 package com.nexusbattles.plataforma.comentarios.publicacion;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.util.List;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -8,7 +12,8 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
+import com.nexusbattles.plataforma.comentarios.publicacion.FiltroDeContenido.VeredictoDelFiltro;
 
 /**
  * Filtro automatico de contenido respaldado por la lista negra de HU-ADM-002.
@@ -29,6 +34,14 @@ import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFil
  * 2.0.0, que no manda {@code accion}, se sigue entendiendo por {@code
  * aprobado}.
  *
+ * <h2>Por que retuvo (HU-COM-007 CA-01, lista negra 2.1.0)</h2>
+ *
+ * <p>Lo que retiene trae ademas su {@link DeteccionAutomatica}: los {@code id}
+ * de las reglas que coincidieron ({@code reglas}, 2.1.0), la categoria y el
+ * motivo generico, con la fecha de la verificacion. Las {@code coincidencias}
+ * —los terminos mismos— no se leen: el moderador ve la regla por su id, nunca
+ * el termino.
+ *
  * <h2>Si la lista negra no contesta</h2>
  *
  * <p>Hay una diferencia deliberada con el cliente de los apodos. Para los
@@ -38,7 +51,9 @@ import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFil
  * valida todo comentario contra el filtro, asi que si el filtro no contesta,
  * publicar sin verificar romperia el requisito. Lo unico que no lo rompe es
  * retener el comentario en revision y que un moderador decida, y siempre queda
- * constancia en la bitacora, nunca en silencio. El RestClient tiene tiempos
+ * constancia en la bitacora, nunca en silencio. Desde HU-COM-007 queda ademas
+ * en la deteccion, con {@code servicioNoDisponible} y sin reglas, para que el
+ * moderador sepa que se retuvo por precaucion. El RestClient tiene tiempos
  * de conexion y de lectura acotados (ConfiguracionClientesHttp): sin ellos, un
  * servicio colgado dejaria la publicacion esperando en vez de retenerla.
  *
@@ -61,16 +76,19 @@ class ClienteListaNegra implements FiltroDeContenido {
 
     private final RestClient restClient;
     private final String urlVerificacion;
+    private final Clock reloj;
 
     ClienteListaNegra(
             RestClient restClientComentarios,
-            @Value("${comentarios.lista-negra.url}") String urlVerificacion) {
+            @Value("${comentarios.lista-negra.url}") String urlVerificacion,
+            Clock reloj) {
         this.restClient = restClientComentarios;
         this.urlVerificacion = urlVerificacion;
+        this.reloj = reloj;
     }
 
     @Override
-    public ResultadoDelFiltro verificar(String texto) {
+    public VeredictoDelFiltro verificar(String texto) {
         try {
             RespuestaVerificacion respuesta = restClient.post()
                     .uri(urlVerificacion)
@@ -80,21 +98,28 @@ class ClienteListaNegra implements FiltroDeContenido {
             if (respuesta == null) {
                 return retenerPorFalla("respuesta vacia del servicio");
             }
-            if (respuesta.accion() != null) {
-                return PERMITIR.equals(respuesta.accion()) ? ResultadoDelFiltro.LIMPIO : ResultadoDelFiltro.SENALADO;
+            boolean publica = respuesta.accion() != null
+                    ? PERMITIR.equals(respuesta.accion())
+                    : respuesta.aprobado();
+            if (publica) {
+                return VeredictoDelFiltro.limpio();
             }
-            return respuesta.aprobado() ? ResultadoDelFiltro.LIMPIO : ResultadoDelFiltro.SENALADO;
+            return VeredictoDelFiltro.senalado(new DeteccionAutomatica(Instant.now(reloj),
+                    respuesta.reglas(), respuesta.categoria(), respuesta.motivo(), false));
         } catch (RestClientException ex) {
             return retenerPorFalla(ex.getMessage());
         }
     }
 
-    private ResultadoDelFiltro retenerPorFalla(String motivo) {
+    private VeredictoDelFiltro retenerPorFalla(String motivo) {
+        // Una excepcion sin mensaje no deja la retencion sin razon.
+        String razon = motivo == null || motivo.isBlank() ? "la lista negra no respondio" : motivo;
         log.warn(
                 "Servicio de lista negra no disponible, el comentario queda retenido en revision"
                         + " para cumplir RF-COM-007. Motivo: {}",
-                motivo);
-        return ResultadoDelFiltro.SENALADO;
+                razon);
+        return VeredictoDelFiltro.senalado(
+                new DeteccionAutomatica(Instant.now(reloj), List.of(), null, razon, true));
     }
 
     /** Cuerpo del POST /lista-negra/verificar segun el contrato 2.0.0. */
@@ -103,9 +128,11 @@ class ClienteListaNegra implements FiltroDeContenido {
 
     /**
      * Respuesta del contrato: aprobado y accion (2.0.0); motivo, categoria y
-     * coincidencias, que aqui no se usan, se ignoran.
+     * reglas (2.1.0) para la deteccion. Las coincidencias —los terminos
+     * mismos— no se leen: no hay donde guardarlas.
      */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record RespuestaVerificacion(boolean aprobado, String accion, String motivo) {
+    record RespuestaVerificacion(boolean aprobado, String accion, String motivo, String categoria,
+            List<Long> reglas) {
     }
 }

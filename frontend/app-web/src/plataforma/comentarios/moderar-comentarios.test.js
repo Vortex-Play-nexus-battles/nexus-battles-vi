@@ -924,3 +924,81 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
     expect(raiz.querySelectorAll(`${ZONA} li`)).toHaveLength(1);
   });
 });
+
+describe('HU-COM-007 CA-01: la detección automática en la cola y el detalle', () => {
+  const porLaListaNegra = {
+    fecha: AHORA,
+    reglas: [7, 9],
+    categoria: 'OFENSIVO',
+    motivo: 'El texto contiene un termino no permitido',
+    servicioNoDisponible: false,
+  };
+  const sinServicio = {
+    fecha: AHORA,
+    reglas: [],
+    motivo: 'I/O error on POST request for "http://lista-negra"',
+    servicioNoDisponible: true,
+  };
+
+  /** La tarjeta de la cola y el panel de detalle, con la misma detección. */
+  const conDeteccion = (deteccion) => [
+    tarjetaDeEntrada(entrada({ reportes: 0, porCategoria: {}, deteccion }), () => {}),
+    panelDeDetalle(detalle({ reportes: [], deteccion }), () => {}),
+  ];
+
+  test('la tarjeta y el detalle dicen qué reglas lo retuvieron, con su categoría y su motivo', () => {
+    for (const nodo of conDeteccion(porLaListaNegra)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque).not.toBeNull();
+      expect(nodo.textContent).toContain('Detección automática');
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+        'Reglas 7, 9',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]').textContent).toBe(
+        'OFENSIVO',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-motivo"]').textContent).toBe(
+        'El texto contiene un termino no permitido',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]')).toBeNull();
+    }
+  });
+
+  test('una sola regla se nombra en singular, y si no vino ninguna se dice', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, reglas: [7] });
+    expect(tarjeta.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe('Regla 7');
+
+    const [, panel] = conDeteccion({ ...porLaListaNegra, reglas: [] });
+    expect(panel.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+      'La lista negra no informó qué regla coincidió',
+    );
+  });
+
+  test('si la lista negra no respondió lo dice, sin inventar reglas ni enseñar el error técnico', () => {
+    for (const nodo of conDeteccion(sinServicio)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]').textContent).toBe(
+        'La lista negra no respondió; retenido por precaución',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]')).toBeNull();
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]')).toBeNull();
+      expect(bloque.textContent).not.toContain('I/O error');
+    }
+  });
+
+  test('sin detección (llegó por reportes) no hay bloque', () => {
+    expect(
+      tarjetaDeEntrada(entrada(), () => {}).querySelector('[data-zona="deteccion"]'),
+    ).toBeNull();
+    const panel = panelDeDetalle(detalle(), () => {});
+    expect(panel.querySelector('[data-zona="deteccion"]')).toBeNull();
+    expect(panel.textContent).not.toContain('Detección automática');
+  });
+
+  test('el motivo llega de otro servicio: se pinta como texto, nunca como marcado', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, motivo: '<img src=x onerror="robar()">' });
+    const motivo = tarjeta.querySelector('[data-campo="deteccion-motivo"]');
+    expect(motivo.textContent).toBe('<img src=x onerror="robar()">');
+    expect(motivo.querySelector('img')).toBeNull();
+  });
+});
