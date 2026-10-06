@@ -8,12 +8,13 @@ import java.util.function.Function;
  * El piso que hace verdad «estadisticas superiores a enemigos regulares» (7.8.4, HU-SIM-006 criterio 1).
  *
  * <p>Un Master es el prototipo de su Master en el nivel del heroe mas dos (RG-107), con la vida y la defensa
- * escaladas por el escalon como cualquier enemigo. Eso casi siempre lo deja por encima, pero no siempre: el nivel
- * tope es 8 (el heroe de nivel 7 u 8 enfrenta un Master de nivel 8), un prototipo puede tener menos vida o defensa que
- * el de los regulares (un Pícaro Veneno contra un Guerrero Tanque), y los dados no escalan con el nivel (un 1d6 de dano
+ * reducidas a la fraccion que fija {@link ReglaDelMaster} (equilibrio del duelo, decision del PO del 5-oct) y escaladas
+ * por el escalon como cualquier enemigo. Eso casi siempre lo deja por encima, pero no siempre: la fraccion lo baja, el
+ * nivel tope es 8 (el heroe de nivel 7 u 8 enfrenta un Master de nivel 8), un prototipo puede tener menos vida o
+ * defensa que el de los regulares (un Pícaro Veneno contra un Guerrero Tanque), y los dados no escalan con el nivel (un 1d6 de dano
  * contra un 1d8). Aqui se comparan, uno por uno, la vida, la defensa, el ataque y el dano del Master con los del mas
  * fuerte de los regulares de SU mision y SU escalon (los regulares llegan ya escalados), y lo que quede por debajo
- * sube hasta quedar por encima.
+ * sube hasta quedar por encima. Este piso se aplica DESPUES de la regla de equilibrio y manda sobre ella.
  *
  * <p>El ataque y el dano son formulas con dados: se comparan por su valor esperado (la base mas la media de los
  * dados) y lo que falta se suma a la base; los dados no se tocan. Un Master sanador no tiene ataque ni dano, y un
