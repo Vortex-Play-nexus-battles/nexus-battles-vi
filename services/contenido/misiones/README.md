@@ -151,7 +151,7 @@ Una misión no se simula a lo largo de su duración: el plazo solo decide cuánd
 
 La IA de los personajes propios y de los adversarios puede apoyarse en una **red neuronal pequeña, propia y entrenada por el equipo** (decisión del PO, 2026-10-01): PyTorch sobre los eventos de combate de abajo, exportada a ONNX (≈18 KB) y ejecutada aquí con ONNX Runtime. **El modelo propone y la regla acota.** Lo entrenado y su receta viven en [`ia/`](ia/README.md); lo que corre en el servicio está en `nexus.misiones.ia`.
 
-- **Apagada por omisión** (`MISIONES_IA_MODELO_HABILITADO=false`). Apagada, sin ruta, con un archivo ausente, dañado o de otras características, decide la regla de heroes y la simulación es idéntica a la de antes, evento por evento (probado). Un modelo que falla al cargarse o al inferir se registra en la bitácora y decide la regla; nunca un error al jugador.
+- **Encendida por omisión** (`MISIONES_IA_MODELO_HABILITADO=true`, ruta `/app/ia/modelo.onnx`): la imagen lleva el modelo 1.0.0, entrenado con partidas reales (ver abajo). Apagada con `MISIONES_IA_MODELO_HABILITADO=false`, o sin ruta, con un archivo ausente (pruebas locales, `gradlew test`), dañado o de otras características, decide la regla de heroes y la simulación es idéntica a la de antes, evento por evento (probado). Un modelo que falla al cargarse o al inferir se registra en la bitácora y decide la regla; nunca un error al jugador.
 - **Candidatas.** En cada turno, `DecisorConModelo` pregunta a la regla lo de siempre y, además, la siguiente jugada viable de cada rotación de menor prioridad (una llamada a heroes por rotación, sin reimplementar aquí su viabilidad) y suma el ataque básico. Las candidatas respetan la rotación y su cursor, el costo en poder y la recarga **porque las dijo heroes**: el modelo no puede elegir fuera de rotación ni sin poder.
 - **Quién decide.** El modelo puntúa cada candidata a partir de un vector de 54 características (vida, poder, nivel, turno y efectos de los dos, prototipos, acción y costo; definición única en `Caracteristicas.java` y en `ia/nexus_ia/caracteristicas.py`, comprobadas una contra otra con casos dorados). Decide el modelo si su mejor candidata tiene al menos `MISIONES_IA_MODELO_CONFIANZA_MINIMA` (0,6) de probabilidad y le gana a la jugada de la regla; con empate, confianza baja, un error o sin contexto del duelo, **gana la prioridad de la regla**.
 - **Costo en llamadas.** Con el modelo encendido, una llamada a heroes por turno más hasta dos (una por cada rotación de menor prioridad que quede por mirar). Con tres rotaciones viables, tres en vez de una.
@@ -160,11 +160,22 @@ La IA de los personajes propios y de los adversarios puede apoyarse en una **red
 
 | Variable | Qué hace |
 |---|---|
-| `MISIONES_IA_MODELO_HABILITADO` | `true` enciende el modelo; `false` (por omisión) deja solo la regla |
-| `MISIONES_IA_MODELO_RUTA` | ruta del `modelo.onnx` (su `modelo.json` en la misma carpeta) |
+| `MISIONES_IA_MODELO_HABILITADO` | `true` (por omisión) enciende el modelo; `false` deja solo la regla |
+| `MISIONES_IA_MODELO_RUTA` | ruta del `modelo.onnx` (su `modelo.json` en la misma carpeta); por omisión `/app/ia/modelo.onnx`, donde lo deja la imagen |
 | `MISIONES_IA_MODELO_CONFIANZA_MINIMA` | probabilidad mínima de la mejor candidata para que decida el modelo (0,6) |
 
-El modelo de producción **no está en el repositorio**: se entrena con los eventos reales de `eventos_de_combate` (`python -m nexus_ia.entrenar`, ver `ia/README.md`) y se entrega por la ruta de arriba. El que hay en `src/test/resources/ia` se entrenó con datos sintéticos y es solo de pruebas (`"sintetico": true`).
+#### El modelo que viaja en la imagen: 1.0.0
+
+El primer modelo entrenado con **partidas reales** está versionado en [`ia/modelos/1.0.0/`](ia/modelos/1.0.0) (`modelo.onnx`, 17 871 bytes, y su `modelo.json`) y el `Dockerfile` lo copia a `/app/ia/`: por eso la ruta por omisión basta. El `.gitattributes` de esta carpeta marca los `.onnx` como binarios.
+
+| | |
+|---|---|
+| **Procedencia** | 689 eventos de combate de 33 ejecuciones de misión en AWS DEV, exportados el 5-oct-2026 con `mongoexport` (solo lectura). **Los datos no están en el repositorio** (son de jugadores de DEV); queda su recuento en el `modelo.json`. |
+| **Versión / características** | `1.0.0`, `sintetico: false`, características v1 (54). sha256 `ef0cdbc8…99ff68f` |
+| **Validación** | 203 muestras (separadas por ejecución): aciertos 1,0 frente a 0,736 de una elección al azar entre las candidatas |
+| **Qué significa** | La versión 1 **aprende a jugar como la regla** (los 689 eventos los decidió la regla, y sus candidatas se derivaron). Un acierto de 1,0 prueba que la red reproduce la regla, no que juegue mejor. Ver `ia/README.md`. |
+
+Una prueba (`ModeloVersionadoTest`) carga ese archivo del repositorio y comprueba que sigue siendo el de producción, versión 1.0.0, 54 características, con el hash de su archivo, que reproduce los ejemplos de PyTorch y que el `Dockerfile` copia esa carpeta. El que hay en `src/test/resources/ia` se entrenó con datos sintéticos y es solo de pruebas (`"sintetico": true`). Para reentrenar y publicar otra versión, ver [`ia/README.md`](ia/README.md#reentrenar-y-publicar-una-versión-nueva).
 
 ### Los turnos quedan registrados
 
@@ -225,8 +236,8 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 - La IA solo elige acciones de la Tabla 7 (las que traen las rotaciones); las épicas del héroe viajan al motor pero la IA de rotaciones no las elige. El Máster sí juega la suya (ver «El Máster»), así que hoy el Máster usa una épica que el héroe del jugador, con las suyas equipadas, no usa en misión.
 - Si el jugador ya tiene la épica que gana, el inventario le crea otro elemento: la clave de idempotencia protege a una ejecución de entregar dos veces, no a un jugador de ganar la misma épica en dos ejecuciones. Si el PO prefiere que no se repita, hay que decidir quién lo evita (misiones antes de entregar, o inventario al recibir).
 - Simular una misión entera son cientos de llamadas síncronas al motor y a heroes (tres por turno de combatiente; hasta cinco con el modelo de IA encendido); el trabajo las atiende una ejecución tras otra.
-- El modelo de IA aprende, mientras solo haya eventos de la regla, sobre todo a imitarla: lo nuevo viene del peso por resultado y de los eventos que genere el propio modelo encendido (con sus candidatas). El ciclo es encender, acumular partidas y reentrenar (`ia/README.md`).
-- ONNX Runtime suma ≈55 MB al jar (bibliotecas nativas de tres plataformas, que no se cargan con el modelo apagado). Su consumo de memoria nativa encendido no está medido en la instancia de contenido: medirlo con la compuerta de capacidad antes de encenderlo en DEV.
+- El modelo 1.0.0 imita a la regla (se entrenó con partidas que ella decidió): con él encendido el servicio juega casi igual que antes. Lo nuevo vendrá de las versiones siguientes, entrenadas con las partidas que juegue el modelo (sus eventos sí registran las candidatas con su puntaje) y ponderadas por resultado (`ia/README.md`).
+- ONNX Runtime suma ≈55 MB al jar (bibliotecas nativas de tres plataformas; solo se extrae y carga la de la plataforma, y solo si hay un modelo que cargar). Con el modelo encendido, una medición local (JVM con las banderas de `docker-compose.contenido.yml`, Windows) dio ≈+35 MiB de memoria residente al cargarlo y ≈+50 MiB tras 20 000 inferencias, memoria nativa fuera del heap (acotado a 128 MiB), que cuenta contra el límite de 320 MiB del contenedor. No está medido en Linux ni con el servicio completo: medirlo en DEV tras el despliegue (`medir-jvm-dev.yml`); si no cabe, `MISIONES_IA_MODELO_HABILITADO=false` lo apaga sin redesplegar código.
 - `POST /api/v1/inventario/entregas` lo implementa la fase B4. Si el inventario de un entorno aún no la trae, las entregas quedan pendientes y se reintentan (el reporte lo dice con `entregaPendiente`), sin perderse.
 - El correo de fin de misión (RF-COR-005) usa `GET /api/v1/internal/usuarios/{uid}/contacto` de ms-identidad, ya implementada. Si un entorno no la sirve, el correo queda como no enviado y lo demás se entrega igual.
 - Avisos en la bandeja del jugador (HU-NOT-004 / RF-NOT-004, contrato 1.2.0): finalización con el detalle de cada recompensa, épica obtenida y misiones de historia desbloqueadas, por `POST /internal/notifications` con `tipo` `MISION` e `id` estable por ejecución (un reintento no duplica). Quedan fuera, porque piden decisión: avisos de misiones de tiempo limitado (no hay ninguna en el catálogo ni umbral de «próximas a expirar»), logros e hitos (no hay sistema de logros), preferencias por categoría y agrupación de avisos (eso es de notificaciones). `MISIONES_AVISOS_ACTIVO=false` los apaga.
