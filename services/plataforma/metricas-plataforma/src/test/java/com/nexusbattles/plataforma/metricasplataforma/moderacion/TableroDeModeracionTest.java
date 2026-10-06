@@ -30,21 +30,71 @@ class TableroDeModeracionTest {
         return new FuenteDeModeracion.Agregados(HASTA.minusDays(30), HASTA, 0, Map.of(), dias, Map.of(), 0, 0);
     }
 
+    private static FuenteDeUsuarios.Indicadores indicadores() {
+        return new FuenteDeUsuarios.Indicadores(12L,
+                Map.of("ACTIVO", 8L, "PENDIENTE_VERIFICACION", 1L, "INACTIVO", 0L, "SUSPENDIDO", 2L, "BANEADO", 1L),
+                new FuenteDeUsuarios.Registros("2026-09-30", "2026-10-01", 3L,
+                        List.of(new FuenteDeUsuarios.DiaDeRegistro("2026-09-30", 1L),
+                                new FuenteDeUsuarios.DiaDeRegistro("2026-10-01", 2L))),
+                false, HASTA);
+    }
+
     @Test
     @DisplayName("sin umbral del PO no hay alertas ni se inventa uno (D-25); con umbral, se evalua por dia")
     void umbral() {
-        TableroDeModeracion sinUmbral = TableroDeModeracion.de(agregados(1, 9), null);
+        TableroDeModeracion sinUmbral = TableroDeModeracion.de(agregados(1, 9), null, null, "no consultado");
         assertThat(sinUmbral.alertasConfiguradas()).isFalse();
         assertThat(sinUmbral.umbralSancionesPorDia()).isNull();
         assertThat(sinUmbral.alertas()).isEmpty();
         assertThat(sinUmbral.pendientes()).hasSize(2);
 
-        TableroDeModeracion conUmbral = TableroDeModeracion.de(agregados(1, 9), 5);
+        TableroDeModeracion conUmbral = TableroDeModeracion.de(agregados(1, 9), 5, null, "no consultado");
         assertThat(conUmbral.alertasConfiguradas()).isTrue();
         assertThat(conUmbral.alertas()).hasSize(1);
         assertThat(conUmbral.alertas().get(0)).contains("2026-09-21", "9");
-        assertThat(TableroDeModeracion.de(agregados(1, 9), 0).alertasConfiguradas()).isFalse();
+        assertThat(TableroDeModeracion.de(agregados(1, 9), 0, null, "no consultado").alertasConfiguradas()).isFalse();
         assertThat(agregados(1, 9).maximoEnUnDia()).isEqualTo(9);
+    }
+
+    @Test
+    @DisplayName("D-25: el umbral del PO es «a partir de»: un dia con EXACTAMENTE el umbral ya es alta frecuencia")
+    void elUmbralEsAPartirDe() {
+        // dias 2026-09-20, -21, -22, -23: 2, 3, 4 y 1 sanciones; umbral 3 (D-25, decidido por el PO el 2026-10-05)
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(2, 3, 4, 1), 3, null, "no consultado");
+
+        assertThat(tablero.alertasConfiguradas()).isTrue();
+        assertThat(tablero.umbralSancionesPorDia()).isEqualTo(3);
+        assertThat(tablero.alertas()).hasSize(2);
+        assertThat(tablero.alertas().get(0)).contains("2026-09-21", "3");
+        assertThat(tablero.alertas().get(1)).contains("2026-09-22", "4");
+        assertThat(tablero.alertas()).noneMatch(a -> a.contains("2026-09-20") || a.contains("2026-09-23"));
+    }
+
+    @Test
+    @DisplayName("con los indicadores de cuentas de ms-identidad se publican y 'nuevos usuarios' deja de ser pendiente")
+    void conIndicadoresDeCuentas() {
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), null, indicadores(), null);
+
+        assertThat(tablero.registroDeUsuarios()).isNotNull();
+        assertThat(tablero.registroDeUsuarios().total()).isEqualTo(12);
+        assertThat(tablero.registroDeUsuarios().porEstado()).containsEntry("SUSPENDIDO", 2L);
+        assertThat(tablero.registroDeUsuarios().registros().total()).isEqualTo(3);
+        assertThat(tablero.pendientes())
+                .hasSize(1)
+                .allMatch(p -> p.startsWith("frecuencia de reportes"));
+    }
+
+    @Test
+    @DisplayName("sin los indicadores, 'nuevos usuarios' queda pendiente con el MOTIVO real, sin tumbar lo demas (CA-03)")
+    void sinIndicadoresDiceElMotivo() {
+        TableroDeModeracion tablero = TableroDeModeracion.de(agregados(1), null, null,
+                "ms-identidad no responde: connection refused");
+
+        assertThat(tablero.registroDeUsuarios()).isNull();
+        assertThat(tablero.sanciones()).isNotNull();
+        assertThat(tablero.pendientes())
+                .anyMatch(p -> p.startsWith("registro de nuevos usuarios") && p.contains("connection refused"))
+                .anyMatch(p -> p.startsWith("frecuencia de reportes"));
     }
 
     @Test

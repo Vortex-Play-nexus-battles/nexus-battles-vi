@@ -408,6 +408,15 @@ services:
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       # HU-MET-001: agregados de moderacion desde moderacion-sanciones.
       SANCIONES_URL: ${SANCIONES_URL:-http://srv-moderacion-sanciones:8086/api/v1}
+      # HU-MET-001: cuentas por estado y altas por dia, de ms-identidad. Es el
+      # servidor SIN /api/v1 (la ruta del contrato ya lo lleva). La consulta
+      # reenvia el token del administrador que mira el tablero: identidad pide
+      # GESTIONAR_CUENTAS de una persona y una credencial de servicio no basta.
+      IDENTIDAD_URL: ${IDENTIDAD_URL:-http://srv-ms-identidad:8089}
+      # HU-MET-001, D-25: el PO fijo el umbral de «alta frecuencia» en 3 el
+      # 2026-10-05: un dia con 3 sanciones o mas genera alerta. Cambiarlo es
+      # definir la variable; vacia, el tablero vuelve a publicar solo conteos.
+      METRICAS_UMBRAL_SANCIONES_POR_DIA: ${METRICAS_UMBRAL_SANCIONES_POR_DIA-3}
       # HU-MET-001 (#527): la observabilidad exige rol administrativo; el
       # emisor de los tokens es ms-identidad, igual que en el resto del bloque.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
