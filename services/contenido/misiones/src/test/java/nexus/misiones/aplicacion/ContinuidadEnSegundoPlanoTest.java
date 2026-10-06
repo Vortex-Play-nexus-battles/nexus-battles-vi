@@ -33,6 +33,7 @@ import nexus.misiones.dominio.EpicaDeTabla20;
 import nexus.misiones.dominio.EstadoDePaso;
 import nexus.misiones.dominio.EstadoEjecucion;
 import nexus.misiones.dominio.GrupoDeEnemigos;
+import nexus.misiones.dominio.Intentos;
 import nexus.misiones.dominio.Jefe;
 import nexus.misiones.dominio.Mision;
 import nexus.misiones.dominio.Misiones;
@@ -40,7 +41,9 @@ import nexus.misiones.dominio.Objetivo;
 import nexus.misiones.dominio.Origen;
 import nexus.misiones.dominio.ParametrosDeRecompensa;
 import nexus.misiones.dominio.PasoDeLiquidacion;
+import nexus.misiones.dominio.Periodo;
 import nexus.misiones.dominio.RecompensasDeMision;
+import nexus.misiones.dominio.ReglaDeMisionIncumplida;
 import nexus.misiones.dominio.RepositorioDeEventosDeCombate;
 import nexus.misiones.dominio.TipoDeObjetivo;
 import nexus.misiones.dominio.simulacion.DecisorDeTurno;
@@ -164,6 +167,7 @@ class ContinuidadEnSegundoPlanoTest {
                 null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
         catalogo = new Dobles.Catalogo(List.of(Misiones.templo(), Misiones.historia("prueba-corta", List.of()),
                 Misiones.historia("prueba-dos", List.of()), unaConDeTodo(),
+                Misiones.desafio("desafio-diario", new Intentos(1, Periodo.DIARIO)),
                 Misiones.historiaTrasDe("tras-la-completa", "prueba-completa")), tabla20);
         matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
                 heroes, parametros, reloj, () -> 7L);
@@ -632,6 +636,85 @@ class ContinuidadEnSegundoPlanoTest {
         assertThat(inventario.bloqueados).isEmpty();
         assertThat(eventos.de(ejecucion.id())).as("los turnos de una mision abandonada no se quedan").isEmpty();
         assertThat(libro.acreditado).isEmpty();
+    }
+
+    // ---- cancelar una mision cuya simulacion falla por un error del sistema (decision del PO, 2026-10-06)
+
+    @Test
+    @DisplayName("criterio 3: si la simulacion viene fallando por un error del sistema, cancelar es sin penalizacion y el heroe se libera")
+    void criterio3_cancelarTrasUnFalloDelSistemaNoTienePenalizacion() {
+        Ejecucion ejecucion = enviar("prueba-corta", "h-1");
+        heroes.fallarAlDecidir = Dobles.caido("heroes");
+        pasarA(Duration.ofHours(1));
+        programador.darUnaVuelta();
+        assertThat(leer(ejecucion).intentosDeLiquidacion()).as("hay al menos un intento de simulacion fallido")
+                .isPositive();
+
+        Cancelacion cancelacion = cancelar.cancelar(JUGADOR, ejecucion.id());
+
+        assertThat(cancelacion.penalizacion()).startsWith("Ninguna").contains("error del sistema")
+                .doesNotContain("Pierdes");
+        assertThat(cancelacion.ejecucion().estado()).isEqualTo(EstadoEjecucion.ABANDONADA);
+        assertThat(cancelacion.heroeLiberado()).isTrue();
+        assertThat(inventario.bloqueados).as("el heroe se libera igual").isEmpty();
+        assertThat(libro.acreditado).isEmpty();
+    }
+
+    @Test
+    @DisplayName("criterio 3: sin un intento de simulacion fallido registrado, cancelar sigue teniendo su penalizacion")
+    void criterio3_cancelarSinFalloDelSistemaSiTienePenalizacion() {
+        Ejecucion enCurso = enviar("prueba-corta", "h-1");
+        pasarA(Duration.ofMinutes(10));
+
+        Cancelacion cancelacion = cancelar.cancelar(JUGADOR, enCurso.id());
+
+        assertThat(cancelacion.penalizacion()).contains("Pierdes todas las recompensas");
+
+        Ejecucion vencidaSinFallo = enviar("prueba-dos", "h-2");
+        pasarA(Duration.ofHours(3));
+        assertThat(leer(vencidaSinFallo).intentosDeLiquidacion()).isZero();
+        assertThat(cancelar.cancelar(JUGADOR, vencidaSinFallo.id()).penalizacion())
+                .as("vencida, pero la simulacion todavia no ha fallado")
+                .contains("Pierdes todas las recompensas");
+    }
+
+    @Test
+    @DisplayName("criterio 3: cancelar sin penalizacion no gasta uno de los intentos de un desafio; cancelar con penalizacion si")
+    void criterio3_cancelarSinPenalizacionNoGastaUnIntento() {
+        Ejecucion fallando = enviar("desafio-diario", "h-1");
+        heroes.fallarAlDecidir = Dobles.caido("heroes");
+        pasarA(Duration.ofHours(2));
+        programador.darUnaVuelta();
+        cancelar.cancelar(JUGADOR, fallando.id());
+
+        Ejecucion otraVez = enviar("desafio-diario", "h-1");
+
+        assertThat(otraVez.estado()).as("el intento no se gasto: puede volver a empezarla")
+                .isEqualTo(EstadoEjecucion.EN_PROGRESO);
+
+        // Control: cancelarla a mano, sin ningun fallo, si gasta el intento (el unico del dia).
+        prepararCon(List.of(), 20, null);
+        Ejecucion sinFallo = enviar("desafio-diario", "h-1");
+        cancelar.cancelar(JUGADOR, sinFallo.id());
+        assertThatThrownBy(() -> enviar("desafio-diario", "h-1")).isInstanceOf(ReglaDeMisionIncumplida.class);
+    }
+
+    @Test
+    @DisplayName("criterio 3: el tablon de misiones en curso ya dice, antes de cancelar, que no hay penalizacion cuando la simulacion viene fallando")
+    void criterio3_laMisionEnCursoYaAnunciaQueCancelarNoTienePenalizacion() {
+        Ejecucion ejecucion = enviar("prueba-corta", "h-1");
+        assertThat(CancelarEjecucion.penalizacionDe(leer(ejecucion))).contains("Pierdes todas las recompensas");
+
+        heroes.fallarAlDecidir = Dobles.caido("heroes");
+        pasarA(Duration.ofHours(1));
+        programador.darUnaVuelta();
+
+        assertThat(CancelarEjecucion.penalizacionDe(leer(ejecucion))).startsWith("Ninguna")
+                .isEqualTo(CancelarEjecucion.SIN_PENALIZACION);
+        cancelar.cancelar(JUGADOR, ejecucion.id());
+        assertThat(CancelarEjecucion.penalizacionDe(leer(ejecucion))).as("y lo recuerda ya cancelada")
+                .isEqualTo(CancelarEjecucion.SIN_PENALIZACION);
+        assertThat(leer(ejecucion).canceladaSinPenalizacion()).isTrue();
     }
 
     /** Los seis pasos de entrega de una mision que gana creditos, botin, una epica y escribe al jugador. */

@@ -299,6 +299,44 @@ class EjecucionTest {
     }
 
     @Test
+    @DisplayName("la simulacion viene fallando desde el primer intento fallido registrado y hasta que la ejecucion deja de estar en progreso")
+    void simulacionFallando() {
+        Instant vence = INICIO.plus(Duration.ofHours(12));
+        Ejecucion ejecucion = enCurso();
+        assertThat(ejecucion.simulacionFallando()).isFalse();
+
+        ejecucion.reservarParaSimular(vence);
+        assertThat(ejecucion.simulacionFallando()).as("reservar no es fallar").isFalse();
+
+        ejecucion.simulacionAplazada(vence, Duration.ofSeconds(30), "heroes no responde");
+        assertThat(ejecucion.simulacionFallando()).isTrue();
+
+        ejecucion.terminar(exito(), recompensas(0, false), false, vence.plusSeconds(31));
+        assertThat(ejecucion.simulacionFallando()).as("terminada, ya no falla").isFalse();
+    }
+
+    @Test
+    @DisplayName("cancelar con la simulacion fallando queda sin penalizacion; sin fallo, con ella")
+    void cancelarSinPenalizacion() {
+        Instant vence = INICIO.plus(Duration.ofHours(12));
+        Ejecucion fallando = enCurso();
+        fallando.reservarParaSimular(vence);
+        fallando.simulacionAplazada(vence, Duration.ofSeconds(30), "heroes no responde");
+
+        fallando.cancelar(vence.plusSeconds(5));
+
+        assertThat(fallando.canceladaSinPenalizacion()).isTrue();
+        assertThat(fallando.estado()).isEqualTo(EstadoEjecucion.ABANDONADA);
+        assertThat(fallando.pasosPendientes()).containsExactly(PasoDeLiquidacion.LIBERACION);
+
+        Ejecucion sana = enCurso();
+        sana.reservarParaSimular(vence);
+        sana.cancelar(vence.plusSeconds(5));
+        assertThat(sana.canceladaSinPenalizacion()).isFalse();
+        assertThat(enCurso().canceladaSinPenalizacion()).isFalse();
+    }
+
+    @Test
     @DisplayName("la progresion que devuelve el inventario al liberar queda en la ejecucion")
     void progresion() {
         Ejecucion ejecucion = enCurso();

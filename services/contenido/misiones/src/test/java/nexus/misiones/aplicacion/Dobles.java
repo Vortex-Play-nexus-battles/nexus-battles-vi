@@ -119,7 +119,8 @@ public final class Dobles {
         @Override
         public long iniciadasDesde(String jugadorUid, String misionId, Instant desde) {
             return delJugadorEnMision(jugadorUid, misionId).stream()
-                    .filter(e -> !e.iniciadaEn().isBefore(desde)).count();
+                    .filter(e -> !e.iniciadaEn().isBefore(desde))
+                    .filter(e -> !e.canceladaSinPenalizacion()).count();
         }
 
         /** Como Mongo: las listas para simular, la de plazo mas antiguo primero. */
@@ -169,6 +170,7 @@ public final class Dobles {
             s.nivelAlcanzado = e.nivelAlcanzado();
             s.experienciaAcumulada = e.experienciaAcumulada();
             s.intentosDeSimulacion = e.intentosDeSimulacion();
+            s.sinPenalizacion = e.canceladaSinPenalizacion() ? Boolean.TRUE : null;
             s.version = e.version();
             return s;
         }

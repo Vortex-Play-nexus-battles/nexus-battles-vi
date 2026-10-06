@@ -69,6 +69,7 @@ public final class Ejecucion {
     private Integer nivelAlcanzado;
     private Double experienciaAcumulada;
     private int intentosDeSimulacion;
+    private boolean canceladaSinPenalizacion;
     private Long version;
 
     private Ejecucion(Estado e) {
@@ -100,6 +101,7 @@ public final class Ejecucion {
         this.nivelAlcanzado = e.nivelAlcanzado;
         this.experienciaAcumulada = e.experienciaAcumulada;
         this.intentosDeSimulacion = e.intentosDeSimulacion == null ? 0 : e.intentosDeSimulacion;
+        this.canceladaSinPenalizacion = Boolean.TRUE.equals(e.sinPenalizacion);
         this.version = e.version;
     }
 
@@ -154,13 +156,30 @@ public final class Ejecucion {
     }
 
     /**
+     * La simulacion de esta ejecucion VIENE FALLANDO: sigue en progreso y hay al menos un intento de simularla
+     * fallido y registrado ({@link #simulacionAplazada}), es decir, un error del sistema y no del jugador la tiene
+     * detenida. Mientras esta en progreso, {@link #intentosDeLiquidacion()} solo lo suma ese aplazamiento (los
+     * reintentos de la liquidacion empiezan cuando termina, y {@code terminar} y {@code cancelar} lo ponen a cero),
+     * asi que es la cuenta de simulaciones fallidas. Reservar para simular no es fallar.
+     */
+    public boolean simulacionFallando() {
+        return estado == EstadoEjecucion.EN_PROGRESO && intentosDeLiquidacion > 0;
+    }
+
+    /**
      * Cancelar (7.8.7, «Abandonada: cancelada por el jugador, con
      * penalizacion»). La penalizacion provisional es perder todo lo de esta
      * ejecucion: no hay resultado ni recompensas, y solo queda liberar al heroe
      * sin experiencia.
+     *
+     * <p>Excepcion (decision del PO, 2026-10-06): si la simulacion venia fallando por un error del sistema
+     * ({@link #simulacionFallando()}), la cancelacion es SIN penalizacion: el jugador no tuvo la culpa de que la
+     * mision no se pudiera resolver, asi que no gasta uno de sus intentos ({@link #canceladaSinPenalizacion()}).
+     * Se decide antes de empezar la liquidacion, que borra la cuenta de fallos.
      */
     public void cancelar(Instant ahora) {
         exigirEnProgreso("cancelar");
+        canceladaSinPenalizacion = simulacionFallando();
         estado = EstadoEjecucion.ABANDONADA;
         terminadaEn = ahora;
         pasos.clear();
@@ -422,6 +441,14 @@ public final class Ejecucion {
         return intentosDeSimulacion;
     }
 
+    /**
+     * Se cancelo con la simulacion fallando por un error del sistema: no cuenta como intento consumido de un
+     * desafio ni lleva la penalizacion de abandonar.
+     */
+    public boolean canceladaSinPenalizacion() {
+        return canceladaSinPenalizacion;
+    }
+
     public Long version() {
         return version;
     }
@@ -451,6 +478,8 @@ public final class Ejecucion {
         public Double experienciaAcumulada;
         /** Nulo en lo guardado antes de HU-SIM-007: se lee como cero. */
         public Integer intentosDeSimulacion;
+        /** Nulo en lo guardado antes de la cancelacion sin penalizacion: se lee como falso. */
+        public Boolean sinPenalizacion;
         public Long version;
     }
 }

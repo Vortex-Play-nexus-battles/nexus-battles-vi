@@ -284,6 +284,22 @@ class RepositoriosMongoIT {
     }
 
     @Test
+    @DisplayName("la cancelada sin penalizacion (su simulacion fallaba por un error del sistema) no cuenta como intento iniciado; la cancelada a mano, si")
+    void canceladaSinPenalizacionNoGastaElIntento() {
+        Instant desde = AHORA.minus(Duration.ofDays(1));
+        Ejecucion fallando = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(5)), Duration.ofHours(1), null);
+        fallando.simulacionAplazada(AHORA.minus(Duration.ofHours(3)), Duration.ofSeconds(30), "heroes no responde");
+        fallando.cancelar(AHORA.minus(Duration.ofHours(2)));
+        Ejecucion guardada = ejecuciones.guardar(fallando);
+        Ejecucion amano = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(4)), Duration.ofHours(1), null);
+        amano.cancelar(AHORA.minus(Duration.ofHours(3)));
+        ejecuciones.guardar(amano);
+
+        assertThat(ejecuciones.buscar(guardada.id()).orElseThrow().canceladaSinPenalizacion()).isTrue();
+        assertThat(ejecuciones.iniciadasDesde(JUGADOR, "m-1", desde)).isEqualTo(1);
+    }
+
+    @Test
     @DisplayName("HU-SIM-007: una ejecucion guardada antes de la reserva, sin el campo de intentos, se lee con cero y sigue entrando en la cola de vencidas")
     void colaDeVencidasConDocumentosViejos() {
         Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null);
