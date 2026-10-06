@@ -29,6 +29,8 @@ import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.TipoProducto;
 import nexus.persistencia.ProductoRepository;
+import nexus.persistencia.RespaldoProductoRepository;
+import nexus.dominio.RespaldoProducto;
 import org.junit.jupiter.api.BeforeEach;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -134,6 +136,9 @@ class ProductosApiTest {
         @MockitoBean
         private ProductoRepository productoRepository;
 
+        @MockitoBean
+        private RespaldoProductoRepository respaldoProductoRepository;
+
         @BeforeEach
         void simularPersistencia() {
                 when(productoRepository.save(any(Producto.class)))
@@ -143,6 +148,8 @@ class ProductosApiTest {
                 when(productoRepository.insert(any(Producto.class)))
                         .thenAnswer(invocacion ->
                                 invocacion.getArgument(0, Producto.class));
+                when(respaldoProductoRepository.save(any(RespaldoProducto.class)))
+                        .thenAnswer(invocacion -> invocacion.getArgument(0, RespaldoProducto.class));
         }
 
 

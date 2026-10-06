@@ -204,6 +204,52 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     expect(campo('precioMonedaReal').disabled).toBe(true);
   });
 
+  test('HU-PRD-007 consulta el historial y revierte el último cambio con confirmación', async () => {
+    const alCambiar = jest.fn();
+    const confirmarAccion = jest.fn(async () => true);
+    const cambio = {
+      id: 'respaldo-1',
+      productoId: YELMO.id,
+      tipo: 'MODIFICACION',
+      campos: ['nombre', 'defensa'],
+      autor: 'admin-uid',
+      fecha: '2026-10-05T10:00:00Z',
+      versionAnterior: 2,
+      versionAplicada: 3,
+      revertible: true,
+    };
+    const fetchImpl = jest.fn(async (url, opciones = {}) => {
+      if (url.endsWith('/historial')) {
+        return respuesta([cambio]);
+      }
+      if (url.endsWith('/reversiones') && opciones.method === 'POST') {
+        return respuesta({ ...YELMO, nombre: 'Yelmo anterior', version: 4 });
+      }
+      throw new Error(`Petición inesperada: ${url}`);
+    });
+
+    abrirHojaDeProducto(YELMO, { fetchImpl, confirmarAccion, alCambiar });
+    ficha().querySelector('[data-accion="consultar-historial"]').click();
+    await esperar();
+
+    const revertir = ficha().querySelector('[data-accion="revertir-producto"]');
+    expect(ficha().textContent).toContain('admin-uid');
+    expect(revertir.disabled).toBe(false);
+    revertir.click();
+    await esperar();
+
+    expect(confirmarAccion).toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledWith(`/api/v1/productos/${YELMO.id}/reversiones`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ respaldoId: 'respaldo-1' }),
+    });
+    expect(ficha().querySelector('.aviso--exito').textContent).toContain('Producto restaurado');
+    expect(alCambiar).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: 'Yelmo anterior', version: 4 }),
+    );
+  });
+
   test('RFINAL-07: sin promoción el resumen no escribe «null» (revisión de DEV del 4-oct)', () => {
     abrirHojaDeProducto({ ...YELMO, promocion: null }, { fetchImpl: jest.fn() });
 

@@ -10,6 +10,8 @@ import nexus.dominio.BannerNoEncontradoException;
 import nexus.dominio.ClaveDeIdempotenciaReutilizadaException;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.ProductoNoEncontradoException;
+import nexus.dominio.RespaldoProductoNoEncontradoException;
+import nexus.dominio.ReversionProductoEnConflictoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -149,6 +151,30 @@ public class ManejadorDeErrores {
                         excepcion.getMessage(),
                         "urn:nexus:problema:producto-no-encontrado",
                         solicitud);
+        }
+
+        @ExceptionHandler(RespaldoProductoNoEncontradoException.class)
+        ResponseEntity<ProblemDetail> manejarRespaldoNoEncontrado(
+                        RespaldoProductoNoEncontradoException excepcion,
+                        HttpServletRequest solicitud) {
+                return respuesta(
+                                HttpStatus.NOT_FOUND,
+                                "Respaldo no encontrado",
+                                excepcion.getMessage(),
+                                "urn:nexus:problema:respaldo-no-encontrado",
+                                solicitud);
+        }
+
+        @ExceptionHandler(ReversionProductoEnConflictoException.class)
+        ResponseEntity<ProblemDetail> manejarConflictoDeReversion(
+                        ReversionProductoEnConflictoException excepcion,
+                        HttpServletRequest solicitud) {
+                return respuesta(
+                                HttpStatus.CONFLICT,
+                                "El respaldo ya no es aplicable",
+                                excepcion.getMessage(),
+                                "urn:nexus:problema:reversion-en-conflicto",
+                                solicitud);
         }
 
         // B4 — suspender y reactivar trabajan con el dominio de disponibilidad,
