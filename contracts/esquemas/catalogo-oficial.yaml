@@ -30,7 +30,11 @@
 #     define es la de las epicas (Tabla 20: efecto general para todos, efecto
 #     potenciado para el tipo afin).
 #   * `probabilidadCaida` y `probabilidadMaster` son porcentajes (3 = 3 %).
-#   * `epicasDeMision` no es de la Tabla 20: es la epica que el documento define
+#   * Las claves de primer nivel van en minusculas y sin guiones: el spec E2E del
+#     profesor (tests/e2e/contrato-del-profesor.smoke.spec.js) lee este archivo
+#     linea a linea con /^([a-z]+):/, y una clave con mayusculas no cierraria la
+#     seccion anterior (el guardian lo exige). De ahi `epicasdemision`.
+#   * `epicasdemision` no es de la Tabla 20: es la epica que el documento define
 #     DENTRO de la mision de ejemplo (seccion 7.8.14). Es un producto EPICA del
 #     catalogo, pero no una de las ocho de `EpicasIniciales` (heroes), que son
 #     las de la Tabla 20 y a las que cada tipo de heroe tiene derecho; por eso el
@@ -163,5 +167,5 @@ epicas:
 #   Efecto general: +2 a la defensa para todos los heroes.
 #   Efecto epico (solo Pícaro Veneno): intangible 1 turno, sin recibir dano y con
 #   veneno al atacante (+3 por veneno durante 2 turnos).
-epicasDeMision:
+epicasdemision:
   - {nombre: Velo de Sombras, heroe: Pícaro Veneno, probabilidadMaster: 15}
