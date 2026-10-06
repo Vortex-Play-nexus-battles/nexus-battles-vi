@@ -62,6 +62,22 @@ class RepositorioEntregasMongoTest {
     }
 
     @Test
+    @DisplayName("el documento conserva las epicas que el jugador ya tenia, y uno viejo sin ese campo las da vacias")
+    void conservaLasQueYaTenia() {
+        Entrega original = Entrega.pendiente("entrega-1", "clave-1", "huella", "uid-1", OrigenDeEntrega.MISION,
+                "mision-7", List.of(new LineaDeEntrega("epica-defensa", 1)), List.of(), List.of("epica-defensa"),
+                "misiones", CREADA);
+
+        EntregaDocumento documento = EntregaDocumento.de(original);
+
+        assertEquals(List.of("epica-defensa"), documento.aDominio().yaTenia());
+        assertEquals(original, documento.aDominio());
+        EntregaDocumento anterior = new EntregaDocumento("e", "c", "h", "u", OrigenDeEntrega.COFRE, "r", null, null,
+                null, EstadoEntrega.PENDIENTE, "s", CREADA, null);
+        assertTrue(anterior.aDominio().yaTenia().isEmpty());
+    }
+
+    @Test
     @DisplayName("una clave ya registrada (indice unico) es ClaveDeEntregaOcupada, no un fallo")
     void claveDuplicada() {
         when(mongo.insert(any(EntregaDocumento.class))).thenThrow(new DuplicateKeyException("clave"));
@@ -114,11 +130,13 @@ class RepositorioEntregasMongoTest {
     @DisplayName("un documento sin listas (escrito a mano o antiguo) se lee con listas vacias")
     void documentoSinListas() {
         EntregaDocumento sinListas = new EntregaDocumento("entrega-2", "clave-2", "huella", "uid-1",
-                OrigenDeEntrega.MISION, "mision-1", null, null, EstadoEntrega.COMPLETADA, "misiones", CREADA, CREADA);
+                OrigenDeEntrega.MISION, "mision-1", null, null, null, EstadoEntrega.COMPLETADA, "misiones", CREADA,
+                CREADA);
 
         Entrega leida = sinListas.aDominio();
 
         assertEquals(List.of(), leida.productos());
         assertEquals(List.of(), leida.elementos());
+        assertEquals(List.of(), leida.yaTenia());
     }
 }
