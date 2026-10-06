@@ -625,6 +625,16 @@
       "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
       "probabilidadMaster": "0.1%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Velo de Sombras",
+      "heroe": "Pícaro Veneno",
+      "id": "epica-picaro-veneno-velo-de-sombras",
+      "efectoGeneral": "+2 a la defensa para todos los héroes.",
+      "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
+      "probabilidadMaster": "15%",
+      "fuente": "Boveda/02-producto/requerimientos/modulo-misiones-ejemplo-diseno.md, 7.8.14: Enemigo Máster «Sombra del Olvido» de «El Templo Olvidado» (no es de la Tabla 20)"
     }
   ],
   "preciosDemostracion": {
