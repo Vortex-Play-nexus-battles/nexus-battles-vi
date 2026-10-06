@@ -37,9 +37,12 @@ public class PerfilDeCombateDelHeroe {
 
     private static final Logger BITACORA = LoggerFactory.getLogger(PerfilDeCombateDelHeroe.class);
 
-    /** Motor-combate.yaml: hasta diez piezas de equipamiento y ocho epicas por combatiente. */
+    /**
+     * Motor-combate.yaml (1.3.0): hasta diez piezas de equipamiento y nueve epicas por
+     * combatiente: las ocho de la Tabla 20 y «Velo de Sombras» (7.8.14).
+     */
     static final int EQUIPAMIENTO_MAXIMO = 10;
-    static final int EPICAS_MAXIMAS = 8;
+    static final int EPICAS_MAXIMAS = 9;
 
     private final InventarioDeHeroes inventario;
     private final CatalogoDeProductos productos;
