@@ -27,7 +27,9 @@ import java.util.Locale;
  * aplicar se rechaza aqui, con un motivo para la persona
  * ({@link ConsultaInvalidaException}, 400 {@code datos-invalidos}).
  *
- * @param texto           apodo, correo o nombre del perfil; cadena vacia = sin texto
+ * @param texto           apodo, correo o nombre del perfil, o (HU-USR-009) el
+ *                        identificador exacto de la cuenta ({@code uid} o
+ *                        clave {@code id}); cadena vacia = sin texto
  * @param ocultarPruebas  sin las cuentas de las pruebas automaticas ({@link CuentasDePrueba})
  * @param rol             nombre del rol del contrato, o null = todos
  * @param estado          estado del contrato ({@link EstadoCuenta#PUBLICADOS}), o null = todos
@@ -71,7 +73,7 @@ public record FiltroDelDirectorio(
 
     /** La consulta del directorio con todos los filtros activos a la vez. */
     public Specification<Usuario> especificacion(CuentasDePrueba cuentasDePrueba) {
-        Specification<Usuario> consulta = BusquedaDelDirectorio.buscandoTambienPorNombre(texto);
+        Specification<Usuario> consulta = BusquedaDelDirectorio.buscandoTambienPorNombreEIdentificador(texto);
         if (ocultarPruebas) {
             consulta = consulta.and(cuentasDePrueba.excluidas());
         }

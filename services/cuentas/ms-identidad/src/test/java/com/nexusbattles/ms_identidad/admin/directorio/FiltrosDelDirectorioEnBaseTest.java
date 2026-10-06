@@ -53,17 +53,24 @@ class FiltrosDelDirectorioEnBaseTest {
     @Autowired private ConteosDeCuentas conteos;
 
     private String marca;
+    private Usuario ana;
+    private Usuario beto;
 
     @BeforeEach
     void sembrar() {
-        marca = "f" + UUID.randomUUID().toString().substring(0, 8);
+        // Solo letras (las cifras del UUID pasan a g..p): asi ningun apodo,
+        // correo ni nombre de esta ejecucion contiene la clave de una cuenta, y
+        // buscar por esa clave solo puede encontrarla por el identificador.
+        marca = "f" + UUID.randomUUID().toString().substring(0, 8).chars()
+                .map(c -> Character.isDigit(c) ? 'g' + (c - '0') : c)
+                .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append);
         RolEntity jugador = rol("JUGADOR");
         RolEntity moderador = rol("MODERADOR");
 
-        Usuario ana = usuarioRepository.save(usuario(jugador, "Ana" + marca, "ana." + marca + "@ejemplo.org",
+        ana = usuarioRepository.save(usuario(jugador, "Ana" + marca, "ana." + marca + "@ejemplo.org",
                 "ACTIVO", LocalDateTime.of(2026, 9, 1, 0, 0)));
         perfil(ana, "Ana Lucía", "Pérez Gómez");
-        Usuario beto = usuarioRepository.save(usuario(moderador, "Beto" + marca, "beto." + marca + "@ejemplo.org",
+        beto = usuarioRepository.save(usuario(moderador, "Beto" + marca, "beto." + marca + "@ejemplo.org",
                 "SUSPENDIDO", LocalDateTime.of(2026, 9, 15, 23, 59)));
         perfil(beto, "Roberto", "Díaz");
         // Fila anterior a B2, en femenino: el filtro SUSPENDIDO tambien la encuentra.
@@ -124,6 +131,59 @@ class FiltrosDelDirectorioEnBaseTest {
                 .containsExactly("Dani");
         assertThat(apodos(deEstaEjecucion(null, null, null, null)))
                 .containsExactlyInAnyOrder("Ana", "Beto", "Cris", "Dani", "Eva");
+    }
+
+    // ------------------------------------------- HU-USR-009: por identificador
+
+    private static FiltroDelDirectorio buscando(String texto) {
+        return FiltroDelDirectorio.de(texto, false, null, null, null, null);
+    }
+
+    @Test
+    void laBusquedaEncuentraPorUidExactoSinDistinguirMayusculas() {
+        String uid = ana.getPublicId().toString();
+
+        assertThat(apodos(buscando(uid))).containsExactly("Ana");
+        assertThat(apodos(buscando(uid.toUpperCase()))).containsExactly("Ana");
+    }
+
+    @Test
+    void laBusquedaEncuentraPorLaClaveExacta() {
+        assertThat(apodos(buscando(String.valueOf(beto.getId())))).containsExactly("Beto");
+    }
+
+    @Test
+    void unIdentificadorQueNoExisteNoEncuentraANadie() {
+        assertThat(apodos(buscando(UUID.randomUUID().toString()))).isEmpty();
+        assertThat(apodos(buscando("999999999999999999"))).isEmpty();
+    }
+
+    @Test
+    void unTextoQueNoEsIdentificadorSeBuscaComoTextoSinError() {
+        String uid = ana.getPublicId().toString();
+        // Un uid a medias, con letras que no son hexadecimales, con llaves o
+        // una clave demasiado larga para un long: texto, sin error ni 500.
+        assertThat(apodos(buscando(uid.substring(0, 18)))).isEmpty();
+        assertThat(apodos(buscando("zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz"))).isEmpty();
+        assertThat(apodos(buscando("{" + uid + "}"))).isEmpty();
+        assertThat(apodos(buscando("12345678901234567890123"))).isEmpty();
+        // Y lo de siempre sigue: apodo, correo y nombre.
+        assertThat(apodos(buscando("ana" + marca))).containsExactly("Ana");
+        assertThat(apodos(buscando("beto." + marca + "@ejemplo"))).containsExactly("Beto");
+        assertThat(apodos(buscando("lucía pérez"))).containsExactly("Ana");
+    }
+
+    @Test
+    void laBusquedaPorIdentificadorSeCombinaConLosFiltros() {
+        String uidDeBeto = beto.getPublicId().toString();
+
+        assertThat(apodos(FiltroDelDirectorio.de(uidDeBeto, false, "MODERADOR", "SUSPENDIDO", null, null)))
+                .containsExactly("Beto");
+        assertThat(apodos(FiltroDelDirectorio.de(uidDeBeto, false, "JUGADOR", null, null, null))).isEmpty();
+        String claveDeAna = String.valueOf(ana.getId());
+        assertThat(apodos(FiltroDelDirectorio.de(claveDeAna, false, null, "ACTIVO", "2026-09-01", "2026-09-01")))
+                .containsExactly("Ana");
+        assertThat(apodos(FiltroDelDirectorio.de(claveDeAna, false, null, "BANEADO", null, null))).isEmpty();
     }
 
     @Test

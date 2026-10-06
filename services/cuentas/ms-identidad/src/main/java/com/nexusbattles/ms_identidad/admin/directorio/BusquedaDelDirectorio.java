@@ -8,6 +8,9 @@ import jakarta.persistence.criteria.Subquery;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.regex.Pattern;
 
 /**
  * La busqueda del directorio como especificacion — RFINAL-06.
@@ -18,11 +21,21 @@ import java.util.Locale;
  * dos den lo mismo lo comprueba {@code DirectorioDeCuentasTest} contra una base.
  *
  * <p>HU-USR-008 (ms-identidad-admin.yaml 1.3.0): {@link #buscandoTambienPorNombre}
- * suma los nombres y apellidos del perfil. Es la que usa el directorio con
- * texto; {@link #buscando} se queda como era, porque es la que se compara con
- * la consulta de siempre.
+ * suma los nombres y apellidos del perfil. {@link #buscando} se queda como era,
+ * porque es la que se compara con la consulta de siempre.
+ *
+ * <p>HU-USR-009 (#562, ms-identidad-admin.yaml 1.5.0):
+ * {@link #buscandoTambienPorNombreEIdentificador} suma el identificador de la
+ * cuenta, el mismo que acepta la ficha (HU-USR-010): su {@code uid} o su clave
+ * {@code id}. Es la que usa el directorio con texto.
  */
 public final class BusquedaDelDirectorio {
+
+    /** Un {@code uid} escrito entero: 8-4-4-4-12 cifras hexadecimales, sin llaves ni prefijos. */
+    private static final Pattern UID = Pattern.compile(
+            "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    /** La clave interna: solo cifras y como mucho 18, asi que siempre cabe en un {@code long}. */
+    private static final Pattern CLAVE = Pattern.compile("[0-9]{1,18}");
 
     private BusquedaDelDirectorio() {
     }
@@ -53,6 +66,43 @@ public final class BusquedaDelDirectorio {
             return buscando(filtro);
         }
         return buscando(filtro).or(porNombreDelPerfil(filtro));
+    }
+
+    /**
+     * HU-USR-009 — lo de {@link #buscandoTambienPorNombre} y, si el texto es un
+     * identificador, ademas la cuenta que lo tiene. Es un O: la busqueda solo
+     * gana resultados, nunca pierde los de antes.
+     */
+    public static Specification<Usuario> buscandoTambienPorNombreEIdentificador(String filtro) {
+        Specification<Usuario> porTexto = buscandoTambienPorNombre(filtro);
+        return porIdentificador(filtro).map(porTexto::or).orElse(porTexto);
+    }
+
+    /**
+     * La cuenta con ese identificador exacto, si el texto lo es:
+     * <ul>
+     *   <li>un {@code uid} completo (sin distinguir mayusculas) &rarr; la cuenta
+     *       con ese {@code public_id}; nunca el apodo del token ({@code sub}),
+     *       que es otra cosa;</li>
+     *   <li>solo cifras (hasta 18) &rarr; la cuenta con esa clave {@code id}.</li>
+     * </ul>
+     * Cualquier otro texto no es un identificador: vacio, sin intentar
+     * convertirlo ni lanzar nada (un {@code uid} a medias o con letras de mas
+     * se sigue buscando como texto, como siempre).
+     */
+    static Optional<Specification<Usuario>> porIdentificador(String filtro) {
+        if (filtro == null || filtro.isEmpty()) {
+            return Optional.empty();
+        }
+        if (UID.matcher(filtro).matches()) {
+            UUID uid = UUID.fromString(filtro);
+            return Optional.of((raiz, consulta, cb) -> cb.equal(raiz.get("publicId"), uid));
+        }
+        if (CLAVE.matcher(filtro).matches()) {
+            long id = Long.parseLong(filtro);
+            return Optional.of((raiz, consulta, cb) -> cb.equal(raiz.get("id"), id));
+        }
+        return Optional.empty();
     }
 
     /**

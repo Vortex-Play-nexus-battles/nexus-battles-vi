@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
+import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
@@ -72,8 +73,12 @@ class AdminDirectorioControllerTest {
     @Mock
     private ExportacionDelDirectorio exportacion;
 
+    @Mock
+    private AuditoriaDeExportaciones auditoriaDeExportaciones;
+
     private AdminDirectorioController controlador() {
-        return new AdminDirectorioController(usuarioRepository, directorio, CRITERIO, indicadores, exportacion);
+        return new AdminDirectorioController(usuarioRepository, directorio, CRITERIO, indicadores, exportacion,
+                auditoriaDeExportaciones);
     }
 
     /** El listado sin los filtros de 1.3.0 (rol, estado, fechas): la llamada de siempre. */
