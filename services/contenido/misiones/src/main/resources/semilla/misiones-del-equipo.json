@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "notas": [
     "Misiones que disena el equipo (RF-MIS-56, RG-108), con el nivel de detalle del ejemplo de 7.8.14. Esta semilla no copia el documento: es diseno del Grupo 2, decidido por el PO. Cada mision lleva origen EQUIPO y el servicio se niega a publicarla si le falta lo que el documento pide (enemigos regulares, jefe final, al menos un Master con su epica) o si su Master no aparece con la probabilidad de su dificultad (tabla en misiones-del-documento.json).",
     "HU-MIS-012, primera mision del equipo: «La Forja Sumergida». Historia, dificultad Dificil, 18 horas, nivel recomendado 8. Sigue a «El Templo Olvidado» en la cadena de historia: su requisito previo es completarla (la narrativa arranca cuando «el sello del Templo Olvidado se rompio»).",
@@ -9,7 +9,9 @@
     "El Master «Hija de la Escarcha» es de tipo Mago Hielo y lleva la epica de la Tabla 20 de ese tipo, «Frio concentrado» (efecto general -1 de poder al oponente; efecto potenciado para Mago Hielo: no recibe ningun dano en el siguiente turno). Su nombre se escribe como en el catalogo oficial, sin tilde, y se entrega con su producto EPICA. Aparece con el 20 %, que es la probabilidad de la dificultad Dificil (PROVISIONAL, decision del PO; ver la tabla del documento).",
     "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Lingote de acero frio y el titulo «Forjador del Lago». Con producto del catalogo oficial (services/contenido/productos/docs/catalogo-inicial-identificadores.md): el arma «Espada de dos manos» (Guerrero Armas) y la armadura «Defensa del enfurecido» (Guerrero Tanque, pecho).",
     "PROVISIONAL DE EQUILIBRIO (revision del 4-oct; el PO puede ajustarlo): con las estadisticas completas de su prototipo en el nivel 8 la mision se ganaba el 0 % de las veces (0 de 72 ejecuciones en BalanceDeMisionesTest, motor-combate), porque la vida del heroe se arrastra de un encuentro al siguiente. Solo fijar vida y defensa tampoco bastaba: aun con enemigos de 1 punto de vida la tasa no pasa del 8 %, porque cada enemigo golpea una vez antes de caer. Se fijan por eso, como en el Templo, vida y defensa de los regulares (Automatas 40/84, Salamandras 20/70, Ladrones 20/60; el jefe conserva sus 120 puntos de vida) y se pasa de 18 a 13 enemigos regulares (8 Automatas, 3 Salamandras, 2 Ladrones). Resultado medido: 28 % de exito en el nivel 8 (10 % en el 7), mas dificil que el Templo (38 %), como corresponde a la dificultad Dificil, y dentro del 15-90 % que exige la prueba.",
-    "PROVISIONAL: no va destacada en el banner; la destacada sigue siendo «El Templo Olvidado». El nivel recomendado es 8 (decision del PO tras la revision del 4-oct): los heroes llegan como mucho al nivel 8 (6.1.1: «puede incrementarse hasta el nivel 8») y esta mision sigue al Templo, que tambien lo recomienda; un nivel mayor no lo alcanza nadie y el catalogo lo rechaza."
+    "PROVISIONAL: no va destacada en el banner; la destacada sigue siendo «El Templo Olvidado». El nivel recomendado es 8 (decision del PO tras la revision del 4-oct): los heroes llegan como mucho al nivel 8 (6.1.1: «puede incrementarse hasta el nivel 8») y esta mision sigue al Templo, que tambien lo recomienda; un nivel mayor no lo alcanza nadie y el catalogo lo rechaza.",
+    "HU-MIS-013, segunda mision del equipo: «La Cripta del Eclipse». Historia distinta que sigue a «La Forja Sumergida», dificultad Extremo, 24 horas y nivel recomendado 8. Su Master usa exactamente la epica de Picaro Veneno de la Tabla 20 y aparece con el 25 % aprobado para esa dificultad.",
+    "PROVISIONAL DE EQUILIBRIO: cantidades, vida, defensa y recompensas de «La Cripta del Eclipse» se validan con BalanceDeMisionesTest. Los productos entregables usan identificadores del catalogo oficial; el Sello del Eclipse y el titulo se informan sin inventar productos."
   ],
   "misiones": [
     {
@@ -70,6 +72,69 @@
         ],
         "porObjetivos": [],
         "primeraVez": { "creditos": 15, "otras": ["Título «Forjador del Lago»"] }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    },
+    {
+      "id": "la-cripta-del-eclipse",
+      "origen": "EQUIPO",
+      "nombre": "La Cripta del Eclipse",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "La llave recuperada en la forja abre una cripta que solo emerge durante un eclipse.",
+      "imagen": null,
+      "dificultad": "EXTREMO",
+      "duracionHoras": 24,
+      "nivelRecomendado": 8,
+      "requisitosPrevios": ["la-forja-sumergida"],
+      "narrativa": "La llave que guardaba el Herrero Ahogado comienza a arder cuando la luna cubre el sol. Su luz revela una escalera bajo las ruinas del observatorio, sellada desde la Guerra del Eclipse. En la cripta, centinelas de obsidiana protegen los recuerdos robados a antiguos héroes. Desciende antes de que termine el eclipse, rompe los sellos y evita que la Reina Sin Rostro despierte con todos esos recuerdos.",
+      "escenario": null,
+      "objetivos": [
+        { "texto": "Derrotar a la Reina Sin Rostro (jefe final).", "principal": true, "tipo": "DERROTAR_JEFE", "valor": null, "botin": null },
+        { "texto": "Romper los 4 sellos de la cripta.", "principal": true, "tipo": "COMPLETAR_ENCUENTROS", "valor": null, "botin": null },
+        { "texto": "Completar la misión sin que la vida del héroe baje del 30 %.", "principal": false, "tipo": "VIDA_MINIMA", "valor": 30, "botin": null },
+        { "texto": "Derrotar al Máster si aparece.", "principal": false, "tipo": "DERROTAR_MASTER", "valor": null, "botin": null },
+        { "texto": "Recuperar los 3 fragmentos del Sello del Eclipse.", "principal": false, "tipo": "OBTENER_BOTIN", "valor": 3, "botin": "Fragmento del Sello del Eclipse" }
+      ],
+      "enemigos": [
+        { "nombre": "Centinelas de Obsidiana", "cantidad": 8, "descripcion": "Guardianes resistentes que cubren los accesos a la cripta.", "prototipo": "Guerrero Tanque", "vida": 36, "defensa": 82, "rotaciones": [] },
+        { "nombre": "Oráculos de Ceniza", "cantidad": 2, "descripcion": "Canalizan el calor atrapado durante el eclipse.", "prototipo": "Mago Fuego", "vida": 18, "defensa": 68, "rotaciones": [] },
+        { "nombre": "Acechadores sin Rostro", "cantidad": 2, "descripcion": "Atacan desde las sombras con venenos antiguos.", "prototipo": "Pícaro Veneno", "vida": 18, "defensa": 60, "rotaciones": [] }
+      ],
+      "jefe": {
+        "nombre": "La Reina Sin Rostro",
+        "prototipo": "Pícaro Machete",
+        "vida": 180,
+        "defensa": null,
+        "descripcion": "La guardiana final de la cripta, armada con las memorias de los héroes caídos.",
+        "rotaciones": []
+      },
+      "masters": [
+        {
+          "nombre": "El Recaudador de Ecos",
+          "prototipo": "Pícaro Veneno",
+          "probabilidad": 0.25,
+          "epica": {
+            "nombre": "Toma y lleva",
+            "efectoGeneral": "+1 al ataque",
+            "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
+            "productoId": "ac841a0a-132a-392f-8cf5-5a9cfa9add0f"
+          }
+        }
+      ],
+      "recompensas": {
+        "creditos": 100,
+        "garantizadas": [
+          { "nombre": "Veneno lacerante", "detalle": "Ítem de Pícaro Veneno", "cantidad": 1, "productoId": "ae461eab-cdbd-370d-8241-99f875417657" }
+        ],
+        "potenciales": [
+          { "nombre": "Fragmento del Sello del Eclipse", "probabilidad": 0.55, "cantidad": 3, "detalle": "55% de probabilidad c/u - 3 en total", "productoId": null },
+          { "nombre": "Daga purulenta", "probabilidad": 0.25, "cantidad": 1, "detalle": "Arma de Pícaro Veneno", "productoId": "d7d1836f-e45e-33f4-a033-6e467017f1df" },
+          { "nombre": "Mano del desterrado", "probabilidad": 0.15, "cantidad": 1, "detalle": "Armadura de Pícaro Veneno", "productoId": "14413b85-7d68-3e83-a258-9044147440d6" }
+        ],
+        "porObjetivos": [],
+        "primeraVez": { "creditos": 20, "otras": ["Título «Guardián del Eclipse»"] }
       },
       "destacada": false,
       "disponibleHasta": null,
