@@ -382,6 +382,43 @@
   border-top: 1px solid var(--borde);
 }
 
+.hoja-producto__historial {
+  display: grid;
+  gap: 12px;
+  padding-top: 18px;
+  border-top: 1px solid var(--borde);
+}
+
+.hoja-producto__historial h3,
+.hoja-producto__historial p {
+  margin: 0;
+}
+
+.hoja-producto__cambios {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.hoja-producto__cambios li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--fondo);
+}
+
+@media (max-width: 520px) {
+  .hoja-producto__cambios li {
+    grid-template-columns: 1fr;
+  }
+}
+
 .hoja-producto__disponibilidad h3,
 .hoja-producto__disponibilidad p {
   margin: 0;

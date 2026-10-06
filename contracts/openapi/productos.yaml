@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.7.0
+  version: 1.8.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
     respaldo (HU-PRD-003) y suspensión lógica con reactivación
     (HU-PRD-004), además de alertas de cambios al iniciar sesión
-    (HU-PRD-014). Contrato publicado antes de la
+    (HU-PRD-014), además de historial y reversión auditada
+    (HU-PRD-007). Contrato publicado antes de la
     implementación, conforme a la regla de plataforma "contrato primero".
 
     1.2.0 (R16): se añade GET /api/v1/productos, el listado público y
@@ -84,6 +85,11 @@ info:
     cierra sus propiedades (`additionalProperties: false`) y ninguna
     respuesta con `id` habria cumplido la composicion. La home del jugador
     rota los vigentes con su fecha de publicacion y su vigencia (RF-NOT-002).
+
+    1.8.0 (HU-PRD-007): añade el historial administrativo inmutable y la
+    reversión al último estado respaldado. La reversión restaura el contenido
+    del producto, queda registrada como un nuevo cambio y rechaza con 409 un
+    respaldo obsoleto para no borrar escrituras posteriores.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -594,6 +600,108 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 
+  /api/v1/productos/{id}/historial:
+    get:
+      summary: Consulta el historial inmutable de cambios de un producto
+      operationId: consultarHistorialProducto
+      description: >
+        HU-PRD-007. Devuelve los cambios del más reciente al más antiguo con
+        autor, fecha, versiones y referencia de reversión. El historial es de
+        solo lectura: no se publican operaciones para modificarlo o eliminarlo.
+        `revertible` solo es verdadero cuando el cambio produjo la versión
+        actual; así una reversión no pisa adquisiciones ni otros cambios
+        posteriores.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Historial del producto, posiblemente vacío
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CambioProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/reversiones:
+    post:
+      summary: Revierte un producto al estado respaldado
+      operationId: revertirProducto
+      description: >
+        HU-PRD-007. Restaura el contenido exacto del respaldo y registra la
+        reversión como una nueva entrada de auditoría, conservando la versión
+        técnica y el autor de esta nueva escritura. Las unidades de inventario
+        guardan el productoId, por lo que vuelven a proyectar el estado
+        restaurado sin una escritura distribuida. Solo se admite el respaldo
+        que corresponde a la versión actual.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudRevertirProducto"
+      responses:
+        "200":
+          description: Producto restaurado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: La solicitud no incluye respaldoId
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto o el respaldo no le pertenece
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: El producto cambió después de crear el respaldo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
   /api/v1/productos/{id}/adquisiciones:
     post:
       summary: Reserva una unidad disponible del producto
@@ -850,6 +958,7 @@ components:
         - imagen
         - descripcion
         - tipo
+        - campos
         - tiraje
         - premium
       properties:
@@ -1279,6 +1388,63 @@ components:
             type: integer
             format: int64
           description: Cantidad de productos para cada estado, incluidos los estados con cero.
+
+    SolicitudRevertirProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - respaldoId
+      properties:
+        respaldoId:
+          type: string
+          minLength: 1
+          description: Identificador de la entrada del historial que se quiere restaurar.
+
+    CambioProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - productoId
+        - tipo
+        - autor
+        - fecha
+        - versionAnterior
+        - versionAplicada
+        - revertible
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [CREACION, MODIFICACION, SUSPENSION, REACTIVACION, REVERSION]
+        campos:
+          type: array
+          description: Campos de negocio que cambiaron entre los dos estados auditados.
+          items:
+            type: string
+        autor:
+          type: string
+          description: uid estable del administrador que ejecutó el cambio.
+        fecha:
+          type: string
+          format: date-time
+        versionAnterior:
+          type: integer
+          minimum: 0
+          description: Cero en la creación, cuando todavía no existía una versión anterior.
+        versionAplicada:
+          type: integer
+          minimum: 1
+        reversionDe:
+          type: string
+          description: Entrada restaurada cuando el tipo es REVERSION.
+        revertible:
+          type: boolean
+          description: Indica si esta entrada produjo la versión actual y puede revertirse sin pisar otro cambio.
 
     ProductoCreado:
       description: >
