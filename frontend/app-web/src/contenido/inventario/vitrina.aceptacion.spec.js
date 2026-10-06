@@ -9,7 +9,7 @@
  * legibilidad dependen del motor de maquetacion.
  */
 import { test, expect } from '@playwright/test';
-import { prepararPagina } from './entorno-de-prueba.js';
+import { colorDelToken, prepararPagina } from './entorno-de-prueba.js';
 
 const JUGADOR = 'jugador-de-prueba';
 
@@ -327,30 +327,32 @@ test.describe('Equipamiento del héroe con limites', () => {
     await page.locator('#pestana-heroes').click();
     await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
 
-    await expect(page.locator('.vitrina-pagina')).toHaveCSS(
-      'background-color',
-      'rgb(215, 222, 237)',
-    );
-    await expect(page.locator('.barra')).toHaveCSS('background-color', 'rgb(28, 35, 64)');
+    const [cromo, superficie, borde, primaria, textoSobreColor] = await Promise.all([
+      colorDelToken(page, '--cromo'),
+      colorDelToken(page, '--superficie'),
+      colorDelToken(page, '--borde'),
+      colorDelToken(page, '--primaria-relleno'),
+      colorDelToken(page, '--texto-sobre-color'),
+    ]);
+
+    await expect(page.locator('.vitrina-pagina')).toHaveCSS('background-color', cromo);
+    await expect(page.locator('.cabecera')).toHaveCSS('background-color', cromo);
     await expect(page.locator('.vitrina__producto').first()).toHaveCSS(
       'background-color',
-      'rgb(255, 255, 255)',
+      superficie,
     );
-    await expect(page.locator('.inventario-equipo__elemento').first()).toHaveCSS(
-      'border-color',
-      'rgb(159, 171, 201)',
-    );
+    await expect(page.locator('.ranura__caja').first()).toHaveCSS('border-color', borde);
     await expect(page.getByRole('button', { name: 'Agregar elemento' })).toHaveCSS(
       'background-color',
-      'rgb(30, 63, 184)',
+      primaria,
     );
-    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
+    await expect(page.locator('.inventario-equipo__opcion[aria-pressed="true"]')).toHaveCSS(
       'background-color',
-      'rgb(30, 63, 184)',
+      primaria,
     );
-    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
+    await expect(page.locator('.inventario-equipo__opcion[aria-pressed="true"]')).toHaveCSS(
       'color',
-      'rgb(255, 255, 255)',
+      textoSobreColor,
     );
   });
 
@@ -360,11 +362,15 @@ test.describe('Equipamiento del héroe con limites', () => {
 
     await page.locator('#pestana-heroes').click();
     await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
-    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 1/2');
-    await page.getByRole('button', { name: 'Desequipar', exact: true }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
+    await expect(page.locator('.equipamiento__resumen')).toContainText('Armas 0/2');
+
+    await page.getByRole('button', { name: 'Arma 1: vacia. Elegir objeto' }).click();
+    await page.getByRole('button', { name: 'Espada', exact: true }).click();
+    await expect(page.locator('.equipamiento__resumen')).toContainText('Armas 1/2');
+    await expect(page.getByRole('button', { name: 'Arma 1: Espada. Cambiar' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Arma 1: Espada. Cambiar' }).click();
+    await expect(page.locator('.equipamiento__resumen')).toContainText('Armas 0/2');
   });
 
   test('Un límite rechazado conserva el equipo y se explica sin código', async ({ page }) => {
@@ -373,10 +379,11 @@ test.describe('Equipamiento del héroe con limites', () => {
 
     await page.locator('#pestana-heroes').click();
     await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
+    await page.getByRole('button', { name: 'Arma 1: vacia. Elegir objeto' }).click();
+    await page.getByRole('button', { name: 'Espada', exact: true }).click();
 
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
-    await expect(page.locator('.inventario__mensaje')).toContainText(/límites/i);
+    await expect(page.locator('.equipamiento__resumen')).toContainText('Armas 0/2');
+    await expect(page.locator('.inventario__mensaje')).toContainText(/límite/i);
     await expect(page.locator('.inventario__mensaje')).not.toContainText('409');
   });
 });
