@@ -141,7 +141,7 @@ class RepositorioInventariosMongoIT {
     }
 
     @Test
-    @DisplayName("busca con el indice de texto sin exponer inventarios ajenos")
+    @DisplayName("busca fragmentos de cuatro caracteres sin exponer inventarios ajenos")
     void buscaElementosIndexadosDelPropietario() {
         repositorio.guardar(Inventario.vacio("jugador-A")
                 .agregar(new ElementoInventario(
@@ -156,7 +156,7 @@ class RepositorioInventariosMongoIT {
                         "Bruma ajena")));
 
         List<ElementoInventario> encontrados =
-                repositorio.buscarElementos("jugador-A", "bruma");
+                repositorio.buscarElementos("jugador-A", "brum");
 
         assertEquals(List.of("elemento-1"), encontrados.stream()
                 .map(ElementoInventario::id).toList());

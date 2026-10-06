@@ -95,6 +95,13 @@ public class RepositorioInventariosMongo implements RepositorioDeInventarios {
         consulta.addCriteria(Criteria.where("propietarioId").is(propietarioId));
 
         InventarioDocumento inventario = mongo.findOne(consulta, InventarioDocumento.class);
+        // El indice de texto de Mongo resuelve palabras completas, no fragmentos
+        // como "brum". El propietario tambien tiene un indice unico, por lo que
+        // esta segunda lectura conserva una busqueda acotada a un solo documento
+        // y permite aplicar la coincidencia por subcadena exigida por HU-INV-002.
+        if (inventario == null) {
+            inventario = documentos.findByPropietarioId(propietarioId).orElse(null);
+        }
         if (inventario == null) {
             return List.of();
         }

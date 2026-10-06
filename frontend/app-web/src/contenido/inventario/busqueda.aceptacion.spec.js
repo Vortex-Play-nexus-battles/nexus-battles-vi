@@ -96,7 +96,7 @@ function formularioBusqueda(page) {
 }
 
 const casos = [
-  { campo: 'nombre propio', criterio: 'bruma', esperado: 'Espada de Bruma' },
+  { campo: 'fragmento de cuatro caracteres', criterio: 'brum', esperado: 'Espada de Bruma' },
   { campo: 'identificador', criterio: 'solar', esperado: 'Amuleto Carmesí' },
   { campo: 'tipo', criterio: 'armadura', esperado: 'Manoplas del Guardián' },
   { campo: 'parte de armadura', criterio: 'guantes', esperado: 'Manoplas del Guardián' },

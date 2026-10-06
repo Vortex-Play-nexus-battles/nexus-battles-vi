@@ -37,7 +37,7 @@ class BuscarElementosInventarioTest {
     @Test
     @DisplayName("localiza un elemento propio por su informacion registrada")
     void buscarPorInformacionRegistrada() {
-        PaginaInventario pagina = busqueda.buscar("jugador-A", "bruma", 0);
+        PaginaInventario pagina = busqueda.buscar("jugador-A", "brum", 0);
 
         assertEquals(1, pagina.totalElementos());
         assertEquals("elemento-1", pagina.elementos().getFirst().id());
