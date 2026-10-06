@@ -28,6 +28,7 @@ import nexus.misiones.dominio.simulacion.OrigenDeEstrategia;
 import nexus.misiones.dominio.simulacion.PerfilDeCombate;
 import nexus.misiones.dominio.simulacion.PlanDeCombate;
 import nexus.misiones.dominio.simulacion.RefuerzoDeMaster;
+import nexus.misiones.dominio.simulacion.ReglaDelMaster;
 import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 import nexus.misiones.dominio.simulacion.Rival;
 import nexus.misiones.dominio.simulacion.Simulacion;
@@ -74,6 +75,7 @@ public class SimularEjecucion {
     private final EstrategiaDeEnemigos enemigos;
     private final ParametrosDeMisiones parametros;
     private final Clock reloj;
+    private final ReglaDelMaster reglaDelMaster;
 
     /** Con la IA de siempre: las jugadas las decide la regla de heroes. */
     public SimularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
@@ -83,14 +85,25 @@ public class SimularEjecucion {
         this(catalogo, ejecuciones, eventos, heroes, heroes, motor, perfiles, enemigos, parametros, reloj);
     }
 
-    /**
-     * @param decisor quien decide la jugada de cada turno, de los dos lados: la regla de heroes o, con el modelo de
-     *                IA encendido (HU-SIM-008), el decorador que la envuelve
-     */
+    /** Con la regla del Master publicada en la semilla ({@link ReglaDelMaster#publicada()}). */
     public SimularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
                             RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes, DecisorDeTurno decisor,
                             MotorDeCombate motor, PerfilDeCombateDelHeroe perfiles, EstrategiaDeEnemigos enemigos,
                             ParametrosDeMisiones parametros, Clock reloj) {
+        this(catalogo, ejecuciones, eventos, heroes, decisor, motor, perfiles, enemigos, parametros, reloj,
+                ReglaDelMaster.publicada());
+    }
+
+    /**
+     * @param decisor        quien decide la jugada de cada turno, de los dos lados: la regla de heroes o, con el
+     *                       modelo de IA encendido (HU-SIM-008), el decorador que la envuelve
+     * @param reglaDelMaster cuanto de la vida y la defensa de su prototipo conserva un Master (HU-SIM-006)
+     */
+    public SimularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
+                            RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes, DecisorDeTurno decisor,
+                            MotorDeCombate motor, PerfilDeCombateDelHeroe perfiles, EstrategiaDeEnemigos enemigos,
+                            ParametrosDeMisiones parametros, Clock reloj, ReglaDelMaster reglaDelMaster) {
+        this.reglaDelMaster = Objects.requireNonNull(reglaDelMaster);
         this.decisor = Objects.requireNonNull(decisor);
         this.catalogo = Objects.requireNonNull(catalogo);
         this.ejecuciones = Objects.requireNonNull(ejecuciones);
@@ -130,7 +143,7 @@ public class SimularEjecucion {
         List<Rival> regulares = new ArrayList<>();
         for (GrupoDeEnemigos grupo : mision.get().enemigos()) {
             Rival rival = rival(grupo.nombre(), TipoDeRival.REGULAR, grupo.prototipo(), nivelDeLosEnemigos,
-                    grupo.vida(), grupo.defensa(), grupo.rotaciones(), null, multiplicador, vistas);
+                    grupo.vida(), grupo.defensa(), grupo.rotaciones(), null, multiplicador, vistas, heroe.nivel());
             for (int i = 0; i < grupo.cantidad(); i++) {
                 regulares.add(rival);
             }
@@ -138,18 +151,21 @@ public class SimularEjecucion {
         List<Rival> masters = new ArrayList<>();
         for (MasterDeMision master : TiradaDeMasters.quienesAparecen(mision.get(), heroe.prototipo(),
                 catalogo.tabla20(), azar)) {
-            // «Estadisticas superiores a enemigos regulares» (7.8.4): los dos niveles de mas casi siempre bastan,
-            // y donde no (tope 8, un prototipo mas debil, dados que no escalan) el refuerzo lo deja por encima.
+            // Primero la regla de equilibrio (HU-SIM-006): el Master conserva solo una fraccion de la vida y la
+            // defensa de su prototipo, la que mide que un heroe de ese nivel le gane cerca de la mitad de las veces.
+            // Despues «estadisticas superiores a enemigos regulares» (7.8.4): los dos niveles de mas casi siempre
+            // bastan, y donde no (tope 8, un prototipo mas debil, dados que no escalan, o una fraccion que lo deja
+            // por debajo de un regular) el refuerzo lo sube hasta quedar por encima. El piso manda sobre la regla.
             masters.add(RefuerzoDeMaster.reforzar(
                     rival(master.nombre(), TipoDeRival.MASTER, master.prototipo(),
                             MasterDeMision.nivelFrente(heroe.nivel()), null, null, List.of(), master, multiplicador,
-                            vistas),
+                            vistas, heroe.nivel()),
                     regulares));
         }
         Jefe jefe = mision.get().jefe();
         Rival rivalFinal = jefe == null ? null
                 : rival(jefe.nombre(), TipoDeRival.JEFE, jefe.prototipo(), nivelDeLosEnemigos, jefe.vida(),
-                        jefe.defensa(), jefe.rotaciones(), null, multiplicador, vistas);
+                        jefe.defensa(), jefe.rotaciones(), null, multiplicador, vistas, heroe.nivel());
 
         List<Rival> plan = PlanDeCombate.armar(regulares, masters, rivalFinal, azar);
         PerfilDeCombate perfil = perfiles.de(ejecucion.jugadorUid(), heroe);
@@ -194,14 +210,21 @@ public class SimularEjecucion {
      * escalon, y no con las del catalogo. La estrategia, por precedencia (HU-SIM-004): la rotacion que la
      * mision trae escrita para ese enemigo; si no, la predefinida de su prototipo y nivel; y si tampoco, la
      * heuristica por defecto ({@link EstrategiaDeEnemigos}). El rival lleva de cual salio.
+     *
+     * <p>Un Master conserva solo la fraccion de la vida y la defensa de su prototipo que la regla fija para el nivel
+     * del heroe ({@link ReglaDelMaster}); el escalon multiplica despues, y el piso de {@link RefuerzoDeMaster}, al final.
      */
     private Rival rival(String nombre, TipoDeRival tipo, String prototipo, int nivel, Integer vida, Integer defensa,
                         List<List<String>> rotaciones, MasterDeMision master, double multiplicador,
-                        Map<String, ServicioDeHeroes.EstadisticasDeNivel> vistas) {
+                        Map<String, ServicioDeHeroes.EstadisticasDeNivel> vistas, int nivelDelHeroe) {
         ServicioDeHeroes.EstadisticasDeNivel vista = vistas.computeIfAbsent(prototipo + "@" + nivel,
                 clave -> heroes.enNivel(prototipo, nivel));
         int vidaBase = vida != null ? vida : vista.vida();
         int defensaBase = defensa != null ? defensa : vista.defensa();
+        if (tipo == TipoDeRival.MASTER) {
+            vidaBase = reglaDelMaster.vida(vidaBase, nivelDelHeroe);
+            defensaBase = reglaDelMaster.defensa(defensaBase, nivelDelHeroe);
+        }
         EstrategiaDeEnemigos.Elegida estrategia = rotaciones.isEmpty()
                 ? enemigos.elegir(prototipo, nivel)
                 : new EstrategiaDeEnemigos.Elegida(OrigenDeEstrategia.MISION, null, rotaciones);

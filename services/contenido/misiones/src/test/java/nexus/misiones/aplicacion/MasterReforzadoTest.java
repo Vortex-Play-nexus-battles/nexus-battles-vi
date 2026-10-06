@@ -28,6 +28,7 @@ import nexus.misiones.dominio.RecompensasDeEjecucion;
 import nexus.misiones.dominio.simulacion.Combatiente;
 import nexus.misiones.dominio.simulacion.EstadisticasDeCombate;
 import nexus.misiones.dominio.simulacion.EventoDeCombate;
+import nexus.misiones.dominio.simulacion.ReglaDelMaster;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -114,6 +115,15 @@ class MasterReforzadoTest {
 
     private Ejecucion simular(int nivelDelHeroe, Escalon escalon, Mision mision,
                               List<nexus.misiones.dominio.EpicaDeTabla20> tabla20) {
+        return simular(nivelDelHeroe, escalon, mision, tabla20, ReglaDelMaster.publicada());
+    }
+
+    private Ejecucion simular(int nivelDelHeroe, Escalon escalon, Mision mision, ReglaDelMaster regla) {
+        return simular(nivelDelHeroe, escalon, mision, List.of(), regla);
+    }
+
+    private Ejecucion simular(int nivelDelHeroe, Escalon escalon, Mision mision,
+                              List<nexus.misiones.dominio.EpicaDeTabla20> tabla20, ReglaDelMaster regla) {
         HeroeEnMision heroe = new HeroeEnMision("h-1", "Vorn", "Guerrero Armas", "p-armas", nivelDelHeroe, 0,
                 8 * nivelDelHeroe, 44 * nivelDelHeroe, 11 * nivelDelHeroe);
         Ejecucion nueva = Ejecucion.nueva(UUID.randomUUID(), mision.id(), JUGADOR, heroe, List.of(), escalon, INICIO,
@@ -121,9 +131,9 @@ class MasterReforzadoTest {
         ejecuciones.guardar(nueva);
         ahora.set(INICIO.plus(Duration.ofHours(2)));
         Dobles.Catalogo catalogo = new Dobles.Catalogo(List.of(mision), tabla20);
-        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor,
+        SimularEjecucion simular = new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, heroes, motor,
                 new PerfilDeCombateDelHeroe(inventario, productos, heroes), (prototipo, nivel) -> List.of(),
-                parametros, reloj);
+                parametros, reloj, regla);
         Ejecucion terminada = simular.simular(ejecuciones.buscar(nueva.id()).orElseThrow()).orElseThrow();
         assertThat(terminada.estado()).isNotEqualTo(EstadoEjecucion.EN_PROGRESO);
         return terminada;
@@ -195,6 +205,86 @@ class MasterReforzadoTest {
                         .isGreaterThan(contra.estadisticas().dano().esperado());
             }
         }
+    }
+
+    // ------------------------------------------------------------------ criterio 1 y la regla del PO (5-oct)
+
+    private static ReglaDelMaster fraccionFija(double fraccion) {
+        StringBuilder niveles = new StringBuilder();
+        for (int nivel = 1; nivel <= 8; nivel++) {
+            niveles.append(nivel > 1 ? "," : "").append("\"").append(nivel).append("\":").append(fraccion);
+        }
+        return ReglaDelMaster.leer(new java.io.ByteArrayInputStream(("{\"version\":\"prueba\",\"notas\":[\"x\"],"
+                + "\"fraccionPorNivelDelHeroe\":{" + niveles + "}}").getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                "prueba");
+    }
+
+    /**
+     * Medido el 4-oct en el Templo: con las estadisticas completas del Master (288 de vida contra los 12 a 30 de los
+     * regulares de D-42) un heroe de nivel 8 ganaba el 34,8 % sin Master y el 1,3 % con el. La regla le deja al Master
+     * una fraccion de la vida y la defensa de su prototipo; el piso del criterio 1 sigue mandando por debajo.
+     */
+    @Test
+    @DisplayName("Regla del PO: el Master pelea con la fraccion de la vida y la defensa de su prototipo que fija el nivel del heroe, y el piso del criterio 1 le sigue ganando a los regulares")
+    void reglaDelPO_fraccionDeLaVidaYLaDefensa() {
+        // Heroe de nivel 6: el Master es un Pícaro Veneno de nivel 8, con 288 de vida y 64 de defensa completas.
+        // Los regulares del Templo llegan a 30 de vida y 84 de defensa: el piso es 31 y 85.
+        simular(6, Escalon.NORMAL, temploConMaster(sombra()), fraccionFija(0.5));
+
+        Combatiente master = rivalesQueLlegaronAlMotor().get(MASTER);
+        assertThat(master.nivel()).isEqualTo(8);
+        assertThat(master.estadisticas().vida()).as("288 de vida por la mitad").isEqualTo(144);
+        assertThat(master.estadisticas().defensa()).as("64 de defensa por la mitad serian 32: el piso la sube a 85")
+                .isEqualTo(85);
+    }
+
+    @Test
+    @DisplayName("Regla del PO: con la regla de antes (estadisticas completas) el Master del Templo conserva sus 288 de vida")
+    void reglaDelPO_sinLaReglaEsComoAntes() {
+        simular(6, Escalon.NORMAL, temploConMaster(sombra()), ReglaDelMaster.COMPLETA);
+
+        assertThat(rivalesQueLlegaronAlMotor().get(MASTER).estadisticas().vida()).isEqualTo(288);
+    }
+
+    @Test
+    @DisplayName("Regla del PO: aunque la fraccion sea casi cero, el Master sigue por encima del regular mas fuerte en cada estadistica (criterio 1)")
+    void reglaDelPO_elPisoNoSeRompe() {
+        for (Escalon escalon : List.of(Escalon.NORMAL, Escalon.HEROICO, Escalon.LEGENDARIO)) {
+            preparar();
+            simular(6, escalon, temploConMaster(sombra()), fraccionFija(0.01));
+            Map<String, Combatiente> rivales = rivalesQueLlegaronAlMotor();
+            Combatiente master = rivales.get(MASTER);
+
+            for (String regular : REGULARES) {
+                Combatiente contra = rivales.get(regular);
+                assertThat(master.estadisticas().vida()).as("vida frente a " + regular + ", " + escalon)
+                        .isGreaterThan(contra.estadisticas().vida());
+                assertThat(master.estadisticas().defensa()).as("defensa frente a " + regular + ", " + escalon)
+                        .isGreaterThan(contra.estadisticas().defensa());
+                assertThat(master.estadisticas().ataque().esperado()).as("ataque frente a " + regular + ", " + escalon)
+                        .isGreaterThan(contra.estadisticas().ataque().esperado());
+                assertThat(master.estadisticas().dano().esperado()).as("dano frente a " + regular + ", " + escalon)
+                        .isGreaterThan(contra.estadisticas().dano().esperado());
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("Regla del PO: el escalon multiplica despues de la fraccion (Heroico, 1,5 veces)")
+    void reglaDelPO_elEscalonVaDespues() {
+        simular(6, Escalon.HEROICO, temploConMaster(sombra()), fraccionFija(0.5));
+
+        assertThat(rivalesQueLlegaronAlMotor().get(MASTER).estadisticas().vida()).as("288 x 0,5 x 1,5").isEqualTo(216);
+    }
+
+    @Test
+    @DisplayName("Regla del PO: sin pedirle una regla, el servicio usa la publicada en la semilla, que ya no deja al Master completo")
+    void reglaDelPO_elServicioUsaLaPublicada() {
+        simular(6, Escalon.NORMAL, temploConMaster(sombra()));
+
+        int vida = rivalesQueLlegaronAlMotor().get(MASTER).estadisticas().vida();
+        assertThat(vida).isEqualTo(ReglaDelMaster.publicada().vida(288, 6));
+        assertThat(vida).isLessThan(288);
     }
 
     /** Como «El Templo Olvidado» de la semilla 1.1.0: nivel 8 y la vida y la defensa provisionales de los regulares. */
