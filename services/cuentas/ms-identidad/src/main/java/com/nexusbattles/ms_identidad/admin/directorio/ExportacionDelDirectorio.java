@@ -79,25 +79,29 @@ public class ExportacionDelDirectorio {
      * El archivo listo para descargar. Lleva un arreglo, asi que la igualdad y
      * el texto se definen por su contenido (SonarCloud java:S6218); el texto
      * dice el tamano y no vuelca los datos personales del archivo.
+     *
+     * @param filas HU-USR-009: cuantas cuentas lleva el archivo, sin la
+     *              cabecera. Es lo que se audita; el contenido, nunca.
      */
-    public record Exportacion(String nombreArchivo, byte[] contenido) {
+    public record Exportacion(String nombreArchivo, byte[] contenido, int filas) {
 
         @Override
         public boolean equals(Object otro) {
-            return otro instanceof Exportacion(String nombre, byte[] bytes)
+            return otro instanceof Exportacion(String nombre, byte[] bytes, int cuantas)
                     && Objects.equals(nombreArchivo, nombre)
-                    && Arrays.equals(contenido, bytes);
+                    && Arrays.equals(contenido, bytes)
+                    && filas == cuantas;
         }
 
         @Override
         public int hashCode() {
-            return 31 * Objects.hashCode(nombreArchivo) + Arrays.hashCode(contenido);
+            return 31 * (31 * Objects.hashCode(nombreArchivo) + Arrays.hashCode(contenido)) + filas;
         }
 
         @Override
         public String toString() {
             return "Exportacion[nombreArchivo=" + nombreArchivo + ", bytes="
-                    + (contenido == null ? 0 : contenido.length) + "]";
+                    + (contenido == null ? 0 : contenido.length) + ", filas=" + filas + "]";
         }
     }
 
@@ -112,7 +116,8 @@ public class ExportacionDelDirectorio {
             throw new ExportacionDemasiadoGrandeException(cuentas.getTotalElements(), maximoFilas);
         }
         String nombre = "directorio-de-cuentas-" + EN_EL_NOMBRE.format(LocalDateTime.now(reloj)) + ".csv";
-        return new Exportacion(nombre, csv(cuentas.getContent()).getBytes(StandardCharsets.UTF_8));
+        return new Exportacion(nombre, csv(cuentas.getContent()).getBytes(StandardCharsets.UTF_8),
+                cuentas.getNumberOfElements());
     }
 
     static String csv(List<Usuario> cuentas) {

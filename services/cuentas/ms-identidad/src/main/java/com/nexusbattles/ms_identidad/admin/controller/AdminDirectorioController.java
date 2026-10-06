@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
+import com.nexusbattles.ms_identidad.admin.directorio.AuditoriaDeExportaciones;
 import com.nexusbattles.ms_identidad.admin.directorio.ConsultaInvalidaException;
 import com.nexusbattles.ms_identidad.admin.directorio.CuentasDePrueba;
 import com.nexusbattles.ms_identidad.admin.directorio.DirectorioDeCuentas;
@@ -59,6 +60,13 @@ import org.springframework.web.bind.annotation.RestController;
  * cuentas del panel ({@link IndicadoresDeCuentas}). Todo de solo lectura, como
  * el resto de esta clase.
  *
+ * ## HU-USR-009 (ms-identidad-admin.yaml 1.5.0)
+ *
+ * {@code buscar} tambien encuentra la cuenta por su identificador exacto
+ * ({@code uid} o clave {@code id}), y cada exportacion queda en la auditoria
+ * ({@link AuditoriaDeExportaciones}): leer no cambia nada, pero sacar datos
+ * personales del sistema se registra.
+ *
  * Mismo permiso que la gestion de cuentas: quien puede abrir la ficha de un
  * jugador puede buscarla. El guarda es {@code @RequirePermission}, el mismo
  * de siempre; no hay una segunda matriz que se pueda desincronizar.
@@ -77,22 +85,27 @@ public class AdminDirectorioController {
     private final CuentasDePrueba cuentasDePrueba;
     private final IndicadoresDeCuentas indicadoresDeCuentas;
     private final ExportacionDelDirectorio exportacion;
+    private final AuditoriaDeExportaciones auditoriaDeExportaciones;
 
     public AdminDirectorioController(UsuarioRepository usuarioRepository,
                                      DirectorioDeCuentas directorio,
                                      CuentasDePrueba cuentasDePrueba,
                                      IndicadoresDeCuentas indicadores,
-                                     ExportacionDelDirectorio exportacion) {
+                                     ExportacionDelDirectorio exportacion,
+                                     AuditoriaDeExportaciones auditoriaDeExportaciones) {
         this.usuarioRepository = usuarioRepository;
         this.directorio = directorio;
         this.cuentasDePrueba = cuentasDePrueba;
         this.indicadoresDeCuentas = indicadores;
         this.exportacion = exportacion;
+        this.auditoriaDeExportaciones = auditoriaDeExportaciones;
     }
 
     /**
      * @param buscar          texto libre; compara con apodo, correo y (1.3.0)
-     *                        nombres y apellidos del perfil. Vacio = todos.
+     *                        nombres y apellidos del perfil; (1.5.0) si es un
+     *                        {@code uid} o una clave {@code id}, tambien con la
+     *                        cuenta que lo tiene, exacto. Vacio = todos.
      * @param ocultarPruebas  RFINAL-06: excluye, en la consulta y antes de
      *                        paginar, las cuentas de las pruebas automaticas
      *                        ({@link CuentasDePrueba}).
@@ -136,6 +149,12 @@ public class AdminDirectorioController {
     /**
      * HU-USR-008 — el listado completo con los filtros vigentes, en CSV.
      * Mismos parametros que {@link #listar} salvo la paginacion.
+     *
+     * <p>HU-USR-009 (ms-identidad-admin.yaml 1.5.0): cada exportacion hecha
+     * queda en la auditoria de ms-cumplimiento —quien, filtros y filas, nunca
+     * el contenido—. Si la auditoria no responde, el archivo se entrega igual
+     * y el fallo queda en la bitacora ({@link AuditoriaDeExportaciones}). Una
+     * exportacion rechazada (400, 422) no produce archivo y no se audita.
      */
     @GetMapping("/exportacion")
     @RequirePermission(Action.GESTIONAR_CUENTAS)
@@ -145,10 +164,15 @@ public class AdminDirectorioController {
             @RequestParam(name = "rol", required = false) String rol,
             @RequestParam(name = "estado", required = false) String estado,
             @RequestParam(name = "registradoDesde", required = false) String registradoDesde,
-            @RequestParam(name = "registradoHasta", required = false) String registradoHasta) {
+            @RequestParam(name = "registradoHasta", required = false) String registradoHasta,
+            HttpServletRequest peticion) {
 
-        ExportacionDelDirectorio.Exportacion archivo = exportacion.exportar(
-                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta));
+        FiltroDelDirectorio filtro =
+                FiltroDelDirectorio.de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta);
+        ExportacionDelDirectorio.Exportacion archivo = exportacion.exportar(filtro);
+        auditoriaDeExportaciones.registrar(filtro, archivo.filas(),
+                (String) peticion.getAttribute("usuarioActual"), uidDe(peticion),
+                AdminGestionUsuarioController.obtenerIpReal(peticion));
         return ResponseEntity.ok()
                 .contentType(TEXTO_CSV)
                 .header(HttpHeaders.CONTENT_DISPOSITION,
@@ -170,6 +194,12 @@ public class AdminDirectorioController {
         return ResponseEntity.ok()
                 .cacheControl(CacheControl.noStore())
                 .body(indicadoresDeCuentas.calcular(desde, hasta, ocultarPruebas));
+    }
+
+    /** El {@code uid} que deja el interceptor (claim {@code uid} del token), o null. */
+    private static String uidDe(HttpServletRequest peticion) {
+        Object uid = peticion.getAttribute("uidActual");
+        return uid == null ? null : uid.toString();
     }
 
     /** 400 {@code datos-invalidos}: el filtro no se puede aplicar, y se dice por que. */
