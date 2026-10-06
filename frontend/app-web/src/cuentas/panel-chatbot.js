@@ -1,13 +1,14 @@
 /**
  * Panel de administración del asistente — HU-CHA-012.
  *
- * Tres pestañas, una por requisito:
+ * Cuatro pestañas:
  *
  * | Pestaña             | Requisito  | Módulo                               |
  * |---------------------|------------|--------------------------------------|
  * | Analíticas          | RF-CHA-012 | `panel-chatbot-analiticas.js`        |
  * | Base de conocimiento| RF-CHA-013 | `panel-chatbot-base.js`              |
  * | Reentrenamiento     | RF-CHA-014 | `panel-chatbot-reentrenamiento.js`   |
+ * | Soporte             | RF-ADM-004 | `panel-chatbot-soporte.js`           |
  *
  * Cada pestaña carga sus datos al abrirse, no al entrar a la vista: quien
  * solo mira analíticas no dispara las consultas de las otras.
@@ -22,6 +23,7 @@ import { crearClientePanelChatbot, descargar } from './cliente-panel-chatbot.js'
 import { montarAnaliticas } from './panel-chatbot-analiticas.js';
 import { montarBaseConocimiento } from './panel-chatbot-base.js';
 import { montarReentrenamiento } from './panel-chatbot-reentrenamiento.js';
+import { montarSoporte } from './panel-chatbot-soporte.js';
 
 /**
  * @param {HTMLElement} raiz
@@ -36,7 +38,7 @@ export function montarPanelChatbot(
     encabezadoDePagina({
       titulo: 'Asistente',
       descripcion:
-        'Cómo está respondiendo el asistente, qué sabe y qué versión de su base de conocimiento atiende a los jugadores.',
+        'Cómo está respondiendo el asistente, qué sabe, qué versión de su base de conocimiento atiende a los jugadores y qué le piden a soporte.',
     }),
   );
 
@@ -45,6 +47,7 @@ export function montarPanelChatbot(
     { id: 'analiticas', etiqueta: 'Analíticas', montar: montarAnaliticas },
     { id: 'base', etiqueta: 'Base de conocimiento', montar: montarBaseConocimiento },
     { id: 'reentrenamiento', etiqueta: 'Reentrenamiento', montar: montarReentrenamiento },
+    { id: 'soporte', etiqueta: 'Soporte', montar: montarSoporte },
   ];
 
   const montadas = new Map();

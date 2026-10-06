@@ -1,6 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -14,6 +16,10 @@ import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,6 +28,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.PageRequest;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -65,6 +72,8 @@ class ChatServiceTest {
     private ModeracionDeContenido moderacion;
     @Mock
     private RegistroDeConversaciones registro;
+    @Mock
+    private PreferenciasService preferenciasService;
 
     private ChatService chatService;
 
@@ -76,7 +85,7 @@ class ChatServiceTest {
     @BeforeEach
     void configurar() {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
-            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro);
+            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService);
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -264,6 +273,66 @@ class ChatServiceTest {
         assertEquals("Hola", historial.get(0).getContenido());
     }
 
+
+    // 1.3.5: historial por paginas.
+    @Test
+    void obtenerHistorialPaginado_sinCursor_devuelveLosUltimosEnOrdenCronologico() {
+        UUID idConversacion = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        Mensaje viejo = new Mensaje(conversacion, Remitente.USUARIO, "viejo", null);
+        Mensaje nuevo = new Mensaje(conversacion, Remitente.BOT, "nuevo", null);
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByConversacionIdOrderByFechaEnvioDescIdDesc(idConversacion, PageRequest.of(0, 2)))
+            .thenReturn(List.of(nuevo, viejo));
+
+        List<Mensaje> pagina = chatService.obtenerHistorial(usuario, null, 2);
+
+        assertEquals(List.of("viejo", "nuevo"), pagina.stream().map(Mensaje::getContenido).toList());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_conCursor_traeLosAnterioresAlCursor() {
+        UUID idConversacion = UUID.randomUUID();
+        UUID idCursor = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        Mensaje cursor = new Mensaje(conversacion, Remitente.USUARIO, "cursor", null,
+            Instant.parse("2026-09-28T10:00:00Z"));
+        Mensaje anterior = new Mensaje(conversacion, Remitente.BOT, "anterior", null,
+            Instant.parse("2026-09-28T09:59:00Z"));
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByIdAndConversacionId(idCursor, idConversacion)).thenReturn(Optional.of(cursor));
+        when(mensajeRepository.buscarAnteriores(idConversacion, Instant.parse("2026-09-28T10:00:00Z"), idCursor,
+            PageRequest.of(0, 50))).thenReturn(List.of(anterior));
+
+        List<Mensaje> pagina = chatService.obtenerHistorial(usuario, idCursor, 50);
+
+        assertEquals(List.of("anterior"), pagina.stream().map(Mensaje::getContenido).toList());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_conCursorDeOtraConversacion_devuelveVacioSinBuscarMas() {
+        UUID idConversacion = UUID.randomUUID();
+        Conversacion conversacion = mock(Conversacion.class);
+        when(conversacion.getId()).thenReturn(idConversacion);
+        when(conversacionRepository.findByIdentificadorSesion(UID.toString())).thenReturn(Optional.of(conversacion));
+        when(mensajeRepository.findByIdAndConversacionId(any(), eq(idConversacion))).thenReturn(Optional.empty());
+
+        assertTrue(chatService.obtenerHistorial(usuario, UUID.randomUUID(), 10).isEmpty());
+
+        verify(mensajeRepository, never()).buscarAnteriores(any(), any(), any(), any());
+    }
+
+    @Test
+    void obtenerHistorialPaginado_sinConversacion_devuelveVacio() {
+        when(conversacionRepository.findByIdentificadorSesion(visitante.claveDeConversacion())).thenReturn(Optional.empty());
+
+        assertTrue(chatService.obtenerHistorial(visitante, null, 20).isEmpty());
+
+        verifyNoInteractions(mensajeRepository);
+    }
+
     @Test
     void limpiarHistorial_borraLosMensajes_cuandoExisteConversacion() {
         UUID idConversacion = UUID.randomUUID();
@@ -284,5 +353,49 @@ class ChatServiceTest {
         chatService.limpiarHistorial(visitante);
 
         verify(mensajeRepository, never()).deleteByConversacionId(any());
+    }
+
+    // 1.3.4: con vista, la base responde sabiendolo; y lo enriquecido llega
+    // tal cual al registro para guardarse con la respuesta.
+    @Test
+    void enviarMensaje_conVista_laUsaYGuardaLoEnriquecido() {
+        registroDevuelveLaRespuesta();
+        RespuestaEnriquecida enriquecida = new RespuestaEnriquecida(List.of(), List.of(), List.of(),
+            List.of("Otra"), true);
+        when(motorRespuestas.generarRespuesta("algo raro", VistaDelChat.SUBASTAS))
+            .thenReturn(ResultadoMotor.escalado("No entendi", List.of()).conEnriquecido(enriquecida));
+
+        chatService.enviarMensaje(visitante, "algo raro", null, VistaDelChat.SUBASTAS);
+
+        verify(registro).guardarIntercambio(any(), eq("algo raro"), any(), any(), anyString(),
+            org.mockito.ArgumentMatchers.argThat(r -> r.enriquecido() == enriquecida), anyInt());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+    }
+
+
+    // 1.3.6: con preferencias propias, la base responde con ellas.
+    @Test
+    void enviarMensaje_conPreferenciasPropias_laBaseRespondeConEllas() {
+        registroDevuelveLaRespuesta();
+        PreferenciasDeRespuesta breveEnIngles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.BREVE);
+        when(preferenciasService.de(visitante)).thenReturn(breveEnIngles);
+        when(motorRespuestas.generarRespuesta("torneo", null, breveEnIngles))
+            .thenReturn(ResultadoMotor.deTema("Short.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "torneo", null);
+
+        assertEquals("Short.", respuesta.getContenido());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+    }
+
+    // Si la lectura falla, se responde igual, con las de por defecto.
+    @Test
+    void enviarMensaje_siNoSePuedenLeerLasPreferencias_respondeConLasDePorDefecto() {
+        registroDevuelveLaRespuesta();
+        when(preferenciasService.de(visitante)).thenThrow(new IllegalStateException("base caida"));
+        when(motorRespuestas.generarRespuesta("torneo"))
+            .thenReturn(ResultadoMotor.deTema("Normal.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
+
+        assertEquals("Normal.", chatService.enviarMensaje(visitante, "torneo", null).getContenido());
     }
 }

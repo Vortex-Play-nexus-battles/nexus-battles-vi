@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_chatbot.chat.api;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.EnlaceInterno;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
@@ -34,6 +37,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -79,7 +83,7 @@ class ChatControllerTest {
         SesionAnonima sesion = sesion();
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion));
         Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -91,9 +95,60 @@ class ChatControllerTest {
             .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
         assertThat(identidad.getValue().autenticado()).isFalse();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
+    }
+
+    // 1.3.0: adjuntoUrl esta obsoleto. Se acepta en el cuerpo (200, no 400)
+    // pero no llega al servicio: nunca se guarda.
+    @Test
+    void enviarMensaje_conAdjuntoUrl_loAceptaPeroNoLoGuarda() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        Mensaje respuestaBot = crearMensajeBot("Respuesta de prueba");
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"Hola\",\"adjuntoUrl\":\"https://img.example/captura.png\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.contenido").value("Respuesta de prueba"));
+
+        verify(chatService).enviarMensaje(any(), eq("Hola"), isNull(), any());
+    }
+
+    // 1.3.4: la vista llega al servicio y la respuesta trae lo enriquecido.
+    @Test
+    void enviarMensaje_conVista_laPasaAlServicioYDevuelveLoEnriquecido() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        Mensaje respuestaBot = crearMensajeBot("Para pujar necesitas créditos.");
+        when(respuestaBot.getEnriquecido()).thenReturn(new RespuestaEnriquecida(List.of("Elige", "Puja"),
+            List.of(new EnlaceInterno("Ir a Subastas", "subastas")), List.of(), List.of("Cómo publicar"), false));
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
+
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"como pujo\",\"vista\":\"SUBASTAS\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.enriquecido.pasos[1]").value("Puja"))
+            .andExpect(jsonPath("$.enriquecido.enlaces[0].destino").value("subastas"))
+            .andExpect(jsonPath("$.enriquecido.respuestasRapidas[0]").value("Cómo publicar"))
+            .andExpect(jsonPath("$.enriquecido.ofrecerSoporteHumano").value(false));
+
+        verify(chatService).enviarMensaje(any(), eq("como pujo"), isNull(), eq(VistaDelChat.SUBASTAS));
+    }
+
+    @Test
+    void enviarMensaje_conUnaVistaQueNoExiste_devuelve400() throws Exception {
+        mockMvc.perform(post("/chat/mensajes")
+                .header(CABECERA, SESION)
+                .contentType("application/json")
+                .content("{\"contenido\":\"hola\",\"vista\":\"COCINA\"}"))
+            .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(chatService);
     }
 
     // 1.2.0 (#708): el asistente de la interfaz manda su propio identificador,
@@ -106,7 +161,7 @@ class ChatControllerTest {
         when(sesiones.validar(declarada)).thenReturn(Optional.empty());
         when(sesiones.declarar(declarada, "203.0.113.7")).thenReturn(sesion);
         Mensaje respuestaBot = crearMensajeBot("Hola visitante");
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, declarada)
@@ -117,7 +172,7 @@ class ChatControllerTest {
             .andExpect(header().doesNotExist(CABECERA));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
         assertThat(identidad.getValue().autenticado()).isFalse();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo("anonimo:" + sesion.getId());
         verify(sesiones, never()).emitir(anyString());
@@ -132,7 +187,7 @@ class ChatControllerTest {
         when(sesiones.validar(any())).thenReturn(Optional.empty());
         when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida(emitida, sesion));
         Mensaje respuestaBot = crearMensajeBot("Hola visitante");
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .header("X-Real-IP", "203.0.113.7")
@@ -148,7 +203,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_conJwt_usaSoloElUidDelTokenEIgnoraLaCabecera() throws Exception {
         Mensaje respuestaBot = crearMensajeBot("Hola jugador");
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
@@ -159,7 +214,7 @@ class ChatControllerTest {
             .andExpect(header().doesNotExist(CABECERA));
 
         ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
-        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any());
+        verify(chatService).enviarMensaje(identidad.capture(), eq("Hola"), any(), any());
         assertThat(identidad.getValue().autenticado()).isTrue();
         assertThat(identidad.getValue().claveDeConversacion()).isEqualTo(UID.toString());
         verifyNoInteractions(sesiones);
@@ -171,7 +226,7 @@ class ChatControllerTest {
         when(sesiones.validar(any())).thenReturn(Optional.empty());
         when(sesiones.emitir(anyString())).thenReturn(new SesionesAnonimas.Emitida("anon_" + "C".repeat(43), sesion()));
         Mensaje respuestaBot = crearMensajeBot("Hola");
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenReturn(respuestaBot);
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenReturn(respuestaBot);
 
         mockMvc.perform(post("/chat/mensajes")
                 .with(jwt().jwt(j -> j.subject("torneos").claim("rol", "SERVICIO")))
@@ -229,6 +284,44 @@ class ChatControllerTest {
             .andExpect(jsonPath("$[0].contenido").value("Historial"));
     }
 
+
+    // 1.3.5: con antesDe o limite, una pagina; sin ellos, todo (compatibilidad).
+    @Test
+    void obtenerHistorial_conCursorYLimite_pideUnaPagina() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        UUID cursor = UUID.randomUUID();
+        Mensaje mensaje = crearMensajeBot("Pagina");
+        when(chatService.obtenerHistorial(any(), eq(cursor), eq(20))).thenReturn(List.of(mensaje));
+
+        mockMvc.perform(get("/chat/historial").header(CABECERA, SESION)
+                .param("antesDe", cursor.toString())
+                .param("limite", "20"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].contenido").value("Pagina"));
+
+        verify(chatService, never()).obtenerHistorial(any());
+    }
+
+    @Test
+    void obtenerHistorial_soloConCursor_usaElLimitePorDefecto() throws Exception {
+        when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
+        UUID cursor = UUID.randomUUID();
+
+        mockMvc.perform(get("/chat/historial").header(CABECERA, SESION).param("antesDe", cursor.toString()))
+            .andExpect(status().isOk());
+
+        verify(chatService).obtenerHistorial(any(), eq(cursor), eq(50));
+    }
+
+    @Test
+    void obtenerHistorial_conParametrosInvalidos_responde400() throws Exception {
+        mockMvc.perform(get("/chat/historial").param("limite", "0")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/chat/historial").param("limite", "101")).andExpect(status().isBadRequest());
+        mockMvc.perform(get("/chat/historial").param("antesDe", "no-es-un-uuid")).andExpect(status().isBadRequest());
+
+        verifyNoInteractions(chatService);
+    }
+
     @Test
     void limpiarHistorial_conJwt_borraLaConversacionDelUsuario() throws Exception {
         mockMvc.perform(delete("/chat/historial").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
@@ -266,7 +359,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_bloqueadoPorLaListaNegra_devuelve422() throws Exception {
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenThrow(new ContenidoBloqueado());
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenThrow(new ContenidoBloqueado());
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)
@@ -279,7 +372,7 @@ class ChatControllerTest {
     @Test
     void enviarMensaje_sinListaNegra_devuelve503() throws Exception {
         when(sesiones.validar(SESION)).thenReturn(Optional.of(sesion()));
-        when(chatService.enviarMensaje(any(), anyString(), any())).thenThrow(new ModeracionNoDisponible());
+        when(chatService.enviarMensaje(any(), anyString(), any(), any())).thenThrow(new ModeracionNoDisponible());
 
         mockMvc.perform(post("/chat/mensajes")
                 .header(CABECERA, SESION)

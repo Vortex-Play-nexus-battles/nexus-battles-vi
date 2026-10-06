@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 import { CLAVE_BASE_LOCAL } from '../comun/cliente-chatbot.js';
 import {
   consultaDePeriodo,
+  consultaDeTickets,
   crearClientePanelChatbot,
   nombreDeArchivo,
 } from './cliente-panel-chatbot.js';
@@ -71,6 +72,8 @@ test('las rutas de la base de conocimiento y del reentrenamiento', async () => {
   await panel.editarTema('t-1', { titulo: 'x' });
   await panel.importarTemas({ temas: [] });
   await panel.desplegarCandidata();
+  await panel.programarDespliegue('2026-10-01T15:00:00.000Z');
+  await panel.cancelarProgramacion();
   await panel.revertir();
   await panel.eliminarCaso('c-1');
 
@@ -80,10 +83,42 @@ test('las rutas de la base de conocimiento y del reentrenamiento', async () => {
     'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/temas/t-1',
     'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/importacion',
     'POST /api/v1/chatbot/admin/base-conocimiento/borrador/despliegue',
+    'PUT /api/v1/chatbot/admin/base-conocimiento/borrador/programacion',
+    'DELETE /api/v1/chatbot/admin/base-conocimiento/borrador/programacion',
     'POST /api/v1/chatbot/admin/base-conocimiento/produccion/reversion',
     'DELETE /api/v1/chatbot/admin/base-conocimiento/casos-evaluacion/c-1',
   ]);
   expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ descripcion: null });
+  expect(JSON.parse(fetch.mock.calls[4][1].body)).toEqual({
+    desplegarEn: '2026-10-01T15:00:00.000Z',
+  });
+});
+
+test('consultaDeTickets pone el estado solo si lo hay', () => {
+  expect(consultaDeTickets()).toBe('?pagina=0&tamano=20');
+  expect(consultaDeTickets({ estado: 'ABIERTO', pagina: 2, tamano: 10 })).toBe(
+    '?estado=ABIERTO&pagina=2&tamano=10',
+  );
+});
+
+test('las rutas de la bandeja de soporte', async () => {
+  const fetch = jest.fn(async () => respuesta({}));
+  const panel = cliente(fetch);
+
+  await panel.listarTickets({ estado: 'EN_PROCESO', pagina: 1 });
+  await panel.obtenerTicket('t-1');
+  await panel.atenderTicket('t-1', { estado: 'RESUELTO', respuesta: 'Listo' });
+
+  const llamadas = fetch.mock.calls.map(([url, opciones]) => `${opciones.method} ${url}`);
+  expect(llamadas).toEqual([
+    'GET /api/v1/chatbot/admin/tickets?estado=EN_PROCESO&pagina=1&tamano=20',
+    'GET /api/v1/chatbot/admin/tickets/t-1',
+    'PATCH /api/v1/chatbot/admin/tickets/t-1',
+  ]);
+  expect(JSON.parse(fetch.mock.calls[2][1].body)).toEqual({
+    estado: 'RESUELTO',
+    respuesta: 'Listo',
+  });
 });
 
 test('una exportación devuelve el nombre del archivo y su contenido', async () => {
