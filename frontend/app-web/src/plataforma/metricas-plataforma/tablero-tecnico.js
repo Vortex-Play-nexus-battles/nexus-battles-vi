@@ -288,10 +288,19 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
         ),
       );
       // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las dio, no se pinta
-      // nada aqui: el motivo real viene en `pendientes` (CA-03) y lo de moderacion sigue completo.
+      // ningun numero (ni un 0 que nadie dio): se dice que no estan, el motivo real viene en
+      // `pendientes` (CA-03) y lo de moderacion sigue completo.
       const cuentas = ultimaModeracion.registroDeUsuarios;
-      if (cuentas) {
-        zonaModeracion.appendChild(nodo('h3', undefined, 'Usuarios'));
+      zonaModeracion.appendChild(nodo('h3', undefined, 'Usuarios'));
+      if (!cuentas) {
+        const sinCuentas = nodo(
+          'p',
+          't-meta',
+          'Cuentas por estado y altas por día: no disponibles. El motivo está abajo, en «Pendiente».',
+        );
+        sinCuentas.dataset.zona = 'usuarios-no-disponibles';
+        zonaModeracion.appendChild(sinCuentas);
+      } else {
         const resumenCuentas = nodo('p', 't-cuerpo', resumenDeCuentas(cuentas));
         resumenCuentas.dataset.zona = 'resumen-usuarios';
         zonaModeracion.appendChild(resumenCuentas);

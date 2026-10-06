@@ -31,11 +31,11 @@ class TableroDeModeracionTest {
     }
 
     private static FuenteDeUsuarios.Indicadores indicadores() {
-        return new FuenteDeUsuarios.Indicadores(12,
+        return new FuenteDeUsuarios.Indicadores(12L,
                 Map.of("ACTIVO", 8L, "PENDIENTE_VERIFICACION", 1L, "INACTIVO", 0L, "SUSPENDIDO", 2L, "BANEADO", 1L),
-                new FuenteDeUsuarios.Registros("2026-09-30", "2026-10-01", 3,
-                        List.of(new FuenteDeUsuarios.DiaDeRegistro("2026-09-30", 1),
-                                new FuenteDeUsuarios.DiaDeRegistro("2026-10-01", 2))),
+                new FuenteDeUsuarios.Registros("2026-09-30", "2026-10-01", 3L,
+                        List.of(new FuenteDeUsuarios.DiaDeRegistro("2026-09-30", 1L),
+                                new FuenteDeUsuarios.DiaDeRegistro("2026-10-01", 2L))),
                 false, HASTA);
     }
 

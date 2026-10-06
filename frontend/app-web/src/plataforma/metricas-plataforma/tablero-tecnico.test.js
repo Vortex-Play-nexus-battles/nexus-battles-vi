@@ -239,12 +239,13 @@ describe('vista', () => {
     const dias = document.querySelectorAll('[data-zona="altas-por-dia"] li');
     expect(dias).toHaveLength(2);
     expect(dias[1].textContent).toBe('2026-10-01: 2');
+    expect(document.querySelector('[data-zona="usuarios-no-disponibles"]')).toBeNull();
     const pendientes = document.querySelectorAll('[data-zona="pendientes"] li');
     expect(pendientes).toHaveLength(1);
     expect(pendientes[0].textContent).toMatch(/frecuencia de reportes/);
   });
 
-  test('si identidad no dio las cuentas no se pinta ese bloque y el motivo real queda en pendientes (CA-03)', async () => {
+  test('si identidad no dio las cuentas no se pinta ningun numero: dice «no disponibles» y el motivo real queda en pendientes (CA-03)', async () => {
     const fetchImpl = servicio({
       '/api/v1/tecnicas': { cuerpo: tecnico() },
       '/api/v1/moderacion': {
@@ -264,6 +265,9 @@ describe('vista', () => {
     expect(document.querySelector('[data-zona="resumen-moderacion"]')).not.toBeNull();
     expect(document.querySelector('[data-zona="resumen-usuarios"]')).toBeNull();
     expect(document.querySelector('[data-zona="altas-por-dia"]')).toBeNull();
+    const sinCuentas = document.querySelector('[data-zona="usuarios-no-disponibles"]');
+    expect(sinCuentas.textContent).toMatch(/no disponibles/);
+    expect(sinCuentas.textContent).not.toMatch(/\d/);
     expect(document.querySelector('[data-zona="pendientes"]').textContent).toMatch(
       /GESTIONAR_CUENTAS/,
     );

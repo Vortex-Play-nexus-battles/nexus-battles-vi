@@ -95,9 +95,11 @@ info:
     Esa ruta pide el permiso GESTIONAR_CUENTAS de una persona, asi que el
     token del administrador que consulta se REENVIA tal cual y es identidad
     quien decide; una credencial de servicio no basta. Si identidad no
-    responde, niega el permiso o rechaza el rango, el tablero NO falla: las
-    sanciones salen igual, `registroDeUsuarios` va en null y el motivo real
-    queda en `pendientes` (CA-03). `pendientes` deja de listar siempre
+    responde (2 s para conectar, 3 s para contestar), niega el permiso,
+    rechaza el rango o contesta algo que no trae todo lo obligatorio de su
+    contrato, el tablero NO falla: las sanciones salen igual,
+    `registroDeUsuarios` va en null (nunca a medias ni con ceros que identidad
+    no dio) y el motivo real queda en `pendientes` (CA-03). `pendientes` deja de listar siempre
     «registro de nuevos usuarios»: solo aparece si no se pudo leer. Ademas,
     el umbral de alta frecuencia (D-25) es «a partir de»: el PO lo fijo en 3 el
     2026-10-05 y un dia con 3 sanciones o mas genera la alerta (antes se
@@ -908,7 +910,9 @@ components:
           description: |
             Cuentas por estado ahora y altas por dia del periodo, tal como las
             publica ms-identidad (1.3.0). `null` si identidad no respondio, nego
-            el permiso o rechazo el rango; el motivo va en `pendientes`.
+            el permiso, rechazo el rango o contesto sin algo obligatorio de su
+            contrato (p. ej. uno de los cinco estados): nunca se publica a
+            medias. El motivo va en `pendientes`.
           oneOf:
             - $ref: '#/components/schemas/RegistroDeUsuarios'
             - type: 'null'
