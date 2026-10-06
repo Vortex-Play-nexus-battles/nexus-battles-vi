@@ -218,7 +218,7 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 | Estrategia de cada enemigo (7.8.6 dice «estrategias predefinidas» pero no las escribe) | las 24 de `estrategias-de-enemigos.json`: el ataque primero; defensa y sanación en la rotación de menor prioridad; dentro de cada familia, la de mayor valor esperado según la Tabla 7 | `semilla/estrategias-de-enemigos.json` |
 | Enemigos sanadores (Chamán, Médico) y Reanimación | sin ataque, su estrategia solo sana y el respaldo es la sanación básica; Reanimación no entra porque cura a un compañero y el enemigo pelea solo | `semilla/estrategias-de-enemigos.json` |
 | «Mazo completo equipado» (7.8.6) | al menos un arma, armadura o ítem (como ADR-004) | `MatricularHeroe` |
-| Probabilidad del Máster del ejemplo («0.15% (15% de probabilidad)») | 15 %; la Tabla 20 se toma literal (0,04 % = 0,0004) | semilla |
+| Probabilidad del Máster del ejemplo («0.15% (15% de probabilidad)») y de la Tabla 20 («0.04%», «0.01%»… «0.1») | 15 % en el ejemplo, donde el propio documento aclara «15 % de probabilidad»; la Tabla 20 se lee igual (decisión del PO, 2026-10-06): 4, 1, 3, 5, 2, 1, 10 y 10 % (0,04 de probabilidad, no 0,04 %). Con la lectura literal esos Máster casi nunca aparecerían | semilla, `EpicaDeTabla20` |
 | Nivel recomendado 15 con héroes hasta nivel 8 | **resuelto (D-42)**: se publica con 8; el catálogo rechaza cualquier nivel fuera de 1..8 | semilla 1.1.0, `Mision` |
 | ¿La épica exige completar la misión? (HU-MIS-007 dice sí; 7.8.4 solo derrotar al Máster) | manda el documento | `MISIONES_EPICA_EXIGE_COMPLETAR` |
 | Multiplicador del escalón Mítico | sin cifra: no se ofrece | `MISIONES_MULTIPLICADOR_MITICO` |

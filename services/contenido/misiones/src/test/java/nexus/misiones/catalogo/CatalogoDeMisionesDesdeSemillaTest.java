@@ -175,16 +175,16 @@ class CatalogoDeMisionesDesdeSemillaTest {
     }
 
     @Test
-    @DisplayName("la Tabla 20: ocho tipos, su probabilidad literal y la epica con su producto del catalogo")
+    @DisplayName("la Tabla 20: ocho tipos, su probabilidad leida como porcentaje (0.04 = 4 %) y la epica con su producto del catalogo")
     void tabla20() {
         List<EpicaDeTabla20> tabla = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20();
 
         assertThat(tabla).extracting(EpicaDeTabla20::prototipo).containsExactly("Guerrero Tanque",
                 "Guerrero Armas", "Mago Fuego", "Mago Hielo", "Pícaro Veneno", "Pícaro Machete", "Chamán", "Médico");
         assertThat(tabla).extracting(EpicaDeTabla20::probabilidadPorcentaje)
-                .containsExactly(0.04, 0.01, 0.03, 0.05, 0.02, 0.01, 0.1, 0.1);
+                .containsExactly(4.0, 1.0, 3.0, 5.0, 2.0, 1.0, 10.0, 10.0);
         assertThat(tabla).allSatisfy(fila -> assertThat(fila.epica().entregable()).isTrue());
-        assertThat(tabla.get(0).comoMaster().probabilidad()).isEqualTo(0.0004);
+        assertThat(tabla.get(0).comoMaster().probabilidad()).isEqualTo(0.04);
         assertThat(tabla.get(6).epica().efectoGeneral()).as("«No aplica»").isNull();
     }
 
