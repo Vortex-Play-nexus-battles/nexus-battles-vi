@@ -294,6 +294,21 @@ public final class Ejecucion {
         motivos.remove(paso);
     }
 
+    /**
+     * El paso se hizo y queda una nota de como: por ejemplo, que el jugador ya
+     * tenia la epica y el inventario no la entrego otra vez. Se guarda con los
+     * motivos de los pasos, que ya se persisten, y los avisos posteriores la leen.
+     */
+    public void pasoHecho(PasoDeLiquidacion paso, String nota) {
+        pasos.put(paso, EstadoDePaso.HECHO);
+        motivos.put(paso, nota);
+    }
+
+    /** La nota con la que se hizo un paso, o nula si se hizo sin nada que contar (o no se ha hecho). */
+    public String notaDe(PasoDeLiquidacion paso) {
+        return pasos.get(paso) == EstadoDePaso.HECHO ? motivos.get(paso) : null;
+    }
+
     /** Rechazo definitivo del otro servicio: no se reintenta, queda el motivo. */
     public void pasoFallido(PasoDeLiquidacion paso, String motivo) {
         pasos.put(paso, EstadoDePaso.FALLIDO);

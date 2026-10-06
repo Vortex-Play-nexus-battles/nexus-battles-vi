@@ -89,6 +89,20 @@ class EjecucionDocumentoTest {
     }
 
     @Test
+    @DisplayName("la nota de un paso hecho (la epica que ya tenia) sobrevive al guardado")
+    void notaDeUnPasoHecho() {
+        Ejecucion cancelada = Ejecucion.nueva(UUID.randomUUID(), "templo-olvidado", "uid-1", HEROE, List.of(),
+                Escalon.NORMAL, INICIO, Duration.ofHours(12), 7L, null);
+        cancelada.cancelar(INICIO.plusSeconds(60));
+        cancelada.pasoHecho(PasoDeLiquidacion.LIBERACION, "ya-la-tenia");
+
+        Ejecucion leida = EjecucionDocumento.de(cancelada, 3).aDominio();
+
+        assertThat(leida.estadoDe(PasoDeLiquidacion.LIBERACION)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(leida.notaDe(PasoDeLiquidacion.LIBERACION)).isEqualTo("ya-la-tenia");
+    }
+
+    @Test
     @DisplayName("los pasos de aviso se guardan y se leen como cualquier otro")
     void pasosDeAvisoIdaYVuelta() {
         assertThat(EjecucionDocumento.conocido("AVISO")).contains(PasoDeLiquidacion.AVISO);

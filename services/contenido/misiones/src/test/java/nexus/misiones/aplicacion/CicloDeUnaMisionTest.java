@@ -289,6 +289,34 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
+    @DisplayName("si el jugador ya tenia la epica, la liquidacion termina bien y el aviso se lo dice")
+    void epicaQueYaSeTenia() {
+        prepararCon(List.of(ARMAS_SEGURA));
+        heroes.vidaDeLosEnemigos = 5;
+        inventario.yaTiene.add("4481eb34-384a-3fa0-ba9a-1aac9562c38f");
+        Ejecucion ejecucion = enviar("prueba-corta");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.liquidacionPendiente()).as("no se reintenta para siempre").isFalse();
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.EPICA)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(inventario.clavesDeEntrega).containsExactly("mision-" + ejecucion.id() + "-epica");
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.LIBERACION)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(terminada.estadoDe(PasoDeLiquidacion.AVISO_EPICA)).isEqualTo(EstadoDePaso.HECHO);
+        assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso-epica"))
+                .startsWith("Ya tenías la épica «Segundo impulso» | ")
+                .endsWith("No se te dio otra copia.");
+        assertThat(correo.enviados.get("mision-" + ejecucion.id() + "-correo-epica"))
+                .contains("No se te dio otra copia.");
+        assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso"))
+                .contains("la épica «Segundo impulso» ya la tenías")
+                .doesNotContain("Aprendió la épica");
+        assertThat(terminada.recompensas().sinEntregar()).isEmpty();
+    }
+
+    @Test
     @DisplayName("si ms-finanzas no responde, el credito se reintenta despues sin repetir lo ya hecho")
     void reintentos() {
         libro.fallar = Dobles.caido("ms-finanzas");
