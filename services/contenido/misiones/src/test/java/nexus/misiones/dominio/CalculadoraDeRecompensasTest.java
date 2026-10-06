@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
+import nexus.misiones.catalogo.CatalogoDeMisionesDesdeSemilla;
 import nexus.misiones.dominio.simulacion.AzarConSemilla;
 import nexus.misiones.dominio.simulacion.ResultadoDeMision;
 import org.junit.jupiter.api.DisplayName;
@@ -138,19 +139,40 @@ class CalculadoraDeRecompensasTest {
     }
 
     @Test
-    @DisplayName("derrotar al Master da su epica; sin producto en el catalogo va a la coleccion y se informa")
+    @DisplayName("HU-SIM-006 C3: derrotar a «Sombra del Olvido» da «Velo de Sombras» con su producto del catalogo: se entrega, no se queda en la coleccion")
     void epicaDelMaster() {
+        // La mision y el Master tal como los publica la semilla del documento (7.8.14).
+        Mision templo = CatalogoDeMisionesDesdeSemilla.cargar(false).buscar("templo-olvidado").orElseThrow();
+        MasterDeMision sombra = templo.masters().get(0);
+
+        RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(templo, Escalon.NORMAL,
+                resultado(true, 80, List.of(new ResultadoDeMision.MasterEnfrentado(
+                        sombra.nombre(), sombra.epica(), true))),
+                false, SIN_EXTRAS, new AzarConSemilla(1));
+
+        assertThat(recompensas.epicas()).containsExactly(new RecompensasDeEjecucion.EpicaGanada(
+                "Velo de Sombras", "Sombra del Olvido", Misiones.ID_DE_VELO_DE_SOMBRAS));
+        assertThat(recompensas.tieneEpicaEntregable()).isTrue();
+        assertThat(recompensas.sinEntregar()).extracting(RecompensasDeEjecucion.SinEntregar::nombre)
+                .doesNotContain("Épica «Velo de Sombras»");
+        assertThat(objetivo(recompensas, "Derrotar al Máster si aparece.").cumplido()).isTrue();
+    }
+
+    @Test
+    @DisplayName("una epica sin producto en el catalogo (hoy ninguna) iria a la coleccion y se informaria, sin inventar un id")
+    void epicaSinProductoVaALaColeccion() {
+        Epica sinProducto = new Epica("Epica de prueba", "+1", "+2", null);
+
         RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(Misiones.templo(), Escalon.NORMAL,
                 resultado(true, 80, List.of(new ResultadoDeMision.MasterEnfrentado(
-                        "Sombra del Olvido", Misiones.VELO_DE_SOMBRAS, true))),
+                        "Un Master", sinProducto, true))),
                 false, SIN_EXTRAS, new AzarConSemilla(1));
 
         assertThat(recompensas.epicas()).containsExactly(
-                new RecompensasDeEjecucion.EpicaGanada("Velo de Sombras", "Sombra del Olvido", null));
+                new RecompensasDeEjecucion.EpicaGanada("Epica de prueba", "Un Master", null));
         assertThat(recompensas.tieneEpicaEntregable()).isFalse();
         assertThat(recompensas.sinEntregar()).extracting(RecompensasDeEjecucion.SinEntregar::nombre)
-                .contains("Épica «Velo de Sombras»");
-        assertThat(objetivo(recompensas, "Derrotar al Máster si aparece.").cumplido()).isTrue();
+                .contains("Épica «Epica de prueba»");
     }
 
     @Test

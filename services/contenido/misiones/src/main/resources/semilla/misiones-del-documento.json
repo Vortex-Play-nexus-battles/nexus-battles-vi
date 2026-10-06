@@ -135,7 +135,7 @@
             "nombre": "Velo de Sombras",
             "efectoGeneral": "+2 a la defensa para todos los héroes.",
             "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
-            "productoId": null
+            "productoId": "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5"
           }
         }
       ],

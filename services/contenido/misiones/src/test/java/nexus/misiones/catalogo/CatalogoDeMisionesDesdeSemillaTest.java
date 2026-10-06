@@ -8,8 +8,13 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.Epica;
@@ -126,7 +131,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
             assertThat(master.prototipo()).isEqualTo("Pícaro Veneno");
             assertThat(master.probabilidad()).isEqualTo(0.15);
             assertThat(master.epica().nombre()).isEqualTo("Velo de Sombras");
-            assertThat(master.epica().entregable()).as("no esta en el catalogo oficial").isFalse();
+            assertThat(master.epica().entregable()).as("tiene producto EPICA en el catalogo").isTrue();
+            assertThat(master.epica().productoId()).isEqualTo(Misiones.ID_DE_VELO_DE_SOMBRAS);
         });
         assertThat(templo.recompensas().creditos()).isEqualTo(50);
         assertThat(templo.recompensas().garantizadas()).extracting(o -> o.nombre()).containsExactly("Cofre de Bronce");
@@ -136,6 +142,36 @@ class CatalogoDeMisionesDesdeSemillaTest {
         assertThat(templo.recompensas().primeraVez().otras()).containsExactly("Título «Explorador del Templo»");
         assertThat(templo.recompensasDestacadas())
                 .containsExactly("50 créditos", "1 Cofre de Bronce", "Fragmento del Sello Antiguo (60 %)");
+    }
+
+    @Test
+    @DisplayName("cada epica de la semilla (las ocho de la Tabla 20 y la del Master del Templo) apunta al producto que el catalogo siembra con su slug")
+    void cadaEpicaApuntaAlProductoDelCatalogo() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
+        Map<String, String> esperados = new LinkedHashMap<>();
+        catalogo.tabla20().forEach(fila -> esperados.put(fila.epica().nombre(),
+                idDelCatalogo("epica-" + slug(fila.prototipo()) + "-" + slug(fila.epica().nombre()))));
+        catalogo.buscar("templo-olvidado").orElseThrow().masters().forEach(master -> esperados.put(
+                master.epica().nombre(),
+                idDelCatalogo("epica-" + slug(master.prototipo()) + "-" + slug(master.epica().nombre()))));
+
+        assertThat(esperados).hasSize(9);
+        Map<String, String> reales = new LinkedHashMap<>();
+        catalogo.tabla20().forEach(fila -> reales.put(fila.epica().nombre(), fila.epica().productoId()));
+        catalogo.buscar("templo-olvidado").orElseThrow().masters()
+                .forEach(master -> reales.put(master.epica().nombre(), master.epica().productoId()));
+        assertThat(reales).containsExactlyInAnyOrderEntriesOf(esperados);
+    }
+
+    /** Como lo hace SemillaDelCatalogo de productos: UUID v3 de «nexus-battles-vi/catalogo-inicial/{slug}». */
+    private static String idDelCatalogo(String slug) {
+        return UUID.nameUUIDFromBytes(("nexus-battles-vi/catalogo-inicial/" + slug).getBytes(StandardCharsets.UTF_8))
+                .toString();
+    }
+
+    private static String slug(String texto) {
+        return Normalizer.normalize(texto, Normalizer.Form.NFD).replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
     }
 
     @Test

@@ -10,11 +10,14 @@ import java.util.List;
  */
 public final class Misiones {
 
+    /** El producto EPICA «Velo de Sombras» del catalogo: UUID v3 de «epica-picaro-veneno-velo-de-sombras». */
+    public static final String ID_DE_VELO_DE_SOMBRAS = "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5";
+
     public static final Epica VELO_DE_SOMBRAS = new Epica("Velo de Sombras",
             "+2 a la defensa para todos los héroes.",
             "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando "
                     + "envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
-            null);
+            ID_DE_VELO_DE_SOMBRAS);
 
     /** Un heroe de nivel 1 con las estadisticas de la Tabla 6 (Guerrero Armas). */
     public static final HeroeEnMision HEROE =
