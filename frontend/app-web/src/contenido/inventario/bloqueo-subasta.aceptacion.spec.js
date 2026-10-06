@@ -53,5 +53,12 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
 
   await page.locator('#pestana-heroes').click();
   await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-  await expect(page.getByRole('button', { name: 'No disponible' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Arma 1: vacia. Elegir objeto' }).click();
+
+  const opcionBloqueada = page.getByRole('button', {
+    name: 'Espada de Bruma · en subasta',
+  });
+  await expect(opcionBloqueada).toBeVisible();
+  await expect(opcionBloqueada).toBeDisabled();
+  await expect(opcionBloqueada).toHaveAttribute('title', 'Está publicado en una subasta');
 });
