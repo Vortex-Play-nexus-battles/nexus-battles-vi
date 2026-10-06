@@ -344,6 +344,25 @@ export async function compartir({ titulo, url, zona, navegador = globalThis.navi
 }
 
 /**
+ * «Aquiles · Guerrero Armas está asignado a esta misión.» (HU-MIS-009 C6).
+ * Nulo si no se sabe quién es: el nombre propio es lo que el jugador reconoce.
+ *
+ * @param {{id?: string, nombre?: string, prototipo?: string|null}|null|undefined} heroe
+ * @returns {HTMLElement|null}
+ */
+function textoDelHeroeAsignado(heroe) {
+  if (!heroe?.nombre) {
+    return null;
+  }
+  const prototipo = heroe.prototipo ? identidadDePrototipo(heroe.prototipo).nombre : null;
+  return h('p', {
+    clase: 'mision-detalle__heroe-asignado',
+    datos: { heroeAsignado: heroe.id ?? '' },
+    texto: `${heroe.nombre}${prototipo ? ` · ${prototipo}` : ''} está asignado a esta misión.`,
+  });
+}
+
+/**
  * El detalle.
  *
  * @param {import('./fuente-misiones.js').Mision} mision
@@ -352,6 +371,9 @@ export async function compartir({ titulo, url, zona, navegador = globalThis.navi
  * @param {(ejecucionId: string) => string} opciones.hrefReporte
  * @param {string} opciones.hrefEnCurso
  * @param {{elemento: HTMLElement}|null} [opciones.configurador]
+ * @param {{id?: string, nombre?: string, prototipo?: string|null}|null} [opciones.heroeAsignado]
+ *   el héroe de la ejecución en curso de esta misión (HU-MIS-009 C6); sin él, el
+ *   detalle dice que hay un héroe en la misión pero no inventa cuál
  * @param {() => Promise<void>} [opciones.alIniciar] la página confirma y matricula
  * @param {(favorita: boolean) => Promise<void>} [opciones.alMarcarFavorita]
  * @param {string} opciones.urlParaCompartir
@@ -365,6 +387,7 @@ export function detalleDeMision(
     hrefReporte,
     hrefEnCurso,
     configurador = null,
+    heroeAsignado = null,
     alIniciar = async () => {},
     alMarcarFavorita = async () => {},
     urlParaCompartir,
@@ -664,6 +687,7 @@ export function detalleDeMision(
     });
   } else if (mision.estado === 'EN_PROGRESO') {
     bloqueConfigurar = seccion('Tu héroe ya está en esta misión', 'en-curso', [
+      textoDelHeroeAsignado(heroeAsignado),
       h('p', { texto: 'Mira cuánto le queda y cómo va en «En curso».' }),
       h('a', {
         clase: 'boton boton--primario boton--pequeno',
