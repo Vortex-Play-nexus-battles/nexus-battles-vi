@@ -495,6 +495,18 @@ class SemillaDelCatalogoTest {
     }
 
     @Test
+    @DisplayName("Tabla 20: la probabilidad de Master de las ocho epicas va en porcentaje, «0.04%» es un 4 %")
+    void laTabla20SeLeeComoPorcentaje() throws IOException {
+        CatalogoInicial catalogo;
+        try (InputStream json = CATALOGO_REAL.getInputStream()) {
+            catalogo = SemillaDelCatalogo.leer(json);
+        }
+
+        assertEquals(List.of("4%", "1%", "3%", "5%", "2%", "1%", "10%", "10%"),
+                catalogo.epicas().stream().map(CatalogoInicial.EntradaCatalogo::probabilidadMaster).toList());
+    }
+
+    @Test
     @DisplayName("leer() entiende el JSON real en UTF-8 (tildes y enie intactas) y su version")
     void leeElJsonReal() throws IOException {
         CatalogoInicial catalogo;
