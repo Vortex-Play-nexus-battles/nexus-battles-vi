@@ -33,6 +33,20 @@ class PlanDeCombateTest {
     }
 
     @Test
+    @DisplayName("criterio3_sinMasterEnLaTiradaElPlanNoTraeRivalesMasterConNingunaSemilla")
+    void criterio3_sinMasterEnLaTiradaElPlanNoTraeRivalesMasterConNingunaSemilla() {
+        // HU-SIM-005 C3: el plan solo lleva Master cuando la tirada los saco; sin ellos, ninguno.
+        Rival jefe = new Rival("Jefe", TipoDeRival.JEFE, "Guerrero Tanque", 1, 100, 11, 10, List.of(), null);
+
+        for (long semilla = 0; semilla < 50; semilla++) {
+            List<Rival> plan = PlanDeCombate.armar(List.of(regular("A"), regular("B")), List.of(), jefe,
+                    new AzarConSemilla(semilla));
+
+            assertThat(plan).extracting(Rival::tipo).doesNotContain(TipoDeRival.MASTER);
+        }
+    }
+
+    @Test
     @DisplayName("sin jefe ni Master, el plan son los regulares")
     void soloRegulares() {
         List<Rival> plan = PlanDeCombate.armar(List.of(regular("A")), List.of(), null, new AzarConSemilla(1));
