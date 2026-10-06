@@ -23,6 +23,8 @@ import nexus.misiones.dominio.Epica;
 import nexus.misiones.dominio.EpicaDeTabla20;
 import nexus.misiones.dominio.EstadoDePaso;
 import nexus.misiones.dominio.EstadoEjecucion;
+import nexus.misiones.dominio.MasterDeMision;
+import nexus.misiones.dominio.Mision;
 import nexus.misiones.dominio.Misiones;
 import nexus.misiones.dominio.ParametrosDeRecompensa;
 import nexus.misiones.dominio.PasoDeLiquidacion;
@@ -99,6 +101,10 @@ class CicloDeUnaMisionTest {
     }
 
     private void prepararCon(List<EpicaDeTabla20> tabla20, int lote) {
+        prepararCon(tabla20, lote, List.of());
+    }
+
+    private void prepararCon(List<EpicaDeTabla20> tabla20, int lote, List<Mision> extras) {
         ejecuciones = new Dobles.Ejecuciones();
         inventario = new Dobles.Inventario().conHeroe("h-1", JUGADOR, "p-armas", true)
                 .conHeroe("h-2", JUGADOR, "p-armas", true);
@@ -115,10 +121,12 @@ class CicloDeUnaMisionTest {
         parametros = new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), lote,
                 true, true, null, null, new ParametrosDeRecompensa(Map.of(), Map.of(), false));
         // «tras-la-corta» y «otra-tras-la-corta» piden «prueba-corta» (la historia se desbloquea en orden, 7.8.2).
-        catalogo = new Dobles.Catalogo(List.of(Misiones.templo(),
+        List<Mision> publicadas = new ArrayList<>(List.of(Misiones.templo(),
                 Misiones.historia("prueba-corta", List.of()),
                 Misiones.historiaTrasDe("tras-la-corta", "prueba-corta"),
-                Misiones.historiaTrasDe("otra-tras-la-corta", "prueba-corta")), tabla20);
+                Misiones.historiaTrasDe("otra-tras-la-corta", "prueba-corta")));
+        publicadas.addAll(extras);
+        catalogo = new Dobles.Catalogo(publicadas, tabla20);
         matricular = new MatricularHeroe(catalogo, ejecuciones, new Dobles.Estrategias(), inventario, productos,
                 heroes, parametros, reloj, () -> 7L);
         liquidar = new LiquidarEjecucion(ejecuciones, catalogo, inventario, libro, directorio,
@@ -592,6 +600,70 @@ class CicloDeUnaMisionTest {
         assertThat(avisos.enBandeja.get("mision-" + ejecucion.id() + "-aviso"))
                 .startsWith("Tu misión «Misión prueba-corta» terminó: Vorn fue derrotado | ");
         assertThat(avisos.enBandeja.keySet()).noneMatch(k -> k.contains("-aviso-desbloqueo-"));
+    }
+
+    /** El Master de la semilla del banco: siempre aparece, con la epica del Tanque y vida baja. */
+    private static final MasterDeMision MASTER_DE_PRUEBA = new MasterDeMision("Máster de prueba", "Guerrero Tanque",
+            1.0, 1, 0, new Epica("Golpe de defensa", "+1 al ataque", "+4 al daño, +2% de crítico",
+                    "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d"));
+
+    @Test
+    @DisplayName("HU-SIM-006: un Master con vida y defensa fijadas pelea con ellas, dos niveles arriba, y su epica se entrega una vez")
+    void masterConVidaFijada() {
+        prepararCon(List.of(), 20, List.of(Misiones.historia("con-master", List.of(MASTER_DE_PRUEBA))));
+        heroes.vidaDeLosEnemigos = 50;
+        Ejecucion ejecucion = enviar("con-master");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        // Pelea con la vida 1 y la defensa 0 de la semilla, no con las 50 y 5 del catalogo, y dos
+        // niveles por encima del heroe (6.1.2), como cualquier Master.
+        assertThat(motor.recibidos.stream().flatMap(List::stream))
+                .anySatisfy(c -> {
+                    assertThat(c.id()).isEqualTo("rival");
+                    assertThat(c.estadisticas().vida()).isEqualTo(1);
+                    assertThat(c.estadisticas().defensa()).isZero();
+                    assertThat(c.nivel()).isEqualTo(3);
+                });
+        assertThat(eventos.de(ejecucion.id())).extracting(EventoDeCombate::enemigo)
+                .contains("Máster de prueba", "Jefe de prueba");
+        // Derrotado: su epica, con su productoId, entregada con la clave de la ejecucion.
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.estado()).isEqualTo(EstadoEjecucion.COMPLETADA);
+        assertThat(terminada.recompensas().epicas()).singleElement().satisfies(epica -> {
+            assertThat(epica.nombre()).isEqualTo("Golpe de defensa");
+            assertThat(epica.master()).isEqualTo("Máster de prueba");
+            assertThat(epica.productoId()).isEqualTo("81af272d-74fb-3dc1-b6ff-01fdc99a1c1d");
+        });
+        assertThat(inventario.clavesDeEntrega).containsExactly("mision-" + ejecucion.id() + "-epica");
+        // Otra vuelta del trabajo no vuelve a entregar nada.
+        ahora.set(INICIO.plus(Duration.ofHours(2)));
+        trabajo.ejecutar();
+        assertThat(inventario.clavesDeEntrega).containsExactly("mision-" + ejecucion.id() + "-epica");
+        assertThat(inventario.entregas).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("un Master sin vida fijada (todos los del juego) pelea con la de su prototipo en su nivel")
+    void masterSinVidaFijada() {
+        MasterDeMision delJuego = new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 1.0,
+                Misiones.VELO_DE_SOMBRAS);
+        prepararCon(List.of(), 20, List.of(Misiones.historia("con-master", List.of(delJuego))));
+        heroes.vidaDeLosEnemigos = 50;
+        enviar("con-master");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        assertThat(motor.recibidos.stream().flatMap(List::stream))
+                .filteredOn(c -> c.id().equals("rival") && c.prototipo().equals("Pícaro Veneno"))
+                .isNotEmpty()
+                .allSatisfy(c -> {
+                    assertThat(c.estadisticas().vida()).isEqualTo(50);
+                    assertThat(c.estadisticas().defensa()).isEqualTo(5);
+                });
+        assertThat(heroes.nivelesPedidos).contains("Pícaro Veneno@3");
     }
 
     @Test
