@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import com.nexusbattles.comun.seguridad.pruebas.DecodificadorDePrueba;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.plataforma.comentarios.Comentario;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.publicacion.ManejadorErroresComentarios;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 import com.nexusbattles.plataforma.comentarios.seguridad.SecurityConfig;
@@ -288,7 +289,7 @@ class ModeracionHttpTest {
             when(servicio.cola(eq(PRODUCTO), isNull(), eq(0), anyInt())).thenReturn(
                     new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
                             comentario(Comentario.Estado.EN_REVISION), 2,
-                            Map.of(CategoriaDeReporte.ACOSO, 2L), CUANDO, true)), 1, 0, 20));
+                            Map.of(CategoriaDeReporte.ACOSO, 2L), CUANDO, true, null)), 1, 0, 20));
 
             mvc.perform(get(RUTA_COLA)
                             .param("productoId", PRODUCTO)
@@ -309,8 +310,8 @@ class ModeracionHttpTest {
         void filtroMarcado() throws Exception {
             when(servicio.cola(any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
-                            comentario(Comentario.Estado.PUBLICADO).conMarca(true), 0, Map.of(), CUANDO, false)),
-                            1, 0, 20));
+                            comentario(Comentario.Estado.PUBLICADO).conMarca(true), 0, Map.of(), CUANDO, false,
+                            null)), 1, 0, 20));
 
             mvc.perform(get(RUTA_COLA)
                             .param("marcado", "true")
@@ -341,7 +342,8 @@ class ModeracionHttpTest {
             when(servicio.detalle(COMENTARIO)).thenReturn(new ServicioDeModeracion.Detalle(
                     comentario(Comentario.Estado.EN_REVISION),
                     List.of(reporte(CategoriaDeReporte.SPAM)),
-                    List.of(asiento())));
+                    List.of(asiento()),
+                    null));
 
             mvc.perform(get(RUTA_COLA + "/" + COMENTARIO)
                             .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
@@ -353,6 +355,66 @@ class ModeracionHttpTest {
                     .andExpect(jsonPath("$.historial[0].estadoNuevo").value("OCULTO"))
                     .andExpect(jsonPath("$.historial[0].textoAnterior").value((Object) null))
                     .andExpect(jsonPath("$.historial[0].ipOrigen").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("HU-COM-007 CA-01: la cola y el detalle traen la deteccion con los nombres del contrato 1.10.0")
+        void deteccionConLosNombresDelContrato() throws Exception {
+            DeteccionAutomatica deteccion = new DeteccionAutomatica(CUANDO, List.of(7L, 9L), "OFENSIVO",
+                    "El texto contiene un termino no permitido", false);
+            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+                    .thenReturn(new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
+                            comentario(Comentario.Estado.EN_REVISION), 0, Map.of(), CUANDO, false, deteccion)),
+                            1, 0, 20));
+            when(servicio.detalle(COMENTARIO)).thenReturn(new ServicioDeModeracion.Detalle(
+                    comentario(Comentario.Estado.EN_REVISION), List.of(), List.of(), deteccion));
+
+            mvc.perform(get(RUTA_COLA).header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.entradas[0].deteccion.fecha").value(CUANDO.toString()))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.reglas.length()").value(2))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.reglas[0]").value(7))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.reglas[1]").value(9))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.categoria").value("OFENSIVO"))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.motivo")
+                            .value("El texto contiene un termino no permitido"))
+                    .andExpect(jsonPath("$.entradas[0].deteccion.servicioNoDisponible").value(false));
+
+            mvc.perform(get(RUTA_COLA + "/" + COMENTARIO)
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.deteccion.fecha").value(CUANDO.toString()))
+                    .andExpect(jsonPath("$.deteccion.reglas[0]").value(7))
+                    .andExpect(jsonPath("$.deteccion.categoria").value("OFENSIVO"))
+                    .andExpect(jsonPath("$.deteccion.servicioNoDisponible").value(false))
+                    // Nunca el texto del comentario ni los terminos coincidentes.
+                    .andExpect(jsonPath("$.deteccion.texto").doesNotExist())
+                    .andExpect(jsonPath("$.deteccion.coincidencias").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("sin deteccion (llego por reportes) el campo no viaja; si la lista negra no respondio, viaja sin reglas ni categoria")
+        void deteccionAusenteOSinServicio() throws Exception {
+            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+                    .thenReturn(new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
+                            comentario(Comentario.Estado.PUBLICADO), 1, Map.of(CategoriaDeReporte.SPAM, 1L),
+                            CUANDO, false, null)), 1, 0, 20));
+            when(servicio.detalle(COMENTARIO)).thenReturn(new ServicioDeModeracion.Detalle(
+                    comentario(Comentario.Estado.EN_REVISION), List.of(), List.of(),
+                    new DeteccionAutomatica(CUANDO, List.of(), null, "respuesta vacia del servicio", true)));
+
+            mvc.perform(get(RUTA_COLA).header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.entradas[0].deteccion").doesNotExist());
+
+            mvc.perform(get(RUTA_COLA + "/" + COMENTARIO)
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.deteccion.servicioNoDisponible").value(true))
+                    .andExpect(jsonPath("$.deteccion.reglas").isArray())
+                    .andExpect(jsonPath("$.deteccion.reglas").isEmpty())
+                    .andExpect(jsonPath("$.deteccion.categoria").doesNotExist())
+                    .andExpect(jsonPath("$.deteccion.motivo").value("respuesta vacia del servicio"));
         }
 
         @Test

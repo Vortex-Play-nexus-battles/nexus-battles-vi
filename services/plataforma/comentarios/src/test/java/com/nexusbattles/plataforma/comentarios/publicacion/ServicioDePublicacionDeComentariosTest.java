@@ -2,8 +2,6 @@ package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.EstadoDeAutor.HABILITADO;
 import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.EstadoDeAutor.SILENCIADO;
-import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.LIMPIO;
-import static com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFiltro.SENALADO;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -28,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -42,9 +41,12 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.support.SimpleTransactionStatus;
+import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
 import com.nexusbattles.plataforma.comentarios.ResumenDeCalificaciones;
 import com.nexusbattles.plataforma.comentarios.calificacion.ServicioDeCalificaciones;
@@ -52,6 +54,9 @@ import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoDeProductos;
 import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoNoDisponible;
 import com.nexusbattles.plataforma.comentarios.catalogo.ProductoInexistente;
 import com.nexusbattles.plataforma.comentarios.imagenes.ServicioDeImagenes;
+import com.nexusbattles.plataforma.comentarios.moderacion.DeteccionRepository;
+import com.nexusbattles.plataforma.comentarios.moderacion.RegistroDeDeteccion;
+import com.nexusbattles.plataforma.comentarios.publicacion.FiltroDeContenido.VeredictoDelFiltro;
 
 /**
  * Pruebas de la orquestacion de la publicacion sobre el dominio ya probado —
@@ -68,6 +73,10 @@ class ServicioDePublicacionDeComentariosTest {
     private static final Instant AHORA = Instant.parse("2026-09-25T15:00:00Z");
     private static final String PRODUCTO = "espada-del-alba";
     private static final String IMAGEN = "3f1c2b4a-1111-4222-8333-944455566677";
+
+    /** Lo que la lista negra explico al retener (HU-COM-007 CA-01). */
+    private static final DeteccionAutomatica DETECCION = new DeteccionAutomatica(
+            AHORA, List.of(7L), "OFENSIVO", "El texto contiene un termino no permitido", false);
 
     @Mock
     private ComentarioRepository repositorio;
@@ -87,15 +96,21 @@ class ServicioDePublicacionDeComentariosTest {
     @Mock
     private ServicioDeImagenes imagenes;
 
+    @Mock
+    private DeteccionRepository detecciones;
+
     private ServicioDePublicacionDeComentarios servicio;
 
     @BeforeEach
     void crearServicio() {
         // Sin transaccion real: aqui se prueba el orden y lo que se guarda; que
         // las escrituras vayan juntas y las llamadas remotas fuera lo cubre la IT.
-        servicio = new ServicioDePublicacionDeComentarios(repositorio, filtro, sanciones, catalogo,
-                calificaciones, imagenes, TransactionOperations.withoutTransaction(),
-                Clock.fixed(AHORA, ZoneOffset.UTC));
+        servicio = servicioCon(TransactionOperations.withoutTransaction());
+    }
+
+    private ServicioDePublicacionDeComentarios servicioCon(TransactionOperations transaccion) {
+        return new ServicioDePublicacionDeComentarios(repositorio, filtro, sanciones, catalogo,
+                calificaciones, imagenes, detecciones, transaccion, Clock.fixed(AHORA, ZoneOffset.UTC));
     }
 
     @Nested
@@ -106,7 +121,7 @@ class ServicioDePublicacionDeComentariosTest {
         @DisplayName("un comentario limpio se guarda publicado, sin estrellas propias, con sus imagenes y su calificacion")
         void publicaLimpio() {
             when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-            when(filtro.verificar("Muy buena espada")).thenReturn(LIMPIO);
+            when(filtro.verificar("Muy buena espada")).thenReturn(VeredictoDelFiltro.limpio());
             when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-1", 4)).thenReturn(true);
             when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of("jugador-1", 4));
 
@@ -129,7 +144,7 @@ class ServicioDePublicacionDeComentariosTest {
         @DisplayName("lo local va antes que lo remoto: imagenes, luego catalogo, luego sancion y filtro")
         void ordenDeLasComprobaciones() {
             when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+            when(filtro.verificar(anyString())).thenReturn(VeredictoDelFiltro.limpio());
 
             servicio.publicar(PRODUCTO, "jugador-1", "LyraRoja", "texto", List.of(IMAGEN), null);
 
@@ -146,7 +161,7 @@ class ServicioDePublicacionDeComentariosTest {
         @DisplayName("si ya habia calificado, el comentario entra igual y la respuesta lo dice con sus estrellas de antes (D-07)")
         void segundaCalificacionDescartada() {
             when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+            when(filtro.verificar(anyString())).thenReturn(VeredictoDelFiltro.limpio());
             when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-1", 2)).thenReturn(false);
             when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of("jugador-1", 5));
 
@@ -162,7 +177,7 @@ class ServicioDePublicacionDeComentariosTest {
         @DisplayName("sin estrellas no se toca la calificacion y no hay nada que descartar")
         void sinEstrellas() {
             when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
-            when(filtro.verificar(anyString())).thenReturn(LIMPIO);
+            when(filtro.verificar(anyString())).thenReturn(VeredictoDelFiltro.limpio());
             when(calificaciones.estrellasDe(PRODUCTO, Set.of("jugador-1"))).thenReturn(Map.of());
 
             ServicioDePublicacionDeComentarios.Publicado publicado = servicio.publicar(
@@ -177,7 +192,7 @@ class ServicioDePublicacionDeComentariosTest {
         @DisplayName("lo senalado por el filtro se guarda en revision; su calificacion cuenta igual (no es contenido)")
         void senaladoEnRevision() {
             when(sanciones.estadoDe("jugador-2")).thenReturn(HABILITADO);
-            when(filtro.verificar("texto senalado")).thenReturn(SENALADO);
+            when(filtro.verificar("texto senalado")).thenReturn(VeredictoDelFiltro.senalado(DETECCION));
             when(calificaciones.registrarDesdeComentario(PRODUCTO, "jugador-2", 3)).thenReturn(true);
 
             Comentario comentario = servicio.publicar(
@@ -188,6 +203,51 @@ class ServicioDePublicacionDeComentariosTest {
         }
 
         @Test
+        @DisplayName("HU-COM-007 CA-01: lo senalado guarda su deteccion, despues del comentario y dentro de la transaccion")
+        void senaladoGuardaSuDeteccion() {
+            AtomicBoolean enTransaccion = new AtomicBoolean();
+            servicio = servicioCon(new TransactionOperations() {
+                @Override
+                public <T> T execute(TransactionCallback<T> escrituras) {
+                    enTransaccion.set(true);
+                    try {
+                        return escrituras.doInTransaction(new SimpleTransactionStatus());
+                    } finally {
+                        enTransaccion.set(false);
+                    }
+                }
+            });
+            when(sanciones.estadoDe("jugador-2")).thenReturn(HABILITADO);
+            when(filtro.verificar("texto senalado")).thenReturn(VeredictoDelFiltro.senalado(DETECCION));
+            when(detecciones.save(any(RegistroDeDeteccion.class))).thenAnswer(guardar -> {
+                assertTrue(enTransaccion.get(), "la deteccion se guarda con el comentario, no aparte");
+                return guardar.getArgument(0);
+            });
+
+            Comentario comentario = servicio.publicar(
+                    PRODUCTO, "jugador-2", "Korrigan", "texto senalado", List.of(), null).comentario();
+
+            ArgumentCaptor<RegistroDeDeteccion> guardada = ArgumentCaptor.forClass(RegistroDeDeteccion.class);
+            InOrder orden = inOrder(repositorio, detecciones);
+            orden.verify(repositorio).saveAndFlush(any(RegistroDeComentario.class));
+            orden.verify(detecciones).save(guardada.capture());
+            assertEquals(comentario.id(), guardada.getValue().comentarioId());
+            assertEquals(DETECCION, guardada.getValue().aDominio());
+        }
+
+        @Test
+        @DisplayName("lo limpio no guarda ninguna deteccion: no hay nada que explicar")
+        void limpioNoGuardaDeteccion() {
+            when(sanciones.estadoDe("jugador-1")).thenReturn(HABILITADO);
+            when(filtro.verificar(anyString())).thenReturn(VeredictoDelFiltro.limpio());
+
+            servicio.publicar(PRODUCTO, "jugador-1", "LyraRoja", "Muy buena espada", List.of(), null);
+
+            verify(repositorio).saveAndFlush(any(RegistroDeComentario.class));
+            verifyNoInteractions(detecciones);
+        }
+
+        @Test
         @DisplayName("el rechazo por sancion no guarda nada y ni consulta el filtro")
         void rechazoPorSancion() {
             when(sanciones.estadoDe("jugador-3")).thenReturn(SILENCIADO);
@@ -195,7 +255,7 @@ class ServicioDePublicacionDeComentariosTest {
             assertThrows(HiloDeComentarios.PublicacionRechazada.class, () -> servicio.publicar(
                     PRODUCTO, "jugador-3", "Umbra", "da igual", List.of(), 2));
 
-            verifyNoInteractions(filtro, calificaciones);
+            verifyNoInteractions(filtro, calificaciones, detecciones);
             verify(repositorio, never()).saveAndFlush(any(RegistroDeComentario.class));
         }
 

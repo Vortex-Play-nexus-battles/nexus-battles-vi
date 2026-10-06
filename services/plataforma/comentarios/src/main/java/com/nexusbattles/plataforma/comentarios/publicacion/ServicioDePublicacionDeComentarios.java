@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,12 +19,16 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
+import com.nexusbattles.plataforma.comentarios.DeteccionAutomatica;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
 import com.nexusbattles.plataforma.comentarios.ResumenDeCalificaciones;
 import com.nexusbattles.plataforma.comentarios.SolicitudDePublicacion;
 import com.nexusbattles.plataforma.comentarios.calificacion.ServicioDeCalificaciones;
 import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoDeProductos;
 import com.nexusbattles.plataforma.comentarios.imagenes.ServicioDeImagenes;
+import com.nexusbattles.plataforma.comentarios.moderacion.DeteccionRepository;
+import com.nexusbattles.plataforma.comentarios.moderacion.RegistroDeDeteccion;
+import com.nexusbattles.plataforma.comentarios.publicacion.FiltroDeContenido.VeredictoDelFiltro;
 
 /**
  * Publica, retira y lee los comentarios de un producto — HU-COM-001..004,
@@ -42,9 +47,9 @@ import com.nexusbattles.plataforma.comentarios.imagenes.ServicioDeImagenes;
  *       contesta) y, solo si puede publicar, el filtro de la lista negra
  *       (EN_REVISION si lo senala o si no contesta). Lo decide
  *       {@link HiloDeComentarios#publicar}.</li>
- *   <li>Se guarda el comentario, se le asocian sus imagenes y, si traia
- *       estrellas, se registra la calificacion — todo en la misma
- *       transaccion.</li>
+ *   <li>Se guarda el comentario, se le asocian sus imagenes, si traia
+ *       estrellas se registra la calificacion y, si el filtro lo retuvo, por
+ *       que (HU-COM-007 CA-01) — todo en la misma transaccion.</li>
  * </ol>
  *
  * <p>El comentario ya no guarda estrellas. Si traia y el jugador aun no habia
@@ -84,6 +89,7 @@ public class ServicioDePublicacionDeComentarios {
     private final CatalogoDeProductos catalogo;
     private final ServicioDeCalificaciones calificaciones;
     private final ServicioDeImagenes imagenes;
+    private final DeteccionRepository detecciones;
     private final TransactionOperations transaccion;
     private final Clock reloj;
 
@@ -94,6 +100,7 @@ public class ServicioDePublicacionDeComentarios {
             CatalogoDeProductos catalogo,
             ServicioDeCalificaciones calificaciones,
             ServicioDeImagenes imagenes,
+            DeteccionRepository detecciones,
             TransactionOperations transaccion,
             Clock reloj) {
         this.repositorio = repositorio;
@@ -102,6 +109,7 @@ public class ServicioDePublicacionDeComentarios {
         this.catalogo = catalogo;
         this.calificaciones = calificaciones;
         this.imagenes = imagenes;
+        this.detecciones = detecciones;
         this.transaccion = transaccion;
         this.reloj = reloj;
     }
@@ -136,11 +144,22 @@ public class ServicioDePublicacionDeComentarios {
         imagenes.exigirDisponibles(solicitud.imagenes(), autorId);
         catalogo.exigirExistente(productoId);
 
+        // El hilo sigue decidiendo cuando se consulta el filtro (despues de la
+        // sancion); aqui solo se recuerda el veredicto para guardar su deteccion.
+        AtomicReference<VeredictoDelFiltro> veredicto = new AtomicReference<>();
         Comentario comentario = HiloDeComentarios.publicar(
-                productoId, solicitud, sanciones.estadoDe(autorId), () -> filtro.verificar(texto));
+                productoId, solicitud, sanciones.estadoDe(autorId), () -> {
+                    VeredictoDelFiltro dado = filtro.verificar(texto);
+                    veredicto.set(dado);
+                    return dado.resultado();
+                });
+        DeteccionAutomatica deteccion = veredicto.get() == null ? null : veredicto.get().deteccion();
 
         return transaccion.execute(estado -> {
             repositorio.saveAndFlush(RegistroDeComentario.desde(comentario));
+            if (deteccion != null) {
+                detecciones.save(new RegistroDeDeteccion(comentario.id(), deteccion));
+            }
             imagenes.asociar(solicitud.imagenes(), autorId, comentario.id());
 
             boolean descartada = estrellas != null

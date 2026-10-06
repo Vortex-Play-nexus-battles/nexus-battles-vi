@@ -35,6 +35,13 @@
  * siga (por ejemplo, editar y despues aprobar). MARCAR y DESMARCAR son una
  * nota interna: el autor no recibe aviso, y la pantalla lo dice.
  *
+ * <h2>Por que se retuvo (HU-COM-007 CA-01)</h2>
+ *
+ * Lo que el filtro automatico retuvo trae su deteccion (comentarios.yaml
+ * 1.10.0): la tarjeta y el detalle dicen que reglas de la lista negra
+ * coincidieron, por su id, con la categoria y el motivo; o que la lista negra
+ * no respondio y se retuvo por precaucion. Lo que llego por reportes no la trae.
+ *
  * Nada se pinta con innerHTML: el texto de un comentario reportado es
  * exactamente el contenido del que hay que desconfiar.
  */
@@ -173,6 +180,55 @@ export function enlazadorDeFicha(rol) {
   };
 }
 
+/** «Regla 7», «Reglas 7, 9»; o que la lista negra no dijo cual. */
+function textoDeReglas(reglas) {
+  if (reglas.length === 0) {
+    return 'La lista negra no informó qué regla coincidió';
+  }
+  return reglas.length === 1 ? `Regla ${reglas[0]}` : `Reglas ${reglas.join(', ')}`;
+}
+
+/**
+ * HU-COM-007 CA-01 (comentarios.yaml 1.10.0) — por que el filtro automatico
+ * retuvo el comentario: las reglas de la lista negra que coincidieron, por su
+ * id (el termino nunca llega), con la categoria y el motivo generico. Si la
+ * lista negra no respondio, se dice eso y nada mas: el motivo tecnico no le
+ * sirve al moderador.
+ *
+ * @param {object} deteccion `DeteccionAutomatica` del contrato
+ * @returns {HTMLElement[]}
+ */
+function lineasDeDeteccion(deteccion) {
+  if (deteccion.servicioNoDisponible === true) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { campo: 'deteccion-sin-servicio' },
+        texto: 'La lista negra no respondió; retenido por precaución',
+      }),
+    ];
+  }
+  const reglas = Array.isArray(deteccion.reglas) ? deteccion.reglas : [];
+  return [
+    h('p', {
+      clase: 't-meta fila fila--envuelta',
+      hijos: [
+        h('span', { datos: { campo: 'deteccion-reglas' }, texto: textoDeReglas(reglas) }),
+        deteccion.categoria
+          ? h('span', {
+              clase: 'distintivo',
+              datos: { campo: 'deteccion-categoria' },
+              texto: deteccion.categoria,
+            })
+          : null,
+      ],
+    }),
+    deteccion.motivo
+      ? h('p', { clase: 't-meta', datos: { campo: 'deteccion-motivo' }, texto: deteccion.motivo })
+      : null,
+  ].filter(Boolean);
+}
+
 /**
  * Una entrada de la cola, como tarjeta pulsable.
  *
@@ -201,6 +257,17 @@ export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) 
       h('span', { clase: 'distintivo', texto: `${nombre.replaceAll('_', ' ')}: ${cuantos}` }),
     );
   const reportes = entrada.reportes ?? 0;
+  // HU-COM-007 CA-01: solo lo que retuvo el filtro trae deteccion.
+  const deteccion = entrada.deteccion
+    ? h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: [
+          h('p', { clase: 'tarjeta__meta', texto: 'Detección automática' }),
+          ...lineasDeDeteccion(entrada.deteccion),
+        ],
+      })
+    : null;
 
   const articulo = h('article', {
     clase: 'tarjeta pila pila--compacta',
@@ -238,6 +305,7 @@ export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) 
       ],
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
+    ...(deteccion ? [deteccion] : []),
     h('div', { clase: 'fila fila--envuelta', hijos: categorias }),
     h('div', {
       clase: 'fila',
@@ -490,8 +558,8 @@ function pistaDelMotivo(accion) {
 }
 
 /**
- * El detalle: el comentario, sus imagenes, sus reportes, su historial y la
- * decision.
+ * El detalle: el comentario, sus imagenes, por que lo retuvo el filtro si fue
+ * el (HU-COM-007), sus reportes, su historial y la decision.
  *
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
@@ -530,6 +598,18 @@ export function panelDeDetalle(
   const imagenes = imagenesDelComentario(comentario, { cargarImagen, crearUrl });
   if (imagenes) {
     panel.append(h('h3', { texto: 'Imágenes' }), imagenes);
+  }
+
+  // ------------------------------------------- deteccion automatica (HU-COM-007)
+  if (detalle.deteccion) {
+    panel.append(
+      h('h3', { texto: 'Detección automática' }),
+      h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: lineasDeDeteccion(detalle.deteccion),
+      }),
+    );
   }
 
   // --------------------------------------------------------------- reportes
