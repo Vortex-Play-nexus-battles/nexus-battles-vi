@@ -119,7 +119,22 @@ info:
     correo en estas respuestas. Campo nuevo opcional y un campo que deja de
     viajar en una respuesta publica cuyo unico consumidor (la tienda, la
     ficha, la portada) se actualiza en el mismo cambio: menor.
-  version: 1.9.0
+
+    1.10.0 (HU-COM-007 CA-01, #521): el moderador ve por que el filtro
+    automatico retuvo un comentario. Hasta aqui el servicio pedia la
+    verificacion a la lista negra y se quedaba solo con `aprobado` y `accion`:
+    el comentario entraba en EN_REVISION y en la cola no decia que termino
+    lo senalo, asi que CA-01 («registra la deteccion») quedaba a medias. Ahora
+    cada entrada de la cola y el detalle de moderacion traen `deteccion`,
+    opcional: los `id` de las reglas que coincidieron (`reglas` de
+    moderacion-lista-negra.yaml 2.1.0, que solo salen con token de servicio),
+    la categoria, el motivo generico y la fecha de la verificacion; nunca el
+    texto del comentario. Si el comentario quedo retenido porque la lista
+    negra no respondio (RF-COM-007: retener antes que publicar sin filtrar),
+    `deteccion` lo dice con `servicioNoDisponible: true` y sin reglas. Ausente
+    cuando el comentario llego a la cola por reportes y no por el filtro.
+    Un objeto opcional en dos respuestas que ya existian: menor.
+  version: 1.10.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -1352,6 +1367,8 @@ components:
           type: string
           format: date-time
           description: Desempata la cola a igualdad de reportes.
+        deteccion:
+          $ref: "#/components/schemas/DeteccionAutomatica"
 
     ColaDeModeracionResponse:
       type: object
@@ -1445,6 +1462,53 @@ components:
           description: Acciones de moderacion ya aplicadas, de la mas antigua a la mas reciente.
           items:
             $ref: "#/components/schemas/AsientoDeModeracion"
+        deteccion:
+          $ref: "#/components/schemas/DeteccionAutomatica"
+
+    DeteccionAutomatica:
+      type: object
+      description: >
+        1.10.0 (HU-COM-007 CA-01) — por que el filtro automatico retuvo el
+        comentario. El servicio lo guarda al encolarlo, con lo que la lista
+        negra respondio a `POST /lista-negra/verificar` (moderacion-lista-negra.yaml
+        2.1.0), y lo devuelve en la cola y en el detalle para que el moderador
+        decida sabiendo que regla lo senalo. Nunca lleva el texto del
+        comentario ni los terminos coincidentes: las reglas se nombran por su
+        `id`, que la consola de lista negra resuelve. Ausente cuando el
+        comentario entro a la cola por reportes y no por el filtro.
+      required:
+        - fecha
+        - reglas
+        - servicioNoDisponible
+      properties:
+        fecha:
+          type: string
+          format: date-time
+          description: Cuando se verifico el texto (al publicar).
+        reglas:
+          type: array
+          description: >
+            Los `id` de los terminos de la lista negra que coincidieron
+            (`reglas` de la respuesta 2.1.0, que solo sale con token de
+            servicio). Vacio si la lista negra no respondio.
+          items:
+            type: integer
+            format: int64
+        categoria:
+          type: string
+          enum: [OFENSIVO, MARCA, CELEBRIDAD, POLITICO, DIRIGENTE, OTRO]
+          description: La categoria que informo la lista negra. Ausente si no respondio.
+        motivo:
+          type: string
+          description: >
+            El mensaje generico de la lista negra (sin el termino) o, si no
+            respondio, la razon de la retencion.
+        servicioNoDisponible:
+          type: boolean
+          description: >
+            `true` si el comentario quedo retenido porque la lista negra no
+            respondio (RF-COM-007: retener antes que publicar sin filtrar);
+            entonces `reglas` viene vacio y `motivo` lo explica.
 
     CalificacionRequest:
       type: object
