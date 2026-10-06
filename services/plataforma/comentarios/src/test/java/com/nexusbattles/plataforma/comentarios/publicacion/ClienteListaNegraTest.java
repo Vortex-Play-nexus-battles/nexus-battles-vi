@@ -1,7 +1,6 @@
 package com.nexusbattles.plataforma.comentarios.publicacion;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -11,6 +10,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -19,8 +19,11 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.json.JsonCompareMode;
@@ -43,12 +46,19 @@ import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.ResultadoDelFil
  *
  * <p>Desde HU-COM-007 CA-01 el veredicto trae ademas la deteccion: que reglas
  * coincidieron, la categoria y el motivo, para que el moderador sepa por que
- * se retuvo. Nunca los terminos coincidentes.
+ * se retuvo. Nunca los terminos coincidentes. Si la lista negra falla, el
+ * motivo es un texto fijo: el detalle tecnico de la falla, que puede llevar la
+ * URL interna, va solo a la bitacora.
  */
+@ExtendWith(OutputCaptureExtension.class)
 class ClienteListaNegraTest {
 
     private static final String URL = "http://localhost:8086/api/v1/lista-negra/verificar";
     private static final Instant AHORA = Instant.parse("2026-10-06T15:00:00Z");
+
+    /** Lo que ve el moderador cuando la lista negra no responde, sea cual sea la falla. */
+    private static final String SIN_SERVICIO =
+            "La lista negra no respondio; el comentario queda retenido para revision";
 
     private MockRestServiceServer servidor;
     private ClienteListaNegra cliente;
@@ -180,17 +190,18 @@ class ClienteListaNegraTest {
     }
 
     @Test
-    @DisplayName("HU-COM-007 CA-01: si la lista negra falla, la deteccion lo dice, sin reglas ni categoria y con la razon")
-    void fallaQuedaComoServicioNoDisponible() {
-        servidor.expect(requestTo(URL)).andRespond(withServerError());
+    @DisplayName("HU-COM-007 CA-01: si la lista negra no responde, la deteccion lo dice con un motivo fijo, "
+            + "sin reglas ni categoria; el detalle tecnico va solo a la bitacora")
+    void fallaQuedaComoServicioNoDisponible(CapturedOutput bitacora) {
+        // Sin conexion, el RestClient lanza una excepcion cuyo mensaje lleva la URL interna.
+        servidor.expect(requestTo(URL)).andRespond(peticion -> {
+            throw new IOException("Connection refused");
+        });
 
         DeteccionAutomatica deteccion = cliente.verificar("da igual el texto").deteccion();
 
-        assertTrue(deteccion.servicioNoDisponible());
-        assertEquals(List.of(), deteccion.reglas());
-        assertNull(deteccion.categoria());
-        assertFalse(deteccion.motivo() == null || deteccion.motivo().isBlank(), "la razon de la retencion");
-        assertEquals(AHORA, deteccion.fecha());
+        assertEquals(new DeteccionAutomatica(AHORA, List.of(), null, SIN_SERVICIO, true), deteccion);
+        assertTrue(bitacora.getAll().contains("Connection refused"), "el detalle tecnico queda en la bitacora");
     }
 
     @Test
@@ -201,8 +212,7 @@ class ClienteListaNegraTest {
         FiltroDeContenido.VeredictoDelFiltro veredicto = cliente.verificar("da igual el texto");
 
         assertEquals(ResultadoDelFiltro.SENALADO, veredicto.resultado());
-        assertEquals(new DeteccionAutomatica(AHORA, List.of(), null, "respuesta vacia del servicio", true),
-                veredicto.deteccion());
+        assertEquals(new DeteccionAutomatica(AHORA, List.of(), null, SIN_SERVICIO, true), veredicto.deteccion());
         servidor.verify();
     }
 

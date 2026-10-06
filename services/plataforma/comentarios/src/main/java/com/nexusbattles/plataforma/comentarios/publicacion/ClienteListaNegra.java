@@ -52,8 +52,10 @@ import com.nexusbattles.plataforma.comentarios.publicacion.FiltroDeContenido.Ver
  * publicar sin verificar romperia el requisito. Lo unico que no lo rompe es
  * retener el comentario en revision y que un moderador decida, y siempre queda
  * constancia en la bitacora, nunca en silencio. Desde HU-COM-007 queda ademas
- * en la deteccion, con {@code servicioNoDisponible} y sin reglas, para que el
- * moderador sepa que se retuvo por precaucion. El RestClient tiene tiempos
+ * en la deteccion, con {@code servicioNoDisponible}, sin reglas y con un motivo
+ * fijo ({@link #MOTIVO_SIN_SERVICIO}), para que el moderador sepa que se retuvo
+ * por precaucion. El mensaje de la excepcion, que puede llevar la URL interna
+ * o el cuerpo del error, va solo a la bitacora. El RestClient tiene tiempos
  * de conexion y de lectura acotados (ConfiguracionClientesHttp): sin ellos, un
  * servicio colgado dejaria la publicacion esperando en vez de retenerla.
  *
@@ -73,6 +75,10 @@ class ClienteListaNegra implements FiltroDeContenido {
 
     /** La unica accion que deja publicar. */
     static final String PERMITIR = "PERMITIR";
+
+    /** Motivo de la deteccion cuando la lista negra no contesta, sea cual sea la falla. */
+    static final String MOTIVO_SIN_SERVICIO =
+            "La lista negra no respondio; el comentario queda retenido para revision";
 
     private final RestClient restClient;
     private final String urlVerificacion;
@@ -111,15 +117,13 @@ class ClienteListaNegra implements FiltroDeContenido {
         }
     }
 
-    private VeredictoDelFiltro retenerPorFalla(String motivo) {
-        // Una excepcion sin mensaje no deja la retencion sin razon.
-        String razon = motivo == null || motivo.isBlank() ? "la lista negra no respondio" : motivo;
+    private VeredictoDelFiltro retenerPorFalla(String causa) {
         log.warn(
                 "Servicio de lista negra no disponible, el comentario queda retenido en revision"
                         + " para cumplir RF-COM-007. Motivo: {}",
-                razon);
-        return VeredictoDelFiltro.senalado(
-                new DeteccionAutomatica(Instant.now(reloj), List.of(), null, razon, true));
+                causa);
+        return VeredictoDelFiltro.senalado(new DeteccionAutomatica(
+                Instant.now(reloj), List.of(), null, MOTIVO_SIN_SERVICIO, true));
     }
 
     /** Cuerpo del POST /lista-negra/verificar segun el contrato 2.0.0. */

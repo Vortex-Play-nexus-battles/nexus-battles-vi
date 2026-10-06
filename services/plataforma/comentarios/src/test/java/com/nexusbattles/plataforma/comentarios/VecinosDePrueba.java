@@ -20,7 +20,7 @@ import com.sun.net.httpserver.HttpServer;
  * Los tres servicios con los que habla comentarios, de mentira pero por HTTP
  * de verdad: el catalogo de productos, la consulta de sanciones y la lista
  * negra. Con las formas exactas de sus contratos (productos.yaml,
- * moderacion-sanciones-consulta.yaml, moderacion-lista-negra.yaml 2.0.0).
+ * moderacion-sanciones-consulta.yaml, moderacion-lista-negra.yaml 2.1.0).
  *
  * <p>Un servidor HTTP del JDK y no un simulacro del cliente: asi las pruebas de
  * integracion recorren tambien los {@code RestClient} reales del servicio, con
@@ -90,13 +90,18 @@ public final class VecinosDePrueba implements AutoCloseable {
                 + (activa ? "\"Spam reiterado\"" : "null") + ",\"vigenteHasta\":null}");
     }
 
-    /** Senala todo texto que contenga «prohibido»: la politica de COMENTARIO es REVISION. */
+    /**
+     * Senala todo texto que contenga «prohibido»: la politica de COMENTARIO es
+     * REVISION. Como la 2.1.0, dice que reglas coincidieron (7 y 9), con su
+     * categoria, y trae las coincidencias, que comentarios no debe guardar.
+     */
     private void listaNegra(HttpExchange intercambio) throws IOException {
         String cuerpo = new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
         verificaciones.add(cuerpo);
         boolean coincide = cuerpo.contains("prohibido");
         responder(intercambio, 200, coincide
-                ? "{\"aprobado\":false,\"accion\":\"REVISION\",\"motivo\":\"contenido no permitido\"}"
+                ? "{\"aprobado\":false,\"accion\":\"REVISION\",\"motivo\":\"contenido no permitido\","
+                        + "\"categoria\":\"OFENSIVO\",\"coincidencias\":[\"prohibido\"],\"reglas\":[7,9]}"
                 : "{\"aprobado\":true,\"accion\":\"PERMITIR\"}");
     }
 
