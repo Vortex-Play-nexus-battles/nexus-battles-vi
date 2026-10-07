@@ -17,6 +17,9 @@
  * y el borde lo enruta a otro servicio. Cambiarlo aqui a la ruta «bonita»
  * rompe la vista en el navegador aunque las pruebas sigan verdes.
  *
+ * Contrato 1.10.0 (HU-COM-005): la cola acepta ademas `categoria` y
+ * `prioridadElevada` como filtros opcionales.
+ *
  * Los errores salen como {@link ErrorDeApi} —el mismo de
  * `cliente-comentarios.js`— para que la vista decida por `motivo` y nunca
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
@@ -149,6 +152,16 @@ export const FILTROS_DE_COLA = Object.freeze([
 ]);
 
 /**
+ * Que prioridad mirar en la cola (`prioridadElevada`, 1.10.0): todas, solo las de
+ * prioridad elevada o solo las demas. `prioridadElevada: null` no viaja.
+ */
+export const FILTROS_DE_PRIORIDAD = Object.freeze([
+  { valor: 'todas', etiqueta: 'Todas', prioridadElevada: null },
+  { valor: 'elevada', etiqueta: 'Solo prioridad elevada', prioridadElevada: true },
+  { valor: 'sin-elevada', etiqueta: 'Sin prioridad elevada', prioridadElevada: false },
+]);
+
+/**
  * @param {string} estado estado actual del comentario
  * @param {boolean} [marcado] si tiene la marca de seguimiento (1.5.0)
  * @param {{reportesPendientes?: boolean}} [contexto] si tiene reportes pendientes
@@ -222,14 +235,24 @@ export async function reportarComentario(
  * Vacia es `200` con lista vacia, no un 404: no tener trabajo pendiente es
  * una respuesta correcta, y la vista lo pinta como tal.
  *
- * @param {{productoId?: string|null, marcado?: boolean|null, pagina?: number, tamano?: number}} [filtro]
+ * @param {{productoId?: string|null, marcado?: boolean|null, categoria?: string|null,
+ *   prioridadElevada?: boolean|null, pagina?: number, tamano?: number}} [filtro]
  *   `marcado` (1.5.0): `true` la lista de seguimiento, `false` los en revision
  *   sin marcar; `null` no viaja y el servicio da la cola de siempre.
+ *   `categoria` y `prioridadElevada` (1.10.0) filtran ademas: «Todas» llega aqui como
+ *   `null` o `''` y no genera parametro. El servicio decide si una categoria existe.
  * @param {{fetchImpl?: Function}} [opciones]
  * @returns {Promise<{entradas: object[], total: number, pagina: number, tamano: number}>}
  */
 export async function consultarCola(
-  { productoId = null, marcado = null, pagina = 0, tamano = 20 } = {},
+  {
+    productoId = null,
+    marcado = null,
+    categoria = null,
+    prioridadElevada = null,
+    pagina = 0,
+    tamano = 20,
+  } = {},
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
@@ -238,6 +261,12 @@ export async function consultarCola(
   }
   if (marcado === true || marcado === false) {
     parametros.set('marcado', String(marcado));
+  }
+  if (typeof categoria === 'string' && categoria !== '') {
+    parametros.set('categoria', categoria);
+  }
+  if (prioridadElevada === true || prioridadElevada === false) {
+    parametros.set('prioridadElevada', String(prioridadElevada));
   }
   return pedir(
     `${rutaDeModeracion()}?${parametros}`,
