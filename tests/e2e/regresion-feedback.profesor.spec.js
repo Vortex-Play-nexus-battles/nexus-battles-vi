@@ -735,11 +735,13 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
         // es un asistente de cinco pasos (héroe, estadísticas, rotaciones,
         // comprobación y confirmación).
         const asistente = page.locator('.mision-asistente');
-        const siguiente = asistente.locator('[data-accion="paso-siguiente"]');
-        await expect(siguiente).toHaveAttribute('aria-disabled', 'false', { timeout: 30_000 });
-        await siguiente.click();
+        // `pasoSiguiente` y no `siguiente`: ese nombre ya lo usa este mismo
+        // paso, más abajo, para lo que desbloquea la misión.
+        const pasoSiguiente = asistente.locator('[data-accion="paso-siguiente"]');
+        await expect(pasoSiguiente).toHaveAttribute('aria-disabled', 'false', { timeout: 30_000 });
+        await pasoSiguiente.click();
         await expect(asistente).toHaveAttribute('data-paso', 'estadisticas');
-        await siguiente.click();
+        await pasoSiguiente.click();
         const pasoDeLaEstrategia = page.locator('.estrategia__paso select').first();
         await expect(pasoDeLaEstrategia).toBeVisible({ timeout: 30_000 });
         const habilidad = await pasoDeLaEstrategia
@@ -748,12 +750,12 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           .getAttribute('value');
         expect(habilidad).toBeTruthy();
         await pasoDeLaEstrategia.selectOption(habilidad);
-        await siguiente.click();
+        await pasoSiguiente.click();
         await page.locator('[data-accion="comprobar-estrategia"]').click();
         await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
           timeout: 30_000,
         });
-        await siguiente.click();
+        await pasoSiguiente.click();
         await expect(asistente).toHaveAttribute('data-paso', 'confirmar');
         await expect(asistente.locator('[data-zona="confirmar"]')).toContainText(
           'queda bloqueado',
