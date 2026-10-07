@@ -7,9 +7,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +20,8 @@ import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -86,6 +90,11 @@ public class ServicioDeModeracion {
 
     /** Contrato 1.10.0: {@code comentarioIds} de la decision en lote admite hasta 100 ids, el mismo tope que la cola. */
     static final int TOPE_DEL_LOTE = 100;
+
+    /** Contrato 1.10.0 (7.3.9): valor exacto de {@code confirmacion} que exige ELIMINAR en lote. */
+    static final String CONFIRMACION_DE_ELIMINAR = "ELIMINAR";
+
+    private static final Logger log = LoggerFactory.getLogger(ServicioDeModeracion.class);
 
     /** Contrato 1.7.0: el historial del autor admite paginas de hasta 100, el mismo tope que la cola. */
     static final int TAMANO_MAXIMO_DEL_HISTORIAL = 100;
@@ -511,13 +520,138 @@ public class ServicioDeModeracion {
     }
 
     /**
-     * Esqueleto del commit en rojo (HU-COM-005, #519): la firma y los tipos de
-     * resultado existen para que compilen las pruebas, la logica no.
+     * La misma decision aplicada a varios comentarios a la vez, atomica: se
+     * resuelven todos los comentarios o ninguno — HU-COM-005 (#519), contrato 1.10.0.
+     *
+     * <h3>Tres fases, y por que este metodo NO es {@code @Transactional}</h3>
+     * <ol>
+     *   <li><b>Entrada, fuera de la transaccion.</b> Lista nula o vacia, mas de
+     *       {@link #TOPE_DEL_LOTE}, ids repetidos, accion ausente o EDITAR (necesita
+     *       un texto por comentario), motivo y, con ELIMINAR, la confirmacion exacta
+     *       {@code "ELIMINAR"} (7.3.9). Un 400 no abre transaccion ni lee la base.</li>
+     *   <li><b>Validacion y escritura, dentro de UNA transaccion.</b> Se cargan los
+     *       comentarios, se juntan <i>todos</i> los fallos (no solo el primero) y solo
+     *       si no hay ninguno se guarda cada estado y su asiento. Se usa
+     *       {@code saveAndFlush} y no {@code save}: con el id asignado a mano
+     *       {@code save} hace un merge y difiere el INSERT y el UPDATE al commit, de
+     *       modo que un fallo de la base saltaria despues, fuera de aqui.</li>
+     *   <li><b>Aviso y auditoria, DESPUES del commit.</b> Si la anotacion
+     *       {@code @Transactional} envolviera el metodo entero, el aviso saldria antes
+     *       de confirmar y un fallo del commit dejaria avisos de algo que no ocurrio.
+     *       Cada aviso y cada registro es fail-open por comentario (HU-DIS-003):
+     *       {@code autorNotificado=false} en ese item y el lote sigue.</li>
+     * </ol>
+     *
+     * <h3>Decisiones de diseno</h3>
+     * <ul>
+     *   <li><b>404 antes que 409.</b> Si faltan ids se responde 404 con todos los que
+     *       faltan, aunque ademas haya comentarios que no admitan la accion: no se
+     *       puede evaluar la transicion de un comentario que no existe.</li>
+     *   <li>Un comentario ELIMINADO no admite ninguna accion: 409, como en
+     *       {@link #resolver}.</li>
+     *   <li><b>Sin bloqueo nuevo ante concurrencia.</b> No hay lock ni se cambia el
+     *       aislamiento. Con el READ COMMITTED de PostgreSQL esto da una sola
+     *       transaccion y un solo contexto de persistencia, <i>no</i> un snapshot
+     *       estricto: si otro moderador cambia un comentario entre la lectura y el
+     *       commit, la exposicion es la de la decision individual.</li>
+     *   <li>Los resultados y los {@code comentarioIds} de los rechazos salen en el
+     *       orden de la lista de entrada; {@code findAllById} no garantiza ninguno.</li>
+     * </ul>
+     *
+     * @param confirmacion solo cuenta con ELIMINAR; en las demas acciones se ignora
      */
     public ResueltoEnLote resolverEnLote(List<String> comentarioIds, String moderadorId,
             String apodoModerador, AccionDeModeracion accion, String motivo, String confirmacion,
             String ipOrigen) {
-        throw new UnsupportedOperationException("pendiente: HU-COM-005 (#519)");
+
+        exigirLoteValido(comentarioIds, accion, motivo, confirmacion);
+
+        List<Decision> decisiones = transaccion.execute(estado -> {
+            Map<String, Comentario> porId = new LinkedHashMap<>();
+            for (RegistroDeComentario fila : comentarios.findAllById(comentarioIds)) {
+                Comentario c = fila.aDominio();
+                porId.put(c.id(), c);
+            }
+
+            List<String> ausentes = comentarioIds.stream().filter(id -> !porId.containsKey(id)).toList();
+            if (!ausentes.isEmpty()) {
+                throw new ComentariosNoEncontrados(ausentes);
+            }
+            List<String> afectados = comentarioIds.stream()
+                    .filter(id -> !admite(porId.get(id), accion))
+                    .toList();
+            if (!afectados.isEmpty()) {
+                throw new TransicionInvalidaEnLote(accion, afectados);
+            }
+
+            List<Decision> hechas = new ArrayList<>();
+            for (String id : comentarioIds) {
+                Decision decision = decidir(porId.get(id), accion, moderadorId, apodoModerador,
+                        motivo, null, ipOrigen);
+                comentarios.saveAndFlush(RegistroDeComentario.desde(decision.resultante()));
+                asientos.saveAndFlush(decision.asiento());
+                hechas.add(decision);
+            }
+            return hechas;
+        });
+
+        List<Resuelto> resultados = new ArrayList<>();
+        for (Decision decision : decisiones) {
+            boolean avisado = accion.seAvisaAlAutor() && !decision.cierraReportesALaVista()
+                    && avisarSinFallar(decision);
+            auditarSinFallar(decision.asiento());
+            resultados.add(new Resuelto(decision.resultante(), decision.asiento(), avisado));
+        }
+        return new ResueltoEnLote(accion, resultados);
+    }
+
+    private void exigirLoteValido(List<String> comentarioIds, AccionDeModeracion accion,
+            String motivo, String confirmacion) {
+        if (comentarioIds == null || comentarioIds.isEmpty()) {
+            throw new DecisionIncompleta("La decision en lote necesita al menos un comentario");
+        }
+        if (comentarioIds.size() > TOPE_DEL_LOTE) {
+            throw new DecisionIncompleta("La decision en lote admite hasta " + TOPE_DEL_LOTE + " comentarios");
+        }
+        if (comentarioIds.stream().anyMatch(Objects::isNull)) {
+            throw new DecisionIncompleta("La lista de comentarios trae un id vacio");
+        }
+        if (new HashSet<>(comentarioIds).size() != comentarioIds.size()) {
+            throw new DecisionIncompleta("La lista de comentarios trae ids repetidos");
+        }
+        if (accion == null) {
+            throw new DecisionIncompleta("Falta la accion de moderacion");
+        }
+        if (accion == AccionDeModeracion.EDITAR) {
+            throw new DecisionIncompleta(
+                    "EDITAR no vale en lote: necesita un texto distinto por comentario");
+        }
+        exigirMotivo(motivo);
+        if (accion == AccionDeModeracion.ELIMINAR && !CONFIRMACION_DE_ELIMINAR.equals(confirmacion)) {
+            throw new ConfirmacionRequerida();
+        }
+    }
+
+    /** Fail-open por comentario (HU-DIS-003): un aviso que falla o que lanza no invalida el lote. */
+    private boolean avisarSinFallar(Decision decision) {
+        try {
+            return aviso.notificar(decision.resultante(), decision.asiento());
+        } catch (RuntimeException fallo) {
+            // Solo el id y la clase de la excepcion: el mensaje puede arrastrar
+            // texto del comentario, el motivo o una direccion.
+            log.warn("El aviso de moderacion sobre {} no salio: {}",
+                    decision.resultante().id(), fallo.getClass().getName());
+            return false;
+        }
+    }
+
+    private void auditarSinFallar(AsientoDeModeracion asiento) {
+        try {
+            auditoria.registrar(asiento);
+        } catch (RuntimeException fallo) {
+            log.warn("El registro de auditoria de {} no salio: {}", asiento.comentarioId(),
+                    fallo.getClass().getName());
+        }
     }
 
     private static void exigirMotivo(String motivo) {
@@ -640,7 +774,7 @@ public class ServicioDeModeracion {
         private final List<String> ids;
 
         public TransicionInvalidaEnLote(AccionDeModeracion accion, List<String> ids) {
-            super("No se puede " + accion + " los comentarios " + ids);
+            super("No se puede aplicar " + accion + " a los comentarios " + ids);
             this.accion = accion;
             this.ids = List.copyOf(ids);
         }

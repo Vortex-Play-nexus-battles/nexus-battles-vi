@@ -227,6 +227,35 @@ public class ManejadorErroresComentarios {
         return problema;
     }
 
+    /**
+     * ELIMINAR en lote sin la confirmacion exacta (7.3.9): 400 con su propio
+     * motivo. Es mas especifico que el de {@code DecisionIncompleta}, de la que
+     * hereda, asi que Spring elige este.
+     */
+    @ExceptionHandler(ServicioDeModeracion.ConfirmacionRequerida.class)
+    public ProblemDetail manejarConfirmacionRequerida(ServicioDeModeracion.ConfirmacionRequerida ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problema.setProperty("motivo", "CONFIRMACION_REQUERIDA");
+        return problema;
+    }
+
+    /** Decision en lote (contrato 1.10.0): 404 con todos los ids que faltan, en el orden recibido. */
+    @ExceptionHandler(ServicioDeModeracion.ComentariosNoEncontrados.class)
+    public ProblemDetail manejarComentariosNoEncontrados(ServicioDeModeracion.ComentariosNoEncontrados ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problema.setProperty("comentarioIds", ex.ids());
+        return problema;
+    }
+
+    /** Decision en lote (contrato 1.10.0): 409 con todos los ids que no admiten la accion, en el orden recibido. */
+    @ExceptionHandler(ServicioDeModeracion.TransicionInvalidaEnLote.class)
+    public ProblemDetail manejarTransicionInvalidaEnLote(ServicioDeModeracion.TransicionInvalidaEnLote ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problema.setProperty("motivo", "TRANSICION_INVALIDA");
+        problema.setProperty("comentarioIds", ex.ids());
+        return problema;
+    }
+
     /** Motivo ausente o fuera de 3..500, o EDITAR sin {@code textoNuevo} valido: 400. */
     @ExceptionHandler(ServicioDeModeracion.DecisionIncompleta.class)
     public ProblemDetail manejarDecisionIncompleta(ServicioDeModeracion.DecisionIncompleta ex) {

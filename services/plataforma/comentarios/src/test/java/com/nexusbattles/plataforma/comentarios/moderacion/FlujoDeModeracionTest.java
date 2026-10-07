@@ -1120,6 +1120,20 @@ class FlujoDeModeracionTest {
         }
 
         @Test
+        @DisplayName("2b: un id nulo en la lista es 400 (el contrato declara items: string) y no toca la base")
+        void idNulo() {
+            publicados("c-1");
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(java.util.Arrays.asList("c-1", null), AccionDeModeracion.OCULTAR));
+
+            sinTocarLaBase();
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            sinEfectos();
+        }
+
+        @Test
         @DisplayName("3a: mas de 100 ids (el tope del contrato) es 400")
         void masDeCien() {
             List<String> ciento1 = new ArrayList<>();
@@ -1463,11 +1477,15 @@ class FlujoDeModeracionTest {
             assertThrows(DataIntegrityViolationException.class, () ->
                     lote(List.of("c-1", "c-2", "c-3"), AccionDeModeracion.OCULTAR));
 
-            // El doble no deshace el primer guardado (eso lo hace la base y lo
-            // prueba DecisionEnLoteIT): aqui se afirma que se pidio la reversion.
+            // El doble no deshace el primer guardado (eso lo hace la base): aqui
+            // solo se afirma que se pidio la reversion, que nunca se confirmo y
+            // que no se aviso ni se audito. La reversion real contra PostgreSQL,
+            // con el estado y los asientos ya enviados a la base, la prueba
+            // IT-c en DecisionEnLoteIT.
             verify(gestorDeTransacciones).rollback(any());
             verify(gestorDeTransacciones, never()).commit(any());
-            sinEfectos();
+            assertTrue(avisos.isEmpty(), "no se debe avisar a nadie");
+            assertTrue(auditados.isEmpty(), "no se debe auditar nada");
         }
 
         @Test

@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -34,6 +33,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.jpa.repository.support.JpaRepositoryFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -54,6 +54,7 @@ import com.nexusbattles.plataforma.comentarios.moderacion.RegistroDeAuditoria;
 import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
 
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
 
 /**
@@ -121,6 +122,9 @@ class DecisionEnLoteIT {
 
     @Autowired
     private EntityManagerFactory fabrica;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private JdbcTemplate jdbc;
@@ -271,10 +275,11 @@ class DecisionEnLoteIT {
         String c3 = sembrar("PUBLICADO");
 
         // El espia envuelve el proxy del repositorio y callRealMethod() no sirve
-        // (ver la IT de la carrera de reportes): el primer guardado se delega al
-        // bean real, que Mockito conserva como instancia espiada.
-        AsientoRepository real = (AsientoRepository) mockingDetails(asientosEspiados)
-                .getMockCreationSettings().getSpiedInstance();
+        // (ver la IT de la carrera de reportes); Spring tampoco deja la instancia
+        // espiada accesible (getSpiedInstance() es null: delega por respuesta).
+        // El primer guardado va a un repositorio real, creado sobre el
+        // EntityManager compartido, que usa la transaccion en curso del servicio.
+        AsientoRepository real = new JpaRepositoryFactory(entityManager).getRepository(AsientoRepository.class);
         AtomicInteger guardados = new AtomicInteger();
         AtomicLong actualizacionesYaEnviadas = new AtomicLong(-1);
         AtomicLong insercionesYaEnviadas = new AtomicLong(-1);
