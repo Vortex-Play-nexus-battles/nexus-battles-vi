@@ -447,41 +447,60 @@ public class ServicioDeModeracion {
                 .map(RegistroDeComentario::aDominio)
                 .orElseThrow(() -> new ComentarioNoEncontrado(comentarioId));
 
-        Comentario.Estado anterior = comentario.estado();
-        if (!accion.aplicableA(comentario)) {
+        if (!admite(comentario, accion)) {
             // Es el caso que CA-03 nombra: otro moderador lo resolvio mientras
             // este miraba la pantalla. Nada cambia.
             throw new TransicionInvalida(accion, comentario);
         }
-        // Contrato 1.8.0: aprobar uno que sigue publicado solo sirve para cerrar
-        // sus reportes pendientes. Si ya no tiene ninguno, otro moderador se
-        // adelanto (CA-03): el mismo 409, sin asiento.
-        boolean cierraReportesALaVista = accion == AccionDeModeracion.APROBAR
-                && anterior == Comentario.Estado.PUBLICADO;
-        if (cierraReportesALaVista
-                && reportes.contarPendientes(comentarioId, AccionDeModeracion.RESUELVEN_REPORTES) == 0) {
-            throw new TransicionInvalida(accion, comentario);
-        }
 
-        Comentario resultante = accion.aplicarA(comentario, textoNuevo);
-        comentarios.save(RegistroDeComentario.desde(resultante));
-
-        boolean edita = accion == AccionDeModeracion.EDITAR;
-        AsientoDeModeracion asiento = new AsientoDeModeracion(
-                UUID.randomUUID().toString(), comentarioId, moderadorId, apodoModerador,
-                accion, motivo, anterior, resultante.estado(), Instant.now(reloj),
-                edita ? comentario.texto() : null,
-                edita ? resultante.texto() : null,
-                ipOrigen);
-        asientos.save(asiento);
+        Decision decision = decidir(comentario, accion, moderadorId, apodoModerador, motivo,
+                textoNuevo, ipOrigen);
+        comentarios.save(RegistroDeComentario.desde(decision.resultante()));
+        asientos.save(decision.asiento());
 
         // Aprobar uno que siguio a la vista no cambia nada para su autor: avisarle
         // solo le diria que alguien lo reporto. Queda el asiento y la auditoria.
-        boolean avisado = accion.seAvisaAlAutor() && !cierraReportesALaVista
-                && aviso.notificar(resultante, asiento);
-        auditoria.registrar(asiento);
+        boolean avisado = accion.seAvisaAlAutor() && !decision.cierraReportesALaVista()
+                && aviso.notificar(decision.resultante(), decision.asiento());
+        auditoria.registrar(decision.asiento());
 
-        return new Resuelto(resultante, asiento, avisado);
+        return new Resuelto(decision.resultante(), decision.asiento(), avisado);
+    }
+
+    /**
+     * Si la accion vale sobre el comentario tal como esta ahora: la transicion
+     * del enum y, contrato 1.8.0, que aprobar uno que sigue publicado solo sirve
+     * para cerrar sus reportes pendientes. Si ya no tiene ninguno, otro
+     * moderador se adelanto (CA-03): el mismo 409, sin asiento.
+     */
+    private boolean admite(Comentario comentario, AccionDeModeracion accion) {
+        if (!accion.aplicableA(comentario)) {
+            return false;
+        }
+        return !cierraReportesALaVista(comentario, accion)
+                || reportes.contarPendientes(comentario.id(), AccionDeModeracion.RESUELVEN_REPORTES) != 0;
+    }
+
+    private static boolean cierraReportesALaVista(Comentario comentario, AccionDeModeracion accion) {
+        return accion == AccionDeModeracion.APROBAR && comentario.estado() == Comentario.Estado.PUBLICADO;
+    }
+
+    /**
+     * El comentario despues de la accion y su asiento, sin guardar nada. Quien
+     * llama ya comprobo {@link #admite}.
+     */
+    private Decision decidir(Comentario comentario, AccionDeModeracion accion, String moderadorId,
+            String apodoModerador, String motivo, String textoNuevo, String ipOrigen) {
+        Comentario resultante = accion.aplicarA(comentario, textoNuevo);
+
+        boolean edita = accion == AccionDeModeracion.EDITAR;
+        AsientoDeModeracion asiento = new AsientoDeModeracion(
+                UUID.randomUUID().toString(), comentario.id(), moderadorId, apodoModerador,
+                accion, motivo, comentario.estado(), resultante.estado(), Instant.now(reloj),
+                edita ? comentario.texto() : null,
+                edita ? resultante.texto() : null,
+                ipOrigen);
+        return new Decision(resultante, asiento, cierraReportesALaVista(comentario, accion));
     }
 
     private static void exigirMotivo(String motivo) {
@@ -521,6 +540,11 @@ public class ServicioDeModeracion {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {
+    }
+
+    /** Lo que una accion decide para un comentario, antes de guardarlo, avisar o auditar. */
+    private record Decision(Comentario resultante, AsientoDeModeracion asiento,
+            boolean cierraReportesALaVista) {
     }
 
     // ------------------------------------------------------------- excepciones
