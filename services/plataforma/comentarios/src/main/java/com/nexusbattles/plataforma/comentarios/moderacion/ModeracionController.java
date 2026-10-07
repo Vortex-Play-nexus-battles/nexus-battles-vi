@@ -64,14 +64,18 @@ public class ModeracionController {
     /**
      * La cola priorizada. Vacia es 200 con lista vacia, no 404 (CA-03).
      * {@code marcado=true} es la lista de seguimiento especial (7.3.3).
+     * {@code categoria} y {@code prioridadElevada} (1.10.0) filtran ademas.
      */
     @GetMapping
     public ColaResponse cola(
             @RequestParam(required = false) String productoId,
             @RequestParam(required = false) Boolean marcado,
+            @RequestParam(required = false) CategoriaDeReporte categoria,
+            @RequestParam(required = false) Boolean prioridadElevada,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
-        return ColaResponse.desde(servicio.cola(productoId, marcado, pagina, Math.min(tamano, 100)));
+        return ColaResponse.desde(servicio.cola(
+                productoId, marcado, categoria, prioridadElevada, pagina, Math.min(tamano, 100)));
     }
 
     /** El comentario con sus reportes y su historial: todo lo que hace falta para decidir. */
