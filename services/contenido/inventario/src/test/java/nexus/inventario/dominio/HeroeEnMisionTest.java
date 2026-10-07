@@ -87,6 +87,20 @@ class HeroeEnMisionTest {
     }
 
     @Test
+    @DisplayName("un heroe liberado vuelve a equiparse y puede salir a otra mision")
+    void liberadoVuelveAEstarDisponible() {
+        Inventario liberado = inventario()
+                .bloquearEnMision("heroe-1", EJECUCION)
+                .liberarDeMision("heroe-1", EJECUCION, 1, 20);
+
+        Inventario reequipado = liberado.equipar("heroe-1", "espada-1");
+        assertThat(reequipado.equipamiento("heroe-1").armas()).containsExactly("espada-1");
+
+        Inventario enOtraMision = reequipado.bloquearEnMision("heroe-1", OTRA);
+        assertThat(enOtraMision.elemento("heroe-1").ejecucionMisionId()).isEqualTo(OTRA);
+    }
+
+    @Test
     @DisplayName("bloquear y liberar conservan la version y las entregas del documento (B4)")
     void conservaVersionYEntregas() {
         // Sin la version leida el guardado dejaria de ser condicional (@Version) y
