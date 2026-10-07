@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "descripcion": "Catalogo inicial de productos extraido literalmente de las reglas del curso. Precios: NO estan en el documento del curso (RF-ADM-03 dice que los fija el administrador); los de `preciosDemostracion` son decision del PO para la demo. `version` es la version del contenido (B4): quien cambie un producto de este archivo la sube, y al arrancar la semilla pone al dia los productos sembrados con una version menor que ningun administrador edito. El guardian tests/contratos/catalogo-oficial.py compara este archivo con contracts/esquemas/catalogo-oficial.yaml.",
   "heroes": [
     {
@@ -628,17 +628,15 @@
     }
   ],
   "preciosDemostracion": {
-    "nota": "Decision del PO (Cesar Luna) del 23-sep-2026 para la demo del 24-sep; el curso no fija precios (RF-ADM-03: los fija el administrador). Editables despues por RF-ADM-09 / HU-PRD-003.",
+    "nota": "Decision del PO (Cesar Luna) del 23-sep-2026 para la demo del 24-sep; el curso no fija precios (RF-ADM-03: los fija el administrador). Editables despues por RF-ADM-09 / HU-PRD-003. Las EPICAS no llevan precio aqui: no se venden (RG-085, RF-MOT-36), solo se obtienen derrotando al Master que las tiene; el mapeador las siembra en 0 creditos y 0 pesos y la tienda no las ofrece.",
     "creditos": {
       "HEROE": 1000,
-      "EPICA": 500,
       "ARMA": 300,
       "ARMADURA": 250,
       "ITEM": 150
     },
     "cop": {
       "HEROE": 20000,
-      "EPICA": 10000,
       "ARMA": 6000,
       "ARMADURA": 5000,
       "ITEM": 3000
