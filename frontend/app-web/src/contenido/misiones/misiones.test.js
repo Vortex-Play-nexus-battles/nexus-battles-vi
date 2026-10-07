@@ -250,6 +250,57 @@ describe('con servicio de misiones', () => {
     ]);
   });
 
+  test('?mision= en progreso: el detalle nombra al héroe asignado a esa misión (HU-MIS-009 C6)', async () => {
+    const fuente = fuenteDeLaboratorio({
+      detalle: jest.fn(async () => ({ ...MISION, estado: 'EN_PROGRESO' })),
+      activas: jest.fn(async () => [
+        {
+          ejecucionId: 'e-2',
+          misionId: 'otra',
+          heroe: { id: 'h-9', nombre: 'Brenna', prototipo: 'Arquero' },
+        },
+        {
+          ejecucionId: 'e-1',
+          misionId: 'templo',
+          heroe: { id: 'h-1', nombre: 'Aquiles', prototipo: 'Guerrero Armas' },
+        },
+      ]),
+    });
+    await montarMisiones(document, {
+      fuente,
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html?mision=templo'),
+      navegar: jest.fn(),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    await esperar();
+
+    const bloque = document.querySelector('[data-seccion="en-curso"]');
+    expect(bloque.textContent).toContain('Aquiles · Guerrero Armas está asignado a esta misión.');
+    expect(bloque.textContent).not.toContain('Brenna');
+  });
+
+  test('?mision= en progreso: si no se leen las activas, el detalle sigue sin nombrar al héroe', async () => {
+    const fuente = fuenteDeLaboratorio({
+      detalle: jest.fn(async () => ({ ...MISION, estado: 'EN_PROGRESO' })),
+      activas: jest.fn(async () => {
+        throw new Error('sin respuesta');
+      }),
+    });
+    await montarMisiones(document, {
+      fuente,
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html?mision=templo'),
+      navegar: jest.fn(),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    await esperar();
+
+    const bloque = document.querySelector('[data-seccion="en-curso"]');
+    expect(bloque.textContent).toContain('Tu héroe ya está en esta misión');
+    expect(bloque.querySelector('[data-heroe-asignado]')).toBeNull();
+  });
+
   test('?mision=: el detalle; con héroe y estrategia comprobada se confirma y se matricula', async () => {
     const fuente = fuenteDeLaboratorio();
     const navegar = jest.fn();

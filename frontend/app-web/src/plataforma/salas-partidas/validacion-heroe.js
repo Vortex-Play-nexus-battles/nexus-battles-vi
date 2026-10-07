@@ -35,6 +35,15 @@ export const RESULTADOS = {
 };
 
 /**
+ * Lo que salas-partidas pone en `salaQueLoOcupa` cuando el heroe esta
+ * reservado por una mision (HU-MIS-009 C3, HU-MIS-011 C2 y C3). En ese caso no
+ * es el nombre de una sala y el dialogo no puede decir «en la sala».
+ */
+export const OCUPADO_EN_MISION = 'una misión en curso';
+
+const enMision = (v) => v.salaQueLoOcupa === OCUPADO_EN_MISION;
+
+/**
  * Textos y tono de cada variante, calcados de Figma.
  *
  * Las funciones reciben la verificacion y devuelven el texto; devolver `null`
@@ -54,16 +63,22 @@ const VARIANTES = {
   },
 
   [RESULTADOS.OCUPADO]: {
-    titulo: () => 'Tu héroe está en otra partida',
-    detalle: (v) =>
-      v.heroe?.nombre && v.salaQueLoOcupa
-        ? `«${v.heroe.nombre}» está en la sala «${v.salaQueLoOcupa}». ` +
-          'Espera a que termine o elige otro héroe.'
-        : null,
+    titulo: (v) =>
+      enMision(v) ? 'Tu héroe está ocupado en una misión' : 'Tu héroe está en otra partida',
+    detalle: (v) => {
+      if (!v.heroe?.nombre || !v.salaQueLoOcupa) {
+        return null;
+      }
+      return enMision(v)
+        ? `«${v.heroe.nombre}» está ocupado en una misión. Espera a que termine o elige otro héroe.`
+        : `«${v.heroe.nombre}» está en la sala «${v.salaQueLoOcupa}». ` +
+            'Espera a que termine o elige otro héroe.';
+    },
     avisoTono: 'advertencia',
     avisoTitulo: () => 'Cuanto falta',
+    // La estimacion es de una partida; una mision no la tiene.
     avisoCuerpo: (v) =>
-      typeof v.minutosRestantes === 'number'
+      typeof v.minutosRestantes === 'number' && !enMision(v)
         ? `La partida en curso termina en unos ${v.minutosRestantes} minutos.`
         : null,
     accion: 'Elegir otro héroe',

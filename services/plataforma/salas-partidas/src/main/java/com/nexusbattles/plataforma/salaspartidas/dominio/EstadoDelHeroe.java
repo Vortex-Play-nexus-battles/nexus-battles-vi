@@ -22,6 +22,14 @@ import java.util.Objects;
  */
 public record EstadoDelHeroe(ResultadoVerificacion resultado, HeroeDeCombate heroe, String ocupadoPor) {
 
+    /**
+     * Lo que se dice cuando el heroe esta reservado por una mision
+     * (HU-MIS-009 criterio 3, HU-MIS-011 criterios 2 y 3). Es el valor de
+     * {@link #ocupadoPor} para ese caso: {@link HeroeNoDisponible} lo reconoce
+     * para hablar de mision y no de «otra partida».
+     */
+    public static final String EN_MISION = "una misión en curso";
+
     public EstadoDelHeroe {
         Objects.requireNonNull(resultado, "La verificacion sin resultado no dice nada.");
         if (resultado == ResultadoVerificacion.DISPONIBLE && heroe == null) {
@@ -54,6 +62,11 @@ public record EstadoDelHeroe(ResultadoVerificacion resultado, HeroeDeCombate her
      */
     public static EstadoDelHeroe ocupado(HeroeDeCombate heroe, String ocupadoPor) {
         return new EstadoDelHeroe(ResultadoVerificacion.HEROE_OCUPADO, heroe, ocupadoPor);
+    }
+
+    /** El heroe esta retenido por una mision y no por una sala o una subasta. */
+    public boolean enMision() {
+        return resultado == ResultadoVerificacion.HEROE_OCUPADO && EN_MISION.equals(ocupadoPor);
     }
 
     public boolean puedeCombatir() {

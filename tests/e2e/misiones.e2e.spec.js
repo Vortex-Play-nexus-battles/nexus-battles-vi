@@ -26,8 +26,9 @@
  *      guardar (§7.8.12).
  *   6. En curso y cancelación (§7.8.7, «Abandonada»): con «El Templo
  *      Olvidado» (doce horas = 24 s en el banco) el héroe queda bloqueado en
- *      el inventario, la misión se ve en «En curso» y cancelarla lo libera sin
- *      recompensas. La misma `Idempotency-Key` no crea una segunda ejecución.
+ *      el inventario, salas-partidas no deja crear una sala con él («Tu héroe
+ *      está ocupado en una misión», 422), la misión se ve en «En curso» y
+ *      cancelarla lo libera sin recompensas. La misma `Idempotency-Key` no crea una segunda ejecución.
  *
  * La jugadora es nueva en cada corrida (`Date.now()`): su héroe es solo suyo,
  * así que bloquearlo en una misión no le quita el héroe a ninguna otra prueba
@@ -498,6 +499,29 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     const bloqueado = await heroeDe(api, jugadora);
     expect(bloqueado.disponible).toBe(false);
     expect(bloqueado.ejecucionMisionId).toBe(activa.ejecucionId);
+
+    // HU-MIS-009 C3 / HU-MIS-011 C2 y C3: con el héroe en misión, salas-partidas
+    // no deja crear la sala y lo dice con su nombre, no con el «otra partida» de
+    // un héroe que combate. Va por el borde, contra el inventario real: el
+    // `ejecucionMisionId` de arriba es el que lee la puerta de héroe de las salas.
+    const intento = await api.post('/api/v1/salas', {
+      headers: conToken(jugadora.token),
+      data: {
+        maximoParticipantes: 2,
+        modalidad: 'UNO_CONTRA_UNO',
+        recompensaCreditos: 0,
+        privada: false,
+      },
+    });
+    expect(intento.status(), await intento.text()).toBe(422);
+    const rechazo = await intento.json();
+    expect(rechazo).toMatchObject({
+      type: 'https://nexusbattles.local/errores/heroe-ocupado',
+      title: 'Tu héroe está ocupado en una misión',
+      status: 422,
+    });
+    expect(rechazo.detail).toContain('ocupado en una misión');
+    expect(rechazo.title).not.toContain('otra partida');
 
     // Y «En misión» en Mi inventario, sin poder cambiarle el equipo.
     await conSesion(page, jugadora);

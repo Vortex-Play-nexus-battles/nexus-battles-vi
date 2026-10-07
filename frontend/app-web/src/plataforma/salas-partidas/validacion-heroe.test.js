@@ -149,6 +149,29 @@ describe('variante Ocupado', () => {
   });
 });
 
+describe('variante Ocupado por una misión (HU-MIS-009 C3, HU-MIS-011 C2 y C3)', () => {
+  const enMision = (extra = {}) => ocupado({ salaQueLoOcupa: 'una misión en curso', ...extra });
+
+  test('dice que el héroe está ocupado en una misión, no que está en otra partida', () => {
+    const d = raiz();
+    pintarValidacion(d, enMision());
+
+    expect(d.dataset.resultado).toBe('HEROE_OCUPADO');
+    expect(d.textContent).toContain('Tu héroe está ocupado en una misión');
+    expect(d.textContent).toContain('«Arquero del Norte» está ocupado en una misión');
+    expect(d.textContent).not.toContain('otra partida');
+    expect(d.textContent).not.toContain('en la sala');
+    expect(d.querySelector('[data-accion="confirmar"]').textContent).toBe('Elegir otro héroe');
+  });
+
+  test('no pinta el aviso de «la partida en curso termina» aunque llegue una estimación', () => {
+    const d = raiz();
+    pintarValidacion(d, enMision({ minutosRestantes: 4 }));
+
+    expect(d.querySelector('.aviso')).toBeNull();
+  });
+});
+
 describe('variante Disponible', () => {
   test('nombra el heroe y muestra sus estadisticas', () => {
     const d = raiz();
