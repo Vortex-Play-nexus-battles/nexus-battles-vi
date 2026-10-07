@@ -495,14 +495,15 @@ class SemillaDelCatalogoTest {
     }
 
     @Test
-    @DisplayName("Tabla 20: la probabilidad de Master de las ocho epicas va en porcentaje, «0.04%» es un 4 %")
+    @DisplayName("Tabla 20: la probabilidad de Master de las ocho epicas va en porcentaje, «0.04%» es un 4 %; "
+            + "la de «Velo de Sombras» (Master del Templo) usa la misma convencion: 15 %")
     void laTabla20SeLeeComoPorcentaje() throws IOException {
         CatalogoInicial catalogo;
         try (InputStream json = CATALOGO_REAL.getInputStream()) {
             catalogo = SemillaDelCatalogo.leer(json);
         }
 
-        assertEquals(List.of("4%", "1%", "3%", "5%", "2%", "1%", "10%", "10%"),
+        assertEquals(List.of("4%", "1%", "3%", "5%", "2%", "1%", "10%", "10%", "15%"),
                 catalogo.epicas().stream().map(CatalogoInicial.EntradaCatalogo::probabilidadMaster).toList());
     }
 
