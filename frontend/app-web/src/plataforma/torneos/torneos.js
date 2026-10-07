@@ -1095,9 +1095,19 @@ export function arbolDelTorneo(torneo, uid) {
     if (lista.length === 0) {
       return;
     }
-    arbol.appendChild(nodo('h3', 't-etiqueta torneo__llave', titulo));
+    const tituloLlave = nodo('h3', 't-etiqueta torneo__llave', titulo);
+    tituloLlave.id = `torneo-llave-${llave.toLowerCase()}`;
+    arbol.appendChild(tituloLlave);
     const cuadro = nodo('div', 'arbol-torneo');
     cuadro.dataset.llave = llave;
+    // Barrido final de la revisión del 6-oct (1024 y 768): dentro de la ruta
+    // el cuadro es más estrecho que sus rondas y se desplaza de lado (el
+    // `overflow-x: auto` del kit). Quien usa el teclado tiene que poder llegar
+    // a él para desplazarlo (axe: scrollable-region-focusable): es una región
+    // con el nombre de su llave y entra en el orden de tabulación.
+    cuadro.tabIndex = 0;
+    cuadro.setAttribute('role', 'region');
+    cuadro.setAttribute('aria-labelledby', tituloLlave.id);
     const rondas = porRonda(lista);
     rondas.forEach(({ ronda, encuentros }, indice) => {
       const columna = nodo('div', 'arbol-torneo__ronda');
