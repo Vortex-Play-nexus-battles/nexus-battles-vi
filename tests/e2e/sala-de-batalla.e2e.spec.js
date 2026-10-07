@@ -491,11 +491,29 @@ test.describe('Sala de batalla de punta a punta', () => {
     await expect(page.locator('[data-zona="arranque"]')).toBeHidden();
     await expect(page.locator('[data-zona="sin-partida"]')).toBeHidden();
 
-    // HU-JUE-015: desde la sala se llega a SU chat (#441 lo tenia como hueco:
-    // la vista del chat existia sin que ninguna pantalla enlazara a ella).
-    const enlaceChat = page.locator('[data-zona="enlace-chat-sala"]');
-    await expect(enlaceChat).toBeVisible();
-    await expect(enlaceChat).toHaveAttribute('href', `./chat.html?sala=${sala.id}`);
+    // HU-JUE-015 · revisión del modo jugador del 6-oct, punto 15: el chat de
+    // ESTA sala se abre en la misma página («Chat grupal»), nunca en otra
+    // pestaña, y habla por el mismo canal STOMP que la vista del chat.
+    const abrirChat = page.locator('[data-accion="abrir-chat-grupal"]');
+    await expect(abrirChat).toBeVisible();
+    await expect(abrirChat).toHaveText(/Chat grupal/);
+    await expect(abrirChat).not.toHaveAttribute('target', /.*/);
+    const paginas = page.context().pages().length;
+    await abrirChat.click();
+    const panelChat = page.locator('[data-zona="chat-grupal"]');
+    await expect(panelChat).toBeVisible();
+    expect(page.context().pages()).toHaveLength(paginas);
+    await expect(page).toHaveURL(new RegExp(`[?&]sala=${sala.id}`));
+    const texto = `Chat grupal — e2e ${new Date().toISOString().slice(11, 19)}`;
+    await panelChat.locator('#texto-chat-grupal').fill(texto);
+    await panelChat.locator('#formulario-chat-grupal button[type="submit"]').click();
+    await expect(panelChat.locator('[data-zona="mensajes"]')).toContainText(texto, {
+      timeout: 20000,
+    });
+    // Escape lo cierra y el foco vuelve al botón: se sigue jugando.
+    await page.keyboard.press('Escape');
+    await expect(panelChat).toBeHidden();
+    await expect(abrirChat).toBeFocused();
   });
 
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({
@@ -849,8 +867,10 @@ test.describe('Sala de batalla de punta a punta', () => {
       JSON.stringify(ingresos),
     ).toBe(true);
 
+    // Revisión del modo jugador del 6-oct, punto 20: la apuesta en su fila
+    // del desglose, con su signo («Apuesta +30 créditos» / «−30 créditos»).
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
-      new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
+      new RegExp(`Apuesta\\s*[+−]${APUESTA} créditos`, 'i'),
       { timeout: 20000 },
     );
   });

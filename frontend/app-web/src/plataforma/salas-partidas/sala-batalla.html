@@ -90,18 +90,25 @@
             Canal en tiempo real no conectado
           </span>
           <!--
-            HU-JUE-015: el chat de ESTA sala, en otra pestana para no dejar el
-            combate. Solo aparece cuando se llego con `?sala=`.
+            HU-JUE-015 · revision del modo jugador del 6-oct (punto 15): el chat
+            de ESTA sala, «Chat grupal», en un panel de la misma pagina —
+            lateral en escritorio, hoja inferior en movil—. Nunca una pestana
+            nueva: en plena batalla no se juega entre pestanas.
+            `chat-grupal.js` lo monta; solo aparece cuando se llego con `?sala=`.
           -->
-          <a
+          <button
             class="boton boton--secundario boton--pequeno combate__chat"
-            data-zona="enlace-chat-sala"
-            href="./chat.html"
-            target="_blank"
-            rel="noopener"
+            type="button"
+            data-accion="abrir-chat-grupal"
             hidden
-            >Chat de la sala<span class="solo-lectores"> (se abre en otra pestaña)</span></a
           >
+            Chat grupal<span
+              class="combate__chat-nuevos"
+              data-zona="chat-nuevos"
+              aria-hidden="true"
+              hidden
+            ></span>
+          </button>
         </div>
       </header>
 
@@ -120,6 +127,13 @@
         dice que el combate ya esta corriendo.
       -->
       <div data-zona="presentacion" hidden></div>
+
+      <!--
+        Revision del modo jugador del 6-oct, punto 19: lo ultimo que paso,
+        grande en el centro del campo («Mago Fuego golpea a Guerrero Tanque:
+        −8 de vida»). Adorno: el lector de pantalla lo oye en el historial.
+      -->
+      <div class="combate__anuncio" data-zona="anuncio" aria-hidden="true" hidden></div>
 
       <!--
         CA-05 · Por debajo del minimo (1360×768 de la ficha) la vista degrada
@@ -338,9 +352,28 @@
           </section>
           <div class="combate__poder" data-zona="poder" hidden></div>
         </div>
-        <section class="combate__registro" aria-labelledby="titulo-registro">
-          <h2 class="combate__grupo-titulo" id="titulo-registro">Lo que ha pasado</h2>
-          <div class="combate__registro-cuerpo" data-zona="registro"></div>
+        <!--
+          Punto 19 — el historial no ocupa la barra: «Historial» lo abre encima.
+          Cerrado sigue en el arbol de accesibilidad (oculto a la vista, no al
+          lector), asi que lo que pasa se sigue anunciando una vez.
+        -->
+        <section class="combate__registro" data-zona="historial" aria-labelledby="titulo-registro">
+          <h2 class="solo-lectores" id="titulo-registro">Historial del combate</h2>
+          <button
+            class="boton boton--secundario boton--pequeno combate__historial"
+            type="button"
+            data-accion="ver-historial"
+            aria-expanded="false"
+            aria-controls="registro-combate"
+          >
+            Historial
+          </button>
+          <div
+            class="combate__registro-cuerpo"
+            id="registro-combate"
+            data-zona="registro"
+            data-abierto="no"
+          ></div>
         </section>
         <!--
           HU-DIS-003: si el motor de combate no responde al jugar, aqui se pinta
@@ -374,6 +407,7 @@
         suscripcionDePartida,
         participantesParaElPanel,
         urlConPartida,
+        montarHistorial,
       } from './sala-batalla.js';
       import {
         urlDelCanal,
@@ -383,6 +417,7 @@
       } from './canal-sala.js';
       import { montarControlesDeCombate, enviarAccion, registroDeAvisos } from './combate.js';
       import { suscripcionConRitmo } from './ritmo-de-combate.js';
+      import { segundosDeCuentaAtras, PAUSA_FINAL_MS } from '../../comun/ui/juego/presentacion.js';
       import {
         baseDeApi,
         iniciarPartida,
@@ -393,6 +428,7 @@
         rendirse,
       } from './cliente-salas.js';
       import { montarInvitarJugador } from './invitar-jugador.js';
+      import { montarChatGrupal } from './chat-grupal.js';
       import { montarSalidaDelCombate } from './salir-del-combate.js';
       import {
         montarSalaDeEspera,
@@ -434,12 +470,13 @@
       const idSala = parametros.get('sala');
       const token = sessionStorage.getItem('nexus.token');
 
-      // HU-JUE-015: el chat de esta sala, con su identificador en la URL.
-      const enlaceChat = document.querySelector('[data-zona="enlace-chat-sala"]');
-      if (enlaceChat && idSala) {
-        enlaceChat.href = `./chat.html?sala=${encodeURIComponent(idSala)}`;
-        enlaceChat.hidden = false;
-      }
+      // HU-JUE-015 · punto 15: el chat grupal de esta sala, en su panel.
+      montarChatGrupal(document, {
+        idSala,
+        abridor: document.querySelector('[data-accion="abrir-chat-grupal"]'),
+        token,
+        miId: usuarioIdDeSesion(),
+      });
 
       const zonaVacia = document.querySelector(
         '[data-zona="sin-partida"] .estado-vista__detalle, [data-zona="sin-partida"] .t-meta',
@@ -488,7 +525,24 @@
         // «Iniciar combate» (R17.4). Al recargar una partida que ya estaba en
         // curso no se presenta nada: presentar a los heroes a mitad de
         // combate mentiria sobre el momento.
-        montarSalaBatalla(document, { partida, suscribir, yo, presentar, turnoActual });
+        // Punto 17 — 5, 4, 3, 2, 1, ¡COMBATE! al empezar de verdad (nunca al
+        // recargar), contada desde la hora de inicio del servidor para que
+        // los dos jugadores la vean a la vez. Es una pausa de la vista: lo que
+        // llegue mientras tanto (la IA puede abrir en el mismo instante) se
+        // retiene en el ritmo y se ve después; los controles esperan.
+        const segundos = presentar ? segundosDeCuentaAtras(partida?.iniciadaEn) : 0;
+        const esperaMs = segundos > 0 ? segundos * 1000 + PAUSA_FINAL_MS : 0;
+        if (esperaMs > 0) {
+          suscribir?.retenerHasta?.(Date.now() + esperaMs);
+        }
+        montarSalaBatalla(document, {
+          partida,
+          suscribir,
+          yo,
+          presentar,
+          turnoActual,
+          cuentaAtras: segundos,
+        });
 
         if (!partida || !canal) {
           return;
@@ -515,15 +569,17 @@
           recienEmpezada: presentar,
           // R17.4 — el desenlace tapa la pantalla entera, barra incluida: lleva
           // sus propias salidas, o quien acaba de jugar no tiene adónde ir.
+          //
+          // Revisión del 6-oct, punto 20: «Volver a las salas», no a la cuenta.
           salidas: [
             {
               id: 'volver-a-jugar',
-              texto: 'Volver a Jugar online',
+              texto: 'Volver a las salas',
               href: resolver(RUTAS.batallas),
             },
-            { id: 'ver-mi-cuenta', texto: 'Ver mi cuenta', href: resolver(RUTAS.perfil) },
           ],
         });
+        controles.esperarCuentaAtras(esperaMs);
 
         // UXC-2 — las acciones especiales y el poder del heroe propio. No se
         // espera por ellas: el ataque basico ya funciona sin ellas.
@@ -970,6 +1026,9 @@
           }
         },
       });
+
+      // Punto 19 — el historial se abre y se cierra encima de la barra.
+      montarHistorial(document);
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
       montarAsistente(document);

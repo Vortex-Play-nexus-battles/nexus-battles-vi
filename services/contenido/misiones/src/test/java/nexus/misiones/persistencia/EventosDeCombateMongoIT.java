@@ -103,7 +103,7 @@ class EventosDeCombateMongoIT {
 
         mongo.insert(EventoDeCombateDocumento.de(EventosDePrueba.evento(UNA, 1), Instant.now()));
         EventoDeCombateDocumento repetido = new EventoDeCombateDocumento("otro-id", UNA.toString(), "templo-olvidado",
-                1, 1, "X", 1, null, null, List.of(), null, null, Instant.now());
+                1, 1, "X", 1, null, null, null, List.of(), null, null, Instant.now());
 
         assertThatThrownBy(() -> mongo.insert(repetido)).isInstanceOf(DuplicateKeyException.class);
     }

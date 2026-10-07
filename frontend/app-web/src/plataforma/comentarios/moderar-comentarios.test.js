@@ -10,6 +10,10 @@
  * marca, y que el resultado dice la verdad sobre si el autor se entero.
  */
 
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { jest } from '@jest/globals';
 
 import {
@@ -18,7 +22,7 @@ import {
   panelDeDetalle,
   tarjetaDeEntrada,
 } from './moderar-comentarios.js';
-import { accionesDesde, ErrorDeApi } from './cliente-moderacion.js';
+import { accionesDesde, CATEGORIAS, ErrorDeApi } from './cliente-moderacion.js';
 import { fechaHora } from '../../comun/ui/formato.js';
 import { TEXTO_SIN_SERVICIO } from '../../comun/ui/texto-de-fallo.js';
 
@@ -57,6 +61,14 @@ function vista() {
         <option value="en-revision">Pendientes de revisión</option>
         <option value="marcados">Marcados para seguimiento</option>
         <option value="sin-marcar">Pendientes sin marcar</option>
+      </select>
+      <label for="filtro-categoria">Categoría del reporte</label>
+      <select id="filtro-categoria" data-zona="filtro-categoria">
+        <option value="">Todas</option>
+      </select>
+      <label for="filtro-prioridad">Prioridad</label>
+      <select id="filtro-prioridad" data-zona="filtro-prioridad">
+        <option value="todas">Todas</option>
       </select>
       <div data-zona="cola"></div>
       <div data-zona="detalle-contenedor"></div>
@@ -922,5 +934,294 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
 
     expect(historialDelAutor).toHaveBeenCalledWith('aut-1', { pagina: 0 });
     expect(raiz.querySelectorAll(`${ZONA} li`)).toHaveLength(1);
+  });
+});
+
+describe('HU-COM-005 (#519): filtros de categoría y de prioridad en la cola', () => {
+  const SIN_FILTROS = {
+    productoId: null,
+    marcado: null,
+    categoria: null,
+    prioridadElevada: null,
+    tamano: 20,
+  };
+
+  function conCola(...entradas) {
+    return jest.fn().mockResolvedValue({ entradas, total: entradas.length });
+  }
+
+  function elegir(raiz, zona, valor) {
+    const control = raiz.querySelector(`[data-zona="${zona}"]`);
+    control.value = valor;
+    control.dispatchEvent(new Event('change'));
+  }
+
+  const textoDeLaCola = (raiz) => raiz.querySelector('[data-zona="cola"]').textContent;
+
+  test('las seis categorías del contrato salen de CATEGORIAS, más «Todas»', async () => {
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola: conCola() } });
+    await asentar();
+
+    const opciones = [...raiz.querySelectorAll('[data-zona="filtro-categoria"] option')];
+    expect(opciones.map((o) => o.value)).toEqual(['', ...CATEGORIAS.map((c) => c.valor)]);
+    expect(opciones.map((o) => o.textContent)).toEqual([
+      'Todas',
+      ...CATEGORIAS.map((c) => c.etiqueta),
+    ]);
+    expect(CATEGORIAS).toHaveLength(6);
+  });
+
+  test('la prioridad ofrece «Todas», «Solo prioridad elevada» y «Sin prioridad elevada»', async () => {
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola: conCola() } });
+    await asentar();
+
+    const opciones = [...raiz.querySelectorAll('[data-zona="filtro-prioridad"] option')];
+    expect(opciones.map((o) => o.textContent)).toEqual([
+      'Todas',
+      'Solo prioridad elevada',
+      'Sin prioridad elevada',
+    ]);
+    expect(opciones.map((o) => o.value)).toEqual(['todas', 'elevada', 'sin-elevada']);
+  });
+
+  test('al abrir la pantalla la cola se pide sin los filtros nuevos', async () => {
+    const consultarCola = conCola();
+    montarModeracion(vista(), { api: { consultarCola } });
+    await asentar();
+
+    expect(consultarCola).toHaveBeenCalledTimes(1);
+    expect(consultarCola).toHaveBeenLastCalledWith(SIN_FILTROS);
+  });
+
+  test('elegir una categoría recarga de inmediato con ella; «Todas» la quita', async () => {
+    const consultarCola = conCola();
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola } });
+    await asentar();
+
+    elegir(raiz, 'filtro-categoria', 'ACOSO');
+    await asentar();
+    expect(consultarCola).toHaveBeenCalledTimes(2);
+    // Sin `pagina`: la consulta siempre es la primera página.
+    expect(consultarCola).toHaveBeenLastCalledWith({ ...SIN_FILTROS, categoria: 'ACOSO' });
+
+    elegir(raiz, 'filtro-categoria', '');
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith(SIN_FILTROS);
+  });
+
+  test('la prioridad viaja como true, false o nada según lo elegido', async () => {
+    const consultarCola = conCola();
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola } });
+    await asentar();
+
+    elegir(raiz, 'filtro-prioridad', 'elevada');
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith({ ...SIN_FILTROS, prioridadElevada: true });
+
+    elegir(raiz, 'filtro-prioridad', 'sin-elevada');
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith({ ...SIN_FILTROS, prioridadElevada: false });
+
+    elegir(raiz, 'filtro-prioridad', 'todas');
+    await asentar();
+    expect(consultarCola).toHaveBeenLastCalledWith(SIN_FILTROS);
+  });
+
+  test('los tres filtros se combinan en una sola consulta', async () => {
+    const consultarCola = conCola();
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola }, productoId: 'espada-del-alba' });
+    await asentar();
+
+    elegir(raiz, 'filtro', 'marcados');
+    elegir(raiz, 'filtro-categoria', 'SPAM');
+    elegir(raiz, 'filtro-prioridad', 'elevada');
+    await asentar();
+
+    expect(consultarCola).toHaveBeenLastCalledWith({
+      productoId: 'espada-del-alba',
+      marcado: true,
+      categoria: 'SPAM',
+      prioridadElevada: true,
+      tamano: 20,
+    });
+  });
+
+  test('cambiar un filtro cierra el detalle abierto: ese comentario puede ya no cumplirlo', async () => {
+    const api = {
+      consultarCola: conCola(entrada()),
+      consultarDetalle: jest.fn().mockResolvedValue(detalle()),
+    };
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+    expect(raiz.querySelector('[data-zona="detalle"]')).not.toBeNull();
+
+    elegir(raiz, 'filtro-categoria', 'SPAM');
+    await asentar();
+
+    expect(raiz.querySelector('[data-zona="detalle"]')).toBeNull();
+  });
+
+  describe('cuando los filtros no dejan nada', () => {
+    test('no es una cola sin trabajo ni un error: lo dice y ofrece «Quitar filtros»', async () => {
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola: conCola() } });
+      await asentar();
+
+      elegir(raiz, 'filtro-categoria', 'SPAM');
+      await asentar();
+
+      const zona = raiz.querySelector('[data-zona="cola"]');
+      expect(zona.querySelector('[data-estado="vacio"]')).not.toBeNull();
+      expect(zona.querySelector('[data-estado="error"]')).toBeNull();
+      expect(zona.textContent).toContain('Ningún comentario coincide con los filtros');
+      expect(zona.textContent).not.toContain('No hay comentarios esperando revisión');
+      const quitar = zona.querySelector('[data-accion="quitar-filtros"]');
+      expect(quitar).not.toBeNull();
+      expect(quitar.textContent).toBe('Quitar filtros');
+    });
+
+    test('«Solo prioridad elevada» sin resultados no parece un error ni dice por qué', async () => {
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola: conCola() } });
+      await asentar();
+
+      elegir(raiz, 'filtro-prioridad', 'elevada');
+      await asentar();
+
+      const zona = raiz.querySelector('[data-zona="cola"]');
+      const texto = textoDeLaCola(raiz);
+      expect(zona.querySelector('[data-estado="vacio"]')).not.toBeNull();
+      expect(zona.querySelector('[data-estado="error"]')).toBeNull();
+      expect(texto).toContain('Ningún comentario coincide con los filtros');
+      expect(texto).toContain(
+        'En este momento ningún comentario de la cola tiene prioridad elevada.',
+      );
+      expect(texto).not.toContain('esperando revisión');
+      // Ni una cifra, ni una explicación de umbral o de configuración.
+      expect(texto).not.toMatch(/\d/);
+      expect(texto).not.toMatch(/umbral|configur/i);
+      expect(zona.querySelector('[data-accion="quitar-filtros"]')).not.toBeNull();
+    });
+
+    test('con solo una categoría no se afirma nada sobre la prioridad', async () => {
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola: conCola() } });
+      await asentar();
+
+      elegir(raiz, 'filtro-categoria', 'ACOSO');
+      await asentar();
+
+      expect(textoDeLaCola(raiz)).not.toContain('prioridad elevada');
+    });
+
+    test('con «Marcados» y un filtro, manda el mensaje de los filtros', async () => {
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola: conCola() } });
+      await asentar();
+
+      elegir(raiz, 'filtro', 'marcados');
+      await asentar();
+      expect(textoDeLaCola(raiz)).toContain('No hay comentarios marcados para seguimiento');
+
+      elegir(raiz, 'filtro-categoria', 'ACOSO');
+      await asentar();
+      expect(textoDeLaCola(raiz)).toContain('Ningún comentario coincide con los filtros');
+      expect(textoDeLaCola(raiz)).not.toContain('No hay comentarios marcados');
+    });
+
+    test('sin filtros, la cola vacía sigue diciendo que no hay trabajo y no ofrece quitar nada', async () => {
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola: conCola() } });
+      await asentar();
+
+      expect(textoDeLaCola(raiz)).toContain('No hay comentarios esperando revisión');
+      expect(raiz.querySelector('[data-accion="quitar-filtros"]')).toBeNull();
+    });
+
+    test('«Quitar filtros» limpia categoría y prioridad, deja «Mostrar», recarga y devuelve el foco', async () => {
+      const vacia = { entradas: [], total: 0 };
+      const consultarCola = jest
+        .fn()
+        .mockResolvedValueOnce(vacia)
+        .mockResolvedValueOnce(vacia)
+        .mockResolvedValueOnce(vacia)
+        .mockResolvedValueOnce(vacia)
+        .mockResolvedValue({ entradas: [entrada()], total: 1 });
+      const raiz = vista();
+      montarModeracion(raiz, { api: { consultarCola } });
+      await asentar();
+      elegir(raiz, 'filtro', 'marcados');
+      elegir(raiz, 'filtro-categoria', 'SPAM');
+      elegir(raiz, 'filtro-prioridad', 'elevada');
+      await asentar();
+
+      raiz.querySelector('[data-accion="quitar-filtros"]').click();
+      await asentar();
+
+      expect(raiz.querySelector('[data-zona="filtro-categoria"]').value).toBe('');
+      expect(raiz.querySelector('[data-zona="filtro-prioridad"]').value).toBe('todas');
+      expect(raiz.querySelector('[data-zona="filtro"]').value).toBe('marcados');
+      expect(consultarCola).toHaveBeenLastCalledWith({ ...SIN_FILTROS, marcado: true });
+      expect(raiz.querySelector('[data-comentario-id="com-1"]')).not.toBeNull();
+      expect(document.activeElement).toBe(raiz.querySelector('[data-zona="filtro-categoria"]'));
+    });
+  });
+
+  test('una respuesta antigua que llega tarde no pisa la cola del filtro vigente', async () => {
+    let soltarLaPrimera;
+    const lenta = new Promise((resolver) => {
+      soltarLaPrimera = resolver;
+    });
+    const deOtro = (id) => entrada({ comentario: { ...entrada().comentario, id } });
+    const consultarCola = jest
+      .fn()
+      .mockResolvedValueOnce({ entradas: [], total: 0 })
+      .mockReturnValueOnce(lenta)
+      .mockResolvedValueOnce({ entradas: [deOtro('com-nuevo')], total: 1 });
+    const raiz = vista();
+    montarModeracion(raiz, { api: { consultarCola } });
+    await asentar();
+
+    elegir(raiz, 'filtro-categoria', 'ACOSO');
+    elegir(raiz, 'filtro-categoria', 'SPAM');
+    await asentar();
+    soltarLaPrimera({ entradas: [deOtro('com-viejo')], total: 1 });
+    await asentar();
+
+    expect(raiz.querySelector('[data-comentario-id="com-nuevo"]')).not.toBeNull();
+    expect(raiz.querySelector('[data-comentario-id="com-viejo"]')).toBeNull();
+  });
+
+  describe('la página real', () => {
+    const AQUI = dirname(fileURLToPath(import.meta.url));
+    const HTML = readFileSync(join(AQUI, 'moderar-comentarios.html'), 'utf8');
+
+    beforeEach(() => {
+      document.documentElement.innerHTML = HTML.replace(/<script[\s\S]*?<\/script>/g, '');
+    });
+
+    test.each([
+      ['filtro-categoria', 'Categoría del reporte'],
+      ['filtro-prioridad', 'Prioridad'],
+    ])(
+      'el control %s tiene una etiqueta visible asociada, no solo un placeholder',
+      (zona, texto) => {
+        const control = document.querySelector(`select[data-zona="${zona}"]`);
+        expect(control).not.toBeNull();
+        expect(control.id).not.toBe('');
+        const etiqueta = document.querySelector(`label[for="${control.id}"]`);
+        expect(etiqueta).not.toBeNull();
+        expect(etiqueta.textContent.trim()).toBe(texto);
+        expect(control.options[0].textContent.trim()).toBe('Todas');
+      },
+    );
   });
 });

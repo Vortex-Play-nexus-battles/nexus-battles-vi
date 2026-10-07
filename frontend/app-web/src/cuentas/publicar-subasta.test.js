@@ -53,7 +53,11 @@ async function montar(opciones = {}) {
   const consultar = jest.fn().mockResolvedValue(pagina);
   const publicar = jest.fn().mockResolvedValue({ id: 'subasta-creada', comisionCobrado: 1 });
   const crearClave = jest.fn().mockReturnValue('clave-estable');
-  const dependencias = { consultar, publicar, crearClave, ...opciones };
+  // PLAYER-07b — el catálogo de productos (GET /api/v1/productos/{id}), de
+  // donde sale el nombre que se lee. Por omisión responde con el mismo nombre
+  // que el inventario, para que las pruebas de antes sigan diciendo lo mismo.
+  const consultarProducto = jest.fn(async (id) => ({ id, nombre: 'Espada de luz' }));
+  const dependencias = { consultar, publicar, crearClave, consultarProducto, ...opciones };
   await montarPublicacion($('#raiz'), dependencias);
   return dependencias;
 }
@@ -339,17 +343,31 @@ test('inventario vacío y fallo de carga tienen estados claros', async () => {
   expect($('#nexus-rbac-forbidden').textContent).not.toContain('interno');
 });
 
-test('nombres del inventario se muestran como texto, sin insertar HTML', async () => {
-  await montar({
-    consultar: jest.fn().mockResolvedValue({
-      ...pagina,
-      elementos: [{ ...elemento, nombrePropio: '<img src=x onerror=alert(1)>' }],
+test.each([
+  // PLAYER-07b — el nombre sale del catálogo, y el del inventario es su
+  // respaldo cuando el catálogo no responde: los dos se pintan como texto.
+  [
+    'el del inventario',
+    jest.fn(async () => {
+      throw new Error('sin catálogo');
     }),
-  });
-  completar();
-  expect($('#raiz img')).toBeNull();
-  expect($('[data-resumen-producto]').textContent).toContain('<img');
-});
+  ],
+  ['el del catálogo', jest.fn(async (id) => ({ id, nombre: '<img src=x onerror=alert(1)>' }))],
+])(
+  'nombres del inventario se muestran como texto, sin insertar HTML: %s',
+  async (_caso, consultarProducto) => {
+    await montar({
+      consultar: jest.fn().mockResolvedValue({
+        ...pagina,
+        elementos: [{ ...elemento, nombrePropio: '<img src=x onerror=alert(1)>' }],
+      }),
+      consultarProducto,
+    });
+    completar();
+    expect($('#raiz img')).toBeNull();
+    expect($('[data-resumen-producto]').textContent).toContain('<img');
+  },
+);
 
 test('auditoría HU-SUB-001: los módulos protegidos coinciden byte a byte con HEAD', () => {
   const raizRepo = new URL('../../../../', import.meta.url);
@@ -397,6 +415,243 @@ test('compra inmediata incompleta no se confunde con campo opcional vacío', asy
   expect($('[type="submit"]').disabled).toBe(true);
   expect(publicar).not.toHaveBeenCalled();
   expect($('#error-inmediata').textContent).not.toBe('');
+});
+
+/*
+ * PLAYER-07b (punto 27) — «Mejorar el nombre del producto ya que sale un
+ * código raro al montar la subasta». La confirmación decía
+ * «Espada de luz · ARMA · <id del elemento>». El nombre sale ahora del
+ * catálogo; los identificadores siguen viajando en la solicitud y no se pintan.
+ */
+describe('PLAYER-07b — el nombre del producto al montar la subasta', () => {
+  const UUID_EN_TEXTO = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+  // Como llegan algunos objetos entregados sin nombre: el inventario guardó
+  // como «nombre» el propio identificador del producto.
+  const conCodigo = {
+    ...elemento,
+    id: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
+    nombrePropio: elemento.productoId,
+  };
+  const delCatalogo = (nombre) => jest.fn(async (id) => ({ id, nombre }));
+  const conElementos = (elementos) => jest.fn().mockResolvedValue({ ...pagina, elementos });
+
+  test('la confirmación dice el nombre del catálogo y el tipo en palabras, sin identificadores', async () => {
+    const consultarProducto = delCatalogo('Espada de una mano');
+    const { publicar } = await montar({ consultar: conElementos([conCodigo]), consultarProducto });
+
+    expect(consultarProducto).toHaveBeenCalledWith(conCodigo.productoId);
+    expect($('#producto').options[1].textContent).toBe('Espada de una mano · Arma');
+    cambiar('#producto', conCodigo.id);
+    expect($('[data-resumen-producto]').textContent).toBe('Espada de una mano · Arma');
+    expect($('[data-resumen-producto]').dataset.origenNombre).toBe('catalogo');
+    expect($('#raiz').textContent).not.toMatch(UUID_EN_TEXTO);
+    expect($('#raiz').textContent).not.toMatch(/\bARMA\b/);
+    expect($('[data-aviso-catalogo]').hidden).toBe(true);
+
+    // El identificador sigue viajando para la operación: solo deja de verse.
+    cambiar('#inicial', '10');
+    marcar('#aceptar');
+    submit();
+    await vaciar();
+    expect(publicar).toHaveBeenCalledWith(
+      expect.objectContaining({
+        elementoInventarioId: conCodigo.id,
+        productoId: conCodigo.productoId,
+      }),
+      'clave-estable',
+    );
+  });
+
+  test('manda el nombre del catálogo (el que verá quien puje), no el que guardó el inventario', async () => {
+    // El inventario puede guardar otro nombre: uno de pruebas («Arma 1») o uno
+    // que se copió antes de que el catálogo lo cambiara.
+    await montar({
+      consultar: conElementos([{ ...elemento, nombrePropio: 'Arma 1' }]),
+      consultarProducto: delCatalogo('Espada de una mano'),
+    });
+
+    expect($('#producto').options[1].textContent).toBe('Espada de una mano · Arma');
+    expect($('#raiz').textContent).not.toContain('Arma 1');
+  });
+
+  test('dos copias del mismo producto se distinguen sin enseñar su identificador', async () => {
+    await montar({
+      consultar: conElementos([elemento, { ...elemento, id: 'unidad-2' }]),
+      consultarProducto: delCatalogo('Espada de una mano'),
+    });
+
+    expect([...$('#producto').options].slice(1).map((o) => o.textContent)).toEqual([
+      'Espada de una mano · Arma · copia 1',
+      'Espada de una mano · Arma · copia 2',
+    ]);
+  });
+
+  test('cada producto se pide una sola vez al catálogo, también al cambiar de página', async () => {
+    const consultarProducto = delCatalogo('Espada de una mano');
+    const consultar = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ...pagina,
+        totalPaginas: 2,
+        elementos: [
+          elemento,
+          { ...elemento, id: 'unidad-2' },
+          {
+            ...elemento,
+            id: 'unidad-3',
+            tipo: 'ARMADURA',
+            productoId: 'b43c621a-0ae2-4b39-9c29-bf5a8a0c2937',
+          },
+        ],
+      })
+      .mockResolvedValueOnce({ ...pagina, numero: 1, totalPaginas: 2, elementos: [elemento] });
+    await montar({ consultar, consultarProducto });
+
+    expect(consultarProducto).toHaveBeenCalledTimes(2);
+    $('[data-siguiente]').click();
+    await vaciar();
+    expect(consultarProducto).toHaveBeenCalledTimes(2);
+    expect($('#producto').options[1].textContent).toBe('Espada de una mano · Arma');
+  });
+
+  test('si el catálogo no responde, se dice y se usa el nombre del inventario, nunca un código', async () => {
+    const consultarProducto = jest.fn(async (id) => {
+      throw new Error(`El catalogo de productos respondio 503 al pedir ${id}`);
+    });
+    const { publicar } = await montar({
+      consultar: conElementos([elemento, conCodigo]),
+      consultarProducto,
+    });
+
+    expect([...$('#producto').options].slice(1).map((o) => o.textContent)).toEqual([
+      'Espada de luz · Arma',
+      'Objeto sin nombre · Arma',
+    ]);
+    expect($('[data-aviso-catalogo]').hidden).toBe(false);
+    expect($('[data-aviso-catalogo]').textContent).toMatch(/catálogo de productos/);
+    expect($('#raiz').textContent).not.toMatch(UUID_EN_TEXTO);
+    expect($('#raiz').textContent).not.toMatch(/503|respondio/);
+
+    cambiar('#producto', conCodigo.id);
+    expect($('[data-resumen-producto]').textContent).toBe('Objeto sin nombre · Arma');
+    expect($('[data-resumen-producto]').dataset.origenNombre).toBe('sin-nombre');
+    cambiar('#producto', elemento.id);
+    expect($('[data-resumen-producto]').dataset.origenNombre).toBe('inventario');
+
+    // Es presentación: sin el nombre del catálogo se puede publicar igual.
+    cambiar('#inicial', '10');
+    marcar('#aceptar');
+    expect($('[type="submit"]').disabled).toBe(false);
+    submit();
+    await vaciar();
+    expect(publicar).toHaveBeenCalledTimes(1);
+  });
+
+  test('«Reintentar» vuelve a preguntar al catálogo y pone su nombre', async () => {
+    let caido = true;
+    const consultarProducto = jest.fn(async (id) => {
+      if (caido) {
+        throw new Error('sin red');
+      }
+      return { id, nombre: 'Espada de una mano' };
+    });
+    await montar({ consultarProducto });
+    expect($('[data-aviso-catalogo]').hidden).toBe(false);
+
+    caido = false;
+    $('[data-reintentar-catalogo]').click();
+    await vaciar();
+
+    expect($('#producto').options[1].textContent).toBe('Espada de una mano · Arma');
+    expect($('[data-aviso-catalogo]').hidden).toBe(true);
+    expect($('[data-reintentar-catalogo]').disabled).toBe(false);
+  });
+
+  test('un catálogo lento no deja la pantalla sin inventario: su nombre llega después', async () => {
+    jest.useFakeTimers();
+    try {
+      let responder;
+      const consultarProducto = jest.fn(
+        () =>
+          new Promise((resolver) => {
+            responder = resolver;
+          }),
+      );
+      const montaje = montar({ consultarProducto });
+      await jest.advanceTimersByTimeAsync(3000);
+      await montaje;
+
+      // Mientras tanto, el nombre del inventario (que aquí es un nombre).
+      expect($('#producto').options[1].textContent).toBe('Espada de luz · Arma');
+      expect($('[data-inventario]').textContent).toBe('Selecciona un elemento para continuar.');
+
+      responder({ nombre: 'Espada de una mano' });
+      await jest.advanceTimersByTimeAsync(0);
+      expect($('#producto').options[1].textContent).toBe('Espada de una mano · Arma');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('la publicación pendiente se guarda con el nombre que se leyó, sin identificadores', async () => {
+    const publicar = jest.fn().mockRejectedValue(interpretarProblema(503, {}));
+    await montar({
+      publicar,
+      consultar: conElementos([conCodigo]),
+      consultarProducto: delCatalogo('Espada de una mano'),
+    });
+    cambiar('#producto', conCodigo.id);
+    cambiar('#inicial', '10');
+    marcar('#aceptar');
+    submit();
+    await vaciar();
+
+    const guardado = JSON.parse(sessionStorage.getItem(`nexus.hu-sub-001.intento:${uid}`));
+    expect(guardado.nombre).toBe('Espada de una mano · Arma');
+    expect(guardado.solicitud.elementoInventarioId).toBe(conCodigo.id);
+    expect($('[data-resumen-producto]').textContent).toBe('Espada de una mano · Arma');
+  });
+
+  test.each([
+    [
+      'con el catálogo caído, el nombre guardado sin el identificador',
+      jest.fn(async () => {
+        throw new Error('sin red');
+      }),
+      'Espada de luz · Arma',
+      'guardado',
+    ],
+    [
+      'con el catálogo, su nombre',
+      jest.fn(async (id) => ({ id, nombre: 'Espada de una mano' })),
+      'Espada de una mano · Arma',
+      'catalogo',
+    ],
+  ])(
+    'una publicación pendiente del formato anterior se enseña limpia: %s',
+    async (_caso, consultarProducto, esperado, origen) => {
+      sessionStorage.setItem(
+        `nexus.hu-sub-001.intento:${uid}`,
+        JSON.stringify({
+          clave: 'clave-vieja',
+          nombre: `Espada de luz · ARMA · ${conCodigo.id}`,
+          solicitud: {
+            elementoInventarioId: conCodigo.id,
+            productoId: conCodigo.productoId,
+            duracion: '24H',
+            precioInicial: 10,
+            precioCompraInmediata: null,
+          },
+        }),
+      );
+      await montar({ consultarProducto });
+      await vaciar();
+
+      expect($('[data-resumen-producto]').textContent).toBe(esperado);
+      expect($('[data-resumen-producto]').dataset.origenNombre).toBe(origen);
+      expect($('#raiz').textContent).not.toMatch(UUID_EN_TEXTO);
+    },
+  );
 });
 
 test('Subastas activas ofrece Publicar subasta sin sesión y conserva la carga del listado', async () => {

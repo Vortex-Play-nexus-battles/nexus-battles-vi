@@ -18,8 +18,25 @@
          la persona pulse «Confirmar». Lo monta `verificar-cuenta.js`. -->
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="entrada__sobretitulo">Activa tu cuenta</p>
-        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <!-- Revisión del modo jugador del 6-oct, punto 5: el mismo logotipo
+             oficial que la entrada, en vez del nombre escrito. -->
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
         <p class="entrada__lema">
           Antes de entrar al Nexo comprobamos que el correo es tuyo: te enviamos un código de un
           solo uso y lo escribes aquí.

@@ -29,6 +29,8 @@ import { consultarProducto as consultarProductoDelCatalogo } from './cliente-pro
 import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
 import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './coleccion-inventario.js';
 import { pintarHeroes } from './heroes-inventario.js';
+import { pintarHeroesDelNexo } from './heroes-del-nexo.js';
+import { listarProductos } from './cliente-productos.js';
 import { consultarTablaDeNiveles } from './cliente-heroes.js';
 import { fuenteDeMisiones } from '../misiones/fuente-misiones.js';
 import { montarBannerDeMisiones } from '../misiones/banner-misiones.js';
@@ -60,6 +62,17 @@ const TIPOS = [
   ['ITEM', 'Ítem'],
   ['EPICA', 'Épica'],
 ];
+
+/** Lo que dice la pestaña «Objetos» sin búsqueda… */
+const TEXTO_DE_OBJETOS =
+  'Armas, armaduras, ítems, habilidades y épicas. Cada uno dice si está equipado, libre o bloqueado.';
+
+/**
+ * …y con una búsqueda puesta (PLAYER-07a): la búsqueda es de todo el
+ * inventario, así que en sus resultados también salen héroes.
+ */
+const TEXTO_DE_RESULTADOS =
+  'Resultados de tu búsqueda en todo el inventario: héroes y objetos. «Limpiar» vuelve a tus objetos.';
 
 const PARTES_ARMADURA = [
   ['CASCO', 'Casco'],
@@ -209,13 +222,18 @@ function construirGestion() {
   botonNuevo.type = 'button';
   cabecera.append(titulo, botonNuevo);
 
-  const busqueda = elementoHtml('form', 'inventario-busqueda');
+  // PLAYER-07a (revisión del 6-oct, punto 25) — la búsqueda es GENERAL: va
+  // arriba, sobre las pestañas, porque busca en todo el inventario (héroes y
+  // objetos), no solo en «Objetos». Sus resultados se siguen pintando en la
+  // vitrina de «Objetos», que es la que pagina (HU-INV-011), y al buscar se va
+  // a esa pestaña. La etiqueta ya no está oculta: quien mira sabe qué busca.
+  const busqueda = elementoHtml('form', 'inventario-busqueda inventario-busqueda--general');
   busqueda.setAttribute('role', 'search');
   const busquedaCampo = elementoHtml('label', 'inventario-busqueda__campo');
   const busquedaEtiqueta = elementoHtml(
     'span',
     'inventario-busqueda__etiqueta',
-    'Buscar productos',
+    'Buscar en tu inventario',
   );
   const busquedaControl = document.createElement('input');
   busquedaControl.className = 'inventario-busqueda__control';
@@ -223,15 +241,23 @@ function construirGestion() {
   busquedaControl.name = 'criterio';
   busquedaControl.minLength = 4;
   busquedaControl.autocomplete = 'off';
-  busquedaControl.placeholder = 'Buscar por nombre, tipo o producto';
+  // Lo que de verdad indexa el servicio (inventario.yaml, búsqueda): el nombre,
+  // el tipo y la parte de armadura de cada elemento. No se promete más.
+  busquedaControl.placeholder = 'Nombre, tipo o parte de armadura';
+  const busquedaPista = elementoHtml(
+    'p',
+    'inventario-busqueda__pista',
+    'Desde 4 letras, en tus héroes y tus objetos.',
+  );
+  busquedaPista.id = 'inventario-busqueda-pista';
+  busquedaControl.setAttribute('aria-describedby', busquedaPista.id);
   busquedaCampo.append(busquedaEtiqueta, busquedaControl);
   const botonBuscar = elementoHtml('button', 'inventario-busqueda__buscar', 'Buscar');
   botonBuscar.type = 'submit';
   const botonLimpiar = elementoHtml('button', 'inventario-busqueda__limpiar', 'Limpiar');
   botonLimpiar.type = 'button';
   botonLimpiar.hidden = true;
-  busqueda.append(busquedaCampo, botonBuscar, botonLimpiar);
-  // UXC-1 — la busqueda vive en la pestana «Objetos», que es donde pagina.
+  busqueda.append(busquedaCampo, botonBuscar, botonLimpiar, busquedaPista);
   cabecera.append(botonNuevo);
 
   const editor = elementoHtml('section', 'inventario-editor');
@@ -307,15 +333,32 @@ function construirGestion() {
     'Tus héroes, con las cifras que les da lo que llevan puesto. Uno sin equipo no puede entrar a una partida y uno en misión no juega hasta que vuelva. Los torneos inscriben jugadores, no héroes: en un encuentro de torneo juegas con tu héroe equipado, como en cualquier batalla.',
   );
   const heroes = elementoHtml('div', 'inventario-heroes');
-  panelHeroes.append(introHeroes, heroes);
-
-  const panelObjetos = elementoHtml('section', 'inventario__panel inventario__panel--objetos');
-  const introObjetos = elementoHtml(
+  // PLAYER-07a (punto 25) — POSESIÓN y CATÁLOGO, separados: «Mis héroes» son
+  // los tuyos; «Héroes del Nexo», los que se pueden conseguir (catálogo de
+  // productos), cada uno con si ya es tuyo o dónde conseguirlo. No se regala
+  // ninguno: la propiedad la decide el inventario.
+  const tituloMisHeroes = elementoHtml('h2', 'inventario__seccion-titulo', 'Mis héroes');
+  tituloMisHeroes.id = 'inventario-mis-heroes';
+  const misHeroes = elementoHtml('section', 'inventario__seccion inventario__seccion--mis-heroes');
+  misHeroes.setAttribute('aria-labelledby', tituloMisHeroes.id);
+  misHeroes.append(tituloMisHeroes, introHeroes, heroes);
+  const tituloNexo = elementoHtml('h2', 'inventario__seccion-titulo', 'Héroes del Nexo');
+  tituloNexo.id = 'inventario-heroes-del-nexo';
+  const introNexo = elementoHtml(
     'p',
     'inventario__intro',
-    'Armas, armaduras, ítems, habilidades y épicas. Cada uno dice si está equipado, libre o bloqueado.',
+    'Los héroes que se pueden conseguir en el Nexo. Los que ya tienes salen marcados; los demás se consiguen en la tienda.',
   );
-  panelObjetos.append(introObjetos, busqueda, contenido, paginacion);
+  const heroesDelNexo = elementoHtml('div', 'heroes-del-nexo');
+  heroesDelNexo.dataset.zona = 'heroes-del-nexo';
+  const seccionNexo = elementoHtml('section', 'inventario__seccion inventario__seccion--nexo');
+  seccionNexo.setAttribute('aria-labelledby', tituloNexo.id);
+  seccionNexo.append(tituloNexo, introNexo, heroesDelNexo);
+  panelHeroes.append(misHeroes, seccionNexo);
+
+  const panelObjetos = elementoHtml('section', 'inventario__panel inventario__panel--objetos');
+  const introObjetos = elementoHtml('p', 'inventario__intro', TEXTO_DE_OBJETOS);
+  panelObjetos.append(introObjetos, contenido, paginacion);
 
   const panelEquipo = elementoHtml('section', 'inventario__panel inventario__panel--equipamiento');
   const selectorHeroe = elementoHtml('div', 'inventario-equipo__selector');
@@ -326,26 +369,46 @@ function construirGestion() {
 
   // UXC-5 (RF-INV-003) — el banner de misiones disponibles. Nace oculto: si el
   // módulo de misiones no responde, el requisito pide ocultarlo «sin afectar
-  // el resto de la vista», y hoy no hay módulo de misiones.
+  // el resto de la vista».
+  //
+  // PLAYER-07a (punto 25) — «aparece el mismo comienzo del módulo de
+  // misiones y eso no debería estar ahí». RF-INV-003 (confirmado) SÍ pide un
+  // banner de misiones en el inventario, así que no se quita: deja de ser lo
+  // primero de la página —donde parecía la cabecera de Misiones— y pasa al
+  // final, con su propio título y en formato compacto (inventario-jugador.css).
   const bannerMisiones = elementoHtml('div', 'inventario__banner-misiones');
   bannerMisiones.dataset.zona = 'banner-misiones';
   bannerMisiones.hidden = true;
+  const tituloMisiones = elementoHtml(
+    'h2',
+    'inventario__seccion-titulo',
+    'Misiones para tus héroes',
+  );
+  tituloMisiones.id = 'inventario-misiones';
+  const seccionMisiones = elementoHtml('section', 'inventario__seccion inventario__misiones');
+  seccionMisiones.setAttribute('aria-labelledby', tituloMisiones.id);
+  seccionMisiones.hidden = true;
+  seccionMisiones.append(tituloMisiones, bannerMisiones);
 
   return {
     elementos: [
       cabecera,
-      bannerMisiones,
+      busqueda,
       editor,
       mensaje,
       zonaPestanas,
       panelHeroes,
       panelObjetos,
       panelEquipo,
+      seccionMisiones,
     ],
     bannerMisiones,
+    seccionMisiones,
     zonaPestanas,
     panelHeroes,
     heroes,
+    heroesDelNexo,
+    introObjetos,
     panelObjetos,
     panelEquipo,
     selectorHeroe,
@@ -395,6 +458,7 @@ export async function montarInventario(
     equipar = equiparElemento,
     desequipar = desequiparElemento,
     consultarProducto = consultarProductoDelCatalogo,
+    listarHeroesDelNexo = () => listarProductos({ tipo: 'HEROE' }),
     fuenteMisiones = fuenteDeMisiones(),
     pestanaInicial = 'heroes',
     maxPaginas,
@@ -407,13 +471,32 @@ export async function montarInventario(
   vista.botonNuevo.hidden = !daDeAlta;
 
   // RF-INV-003: sin módulo de misiones se queda oculto y no hace ninguna
-  // petición; con él, las destacadas o, si no hay, la estrategia.
+  // petición; con él, las destacadas o, si no hay, la estrategia. Su sección
+  // (con su título) se enseña solo si el banner se enseña.
   montarBannerDeMisiones(vista.bannerMisiones, {
     fuente: fuenteMisiones,
     hrefDe: (mision) => `../misiones/misiones.html?mision=${encodeURIComponent(mision.id)}`,
     hrefTablon: '../misiones/misiones.html',
     hrefEstrategia: '../misiones/misiones.html#estrategia',
-  });
+  })
+    .catch(() => 'oculto')
+    .then(() => {
+      vista.seccionMisiones.hidden = vista.bannerMisiones.hidden;
+    });
+
+  /**
+   * PLAYER-07a — el catálogo de héroes se pide una vez por visita: al volver a
+   * reunir el inventario (crear, renombrar, equipar) solo cambia cuáles son
+   * tuyos. Si falla, se olvida, para que «Reintentar» vuelva a pedirlo.
+   */
+  let catalogoDeHeroes = null;
+  const leerCatalogoDeHeroes = () => {
+    catalogoDeHeroes ??= listarHeroesDelNexo().catch((fallo) => {
+      catalogoDeHeroes = null;
+      throw fallo;
+    });
+    return catalogoDeHeroes;
+  };
 
   /**
    * UXC-1 — la coleccion entera, partida en heroes y objetos (ver
@@ -504,6 +587,12 @@ export async function montarInventario(
     equipos = leido.equipos;
     prototipos = leido.prototipos;
     equipados = mapaDeEquipados(heroes, equipos);
+    // PLAYER-07a — «Héroes del Nexo»: no se espera. Si el catálogo tarda o
+    // falla, «Mis héroes» y el resto del inventario ya están en pantalla.
+    pintarHeroesDelNexo(vista.heroesDelNexo, {
+      listar: leerCatalogoDeHeroes,
+      propios: new Set(heroes.map((heroe) => heroe.productoId).filter(Boolean)),
+    }).catch((fallo) => console.warn('No se pudieron pintar los héroes del Nexo', fallo));
     if (!coleccion.completo) {
       vista.heroes.prepend(
         elementoHtml(
@@ -887,6 +976,10 @@ export async function montarInventario(
     vista.busquedaControl.value = criterio;
     vista.busqueda.classList.add('inventario-busqueda--activa');
     vista.botonLimpiar.hidden = false;
+    // PLAYER-07a — la búsqueda es de todo el inventario; sus resultados se
+    // ven en la vitrina de «Objetos», que es la que pagina.
+    pestanas.mostrar('objetos');
+    vista.introObjetos.textContent = TEXTO_DE_RESULTADOS;
     cambiarDisponibilidad(vista.botonBuscar, false);
     mostrarMensaje(`Buscando "${criterio}"...`);
     try {
@@ -908,6 +1001,7 @@ export async function montarInventario(
     vista.busquedaControl.value = '';
     vista.busqueda.classList.remove('inventario-busqueda--activa');
     vista.botonLimpiar.hidden = true;
+    vista.introObjetos.textContent = TEXTO_DE_OBJETOS;
     mostrarMensaje('');
     await actualizar(0);
     vista.busquedaControl.focus();

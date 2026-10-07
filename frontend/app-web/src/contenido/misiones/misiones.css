@@ -24,6 +24,17 @@
   padding-top: var(--e-5);
 }
 
+/* Revisión del modo jugador del 6-oct, punto 21 — el lema del tablón: más
+   grande que un metadato y en la tinta del mundo, no de la interfaz. */
+.misiones__lema {
+  max-width: 62ch;
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: 1.35;
+  color: var(--tinta-2);
+}
+
 /* --- Estado «no están disponibles ahora» (servicio sin responder) ------- */
 
 .misiones-estado {
@@ -591,23 +602,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .mision-detalle__cuerpo > [data-seccion='enemigos'] {
+  .mision-detalle__cuerpo > [data-seccion='enemigos'],
+  .mision-detalle__cuerpo > [data-seccion='jefe'] {
     grid-column: 1 / -1;
-  }
-
-  [data-seccion='enemigos'] {
-    display: grid;
-    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
-    column-gap: var(--e-5);
-    align-items: start;
-  }
-
-  [data-seccion='enemigos'] > .mision-detalle__subtitulo {
-    grid-column: 1 / -1;
-  }
-
-  [data-seccion='enemigos'] > .mision-jefe {
-    margin-top: 0;
   }
 }
 
@@ -707,37 +704,67 @@
   color: var(--texto-2);
 }
 
+/* Revisión del modo jugador del 6-oct, punto 22 — el jefe final en su propia
+   sección, a lo ancho y sobre el cromo: es el rival de la misión, no una
+   tarjeta más al lado de los enemigos. El filo rojo y el emblema grande lo
+   distinguen; el texto dice qué es (el color nunca va solo). */
+.mision-detalle__seccion[data-seccion='jefe'] {
+  --tinta: var(--texto-sobre-color);
+  --tinta-2: var(--pista);
+  --tinta-3: var(--pista);
+  border-color: color-mix(in srgb, var(--error) 55%, var(--borde));
+  background:
+    radial-gradient(
+      70% 120% at 0% 0%,
+      color-mix(in srgb, var(--error) 30%, transparent),
+      transparent 60%
+    ),
+    radial-gradient(
+      60% 120% at 100% 100%,
+      color-mix(in srgb, var(--acento-relleno) 35%, transparent),
+      transparent 65%
+    ),
+    var(--cromo);
+  color: var(--tinta);
+}
+
+.mision-detalle__seccion[data-seccion='jefe'] > .mision-detalle__subtitulo {
+  color: var(--tinta);
+}
+
 .mision-jefe {
   display: flex;
-  gap: var(--e-4);
-  margin-top: var(--e-4);
-  padding: var(--e-4);
-  border: 1px solid var(--borde-tenue);
-  border-left: 4px solid var(--error);
-  border-radius: var(--radio);
-  background: var(--superficie-2);
+  align-items: center;
+  gap: var(--e-5);
 }
 
 .mision-jefe__emblema {
   display: grid;
   flex: none;
   place-items: center;
-  width: 56px;
-  height: 56px;
+  width: 96px;
+  height: 96px;
   border-radius: 50%;
-  background: var(--error-insignia);
-  color: var(--error);
+  background: radial-gradient(
+    circle at 50% 40%,
+    color-mix(in srgb, var(--error) 55%, var(--cromo-elevado)),
+    var(--cromo) 75%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--error) 70%, transparent),
+    0 0 28px color-mix(in srgb, var(--error) 45%, transparent);
+  color: var(--texto-sobre-color);
 }
 
 .mision-jefe__emblema .icono {
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
 }
 
 .mision-jefe__cuerpo {
   display: flex;
   flex-direction: column;
-  gap: var(--e-1);
+  gap: var(--e-2);
   min-width: 0;
 }
 
@@ -745,29 +772,35 @@
   margin: 0;
   font-family: var(--t-meta-familia);
   font-size: var(--t-meta-tam);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--error);
+  color: var(--pista);
 }
 
 .mision-jefe__nombre {
   margin: 0;
-  font-family: var(--t-subtitulo-familia);
-  font-size: var(--t-subtitulo-tam);
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: 1.1;
   font-weight: 700;
+  color: var(--texto-sobre-color);
 }
 
 .mision-jefe__datos {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--e-2) var(--e-5);
+  gap: var(--e-2) var(--e-3);
   margin: 0;
 }
 
 .mision-jefe__datos > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--e-2);
+  padding: var(--e-1) var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--pista) 35%, transparent);
+  border-radius: var(--radio-pildora);
+  background: color-mix(in srgb, var(--cromo-elevado) 80%, transparent);
 }
 
 .mision-jefe__datos dt {
@@ -775,24 +808,38 @@
   align-items: center;
   gap: var(--e-1);
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  color: var(--pista);
 }
 
 .mision-jefe__datos dd {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
   font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto-sobre-color);
 }
 
 .mision-jefe__datos .icono {
   width: var(--icono-menudo);
   height: var(--icono-menudo);
-  color: var(--error);
+  color: var(--texto-sobre-color);
 }
 
 .mision-jefe__descripcion {
+  max-width: 70ch;
   margin: 0;
-  color: var(--texto-2);
+  color: var(--pista);
+}
+
+@media (max-width: 599px) {
+  .mision-jefe {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mision-jefe__emblema {
+    width: 72px;
+    height: 72px;
+  }
 }
 
 .mision-master__probabilidad {
@@ -923,34 +970,266 @@
   min-width: 640px;
 }
 
-/* --- Preparar la misión ------------------------------------------------ */
+/* --- Preparar la misión, paso a paso (puntos 22 y 23) ------------------ */
 
-.mision-detalle__configurar {
+/* Los dos modos del detalle: la misión, o su preparación. Lo que no toca no
+   se pinta (ni se lee): con display:none sale también del árbol accesible. */
+.mision-detalle[data-modo='preparar'] .mision-detalle__cuerpo,
+.mision-detalle[data-modo='preparar'] .mision-detalle__preparar,
+.mision-detalle[data-modo='detalles'] .mision-asistente {
+  display: none;
+}
+
+.mision-asistente {
   display: flex;
   flex-direction: column;
   gap: var(--e-4);
   scroll-margin-top: calc(var(--cabecera-alto) + var(--e-4));
 }
 
-.mision-detalle__inicio {
+.mision-asistente__cabecera {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: var(--e-3);
 }
 
-.mision-detalle__advertencia {
-  display: flex;
-  align-items: flex-start;
+/* El indicador de pasos: cinco marcas con su número; la de ahora, llena; las
+   hechas, con el filo de energía. En el teléfono solo cabe la de ahora. */
+.mision-asistente__pasos {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: none;
+}
+
+.mision-asistente__marca {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 0;
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--pista) 30%, transparent);
+  border-radius: var(--radio);
+  background: color-mix(in srgb, var(--cromo-elevado) 70%, transparent);
+  color: var(--pista);
+}
+
+.mision-asistente__numero {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid currentcolor;
+  font-family: var(--t-titulo-familia);
+  font-weight: 700;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.mision-asistente__etiqueta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.mision-asistente__marca[data-estado='actual'] {
+  border-color: var(--enlace-sobre-cromo);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+}
+
+.mision-asistente__marca[data-estado='actual'] .mision-asistente__numero {
+  border-color: var(--texto-sobre-color);
+  background: var(--texto-sobre-color);
+  color: var(--primaria-relleno);
+}
+
+.mision-asistente__marca[data-estado='hecho'] {
+  border-color: color-mix(in srgb, var(--enlace-sobre-cromo) 60%, transparent);
+  color: var(--texto-sobre-color);
+}
+
+.mision-asistente__marca[data-estado='hecho'] .mision-asistente__numero {
+  border-color: var(--enlace-sobre-cromo);
+  color: var(--enlace-sobre-cromo);
+}
+
+.mision-asistente__paso {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-4);
+}
+
+.mision-asistente__encabezado {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.mision-asistente__contador {
+  margin: 0;
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--texto-3);
+}
+
+.mision-asistente__titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+}
+
+.mision-asistente__detalle {
+  max-width: 70ch;
   margin: 0;
   color: var(--texto-2);
 }
 
-.mision-detalle__motivo-inicio {
+.mision-asistente__equipo {
+  width: fit-content;
+  min-height: var(--objetivo-tactil);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* El configurador va dentro del paso: sin su propia tarjeta ni su cabecera
+   (el asistente pone el título de cada paso). */
+.mision-asistente .estrategia {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.mision-asistente .estrategia__cabecera {
+  display: none;
+}
+
+/* Qué parte del configurador se ve en cada paso. */
+.mision-asistente[data-paso='heroe']
+  :is(
+    .estrategia__nivel,
+    .estrategia__vista-previa,
+    .estrategia__editor,
+    .estrategia__acciones,
+    .estrategia__veredicto
+  ),
+.mision-asistente[data-paso='estadisticas']
+  :is(.estrategia__heroes, .estrategia__editor, .estrategia__acciones, .estrategia__veredicto),
+.mision-asistente[data-paso='rotaciones']
+  :is(
+    .estrategia__eleccion,
+    .estrategia__vista-previa,
+    .estrategia__acciones,
+    .estrategia__veredicto
+  ),
+.mision-asistente[data-paso='comprobar']
+  :is(.estrategia__eleccion, .estrategia__vista-previa, .estrategia__editor),
+.mision-asistente[data-paso='confirmar'] .estrategia,
+.mision-asistente:not([data-paso='confirmar']) .mision-asistente__confirmar {
+  display: none;
+}
+
+/* El título de cada paso ya dice qué se hace: las leyendas de los grupos del
+   configurador («Elige el héroe», «Ordena sus rotaciones») sobran a la vista,
+   pero siguen nombrando su grupo para el lector de pantalla. */
+.mision-asistente .estrategia__paso-titulo {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.mision-asistente__confirmar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-3);
+  background: var(--superficie-2);
+  box-shadow: none;
+}
+
+.mision-asistente__resumen:empty {
+  display: none;
+}
+
+.mision-asistente__navegacion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3);
+  padding-top: var(--e-3);
+  border-top: 1px solid var(--borde);
+}
+
+.mision-asistente__navegacion [data-accion='paso-siguiente'] {
+  margin-left: auto;
+}
+
+.mision-asistente__atras {
+  transform: rotate(180deg);
+}
+
+.mision-asistente__motivo {
+  flex: 1 1 200px;
   margin: 0;
   font-size: var(--t-meta-tam);
-  color: var(--texto-3);
+  color: var(--texto-2);
+  text-align: right;
+}
+
+.mision-asistente__motivo:empty {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  /* Un paso por pantalla: el indicador se queda con la marca de ahora y su
+     número; las demás son puntos. */
+  .mision-asistente__pasos {
+    grid-template-columns: repeat(5, auto);
+    justify-content: start;
+  }
+
+  .mision-asistente__marca:not([data-estado='actual']) .mision-asistente__etiqueta {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .mision-asistente__marca:not([data-estado='actual']) {
+    padding: var(--e-1);
+  }
+
+  .mision-asistente__navegacion > .boton {
+    flex: 1 1 auto;
+  }
+
+  .mision-asistente__motivo {
+    flex-basis: 100%;
+    order: -1;
+    text-align: left;
+  }
 }
 
 /* --- Estrategia (RotationBuilder) -------------------------------------- */

@@ -122,7 +122,8 @@
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
       montarCabecera(document.querySelector('[data-cabecera-app]'), {
         vista: 'chat',
-        seccionActiva: 'jugar',
+        // Revisión del 6-oct, punto 7: el chat tiene su atajo en la barra.
+        seccionActiva: 'chat',
       });
 
       // UXC-6 — el chat general o el de la sala, y la pestaña de mensajes

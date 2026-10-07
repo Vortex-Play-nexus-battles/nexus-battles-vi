@@ -249,11 +249,52 @@ describe('armazón de jugador', () => {
       'Historial de transacciones',
       'Mis cofres',
       'Tienda',
+      'Chat',
       'Mis sanciones',
       'Cerrar sesión',
     ]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(menu.hidden).toBe(true);
+  });
+
+  /*
+   * Revisión del modo jugador del 6-oct, punto 7: lo que solo estaba en «A
+   * dónde ir» del inicio (la tienda y el chat) sube a la barra como atajo del
+   * HUD. Los seis destinos de RF-INV-008 no cambian.
+   */
+  test('punto 7: la tienda y el chat como atajos del HUD, con nombre e icono', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+    const atajos = [...elemento.querySelectorAll('.cabecera__acciones .cabecera__atajo')];
+    expect(atajos.map((a) => a.dataset.atajo)).toEqual(['tienda', 'chat']);
+    expect(atajos.map((a) => a.getAttribute('aria-label'))).toEqual(['Tienda', 'Chat']);
+    expect(atajos[0].href).toMatch(/cuentas\/tienda\.html$/);
+    expect(atajos[1].href).toMatch(/salas-partidas\/chat\.html$/);
+    for (const atajo of atajos) {
+      expect(atajo.querySelector('svg[aria-hidden="true"] use')).not.toBeNull();
+    }
+    // Los seis destinos, intactos.
+    expect(elemento.querySelectorAll('.cabecera__nav .cabecera__destino')).toHaveLength(6);
+    // Entre el saldo y la campana.
+    const orden = [...elemento.querySelector('.cabecera__acciones').children].map(
+      (hijo) => hijo.dataset.zona ?? hijo.dataset.atajo ?? hijo.className,
+    );
+    expect(orden.indexOf('tienda')).toBeGreaterThan(orden.indexOf('creditos'));
+    expect(orden.indexOf('chat')).toBeLessThan(orden.indexOf('cabecera__campana'));
+  });
+
+  test('punto 7: en la tienda, su atajo queda marcado y ningún destino lo está', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'tienda', seccionActiva: 'tienda' });
+    const tienda = elemento.querySelector('[data-atajo="tienda"]');
+    expect(tienda.classList.contains('activo')).toBe(true);
+    expect(tienda.getAttribute('aria-current')).toBe('page');
+    expect(elemento.querySelectorAll('.cabecera__destino.activo')).toHaveLength(0);
+  });
+
+  test('punto 7: sin sesión no hay atajos del HUD', () => {
+    const { elemento } = montar({ vista: 'subastas' });
+    expect(elemento.querySelector('.cabecera__atajo')).toBeNull();
   });
 
   test('un jugador no ve rastro de administración; quien la opera tiene su puerta', () => {

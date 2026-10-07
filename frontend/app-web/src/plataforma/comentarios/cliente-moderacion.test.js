@@ -79,6 +79,65 @@ describe('las rutas', () => {
     expect(FILTROS_DE_COLA.map((f) => f.marcado)).toEqual([null, true, false]);
   });
 
+  test('1.10.0: la categoría viaja solo cuando hay una elegida; «Todas» no genera parámetro', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola({ categoria: 'ACOSO' }, { fetchImpl });
+    await consultarCola({ categoria: '' }, { fetchImpl });
+    await consultarCola({ categoria: null }, { fetchImpl });
+    await consultarCola({}, { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain('categoria=ACOSO');
+    for (const llamada of fetchImpl.mock.calls.slice(1)) {
+      expect(llamada[0]).not.toContain('categoria');
+    }
+  });
+
+  test('1.10.0: prioridadElevada viaja solo cuando es true o false', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola({ prioridadElevada: true }, { fetchImpl });
+    await consultarCola({ prioridadElevada: false }, { fetchImpl });
+    await consultarCola({ prioridadElevada: null }, { fetchImpl });
+    await consultarCola({ prioridadElevada: undefined }, { fetchImpl });
+    await consultarCola({ prioridadElevada: '' }, { fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain('prioridadElevada=true');
+    expect(fetchImpl.mock.calls[1][0]).toContain('prioridadElevada=false');
+    for (const llamada of fetchImpl.mock.calls.slice(2)) {
+      expect(llamada[0]).not.toContain('prioridadElevada');
+    }
+  });
+
+  test('1.10.0: los filtros nuevos se combinan con marcado y producto en la misma consulta', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ entradas: [] }));
+    await consultarCola(
+      { productoId: 'p-1', marcado: false, categoria: 'SPAM', prioridadElevada: true },
+      { fetchImpl },
+    );
+
+    const [url] = fetchImpl.mock.calls[0];
+    expect(url.startsWith('/api/v1/comentarios/moderacion?')).toBe(true);
+    expect(Object.fromEntries(new URLSearchParams(url.split('?')[1]))).toEqual({
+      pagina: '0',
+      tamano: '20',
+      productoId: 'p-1',
+      marcado: 'false',
+      categoria: 'SPAM',
+      prioridadElevada: 'true',
+    });
+  });
+
+  test('1.10.0: los filtros de prioridad son «Todas», solo elevada y sin elevada', async () => {
+    const { FILTROS_DE_PRIORIDAD } = await import('./cliente-moderacion.js');
+
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.valor)).toEqual(['todas', 'elevada', 'sin-elevada']);
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.etiqueta)).toEqual([
+      'Todas',
+      'Solo prioridad elevada',
+      'Sin prioridad elevada',
+    ]);
+    expect(FILTROS_DE_PRIORIDAD.map((f) => f.prioridadElevada)).toEqual([null, true, false]);
+  });
+
   test('el detalle y la decision cuelgan del comentario dentro de la cola', async () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta({}));
     await consultarDetalle('com-1', { fetchImpl });

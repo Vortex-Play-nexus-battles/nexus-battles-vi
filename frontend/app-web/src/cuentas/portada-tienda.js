@@ -4,8 +4,10 @@
  * Quien llegaba a Nexus Battles VI sin cuenta aterrizaba en la entrada y solo
  * veía un formulario: nada de lo que el juego vende. Desde F6 (auditoría del
  * 4-oct, cambio autorizado n.º 3) `/` es la portada pública (`portada.html`)
- * con esta misma tienda, y la entrada (`/login`) la sigue enseñando debajo
- * del formulario. §7.5 describe una vitrina, y la vitrina es pública
+ * con esta misma tienda. La entrada (`/login`) ya no la enseña: la revisión
+ * del modo jugador del 6-oct (puntos 2 y 3) pidió que entrar sea solo entrar;
+ * el inicio del jugador tiene su propio escaparate (`home.js`). §7.5
+ * describe una vitrina, y la vitrina es pública
  * (`GET /api/v1/vitrina`, `security: []` en ecommerce-carrito.yaml), así que
  * la portada la enseña: productos reales, con su imagen, nombre, tipo, precio
  * y rebaja si la hay, y «Ver producto» para su detalle —el mismo del

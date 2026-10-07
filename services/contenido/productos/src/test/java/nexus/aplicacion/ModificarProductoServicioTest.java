@@ -169,6 +169,99 @@ class ModificarProductoServicioTest {
                 verify(repositorio, never()).save(any(Producto.class));
         }
 
+        // RG-085 / RF-MOT-36: la fusion de una epica se valida con la regla de que
+        // la unica fuente de epicas es derrotar al Master: sin precio y sin premium.
+        @Test
+        @DisplayName("RG-085: ponerle precio en creditos a una epica se rechaza y no se guarda ni respalda nada")
+        void rechazaPrecioEnCreditosSobreEpica() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                ModificacionProductoInvalidaException error = assertThrows(
+                        ModificacionProductoInvalidaException.class,
+                        () -> servicio.modificar(epica.id(), cambiosDePrecio(500, null, null), AUTOR));
+
+                org.junit.jupiter.api.Assertions.assertTrue(
+                        error.getMessage().contains("derrotando al M\u00e1ster"), error.getMessage());
+                verify(respaldoRepositorio, never()).save(any(RespaldoProducto.class));
+                verify(repositorio, never()).save(any(Producto.class));
+        }
+
+        @Test
+        @DisplayName("RG-085: ponerle precio en moneda real a una epica se rechaza")
+        void rechazaPrecioEnMonedaRealSobreEpica() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                assertThrows(
+                        ModificacionProductoInvalidaException.class,
+                        () -> servicio.modificar(epica.id(), cambiosDePrecio(null, new BigDecimal("10000"), null), AUTOR));
+
+                verify(repositorio, never()).save(any(Producto.class));
+        }
+
+        @Test
+        @DisplayName("RG-085: hacer premium a una epica se rechaza")
+        void rechazaPremiumSobreEpica() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                assertThrows(
+                        ModificacionProductoInvalidaException.class,
+                        () -> servicio.modificar(epica.id(), cambiosDePrecio(null, null, true), AUTOR));
+
+                verify(repositorio, never()).save(any(Producto.class));
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica sin precio se edita sin que la regla estorbe")
+        void editaUnaEpicaSinPrecio() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(repositorio.findById(epica.id())).thenReturn(Optional.of(epica));
+                when(repositorio.save(any(Producto.class)))
+                        .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                Producto resultado = servicio.modificar(epica.id(), solicitudConNombre("Epica renombrada"), AUTOR);
+
+                assertEquals("Epica renombrada", resultado.nombre());
+                verify(respaldoRepositorio).save(any(RespaldoProducto.class));
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica que quedo con precio (editada a mano antes de la regla) se puede dejar en cero")
+        void unaEpicaConPrecioSePuedeDejarEnCero() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldoRepositorio = mock(RespaldoProductoRepository.class);
+                Producto conPrecio = productoEpica(500, new BigDecimal("10000"));
+                when(repositorio.findById(conPrecio.id())).thenReturn(Optional.of(conPrecio));
+                when(repositorio.save(any(Producto.class)))
+                        .thenAnswer(invocacion -> guardadoVersionado(invocacion.getArgument(0, Producto.class)));
+                ModificarProductoServicio servicio = new ModificarProductoServicio(
+                        repositorio, respaldoRepositorio, mapper, validator);
+
+                Producto resultado = servicio.modificar(
+                        conPrecio.id(), cambiosDePrecio(0, BigDecimal.ZERO, false), AUTOR);
+
+                assertEquals(0, resultado.precioCreditos());
+                assertEquals(0, resultado.precioMonedaReal().signum());
+        }
+
         @Test
         @DisplayName("producto inexistente lanza ProductoNoEncontradoException y no toca ningun repositorio de escritura")
         void productoInexistente() {
@@ -254,6 +347,45 @@ class ModificarProductoServicioTest {
                         nombre, null, null, null, null, null, null, null, null,
                         null, null, null, null, null, null, null, null, null,
                         null, null);
+        }
+
+        private static SolicitudModificarProducto cambiosDePrecio(
+                        Integer precioCreditos, BigDecimal precioMonedaReal, Boolean premium) {
+                return new SolicitudModificarProducto(
+                        null, null, null, null, precioCreditos, precioMonedaReal, premium, null, null,
+                        null, null, null, null, null, null, null, null, null,
+                        null, null);
+        }
+
+        private static Producto productoEpica(int precioCreditos, BigDecimal precioMonedaReal) {
+                Instant ahora = Instant.parse("2026-08-27T18:00:00Z");
+                return new Producto(
+                        UUID.randomUUID().toString(),            // id
+                        "Epica de prueba",                       // nombre
+                        "productos/epica-prueba.webp",           // imagen
+                        "Epica de prueba",                       // descripcion
+                        TipoProducto.EPICA,                      // tipo
+                        -1,                                      // tiraje
+                        precioCreditos,                          // precioCreditos
+                        precioMonedaReal,                        // precioMonedaReal
+                        false,                                   // premium
+                        null,                                    // prototipo
+                        "550e8400-e29b-41d4-a716-446655440000",  // heroe
+                        null,                                    // costoPoder
+                        null,                                    // multiplicadorNivel
+                        null,                                    // turnosCarga
+                        2,                                       // turnosRecarga
+                        "Aumenta el poder de todo el equipo",    // efectoGeneral
+                        "Duplica el poder durante dos turnos",   // efectoPotenciado
+                        null,                                    // defensa
+                        null,                                    // parte
+                        null,                                    // efecto
+                        null,                                    // poderDeAtaque
+                        null,                                    // tasaDeCaida
+                        EstadoProducto.ACTIVO,                   // estado
+                        1,                                       // version
+                        ahora,                                   // creadoEn
+                        ahora);                                  // modificadoEn
         }
 
         private static Producto productoArma() {

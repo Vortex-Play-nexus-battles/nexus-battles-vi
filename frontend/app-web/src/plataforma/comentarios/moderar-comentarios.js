@@ -61,7 +61,9 @@ import {
   resolverComentario,
   ACCIONES_INTERNAS,
   ACCIONES_SIN_CAMBIO_DE_ESTADO,
+  CATEGORIAS,
   FILTROS_DE_COLA,
+  FILTROS_DE_PRIORIDAD,
   MOTIVO_MAXIMO,
   MOTIVO_MINIMO,
   MOTIVO_MODERACION,
@@ -709,10 +711,84 @@ function filtroElegido(filtro) {
 }
 
 /**
+ * El filtro de prioridad que esta elegido (1.10.0); sin el control, «Todas».
+ *
+ * @param {HTMLSelectElement|null} filtro
+ * @returns {{valor: string, etiqueta: string, prioridadElevada: boolean|null}}
+ */
+function prioridadElegida(filtro) {
+  return FILTROS_DE_PRIORIDAD.find((f) => f.valor === filtro?.value) ?? FILTROS_DE_PRIORIDAD[0];
+}
+
+/**
+ * Anade las opciones de un select que el HTML trae solo con «Todas». Si ya trae
+ * mas, no las duplica: montar dos veces la vista no debe repetir la lista.
+ *
+ * @param {HTMLSelectElement|null} select
+ * @param {Array<{valor: string, etiqueta: string}>} opciones
+ */
+function llenarOpciones(select, opciones) {
+  if (!select || select.options.length > 1) {
+    return;
+  }
+  select.append(
+    ...opciones.map(({ valor, etiqueta }) =>
+      h('option', { texto: etiqueta, atributos: { value: valor } }),
+    ),
+  );
+}
+
+/**
+ * La cola vacia porque los filtros no coinciden con nada. NO es una cola sin
+ * trabajo ni un error: no dice que no haya nada pendiente, ni da ninguna
+ * explicacion de por que, y ofrece quitar los filtros.
+ *
+ * @param {{categoria: string|null, prioridadElevada: boolean|null}} filtros
+ * @param {() => void} alQuitar
+ * @returns {HTMLElement}
+ */
+function vacioPorFiltros({ categoria, prioridadElevada }, alQuitar) {
+  const soloPrioridad = prioridadElevada === true && !categoria;
+  return estadoVacio({
+    titulo: 'Ningún comentario coincide con los filtros',
+    detalle: soloPrioridad
+      ? 'En este momento ningún comentario de la cola tiene prioridad elevada.'
+      : 'Prueba con otros filtros o quítalos para ver todo lo pendiente.',
+    accion: { texto: 'Quitar filtros', nombre: 'quitar-filtros', alPulsar: alQuitar },
+  });
+}
+
+/**
+ * El estado vacio de la cola, segun por que esta vacia. «Marcado» elige que cola
+ * se mira y tiene sus propios vacios; solo categoria y prioridad son filtros que
+ * pueden dejarla sin nada, y con ellos manda el mensaje de los filtros.
+ *
+ * @param {{marcado: boolean|null, categoria: string|null, prioridadElevada: boolean|null}} elegido
+ * @param {() => void} alQuitarFiltros
+ * @returns {HTMLElement}
+ */
+function vacioDeLaCola({ marcado, categoria, prioridadElevada }, alQuitarFiltros) {
+  if (categoria !== null || prioridadElevada !== null) {
+    return vacioPorFiltros({ categoria, prioridadElevada }, alQuitarFiltros);
+  }
+  if (marcado === true) {
+    return estadoVacio({
+      titulo: 'No hay comentarios marcados para seguimiento',
+      detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
+    });
+  }
+  return estadoVacio({
+    titulo: 'No hay comentarios esperando revisión',
+    detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
+  });
+}
+
+/**
  * Monta la vista completa.
  *
  * @param {HTMLElement} raiz elemento con las zonas `cola`, `detalle` y `aviso`
- *   (y, si lo trae, el filtro `[data-zona="filtro"]`)
+ *   (y, si los trae, los filtros `[data-zona="filtro"]`, `"filtro-categoria"` y
+ *   `"filtro-prioridad"`; los dos ultimos traen solo «Todas» y la vista anade el resto)
  * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string,
  *          rol?: string|null}} [opciones]
  *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real. `rol`
@@ -736,6 +812,14 @@ export function montarModeracion(
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const filtro = raiz.querySelector('[data-zona="filtro"]');
+  // 1.10.0: categoria de reporte y prioridad. Se combinan con `filtro` (marcado).
+  const filtroCategoria = raiz.querySelector('[data-zona="filtro-categoria"]');
+  const filtroPrioridad = raiz.querySelector('[data-zona="filtro-prioridad"]');
+  llenarOpciones(filtroCategoria, CATEGORIAS);
+  llenarOpciones(filtroPrioridad, FILTROS_DE_PRIORIDAD.slice(1));
+  // Cada recarga lleva un numero: la respuesta de una anterior que llega tarde no
+  // pinta la cola (con tres filtros y el teclado, los cambios seguidos son normales).
+  let generacion = 0;
   // El detalle no trae `prioridadElevada`: se recuerda de la entrada de la
   // cola desde la que se abrio. `recargar` lo rehace antes de reabrir.
   const prioridadPorComentario = new Map();
@@ -768,12 +852,20 @@ export function montarModeracion(
     vaciar(zonaDetalle);
     pintarEstado(zonaCola, estadoDeCarga({ filas: 3, etiqueta: 'Cargando la cola…' }));
     const elegido = filtroElegido(filtro);
+    const categoria = filtroCategoria?.value || null;
+    const soloPrioridad = prioridadElegida(filtroPrioridad).prioridadElevada;
+    const miRecarga = ++generacion;
     try {
       const cola = await cliente.consultarCola({
         productoId,
         marcado: elegido.marcado,
+        categoria,
+        prioridadElevada: soloPrioridad,
         tamano: TAMANO,
       });
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       prioridadPorComentario.clear();
       for (const { comentario, prioridadElevada } of cola.entradas ?? []) {
@@ -784,15 +876,10 @@ export function montarModeracion(
         // nada pendiente. Por eso estado vacio y no estado de error.
         pintarEstado(
           zonaCola,
-          elegido.marcado === true
-            ? estadoVacio({
-                titulo: 'No hay comentarios marcados para seguimiento',
-                detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
-              })
-            : estadoVacio({
-                titulo: 'No hay comentarios esperando revisión',
-                detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
-              }),
+          vacioDeLaCola(
+            { marcado: elegido.marcado, categoria, prioridadElevada: soloPrioridad },
+            quitarFiltros,
+          ),
         );
         return;
       }
@@ -800,6 +887,9 @@ export function montarModeracion(
         zonaCola.append(tarjetaDeEntrada(entrada, (id) => abrir(id), { hrefDeFicha }));
       }
     } catch (error) {
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       // UX-R4.3 — el reintento solo cuando reintentar puede servir de algo.
       // Un 403 no se arregla pulsando otra vez: el permiso no va a cambiar
@@ -883,7 +973,25 @@ export function montarModeracion(
     }
   }
 
+  /**
+   * «Quitar filtros»: categoria y prioridad vuelven a «Todas». «Mostrar» no se
+   * toca. El foco pasa al primer filtro antes de recargar, porque el boton que
+   * se acaba de pulsar desaparece con la recarga.
+   */
+  function quitarFiltros() {
+    if (filtroCategoria) {
+      filtroCategoria.value = '';
+    }
+    if (filtroPrioridad) {
+      filtroPrioridad.value = FILTROS_DE_PRIORIDAD[0].valor;
+    }
+    (filtroCategoria ?? filtroPrioridad)?.focus();
+    void recargar();
+  }
+
   filtro?.addEventListener('change', () => recargar());
+  filtroCategoria?.addEventListener('change', () => recargar());
+  filtroPrioridad?.addEventListener('change', () => recargar());
   recargar();
   return { recargar };
 }

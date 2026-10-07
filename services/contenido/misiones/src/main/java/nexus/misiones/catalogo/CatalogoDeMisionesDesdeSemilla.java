@@ -2,6 +2,8 @@ package nexus.misiones.catalogo;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -42,6 +44,13 @@ import tools.jackson.databind.json.JsonMapper;
  *       Se exige que su origen sea {@link Origen#PROVISIONAL_DEV} y que su
  *       nombre empiece por {@value #PREFIJO_PROVISIONAL}: una mision inventada
  *       nunca pasa por contenido del juego.</li>
+ *   <li>una semilla EXTRA, de disco y no del servicio, solo si se da su ruta
+ *       ({@code MISIONES_SEMILLA_EXTRA}): la monta el banco E2E para tener una
+ *       mision con un Master que siempre aparece. Tiene las mismas reglas que
+ *       la provisional (origen {@link Origen#PROVISIONAL_DEV}, nombre marcado,
+ *       sin Tabla 20). Su contenido no esta en el jar, asi que un entorno que
+ *       no monte el archivo no puede publicarla; y si da la ruta de un archivo
+ *       que no existe, el servicio no arranca.</li>
  * </ul>
  *
  * <p>La lectura es estricta: un campo que no existe (una errata en la semilla)
@@ -77,10 +86,21 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
      * @throws IllegalStateException si una semilla falta, no se lee o no es coherente
      */
     public static CatalogoDeMisionesDesdeSemilla cargar(boolean conProvisional) {
+        return cargar(conProvisional, null);
+    }
+
+    /**
+     * @param conProvisional si se suma la semilla provisional de desarrollo
+     * @param semillaExtra   ruta de una semilla de disco (la del banco E2E), o nula
+     * @throws IllegalStateException si una semilla falta, no se lee o no es coherente, incluida
+     *                               una ruta extra que no existe
+     */
+    public static CatalogoDeMisionesDesdeSemilla cargar(boolean conProvisional, Path semillaExtra) {
         SemillaDeMisiones documento = leer(DEL_DOCUMENTO);
         SemillaDeMisiones progresion = leer(DE_PROGRESION);
         SemillaDeMisiones provisional = conProvisional ? leer(PROVISIONAL_DE_DEV) : null;
-        return desde(documento, progresion, provisional);
+        SemillaDeMisiones extra = semillaExtra == null ? null : leer(semillaExtra);
+        return desde(documento, progresion, provisional, extra);
     }
 
     /** El catalogo sin la semilla de progresion, como era antes de D-42. */
@@ -99,6 +119,16 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
      */
     static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones progresion,
                                                 SemillaDeMisiones provisional) {
+        return desde(documento, progresion, provisional, null);
+    }
+
+    /**
+     * Lo mismo, con la semilla extra del banco E2E.
+     *
+     * @param extra nula si no se carga; sigue las reglas de la provisional
+     */
+    static CatalogoDeMisionesDesdeSemilla desde(SemillaDeMisiones documento, SemillaDeMisiones progresion,
+                                                SemillaDeMisiones provisional, SemillaDeMisiones extra) {
         List<Mision> todas = new ArrayList<>();
         for (Mision mision : documento.misiones()) {
             if (mision.origen() != Origen.DOCUMENTO) {
@@ -123,19 +153,8 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
                 todas.add(mision);
             }
         }
-        if (provisional != null) {
-            for (Mision mision : provisional.misiones()) {
-                if (mision.origen() != Origen.PROVISIONAL_DEV || !mision.nombre().startsWith(PREFIJO_PROVISIONAL)) {
-                    throw new IllegalStateException("La mision provisional «" + mision.id()
-                            + "» debe tener origen PROVISIONAL_DEV y su nombre empezar por " + PREFIJO_PROVISIONAL
-                            + ".");
-                }
-                todas.add(mision);
-            }
-            if (!provisional.tabla20().isEmpty()) {
-                throw new IllegalStateException("La Tabla 20 es del documento: la semilla provisional no la toca.");
-            }
-        }
+        agregarProvisionales(todas, provisional, "provisional");
+        agregarProvisionales(todas, extra, "extra");
         Set<String> ids = new HashSet<>();
         for (Mision mision : todas) {
             if (!ids.add(mision.id())) {
@@ -159,6 +178,24 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
         return new CatalogoDeMisionesDesdeSemilla(todas, documento.tabla20());
     }
 
+    /** Las misiones de una semilla que no es del juego: marcadas, sin Tabla 20. */
+    private static void agregarProvisionales(List<Mision> todas, SemillaDeMisiones semilla, String cual) {
+        if (semilla == null) {
+            return;
+        }
+        for (Mision mision : semilla.misiones()) {
+            if (mision.origen() != Origen.PROVISIONAL_DEV || !mision.nombre().startsWith(PREFIJO_PROVISIONAL)) {
+                throw new IllegalStateException("La mision " + cual + " «" + mision.id()
+                        + "» debe tener origen PROVISIONAL_DEV y su nombre empezar por " + PREFIJO_PROVISIONAL
+                        + ".");
+            }
+            todas.add(mision);
+        }
+        if (!semilla.tabla20().isEmpty()) {
+            throw new IllegalStateException("La Tabla 20 es del documento: la semilla " + cual + " no la toca.");
+        }
+    }
+
     /** Lee una semilla del classpath, sin tolerar campos desconocidos. */
     static SemillaDeMisiones leer(String recurso) {
         try (InputStream entrada = CatalogoDeMisionesDesdeSemilla.class.getClassLoader()
@@ -169,6 +206,19 @@ public final class CatalogoDeMisionesDesdeSemilla implements CatalogoDeMisiones 
             return leer(entrada, recurso);
         } catch (IOException e) {
             throw new IllegalStateException("No se pudo leer la semilla " + recurso + ".", e);
+        }
+    }
+
+    /** Lee una semilla de un archivo del disco; si no esta, el servicio no arranca. */
+    static SemillaDeMisiones leer(Path archivo) {
+        if (!Files.isRegularFile(archivo)) {
+            throw new IllegalStateException("No se encontro la semilla extra " + archivo
+                    + ": si no se va a usar, quitar MISIONES_SEMILLA_EXTRA.");
+        }
+        try (InputStream entrada = Files.newInputStream(archivo)) {
+            return leer(entrada, archivo.toString());
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo leer la semilla " + archivo + ".", e);
         }
     }
 

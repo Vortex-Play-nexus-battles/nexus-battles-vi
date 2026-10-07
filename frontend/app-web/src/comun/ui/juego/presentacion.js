@@ -39,6 +39,40 @@
 import { h, vaciar } from '../dom.js';
 import { retratoDeHeroe } from './heroe.js';
 
+/** Segundos de la cuenta atrás del comienzo (revisión del modo jugador del 6-oct, punto 17). */
+export const SEGUNDOS_DE_CUENTA_ATRAS = 5;
+
+/** Cuánto se ve «¡COMBATE!» al final de la cuenta, antes de entrar al campo. */
+export const PAUSA_FINAL_MS = 800;
+
+/** Lo que se lee al llegar a cero. */
+export const GRITO_DE_COMBATE = '¡COMBATE!';
+
+/**
+ * Cuántos segundos de cuenta atrás quedan para una partida que empezó en
+ * `iniciadaEn`, contados con el reloj de quien mira. Sincroniza a dos
+ * jugadores que reciben el comienzo con un poco de diferencia; un reloj
+ * desfasado no alarga la cuenta más allá de su duración, ni la vuelve
+ * negativa. Sin hora de inicio, la cuenta entera.
+ *
+ * @param {string|null|undefined} iniciadaEn ISO-8601 del servidor
+ * @param {number} [ahora] milisegundos
+ * @param {number} [duracion] segundos
+ * @returns {number} segundos enteros, de 0 a `duracion`
+ */
+export function segundosDeCuentaAtras(
+  iniciadaEn,
+  ahora = Date.now(),
+  duracion = SEGUNDOS_DE_CUENTA_ATRAS,
+) {
+  const inicio = Date.parse(iniciadaEn ?? '');
+  if (!Number.isFinite(inicio)) {
+    return duracion;
+  }
+  const quedan = duracion - (ahora - inicio) / 1000;
+  return Math.max(0, Math.min(duracion, Math.ceil(quedan)));
+}
+
 /**
  * Quien abrio el combate.
  *
@@ -94,6 +128,8 @@ export function presentacionDeHeroes({
   turnoActual = null,
   yo = null,
   alCerrar = () => {},
+  cuentaAtras = 0,
+  programar = (fn, ms) => setTimeout(fn, ms),
 } = {}) {
   const conHeroe = participantes.filter((p) => p?.heroe?.nombre);
   if (conHeroe.length === 0) {
@@ -153,14 +189,22 @@ export function presentacionDeHeroes({
     );
   }
 
-  const entrar = h('button', {
-    clase: 'boton boton--primario presentacion__entrar',
-    texto: 'Entrar al combate',
-    atributos: { type: 'button' },
-    datos: { accion: 'entrar-al-combate' },
-  });
-  entrar.addEventListener('click', () => cerrar(capa, alCerrar));
-  capa.append(entrar);
+  const segundos = Number.isInteger(cuentaAtras) && cuentaAtras > 0 ? cuentaAtras : 0;
+  if (segundos > 0) {
+    // Revisión del modo jugador del 6-oct, punto 17: 5, 4, 3, 2, 1, ¡COMBATE!
+    // Es una pausa de la vista, no del servidor (no hay esperas en el
+    // backend): lo que llegue mientras tanto se retiene y se ve después.
+    capa.append(...cuentaAtrasDe(capa, segundos, { programar, alCerrar }));
+  } else {
+    const entrar = h('button', {
+      clase: 'boton boton--primario presentacion__entrar',
+      texto: 'Entrar al combate',
+      atributos: { type: 'button' },
+      datos: { accion: 'entrar-al-combate' },
+    });
+    entrar.addEventListener('click', () => cerrar(capa, alCerrar));
+    capa.append(entrar);
+  }
 
   // Escape también cierra: si el foco está aquí, tiene que haber una salida
   // de teclado (WCAG 2.1.2).
@@ -192,8 +236,53 @@ export function mostrarPresentacion(raiz, opciones = {}) {
   vaciar(raiz).append(capa);
   raiz.hidden = false;
   // El foco va al boton: es la salida, y asi el Escape de la capa funciona.
+  // Con cuenta atrás no hay botón: se cierra sola.
   capa.querySelector('[data-accion="entrar-al-combate"]')?.focus();
   return () => cerrar(capa, opciones.alCerrar ?? (() => {}));
+}
+
+/**
+ * La cuenta atrás: la cifra grande (oculta al lector de pantalla, que no
+ * tiene por qué oír cinco números) y un único aviso al empezar y al acabar.
+ *
+ * @param {HTMLElement} capa
+ * @param {number} segundos
+ * @param {{programar: Function, alCerrar: Function}} opciones
+ * @returns {HTMLElement[]}
+ */
+function cuentaAtrasDe(capa, segundos, { programar, alCerrar }) {
+  const cifra = h('p', {
+    clase: 'presentacion__cuenta',
+    texto: String(segundos),
+    datos: { zona: 'cuenta-atras', tic: 'a' },
+    atributos: { 'aria-hidden': 'true' },
+  });
+  const aviso = h('p', {
+    clase: 'solo-lectores',
+    texto: `El combate empieza en ${segundos} segundos.`,
+    atributos: { role: 'status' },
+  });
+  capa.dataset.cuentaAtras = 'si';
+  let quedan = segundos;
+  const tic = () => {
+    if (!capa.isConnected) {
+      return;
+    }
+    quedan -= 1;
+    // El atributo alterna para que la animación del número vuelva a empezar.
+    cifra.dataset.tic = cifra.dataset.tic === 'a' ? 'b' : 'a';
+    if (quedan > 0) {
+      cifra.textContent = String(quedan);
+      programar(tic, 1000);
+      return;
+    }
+    cifra.textContent = GRITO_DE_COMBATE;
+    cifra.dataset.final = 'si';
+    aviso.textContent = '¡Combate!';
+    programar(() => cerrar(capa, alCerrar), PAUSA_FINAL_MS);
+  };
+  programar(tic, 1000);
+  return [cifra, aviso];
 }
 
 /** Una ficha: retrato, nombre, quien lo lleva y si abre. */
@@ -208,7 +297,8 @@ function fichaDeHeroe(participante, { yo, abre }) {
 
   let quien;
   if (esIA) {
-    quien = 'Controlado por la IA';
+    // Revisión del 6-oct, punto 17: «IA», sin más.
+    quien = 'IA';
   } else if (jugador?.id === yo) {
     quien = 'Tu héroe';
   } else {

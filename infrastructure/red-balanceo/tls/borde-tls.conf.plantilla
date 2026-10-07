@@ -1,9 +1,10 @@
-# HTTPS del borde — plantilla (28-sep). NO se monta tal cual.
+# HTTPS del borde — plantilla (28-sep, revisada el 6-oct). NO se monta tal cual.
 #
 # scripts/cd/certificado.sh la copia a /opt/nexus/tls/borde-tls.conf,
 # cambiando __DOMINIO__ por vars.DOMINIO_PUBLICO, SOLO cuando existe un
-# certificado de Let's Encrypt para ese nombre. borde-dev.conf la incluye
-# DENTRO de su unico `server` con
+# certificado de confianza de Let's Encrypt para ese nombre (nunca uno del
+# entorno de pruebas). borde-dev.conf la incluye DENTRO de su unico `server`
+# con
 #     include /etc/nginx/nexus-tls/*.conf;
 # y un include con comodin que no encuentra ningun archivo no es un error: sin
 # certificado, el borde sigue exactamente como antes (solo el 80).
@@ -11,25 +12,47 @@
 # Lo que hace al activarse:
 #   - el mismo server escucha tambien en el 443 con el certificado del dominio
 #     (una sola lista de rutas para los dos puertos: nada que duplicar);
-#   - el 80 redirige con 301 a https://__DOMINIO__ todo MENOS /salud-borde
-#     (lo consultan desplegar.sh, la compuerta de capacidad y el diagnostico
-#     por http://localhost) y el reto de ACME (/.well-known/acme-challenge/,
-#     que la renovacion tiene que poder servir por el 80);
+#   - el 80 redirige con 301 a https://__DOMINIO__ todo MENOS:
+#       /salud-borde   lo consultan desplegar.sh, la compuerta de capacidad y
+#                      el diagnostico por http://localhost;
+#       /.well-known/acme-challenge/
+#                      la renovacion lo tiene que poder servir por el 80;
+#       /mailpit/      la bandeja de pruebas solo la ven los origenes internos
+#                      (smoke-dev, canarios y la prueba del profesor llegan por
+#                      un tunel SSH a http://localhost); redirigida, saldria a
+#                      https://__DOMINIO__/mailpit/ desde internet y el propio
+#                      borde la negaria con 403;
 #   - la redireccion va al DOMINIO, no a $host: quien entre por la IP acaba en
 #     el nombre para el que vale el certificado.
-# Los WebSocket no necesitan nada: el mismo /ws, /ws-subastas y
-# /ws/notificaciones pasan por el 443 (wss://), y la interfaz ya deriva ws(s)
-# del protocolo de la pagina. X-Forwarded-Proto ya sale con $scheme.
-# HSTS NO: se pone a mano cuando HTTPS lleve una semana estable.
+# Los WebSocket no necesitan nada: el mismo /ws, /ws/notificaciones y
+# /api/v1/ws-subastas pasan por el 443 (wss://), y la interfaz ya deriva ws(s)
+# del protocolo de la pagina. X-Forwarded-Proto ya sale con $scheme. Lo que SI
+# necesitan es que https://__DOMINIO__ este en sus listas de origenes: eso lo
+# hace desplegar.sh (abrir_origenes_al_dominio) a partir de DOMINIO_PUBLICO.
+#
+# TLS 1.2 y 1.3 solamente, con la configuracion "intermediate" de Mozilla
+# (Server Side TLS 5.7): en TLS 1.2 solo suites AEAD con ECDHE (sin CBC, sin
+# RSA estatico; las DHE quedan fuera porque no hay ssl_dhparam). TLS 1.3 trae
+# sus propias suites. Sin OCSP stapling: Let's Encrypt dejo de dar OCSP en
+# 2025.
+#
+# HSTS: la linea `# __HSTS__` la cambia certificado.sh por
+#     add_header Strict-Transport-Security "max-age=N" always;
+# solo si HSTS_SEGUNDOS trae un numero. Se enciende a mano y de menos a mas
+# (300 -> 86400 -> 31536000) cuando HTTPS lleve una semana estable; sin
+# includeSubDomains ni preload. Apagado, la linea es un comentario.
 
 listen 443 ssl;
 ssl_certificate     /etc/letsencrypt/live/__DOMINIO__/fullchain.pem;
 ssl_certificate_key /etc/letsencrypt/live/__DOMINIO__/privkey.pem;
 ssl_protocols TLSv1.2 TLSv1.3;
+ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+ssl_ecdh_curve X25519:prime256v1:secp384r1;
 ssl_prefer_server_ciphers off;
 ssl_session_cache shared:nexus_tls:1m;
 ssl_session_timeout 1d;
 ssl_session_tickets off;
+# __HSTS__
 
 set $nexus_a_https 1;
 if ($scheme = https) {
@@ -39,6 +62,9 @@ if ($uri = /salud-borde) {
     set $nexus_a_https 0;
 }
 if ($uri ~ ^/\.well-known/acme-challenge/) {
+    set $nexus_a_https 0;
+}
+if ($uri ~ ^/mailpit/) {
     set $nexus_a_https 0;
 }
 if ($nexus_a_https) {

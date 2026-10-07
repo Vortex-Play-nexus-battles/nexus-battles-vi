@@ -26,17 +26,15 @@
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { icono } from '../../comun/ui/icono.js';
 import { aviso } from '../../comun/ui/aviso.js';
-import { confirmar } from '../../comun/ui/dialogo.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
 import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { fuenteDeMisiones } from './fuente-misiones.js';
 import { montarBannerDeMisiones } from './banner-misiones.js';
 import { montarTablon, tablonSinAbrir } from './tablon-misiones.js';
-import { detalleDeMision } from './detalle-mision.js';
+import { detalleDeMision, MODOS_DEL_DETALLE } from './detalle-mision.js';
 import { montarEnCurso } from './en-curso.js';
 import { historialDeMisiones, reporteDeMision } from './reporte-mision.js';
 import { constructorDeEstrategia } from './constructor-estrategia.js';
-import { textoDeDuracion } from './modelo-misiones.js';
 
 /** Las cuatro secciones del tablón, en su orden. */
 export const SECCIONES_DE_MISIONES = Object.freeze([
@@ -131,48 +129,19 @@ export function avisoSinAbrir({ alPrepararEstrategia, hrefJugar }) {
 }
 
 /**
- * El resumen que se confirma antes de mandar al héroe (RF-MIS-004: «presenta
- * el resumen de la misión, exige confirmación»).
- *
- * @param {object} mision
- * @param {{heroe: string, rotaciones: Array<{pasos: string[]}>}} envio
- * @returns {HTMLElement}
+ * El resumen que se confirma antes de mandar al héroe. Vive en el asistente
+ * de preparar la misión (es su último paso); se reexporta aquí, donde estuvo.
  */
-export function resumenDeMatricula(mision, { heroe, rotaciones }) {
-  const duracion = textoDeDuracion(mision.duracionHoras);
-  return h('div', {
-    clase: 'pila pila--compacta misiones-confirmacion',
-    hijos: [
-      h('dl', {
-        clase: 'misiones-confirmacion__datos',
-        hijos: [
-          ['Misión', mision.nombre],
-          ['Duración', duracion],
-          ['Héroe', heroe],
-          [
-            'Estrategia',
-            rotaciones.length > 0
-              ? rotaciones.map((r, i) => `${i + 1}. ${r.pasos.join(' → ')}`).join(' · ')
-              : 'Ataque básico',
-          ],
-        ]
-          .filter(([, valor]) => valor)
-          .map(([etiqueta, valor]) =>
-            h('div', { hijos: [h('dt', { texto: etiqueta }), h('dd', { texto: valor })] }),
-          ),
-      }),
-      h('p', {
-        clase: 'misiones-confirmacion__advertencia',
-        hijos: [
-          icono('candado', { etiqueta: null }),
-          h('span', {
-            texto: `${heroe} queda bloqueado${duracion ? ` ${duracion}` : ''}: no podrá jugar en línea, entrar en torneos ni cambiar su equipamiento hasta que termine o la canceles.`,
-          }),
-        ],
-      }),
-    ],
-  });
-}
+export { resumenDeMatricula } from './asistente-mision.js';
+
+/**
+ * Revisión del modo jugador del 6-oct, punto 21: el lema del tablón.
+ * «Eliminar las frases genéricas… hacer un eslogan más llamativo y más
+ * adentrado al juego». Habla del mundo y de lo que se gana, no del
+ * funcionamiento (eso lo explica la pestaña Estrategia).
+ */
+export const LEMA_DE_MISIONES =
+  'Templos olvidados, guardianes eternos y épicas por reclamar. Traza la estrategia de tu héroe y envíalo a conquistarlas.';
 
 /**
  * Monta la vista.
@@ -253,11 +222,7 @@ export async function montarMisiones(
             clase: 'pila pila--ajustada',
             hijos: [
               h('h1', { texto: 'Misiones' }),
-              h('p', {
-                clase: 't-meta',
-                texto:
-                  'Aventuras contra el entorno: tu héroe pelea solo, dirigido por la IA con la estrategia que le prepares, y vuelve con créditos, objetos y épicas.',
-              }),
+              h('p', { clase: 'misiones__lema', texto: LEMA_DE_MISIONES }),
             ],
           }),
         ],
@@ -434,44 +399,61 @@ export async function montarMisiones(
       modo: 'matricula',
       titulo: 'Tu héroe y su estrategia',
       nivelTitulo: 3,
+      // Revisión del 6-oct, punto 23: el asistente numera sus pasos.
+      numerarPasos: false,
       alCambiar: (lista) => detalle.habilitarInicio(lista !== null),
+      alElegirHeroe: () => detalle.asistente?.actualizar(),
     });
+    // Punto 22: «Ver detalles» (?mision=) enseña la misión; «Iniciar misión»
+    // (#configurar) abre directamente la preparación, paso a paso.
+    const preparar = ubicacion.hash === '#configurar';
     const detalle = detalleDeMision(mision, {
       hrefTablon: rutas.hrefTablon,
       hrefReporte: rutas.hrefReporte,
       hrefEnCurso: rutas.hrefEnCurso,
+      hrefEquipamiento: rutas.hrefEquipamiento,
       configurador,
       urlParaCompartir: new URL(rutas.hrefDe(mision), ubicacion.href).href,
       alMarcarFavorita: (favorita) => fuente.marcarFavorita(mision.id, favorita),
       alIniciar: () => iniciar(mision, configurador, detalle),
+      modoInicial: preparar ? MODOS_DEL_DETALLE.PREPARAR : MODOS_DEL_DETALLE.DETALLES,
+      alCambiarModo: (modo) => anotarModo(mision, modo),
     });
     raiz.replaceChildren(detalle.elemento);
     configurador.cargar();
 
     const destino =
-      ubicacion.hash === '#configurar'
+      detalle.modo() === MODOS_DEL_DETALLE.PREPARAR
         ? raiz.querySelector('#mision-seccion-configurar')
         : raiz.querySelector('.mision-detalle__nombre');
     destino?.focus();
-    if (ubicacion.hash === '#configurar') {
-      destino?.scrollIntoView?.({ block: 'start' });
+  }
+
+  /**
+   * La dirección dice en qué modo está el detalle (`#configurar` al
+   * preparar), sin recargar: un F5 o un enlace compartido vuelven al mismo.
+   *
+   * @param {{id: string}} mision
+   * @param {'detalles'|'preparar'} modo
+   */
+  function anotarModo(mision, modo) {
+    const destino = rutas.hrefDe(mision, modo === MODOS_DEL_DETALLE.PREPARAR ? 'configurar' : null);
+    try {
+      globalThis.history?.replaceState?.(globalThis.history.state, '', destino);
+    } catch {
+      // Sin historial (una prueba, un marco): el modo cambia igual.
     }
   }
 
+  /**
+   * Revisión del 6-oct, punto 23: la confirmación es el último paso del
+   * asistente («Confirma y parte»), con el resumen de la misión y lo que queda
+   * bloqueado a la vista (RF-MIS-004). Pulsar «Iniciar misión» ahí es la
+   * confirmación: no se pregunta dos veces.
+   */
   async function iniciar(mision, configurador, detalle) {
     const envio = configurador.estrategia();
     if (!envio) {
-      return;
-    }
-    const heroe = envio.heroeNombre ?? 'Tu héroe';
-    const seguro = await confirmar({
-      titulo: `¿Enviar a ${heroe} a «${mision.nombre}»?`,
-      cuerpo: resumenDeMatricula(mision, { heroe, rotaciones: envio.rotaciones }),
-      textoConfirmar: mision.estado === 'COMPLETADA' ? 'Repetir misión' : 'Iniciar misión',
-      textoCancelar: 'Volver',
-      peligro: false,
-    });
-    if (!seguro) {
       return;
     }
     detalle.ocupado(true);

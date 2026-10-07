@@ -12,7 +12,14 @@
  */
 
 import { jest } from '@jest/globals';
-import { mostrarPresentacion, presentacionDeHeroes, quienAbrio } from './presentacion.js';
+import {
+  mostrarPresentacion,
+  presentacionDeHeroes,
+  quienAbrio,
+  segundosDeCuentaAtras,
+  GRITO_DE_COMBATE,
+  PAUSA_FINAL_MS,
+} from './presentacion.js';
 
 /** Un participante con la forma del esquema `Participante` del contrato. */
 function participante(id, nombre, extra = {}) {
@@ -129,7 +136,7 @@ describe('presentacionDeHeroes', () => {
     });
 
     const quienes = [...capa.querySelectorAll('.presentacion__jugador')].map((n) => n.textContent);
-    expect(quienes).toEqual(['Tu héroe', 'apodo-u-2', 'Controlado por la IA']);
+    expect(quienes).toEqual(['Tu héroe', 'apodo-u-2', 'IA']);
   });
 
   test('no bloquea: es una capa, no un diálogo modal', () => {
@@ -200,5 +207,78 @@ describe('mostrarPresentacion', () => {
 
     expect(raiz.hidden).toBe(true);
     expect(() => cerrar()).not.toThrow();
+  });
+});
+
+/** Revisión del modo jugador del 6-oct, punto 17: la cuenta atrás del comienzo. */
+describe('cuenta atrás del comienzo', () => {
+  function relojDePrueba() {
+    const pendientes = [];
+    let ahora = 0;
+    return {
+      programar: (fn, ms) => pendientes.push({ fn, cuando: ahora + ms }),
+      pasa(ms) {
+        ahora += ms;
+        for (;;) {
+          pendientes.sort((a, b) => a.cuando - b.cuando);
+          if (!pendientes.length || pendientes[0].cuando > ahora) {
+            break;
+          }
+          pendientes.shift().fn();
+        }
+      },
+    };
+  }
+
+  test('5, 4, 3, 2, 1, ¡COMBATE! y se cierra sola, sin botón', () => {
+    const raiz = document.createElement('div');
+    document.body.append(raiz);
+    const reloj = relojDePrueba();
+    const alCerrar = jest.fn();
+
+    mostrarPresentacion(raiz, {
+      participantes: DOS,
+      cuentaAtras: 5,
+      programar: reloj.programar,
+      alCerrar,
+    });
+
+    const cifra = () => raiz.querySelector('[data-zona="cuenta-atras"]');
+    expect(raiz.querySelector('[data-accion="entrar-al-combate"]')).toBeNull();
+    expect(cifra().textContent).toBe('5');
+    expect(cifra().getAttribute('aria-hidden')).toBe('true');
+    const vistos = [cifra().textContent];
+    for (let i = 0; i < 5; i += 1) {
+      reloj.pasa(1000);
+      vistos.push(cifra().textContent);
+    }
+    expect(vistos).toEqual(['5', '4', '3', '2', '1', GRITO_DE_COMBATE]);
+    expect(alCerrar).not.toHaveBeenCalled();
+
+    reloj.pasa(PAUSA_FINAL_MS);
+    expect(raiz.querySelector('.presentacion')).toBeNull();
+    expect(alCerrar).toHaveBeenCalledTimes(1);
+  });
+
+  test('al lector de pantalla se le dice una vez cuándo empieza, no cinco números', () => {
+    const raiz = document.createElement('div');
+    document.body.append(raiz);
+    mostrarPresentacion(raiz, { participantes: DOS, cuentaAtras: 5, programar: () => {} });
+
+    const avisos = [...raiz.querySelectorAll('[role="status"]')].map((n) => n.textContent);
+    expect(avisos).toContain('El combate empieza en 5 segundos.');
+  });
+
+  test('los segundos que quedan salen de la hora de inicio del servidor, entre 0 y 5', () => {
+    const inicio = '2026-10-06T20:00:00.000Z';
+    const t = Date.parse(inicio);
+    expect(segundosDeCuentaAtras(inicio, t)).toBe(5);
+    expect(segundosDeCuentaAtras(inicio, t + 1200)).toBe(4);
+    expect(segundosDeCuentaAtras(inicio, t + 4900)).toBe(1);
+    expect(segundosDeCuentaAtras(inicio, t + 6000)).toBe(0);
+    // Un reloj adelantado al servidor no alarga la cuenta.
+    expect(segundosDeCuentaAtras(inicio, t - 30_000)).toBe(5);
+    // Sin hora de inicio, la cuenta entera.
+    expect(segundosDeCuentaAtras(null, t)).toBe(5);
   });
 });

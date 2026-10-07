@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="./torneos.css" />
   </head>
   <body>
     <div data-cabecera-app></div>
@@ -22,9 +23,11 @@
       -->
       <!-- UX-R3.6 — decia «Torneo» en singular y debajo, sin nada en medio,
            otro encabezado «Torneos». Dos titulos para una lista. -->
-      <header class="encabezado-pagina">
+      <!-- Punto 24 (revisión del 6-oct) — el encabezado y el tablón se ocultan
+           en la ruta de un torneo (?torneo=), que lleva su propia portada. -->
+      <header class="encabezado-pagina" data-zona="encabezado">
         <div class="pila pila--ajustada">
-          <h1>Torneos</h1>
+          <h1 tabindex="-1">Torneos</h1>
           <p class="t-meta">
             Ocho equipos, árbol de doble eliminación. Se abre uno cada 91 días; mientras haya
             inscripciones abiertas puedes apuntar a tu equipo.
@@ -58,11 +61,11 @@
         <button class="boton boton--primario" type="submit">Crear y abrir inscripciones</button>
       </form>
 
-      <section class="pila pila--compacta">
-        <div class="pila pila--compacta" data-zona="listado"></div>
+      <section class="pila pila--compacta" data-zona="tablon">
+        <div class="torneos-rejilla" data-zona="listado"></div>
       </section>
 
-      <section class="tarjeta pila pila--compacta" data-zona="detalle" hidden></section>
+      <section class="torneo-detalle pila" data-zona="detalle" hidden></section>
     </main>
 
     <script type="module">

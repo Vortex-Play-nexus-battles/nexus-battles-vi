@@ -162,9 +162,15 @@ export async function heroesConPrototipo(elementos, consultarProducto) {
  * @param {Function} [opciones.consultarProducto]
  * @param {Function} [opciones.validar]
  * @param {Function} [opciones.vista]
+ * @param {boolean} [opciones.numerarPasos] «1. Elige el héroe», «2. Ordena…»; el
+ *   asistente de preparar una misión (revisión del 6-oct, punto 23) lleva su
+ *   propia numeración y los pide sin número
+ * @param {(heroe: {id: string, nombre: string}) => void} [opciones.alElegirHeroe]
+ *   cada vez que se elige un héroe (también el que se elige solo al cargar)
  * @returns {{elemento: HTMLElement, cargar: () => Promise<void>,
  *   estrategia: () => ({heroeId: string, heroeNombre: string, prototipo: string, nivel: number,
- *     rotaciones: Array<{pasos: string[]}>}|null)}}
+ *     rotaciones: Array<{pasos: string[]}>}|null),
+ *   heroe: () => ({id: string, nombre: string, prototipo: string|null, nivel: number}|null)}}
  */
 export function constructorDeEstrategia({
   identidad,
@@ -172,6 +178,8 @@ export function constructorDeEstrategia({
   titulo = 'Estrategia de combate',
   nivelTitulo = 2,
   alCambiar = () => {},
+  alElegirHeroe = () => {},
+  numerarPasos = true,
   hrefTienda = '../../cuentas/tienda.html',
   fuente = null,
   consultar = consultarPagina,
@@ -268,7 +276,10 @@ export function constructorDeEstrategia({
     clase: 'estrategia__editor',
     datos: { zona: 'editor' },
     hijos: [
-      h('legend', { clase: 'estrategia__paso-titulo', texto: '2. Ordena sus rotaciones' }),
+      h('legend', {
+        clase: 'estrategia__paso-titulo',
+        texto: numerarPasos ? '2. Ordena sus rotaciones' : 'Ordena sus rotaciones',
+      }),
       h('p', {
         clase: 'estrategia__explicacion',
         texto:
@@ -307,7 +318,10 @@ export function constructorDeEstrategia({
       h('fieldset', {
         clase: 'estrategia__eleccion',
         hijos: [
-          h('legend', { clase: 'estrategia__paso-titulo', texto: '1. Elige el héroe' }),
+          h('legend', {
+            clase: 'estrategia__paso-titulo',
+            texto: numerarPasos ? '1. Elige el héroe' : 'Elige el héroe',
+          }),
           zonaHeroes,
           campoNivel,
         ],
@@ -493,6 +507,7 @@ export function constructorDeEstrategia({
     selectorNivel.value = String(estado.nivel);
     marcarNivelDelHeroe(estado.nivel);
     campoNivel.hidden = false;
+    alElegirHeroe(heroeElegido());
     await cargarGuardada(heroe);
     if (estado.heroe !== heroe) {
       // Mientras se leía su estrategia, el jugador eligió a otro.
@@ -1067,5 +1082,18 @@ export function constructorDeEstrategia({
     estado.vigente = true;
   }
 
-  return { elemento, cargar, estrategia };
+  /** El héroe elegido ahora mismo, con su nivel de validación, o `null`. */
+  function heroeElegido() {
+    if (!estado.heroe) {
+      return null;
+    }
+    return {
+      id: estado.heroe.id,
+      nombre: estado.heroe.nombre,
+      prototipo: estado.heroe.prototipo ?? null,
+      nivel: estado.nivel,
+    };
+  }
+
+  return { elemento, cargar, estrategia, heroe: heroeElegido };
 }

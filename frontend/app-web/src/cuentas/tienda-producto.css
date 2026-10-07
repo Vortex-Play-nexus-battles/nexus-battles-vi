@@ -2,8 +2,9 @@
  *
  * Los estilos de `tienda-producto.js` (ProductCard, PriceTag, OwnedBadge,
  * WishlistToggle y el bloque de compra del detalle). Viven aparte de
- * `tienda.css` porque los usan dos vistas: la tienda y la portada publica
- * (`login.html`), que no carga la hoja de la tienda.
+ * `tienda.css` porque los usan tres vistas: la tienda, la portada publica
+ * (`portada.html`) y el inicio del jugador (`index.html`, el escaparate de la
+ * revisión del 6-oct), que no cargan la hoja de la tienda.
  *
  * Las reglas de `.product-card`, el precio y «Añadir» vienen de `tienda.css`
  * tal cual estaban (UX-R2.8d, FI-R2, UX-GAME-5), con sus comentarios.
@@ -404,20 +405,12 @@
   color: var(--texto);
 }
 
-/* El salto desde la columna de identidad de la entrada hasta la tienda. */
-.entrada__enlace-tienda {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--objetivo-tactil);
-  width: fit-content;
-  font-weight: var(--t-cuerpo-peso-enfasis);
-}
-
 /* =======================================================================
    La tienda en la portada — UXC-4 (retroalimentacion del profesor)
    -----------------------------------------------------------------------
-   Debajo de la entrada, sobre la atmosfera del portal: las tarjetas son la
-   superficie clara; el titulo y el lema van en la tinta clara del portal.
+   En la portada pública (`/`), sobre la atmosfera del portal: las tarjetas
+   son la superficie clara; el titulo y el lema van en la tinta clara del
+   portal. La entrada (`/login`) ya no la lleva (revisión del 6-oct, punto 3).
    ======================================================================= */
 
 .vitrina-publica {

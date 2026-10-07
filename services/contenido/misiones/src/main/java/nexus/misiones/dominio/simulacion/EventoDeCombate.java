@@ -21,7 +21,9 @@ import java.util.UUID;
  * @param enemigo      nombre del enemigo de ese encuentro
  * @param turno        ronda dentro del encuentro, desde 1
  * @param actor        quien juega
- * @param antes        el estado de los dos al DECIDIR, es decir despues de aplicar el inicio del turno
+ * @param oponente     contra quien: el otro combatiente del encuentro (HU-SIM-008; sin este dato un turno no dice
+ *                     contra que prototipo se jugo si el rival cae antes de actuar)
+ * @param antes       el estado de los dos al DECIDIR, es decir despues de aplicar el inicio del turno
  * @param alIniciar    lo que paso al empezar el turno: efectos por turno, poder recuperado...
  * @param jugada       lo que hizo; nula si cayo al empezar su turno (un sangrado)
  * @param despues      el estado de los dos al terminar el turno
@@ -34,6 +36,7 @@ public record EventoDeCombate(
         String enemigo,
         int turno,
         Actor actor,
+        Actor oponente,
         Estados antes,
         List<Suceso> alIniciar,
         Jugada jugada,
@@ -87,12 +90,26 @@ public record EventoDeCombate(
      * @param costoDePoder el poder que de verdad gasto, segun el estado que devolvio el motor
      * @param rechazadas   las opciones que el motor rechazo antes de aceptar esta, en orden
      * @param resultado    lo que resolvio el motor
+     * @param decididaPor  quien tomo la decision: la regla de heroes o el modelo propio (HU-SIM-008)
+     * @param versionDelModelo la version del modelo que se consulto en este turno; nula si no se consulto
+     * @param candidatas   las opciones legales que puntuo el modelo (sirven para reentrenarlo); vacia si no
+     *                     se consulto
      */
     public record Jugada(String decidida, String ejecutada, boolean enValorBase, int costoDecidido, int costoDePoder,
-                         List<Rechazo> rechazadas, Resultado resultado) {
+                         List<Rechazo> rechazadas, Resultado resultado, DecididaPor decididaPor,
+                         String versionDelModelo, List<DecisionDeTurno.Candidata> candidatas) {
 
         public Jugada {
             rechazadas = rechazadas == null ? List.of() : List.copyOf(rechazadas);
+            decididaPor = decididaPor == null ? DecididaPor.REGLA : decididaPor;
+            candidatas = candidatas == null ? List.of() : List.copyOf(candidatas);
+        }
+
+        /** Una jugada que decidio la regla sola. */
+        public Jugada(String decidida, String ejecutada, boolean enValorBase, int costoDecidido, int costoDePoder,
+                      List<Rechazo> rechazadas, Resultado resultado) {
+            this(decidida, ejecutada, enValorBase, costoDecidido, costoDePoder, rechazadas, resultado,
+                    DecididaPor.REGLA, null, List.of());
         }
     }
 

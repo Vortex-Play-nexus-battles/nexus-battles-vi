@@ -119,7 +119,23 @@ info:
     correo en estas respuestas. Campo nuevo opcional y un campo que deja de
     viajar en una respuesta publica cuyo unico consumidor (la tienda, la
     ficha, la portada) se actualiza en el mismo cambio: menor.
-  version: 1.9.0
+
+    1.10.0 (HU-COM-005, #519): la cola gana dos filtros opcionales,
+    `categoria` y `prioridadElevada`, que se combinan con los que ya tenia, y
+    se anade `POST /comentarios/moderacion/decisiones-en-lote`, la decision
+    de moderacion aplicada a varios comentarios a la vez, atomica (todo o
+    nada). Admite APROBAR, OCULTAR, ELIMINAR, RESTAURAR, MARCAR y DESMARCAR;
+    EDITAR no, porque necesita un texto distinto por comentario. ELIMINAR en
+    lote exige una confirmacion adicional validada por el servidor (7.3.9,
+    acciones criticas). Un lote en el que algun comentario no admite la
+    accion es 409 `TRANSICION_INVALIDA` con los ids afectados y no cambia
+    nada. `ProblemDetail` gana el valor `CONFIRMACION_REQUERIDA` en `motivo`
+    y la propiedad opcional `comentarioIds`. La operacion nueva esta
+    pendiente de implementar (`x-implementacion: pendiente`). El perfil
+    rapido del autor NO forma parte de esta version: no anade ninguna
+    operacion ni campo para mostrar la sancion activa de un autor. Es menor:
+    solo anade parametros opcionales, una operacion, esquemas y un valor.
+  version: 1.10.0
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -457,6 +473,12 @@ paths:
         1.8.0 — lo pendiente son los EN_REVISION y los PUBLICADOS con reportes
         pendientes (posteriores a la ultima decision que los atiende). Un
         comentario reportado sigue a la vista mientras espera aqui.
+
+
+        1.10.0 — `categoria` y `prioridadElevada` filtran ademas. Todos los
+        filtros se combinan (un comentario debe cumplirlos todos) y `total`
+        cuenta la cola ya filtrada, no la completa. Un valor de `categoria`
+        fuera de la lista es 400.
       security:
         - bearerAuth: []
       parameters:
@@ -472,6 +494,25 @@ paths:
           schema:
             type: boolean
           description: 1.5.0 — `true` lista de seguimiento; `false` solo los en revision sin marcar.
+        - name: categoria
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/CategoriaDeReporte"
+          description: >
+            1.10.0 — solo los comentarios con al menos un reporte de esa
+            categoria (la misma cuenta que `porCategoria` de cada entrada). Un
+            comentario en revision que no tiene reportes, como el que retuvo el
+            filtro automatico, no sale con este filtro.
+        - name: prioridadElevada
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >
+            1.10.0 — `true` solo los de prioridad elevada; `false` solo los
+            demas. Mientras no haya umbral configurado ninguno la tiene, asi
+            que `true` devuelve la cola vacia.
         - name: pagina
           in: query
           required: false
@@ -494,6 +535,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ColaDeModeracionResponse"
+        "400":
+          description: 1.10.0 — `categoria` no es una de las categorias de reporte.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -502,6 +549,97 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "403":
           description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/decisiones-en-lote:
+    post:
+      summary: Resolver varios comentarios a la vez (RF-COM-008, 1.10.0)
+      operationId: resolverEnLote
+      x-implementacion: pendiente
+      x-fase: "HU-COM-005 (#519)"
+      description: >
+        1.10.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Aplica
+        la misma accion, con el mismo motivo, a todos los comentarios de
+        `comentarioIds`. El moderador sale del token, nunca del cuerpo.
+
+
+        Es atomica: todo o nada. Si algun comentario no admite la accion, no
+        cambia ninguno ni se escribe ningun asiento. Si todos la admiten, cada
+        uno recibe su propio asiento, igual que en la decision individual.
+        `comentarioIds` admite el mismo tope que `tamano` de la cola.
+
+
+        Admite APROBAR, OCULTAR, ELIMINAR, RESTAURAR, MARCAR y DESMARCAR, con
+        las mismas reglas de transicion que `POST
+        /comentarios/moderacion/{commentId}/decision`. EDITAR no: necesita un
+        texto distinto por comentario, y eso es una decision por comentario.
+
+
+        ELIMINAR en lote es una accion critica (7.3.9, «confirmacion adicional
+        para acciones criticas ... eliminacion masiva»): el cuerpo debe traer
+        `confirmacion` con el valor `ELIMINAR`. Lo comprueba el servidor, no
+        solo la interfaz; sin ella es 400 `CONFIRMACION_REQUERIDA` y no cambia
+        nada. En las demas acciones `confirmacion` se ignora.
+
+
+        El aviso al autor es fail-open por comentario (HU-DIS-003), como en la
+        decision individual: `autorNotificado: false` en un item no invalida
+        el lote.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionEnLoteRequest"
+      responses:
+        "200":
+          description: Lote resuelto, con el asiento de cada comentario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionEnLoteResponse"
+        "400":
+          description: >
+            Lista de ids vacia, con repetidos o por encima del tope; falta la
+            accion o no es una de las admitidas en lote; motivo que no tiene de
+            3 a 500 caracteres; o ELIMINAR sin `confirmacion` correcta
+            (`motivo: CONFIRMACION_REQUERIDA`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >
+            Algun id no existe. `comentarioIds` trae los que faltan y no cambia
+            ningun comentario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: >
+            Algun comentario no admite la accion desde su estado actual
+            (`motivo: TRANSICION_INVALIDA`). `comentarioIds` trae todos los
+            afectados, no solo el primero, y no cambia ninguno. Incluye MARCAR
+            sobre uno ya marcado, DESMARCAR sobre uno sin marca y APROBAR sobre
+            uno publicado sin reportes pendientes.
           content:
             application/problem+json:
               schema:
@@ -1265,6 +1403,87 @@ components:
             1.4.0 — obligatorio con EDITAR; el texto que queda visible. En las
             demas acciones se ignora.
 
+    AccionDeLote:
+      type: string
+      description: >
+        1.10.0 — las acciones de `AccionDeModeracion` que valen en lote. EDITAR
+        queda fuera: necesita `textoNuevo` y ese texto es distinto por
+        comentario.
+      enum:
+        - APROBAR
+        - OCULTAR
+        - ELIMINAR
+        - RESTAURAR
+        - MARCAR
+        - DESMARCAR
+
+    DecisionEnLoteRequest:
+      type: object
+      required:
+        - comentarioIds
+        - accion
+        - motivo
+      properties:
+        comentarioIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+          description: >
+            Los comentarios a resolver. Mismo tope que `tamano` de la cola; sin
+            repetidos.
+        accion:
+          $ref: "#/components/schemas/AccionDeLote"
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 500
+          description: >
+            Obligatorio, como en la decision individual. Es uno solo para el
+            lote y queda en el asiento de cada comentario.
+        confirmacion:
+          type: string
+          description: >
+            Obligatorio solo con `accion: ELIMINAR`, y debe valer exactamente
+            `ELIMINAR` (7.3.9). En las demas acciones se ignora.
+
+    ItemDeDecisionEnLote:
+      type: object
+      required:
+        - comentarioId
+        - asiento
+      properties:
+        comentarioId:
+          type: string
+        asiento:
+          $ref: "#/components/schemas/AsientoDeModeracion"
+        autorNotificado:
+          type: boolean
+          description: >
+            Igual que en `DecisionResponse`: `false` no invalida la decision.
+
+    DecisionEnLoteResponse:
+      type: object
+      description: >
+        1.10.0 — no repite el comentario completo de cada decision: trae el
+        asiento de cada uno, que ya dice el estado anterior y el nuevo.
+      required:
+        - accion
+        - total
+        - resultados
+      properties:
+        accion:
+          $ref: "#/components/schemas/AccionDeLote"
+        total:
+          type: integer
+          description: Cuantos comentarios se resolvieron.
+        resultados:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDeDecisionEnLote"
+
     AsientoDeModeracion:
       type: object
       description: >
@@ -1533,6 +1752,14 @@ components:
           type: string
         instance:
           type: string
+        comentarioIds:
+          type: array
+          items:
+            type: string
+          description: >
+            1.10.0 — solo en los rechazos de la decision en lote: en el 409
+            los comentarios que no admiten la accion, en el 404 los que no
+            existen.
         motivo:
           type: string
           enum:
@@ -1542,6 +1769,7 @@ components:
             - REPORTE_DUPLICADO
             - LIMITE_DE_REPORTES
             - TRANSICION_INVALIDA
+            - CONFIRMACION_REQUERIDA
           description: >
             Presente en los rechazos que el cliente tiene que distinguir sin
             interpretar el texto del detalle. `AUTOR_SILENCIADO` en el 403 de

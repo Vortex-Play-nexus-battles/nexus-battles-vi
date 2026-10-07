@@ -470,6 +470,55 @@ function rutasDeOchoHeroes() {
     ],
     // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
     ...rutasDeOpiniones(),
+    // PLAYER-07a — «Héroes del Nexo»: el catálogo de héroes (PaginaDeProductos
+    // de productos.yaml) con los ocho prototipos del laboratorio.
+    [
+      '**/api/v1/productos?*',
+      json({
+        content: catalogoDeHeroes(),
+        page: 0,
+        size: 50,
+        totalElements: OCHO_HEROES.length,
+        totalPages: 1,
+      }),
+    ],
+  ];
+}
+
+/** PLAYER-07a — los ocho héroes del laboratorio como productos del catálogo. */
+function catalogoDeHeroes() {
+  return OCHO_HEROES.map((heroe) => ({
+    id: heroe.elemento.productoId,
+    nombre: heroe.prototipo,
+    tipo: 'HEROE',
+    prototipo: heroe.prototipo,
+    descripcion: `Prototipo ${heroe.prototipo} del catálogo.`,
+    imagen: null,
+    estado: 'ACTIVO',
+    tiraje: -1,
+  }));
+}
+
+/**
+ * PLAYER-07a — una cuenta recién preparada: el héroe inicial y tres objetos.
+ * Es el caso del punto 25 («no solo uno»): «Mis héroes» con uno y «Héroes del
+ * Nexo» con los ocho, el suyo marcado.
+ */
+function rutasDeCuentaNueva() {
+  const elementos = [OCHO_HEROES[0].elemento, ...OBJETOS_DE_LABORATORIO.slice(0, 3)];
+  return [
+    ...rutasDeOchoHeroes(),
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos,
+        numero: 0,
+        tamanio: 16,
+        totalElementos: elementos.length,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
   ];
 }
 
@@ -608,20 +657,42 @@ const RUTAS_DEL_HEROE_EN_COMBATE = [
 function escenarioDeCombate(
   id,
   titulo,
-  { partida, mensajes = [], exige, canal = {}, interaccion },
+  { partida, mensajes = [], exige, canal = {}, interaccion, sala = null, otrosDestinos = {} },
 ) {
+  // Con `sala`, se llega como desde la sala de espera (`?sala=…&partida=…`):
+  // es lo que monta el chat grupal de esa sala (revisión del 6-oct, punto 15).
+  const consulta = sala ? `sala=${sala}&partida=${ID_PARTIDA}` : `partida=${ID_PARTIDA}`;
   return {
     id,
     titulo,
-    ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
+    ruta: `plataforma/salas-partidas/sala-batalla.html?${consulta}`,
     sesion: () => SESION_COMBATE,
     rutas: [
       [`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)],
       ...RUTAS_DEL_HEROE_EN_COMBATE,
     ],
-    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
+    canal: {
+      mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes, ...otrosDestinos },
+      ...canal,
+    },
     ...(interaccion ? { interaccion } : {}),
     exige,
+  };
+}
+
+/** La sala del combate del chat grupal (punto 15). DATOS DE LABORATORIO. */
+const ID_SALA_COMBATE = 'bbbbbbb9-9999-4999-8999-999999999999';
+
+/** Un mensaje del chat de sala con la forma de `chat.mensaje`. */
+function mensajeDeSala(id, autor, texto, minutosAtras) {
+  return {
+    id,
+    tipo: 'chat.mensaje',
+    idSala: ID_SALA_COMBATE,
+    autor,
+    texto,
+    logro: null,
+    enviadoEn: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
   };
 }
 
@@ -804,6 +875,41 @@ export function torneoTerminadoConCampeon() {
       ],
     },
   };
+}
+
+/* Punto 24 (revisión del 6-oct) — el tablón con más de un torneo y la ruta
+   de uno con las inscripciones abiertas: tres equipos registrados, ninguno
+   del jugador de laboratorio, y el árbol todavía sin generar. */
+const ID_TORNEO_ABIERTO = 'fffffff2-2222-4222-8222-222222222222';
+const ID_TORNEO_TERMINADO = 'fffffff3-3333-4333-8333-333333333333';
+
+export function torneoAbierto() {
+  return {
+    ...torneoEnCurso(),
+    id: ID_TORNEO_ABIERTO,
+    nombre: 'Copa de la Bruma',
+    estado: 'INSCRIPCIONES_ABIERTAS',
+    creadoEn: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    inscripcionesCierranEn: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    iniciadoEn: null,
+    equiposInscritos: 3,
+    equipos: EQUIPOS.slice(1, 4).map((e, i) => ({
+      ...e,
+      torneoId: ID_TORNEO_ABIERTO,
+      posicion: i + 1,
+      derrotas: 0,
+    })),
+    encuentros: [],
+  };
+}
+
+/** Los tres torneos del tablón: abierto, en curso y terminado. */
+function torneosDelTablon() {
+  return [
+    torneoAbierto(),
+    torneoEnCurso(),
+    { ...torneoTerminadoConCampeon(), id: ID_TORNEO_TERMINADO, nombre: 'Copa del Ocaso' },
+  ];
 }
 
 function transaccion(i, cambios = {}) {
@@ -1332,12 +1438,31 @@ async function elegirPaso(pagina, indice, habilidad) {
 
 /** Configura dos pasos y comprueba la estrategia contra el servicio de mentira. */
 async function prepararEstrategia(pagina) {
+  await elegirRotacion(pagina);
+  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+}
+
+/** Dos pasos en la rotación de prioridad alta (Tabla 7, Guerrero Tanque). */
+async function elegirRotacion(pagina) {
   await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
   await elegirPaso(pagina, 0, 'Golpe con escudo');
   await pagina.locator('[data-accion="anadir-paso"]').first().click();
   await elegirPaso(pagina, 1, 'Ataque básico');
-  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
-  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+}
+
+/**
+ * Revisión del modo jugador del 6-oct, punto 23 — avanza pasos en el
+ * asistente de preparar la misión, esperando a que se pueda seguir.
+ */
+async function avanzarPasos(pagina, cuantos) {
+  const siguiente = pagina.locator('.mision-asistente [data-accion="paso-siguiente"]');
+  for (let i = 0; i < cuantos; i += 1) {
+    await pagina
+      .locator('.mision-asistente [data-accion="paso-siguiente"][aria-disabled="false"]')
+      .waitFor({ timeout: 15_000 });
+    await siguiente.click();
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -2028,6 +2153,116 @@ export const ESCENARIOS = [
       '.impacto',
     ],
   }),
+  // Revisión del modo jugador del 6-oct, punto 19 — el historial ya no ocupa
+  // la barra de mando: «Historial» lo abre encima. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-historial', 'combate con el historial abierto', {
+    partida: partidaEnCurso({ vidaMia: 48, vidaRival: 51 }),
+    mensajes: [
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO_CRITICO', [
+        { idJugador: RIVAL_IA, vidaActual: 51, vidaMaxima: 60, diferencia: -9 },
+      ]),
+      accionResuelta(RIVAL_IA, 'CAUSAR_DANO', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 48, vidaMaxima: 52, diferencia: -4 },
+      ]),
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="ver-historial"]').click();
+    },
+    exige: [
+      '.combate__registro-cuerpo[data-abierto="si"] .registro-combate__linea',
+      '[data-accion="ver-historial"][aria-expanded="true"]',
+    ],
+  }),
+  // Punto 15 — el chat grupal abierto en pleno combate, en la misma página:
+  // panel lateral en escritorio, hoja inferior en móvil. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-chat-grupal', 'combate con el chat grupal abierto', {
+    partida: partidaEnCurso(),
+    sala: ID_SALA_COMBATE,
+    otrosDestinos: {
+      // El historial llega como UNA respuesta con la lista entera.
+      [`/app/salas/${ID_SALA_COMBATE}/chat/historial`]: [
+        [
+          mensajeDeSala(
+            'c-1',
+            { id: 'cccccc07-7777-4777-8777-777777777777', apodo: 'Kael_77' },
+            '¡Suerte en la arena!',
+            3,
+          ),
+          mensajeDeSala(
+            'c-2',
+            { id: SESION_COMBATE.uid, apodo: 'qa_combate' },
+            'Igualmente, vamos allá.',
+            2,
+          ),
+        ],
+      ],
+    },
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="abrir-chat-grupal"]').click();
+    },
+    exige: [
+      '[data-zona="chat-grupal"]:not([hidden])',
+      '#formulario-chat-grupal',
+      '[data-zona="chat-grupal"] [data-zona="mensajes"] li',
+    ],
+  }),
+  // Punto 17 — el comienzo: la sala de espera recibe `sala.partida.iniciada`
+  // y la presentación cuenta 5, 4, 3, 2, 1, ¡COMBATE! (la hora de inicio se
+  // toma al pedir la partida, así la cuenta siempre está entera).
+  {
+    id: 'combate-cuenta-atras',
+    titulo: 'comienzo del combate con la cuenta atrás',
+    ruta: `plataforma/salas-partidas/sala-batalla.html?sala=${ID_SALA_COMBATE}`,
+    sesion: () => SESION_COMBATE,
+    rutas: [
+      [
+        `**/api/v1/salas/${ID_SALA_COMBATE}`,
+        json({
+          id: ID_SALA_COMBATE,
+          estado: 'ABIERTA',
+          modalidad: 'CONTRA_IA',
+          maximoParticipantes: 2,
+          ocupacion: 2,
+          recompensaCreditos: 120,
+          incluirHeroeIA: true,
+          heroesIA: 1,
+          privada: false,
+          tamanoEquipo: null,
+          idAnfitrion: SESION_COMBATE.uid,
+          participantes: [SESION_COMBATE.uid],
+          idPartida: null,
+          creadaEn: new Date(Date.now() - 60_000).toISOString(),
+          apodoAnfitrion: 'qa_combate',
+          jugadores: [
+            { id: SESION_COMBATE.uid, apodo: 'qa_combate', anfitrion: true, heroe: 'Aquiles' },
+          ],
+        }),
+      ],
+      [
+        `**/api/v1/partidas/${ID_PARTIDA}`,
+        () =>
+          json({
+            ...partidaEnCurso(),
+            iniciadaEn: new Date().toISOString(),
+            turnoActual: { idJugador: SESION_COMBATE.uid, numeroTurno: 1, segundosRestantes: null },
+          }),
+      ],
+      ...RUTAS_DEL_HEROE_EN_COMBATE,
+    ],
+    canal: {
+      mensajes: {
+        [`/tema/salas/${ID_SALA_COMBATE}`]: [
+          {
+            tipo: 'sala.partida.iniciada',
+            idSala: ID_SALA_COMBATE,
+            idPartida: ID_PARTIDA,
+            turnoActual: { idJugador: SESION_COMBATE.uid, numeroTurno: 1 },
+          },
+        ],
+      },
+    },
+    exige: ['[data-zona="cuenta-atras"]', '[data-atacar]:disabled'],
+  },
   // UXC-2 — seis participantes, tres contra tres: el HUD con seis barras.
   escenarioDeCombate('combate-seis', 'combate de seis, tres contra tres', {
     partida: partidaDeSeis(),
@@ -2227,6 +2462,18 @@ export const ESCENARIOS = [
       // como carrusel (controles, puntos y región con nombre). `Banner` de
       // productos.yaml 1.6.0.
       ['**/api/v1/banners/vigentes', json(bannersVigentes())],
+      // Revisión del modo jugador del 6-oct, punto 6 — el escaparate de la
+      // tienda en el inicio: la misma vitrina que la tienda.
+      [
+        '**/api/v1/vitrina*',
+        json({
+          content: PRODUCTOS_DE_TIENDA,
+          last: true,
+          totalPages: 1,
+          moneda: 'COP',
+          monedasDisponibles: ['COP'],
+        }),
+      ],
     ],
     exige: [
       '[data-zona="saldo"]',
@@ -2235,6 +2482,10 @@ export const ESCENARIOS = [
       '[data-zona="avisos"]',
       '[data-componente="banner-rotativo"] [data-banner]',
       '[data-accion="pausar-banner"]',
+      '[data-zona="bloque-tienda"] .product-card',
+      '[data-zona="bloque-tienda"] [data-ver-en-tienda]',
+      '.cabecera__atajo[data-atajo="tienda"]',
+      '.chatbot-flotante .chatbot-flotante__emblema',
     ],
   },
   {
@@ -2581,9 +2832,37 @@ export const ESCENARIOS = [
   {
     // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
     // sesion, productos reales a la vista.
+    // Revisión del modo jugador del 6-oct, puntos 3 y 5 — la entrada sin la
+    // tienda debajo, y el mismo logotipo al crear cuenta y al recuperarla.
+    id: 'entrada-sin-tienda',
+    titulo: 'entrada: solo el formulario, con el logotipo oficial',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo', '#email'],
+  },
+  {
+    id: 'entrada-crear-cuenta',
+    titulo: 'crear cuenta con el mismo logotipo que la entrada',
+    ruta: 'cuentas/registro.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo'],
+  },
+  {
+    id: 'entrada-recuperar',
+    titulo: 'recuperar la contraseña con el mismo logotipo que la entrada',
+    ruta: 'cuentas/restablecer-solicitar.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo'],
+  },
+  {
     id: 'portada-con-tienda',
     titulo: 'portada pública con la tienda: productos, rebaja e imagen',
-    ruta: 'cuentas/login.html',
+    // Revisión del 6-oct, puntos 2 y 3: la tienda pública vive en `/`
+    // (portada.html), ya no debajo de la entrada.
+    ruta: 'cuentas/portada.html',
     sesion: () => null,
     rutas: rutasDeTienda(),
     exige: ['.vitrina-publica .product-card', '.vitrina-publica .badge-descuento'],
@@ -2593,7 +2872,7 @@ export const ESCENARIOS = [
     // comprar u opinar, entrar.
     id: 'portada-detalle-publico',
     titulo: 'detalle público: opiniones de solo lectura y «Entra para comprar»',
-    ruta: 'cuentas/login.html',
+    ruta: 'cuentas/portada.html',
     sesion: () => null,
     rutas: rutasDeTienda(),
     interaccion: async (pagina) => {
@@ -2703,32 +2982,71 @@ export const ESCENARIOS = [
     exige: ['.mision-card[data-estado="completada"]', '.mision-card[data-estado="abandonada"]'],
   },
   {
+    // Revisión del modo jugador del 6-oct, punto 22 — «Ver detalles»: la
+    // misión, con el jefe final en su recuadro y «Preparar misión» arriba; la
+    // preparación no está a la vista.
     id: 'misiones-detalle',
-    titulo: 'detalle de «El Templo Olvidado» (§7.8.14) con su configurador',
+    titulo: 'detalle de «El Templo Olvidado» (§7.8.14): la misión y su jefe final',
     ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado',
     sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
     exige: [
+      '.mision-detalle[data-modo="detalles"]',
       '.mision-detalle__cabecera',
       '.mision-enemigo',
-      '.mision-jefe',
+      '[data-seccion="jefe"] .mision-jefe',
       '.mision-master',
       '.mision-recompensas',
-      '#configurar .estrategia__heroe',
-      '[data-accion="iniciar-mision"][aria-disabled="true"]',
+      '[data-accion="preparar-mision"]',
     ],
   },
   {
-    id: 'misiones-matricula',
-    titulo: 'iniciar misión: estrategia comprobada y confirmación con lo que queda bloqueado',
+    // Puntos 22 y 23 — «Iniciar misión»: la preparación en cinco pasos, el
+    // primero a la vista (el héroe).
+    id: 'misiones-preparar',
+    titulo: 'preparar la misión, paso 1 de 5: elegir el héroe',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-detalle[data-modo="preparar"]',
+      '.mision-asistente[data-paso="heroe"] .estrategia__heroe',
+      '.mision-asistente__marca[aria-current="step"]',
+      '[data-accion="paso-siguiente"]',
+    ],
+  },
+  {
+    // Punto 23 — el paso de las rotaciones, solo.
+    id: 'misiones-preparar-rotaciones',
+    titulo: 'preparar la misión, paso 3 de 5: ordenar las rotaciones',
     ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
     sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
     interaccion: async (pagina) => {
-      await prepararEstrategia(pagina);
-      await pagina.locator('[data-accion="iniciar-mision"][aria-disabled="false"]').click();
+      await avanzarPasos(pagina, 2);
+      await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
     },
-    exige: ['[role="dialog"] .misiones-confirmacion', '.misiones-confirmacion__advertencia'],
+    exige: ['.mision-asistente[data-paso="rotaciones"] .estrategia__rotacion'],
+  },
+  {
+    id: 'misiones-matricula',
+    titulo: 'iniciar misión: último paso con el resumen y lo que queda bloqueado',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await avanzarPasos(pagina, 2);
+      await elegirRotacion(pagina);
+      await avanzarPasos(pagina, 1);
+      await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+      await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+      await avanzarPasos(pagina, 1);
+    },
+    exige: [
+      '.mision-asistente[data-paso="confirmar"] .misiones-confirmacion',
+      '.misiones-confirmacion__advertencia',
+      '[data-accion="iniciar-mision"][aria-disabled="false"]',
+    ],
   },
   {
     id: 'misiones-en-curso',
@@ -2771,6 +3089,49 @@ export const ESCENARIOS = [
     sesion: () => sesionDe('qa_banner', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeOchoHeroes()],
     exige: ['.inventario__banner-misiones .banner-misiones__diapositiva', '.hero-card'],
+  },
+  {
+    // PLAYER-07a (punto 25) — una cuenta recién preparada: «Mis héroes» con
+    // el inicial y «Héroes del Nexo» con los ocho del catálogo, el suyo
+    // marcado y los demás con «Conseguir en la tienda». Nada se regala.
+    id: 'inventario-heroes-del-nexo',
+    titulo: 'mi inventario de una cuenta nueva: mis héroes y los héroes del Nexo',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_nuevo', 'JUGADOR'),
+    rutas: rutasDeCuentaNueva(),
+    exige: [
+      '.inventario__seccion--mis-heroes .hero-card',
+      '.nexo-heroe[data-tuyo="true"]',
+      '.nexo-heroe [data-accion="conseguir-heroe"]',
+    ],
+  },
+  {
+    // PLAYER-07a (punto 25) — la búsqueda general, arriba: busca en héroes y
+    // objetos y enseña los resultados en la vitrina que pagina.
+    id: 'inventario-busqueda-general',
+    titulo: 'mi inventario: la búsqueda general con resultados de héroes y objetos',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_busca', 'JUGADOR'),
+    rutas: [
+      ...rutasDeOchoHeroes(),
+      [
+        '**/api/v1/inventario/elementos/busqueda?*',
+        json({
+          elementos: [OCHO_HEROES[1].elemento, OBJETOS_DE_LABORATORIO[1]],
+          numero: 0,
+          tamanio: 16,
+          totalElementos: 2,
+          totalPaginas: 1,
+          ultima: true,
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('.hero-card').first().waitFor({ timeout: 10_000 });
+      await pagina.locator('.inventario-busqueda__control').fill('Espada');
+      await pagina.locator('.inventario-busqueda__buscar').click();
+    },
+    exige: ['.inventario-busqueda--activa', '.inventario__contenido .vitrina__producto'],
   },
   {
     // UXC-6 — el chat general con conversación: «Tú», los demás con su
@@ -3556,6 +3917,46 @@ export const ESCENARIOS_UXC8 = [
     ],
   },
   {
+    // Punto 24 — «muy básico su cuadro inicial»: un solo torneo, su tarjeta
+    // a lo ancho como un cartel, con los cupos como barra.
+    id: 'torneos-tablon',
+    titulo: 'tablón con un torneo abierto: la tarjeta a lo ancho',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json([torneoAbierto()])]],
+    exige: ['[data-cuantos="1"] .torneo-card', '.torneo-card [role="progressbar"]'],
+  },
+  {
+    id: 'torneos-tablon-varios',
+    titulo: 'tablón con tres torneos: abierto, en curso y terminado',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json(torneosDelTablon())]],
+    exige: [
+      '.torneo-card[data-estado="INSCRIPCIONES_ABIERTAS"]',
+      '.torneo-card[data-estado="EN_CURSO"]',
+      '.torneo-card[data-estado="FINALIZADO"]',
+    ],
+  },
+  {
+    // Punto 24 — la ruta de un torneo abierto vista por quien aún no tiene
+    // equipo: «Mi equipo» es donde está, con el registro.
+    id: 'torneo-ruta-inscripciones',
+    titulo: 'ruta de un torneo abierto: portada, hitos y registro del equipo',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO_ABIERTO}`,
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoAbierto()])],
+      [`**/api/v1/torneos/${ID_TORNEO_ABIERTO}`, json(torneoAbierto())],
+    ],
+    exige: [
+      '.torneo-portada [role="progressbar"]',
+      '.torneo-ruta [data-hito="equipo"][aria-current="step"]',
+      '[data-zona="crear-equipo"]',
+      '[data-zona="equipos"] .torneo__equipos',
+    ],
+  },
+  {
     id: 'aviso-de-red',
     titulo: 'sin conexión: el aviso de red transversal',
     ruta: 'plataforma/torneos/torneos.html',
@@ -3720,3 +4121,269 @@ export const ESCENARIOS_UXC9 = [
 // Los escenarios de arriba usan ayudantes definidos después del arreglo
 // principal; se suman al final, cuando ya existen.
 ESCENARIOS.push(...ESCENARIOS_UXC8, ...ESCENARIOS_UXC9);
+
+// ---------------------------------------------------------------------------
+// PLAYER-07b — el mercado (subastas.html) y publicar (publicar-subasta.html),
+// puntos 26 y 27 de la revisión del modo jugador. DATOS DE LABORATORIO: los
+// nombres, las cifras y las fechas son inventados; la forma es la del
+// contrato (ms-subastas-listado.yaml, inventario.yaml, productos.yaml).
+// ---------------------------------------------------------------------------
+
+/**
+ * Un lote del mercado con la forma de `SubastaResumen`. Las miniaturas cubren
+ * los tres casos que se veían mal: una que carga (un retrato del propio
+ * repositorio), una que no existe («espada.png», como en DEV) y ninguna.
+ */
+function loteDelMercado(n, cambios) {
+  return {
+    id: `aaaaaab${n}-1111-4111-8111-11111111111${n}`,
+    nombreProducto: 'Objeto del mercado',
+    tipoProducto: 'ARMA',
+    descripcionCorta: 'Lote de laboratorio.',
+    rareza: null,
+    vendedorId: null,
+    esPropia: false,
+    estado: 'ACTIVA',
+    ofertaVigente: String(120 + n * 35),
+    precioInicial: '100',
+    precioCompraInmediata: null,
+    fechaFin: dentroDe(n + 2),
+    cantidadPujas: n,
+    miniaturaUrl: null,
+    esMaestroDeJuego: false,
+    ...cambios,
+  };
+}
+
+/** Catorce páginas: con la ventana de casillas y las dos flechas a la vista. */
+function mercadoDeLaboratorio() {
+  const contenido = [
+    loteDelMercado(0, {
+      nombreProducto: 'Espada de una mano',
+      rareza: 'Común',
+      miniaturaUrl: 'espada.png',
+      precioCompraInmediata: '300',
+    }),
+    loteDelMercado(1, {
+      nombreProducto: 'Casco de acero templado',
+      tipoProducto: 'ARMADURA',
+      rareza: 'Rara',
+    }),
+    loteDelMercado(2, {
+      nombreProducto: 'Guerrero Tanque',
+      tipoProducto: 'HEROE',
+      rareza: 'Épica',
+      miniaturaUrl: './avatares/guerrero-tanque.jpg',
+      esMaestroDeJuego: true,
+    }),
+    loteDelMercado(3, { nombreProducto: 'Poción de brasa', tipoProducto: 'ITEM' }),
+    loteDelMercado(4, {
+      nombreProducto: 'Grito de guerra',
+      tipoProducto: 'HABILIDAD',
+      miniaturaUrl: 'habilidades/grito.png',
+    }),
+    loteDelMercado(5, {
+      nombreProducto: 'Reliquia del Nexo',
+      tipoProducto: 'EPICA',
+      rareza: 'Legendaria',
+      precioCompraInmediata: '2400',
+    }),
+    // Un lote sin nombre: la tarjeta dice «Objeto sin nombre», no «null».
+    loteDelMercado(6, { nombreProducto: null }),
+    loteDelMercado(7, {
+      nombreProducto: 'Coraza del Centinela',
+      tipoProducto: 'ARMADURA',
+      rareza: 'Rara',
+    }),
+  ];
+  return json({
+    contenido,
+    pagina: 0,
+    tamanoPagina: 16,
+    totalElementos: 14 * 16,
+    totalPaginas: 14,
+  });
+}
+
+const PRODUCTO_ESPADA = 'aaaaaaa7-0000-4000-8000-000000000001';
+const PRODUCTO_CASCO = 'aaaaaaa7-0000-4000-8000-000000000002';
+const PRODUCTO_POCION = 'aaaaaaa7-0000-4000-8000-000000000003';
+const NOMBRE_EN_EL_CATALOGO = Object.freeze({
+  [PRODUCTO_ESPADA]: { nombre: 'Espada de una mano', tipo: 'ARMA' },
+  [PRODUCTO_CASCO]: { nombre: 'Casco de acero templado', tipo: 'ARMADURA' },
+  [PRODUCTO_POCION]: { nombre: 'Poción de vida', tipo: 'ITEM' },
+});
+
+/** El elemento que el inventario guardó con el id del producto como «nombre». */
+const ELEMENTO_CON_CODIGO = 'eeeeeee7-0000-4000-8000-000000000001';
+
+/**
+ * Inventario para publicar: dos espadas del mismo producto (una con el código
+ * por nombre, como algunos objetos entregados), un casco con un nombre de
+ * pruebas y una poción ya en subasta.
+ */
+function inventarioParaPublicar() {
+  const elemento = (id, productoId, tipo, nombrePropio, cambios = {}) => ({
+    id,
+    productoId,
+    tipo,
+    nombrePropio,
+    parteArmadura: null,
+    disponible: true,
+    subastaId: null,
+    ...cambios,
+  });
+  const elementos = [
+    elemento(ELEMENTO_CON_CODIGO, PRODUCTO_ESPADA, 'ARMA', PRODUCTO_ESPADA),
+    elemento('eeeeeee7-0000-4000-8000-000000000002', PRODUCTO_ESPADA, 'ARMA', 'Espada de una mano'),
+    elemento('eeeeeee7-0000-4000-8000-000000000003', PRODUCTO_CASCO, 'ARMADURA', 'Casco 1', {
+      parteArmadura: 'CASCO',
+    }),
+    elemento('eeeeeee7-0000-4000-8000-000000000004', PRODUCTO_POCION, 'ITEM', 'Poción de vida', {
+      disponible: false,
+      subastaId: 'aaaaaab9-1111-4111-8111-111111111119',
+    }),
+  ];
+  return json({
+    elementos,
+    numero: 0,
+    tamanio: 16,
+    totalElementos: elementos.length,
+    totalPaginas: 1,
+    ultima: true,
+  });
+}
+
+/** `GET /api/v1/productos/{id}`: la proyección pública del catálogo. */
+function productoParaPublicar(ruta) {
+  const id = decodeURIComponent(new URL(ruta.request().url()).pathname.split('/').pop());
+  const conocido = NOMBRE_EN_EL_CATALOGO[id] ?? { nombre: 'Producto del catálogo', tipo: 'ITEM' };
+  return json({
+    id,
+    ...conocido,
+    imagen: 'espada.png',
+    descripcion: 'Producto de laboratorio.',
+    estado: 'ACTIVO',
+    creadoEn: hace(240),
+    modificadoEn: hace(24),
+  });
+}
+
+const REGLAS_DE_SUBASTAS = Object.freeze({
+  duraciones: [
+    { codigo: '24H', horas: 24, comision: '1' },
+    { codigo: '48H', horas: 48, comision: '3' },
+  ],
+  incrementoMinimoConfigurado: true,
+  incrementoMinimo: '5',
+});
+
+/** Elige en «Producto» el elemento que tenía el código por nombre. */
+async function elegirElProductoConCodigo(pagina) {
+  await pagina
+    .locator(`#producto option[value="${ELEMENTO_CON_CODIGO}"]`)
+    .waitFor({ state: 'attached', timeout: 10_000 });
+  await pagina.selectOption('#producto', ELEMENTO_CON_CODIGO);
+  await pagina.fill('#inicial', '120');
+}
+
+export const ESCENARIOS_PLAYER07B = [
+  {
+    id: 'subastas-mercado-con-paginas',
+    titulo:
+      'mercado de subastas: filtros con título, ordenar y por página con etiqueta, imágenes y paginación con flechas',
+    ruta: 'cuentas/subastas.html',
+    sesion: () => sesionDe('qa_mercado', 'JUGADOR'),
+    rutas: [['**/api/v1/subastas?*', () => mercadoDeLaboratorio()]],
+    interaccion: async (pagina) => {
+      // La imagen que no existe se cambia por el símbolo del tipo al fallar.
+      await pagina
+        .locator('.subastas__miniatura[data-imagen="rota"]')
+        .first()
+        .waitFor({ state: 'attached', timeout: 10_000 });
+    },
+    exige: [
+      'label[for="subastas-buscar"]',
+      'label[for="subastas-ordenar"]',
+      'label[for="subastas-tamano"]',
+      '.mercado__filtros .mercado__filtros-titulo',
+      '.subastas-filtros__leyenda',
+      '.subastas__miniatura[data-imagen="rota"] .subastas__simbolo',
+      '.subastas__miniatura[data-imagen="no"] .subastas__simbolo',
+      '.subastas__miniatura img',
+      'nav.mercado__paginacion .paginacion__pagina[data-direccion="anterior"][disabled]',
+      'nav.mercado__paginacion .paginacion__pagina[data-direccion="siguiente"]',
+    ],
+  },
+  {
+    id: 'subastas-cajon-de-filtros',
+    titulo: 'mercado de subastas: los filtros en su panel (cajón en el teléfono) con uno puesto',
+    ruta: 'cuentas/subastas.html',
+    sesion: () => sesionDe('qa_mercado', 'JUGADOR'),
+    rutas: [['**/api/v1/subastas?*', () => mercadoDeLaboratorio()]],
+    interaccion: async (pagina) => {
+      await pagina.locator('.subastas__producto').first().waitFor({ timeout: 10_000 });
+      const abrir = pagina.locator('[data-accion="abrir-filtros"]');
+      // En el teléfono el panel es un cajón que se abre con «Filtros»; en
+      // escritorio ya está a la vista, en su columna.
+      if (await abrir.isVisible()) {
+        await abrir.click();
+        await pagina.locator('.mercado__filtros[role="dialog"]').waitFor({ timeout: 5_000 });
+      }
+      await pagina.getByLabel('Arma', { exact: true }).check();
+      await pagina
+        .locator('[data-zona="filtros-activos"]:not([hidden])')
+        .waitFor({ state: 'attached', timeout: 5_000 });
+    },
+    exige: [
+      '.mercado__filtros .subastas-filtros',
+      '[data-zona="filtros-activos"]:not([hidden])',
+      '[data-accion="abrir-filtros"]',
+      '[data-accion="cerrar-filtros"]',
+      '[data-accion="ver-resultados"]',
+    ],
+  },
+  {
+    id: 'publicar-con-nombre-del-catalogo',
+    titulo: 'publicar subasta: el nombre del catálogo en las opciones y en la confirmación',
+    ruta: 'cuentas/publicar-subasta.html',
+    sesion: () => sesionDe('qa_vendedor', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/subastas/reglas', json(REGLAS_DE_SUBASTAS)],
+      ['**/api/v1/inventario/elementos?*', () => inventarioParaPublicar()],
+      ['**/api/v1/productos/*', (ruta) => productoParaPublicar(ruta)],
+    ],
+    interaccion: elegirElProductoConCodigo,
+    exige: [
+      '[data-resumen-producto][data-origen-nombre="catalogo"]',
+      `#producto option[value="${ELEMENTO_CON_CODIGO}"]`,
+      '[data-aviso-catalogo][hidden]',
+    ],
+  },
+  {
+    id: 'publicar-sin-catalogo',
+    titulo: 'publicar subasta: el catálogo no responde y no se enseña ningún código',
+    ruta: 'cuentas/publicar-subasta.html',
+    sesion: () => sesionDe('qa_vendedor', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/subastas/reglas', json(REGLAS_DE_SUBASTAS)],
+      ['**/api/v1/inventario/elementos?*', () => inventarioParaPublicar()],
+      [
+        '**/api/v1/productos/*',
+        {
+          status: 503,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ type: 'about:blank', title: 'Service Unavailable', status: 503 }),
+        },
+      ],
+    ],
+    interaccion: elegirElProductoConCodigo,
+    exige: [
+      '[data-aviso-catalogo]:not([hidden])',
+      '[data-reintentar-catalogo]',
+      '[data-resumen-producto][data-origen-nombre="sin-nombre"]',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_PLAYER07B);

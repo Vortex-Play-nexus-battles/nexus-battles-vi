@@ -226,17 +226,33 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(tarjeta).toBeVisible({ timeout: 20_000 });
     await tarjeta.locator('[data-accion="iniciar"]').click();
 
-    // El configurador: el héroe del alta ya elegido y sus habilidades, que
-    // dice el servicio de héroes para su prototipo y su nivel.
+    // Revisión del modo jugador del 6-oct, puntos 22 y 23: «Iniciar misión»
+    // abre la preparación, en cinco pasos y uno a la vista.
     await expect(page.locator('.mision-detalle__nombre')).toHaveText(PRUEBA.nombre, {
       timeout: 20_000,
     });
+    await expect(page.locator('.mision-detalle')).toHaveAttribute('data-modo', 'preparar');
+    const asistente = page.locator('.mision-asistente');
+    const siguiente = asistente.locator('[data-accion="paso-siguiente"]');
+    // 1 · Héroe: el del alta, ya elegido.
+    await expect(asistente).toHaveAttribute('data-paso', 'heroe');
+    await expect(siguiente).toHaveAttribute('aria-disabled', 'false', { timeout: 30_000 });
+    await siguiente.click();
+    // 2 · Estadísticas, en su nivel de hoy.
+    await expect(asistente).toHaveAttribute('data-paso', 'estadisticas');
+    await expect(page.locator('select[name="nivel"]')).toHaveValue('1');
+    await siguiente.click();
+    // 3 · Rotaciones: las habilidades que dice el servicio de héroes para su
+    // prototipo y su nivel.
+    await expect(asistente).toHaveAttribute('data-paso', 'rotaciones');
     const paso = page.locator('.estrategia__paso select').first();
     await expect(paso).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('select[name="nivel"]')).toHaveValue('1');
     habilidad = await paso.locator('option:not([value=""])').first().getAttribute('value');
     expect(habilidad).toBeTruthy();
     await paso.selectOption(habilidad);
+    await siguiente.click();
+    // 4 · Comprobación.
+    await expect(asistente).toHaveAttribute('data-paso', 'comprobar');
     await page.locator('[data-accion="comprobar-estrategia"]').click();
     await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
       timeout: 30_000,
@@ -244,13 +260,17 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(page.locator('.estrategia__veredicto')).toContainText(
       'quedará guardada para la próxima',
     );
+    await siguiente.click();
+    // 5 · Confirmación: el resumen y lo que queda bloqueado; «Iniciar misión»
+    // es la confirmación (RF-MIS-004), sin un segundo diálogo.
+    await expect(asistente).toHaveAttribute('data-paso', 'confirmar');
+    const confirmacion = asistente.locator('[data-zona="confirmar"]');
+    await expect(confirmacion).toContainText(PRUEBA.nombre);
+    await expect(confirmacion).toContainText('queda bloqueado');
+    await sinBarrerasGraves(page, 'preparar la misión: confirmación');
 
     const iniciar = page.locator('[data-accion="iniciar-mision"]');
     await expect(iniciar).toHaveAttribute('aria-disabled', 'false');
-    await iniciar.click();
-    const dialogo = page.locator('[role="dialog"]');
-    await expect(dialogo).toContainText(`«${PRUEBA.nombre}»`);
-    await expect(dialogo).toContainText('queda bloqueado');
 
     // La vista navega en cuanto la matrícula contesta, y con la navegación el
     // navegador suelta el cuerpo de la respuesta: se lee al pasar por la ruta.
@@ -264,7 +284,7 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
       };
       await ruta.fulfill({ response: respuesta });
     });
-    await dialogo.locator('[data-accion="confirmar"]').click();
+    await iniciar.click();
     await expect.poll(() => matricula?.status, { timeout: 20_000 }).toBeTruthy();
     expect(matricula.status, JSON.stringify(matricula.cuerpo)).toBe(201);
     expect(matricula.peticion.method()).toBe('POST');
@@ -282,7 +302,9 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     ejecucionId = activa.ejecucionId;
 
     // Vuelve al tablón, en «En curso», con el aviso de que salió.
-    await expect(page).toHaveURL(/misiones\.html\?iniciada=dev-prueba-de-humo#en-curso$/);
+    // 6-oct — el tablón tiene dirección limpia: el borde lleva misiones.html a
+    // /misiones conservando la consulta (y el navegador, el fragmento).
+    await expect(page).toHaveURL(/\/misiones(?:\.html)?\?iniciada=dev-prueba-de-humo#en-curso$/);
     await expect(page.locator('.misiones__aviso')).toContainText('Tu héroe salió a la misión');
   });
 

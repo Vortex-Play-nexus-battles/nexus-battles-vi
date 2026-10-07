@@ -334,6 +334,26 @@ describe('panelDeResultado', () => {
     expect(nodo.querySelector('.panel-resultado__acciones').children).toHaveLength(1);
   });
 
+  test('revisión del 6-oct, punto 20: el desglose es una lista de definiciones en orden', () => {
+    const nodo = panelDeResultado({
+      victoria: true,
+      desglose: [
+        { etiqueta: 'Apuesta', valor: '+50 créditos', signo: 'positivo' },
+        { etiqueta: 'Cambio neto', valor: '+70 créditos', signo: 'positivo', total: true },
+      ],
+    });
+    const lista = nodo.querySelector('dl.panel-resultado__desglose');
+    expect(lista).not.toBeNull();
+    // Solo dt y dd alternos, hijos directos (axe: definition-list / dlitem).
+    expect([...lista.children].map((hijo) => hijo.tagName)).toEqual(['DT', 'DD', 'DT', 'DD']);
+    expect(lista.querySelector('.panel-resultado__concepto--total').textContent).toBe(
+      'Cambio neto',
+    );
+    expect(lista.querySelector('.panel-resultado__valor--total').dataset.signo).toBe('positivo');
+    // Sin filas no hay lista vacía.
+    expect(panelDeResultado({ victoria: true }).querySelector('dl')).toBeNull();
+  });
+
   /*
    * R10. Hasta aqui habia dos estados, asi que una partida en la que nadie
    * quedaba en pie se pintaba con el escudo y la palabra DERROTA mientras el

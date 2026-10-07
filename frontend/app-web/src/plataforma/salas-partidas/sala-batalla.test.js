@@ -9,8 +9,11 @@
  * Lo que ya cubre `panel-vidas.test.js` no se repite aqui.
  */
 
+import { jest } from '@jest/globals';
+
 import {
   montarSalaBatalla,
+  montarHistorial,
   leerEstadoInicial,
   destinoDePartida,
   suscripcionDePartida,
@@ -160,6 +163,142 @@ describe('montarSalaBatalla', () => {
     const barra = document.querySelector(`[data-jugador="${ANA}"]`);
     expect(barra.querySelector('.barra-vida__valor').textContent).toBe('35/100');
     expect(barra.dataset.estado).toBe('bajo');
+  });
+});
+
+/*
+ * Revisión del modo jugador del 6-oct, punto 17: «5, 4, 3, 2, 1, COMBATE».
+ * La cuenta es de la vista (sin esperas en el servidor): la presentación se
+ * cierra sola al llegar a cero y no la cierra el primer aviso del canal —lo
+ * que llegue mientras tanto lo retiene el ritmo del combate—.
+ */
+describe('montarSalaBatalla · cuenta atrás del comienzo (punto 17)', () => {
+  const CON_PRESENTACION = `${VISTA}<div data-zona="presentacion" hidden></div>`;
+
+  function montarConOyentes(extra) {
+    const oyentes = [];
+    montarSalaBatalla(document, {
+      idPartida: ID_PARTIDA,
+      participantes: participantes(),
+      yo: ANA,
+      presentar: true,
+      suscribir: (alRecibir) => oyentes.push(alRecibir),
+      ...extra,
+    });
+    return (aviso) => oyentes.forEach((alRecibir) => alRecibir(aviso));
+  }
+
+  const presentacion = () => document.querySelector('[data-zona="presentacion-heroes"]');
+  const turno = { tipo: 'partida.turno.cambiado', idPartida: ID_PARTIDA, idJugador: ANA };
+
+  beforeEach(() => {
+    document.body.innerHTML = CON_PRESENTACION;
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  test('cuenta 5…1, grita «¡COMBATE!» y se cierra sola; el primer aviso no la corta', () => {
+    const entregar = montarConOyentes({ cuentaAtras: 5 });
+    const cifra = () => presentacion()?.querySelector('[data-zona="cuenta-atras"]');
+
+    expect(cifra().textContent).toBe('5');
+    // Sin botón: no hay nada que pulsar mientras se cuenta.
+    expect(presentacion().querySelector('[data-accion="entrar-al-combate"]')).toBeNull();
+
+    entregar(turno);
+    expect(presentacion()).not.toBeNull();
+
+    const vistos = [];
+    for (let i = 0; i < 4; i += 1) {
+      jest.advanceTimersByTime(1000);
+      vistos.push(cifra().textContent);
+    }
+    expect(vistos).toEqual(['4', '3', '2', '1']);
+
+    jest.advanceTimersByTime(1000);
+    expect(cifra().textContent).toBe('¡COMBATE!');
+    expect(cifra().dataset.final).toBe('si');
+
+    jest.advanceTimersByTime(800);
+    expect(presentacion()).toBeNull();
+    expect(document.querySelector('[data-zona="presentacion"]').hidden).toBe(true);
+  });
+
+  test('sin cuenta atrás, como siempre: el primer aviso de la partida la cierra', () => {
+    const entregar = montarConOyentes({ cuentaAtras: 0 });
+    expect(presentacion().querySelector('[data-accion="entrar-al-combate"]')).not.toBeNull();
+
+    entregar(turno);
+    expect(presentacion()).toBeNull();
+  });
+});
+
+/*
+ * Punto 19: «LO QUE HA PASADO» ocupaba la barra de mando. Ahora es un botón
+ * «Historial» que lo abre encima; cerrado se oculta a la vista, no al lector.
+ */
+describe('montarHistorial (punto 19)', () => {
+  const HISTORIAL = `
+    <section data-zona="historial">
+      <button type="button" data-accion="ver-historial" aria-controls="registro-combate">
+        Historial
+      </button>
+      <div id="registro-combate" data-zona="registro"></div>
+    </section>
+  `;
+
+  const boton = () => document.querySelector('[data-accion="ver-historial"]');
+  const cuerpo = () => document.querySelector('[data-zona="registro"]');
+
+  beforeEach(() => {
+    document.body.innerHTML = HISTORIAL;
+  });
+
+  test('nace cerrado; el botón lo abre y lo cierra diciendo su estado', () => {
+    montarHistorial(document);
+    expect(cuerpo().dataset.abierto).toBe('no');
+    expect(boton().getAttribute('aria-expanded')).toBe('false');
+    expect(boton().textContent).toBe('Historial');
+
+    boton().click();
+    expect(cuerpo().dataset.abierto).toBe('si');
+    expect(boton().getAttribute('aria-expanded')).toBe('true');
+    expect(boton().textContent).toBe('Ocultar historial');
+
+    boton().click();
+    expect(cuerpo().dataset.abierto).toBe('no');
+  });
+
+  test('Escape lo cierra y devuelve el foco al botón', () => {
+    montarHistorial(document);
+    boton().click();
+    cuerpo().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(cuerpo().dataset.abierto).toBe('no');
+    expect(document.activeElement).toBe(boton());
+  });
+
+  test('cerrado, el registro no se alcanza con el tabulador; abierto, sí (aunque llegue después)', async () => {
+    montarHistorial(document);
+    // El registro lo crean los controles del combate, después de montar esto.
+    const registro = document.createElement('div');
+    registro.setAttribute('role', 'log');
+    registro.setAttribute('tabindex', '0');
+    cuerpo().append(registro);
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    expect(registro.getAttribute('tabindex')).toBe('-1');
+
+    boton().click();
+    expect(registro.getAttribute('tabindex')).toBe('0');
+    boton().click();
+    expect(registro.getAttribute('tabindex')).toBe('-1');
+  });
+
+  test('sin su marcado no monta nada', () => {
+    document.body.innerHTML = '';
+    expect(montarHistorial(document)).toBeNull();
   });
 });
 

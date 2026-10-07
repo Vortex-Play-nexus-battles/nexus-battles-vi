@@ -195,11 +195,12 @@ test.describe('Recompensa por jugar (HU-JUE-012)', () => {
     expect(Number(operacion.monto)).toBe(esperado);
     expect(operacion.concepto).toBe(gano ? 'recompensa-victoria' : 'recompensa-participacion');
 
-    // La vista lo dice con la coletilla de HU-JUE-012 (contrato 1.4.0).
+    // La vista lo dice (HU-JUE-012, contrato 1.4.0). Revisión del modo
+    // jugador del 6-oct, punto 20: la recompensa va en su fila del desglose.
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
       gano
-        ? /has ganado.*ganas 2 créditos por ganar/i
-        : /has perdido.*ganas 1 crédito por participar/i,
+        ? /has ganado.*recompensa por ganar\s*\+2 créditos/i
+        : /has perdido.*recompensa por participar\s*\+1 crédito/i,
       { timeout: 20000 },
     );
 

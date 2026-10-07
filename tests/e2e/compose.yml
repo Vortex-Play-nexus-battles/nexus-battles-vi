@@ -389,9 +389,15 @@ services:
       MISIONES_AVISOS_ACTIVO: "true"
       MISIONES_SEMILLA_PROVISIONAL: "true"
       MISIONES_SEMILLA_DE_PRUEBAS: "7"
+      # HU-SIM-005/006 — la mision del banco con un Master que aparece al 100 %: el archivo
+      # vive aqui y se monta solo aqui (volumes, abajo); ni esta variable ni el archivo
+      # existen en docker-compose.contenido.yml, asi que AWS DEV no la publica.
+      MISIONES_SEMILLA_EXTRA: /semilla-extra/misiones-banco.json
       MISIONES_SEGUNDOS_POR_HORA: "2"
       MISIONES_INTERVALO_MS: "1000"
       MISIONES_REINTENTO_SEGUNDOS: "1"
+    volumes:
+      - ./semilla-misiones-banco.json:/semilla-extra/misiones-banco.json:ro
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }

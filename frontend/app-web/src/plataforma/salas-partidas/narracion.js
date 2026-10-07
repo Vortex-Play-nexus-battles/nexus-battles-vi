@@ -196,7 +196,8 @@ function textoDeEfectoQueQuitaVida(aviso, afectado, efecto, participantes, yo, v
  * @param {Array<object>} participantes
  * @param {string|null} yo
  * @returns {{lineas: Array<{texto: string, tono: string, icono: string}>,
- *   impactos: Array<{idJugador: string, cifra: string, etiqueta: string|null, tono: string}>}}
+ *   impactos: Array<{idJugador: string, cifra: string, unidad?: string, etiqueta: string|null,
+ *   tono: string}>}}
  */
 export function narrarAccion(aviso, participantes, yo) {
   const lineas = [];
@@ -278,6 +279,7 @@ export function narrarAccion(aviso, participantes, yo) {
       impactos.push({
         idJugador: afectado.idJugador,
         cifra: `${diferencia}`.replace('-', '−'),
+        unidad: 'VIDA',
         etiqueta: accion,
         tono: 'dano',
       });
@@ -292,6 +294,7 @@ export function narrarAccion(aviso, participantes, yo) {
       impactos.push({
         idJugador: afectado.idJugador,
         cifra: `${diferencia}`.replace('-', '−'),
+        unidad: 'VIDA',
         etiqueta: 'Devuelto',
         tono: 'dano',
       });
@@ -311,6 +314,7 @@ export function narrarAccion(aviso, participantes, yo) {
       impactos.push({
         idJugador: afectado.idJugador,
         cifra: `+${diferencia}`,
+        unidad: 'VIDA',
         etiqueta: 'Curación',
         tono: 'curacion',
       });
@@ -348,6 +352,7 @@ export function narrarAccion(aviso, participantes, yo) {
         impactos.push({
           idJugador: afectado.idJugador,
           cifra: cifra.replace('-', '−'),
+          unidad: 'VIDA',
           etiqueta: categoria && categoria.clave !== 'CAUSAR_DANO' ? categoria.etiqueta : null,
           tono: categoria?.tono ?? 'dano',
         });

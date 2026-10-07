@@ -198,6 +198,79 @@ describe('iniciar, repetir o no', () => {
   });
 });
 
+/*
+ * Revisión del modo jugador del 6-oct, punto 22: «Iniciar misión» y «Ver
+ * detalles» llevaban a la misma página, con todo desplegado. Ahora el detalle
+ * tiene dos modos y la preparación solo sale cuando se pide.
+ */
+describe('punto 22 · detalles o preparar', () => {
+  test('por omisión, la misión; «Preparar misión» abre el asistente y lo dice a la página', () => {
+    const alCambiarModo = jest.fn();
+    const detalle = detalleDeMision(TEMPLO, {
+      ...rutas,
+      configurador: configurador(),
+      alCambiarModo,
+    });
+    document.body.append(detalle.elemento);
+
+    expect(detalle.modo()).toBe('detalles');
+    expect(detalle.elemento.dataset.modo).toBe('detalles');
+    // Ya no hay un enlace al ancla: un botón cambia de modo.
+    expect(detalle.elemento.querySelector('[data-accion="ir-a-configurar"]')).toBeNull();
+    const preparar = detalle.elemento.querySelector('[data-accion="preparar-mision"]');
+    expect(preparar.textContent).toBe('Preparar misión');
+
+    preparar.click();
+    expect(detalle.modo()).toBe('preparar');
+    expect(detalle.elemento.dataset.modo).toBe('preparar');
+    expect(alCambiarModo).toHaveBeenLastCalledWith('preparar');
+    expect(document.activeElement.id).toBe('mision-seccion-configurar');
+
+    detalle.elemento.querySelector('[data-accion="ver-detalles"]').click();
+    expect(detalle.modo()).toBe('detalles');
+    expect(alCambiarModo).toHaveBeenLastCalledWith('detalles');
+    expect(document.activeElement).toBe(detalle.elemento.querySelector('h1'));
+  });
+
+  test('con #configurar empieza en preparar, sin avisar (la dirección ya lo dice)', () => {
+    const alCambiarModo = jest.fn();
+    const detalle = detalleDeMision(TEMPLO, {
+      ...rutas,
+      configurador: configurador(),
+      modoInicial: 'preparar',
+      alCambiarModo,
+    });
+    expect(detalle.modo()).toBe('preparar');
+    expect(detalle.asistente.paso()).toBe('heroe');
+    expect(alCambiarModo).not.toHaveBeenCalled();
+  });
+
+  test('sin poder iniciarla (bloqueada) no hay preparación, aunque se pida', () => {
+    const detalle = detalleDeMision(
+      { ...TEMPLO, estado: 'BLOQUEADA' },
+      { ...rutas, configurador: configurador(), modoInicial: 'preparar' },
+    );
+    expect(detalle.modo()).toBe('detalles');
+    expect(detalle.asistente).toBeNull();
+    expect(detalle.elemento.querySelector('[data-accion="preparar-mision"]')).toBeNull();
+  });
+
+  test('el jefe final tiene su propia sección, fuera de la de enemigos', () => {
+    const { elemento } = detalleDeMision(TEMPLO, { ...rutas, configurador: configurador() });
+    const jefe = elemento.querySelector('[data-seccion="jefe"]');
+    expect(jefe).not.toBeNull();
+    expect(jefe.querySelector('h2').textContent).toBe('Jefe final');
+    expect(jefe.querySelector('.mision-jefe__nombre').textContent).toBe('El Guardián Eterno');
+    expect(elemento.querySelector('[data-seccion="enemigos"] .mision-jefe')).toBeNull();
+    // Va después de los objetivos y antes de los enemigos.
+    const orden = [...elemento.querySelectorAll('.mision-detalle__cuerpo > section')].map(
+      (s) => s.dataset.seccion,
+    );
+    expect(orden.indexOf('jefe')).toBe(orden.indexOf('objetivos') + 1);
+    expect(orden.indexOf('enemigos')).toBe(orden.indexOf('jefe') + 1);
+  });
+});
+
 describe('favorita y compartir', () => {
   test('favorita es un conmutador con estado; si no se guarda, vuelve atrás y lo dice', async () => {
     const alMarcarFavorita = jest

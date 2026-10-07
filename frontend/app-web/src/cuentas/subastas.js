@@ -29,6 +29,25 @@
  *    `.subastas-paginacion__*` eran copias locales de `.estado-vista` y
  *    `.paginacion`.
  *
+ * ## PLAYER-07b — revisión del modo jugador, punto 26
+ *
+ * «Los filtros de búsqueda y de ordenar por no tienen títulos […], la parte
+ * del número de páginas sale el anterior y siguiente desbordados […]. La barra
+ * de búsqueda izquierda toca scrolear toda la página para buscar los
+ * filtros». Lo que cambia:
+ *
+ * - **Etiquetas visibles.** Buscar, «Ordenar por» y «Por página» tenían solo
+ *   `aria-label`: quien mira no sabía qué era cada caja. Ahora cada una tiene
+ *   su `<label for>`, y el panel lleva el título «Filtros» con cuántos hay
+ *   puestos.
+ * - **La paginación es la compartida** (`comun/paginacion.js`), con flechas
+ *   con nombre accesible. La copia de aquí escribía «Anterior» y «Siguiente»
+ *   en casillas de 32 px del kit, y el texto se salía de la casilla.
+ * - **Los filtros son un panel aparte.** En escritorio, una columna fija
+ *   (`sticky`) con su propio desplazamiento solo si no cabe; en un teléfono,
+ *   un botón «Filtros» que abre un cajón: diálogo modal, foco dentro, Escape
+ *   y botón para cerrar, y el foco vuelve al botón.
+ *
  * PENDIENTE, a proposito fuera de este archivo: la suscripcion STOMP al canal
  * `/topic/subastas/listado`. El contador ya es real; lo que sigue sin llegar
  * solo es la puja de otra persona, que exige el canal.
@@ -39,9 +58,11 @@ import { listarSubastas, sugerirSubastas } from './cliente-subastas.js';
 import { actualizarTarjeta, construirVitrinaSubastas } from './subastas-vitrina.js';
 import { urlDelCanal } from './pujas-api.js';
 import { conectarStomp } from '../comun/transporte-stomp.js';
-import { calcularVentana } from '../comun/paginacion.js';
-import { construirFiltros } from './subastas-filtros.js';
+import { CASILLAS_VISIBLES, construirPaginacion } from '../comun/paginacion.js';
+import { construirFiltros, leerFiltros } from './subastas-filtros.js';
 import { h } from '../comun/ui/dom.js';
+import { icono } from '../comun/ui/icono.js';
+import { bloquearDesplazamiento } from '../comun/ui/dialogo.js';
 import { encabezadoDePagina } from '../comun/ui/pagina.js';
 import {
   estadoDeCarga,
@@ -63,6 +84,19 @@ export const TAMANOS_DE_PAGINA = Object.freeze([16, 32, 48]);
 /** El canal público del listado (contracts/websocket/subastas.yaml 1.1.0). */
 export const CANAL_DEL_LISTADO = '/topic/subastas/listado';
 
+/**
+ * PLAYER-07b — desde aquí los filtros son una columna fija; por debajo, un
+ * cajón. Es el mismo punto de quiebre que ya tenía el CSS de la vista.
+ */
+const ESCRITORIO = '(min-width: 900px)';
+
+/**
+ * PLAYER-07b — en un teléfono caben cinco casillas de 44 px y las dos
+ * flechas en una sola fila; diez partían la paginación en dos.
+ */
+const TELEFONO = '(max-width: 599px)';
+const CASILLAS_EN_TELEFONO = 5;
+
 const estado = {
   pagina: 0,
   filtros: {},
@@ -75,6 +109,20 @@ let canalDelListado = null;
 
 /** Como parar el latido de los contadores de la tanda anterior. */
 let detenerContadores = null;
+
+/**
+ * PLAYER-07b — cada lectura del listado lleva su número y solo pinta la más
+ * reciente. Dos filtros seguidos lanzaban dos peticiones, y si la primera
+ * respondía la última se quedaba en pantalla un listado que ya no era el
+ * que se había pedido.
+ */
+let peticionVigente = 0;
+
+/** La última página pintada, para rehacer su paginación al girar el teléfono. */
+let ultimaPagina = null;
+
+/** Lo que la pantalla montada necesita fuera de `inicializar`. */
+let vista = null;
 
 document.addEventListener('DOMContentLoaded', () => inicializar());
 
@@ -90,6 +138,9 @@ export function inicializar({ conectarCanal = conectarStomp, urlCanal = null } =
   estado.filtros = {};
   estado.ordenarPor = 'FECHA_PUBLICACION';
   estado.tamano = TAMANO_PAGINA;
+  ultimaPagina = null;
+  vista?.desmontar();
+  vista = null;
   const raiz = document.getElementById('raiz-subastas');
   if (!raiz) {
     throw new Error('subastas.html debe traer un elemento con id="raiz-subastas"');
@@ -124,61 +175,27 @@ export function inicializar({ conectarCanal = conectarStomp, urlCanal = null } =
     }),
   );
 
-  // Buscar y ordenar son el mismo control compuesto, no dos bloques apilados.
-  const controles = h('div', { clase: 'mercado__controles' });
-  controles.append(construirBarraBusqueda(), construirBarraOrden());
-  raiz.appendChild(controles);
-
-  const contenido = document.createElement('div');
-  contenido.className = 'subastas-contenido';
-
-  const filtros = construirFiltros({
-    alCambiar: (nuevosFiltros) => {
-      // El texto de busqueda vive aparte (construirBarraBusqueda), asi
-      // que se preserva aqui en vez de dejar que el panel de filtros lo
-      // borre al no conocerlo.
-      estado.filtros = { ...nuevosFiltros, q: estado.filtros.q };
-      estado.pagina = 0;
-      rotularFiltros();
-      cargarYRenderizar();
-    },
+  const filtros = construirFiltros({ alCambiar: aplicarFiltros });
+  // PLAYER-07b — con id, para que el resto de la pantalla pueda nombrarlo.
+  filtros.id = 'mercado-filtros-formulario';
+  // El evento `reset` llega ANTES de que el navegador vacíe el formulario (lo
+  // documenta #390, PR abierta sobre `subastas-filtros.js`), así que el aviso
+  // que manda el panel en ese momento trae los filtros viejos y «Limpiar
+  // filtros» no limpiaba el listado. Se vuelve a leer en la tarea siguiente,
+  // cuando ya está vacío. `aplicarFiltros` no repite una carga si los filtros
+  // no cambiaron, así que cuando #390 entre esto no duplica nada.
+  filtros.addEventListener('reset', () => {
+    setTimeout(() => aplicarFiltros(leerFiltros(filtros)), 0);
   });
 
-  // UX-R4.8 — En pantalla ancha el panel es una columna fija a la izquierda y
-  // no estorba. A 375 px la rejilla pasa a una sola columna y el panel se
-  // apila ENCIMA de los resultados: veinticuatro controles, unos 1.400 px de
-  // filtros antes de la primera subasta. Quien entra al mercado publico —y
-  // puede entrar sin sesion— ve una pared de casillas, no un objeto.
-  //
-  // Se pliega con `<details>`, que trae el teclado y el lector de pantalla
-  // hechos. En ancho se abre y su resumen se esconde, asi que ahi no cambia
-  // nada de lo que ya habia.
-  const panelFiltros = document.createElement('details');
-  panelFiltros.className = 'subastas-filtros__plegable';
-  const resumenFiltros = document.createElement('summary');
-  resumenFiltros.className = 'subastas-filtros__resumen';
+  const panel = construirPanelDeFiltros(filtros);
+  const abrirFiltros = construirBotonFiltros();
 
-  /**
-   * Un panel plegado no puede esconder que hay filtros puestos: quien no vea
-   * ni el panel ni la causa se queda mirando «ninguna subasta coincide» sin
-   * saber por que. El resumen dice cuantos hay.
-   */
-  function rotularFiltros() {
-    const puestos = Object.keys(estado.filtros).filter((clave) => clave !== 'q').length;
-    resumenFiltros.textContent = puestos === 0 ? 'Filtros' : `Filtros · ${puestos} activos`;
-  }
-  rotularFiltros();
-
-  panelFiltros.append(resumenFiltros, filtros);
-
-  // El estado abierto lo decide la anchura, no el usuario: en ancho el
-  // resumen ni se ve, asi que dejarlo cerrado escondería el panel entero.
-  const esAncho = globalThis.matchMedia?.('(min-width: 900px)');
-  const ajustarPliegue = () => {
-    panelFiltros.open = esAncho ? esAncho.matches : true;
-  };
-  ajustarPliegue();
-  esAncho?.addEventListener?.('change', ajustarPliegue);
+  // Buscar y ordenar son el mismo control compuesto, no dos bloques apilados.
+  // PLAYER-07b: van encima de los resultados, en su columna; así el panel de
+  // filtros empieza arriba, a la altura del título.
+  const controles = h('div', { clase: 'mercado__controles subastas-herramientas' });
+  controles.append(construirBarraBusqueda(), construirBarraOrden(abrirFiltros));
 
   const zonaResultados = document.createElement('div');
   zonaResultados.id = 'subastas-resultados';
@@ -192,13 +209,284 @@ export function inicializar({ conectarCanal = conectarStomp, urlCanal = null } =
     atributos: { role: 'status' },
   });
   novedades.hidden = true;
-  const columna = h('div', { clase: 'mercado__resultados', hijos: [novedades, zonaResultados] });
+  const columna = h('div', {
+    clase: 'mercado__resultados',
+    hijos: [controles, novedades, zonaResultados],
+  });
 
-  contenido.append(panelFiltros, columna);
+  // El velo del cajón va el último: entre el panel y los resultados no puede
+  // haber nada (los resultados son lo que viene DESPUÉS de los filtros).
+  const velo = h('div', { clase: 'mercado__velo', datos: { zona: 'velo-filtros' } });
+  velo.hidden = true;
+
+  const contenido = h('div', {
+    clase: 'subastas-contenido',
+    hijos: [panel.elemento, columna, velo],
+  });
   raiz.appendChild(contenido);
+
+  const cajon = montarCajonDeFiltros({
+    panel: panel.elemento,
+    boton: abrirFiltros.boton,
+    cerrar: panel.cerrar,
+    verResultados: panel.verResultados,
+    velo,
+  });
+
+  // El cajón es cosa del teléfono: si la ventana se ensancha con él abierto,
+  // se cierra (en ancho el panel ya está a la vista, en su columna). Y la
+  // paginación se rehace con las casillas que caben.
+  const esEscritorio = globalThis.matchMedia?.(ESCRITORIO);
+  const alCambiarAncho = () => {
+    if (esEscritorio?.matches) {
+      cajon.cerrar({ devolverFoco: false });
+    }
+  };
+  esEscritorio?.addEventListener?.('change', alCambiarAncho);
+  const esTelefono = globalThis.matchMedia?.(TELEFONO);
+  const alGirar = () => repintarPaginacion();
+  esTelefono?.addEventListener?.('change', alGirar);
+
+  vista = {
+    rotulos: { boton: abrirFiltros.texto, activos: panel.activos },
+    filtros,
+    cajon,
+    desmontar() {
+      cajon.cerrar({ devolverFoco: false });
+      esEscritorio?.removeEventListener?.('change', alCambiarAncho);
+      esTelefono?.removeEventListener?.('change', alGirar);
+    },
+  };
+  rotularFiltros();
 
   cargarYRenderizar();
   escucharElMercado({ conectarCanal, urlCanal: urlCanal ?? urlDelCanal(), novedades });
+}
+
+/**
+ * Lo que manda el panel al cambiar algo. El texto de busqueda vive aparte
+ * (construirBarraBusqueda), asi que se conserva aqui en vez de dejar que el
+ * panel lo borre al no conocerlo. Si los filtros no cambiaron, no se vuelve a
+ * pedir nada (ver el `reset` de `inicializar`).
+ *
+ * @param {object} nuevosFiltros lo que devuelve `leerFiltros`
+ */
+function aplicarFiltros(nuevosFiltros) {
+  const siguientes = { ...nuevosFiltros, q: estado.filtros.q };
+  if (firmaDeFiltros(siguientes) === firmaDeFiltros(estado.filtros)) {
+    return;
+  }
+  estado.filtros = siguientes;
+  estado.pagina = 0;
+  rotularFiltros();
+  cargarYRenderizar();
+}
+
+/**
+ * Los filtros como texto comparable: sin los vacíos y con las claves (y los
+ * tipos marcados) en orden, para que el orden en que se marcaron no cuente.
+ *
+ * @param {object} filtros
+ * @returns {string}
+ */
+function firmaDeFiltros(filtros) {
+  return JSON.stringify(
+    Object.entries(filtros ?? {})
+      .filter(([, valor]) => valor !== undefined && valor !== null && valor !== '')
+      .map(([clave, valor]) => [clave, Array.isArray(valor) ? [...valor].sort() : valor])
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+}
+
+/** Cuántos filtros del panel hay puestos (la búsqueda va aparte). */
+function filtrosPuestos() {
+  return Object.entries(estado.filtros).filter(
+    ([clave, valor]) => clave !== 'q' && valor !== undefined,
+  ).length;
+}
+
+/**
+ * Un panel plegado no puede esconder que hay filtros puestos: quien no vea
+ * ni el panel ni la causa se queda mirando «ninguna subasta coincide» sin
+ * saber por que. El botón «Filtros» y el título del panel dicen cuántos hay.
+ */
+function rotularFiltros() {
+  if (!vista) {
+    return;
+  }
+  const puestos = filtrosPuestos();
+  const cuantos = `${puestos} ${puestos === 1 ? 'activo' : 'activos'}`;
+  vista.rotulos.boton.textContent = puestos === 0 ? 'Filtros' : `Filtros · ${cuantos}`;
+  vista.rotulos.activos.textContent = cuantos;
+  vista.rotulos.activos.hidden = puestos === 0;
+}
+
+/**
+ * El panel de filtros: título, el formulario de siempre y, para el cajón del
+ * teléfono, el botón de cerrar y «Ver resultados».
+ *
+ * En escritorio es una columna que se queda a la vista mientras se recorren
+ * los resultados; si sus grupos no caben en la pantalla, se desplaza él solo,
+ * sin arrastrar la página. El CSS decide cuál de las dos formas toma.
+ *
+ * @param {HTMLFormElement} formulario
+ */
+function construirPanelDeFiltros(formulario) {
+  const titulo = h('h2', {
+    clase: 'mercado__filtros-titulo',
+    texto: 'Filtros',
+    atributos: { id: 'mercado-filtros-titulo' },
+  });
+  const activos = h('p', { clase: 'mercado__filtros-activos', datos: { zona: 'filtros-activos' } });
+  activos.hidden = true;
+  const cerrar = h('button', {
+    clase: 'boton boton--icono boton--secundario mercado__cerrar-filtros',
+    datos: { accion: 'cerrar-filtros' },
+    atributos: { type: 'button', 'aria-label': 'Cerrar filtros' },
+    hijos: [icono('cerrar', { etiqueta: null })],
+  });
+  const verResultados = h('button', {
+    clase: 'boton boton--primario mercado__ver-resultados',
+    texto: 'Ver resultados',
+    datos: { accion: 'ver-resultados' },
+    atributos: { type: 'button' },
+  });
+
+  const elemento = h('aside', {
+    clase: 'mercado__filtros',
+    atributos: { id: 'mercado-filtros', 'aria-labelledby': 'mercado-filtros-titulo' },
+    hijos: [
+      h('div', {
+        clase: 'mercado__filtros-cabecera',
+        hijos: [
+          icono('filtro', { clase: 'icono mercado__filtros-icono', etiqueta: null }),
+          h('div', { clase: 'mercado__filtros-rotulo', hijos: [titulo, activos] }),
+          cerrar,
+        ],
+      }),
+      h('div', { clase: 'mercado__filtros-cuerpo', hijos: [formulario] }),
+      h('div', { clase: 'mercado__filtros-pie', hijos: [verResultados] }),
+    ],
+  });
+  return { elemento, activos, cerrar, verResultados };
+}
+
+/** El botón «Filtros» de la barra: solo se ve en un teléfono (CSS). */
+function construirBotonFiltros() {
+  const texto = h('span', { texto: 'Filtros' });
+  const boton = h('button', {
+    clase: 'boton boton--secundario mercado__abrir-filtros',
+    datos: { accion: 'abrir-filtros' },
+    atributos: {
+      type: 'button',
+      'aria-controls': 'mercado-filtros',
+      'aria-expanded': 'false',
+      'aria-haspopup': 'dialog',
+    },
+    hijos: [icono('filtro', { etiqueta: null }), texto],
+  });
+  return { boton, texto };
+}
+
+/**
+ * El cajón de filtros del teléfono.
+ *
+ * Mismas garantías que el diálogo del kit (`comun/ui/dialogo.js`), sobre un
+ * panel que NO se crea ni se destruye —es el mismo de la columna de
+ * escritorio, y el formulario conserva lo marcado—: `role="dialog"` con
+ * `aria-modal` mientras está abierto, el foco entra y no se escapa, Escape,
+ * la equis, «Ver resultados» y el velo cierran, la página de atrás no se
+ * desplaza y, al cerrar, el foco vuelve al botón «Filtros».
+ *
+ * @param {{panel: HTMLElement, boton: HTMLButtonElement, cerrar: HTMLButtonElement,
+ *          verResultados: HTMLButtonElement, velo: HTMLElement}} piezas
+ */
+function montarCajonDeFiltros({ panel, boton, cerrar, verResultados, velo }) {
+  let abierto = false;
+  let soltarDesplazamiento = null;
+
+  // `a[href]` y no `[href]`: los iconos del sprite son `<use href>`, y con el
+  // selector suelto el «primero» del panel era el icono del título, que no
+  // admite foco, y el tabulador no daba la vuelta.
+  const enfocables = () =>
+    [
+      ...panel.querySelectorAll(
+        'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      ),
+    ].filter((elemento) => !elemento.disabled && !elemento.closest('[hidden]'));
+
+  function alTeclado(evento) {
+    if (evento.key === 'Escape') {
+      evento.preventDefault();
+      cerrarCajon();
+      return;
+    }
+    if (evento.key !== 'Tab') {
+      return;
+    }
+    const lista = enfocables();
+    if (lista.length === 0) {
+      return;
+    }
+    const primero = lista[0];
+    const ultimo = lista[lista.length - 1];
+    if (!panel.contains(document.activeElement)) {
+      evento.preventDefault();
+      primero.focus();
+    } else if (evento.shiftKey && document.activeElement === primero) {
+      evento.preventDefault();
+      ultimo.focus();
+    } else if (!evento.shiftKey && document.activeElement === ultimo) {
+      evento.preventDefault();
+      primero.focus();
+    }
+  }
+
+  function abrirCajon() {
+    if (abierto) {
+      return;
+    }
+    abierto = true;
+    panel.dataset.cajon = 'abierto';
+    panel.setAttribute('role', 'dialog');
+    panel.setAttribute('aria-modal', 'true');
+    boton.setAttribute('aria-expanded', 'true');
+    velo.hidden = false;
+    soltarDesplazamiento = bloquearDesplazamiento();
+    document.addEventListener('keydown', alTeclado);
+    cerrar.focus();
+  }
+
+  function cerrarCajon({ devolverFoco = true } = {}) {
+    if (!abierto) {
+      return;
+    }
+    abierto = false;
+    delete panel.dataset.cajon;
+    panel.removeAttribute('role');
+    panel.removeAttribute('aria-modal');
+    boton.setAttribute('aria-expanded', 'false');
+    velo.hidden = true;
+    document.removeEventListener('keydown', alTeclado);
+    soltarDesplazamiento?.();
+    soltarDesplazamiento = null;
+    if (devolverFoco) {
+      boton.focus();
+    }
+  }
+
+  boton.addEventListener('click', abrirCajon);
+  cerrar.addEventListener('click', () => cerrarCajon());
+  verResultados.addEventListener('click', () => cerrarCajon());
+  velo.addEventListener('click', () => cerrarCajon());
+
+  return {
+    abrir: abrirCajon,
+    cerrar: cerrarCajon,
+    get abierto() {
+      return abierto;
+    },
+  };
 }
 
 /**
@@ -266,6 +554,17 @@ function avisarNovedades(novedades, cuantos, alActualizar) {
   novedades.hidden = false;
 }
 
+/**
+ * Una etiqueta visible pegada a su control (PLAYER-07b). Antes solo había
+ * `aria-label`: el lector de pantalla lo decía, quien miraba no lo veía.
+ *
+ * @param {string} texto
+ * @param {string} paraId
+ */
+function etiquetaVisible(texto, paraId) {
+  return h('label', { clase: 'mercado__etiqueta', texto, atributos: { for: paraId } });
+}
+
 /** Buscador con autocompletado, independiente del de la barra compartida. */
 function construirBarraBusqueda() {
   const contenedor = document.createElement('div');
@@ -273,12 +572,21 @@ function construirBarraBusqueda() {
 
   const campo = document.createElement('input');
   campo.type = 'search';
+  campo.id = 'subastas-buscar';
   campo.className = 'subastas-busqueda__campo';
-  campo.placeholder = 'Buscar por nombre, tipo o habilidad...';
-  campo.setAttribute('aria-label', 'Buscar subastas');
+  campo.placeholder = 'Nombre, tipo o habilidad…';
   campo.setAttribute('aria-autocomplete', 'list');
+  campo.setAttribute('aria-controls', 'subastas-sugerencias');
+  campo.autocomplete = 'off';
+
+  // La lupa es adorno: el nombre del campo lo da su etiqueta.
+  const caja = h('div', {
+    clase: 'subastas-busqueda__caja',
+    hijos: [icono('buscar', { clase: 'icono subastas-busqueda__icono', etiqueta: null }), campo],
+  });
 
   const listaSugerencias = document.createElement('ul');
+  listaSugerencias.id = 'subastas-sugerencias';
   listaSugerencias.className = 'subastas-busqueda__sugerencias';
   listaSugerencias.hidden = true;
 
@@ -355,17 +663,23 @@ function construirBarraBusqueda() {
     cargarYRenderizar();
   }
 
-  contenedor.append(campo, listaSugerencias);
+  contenedor.append(etiquetaVisible('Buscar subastas', campo.id), caja, listaSugerencias);
   return contenedor;
 }
 
-function construirBarraOrden() {
+/**
+ * Ordenar y tamaño de página, cada uno con su etiqueta. En un teléfono el
+ * botón «Filtros» va delante, en la misma fila.
+ *
+ * @param {{boton: HTMLButtonElement}} abrirFiltros
+ */
+function construirBarraOrden(abrirFiltros) {
   const contenedor = document.createElement('div');
   contenedor.className = 'subastas-orden';
 
   const control = document.createElement('select');
+  control.id = 'subastas-ordenar';
   control.className = 'subastas-orden__control';
-  control.setAttribute('aria-label', 'Ordenar subastas por');
 
   const opciones = [
     { valor: 'FECHA_PUBLICACION', etiqueta: 'Más recientes' },
@@ -391,15 +705,16 @@ function construirBarraOrden() {
     cargarYRenderizar();
   });
 
-  // UXC-9 — el tamaño de página (7.7.9 «selector de tamaño»).
+  // UXC-9 — el tamaño de página (7.7.9 «selector de tamaño»). La etiqueta ya
+  // dice «Por página»: cada opción es solo la cifra.
   const tamano = document.createElement('select');
+  tamano.id = 'subastas-tamano';
   tamano.className = 'subastas-orden__control';
-  tamano.setAttribute('aria-label', 'Subastas por página');
   tamano.dataset.control = 'tamano-pagina';
   for (const valor of TAMANOS_DE_PAGINA) {
     const opcion = document.createElement('option');
     opcion.value = String(valor);
-    opcion.textContent = `${valor} por página`;
+    opcion.textContent = String(valor);
     tamano.appendChild(opcion);
   }
   tamano.addEventListener('change', () => {
@@ -408,7 +723,17 @@ function construirBarraOrden() {
     cargarYRenderizar();
   });
 
-  contenedor.append(control, tamano);
+  contenedor.append(
+    abrirFiltros.boton,
+    h('div', {
+      clase: 'mercado__campo mercado__campo--orden',
+      hijos: [etiquetaVisible('Ordenar por', control.id), control],
+    }),
+    h('div', {
+      clase: 'mercado__campo',
+      hijos: [etiquetaVisible('Por página', tamano.id), tamano],
+    }),
+  );
   return contenedor;
 }
 
@@ -417,6 +742,7 @@ async function cargarYRenderizar() {
   if (!zona) {
     return;
   }
+  const peticion = ++peticionVigente;
 
   // Cada tanda se lleva por delante el latido de la anterior: si no, cada
   // filtro dejaria un temporizador corriendo sobre elementos ya borrados.
@@ -432,11 +758,18 @@ async function cargarYRenderizar() {
       estado.tamano,
     );
   } catch (error) {
-    pintarEstado(zona, estadoDelFallo(error));
+    if (peticion === peticionVigente) {
+      pintarEstado(zona, estadoDelFallo(error));
+    }
+    return;
+  }
+  // Llegó tarde: ya se pidió otro listado y es ese el que tiene que verse.
+  if (peticion !== peticionVigente) {
     return;
   }
 
   if (pagina.contenido.length === 0) {
+    ultimaPagina = null;
     pintarEstado(zona, estadoSinResultados());
     return;
   }
@@ -454,7 +787,8 @@ async function cargarYRenderizar() {
     },
   });
 
-  zona.replaceChildren(vitrina, construirPaginacion(pagina));
+  ultimaPagina = pagina;
+  zona.replaceChildren(vitrina, construirPaginacionDelMercado(pagina));
   ponerEnHoraLosContadores(zona, pagina.contenido);
 }
 
@@ -526,24 +860,21 @@ function estadoSinResultados() {
 /**
  * Deja la busqueda y los filtros como al entrar.
  *
- * El panel de filtros es un `<form>` con un boton `type="reset"` nativo, y
- * escucha su propio evento `reset` para avisar. Asi que basta con pulsarlo:
- * el panel se vacia y el `alCambiar` que ya esta enganchado recarga solo.
- * Se evita a proposito tener dos caminos distintos para lo mismo.
+ * El panel es un `<form>`: se vacía con su `reset()` nativo, sin lógica a mano
+ * campo por campo. PLAYER-07b: el listado se pide aquí directamente, con los
+ * filtros ya vacíos, en vez de esperar al aviso del panel (que en `reset`
+ * llega con los filtros viejos; ver `inicializar`). El aviso que llegue
+ * después ve los mismos filtros y no vuelve a pedir nada.
  */
 function limpiarFiltros() {
   const campo = document.querySelector('.subastas-busqueda__campo');
   if (campo) {
     campo.value = '';
   }
+  vista?.filtros.reset();
   estado.filtros = {};
   estado.pagina = 0;
-
-  const limpiarPanel = document.querySelector('.subastas-filtros__limpiar');
-  if (limpiarPanel) {
-    limpiarPanel.click(); // Dispara `reset` → `alCambiar` → `cargarYRenderizar`.
-    return;
-  }
+  rotularFiltros();
   cargarYRenderizar();
 }
 
@@ -581,75 +912,44 @@ function pararContadores() {
 }
 
 /**
- * Paginacion sobre `.paginacion` del kit (UX-R2.8b).
+ * La paginacion del mercado es la compartida (`comun/paginacion.js`) —
+ * PLAYER-07b. La copia que habia aqui escribia «Anterior» y «Siguiente» en
+ * las casillas de 32 px del kit y el texto se salia de la casilla. Las
+ * flechas son las del componente, con su nombre («Página anterior»,
+ * «Página siguiente») y siempre a la vista: apagadas en los extremos, para que
+ * la fila no salte de sitio. Diez casillas como mucho (7.7.9); cinco en un
+ * teléfono, para que quepan en una fila.
  *
- * Era un bloque `subastas-paginacion__*` propio, calcado del que ya vive en
- * `componentes.css` desde PR-UX-6. El estado activo ademas se marcaba con una
- * clase modificadora ADEMAS de `aria-current`; el kit estiliza directamente
- * `[aria-current='page']`, asi que la clase sobraba y podia desincronizarse.
+ * @param {{pagina: number, totalPaginas: number}} pagina
+ * @returns {HTMLElement}
  */
-function construirPaginacion(pagina) {
-  const nav = h('nav', {
-    clase: 'paginacion',
-    atributos: { 'aria-label': 'Paginación de subastas' },
-  });
-
-  const irA = (numeroPagina) => {
-    estado.pagina = numeroPagina;
-    cargarYRenderizar();
-  };
-
-  const paginas = h('div', { clase: 'paginacion__paginas' });
-  paginas.append(construirBotonPagina('Anterior', pagina.pagina - 1, pagina.pagina > 0, irA));
-
-  // UXC-9 — «paginación de hasta diez páginas» (7.7.9): la misma ventana
-  // centrada de diez casillas que el inventario (`comun/paginacion.js`).
-  const { inicio, fin } = calcularVentana(pagina.pagina, pagina.totalPaginas);
-  for (let numero = inicio; numero < fin; numero += 1) {
-    const boton = h('button', {
-      clase: 'paginacion__pagina',
-      // Vista 1-indexada; el backend es 0-indexado.
-      texto: String(numero + 1),
-      atributos: {
-        type: 'button',
-        'aria-current': numero === pagina.pagina ? 'page' : null,
-        'aria-label': `Página ${numero + 1}`,
-      },
-    });
-    boton.addEventListener('click', () => irA(numero));
-    paginas.append(boton);
-  }
-
-  paginas.append(
-    construirBotonPagina(
-      'Siguiente',
-      pagina.pagina + 1,
-      pagina.pagina + 1 < pagina.totalPaginas,
-      irA,
-    ),
+function construirPaginacionDelMercado(pagina) {
+  const total = Number.isInteger(pagina.totalPaginas) ? Math.max(pagina.totalPaginas, 0) : 0;
+  const pedida = Number.isInteger(pagina.pagina) ? pagina.pagina : 0;
+  const actual = Math.min(Math.max(pedida, 0), Math.max(total - 1, 0));
+  const telefono = globalThis.matchMedia?.(TELEFONO)?.matches ?? false;
+  const nav = construirPaginacion(
+    { paginaActual: actual, totalPaginas: total },
+    (numero) => {
+      estado.pagina = numero;
+      cargarYRenderizar();
+    },
+    {
+      etiqueta: 'Páginas de subastas',
+      flechas: 'siempre',
+      casillas: telefono ? CASILLAS_EN_TELEFONO : CASILLAS_VISIBLES,
+    },
   );
-
-  nav.append(
-    h('p', {
-      clase: 'paginacion__info',
-      texto: `Página ${pagina.pagina + 1} de ${Math.max(pagina.totalPaginas, 1)}`,
-    }),
-    paginas,
-  );
+  nav.classList.add('mercado__paginacion');
   return nav;
 }
 
-function construirBotonPagina(etiqueta, numeroDestino, habilitado, irA) {
-  const boton = h('button', {
-    clase: 'paginacion__pagina',
-    texto: etiqueta,
-    atributos: { type: 'button' },
-  });
-  boton.disabled = !habilitado;
-  if (habilitado) {
-    boton.addEventListener('click', () => irA(numeroDestino));
+/** Rehace la paginación que se ve (p. ej. al girar el teléfono). */
+function repintarPaginacion() {
+  const actual = document.querySelector('#subastas-resultados .mercado__paginacion');
+  if (actual && ultimaPagina) {
+    actual.replaceWith(construirPaginacionDelMercado(ultimaPagina));
   }
-  return boton;
 }
 
 function debounce(funcion, esperaMs) {

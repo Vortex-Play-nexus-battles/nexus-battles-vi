@@ -39,59 +39,92 @@ import {
 } from '../comun/ui/estado-vista.js';
 import { listarVigentes } from '../contenido/productos/cliente-banners.js';
 import { montarBannerRotativo } from '../plataforma/notificaciones/banner-rotativo.js';
+import { RUTAS, resolver } from '../comun/sesion.js';
+import { pedirVitrinaPublica } from './portada-tienda.js';
+import { MODOS, tarjetaDeProducto } from './tienda-producto.js';
+import { aProductoDeVitrina } from './tienda-adaptador.js';
 
-/** Accesos fijos de la home. Rutas reales del repo, ninguna inventada. */
-export const ACCESOS = Object.freeze([
-  {
-    id: 'batallas',
-    titulo: 'Batallas',
-    detalle: 'Salas abiertas ahora',
-    destino: '../plataforma/salas-partidas/batallas.html',
-  },
-  // UXC-5 — el recorrido del jugador pasa por las misiones (§7.8). La vista
-  // dice si hay misiones abiertas; lo que funciona ya es la estrategia.
-  {
-    id: 'misiones',
-    titulo: 'Misiones',
-    detalle: 'Estrategia de tu héroe',
-    destino: '../contenido/misiones/misiones.html',
-  },
-  {
-    id: 'inventario',
-    titulo: 'Inventario',
-    detalle: 'Tus héroes y objetos',
-    destino: '../contenido/inventario/inventario.html',
-  },
-  {
-    id: 'torneos',
-    titulo: 'Torneos',
-    detalle: 'Equipos y árbol',
-    destino: '../plataforma/torneos/torneos.html',
-  },
-  { id: 'subastas', titulo: 'Subastas', detalle: 'Pujas en vivo', destino: './subastas.html' },
-  // R18 — decia «Compra con créditos», y la tienda cobra en dinero real: los
-  // créditos solo se ganan en batalla y solo circulan en las subastas
-  // (Proyecto Integrador II, §7.7.3). La propia tienda dice «Paga con moneda local».
-  { id: 'tienda', titulo: 'Tienda', detalle: 'Paga en tu moneda', destino: './tienda.html' },
-  // Auditoría de DEV del 30-sep: llevaba a «Comentar un producto» sin
-  // producto, que solo dice «No hay ningún producto seleccionado». Las
-  // opiniones viven en la ficha de cada producto de la tienda (UXC-3): ahí
-  // se leen, se califica y se comenta.
-  {
-    id: 'comentarios',
-    titulo: 'Comunidad',
-    detalle: 'Opiniones en cada producto',
-    destino: './tienda.html',
-  },
-  // UXC-6 — el chat solo se alcanzaba desde Batallas y desde una sala. La
-  // vista dice ella misma que los mensajes privados aún no están abiertos.
-  {
-    id: 'chat',
-    titulo: 'Chat',
-    detalle: 'General y mensajes privados',
-    destino: '../plataforma/salas-partidas/chat.html',
-  },
-]);
+/** Cuántos productos enseña el escaparate del inicio: dos filas de cuatro. */
+export const PRODUCTOS_EN_INICIO = 8;
+
+/**
+ * La tienda con un producto ya buscado por su nombre: es donde se compra,
+ * con su carrito, su lista de deseos y «Ya lo tienes».
+ *
+ * @param {string} [nombre]
+ * @returns {string}
+ */
+export function urlDeLaTiendaCon(nombre = '') {
+  const url = new URL(resolver(RUTAS.tienda));
+  const limpio = String(nombre ?? '').trim();
+  if (limpio) {
+    url.searchParams.set('busqueda', limpio);
+  }
+  return url.href;
+}
+
+/**
+ * Revisión del modo jugador del 6-oct, punto 6 — «poner la tienda en mi
+ * landing page cuando entro como usuario y se despliega mi inicio».
+ *
+ * El escaparate: los primeros productos de la vitrina (`GET /api/v1/vitrina`,
+ * los mismos y en la misma moneda que la tienda), con su imagen, tipo y
+ * precio, y «Ver en la tienda» en cada uno. Nada inventado: si la vitrina no
+ * responde se dice y se ofrece reintentar; si no hay nada a la venta, se dice.
+ *
+ * Punto 7: aquí estaba «A dónde ir», ocho tarjetas que repetían la barra de
+ * arriba. Lo que solo estaba aquí —la tienda y el chat— subió a la barra
+ * como atajo del HUD (`shell.js`, `ATAJOS_DEL_HUD`).
+ *
+ * @param {{fetchImpl?: Function, consultar?: typeof pedirVitrinaPublica,
+ *   alReintentar?: () => void}} [opciones]
+ * @returns {Promise<HTMLElement>}
+ */
+export async function bloqueDeTienda({
+  fetchImpl = fetchWithHttpErrorInterceptor,
+  consultar = pedirVitrinaPublica,
+  alReintentar,
+} = {}) {
+  let productos;
+  try {
+    ({ productos } = await consultar({ fetchImpl, cuantos: PRODUCTOS_EN_INICIO }));
+  } catch {
+    return estadoDeError({
+      titulo: 'La tienda no responde ahora mismo',
+      detalle: 'Vuelve a intentarlo en un momento para ver lo que está a la venta.',
+      alReintentar,
+    });
+  }
+  if (!Array.isArray(productos) || productos.length === 0) {
+    return estadoVacio({
+      titulo: 'Todavía no hay productos a la venta',
+      detalle: 'Cuando el catálogo publique novedades aparecerán aquí.',
+    });
+  }
+  const rejilla = h('div', { clase: 'home__tienda-rejilla', datos: { zona: 'escaparate' } });
+  for (const dto of productos.slice(0, PRODUCTOS_EN_INICIO)) {
+    const tarjetaProducto = tarjetaDeProducto(dto, { modo: MODOS.PORTADA });
+    // En la portada «Ver producto» abre la ficha pública; con cuenta, el
+    // producto se compra en la tienda: el botón pasa a ser un enlace a ella.
+    const ver = tarjetaProducto.querySelector('[data-ver-producto]');
+    const { nombre } = aProductoDeVitrina(dto);
+    if (ver) {
+      ver.replaceWith(
+        h('a', {
+          clase: 'boton boton--secundario boton--pequeno product-card__ver',
+          texto: 'Ver en la tienda',
+          atributos: {
+            href: urlDeLaTiendaCon(nombre),
+            'aria-label': `Ver en la tienda: ${nombre || 'producto sin nombre'}`,
+          },
+          datos: { verEnTienda: String(dto.id ?? '') },
+        }),
+      );
+    }
+    rejilla.append(tarjetaProducto);
+  }
+  return rejilla;
+}
 
 /**
  * Una llamada que puede no estar disponible en este entorno.
@@ -400,14 +433,13 @@ export function montarHome(
     heroe: raiz.querySelector('[data-zona="bloque-heroe"]'),
     torneo: raiz.querySelector('[data-zona="bloque-torneo"]'),
     avisos: raiz.querySelector('[data-zona="bloque-avisos"]'),
+    // Punto 6 — el escaparate de la tienda.
+    tienda: raiz.querySelector('[data-zona="bloque-tienda"]'),
   };
-  const zonaAccesos = raiz.querySelector('[data-zona="accesos"]');
 
   if (zonaSaludo) {
     zonaSaludo.textContent = sesion.apodo ? `Hola, ${sesion.apodo}` : 'Hola';
   }
-
-  pintarAccesos(zonaAccesos);
 
   // RF-NOT-002: los anuncios vigentes rotan arriba; sin vigentes o sin
   // servicio la zona sigue oculta y el resto de la home no se entera.
@@ -446,26 +478,13 @@ export function montarHome(
         cargar('avisos', () => bloqueDeAvisos(sesion.uid, fetchImpl, cargarTodo)),
       ),
     );
+    cargarTienda();
+  }
+
+  function cargarTienda() {
+    cargar('tienda', () => bloqueDeTienda({ fetchImpl, alReintentar: cargarTienda }));
   }
 
   cargarTodo();
   return { recargar: cargarTodo };
-}
-
-/** @param {HTMLElement|null} zona */
-function pintarAccesos(zona) {
-  if (!zona) {
-    return;
-  }
-  vaciar(zona);
-  for (const acceso of ACCESOS) {
-    zona.append(
-      tarjeta({
-        titulo: acceso.titulo,
-        subtitulo: acceso.detalle,
-        href: acceso.destino,
-        atributosDeDatos: { acceso: acceso.id },
-      }),
-    );
-  }
 }

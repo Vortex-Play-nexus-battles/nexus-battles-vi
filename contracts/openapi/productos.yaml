@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.7.0
+  version: 1.7.1
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -84,6 +84,14 @@ info:
     cierra sus propiedades (`additionalProperties: false`) y ninguna
     respuesta con `id` habria cumplido la composicion. La home del jugador
     rota los vigentes con su fecha de publicacion y su vigencia (RF-NOT-002).
+
+    1.7.1 (RG-085, RF-MOT-36): solo documentacion. La unica fuente de
+    epicas es derrotar al Master que la tiene, asi que una EPICA no se
+    vende: crearla o modificarla con `precioCreditos` mayor que 0,
+    `precioMonedaReal` mayor que 0 o `premium` verdadero responde 400. Los
+    esquemas no cambian (el 400 por validacion ya existia en `crearProducto`
+    y `modificarProducto`); se documenta el motivo nuevo. Dejar en cero el
+    precio de una epica que ya lo tenia sigue siendo valido.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -442,7 +450,9 @@ paths:
           description: >
             Solicitud inválida por campos obligatorios ausentes, precios
             negativos, tiraje inválido, tipo no permitido o atributos que
-            no corresponden al tipo seleccionado.
+            no corresponden al tipo seleccionado. Una EPICA tampoco admite
+            precio en créditos ni en moneda real mayor que 0, ni `premium`
+            (RG-085: las épicas solo se obtienen derrotando al Máster).
           content:
             application/problem+json:
               schema:
@@ -555,7 +565,10 @@ paths:
         "400":
           description: >
             Solicitud vacía (ningún campo presente), o la combinación
-            resultante de campos no corresponde al tipo del producto.
+            resultante de campos no corresponde al tipo del producto. A una
+            EPICA no se le puede poner precio en créditos ni en moneda real
+            mayor que 0, ni `premium` (RG-085); mientras conserve uno de
+            ellos, hay que dejarlo en 0 en la misma solicitud.
           content:
             application/problem+json:
               schema:
@@ -1032,6 +1045,11 @@ components:
               maximum: 100
 
     SolicitudCrearEpica:
+      description: >
+        Una épica no se vende (RG-085, RF-MOT-36): solo se obtiene derrotando
+        al Máster que la tiene. `precioCreditos` y `precioMonedaReal` solo
+        admiten 0 (o `precioMonedaReal` ausente) y `premium` solo `false`;
+        cualquier otro valor responde 400.
       unevaluatedProperties: false
       allOf:
         - $ref: "#/components/schemas/CamposComunesDeCreacion"

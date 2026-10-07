@@ -20,10 +20,61 @@
  * El botón está en todas las vistas y casi nadie lo pulsa. La ventana (y el
  * cliente HTTP) se importa la primera vez que se abre, no al cargar la vista.
  *
+ * ## Revisión del modo jugador del 6-oct, punto 4
+ *
+ * «Mejorar el botón de IA para que no se vea tan genérico en todas las
+ * pantallas». Era un círculo azul con «IA». Ahora lleva el emblema del Nexo
+ * (el cristal del logotipo) sobre el cromo, con un halo de energía, una
+ * señal y el rótulo «Asistente Nexus» al pasar el puntero o al llegar con el
+ * teclado. Su nombre accesible es «Abrir asistente Nexus» (y «Cerrar…» con la
+ * ventana abierta); el rótulo visible está contenido en él (WCAG 2.5.3). No
+ * lleva otro texto visible: un «IA» suelto no estaría en ese nombre.
+ *
  * @module comun/ui/asistente
  */
 
 import { h } from './dom.js';
+
+/** Lo que dice el botón: su nombre accesible y su rótulo. */
+export const TEXTOS_DEL_LANZADOR = Object.freeze({
+  abrir: 'Abrir asistente Nexus',
+  cerrar: 'Cerrar asistente Nexus',
+  rotulo: 'Asistente Nexus',
+});
+
+/**
+ * El emblema del logotipo, resuelto desde este módulo y no desde la vista
+ * (las vistas cuelgan a profundidades distintas; ver `icono.js`).
+ *
+ * @returns {string}
+ */
+export function rutaDelEmblema() {
+  return new URL('../../../../../shared/ui-kit/marca/emblema.webp', import.meta.url).href;
+}
+
+/**
+ * Lo de dentro del botón: halo, emblema, señal y rótulo. Todo adorno para el
+ * lector de pantalla, que oye el `aria-label`.
+ *
+ * @returns {HTMLElement[]}
+ */
+function contenidoDelLanzador() {
+  const emblema = h('img', {
+    clase: 'chatbot-flotante__emblema',
+    atributos: { alt: '', width: 34, height: 32, decoding: 'async', draggable: 'false' },
+  });
+  emblema.src = rutaDelEmblema();
+  return [
+    h('span', { clase: 'chatbot-flotante__halo', atributos: { 'aria-hidden': 'true' } }),
+    emblema,
+    h('span', { clase: 'chatbot-flotante__senal', atributos: { 'aria-hidden': 'true' } }),
+    h('span', {
+      clase: 'chatbot-flotante__rotulo',
+      texto: TEXTOS_DEL_LANZADOR.rotulo,
+      atributos: { 'aria-hidden': 'true' },
+    }),
+  ];
+}
 
 /**
  * Crea la ventana real. Se importa bajo demanda; las pruebas inyectan otra.
@@ -61,10 +112,11 @@ export function montarAsistente(raiz = document, { crearVentana = crearVentanaPo
     existente ??
     h('button', {
       clase: 'chatbot-flotante',
-      texto: 'IA',
       atributos: { type: 'button' },
     });
-  boton.setAttribute('aria-label', 'Abrir el asistente');
+  // Punto 4 — el mismo aspecto aunque la vista traiga un botón suyo con «IA».
+  boton.replaceChildren(...contenidoDelLanzador());
+  boton.setAttribute('aria-label', TEXTOS_DEL_LANZADOR.abrir);
   boton.setAttribute('aria-expanded', 'false');
   boton.dataset.asistenteMontado = 'si';
 
@@ -84,7 +136,10 @@ export function montarAsistente(raiz = document, { crearVentana = crearVentanaPo
 
   function reflejarEstado(abierta) {
     boton.setAttribute('aria-expanded', String(abierta));
-    boton.setAttribute('aria-label', abierta ? 'Cerrar el asistente' : 'Abrir el asistente');
+    boton.setAttribute(
+      'aria-label',
+      abierta ? TEXTOS_DEL_LANZADOR.cerrar : TEXTOS_DEL_LANZADOR.abrir,
+    );
   }
 
   boton.addEventListener('click', async () => {
