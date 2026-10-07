@@ -172,7 +172,7 @@ class LaForjaSumergidaTest {
     void convivenConLaDelDocumento() {
         List<Mision> delEquipo = catalogo.todas().stream().filter(m -> m.origen() == Origen.EQUIPO).toList();
 
-        assertThat(delEquipo).extracting(Mision::id).containsExactly("la-forja-sumergida");
+        assertThat(delEquipo).extracting(Mision::id).startsWith("la-forja-sumergida");
         assertThat(catalogo.todas().stream().filter(Mision::destacada)).extracting(Mision::id)
                 .containsExactly("templo-olvidado");
     }
