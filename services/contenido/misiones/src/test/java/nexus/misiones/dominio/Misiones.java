@@ -23,6 +23,13 @@ public final class Misiones {
     public static final HeroeEnMision HEROE =
             new HeroeEnMision("h-1", "Vorn", "Guerrero Armas", "p-1", 1, 0, 8, 44, 11);
 
+    /**
+     * Una epica que el catalogo oficial NO tiene (sin productoId): lo que antes era «Velo de Sombras». Sirve para
+     * probar que una epica sin producto queda en la coleccion y se informa como no entregada.
+     */
+    public static final Epica EPICA_SIN_PRODUCTO = new Epica("Eco de Cenizas",
+            "+1 a la defensa para todos los héroes.", "El héroe se vuelve intangible durante 1 turno.", null);
+
     public static final MasterDeMision SOMBRA_DEL_OLVIDO =
             new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 0.15, VELO_DE_SOMBRAS);
 

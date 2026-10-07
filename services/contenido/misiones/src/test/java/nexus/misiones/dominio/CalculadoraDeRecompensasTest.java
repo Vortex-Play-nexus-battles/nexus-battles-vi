@@ -201,17 +201,17 @@ class CalculadoraDeRecompensasTest {
         ResultadoDeMision.MasterEnfrentado tanque = new ResultadoDeMision.MasterEnfrentado(
                 "Master afin a Guerrero Tanque", golpe, true);
         ResultadoDeMision.MasterEnfrentado sombra = new ResultadoDeMision.MasterEnfrentado(
-                "Sombra del Olvido", Misiones.VELO_DE_SOMBRAS, true);
+                "Sombra del Olvido", Misiones.EPICA_SIN_PRODUCTO, true);
 
         RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(Misiones.templo(), Escalon.NORMAL,
                 resultado(true, 80, List.of(tanque, sombra, tanque, sombra)), false, SIN_EXTRAS,
                 new AzarConSemilla(1));
 
         assertThat(recompensas.epicas()).extracting(RecompensasDeEjecucion.EpicaGanada::nombre)
-                .containsExactly("Golpe de defensa", "Velo de Sombras");
-        // Y lo que se informa como no entregado tampoco se repite.
+                .containsExactly("Golpe de defensa", "Eco de Cenizas");
+        // Y lo que se informa como no entregado (una epica sin producto en el catalogo) tampoco se repite.
         assertThat(recompensas.sinEntregar()).extracting(RecompensasDeEjecucion.SinEntregar::nombre)
-                .containsOnlyOnce("Épica «Velo de Sombras»");
+                .containsOnlyOnce("Épica «Eco de Cenizas»");
     }
 
     @Test

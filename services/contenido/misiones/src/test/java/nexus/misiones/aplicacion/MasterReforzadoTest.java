@@ -413,14 +413,16 @@ class MasterReforzadoTest {
     @Test
     @DisplayName("Criterio 3: una epica fuera del catalogo oficial (la del ejemplo del documento) queda en la coleccion y se informa")
     void criterio3_epicaSinProducto() {
-        Ejecucion terminada = simular(2, Escalon.NORMAL, mision(sombra()));
+        // «Velo de Sombras» ya es un producto del catalogo (HU-SIM-006 criterio 3): la epica sin producto es otra.
+        Ejecucion terminada = simular(2, Escalon.NORMAL,
+                mision(new MasterDeMision("Sombra del Olvido", MASTER, 1.0, Misiones.EPICA_SIN_PRODUCTO)));
 
         RecompensasDeEjecucion recompensas = terminada.recompensas();
         assertThat(recompensas.epicas()).singleElement().satisfies(epica -> {
-            assertThat(epica.nombre()).isEqualTo("Velo de Sombras");
+            assertThat(epica.nombre()).isEqualTo("Eco de Cenizas");
             assertThat(epica.entregable()).isFalse();
         });
-        assertThat(recompensas.sinEntregar()).anySatisfy(s -> assertThat(s.nombre()).contains("Velo de Sombras"));
+        assertThat(recompensas.sinEntregar()).anySatisfy(s -> assertThat(s.nombre()).contains("Eco de Cenizas"));
         assertThat(terminada.pasos()).doesNotContainKey(PasoDeLiquidacion.EPICA);
     }
 
