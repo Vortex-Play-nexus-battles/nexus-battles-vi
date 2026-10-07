@@ -217,7 +217,7 @@ aparecer un reparto por `$request_method`.
 recarga sin cortar conexiones. Un push que solo toque frontend, ui-kit o esta
 carpeta también despliega.
 
-## HTTPS con Let's Encrypt (28-sep) — preparado, apagado hasta que haya dominio
+## HTTPS con Let's Encrypt (28-sep; revisado el 6-oct) — listo, apagado hasta que haya dominio
 
 El borde publica HTTPS **en el mismo nginx**, sin coste y sin cambiar rutas.
 Mientras no haya dominio todo sigue como antes: solo el 80.
@@ -226,30 +226,46 @@ Mientras no haya dominio todo sigue como antes: solo el 80.
 |---|---|---|
 | `include /etc/nginx/nexus-tls/*.conf;` | `borde-dev.conf`, dentro del `server` | Sin fragmento no incluye nada (un comodín sin coincidencias no es un error) |
 | `location ^~ /.well-known/acme-challenge/` | `borde-dev.conf` | Sirve el reto HTTP-01 desde `/opt/nexus/acme` |
-| Plantilla del fragmento | `tls/borde-tls.conf.plantilla` | `listen 443 ssl`, certificado del dominio y 301 del 80 a `https://DOMINIO` salvo `/salud-borde` y el reto |
-| `scripts/cd/certificado.sh` | host de plataforma | Emite, renueva, activa o quita el fragmento; nunca deja nginx sin recargar |
-| 443 en el grupo de seguridad | `entornos/plataforma/main.tf` | Abierto antes del certificado: sin él, nadie escucha en el 443 |
-| `certificado-dev.yml` | Actions | Renovación diaria (lun-vie) sin encender el host |
-| `pruebas/comprobar-tls.sh` | CI (banco del borde) | El mismo `borde-dev.conf` con el fragmento y un certificado autofirmado |
+| Plantilla del fragmento | `tls/borde-tls.conf.plantilla` | `listen 443 ssl`, TLS 1.2/1.3 con suites AEAD, 301 del 80 a `https://DOMINIO` salvo `/salud-borde`, el reto y `/mailpit/`; HSTS opcional |
+| `scripts/cd/certificado.sh` | host de plataforma | Emite, renueva, amplía, activa o quita el fragmento; solo publica un certificado **de confianza**; nunca deja nginx sin recargar |
+| `abrir_origenes_al_dominio` | `scripts/cd/desplegar.sh` | Suma `https://DOMINIO` a las ocho listas de orígenes (CORS y WebSocket) en los dos hosts |
+| 443 en el grupo de seguridad | `entornos/plataforma/main.tf` | Abierto antes del certificado: sin él, nadie escucha en el 443 (aplicado: `sg-005c60a57c33baac1`) |
+| `certificado-dev.yml` | Actions | Renovación diaria (lun-vie) sin encender el host, DNS público, comprobación desde fuera y aviso a 14 días de caducar; a demanda `estado` y `probar-renovacion` |
+| `pruebas/comprobar-tls.sh` | CI (banco del borde) | El mismo `borde-dev.conf` con el fragmento, un certificado autofirmado y un cliente «de internet» |
+| `tests/e2e/https-del-borde.smoke.spec.js` | smoke de DEV | Con `PUBLIC_BASE_URL` en https: 301, rutas limpias, contenido mixto 0, enlaces de correo y `wss://` |
 
-**Para activarlo** (en este orden, lo hace Grupo 6):
+**Lo que cambió el 6-oct al revisarlo para encenderlo** (nada de esto se había ejercitado con un dominio real):
 
-1. Registro A del dominio → `35.168.124.119`, y comprobar que resuelve.
-2. Variables del entorno `dev`: `DOMINIO_PUBLICO` (sin `https://`), `ACME_CORREO` y
-   `ACME_ACEPTA_TERMINOS=true`. Esta última **solo tras el sí explícito de una persona** al
-   Subscriber Agreement de Let's Encrypt. `ACME_PRUEBAS=1` ensaya contra el entorno de
-   pruebas de Let's Encrypt sin gastar sus límites.
-3. Añadir `https://DOMINIO` **sin quitar** el origen actual en `SALAS_WS_ORIGENES`,
-   `CHAT_WS_ORIGENES`, `NOTIFICACIONES_WS_ORIGENES`, `SUBASTAS_WS_ORIGENES`,
-   `SUBASTAS_CORS_ORIGENES` e `IDENTIDAD_CORS_ORIGENES` (listas separadas por comas), y
-   volver a desplegar los servicios que los leen. Si no, el primer WebSocket desde
-   `https://` se rechaza.
-4. Lanzar un despliegue (`cd.yml` a demanda). `desplegar.sh` llama a `certificado.sh`, que
-   comprueba DNS y reto antes de molestar a Let's Encrypt.
-5. `PUBLIC_BASE_URL=https://DOMINIO`: los enlaces de los correos dejan de llevar la IP.
+- certbot deja `live/` y `archive/` en `0700` de root y el despliegue corre como `ubuntu`: el `[ -f ]` desde el
+  host no veía nunca el certificado recién emitido y el borde volvía a HTTP. Ahora el estado se lee dentro del
+  contenedor de certbot.
+- Un certificado del entorno de pruebas ya no se publica; al quitar `ACME_PRUEBAS` se pide el real con
+  `--force-renewal` (sin él certbot se quedaba con el de pruebas: «no toca renovar»).
+- Desde `https://` el `Origin` deja de coincidir con lo que cada servicio cree ser (`http://host:80`) y Spring lo
+  trata como CORS: sin `https://DOMINIO` en su lista, login, carrito, chatbot, pujas y los canales STOMP dan 403.
+  `IDENTIDAD_CORS_ORIGENES` no llegaba al host y ms-chatbot no tenía de dónde leer la suya.
+- `/mailpit/` queda fuera de la redirección: los túneles SSH de smoke, canarios y la prueba del profesor la leen
+  por `http://localhost`, y redirigida habría salido a internet, donde el borde la niega.
+- `ACME_CORREO` es opcional: Let's Encrypt dejó de mandar avisos de caducidad el 4-jun-2025. El aviso es
+  `certificado-dev.yml` en rojo a menos de 14 días.
 
-**Para volver atrás:** vaciar `DOMINIO_PUBLICO` y desplegar. El script quita el fragmento y el
-borde vuelve a solo HTTP. **HSTS** no se activa hasta que HTTPS lleve una semana estable.
+**Para activarlo** (lo hace Grupo 6; una persona solo pone el dominio y su consentimiento):
+
+1. Registro **A** del dominio → `35.168.124.119` (TTL 300), sin AAAA, sin proxy de CDN delante.
+2. Variables del entorno `dev`: `DOMINIO_PUBLICO` (sin `https://`) y `ACME_ACEPTA_TERMINOS=true` — esta última
+   **solo tras el sí explícito de una persona** al Subscriber Agreement de Let's Encrypt. `ACME_CORREO` opcional.
+3. Ensayo: `ACME_PRUEBAS=1` y `certificado-dev.yml` (asegurar). Emite en el entorno de pruebas de Let's Encrypt,
+   no lo publica y dice si DNS y reto funcionan.
+4. Real: quitar `ACME_PRUEBAS` y volver a lanzarlo. Publica HTTPS y lo comprueba desde fuera.
+5. Desplegar los servicios que leen orígenes (`cd.yml` a demanda): salas-partidas, notificaciones, ms-identidad,
+   ms-ecommerce y ms-chatbot en plataforma; ms-subastas en contenido. `desplegar.sh` les suma `https://DOMINIO`.
+6. `PUBLIC_BASE_URL=https://DOMINIO` y desplegar correo: los enlaces de los correos dejan de llevar la IP, y smoke,
+   canarios y la prueba del profesor pasan a entrar por el dominio.
+7. `certificado-dev.yml` con `probar-renovacion` (certbot renew --dry-run) y un apagado/encendido del host.
+
+**Para volver atrás:** vaciar `DOMINIO_PUBLICO` (y `PUBLIC_BASE_URL` a la IP) y desplegar. El script quita el
+fragmento y el borde vuelve a solo HTTP. **HSTS**: `HSTS_SEGUNDOS` vacío hasta que HTTPS lleve una semana estable;
+después 300 → 86400 → 31536000, sin `includeSubDomains` ni `preload`.
 
 Contingencia sin dominio: CloudFront con el plan Free (USD 0/mes, TLS incluido) delante de este
 mismo borde, con un nombre `*.cloudfront.net`.

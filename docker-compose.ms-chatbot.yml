@@ -94,6 +94,14 @@ services:
       DB_PASSWORD: ${MS_CHATBOT_DB_PASSWORD}
       # Clave publica de los tokens de usuario (ADR-002), dentro de la red.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # 6-oct — origenes del navegador (app.cors.origenes-permitidos). Hasta
+      # hoy no se fijaba y el servicio se quedaba con su lista de desarrollo
+      # (localhost:8080/5500): funcionaba solo porque la pagina era
+      # http://<IP> y Spring trataba su POST como del mismo origen. Desde
+      # https://<dominio> no lo es, y sin esto el chat respondia 403. Mismo
+      # patron y mismo valor por omision que ECOMMERCE_CORS_ORIGENES;
+      # desplegar.sh le suma https://<DOMINIO_PUBLICO> (abrir_origenes_al_dominio).
+      CORS_ORIGENES: ${CHATBOT_CORS_ORIGENES:-http://35.168.124.119}
       # Consultas asistidas (HU-CHA-008). No usa credencial de servicio
       # (ADR-005): reenvia el token del propio jugador. Inventario vive en el
       # host de contenido, igual que en docker-compose.deploy.yml.
