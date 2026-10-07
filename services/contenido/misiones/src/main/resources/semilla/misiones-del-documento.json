@@ -1,5 +1,5 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "notas": [
     "Contenido del documento del curso, copiado sin reescribir: la mision de ejemplo de la seccion 7.8.14 («El Templo Olvidado») y la Tabla 20 (epicas y probabilidad de Master por tipo de heroe).",
     "PROVISIONAL (decision del PO, seccion 7.8.13 «las estadisticas de enemigos deben escalar segun nivel de mision»): el documento describe a los enemigos regulares solo con palabras. Para que el motor de combate los resuelva se les asigna un prototipo del catalogo de heroes y las estadisticas de ese prototipo en el nivel del heroe: Sombras Corrompidas = Guerrero Armas («ataque moderado»), Guardianes de Piedra = Guerrero Tanque («alta defensa»), Espectros Ancestrales = Mago Fuego («ataques magicos»).",
@@ -8,8 +8,15 @@
     "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
     "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
     "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
-    "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento."
+    "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento.",
+    "1.2.0 (HU-MIS-012) PROVISIONAL (decision del PO, 2026-10-01): el documento solo dice que la probabilidad de aparicion del Master esta «configurada segun dificultad» (7.8). Mientras no haya cifras del cliente: Facil 10 %, Normal 15 % (la del ejemplo de 7.8.14), Dificil 20 % y Extremo 25 %. Esta tabla no es contenido de una mision sino configuracion de todas: el servicio no publica una mision cuyo Master no aparezca con la probabilidad de su dificultad."
   ],
+  "probabilidadDeMasterPorDificultad": {
+    "FACIL": 0.10,
+    "NORMAL": 0.15,
+    "DIFICIL": 0.20,
+    "EXTREMO": 0.25
+  },
   "tabla20": [
     {
       "prototipo": "Guerrero Tanque",

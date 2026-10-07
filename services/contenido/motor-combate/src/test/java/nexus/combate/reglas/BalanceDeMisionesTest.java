@@ -20,8 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * El equilibrio de las misiones publicadas, con el motor de combate real —
  * auditoria del 4-oct, cambio autorizado n.º 2 (D-42).
  *
- * <p>Lee las semillas del servicio de misiones ({@code misiones-de-progresion.json}
- * y {@code misiones-del-documento.json}) y juega cada mision entera, como la
+ * <p>Lee las semillas del servicio de misiones ({@code misiones-de-progresion.json},
+ * {@code misiones-del-documento.json} y {@code misiones-del-equipo.json}, esta
+ * ultima desde HU-MIS-012) y juega cada mision entera, como la
  * simulacion de ese servicio ({@link SimuladorDeMisiones}). Si alguien cambia
  * una semilla, la integracion continua de motor-combate corre (ci.yml lo
  * engancha) y esto dice si la mision sigue jugable.
@@ -54,7 +55,8 @@ class BalanceDeMisionesTest {
 
     @BeforeAll
     static void leerSemillas() {
-        catalogo = SimuladorDeMisiones.semillas("misiones-de-progresion.json", "misiones-del-documento.json");
+        catalogo = SimuladorDeMisiones.semillas("misiones-de-progresion.json", "misiones-del-documento.json",
+                "misiones-del-equipo.json");
     }
 
     @Test

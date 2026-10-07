@@ -14,9 +14,15 @@ package nexus.misiones.dominio;
  * de nivel 1 a 7 que llevan a un heroe nuevo hasta el Templo (nivel 8). Son
  * contenido del juego disenado por el equipo 6, no del documento, y se cargan
  * siempre.
+ *
+ * <p>{@link #EQUIPO} (HU-MIS-012): las misiones que disena el equipo (RF-MIS-56),
+ * con el nivel de detalle del ejemplo de la seccion 7.8.14: enemigos regulares,
+ * jefe final y al menos un Master con su epica. Se cargan siempre, de su propia
+ * semilla, separada de la del documento.
  */
 public enum Origen {
     DOCUMENTO,
     PROVISIONAL_DEV,
-    PROGRESION
+    PROGRESION,
+    EQUIPO
 }
