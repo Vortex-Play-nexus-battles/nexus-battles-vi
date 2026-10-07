@@ -522,12 +522,46 @@ class RepositorioSalasJpaIT {
      * PRIVADA y el listado tiene que probarse con los seis estados.
      */
     private void guardarConEstado(EstadoSala estado, Modalidad modalidad) {
+        guardarConEstado(estado, modalidad, java.time.Instant.now());
+    }
+
+    private Sala guardarConEstado(EstadoSala estado, Modalidad modalidad, java.time.Instant creadaEn) {
         int maximo = modalidad == Modalidad.HASTA_SEIS ? 6 : 2;
         boolean privada = estado == EstadoSala.PRIVADA;
         // Una privada sin codigo la rechaza ck_salas_codigo_solo_si_privada (V5),
         // y con razon: seria una sala que nadie puede abrir, ni su anfitrion.
-        repositorio.guardar(Sala.rehidratar(UUID.randomUUID(), estado, modalidad, maximo, 0,
+        return repositorio.guardar(Sala.rehidratar(UUID.randomUUID(), estado, modalidad, maximo, 0,
                 false, privada, null, ANFITRION, java.util.Set.of(),
-                java.time.Instant.now(), 0L, privada ? "ABCD-2345" : null, null));
+                creadaEn, 0L, privada ? "ABCD-2345" : null, null));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · varios estados a la vez («disponibles»: abiertas y privadas), la mas reciente primero")
+    void listarVariosEstadosRecientesPrimero() {
+        java.time.Instant base = java.time.Instant.parse("2026-10-06T12:00:00Z");
+        Sala vieja = guardarConEstado(EstadoSala.ABIERTA, Modalidad.HASTA_SEIS, base);
+        Sala privada = guardarConEstado(EstadoSala.PRIVADA, Modalidad.UNO_CONTRA_UNO, base.plusSeconds(60));
+        guardarConEstado(EstadoSala.LLENA, Modalidad.UNO_CONTRA_UNO, base.plusSeconds(120));
+        Sala nueva = guardarConEstado(EstadoSala.ABIERTA, Modalidad.UNO_CONTRA_UNO, base.plusSeconds(180));
+
+        PaginaDeSalas disponibles = repositorio.listarEnEstados(null,
+                java.util.Set.of(EstadoSala.ABIERTA, EstadoSala.PRIVADA), 0, 16);
+
+        assertAll(
+                () -> assertEquals(3, disponibles.totalElementos(), "la llena no se cuenta"),
+                () -> assertEquals(java.util.List.of(nueva.id(), privada.id(), vieja.id()),
+                        disponibles.contenido().stream().map(Sala::id).toList()));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · pedir solo estados fuera del listado sigue sin devolver nada")
+    void listarVariosEstadosFueraDelListado() {
+        guardarConEstado(EstadoSala.EN_JUEGO, Modalidad.HASTA_SEIS);
+        guardarConEstado(EstadoSala.FINALIZADA, Modalidad.HASTA_SEIS);
+
+        PaginaDeSalas pagina = repositorio.listarEnEstados(null,
+                java.util.Set.of(EstadoSala.EN_JUEGO, EstadoSala.FINALIZADA), 0, 16);
+
+        assertEquals(0, pagina.totalElementos());
     }
 }

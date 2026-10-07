@@ -34,9 +34,17 @@ asyncapi: 3.0.0
 
 info:
   title: Nexus Battles VI — Canal de salas y partidas
-  version: 1.7.0
+  version: 1.8.0
   description: |
     Canal WebSocket + STOMP del modulo `salas-partidas`.
+
+    **1.8.0 (revision del modo jugador del 6-oct) — rendirse. Aditivo.**
+    `partidaEstado` gana `participanteRendido` (`partida.participante.rendido`):
+    alguien salio del combate con `POST /partidas/{idPartida}/rendicion`
+    (salas-partidas.yaml 1.10.0) y su heroe queda fuera de combate. Llega
+    ANTES que lo que provoque: `turnoCambiado` con el nuevo motivo
+    `RENDICION` si era su turno, o `partidaFinalizada` si su bando se quedo
+    sin nadie en pie. Ningun otro mensaje cambia de forma.
 
     **1.7.0 (auditoria del 4-oct) — cada golpe dice a quien y por que.
     Aditivo.** `accionResuelta` gana `idObjetivo` (a quien apunto la accion) y,
@@ -167,6 +175,8 @@ channels:
         $ref: '#/components/messages/AccionResuelta'
       partidaFinalizada:
         $ref: '#/components/messages/PartidaFinalizada'
+      participanteRendido:
+        $ref: '#/components/messages/ParticipanteRendido'
 
   accionDelJugador:
     address: '/app/partidas/{idPartida}/acciones'
@@ -479,8 +489,10 @@ components:
               `salas.partidas.segundos-por-turno` (D-B7-14).
           motivo:
             type: [string, 'null']
-            enum: [ACCION, TIEMPO_AGOTADO, TURNO_PERDIDO, null]
-            description: (1.5.0) Por que paso el turno. `TIEMPO_AGOTADO` si se acabo el tiempo sin accion.
+            enum: [ACCION, TIEMPO_AGOTADO, TURNO_PERDIDO, RENDICION, null]
+            description: |
+              (1.5.0) Por que paso el turno. `TIEMPO_AGOTADO` si se acabo el tiempo sin accion.
+              (1.8.0) `RENDICION` si quien tenia el turno se rindio.
           poderActual: { type: [integer, 'null'], minimum: 0 }
           poderMaximo: { type: [integer, 'null'], minimum: 0 }
           recargas:
@@ -709,6 +721,24 @@ components:
                   type: string
                   format: uuid
                   description: Cofre entregado con estos creditos (RF-JUE-013), si toco uno.
+
+    ParticipanteRendido:
+      name: participanteRendido
+      title: Un participante se rindio
+      description: |
+        (1.8.0) Alguien salio del combate: rendirse cuenta como derrota. Su
+        heroe queda fuera de combate (`vidaActual` 0) sin golpe ni ejecutor.
+        Quien ganara, si la partida termina, lo dice `partidaFinalizada`, que
+        llega despues; nunca lo decide el cliente.
+      payload:
+        type: object
+        required: [tipo, idPartida, idJugador, vidaActual]
+        properties:
+          tipo: { const: 'partida.participante.rendido' }
+          idPartida: { type: string, format: uuid }
+          idJugador: { type: string, format: uuid }
+          vidaActual: { type: integer, minimum: 0 }
+          vidaMaxima: { type: integer, minimum: 0 }
 
     EjecutarAccion:
       name: ejecutarAccion

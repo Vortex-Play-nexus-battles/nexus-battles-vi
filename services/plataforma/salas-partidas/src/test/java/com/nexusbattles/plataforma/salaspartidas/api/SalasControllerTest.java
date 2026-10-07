@@ -109,6 +109,9 @@ class SalasControllerTest {
     @MockitoBean
     private com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso comprobarIngreso;
 
+    @MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.InvitarASala invitarASala;
+
     // ---- RFINAL-04 · comprobarIngreso (1.9.0): el codigo primero, sin efectos ----
 
     @Test
@@ -475,7 +478,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("GET /salas devuelve la pagina con los cinco campos del contrato")
     void listaSalas() throws Exception {
-        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon(salaDeEjemplo()));
+        when(listarSalas.ejecutarEnEstados(any(), any(), any(), any())).thenReturn(paginaCon(salaDeEjemplo()));
 
         mockMvc.perform(get("/api/v1/salas").with(jugador()))
                 .andExpect(status().isOk())
@@ -496,7 +499,7 @@ class SalasControllerTest {
     @Test
     @DisplayName("GET /salas traslada los filtros y la paginacion del contrato")
     void listaSalasConFiltros() throws Exception {
-        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon());
+        when(listarSalas.ejecutarEnEstados(any(), any(), any(), any())).thenReturn(paginaCon());
 
         mockMvc.perform(get("/api/v1/salas")
                         .param("pagina", "2")
@@ -506,18 +509,18 @@ class SalasControllerTest {
                         .with(jugador()))
                 .andExpect(status().isOk());
 
-        verify(listarSalas).ejecutar(2, 8, Modalidad.HASTA_SEIS, EstadoSala.ABIERTA);
+        verify(listarSalas).ejecutarEnEstados(2, 8, Modalidad.HASTA_SEIS, java.util.Set.of(EstadoSala.ABIERTA));
     }
 
     @Test
     @DisplayName("GET /salas sin parametros no inventa valores: los decide el caso de uso")
     void listaSalasSinParametros() throws Exception {
-        when(listarSalas.ejecutar(any(), any(), any(), any())).thenReturn(paginaCon());
+        when(listarSalas.ejecutarEnEstados(any(), any(), any(), any())).thenReturn(paginaCon());
 
         mockMvc.perform(get("/api/v1/salas").with(jugador()))
                 .andExpect(status().isOk());
 
-        verify(listarSalas).ejecutar(null, null, null, null);
+        verify(listarSalas).ejecutarEnEstados(null, null, null, java.util.Set.of());
     }
 
     @Test
@@ -964,6 +967,127 @@ class SalasControllerTest {
                         .value("https://nexusbattles.local/errores/heroe-ocupado"))
                 .andExpect(jsonPath("$.detail").value(
                         org.hamcrest.Matchers.containsString("Torre del Alba")));
+    }
+
+    // ---------------------------------------------------------------------
+    // 1.10.0 — revision del modo jugador (6-oct)
+    // ---------------------------------------------------------------------
+
+    @Test
+    @DisplayName("1.10.0 · estado se repite o va con comas: «disponibles» es ABIERTA + PRIVADA")
+    void listaVariosEstados() throws Exception {
+        when(listarSalas.ejecutarEnEstados(any(), any(), any(), any())).thenReturn(paginaCon());
+
+        mockMvc.perform(get("/api/v1/salas").param("estado", "ABIERTA").param("estado", "PRIVADA")
+                        .with(jugador()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/salas").param("estado", "ABIERTA,PRIVADA").with(jugador()))
+                .andExpect(status().isOk());
+
+        verify(listarSalas, org.mockito.Mockito.times(2)).ejecutarEnEstados(null, null, null,
+                java.util.Set.of(EstadoSala.ABIERTA, EstadoSala.PRIVADA));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · un estado que no existe es 400, no un listado sin filtrar")
+    void estadoDesconocido() throws Exception {
+        mockMvc.perform(get("/api/v1/salas").param("estado", "INVENTADO").with(jugador()))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(listarSalas);
+    }
+
+    private static Sala salaConFichaDelAnfitrion() {
+        return Sala.crear(new ParametrosDeSala(2, Modalidad.UNO_CONTRA_UNO, 0, false, false, null), JUGADOR,
+                new com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante("Simon_P",
+                        HeroeDeCombate.aPleno("h-1", "Sombra de Vael", 140)));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · quien esta dentro ve el apodo del anfitrion y las plazas con apodo y heroe")
+    void laSalaDiceQuienEstaDentro() throws Exception {
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(salaConFichaDelAnfitrion());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.apodoAnfitrion").value("Simon_P"))
+                .andExpect(jsonPath("$.jugadores.length()").value(1))
+                .andExpect(jsonPath("$.jugadores[0].id").value(JUGADOR.toString()))
+                .andExpect(jsonPath("$.jugadores[0].apodo").value("Simon_P"))
+                .andExpect(jsonPath("$.jugadores[0].anfitrion").value(true))
+                .andExpect(jsonPath("$.jugadores[0].heroe").value("Sombra de Vael"));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · quien no esta dentro ve «Creada por» pero no la lista de jugadores")
+    void deFueraSoloElAnfitrion() throws Exception {
+        when(obtenerSala.ejecutar(ID_SALA)).thenReturn(salaConFichaDelAnfitrion());
+
+        mockMvc.perform(get("/api/v1/salas/{id}", ID_SALA).with(otroJugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.apodoAnfitrion").value("Simon_P"))
+                .andExpect(jsonPath("$.jugadores").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("1.10.0 · invitar: 200 con el apodo del invitado; el anfitrion sale del token")
+    void invitaAUnJugador() throws Exception {
+        UUID invitado = UUID.fromString("99999999-9999-9999-9999-999999999999");
+        when(invitarASala.ejecutar(any(), any(), any()))
+                .thenReturn(new com.nexusbattles.plataforma.salaspartidas.aplicacion.InvitarASala.Resultado(
+                        invitado, "Perez_Bro15", true));
+
+        mockMvc.perform(post("/api/v1/salas/{id}/invitaciones", ID_SALA)
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idJugador\": \"" + invitado + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.idJugador").value(invitado.toString()))
+                .andExpect(jsonPath("$.apodo").value("Perez_Bro15"))
+                .andExpect(jsonPath("$.enviada").value(true));
+
+        var anfitrion = org.mockito.ArgumentCaptor.forClass(JugadorAutenticado.class);
+        verify(invitarASala).ejecutar(org.mockito.ArgumentMatchers.eq(ID_SALA), anfitrion.capture(),
+                org.mockito.ArgumentMatchers.eq(invitado));
+        org.junit.jupiter.api.Assertions.assertEquals(JUGADOR, anfitrion.getValue().id());
+    }
+
+    @Test
+    @DisplayName("1.10.0 · invitar sin decir a quien es 400 y no llega al caso de uso")
+    void invitarSinInvitado() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/{id}/invitaciones", ID_SALA)
+                        .with(jugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+        org.mockito.Mockito.verifyNoInteractions(invitarASala);
+    }
+
+    @Test
+    @DisplayName("1.10.0 · un rechazo de la invitacion sale como problem details con su motivo")
+    void invitacionRechazada() throws Exception {
+        when(invitarASala.ejecutar(any(), any(), any()))
+                .thenThrow(com.nexusbattles.plataforma.salaspartidas.dominio.InvitacionNoPermitida.soloElAnfitrion());
+
+        mockMvc.perform(post("/api/v1/salas/{id}/invitaciones", ID_SALA)
+                        .with(otroJugador())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idJugador\": \"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.type")
+                        .value("https://nexusbattles.local/errores/invitacion-no-permitida"))
+                .andExpect(jsonPath("$.detail").value("Solo quien creó la sala puede invitar."));
+    }
+
+    @Test
+    @DisplayName("1.10.0 · invitar sin sesion es 401")
+    void invitarSinSesion() throws Exception {
+        mockMvc.perform(post("/api/v1/salas/{id}/invitaciones", ID_SALA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"idJugador\": \"" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(invitarASala);
     }
 
     /** Un jugador distinto del de {@link #jugador()}, para probar quien ve que. */

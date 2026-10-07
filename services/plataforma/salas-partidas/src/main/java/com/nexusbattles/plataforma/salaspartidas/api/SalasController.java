@@ -7,6 +7,7 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.InformarEncuentroDeTorneo;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.InvitarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.JugadorAutenticado;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
@@ -55,13 +56,15 @@ public class SalasController {
     private final IniciarPartida iniciarPartida;
     private final InformarEncuentroDeTorneo encuentroDeTorneo;
     private final ComprobarIngreso comprobarIngreso;
+    private final InvitarASala invitarASala;
 
     SalasController(CrearSala crearSala, ListarSalas listarSalas, IngresarASala ingresarASala,
                     ObtenerSala obtenerSala, AbandonarSala abandonarSala,
                     CancelarSala cancelarSala, VerificarHeroe verificarHeroe,
                     IniciarPartida iniciarPartida, InformarEncuentroDeTorneo encuentroDeTorneo,
-                    ComprobarIngreso comprobarIngreso) {
+                    ComprobarIngreso comprobarIngreso, InvitarASala invitarASala) {
         this.comprobarIngreso = comprobarIngreso;
+        this.invitarASala = invitarASala;
         this.iniciarPartida = iniciarPartida;
         this.encuentroDeTorneo = encuentroDeTorneo;
         this.crearSala = crearSala;
@@ -110,14 +113,22 @@ public class SalasController {
      * <p>Los cuatro parametros se pasan tal cual, incluso nulos: los valores por
      * defecto los decide el caso de uso, que es donde vive esa regla. Si el
      * controlador rellenara aqui el 16, habria dos sitios donde cambiarlo.
+     *
+     * <p>1.10.0 — {@code estado} se puede repetir ({@code ?estado=ABIERTA&estado=PRIVADA})
+     * o separar con comas: las salas a las que se puede entrar son las dos.
      */
     @GetMapping
     public PaginaDeSalasResponse listar(@RequestParam(required = false) Integer pagina,
                                         @RequestParam(required = false) Integer tamano,
                                         @RequestParam(required = false) Modalidad modalidad,
-                                        @RequestParam(required = false) EstadoSala estado) {
+                                        @RequestParam(required = false) java.util.List<EstadoSala> estado) {
 
-        return PaginaDeSalasResponse.desde(listarSalas.ejecutar(pagina, tamano, modalidad, estado));
+        java.util.Set<EstadoSala> estados = estado == null
+                ? java.util.Set.of()
+                : estado.stream().filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toCollection(
+                                () -> java.util.EnumSet.noneOf(EstadoSala.class)));
+        return PaginaDeSalasResponse.desde(listarSalas.ejecutarEnEstados(pagina, tamano, modalidad, estados));
     }
 
     /**
@@ -206,6 +217,39 @@ public class SalasController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void abandonar(@PathVariable UUID idSala, @AuthenticationPrincipal Jwt token) {
         abandonarSala.ejecutar(idSala, idDe(token));
+    }
+
+    /**
+     * Invita a un jugador a la sala — operacion {@code invitarASala} (1.10.0).
+     *
+     * <p>Solo el anfitrion. El invitado se elige en la vista buscandolo por su
+     * apodo ({@code GET /perfiles/publicos} de ms-identidad) y viaja aqui por su
+     * identificador, que el jugador nunca ve. Le llega un aviso a su bandeja con
+     * la sala y, si es privada, el codigo. Los rechazos son
+     * {@code invitacion-no-permitida} con el motivo en {@code detail}.
+     *
+     * @return 200 con a quien se invito y si el aviso salio ahora ({@code enviada})
+     *         o ya lo tenia de antes
+     */
+    @PostMapping("/{idSala}/invitaciones")
+    public InvitacionResponse invitar(@PathVariable UUID idSala,
+                                      @RequestBody(required = false) InvitacionRequest peticion,
+                                      @AuthenticationPrincipal Jwt token) {
+
+        if (peticion == null || peticion.idJugador() == null) {
+            throw new com.nexusbattles.plataforma.salaspartidas.dominio.ParametrosInvalidos(
+                    "idJugador", "Falta el jugador al que invitas");
+        }
+        var resultado = invitarASala.ejecutar(idSala, jugadorDe(token), peticion.idJugador());
+        return new InvitacionResponse(resultado.idJugador(), resultado.apodo(), resultado.enviada());
+    }
+
+    /** Cuerpo de {@code invitarASala}: a quien. */
+    public record InvitacionRequest(UUID idJugador) {
+    }
+
+    /** Respuesta de {@code invitarASala}. */
+    public record InvitacionResponse(UUID idJugador, String apodo, boolean enviada) {
     }
 
     /**

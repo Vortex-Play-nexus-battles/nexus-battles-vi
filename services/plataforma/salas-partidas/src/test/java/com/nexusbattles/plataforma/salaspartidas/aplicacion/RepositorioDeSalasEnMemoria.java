@@ -45,10 +45,19 @@ class RepositorioDeSalasEnMemoria implements RepositorioDeSalas {
     @Override
     public PaginaDeSalas listar(Modalidad modalidad, EstadoSala estado,
                                 int pagina, int tamano) {
+        return listarEnEstados(modalidad, estado == null ? java.util.Set.of() : java.util.Set.of(estado), pagina,
+                tamano);
+    }
+
+    /** Como el real: varios estados, la sala mas reciente primero. */
+    @Override
+    public PaginaDeSalas listarEnEstados(Modalidad modalidad, java.util.Set<EstadoSala> estados, int pagina,
+                                         int tamano) {
         List<Sala> coincidencias = almacen.values().stream()
                 .filter(sala -> sala.estado().apareceEnElListado())
                 .filter(sala -> modalidad == null || sala.modalidad() == modalidad)
-                .filter(sala -> estado == null || sala.estado() == estado)
+                .filter(sala -> estados == null || estados.isEmpty() || estados.contains(sala.estado()))
+                .sorted(java.util.Comparator.comparing(Sala::creadaEn).reversed())
                 .toList();
 
         int desde = Math.min(pagina * tamano, coincidencias.size());

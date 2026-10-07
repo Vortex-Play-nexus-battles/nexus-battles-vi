@@ -4,6 +4,7 @@ import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AvisoDeInvitacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
@@ -12,6 +13,7 @@ import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.InvitarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
@@ -19,7 +21,10 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import com.nexusbattles.plataforma.salaspartidas.integracion.ClienteNotificacionesDeInvitaciones;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -79,6 +84,24 @@ public class ConfiguracionDelServicio {
     public CancelarSala cancelarSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
                                      CanalDeSala canal) {
         return new CancelarSala(repositorio, creditos, canal);
+    }
+
+    /**
+     * 1.10.0 — la invitacion a una sala es un aviso en la bandeja del invitado
+     * (notificaciones), con la misma URL que los avisos de mensajes privados.
+     */
+    @Bean
+    public AvisoDeInvitacion avisoDeInvitacion(
+            @Qualifier("restClientServicios") RestClient http,
+            @Value("${mensajes-directos.notificaciones.url:}") String urlDeNotificaciones) {
+        return new ClienteNotificacionesDeInvitaciones(http, urlDeNotificaciones);
+    }
+
+    /** 1.10.0 — el anfitrion invita por apodo (revision del modo jugador, punto 13). */
+    @Bean
+    public InvitarASala invitarASala(RepositorioDeSalas repositorio, DirectorioDeJugadores directorio,
+                                     AvisoDeInvitacion aviso) {
+        return new InvitarASala(repositorio, directorio, aviso, Clock.systemUTC());
     }
 
     /** HU-SAL-003: verificacion previa de heroe, sin efectos. */

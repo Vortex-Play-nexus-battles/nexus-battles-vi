@@ -78,6 +78,8 @@ public class EjecutarAccion {
     static final String POR_ACCION = "ACCION";
     static final String POR_TIEMPO_AGOTADO = "TIEMPO_AGOTADO";
     static final String POR_TURNO_PERDIDO = "TURNO_PERDIDO";
+    /** Quien tenia el turno se rindio (canal 1.10.0). */
+    static final String POR_RENDICION = "RENDICION";
 
     /** Codigo por defecto cuando el cliente no manda uno. */
     static final String ACCION_BASICA = MotorDeCombate.ATAQUE_BASICO;
@@ -219,6 +221,71 @@ public class EjecutarAccion {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(jugarTurnosDeLaMaquina(pasarTurnoSinAccion(partida, POR_TIEMPO_AGOTADO)));
+    }
+
+    /**
+     * Rendirse — revision del modo jugador del 6-oct: «Salir» en pleno combate
+     * (salas-partidas.yaml 1.10.0, {@code POST /partidas/{id}/rendicion}).
+     *
+     * <p>Lo que pasa, en este orden y con las mismas piezas que una accion:
+     * <ol>
+     *   <li>Solo un participante humano de la partida puede rendirse; quien es
+     *       sale del token, nunca del cuerpo. La maquina no se rinde.</li>
+     *   <li>Su heroe queda fuera de combate ({@link Partida#rendir}). No hay
+     *       golpe ni ejecutor que inventar.</li>
+     *   <li>Si su bando se queda sin nadie en pie, la partida termina con la
+     *       regla de siempre: gana quien sigue en pie, se liquida la apuesta
+     *       ({@link LiquidarApuesta}, con la politica de la modalidad) y se
+     *       acredita lo de jugar. El ganador no lo decide el cliente.</li>
+     *   <li>Si no termina y era su turno, el turno pasa (y juega la maquina si
+     *       le toca); si no era su turno, el combate sigue sin el.</li>
+     *   <li>Guardar y despues anunciar: primero quien se rindio, luego el
+     *       turno o el fin.</li>
+     * </ol>
+     *
+     * <p>Idempotente: con la partida terminada o el heroe ya fuera de combate
+     * devuelve la partida tal cual, sin anunciar nada otra vez.
+     *
+     * @return la partida despues de la rendicion
+     * @throws PartidaNoEncontrada si no existe
+     * @throws com.nexusbattles.plataforma.salaspartidas.dominio.PartidaAjena si quien llama no la juega
+     * @throws AccionNoPermitida   si no se puede dar por fuera de combate (sin heroe conocido)
+     */
+    public Partida rendirse(UUID idPartida, UUID idJugador) {
+        Objects.requireNonNull(idPartida, "Hace falta la partida de la que se sale.");
+        Objects.requireNonNull(idJugador, "Hace falta quien se rinde.");
+
+        Partida partida = partidas.buscarPorId(idPartida)
+                .orElseThrow(() -> new PartidaNoEncontrada(idPartida));
+        ParticipanteDePartida quien = partida.participante(idJugador)
+                .filter(p -> !p.esIA())
+                .orElseThrow(com.nexusbattles.plataforma.salaspartidas.dominio.PartidaAjena::new);
+        if (partida.estado() == EstadoPartida.FINALIZADA || !quien.enPie()) {
+            return partida;
+        }
+
+        Instant ahora = reloj.instant();
+        boolean eraSuTurno = partida.turnoActual().idJugador().equals(idJugador);
+        partida.rendir(idJugador);
+
+        List<AccionResuelta> anuncios = new ArrayList<>();
+        boolean termino = partida.terminarSiSoloQuedaUno(ahora);
+        if (!termino && eraSuTurno) {
+            termino = pasarTurno(partida, anuncios, ahora);
+        }
+        Partida guardada = partidas.guardar(partida);
+
+        canal.anunciarRendicion(guardada, idJugador);
+        anuncios.forEach(canal::anunciarAccionResuelta);
+        if (termino) {
+            terminar(guardada);
+            return guardada;
+        }
+        if (eraSuTurno) {
+            canal.anunciarTurno(guardada, POR_RENDICION);
+            return jugarTurnosDeLaMaquina(guardada);
+        }
+        return guardada;
     }
 
     /**
