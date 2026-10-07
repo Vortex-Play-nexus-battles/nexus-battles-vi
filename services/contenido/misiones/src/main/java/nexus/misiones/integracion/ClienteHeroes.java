@@ -123,7 +123,7 @@ public class ClienteHeroes implements ServicioDeHeroes {
             throw c.comoRechazo(DEPENDENCIA);
         }
         Decision d = c.cuerpo();
-        return new DecisionDeTurno(d.accion(), d.costoDePoder(), d.cursoresSiguientes());
+        return new DecisionDeTurno(d.accion(), d.costoDePoder(), d.cursoresSiguientes()).deLaRotacion(d.rotacion());
     }
 
     @Override
@@ -191,7 +191,7 @@ public class ClienteHeroes implements ServicioDeHeroes {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Decision(String accion, int costoDePoder, List<Integer> cursoresSiguientes) {
+    record Decision(String accion, Integer rotacion, int costoDePoder, List<Integer> cursoresSiguientes) {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

@@ -11,7 +11,7 @@ Contrato: [`contracts/openapi/misiones.yaml`](../../../contracts/openapi/misione
 | 7.8.2 Categorías | Historia (lineal, con misiones previas que desbloquean), Desafío (intentos por día o semana, declarados en la semilla) y Exploración (24 a 72 horas, validado al cargar la semilla). |
 | 7.8.3 Estructura | Cada misión trae nombre, categoría, descripción, dificultad, duración, nivel recomendado, requisitos, narrativa, objetivos principales y secundarios, enemigos, jefe, Máster y recompensas. |
 | 7.8.4 Máster | Aparición aleatoria con la probabilidad de la misión y con la del Máster afín al tipo del héroe (Tabla 20). Dos niveles por encima del héroe, tope 8 (6.1.2). Al derrotarlo, su épica: se entrega al inventario si está en el catálogo oficial; si no, queda en la colección del jugador. En exploración, una tirada por cada 24 horas. |
-| 7.8.5 Estrategia | Hasta tres rotaciones con prioridad Alta, Media y Baja. Las valida el servicio de héroes con el prototipo y el nivel **reales** del héroe (leídos del inventario) y la IA de cada turno la decide heroes (`POST /api/v1/estrategias/decision`). Aquí no se reimplementa. |
+| 7.8.5 Estrategia | Hasta tres rotaciones con prioridad Alta, Media y Baja. Las valida el servicio de héroes con el prototipo y el nivel **reales** del héroe (leídos del inventario) y la IA de cada turno la decide heroes (`POST /api/v1/estrategias/decision`). Aquí no se reimplementa. Con la IA con modelo propio encendida (HU-SIM-008, ver abajo), el modelo elige entre las jugadas que esa misma regla admite. |
 | 7.8.6 Ejecución | Matrícula con todas las comprobaciones antes de tocar el inventario; el héroe queda bloqueado (`PUT .../bloqueo-mision`). Al vencer el plazo, el trabajo en segundo plano simula todos los combates con el **motor de combate** (el mismo de las batallas en línea: `turnos` y `acciones`, con el héroe real), calcula recompensas y experiencia, libera al héroe sumándole la experiencia y entrega lo ganado. |
 | 7.8.7 Estados | Disponible, Bloqueada, En progreso, Completada, Fallida, Abandonada, vistos por el jugador que pregunta. |
 | 7.8.8 Reporte e historial | Resultado, tiempo, héroe y nivel alcanzado, estadísticas de combate, enemigos y Máster derrotados, recompensas (y lo que no se pudo entregar, con motivo), objetivos; historial con estadísticas por categoría, mejores tiempos, colección de épicas y progreso de la historia. |
@@ -41,9 +41,28 @@ Cada turno de cada duelo lo resuelve el **mismo motor de combate que las batalla
 
 - **El héroe entra con lo suyo.** Nivel, estadísticas con el equipamiento aplicado y fórmulas (`GET .../heroes/{id}/estadisticas`, que el inventario calcula en el nivel del héroe), nombres de lo que lleva puesto (`GET .../equipamiento` + la vitrina + el nombre del producto) y sus épicas disponibles. Las acciones de la Tabla 7 y las épicas las conoce el motor por el prototipo y el nivel. Se lee **al simular**, no al matricular: el equipamiento no cambia mientras está en misión (7.8.10), y así también se simulan bien las ejecuciones guardadas antes de este cambio. Si el inventario ya no conoce al héroe, pelea con lo del catálogo y se anota; si el inventario o productos no responden, la simulación espera a la vuelta siguiente.
 - **Los enemigos** entran con su prototipo en el **nivel recomendado de la misión** (§7.8.13; D-42 — antes, en el del héroe, y subir de nivel no hacía más fácil ninguna misión; la que no tiene nivel recomendado, la provisional de DEV, sigue en el del héroe; Máster: dos por encima del héroe), con la **vida y la defensa de la semilla y del escalón** y las fórmulas de la vista por nivel de heroes.
-- **La IA decide para los dos lados** con la lógica de heroes (rotaciones con prioridad, poder y recarga; HU-SIM-002): el héroe con la estrategia guardada del jugador; los enemigos con la de la misión y, si no la trae, con una **rotación por defecto de su prototipo** (una rotación por habilidad desbloqueada en su nivel, la más avanzada primero; `EstrategiaDeEnemigos`, el punto de extensión que HU-SIM-004 sustituye o completa). El poder lo lleva el motor.
+- **La IA decide para los dos lados** con la lógica de heroes (rotaciones con prioridad, poder y recarga; HU-SIM-002): el héroe con la estrategia guardada del jugador; los enemigos con la de la misión y, si no la trae, con una **rotación por defecto de su prototipo** (una rotación por habilidad desbloqueada en su nivel, la más avanzada primero; `EstrategiaDeEnemigos`, el punto de extensión que HU-SIM-004 sustituye o completa). El poder lo lleva el motor. Esa decisión puede tomarla, en cambio, el modelo propio de HU-SIM-008 (siguiente sección), siempre acotado por la misma regla.
 - **Si el motor rechaza la jugada** (409 `accion-no-permitida`, p. ej. `EN_CARGA`, porque heroes y el motor cuentan la recarga a su manera), la IA prueba la siguiente opción de su rotación y, al final, el ataque básico. Nunca se queda a medias. Si el motor no responde, la simulación entera se reintenta en la vuelta siguiente (corta circuitos de HU-DIS-003) sin guardar nada.
 - **Velocidad acelerada.** No se espera tiempo real por turno: una misión entera se simula en una pasada en cuanto vence el plazo; la duración solo gobierna cuándo se ve el resultado.
+
+### La IA con modelo propio (HU-SIM-008, RF-MOT-59, RF-ONL-22)
+
+La IA de los personajes propios y de los adversarios puede apoyarse en una **red neuronal pequeña, propia y entrenada por el equipo** (decisión del PO, 2026-10-01): PyTorch sobre los eventos de combate de abajo, exportada a ONNX (≈18 KB) y ejecutada aquí con ONNX Runtime. **El modelo propone y la regla acota.** Lo entrenado y su receta viven en [`ia/`](ia/README.md); lo que corre en el servicio está en `nexus.misiones.ia`.
+
+- **Apagada por omisión** (`MISIONES_IA_MODELO_HABILITADO=false`). Apagada, sin ruta, con un archivo ausente, dañado o de otras características, decide la regla de heroes y la simulación es idéntica a la de antes, evento por evento (probado). Un modelo que falla al cargarse o al inferir se registra en la bitácora y decide la regla; nunca un error al jugador.
+- **Candidatas.** En cada turno, `DecisorConModelo` pregunta a la regla lo de siempre y, además, la siguiente jugada viable de cada rotación de menor prioridad (una llamada a heroes por rotación, sin reimplementar aquí su viabilidad) y suma el ataque básico. Las candidatas respetan la rotación y su cursor, el costo en poder y la recarga **porque las dijo heroes**: el modelo no puede elegir fuera de rotación ni sin poder.
+- **Quién decide.** El modelo puntúa cada candidata a partir de un vector de 54 características (vida, poder, nivel, turno y efectos de los dos, prototipos, acción y costo; definición única en `Caracteristicas.java` y en `ia/nexus_ia/caracteristicas.py`, comprobadas una contra otra con casos dorados). Decide el modelo si su mejor candidata tiene al menos `MISIONES_IA_MODELO_CONFIANZA_MINIMA` (0,6) de probabilidad y le gana a la jugada de la regla; con empate, confianza baja, un error o sin contexto del duelo, **gana la prioridad de la regla**.
+- **Costo en llamadas.** Con el modelo encendido, una llamada a heroes por turno más hasta dos (una por cada rotación de menor prioridad que quede por mirar). Con tres rotaciones viables, tres en vez de una.
+- **Carga segura.** El `modelo.onnx` debe traer su `modelo.json` al lado; se rechaza si la versión o la dimensión de las características no son las de este servicio, si el hash no es el del archivo, si el grafo no tiene la entrada y la salida esperadas, o si tres entradas de ejemplo no dan, al correrlas aquí, lo mismo que dieron en PyTorch.
+- **Trazabilidad.** Cada jugada guarda quién la decidió (`decididaPor`: `REGLA` o `MODELO`), la versión del modelo y las candidatas con su puntaje, para poder medir después al modelo contra la regla y reentrenarlo con lo que hizo.
+
+| Variable | Qué hace |
+|---|---|
+| `MISIONES_IA_MODELO_HABILITADO` | `true` enciende el modelo; `false` (por omisión) deja solo la regla |
+| `MISIONES_IA_MODELO_RUTA` | ruta del `modelo.onnx` (su `modelo.json` en la misma carpeta) |
+| `MISIONES_IA_MODELO_CONFIANZA_MINIMA` | probabilidad mínima de la mejor candidata para que decida el modelo (0,6) |
+
+El modelo de producción **no está en el repositorio**: se entrena con los eventos reales de `eventos_de_combate` (`python -m nexus_ia.entrenar`, ver `ia/README.md`) y se entrega por la ruta de arriba. El que hay en `src/test/resources/ia` se entrenó con datos sintéticos y es solo de pruebas (`"sintetico": true`).
 
 ### Los turnos quedan registrados
 
@@ -53,10 +72,10 @@ Cada turno de cada combatiente se guarda en la colección `eventos_de_combate` (
 |---|---|
 | `ejecucionId`, `misionId`, `secuencia` | la ejecución, la misión y el orden del turno dentro de ella (desde 1, sin saltos) |
 | `encuentro`, `enemigo`, `turno` | número del encuentro (el jefe va al final), nombre del enemigo y ronda dentro del encuentro (desde 1) |
-| `actor` | `lado` (`HEROE`, `ENEMIGO`, `JEFE`, `MASTER`), `nombre`, `prototipo`, `nivel` |
+| `actor`, `oponente` | quien juega y contra quién: `lado` (`HEROE`, `ENEMIGO`, `JEFE`, `MASTER`), `nombre`, `prototipo`, `nivel` (HU-SIM-008 añadió `oponente`: así un turno se basta solo para entrenar aunque el rival caiga antes de actuar) |
 | `antes`, `despues` | `{actor, oponente}`; cada uno con `vida`, `vidaMaxima`, `poder`, `poderMaximo`, `recargas` (`accion`, `turnosRestantes`) y `efectos` (`nombre`, `tipo`, `valor`, `turnos`). `antes` es el estado al decidir (ya aplicado el inicio del turno) |
 | `alIniciar` | lo que pasó al empezar el turno: efectos por turno, poder recuperado (`tipo`, `combatiente`, `origen`, `efecto`, `cantidad`) |
-| `jugada` | ausente si el actor cayó al empezar su turno. `decidida` (lo que eligió la IA), `ejecutada` (lo que se jugó; nula si el motor no admitió ni el ataque básico), `enValorBase`, `costoDecidido`, `costoDePoder` (el gastado de verdad), `rechazadas` (`accion`, `motivo` del 409) y `resultado` |
+| `jugada` | ausente si el actor cayó al empezar su turno. `decidida` (lo que eligió la IA), `ejecutada` (lo que se jugó; nula si el motor no admitió ni el ataque básico), `enValorBase`, `costoDecidido`, `costoDePoder` (el gastado de verdad), `rechazadas` (`accion`, `motivo` del 409), `resultado` y, desde HU-SIM-008, `decididaPor` (`REGLA` o `MODELO`), `versionDelModelo` (si se consultó al modelo) y `candidatas` (`accion`, `costoDePoder`, `rotacion`, `puntaje`: lo que puntuó el modelo; vacía si no se consultó) |
 | `jugada.resultado` | `categoria`, `acierta`, `ataqueResuelto`, `defensaObjetivo`, `porcentajeDano`, `danoBase`, `danoAplicado`, `critico` y `sucesos` (lo que dijo el motor; `combatiente` y `origen` hablan de `HEROE`/`ENEMIGO`/`JEFE`/`MASTER`). `categoria` y compañía son nulas si la acción no golpea |
 
 ## Dependencias y configuración
@@ -67,7 +86,7 @@ REST síncrono con la credencial de servicio de misiones (`client_credentials`, 
 |---|---|---|
 | inventario (1.6.0) | `INVENTARIO_BASE_URL` | dueño del héroe, bloqueo, liberación con experiencia, entregas, y lo que lleva al combate (estadísticas con equipo, equipamiento, épicas). Si la consulta interna del héroe responde 409 (inventario histórico: su producto no tiene id UUID), el héroe se lee de la vitrina del jugador (`GET /api/v1/inventario/elementos` con `X-User-Name`) |
 | productos | `PRODUCTOS_BASE_URL` | prototipo del producto HÉROE y nombre del equipo y las épicas (como los conoce el motor) |
-| heroes (1.2.0) | `HEROES_BASE_URL` | validaciones, IA de cada turno, vista por nivel (con fórmulas), habilidades por nivel, experiencia por enemigo |
+| heroes (1.2.0) | `HEROES_BASE_URL` | validaciones, IA de cada turno (con el modelo encendido, hasta dos consultas más por turno), vista por nivel (con fórmulas), habilidades por nivel, experiencia por enemigo |
 | motor de combate (1.2.0) | `MOTOR_COMBATE_URL` | cada turno y cada acción de la simulación (`/combate/turnos`, `/combate/acciones`) |
 | ms-finanzas (créditos 1.4.0) | `CREDITOS_URL` | abono de créditos |
 | correo (1.4.0) | `CORREO_URL` | `POST /correos/mision` |
@@ -97,7 +116,9 @@ El resto de variables está en [`.env.example`](.env.example) y explicado en `sr
 ## Límites conocidos
 
 - La IA solo elige acciones de la Tabla 7 (las que traen las rotaciones); las épicas del héroe viajan al motor pero la IA de rotaciones no las elige.
-- Simular una misión entera son cientos de llamadas síncronas al motor y a heroes (tres por turno de combatiente); el trabajo las atiende una ejecución tras otra.
+- Simular una misión entera son cientos de llamadas síncronas al motor y a heroes (tres por turno de combatiente; hasta cinco con el modelo de IA encendido); el trabajo las atiende una ejecución tras otra.
+- El modelo de IA aprende, mientras solo haya eventos de la regla, sobre todo a imitarla: lo nuevo viene del peso por resultado y de los eventos que genere el propio modelo encendido (con sus candidatas). El ciclo es encender, acumular partidas y reentrenar (`ia/README.md`).
+- ONNX Runtime suma ≈55 MB al jar (bibliotecas nativas de tres plataformas, que no se cargan con el modelo apagado). Su consumo de memoria nativa encendido no está medido en la instancia de contenido: medirlo con la compuerta de capacidad antes de encenderlo en DEV.
 - `POST /api/v1/inventario/entregas` lo implementa la fase B4. Si el inventario de un entorno aún no la trae, las entregas quedan pendientes y se reintentan (el reporte lo dice con `entregaPendiente`), sin perderse.
 - El correo de fin de misión (RF-COR-005) usa `GET /api/v1/internal/usuarios/{uid}/contacto` de ms-identidad, ya implementada. Si un entorno no la sirve, el correo queda como no enviado y lo demás se entrega igual.
 - Avisos en la bandeja del jugador (HU-NOT-004 / RF-NOT-004, contrato 1.2.0): finalización con el detalle de cada recompensa, épica obtenida y misiones de historia desbloqueadas, por `POST /internal/notifications` con `tipo` `MISION` e `id` estable por ejecución (un reintento no duplica). Quedan fuera, porque piden decisión: avisos de misiones de tiempo limitado (no hay ninguna en el catálogo ni umbral de «próximas a expirar»), logros e hitos (no hay sistema de logros), preferencias por categoría y agrupación de avisos (eso es de notificaciones). `MISIONES_AVISOS_ACTIVO=false` los apaga.
@@ -124,6 +145,7 @@ En el banco E2E (`tests/e2e/compose.yml`) corre entero: credencial propia, reloj
 ```
 ./gradlew :services:contenido:misiones:check    # pruebas (dominio, casos de uso, MongoDB y HTTP reales) + JaCoCo ≥ 80 %
 ./gradlew :services:contenido:misiones:bootRun  # con MongoDB local y las dependencias de .env.example
+cd services/contenido/misiones/ia && python -m pytest pruebas -q   # el entrenamiento de la IA (ver ia/README.md)
 ```
 
 Las pruebas de integración levantan MongoDB 8 con Testcontainers (hace falta Docker) y las siete dependencias como servidores HTTP falsos; cada respuesta se valida contra el contrato. El pacto de consumidor misiones → ms-inventario se escribe en `contracts/pactos/`.

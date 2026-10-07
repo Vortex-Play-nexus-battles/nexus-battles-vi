@@ -34,11 +34,13 @@ import nexus.misiones.dominio.RepositorioDeEjecuciones;
 import nexus.misiones.dominio.RepositorioDeEventosDeCombate;
 import nexus.misiones.dominio.RepositorioDeEstrategias;
 import nexus.misiones.dominio.RepositorioDeFavoritas;
+import nexus.misiones.dominio.simulacion.DecisorDeTurno;
 import nexus.misiones.dominio.simulacion.MotorDeCombate;
 import nexus.misiones.persistencia.RepositorioEjecucionesMongo;
 import nexus.misiones.persistencia.RepositorioEventosDeCombateMongo;
 import nexus.misiones.persistencia.RepositorioEstrategiasMongo;
 import nexus.misiones.persistencia.RepositorioFavoritasMongo;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -161,11 +163,12 @@ public class ConfiguracionDeMisiones {
     @Bean
     public SimularEjecucion simularEjecucion(CatalogoDeMisiones catalogo, RepositorioDeEjecuciones ejecuciones,
                                              RepositorioDeEventosDeCombate eventos, ServicioDeHeroes heroes,
+                                             @Qualifier("decisorDeTurnoConfigurado") DecisorDeTurno decisor,
                                              MotorDeCombate motor, PerfilDeCombateDelHeroe perfiles,
                                              EstrategiaDeEnemigos enemigos, ParametrosDeMisiones parametros,
                                              Clock reloj) {
-        return new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, motor, perfiles, enemigos, parametros,
-                reloj);
+        return new SimularEjecucion(catalogo, ejecuciones, eventos, heroes, decisor, motor, perfiles, enemigos,
+                parametros, reloj);
     }
 
     @Bean

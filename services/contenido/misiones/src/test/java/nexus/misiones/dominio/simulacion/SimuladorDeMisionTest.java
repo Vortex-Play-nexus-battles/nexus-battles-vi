@@ -511,6 +511,78 @@ class SimuladorDeMisionTest {
     }
 
     @Test
+    @DisplayName("el decisor ve tambien al oponente (su prototipo, nivel y estado): lo que necesita un modelo")
+    void decisorVeAlOponente() {
+        DecisorEspia espia = new DecisorEspia("Ataque básico", 0);
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 3;
+        motor.danoDeLosEnemigos = 0;
+        SimuladorDeMision simulador = new SimuladorDeMision(espia, motor, dado -> 1);
+
+        Simulacion simulacion = simular(simulador, List.of(), List.of(regular("A", 10)), new AzarGuionado(true, 1),
+                null);
+
+        ContextoDelDuelo contexto = espia.turnosRecibidos.getFirst().contexto();
+        assertThat(contexto).isNotNull();
+        assertThat(contexto.prototipoDelOponente()).isEqualTo("Guerrero Tanque");
+        assertThat(contexto.nivelDelOponente()).isEqualTo(1);
+        // El mismo estado que queda en el evento como «antes»: es lo que vio quien decidio.
+        EventoDeCombate primero = simulacion.eventos().getFirst();
+        assertThat(contexto.propio()).isEqualTo(primero.antes().actor());
+        assertThat(contexto.oponente()).isEqualTo(primero.antes().oponente());
+        assertThat(contexto.propio().vidaMaxima()).isEqualTo(44);
+        assertThat(contexto.oponente().vida()).isEqualTo(10);
+    }
+
+    @Test
+    @DisplayName("cada evento dice contra quien se juega (para entrenar sin reconstruir el encuentro)")
+    void eventoConOponente() {
+        Dobles.Motor motor = new Dobles.Motor();
+        motor.danoDelHeroe = 5;
+        motor.danoDeLosEnemigos = 2;
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), motor, dado -> 1);
+
+        List<EventoDeCombate> eventos = simular(simulador, List.of(), List.of(regular("A", 10)),
+                new AzarGuionado(true, 1), null).eventos();
+
+        assertThat(eventos.get(0).oponente())
+                .isEqualTo(new EventoDeCombate.Actor(EventoDeCombate.Lado.ENEMIGO, "A", "Guerrero Tanque", 1));
+        assertThat(eventos.get(1).oponente())
+                .isEqualTo(new EventoDeCombate.Actor(EventoDeCombate.Lado.HEROE, "Vorn", "Guerrero Armas", 1));
+    }
+
+    @Test
+    @DisplayName("lo que decide la regla queda como REGLA, sin version de modelo ni candidatas")
+    void jugadaDeLaRegla() {
+        SimuladorDeMision simulador = new SimuladorDeMision(new DecisorBasico(), new Dobles.Motor(), dado -> 1);
+
+        EventoDeCombate.Jugada jugada = simular(simulador, List.of(), List.of(regular("A", 5)),
+                new AzarGuionado(true, 1), null).eventos().getFirst().jugada();
+
+        assertThat(jugada.decididaPor()).isEqualTo(DecididaPor.REGLA);
+        assertThat(jugada.versionDelModelo()).isNull();
+        assertThat(jugada.candidatas()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("lo que decide el modelo queda dicho en el evento, con su version y las candidatas que puntuo")
+    void jugadaDelModelo() {
+        List<DecisionDeTurno.Candidata> candidatas = List.of(
+                new DecisionDeTurno.Candidata("Embate sangriento", 4, 1, 0.2),
+                new DecisionDeTurno.Candidata("Ataque básico", 0, null, 0.8));
+        DecisionDeTurno delModelo = new DecisionDeTurno("Ataque básico", 0, List.of())
+                .consultandoAlModelo(DecididaPor.MODELO, "v1-prueba", candidatas);
+        SimuladorDeMision simulador = new SimuladorDeMision(turno -> delModelo, new Dobles.Motor(), dado -> 1);
+
+        EventoDeCombate.Jugada jugada = simular(simulador, List.of(), List.of(regular("A", 5)),
+                new AzarGuionado(true, 1), null).eventos().getFirst().jugada();
+
+        assertThat(jugada.decididaPor()).isEqualTo(DecididaPor.MODELO);
+        assertThat(jugada.versionDelModelo()).isEqualTo("v1-prueba");
+        assertThat(jugada.candidatas()).isEqualTo(candidatas);
+    }
+
+    @Test
     @DisplayName("el lado del enemigo en el evento es MASTER o JEFE segun quien sea")
     void ladoDelEnemigo() {
         Dobles.Motor motor = new Dobles.Motor();
