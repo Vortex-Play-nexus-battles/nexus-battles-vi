@@ -1,0 +1,671 @@
+/* =======================================================================
+   Torneos — el tablón y la ruta de un torneo
+   Revisión del modo jugador del 6-oct, punto 24: «muy básico su cuadro
+   inicial, quiero algo parecido a misiones… algo más como una ruta y más
+   llamativo».
+   -----------------------------------------------------------------------
+   El tablón son tarjetas con la anatomía de las de misiones (arte arriba,
+   datos, acción). La ruta es la vista de un torneo: su portada y seis hitos
+   unidos por un camino, con el hito en el que está quien mira marcado con
+   palabras además del color. El árbol, la transmisión y «tu torneo» siguen
+   con sus componentes del kit (`.encuentro`, `.arbol-torneo`, `.transmision`,
+   `.torneo-mio`); aquí solo lo que es de esta vista.
+   ======================================================================= */
+
+/* --- El tablón --------------------------------------------------------- */
+
+.torneos-rejilla {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--e-5);
+}
+
+/* Cargando, vacío o caído: a lo ancho, no en la primera columna. */
+.torneos-rejilla > .estado-vista {
+  grid-column: 1 / -1;
+}
+
+.torneo-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+.torneo-card__arte {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 140px;
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      circle at 50% 62%,
+      color-mix(in srgb, var(--credito-oro-sobre-cromo) 28%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(
+      135deg,
+      var(--cromo),
+      color-mix(in srgb, var(--acento-relleno) 60%, var(--cromo))
+    );
+}
+
+/* El color de la fase acompaña al distintivo, que es quien la dice. */
+.torneo-card[data-estado='EN_CURSO'] .torneo-card__arte,
+.torneo-portada[data-estado='EN_CURSO'] .torneo-portada__arte {
+  background-image:
+    radial-gradient(
+      circle at 50% 62%,
+      color-mix(in srgb, var(--enlace-sobre-cromo) 30%, transparent),
+      transparent 58%
+    ),
+    linear-gradient(135deg, var(--cromo), color-mix(in srgb, var(--primaria) 60%, var(--cromo)));
+}
+
+.torneo-card[data-estado='FINALIZADO'] .torneo-card__arte,
+.torneo-portada[data-estado='FINALIZADO'] .torneo-portada__arte {
+  background-image:
+    radial-gradient(
+      circle at 50% 62%,
+      color-mix(in srgb, var(--credito-oro-sobre-cromo) 45%, transparent),
+      transparent 62%
+    ),
+    linear-gradient(
+      135deg,
+      var(--cromo),
+      color-mix(in srgb, var(--rareza-legendaria) 40%, var(--cromo))
+    );
+}
+
+.torneo-card[data-estado='CANCELADO'] .torneo-card__arte,
+.torneo-portada[data-estado='CANCELADO'] .torneo-portada__arte {
+  background-image: linear-gradient(135deg, var(--cromo), var(--cromo-elevado));
+}
+
+.torneo-card__emblema {
+  width: 64px;
+  height: 64px;
+  color: var(--credito-oro-sobre-cromo);
+  filter: drop-shadow(0 6px 16px color-mix(in srgb, var(--cromo) 85%, transparent));
+}
+
+.torneo-card[data-estado='CANCELADO'] .torneo-card__emblema,
+.torneo-portada[data-estado='CANCELADO'] .torneo-portada__emblema {
+  color: var(--pista);
+}
+
+.torneo-card__chips {
+  position: absolute;
+  inset: var(--e-3) var(--e-3) auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+.torneo-card__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  padding: var(--e-4) var(--e-5);
+}
+
+.torneo-card__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+  overflow-wrap: anywhere;
+}
+
+.torneo-card__fase {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.torneo-card__datos,
+.torneo-ruta__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2) var(--e-5);
+  margin: 0;
+}
+
+.torneo-card__datos > div,
+.torneo-ruta__datos > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.torneo-card__datos dt,
+.torneo-ruta__datos dt {
+  font-family: var(--t-meta-familia);
+  font-size: var(--t-meta-tam);
+  color: var(--texto-3);
+}
+
+.torneo-card__datos dd,
+.torneo-ruta__datos dd {
+  display: flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: var(--cifras-tabulares);
+}
+
+.torneo-card__datos .icono,
+.torneo-ruta__datos .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+  color: var(--primaria);
+}
+
+.torneo-card__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  padding: 0 var(--e-5) var(--e-5);
+}
+
+/* «Ahorita solo hay un torneo»: su tarjeta a lo ancho, como un cartel, con
+   el arte a la izquierda. Con dos o más, la rejilla de siempre. */
+@media (min-width: 768px) {
+  .torneos-rejilla[data-cuantos='1'] {
+    grid-template-columns: minmax(0, 960px);
+  }
+
+  .torneos-rejilla[data-cuantos='1'] .torneo-card {
+    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+  }
+
+  .torneos-rejilla[data-cuantos='1'] .torneo-card__arte {
+    grid-row: 1 / -1;
+    min-height: 220px;
+  }
+
+  .torneos-rejilla[data-cuantos='1'] .torneo-card__emblema {
+    width: 96px;
+    height: 96px;
+  }
+
+  .torneos-rejilla[data-cuantos='1'] .torneo-card__cuerpo {
+    padding-top: var(--e-5);
+  }
+}
+
+/* --- La ruta: portada ------------------------------------------------- */
+
+.torneo-detalle {
+  gap: var(--e-5);
+}
+
+.torneo-detalle__migas {
+  display: flex;
+}
+
+.torneo-detalle__volver {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: var(--objetivo-tactil);
+  font-family: var(--t-etiqueta-familia);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.torneo-detalle__volver .icono {
+  transform: rotate(180deg);
+}
+
+.torneo-portada {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--e-6);
+}
+
+.torneo-portada__arte {
+  display: grid;
+  place-items: center;
+  width: 180px;
+  height: 180px;
+  border-radius: var(--radio);
+  background: var(--cromo-elevado);
+  background-image:
+    radial-gradient(
+      circle at 50% 60%,
+      color-mix(in srgb, var(--credito-oro-sobre-cromo) 32%, transparent),
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      var(--cromo),
+      color-mix(in srgb, var(--acento-relleno) 60%, var(--cromo))
+    );
+  box-shadow: var(--sombra-2);
+}
+
+.torneo-portada__emblema {
+  width: 96px;
+  height: 96px;
+  color: var(--credito-oro-sobre-cromo);
+  filter: drop-shadow(0 8px 20px color-mix(in srgb, var(--cromo) 90%, transparent));
+}
+
+.torneo-portada__identidad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.torneo-portada__chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-2);
+}
+
+.torneo-portada__tuyo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.torneo-portada__tuyo .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.torneo-portada__nombre {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-xl-tam);
+  line-height: var(--t-titulo-xl-alto);
+  overflow-wrap: anywhere;
+}
+
+.torneo-portada__fechas {
+  margin: 0;
+  color: var(--texto-2);
+}
+
+.torneo-portada .torneo-cupos {
+  max-width: 420px;
+}
+
+/* El premio, a la vista: lo primero que se quiere saber de un torneo. */
+.torneo-portada__premio {
+  align-self: flex-start;
+  align-items: flex-start;
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  background: var(--rareza-legendaria-insignia);
+  color: var(--texto);
+}
+
+.torneo-portada__premio .icono {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--rareza-legendaria);
+}
+
+.torneo-portada__administracion {
+  padding-top: var(--e-2);
+  border-top: 1px solid var(--borde);
+}
+
+@media (max-width: 640px) {
+  .torneo-portada {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--e-4);
+  }
+
+  .torneo-portada__arte {
+    width: 100%;
+    height: 112px;
+  }
+
+  .torneo-portada__emblema {
+    width: 64px;
+    height: 64px;
+  }
+
+  .torneo-portada__nombre {
+    font-size: var(--t-titulo-tam);
+    line-height: var(--t-titulo-alto);
+  }
+}
+
+/* --- La ruta: los seis hitos ----------------------------------------- */
+
+.torneo-ruta {
+  display: grid;
+  gap: var(--e-5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.torneo-ruta__hito {
+  position: relative;
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--e-4);
+}
+
+/* El camino: une cada marca con la siguiente, por detrás de las tarjetas. */
+.torneo-ruta__hito::before {
+  content: '';
+  position: absolute;
+  top: 52px;
+  bottom: calc(-1 * var(--e-5));
+  left: 25px;
+  width: 2px;
+  background: color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+}
+
+.torneo-ruta__hito:last-child::before {
+  display: none;
+}
+
+.torneo-ruta__hito[data-estado='pendiente']::before {
+  background: repeating-linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--pista) 70%, transparent) 0 6px,
+    transparent 6px 12px
+  );
+}
+
+.torneo-ruta__marca {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border: 2px solid var(--enlace-sobre-cromo);
+  border-radius: 50%;
+  background: var(--cromo-elevado);
+  color: var(--texto-sobre-color);
+  box-shadow: var(--sombra-2);
+}
+
+.torneo-ruta__icono {
+  width: 24px;
+  height: 24px;
+}
+
+.torneo-ruta__numero {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  display: grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--radio-pildora);
+  background: var(--superficie);
+  color: var(--texto);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: 700;
+  box-shadow: var(--sombra-1);
+}
+
+.torneo-ruta__hito[data-estado='actual'] .torneo-ruta__marca {
+  border-color: var(--credito-oro-sobre-cromo);
+  background: var(--acento-relleno);
+  box-shadow: var(--brillo-acento);
+}
+
+.torneo-ruta__hito[data-estado='pendiente'] .torneo-ruta__marca {
+  border-style: dashed;
+  border-color: var(--pista);
+  background: var(--cromo);
+  color: var(--pista);
+  box-shadow: none;
+}
+
+.torneo-ruta__cuerpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-3);
+  min-width: 0;
+}
+
+.torneo-ruta__hito[data-estado='actual'] .torneo-ruta__cuerpo {
+  border-color: var(--acento-relleno);
+  box-shadow:
+    var(--sombra-atmosfera),
+    0 0 0 1px var(--acento-relleno);
+}
+
+.torneo-ruta__hito[data-estado='pendiente'] .torneo-ruta__cuerpo {
+  border-style: dashed;
+  background: var(--superficie-2);
+  box-shadow: none;
+}
+
+.torneo-ruta__cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-2) var(--e-3);
+}
+
+.torneo-ruta__titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+}
+
+.torneo-ruta__estado {
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.torneo-ruta__estado--actual {
+  background: var(--rareza-epica-insignia);
+  color: var(--acento-relleno);
+}
+
+.torneo-ruta__estado--pendiente {
+  background: var(--fondo);
+  color: var(--texto-2);
+}
+
+.torneo-ruta__descripcion > .t-cuerpo {
+  max-width: 72ch;
+  margin: 0;
+}
+
+/* Lo que va dentro de un hito ya está en una tarjeta: sus bloques no
+   repiten borde y sombra encima. */
+.torneo-ruta__cuerpo .torneo-mio__bloque {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.torneo-ruta__cuerpo [data-zona='crear-equipo'] {
+  background: var(--fondo);
+  box-shadow: none;
+}
+
+/* La acción del hito, a su tamaño: no una franja de lado a lado. */
+.torneo-ruta__cuerpo [data-accion='jugar-mi-encuentro'],
+.torneo-ruta__cuerpo [data-accion='inscribir'] {
+  align-self: flex-start;
+}
+
+.torneo__subtitulo,
+.torneo__llave {
+  margin: 0;
+}
+
+.torneo__subtitulo {
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-etiqueta-tam);
+}
+
+.torneo-ruta__cuerpo .transmision {
+  box-shadow: none;
+}
+
+/* El emblema que el equipo eligió al registrarse, junto a su nombre. */
+.torneo-mio__emblema {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--cromo-elevado);
+}
+
+/* --- El duelo del próximo encuentro y el campeón ---------------------- */
+
+.torneo-duelo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border-radius: var(--radio);
+  background: var(--cromo);
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--acento-relleno) 55%, var(--cromo)),
+    var(--cromo) 50%,
+    color-mix(in srgb, var(--error) 40%, var(--cromo))
+  );
+  color: var(--texto-sobre-color);
+}
+
+.torneo-duelo__lado {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--e-2);
+  min-width: 0;
+  text-align: center;
+}
+
+.torneo-duelo__inicial {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 2px solid var(--texto-sobre-color);
+  border-radius: 50%;
+  background: var(--acento-relleno);
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+}
+
+.torneo-duelo__lado--rival .torneo-duelo__inicial {
+  background: var(--cromo-elevado);
+}
+
+.torneo-duelo__nombre {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.torneo-duelo__vs {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--credito-oro-sobre-cromo);
+}
+
+.torneo-campeon {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  margin: 0;
+  padding: var(--e-3) var(--e-4);
+  border-radius: var(--radio);
+  background: var(--rareza-legendaria-insignia);
+  color: var(--texto);
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+}
+
+.torneo-campeon__icono {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  color: var(--rareza-legendaria);
+}
+
+@media (max-width: 640px) {
+  .torneo-ruta {
+    gap: var(--e-4);
+  }
+
+  .torneo-ruta__hito {
+    grid-template-columns: 40px minmax(0, 1fr);
+    gap: var(--e-3);
+  }
+
+  .torneo-ruta__hito::before {
+    top: 40px;
+    bottom: calc(-1 * var(--e-4));
+    left: 19px;
+  }
+
+  .torneo-ruta__marca {
+    width: 40px;
+    height: 40px;
+  }
+
+  .torneo-ruta__icono {
+    width: 20px;
+    height: 20px;
+  }
+
+  .torneo-duelo {
+    padding: var(--e-3);
+  }
+}
+
+/* El hito de ahora late, despacio. Quien pide menos movimiento no lo ve. */
+@media (prefers-reduced-motion: no-preference) {
+  .torneo-ruta__hito[data-estado='actual'] .torneo-ruta__marca {
+    animation: torneo-hito-actual 2.4s var(--curva-estandar) infinite;
+  }
+}
+
+@keyframes torneo-hito-actual {
+  0%,
+  100% {
+    box-shadow: var(--brillo-acento);
+  }
+
+  50% {
+    box-shadow:
+      var(--brillo-acento),
+      0 0 0 6px color-mix(in srgb, var(--acento-relleno) 30%, transparent);
+  }
+}

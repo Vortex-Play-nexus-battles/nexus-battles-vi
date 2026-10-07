@@ -12,7 +12,7 @@
 
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { h, nodo } from '../../comun/ui/dom.js';
-import { pintarAviso } from '../../comun/ui/aviso.js';
+import { limpiarAviso, pintarAviso } from '../../comun/ui/aviso.js';
 import { campo } from '../../comun/ui/campo.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../../comun/ui/estado-vista.js';
 import { pedirTexto } from '../../comun/ui/dialogo.js';
@@ -26,6 +26,13 @@ import {
   selectorDeCompanero,
   selectorDeEmblema,
 } from './equipo-formulario.js';
+import {
+  cuposDelTorneo,
+  descripcionDelTorneo,
+  dueloDelEncuentro,
+  rutaDelTorneo,
+  textoDeInscripcion,
+} from './torneo-ruta.js';
 
 export const ROLES_DE_ADMINISTRACION = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMINISTRADOR']);
 
@@ -310,28 +317,111 @@ function avisarError(zona, error) {
   });
 }
 
-export function tarjetaDeTorneo(torneo, { alAbrir } = {}) {
-  // `.tarjeta--pulsable` esta documentada en el kit como «tarjeta que ademas
-  // es un boton o un enlace» y pone `cursor: pointer` sobre toda la tarjeta.
-  // Aqui estaba puesta sobre un `<article>` sin manejador: el cursor cambiaba
-  // a mano en toda la superficie y solo funcionaba el boton pequeno de abajo.
-  // Una afordancia que miente es peor que ninguna.
-  const tarjeta = nodo('article', 'tarjeta pila pila--compacta');
-  tarjeta.dataset.torneoId = torneo.id;
-  tarjeta.dataset.estado = torneo.estado;
-  const cabecera = nodo('div', 'torneo__tarjeta-cabecera');
-  cabecera.append(nodo('strong', 'tarjeta__titulo', torneo.nombre), distintivoDeTorneo(torneo));
-  tarjeta.appendChild(cabecera);
-  tarjeta.appendChild(nodo('p', 't-cuerpo', resumenDe(torneo)));
-  // UXC-8 — la tarjeta decía «Inscripciones hasta…» también de un torneo
-  // terminado o cancelado. Ahora dice lo que toca a cada fase.
-  tarjeta.appendChild(nodo('p', 't-meta', faseDe(torneo)));
-  const boton = nodo('button', 'boton boton--secundario boton--pequeno', 'Ver torneo');
-  boton.type = 'button';
-  boton.dataset.accion = 'abrir';
-  boton.addEventListener('click', () => alAbrir?.(torneo));
-  tarjeta.appendChild(boton);
-  return tarjeta;
+/** Un clic que el navegador debe resolver solo: otra pestaña, otra ventana. */
+function clicConModificador(evento) {
+  return (
+    evento.defaultPrevented ||
+    evento.button !== 0 ||
+    evento.metaKey ||
+    evento.ctrlKey ||
+    evento.shiftKey ||
+    evento.altKey
+  );
+}
+
+/** Un dato de la tarjeta o de la portada: etiqueta arriba, valor con su icono. */
+function datoDeTorneo(etiqueta, valor, iconoDelDato) {
+  return h('div', {
+    hijos: [
+      h('dt', { texto: etiqueta }),
+      h('dd', {
+        hijos: [icono(iconoDelDato, { etiqueta: null }), h('span', { texto: valor })],
+      }),
+    ],
+  });
+}
+
+/**
+ * La tarjeta de un torneo en el tablón — punto 24 de la revisión del 6-oct:
+ * «muy básico su cuadro inicial, quiero algo parecido a misiones».
+ *
+ * La misma anatomía que la tarjeta de una misión: arriba el arte —el trofeo
+ * sobre el cromo, con el color de su fase— y el distintivo; debajo el nombre,
+ * lo que toca a cada fase, los cupos como barra con su cifra mientras hay
+ * inscripciones, el formato y lo que cuesta; y la acción. Todo sale de
+ * `TorneoResumen`: el contrato no trae imagen ni el nombre del campeón, y no
+ * se inventan.
+ *
+ * «Ver torneo» es un enlace a la ruta del torneo (`?torneo=<id>`): se puede
+ * abrir en otra pestaña; con un clic normal se abre en la misma vista, sin
+ * recargar. (`.tarjeta--pulsable` sigue fuera: pone la mano en toda la
+ * superficie y aquí solo el enlace hace algo.)
+ *
+ * @param {object} torneo `TorneoResumen`
+ * @param {{alAbrir?: (torneo: object) => void, href?: string|null}} [opciones]
+ * @returns {HTMLElement}
+ */
+export function tarjetaDeTorneo(torneo, { alAbrir, href = null } = {}) {
+  const idNombre = `torneo-${torneo.id}-nombre`;
+  const abiertas = torneo.estado === 'INSCRIPCIONES_ABIERTAS';
+  const ver = h('a', {
+    clase: 'boton boton--primario boton--pequeno torneo-card__accion',
+    texto: 'Ver torneo',
+    datos: { accion: 'abrir' },
+    atributos: {
+      href: href ?? `?torneo=${encodeURIComponent(torneo.id)}`,
+      'aria-label': `Ver torneo: ${torneo.nombre}`,
+    },
+  });
+  ver.addEventListener('click', (evento) => {
+    if (!alAbrir || clicConModificador(evento)) {
+      return;
+    }
+    evento.preventDefault();
+    alAbrir(torneo);
+  });
+  const datos = [datoDeTorneo('Formato', 'Doble eliminación', 'bandera')];
+  if (!abiertas) {
+    datos.push(
+      datoDeTorneo(
+        'Equipos',
+        `${Math.min(torneo.equiposInscritos, torneo.cupos)} de ${torneo.cupos}`,
+        'usuarios',
+      ),
+    );
+  }
+  datos.push(datoDeTorneo('Inscripción', textoDeInscripcion(torneo), 'moneda'));
+
+  return h('article', {
+    clase: 'tarjeta torneo-card',
+    datos: { torneoId: torneo.id, estado: torneo.estado },
+    atributos: { 'aria-labelledby': idNombre },
+    hijos: [
+      h('div', {
+        clase: 'torneo-card__arte',
+        hijos: [
+          icono('trofeo', { etiqueta: null, clase: 'icono torneo-card__emblema' }),
+          h('div', { clase: 'torneo-card__chips', hijos: [distintivoDeTorneo(torneo)] }),
+        ],
+      }),
+      h('div', {
+        clase: 'torneo-card__cuerpo',
+        hijos: [
+          h('h2', {
+            clase: 'torneo-card__nombre',
+            texto: torneo.nombre,
+            atributos: { id: idNombre },
+          }),
+          // UXC-8 — lo que toca decir a cada fase, no «Inscripciones hasta…»
+          // de un torneo terminado.
+          h('p', { clase: 'torneo-card__fase', texto: faseDe(torneo) }),
+          abiertas ? cuposDelTorneo(torneo) : null,
+          h('dl', { clase: 'torneo-card__datos', hijos: datos }),
+        ],
+      }),
+      h('div', { clase: 'torneo-card__acciones', hijos: [ver] }),
+    ],
+  });
 }
 
 /** El distintivo de la fase, con variante del kit: el color no va solo. */
@@ -724,76 +814,112 @@ export function necesitaRevision(torneo) {
 }
 
 /**
- * «Tu torneo» — UXC-8: Mi equipo, Próximo encuentro y Mi camino.
+ * La marca de un equipo: el emblema que eligió al registrarse (RFINAL-04) o,
+ * si no es uno de los emblemas, su inicial. Adorno: el nombre va al lado.
+ *
+ * @param {{nombre?: string, avatar?: string|null}} equipo
+ * @returns {HTMLElement}
+ */
+function marcaDeEquipo(equipo) {
+  const emblema = emblemaDe(equipo.avatar);
+  if (emblema) {
+    return h('img', {
+      clase: 'torneo-mio__emblema',
+      atributos: {
+        src: imagenDeEmblema(emblema),
+        alt: '',
+        width: 40,
+        height: 40,
+        loading: 'lazy',
+      },
+    });
+  }
+  return h('span', {
+    clase: 'torneo-mio__inicial',
+    texto: (equipo.nombre || '?').trim().charAt(0).toUpperCase(),
+    atributos: { 'aria-hidden': 'true' },
+  });
+}
+
+/**
+ * Lo tuyo en un torneo — UXC-8: tu equipo, tu próximo encuentro, tu camino y
+ * tu parte del premio, cada uno en su bloque.
  *
  * Solo con lo que trae el contrato: el compañero es un identificador sin
  * apodo, así que se dice «tu compañero»; el marcador no existe, así que el
  * camino dice victoria o derrota y contra quién.
  *
+ * La ruta del torneo (punto 24) pone cada bloque en su hito, sin título propio
+ * (el hito ya lo lleva) y con el duelo del próximo encuentro; mientras hay
+ * inscripciones, la situación del equipo la dice la zona de acciones de al
+ * lado y aquí no se repite. `panelDeMiTorneo` los junta en un panel.
+ *
  * @param {object} torneo
  * @param {object} equipo el de quien mira
  * @param {string} uid
- * @returns {HTMLElement}
+ * @param {{enRuta?: boolean}} [opciones]
+ * @returns {{equipo: HTMLElement, proximo: HTMLElement, camino: HTMLElement,
+ *   premio: HTMLElement|null}}
  */
-export function panelDeMiTorneo(torneo, equipo, uid) {
+export function bloquesDeMiTorneo(torneo, equipo, uid, { enRuta = false } = {}) {
   const soyCapitan = equipo.capitanUid === uid;
   const conCompanero = equipo.integrantes.length > 1;
+  const titulo = (texto) => (enRuta ? null : h('h4', { clase: 't-etiqueta', texto }));
+  const conSituacion = !enRuta || torneo.estado !== 'INSCRIPCIONES_ABIERTAS';
 
   const bloqueEquipo = h('article', {
     clase: 'torneo-mio__bloque pila pila--ajustada',
     datos: { zona: 'mi-equipo' },
     hijos: [
-      h('h4', { clase: 't-etiqueta', texto: 'Mi equipo' }),
+      titulo('Mi equipo'),
       h('p', {
         clase: 'torneo-mio__equipo',
-        hijos: [
-          h('span', {
-            clase: 'torneo-mio__inicial',
-            texto: (equipo.nombre || '?').trim().charAt(0).toUpperCase(),
-            atributos: { 'aria-hidden': 'true' },
-          }),
-          h('strong', { texto: equipo.nombre }),
-        ],
+        hijos: [marcaDeEquipo(equipo), h('strong', { texto: equipo.nombre })],
       }),
       h('p', {
         clase: 't-meta',
         texto: `${soyCapitan ? 'Tú (capitán)' : 'Tú'}${conCompanero ? ` y ${soyCapitan ? 'tu compañero' : 'tu capitán'}` : ', sin compañero todavía'}`,
       }),
-      h('p', {
-        clase: 't-cuerpo',
-        datos: { zona: 'situacion' },
-        texto: situacionDeEquipo(torneo, equipo),
-      }),
+      conSituacion
+        ? h('p', {
+            clase: 't-cuerpo',
+            datos: { zona: 'situacion' },
+            texto: situacionDeEquipo(torneo, equipo),
+          })
+        : null,
     ],
   });
-  // UXC-8 — 1.2.0: en qué va el pago de la inscripción y, si ganasteis, tu
-  // parte del premio.
+  // UXC-8 — 1.2.0: en qué va el pago de la inscripción.
   const pago = textoDelPago(equipo, uid, soyCapitan ? 'tu compañero' : 'tu capitán');
   if (pago) {
     bloqueEquipo.append(h('p', { clase: 't-meta', datos: { zona: 'pago' }, texto: pago }));
   }
+  // Y, si ganasteis, tu parte del premio.
   const premio = miPremio(torneo, uid);
-  if (premio) {
-    bloqueEquipo.append(
-      h('p', {
+  const bloquePremio = premio
+    ? h('p', {
         clase: `torneo-mio__premio torneo-mio__premio--${premio.tono}`,
         datos: { zona: 'mi-premio' },
         hijos: [
           icono('trofeo', { clase: 'icono icono--menudo' }),
           h('span', { texto: premio.texto }),
         ],
-      }),
-    );
-  }
+      })
+    : null;
 
   const siguiente = proximoEncuentro(torneo, equipo.id);
   const bloqueProximo = h('article', {
     clase: 'torneo-mio__bloque pila pila--ajustada',
     datos: { zona: 'proximo-encuentro' },
-    hijos: [h('h4', { clase: 't-etiqueta', texto: 'Próximo encuentro' })],
+    hijos: [titulo('Próximo encuentro')],
   });
   if (siguiente && torneo.estado === 'EN_CURSO') {
     const rival = siguiente.equipoA === equipo.id ? siguiente.equipoB : siguiente.equipoA;
+    if (enRuta) {
+      bloqueProximo.append(
+        dueloDelEncuentro(equipo.nombre, rival ? nombreDe(torneo, rival) : 'Por decidir'),
+      );
+    }
     bloqueProximo.append(
       h('p', {
         clase: 't-cuerpo',
@@ -843,7 +969,7 @@ export function panelDeMiTorneo(torneo, equipo, uid) {
   const bloqueCamino = h('article', {
     clase: 'torneo-mio__bloque pila pila--ajustada',
     datos: { zona: 'mi-camino' },
-    hijos: [h('h4', { clase: 't-etiqueta', texto: 'Mi camino' })],
+    hijos: [titulo('Mi camino')],
   });
   if (jugados.length === 0) {
     bloqueCamino.append(
@@ -874,6 +1000,28 @@ export function panelDeMiTorneo(torneo, equipo, uid) {
     bloqueCamino.append(lista);
   }
 
+  return {
+    equipo: bloqueEquipo,
+    proximo: bloqueProximo,
+    camino: bloqueCamino,
+    premio: bloquePremio,
+  };
+}
+
+/**
+ * «Tu torneo» — UXC-8: Mi equipo (con su pago y, si ganasteis, tu premio),
+ * Próximo encuentro y Mi camino, juntos en un panel.
+ *
+ * @param {object} torneo
+ * @param {object} equipo el de quien mira
+ * @param {string} uid
+ * @returns {HTMLElement}
+ */
+export function panelDeMiTorneo(torneo, equipo, uid) {
+  const bloques = bloquesDeMiTorneo(torneo, equipo, uid);
+  if (bloques.premio) {
+    bloques.equipo.append(bloques.premio);
+  }
   return h('section', {
     clase: 'tarjeta torneo-mio pila pila--compacta',
     datos: { zona: 'mi-torneo' },
@@ -882,10 +1030,98 @@ export function panelDeMiTorneo(torneo, equipo, uid) {
       h('h3', { texto: 'Tu torneo' }),
       h('div', {
         clase: 'torneo-mio__rejilla',
-        hijos: [bloqueEquipo, bloqueProximo, bloqueCamino],
+        hijos: [bloques.equipo, bloques.proximo, bloques.camino],
       }),
     ],
   });
+}
+
+/**
+ * Los equipos del torneo (CA-01/02 de HU-TOR-008), en rejilla.
+ *
+ * @param {object} torneo
+ * @param {string|null} uid quien mira, para marcar el suyo
+ * @returns {HTMLElement}
+ */
+export function equiposDelTorneo(torneo, uid) {
+  const equipos = nodo('section', 'pila pila--compacta torneo__participantes');
+  equipos.dataset.zona = 'equipos';
+  equipos.appendChild(nodo('h3', 'torneo__subtitulo', `Equipos (${torneo.equipos.length})`));
+  if (torneo.equipos.length === 0) {
+    equipos.appendChild(
+      nodo(
+        'p',
+        't-meta',
+        torneo.estado === 'INSCRIPCIONES_ABIERTAS'
+          ? 'Todavía no hay equipos registrados. Registra el tuyo con un compañero para ser el primero.'
+          : 'Este torneo no tuvo equipos registrados.',
+      ),
+    );
+  }
+  // UX-GAME-5 — ocho tarjetas a lo ancho ocupaban una pantalla entera antes
+  // del arbol; en rejilla caben en dos filas.
+  const rejilla = nodo('div', 'torneo__equipos');
+  torneo.equipos.forEach((e) => rejilla.appendChild(tarjetaDeEquipo(torneo, e, uid)));
+  equipos.appendChild(rejilla);
+  return equipos;
+}
+
+/**
+ * El árbol de doble eliminación (HU-TOR-004 CA-03): una columna por ronda y
+ * una llave tras otra. Cada llave lleva su título (`h3`): el hito de la ruta
+ * ya se llama «El árbol».
+ *
+ * @param {object} torneo
+ * @param {string|null} uid quien mira, para ofrecerle jugar el suyo
+ * @returns {HTMLElement}
+ */
+export function arbolDelTorneo(torneo, uid) {
+  const arbol = nodo('section', 'pila pila--compacta torneo__arbol');
+  arbol.dataset.zona = 'arbol';
+  arbol.setAttribute('aria-label', 'Árbol del torneo');
+  if (torneo.encuentros.length === 0) {
+    arbol.appendChild(
+      nodo(
+        'p',
+        't-meta',
+        torneo.estado === 'CANCELADO'
+          ? 'El torneo se canceló antes de empezar: no llegó a tener árbol.'
+          : 'El árbol se genera al cerrar las inscripciones: entonces verás contra quién juega cada equipo.',
+      ),
+    );
+  }
+  LLAVES.forEach(([llave, titulo]) => {
+    const lista = encuentrosDe(torneo, llave);
+    if (lista.length === 0) {
+      return;
+    }
+    arbol.appendChild(nodo('h3', 't-etiqueta torneo__llave', titulo));
+    const cuadro = nodo('div', 'arbol-torneo');
+    cuadro.dataset.llave = llave;
+    const rondas = porRonda(lista);
+    rondas.forEach(({ ronda, encuentros }, indice) => {
+      const columna = nodo('div', 'arbol-torneo__ronda');
+      columna.dataset.ronda = String(ronda);
+      // La gran final ya la nombra su llave: repetirlo encima del único
+      // encuentro no dice nada nuevo.
+      if (llave !== 'FINAL') {
+        columna.appendChild(
+          nodo(
+            'p',
+            't-meta',
+            nombreDeRonda(llave, ronda, {
+              cantidad: encuentros.length,
+              ultima: indice === rondas.length - 1,
+            }),
+          ),
+        );
+      }
+      encuentros.forEach((e) => columna.appendChild(tarjetaDeEncuentro(torneo, e, uid)));
+      cuadro.appendChild(columna);
+    });
+    arbol.appendChild(cuadro);
+  });
+  return arbol;
 }
 
 /**
@@ -966,28 +1202,174 @@ export function porRonda(encuentros) {
 /**
  * Monta la vista completa.
  *
- * @param {ParentNode} raiz zonas `[data-zona=...]`: aviso, listado, detalle, crear-torneo
- * @param {{uid?: string|null, rol?: string|null, fetchImpl?: Function, torneoInicial?: string|null}} [opciones]
+ * Dos modos (punto 24 de la revisión del 6-oct): el **tablón** con las
+ * tarjetas y la **ruta** de un torneo (`?torneo=<id>`), que ocupa la vista
+ * entera en vez de desplegarse debajo. Se pasa de uno a otro sin recargar y
+ * la dirección los sigue: atrás y adelante del navegador funcionan, y la
+ * dirección de un torneo se puede compartir.
+ *
+ * @param {ParentNode} raiz zonas `[data-zona=...]`: aviso, listado, detalle,
+ *   crear-torneo y, en la vista real, encabezado y tablon
+ * @param {{uid?: string|null, rol?: string|null, fetchImpl?: Function,
+ *   torneoInicial?: string|null, historial?: History|null, ubicacion?: Location|null,
+ *   ventana?: EventTarget|null}} [opciones] las tres últimas, para las pruebas
  */
 export function montarTorneos(
   raiz,
-  { uid = null, rol = null, fetchImpl, torneoInicial = null } = {},
+  {
+    uid = null,
+    rol = null,
+    fetchImpl,
+    torneoInicial = null,
+    historial = globalThis.history ?? null,
+    ubicacion = globalThis.location ?? null,
+    ventana = globalThis.window ?? null,
+  } = {},
 ) {
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const zonaListado = raiz.querySelector('[data-zona="listado"]');
   const zonaDetalle = raiz.querySelector('[data-zona="detalle"]');
   const formCrear = raiz.querySelector('[data-zona="crear-torneo"]');
+  // Lo que se oculta en la ruta: el encabezado de la página y el tablón.
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
+  const zonaTablon = raiz.querySelector('[data-zona="tablon"]') ?? zonaListado;
+  const documento = zonaDetalle.ownerDocument;
+  const tituloBase = documento.title;
   const administra = ROLES_DE_ADMINISTRACION.includes(rol);
 
   if (formCrear) {
     formCrear.hidden = !administra;
   }
 
+  /* ---- Tablón y ruta: la dirección sigue al modo ---- */
+
+  // La última petición de detalle: si llegan dos respuestas, se pinta solo
+  // la del torneo que se pidió el último.
+  let peticionDeDetalle = 0;
+
+  /**
+   * La dirección del tablón o de un torneo, sobre la página en la que se
+   * está y no sobre el `<base>` del borde: tras las rutas limpias (R17) la
+   * página es `/torneos` y su `<base>` apunta a la carpeta del fichero.
+   *
+   * @param {string|null} torneoId
+   * @returns {string}
+   */
+  function direccion(torneoId) {
+    if (!ubicacion?.href) {
+      return torneoId ? `?torneo=${encodeURIComponent(torneoId)}` : '?';
+    }
+    const url = new URL(ubicacion.href);
+    url.search = '';
+    url.hash = '';
+    if (torneoId) {
+      url.searchParams.set('torneo', torneoId);
+    }
+    return `${url.pathname}${url.search}`;
+  }
+
+  function anotarDireccion(torneoId) {
+    const destino = direccion(torneoId);
+    if (!historial?.pushState || `${ubicacion?.pathname}${ubicacion?.search}` === destino) {
+      return;
+    }
+    historial.pushState({ torneo: torneoId }, '', destino);
+  }
+
+  /** @param {'tablon'|'ruta'} modo */
+  function mostrarModo(modo) {
+    const enRuta = modo === 'ruta';
+    zonaDetalle.hidden = !enRuta;
+    zonaTablon.hidden = enRuta;
+    if (zonaEncabezado) {
+      zonaEncabezado.hidden = enRuta;
+    }
+    if (formCrear) {
+      formCrear.hidden = !administra || enRuta;
+    }
+    const vista = zonaDetalle.closest('[data-vista]');
+    if (vista) {
+      vista.dataset.modo = modo;
+    }
+  }
+
+  /** Volver al tablón; con `foco`, a la tarjeta del torneo del que se viene. */
+  function mostrarListado({ anotar = false, foco = false } = {}) {
+    const venia = zonaDetalle.dataset.torneoId ?? null;
+    peticionDeDetalle += 1;
+    mostrarModo('tablon');
+    zonaDetalle.replaceChildren();
+    delete zonaDetalle.dataset.torneoId;
+    delete zonaDetalle.dataset.estado;
+    documento.title = tituloBase;
+    if (anotar) {
+      anotarDireccion(null);
+    }
+    if (zonaListado.childElementCount === 0) {
+      cargarListado();
+    }
+    if (foco) {
+      const tarjeta = [...zonaListado.querySelectorAll('[data-torneo-id]')].find(
+        (t) => t.dataset.torneoId === venia,
+      );
+      const destino =
+        tarjeta?.querySelector('[data-accion="abrir"]') ?? zonaEncabezado?.querySelector('h1');
+      destino?.focus();
+    }
+  }
+
+  /** De una tarjeta a la ruta de su torneo. */
+  function navegarA(torneoId) {
+    limpiarAviso(zonaAviso);
+    return abrir(torneoId, { anotar: true, foco: true, enSitio: true });
+  }
+
+  /** «Todos los torneos», arriba de la ruta. */
+  function migas() {
+    const volver = h('a', {
+      clase: 'torneo-detalle__volver',
+      datos: { accion: 'volver-a-torneos' },
+      atributos: { href: direccion(null) },
+      hijos: [icono('chevron', { etiqueta: null }), h('span', { texto: 'Todos los torneos' })],
+    });
+    volver.addEventListener('click', (evento) => {
+      if (clicConModificador(evento)) {
+        return;
+      }
+      evento.preventDefault();
+      limpiarAviso(zonaAviso);
+      mostrarListado({ anotar: true, foco: true });
+    });
+    return h('nav', {
+      clase: 'torneo-detalle__migas',
+      atributos: { 'aria-label': 'Volver' },
+      hijos: [volver],
+    });
+  }
+
+  /** Al llegar a la ruta, el foco va a su título: es una página nueva. */
+  function enfocarTitulo() {
+    zonaDetalle.scrollIntoView?.({ block: 'start' });
+    zonaDetalle.querySelector('#torneo-detalle-titulo')?.focus({ preventScroll: true });
+  }
+
+  ventana?.addEventListener?.('popstate', () => {
+    const torneoId = new URLSearchParams(ubicacion?.search ?? '').get('torneo');
+    limpiarAviso(zonaAviso);
+    if (torneoId) {
+      abrir(torneoId, { enSitio: true });
+    } else {
+      mostrarListado();
+    }
+  });
+
   async function cargarListado() {
     try {
       zonaListado.replaceChildren(estadoDeCarga({ filas: 2, etiqueta: 'Buscando torneos…' }));
       const torneos = await api.listar(fetchImpl);
       zonaListado.replaceChildren();
+      // Con un solo torneo, su tarjeta se pone a lo ancho (torneos.css).
+      zonaListado.dataset.cuantos = String(torneos.length);
 
       // UX-R2.7 — el vacio era un parrafo gris de una linea: «Todavia no hay
       // torneos publicados». Cierto y completamente inutil — el jugador se
@@ -1014,7 +1396,9 @@ export function montarTorneos(
         return;
       }
       torneos.forEach((t) =>
-        zonaListado.appendChild(tarjetaDeTorneo(t, { alAbrir: (x) => abrir(x.id) })),
+        zonaListado.appendChild(
+          tarjetaDeTorneo(t, { alAbrir: (x) => navegarA(x.id), href: direccion(t.id) }),
+        ),
       );
     } catch (error) {
       // El fallo se pinta DONDE iban los torneos, no solo en el aviso de
@@ -1045,54 +1429,253 @@ export function montarTorneos(
     }
   }
 
-  async function abrir(torneoId) {
+  /**
+   * Pide un torneo y pinta su ruta.
+   *
+   * @param {string} torneoId
+   * @param {{anotar?: boolean, foco?: boolean, enSitio?: boolean}} [opciones]
+   *   `anotar` pone su dirección en el historial; `foco` lleva el foco a su
+   *   título; `enSitio` es una navegación: la ruta se enseña al momento,
+   *   cargando, y un fallo se dice en ella. Sin `enSitio` es un refresco tras
+   *   una acción, y el fallo va al aviso de arriba.
+   */
+  async function abrir(torneoId, { anotar = false, foco = false, enSitio = false } = {}) {
+    peticionDeDetalle += 1;
+    const esta = peticionDeDetalle;
+    if (enSitio) {
+      mostrarModo('ruta');
+      delete zonaDetalle.dataset.estado;
+      zonaDetalle.dataset.torneoId = torneoId;
+      zonaDetalle.replaceChildren(
+        migas(),
+        estadoDeCarga({ filas: 3, etiqueta: 'Abriendo el torneo…' }),
+      );
+    }
     try {
       const torneo = await api.obtener(torneoId, fetchImpl);
+      if (esta !== peticionDeDetalle) {
+        return;
+      }
       pintarDetalle(torneo);
+      if (anotar) {
+        anotarDireccion(torneo.id);
+      }
+      if (foco) {
+        enfocarTitulo();
+      }
     } catch (error) {
-      avisarError(zonaAviso, error);
-    }
-  }
-
-  function pintarDetalle(torneo) {
-    zonaDetalle.replaceChildren();
-    zonaDetalle.hidden = false;
-    zonaDetalle.dataset.torneoId = torneo.id;
-    zonaDetalle.dataset.estado = torneo.estado;
-    zonaDetalle.appendChild(nodo('h2', undefined, torneo.nombre));
-    zonaDetalle.appendChild(nodo('p', 't-cuerpo', resumenDe(torneo)));
-    // CA-01 de HU-TOR-008: el detalle dice sus fechas, no solo la tarjeta.
-    const fechas = nodo('p', 't-meta', fechasDe(torneo).join(' · '));
-    fechas.dataset.zona = 'fechas';
-    zonaDetalle.appendChild(fechas);
-    if (torneo.campeonEquipoId) {
-      const campeon = nodo(
-        'p',
-        'aviso aviso--exito',
-        `Campeón: ${nombreDe(torneo, torneo.campeonEquipoId)}`,
-      );
-      campeon.dataset.zona = 'campeon';
-      zonaDetalle.appendChild(campeon);
-    }
-    if (torneo.motivoCancelacion) {
-      zonaDetalle.appendChild(nodo('p', 't-meta', `Cancelado: ${torneo.motivoCancelacion}`));
-    }
-    // UXC-8 — el premio (RF-TOR-007, 1.2.0), para todos: qué gana el
-    // campeón y en qué va la entrega.
-    const premio = torneo.estado === 'CANCELADO' ? null : textoDelPremio(torneo);
-    if (premio) {
-      zonaDetalle.appendChild(
-        h('p', {
-          clase: 'torneo__premio',
-          datos: { zona: 'premio' },
-          hijos: [icono('trofeo', { clase: 'icono icono--menudo' }), h('span', { texto: premio })],
+      if (esta !== peticionDeDetalle) {
+        return;
+      }
+      if (!enSitio) {
+        avisarError(zonaAviso, error);
+        return;
+      }
+      // UX-R3.6 — el fallo de abrir la ruta se dice donde iba el torneo, una
+      // sola vez. Reintentar solo si puede servir: un torneo que no existe
+      // no aparece por insistir.
+      const deNegocio = error instanceof ErrorDeTorneos;
+      if (anotar) {
+        anotarDireccion(torneoId);
+      }
+      zonaDetalle.replaceChildren(
+        migas(),
+        estadoDeError({
+          titulo: deNegocio ? error.titulo : 'No pudimos abrir el torneo',
+          detalle: deNegocio ? error.detalle : 'Revisa tu conexión e inténtalo de nuevo.',
+          alReintentar:
+            deNegocio && error.estado < 500 ? null : () => abrir(torneoId, { enSitio: true }),
         }),
       );
     }
+  }
 
-    // Acciones del jugador (HU-TOR-003 / HU-TOR-002).
+  /* ---- La ruta del torneo ---- */
+
+  /** La portada: el trofeo, la fase, el nombre, sus fechas, los cupos y el premio. */
+  function portadaDelTorneo(torneo, mio) {
+    // UXC-8 — el premio (RF-TOR-007, 1.2.0), para todos: qué gana el
+    // campeón y en qué va la entrega. De un torneo cancelado, no se anuncia.
+    const premio = torneo.estado === 'CANCELADO' ? null : textoDelPremio(torneo);
+    return h('header', {
+      clase: 'tarjeta torneo-portada',
+      datos: { estado: torneo.estado },
+      hijos: [
+        h('div', {
+          clase: 'torneo-portada__arte',
+          atributos: { 'aria-hidden': 'true' },
+          hijos: [icono('trofeo', { etiqueta: null, clase: 'icono torneo-portada__emblema' })],
+        }),
+        h('div', {
+          clase: 'torneo-portada__identidad',
+          hijos: [
+            h('div', {
+              clase: 'torneo-portada__chips',
+              hijos: [
+                distintivoDeTorneo(torneo),
+                mio
+                  ? h('span', {
+                      clase: 'torneo-portada__tuyo',
+                      hijos: [
+                        icono('usuarios', { etiqueta: null }),
+                        h('span', { texto: `Tu equipo: ${mio.nombre}` }),
+                      ],
+                    })
+                  : null,
+              ],
+            }),
+            h('h1', {
+              clase: 'torneo-portada__nombre',
+              texto: torneo.nombre,
+              atributos: { id: 'torneo-detalle-titulo', tabindex: '-1' },
+            }),
+            // CA-01 de HU-TOR-008: el detalle dice sus fechas, no solo la tarjeta.
+            h('p', {
+              clase: 'torneo-portada__fechas',
+              datos: { zona: 'fechas' },
+              texto: fechasDe(torneo).join(' · '),
+            }),
+            torneo.estado === 'INSCRIPCIONES_ABIERTAS' ? cuposDelTorneo(torneo) : null,
+            premio
+              ? h('p', {
+                  clase: 'torneo__premio torneo-portada__premio',
+                  datos: { zona: 'premio' },
+                  hijos: [
+                    icono('trofeo', { clase: 'icono icono--menudo' }),
+                    h('span', { texto: premio }),
+                  ],
+                })
+              : null,
+            administra && torneo.estado === 'INSCRIPCIONES_ABIERTAS'
+              ? zonaDeAdministracion(torneo)
+              : null,
+          ],
+        }),
+      ],
+    });
+  }
+
+  /** «Próximo encuentro» de quien no tiene equipo en este torneo. */
+  function proximoSinEquipo(torneo) {
+    const textos = {
+      INSCRIPCIONES_ABIERTAS:
+        'Cuando se cierren las inscripciones, aquí verás contra quién juega tu equipo y podrás crear la sala del encuentro.',
+      EN_CURSO: 'No tienes equipo en este torneo: sigue sus encuentros en el árbol.',
+      FINALIZADO: 'El torneo terminó: no quedan encuentros por jugar.',
+      CANCELADO: 'El torneo se canceló.',
+    };
+    return h('p', { clase: 't-meta', texto: textos[torneo.estado] ?? textos.EN_CURSO });
+  }
+
+  /** «Mi camino» de quien no tiene equipo en este torneo. */
+  function caminoSinEquipo(torneo) {
+    return h('p', {
+      clase: 't-meta',
+      texto:
+        torneo.estado === 'FINALIZADO' || torneo.estado === 'CANCELADO'
+          ? 'No tuviste equipo en este torneo.'
+          : 'Aquí queda cada encuentro que juegue tu equipo: victoria o derrota, y contra quién.',
+    });
+  }
+
+  /** «Resultado y premio»: el campeón, o en qué queda el torneo, y tu premio. */
+  function resultadoDelTorneo(torneo, premioMio) {
+    const partes = [];
+    if (torneo.campeonEquipoId) {
+      partes.push(
+        h('p', {
+          clase: 'torneo-campeon',
+          datos: { zona: 'campeon' },
+          hijos: [
+            icono('trofeo', { etiqueta: null, clase: 'icono torneo-campeon__icono' }),
+            h('span', { texto: `Campeón: ${nombreDe(torneo, torneo.campeonEquipoId)}` }),
+          ],
+        }),
+      );
+    } else if (torneo.estado === 'CANCELADO') {
+      partes.push(
+        h('p', {
+          clase: 't-cuerpo',
+          texto: 'El torneo se canceló: se devuelven las inscripciones que se pagaron.',
+        }),
+      );
+    } else if (torneo.estado === 'FINALIZADO') {
+      partes.push(h('p', { clase: 't-cuerpo', texto: 'El torneo terminó.' }));
+    } else {
+      partes.push(
+        h('p', {
+          clase: 't-meta',
+          texto: 'El campeón sale de la gran final: aquí verás quién gana y lo que se lleva.',
+        }),
+      );
+    }
+    if (torneo.motivoCancelacion) {
+      partes.push(
+        h('p', {
+          clase: 't-meta',
+          datos: { zona: 'cancelacion' },
+          texto: `Cancelado: ${torneo.motivoCancelacion}`,
+        }),
+      );
+    }
+    if (premioMio) {
+      partes.push(premioMio);
+    }
+    return partes;
+  }
+
+  function pintarDetalle(torneo) {
+    const mio = uid ? miEquipo(torneo, uid) : null;
+    const bloques = mio ? bloquesDeMiTorneo(torneo, mio, uid, { enRuta: true }) : null;
+    mostrarModo('ruta');
+    zonaDetalle.replaceChildren();
+    zonaDetalle.dataset.torneoId = torneo.id;
+    zonaDetalle.dataset.estado = torneo.estado;
+    documento.title = `${torneo.nombre} · ${tituloBase}`;
+
+    // La zona de acciones va en «Mi equipo» mientras hay algo que hacer en
+    // ella: sin equipo (registrarlo, o por qué no se puede) o con las
+    // inscripciones abiertas (inscribirlo). Con el torneo ya jugándose, a
+    // quien tiene equipo solo le diría «Las inscripciones están cerradas».
+    const conAcciones = !mio || torneo.estado === 'INSCRIPCIONES_ABIERTAS';
+    const enJuegoOJugado = torneo.estado === 'EN_CURSO' || torneo.estado === 'FINALIZADO';
+
+    const ruta = rutaDelTorneo(
+      torneo,
+      mio,
+      {
+        descripcion: [descripcionDelTorneo(torneo)],
+        equipo: [bloques?.equipo, conAcciones ? zonaDeAcciones(torneo) : null],
+        proximo: [bloques ? bloques.proximo : proximoSinEquipo(torneo)],
+        arbol: [
+          arbolDelTorneo(torneo, uid),
+          // UXC-8 — la transmisión, dicha como es: todavía no hay (RF-TOR-006).
+          enJuegoOJugado
+            ? panelDeTransmision(torneo, { alActualizar: () => abrir(torneo.id) })
+            : null,
+          equiposDelTorneo(torneo, uid),
+        ],
+        camino: [bloques ? bloques.camino : caminoSinEquipo(torneo)],
+        resultado: resultadoDelTorneo(torneo, bloques?.premio ?? null),
+      },
+      // UXC-8 — con equipo, la ruta es «tu torneo».
+      { zona: mio ? 'mi-torneo' : null },
+    );
+
+    zonaDetalle.append(migas(), portadaDelTorneo(torneo, mio));
+    // UXC-8 — 1.2.0: un cobro, una devolución o un premio que el proveedor
+    // rechazó o que agotó sus reintentos se vuelve a poner en cola desde aquí
+    // (RF-ADM-005), después de corregir la causa.
+    if (administra && necesitaRevision(torneo)) {
+      zonaDetalle.append(bloqueDeRevision(torneo));
+    }
+    zonaDetalle.append(ruta);
+  }
+
+  /** Acciones del jugador (HU-TOR-003 / HU-TOR-002): registrar e inscribir. */
+  function zonaDeAcciones(torneo) {
     const acciones = accionesDe(torneo, uid);
-    const zonaAcciones = nodo('div', 'pila pila--compacta');
+    const zonaAcciones = nodo('div', 'pila pila--compacta torneo__acciones');
     zonaAcciones.dataset.zona = 'acciones';
     zonaAcciones.appendChild(nodo('p', 't-meta', acciones.motivo));
     if (acciones.crearEquipo) {
@@ -1127,153 +1710,66 @@ export function montarTorneos(
       });
       zonaAcciones.appendChild(boton);
     }
-    zonaDetalle.appendChild(zonaAcciones);
+    return zonaAcciones;
+  }
 
-    // Acciones del administrador (HU-TOR-001 / HU-ADM-005).
-    if (administra && torneo.estado === 'INSCRIPCIONES_ABIERTAS') {
-      const zonaAdmin = nodo('div', 'fila');
-      zonaAdmin.dataset.zona = 'administracion';
-      const iniciar = nodo('button', 'boton boton--acento', 'Cerrar inscripciones e iniciar');
-      iniciar.type = 'button';
-      iniciar.dataset.accion = 'iniciar';
-      iniciar.addEventListener('click', async () => {
-        iniciar.disabled = true;
-        try {
-          await api.iniciar(torneo.id, fetchImpl);
-          pintarAviso(zonaAviso, {
-            tono: 'exito',
-            titulo: 'Torneo iniciado',
-            detalle: 'Las posiciones vacías se completaron con la máquina y el árbol está listo.',
-          });
-          await abrir(torneo.id);
-          await cargarListado();
-        } catch (error) {
-          avisarError(zonaAviso, error);
-          iniciar.disabled = false;
-        }
-      });
-      const cancelar = nodo('button', 'boton boton--peligro', 'Cancelar torneo');
-      cancelar.type = 'button';
-      cancelar.dataset.accion = 'cancelar';
-      cancelar.addEventListener('click', async () => {
-        // UXC-7/9 — era `globalThis.prompt?.()`: el diálogo del navegador, sin
-        // estilo ni foco gestionado, y el guardián no lo veía por el `?.`.
-        const motivo =
-          (await pedirTexto({
-            titulo: `¿Cancelar «${torneo.nombre}»?`,
-            etiqueta: 'Motivo de la cancelación',
-            pista: 'Lo verán los equipos. Se devuelven todas las inscripciones.',
-            textoConfirmar: 'Cancelar el torneo',
-            textoCancelar: 'Volver',
-            maximo: 500,
-          })) ?? '';
-        if (!motivo.trim()) {
-          return;
-        }
-        try {
-          await api.cancelar(torneo.id, motivo.trim(), fetchImpl);
-          pintarAviso(zonaAviso, {
-            tono: 'info',
-            titulo: 'Torneo cancelado',
-            detalle:
-              'Las inscripciones pagadas se devuelven ahora; cada equipo ve en el torneo en qué va la suya.',
-          });
-          await abrir(torneo.id);
-          await cargarListado();
-        } catch (error) {
-          avisarError(zonaAviso, error);
-        }
-      });
-      zonaAdmin.append(iniciar, cancelar);
-      zonaDetalle.appendChild(zonaAdmin);
-    }
-
-    // UXC-8 — 1.2.0: un cobro, una devolución o un premio que el proveedor
-    // rechazó o que agotó sus reintentos se vuelve a poner en cola desde aquí
-    // (RF-ADM-005), después de corregir la causa.
-    if (administra && necesitaRevision(torneo)) {
-      zonaDetalle.appendChild(bloqueDeRevision(torneo));
-    }
-
-    // UXC-8 — lo tuyo primero: tu equipo, tu próximo encuentro y tu camino.
-    const mio = uid ? miEquipo(torneo, uid) : null;
-    if (mio) {
-      zonaDetalle.appendChild(panelDeMiTorneo(torneo, mio, uid));
-    }
-    // UXC-8 — la transmisión, dicha como es: todavía no hay (RF-TOR-006).
-    if (torneo.estado === 'EN_CURSO' || torneo.estado === 'FINALIZADO') {
-      zonaDetalle.appendChild(panelDeTransmision(torneo, { alActualizar: () => abrir(torneo.id) }));
-    }
-
-    // Equipos (CA-01/02 de HU-TOR-008).
-    const equipos = nodo('section', 'pila pila--compacta');
-    equipos.dataset.zona = 'equipos';
-    equipos.appendChild(nodo('h3', undefined, `Equipos (${torneo.equipos.length})`));
-    if (torneo.equipos.length === 0) {
-      equipos.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          torneo.estado === 'INSCRIPCIONES_ABIERTAS'
-            ? 'Todavía no hay equipos registrados. Registra el tuyo con un compañero para ser el primero.'
-            : 'Este torneo no tuvo equipos registrados.',
-        ),
-      );
-    }
-    // UX-GAME-5 — ocho tarjetas a lo ancho ocupaban una pantalla entera antes
-    // del arbol; en rejilla caben en dos filas.
-    const rejilla = nodo('div', 'torneo__equipos');
-    torneo.equipos.forEach((e) => rejilla.appendChild(tarjetaDeEquipo(torneo, e, uid)));
-    equipos.appendChild(rejilla);
-    zonaDetalle.appendChild(equipos);
-
-    // Árbol (HU-TOR-004 CA-03).
-    const arbol = nodo('section', 'pila pila--compacta');
-    arbol.dataset.zona = 'arbol';
-    arbol.appendChild(nodo('h3', undefined, 'Árbol del torneo'));
-    if (torneo.encuentros.length === 0) {
-      arbol.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          torneo.estado === 'CANCELADO'
-            ? 'El torneo se canceló antes de empezar: no llegó a tener árbol.'
-            : 'El árbol se genera al cerrar las inscripciones: entonces verás contra quién juega cada equipo.',
-        ),
-      );
-    }
-    LLAVES.forEach(([llave, titulo]) => {
-      const lista = encuentrosDe(torneo, llave);
-      if (lista.length === 0) {
+  /** Acciones del administrador (HU-TOR-001 / HU-ADM-005), en la portada. */
+  function zonaDeAdministracion(torneo) {
+    const zonaAdmin = nodo('div', 'fila torneo-portada__administracion');
+    zonaAdmin.dataset.zona = 'administracion';
+    const iniciar = nodo('button', 'boton boton--acento', 'Cerrar inscripciones e iniciar');
+    iniciar.type = 'button';
+    iniciar.dataset.accion = 'iniciar';
+    iniciar.addEventListener('click', async () => {
+      iniciar.disabled = true;
+      try {
+        await api.iniciar(torneo.id, fetchImpl);
+        pintarAviso(zonaAviso, {
+          tono: 'exito',
+          titulo: 'Torneo iniciado',
+          detalle: 'Las posiciones vacías se completaron con la máquina y el árbol está listo.',
+        });
+        await abrir(torneo.id);
+        await cargarListado();
+      } catch (error) {
+        avisarError(zonaAviso, error);
+        iniciar.disabled = false;
+      }
+    });
+    const cancelar = nodo('button', 'boton boton--peligro', 'Cancelar torneo');
+    cancelar.type = 'button';
+    cancelar.dataset.accion = 'cancelar';
+    cancelar.addEventListener('click', async () => {
+      // UXC-7/9 — era `globalThis.prompt?.()`: el diálogo del navegador, sin
+      // estilo ni foco gestionado, y el guardián no lo veía por el `?.`.
+      const motivo =
+        (await pedirTexto({
+          titulo: `¿Cancelar «${torneo.nombre}»?`,
+          etiqueta: 'Motivo de la cancelación',
+          pista: 'Lo verán los equipos. Se devuelven todas las inscripciones.',
+          textoConfirmar: 'Cancelar el torneo',
+          textoCancelar: 'Volver',
+          maximo: 500,
+        })) ?? '';
+      if (!motivo.trim()) {
         return;
       }
-      arbol.appendChild(nodo('h4', 't-etiqueta', titulo));
-      const cuadro = nodo('div', 'arbol-torneo');
-      cuadro.dataset.llave = llave;
-      const rondas = porRonda(lista);
-      rondas.forEach(({ ronda, encuentros }, indice) => {
-        const columna = nodo('div', 'arbol-torneo__ronda');
-        columna.dataset.ronda = String(ronda);
-        // La gran final ya la nombra su llave: repetirlo encima del único
-        // encuentro no dice nada nuevo.
-        if (llave !== 'FINAL') {
-          columna.appendChild(
-            nodo(
-              'p',
-              't-meta',
-              nombreDeRonda(llave, ronda, {
-                cantidad: encuentros.length,
-                ultima: indice === rondas.length - 1,
-              }),
-            ),
-          );
-        }
-        encuentros.forEach((e) => columna.appendChild(tarjetaDeEncuentro(torneo, e, uid)));
-        cuadro.appendChild(columna);
-      });
-      arbol.appendChild(cuadro);
+      try {
+        await api.cancelar(torneo.id, motivo.trim(), fetchImpl);
+        pintarAviso(zonaAviso, {
+          tono: 'info',
+          titulo: 'Torneo cancelado',
+          detalle:
+            'Las inscripciones pagadas se devuelven ahora; cada equipo ve en el torneo en qué va la suya.',
+        });
+        await abrir(torneo.id);
+        await cargarListado();
+      } catch (error) {
+        avisarError(zonaAviso, error);
+      }
     });
-    zonaDetalle.appendChild(arbol);
+    zonaAdmin.append(iniciar, cancelar);
+    return zonaAdmin;
   }
 
   function bloqueDeRevision(torneo) {
@@ -1394,7 +1890,10 @@ export function montarTorneos(
       });
       form.reset();
       await cargarListado();
+      // El torneo recién creado se abre en su ruta, con su dirección.
       pintarDetalle(torneo);
+      anotarDireccion(torneo.id);
+      enfocarTitulo();
     } catch (error) {
       avisarError(zonaAviso, error);
     } finally {
@@ -1402,11 +1901,13 @@ export function montarTorneos(
     }
   });
 
-  cargarListado().then(() => {
-    if (torneoInicial) {
-      return abrir(torneoInicial);
-    }
-    return undefined;
-  });
-  return { cargarListado, abrir };
+  // Con `?torneo=` se entra directo a su ruta; el tablón se carga igual, para
+  // volver a él sin esperar.
+  if (torneoInicial) {
+    abrir(torneoInicial, { enSitio: true });
+  } else {
+    mostrarModo('tablon');
+  }
+  cargarListado();
+  return { cargarListado, abrir, mostrarListado };
 }

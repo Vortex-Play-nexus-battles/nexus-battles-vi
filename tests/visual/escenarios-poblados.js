@@ -828,6 +828,41 @@ export function torneoTerminadoConCampeon() {
   };
 }
 
+/* Punto 24 (revisión del 6-oct) — el tablón con más de un torneo y la ruta
+   de uno con las inscripciones abiertas: tres equipos registrados, ninguno
+   del jugador de laboratorio, y el árbol todavía sin generar. */
+const ID_TORNEO_ABIERTO = 'fffffff2-2222-4222-8222-222222222222';
+const ID_TORNEO_TERMINADO = 'fffffff3-3333-4333-8333-333333333333';
+
+export function torneoAbierto() {
+  return {
+    ...torneoEnCurso(),
+    id: ID_TORNEO_ABIERTO,
+    nombre: 'Copa de la Bruma',
+    estado: 'INSCRIPCIONES_ABIERTAS',
+    creadoEn: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+    inscripcionesCierranEn: new Date(Date.now() + 3 * 86_400_000).toISOString(),
+    iniciadoEn: null,
+    equiposInscritos: 3,
+    equipos: EQUIPOS.slice(1, 4).map((e, i) => ({
+      ...e,
+      torneoId: ID_TORNEO_ABIERTO,
+      posicion: i + 1,
+      derrotas: 0,
+    })),
+    encuentros: [],
+  };
+}
+
+/** Los tres torneos del tablón: abierto, en curso y terminado. */
+function torneosDelTablon() {
+  return [
+    torneoAbierto(),
+    torneoEnCurso(),
+    { ...torneoTerminadoConCampeon(), id: ID_TORNEO_TERMINADO, nombre: 'Copa del Ocaso' },
+  ];
+}
+
 function transaccion(i, cambios = {}) {
   return {
     id: `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`,
@@ -3685,6 +3720,46 @@ export const ESCENARIOS_UXC8 = [
       '[data-zona="campeon"]',
       '[data-zona="premio"]',
       '[data-zona="mi-premio"].torneo-mio__premio--exito',
+    ],
+  },
+  {
+    // Punto 24 — «muy básico su cuadro inicial»: un solo torneo, su tarjeta
+    // a lo ancho como un cartel, con los cupos como barra.
+    id: 'torneos-tablon',
+    titulo: 'tablón con un torneo abierto: la tarjeta a lo ancho',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json([torneoAbierto()])]],
+    exige: ['[data-cuantos="1"] .torneo-card', '.torneo-card [role="progressbar"]'],
+  },
+  {
+    id: 'torneos-tablon-varios',
+    titulo: 'tablón con tres torneos: abierto, en curso y terminado',
+    ruta: 'plataforma/torneos/torneos.html',
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [['**/api/v1/torneos', json(torneosDelTablon())]],
+    exige: [
+      '.torneo-card[data-estado="INSCRIPCIONES_ABIERTAS"]',
+      '.torneo-card[data-estado="EN_CURSO"]',
+      '.torneo-card[data-estado="FINALIZADO"]',
+    ],
+  },
+  {
+    // Punto 24 — la ruta de un torneo abierto vista por quien aún no tiene
+    // equipo: «Mi equipo» es donde está, con el registro.
+    id: 'torneo-ruta-inscripciones',
+    titulo: 'ruta de un torneo abierto: portada, hitos y registro del equipo',
+    ruta: `plataforma/torneos/torneos.html?torneo=${ID_TORNEO_ABIERTO}`,
+    sesion: () => sesionDe('qa_torneo', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/torneos', json([torneoAbierto()])],
+      [`**/api/v1/torneos/${ID_TORNEO_ABIERTO}`, json(torneoAbierto())],
+    ],
+    exige: [
+      '.torneo-portada [role="progressbar"]',
+      '.torneo-ruta [data-hito="equipo"][aria-current="step"]',
+      '[data-zona="crear-equipo"]',
+      '[data-zona="equipos"] .torneo__equipos',
     ],
   },
   {
