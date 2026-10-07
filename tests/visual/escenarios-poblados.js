@@ -3896,3 +3896,269 @@ export const ESCENARIOS_UXC9 = [
 // Los escenarios de arriba usan ayudantes definidos después del arreglo
 // principal; se suman al final, cuando ya existen.
 ESCENARIOS.push(...ESCENARIOS_UXC8, ...ESCENARIOS_UXC9);
+
+// ---------------------------------------------------------------------------
+// PLAYER-07b — el mercado (subastas.html) y publicar (publicar-subasta.html),
+// puntos 26 y 27 de la revisión del modo jugador. DATOS DE LABORATORIO: los
+// nombres, las cifras y las fechas son inventados; la forma es la del
+// contrato (ms-subastas-listado.yaml, inventario.yaml, productos.yaml).
+// ---------------------------------------------------------------------------
+
+/**
+ * Un lote del mercado con la forma de `SubastaResumen`. Las miniaturas cubren
+ * los tres casos que se veían mal: una que carga (un retrato del propio
+ * repositorio), una que no existe («espada.png», como en DEV) y ninguna.
+ */
+function loteDelMercado(n, cambios) {
+  return {
+    id: `aaaaaab${n}-1111-4111-8111-11111111111${n}`,
+    nombreProducto: 'Objeto del mercado',
+    tipoProducto: 'ARMA',
+    descripcionCorta: 'Lote de laboratorio.',
+    rareza: null,
+    vendedorId: null,
+    esPropia: false,
+    estado: 'ACTIVA',
+    ofertaVigente: String(120 + n * 35),
+    precioInicial: '100',
+    precioCompraInmediata: null,
+    fechaFin: dentroDe(n + 2),
+    cantidadPujas: n,
+    miniaturaUrl: null,
+    esMaestroDeJuego: false,
+    ...cambios,
+  };
+}
+
+/** Catorce páginas: con la ventana de casillas y las dos flechas a la vista. */
+function mercadoDeLaboratorio() {
+  const contenido = [
+    loteDelMercado(0, {
+      nombreProducto: 'Espada de una mano',
+      rareza: 'Común',
+      miniaturaUrl: 'espada.png',
+      precioCompraInmediata: '300',
+    }),
+    loteDelMercado(1, {
+      nombreProducto: 'Casco de acero templado',
+      tipoProducto: 'ARMADURA',
+      rareza: 'Rara',
+    }),
+    loteDelMercado(2, {
+      nombreProducto: 'Guerrero Tanque',
+      tipoProducto: 'HEROE',
+      rareza: 'Épica',
+      miniaturaUrl: './avatares/guerrero-tanque.jpg',
+      esMaestroDeJuego: true,
+    }),
+    loteDelMercado(3, { nombreProducto: 'Poción de brasa', tipoProducto: 'ITEM' }),
+    loteDelMercado(4, {
+      nombreProducto: 'Grito de guerra',
+      tipoProducto: 'HABILIDAD',
+      miniaturaUrl: 'habilidades/grito.png',
+    }),
+    loteDelMercado(5, {
+      nombreProducto: 'Reliquia del Nexo',
+      tipoProducto: 'EPICA',
+      rareza: 'Legendaria',
+      precioCompraInmediata: '2400',
+    }),
+    // Un lote sin nombre: la tarjeta dice «Objeto sin nombre», no «null».
+    loteDelMercado(6, { nombreProducto: null }),
+    loteDelMercado(7, {
+      nombreProducto: 'Coraza del Centinela',
+      tipoProducto: 'ARMADURA',
+      rareza: 'Rara',
+    }),
+  ];
+  return json({
+    contenido,
+    pagina: 0,
+    tamanoPagina: 16,
+    totalElementos: 14 * 16,
+    totalPaginas: 14,
+  });
+}
+
+const PRODUCTO_ESPADA = 'aaaaaaa7-0000-4000-8000-000000000001';
+const PRODUCTO_CASCO = 'aaaaaaa7-0000-4000-8000-000000000002';
+const PRODUCTO_POCION = 'aaaaaaa7-0000-4000-8000-000000000003';
+const NOMBRE_EN_EL_CATALOGO = Object.freeze({
+  [PRODUCTO_ESPADA]: { nombre: 'Espada de una mano', tipo: 'ARMA' },
+  [PRODUCTO_CASCO]: { nombre: 'Casco de acero templado', tipo: 'ARMADURA' },
+  [PRODUCTO_POCION]: { nombre: 'Poción de vida', tipo: 'ITEM' },
+});
+
+/** El elemento que el inventario guardó con el id del producto como «nombre». */
+const ELEMENTO_CON_CODIGO = 'eeeeeee7-0000-4000-8000-000000000001';
+
+/**
+ * Inventario para publicar: dos espadas del mismo producto (una con el código
+ * por nombre, como algunos objetos entregados), un casco con un nombre de
+ * pruebas y una poción ya en subasta.
+ */
+function inventarioParaPublicar() {
+  const elemento = (id, productoId, tipo, nombrePropio, cambios = {}) => ({
+    id,
+    productoId,
+    tipo,
+    nombrePropio,
+    parteArmadura: null,
+    disponible: true,
+    subastaId: null,
+    ...cambios,
+  });
+  const elementos = [
+    elemento(ELEMENTO_CON_CODIGO, PRODUCTO_ESPADA, 'ARMA', PRODUCTO_ESPADA),
+    elemento('eeeeeee7-0000-4000-8000-000000000002', PRODUCTO_ESPADA, 'ARMA', 'Espada de una mano'),
+    elemento('eeeeeee7-0000-4000-8000-000000000003', PRODUCTO_CASCO, 'ARMADURA', 'Casco 1', {
+      parteArmadura: 'CASCO',
+    }),
+    elemento('eeeeeee7-0000-4000-8000-000000000004', PRODUCTO_POCION, 'ITEM', 'Poción de vida', {
+      disponible: false,
+      subastaId: 'aaaaaab9-1111-4111-8111-111111111119',
+    }),
+  ];
+  return json({
+    elementos,
+    numero: 0,
+    tamanio: 16,
+    totalElementos: elementos.length,
+    totalPaginas: 1,
+    ultima: true,
+  });
+}
+
+/** `GET /api/v1/productos/{id}`: la proyección pública del catálogo. */
+function productoParaPublicar(ruta) {
+  const id = decodeURIComponent(new URL(ruta.request().url()).pathname.split('/').pop());
+  const conocido = NOMBRE_EN_EL_CATALOGO[id] ?? { nombre: 'Producto del catálogo', tipo: 'ITEM' };
+  return json({
+    id,
+    ...conocido,
+    imagen: 'espada.png',
+    descripcion: 'Producto de laboratorio.',
+    estado: 'ACTIVO',
+    creadoEn: hace(240),
+    modificadoEn: hace(24),
+  });
+}
+
+const REGLAS_DE_SUBASTAS = Object.freeze({
+  duraciones: [
+    { codigo: '24H', horas: 24, comision: '1' },
+    { codigo: '48H', horas: 48, comision: '3' },
+  ],
+  incrementoMinimoConfigurado: true,
+  incrementoMinimo: '5',
+});
+
+/** Elige en «Producto» el elemento que tenía el código por nombre. */
+async function elegirElProductoConCodigo(pagina) {
+  await pagina
+    .locator(`#producto option[value="${ELEMENTO_CON_CODIGO}"]`)
+    .waitFor({ state: 'attached', timeout: 10_000 });
+  await pagina.selectOption('#producto', ELEMENTO_CON_CODIGO);
+  await pagina.fill('#inicial', '120');
+}
+
+export const ESCENARIOS_PLAYER07B = [
+  {
+    id: 'subastas-mercado-con-paginas',
+    titulo:
+      'mercado de subastas: filtros con título, ordenar y por página con etiqueta, imágenes y paginación con flechas',
+    ruta: 'cuentas/subastas.html',
+    sesion: () => sesionDe('qa_mercado', 'JUGADOR'),
+    rutas: [['**/api/v1/subastas?*', () => mercadoDeLaboratorio()]],
+    interaccion: async (pagina) => {
+      // La imagen que no existe se cambia por el símbolo del tipo al fallar.
+      await pagina
+        .locator('.subastas__miniatura[data-imagen="rota"]')
+        .first()
+        .waitFor({ state: 'attached', timeout: 10_000 });
+    },
+    exige: [
+      'label[for="subastas-buscar"]',
+      'label[for="subastas-ordenar"]',
+      'label[for="subastas-tamano"]',
+      '.mercado__filtros .mercado__filtros-titulo',
+      '.subastas-filtros__leyenda',
+      '.subastas__miniatura[data-imagen="rota"] .subastas__simbolo',
+      '.subastas__miniatura[data-imagen="no"] .subastas__simbolo',
+      '.subastas__miniatura img',
+      'nav.mercado__paginacion .paginacion__pagina[data-direccion="anterior"][disabled]',
+      'nav.mercado__paginacion .paginacion__pagina[data-direccion="siguiente"]',
+    ],
+  },
+  {
+    id: 'subastas-cajon-de-filtros',
+    titulo: 'mercado de subastas: los filtros en su panel (cajón en el teléfono) con uno puesto',
+    ruta: 'cuentas/subastas.html',
+    sesion: () => sesionDe('qa_mercado', 'JUGADOR'),
+    rutas: [['**/api/v1/subastas?*', () => mercadoDeLaboratorio()]],
+    interaccion: async (pagina) => {
+      await pagina.locator('.subastas__producto').first().waitFor({ timeout: 10_000 });
+      const abrir = pagina.locator('[data-accion="abrir-filtros"]');
+      // En el teléfono el panel es un cajón que se abre con «Filtros»; en
+      // escritorio ya está a la vista, en su columna.
+      if (await abrir.isVisible()) {
+        await abrir.click();
+        await pagina.locator('.mercado__filtros[role="dialog"]').waitFor({ timeout: 5_000 });
+      }
+      await pagina.getByLabel('Arma', { exact: true }).check();
+      await pagina
+        .locator('[data-zona="filtros-activos"]:not([hidden])')
+        .waitFor({ state: 'attached', timeout: 5_000 });
+    },
+    exige: [
+      '.mercado__filtros .subastas-filtros',
+      '[data-zona="filtros-activos"]:not([hidden])',
+      '[data-accion="abrir-filtros"]',
+      '[data-accion="cerrar-filtros"]',
+      '[data-accion="ver-resultados"]',
+    ],
+  },
+  {
+    id: 'publicar-con-nombre-del-catalogo',
+    titulo: 'publicar subasta: el nombre del catálogo en las opciones y en la confirmación',
+    ruta: 'cuentas/publicar-subasta.html',
+    sesion: () => sesionDe('qa_vendedor', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/subastas/reglas', json(REGLAS_DE_SUBASTAS)],
+      ['**/api/v1/inventario/elementos?*', () => inventarioParaPublicar()],
+      ['**/api/v1/productos/*', (ruta) => productoParaPublicar(ruta)],
+    ],
+    interaccion: elegirElProductoConCodigo,
+    exige: [
+      '[data-resumen-producto][data-origen-nombre="catalogo"]',
+      `#producto option[value="${ELEMENTO_CON_CODIGO}"]`,
+      '[data-aviso-catalogo][hidden]',
+    ],
+  },
+  {
+    id: 'publicar-sin-catalogo',
+    titulo: 'publicar subasta: el catálogo no responde y no se enseña ningún código',
+    ruta: 'cuentas/publicar-subasta.html',
+    sesion: () => sesionDe('qa_vendedor', 'JUGADOR'),
+    rutas: [
+      ['**/api/v1/subastas/reglas', json(REGLAS_DE_SUBASTAS)],
+      ['**/api/v1/inventario/elementos?*', () => inventarioParaPublicar()],
+      [
+        '**/api/v1/productos/*',
+        {
+          status: 503,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({ type: 'about:blank', title: 'Service Unavailable', status: 503 }),
+        },
+      ],
+    ],
+    interaccion: elegirElProductoConCodigo,
+    exige: [
+      '[data-aviso-catalogo]:not([hidden])',
+      '[data-reintentar-catalogo]',
+      '[data-resumen-producto][data-origen-nombre="sin-nombre"]',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_PLAYER07B);
