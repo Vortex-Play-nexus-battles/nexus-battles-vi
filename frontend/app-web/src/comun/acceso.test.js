@@ -252,11 +252,12 @@ describe('vistaDeRuta y urlDeVista', () => {
     );
   });
 
-  test('R17.3, B1 y F6 — doce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+  test('R17.3, B1, F6 y 6-oct — catorce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
     const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
     // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
     // la verificación de la cuenta y el canje del código de recuperación. F6
-    // suma la raíz: la portada pública con la tienda.
+    // suma la raíz: la portada pública con la tienda. El 6-oct, pedir el
+    // código de recuperación y el tablón de misiones.
     expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
       '/',
       '/cuenta',
@@ -264,7 +265,9 @@ describe('vistaDeRuta y urlDeVista', () => {
       '/inventario',
       '/jugar',
       '/login',
+      '/misiones',
       '/preparando',
+      '/recuperar',
       '/registro',
       '/restablecer',
       '/subastas',
@@ -277,6 +280,22 @@ describe('vistaDeRuta y urlDeVista', () => {
     }
     // Las direcciones no se repiten: dos vistas no pueden servirse en la misma.
     expect(new Set(limpias.map(([, v]) => v.limpia)).size).toBe(limpias.length);
+  });
+
+  test('6-oct — /recuperar y /misiones abren su vista, y cada una con su acceso', () => {
+    expect(vistaDeRuta('/recuperar')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/recuperar/')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/misiones?categoria=HISTORIA')).toBe('misiones');
+    expect(vistaDeRuta('/frontend/app-web/src/contenido/misiones/misiones.html')).toBe('misiones');
+    // Pedir el código es del portal (aún no hay sesión); el tablón, del jugador.
+    expect(armazonDeVista('restablecer-solicitar')).toBe('publico');
+    expect(puedeVer('restablecer-solicitar', { autenticado: false }).veredicto).toBe(
+      VEREDICTO.VISIBLE,
+    );
+    expect(armazonDeVista('misiones')).toBe('jugador');
+    expect(puedeVer('misiones', { autenticado: false }).veredicto).not.toBe(VEREDICTO.VISIBLE);
+    // La del canje no se confunde con la de pedir el código.
+    expect(vistaDeRuta('/restablecer')).toBe('restablecer-confirmar');
   });
 
   test('F6 — la raíz es la portada pública, y solo la raíz', () => {
