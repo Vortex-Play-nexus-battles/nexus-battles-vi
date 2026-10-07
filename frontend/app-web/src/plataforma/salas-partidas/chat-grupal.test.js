@@ -85,20 +85,29 @@ describe('montarChatGrupal', () => {
     expect(abridor.hidden).toBe(true);
   });
 
-  test('el panel vive en la misma página, cerrado, y el botón dice lo que controla', () => {
+  test('cerrado no deja nada en la vista; al abrirlo vive en la misma página', () => {
     const { chat, abridor } = montarEn();
     expect(abridor.hidden).toBe(false);
     expect(abridor.tagName).toBe('BUTTON');
-    expect(abridor.getAttribute('aria-controls')).toBe('chat-grupal');
     expect(abridor.getAttribute('aria-expanded')).toBe('false');
+    // Ni un diálogo oculto ni zonas repetidas mientras nadie lo abre (el
+    // banco E2E busca `[data-zona="conexion"]` y `[role="dialog"]` en la vista).
+    expect(chat.panel).toBeNull();
+    expect(abridor.hasAttribute('aria-controls')).toBe(false);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+
+    abridor.click();
     expect(chat.panel.parentElement).toBe(document.body);
-    expect(chat.panel.hidden).toBe(true);
+    expect(abridor.getAttribute('aria-controls')).toBe('chat-grupal');
     expect(chat.panel.getAttribute('role')).toBe('dialog');
     expect(chat.panel.getAttribute('aria-labelledby')).toBe('titulo-chat-grupal');
     expect(document.getElementById('titulo-chat-grupal').textContent).toBe('Chat grupal');
     // Nunca una pestaña nueva ni un enlace a otra vista.
     expect(document.querySelector('a[target="_blank"]')).toBeNull();
     expect(document.querySelector('a[href*="chat.html"]')).toBeNull();
+    // El estado de su canal va en su propia zona: la de la partida no se repite.
+    expect(chat.panel.querySelector('[data-zona="conexion"]')).toBeNull();
+    expect(chat.panel.querySelector('[data-zona="conexion-chat-grupal"]')).not.toBeNull();
   });
 
   test('el canal se abre al abrir el panel, una sola vez, con la sala y la sesión', async () => {
@@ -110,11 +119,16 @@ describe('montarChatGrupal', () => {
     expect(montar).toHaveBeenCalledTimes(1);
     const [raiz, opciones] = montar.mock.calls[0];
     expect(raiz).toBe(chat.panel);
-    expect(opciones).toEqual({ canal: { idSala: SALA }, token: 'token-de-prueba', miId: YO });
+    expect(opciones).toEqual({
+      canal: { idSala: SALA },
+      token: 'token-de-prueba',
+      miId: YO,
+      indicador: raiz.querySelector('[data-zona="conexion-chat-grupal"]'),
+    });
+    expect(opciones.indicador).not.toBeNull();
     // Lo que `montarChat` necesita está en el panel.
     expect(raiz.querySelector('[data-zona="mensajes"]')).not.toBeNull();
     expect(raiz.querySelector('[data-zona="sin-mensajes"]')).not.toBeNull();
-    expect(raiz.querySelector('[data-zona="conexion"]')).not.toBeNull();
     expect(raiz.querySelector('form [data-zona="aviso"]')).not.toBeNull();
     expect(raiz.querySelector('textarea[name="texto"]').getAttribute('maxlength')).toBe('500');
 

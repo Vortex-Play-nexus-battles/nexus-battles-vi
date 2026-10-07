@@ -135,11 +135,12 @@ function construirPanel() {
             texto: 'Chat grupal',
             atributos: { id: 'titulo-chat-grupal' },
           }),
-          // `montarChat` pinta aquí el estado del canal; discreto en el
-          // combate, como la píldora del HUD.
+          // `montarChat` pinta aquí el estado del canal del chat; discreto,
+          // como la píldora del HUD. Su zona no se llama «conexion»: esa es
+          // la del canal de la partida, y la vista la busca por ese nombre.
           h('span', {
             clase: 'conexion',
-            datos: { zona: 'conexion' },
+            datos: { zona: 'conexion-chat-grupal' },
             atributos: { role: 'status' },
           }),
           cerrar,
@@ -163,7 +164,8 @@ function construirPanel() {
  * @param {typeof montarChat} [opciones.montar] inyectable para las pruebas
  * @param {Function} [opciones.conectar] transporte, inyectable para las pruebas
  * @param {(consulta: string) => {matches: boolean}} [opciones.medios] `matchMedia`
- * @returns {{abrir: () => void, cerrar: () => void, panel: HTMLElement, nuevos: () => number} | null}
+ * @returns {{abrir: () => void, cerrar: () => void, panel: HTMLElement|null,
+ *   nuevos: () => number} | null} `panel` es null hasta la primera vez que se abre
  */
 export function montarChatGrupal(
   documento,
@@ -180,15 +182,28 @@ export function montarChatGrupal(
   if (!idSala || !abridor) {
     return null;
   }
-  const { panel, cerrar: botonCerrar } = construirPanel();
-  documento.body.append(panel);
   abridor.hidden = false;
-  abridor.setAttribute('aria-controls', 'chat-grupal');
   abridor.setAttribute('aria-expanded', 'false');
   const marca = abridor.querySelector('[data-zona="chat-nuevos"]');
 
+  // El panel se construye la primera vez que se abre: quien no chatea no
+  // carga ni un diálogo oculto en la vista (ni sus zonas repetidas).
+  let panel = null;
   let montado = null;
   let nuevos = 0;
+
+  function asegurarPanel() {
+    if (panel) {
+      return panel;
+    }
+    const construido = construirPanel();
+    panel = construido.panel;
+    documento.body.append(panel);
+    abridor.setAttribute('aria-controls', panel.id);
+    construido.cerrar.addEventListener('click', () => cerrar());
+    panel.addEventListener('keydown', alTeclear);
+    return panel;
+  }
 
   function pintarNuevos() {
     const { visible, accesible } = textoDeNuevos(nuevos);
@@ -207,7 +222,12 @@ export function montarChatGrupal(
     if (montado) {
       return montado;
     }
-    const opciones = { canal: { idSala }, token, miId };
+    const opciones = {
+      canal: { idSala },
+      token,
+      miId,
+      indicador: panel.querySelector('[data-zona="conexion-chat-grupal"]'),
+    };
     if (conectar) {
       opciones.conectar = conectar;
     }
@@ -226,6 +246,7 @@ export function montarChatGrupal(
   }
 
   function abrir() {
+    asegurarPanel();
     const hoja = esHoja();
     panel.hidden = false;
     panel.dataset.hoja = hoja ? 'si' : 'no';
@@ -241,7 +262,7 @@ export function montarChatGrupal(
   }
 
   function cerrar({ devolverFoco = true } = {}) {
-    if (panel.hidden) {
+    if (!panel || panel.hidden) {
       return;
     }
     panel.hidden = true;
@@ -252,15 +273,7 @@ export function montarChatGrupal(
     }
   }
 
-  abridor.addEventListener('click', () => {
-    if (panel.hidden) {
-      abrir();
-    } else {
-      cerrar();
-    }
-  });
-  botonCerrar.addEventListener('click', () => cerrar());
-  panel.addEventListener('keydown', (evento) => {
+  function alTeclear(evento) {
     if (evento.key === 'Escape') {
       evento.preventDefault();
       cerrar();
@@ -282,8 +295,23 @@ export function montarChatGrupal(
         primero.focus();
       }
     }
+  }
+
+  abridor.addEventListener('click', () => {
+    if (!panel || panel.hidden) {
+      abrir();
+    } else {
+      cerrar();
+    }
   });
   pintarNuevos();
 
-  return { abrir, cerrar, panel, nuevos: () => nuevos };
+  return {
+    abrir,
+    cerrar,
+    get panel() {
+      return panel;
+    },
+    nuevos: () => nuevos,
+  };
 }

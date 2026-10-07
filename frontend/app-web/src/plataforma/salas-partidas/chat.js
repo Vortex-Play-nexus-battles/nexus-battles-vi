@@ -199,9 +199,13 @@ function urlDelCanalDelChat() {
  *
  * @param {HTMLElement} raiz contenedor con [data-zona=mensajes|sin-mensajes|conexion], el form y su [data-zona=aviso]
  * @param {{canal: {idSala?: string}, token: string|null, conectar?: Function, url?: string,
- *   miId?: string|null, esperas?: readonly number[], reloj?: object, discreto?: boolean}} opciones
+ *   miId?: string|null, esperas?: readonly number[], reloj?: object, discreto?: boolean,
+ *   indicador?: HTMLElement|null}} opciones
  *   `discreto` (revisión del modo jugador del 6-oct): el estado del canal solo
  *   se ve cuando hay algo que contar; «Conectado» no se enseña.
+ *   `indicador`: dónde pintar ese estado, si no es el `[data-zona=conexion]`
+ *   de la raíz (el chat grupal vive en la vista del combate, que ya tiene el
+ *   suyo para el canal de la partida).
  */
 export async function montarChat(
   raiz,
@@ -214,11 +218,11 @@ export async function montarChat(
     esperas,
     reloj,
     discreto = true,
+    indicador = raiz.querySelector('[data-zona="conexion"]'),
   },
 ) {
   const lista = raiz.querySelector('[data-zona="mensajes"]');
   const zonaSinMensajes = raiz.querySelector('[data-zona="sin-mensajes"]');
-  const indicador = raiz.querySelector('[data-zona="conexion"]');
   const formulario = raiz.querySelector('form');
   const destinos = destinosDe(canal);
 

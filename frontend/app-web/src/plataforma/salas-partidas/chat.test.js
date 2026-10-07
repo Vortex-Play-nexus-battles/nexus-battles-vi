@@ -128,6 +128,23 @@ test('CA-01: el historial se pinta al suscribirse y los mensajes en vivo se agre
   expect(contenedor.querySelector('.conversacion__dia')).not.toBeNull();
 });
 
+test('el estado del canal se puede pintar en otro indicador (el chat grupal, punto 15)', async () => {
+  const cliente = clienteFalso();
+  const contenedor = raiz();
+  const propio = document.createElement('span');
+
+  await montarChat(contenedor, {
+    canal: { idSala: ID_SALA },
+    token: 't',
+    conectar: async () => cliente,
+    indicador: propio,
+  });
+
+  expect(propio.dataset.estadoCanal).toBe('conectado');
+  // El de la raíz no se toca: es de otro canal.
+  expect(contenedor.querySelector('[data-zona="conexion"]').dataset.estadoCanal).toBeUndefined();
+});
+
 test('CA-01: enviar manda el texto al destino del canal y limpia el formulario', async () => {
   const cliente = clienteFalso();
   const contenedor = raiz();

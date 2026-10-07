@@ -867,8 +867,10 @@ test.describe('Sala de batalla de punta a punta', () => {
       JSON.stringify(ingresos),
     ).toBe(true);
 
+    // Revisión del modo jugador del 6-oct, punto 20: la apuesta en su fila
+    // del desglose, con su signo («Apuesta +30 créditos» / «−30 créditos»).
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
-      new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
+      new RegExp(`Apuesta\\s*[+−]${APUESTA} créditos`, 'i'),
       { timeout: 20000 },
     );
   });
