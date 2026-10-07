@@ -8,6 +8,7 @@ de entrada público del host de plataforma en AWS: `http://<ip-del-host>/`.
 | Ruta | Destino |
 |---|---|
 | `/` | **F6:** la portada pública (`cuentas/portada.html`, con `<base>` y la marca de rutas limpias): qué es el juego, cómo empezar y la tienda con productos reales. Hasta el 4-oct redirigía a `/login`; entrar sigue en `/login` y crear la cuenta en `/registro` |
+| `/login` `/registro` `/preparando` `/inicio` `/cuenta` `/subastas` `/inventario` `/jugar` `/torneos` `/verificar` `/restablecer` `/recuperar` `/misiones` | **direcciones limpias** (R17, B1, 6-oct): el fichero de la vista con su `<base>` y la marca; la ruta antigua del fichero redirige (302) a la limpia con su consulta. `/recuperar` es pedir el código; `/restablecer`, canjearlo |
 | `/frontend/app-web/src/…`, `/shared/ui-kit/…` | archivos estáticos del repo, misma jerarquía (las vistas usan `../../../../../shared/ui-kit`) |
 | `/api/v1/salas`, `/api/v1/partidas`, `/api/v1/mensajes-directos` (B6) | `srv-salas-partidas:8084` |
 | `/api/v1/users` | `srv-notificaciones:8085` |
