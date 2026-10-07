@@ -92,25 +92,34 @@ function conAuthorizationSiHayToken(options) {
 /**
  * Envoltorio para fetch que intercepta errores HTTP 403 y Problem Details,
  * y adjunta el token de sesión automáticamente cuando existe.
+ *
+ * `rechazoEsperado` (revisión del modo jugador del 6-oct): quien llama sabe
+ * que un 403 es una respuesta de negocio y la pinta en su sitio —el código de
+ * una sala privada se pide en su propio formulario—. Con él, ese 403 no saca
+ * el aviso rojo genérico ni hace sospechar de la credencial. No viaja a
+ * `fetch`. Un 401 se trata igual siempre: ese sí habla de la sesión.
+ *
  * @param {string} url
- * @param {RequestInit} [options={}]
+ * @param {RequestInit & {rechazoEsperado?: boolean}} [options={}]
  * @returns {Promise<Response>}
  */
 export async function fetchWithHttpErrorInterceptor(url, options = {}) {
+  const { rechazoEsperado = false, ...opcionesDeFetch } = options ?? {};
   try {
     const token = sessionStorage.getItem(CLAVE_TOKEN);
-    const opcionesConAuth = conAuthorizationSiHayToken(options);
+    const opcionesConAuth = conAuthorizationSiHayToken(opcionesDeFetch);
     const response = await fetch(url, opcionesConAuth);
 
+    const prohibidoInesperado = response.status === 403 && !rechazoEsperado;
     if (
-      (response.status === 401 || response.status === 403) &&
+      (response.status === 401 || prohibidoInesperado) &&
       llevabaElTokenDeLaSesion(opcionesConAuth, token) &&
       !RUTAS_DE_ENTRADA.test(String(url))
     ) {
       avisarRechazoDeCredencial(response.status, String(url));
     }
 
-    if (response.status === 403) {
+    if (prohibidoInesperado) {
       // Capturar respuesta RFC 7807 (Problem Details)
       let errorDetail = 'No tienes permiso para realizar esta acción.';
       try {

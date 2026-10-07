@@ -134,6 +134,11 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
     await expect(formulario).toBeVisible();
     // Y el listado sigue en pie: no es un callejon sin salida.
     await expect(page.locator('[data-zona="salas"]')).toBeVisible();
+    // Revisión del 6-oct (punto 10): pedir el código no es un error. Ni el
+    // aviso rojo flotante de «permiso denegado» ni la frase genérica.
+    await expect(page.locator('#nexus-rbac-toast')).toHaveCount(0);
+    await expect(formulario).not.toContainText('se entra por invitación');
+    await expect(page.locator('[data-zona="aviso-codigo"]')).toBeHidden();
   });
 
   test('B con un codigo equivocado sigue fuera, y se le dice por que', async ({ page }) => {
@@ -182,7 +187,7 @@ test.describe('Sala privada con codigo de invitacion (RF-JUE-002)', () => {
     // Sigue pidiendo el codigo, y ahora dice que el que escribio no vale: el
     // mensaje cambia para que no haya duda de si se envio.
     await expect(formulario).toBeVisible();
-    await expect(page.locator('[data-zona="aviso-codigo"]')).toContainText(/no vale/i);
+    await expect(page.locator('[data-zona="aviso-codigo"]')).toContainText(/no válido/i);
     await expect(page).not.toHaveURL(/sala-batalla\.html/);
 
     const dentro = await api.get(`/api/v1/salas/${sala.id}`, {

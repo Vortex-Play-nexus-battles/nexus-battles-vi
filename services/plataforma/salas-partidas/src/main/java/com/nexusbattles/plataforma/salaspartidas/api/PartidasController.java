@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.api;
 
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.MisPartidas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import org.springframework.security.core.Authentication;
@@ -9,6 +10,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -38,12 +40,27 @@ public class PartidasController {
 
     private final ObtenerPartida obtenerPartida;
     private final MisPartidas misPartidas;
+    private final EjecutarAccion ejecutarAccion;
     private final Clock reloj;
 
-    PartidasController(ObtenerPartida obtenerPartida, MisPartidas misPartidas) {
+    PartidasController(ObtenerPartida obtenerPartida, MisPartidas misPartidas, EjecutarAccion ejecutarAccion) {
         this.obtenerPartida = obtenerPartida;
         this.misPartidas = misPartidas;
+        this.ejecutarAccion = ejecutarAccion;
         this.reloj = Clock.systemUTC();
+    }
+
+    /**
+     * Rendirse — revision del modo jugador del 6-oct (1.10.0): «Salir» en pleno
+     * combate cuenta como derrota. Quien se rinde sale del token; el ganador lo
+     * decide la partida. Idempotente: repetirla devuelve la partida igual.
+     *
+     * <p>403 {@code partida-ajena} si quien llama no la juega; 404 si no existe.
+     */
+    @PostMapping("/{idPartida}/rendicion")
+    public PartidaResponse rendirse(@PathVariable UUID idPartida, @AuthenticationPrincipal Jwt token) {
+        return PartidaResponse.desde(ejecutarAccion.rendirse(idPartida, IdentidadDelToken.idDe(token)),
+                reloj.instant());
     }
 
     /**

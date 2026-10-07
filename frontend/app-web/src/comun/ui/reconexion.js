@@ -33,11 +33,44 @@ const PRESENTACION = Object.freeze({
  */
 const PREFIJO = 'Canal en tiempo real: ';
 
+/** Estados que, en modo discreto, sí se enseñan: los que piden algo a quien juega. */
+const A_LA_VISTA_EN_DISCRETO = new Set(['reconectando', 'sin-conexion', 'reconectado']);
+
+/** Cuánto se ve «Conexión recuperada» en modo discreto antes de irse. */
+export const RECUPERADA_VISIBLE_MS = 4000;
+
+/**
+ * Modo discreto — revisión del modo jugador del 6-oct (puntos 9, 13 y 18):
+ * «Canal en tiempo real: Conectado» a la vista todo el rato es texto técnico
+ * que no le dice nada a quien juega. En discreto la píldora solo aparece
+ * cuando hay algo que contar —reconectando, sin conexión— y «Conexión
+ * recuperada» un momento al volver. Sigue pintándose siempre (estado,
+ * `data-estado-canal`, texto): lo que cambia es si se ve.
+ *
+ * @param {HTMLElement} zona
+ * @param {string} estado
+ */
+function aplicarDiscrecion(zona, estado) {
+  clearTimeout(zona._ocultarRecuperada);
+  zona.hidden = !A_LA_VISTA_EN_DISCRETO.has(estado);
+  if (estado === 'reconectado') {
+    zona._ocultarRecuperada = setTimeout(() => {
+      if (zona.dataset.estadoCanal === 'reconectado') {
+        zona.hidden = true;
+      }
+    }, RECUPERADA_VISIBLE_MS);
+  }
+}
+
 /**
  * @param {HTMLElement|null} zona la píldora `.conexion`
- * @param {{estado: string, intento?: number, de?: number, alReintentar?: () => void}} datos
+ * @param {{estado: string, intento?: number, de?: number, alReintentar?: () => void,
+ *   discreto?: boolean}} datos `discreto`: solo se ve cuando hay un problema
  */
-export function pintarEstadoDelCanal(zona, { estado, intento, de, alReintentar } = {}) {
+export function pintarEstadoDelCanal(
+  zona,
+  { estado, intento, de, alReintentar, discreto = false } = {},
+) {
   if (!zona) {
     return;
   }
@@ -51,6 +84,9 @@ export function pintarEstadoDelCanal(zona, { estado, intento, de, alReintentar }
   zona.replaceChildren(h('span', { clase: 'conexion__prefijo', texto: PREFIJO }), texto);
   if (!zona.hasAttribute('role')) {
     zona.setAttribute('role', 'status');
+  }
+  if (discreto) {
+    aplicarDiscrecion(zona, estado);
   }
 
   const siguiente = zona.nextElementSibling;

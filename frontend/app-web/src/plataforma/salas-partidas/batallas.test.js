@@ -19,6 +19,10 @@ import {
   textoDePaginacion,
   invitacionDeLaUrl,
   rutaDeVerificacion,
+  estadoParaLaApi,
+  textoDelCreador,
+  ESTADOS_DISPONIBLES,
+  CODIGO_NO_VALIDO,
 } from './batallas.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -215,8 +219,10 @@ describe('montarBatallas', () => {
     await asentar();
 
     expect(modalidad.value).toBe('');
+    // Revision del 6-oct (punto 8): sin filtros se piden las salas a las que
+    // se puede entrar, no todas.
     expect(listar).toHaveBeenLastCalledWith(
-      expect.objectContaining({ pagina: 0, modalidad: '', estado: '' }),
+      expect.objectContaining({ pagina: 0, modalidad: '', estado: 'ABIERTA,PRIVADA' }),
     );
     expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
       '25 salas abiertas ahora mismo',
@@ -439,6 +445,9 @@ describe('canal en tiempo real en el listado', () => {
       `/tema/salas/${OTRA}`,
     ]);
     expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('conectado');
+    // Revision del 6-oct (punto 9): conectado no se dice; es lo normal.
+    expect(raiz.querySelector('[data-zona="canal"]').hidden).toBe(true);
+    expect(raiz.querySelector('[data-zona="canal"]').textContent).toBe('');
 
     canal.entregar(`/tema/salas/${OTRA}`, {
       tipo: 'sala.participante.ingreso',
@@ -784,7 +793,7 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     // El aviso cambia: la primera vez dice que pidas el codigo, la segunda que
     // el que escribiste no vale. Repetir el mismo texto haria dudar de si se
     // envio.
-    expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
+    expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no válido/i);
     expect(campo().value).toBe('MALO-0000');
     expect(ingresar).not.toHaveBeenCalled();
   });
@@ -933,7 +942,7 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
       formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
       await vaciarCola();
 
-      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no válido/i);
       expect(irAVerificacion).not.toHaveBeenCalled();
       expect(ingresar).not.toHaveBeenCalled();
     });
@@ -1197,5 +1206,215 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
 
     expect(irAVerificacion).not.toHaveBeenCalled();
     expect(raiz.querySelector('[data-zona="estado"]').textContent).toMatch(/rechazado/i);
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct — puntos 8, 9 y 10.
+ */
+describe('revisión del modo jugador · listado y sala privada', () => {
+  test('punto 8: el filtro por omisión son las salas disponibles; «Todos» no filtra', () => {
+    expect(ESTADOS_DISPONIBLES).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi('')).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi(undefined)).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi('TODOS')).toBe('');
+    expect(estadoParaLaApi('LLENA')).toBe('LLENA');
+    expect(estadoParaLaApi('PRIVADA')).toBe('PRIVADA');
+  });
+
+  test('punto 8: al entrar se piden las disponibles y el subtítulo las cuenta como abiertas', async () => {
+    const raiz = preparar();
+    const listar = jest.fn().mockResolvedValue(pagina([sala()], { totalElementos: 3 }));
+
+    montarBatallas(raiz, { listar });
+    await asentar();
+
+    expect(listar).toHaveBeenCalledWith(
+      expect.objectContaining({ pagina: 0, estado: 'ABIERTA,PRIVADA' }),
+    );
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      '3 salas abiertas ahora mismo',
+    );
+  });
+
+  test('punto 10: «Creada por …» solo si la sala trae el apodo; sin apodo no se inventa', () => {
+    expect(textoDelCreador({ apodoAnfitrion: 'Perez_Bro15' })).toBe('Creada por Perez_Bro15');
+    expect(textoDelCreador({ apodoAnfitrion: '  ' })).toBeNull();
+    expect(textoDelCreador({})).toBeNull();
+    expect(textoDelCreador(null)).toBeNull();
+  });
+
+  describe('punto 10 · el formulario de la sala privada', () => {
+    const ID = '77777777-7777-7777-7777-777777777777';
+    const HTML_PRIVADA = `
+      <main id="vista">
+        <p data-zona="subtitulo"></p>
+        <select name="modalidad"><option value="">Todas</option></select>
+        <select name="estado"><option value="">Disponibles</option><option value="TODOS">Todos</option></select>
+        <div class="estado-vista" data-zona="estado"></div>
+        <div data-zona="degradacion" hidden></div>
+        <form data-zona="pedir-codigo" hidden>
+          <h2>Sala privada</h2>
+          <p data-zona="creador-sala" hidden></p>
+          <div class="campo">
+            <input name="codigoInvitacion" />
+            <p class="campo__error" data-zona="aviso-codigo" role="alert" hidden></p>
+          </div>
+          <button type="submit">Entrar con el código</button>
+          <button type="button" data-accion="cerrar-codigo">Cancelar</button>
+        </form>
+        <p data-zona="canal" hidden></p>
+        <div class="rejilla-salas" data-zona="salas" hidden></div>
+        <nav class="paginacion" data-zona="paginacion" hidden></nav>
+      </main>
+    `;
+    const privada = (cambios = {}) => ({
+      ...sala({ id: ID, estado: 'PRIVADA', privada: true, recompensaCreditos: 0 }),
+      apodoAnfitrion: 'Perez_Bro15',
+      ...cambios,
+    });
+    const rechazo = () =>
+      new ErrorDeApi(
+        {
+          type: 'https://nexusbattles.local/errores/sala-privada',
+          title: 'Esta sala es privada',
+          detail: 'A una sala privada se entra por invitación, no desde el listado.',
+          status: 403,
+        },
+        403,
+      );
+    const llena = () =>
+      new ErrorDeApi(
+        {
+          type: 'urn:llena',
+          title: 'Sala llena',
+          detail: 'La sala ya está completa.',
+          status: 409,
+        },
+        409,
+      );
+    const cola = async () => {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+    };
+
+    function montarPrivada({
+      contenido = [privada()],
+      comprobar,
+      ingresar = jest.fn(),
+      obtener,
+    } = {}) {
+      document.body.innerHTML = HTML_PRIVADA;
+      const raiz = document.getElementById('vista');
+      const vista = montarBatallas(raiz, {
+        listar: jest.fn().mockResolvedValue(pagina(contenido)),
+        comprobar: comprobar ?? jest.fn().mockRejectedValue(rechazo()),
+        ingresar,
+        obtener: obtener ?? jest.fn().mockResolvedValue(privada()),
+        alEntrar: jest.fn(),
+        irAVerificacion: jest.fn(),
+      });
+      return { raiz, vista };
+    }
+
+    test('al abrirla: título, «Creada por» y NINGUNA frase genérica ni rojo', async () => {
+      const { raiz } = montarPrivada();
+      await cola();
+
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      const formulario = raiz.querySelector('[data-zona="pedir-codigo"]');
+      const aviso = raiz.querySelector('[data-zona="aviso-codigo"]');
+      expect(formulario.hidden).toBe(false);
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe(
+        'Creada por Perez_Bro15',
+      );
+      expect(raiz.querySelector('[data-zona="creador-sala"]').hidden).toBe(false);
+      expect(aviso.hidden).toBe(true);
+      expect(formulario.textContent).not.toContain('se entra por invitación');
+      expect(raiz.querySelector('[name="codigoInvitacion"]').hasAttribute('aria-invalid')).toBe(
+        false,
+      );
+    });
+
+    test('un código que no vale: «Código de invitación no válido», en rojo y el campo marcado', async () => {
+      const { raiz } = montarPrivada();
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'ZZZZ-9999';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+
+      const aviso = raiz.querySelector('[data-zona="aviso-codigo"]');
+      expect(aviso.hidden).toBe(false);
+      expect(aviso.textContent).toBe(CODIGO_NO_VALIDO);
+      expect(aviso.className).toContain('campo__error');
+      expect(raiz.querySelector('[name="codigoInvitacion"]').getAttribute('aria-invalid')).toBe(
+        'true',
+      );
+      expect(raiz.querySelector('.campo').classList.contains('campo--invalido')).toBe(true);
+
+      // Al volver a escribir, el error de antes se va.
+      const campo = raiz.querySelector('[name="codigoInvitacion"]');
+      campo.value = 'ZZZZ-999';
+      campo.dispatchEvent(new Event('input'));
+      expect(aviso.hidden).toBe(true);
+    });
+
+    test('si con el formulario abierto la sala se llena, se dice ahí y el listado se queda', async () => {
+      const comprobar = jest.fn().mockRejectedValueOnce(rechazo()).mockRejectedValueOnce(llena());
+      const { raiz } = montarPrivada({ comprobar });
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'WXYZ-2345';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toContain('completa');
+      expect(raiz.querySelector('[data-zona="pedir-codigo"]').hidden).toBe(false);
+      expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    });
+
+    test('un enlace de invitación con un código que no vale: el error y «Creada por» preguntando por la sala', async () => {
+      const obtener = jest.fn().mockResolvedValue(privada({ apodoAnfitrion: 'Ana_Nexo' }));
+      const { raiz, vista } = montarPrivada({ contenido: [], obtener });
+      await cola();
+
+      await vista.entrarA(ID, 'MALO-0000');
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toBe(CODIGO_NO_VALIDO);
+      expect(obtener).toHaveBeenCalledWith(ID);
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe(
+        'Creada por Ana_Nexo',
+      );
+    });
+
+    test('cambiar de sala privada con el formulario abierto no arrastra el error ni lo escrito', async () => {
+      const OTRA_PRIVADA = '88888888-8888-8888-8888-888888888888';
+      const { raiz } = montarPrivada({
+        contenido: [privada(), privada({ id: OTRA_PRIVADA, apodoAnfitrion: 'Otro' })],
+      });
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'MALO-0000';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').hidden).toBe(false);
+
+      raiz.querySelector(`[data-sala="${OTRA_PRIVADA}"]`).click();
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').hidden).toBe(true);
+      expect(raiz.querySelector('[name="codigoInvitacion"]').value).toBe('');
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe('Creada por Otro');
+    });
   });
 });

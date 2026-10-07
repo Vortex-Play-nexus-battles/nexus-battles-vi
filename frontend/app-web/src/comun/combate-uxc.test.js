@@ -12,7 +12,7 @@ import {
   registroDeCombate,
 } from './ui/juego/combate.js';
 import { canalReconectable, ESTADOS_DE_CANAL } from './canal-reconectable.js';
-import { pintarEstadoDelCanal } from './ui/reconexion.js';
+import { pintarEstadoDelCanal, RECUPERADA_VISIBLE_MS } from './ui/reconexion.js';
 import { buscarElementoPropio, cargarHeroePropio, puntosDePoder } from './heroe-propio.js';
 
 describe('medidorDePoder (PowerMeter)', () => {
@@ -435,5 +435,45 @@ describe('pintarEstadoDelCanal (ReconnectBanner)', () => {
     pintarEstadoDelCanal(pildora, { estado: 'reconectado' });
     expect(contenedor.querySelector('[data-accion="reintentar-canal"]')).toBeNull();
     expect(pildora.textContent).toMatch(/Conexión recuperada$/);
+  });
+
+  /*
+   * Revisión del modo jugador del 6-oct (puntos 9, 13 y 18): «Canal en tiempo
+   * real: Conectado» a la vista todo el rato era texto técnico. En discreto
+   * solo se ve cuando hay algo que contar; el estado se sigue pintando.
+   */
+  test('discreto: conectado no se ve; reconectando y sin conexión sí; recuperada solo un momento', () => {
+    jest.useFakeTimers();
+    try {
+      const pildora = document.createElement('span');
+      document.body.append(pildora);
+
+      pintarEstadoDelCanal(pildora, { estado: 'conectando', discreto: true });
+      expect(pildora.hidden).toBe(true);
+
+      pintarEstadoDelCanal(pildora, { estado: 'conectado', discreto: true });
+      expect(pildora.hidden).toBe(true);
+      expect(pildora.dataset.estadoCanal).toBe('conectado');
+      expect(pildora.textContent).toMatch(/Conectado$/);
+
+      pintarEstadoDelCanal(pildora, { estado: 'reconectando', intento: 1, de: 5, discreto: true });
+      expect(pildora.hidden).toBe(false);
+
+      pintarEstadoDelCanal(pildora, { estado: 'sin-conexion', discreto: true });
+      expect(pildora.hidden).toBe(false);
+
+      pintarEstadoDelCanal(pildora, { estado: 'reconectado', discreto: true });
+      expect(pildora.hidden).toBe(false);
+      jest.advanceTimersByTime(RECUPERADA_VISIBLE_MS);
+      expect(pildora.hidden).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('sin discreto, la píldora no toca su visibilidad (chat y mensajes privados siguen igual)', () => {
+    const pildora = document.createElement('span');
+    pintarEstadoDelCanal(pildora, { estado: 'conectado' });
+    expect(pildora.hidden).toBe(false);
   });
 });

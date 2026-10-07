@@ -36,12 +36,17 @@ interface SalasSpringData extends JpaRepository<SalaEntidad, UUID> {
      * para no tener cuatro consultas casi iguales. La paginacion la resuelve la
      * base de datos: traer todo y cortar en memoria dejaria de funcionar en
      * cuanto haya salas de verdad.
+     *
+     * <p>Revision del modo jugador (6-oct): la mas reciente primero. Sin orden
+     * la base devolvia las salas en el que le convenia, y una sala recien
+     * abierta podia quedar en la segunda pagina.
      */
     @Query("""
             SELECT s FROM SalaEntidad s
             WHERE s.estado IN :estados
               AND (:modalidad IS NULL OR s.modalidad = :modalidad)
               AND (:estado IS NULL OR s.estado = :estado)
+            ORDER BY s.creadaEn DESC, s.id
             """)
     Page<SalaEntidad> listar(@Param("estados") Collection<EstadoSala> estados,
                              @Param("modalidad") Modalidad modalidad,

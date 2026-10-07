@@ -57,6 +57,10 @@ public class SecurityConfig {
                 // entrar, verificar heroe, jugar. RF-JUE-001 la describe como
                 // accion del jugador y un administrador no juega por nadie.
                 .requestMatchers("/api/v1/salas/**").hasRole("JUGADOR")
+                // 1.10.0 — rendirse tambien es del jugador: solo quien combate
+                // sale de su propio combate (el caso de uso lo comprueba con el
+                // token; aqui se cierra a cualquier otro rol).
+                .requestMatchers(HttpMethod.POST, "/api/v1/partidas/*/rendicion").hasRole("JUGADOR")
                 // B6 (feedback del profesor): los mensajes privados son entre
                 // personas. Cualquier rol de persona de RF-RBAC-001 escribe y
                 // lee los SUYOS (el uid sale del token); un token de servicio

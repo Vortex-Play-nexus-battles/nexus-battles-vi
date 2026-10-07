@@ -95,4 +95,21 @@ describe('aviso de credencial rechazada', () => {
     });
     expect(avisos).toHaveLength(1);
   });
+
+  test('un 403 que quien llama esperaba (rechazoEsperado) no es asunto de la sesión; un 401 sí', async () => {
+    sessionStorage.setItem(CLAVES.token, 'el-token');
+    globalThis.fetch = jest.fn(() => respuesta(403));
+    await fetchWithHttpErrorInterceptor('/api/v1/salas/s1/participantes', {
+      method: 'POST',
+      rechazoEsperado: true,
+    });
+    expect(avisos).toEqual([]);
+
+    globalThis.fetch = jest.fn(() => respuesta(401));
+    await fetchWithHttpErrorInterceptor('/api/v1/salas/s1/participantes', {
+      method: 'POST',
+      rechazoEsperado: true,
+    });
+    expect(avisos).toEqual([{ estado: 401, url: '/api/v1/salas/s1/participantes' }]);
+  });
 });

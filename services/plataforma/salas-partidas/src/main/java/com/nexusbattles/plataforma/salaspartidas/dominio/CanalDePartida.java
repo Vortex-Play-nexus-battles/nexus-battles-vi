@@ -55,6 +55,20 @@ public interface CanalDePartida {
     }
 
     /**
+     * Alguien se rindio (canal 1.10.0, {@code partida.participante.rendido}):
+     * su barra pasa a cero y la vista lo dice por su nombre, en vez de dejar a
+     * los demas mirando una vida que ya no cuenta. Va ANTES del cambio de turno
+     * o del fin que provoca. Por omision se descarta, para los dobles que no lo
+     * miran.
+     *
+     * @param partida   la partida tras la rendicion
+     * @param idJugador quien se rindio
+     */
+    default void anunciarRendicion(Partida partida, java.util.UUID idJugador) {
+        // Sin canal que lo lleve no hay nada que decir.
+    }
+
+    /**
      * El combate termino — HU-JUE-005, RF-JUE-017, HU-JUE-014.
      *
      * <p>Se anuncia aparte del ultimo golpe: la vista tiene que poder pintar

@@ -102,7 +102,31 @@ public class RepositorioSalasJpa implements RepositorioDeSalas {
 
         Page<SalaEntidad> resultado = datos.listar(EstadoSala.delListado(),
                 modalidad, estado, PageRequest.of(pagina, tamano));
+        return pagina(resultado);
+    }
 
+    /**
+     * Varios estados a la vez (1.10.0): «disponibles» es ABIERTA + PRIVADA. Se
+     * cruzan con los del listado, asi que pedir un estado que no se lista
+     * (EN_JUEGO) sigue sin devolver nada.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public PaginaDeSalas listarEnEstados(Modalidad modalidad, java.util.Set<EstadoSala> estados, int pagina,
+                                         int tamano) {
+        if (estados == null || estados.isEmpty()) {
+            return listar(modalidad, (EstadoSala) null, pagina, tamano);
+        }
+        java.util.Set<EstadoSala> admitidos = java.util.EnumSet.noneOf(EstadoSala.class);
+        admitidos.addAll(EstadoSala.delListado());
+        admitidos.retainAll(estados);
+        if (admitidos.isEmpty()) {
+            return new PaginaDeSalas(java.util.List.of(), pagina, tamano, 0, 0);
+        }
+        return pagina(datos.listar(admitidos, modalidad, null, PageRequest.of(pagina, tamano)));
+    }
+
+    private static PaginaDeSalas pagina(Page<SalaEntidad> resultado) {
         return new PaginaDeSalas(
                 resultado.getContent().stream().map(SalaEntidad::aDominio).toList(),
                 resultado.getNumber(),

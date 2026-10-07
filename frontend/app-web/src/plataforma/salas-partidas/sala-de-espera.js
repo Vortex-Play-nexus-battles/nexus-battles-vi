@@ -22,6 +22,7 @@
  */
 
 import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
+import { h } from '../../comun/ui/dom.js';
 
 /** Clave de sessionStorage con la que el listado se entera de por que se volvio. */
 export const CLAVE_AVISO_DEL_LISTADO = 'nexus.avisoDeSala';
@@ -316,9 +317,239 @@ export function montarInvitacion(raiz, { sala, origen = '', copiar } = {}) {
 /** Lo que exige el servidor para empezar (`Sala.iniciarPartida`): dos, contando a la IA. */
 export const MINIMO_PARA_EMPEZAR = 2;
 
-/** Por que todavia no se puede empezar, dicho como lo dice el servidor. */
-export const MOTIVO_SIN_RIVAL =
-  'Hace falta al menos un rival para empezar: invita a alguien o crea la sala con héroe de la IA.';
+/**
+ * Por que todavia no se puede empezar. Revision del modo jugador del 6-oct
+ * (punto 13): antes era una frase larga y generica («Hace falta al menos un
+ * rival para empezar: invita a alguien o crea la sala…»); ahora lo dicen las
+ * plazas —la libre espera a alguien— y el boton de invitar. Esto queda como
+ * motivo corto del boton cerrado, para quien usa lector de pantalla.
+ */
+export const MOTIVO_SIN_RIVAL = 'Esperando rival para empezar.';
+
+/* ------------------------------------------------------------------------
+ * La sala de espera en tres zonas — revision del modo jugador del 6-oct,
+ * puntos 13, 14 y 16: A · estado, B · plazas, C · acciones.
+ * --------------------------------------------------------------------- */
+
+/** El nombre de la modalidad dentro de la sala (punto 11: «Solo»). */
+const MODALIDAD_EN_LA_SALA = Object.freeze({
+  UNO_CONTRA_UNO: '1 contra 1',
+  CONTRA_IA: 'Solo contra la IA',
+  HASTA_SEIS: 'Hasta seis',
+});
+
+/**
+ * Zona A · el titulo de la sala: la modalidad y, si hay, los equipos.
+ *
+ * @param {{modalidad?: string, tamanoEquipo?: number|null}|null} sala
+ * @returns {string}
+ */
+export function tituloDeLaSala(sala) {
+  const nombre = MODALIDAD_EN_LA_SALA[sala?.modalidad] ?? 'Sala de batalla';
+  const equipo = Number(sala?.tamanoEquipo);
+  return Number.isInteger(equipo) && equipo > 1 ? `${nombre} · Equipos de ${equipo}` : nombre;
+}
+
+/**
+ * Zona A · los datos de la sala, en el orden en que se leen: publica o
+ * privada, la apuesta y quien la abrio. Lo que no se sabe no se pone.
+ *
+ * @param {{privada?: boolean, recompensaCreditos?: number, apodoAnfitrion?: string|null}|null} sala
+ * @returns {Array<{texto: string, variante: string|null}>}
+ */
+export function datosDeLaSala(sala) {
+  const datos = [
+    sala?.privada
+      ? { texto: 'Privada', variante: 'privada' }
+      : { texto: 'Pública', variante: 'abierta' },
+  ];
+  const apuesta = Number(sala?.recompensaCreditos ?? 0);
+  datos.push({
+    texto: apuesta > 0 ? `Apuesta: ${apuesta} créditos` : 'Sin apuesta',
+    variante: null,
+  });
+  const apodo = typeof sala?.apodoAnfitrion === 'string' ? sala.apodoAnfitrion.trim() : '';
+  if (apodo) {
+    datos.push({ texto: `Anfitrión: ${apodo}`, variante: null });
+  }
+  return datos;
+}
+
+/**
+ * Quien esta dentro, en orden: la lista viva del canal si la hay; si no, la
+ * de la ficha (con apodos si los trae).
+ *
+ * @param {object|null} sala
+ * @param {string[]|null} participantes
+ * @returns {string[]}
+ */
+function idsDeLaSala(sala, participantes) {
+  if (Array.isArray(participantes)) {
+    return participantes;
+  }
+  if (Array.isArray(sala?.jugadores) && sala.jugadores.length) {
+    return sala.jugadores.map((jugador) => jugador.id);
+  }
+  return Array.isArray(sala?.participantes) ? sala.participantes : [];
+}
+
+/**
+ * Zona B · una plaza por puesto: las personas (con su apodo si la sala lo
+ * trae), los cupos de la IA y las libres hasta el aforo.
+ *
+ * Los apodos los da `GET /salas/{id}` (`jugadores`, salas-partidas 1.10.0)
+ * solo a quien esta dentro; sin ellos la plaza dice «Jugador», nunca un
+ * identificador.
+ *
+ * @param {object|null} sala tal como la devolvio `GET /salas/{id}`
+ * @param {{yo?: string|null, participantes?: string[]|null}} [opciones]
+ *   `participantes`: la lista viva del canal, si es mas nueva que la ficha
+ * @returns {Array<{tipo: 'jugador'|'ia'|'libre', id?: string, apodo?: string|null,
+ *   anfitrion?: boolean, heroe?: string|null, tu?: boolean}>}
+ */
+export function plazasDeLaSala(sala, { yo = null, participantes = null } = {}) {
+  const fichas = new Map(
+    (Array.isArray(sala?.jugadores) ? sala.jugadores : [])
+      .filter((jugador) => jugador && typeof jugador.id === 'string')
+      .map((jugador) => [jugador.id, jugador]),
+  );
+  const ids = idsDeLaSala(sala, participantes);
+  const plazas = ids.map((id) => {
+    const ficha = fichas.get(id);
+    return {
+      tipo: 'jugador',
+      id,
+      apodo: typeof ficha?.apodo === 'string' && ficha.apodo.trim() ? ficha.apodo.trim() : null,
+      anfitrion: ficha ? Boolean(ficha.anfitrion) : id === sala?.idAnfitrion,
+      heroe: typeof ficha?.heroe === 'string' ? ficha.heroe : null,
+      tu: Boolean(yo) && id === yo,
+    };
+  });
+  const maquinas = Number(sala?.heroesIA ?? (sala?.incluirHeroeIA ? 1 : 0)) || 0;
+  for (let i = 0; i < maquinas; i += 1) {
+    plazas.push({ tipo: 'ia' });
+  }
+  const aforo = Number(sala?.maximoParticipantes ?? 0);
+  while (plazas.length < aforo) {
+    plazas.push({ tipo: 'libre' });
+  }
+  return plazas;
+}
+
+/**
+ * El contador de plazas, a la vista: «1 / 2». Para el lector de pantalla
+ * esta {@link textoDeOcupacion}, con todas las letras.
+ *
+ * @param {{actual: number, maximo: number}} ocupacion
+ * @returns {string}
+ */
+export function contadorDePlazas(ocupacion) {
+  return `${Number(ocupacion?.actual ?? 0)} / ${Number(ocupacion?.maximo ?? 0)}`;
+}
+
+/**
+ * La linea de estado de la sala de espera.
+ *
+ * Punto 16: contra la IA (tu y la maquina, 2 de 2) no faltan jugadores:
+ * esta lista para combatir. Con rival, lo mismo; sin el, se espera.
+ *
+ * @param {{ocupacion: {actual: number, maximo: number}, esAnfitrion: boolean,
+ *   apodoAnfitrion?: string|null}} datos
+ * @returns {{texto: string, listo: boolean}}
+ */
+export function estadoDeLaEspera({ ocupacion, esAnfitrion, apodoAnfitrion = null }) {
+  const actual = Number(ocupacion?.actual ?? 0);
+  const maximo = Number(ocupacion?.maximo ?? 0);
+  if (actual < MINIMO_PARA_EMPEZAR) {
+    return { texto: 'Esperando rival…', listo: false };
+  }
+  if (!esAnfitrion) {
+    const quien =
+      typeof apodoAnfitrion === 'string' && apodoAnfitrion.trim()
+        ? apodoAnfitrion.trim()
+        : 'el anfitrión';
+    return { texto: `Listo para combatir · esperando a que ${quien} lo inicie`, listo: true };
+  }
+  const libres = Math.max(0, maximo - actual);
+  if (libres === 0) {
+    return { texto: 'Listo para combatir', listo: true };
+  }
+  const plazas = libres === 1 ? '1 plaza libre' : `${libres} plazas libres`;
+  return { texto: `Listo para combatir · ${plazas}`, listo: true };
+}
+
+/**
+ * Inicial con la que se pinta a alguien en su plaza.
+ *
+ * @param {string|null|undefined} apodo
+ * @returns {string}
+ */
+function inicialDe(apodo) {
+  const limpio = String(apodo ?? '').trim();
+  return limpio ? limpio[0].toUpperCase() : '?';
+}
+
+/**
+ * Pinta una plaza.
+ *
+ * @param {ReturnType<typeof plazasDeLaSala>[number]} plaza
+ * @returns {HTMLElement}
+ */
+function nodoDePlaza(plaza) {
+  if (plaza.tipo === 'ia') {
+    return h('li', {
+      clase: 'plaza plaza--ia',
+      datos: { plaza: 'ia' },
+      hijos: [
+        h('span', { clase: 'plaza__avatar', texto: 'IA', atributos: { 'aria-hidden': 'true' } }),
+        h('span', {
+          clase: 'plaza__cuerpo',
+          hijos: [
+            h('span', { clase: 'plaza__nombre', texto: 'Rival de la IA' }),
+            h('span', { clase: 'plaza__detalle', texto: 'Listo' }),
+          ],
+        }),
+      ],
+    });
+  }
+  if (plaza.tipo === 'libre') {
+    return h('li', {
+      clase: 'plaza plaza--libre',
+      datos: { plaza: 'libre' },
+      hijos: [
+        h('span', { clase: 'plaza__avatar', texto: '+', atributos: { 'aria-hidden': 'true' } }),
+        h('span', {
+          clase: 'plaza__cuerpo',
+          hijos: [
+            h('span', { clase: 'plaza__nombre', texto: 'Plaza libre' }),
+            h('span', { clase: 'plaza__detalle', texto: 'Esperando jugador…' }),
+          ],
+        }),
+      ],
+    });
+  }
+  const nombre = plaza.apodo ?? (plaza.tu ? 'Tú' : 'Jugador');
+  const detalle = [plaza.anfitrion ? 'Anfitrión' : null, plaza.heroe].filter(Boolean).join(' · ');
+  return h('li', {
+    clase: 'plaza plaza--ocupada',
+    datos: { plaza: 'jugador', ...(plaza.tu ? { tu: 'si' } : {}) },
+    hijos: [
+      h('span', {
+        clase: 'plaza__avatar',
+        texto: inicialDe(nombre),
+        atributos: { 'aria-hidden': 'true' },
+      }),
+      h('span', {
+        clase: 'plaza__cuerpo',
+        hijos: [
+          h('span', { clase: 'plaza__nombre', texto: nombre }),
+          detalle ? h('span', { clase: 'plaza__detalle', texto: detalle }) : null,
+        ],
+      }),
+      plaza.tu ? h('span', { clase: 'distintivo distintivo--activo', texto: 'Tú' }) : null,
+    ],
+  });
+}
 
 /**
  * Por que el anfitrion no puede empezar todavia, o null si puede.
@@ -337,7 +568,8 @@ export function motivoParaNoEmpezar(ocupacion) {
 }
 
 /**
- * Monta la sala de espera sobre `[data-zona="espera"]`.
+ * Monta la sala de espera sobre `[data-zona="sala-espera"]` y sus zonas de
+ * siempre (`espera`, `ocupacion`, `arranque`).
  *
  * @param {ParentNode} raiz
  * @param {object} opciones
@@ -349,15 +581,25 @@ export function motivoParaNoEmpezar(ocupacion) {
  * @param {(texto: string) => boolean|Promise<boolean>} [opciones.confirmar] dialogo de
  *   confirmacion (CA-05); puede ser el del kit, que devuelve una promesa
  * @param {(salida: {motivo: 'abandono'|'cancelada'}) => void} [opciones.alSalir]
- * @returns {{actualizar: (estado: {ocupacion: {actual: number, maximo: number}}) => void,
- *            ocultar: () => void, esAnfitrion: boolean}}
+ * @param {(idSala: string) => Promise<object>} [opciones.releer] vuelve a leer la
+ *   sala cuando el canal dice que alguien entro o salio: el aviso trae solo el
+ *   identificador y la plaza tiene que decir su apodo (punto 13)
+ * @returns {{actualizar: (estado: {ocupacion: {actual: number, maximo: number},
+ *            participantes?: string[]}) => void, ocultar: () => void, esAnfitrion: boolean,
+ *            sala: () => object}}
  */
 export function montarSalaDeEspera(
   raiz,
-  { sala, yo, abandonar, cancelar, confirmar = () => true, alSalir = () => {} },
+  { sala, yo, abandonar, cancelar, confirmar = () => true, alSalir = () => {}, releer = null },
 ) {
   const zona = raiz.querySelector('[data-zona="espera"]');
+  const tarjeta = raiz.querySelector('[data-zona="sala-espera"]');
   const ocupacion = raiz.querySelector('[data-zona="ocupacion"]');
+  const contador = raiz.querySelector('[data-zona="contador-plazas"]');
+  const zonaPlazas = raiz.querySelector('[data-zona="plazas"]');
+  const zonaDatos = raiz.querySelector('[data-zona="datos-sala"]');
+  const zonaTitulo = raiz.querySelector('[data-zona="titulo-sala"]');
+  const zonaEstado = raiz.querySelector('[data-zona="estado-espera"]');
   const aviso = raiz.querySelector('[data-zona="aviso-espera"]');
   const botonSalir = raiz.querySelector('[data-accion="salir-de-sala"]');
   const botonCancelar = raiz.querySelector('[data-accion="cancelar-sala"]');
@@ -365,14 +607,29 @@ export function montarSalaDeEspera(
   const avisoArranque = raiz.querySelector('[data-zona="aviso-arranque"]');
 
   const esAnfitrion = Boolean(yo) && sala?.idAnfitrion === yo;
+  let fichaActual = sala ?? {};
   let ocupacionActual = {
     actual: Number(sala?.ocupacion ?? 1),
     maximo: Number(sala?.maximoParticipantes ?? 0),
   };
+  /** La lista viva de quien esta dentro, segun el canal; null mientras no hable. */
+  let participantesVivos = null;
 
   const pintarOcupacion = () => {
     if (ocupacion) {
       ocupacion.textContent = textoDeOcupacion(ocupacionActual);
+    }
+    if (contador) {
+      contador.textContent = contadorDePlazas(ocupacionActual);
+    }
+    const estado = estadoDeLaEspera({
+      ocupacion: ocupacionActual,
+      esAnfitrion,
+      apodoAnfitrion: fichaActual?.apodoAnfitrion ?? null,
+    });
+    if (zonaEstado) {
+      zonaEstado.textContent = estado.texto;
+      zonaEstado.dataset.listo = estado.listo ? 'si' : 'no';
     }
     // El arranque es del anfitrion: se cierra con su motivo mientras falte
     // rival y se abre en cuanto entra alguien (el canal avisa).
@@ -394,6 +651,28 @@ export function montarSalaDeEspera(
     }
   };
 
+  /** Zonas A y B: titulo, datos y una plaza por puesto. */
+  const pintarSala = () => {
+    if (zonaTitulo) {
+      zonaTitulo.textContent = tituloDeLaSala(fichaActual);
+    }
+    if (zonaDatos) {
+      zonaDatos.replaceChildren(
+        ...datosDeLaSala(fichaActual).map((dato) =>
+          h('li', {
+            clase: dato.variante ? `distintivo distintivo--${dato.variante}` : 'distintivo',
+            texto: dato.texto,
+          }),
+        ),
+      );
+    }
+    if (zonaPlazas) {
+      zonaPlazas.replaceChildren(
+        ...plazasDeLaSala(fichaActual, { yo, participantes: participantesVivos }).map(nodoDePlaza),
+      );
+    }
+  };
+
   const decir = (texto) => {
     if (aviso) {
       aviso.textContent = texto ?? '';
@@ -403,6 +682,9 @@ export function montarSalaDeEspera(
   const ocultar = () => {
     if (zona) {
       zona.hidden = true;
+    }
+    if (tarjeta) {
+      tarjeta.hidden = true;
     }
   };
 
@@ -418,7 +700,45 @@ export function montarSalaDeEspera(
   if (zona) {
     zona.hidden = !admiteSalir;
   }
+  if (tarjeta) {
+    tarjeta.hidden = !admiteSalir;
+  }
+  pintarSala();
   pintarOcupacion();
+
+  /** Una relectura a la vez: el canal puede avisar de dos entradas seguidas. */
+  let releyendo = null;
+  let otraVez = false;
+  const releerSala = () => {
+    if (typeof releer !== 'function' || !sala?.id) {
+      return;
+    }
+    if (releyendo) {
+      otraVez = true;
+      return;
+    }
+    releyendo = Promise.resolve()
+      .then(() => releer(sala.id))
+      .then((nueva) => {
+        if (nueva && nueva.id === sala.id) {
+          fichaActual = nueva;
+          // La ficha recien leida manda sobre la lista del canal: ya la incluye.
+          participantesVivos = null;
+          pintarSala();
+          pintarOcupacion();
+        }
+      })
+      .catch(() => {
+        // Sin relectura, las plazas siguen con lo que dijo el canal.
+      })
+      .finally(() => {
+        releyendo = null;
+        if (otraVez) {
+          otraVez = false;
+          releerSala();
+        }
+      });
+  };
 
   const ejecutar = async (boton, accion, motivo) => {
     boton.disabled = true;
@@ -449,10 +769,16 @@ export function montarSalaDeEspera(
     actualizar(estado) {
       if (estado?.ocupacion) {
         ocupacionActual = { ...estado.ocupacion };
+        if (Array.isArray(estado.participantes)) {
+          participantesVivos = [...estado.participantes];
+        }
+        pintarSala();
         pintarOcupacion();
+        releerSala();
       }
     },
     ocultar,
     esAnfitrion,
+    sala: () => fichaActual,
   };
 }

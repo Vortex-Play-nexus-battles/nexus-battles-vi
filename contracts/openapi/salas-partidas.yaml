@@ -150,7 +150,28 @@ info:
       heroe (422) → creditos (422). Antes el heroe iba antes que la sala, y
       con apuesta el libro anotaba una reserva y su devolucion por un ingreso
       que nunca podia prosperar. Mismos codigos y tipos que en 1.8.x.
-  version: 1.9.0
+
+    Cambios 1.10.0 (revision del modo jugador del 6-oct), aditivos:
+
+    - `listarSalas`: `estado` admite varios valores (`?estado=ABIERTA&estado=PRIVADA`
+      o `?estado=ABIERTA,PRIVADA`). «Jugar online» pide por omision las salas a
+      las que se puede entrar. Un solo valor se comporta como en 1.9.0. El
+      orden es fijo: la sala mas reciente primero.
+    - `Sala` gana `apodoAnfitrion` («Sala privada · Creada por …») y, solo para
+      quien esta dentro, `jugadores` (las plazas de la sala de espera con su
+      apodo). Los apodos son la foto que la sala guarda de cada ficha al
+      entrar (sacada del token); no se leen de la base de cuentas.
+    - Nueva `POST /salas/{idSala}/invitaciones` (`invitarASala`): el anfitrion
+      invita a un jugador que eligio buscandolo por su apodo
+      (`GET /perfiles/publicos` de ms-identidad). Al invitado le llega un aviso
+      de tipo `INVITACION_SALA` en su bandeja. Sin sistema de amigos: la
+      invitacion es el aviso.
+    - Nueva `POST /partidas/{idPartida}/rendicion` (`rendirse`): «Salir» en
+      pleno combate cuenta como derrota. El heroe de quien se rinde queda
+      fuera de combate; si su bando se queda sin nadie en pie, gana el otro
+      con la regla de siempre y la apuesta se liquida igual que con el ultimo
+      golpe. Idempotente. El ganador nunca lo manda el cliente.
+  version: 1.10.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -285,9 +306,19 @@ paths:
             $ref: '#/components/schemas/Modalidad'
         - name: estado
           in: query
-          description: Filtro por estado de la sala
+          description: |
+            Filtro por estado de la sala. Desde 1.10.0 se puede repetir o separar
+            con comas: `ABIERTA,PRIVADA` son las salas a las que se puede entrar,
+            lo que «Jugar online» pide por omision. Un estado que no aparece en
+            el listado (`EN_JUEGO`, `CANCELADA`, `FINALIZADA`) no devuelve nada
+            aunque se pida. Sin el parametro no se filtra. Las salas salen
+            siempre de la mas reciente a la mas antigua.
+          style: form
+          explode: true
           schema:
-            $ref: '#/components/schemas/EstadoSala'
+            type: array
+            items:
+              $ref: '#/components/schemas/EstadoSala'
         # RETIRADO: buscaba por nombre de sala, y las salas no tienen nombre.
         # Ningun requisito pide buscar en el listado; RF-JUE-002 solo habla de
         # seleccionar una sala de la lista.
@@ -472,7 +503,9 @@ paths:
       description: |
         Saca al jugador autenticado de la sala antes de que comience la
         partida y le devuelve los creditos comprometidos. Una vez iniciado el
-        combate, abandonar cuenta como derrota y no hay devolucion.
+        combate esta ruta ya no sirve (`409`): salir de un combate es
+        rendirse, `POST /partidas/{idPartida}/rendicion` (1.10.0), que cuenta
+        como derrota y liquida la apuesta con las reglas de la partida.
       operationId: abandonarSala
       responses:
         '204':
@@ -481,6 +514,92 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # 1.10.0 · Revision del modo jugador (6-oct, punto 13) — Invitar por apodo
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/invitaciones:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Salas]
+      summary: Invitar a un jugador a la sala
+      description: |
+        1.10.0. Solo el anfitrion. La vista busca al jugador por su apodo con
+        `GET /api/v1/perfiles/publicos?apodo=` de ms-identidad (minimo 3
+        caracteres) y manda aqui su identificador, que el jugador nunca ve.
+
+        Al invitado le llega un aviso en su bandeja de notificaciones
+        (`POST /internal/notifications` de `notificaciones.yaml`, sin cambios
+        en ese contrato):
+
+        - `tipo`: `INVITACION_SALA`
+        - `id`: `sala:{idSala}:invitacion:{idInvitado}` y, si la sala es
+          privada, `:codigo:{codigoInvitacion}`. Es estable por sala e
+          invitado: invitar otra vez a la misma persona no le manda un
+          segundo aviso (`enviada: false`). La bandeja lo lee para ofrecer
+          «Unirme» sin que notificaciones sepa nada de salas.
+        - `titulo`: «{apodoAnfitrion} te invita a una batalla»; `cuerpo` con
+          la modalidad, la apuesta y, en una privada, el codigo.
+
+        No es un sistema de amigos: no se guarda nada aparte del aviso.
+      operationId: invitarASala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitacionRequest'
+      responses:
+        '200':
+          description: Invitacion enviada, o ya enviada antes (`enviada` lo dice).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionResponse'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: '`invitacion-no-permitida` — solo quien creo la sala puede invitar.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: |
+            Distinguir por `type`: `sala-no-encontrada`, o
+            `invitacion-no-permitida` si no hay una cuenta activa con ese
+            identificador (no se dice cual de las dos cosas).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            `invitacion-no-permitida`: el jugador ya esta dentro, la sala esta
+            completa o ya no espera jugadores (cancelada, en juego, terminada).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              examples:
+                completa:
+                  value:
+                    type: 'https://nexusbattles.local/errores/invitacion-no-permitida'
+                    title: 'No se pudo invitar'
+                    status: 409
+                    detail: 'La sala está completa.'
+        '422':
+          description: '`invitacion-no-permitida` — el anfitrion se invito a si mismo.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: |
+            `invitacion-no-permitida` — ms-identidad o notificaciones no
+            contestaron: la invitacion NO salio, y se dice.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
 
   # ---------------------------------------------------------------------------
   # RFINAL-04 · HU-SAL-002 — El codigo primero (1.9.0), sin efectos
@@ -683,6 +802,67 @@ paths:
                 detail: 'Solo quienes juegan una partida pueden ver su estado.'
         '404':
           description: Partida no encontrada
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
+  # 1.10.0 · Revision del modo jugador (6-oct, punto 19) — Salir = rendirse
+  # ---------------------------------------------------------------------------
+  /partidas/{idPartida}/rendicion:
+    parameters:
+      - name: idPartida
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Partidas]
+      summary: Rendirse (salir del combate cuenta como derrota)
+      description: |
+        1.10.0. Quien se rinde sale del token, nunca del cuerpo; solo un
+        participante humano de la partida puede hacerlo (rol JUGADOR).
+
+        El heroe de quien se rinde queda fuera de combate, como si hubiera
+        caido; no se inventa un golpe ni un ejecutor. A partir de ahi manda
+        la regla de siempre:
+
+        - Si su bando se queda sin nadie en pie, la partida termina: gana
+          quien sigue en pie, la apuesta se liquida con las reglas de la
+          partida (las mismas que con el ultimo golpe) y se acredita lo de
+          jugar. Llega `partida.finalizada` por el canal.
+        - Si no termina y era su turno, el turno pasa (y juega la maquina si
+          le toca), con motivo `RENDICION` en `partida.turno.cambiado`.
+        - Si no era su turno, el combate sigue sin el.
+
+        Antes que todo eso, a todos les llega `partida.participante.rendido`
+        (AsyncAPI). Idempotente: con la partida terminada o el heroe ya
+        fuera de combate devuelve la partida tal cual y no anuncia nada.
+      operationId: rendirse
+      responses:
+        '200':
+          description: La partida despues de la rendicion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            `partida-ajena`: quien llama no combate en esta partida. Un rol
+            de operacion no se rinde por nadie.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: Partida no encontrada
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            `accion-no-permitida` con motivo `RENDICION_NO_PERMITIDA`: no se
+            conoce el heroe del participante (partidas anteriores a las fichas).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -1298,11 +1478,14 @@ components:
         ejemplos de la Pantalla 2 resuelven como
         «4 de 6 jugadores · 320 creditos · Con heroe de la IA».
 
-        Por eso aqui NO viajan ni el apodo del anfitrion, ni el heroe de cada
-        participante, ni un indicador de preparacion: ninguna pantalla los
-        muestra y ningun requisito los pide. Un participante se identifica por
-        su UUID, que es lo unico que este servicio conoce — el apodo pertenece
-        al modulo de cuentas y no se replica aqui (regla 7 de plataforma).
+        Hasta 1.9.0 aqui NO viajaban apodos: ninguna pantalla los mostraba.
+        1.10.0 (revision del modo jugador del 6-oct): dos pantallas los piden
+        —la entrada a una sala privada («Sala privada · Creada por …») y las
+        plazas de la sala de espera— y viajan `apodoAnfitrion` y, solo para
+        quien esta dentro, `jugadores`. No se replica el modulo de cuentas
+        (regla 7): es la foto que la sala ya guarda de cada participante al
+        entrar, sacada de su token. El identificador sigue sin mostrarse a
+        nadie; la interfaz pinta el apodo.
       required: [id, estado, modalidad, maximoParticipantes, ocupacion, recompensaCreditos, incluirHeroeIA, heroesIA]
       properties:
         id: { type: string, format: uuid }
@@ -1366,6 +1549,60 @@ components:
             nuevo, compatible hacia atras: ningun consumidor que lo ignore se
             rompe.
           example: 'H7KM-3PQX'
+        apodoAnfitrion:
+          type: [string, 'null']
+          description: |
+            1.10.0. Apodo del anfitrion al abrir la sala (foto de su token). Nulo
+            en salas anteriores a las fichas de participante: no se inventa.
+          example: 'Perez_Bro15'
+        jugadores:
+          type: array
+          description: |
+            1.10.0. Quien esta dentro, en el orden en que entro, con su apodo.
+            **Solo viaja a quien esta dentro de la sala**; a los demas el campo
+            ni aparece. Los cupos de la IA no son personas y no estan aqui: los
+            cuenta `heroesIA`.
+          items:
+            $ref: '#/components/schemas/JugadorEnSala'
+
+    JugadorEnSala:
+      type: object
+      description: 1.10.0. Una persona dentro de la sala, para las plazas de la sala de espera.
+      required: [id, anfitrion]
+      properties:
+        id: { type: string, format: uuid }
+        apodo:
+          type: [string, 'null']
+          description: Nombre visible al entrar (foto del token). Nulo si la sala no guardo su ficha.
+        anfitrion: { type: boolean }
+        heroe:
+          type: [string, 'null']
+          description: Nombre del heroe con el que entro, o nulo si no se conoce.
+
+    InvitacionRequest:
+      type: object
+      description: 1.10.0. A quien se invita. El anfitrion sale del token.
+      required: [idJugador]
+      properties:
+        idJugador:
+          type: string
+          format: uuid
+          description: El `uid` del perfil publico que el anfitrion eligio por su apodo.
+
+    InvitacionResponse:
+      type: object
+      description: 1.10.0. Resultado de la invitacion.
+      required: [idJugador, apodo, enviada]
+      properties:
+        idJugador: { type: string, format: uuid }
+        apodo:
+          type: string
+          description: Apodo del invitado, para el mensaje «Invitación enviada a …».
+        enviada:
+          type: boolean
+          description: |
+            `true` si el aviso salio ahora; `false` si ese jugador ya tenia la
+            invitacion a esta sala (no se manda otra).
 
     PaginaDeSalas:
       type: object

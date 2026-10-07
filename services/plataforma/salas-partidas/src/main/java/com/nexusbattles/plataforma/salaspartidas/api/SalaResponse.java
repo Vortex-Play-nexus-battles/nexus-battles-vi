@@ -2,11 +2,13 @@ package com.nexusbattles.plataforma.salaspartidas.api;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.nexusbattles.plataforma.salaspartidas.dominio.EstadoSala;
+import com.nexusbattles.plataforma.salaspartidas.dominio.FichaDeParticipante;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Modalidad;
 import com.nexusbattles.plataforma.salaspartidas.dominio.Sala;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -17,12 +19,15 @@ import java.util.UUID;
  * unica linea de texto — y sus ocho ejemplos de la Pantalla 2 la resuelven como
  * «4 de 6 jugadores · 320 creditos · Con heroe de la IA». De ahi salen
  * {@code estado}, {@code ocupacion}, {@code maximoParticipantes},
- * {@code recompensaCreditos} e {@code incluirHeroeIA}, y nada mas.
+ * {@code recompensaCreditos} e {@code incluirHeroeIA}.
  *
- * <p>No viaja el apodo de nadie. El apodo pertenece al modulo de cuentas y este
- * servicio no puede leer su base de datos (regla 7 de plataforma) ni tiene
- * motivo para copiarlo: ninguna pantalla de HU-SAL-002 lo muestra. Un
- * participante es un identificador.
+ * <p><b>Apodos (1.10.0).</b> La revision del modo jugador del 6-oct pide dos
+ * pantallas que ahora si los muestran: la entrada a una sala privada («Sala
+ * privada · Creada por Perez_Bro15») y la sala de espera con sus plazas
+ * («Jugador 1 · Jugador 2 · 1/2»). El apodo NO se lee de la base de cuentas
+ * (regla 7): es la foto que la sala ya guarda de cada ficha al entrar, sacada
+ * del token ({@link FichaDeParticipante#apodo()}). {@code apodoAnfitrion} viaja
+ * siempre; la lista {@code jugadores}, solo a quien esta dentro.
  *
  * <p><b>El codigo de invitacion es la excepcion, y por eso hay dos fabricas.</b>
  * {@link #desde(Sala)} lo omite siempre; {@link #paraElAnfitrion(Sala)} lo
@@ -55,11 +60,29 @@ public record SalaResponse(
          * llamado asi y que a esta persona le toco un nulo.
          */
         @JsonInclude(JsonInclude.Include.NON_NULL)
-        String codigoInvitacion) {
+        String codigoInvitacion,
 
-    /** La sala sin su codigo de invitacion. Es lo que ve todo el mundo. */
+        /* Apodo del anfitrion en el momento de abrirla (1.10.0); nulo si la sala no guarda su ficha. */
+        String apodoAnfitrion,
+
+        /* Quien hay dentro, con su apodo (1.10.0). Solo a quien esta dentro; a los demas no se les manda. */
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        List<JugadorEnSala> jugadores) {
+
+    /**
+     * Un jugador dentro de la sala, para las plazas de la sala de espera.
+     *
+     * @param id        su identificador
+     * @param apodo     nombre visible al entrar (foto del token)
+     * @param anfitrion si abrio la sala
+     * @param heroe     nombre del heroe con el que entro, o nulo si no se conoce
+     */
+    public record JugadorEnSala(UUID id, String apodo, boolean anfitrion, String heroe) {
+    }
+
+    /** La sala sin su codigo de invitacion ni la lista de quien esta dentro. Es lo que ve todo el mundo. */
     static SalaResponse desde(Sala sala) {
-        return construir(sala, null);
+        return construir(sala, null, null, false);
     }
 
     /**
@@ -70,7 +93,7 @@ public record SalaResponse(
      * codigo que dar.
      */
     static SalaResponse paraElAnfitrion(Sala sala) {
-        return construir(sala, sala.codigoInvitacion());
+        return construir(sala, sala.codigoInvitacion(), null, true);
     }
 
     /** El codigo solo si quien pregunta es el anfitrion; si no, la sala pelada. */
@@ -80,17 +103,17 @@ public record SalaResponse(
 
     /**
      * Como {@link #segunQuienPregunta(Sala, UUID)}, con la partida de la sala si
-     * ya arranco (R18): es lo que deja volver al combate tras recargar.
+     * ya arranco (R18): es lo que deja volver al combate tras recargar. Quien
+     * esta dentro recibe ademas la lista de jugadores, con sus apodos.
      */
     static SalaResponse segunQuienPregunta(Sala sala, UUID idJugador, UUID idPartida) {
-        return construir(sala, sala.esAnfitrion(idJugador) ? sala.codigoInvitacion() : null, idPartida);
+        boolean dentro = idJugador != null && sala.participantes().contains(idJugador);
+        return construir(sala, sala.esAnfitrion(idJugador) ? sala.codigoInvitacion() : null, idPartida, dentro);
     }
 
-    private static SalaResponse construir(Sala sala, String codigoInvitacion) {
-        return construir(sala, codigoInvitacion, null);
-    }
-
-    private static SalaResponse construir(Sala sala, String codigoInvitacion, UUID idPartida) {
+    private static SalaResponse construir(Sala sala, String codigoInvitacion, UUID idPartida,
+                                          boolean conJugadores) {
+        FichaDeParticipante delAnfitrion = sala.fichaDe(sala.idAnfitrion());
         return new SalaResponse(
                 sala.id(),
                 sala.estado(),
@@ -108,6 +131,20 @@ public record SalaResponse(
                 // rellena quien la busca: la consulta de una sala concreta.
                 idPartida,
                 sala.creadaEn(),
-                codigoInvitacion);
+                codigoInvitacion,
+                delAnfitrion == null ? null : delAnfitrion.apodo(),
+                conJugadores ? jugadoresDe(sala) : null);
+    }
+
+    /** En el orden en que entraron; sin ficha (salas anteriores a V7) el apodo no se inventa. */
+    private static List<JugadorEnSala> jugadoresDe(Sala sala) {
+        Map<UUID, FichaDeParticipante> fichas = sala.fichas();
+        return sala.participantes().stream()
+                .map(id -> {
+                    FichaDeParticipante ficha = fichas.get(id);
+                    return new JugadorEnSala(id, ficha == null ? null : ficha.apodo(), sala.esAnfitrion(id),
+                            ficha == null || ficha.heroe() == null ? null : ficha.heroe().nombre());
+                })
+                .toList();
     }
 }

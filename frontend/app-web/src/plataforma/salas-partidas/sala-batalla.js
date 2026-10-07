@@ -137,7 +137,9 @@ function pintarConexion(zona, hayCanal) {
   if (hayCanal && (actual === 'reconectando' || actual === 'sin-conexion')) {
     return;
   }
-  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion' });
+  // Revisión del modo jugador del 6-oct (puntos 13 y 18): discreto, la
+  // píldora solo se ve cuando hay algo que contar; «Conectado» no se enseña.
+  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion', discreto: true });
 }
 
 /**
@@ -175,6 +177,9 @@ function explicarVacio(zona, texto) {
  *   abierto aunque todavia no haya partida a la que suscribirse (la sala de
  *   espera sigue la SALA por el canal). Sin el, el indicador se deduce de
  *   `suscribir`.
+ * @param {boolean} [opciones.salaDeEspera] se esta en la sala de espera: se ve
+ *   su tarjeta, no el estado vacio de «no hay ninguna batalla» (revision del
+ *   modo jugador del 6-oct, puntos 13 y 14)
  */
 export function montarSalaBatalla(
   raiz,
@@ -187,6 +192,7 @@ export function montarSalaBatalla(
     turnoActual = null,
     presentar = false,
     canalConectado,
+    salaDeEspera = false,
   } = {},
 ) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
@@ -218,7 +224,7 @@ export function montarSalaBatalla(
   }
 
   if (zonaSinPartida) {
-    zonaSinPartida.hidden = hayPartida;
+    zonaSinPartida.hidden = hayPartida || salaDeEspera;
   }
   if (panel) {
     panel.hidden = !hayPartida;

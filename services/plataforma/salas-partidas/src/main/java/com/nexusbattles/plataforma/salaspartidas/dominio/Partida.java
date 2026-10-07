@@ -308,6 +308,45 @@ public class Partida {
     }
 
     /**
+     * Se rinde — revision del modo jugador del 6-oct (salas-partidas.yaml 1.10.0,
+     * {@code POST /partidas/{id}/rendicion}).
+     *
+     * <p>Rendirse es dejar el combate: el heroe de quien se rinde queda fuera de
+     * combate, igual que si hubiera caido, y a partir de ahi manda la regla de
+     * siempre ({@link #terminarSiSoloQuedaUno}): si su bando se queda sin nadie
+     * en pie, gana el otro. El ganador lo decide la partida, nunca quien llama.
+     * No se inventa un golpe: no hay dano ni ejecutor, solo la retirada.
+     *
+     * <p>Idempotente: rendirse dos veces, o con el heroe ya caido, no cambia
+     * nada.
+     *
+     * @return quien se rindio, ya fuera de combate
+     * @throws PartidaYaTerminada  si el combate ya acabo
+     * @throws SinObjetivoPosible  si no juega esta partida
+     * @throws AccionNoPermitida   si es la maquina, o si no se conoce su heroe
+     */
+    public ParticipanteDePartida rendir(UUID idJugador) {
+        if (estado == EstadoPartida.FINALIZADA) {
+            throw new PartidaYaTerminada(id);
+        }
+        int posicion = indiceDe(idJugador, "Ese jugador no esta en esta partida.");
+        ParticipanteDePartida quien = participantes.get(posicion);
+        if (quien.esIA()) {
+            throw new AccionNoPermitida("RENDICION_NO_PERMITIDA", "La IA no se rinde.");
+        }
+        if (quien.heroe() == null) {
+            throw new AccionNoPermitida("RENDICION_NO_PERMITIDA",
+                    "Sin héroe conocido no se le puede dar por fuera de combate.");
+        }
+        if (!quien.enPie()) {
+            return quien;
+        }
+        ParticipanteDePartida rendido = quien.conHeroe(quien.heroe().conVida(0));
+        participantes.set(posicion, rendido);
+        return rendido;
+    }
+
+    /**
      * Guarda el estado de todos los combatientes de una respuesta del motor.
      * Uno que no este en la partida se ignora: el motor solo devuelve a quien
      * se le mando.

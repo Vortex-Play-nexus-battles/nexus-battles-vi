@@ -276,6 +276,12 @@ test.describe('Guion de demostración del Sprint 2', () => {
 
     await conSesion(page, anfitriona);
     await page.goto(`${BORDE}${VISTAS}/plataforma/salas-partidas/batallas.html`);
+    // Revisión del 6-oct (punto 8): por omisión se ven las salas a las que se
+    // puede entrar; una contra la IA nace llena y sale con «Todos».
+    await expect(page.locator('[data-zona="subtitulo"]')).not.toHaveText('Buscando batallas', {
+      timeout: 20000,
+    });
+    await page.locator('[name="estado"]').selectOption('TODOS');
     await expect(page.locator('body')).toContainText(/héroe de la IA/i, { timeout: 20000 });
     const captura = await capturar(page, 6, 'modalidades-en-el-listado');
     anotar(6, 'Modalidades: 1v1, contra la IA y hasta seis (HU-SAL-004)', {

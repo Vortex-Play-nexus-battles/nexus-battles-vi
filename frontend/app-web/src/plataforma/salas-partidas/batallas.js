@@ -21,6 +21,7 @@ import {
   listarSalas,
   ingresarASala,
   comprobarIngreso,
+  obtenerSala,
   esSalaPrivada,
   esHeroeNoDisponible,
 } from './cliente-salas.js';
@@ -49,6 +50,49 @@ const CLASE_DE_ESTADO = {
   EN_JUEGO: 'en-juego',
   PRIVADA: 'privada',
 };
+
+/**
+ * Las salas a las que se puede entrar — revision del modo jugador del 6-oct,
+ * punto 8: «en batallas mostrar cuando entra las que están abiertas». Es lo
+ * que pide el listado por omision (`estado` repetible, salas-partidas 1.10.0);
+ * una sala llena, o una contra la IA (nace llena), no es una batalla a la que
+ * unirse.
+ */
+export const ESTADOS_DISPONIBLES = 'ABIERTA,PRIVADA';
+
+/** Valor del filtro «Todos»: sin filtro de estado. */
+export const ESTADO_TODOS = 'TODOS';
+
+/**
+ * Lo que se pide al servicio segun el filtro de estado elegido.
+ *
+ * La opcion por omision (valor vacio) son las disponibles; «Todos» es no
+ * filtrar; el resto, el estado tal cual.
+ *
+ * @param {string|null|undefined} valor el del `<select name="estado">`
+ * @returns {string} el parametro `estado` de `listarSalas` ('' = sin filtro)
+ */
+export function estadoParaLaApi(valor) {
+  if (!valor) {
+    return ESTADOS_DISPONIBLES;
+  }
+  return valor === ESTADO_TODOS ? '' : valor;
+}
+
+/**
+ * «Creada por …» de una sala privada (punto 10), o null si no se sabe: las
+ * salas anteriores a las fichas no guardaban el apodo, y no se inventa.
+ *
+ * @param {{apodoAnfitrion?: string|null}|null|undefined} sala
+ * @returns {string|null}
+ */
+export function textoDelCreador(sala) {
+  const apodo = typeof sala?.apodoAnfitrion === 'string' ? sala.apodoAnfitrion.trim() : '';
+  return apodo ? `Creada por ${apodo}` : null;
+}
+
+/** Lo que dice el formulario de una sala privada cuando el codigo no vale (punto 10). */
+export const CODIGO_NO_VALIDO = 'Código de invitación no válido. Compruébalo con quien te invitó.';
 
 /**
  * Linea de metadatos de la tarjeta, calcada de los ejemplos del diseno.
@@ -252,6 +296,9 @@ export function montarBatallas(raiz, puertos = {}) {
     ingresar = ingresarASala,
     // RFINAL-04 — «¿me dejaría entrar con este código?», sin efectos (1.9.0).
     comprobar = comprobarIngreso,
+    // Punto 10 — «Creada por …» de una sala privada que no esta en la pagina
+    // (un enlace de invitacion con un codigo que no vale).
+    obtener = obtenerSala,
     alEntrar = () => {},
     // FI-R6 — a donde se va a verificar el heroe. Inyectable para que las
     // pruebas no naveguen de verdad.
@@ -289,13 +336,18 @@ export function montarBatallas(raiz, puertos = {}) {
   /** Salas ya suscritas en esta sesion: el cliente no expone UNSUBSCRIBE. */
   const seguidas = new Set();
 
+  /**
+   * Punto 9 de la revision del 6-oct: «Canal en tiempo real conectado: las
+   * salas se actualizan solas» sobraba. Conectado no se dice (es lo normal);
+   * solo se ve cuando las salas dejan de actualizarse solas.
+   */
   function marcarCanal(texto, estadoCanal) {
     if (!zonaCanal) {
       return;
     }
     zonaCanal.textContent = texto;
     zonaCanal.dataset.estado = estadoCanal;
-    zonaCanal.hidden = false;
+    zonaCanal.hidden = estadoCanal === 'conectado';
   }
 
   function repintarTarjeta(sala, estado) {
@@ -331,7 +383,7 @@ export function montarBatallas(raiz, puertos = {}) {
     .then((cliente) => {
       if (!cliente) {
         marcarCanal(
-          'Sin canal en tiempo real: inicia sesión para ver los cambios al instante.',
+          'Las salas no se actualizan solas: inicia sesión para verlas cambiar al momento.',
           'sin-sesion',
         );
         return;
@@ -341,12 +393,12 @@ export function montarBatallas(raiz, puertos = {}) {
         cliente.alCerrar = () => {
           canal = null;
           marcarCanal(
-            'Canal en tiempo real desconectado. Recarga para volver a seguir las salas.',
+            'Las salas han dejado de actualizarse solas. Recarga la página para verlas al día.',
             'cerrado',
           );
         };
       }
-      marcarCanal('Canal en tiempo real conectado: las salas se actualizan solas.', 'conectado');
+      marcarCanal('', 'conectado');
       seguirVisibles();
     })
     .catch((error) => {
@@ -428,6 +480,9 @@ export function montarBatallas(raiz, puertos = {}) {
     zonaSalas.hidden = false;
     vaciar(zonaSalas);
 
+    // Punto 8: sin filtros (lo que se ve al entrar) el total son las salas
+    // abiertas a las que se puede entrar; con filtros, lo que da el filtro, y
+    // se dice asi para no confundir una cosa con la otra.
     const filtrada = hayFiltros();
     subtitulo.textContent = subtituloDeSalas(pagina.totalElementos, { filtrada });
 
@@ -497,7 +552,7 @@ export function montarBatallas(raiz, puertos = {}) {
         await listar({
           pagina: paginaActual,
           modalidad: filtroModalidad?.value,
-          estado: filtroEstado?.value,
+          estado: estadoParaLaApi(filtroEstado?.value),
         }),
       );
     } catch (error) {
@@ -551,6 +606,16 @@ export function montarBatallas(raiz, puertos = {}) {
     }
 
     zonaInvitacion.hidden = false;
+    // Otra sala privada con el formulario abierto: lo intentado y lo escrito
+    // eran para la anterior.
+    const anterior = zonaInvitacion.dataset.salaInvitada;
+    if (anterior && anterior !== idSala) {
+      delete zonaInvitacion.dataset.intentado;
+      const escrito = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
+      if (escrito) {
+        escrito.value = '';
+      }
+    }
     // `data-sala-invitada` y no `data-sala`: la escucha de las tarjetas esta
     // delegada en TODA la vista y busca `closest('[data-sala]')`. Con ese
     // nombre, pulsar «Entrar con el codigo» disparaba **dos** ingresos: el del
@@ -561,18 +626,19 @@ export function montarBatallas(raiz, puertos = {}) {
     // intentos de reserva.
     zonaInvitacion.dataset.salaInvitada = idSala;
     const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
-    const aviso = zonaInvitacion.querySelector('[data-zona="aviso-codigo"]');
 
     // Que el codigo ya se intento es una propiedad de la interaccion, no del
     // parametro que llega por el catch. Lo marca el propio formulario al
-    // enviarse, asi que el mensaje es correcto aunque el rechazo vuelva por un
-    // camino distinto del que lo pidio.
-    const yaIntento = zonaInvitacion.dataset.intentado === 'si';
-    if (aviso) {
-      aviso.textContent = yaIntento
-        ? 'Ese código no vale para esta sala. Compruébalo con quien te invitó.'
-        : (problema.detalle ?? 'Pide el código a quien creó la sala.');
-    }
+    // enviarse (o el enlace de invitacion, que llega con un codigo), asi que
+    // el mensaje es correcto aunque el rechazo vuelva por otro camino.
+    //
+    // Revision del modo jugador del 6-oct (punto 10): antes de intentarlo no
+    // se dice nada —ni la frase generica del servidor «A una sala privada se
+    // entra por invitacion…» ni un aviso rojo—: el titulo, quien la creo y el
+    // campo bastan. El rojo es para el error de verdad.
+    const yaIntento = zonaInvitacion.dataset.intentado === 'si' || Boolean(codigoPrevio);
+    decirEnElFormulario(yaIntento ? CODIGO_NO_VALIDO : '');
+    pintarCreador(idSala);
     if (campo) {
       // No se pisa lo que la persona tenga escrito. Un rechazo que llega
       // mientras alguien teclea no puede borrarle el campo: pasa cuando se
@@ -585,17 +651,85 @@ export function montarBatallas(raiz, puertos = {}) {
     }
   }
 
+  /**
+   * El mensaje del formulario de la sala privada: vacio y oculto, o un error
+   * (en rojo, `campo__error`, y el campo marcado como invalido).
+   *
+   * @param {string} texto
+   */
+  function decirEnElFormulario(texto) {
+    const aviso = zonaInvitacion?.querySelector('[data-zona="aviso-codigo"]');
+    const campo = zonaInvitacion?.querySelector('[name="codigoInvitacion"]');
+    if (aviso) {
+      aviso.textContent = texto;
+      aviso.hidden = !texto;
+    }
+    if (campo) {
+      if (texto) {
+        campo.setAttribute('aria-invalid', 'true');
+      } else {
+        campo.removeAttribute('aria-invalid');
+      }
+      campo.closest?.('.campo')?.classList.toggle('campo--invalido', Boolean(texto));
+    }
+  }
+
+  /**
+   * «Creada por …» (punto 10). Sale de la ficha del listado; si la sala no
+   * esta en la pagina (un enlace de invitacion), se pregunta por ella. Sin
+   * apodo no se dice nada: no se inventa.
+   *
+   * @param {string} idSala
+   */
+  async function pintarCreador(idSala) {
+    const zona = zonaInvitacion?.querySelector('[data-zona="creador-sala"]');
+    if (!zona) {
+      return;
+    }
+    const decir = (texto) => {
+      zona.textContent = texto ?? '';
+      zona.hidden = !texto;
+    };
+    const ficha = fichas.get(idSala);
+    decir(textoDelCreador(ficha));
+    if (ficha) {
+      return;
+    }
+    try {
+      const sala = await obtener(idSala);
+      if (zonaInvitacion.dataset.salaInvitada === idSala) {
+        decir(textoDelCreador(sala));
+      }
+    } catch {
+      // Sin el apodo el formulario funciona igual.
+    }
+  }
+
   function cerrarPeticionDeCodigo() {
     if (zonaInvitacion) {
       zonaInvitacion.hidden = true;
       delete zonaInvitacion.dataset.salaInvitada;
       delete zonaInvitacion.dataset.intentado;
+      decirEnElFormulario('');
       const campo = zonaInvitacion.querySelector('[name="codigoInvitacion"]');
       if (campo) {
         campo.value = '';
       }
     }
   }
+
+  /** ¿El formulario de la sala privada esta abierto, y para esta sala? */
+  function formularioAbiertoPara(idSala) {
+    return Boolean(
+      zonaInvitacion && !zonaInvitacion.hidden && zonaInvitacion.dataset.salaInvitada === idSala,
+    );
+  }
+
+  // Al volver a escribir, el error de la vez anterior se va: ya no habla de
+  // lo que hay en el campo.
+  zonaInvitacion
+    ?.querySelector('[name="codigoInvitacion"]')
+    ?.addEventListener('input', () => decirEnElFormulario(''));
 
   zonaInvitacion?.addEventListener('submit', (evento) => {
     evento.preventDefault();
@@ -709,6 +843,15 @@ export function montarBatallas(raiz, puertos = {}) {
       pintarSeccionDegradada(zonaDegradacion, error.problema, {
         alReintentar: () => entrarA(idSala, codigoInvitacion),
       });
+      return;
+    }
+    // Punto 10 — con el formulario de la sala privada abierto, lo que pase
+    // con ESA sala (se lleno, se cancelo, ya no existe) se dice ahi, en rojo
+    // porque es un error de verdad, y el listado se queda donde estaba.
+    if (formularioAbiertoPara(idSala)) {
+      decirEnElFormulario(
+        textoDeError(error, 'No pudimos meterte en la sala. Vuelve a intentarlo.'),
+      );
       return;
     }
     // Los tres rechazos del contrato -403 privada, 404 no existe, 409 llena-

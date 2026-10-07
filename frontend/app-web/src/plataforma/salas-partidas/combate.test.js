@@ -26,6 +26,7 @@ import {
   ACCION_RESUELTA,
   TURNO_CAMBIADO,
   PARTIDA_FINALIZADA,
+  PARTICIPANTE_RENDIDO,
   MOTIVO_ESPECIALES,
   MOTIVOS_DE_ESPECIALES,
   LARGO_MAXIMO_MOTIVO,
@@ -1774,5 +1775,79 @@ describe('auditoría de DEV del 30-sep · combate', () => {
 
     expect(registro()).not.toContain('abrió');
     expect(registro()).not.toContain('recibió');
+  });
+});
+
+/** salas-partidas 1.10.0 (AsyncAPI 1.8.0) — alguien sale del combate rindiéndose. */
+describe('partida.participante.rendido', () => {
+  const MARCADO = `
+    <p class="turno-actual" data-zona="turno" role="status" hidden></p>
+    <div data-zona="vidas">
+      <div class="barra-vida" data-jugador="${ANA}"></div>
+      <div class="barra-vida" data-jugador="${BRUNO}"></div>
+    </div>
+    <div data-zona="campo">
+      <div class="campo__puesto" data-puesto="${ANA}"></div>
+      <div class="campo__puesto" data-puesto="${BRUNO}"></div>
+    </div>
+    <div data-zona="acciones"></div>
+    <div data-zona="especiales"></div>
+    <p id="motivo-especiales" data-zona="motivo-especiales"></p>
+    <div data-zona="poder" hidden></div>
+    <div data-zona="registro"></div>
+    <div data-zona="resultado" hidden></div>
+  `;
+
+  function montar() {
+    document.body.innerHTML = MARCADO;
+    return montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      turnoDe: ANA,
+      numeroTurno: 3,
+      alAtacar: () => {},
+    });
+  }
+
+  const rendido = (idJugador) => ({
+    tipo: PARTICIPANTE_RENDIDO,
+    idPartida: PARTIDA,
+    idJugador,
+    vidaActual: 0,
+    vidaMaxima: 90,
+  });
+
+  test('el rival que se rinde sale en el registro; quien gana lo dirá el final, no esto', () => {
+    const controles = montar();
+
+    controles.recibir(rendido(BRUNO));
+
+    const registro = document.querySelector('[data-zona="registro"]');
+    expect(registro.textContent).toContain('abandonó la batalla');
+    expect(document.querySelector('[data-zona="resultado"]').hidden).toBe(true);
+  });
+
+  test('si te rindes tú, el registro lo dice y tus controles se cierran', () => {
+    const controles = montar();
+
+    controles.recibir(rendido(ANA));
+
+    expect(document.querySelector('[data-zona="registro"]').textContent).toContain(
+      'Abandonaste la batalla: cuenta como derrota.',
+    );
+    expect(document.querySelector('[data-zona="acciones"]').hidden).toBe(true);
+  });
+
+  test('el mismo aviso repetido (una reconexión) no se anota dos veces', () => {
+    const controles = montar();
+
+    controles.recibir(rendido(BRUNO));
+    controles.recibir(rendido(BRUNO));
+
+    const veces =
+      document.querySelector('[data-zona="registro"]').textContent.split('abandonó la batalla')
+        .length - 1;
+    expect(veces).toBe(1);
   });
 });
