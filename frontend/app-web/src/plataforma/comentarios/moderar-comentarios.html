@@ -47,14 +47,33 @@
           B3 (comentarios.yaml 1.5.0, 7.3.3): la cola de siempre, la lista de
           seguimiento especial (los marcados, en cualquier estado salvo
           eliminado) o solo los que esperan revisión sin marca.
+
+          comentarios.yaml 1.10.0 (HU-COM-005): además se filtra por categoría de
+          reporte y por prioridad, y los tres se combinan. Las dos listas nuevas
+          traen solo «Todas»: la vista añade el resto desde cliente-moderacion.js,
+          para que las categorías salgan de una sola fuente.
         -->
-        <div class="campo">
-          <label class="campo__etiqueta" for="filtro-cola">Mostrar</label>
-          <select class="desplegable__control" id="filtro-cola" data-zona="filtro">
-            <option value="en-revision">Pendientes de revisión</option>
-            <option value="marcados">Marcados para seguimiento</option>
-            <option value="sin-marcar">Pendientes sin marcar</option>
-          </select>
+        <div class="fila fila--envuelta">
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-cola">Mostrar</label>
+            <select class="desplegable__control" id="filtro-cola" data-zona="filtro">
+              <option value="en-revision">Pendientes de revisión</option>
+              <option value="marcados">Marcados para seguimiento</option>
+              <option value="sin-marcar">Pendientes sin marcar</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-categoria">Categoría del reporte</label>
+            <select class="desplegable__control" id="filtro-categoria" data-zona="filtro-categoria">
+              <option value="">Todas</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label class="campo__etiqueta" for="filtro-prioridad">Prioridad</label>
+            <select class="desplegable__control" id="filtro-prioridad" data-zona="filtro-prioridad">
+              <option value="todas">Todas</option>
+            </select>
+          </div>
         </div>
         <div class="pila pila--compacta" data-zona="cola" aria-live="polite"></div>
       </section>
