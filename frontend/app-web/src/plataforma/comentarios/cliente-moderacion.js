@@ -132,7 +132,22 @@ export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
+  // comentarios.yaml 1.10.0: ELIMINAR en lote sin la confirmacion exacta (400).
+  CONFIRMACION_REQUERIDA: 'CONFIRMACION_REQUERIDA',
 });
+
+/**
+ * Las acciones que valen en lote (`AccionDeLote`, comentarios.yaml 1.10.0): las
+ * de `ACCIONES` menos EDITAR, que necesita un texto distinto por comentario.
+ */
+export const ACCIONES_EN_LOTE = Object.freeze(
+  ACCIONES.filter((a) => a.valor !== 'EDITAR').map(({ valor, etiqueta }) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
+
+/** Valor exacto de `confirmacion` que exige ELIMINAR en lote (7.3.9, contrato 1.10.0). */
+export const CONFIRMACION_DE_ELIMINAR = 'ELIMINAR';
 
 /** Largos del contrato (`DecisionRequest`). */
 export const MOTIVO_MINIMO = 3;
@@ -348,6 +363,37 @@ export async function resolverComentario(
     },
     fetchImpl,
   );
+}
+
+/**
+ * El rechazo de la decision en lote: un {@link ErrorDeApi} que ademas dice que
+ * comentarios lo causaron (`comentarioIds` del problem detail, 404 y 409).
+ *
+ * Esqueleto del commit en rojo (HU-COM-005, #519): la clase existe para que
+ * compilen las pruebas; leer `comentarioIds` del problema esta pendiente.
+ */
+export class ErrorDeLote extends ErrorDeApi {
+  constructor(problema, estado) {
+    super(problema, estado);
+    /** @type {string[]} */
+    this.comentarioIds = [];
+  }
+}
+
+/**
+ * La misma decision para varios comentarios a la vez, atomica — RF-COM-008,
+ * comentarios.yaml 1.10.1. Esqueleto del commit en rojo: la llamada esta
+ * pendiente.
+ *
+ * Contrato previsto: `resolverEnLote({comentarioIds, accion, motivo, confirmacion?},
+ * {fetchImpl?})` y devuelve `{accion, total, resultados: [{comentarioId, asiento,
+ * autorNotificado?}]}`. Sin parametros mientras sea esqueleto.
+ *
+ * @returns {Promise<never>}
+ * @throws {Error} siempre, hasta que se implemente
+ */
+export async function resolverEnLote() {
+  throw new Error('pendiente: decision en lote');
 }
 
 /**
