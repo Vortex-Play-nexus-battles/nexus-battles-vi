@@ -56,7 +56,10 @@ export const MOTIVOS_DE_ESPECIALES = Object.freeze({
   fueraDeTurno: 'Se habilitan en tu turno.',
   sinEspeciales: 'Tu héroe no tiene acciones especiales.',
   eligiendoRival: 'Elige el rival; púlsala otra vez para cancelar.',
-  miTurno: 'Tu turno: las que no puedes usar dicen por qué.',
+  // Revisión del modo jugador del 6-oct (punto 18): «Tu turno: las que no
+  // puedes usar dicen por qué» era texto de relleno. En tu turno cada botón
+  // ya dice lo suyo; la franja se calla.
+  miTurno: '',
 });
 
 /** El ataque sin accion especial (motor-combate.yaml 1.2.0). */
@@ -169,6 +172,12 @@ export function insigniasDe(accion, recargas = {}) {
 export function destinoDeAccion(idPartida) {
   return `/app/partidas/${idPartida}/acciones`;
 }
+
+/** Cuánto se ve el anuncio central de una acción (punto 19): cabe en la pausa entre golpes. */
+export const DURACION_DEL_ANUNCIO_MS = 2000;
+
+/** Los tonos que merecen el anuncio central: lo que le pasa a la vida de alguien. */
+const TONOS_DEL_ANUNCIO = new Set(['dano', 'critico', 'mitigado', 'curacion', 'fallo', 'caida']);
 
 /** Tipos que viajan por el canal de la partida, fijados por el contrato. */
 export const ACCION_RESUELTA = 'partida.accion.resuelta';
@@ -324,6 +333,80 @@ export function textoDelResultado(aviso, yo, miEquipo = null) {
     base = gano(aviso, yo, miEquipo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
   }
   return `${base}${textoDelReparto(aviso, yo)}${textoDeLaRecompensa(aviso, yo)}`;
+}
+
+/**
+ * La frase del resultado sin la parte de los créditos: la usa el panel del
+ * desenlace, que desglosa los créditos en filas (revisión del 6-oct, punto 20).
+ *
+ * @param {{ganadores?: string[], equipoGanador?: number}} aviso
+ * @param {string} yo
+ * @param {number|null} [miEquipo]
+ * @returns {string}
+ */
+export function fraseDelResultado(aviso, yo, miEquipo = null) {
+  const equipo = aviso?.equipoGanador;
+  if (Number.isInteger(equipo) && equipo > 0) {
+    return gano(aviso, yo, miEquipo)
+      ? `Tu equipo (${equipo}) ha ganado el combate.`
+      : `Gana el equipo ${equipo}. Tu equipo ha perdido.`;
+  }
+  if ((aviso?.ganadores ?? []).length > 0) {
+    return gano(aviso, yo, miEquipo) ? 'Has ganado el combate.' : 'Has perdido el combate.';
+  }
+  return 'Combate terminado en empate.';
+}
+
+/**
+ * Los créditos del final, fila a fila — revisión del modo jugador del 6-oct,
+ * punto 20 («hacerlo más profesional»): la apuesta, la recompensa por jugar y
+ * el cambio neto. Todas las cifras son del servidor (el reparto de la apuesta
+ * y la recompensa del libro); aquí no se calcula nada que no esté en el aviso,
+ * y lo que no llegó no se pinta.
+ *
+ * @param {object} aviso `partida.finalizada` (acumulado)
+ * @param {string} yo
+ * @returns {Array<{etiqueta: string, valor: string, signo: 'positivo'|'negativo'|'neutro',
+ *   total?: boolean}>}
+ */
+export function desgloseDelResultado(aviso, yo) {
+  const filas = [];
+  const conSigno = (n) => `${n > 0 ? '+' : '−'}${Math.abs(n)}`;
+  const signo = (n) => {
+    if (n > 0) {
+      return 'positivo';
+    }
+    return n < 0 ? 'negativo' : 'neutro';
+  };
+  const apuesta = creditosDe(aviso, yo);
+  if (apuesta !== null) {
+    filas.push({
+      etiqueta: 'Apuesta',
+      valor: apuesta === 0 ? 'Devuelta' : `${conSigno(apuesta)} créditos`,
+      signo: signo(apuesta),
+    });
+  }
+  const recompensa = recompensaDe(aviso, yo);
+  if (recompensa !== null) {
+    filas.push({
+      etiqueta: recompensa.ganador ? 'Recompensa por ganar' : 'Recompensa por participar',
+      valor: `+${recompensa.creditos} ${recompensa.creditos === 1 ? 'crédito' : 'créditos'}`,
+      signo: signo(recompensa.creditos),
+    });
+    if (recompensa.cofre) {
+      filas.push({ etiqueta: 'Cofre', valor: 'Conseguido', signo: 'positivo' });
+    }
+  }
+  const neto = netoDeCreditos(aviso, yo);
+  if (neto !== null && apuesta !== null && recompensa !== null) {
+    filas.push({
+      etiqueta: 'Cambio neto',
+      valor: neto === 0 ? '0 créditos' : `${conSigno(neto)} créditos`,
+      signo: signo(neto),
+      total: true,
+    });
+  }
+  return filas;
 }
 
 /**
@@ -631,6 +714,8 @@ export function montarControlesDeCombate(
   // una y la otra deja de decir que la partida sigue en curso.
   const zonaMando = raiz.querySelector('[data-zona="mando"]');
   const zonaSalir = raiz.querySelector('[data-zona="salir"]');
+  // Revisión del 6-oct, punto 19: lo último que pasó, grande en el centro.
+  const zonaAnuncio = raiz.querySelector('[data-zona="anuncio"]');
   const registro = registroDeAvisos();
   /** La ultima accion enviada, para poder reintentarla tal cual. */
   let ultimaAccion = null;
@@ -639,6 +724,9 @@ export function montarControlesDeCombate(
   let numeroActual = Number.isInteger(numeroTurno) ? numeroTurno : null;
   /** Sin canal no se juega: lo marca `bloquear` y lo quita `sincronizar`. */
   let sinCanal = false;
+  /** Punto 17 — durante la cuenta atrás del comienzo nadie juega. */
+  let enCuentaAtras = false;
+  let temporizadorDelAnuncio = null;
   // Una partida que ya llega terminada no abre nada ni un instante.
   let terminado = Boolean(partidaFinalizada);
 
@@ -789,7 +877,7 @@ export function montarControlesDeCombate(
    */
   function habilitar(esMiTurnoPedido) {
     turnoPropio = Boolean(esMiTurnoPedido);
-    const esMiTurno = turnoPropio && !sinCanal && !terminado;
+    const esMiTurno = turnoPropio && !sinCanal && !terminado && !enCuentaAtras;
     if (!esMiTurno) {
       accionPendiente = null;
     }
@@ -797,7 +885,9 @@ export function montarControlesDeCombate(
     for (const boton of zona?.querySelectorAll('[data-atacar]') ?? []) {
       const nombre = boton.dataset.accion ?? 'tu rival';
       let impedimento = null;
-      if (!esMiTurno) {
+      if (enCuentaAtras && !terminado) {
+        impedimento = 'El combate está a punto de empezar';
+      } else if (!esMiTurno) {
         impedimento = 'No es tu turno';
       } else if (caidos.has(boton.dataset.atacar)) {
         impedimento = 'Ya cayó';
@@ -931,6 +1021,7 @@ export function montarControlesDeCombate(
         motivo = MOTIVOS_DE_ESPECIALES.miTurno;
       }
       zonaMotivoEspeciales.textContent = motivo;
+      zonaMotivoEspeciales.hidden = !motivo;
     }
   }
 
@@ -1049,17 +1140,28 @@ export function montarControlesDeCombate(
     // La suma de apuesta y recompensa, no solo la recompensa: ver
     // `netoDeCreditos`. Antes quien perdia 350 creditos apostados veia un «+2».
     const creditos = netoDeCreditos(desenlaceConocido, yo);
-    const detalle = textoDelResultado(desenlaceConocido, yo, miEquipo);
+    // Punto 20: la frase y, debajo, los créditos fila a fila (apuesta,
+    // recompensa, cambio neto); sin desglose, la frase de siempre con todo.
+    const desglose = desgloseDelResultado(desenlaceConocido, yo);
+    const detalle =
+      desglose.length > 0
+        ? fraseDelResultado(desenlaceConocido, yo, miEquipo)
+        : textoDelResultado(desenlaceConocido, yo, miEquipo);
+    // Con la fila «Cambio neto» la cifra suelta de encima sobraría: es la misma.
+    const conTotal = desglose.some((fila) => fila.total);
     vaciar(aviso);
     aviso.append(
       panelDeResultado({
         desenlace,
         detalle: creditos === null && nota ? `${detalle} ${nota}` : detalle,
-        creditos,
+        creditos: conTotal ? null : creditos,
+        desglose,
         acciones: enlacesDeSalida(salidas),
       }),
     );
     aviso.hidden = false;
+    // El foco va a la salida principal: la partida acabó y es lo que toca.
+    aviso.querySelector('.panel-resultado__acciones a, .panel-resultado__acciones button')?.focus();
   }
 
   /**
@@ -1081,6 +1183,16 @@ export function montarControlesDeCombate(
     }
     // Revisión del 6-oct: además de escrito, el medidor enseña el movimiento.
     pintarPoder(despues - antes);
+    // Punto 19: el gasto de poder también se ve sobre tu héroe («−2 PODER»).
+    if (motivo === 'gasto' && despues < antes) {
+      mostrarImpacto({
+        idJugador: yo,
+        cifra: `−${antes - despues}`,
+        unidad: 'PODER',
+        etiqueta: null,
+        tono: 'poder',
+      });
+    }
     const maximo = estadoPropio.poderMaximo ?? catalogo?.poderMaximo ?? null;
     const cifra = maximo === null ? `${despues}` : `${despues}/${maximo}`;
     const cuanto = Math.abs(despues - antes);
@@ -1223,15 +1335,48 @@ export function montarControlesDeCombate(
   }
 
   /** La cifra del golpe sobre el heroe en el campo; se va sola. */
-  function mostrarImpacto({ idJugador, cifra, etiqueta, tono }) {
+  function mostrarImpacto({ idJugador, cifra, etiqueta, tono, unidad = null }) {
     const puesto = zonaCampo?.querySelector(`[data-puesto="${idJugador}"]`);
     if (!puesto) {
       return;
     }
     puesto.querySelector('.impacto')?.remove();
-    const impacto = impactoEnCampo({ cifra, etiqueta, tono });
+    const impacto = impactoEnCampo({ cifra, etiqueta, tono, unidad });
     puesto.append(impacto);
     setTimeout(() => impacto.remove(), 2400);
+  }
+
+  /**
+   * Revisión del 6-oct, punto 19 — lo último que pasó, grande en el centro
+   * del campo, para que se vea la emoción del combate y no solo en una lista
+   * pequeña. Es adorno (`aria-hidden` en el marcado): el lector de pantalla
+   * lo oye en el registro, una sola vez.
+   *
+   * @param {string} texto
+   * @param {string} [tono]
+   */
+  function anunciar(texto, tono = 'sistema') {
+    if (!zonaAnuncio || !texto) {
+      return;
+    }
+    clearTimeout(temporizadorDelAnuncio);
+    // Va justo encima de la barra de mando, como un subtítulo: el centro del
+    // campo es de los héroes y de sus cifras, y no se les tapa.
+    const mando = raiz.querySelector('[data-zona="panel"]');
+    if (mando?.offsetHeight) {
+      zonaAnuncio.style.setProperty('--hueco-del-mando', `${mando.offsetHeight}px`);
+    }
+    zonaAnuncio.replaceChildren(
+      h('p', {
+        clase: `combate__anuncio-texto combate__anuncio-texto--${tono}`,
+        texto: texto.replace(/\.$/, ''),
+      }),
+    );
+    zonaAnuncio.dataset.tic = zonaAnuncio.dataset.tic === 'a' ? 'b' : 'a';
+    zonaAnuncio.hidden = false;
+    temporizadorDelAnuncio = setTimeout(() => {
+      zonaAnuncio.hidden = true;
+    }, DURACION_DEL_ANUNCIO_MS);
   }
 
   /**
@@ -1341,6 +1486,25 @@ export function montarControlesDeCombate(
     anotar,
 
     /**
+     * Punto 17 — durante la cuenta atrás del comienzo nadie juega: los
+     * botones esperan con su motivo y se abren al llegar a cero.
+     *
+     * @param {number} ms
+     * @param {(fn: () => void, ms: number) => unknown} [programar]
+     */
+    esperarCuentaAtras(ms, programar = (fn, espera) => setTimeout(fn, espera)) {
+      if (!(ms > 0) || terminado) {
+        return;
+      }
+      enCuentaAtras = true;
+      habilitar(turnoPropio);
+      programar(() => {
+        enCuentaAtras = false;
+        habilitar(turnoPropio);
+      }, ms);
+    },
+
+    /**
      * Sin canal no se juega el turno (riesgo #7: nunca fallar en silencio).
      * `sincronizar` los vuelve a abrir cuando el canal vuelve.
      *
@@ -1426,6 +1590,11 @@ export function montarControlesDeCombate(
         for (const linea of lineas) {
           anotar(linea);
         }
+        const principal =
+          lineas.find((linea) => TONOS_DEL_ANUNCIO.has(linea.tono)) ?? lineas[0] ?? null;
+        if (principal) {
+          anunciar(principal.texto, principal.tono);
+        }
         for (const impacto of impactos) {
           mostrarImpacto(impacto);
         }
@@ -1461,6 +1630,9 @@ export function montarControlesDeCombate(
         habilitar(mensaje.idJugador === yo);
         marcarTurno(mensaje.idJugador, numeroActual);
         anotar(narrarTurno(mensaje, participantes, yo));
+        if (mensaje.idJugador === yo && !terminado) {
+          anunciar('¡Tu turno!', 'turno');
+        }
         if (mensaje.idJugador === yo) {
           anotarPoder(poderAntes, 'turno');
         }
@@ -1471,14 +1643,12 @@ export function montarControlesDeCombate(
         // ni ejecutor. Quien gana, si se acaba, lo dice `partida.finalizada`,
         // que llega despues: aqui no se decide nada.
         anotarVida(mensaje.idJugador, 0);
-        anotar({
-          texto:
-            mensaje.idJugador === yo
-              ? 'Abandonaste la batalla: cuenta como derrota.'
-              : `${nombreDe(mensaje.idJugador, participantes, yo)} abandonó la batalla.`,
-          tono: 'sistema',
-          icono: 'salir',
-        });
+        const textoDelAbandono =
+          mensaje.idJugador === yo
+            ? 'Abandonaste la batalla: cuenta como derrota.'
+            : `${nombreDe(mensaje.idJugador, participantes, yo)} abandonó la batalla.`;
+        anotar({ texto: textoDelAbandono, tono: 'sistema', icono: 'salir' });
+        anunciar(textoDelAbandono, 'caida');
         if (mensaje.idJugador === yo && !terminado) {
           cerrarControles();
         }

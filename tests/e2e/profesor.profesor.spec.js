@@ -584,16 +584,22 @@ test.describe('R17 · la prueba del profesor', () => {
         const resultado = page.locator('[data-zona="resultado"]');
         const ataque = page.locator('[data-zona="acciones"] [data-atacar]').first();
         // HU-JUE-017 CA-04: al arrancar, la presentación de los héroes cubre el
-        // campo hasta que se entra al combate (o hasta el primer aviso del
-        // canal, si abre el rival). Una persona pulsa «Entrar al combate».
+        // campo. Revisión del 6-oct, punto 17: recién empezada cuenta 5…1 y
+        // «¡COMBATE!» y se cierra sola (los botones esperan mientras tanto);
+        // si se llega tarde, queda «Entrar al combate» para quitarla.
         const entrar = page.locator('[data-accion="entrar-al-combate"]');
+        const cuentaAtras = page.locator('[data-zona="cuenta-atras"]');
         // B7: el combate real dura mas que el simplificado (Tablas 21-23, D-B7-01).
         const limite = Date.now() + 8 * 60_000;
         let golpes = 0;
         let recargada = false;
         let presentacion = false;
+        let cuenta = false;
         while (Date.now() < limite && !(await resultado.isVisible())) {
-          if (await entrar.isVisible()) {
+          if (await cuentaAtras.isVisible()) {
+            cuenta = true;
+            await page.waitForTimeout(500);
+          } else if (await entrar.isVisible()) {
             presentacion = true;
             // El primer aviso del canal también la cierra: si se adelanta al
             // clic, no pasa nada.
@@ -644,6 +650,7 @@ test.describe('R17 · la prueba del profesor', () => {
           'las barras de vida se movieron',
         ).toBe(true);
         return (
+          `${cuenta ? 'presentación con cuenta atrás 5…1 «¡COMBATE!»; ' : ''}` +
           `${presentacion ? 'presentación de los héroes → «Entrar al combate»; ' : ''}` +
           `${golpes} golpes; vida propia ${alEmpezar.mia}→${alTerminar.mia}, ` +
           `rival ${alEmpezar.rival}→${alTerminar.rival}; un F5 a mitad volvió al combate`
@@ -654,16 +661,22 @@ test.describe('R17 · la prueba del profesor', () => {
         const resultado = page.locator('[data-zona="resultado"]');
         await expect(resultado).toContainText(/has ganado|has perdido|empate/i);
         // El desenlace ocupa toda la pantalla, barra incluida: tiene que llevar
-        // sus propias salidas (R17.4) o el profesor se queda sin camino.
-        await expect(resultado.locator('[data-accion="volver-a-jugar"]')).toBeVisible();
-        await expect(resultado.locator('[data-accion="ver-mi-cuenta"]')).toBeVisible();
+        // su propia salida (R17.4) o el profesor se queda sin camino. Revisión
+        // del 6-oct, punto 20: una sola, «Volver a las salas», no a la cuenta.
+        const volver = resultado.locator('[data-accion="volver-a-jugar"]');
+        await expect(volver).toBeVisible();
+        await expect(volver).toHaveText('Volver a las salas');
+        await expect(resultado.locator('[data-accion="ver-mi-cuenta"]')).toHaveCount(0);
         await capturar(page, testInfo, '15-resultado');
-        return `${desenlace.slice(0, 160)} → salidas «Volver a Jugar online» y «Ver mi cuenta»`;
+        return `${desenlace.slice(0, 160)} → salida «Volver a las salas»`;
       });
 
       await paso(16, 'Revisar la cuenta y el historial', async () => {
-        // Desde el propio panel del desenlace, como lo haría una persona.
-        await page.locator('[data-zona="resultado"] [data-accion="ver-mi-cuenta"]').click();
+        // «Volver a las salas» lleva al listado; la cuenta, desde la barra,
+        // como lo haría una persona.
+        await page.locator('[data-zona="resultado"] [data-accion="volver-a-jugar"]').click();
+        await expect(page).toHaveURL(EN.jugar);
+        await irA(page, 'cuenta');
         await expect(page).toHaveURL(EN.cuenta);
         // La apuesta se liquida justo detrás del final (HU-JUE-014). Se espera
         // a que no quede nada apartado, recargando como lo haría una persona:

@@ -113,6 +113,20 @@ describe('impactoEnCampo (DamageCallout)', () => {
     expect(impacto.className).toContain('impacto--critico');
     expect(impacto.textContent).toBe('−9Crítico');
   });
+
+  test('revisión del 6-oct, punto 19: la cifra lleva su unidad («−4 VIDA», «−2 PODER»)', () => {
+    const vida = impactoEnCampo({ cifra: '−4', unidad: 'VIDA', tono: 'dano' });
+    expect(vida.querySelector('.impacto__cifra').textContent).toBe('−4 VIDA');
+    expect(vida.querySelector('.impacto__unidad').textContent).toBe(' VIDA');
+    expect(vida.querySelector('.impacto__etiqueta')).toBeNull();
+
+    const poder = impactoEnCampo({ cifra: '−2', unidad: 'PODER', tono: 'poder' });
+    expect(poder.className).toContain('impacto--poder');
+    expect(poder.textContent).toBe('−2 PODER');
+
+    // Sin unidad, como antes.
+    expect(impactoEnCampo({ cifra: '+3', tono: 'curacion' }).textContent).toBe('+3');
+  });
 });
 
 describe('accionDeCombate especial', () => {

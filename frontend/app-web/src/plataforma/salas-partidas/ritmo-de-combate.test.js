@@ -189,4 +189,43 @@ describe('suscripcionConRitmo', () => {
   test('sin canal devuelve lo que le dieron', () => {
     expect(suscripcionConRitmo(undefined)).toBeUndefined();
   });
+
+  /*
+   * Revisión del 6-oct, punto 17: la cuenta atrás del comienzo. Si la IA abre,
+   * su golpe llega en el mismo instante en que empieza la partida; se retiene
+   * hasta que termina la cuenta, y después sigue con el ritmo de siempre.
+   */
+  test('retenerHasta: nada se enseña durante la cuenta atrás; después, en orden', () => {
+    const b = banco({ pausaMs: 2200, pausaTrasAjenaMs: 900 });
+    const vistos = [];
+    b.suscribir((aviso) => vistos.push(`${aviso.tipo}:${aviso.idEjecutor ?? aviso.idJugador}`));
+    b.suscribir.retenerHasta(5800);
+
+    b.llega(accion(MAQUINA));
+    b.llega(turno(YO, 2));
+    b.pasa(5799);
+    expect(vistos).toEqual([]);
+
+    b.pasa(1);
+    expect(vistos).toEqual(['partida.accion.resuelta:u-maquina']);
+    // Lo que sigue a la acción ajena guarda su pausa de siempre.
+    b.pasa(899);
+    expect(vistos).toHaveLength(1);
+    b.pasa(1);
+    expect(vistos[1]).toBe('partida.turno.cambiado:u-yo');
+  });
+
+  test('retenerHasta solo alarga: una retención más corta no acorta la vigente', () => {
+    const b = banco({ pausaMs: 0 });
+    const vistos = [];
+    b.suscribir((aviso) => vistos.push(aviso.tipo));
+    b.suscribir.retenerHasta(3000);
+    b.suscribir.retenerHasta(1000);
+
+    b.llega(turno(YO, 1));
+    b.pasa(2999);
+    expect(vistos).toEqual([]);
+    b.pasa(1);
+    expect(vistos).toEqual(['partida.turno.cambiado']);
+  });
 });

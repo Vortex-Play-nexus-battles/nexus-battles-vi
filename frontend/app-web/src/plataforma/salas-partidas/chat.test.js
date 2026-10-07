@@ -376,7 +376,7 @@ describe('la página', () => {
     });
     await chat;
 
-    expect(document.querySelector('[data-zona="titulo"]').textContent).toBe('Chat de la sala');
+    expect(document.querySelector('[data-zona="titulo"]').textContent).toBe('Chat grupal');
     const vuelta = document.querySelector('[data-zona="volver-a-la-sala"]');
     expect(vuelta.hidden).toBe(false);
     expect(vuelta.getAttribute('href')).toBe(`./sala-batalla.html?sala=${ID_SALA}`);

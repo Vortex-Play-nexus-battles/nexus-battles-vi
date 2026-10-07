@@ -89,6 +89,8 @@ describe('narrarAccion', () => {
     expect(impactos[0]).toEqual({
       idJugador: RIVAL,
       cifra: '−9',
+      // Revisión del 6-oct (punto 19): «−9 VIDA» sobre el héroe.
+      unidad: 'VIDA',
       etiqueta: 'Crítico',
       tono: 'critico',
     });
@@ -386,6 +388,7 @@ describe('sin auto-daño al atacar (auditoría del 4-oct)', () => {
     expect(impactos.find((i) => i.idJugador === YO)).toEqual({
       idJugador: YO,
       cifra: '−1',
+      unidad: 'VIDA',
       etiqueta: 'Devuelto',
       tono: 'dano',
     });

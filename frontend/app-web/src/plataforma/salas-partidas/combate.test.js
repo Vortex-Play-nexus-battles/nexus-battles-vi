@@ -33,6 +33,9 @@ import {
   MOTIVO_SANADOR,
   estadoPropioDe,
   insigniasDe,
+  desgloseDelResultado,
+  fraseDelResultado,
+  DURACION_DEL_ANUNCIO_MS,
 } from './combate.js';
 
 const PARTIDA = '11111111-1111-1111-1111-111111111111';
@@ -269,7 +272,122 @@ describe('registroDeAvisos con reparto (HU-JUE-014, CA-06)', () => {
       ganadores: [ANA],
       reparto: [{ idJugador: ANA, creditos: 100 }],
     });
-    expect(resultado.textContent).toMatch(/llevas 100 créditos/i);
+    // Revisión del 6-oct, punto 20: los créditos van fila a fila.
+    const desglose = resultado.querySelector('.panel-resultado__desglose');
+    expect(desglose).not.toBeNull();
+    expect(
+      [...desglose.querySelectorAll('dt')].map((dt) => [
+        dt.textContent,
+        dt.nextElementSibling.textContent,
+      ]),
+    ).toEqual([['Apuesta', '+100 créditos']]);
+    expect(resultado.textContent).toContain('Has ganado el combate.');
+  });
+});
+
+/*
+ * Revisión del modo jugador del 6-oct, punto 20 — el desenlace «más
+ * profesional»: la apuesta, la recompensa y el cambio neto en filas. Todas las
+ * cifras salen del aviso del servidor; lo que no llegó no se pinta.
+ */
+describe('desgloseDelResultado (punto 20)', () => {
+  const filas = (aviso) =>
+    desgloseDelResultado(aviso, ANA).map(({ etiqueta, valor, signo, total }) => [
+      etiqueta,
+      valor,
+      signo,
+      Boolean(total),
+    ]);
+
+  test('apuesta ganada, recompensa por ganar y cambio neto', () => {
+    expect(
+      filas({
+        ganadores: [ANA],
+        reparto: [{ idJugador: ANA, creditos: 50 }],
+        recompensa: [{ idJugador: ANA, creditos: 20, ganador: true }],
+      }),
+    ).toEqual([
+      ['Apuesta', '+50 créditos', 'positivo', false],
+      ['Recompensa por ganar', '+20 créditos', 'positivo', false],
+      ['Cambio neto', '+70 créditos', 'positivo', true],
+    ]);
+  });
+
+  test('apuesta perdida con recompensa por participar: el neto puede ser negativo', () => {
+    expect(
+      filas({
+        ganadores: [BRUNO],
+        reparto: [{ idJugador: ANA, creditos: -50 }],
+        recompensa: [{ idJugador: ANA, creditos: 5, ganador: false }],
+      }),
+    ).toEqual([
+      ['Apuesta', '−50 créditos', 'negativo', false],
+      ['Recompensa por participar', '+5 créditos', 'positivo', false],
+      ['Cambio neto', '−45 créditos', 'negativo', true],
+    ]);
+  });
+
+  test('un cofre se dice en su fila', () => {
+    expect(
+      filas({
+        ganadores: [ANA],
+        recompensa: [{ idJugador: ANA, creditos: 1, ganador: true, cofre: { rareza: 'COMUN' } }],
+      }),
+    ).toEqual([
+      ['Recompensa por ganar', '+1 crédito', 'positivo', false],
+      ['Cofre', 'Conseguido', 'positivo', false],
+    ]);
+  });
+
+  test('una apuesta devuelta (empate) se dice, no se calla', () => {
+    expect(filas({ ganadores: [], reparto: [{ idJugador: ANA, creditos: 0 }] })).toEqual([
+      ['Apuesta', 'Devuelta', 'neutro', false],
+    ]);
+  });
+
+  test('sin reparto ni recompensa no hay desglose (nada inventado)', () => {
+    expect(desgloseDelResultado({ ganadores: [ANA] }, ANA)).toEqual([]);
+    // Lo de otro jugador no es tuyo.
+    expect(
+      desgloseDelResultado({ ganadores: [ANA], reparto: [{ idJugador: BRUNO, creditos: 9 }] }, ANA),
+    ).toEqual([]);
+  });
+
+  test('la frase del desenlace no repite los créditos que ya van en filas', () => {
+    expect(fraseDelResultado({ ganadores: [ANA] }, ANA)).toBe('Has ganado el combate.');
+    expect(fraseDelResultado({ ganadores: [BRUNO] }, ANA)).toBe('Has perdido el combate.');
+    expect(fraseDelResultado({ ganadores: [] }, ANA)).toBe('Combate terminado en empate.');
+    expect(fraseDelResultado({ ganadores: [ANA], equipoGanador: 1 }, ANA, 1)).toBe(
+      'Tu equipo (1) ha ganado el combate.',
+    );
+  });
+
+  test('en la vista: filas con su signo y la del total marcada', () => {
+    const controles = montarControlesDeCombate(document, {
+      idPartida: PARTIDA,
+      yo: ANA,
+      participantes: participantes(),
+      alAtacar: () => {},
+    });
+    controles.recibir({
+      tipo: PARTIDA_FINALIZADA,
+      idPartida: PARTIDA,
+      ganadores: [ANA],
+      reparto: [{ idJugador: ANA, creditos: 50 }],
+      recompensa: [{ idJugador: ANA, creditos: 20, ganador: true }],
+    });
+    const resultado = document.querySelector('[data-zona="resultado"]');
+    const total = resultado.querySelector('.panel-resultado__valor--total');
+    expect(total.textContent).toBe('+70 créditos');
+    expect(total.dataset.signo).toBe('positivo');
+    expect(resultado.querySelector('.panel-resultado__concepto--total').textContent).toBe(
+      'Cambio neto',
+    );
+    expect(resultado.querySelector('.panel-resultado__detalle').textContent).toBe(
+      'Has ganado el combate.',
+    );
+    // Con la fila del total, la cifra suelta de encima no se repite.
+    expect(resultado.querySelector('.panel-resultado__creditos')).toBeNull();
   });
 });
 
@@ -1014,6 +1132,7 @@ describe('UXC-2 · barra de mando, registro y reconexion', () => {
     <p id="motivo-especiales" data-zona="motivo-especiales"></p>
     <div data-zona="poder" hidden></div>
     <div data-zona="registro"></div>
+    <div data-zona="anuncio" aria-hidden="true" hidden></div>
     <div data-zona="resultado" hidden></div>
   `;
 
@@ -1058,10 +1177,95 @@ describe('UXC-2 · barra de mando, registro y reconexion', () => {
     const registro = document.querySelector('[data-zona="registro"]');
     expect(registro.querySelector('[data-tono="critico"]').textContent).toContain('¡Crítico!');
     const puesto = document.querySelector(`[data-puesto="${BRUNO}"]`);
-    expect(puesto.querySelector('.impacto').textContent).toBe('−10Crítico');
+    // Revisión del 6-oct, punto 19: la cifra lleva su unidad («−10 VIDA»).
+    expect(puesto.querySelector('.impacto').textContent).toBe('−10 VIDACrítico');
+    expect(puesto.querySelector('.impacto__unidad').textContent).toBe(' VIDA');
     // El efecto, sobre la barra (compacto) y bajo el heroe en el campo.
     expect(document.querySelector(`[data-jugador="${BRUNO}"] .efecto--compacto`)).not.toBeNull();
     expect(puesto.querySelector('.efecto')).not.toBeNull();
+  });
+
+  describe('punto 19 · lo que pasa, grande en el centro del campo', () => {
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    test('el golpe se anuncia con su tono y el anuncio se va solo', () => {
+      jest.useFakeTimers();
+      const controles = montar();
+      const anuncio = document.querySelector('[data-zona="anuncio"]');
+      expect(anuncio.hidden).toBe(true);
+
+      controles.recibir({
+        ...accionResuelta(80),
+        accion: { codigo: 'ATAQUE_BASICO', nombre: 'CAUSAR_DANO_CRITICO' },
+      });
+
+      expect(anuncio.hidden).toBe(false);
+      const texto = anuncio.querySelector('.combate__anuncio-texto');
+      expect(texto.classList.contains('combate__anuncio-texto--critico')).toBe(true);
+      expect(texto.textContent).toContain('¡Crítico!');
+      // Sin el punto final: es un rótulo, no una frase del registro.
+      expect(texto.textContent.endsWith('.')).toBe(false);
+      // Adorno: el lector de pantalla lo oye en el registro, una sola vez.
+      expect(anuncio.getAttribute('aria-hidden')).toBe('true');
+
+      jest.advanceTimersByTime(DURACION_DEL_ANUNCIO_MS);
+      expect(anuncio.hidden).toBe(true);
+    });
+
+    test('un anuncio nuevo sustituye al anterior (no se apilan)', () => {
+      jest.useFakeTimers();
+      const controles = montar();
+      controles.recibir(accionResuelta(80));
+      controles.recibir({ ...accionResuelta(70), accion: { codigo: 'X', nombre: 'CAUSAR_DANO' } });
+      const anuncio = document.querySelector('[data-zona="anuncio"]');
+      expect(anuncio.querySelectorAll('.combate__anuncio-texto')).toHaveLength(1);
+      expect(anuncio.textContent).toContain('70');
+    });
+
+    test('al volver tu turno se anuncia «¡Tu turno!»', () => {
+      jest.useFakeTimers();
+      const controles = montar({ turnoDe: BRUNO });
+      controles.recibir({
+        tipo: TURNO_CAMBIADO,
+        idPartida: PARTIDA,
+        idJugador: ANA,
+        numeroTurno: 4,
+      });
+      const anuncio = document.querySelector('[data-zona="anuncio"]');
+      expect(anuncio.hidden).toBe(false);
+      expect(anuncio.textContent).toBe('¡Tu turno!');
+      expect(
+        anuncio
+          .querySelector('.combate__anuncio-texto')
+          .classList.contains('combate__anuncio-texto--turno'),
+      ).toBe(true);
+    });
+  });
+
+  test('punto 17: durante la cuenta atrás nadie juega; al acabar, el mando se abre', () => {
+    const controles = montar();
+    const ataques = () => [...document.querySelectorAll('[data-atacar]')];
+    expect(ataques().every((b) => !b.disabled)).toBe(true);
+
+    let alAcabar = null;
+    controles.esperarCuentaAtras(5800, (fn, ms) => {
+      expect(ms).toBe(5800);
+      alAcabar = fn;
+    });
+    expect(ataques().every((b) => b.disabled)).toBe(true);
+
+    alAcabar();
+    expect(ataques().every((b) => !b.disabled)).toBe(true);
+  });
+
+  test('punto 17: sin cuenta atrás (0 ms) no se cierra nada', () => {
+    const controles = montar();
+    const programar = jest.fn();
+    controles.esperarCuentaAtras(0, programar);
+    expect(programar).not.toHaveBeenCalled();
+    expect([...document.querySelectorAll('[data-atacar]')].every((b) => !b.disabled)).toBe(true);
   });
 
   test('las especiales se ensenan deshabilitadas con el motivo, y el poder con su maximo', () => {
@@ -1627,6 +1831,12 @@ describe('auditoría de DEV del 30-sep · combate', () => {
     expect(registro()).toContain('Guerrero Tanque (tú) usa Golpe con escudo.');
     expect(registro()).toContain('Gastas 2 de poder (2/10).');
     expect(document.querySelector('[data-zona="poder"]').textContent).toContain('2/10');
+    // Revisión del 6-oct, punto 19: el gasto también salta sobre tu héroe,
+    // y el golpe sobre el rival con su unidad.
+    const sobreAna = document.querySelector(`[data-puesto="${ANA}"] .impacto`);
+    expect(sobreAna.textContent).toBe('−2 PODER');
+    expect(sobreAna.classList.contains('impacto--poder')).toBe(true);
+    expect(document.querySelector(`[data-puesto="${BRUNO}"] .impacto`).textContent).toBe('−6 VIDA');
 
     controles.recibir({
       tipo: TURNO_CAMBIADO,
