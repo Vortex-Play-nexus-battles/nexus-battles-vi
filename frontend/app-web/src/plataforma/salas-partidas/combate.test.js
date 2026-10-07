@@ -619,7 +619,7 @@ describe('textoDelTurno()', () => {
       { jugador: { id: BRUNO }, heroe: { nombre: 'Golem' }, esIA: true },
     ];
 
-    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Juega la máquina (Golem)');
+    expect(textoDelTurno(BRUNO, conIA, ANA).texto).toBe('Turno de la IA · Golem');
   });
 
   test('un identificador que no esta en pantalla no deja el indicador en blanco', () => {
@@ -1649,6 +1649,54 @@ describe('auditoría de DEV del 30-sep · combate', () => {
     expect(lineas.indexOf('Recuperas 2 de poder (4/10).')).toBeGreaterThan(
       lineas.indexOf('Turno 4: te toca a ti.'),
     );
+  });
+
+  test('revisión 6-oct: el medidor es la cifra del servidor tras cada aviso, y enseña el −2 y el +2', () => {
+    const controles = montar();
+    const medidor = () => document.querySelector('[data-zona="poder"]');
+
+    // 10 → 8: lo que el servidor dice tras el golpe con escudo (coste 2).
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: ANA,
+      accion: { codigo: 'GOLPE_CON_ESCUDO', nombre: 'CAUSAR_DANO', tipo: 'ATAQUE' },
+      afectados: [
+        { idJugador: BRUNO, vidaActual: 34, vidaMaxima: 40, diferencia: -6 },
+        {
+          idJugador: ANA,
+          vidaActual: 44,
+          vidaMaxima: 44,
+          diferencia: 0,
+          poderActual: 8,
+          poderMaximo: 10,
+        },
+      ],
+    });
+    expect(medidor().querySelector('.medidor-poder__valor').textContent).toBe('8/10');
+    expect(medidor().querySelector('[role="meter"]').getAttribute('aria-valuenow')).toBe('8');
+
+    // El contragolpe de la máquina no toca el poder propio: la cifra sigue siendo 8.
+    controles.recibir({
+      tipo: ACCION_RESUELTA,
+      idPartida: PARTIDA,
+      idEjecutor: BRUNO,
+      accion: { codigo: 'ATAQUE_BASICO', nombre: 'ATAQUE_BASICO', tipo: 'ATAQUE' },
+      afectados: [{ idJugador: ANA, vidaActual: 39, vidaMaxima: 44, diferencia: -5 }],
+    });
+    expect(medidor().querySelector('.medidor-poder__valor').textContent).toBe('8/10');
+
+    // Vuelve el turno con el +2 del servidor: 10/10 y se enseña el «+2».
+    controles.recibir({
+      tipo: TURNO_CAMBIADO,
+      idPartida: PARTIDA,
+      idJugador: ANA,
+      numeroTurno: 3,
+      poderActual: 10,
+      poderMaximo: 10,
+    });
+    expect(medidor().querySelector('.medidor-poder__valor').textContent).toBe('10/10');
+    expect(medidor().querySelector('.medidor-poder__cambio').textContent).toBe('+2');
   });
 
   test('el poder que quita una acción ajena se dice como pérdida', () => {

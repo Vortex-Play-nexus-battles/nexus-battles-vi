@@ -267,7 +267,7 @@ export function montarSalaBatalla(
     return;
   }
 
-  montarPanelVidas(vidas, { idPartida: id, participantes: enPantalla, suscribir });
+  montarPanelVidas(vidas, { idPartida: id, participantes: enPantalla, suscribir, yo: yo ?? null });
 
   // HU-JUE-017 CA-04 · la presentacion de los heroes.
   //

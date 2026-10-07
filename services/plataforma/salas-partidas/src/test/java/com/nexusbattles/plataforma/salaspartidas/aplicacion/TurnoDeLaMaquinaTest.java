@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -186,12 +187,12 @@ class TurnoDeLaMaquinaTest {
     }
 
     @Test
-    @DisplayName("si el motor se cae en el turno de la maquina, ella pasa y el combate sigue")
+    @DisplayName("si el motor se cae en el turno de la maquina (y sigue caido al reintentar), ella pasa y el combate sigue")
     void motorCaidoEnElTurnoDeLaMaquina() {
         // No se propaga el 503: quien mando la accion ya la vio resuelta.
         motor.dano = 15;
         motor.mientrasResuelve = partida -> {
-            if (motor.acciones.size() == 2) {
+            if (motor.acciones.size() >= 2) {
                 throw new MotorNoDisponible("apagado");
             }
         };
@@ -205,6 +206,29 @@ class TurnoDeLaMaquinaTest {
                 () -> assertEquals(EstadoPartida.EN_CURSO, despues.estado()),
                 () -> assertEquals(ANA, despues.turnoActual().idJugador()),
                 () -> assertEquals("TURNO_PERDIDO", canal.motivos.get(canal.motivos.size() - 1)));
+    }
+
+    @Test
+    @DisplayName("un corte de un instante no le quita el turno a la maquina: reintenta una vez y juega (revision 6-oct)")
+    void corteDeUnInstante() {
+        motor.dano = 15;
+        motor.mientrasResuelve = partida -> {
+            if (motor.acciones.size() == 2) {
+                throw new MotorNoDisponible("corte de red entre hosts");
+            }
+        };
+        Partida partida = contraLaMaquina();
+
+        Partida despues = casoDeUso().ejecutar(partida.id(), ANA, null, null);
+
+        assertAll(
+                () -> assertEquals(3, motor.acciones.size(), "Ana, la maquina y su reintento"),
+                () -> assertTrue(motor.acciones.get(2).startsWith(MotorDeCombate.DECISION_DE_LA_MAQUINA + " "),
+                        "el reintento es la misma decision, sin inventar otra jugada"),
+                () -> assertEquals(85, despues.participantes().get(1).heroe().vidaActual(), "el golpe de Ana"),
+                () -> assertEquals(85, despues.participantes().get(0).heroe().vidaActual(), "el de la maquina, una vez"),
+                () -> assertEquals(ANA, despues.turnoActual().idJugador()),
+                () -> assertFalse(canal.motivos.contains("TURNO_PERDIDO"), "no paso el turno"));
     }
 
     @Test

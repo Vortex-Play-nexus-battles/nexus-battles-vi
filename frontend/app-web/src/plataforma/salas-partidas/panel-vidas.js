@@ -39,15 +39,17 @@ const ACCION_RESUELTA = 'partida.accion.resuelta';
  * selectores que consulta `shared/ui-kit/js/barra-vida.js`.
  *
  * @param {object} participante  esquema `Participante` del contrato
+ * @param {string|null} [yo] quien mira: su barra dice «Tú»
  * @returns {HTMLElement}
  */
-function crearBarra(participante) {
+function crearBarra(participante, yo = null) {
   const { jugador, heroe, esIA, equipo } = participante;
   return barraDeVida({
     nombre: heroe.nombre,
     idJugador: jugador.id,
     esIA,
     equipo,
+    esPropia: Boolean(yo) && jugador.id === yo,
   });
 }
 
@@ -59,12 +61,12 @@ function crearBarra(participante) {
  *
  * @param {HTMLElement} contenedor
  * @param {Array<object>} participantes  esquema `Participante` del contrato
- * @param {{idPartida?: string}} [opciones]
+ * @param {{idPartida?: string, yo?: string|null}} [opciones]
  *   `idPartida` deja al panel reconocer sus propios eventos. Sin ella el panel
  *   acepta cualquier accion que le entreguen, que es lo que se quiere cuando
- *   se usa suelto en pruebas o en una maqueta.
+ *   se usa suelto en pruebas o en una maqueta. `yo` marca la barra propia.
  */
-export function pintarParticipantes(contenedor, participantes, { idPartida } = {}) {
+export function pintarParticipantes(contenedor, participantes, { idPartida, yo = null } = {}) {
   if (!(contenedor instanceof HTMLElement)) {
     throw new TypeError('panel-vidas: se esperaba un HTMLElement como contenedor.');
   }
@@ -76,7 +78,7 @@ export function pintarParticipantes(contenedor, participantes, { idPartida } = {
   contenedor.replaceChildren();
 
   for (const participante of participantes) {
-    const barra = crearBarra(participante);
+    const barra = crearBarra(participante, yo);
     contenedor.appendChild(barra);
     actualizar(barra, participante.heroe.vidaActual, participante.heroe.vidaMaxima);
   }
@@ -141,9 +143,10 @@ export function aplicarAccionResuelta(contenedor, evento) {
  *   Recibe el manejador al que entregar cada mensaje del canal de la partida.
  *   Si no se pasa, el panel queda pintado con el estado inicial y quieto: util
  *   mientras el canal en tiempo real no este disponible.
+ * @param {string|null} [opciones.yo] quien mira: su barra dice «Tú»
  */
-export function montarPanelVidas(contenedor, { idPartida, participantes, suscribir }) {
-  pintarParticipantes(contenedor, participantes, { idPartida });
+export function montarPanelVidas(contenedor, { idPartida, participantes, suscribir, yo = null }) {
+  pintarParticipantes(contenedor, participantes, { idPartida, yo });
 
   if (typeof suscribir === 'function') {
     suscribir((evento) => aplicarAccionResuelta(contenedor, evento));

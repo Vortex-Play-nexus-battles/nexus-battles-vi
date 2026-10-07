@@ -3,7 +3,11 @@
  * máquina después, para que su contragolpe no parezca parte del tuyo.
  */
 import { jest } from '@jest/globals';
-import { PAUSA_ENTRE_ACCIONES_MS, suscripcionConRitmo } from './ritmo-de-combate.js';
+import {
+  PAUSA_ENTRE_ACCIONES_MS,
+  PAUSA_TRAS_AJENA_MS,
+  suscripcionConRitmo,
+} from './ritmo-de-combate.js';
 
 const YO = 'u-yo';
 const MAQUINA = 'u-maquina';
@@ -22,7 +26,7 @@ const turno = (idJugador, numeroTurno) => ({
 });
 
 /** Un canal falso y un reloj que se mueve a mano. */
-function banco({ pausaMs = 700 } = {}) {
+function banco({ pausaMs = 700, pausaTrasAjenaMs } = {}) {
   let entregar = null;
   let reloj = 0;
   const pendientes = [];
@@ -32,6 +36,7 @@ function banco({ pausaMs = 700 } = {}) {
   const suscribir = suscripcionConRitmo(canal, {
     yo: YO,
     pausaMs,
+    pausaTrasAjenaMs,
     ahora: () => reloj,
     programar: (fn, ms) => pendientes.push({ fn, cuando: reloj + ms }),
   });
@@ -52,12 +57,15 @@ function banco({ pausaMs = 700 } = {}) {
 }
 
 describe('suscripcionConRitmo', () => {
-  test('la pausa por defecto es la de producción', () => {
-    expect(PAUSA_ENTRE_ACCIONES_MS).toBe(700);
+  test('las pausas de producción dan 2–3 s para leer cada golpe (revisión del 6-oct)', () => {
+    expect(PAUSA_ENTRE_ACCIONES_MS).toBeGreaterThanOrEqual(2000);
+    expect(PAUSA_ENTRE_ACCIONES_MS).toBeLessThanOrEqual(3000);
+    expect(PAUSA_TRAS_AJENA_MS).toBeGreaterThan(0);
+    expect(PAUSA_TRAS_AJENA_MS).toBeLessThan(PAUSA_ENTRE_ACCIONES_MS);
   });
 
-  test('tu golpe y el cambio de turno llegan al instante; el contragolpe de la máquina espera la pausa', () => {
-    const b = banco();
+  test('tu golpe y el turno de la IA al instante; su golpe tras la pausa; tu turno, después de verlo', () => {
+    const b = banco({ pausaMs: 2200, pausaTrasAjenaMs: 900 });
     const vistos = [];
     b.suscribir((aviso) => vistos.push(`${aviso.tipo}:${aviso.idEjecutor ?? aviso.idJugador}`));
 
@@ -66,9 +74,10 @@ describe('suscripcionConRitmo', () => {
     b.llega(accion(MAQUINA));
     b.llega(turno(YO, 3));
 
+    // El mando se cierra al instante y el HUD dice de quién es el turno.
     expect(vistos).toEqual(['partida.accion.resuelta:u-yo', 'partida.turno.cambiado:u-maquina']);
 
-    b.pasa(699);
+    b.pasa(2199);
     expect(vistos).toHaveLength(2);
 
     b.pasa(1);
@@ -76,8 +85,43 @@ describe('suscripcionConRitmo', () => {
       'partida.accion.resuelta:u-yo',
       'partida.turno.cambiado:u-maquina',
       'partida.accion.resuelta:u-maquina',
-      'partida.turno.cambiado:u-yo',
     ]);
+
+    // El turno que vuelve (con su +2 de poder) no pisa el golpe de la IA.
+    b.pasa(899);
+    expect(vistos).toHaveLength(3);
+    b.pasa(1);
+    expect(vistos[3]).toBe('partida.turno.cambiado:u-yo');
+  });
+
+  test('el final tras el golpe de la IA también espera a que se vea ese golpe', () => {
+    const b = banco({ pausaMs: 2200, pausaTrasAjenaMs: 900 });
+    const vistos = [];
+    b.suscribir((aviso) => vistos.push(aviso.tipo));
+
+    b.llega(accion(YO));
+    b.llega(accion(MAQUINA));
+    b.llega({ tipo: 'partida.finalizada', idPartida: 'p', ganadores: [MAQUINA] });
+
+    b.pasa(2200);
+    expect(vistos).toEqual(['partida.accion.resuelta', 'partida.accion.resuelta']);
+    b.pasa(900);
+    expect(vistos).toEqual([
+      'partida.accion.resuelta',
+      'partida.accion.resuelta',
+      'partida.finalizada',
+    ]);
+  });
+
+  test('lo que sigue a TU acción no espera: solo se hace esperar lo que viene tras una ajena', () => {
+    const b = banco({ pausaMs: 2200, pausaTrasAjenaMs: 900 });
+    const vistos = [];
+    b.suscribir((aviso) => vistos.push(aviso.tipo));
+
+    b.llega(accion(YO));
+    b.llega({ tipo: 'partida.finalizada', idPartida: 'p', ganadores: [YO] });
+
+    expect(vistos).toEqual(['partida.accion.resuelta', 'partida.finalizada']);
   });
 
   test('todos los que escuchan (barras y registro) reciben cada aviso a la vez y en orden', () => {
