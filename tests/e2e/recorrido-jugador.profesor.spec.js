@@ -466,7 +466,16 @@ async function crearSalaYEntrar(page, { modalidad, privada = false }) {
   expect(await textoVisible(page, 'main')).not.toMatch(/canal en tiempo real|websocket/i);
   await page.getByRole('link', { name: 'Crear sala' }).first().click();
   await expect(page).toHaveURL(EN.crearSala);
+  // La dirección cambia antes de que crear-sala.js escuche el envío: si se
+  // pulsa «Crear sala» antes, el formulario se envía solo, por GET, y la
+  // página vuelve a empezar (DEV, corrida 37637858830). El guion ya está
+  // cuando ha ocultado el aforo, que en 1 contra 1 y «Solo» es fijo.
+  await page.waitForLoadState('load');
+  await expect(page.locator('#maximoParticipantes')).toBeHidden({ timeout: 30_000 });
   await page.locator(modalidad).check();
+  if (modalidad === '#modalidad-ia') {
+    await expect(page.locator('[data-zona="nota-contra-ia"]')).toBeVisible();
+  }
   if (privada) {
     await page.locator('#formulario-crear-sala [name="privada"]').check();
   }
@@ -768,7 +777,7 @@ test.describe('PLAYER-08 · los dos recorridos del jugador (revisión del 6-oct)
         await irA(page, 'inventario');
         await expect(page).toHaveURL(EN.inventario);
         const misHeroes = page.locator('.inventario__seccion--mis-heroes');
-        await expect(misHeroes.locator('h2')).toHaveText('Mis héroes');
+        await expect(misHeroes.locator('#inventario-mis-heroes')).toHaveText('Mis héroes');
         await expect(misHeroes.locator('[data-heroe]')).toHaveCount(1, { timeout: 30_000 });
         const nexo = page.locator('[data-zona="heroes-del-nexo"]');
         await expect(
@@ -781,7 +790,10 @@ test.describe('PLAYER-08 · los dos recorridos del jugador (revisión del 6-oct)
         // hay, va después de los héroes y con su título.
         const misiones = page.locator('.inventario__misiones');
         if (await misiones.isVisible()) {
-          await expect(misiones.locator('h2')).toHaveText('Misiones para tus héroes');
+          // El título de la sección; dentro, el banner lleva el nombre de cada misión.
+          await expect(misiones.locator('#inventario-misiones')).toHaveText(
+            'Misiones para tus héroes',
+          );
           const despues = await page.evaluate(() => {
             const heroes = document.querySelector('.inventario__panel--heroes');
             const banner = document.querySelector('.inventario__misiones');
