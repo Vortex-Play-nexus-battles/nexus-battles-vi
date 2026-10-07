@@ -477,9 +477,9 @@ def autoprueba() -> int:
          epicas.replace('"Frio concentrado"', '"Frío concentrado"'),
          "falta «Frio concentrado»"),
         ("epica con otra probabilidad", "epicas",
-         epicas.replace('"Té changua", "Chamán", null, "Sana a todos +(4d8)", 0.1',
-                        '"Té changua", "Chamán", null, "Sana a todos +(4d8)", 0.2'),
-         "probabilidadMaster es 0.2"),
+         epicas.replace('"Té changua", "Chamán", null, "Sana a todos +(4d8)", 10',
+                        '"Té changua", "Chamán", null, "Sana a todos +(4d8)", 20'),
+         "probabilidadMaster es 20.0"),
         # 7.8.14: la epica de la mision es producto del catalogo, no de la Tabla 20.
         ("falta la epica de la mision (Velo de Sombras) en la semilla", "semilla",
          semilla_con(lambda s: s.__setitem__("epicas", [e for e in s["epicas"] if e["nombre"] != "Velo de Sombras"])),
