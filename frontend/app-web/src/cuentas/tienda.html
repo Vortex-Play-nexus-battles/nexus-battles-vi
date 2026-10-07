@@ -33,7 +33,8 @@
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
       montarCabecera(document.getElementById('navbar-container'), {
         vista: 'tienda',
-        seccionActiva: 'cuenta',
+        // Revisión del 6-oct, punto 7: la tienda tiene su atajo en la barra.
+        seccionActiva: 'tienda',
         // UXC-9 — RF-INV-008: aquí la búsqueda de la barra filtra la tienda en
         // el sitio, con el mismo campo que la vitrina, en vez de recargarla.
         buscador: {

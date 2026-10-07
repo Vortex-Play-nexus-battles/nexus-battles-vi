@@ -8,6 +8,8 @@
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
     <link rel="stylesheet" href="../plataforma/notificaciones/banner-rotativo.css" />
+    <!-- Revisión del 6-oct, punto 6: las tarjetas de producto del escaparate. -->
+    <link rel="stylesheet" href="./tienda-producto.css" />
   </head>
   <body>
     <div data-cabecera-app></div>
@@ -88,9 +90,26 @@
         </section>
       </div>
 
-      <section class="pila pila--compacta">
-        <h2 class="t-subtitulo">A dónde ir</h2>
-        <div class="home__accesos" data-zona="accesos"></div>
+      <!--
+        Revisión del modo jugador del 6-oct, punto 6: la tienda en el inicio
+        del jugador. Los primeros productos de la vitrina, cada uno con «Ver en
+        la tienda», y la tienda completa a un clic. Lo pinta `home.js`.
+
+        Punto 7: aquí estaba «A dónde ir», ocho tarjetas que repetían la barra
+        de arriba. Lo que solo estaba aquí —la tienda y el chat— subió a la
+        barra como atajo; el resto ya estaba en ella.
+      -->
+      <section class="home__tienda" aria-labelledby="titulo-tienda-inicio">
+        <div class="home__tienda-cabecera">
+          <div class="home__tienda-titulos">
+            <p class="home__sobretitulo">Explora el Nexo</p>
+            <h2 class="home__tienda-titulo" id="titulo-tienda-inicio">Tienda</h2>
+          </div>
+          <a class="boton boton--contorno" data-zona="ver-tienda" href="./tienda.html">
+            Ver toda la tienda
+          </a>
+        </div>
+        <div data-zona="bloque-tienda"></div>
       </section>
 
       <!--
