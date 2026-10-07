@@ -2359,6 +2359,18 @@ export const ESCENARIOS = [
       // como carrusel (controles, puntos y región con nombre). `Banner` de
       // productos.yaml 1.6.0.
       ['**/api/v1/banners/vigentes', json(bannersVigentes())],
+      // Revisión del modo jugador del 6-oct, punto 6 — el escaparate de la
+      // tienda en el inicio: la misma vitrina que la tienda.
+      [
+        '**/api/v1/vitrina*',
+        json({
+          content: PRODUCTOS_DE_TIENDA,
+          last: true,
+          totalPages: 1,
+          moneda: 'COP',
+          monedasDisponibles: ['COP'],
+        }),
+      ],
     ],
     exige: [
       '[data-zona="saldo"]',
@@ -2367,6 +2379,10 @@ export const ESCENARIOS = [
       '[data-zona="avisos"]',
       '[data-componente="banner-rotativo"] [data-banner]',
       '[data-accion="pausar-banner"]',
+      '[data-zona="bloque-tienda"] .product-card',
+      '[data-zona="bloque-tienda"] [data-ver-en-tienda]',
+      '.cabecera__atajo[data-atajo="tienda"]',
+      '.chatbot-flotante .chatbot-flotante__emblema',
     ],
   },
   {
@@ -2713,9 +2729,37 @@ export const ESCENARIOS = [
   {
     // UXC-4 (retroalimentacion del profesor) — la portada con la tienda: sin
     // sesion, productos reales a la vista.
+    // Revisión del modo jugador del 6-oct, puntos 3 y 5 — la entrada sin la
+    // tienda debajo, y el mismo logotipo al crear cuenta y al recuperarla.
+    id: 'entrada-sin-tienda',
+    titulo: 'entrada: solo el formulario, con el logotipo oficial',
+    ruta: 'cuentas/login.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo', '#email'],
+  },
+  {
+    id: 'entrada-crear-cuenta',
+    titulo: 'crear cuenta con el mismo logotipo que la entrada',
+    ruta: 'cuentas/registro.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo'],
+  },
+  {
+    id: 'entrada-recuperar',
+    titulo: 'recuperar la contraseña con el mismo logotipo que la entrada',
+    ruta: 'cuentas/restablecer-solicitar.html',
+    sesion: () => null,
+    rutas: [],
+    exige: ['h1 .entrada__logo'],
+  },
+  {
     id: 'portada-con-tienda',
     titulo: 'portada pública con la tienda: productos, rebaja e imagen',
-    ruta: 'cuentas/login.html',
+    // Revisión del 6-oct, puntos 2 y 3: la tienda pública vive en `/`
+    // (portada.html), ya no debajo de la entrada.
+    ruta: 'cuentas/portada.html',
     sesion: () => null,
     rutas: rutasDeTienda(),
     exige: ['.vitrina-publica .product-card', '.vitrina-publica .badge-descuento'],
@@ -2725,7 +2769,7 @@ export const ESCENARIOS = [
     // comprar u opinar, entrar.
     id: 'portada-detalle-publico',
     titulo: 'detalle público: opiniones de solo lectura y «Entra para comprar»',
-    ruta: 'cuentas/login.html',
+    ruta: 'cuentas/portada.html',
     sesion: () => null,
     rutas: rutasDeTienda(),
     interaccion: async (pagina) => {

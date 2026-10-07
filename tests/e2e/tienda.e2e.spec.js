@@ -546,11 +546,17 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
   test('la portada pública enseña la tienda, su detalle y lleva a entrar para comprar (UXC-4)', async ({
     browser,
   }) => {
-    // Sin sesión: la vitrina y las opiniones son públicas.
+    // Sin sesión: la vitrina y las opiniones son públicas. Revisión del 6-oct,
+    // puntos 2 y 3: la tienda vive en la portada (`/`), no en la entrada.
     const contexto = await browser.newContext();
     const page = await contexto.newPage();
     try {
       await page.goto(`${BORDE}/login`);
+      await expect(page.locator('#email')).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator('.vitrina-publica')).toHaveCount(0);
+      await expect(page.getByText('Mira lo que se vende en el Nexo')).toHaveCount(0);
+
+      await page.goto(`${BORDE}/`);
       const tarjetas = page.locator('.vitrina-publica .product-card');
       await expect(tarjetas.first()).toBeVisible({ timeout: 20_000 });
       // Sin carrito que llenar: la portada no ofrece «Añadir».
@@ -562,9 +568,11 @@ test.describe('Tienda sobre el catálogo maestro (R16, #421)', () => {
       await expect(ficha.locator('.redactor-comentario')).toHaveCount(0);
       await expect(ficha.locator('[data-accion="entrar-para-opinar"]')).toBeVisible();
 
+      // Desde la portada, «Entra para comprar» lleva a la entrada con la
+      // vuelta escrita: al entrar, la tienda.
       await ficha.locator('[data-accion="entrar-para-comprar"]').click();
-      await expect(page.locator('#email')).toBeFocused();
-      // La vuelta queda escrita: al entrar, la tienda.
+      await expect(page).toHaveURL(/\/login\?/, { timeout: 20_000 });
+      await expect(page.locator('#email')).toBeVisible();
       expect(new URL(page.url()).searchParams.get('volver')).toMatch(/tienda\.html$/);
     } finally {
       await contexto.close();

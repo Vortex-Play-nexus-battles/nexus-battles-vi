@@ -9,7 +9,13 @@
 
 import { jest } from '@jest/globals';
 
-import { ACCESOS, montarHome, motivoDeIndisponibilidad } from './home.js';
+import {
+  PRODUCTOS_EN_INICIO,
+  bloqueDeTienda,
+  montarHome,
+  motivoDeIndisponibilidad,
+  urlDeLaTiendaCon,
+} from './home.js';
 
 const VISTA = `
   <main>
@@ -18,9 +24,19 @@ const VISTA = `
     <div data-zona="bloque-heroe"></div>
     <div data-zona="bloque-torneo"></div>
     <div data-zona="bloque-avisos"></div>
-    <div data-zona="accesos"></div>
+    <div data-zona="bloque-tienda"></div>
   </main>
 `;
+
+/** Un producto de la vitrina con la forma de ecommerce-carrito.yaml. */
+const producto = (i) => ({
+  id: `p-${i}`,
+  nombre: `Espada rúnica ${i}`,
+  tipo: 'ARMA',
+  precioFinal: 1000,
+  precioOriginal: 1000,
+  moneda: 'COP',
+});
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -110,19 +126,72 @@ describe('con todos los servicios disponibles', () => {
     );
   });
 
-  test('los accesos salen de una lista, no de HTML escrito a mano', async () => {
-    montarHome(document, { sesion: SESION, fetchImpl: servicio(TODO_BIEN) });
+  test('punto 6: el escaparate pinta los productos de la vitrina con «Ver en la tienda»', async () => {
+    const vitrina = {
+      '/api/v1/vitrina': { cuerpo: { content: [producto(1), producto(2)], totalElements: 2 } },
+    };
+    montarHome(document, { sesion: SESION, fetchImpl: servicio({ ...TODO_BIEN, ...vitrina }) });
+    await asentar();
     await asentar();
 
-    const enlaces = document.querySelectorAll('[data-zona="accesos"] [data-acceso]');
-    expect(enlaces).toHaveLength(ACCESOS.length);
-    expect(enlaces[0].getAttribute('href')).toBe(ACCESOS[0].destino);
+    const zona = document.querySelector('[data-zona="bloque-tienda"]');
+    const tarjetas = zona.querySelectorAll('.product-card');
+    expect(tarjetas).toHaveLength(2);
+    const enlace = tarjetas[0].querySelector('a[data-ver-en-tienda]');
+    expect(enlace.textContent).toBe('Ver en la tienda');
+    expect(new URL(enlace.href).searchParams.get('busqueda')).toBe('Espada rúnica 1');
+    expect(enlace.getAttribute('aria-label')).toBe('Ver en la tienda: Espada rúnica 1');
+    // Con cuenta no hay «Entra para comprar» ni el botón de la ficha pública.
+    expect(zona.querySelector('[data-ver-producto]')).toBeNull();
+  });
+});
+
+/*
+ * Revisión del modo jugador del 6-oct, punto 6 — el escaparate de la tienda
+ * en el inicio. Productos reales de la vitrina; si no hay o no responde, se
+ * dice.
+ */
+describe('bloqueDeTienda (punto 6)', () => {
+  test('pide la vitrina con el tamaño del escaparate y no enseña más', async () => {
+    const consultar = jest.fn(async () => ({
+      productos: Array.from({ length: 12 }, (_, i) => producto(i + 1)),
+    }));
+    const bloque = await bloqueDeTienda({ consultar, fetchImpl: () => {} });
+
+    expect(consultar).toHaveBeenCalledWith(
+      expect.objectContaining({ cuantos: PRODUCTOS_EN_INICIO }),
+    );
+    expect(bloque.querySelectorAll('.product-card')).toHaveLength(PRODUCTOS_EN_INICIO);
+    expect(PRODUCTOS_EN_INICIO).toBeGreaterThanOrEqual(4);
+    expect(PRODUCTOS_EN_INICIO).toBeLessThanOrEqual(8);
   });
 
-  test('auditoría 30-sep: «Comunidad» lleva a donde están las opiniones, no a un formulario sin producto', () => {
-    const comunidad = ACCESOS.find((acceso) => acceso.titulo === 'Comunidad');
-    expect(comunidad.destino).toBe('./tienda.html');
-    expect(ACCESOS.some((acceso) => acceso.destino.includes('publicar-comentario'))).toBe(false);
+  test('la vitrina vacía se dice, sin tarjetas inventadas', async () => {
+    const bloque = await bloqueDeTienda({ consultar: async () => ({ productos: [] }) });
+    expect(bloque.textContent).toMatch(/Todavía no hay productos a la venta/);
+    expect(bloque.querySelector('.product-card')).toBeNull();
+  });
+
+  test('si la vitrina no responde se dice y se puede reintentar, sin códigos', async () => {
+    const alReintentar = jest.fn();
+    const bloque = await bloqueDeTienda({
+      consultar: async () => {
+        throw new Error('La vitrina respondió 503');
+      },
+      alReintentar,
+    });
+    expect(bloque.textContent).toMatch(/La tienda no responde ahora mismo/);
+    expect(bloque.textContent).not.toMatch(/503/);
+    bloque.querySelector('button').click();
+    expect(alReintentar).toHaveBeenCalled();
+  });
+
+  test('urlDeLaTiendaCon: la tienda con el nombre buscado, o la tienda sin más', () => {
+    expect(new URL(urlDeLaTiendaCon('Casco de Obsidiana')).searchParams.get('busqueda')).toBe(
+      'Casco de Obsidiana',
+    );
+    expect(new URL(urlDeLaTiendaCon('')).search).toBe('');
+    expect(urlDeLaTiendaCon()).toMatch(/cuentas\/tienda\.html$/);
   });
 });
 

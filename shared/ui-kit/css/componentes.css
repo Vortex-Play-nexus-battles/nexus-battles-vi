@@ -3478,6 +3478,15 @@ button.tarjeta--partida:disabled {
   .cabecera .cabecera__marca-corta {
     display: inline;
   }
+
+  /* Revisión del modo jugador del 6-oct (responsive a 1024): con la marca
+     corta todavía no cabían los seis destinos, la lupa, el saldo, la campana
+     y el apodo, y «Mi Cuenta» bajaba a una segunda línea. El apodo se queda
+     en el avatar (su nombre accesible lo lleva entero), como ya pasaba por
+     debajo de 900 px. Nunca se quita un destino. */
+  .cabecera--jugador .cabecera__identidad {
+    display: none;
+  }
 }
 
 /* UXC-9 — el campo de búsqueda cabe junto a la marca, los seis destinos y la
@@ -3928,27 +3937,163 @@ button.tarjeta--partida:disabled {
    escribio; lo destapo la primera vista construida de verdad.
    ======================================================================= */
 
+/* Revisión del modo jugador del 6-oct, punto 4 — «que no se vea tan
+   genérico»: el emblema del Nexo sobre el cromo, con un halo de energía que
+   gira despacio, una señal y el rótulo «Asistente Nexus» al pasar o al llegar
+   con el teclado. Mismo tamaño que antes (56 px): la ventana y los huecos que
+   las vistas le reservan siguen midiendo lo mismo. */
 .chatbot-flotante {
   position: fixed;
   right: var(--e-6);
   bottom: var(--e-6);
   width: 56px;
   height: 56px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 0;
   border-radius: 50%;
-  background: var(--primaria-relleno);
+  isolation: isolate;
+  background: radial-gradient(
+    circle at 50% 38%,
+    var(--cromo-elevado),
+    var(--cromo) 72%
+  );
   color: var(--texto-sobre-color);
   font-family: var(--t-etiqueta-familia);
   font-weight: var(--t-etiqueta-peso);
-  box-shadow: var(--sombra-3);
+  box-shadow:
+    var(--sombra-3),
+    0 0 18px color-mix(in srgb, var(--primaria) 55%, transparent);
   cursor: pointer;
+  transition:
+    transform var(--duracion-normal) var(--curva-estandar),
+    box-shadow var(--duracion-normal) var(--curva-estandar);
 }
 
-.chatbot-flotante:hover {
-  background: var(--acento-relleno);
+/* El halo: un anillo con el degradado de energía, por detrás del cromo. */
+.chatbot-flotante__halo {
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    var(--primaria),
+    var(--acento-relleno),
+    var(--enlace-sobre-cromo),
+    var(--primaria)
+  );
+  /* Solo el anillo: el centro deja ver el cromo del botón. */
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 3px));
+  pointer-events: none;
+}
+
+.chatbot-flotante__emblema {
+  width: 34px;
+  height: auto;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--enlace-sobre-cromo) 70%, transparent));
+}
+
+/* La señal: un punto de energía en el borde, como el de un HUD. */
+.chatbot-flotante__senal {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--enlace-sobre-cromo);
+  box-shadow:
+    0 0 0 2px var(--cromo),
+    0 0 8px var(--enlace-sobre-cromo);
+  pointer-events: none;
+}
+
+/* El rótulo, a la izquierda del botón: solo al pasar o con el foco del
+   teclado. Está dentro del nombre accesible, así que no se anuncia dos veces. */
+.chatbot-flotante__rotulo {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + var(--e-3));
+  padding: var(--e-1) var(--e-3);
+  border-radius: var(--radio-pildora);
+  background: var(--cromo);
+  box-shadow: var(--sombra-2);
+  color: var(--texto-sobre-color);
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translate(6px, -50%);
+  pointer-events: none;
+  transition:
+    opacity var(--duracion-normal) var(--curva-salida),
+    transform var(--duracion-normal) var(--curva-salida);
+}
+
+.chatbot-flotante:hover,
+.chatbot-flotante:focus-visible {
+  transform: translateY(-2px);
+  box-shadow:
+    var(--sombra-3),
+    0 0 26px color-mix(in srgb, var(--acento-relleno) 70%, transparent);
+}
+
+.chatbot-flotante:hover .chatbot-flotante__rotulo,
+.chatbot-flotante:focus-visible .chatbot-flotante__rotulo {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.chatbot-flotante:focus-visible {
+  outline: 3px solid var(--enlace-sobre-cromo);
+  outline-offset: 5px;
+}
+
+.chatbot-flotante:active {
+  transform: scale(0.95);
+}
+
+/* Con la ventana abierta, el halo queda quieto y lleno: el asistente escucha. */
+.chatbot-flotante[aria-expanded='true'] .chatbot-flotante__halo {
+  inset: -4px;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chatbot-flotante__halo {
+    animation: halo-del-nexo 8s linear infinite;
+  }
+}
+
+@keyframes halo-del-nexo {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
+/* En el teléfono el rótulo no cabe a la izquierda y no hay puntero: fuera. */
+@media (max-width: 599px) {
+  .chatbot-flotante {
+    right: var(--e-4);
+    bottom: var(--e-4);
+  }
+
+  .chatbot-flotante__rotulo {
+    display: none;
+  }
+}
+
+/* Que no tape acciones: la sala de espera en el teléfono es una columna que
+   termina en sus botones; se le deja el hueco del botón debajo. */
+@media (max-width: 767px) {
+  body:has(.chatbot-flotante) .combate[data-sin-partida='si'] {
+    padding-bottom: calc(var(--e-4) + 56px + var(--e-4));
+  }
 }
 
 /* =======================================================================
@@ -4085,6 +4230,56 @@ button.tarjeta--partida:disabled {
 
 .cabecera__campana:hover {
   background: var(--cromo-elevado);
+}
+
+/* Revisión del modo jugador del 6-oct, punto 7 — la tienda y el chat como
+   atajos del HUD, junto a la campana y con su misma forma: icono, objetivo
+   táctil completo y nombre accesible. El de la vista en curso lleva el filo
+   de energía debajo, como el destino activo. */
+.cabecera__atajo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--objetivo-tactil);
+  min-height: var(--objetivo-tactil);
+  border-radius: var(--radio);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color var(--transicion);
+}
+
+.cabecera__atajo:hover {
+  background: var(--cromo-elevado);
+  color: inherit;
+}
+
+.cabecera__atajo:focus-visible {
+  outline: 2px solid var(--acento-relleno);
+  outline-offset: 2px;
+}
+
+.cabecera__atajo.activo {
+  background: var(--cromo-elevado);
+  box-shadow: inset 0 -2px 0 var(--enlace-sobre-cromo);
+}
+
+/* La barra está medida para que los seis destinos de RF-INV-008 no salten de
+   línea (ver el buscador, a 1300 px). Dos iconos más solo caben con holgura
+   —sin recortar el campo de búsqueda— desde 1440 px; por debajo, la tienda y
+   el chat siguen arriba, en el menú de la cuenta, y la barra queda como
+   estaba. */
+@media (max-width: 1439px) {
+  .cabecera__atajo {
+    display: none;
+  }
+}
+
+/* Con los atajos a la vista, las acciones se juntan un poco: el campo de
+   búsqueda conserva su ancho. */
+@media (min-width: 1440px) {
+  .cabecera--jugador .cabecera__acciones {
+    gap: var(--e-3);
+  }
 }
 
 .cabecera__contador {
@@ -4974,10 +5169,45 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
-.home__accesos {
+/* Revisión del modo jugador del 6-oct, puntos 6 y 7 — el escaparate de la
+   tienda ocupa el sitio de «A dónde ir» (que repetía la barra). Las tarjetas
+   son las de producto de la tienda (`tienda-producto.css`): superficie clara
+   sobre la atmósfera, como en la portada pública. */
+.home__tienda {
   display: grid;
+  gap: var(--e-4);
+}
+
+.home__tienda-cabecera {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
   gap: var(--e-3);
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.home__tienda-titulos {
+  display: grid;
+  gap: var(--e-1);
+}
+
+.home__tienda-titulo {
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+}
+
+.home__tienda-rejilla {
+  display: grid;
+  gap: var(--e-4);
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+@media (max-width: 599px) {
+  .home__tienda-rejilla {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: var(--e-3);
+  }
 }
 
 /* =======================================================================

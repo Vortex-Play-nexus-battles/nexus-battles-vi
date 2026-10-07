@@ -49,6 +49,7 @@ import {
   destinoVisible,
   esRolDeTrastienda,
   puedeVer,
+  rutaDeVista,
   urlDeVista,
   VEREDICTO,
 } from './acceso.js';
@@ -87,6 +88,20 @@ export const SECCIONES = Object.freeze([
   { id: 'inventario', etiqueta: 'Mi inventario', vista: 'inventario', icono: 'mochila' },
   { id: 'subasta', etiqueta: 'Subasta', vista: 'subastas', icono: 'martillo' },
   { id: 'cuenta', etiqueta: 'Mi Cuenta', vista: 'perfil', icono: 'usuario' },
+]);
+
+/**
+ * Revisión del modo jugador del 6-oct, punto 7: «quitar la duplicidad de
+ * botones en entrada… implementar los que no están [arriba] y ponerlos
+ * arriba». El inicio repetía, en «A dónde ir», los seis destinos de la barra
+ * y dos que no estaban en ella: la tienda y el chat. Esos dos suben a la
+ * barra como atajos del HUD, junto a la campana, con su icono. No son
+ * destinos de RF-INV-008 —los seis siguen siendo los seis, con sus etiquetas
+ * literales— ni la convierten en una barra de quince enlaces.
+ */
+export const ATAJOS_DEL_HUD = Object.freeze([
+  { id: 'tienda', etiqueta: 'Tienda', vista: 'tienda', icono: 'carrito' },
+  { id: 'chat', etiqueta: 'Chat', vista: 'chat', icono: 'chat' },
 ]);
 
 /**
@@ -348,6 +363,9 @@ function menuDeCuenta({ sesion, base, almacen, navegar, opcionesExtra = [] }) {
     ['Historial de transacciones', RUTAS.historial, 'historial-transacciones'],
     ['Mis cofres', RUTAS.cofres, 'mis-cofres'],
     ['Tienda', RUTAS.tienda, 'tienda'],
+    // Punto 7 — en el teléfono los atajos del HUD no caben en la barra: el
+    // chat queda aquí, junto a la tienda.
+    ['Chat', rutaDeVista('chat'), 'chat'],
     ['Mis sanciones', RUTAS.misSanciones, 'mis-sanciones'],
     ...opcionesExtra,
   ];
@@ -610,6 +628,7 @@ export function montarArmazonJugador(
     }
     acciones.append(
       indicadorDeCreditos(base),
+      ...atajosDelHud({ sesion, base, seccionActiva }),
       campana(base),
       menuDeCuenta({
         sesion,
@@ -626,6 +645,31 @@ export function montarArmazonJugador(
   cabecera.append(acciones);
   raiz.replaceChildren(cabecera);
   return { elemento: cabecera, sesion };
+}
+
+/**
+ * Punto 7 — la tienda y el chat como atajos del HUD: un icono con su nombre
+ * accesible (y el mismo de ayuda al pasar el puntero). Solo los que la matriz
+ * deja ver a quien mira; el de la vista en curso queda marcado.
+ *
+ * @param {{sesion: object, base: string, seccionActiva: string|null}} opciones
+ * @returns {HTMLAnchorElement[]}
+ */
+function atajosDelHud({ sesion, base, seccionActiva }) {
+  return ATAJOS_DEL_HUD.filter((atajo) => destinoVisible(atajo.vista, sesion)).map((atajo) => {
+    const enlaceAtajo = h('a', {
+      clase: 'cabecera__atajo',
+      atributos: { 'aria-label': atajo.etiqueta, title: atajo.etiqueta },
+      datos: { atajo: atajo.id },
+    });
+    enlaceAtajo.href = urlDeVista(atajo.vista, base);
+    enlaceAtajo.append(icono(atajo.icono, base));
+    if (atajo.id === seccionActiva) {
+      enlaceAtajo.classList.add('activo');
+      enlaceAtajo.setAttribute('aria-current', 'page');
+    }
+    return enlaceAtajo;
+  });
 }
 
 /** Créditos: oculto hasta que la vista sepa la cifra. Nunca se inventa. */
