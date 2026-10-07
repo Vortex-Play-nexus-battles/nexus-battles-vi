@@ -171,6 +171,13 @@ export function distintivoDeDeseo() {
   });
 }
 
+export function distintivoPremium() {
+  return h('span', {
+    clase: 'distintivo distintivo--epica producto-premium',
+    texto: 'Premium',
+  });
+}
+
 /**
  * El nombre accesible del conmutador: empieza por lo que se lee en él (WCAG
  * 2.5.3) y dice de qué producto es. No cambia al pulsarlo: el estado lo
@@ -323,6 +330,7 @@ export function tarjetaDeProducto(
   }
 
   const distintivos = [
+    producto.premium ? distintivoPremium() : null,
     unidadesPropias > 0 || producto.esPropio
       ? distintivoDePropiedad(Math.max(unidadesPropias, 1))
       : null,

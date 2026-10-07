@@ -125,6 +125,12 @@ export function aProductoDeVitrina(dto = {}) {
   // D-44 (1.6.0): lo que cuesta pagado con créditos, ya calculado por el
   // servidor con la promoción vigente; null si no se puede pagar así.
   const precioCreditos = enteroPositivo(dto.precioCreditos);
+  const premium =
+    dto.premium === true ||
+    (dto.premium !== false &&
+      Object.hasOwn(dto, 'precioCreditos') &&
+      precio !== null &&
+      precioCreditos === null);
 
   // Solo hay precio anterior que tachar si el actual es realmente menor.
   const hayRebaja = precio !== null && original !== null && original > precio;
@@ -148,6 +154,7 @@ export function aProductoDeVitrina(dto = {}) {
     descuento: hayRebaja && porcentaje && porcentaje > 0 ? porcentaje : null,
     esPropio: dto.esPropio === true,
     enListaDeseos: dto.enListaDeseos === true,
+    premium,
     precioCreditos,
     precioCreditosTexto: textoDeCreditos(precioCreditos),
     // G3 (1.7.0): se vende, pero solo con créditos del juego. Su precio es el
