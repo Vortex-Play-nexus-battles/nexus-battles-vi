@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.comentarios.moderacion;
 
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -12,6 +14,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -272,7 +275,7 @@ class ModeracionHttpTest {
         @Test
         @DisplayName("la cola vacia es 200 con lista vacia, no 404: no tener trabajo es una respuesta")
         void colaVaciaEs200() throws Exception {
-            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+            when(servicio.cola(any(), any(), any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(), 0, 0, 20));
 
             mvc.perform(get(RUTA_COLA).header(HttpHeaders.AUTHORIZATION, comoModeradora()))
@@ -285,7 +288,7 @@ class ModeracionHttpTest {
         @Test
         @DisplayName("la cola trae el comentario con su marca, su recuento por categoria y el primer reporte")
         void colaConEntrada() throws Exception {
-            when(servicio.cola(eq(PRODUCTO), isNull(), eq(0), anyInt())).thenReturn(
+            when(servicio.cola(eq(PRODUCTO), isNull(), isNull(), isNull(), eq(0), anyInt())).thenReturn(
                     new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
                             comentario(Comentario.Estado.EN_REVISION), 2,
                             Map.of(CategoriaDeReporte.ACOSO, 2L), CUANDO, true)), 1, 0, 20));
@@ -307,7 +310,7 @@ class ModeracionHttpTest {
         @Test
         @DisplayName("el filtro marcado viaja al servicio (7.3.3, seguimiento especial)")
         void filtroMarcado() throws Exception {
-            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+            when(servicio.cola(any(), any(), any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(new ServicioDeModeracion.Entrada(
                             comentario(Comentario.Estado.PUBLICADO).conMarca(true), 0, Map.of(), CUANDO, false)),
                             1, 0, 20));
@@ -318,13 +321,55 @@ class ModeracionHttpTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.entradas[0].comentario.marcado").value(true));
 
-            verify(servicio).cola(null, true, 0, 20);
+            verify(servicio).cola(null, true, null, null, 0, 20);
+        }
+
+        @Test
+        @DisplayName("los filtros categoria y prioridadElevada viajan al servicio (1.10.0)")
+        void filtrosNuevosDeLaCola() throws Exception {
+            when(servicio.cola(any(), any(), any(), any(), anyInt(), anyInt()))
+                    .thenReturn(new ServicioDeModeracion.Cola(List.of(), 0, 0, 20));
+
+            mvc.perform(get(RUTA_COLA)
+                            .param("categoria", "ACOSO")
+                            .param("prioridadElevada", "true")
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isOk());
+
+            verify(servicio).cola(null, null, CategoriaDeReporte.ACOSO, true, 0, 20);
+        }
+
+        @Test
+        @DisplayName("una categoria fuera de la lista es 400 problem+json, sin llegar al servicio ni nombrar clases internas")
+        void categoriaDeLaColaInventadaEs400() throws Exception {
+            mvc.perform(get(RUTA_COLA)
+                            .param("categoria", "INVENTADA")
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.status").value(400))
+                    .andExpect(jsonPath("$.detail", not(containsString("No enum constant"))))
+                    .andExpect(jsonPath("$.detail", not(containsString("nexusbattles"))));
+
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
+        @DisplayName("un prioridadElevada que no es booleano es 400 problem+json, sin llegar al servicio")
+        void prioridadElevadaNoBooleanaEs400() throws Exception {
+            mvc.perform(get(RUTA_COLA)
+                            .param("prioridadElevada", "quizas")
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON));
+
+            verifyNoInteractions(servicio);
         }
 
         @Test
         @DisplayName("el tamano de pagina se recorta a 100: el cliente no decide cuanto carga el servidor")
         void tamanoSeRecorta() throws Exception {
-            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+            when(servicio.cola(any(), any(), any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(), 0, 0, 100));
 
             mvc.perform(get(RUTA_COLA)
@@ -332,7 +377,7 @@ class ModeracionHttpTest {
                             .header(HttpHeaders.AUTHORIZATION, comoModeradora()))
                     .andExpect(status().isOk());
 
-            verify(servicio).cola(null, null, 0, 100);
+            verify(servicio).cola(null, null, null, null, 0, 100);
         }
 
         @Test
@@ -480,7 +525,7 @@ class ModeracionHttpTest {
         @Test
         @DisplayName("un ADMINISTRADOR tambien modera: la lista de roles no deja fuera a quien manda")
         void administradorTambienModera() throws Exception {
-            when(servicio.cola(any(), any(), anyInt(), anyInt()))
+            when(servicio.cola(any(), any(), any(), any(), anyInt(), anyInt()))
                     .thenReturn(new ServicioDeModeracion.Cola(List.of(), 0, 0, 20));
 
             mvc.perform(get(RUTA_COLA).header(HttpHeaders.AUTHORIZATION,

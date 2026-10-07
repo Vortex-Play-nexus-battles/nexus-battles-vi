@@ -158,7 +158,7 @@ class FlujoDeModeracionTest {
         assertEquals(1, reportado.totales());
 
         // 2. aparece en la cola del moderador
-        ServicioDeModeracion.Cola cola = servicio.cola(null, null, 0, 20);
+        ServicioDeModeracion.Cola cola = servicio.cola(null, null, null, null, 0, 20);
         assertEquals(1, cola.total());
         assertEquals("c-1", cola.entradas().get(0).comentario().id());
         assertEquals(1, cola.entradas().get(0).reportes());
@@ -169,7 +169,7 @@ class FlujoDeModeracionTest {
 
         // 4. SALE del estado en el que entro. Esto es el defecto que R10.1 cierra.
         assertEquals(Comentario.Estado.OCULTO, resuelto.comentario().estado());
-        assertEquals(0, servicio.cola(null, null, 0, 20).total(),
+        assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total(),
                 "resuelto es resuelto: deja de estar en la cola");
 
         // 5. queda el asiento, con las cinco cosas que pide la ficha y la IP (B3)
@@ -215,7 +215,7 @@ class FlujoDeModeracionTest {
 
             assertEquals(2, segundo.totales());
             assertEquals(Comentario.Estado.PUBLICADO, segundo.comentario().estado());
-            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "agrupados: una sola entrada");
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "agrupados: una sola entrada");
         }
 
         @Test
@@ -232,7 +232,7 @@ class FlujoDeModeracionTest {
                     PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
             assertEquals(Comentario.Estado.EN_REVISION, segundo.comentario().estado(), "el umbral es inclusivo");
             assertEquals(Comentario.Estado.EN_REVISION, leido("c-1").estado());
-            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "sigue siendo una sola entrada");
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "sigue siendo una sola entrada");
         }
 
         @Test
@@ -363,7 +363,7 @@ class FlujoDeModeracionTest {
                     servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null));
 
             assertEquals(1, filasDeReportes.size());
-            assertTrue(servicio.cola(null, null, 0, 20).entradas().stream()
+            assertTrue(servicio.cola(null, null, null, null, 0, 20).entradas().stream()
                     .noneMatch(ServicioDeModeracion.Entrada::prioridadElevada));
         }
 
@@ -385,7 +385,7 @@ class FlujoDeModeracionTest {
         @Test
         @DisplayName("vacia es una respuesta correcta, no un 404 (CA-03)")
         void vacia() {
-            ServicioDeModeracion.Cola cola = servicio.cola(null, null, 0, 20);
+            ServicioDeModeracion.Cola cola = servicio.cola(null, null, null, null, 0, 20);
             assertEquals(0, cola.total());
             assertTrue(cola.entradas().isEmpty());
         }
@@ -401,7 +401,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
             servicio.reportar(PRODUCTO, "mucho", "jugador-c", CategoriaDeReporte.SPAM, null);
 
-            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, null, null, 0, 20).entradas();
             assertEquals("mucho", entradas.get(0).comentario().id());
             assertEquals(3, entradas.get(0).reportes());
             assertEquals(2L, entradas.get(0).porCategoria().get(CategoriaDeReporte.ACOSO));
@@ -419,7 +419,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "mucho", "jugador-a", CategoriaDeReporte.ACOSO, null);
             servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
 
-            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, null, null, 0, 20).entradas();
             assertEquals("mucho", entradas.get(0).comentario().id());
             assertTrue(entradas.get(0).prioridadElevada());
             assertEquals("poco", entradas.get(1).comentario().id());
@@ -433,7 +433,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
             servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
 
-            assertFalse(servicio.cola(null, null, 0, 20).entradas().get(0).prioridadElevada());
+            assertFalse(servicio.cola(null, null, null, null, 0, 20).entradas().get(0).prioridadElevada());
         }
 
         @Test
@@ -444,9 +444,9 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
             servicio.reportar(PRODUCTO, "c-2", "jugador-b", CategoriaDeReporte.SPAM, null);
 
-            assertEquals(2, servicio.cola(PRODUCTO, null, 0, 20).total());
-            assertEquals(0, servicio.cola("otro", null, 0, 20).total());
-            ServicioDeModeracion.Cola segunda = servicio.cola(PRODUCTO, null, 1, 1);
+            assertEquals(2, servicio.cola(PRODUCTO, null, null, null, 0, 20).total());
+            assertEquals(0, servicio.cola("otro", null, null, null, 0, 20).total());
+            ServicioDeModeracion.Cola segunda = servicio.cola(PRODUCTO, null, null, null, 1, 1);
             assertEquals(1, segunda.entradas().size());
             assertEquals(2, segunda.total());
         }
@@ -462,13 +462,153 @@ class FlujoDeModeracionTest {
             resolver("eliminado-marcado", AccionDeModeracion.MARCAR, "vigilar");
             resolver("eliminado-marcado", AccionDeModeracion.ELIMINAR, "reincide");
 
-            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(null, true, 0, 20)));
-            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(PRODUCTO, true, 0, 20)));
-            assertEquals(List.of("en-revision"), ids(servicio.cola(null, false, 0, 20)),
+            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(null, true, null, null, 0, 20)));
+            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(PRODUCTO, true, null, null, 0, 20)));
+            assertEquals(List.of("en-revision"), ids(servicio.cola(null, false, null, null, 0, 20)),
                     "marcado=false son los EN_REVISION sin marcar");
-            assertEquals(List.of("en-revision"), ids(servicio.cola(PRODUCTO, false, 0, 20)));
-            assertEquals(List.of("en-revision"), ids(servicio.cola(null, null, 0, 20)),
+            assertEquals(List.of("en-revision"), ids(servicio.cola(PRODUCTO, false, null, null, 0, 20)));
+            assertEquals(List.of("en-revision"), ids(servicio.cola(null, null, null, null, 0, 20)),
                     "sin filtro, la cola de siempre");
+        }
+
+        @Test
+        @DisplayName("categoria deja solo los comentarios con al menos un reporte de esa categoria (1.10.0)")
+        void filtroPorCategoria() {
+            publicar("acoso-1", "autor-1");
+            publicar("spam-1", "autor-2");
+            retenido("retenido", "autor-3");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "spam-1", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            assertEquals(List.of("acoso-1"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, null, 0, 20)));
+            assertEquals(List.of("acoso-1", "spam-1"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 0, 20)),
+                    "un comentario con dos categorias sale con cada una de ellas");
+            assertEquals(List.of(),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.INFORMACION_FALSA, null, 0, 20)));
+            assertEquals(3, servicio.cola(null, null, null, null, 0, 20).total(),
+                    "sin el filtro entra tambien el retenido sin reportes");
+        }
+
+        @Test
+        @DisplayName("con categoria, la entrada conserva el recuento completo por categoria")
+        void categoriaNoRecortaPorCategoria() {
+            publicar("acoso-1", "autor-1");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Entrada entrada =
+                    servicio.cola(null, null, CategoriaDeReporte.ACOSO, null, 0, 20).entradas().get(0);
+
+            assertEquals(2, entrada.reportes());
+            assertEquals(1L, entrada.porCategoria().get(CategoriaDeReporte.ACOSO));
+            assertEquals(1L, entrada.porCategoria().get(CategoriaDeReporte.SPAM));
+        }
+
+        @Test
+        @DisplayName("el total y la pagina cuentan la cola ya filtrada")
+        void totalDeLaColaFiltrada() {
+            publicar("acoso-1", "autor-1");
+            publicar("spam-1", "autor-2");
+            publicar("spam-2", "autor-3");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "spam-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "spam-2", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola primera =
+                    servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 0, 1);
+            ServicioDeModeracion.Cola segunda =
+                    servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 1, 1);
+
+            assertEquals(2, primera.total(), "los dos de SPAM, no los tres de la cola");
+            assertEquals(1, primera.entradas().size());
+            assertEquals(1, segunda.entradas().size());
+            assertEquals(2, segunda.total());
+            assertEquals(List.of("spam-1", "spam-2"),
+                    List.of(primera.entradas().get(0).comentario().id(),
+                            segunda.entradas().get(0).comentario().id()));
+        }
+
+        @Test
+        @DisplayName("prioridadElevada=true deja solo los que alcanzaron el umbral; false, los demas")
+        void filtroPorPrioridadElevada() {
+            servicio = servicioConUmbral(2);
+            publicar("alta", "autor-1");
+            publicar("baja", "autor-2");
+            retenido("sin-reportes", "autor-3");
+            servicio.reportar(PRODUCTO, "alta", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "baja", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola elevadas = servicio.cola(null, null, null, true, 0, 20);
+            ServicioDeModeracion.Cola demas = servicio.cola(null, null, null, false, 0, 20);
+
+            assertEquals(List.of("alta"), ids(elevadas));
+            assertEquals(1, elevadas.total());
+            assertEquals(List.of("baja", "sin-reportes"), ids(demas));
+            assertEquals(2, demas.total());
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado nadie tiene prioridad elevada: true es cola vacia, false es todo")
+        void prioridadElevadaSinUmbral() {
+            publicar("c-1", "autor-1");
+            publicar("c-2", "autor-2");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-2", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola elevadas = servicio.cola(null, null, null, true, 0, 20);
+
+            assertEquals(List.of(), ids(elevadas));
+            assertEquals(0, elevadas.total());
+            assertEquals(List.of("c-1", "c-2"), ids(servicio.cola(null, null, null, false, 0, 20)));
+        }
+
+        @Test
+        @DisplayName("categoria y prioridadElevada se combinan entre si por Y")
+        void categoriaYPrioridad() {
+            servicio = servicioConUmbral(2);
+            publicar("alta-acoso", "autor-1");
+            publicar("baja-acoso", "autor-2");
+            publicar("alta-spam", "autor-3");
+            servicio.reportar(PRODUCTO, "alta-acoso", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta-acoso", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "baja-acoso", "jugador-c", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta-spam", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "alta-spam", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            assertEquals(List.of("alta-acoso"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, true, 0, 20)));
+            assertEquals(List.of("baja-acoso"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, false, 0, 20)));
+        }
+
+        @Test
+        @DisplayName("los filtros nuevos se combinan por Y con productoId y con marcado")
+        void filtrosConProductoYMarcado() {
+            publicar("vigilado", "autor-1");
+            publicar("suelto", "autor-2");
+            Comentario deOtroProducto = new Comentario("otro-prod", "otro", "autor-3", "apodo-autor-3",
+                    "texto", List.of(), AHORA.minusSeconds(3600), Comentario.Estado.PUBLICADO);
+            comentarios.save(RegistroDeComentario.desde(deOtroProducto));
+            servicio.reportar(PRODUCTO, "vigilado", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "suelto", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar("otro", "otro-prod", "jugador-c", CategoriaDeReporte.SPAM, null);
+            resolver("vigilado", AccionDeModeracion.MARCAR, "vigilar a este autor");
+
+            assertEquals(List.of("vigilado"),
+                    ids(servicio.cola(null, true, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("suelto", "otro-prod"),
+                    ids(servicio.cola(null, false, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("suelto"),
+                    ids(servicio.cola(PRODUCTO, false, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("otro-prod"),
+                    ids(servicio.cola("otro", null, CategoriaDeReporte.SPAM, false, 0, 20)));
+            assertEquals(List.of(),
+                    ids(servicio.cola(PRODUCTO, true, CategoriaDeReporte.ACOSO, null, 0, 20)));
         }
 
         private List<String> ids(ServicioDeModeracion.Cola cola) {
@@ -530,7 +670,7 @@ class FlujoDeModeracionTest {
             assertFalse(resuelto.autorNotificado(), "para el autor nada cambio: avisarle solo diria que lo reportaron");
             assertTrue(avisos.isEmpty());
             assertEquals(List.of("c-1:APROBAR"), auditados, "pero queda auditado");
-            assertEquals(0, servicio.cola(null, null, 0, 20).total(), "ya no tiene reportes pendientes");
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total(), "ya no tiene reportes pendientes");
         }
 
         @Test
@@ -559,16 +699,16 @@ class FlujoDeModeracionTest {
 
             ahora.set(AHORA.plusSeconds(60));
             resolver("c-1", AccionDeModeracion.APROBAR, "es una opinion");
-            assertEquals(0, servicio.cola(null, null, 0, 20).total());
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total());
 
             ahora.set(AHORA.plusSeconds(120));
             servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
-            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "el reporte nuevo esta pendiente");
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "el reporte nuevo esta pendiente");
 
             // MARCAR es una nota interna: no atiende el reporte.
             ahora.set(AHORA.plusSeconds(180));
             resolver("c-1", AccionDeModeracion.MARCAR, "vigilar");
-            assertEquals(1, servicio.cola(null, null, 0, 20).total(), "marcar no cierra reportes");
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "marcar no cierra reportes");
         }
 
         @Test
