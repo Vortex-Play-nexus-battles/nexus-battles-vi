@@ -1354,12 +1354,31 @@ async function elegirPaso(pagina, indice, habilidad) {
 
 /** Configura dos pasos y comprueba la estrategia contra el servicio de mentira. */
 async function prepararEstrategia(pagina) {
+  await elegirRotacion(pagina);
+  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+}
+
+/** Dos pasos en la rotación de prioridad alta (Tabla 7, Guerrero Tanque). */
+async function elegirRotacion(pagina) {
   await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
   await elegirPaso(pagina, 0, 'Golpe con escudo');
   await pagina.locator('[data-accion="anadir-paso"]').first().click();
   await elegirPaso(pagina, 1, 'Ataque básico');
-  await pagina.locator('[data-accion="comprobar-estrategia"]').click();
-  await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+}
+
+/**
+ * Revisión del modo jugador del 6-oct, punto 23 — avanza pasos en el
+ * asistente de preparar la misión, esperando a que se pueda seguir.
+ */
+async function avanzarPasos(pagina, cuantos) {
+  const siguiente = pagina.locator('.mision-asistente [data-accion="paso-siguiente"]');
+  for (let i = 0; i < cuantos; i += 1) {
+    await pagina
+      .locator('.mision-asistente [data-accion="paso-siguiente"][aria-disabled="false"]')
+      .waitFor({ timeout: 15_000 });
+    await siguiente.click();
+  }
 }
 
 /* ---------------------------------------------------------------------------
@@ -2879,32 +2898,71 @@ export const ESCENARIOS = [
     exige: ['.mision-card[data-estado="completada"]', '.mision-card[data-estado="abandonada"]'],
   },
   {
+    // Revisión del modo jugador del 6-oct, punto 22 — «Ver detalles»: la
+    // misión, con el jefe final en su recuadro y «Preparar misión» arriba; la
+    // preparación no está a la vista.
     id: 'misiones-detalle',
-    titulo: 'detalle de «El Templo Olvidado» (§7.8.14) con su configurador',
+    titulo: 'detalle de «El Templo Olvidado» (§7.8.14): la misión y su jefe final',
     ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado',
     sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
     exige: [
+      '.mision-detalle[data-modo="detalles"]',
       '.mision-detalle__cabecera',
       '.mision-enemigo',
-      '.mision-jefe',
+      '[data-seccion="jefe"] .mision-jefe',
       '.mision-master',
       '.mision-recompensas',
-      '#configurar .estrategia__heroe',
-      '[data-accion="iniciar-mision"][aria-disabled="true"]',
+      '[data-accion="preparar-mision"]',
     ],
   },
   {
-    id: 'misiones-matricula',
-    titulo: 'iniciar misión: estrategia comprobada y confirmación con lo que queda bloqueado',
+    // Puntos 22 y 23 — «Iniciar misión»: la preparación en cinco pasos, el
+    // primero a la vista (el héroe).
+    id: 'misiones-preparar',
+    titulo: 'preparar la misión, paso 1 de 5: elegir el héroe',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    exige: [
+      '.mision-detalle[data-modo="preparar"]',
+      '.mision-asistente[data-paso="heroe"] .estrategia__heroe',
+      '.mision-asistente__marca[aria-current="step"]',
+      '[data-accion="paso-siguiente"]',
+    ],
+  },
+  {
+    // Punto 23 — el paso de las rotaciones, solo.
+    id: 'misiones-preparar-rotaciones',
+    titulo: 'preparar la misión, paso 3 de 5: ordenar las rotaciones',
     ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
     sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
     interaccion: async (pagina) => {
-      await prepararEstrategia(pagina);
-      await pagina.locator('[data-accion="iniciar-mision"][aria-disabled="false"]').click();
+      await avanzarPasos(pagina, 2);
+      await pagina.locator('.estrategia__paso select').first().waitFor({ timeout: 15_000 });
     },
-    exige: ['[role="dialog"] .misiones-confirmacion', '.misiones-confirmacion__advertencia'],
+    exige: ['.mision-asistente[data-paso="rotaciones"] .estrategia__rotacion'],
+  },
+  {
+    id: 'misiones-matricula',
+    titulo: 'iniciar misión: último paso con el resumen y lo que queda bloqueado',
+    ruta: 'contenido/misiones/misiones.html?mision=templo-olvidado#configurar',
+    sesion: () => sesionDe('qa_misiones', 'JUGADOR'),
+    rutas: [MISIONES_DE_LABORATORIO, ...rutasDeEstrategia()],
+    interaccion: async (pagina) => {
+      await avanzarPasos(pagina, 2);
+      await elegirRotacion(pagina);
+      await avanzarPasos(pagina, 1);
+      await pagina.locator('[data-accion="comprobar-estrategia"]').click();
+      await pagina.locator('.estrategia__veredicto .aviso--exito').waitFor({ timeout: 15_000 });
+      await avanzarPasos(pagina, 1);
+    },
+    exige: [
+      '.mision-asistente[data-paso="confirmar"] .misiones-confirmacion',
+      '.misiones-confirmacion__advertencia',
+      '[data-accion="iniciar-mision"][aria-disabled="false"]',
+    ],
   },
   {
     id: 'misiones-en-curso',

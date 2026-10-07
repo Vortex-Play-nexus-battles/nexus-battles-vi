@@ -5,7 +5,12 @@
 import { jest } from '@jest/globals';
 
 import { FUENTE_SIN_SERVICIO } from './fuente-misiones.js';
-import { montarMisiones, resumenDeMatricula, rutasDeMisiones } from './misiones.js';
+import {
+  LEMA_DE_MISIONES,
+  montarMisiones,
+  resumenDeMatricula,
+  rutasDeMisiones,
+} from './misiones.js';
 
 const esperar = async () => {
   for (let i = 0; i < 10; i += 1) {
@@ -199,6 +204,19 @@ describe('con servicio de misiones', () => {
     expect(document.querySelectorAll('.mision-card')).toHaveLength(1);
   });
 
+  test('revisión del 6-oct, punto 21: un lema del juego, no una explicación genérica', async () => {
+    await montarMisiones(document, {
+      fuente: fuenteDeLaboratorio(),
+      identidad: 'ana',
+      ubicacion: new URL('https://nexus.test/misiones.html'),
+      estrategia: inyeccionesDeEstrategia(),
+    });
+    await esperar();
+
+    expect(document.querySelector('.misiones__lema').textContent).toBe(LEMA_DE_MISIONES);
+    expect(document.body.textContent).not.toMatch(/Aventuras contra el entorno/);
+  });
+
   test('una fuente que llega como promesa y contesta abre el tablón', async () => {
     const fuente = fuenteDeLaboratorio();
     const modo = await montarMisiones(document, {
@@ -263,25 +281,50 @@ describe('con servicio de misiones', () => {
     await esperar();
 
     expect(document.title).toBe('El Templo Olvidado · Misiones · The Nexus Battles VI');
+    // Revisión del 6-oct, punto 22: «Iniciar misión» (#configurar) abre la
+    // preparación, paso a paso; la historia de la misión queda a un clic.
+    const detalle = document.querySelector('.mision-detalle');
+    expect(detalle.dataset.modo).toBe('preparar');
+    const asistente = document.querySelector('.mision-asistente');
+    const paso = () => asistente.dataset.paso;
+    const siguiente = asistente.querySelector('[data-accion="paso-siguiente"]');
     const iniciar = document.querySelector('[data-accion="iniciar-mision"]');
     expect(iniciar.getAttribute('aria-disabled')).toBe('true');
 
-    const paso = document.querySelector('.estrategia__paso select');
-    paso.value = 'Embate sangriento';
-    paso.dispatchEvent(new Event('change', { bubbles: true }));
+    // 1 · Héroe: el del inventario ya viene elegido, así que se puede seguir.
+    expect(paso()).toBe('heroe');
+    expect(siguiente.getAttribute('aria-disabled')).toBe('false');
+    siguiente.click();
+    // 2 · Estadísticas → 3 · Rotaciones.
+    expect(paso()).toBe('estadisticas');
+    siguiente.click();
+    expect(paso()).toBe('rotaciones');
+    const selector = document.querySelector('.estrategia__paso select');
+    selector.value = 'Embate sangriento';
+    selector.dispatchEvent(new Event('change', { bubbles: true }));
+    siguiente.click();
+    // 4 · Comprobación: sin comprobar no se pasa a confirmar.
+    expect(paso()).toBe('comprobar');
+    expect(siguiente.getAttribute('aria-disabled')).toBe('true');
+    siguiente.click();
+    expect(paso()).toBe('comprobar');
     document
       .querySelector('.estrategia__formulario')
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await esperar();
     expect(iniciar.getAttribute('aria-disabled')).toBe('false');
+    expect(siguiente.getAttribute('aria-disabled')).toBe('false');
+    siguiente.click();
 
+    // 5 · Confirmación: el resumen y lo que queda bloqueado, a la vista. Es la
+    // confirmación (RF-MIS-004): «Iniciar misión» no vuelve a preguntar.
+    expect(paso()).toBe('confirmar');
+    const resumen = asistente.querySelector('.misiones-confirmacion');
+    expect(resumen.textContent).toContain('Aquiles');
+    expect(resumen.textContent).toContain('queda bloqueado 12 horas');
     iniciar.click();
     await esperar();
-    const dialogo = document.querySelector('[role="dialog"]');
-    expect(dialogo.textContent).toContain('¿Enviar a Aquiles a «El Templo Olvidado»?');
-    expect(dialogo.textContent).toContain('queda bloqueado 12 horas');
-    dialogo.querySelector('[data-accion="confirmar"]').click();
-    await esperar();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
 
     expect(fuente.matricular).toHaveBeenCalledWith({
       misionId: 'templo',
@@ -305,6 +348,11 @@ describe('con servicio de misiones', () => {
       estrategia: inyeccionesDeEstrategia(),
     });
     await esperar();
+    // «Ver detalles» abre la misión; «Preparar misión» lleva al asistente.
+    expect(document.querySelector('.mision-detalle').dataset.modo).toBe('detalles');
+    document.querySelector('[data-accion="preparar-mision"]').click();
+    expect(document.querySelector('.mision-detalle').dataset.modo).toBe('preparar');
+    expect(window.location.hash).toBe('#configurar');
     const paso = document.querySelector('.estrategia__paso select');
     paso.value = 'Ataque básico';
     paso.dispatchEvent(new Event('change', { bubbles: true }));
@@ -313,8 +361,6 @@ describe('con servicio de misiones', () => {
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await esperar();
     document.querySelector('[data-accion="iniciar-mision"]').click();
-    await esperar();
-    document.querySelector('[data-accion="confirmar"]').click();
     await esperar();
 
     expect(navegar).not.toHaveBeenCalled();
