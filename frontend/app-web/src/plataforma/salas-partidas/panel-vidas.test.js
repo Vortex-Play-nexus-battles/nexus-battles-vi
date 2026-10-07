@@ -133,6 +133,56 @@ describe('pintarParticipantes', () => {
 
     expect(panel.querySelectorAll('.barra-vida')).toHaveLength(3);
   });
+
+  test('revisión 6-oct: la barra de quien mira dice «Tú» (antes solo la IA tenía etiqueta)', () => {
+    pintarParticipantes(panel, participantes(), { yo: ANA });
+
+    expect(barraDe(ANA).dataset.propia).toBe('true');
+    expect(barraDe(ANA).querySelector('[data-etiqueta]').textContent).toBe('Tú · Equipo 1');
+    expect(barraDe(BRUNO).dataset.propia).toBeUndefined();
+    expect(barraDe(MAQUINA).querySelector('[data-etiqueta]').textContent).toBe('IA · Equipo 2');
+  });
+});
+
+describe('invariante HUD = servidor (revisión 6-oct)', () => {
+  test('tras tu golpe y el contragolpe, cada barra dice exactamente lo último que mandó el servidor', () => {
+    pintarParticipantes(panel, participantes(), { idPartida: 'p-1', yo: ANA });
+    const aviso = (idEjecutor, afectados) => ({
+      tipo: 'partida.accion.resuelta',
+      idPartida: 'p-1',
+      idEjecutor,
+      afectados,
+    });
+
+    // Tu golpe: el rival baja y tú no (sin reflejo, sin autodaño).
+    aplicarAccionResuelta(
+      panel,
+      aviso(ANA, [
+        { idJugador: MAQUINA, vidaActual: 72, vidaMaxima: 100 },
+        { idJugador: ANA, vidaActual: 100, vidaMaxima: 100 },
+      ]),
+    );
+    // El contragolpe de la máquina: ahora sí bajas tú.
+    aplicarAccionResuelta(
+      panel,
+      aviso(MAQUINA, [
+        { idJugador: ANA, vidaActual: 91, vidaMaxima: 100 },
+        { idJugador: MAQUINA, vidaActual: 72, vidaMaxima: 100 },
+      ]),
+    );
+
+    expect(valorDe(ANA)).toBe('91/100');
+    expect(valorDe(MAQUINA)).toBe('72/100');
+    expect(barraDe(ANA).getAttribute('aria-valuenow')).toBe('91');
+    expect(barraDe(MAQUINA).getAttribute('aria-valuenow')).toBe('72');
+
+    // Repetir un aviso (una reconexión) no resta dos veces: la barra es absoluta.
+    aplicarAccionResuelta(
+      panel,
+      aviso(MAQUINA, [{ idJugador: ANA, vidaActual: 91, vidaMaxima: 100 }]),
+    );
+    expect(valorDe(ANA)).toBe('91/100');
+  });
 });
 
 describe('aplicarAccionResuelta · criterio 3', () => {

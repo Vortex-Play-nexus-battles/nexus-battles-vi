@@ -34,10 +34,17 @@ import { icono } from '../icono.js';
  * @param {string} [participante.idJugador]
  * @param {boolean} [participante.esIA]
  * @param {number} [participante.equipo]
+ * @param {boolean} [participante.esPropia]
+ *   la barra de quien mira. Revisión del modo jugador (6-oct): la de la IA
+ *   decía «IA» y la propia nada, así que cuando el contragolpe bajaba tu barra
+ *   parecía que tu golpe te había dañado. Ahora la tuya dice «Tú».
  * @returns {HTMLElement}
  */
-export function barraDeVida({ nombre, idJugador, esIA = false, equipo }) {
+export function barraDeVida({ nombre, idJugador, esIA = false, equipo, esPropia = false }) {
   const etiquetas = [];
+  if (esPropia) {
+    etiquetas.push('Tú');
+  }
   if (esIA) {
     etiquetas.push('IA');
   }
@@ -50,6 +57,7 @@ export function barraDeVida({ nombre, idJugador, esIA = false, equipo }) {
     datos: {
       barraVida: '',
       ...(idJugador ? { jugador: idJugador } : {}),
+      ...(esPropia ? { propia: 'true' } : {}),
       ...(esIA ? { ia: 'true' } : {}),
       ...(Number.isInteger(equipo) && equipo > 0 ? { equipo: String(equipo) } : {}),
     },
@@ -268,14 +276,21 @@ export function actualizarTurno(indicador, { texto, propio = false, ronda }) {
  * el medidor dice la capacidad y que no hay seguimiento, en vez de enseñar un
  * «10/10» que nadie ha calculado.
  *
- * @param {{maximo: number|null, actual?: number|null}} poder
+ * Revisión del modo jugador (6-oct): «Poder 10/10 no suma ni resta». El
+ * servidor sí lo descontaba, pero el +2 del turno siguiente llegaba casi a la
+ * vez y el medidor volvía a 10/10 sin que nadie lo viera bajar. Con `cambio`
+ * el medidor enseña el movimiento («−2», «+2») junto a la cifra, la que mandó
+ * el servidor: aquí no se resta ni se suma nada.
+ *
+ * @param {{maximo: number|null, actual?: number|null, cambio?: number|null}} poder
  * @returns {HTMLElement|null} `null` si no se conoce ni el máximo
  */
-export function medidorDePoder({ maximo, actual = null }) {
+export function medidorDePoder({ maximo, actual = null, cambio = null }) {
   if (!Number.isFinite(maximo) || maximo <= 0) {
     return null;
   }
   const conActual = Number.isFinite(actual);
+  const conCambio = conActual && Number.isFinite(cambio) && cambio !== 0;
   const segmentos = Math.min(Math.round(maximo), 12);
   return h('div', {
     clase: clases('medidor-poder', !conActual && 'medidor-poder--sin-seguimiento'),
@@ -298,6 +313,16 @@ export function medidorDePoder({ maximo, actual = null }) {
             clase: 'medidor-poder__valor',
             texto: conActual ? `${actual}/${maximo}` : `máx. ${maximo}`,
           }),
+          // El movimiento, solo para la vista: el registro ya lo dice con
+          // palabras («Gastas 2 de poder (8/10)») para el lector de pantalla.
+          conCambio
+            ? h('span', {
+                clase: 'medidor-poder__cambio',
+                texto: cambio > 0 ? `+${cambio}` : `−${Math.abs(cambio)}`,
+                datos: { signo: cambio > 0 ? 'positivo' : 'negativo' },
+                atributos: { 'aria-hidden': 'true' },
+              })
+            : null,
         ],
       }),
       h('span', {

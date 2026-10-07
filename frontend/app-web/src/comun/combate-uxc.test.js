@@ -34,6 +34,29 @@ describe('medidorDePoder (PowerMeter)', () => {
   test('sin maximo no se pinta', () => {
     expect(medidorDePoder({ maximo: null })).toBeNull();
   });
+
+  test('revisión 6-oct: enseña el movimiento que mandó el servidor (−2 al gastar, +2 al recuperar)', () => {
+    const gasto = medidorDePoder({ maximo: 10, actual: 8, cambio: -2 });
+    const cambio = gasto.querySelector('.medidor-poder__cambio');
+    expect(gasto.querySelector('.medidor-poder__valor').textContent).toBe('8/10');
+    expect(cambio.textContent).toBe('−2');
+    expect(cambio.dataset.signo).toBe('negativo');
+    // Lo dice el registro con palabras: para el lector, el medidor ya trae su valor.
+    expect(cambio.getAttribute('aria-hidden')).toBe('true');
+
+    const recupera = medidorDePoder({ maximo: 10, actual: 10, cambio: 2 });
+    expect(recupera.querySelector('.medidor-poder__cambio').textContent).toBe('+2');
+    expect(recupera.querySelector('.medidor-poder__cambio').dataset.signo).toBe('positivo');
+  });
+
+  test('sin movimiento (o sin valor actual) no hay cifra de cambio', () => {
+    expect(
+      medidorDePoder({ maximo: 10, actual: 10, cambio: 0 }).querySelector('.medidor-poder__cambio'),
+    ).toBeNull();
+    expect(
+      medidorDePoder({ maximo: 10, cambio: -2 }).querySelector('.medidor-poder__cambio'),
+    ).toBeNull();
+  });
 });
 
 describe('chipDeEfecto (EffectChip)', () => {

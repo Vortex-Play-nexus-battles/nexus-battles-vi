@@ -524,7 +524,9 @@ export function textoDelTurno(idJugador, participantes, yo) {
     return { texto: 'Turno de otro participante', mio: false };
   }
   const nombre = quien.heroe?.nombre ?? 'tu rival';
-  return { texto: quien.esIA ? `Juega la máquina (${nombre})` : `Turno de ${nombre}`, mio: false };
+  // Revisión del 6-oct: mientras la IA «piensa» (la pausa del ritmo) el HUD lo
+  // dice con las palabras del juego, y el mando está cerrado.
+  return { texto: quien.esIA ? `Turno de la IA · ${nombre}` : `Turno de ${nombre}`, mio: false };
 }
 
 /**
@@ -815,8 +817,11 @@ export function montarControlesDeCombate(
   /**
    * El poder del heroe propio: el que lleva el servidor (B7) y, si todavia no
    * lo lleva, el maximo del catalogo. Sin ninguno de los dos no se toca.
+   *
+   * @param {number|null} [cambio] cuánto se acaba de mover (servidor: después − antes),
+   *   para que el medidor lo enseñe («−2», «+2»); nunca se calcula aquí
    */
-  function pintarPoder() {
+  function pintarPoder(cambio = null) {
     // Terminado no hay poder que gastar: el medidor se retira con el mando.
     if (!zonaPoder || terminado) {
       return;
@@ -826,7 +831,7 @@ export function montarControlesDeCombate(
       return;
     }
     vaciar(zonaPoder);
-    const medidor = medidorDePoder({ maximo, actual: estadoPropio.poderActual });
+    const medidor = medidorDePoder({ maximo, actual: estadoPropio.poderActual, cambio });
     if (medidor) {
       zonaPoder.append(medidor);
     }
@@ -1068,6 +1073,8 @@ export function montarControlesDeCombate(
     if (!Number.isFinite(antes) || !Number.isFinite(despues) || antes === despues) {
       return;
     }
+    // Revisión del 6-oct: además de escrito, el medidor enseña el movimiento.
+    pintarPoder(despues - antes);
     const maximo = estadoPropio.poderMaximo ?? catalogo?.poderMaximo ?? null;
     const cifra = maximo === null ? `${despues}` : `${despues}/${maximo}`;
     const cuanto = Math.abs(despues - antes);
