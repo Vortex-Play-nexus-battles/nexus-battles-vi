@@ -1,14 +1,17 @@
 package com.nexusbattles.plataforma.comentarios.moderacion;
 
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -681,6 +684,246 @@ class ModeracionHttpTest {
                     .andExpect(status().isOk());
 
             verify(servicio, never()).detalle(anyString());
+        }
+    }
+
+    // ------------------------------------- HU-COM-005: decision en lote
+
+    /**
+     * {@code POST /comentarios/moderacion/decisiones-en-lote} (contrato 1.10.0).
+     * El servicio es un doble: aqui se mira quien entra, de donde sale el
+     * moderador y como se traduce cada rechazo a estado y problem detail. Que
+     * el lote sea atomico lo prueban FlujoDeModeracionTest y DecisionEnLoteIT.
+     */
+    @Nested
+    @DisplayName("la decision en lote (HU-COM-005, contrato 1.10.0)")
+    class DecisionEnLote {
+
+        private static final String RUTA_LOTE = RUTA_COLA + "/decisiones-en-lote";
+
+        /** Trae un moderadorId que no es el del token: el servicio no debe verlo. */
+        private static final String CUERPO_LOTE = """
+                {
+                  "moderadorId": "moderador-suplantado",
+                  "apodoModerador": "OtraPersona",
+                  "comentarioIds": ["com-1", "com-2"],
+                  "accion": "OCULTAR",
+                  "motivo": "Spam coordinado"
+                }
+                """;
+
+        private MockHttpServletRequestBuilder lote(String credencial, String cuerpo) {
+            MockHttpServletRequestBuilder peticion = post(RUTA_LOTE)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(cuerpo);
+            return credencial == null ? peticion : peticion.header(HttpHeaders.AUTHORIZATION, credencial);
+        }
+
+        private Comentario oculto(String id) {
+            return new Comentario(id, PRODUCTO, UID_LYRA.toString(), "LyraRoja",
+                    "Un texto cualquiera", List.of(), CUANDO.minusSeconds(3600), Comentario.Estado.OCULTO);
+        }
+
+        private AsientoDeModeracion asientoDe(String id) {
+            return new AsientoDeModeracion("asi-" + id, id, UID_MODERADORA.toString(),
+                    "AdaLaJusta", AccionDeModeracion.OCULTAR, "Spam coordinado",
+                    Comentario.Estado.PUBLICADO, Comentario.Estado.OCULTO, CUANDO);
+        }
+
+        private ServicioDeModeracion.ResueltoEnLote dosOcultados() {
+            return new ServicioDeModeracion.ResueltoEnLote(AccionDeModeracion.OCULTAR, List.of(
+                    new ServicioDeModeracion.Resuelto(oculto("com-1"), asientoDe("com-1"), true),
+                    new ServicioDeModeracion.Resuelto(oculto("com-2"), asientoDe("com-2"), false)));
+        }
+
+        private void respuestaVacia() {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenReturn(new ServicioDeModeracion.ResueltoEnLote(AccionDeModeracion.OCULTAR, List.of()));
+        }
+
+        @Test
+        @DisplayName("H1: sin token es 401 y el servicio ni se entera")
+        void sinTokenEs401() throws Exception {
+            mvc.perform(lote(null, CUERPO_LOTE)).andExpect(status().isUnauthorized());
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
+        @DisplayName("H2: una jugadora o un token de servicio no deciden en lote: 403")
+        void jugadoraYServicioSon403() throws Exception {
+            mvc.perform(lote(comoJugadora(), CUERPO_LOTE)).andExpect(status().isForbidden());
+            mvc.perform(lote("Bearer " + emisor.tokenDeServicio("ms-subastas"), CUERPO_LOTE))
+                    .andExpect(status().isForbidden());
+            verifyNoInteractions(servicio);
+        }
+
+        @Test
+        @DisplayName("H3: MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR deciden en lote: 200")
+        void losTresRolesDeModeracionEntran() throws Exception {
+            respuestaVacia();
+
+            for (String rol : List.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+                mvc.perform(lote("Bearer " + emisor.tokenDeUsuario("Alguien", UID_MODERADORA, rol), CUERPO_LOTE))
+                        .andExpect(status().isOk());
+            }
+        }
+
+        @Test
+        @DisplayName("H4: quien firma el lote es el token: el moderadorId del cuerpo se ignora")
+        void elModeradorSaleDelToken() throws Exception {
+            respuestaVacia();
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE)).andExpect(status().isOk());
+
+            ArgumentCaptor<String> id = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<String> apodo = ArgumentCaptor.forClass(String.class);
+            verify(servicio).resolverEnLote(eq(List.of("com-1", "com-2")), id.capture(), apodo.capture(),
+                    eq(AccionDeModeracion.OCULTAR), eq("Spam coordinado"), isNull(), any());
+            assertEquals(UID_MODERADORA.toString(), id.getValue());
+            assertEquals("AdaLaJusta", apodo.getValue());
+        }
+
+        @Test
+        @DisplayName("H4b: la confirmacion del cuerpo llega al servicio, que es quien la comprueba")
+        void laConfirmacionLlegaAlServicio() throws Exception {
+            respuestaVacia();
+
+            mvc.perform(lote(comoModeradora(), """
+                            {"comentarioIds": ["com-1"], "accion": "ELIMINAR",
+                             "motivo": "Limpieza", "confirmacion": "ELIMINAR"}
+                            """))
+                    .andExpect(status().isOk());
+
+            verify(servicio).resolverEnLote(eq(List.of("com-1")), anyString(), anyString(),
+                    eq(AccionDeModeracion.ELIMINAR), eq("Limpieza"), eq("ELIMINAR"), any());
+        }
+
+        @Test
+        @DisplayName("H5: la IP del asiento es el primer valor de X-Forwarded-For")
+        void ipDeOrigen() throws Exception {
+            respuestaVacia();
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE).header("X-Forwarded-For", "198.51.100.23, 10.0.0.2"))
+                    .andExpect(status().isOk());
+
+            verify(servicio).resolverEnLote(anyList(), anyString(), anyString(), any(), anyString(), any(),
+                    eq("198.51.100.23"));
+        }
+
+        @Test
+        @DisplayName("H6: el 200 trae la accion, el total y el asiento de cada comentario, sin la IP")
+        void formaDeLaRespuesta() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenReturn(dosOcultados());
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.accion").value("OCULTAR"))
+                    .andExpect(jsonPath("$.total").value(2))
+                    .andExpect(jsonPath("$.resultados", hasSize(2)))
+                    .andExpect(jsonPath("$.resultados[0].comentarioId").value("com-1"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.id").value("asi-com-1"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.accion").value("OCULTAR"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.moderadorId").value(UID_MODERADORA.toString()))
+                    .andExpect(jsonPath("$.resultados[0].asiento.motivo").value("Spam coordinado"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.estadoAnterior").value("PUBLICADO"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.estadoNuevo").value("OCULTO"))
+                    .andExpect(jsonPath("$.resultados[0].asiento.ipOrigen").doesNotExist())
+                    .andExpect(jsonPath("$.resultados[0].autorNotificado").value(true))
+                    .andExpect(jsonPath("$.resultados[1].comentarioId").value("com-2"))
+                    .andExpect(jsonPath("$.resultados[1].autorNotificado").value(false));
+        }
+
+        @Test
+        @DisplayName("H7: una entrada incompleta (lista vacia, repetidos, mas de 100, EDITAR, motivo) es 400")
+        void entradaIncompletaEs400() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenThrow(new ServicioDeModeracion.DecisionIncompleta("la lista de ids no puede estar vacia"));
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith("application/problem+json"));
+        }
+
+        @Test
+        @DisplayName("H8: ELIMINAR sin la confirmacion es 400 con motivo CONFIRMACION_REQUERIDA")
+        void confirmacionRequeridaEs400() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenThrow(new ServicioDeModeracion.ConfirmacionRequerida());
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                    .andExpect(jsonPath("$.motivo").value("CONFIRMACION_REQUERIDA"));
+        }
+
+        @Test
+        @DisplayName("H9: ids que no existen son 404 con comentarioIds completo, en el orden recibido")
+        void inexistentesSon404() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenThrow(new ServicioDeModeracion.ComentariosNoEncontrados(List.of("com-z", "com-a")));
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isNotFound())
+                    .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                    .andExpect(jsonPath("$.comentarioIds", hasSize(2)))
+                    .andExpect(jsonPath("$.comentarioIds[0]").value("com-z"))
+                    .andExpect(jsonPath("$.comentarioIds[1]").value("com-a"));
+        }
+
+        @Test
+        @DisplayName("H10: comentarios que no admiten la accion son 409 TRANSICION_INVALIDA con todos los ids")
+        void transicionInvalidaEnLoteEs409() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenThrow(new ServicioDeModeracion.TransicionInvalidaEnLote(
+                            AccionDeModeracion.OCULTAR, List.of("com-2", "com-1")));
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentTypeCompatibleWith("application/problem+json"))
+                    .andExpect(jsonPath("$.motivo").value("TRANSICION_INVALIDA"))
+                    .andExpect(jsonPath("$.comentarioIds", hasSize(2)))
+                    .andExpect(jsonPath("$.comentarioIds[0]").value("com-2"))
+                    .andExpect(jsonPath("$.comentarioIds[1]").value("com-1"));
+        }
+
+        @Test
+        @DisplayName("H11: el 404 y el 409 del lote llevan status y title de problem details (regla 4)")
+        void problemDetailsEstandar() throws Exception {
+            when(servicio.resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any()))
+                    .thenThrow(new ServicioDeModeracion.ComentariosNoEncontrados(List.of("com-z")))
+                    .thenThrow(new ServicioDeModeracion.TransicionInvalidaEnLote(
+                            AccionDeModeracion.OCULTAR, List.of("com-1")));
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isNotFound())
+                    .andExpect(jsonPath("$.status").value(404))
+                    .andExpect(jsonPath("$.title").exists());
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE))
+                    .andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.status").value(409))
+                    .andExpect(jsonPath("$.title").exists());
+        }
+
+        @Test
+        @DisplayName("H12: /decisiones-en-lote y /{id}/decision enrutan cada una a lo suyo")
+        void lasDosRutasNoSeConfunden() throws Exception {
+            respuestaVacia();
+            when(servicio.resolver(anyString(), anyString(), anyString(), any(), anyString(), any(), any()))
+                    .thenReturn(new ServicioDeModeracion.Resuelto(
+                            comentario(Comentario.Estado.OCULTO), asiento(), true));
+
+            mvc.perform(lote(comoModeradora(), CUERPO_LOTE)).andExpect(status().isOk());
+            verify(servicio).resolverEnLote(anyList(), anyString(), anyString(), any(), anyString(), any(), any());
+            verify(servicio, never()).resolver(anyString(), anyString(), anyString(), any(), any(), any(), any());
+
+            mvc.perform(post(RUTA_DECISION)
+                            .header(HttpHeaders.AUTHORIZATION, comoModeradora())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(CUERPO_DECISION))
+                    .andExpect(status().isOk());
+            verify(servicio).resolver(eq(COMENTARIO), anyString(), anyString(), any(), anyString(), any(), any());
+            verify(servicio, times(1)).resolverEnLote(anyList(), anyString(), anyString(), any(), any(), any(), any());
         }
     }
 }
