@@ -8,6 +8,10 @@
  * una misma pagina.
  */
 
+import { icono } from '../comun/ui/icono.js';
+import { ICONO_DEL_TIPO } from '../contenido/inventario/vitrina.js';
+import { nombreLegible } from './nombre-de-producto.js';
+
 /** Etiqueta legible de cada tipo, igual que el inventario (mismo catalogo). */
 const NOMBRE_DEL_TIPO = {
   HEROE: 'Héroe',
@@ -97,9 +101,17 @@ function construirTarjeta(subasta, alAbrirDetalle, alComprarAhora) {
 
   tarjeta.appendChild(construirMiniatura(subasta));
 
+  // PLAYER-07b — sin nombre la tarjeta salía con el título vacío y los botones
+  // se anunciaban «Ver la subasta de null»; un nombre que fuera un
+  // identificador se pintaba tal cual. Ahora, el mismo respaldo que ya usa la
+  // sala de pujas: «Objeto sin nombre» (criterio en `nombre-de-producto.js`).
+  const nombreVisible = nombreLegible(subasta.nombreProducto, {
+    identificadores: [subasta.id, subasta.productoId],
+  });
+
   const nombre = document.createElement('p');
   nombre.className = 'subastas__nombre';
-  nombre.textContent = subasta.nombreProducto ?? '';
+  nombre.textContent = nombreVisible;
 
   const meta = document.createElement('p');
   meta.className = 'subastas__meta';
@@ -149,7 +161,7 @@ function construirTarjeta(subasta, alAbrirDetalle, alComprarAhora) {
     botonDetalle.className = 'subastas__ver-detalle';
     botonDetalle.type = 'button';
     botonDetalle.textContent = 'Ver subasta';
-    botonDetalle.setAttribute('aria-label', `Ver la subasta de ${subasta.nombreProducto}`);
+    botonDetalle.setAttribute('aria-label', `Ver la subasta de ${nombreVisible}`);
     botonDetalle.addEventListener('click', () => alAbrirDetalle(subasta));
     acciones.appendChild(botonDetalle);
   }
@@ -163,7 +175,7 @@ function construirTarjeta(subasta, alAbrirDetalle, alComprarAhora) {
     botonComprar.className = 'subastas__comprar-ahora';
     botonComprar.type = 'button';
     botonComprar.textContent = `Comprar ahora · ${FORMATEADOR_CREDITOS.format(subasta.precioCompraInmediata)}`;
-    botonComprar.setAttribute('aria-label', `Comprar ${subasta.nombreProducto} ahora`);
+    botonComprar.setAttribute('aria-label', `Comprar ${nombreVisible} ahora`);
     botonComprar.addEventListener('click', () => alComprarAhora(subasta));
     acciones.appendChild(botonComprar);
   }
@@ -186,13 +198,40 @@ function construirTarjeta(subasta, alAbrirDetalle, alComprarAhora) {
 function construirMiniatura(subasta) {
   const miniatura = document.createElement('div');
   miniatura.className = 'subastas__miniatura';
+  miniatura.dataset.tipo = subasta.tipoProducto ?? '';
 
+  // PLAYER-07b — «no se ven bien las imágenes». La miniatura es la `imagen`
+  // del catálogo tal cual, y en DEV hay productos con «espada.png», una ruta
+  // que no sirve nadie: el navegador pintaba su icono de imagen rota con el
+  // nombre encima, sobre una caja gris. Sin imagen, la caja quedaba vacía.
+  // Mismo patrón que la tienda (`tienda-producto.js`, imagen rota): la ranura
+  // oscura con el símbolo del tipo, y `data-imagen="rota"` cuando la URL falla.
+  const simbolo = () =>
+    icono(ICONO_DEL_TIPO[subasta.tipoProducto] ?? 'estrella', {
+      clase: 'icono subastas__simbolo',
+      etiqueta: null,
+    });
   if (subasta.miniaturaUrl) {
+    miniatura.dataset.imagen = 'si';
     const imagen = document.createElement('img');
-    imagen.src = subasta.miniaturaUrl;
-    imagen.alt = subasta.nombreProducto ?? '';
+    // El nombre ya se lee debajo, en la tarjeta: repetirlo como texto
+    // alternativo lo hacía sonar dos veces. La imagen acompaña, no informa.
+    imagen.alt = '';
     imagen.loading = 'lazy';
+    imagen.decoding = 'async';
+    imagen.addEventListener(
+      'error',
+      () => {
+        miniatura.dataset.imagen = 'rota';
+        imagen.replaceWith(simbolo());
+      },
+      { once: true },
+    );
+    imagen.src = subasta.miniaturaUrl;
     miniatura.appendChild(imagen);
+  } else {
+    miniatura.dataset.imagen = 'no';
+    miniatura.appendChild(simbolo());
   }
 
   if (subasta.esMaestroDeJuego) {

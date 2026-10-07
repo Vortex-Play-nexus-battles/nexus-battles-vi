@@ -64,6 +64,9 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
   document.body.innerHTML = '';
+  // PLAYER-07b — algunas pruebas simulan el ancho de la pantalla; jsdom no
+  // trae `matchMedia` y la siguiente prueba tiene que empezar sin él.
+  delete globalThis.matchMedia;
 });
 
 describe('cuando el mercado no responde', () => {
@@ -203,17 +206,204 @@ describe('cuando hay subastas', () => {
     expect(zona().querySelector('.subastas-paginacion')).toBeNull();
     // El activo se marca con aria-current, que es lo que estiliza el kit.
     expect(zona().querySelector('.paginacion__pagina[aria-current="page"]').textContent).toBe('1');
+    // PLAYER-07b — y es el control COMPARTIDO, con su nombre de lo que pagina.
+    expect(zona().querySelector('nav.paginacion').getAttribute('aria-label')).toBe(
+      'Páginas de subastas',
+    );
   });
 
-  test('«Anterior» esta deshabilitado en la primera pagina', async () => {
+  test('PLAYER-07b: la flecha «Página anterior» está apagada en la primera página', async () => {
+    // Era «Anterior» escrito en una casilla de 32 px: el texto se salía de la
+    // casilla («sale el anterior y siguiente desbordados»). Ahora es una
+    // flecha con nombre accesible, apagada en el extremo y sin desaparecer.
     globalThis.fetch = jest.fn(async () =>
       responder(listado([subasta()], { totalPaginas: 3, pagina: 0 })),
     );
     await montar();
 
-    const [anterior] = [...zona().querySelectorAll('.paginacion__pagina')];
-    expect(anterior.textContent).toBe('Anterior');
+    const anterior = zona().querySelector('.paginacion__pagina[data-direccion="anterior"]');
+    const siguiente = zona().querySelector('.paginacion__pagina[data-direccion="siguiente"]');
+    expect(anterior.getAttribute('aria-label')).toBe('Página anterior');
     expect(anterior.disabled).toBe(true);
+    expect(siguiente.getAttribute('aria-label')).toBe('Página siguiente');
+    expect(siguiente.disabled).toBe(false);
+    expect(zona().querySelector('nav.paginacion').textContent).not.toMatch(/Anterior|Siguiente/);
+  });
+
+  test('PLAYER-07b: la flecha «Página siguiente» pide la página de al lado con los mismos filtros', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta()], { totalPaginas: 3, pagina: 0 })),
+    );
+    await montar();
+    document.querySelector('#subastas-ordenar').value = 'PRECIO_ASC';
+    document.querySelector('#subastas-ordenar').dispatchEvent(new Event('change'));
+    await asentar();
+
+    zona().querySelector('.paginacion__pagina[data-direccion="siguiente"]').click();
+    await asentar();
+
+    const url = String(globalThis.fetch.mock.calls.at(-1)[0]);
+    expect(url).toContain('page=1');
+    expect(url).toContain('ordenarPor=PRECIO_ASC');
+  });
+
+  test('PLAYER-07b: con una sola página no se pinta paginación', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta()], { totalPaginas: 1, pagina: 0 })),
+    );
+    await montar();
+
+    expect(zona().querySelector('nav.paginacion').hidden).toBe(true);
+  });
+});
+
+describe('PLAYER-07b — las imágenes de la vitrina', () => {
+  test('una imagen que no carga se cambia por el símbolo del tipo', async () => {
+    // En DEV hay productos con «espada.png», una ruta que no sirve nadie: el
+    // navegador pintaba su icono de imagen rota con el nombre encima.
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta({ miniaturaUrl: 'espada.png' })])),
+    );
+    await montar();
+
+    const miniatura = zona().querySelector('.subastas__miniatura');
+    const imagen = miniatura.querySelector('img');
+    expect(imagen.getAttribute('src')).toBe('espada.png');
+    // El nombre ya está escrito debajo: la imagen no lo repite.
+    expect(imagen.alt).toBe('');
+
+    imagen.dispatchEvent(new Event('error'));
+
+    expect(miniatura.dataset.imagen).toBe('rota');
+    expect(miniatura.querySelector('img')).toBeNull();
+    expect(miniatura.querySelector('svg.subastas__simbolo')).not.toBeNull();
+    expect(miniatura.querySelector('svg').getAttribute('aria-hidden')).toBe('true');
+  });
+
+  test('sin imagen, la ranura lleva el símbolo del tipo y no se queda vacía', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta({ miniaturaUrl: null, tipoProducto: 'ARMADURA' })])),
+    );
+    await montar();
+
+    const miniatura = zona().querySelector('.subastas__miniatura');
+    expect(miniatura.dataset.imagen).toBe('no');
+    expect(miniatura.dataset.tipo).toBe('ARMADURA');
+    expect(miniatura.querySelector('use').getAttribute('href')).toMatch(/#escudo$/);
+  });
+
+  test('una imagen que sí carga se queda', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta({ miniaturaUrl: './avatares/guerrero-tanque.jpg' })])),
+    );
+    await montar();
+
+    const miniatura = zona().querySelector('.subastas__miniatura');
+    miniatura.querySelector('img').dispatchEvent(new Event('load'));
+    expect(miniatura.dataset.imagen).toBe('si');
+    expect(miniatura.querySelector('img')).not.toBeNull();
+  });
+});
+
+describe('PLAYER-07b — el nombre de cada lote nunca es un código', () => {
+  test('sin nombre, la tarjeta y sus botones dicen «Objeto sin nombre», no «null»', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta({ nombreProducto: null, precioCompraInmediata: 900 })])),
+    );
+    await montar();
+
+    const tarjeta = zona().querySelector('.subastas__producto');
+    expect(tarjeta.querySelector('.subastas__nombre').textContent).toBe('Objeto sin nombre');
+    expect(tarjeta.querySelector('.subastas__ver-detalle').getAttribute('aria-label')).toBe(
+      'Ver la subasta de Objeto sin nombre',
+    );
+    expect(tarjeta.querySelector('.subastas__comprar-ahora').getAttribute('aria-label')).toBe(
+      'Comprar Objeto sin nombre ahora',
+    );
+    expect(tarjeta.innerHTML).not.toMatch(/null|undefined/);
+  });
+
+  test('un nombre que es un identificador no llega a la pantalla', async () => {
+    const uuid = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+    globalThis.fetch = jest.fn(async () => responder(listado([subasta({ nombreProducto: uuid })])));
+    await montar();
+
+    expect(zona().querySelector('.subastas__nombre').textContent).toBe('Objeto sin nombre');
+    expect(zona().textContent).not.toContain(uuid);
+  });
+
+  test('un nombre de verdad se enseña tal cual', async () => {
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta({ nombreProducto: 'Espada de una mano' })])),
+    );
+    await montar();
+
+    expect(zona().querySelector('.subastas__nombre').textContent).toBe('Espada de una mano');
+  });
+});
+
+describe('PLAYER-07b — buscar, ordenar y por página tienen título a la vista', () => {
+  test('cada control tiene su etiqueta visible asociada, no solo un aria-label', async () => {
+    await montar();
+
+    for (const [selector, rotulo] of [
+      ['.subastas-busqueda__campo', 'Buscar subastas'],
+      ['#subastas-ordenar', 'Ordenar por'],
+      ['[data-control="tamano-pagina"]', 'Por página'],
+    ]) {
+      const control = document.querySelector(selector);
+      expect(control.labels).toHaveLength(1);
+      expect(control.labels[0].textContent).toBe(rotulo);
+      // Con la etiqueta a la vista sobra el aria-label: si no coincidieran, el
+      // lector de pantalla diría una cosa y la pantalla otra.
+      expect(control.hasAttribute('aria-label')).toBe(false);
+    }
+  });
+
+  test('el ordenar conserva sus ocho criterios y el tamaño sus tres cifras', async () => {
+    await montar();
+
+    expect(document.querySelectorAll('#subastas-ordenar option')).toHaveLength(8);
+    expect(
+      [...document.querySelectorAll('[data-control="tamano-pagina"] option')].map(
+        (o) => o.textContent,
+      ),
+    ).toEqual(['16', '32', '48']);
+  });
+
+  test('cada grupo de filtros lleva su título visible', async () => {
+    await montar();
+
+    const grupos = [...document.querySelectorAll('.subastas-filtros fieldset')];
+    expect(grupos.length).toBeGreaterThanOrEqual(7);
+    for (const grupo of grupos) {
+      expect(grupo.querySelector('legend').textContent.trim()).not.toBe('');
+    }
+  });
+});
+
+describe('PLAYER-07b — dos lecturas seguidas: gana la última', () => {
+  test('si la primera respuesta llega después, no tapa a la segunda', async () => {
+    const pendientes = [];
+    globalThis.fetch = jest.fn(
+      () =>
+        new Promise((resolver) => {
+          pendientes.push(resolver);
+        }),
+    );
+    await montar();
+    document.querySelector('#subastas-ordenar').value = 'PRECIO_ASC';
+    document.querySelector('#subastas-ordenar').dispatchEvent(new Event('change'));
+    await asentar();
+
+    // La segunda (la vigente) responde primero; la primera, después.
+    pendientes[1](responder(listado([subasta({ id: 'nueva', nombreProducto: 'La vigente' })])));
+    await asentar();
+    pendientes[0](responder(listado([subasta({ id: 'vieja', nombreProducto: 'La vieja' })])));
+    await asentar();
+
+    expect(zona().querySelector('[data-subasta-id="nueva"]')).not.toBeNull();
+    expect(zona().querySelector('[data-subasta-id="vieja"]')).toBeNull();
   });
 });
 
@@ -242,20 +432,31 @@ describe('estructura de la pantalla', () => {
   });
 });
 
-describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () => {
-  const panel = () => document.querySelector('.subastas-filtros__plegable');
-  const resumen = () => document.querySelector('.subastas-filtros__resumen');
+/*
+ * UX-R4.8 plegaba el panel en un `<details>` para que en un teléfono no tapara
+ * el mercado. PLAYER-07b (punto 26) lo convierte en un panel aparte: columna
+ * fija en escritorio y cajón en el teléfono. Lo que UX-R4.8 protegía se sigue
+ * exigiendo aquí: que los resultados no queden detrás de los filtros y que un
+ * panel cerrado no esconda cuántos filtros hay puestos.
+ */
+describe('el panel de filtros no tapa el mercado — UX-R4.8 y PLAYER-07b', () => {
+  const panel = () => document.querySelector('.mercado__filtros');
+  const boton = () => document.querySelector('[data-accion="abrir-filtros"]');
+  const tecla = (key, extra = {}) =>
+    document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, ...extra }));
 
-  test('los filtros viven dentro de un desplegable, con su resumen delante', async () => {
+  test('los filtros viven en su propio panel, con título, y un botón «Filtros» lo abre', async () => {
     await montar();
 
-    expect(panel()).not.toBeNull();
-    expect(panel().tagName).toBe('DETAILS');
-    // El resumen tiene que ser el PRIMER hijo o el navegador no lo trata como
-    // el control que abre y cierra.
-    expect(panel().firstElementChild).toBe(resumen());
-    expect(resumen().tagName).toBe('SUMMARY');
-    expect(panel().querySelector('.subastas-filtros')).not.toBeNull();
+    expect(panel().tagName).toBe('ASIDE');
+    expect(panel().querySelector('form.subastas-filtros')).not.toBeNull();
+    const titulo = document.getElementById(panel().getAttribute('aria-labelledby'));
+    expect(titulo.tagName).toBe('H2');
+    expect(titulo.textContent).toBe('Filtros');
+    expect(boton().getAttribute('aria-controls')).toBe(panel().id);
+    expect(boton().getAttribute('aria-expanded')).toBe('false');
+    // Cerrado no es un diálogo: en escritorio es la columna de siempre.
+    expect(panel().getAttribute('role')).toBeNull();
   });
 
   test('los resultados van DESPUES del panel, no dentro', async () => {
@@ -268,13 +469,14 @@ describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () =>
     expect(document.querySelector('[data-zona="novedades-mercado"]').hidden).toBe(true);
   });
 
-  test('sin filtros puestos el resumen no promete nada', async () => {
+  test('sin filtros puestos el botón no promete nada', async () => {
     await montar();
 
-    expect(resumen().textContent).toBe('Filtros');
+    expect(boton().textContent).toBe('Filtros');
+    expect(document.querySelector('[data-zona="filtros-activos"]').hidden).toBe(true);
   });
 
-  test('con filtros puestos el resumen dice cuantos, aunque este plegado', async () => {
+  test('con filtros puestos, el botón y el panel dicen cuántos, aunque esté cerrado', async () => {
     await montar();
 
     const casilla = document.querySelector('input[name="tipoProducto"]');
@@ -282,9 +484,108 @@ describe('el panel de filtros no tapa el mercado en telefono — UX-R4.8', () =>
     casilla.dispatchEvent(new Event('change', { bubbles: true }));
     await asentar();
 
-    // Un panel plegado que esconde filtros activos deja a alguien mirando
+    // Un panel cerrado que esconde filtros activos deja a alguien mirando
     // «ninguna subasta coincide» sin saber por que.
-    expect(resumen().textContent).toBe('Filtros · 1 activos');
+    expect(boton().textContent).toBe('Filtros · 1 activo');
+    const activos = document.querySelector('[data-zona="filtros-activos"]');
+    expect(activos.hidden).toBe(false);
+    expect(activos.textContent).toBe('1 activo');
+
+    const rara = document.querySelector('input[name="rareza"][value="Rara"]');
+    rara.checked = true;
+    rara.dispatchEvent(new Event('change', { bubbles: true }));
+    await asentar();
+    expect(boton().textContent).toBe('Filtros · 2 activos');
+  });
+
+  test('en el teléfono se abre como diálogo, con el foco dentro y la página quieta', async () => {
+    await montar();
+
+    boton().click();
+
+    expect(panel().dataset.cajon).toBe('abierto');
+    expect(panel().getAttribute('role')).toBe('dialog');
+    expect(panel().getAttribute('aria-modal')).toBe('true');
+    expect(boton().getAttribute('aria-expanded')).toBe('true');
+    expect(panel().contains(document.activeElement)).toBe(true);
+    expect(document.activeElement.getAttribute('aria-label')).toBe('Cerrar filtros');
+    expect(document.documentElement.classList.contains('con-modal')).toBe(true);
+    expect(document.querySelector('[data-zona="velo-filtros"]').hidden).toBe(false);
+  });
+
+  test('Escape lo cierra y el foco vuelve al botón «Filtros»', async () => {
+    await montar();
+    boton().click();
+
+    tecla('Escape');
+
+    expect(panel().dataset.cajon).toBeUndefined();
+    expect(panel().getAttribute('role')).toBeNull();
+    expect(panel().getAttribute('aria-modal')).toBeNull();
+    expect(boton().getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(boton());
+    expect(document.documentElement.classList.contains('con-modal')).toBe(false);
+    expect(document.querySelector('[data-zona="velo-filtros"]').hidden).toBe(true);
+  });
+
+  test('la equis, «Ver resultados» y el velo también lo cierran', async () => {
+    await montar();
+
+    for (const cerrar of [
+      '[data-accion="cerrar-filtros"]',
+      '[data-accion="ver-resultados"]',
+      '[data-zona="velo-filtros"]',
+    ]) {
+      boton().click();
+      expect(panel().dataset.cajon).toBe('abierto');
+      document.querySelector(cerrar).click();
+      expect(panel().dataset.cajon).toBeUndefined();
+      expect(document.activeElement).toBe(boton());
+    }
+    expect(
+      document.querySelector('[data-accion="cerrar-filtros"]').getAttribute('aria-label'),
+    ).toBe('Cerrar filtros');
+  });
+
+  test('el tabulador no se escapa del cajón abierto', async () => {
+    await montar();
+    boton().click();
+
+    const ultimo = document.querySelector('[data-accion="ver-resultados"]');
+    ultimo.focus();
+    tecla('Tab');
+    expect(document.activeElement.dataset.accion).toBe('cerrar-filtros');
+
+    tecla('Tab', { shiftKey: true });
+    expect(document.activeElement).toBe(ultimo);
+  });
+
+  test('cerrado, Escape no hace nada ni roba el foco', async () => {
+    await montar();
+    const campo = document.querySelector('.subastas-busqueda__campo');
+    campo.focus();
+
+    tecla('Escape');
+
+    expect(document.activeElement).toBe(campo);
+  });
+
+  test('«Limpiar filtros» vuelve a pedir el listado entero', async () => {
+    // El `reset` del formulario avisa ANTES de vaciarse (ver #390): sin la
+    // segunda lectura, el listado se quedaba filtrado con el panel vacío.
+    await montar();
+    const rara = document.querySelector('input[name="rareza"][value="Rara"]');
+    rara.checked = true;
+    rara.dispatchEvent(new Event('change', { bubbles: true }));
+    await asentar();
+    expect(String(globalThis.fetch.mock.calls.at(-1)[0])).toContain('rareza=Rara');
+
+    document.querySelector('.subastas-filtros__limpiar').click();
+    await asentar();
+    await asentar();
+
+    expect(String(globalThis.fetch.mock.calls.at(-1)[0])).not.toContain('rareza');
+    expect(boton().textContent).toBe('Filtros');
   });
 });
 
@@ -309,7 +610,10 @@ describe('UXC-9 — paginación de 7.7.9 y listado en vivo', () => {
     );
     await montar();
 
-    const casillas = [...zona().querySelectorAll('.paginacion__pagina[aria-label^="Página"]')];
+    // PLAYER-07b — las casillas numeradas son las que no llevan dirección; las
+    // dos flechas van aparte, a los lados.
+    const casillas = [...zona().querySelectorAll('.paginacion__pagina:not([data-direccion])')];
+    expect(zona().querySelectorAll('.paginacion__pagina[data-direccion]')).toHaveLength(2);
     expect(casillas.map((c) => c.textContent)).toEqual([
       '1',
       '2',
@@ -322,6 +626,49 @@ describe('UXC-9 — paginación de 7.7.9 y listado en vivo', () => {
       '9',
       '10',
     ]);
+  });
+
+  // jsdom no trae `matchMedia`: estas dos pruebas lo ponen y el `afterEach`
+  // de arriba lo quita.
+  test('PLAYER-07b: en un teléfono, cinco casillas y las dos flechas, en una fila', async () => {
+    globalThis.matchMedia = (consulta) => ({
+      matches: consulta === '(max-width: 599px)',
+      addEventListener() {},
+      removeEventListener() {},
+    });
+    globalThis.fetch = jest.fn(async () =>
+      responder(listado([subasta()], { totalPaginas: 25, pagina: 0 })),
+    );
+    await montar();
+
+    const casillas = [...zona().querySelectorAll('.paginacion__pagina:not([data-direccion])')];
+    expect(casillas.map((c) => c.textContent)).toEqual(['1', '2', '3', '4', '5']);
+    expect(zona().querySelectorAll('.paginacion__pagina[data-direccion]')).toHaveLength(2);
+  });
+
+  test('PLAYER-07b: si la ventana se ensancha con el cajón abierto, se cierra', async () => {
+    const oyentes = new Map();
+    const consultas = new Map();
+    globalThis.matchMedia = (consulta) => {
+      const mq = {
+        matches: false,
+        addEventListener: (_evento, fn) => oyentes.set(consulta, fn),
+        removeEventListener() {},
+      };
+      consultas.set(consulta, mq);
+      return mq;
+    };
+    await montar();
+    const boton = document.querySelector('[data-accion="abrir-filtros"]');
+    boton.click();
+    expect(document.querySelector('.mercado__filtros').dataset.cajon).toBe('abierto');
+
+    consultas.get('(min-width: 900px)').matches = true;
+    oyentes.get('(min-width: 900px)')();
+
+    expect(document.querySelector('.mercado__filtros').dataset.cajon).toBeUndefined();
+    expect(document.querySelector('.mercado__filtros').getAttribute('role')).toBeNull();
+    expect(document.documentElement.classList.contains('con-modal')).toBe(false);
   });
 
   test('un cambio de una subasta a la vista pone su tarjeta al día; uno de fuera se avisa', async () => {

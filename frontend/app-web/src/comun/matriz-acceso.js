@@ -132,8 +132,12 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
+  // 6-oct — pedir el código de recuperación («¿Olvidaste tu contraseña?») tiene
+  // su dirección: es de las que una persona escribe o le dicen. La del canje
+  // sigue siendo `/restablecer`.
   'restablecer-solicitar': {
     ruta: 'cuentas/restablecer-solicitar.html',
+    limpia: '/recuperar',
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
@@ -239,9 +243,11 @@ export const MATRIZ = Object.freeze({
   },
   // UXC-5 — el módulo de misiones (§7.8). Pide sesión: el tablón muestra «las
   // misiones aplicables al jugador» (RF-MIS-001) y la estrategia se prepara
-  // para uno de SUS héroes. Sin dirección limpia: el borde no la sirve.
+  // para uno de SUS héroes. 6-oct — con dirección limpia, como los otros
+  // destinos del jugador: `/misiones`.
   misiones: {
     ruta: 'contenido/misiones/misiones.html',
+    limpia: '/misiones',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },

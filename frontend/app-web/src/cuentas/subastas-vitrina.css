@@ -40,16 +40,46 @@
   box-sizing: inherit;
 }
 
-/* --- Barra de orden, encima de la rejilla --------------------------- */
+/* --- Barra de buscar y ordenar, encima de la rejilla ---------------------
+ * PLAYER-07b (punto 26) — «los filtros de búsqueda y de ordenar por no tienen
+ * títulos, hace que se vea como muy básico». Las tres cajas sueltas sobre la
+ * atmósfera pasan a ser UNA barra sobre una superficie clara, y cada control
+ * lleva su etiqueta visible encima. `.mercado__controles` (kit) pone la fila;
+ * esta clase, la superficie. */
+
+.subastas-herramientas {
+  align-items: flex-end;
+  padding: var(--e-4);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  box-shadow: var(--sombra-1);
+}
+
+.mercado__etiqueta {
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  line-height: var(--t-etiqueta-alto);
+  color: var(--texto-2);
+}
 
 .subastas-orden {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--e-4);
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--e-3);
+}
+
+.mercado__campo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  min-width: 0;
 }
 
 .subastas-orden__control {
   min-height: var(--campo-alto);
+  max-width: 100%;
   padding: 0 var(--e-3);
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
@@ -57,6 +87,30 @@
   color: var(--texto);
   font: inherit;
   font-size: var(--t-cuerpo-tam);
+}
+
+/* El botón «Filtros» del teléfono va en la fila de ordenar, a la altura de
+   las cajas (no de sus etiquetas). En escritorio se esconde
+   (subastas-filtros.css): ahí el panel ya está a la vista. */
+.mercado__abrir-filtros {
+  min-height: var(--campo-alto);
+}
+
+/* Sin la columna de filtros, el buscador ocupa su fila entera y debajo van
+   «Filtros», «Ordenar por» y «Por página»: a 768 px el buscador se quedaba
+   en un tercio de la barra. */
+@media (max-width: 899px) {
+  .subastas-herramientas > .subastas-busqueda {
+    flex-basis: 100%;
+  }
+
+  .subastas-orden {
+    width: 100%;
+  }
+
+  .mercado__campo--orden {
+    flex: 1 1 12rem;
+  }
 }
 
 /* UXC-9 — el aviso de cambios fuera de la página que se ve, encima de los
@@ -78,10 +132,6 @@
   margin: 0;
   font-weight: 600;
   color: var(--texto-2);
-}
-
-.subastas-orden {
-  gap: var(--e-2);
 }
 
 /* --- Rejilla ---------------------------------------------------------- */
@@ -117,20 +167,49 @@
  * rareza (ver CLASE_POR_RAREZA en subastas-vitrina.js), asi que un badge
  * de MdJ del mismo color competiria visualmente en vez de distinguirse. */
 
+/* PLAYER-07b — la miniatura es una ranura oscura con un halo del color del
+   tipo, como la tarjeta de la tienda (UX-GAME-5), y no una caja gris: sin
+   imagen, o con una imagen que no carga, lleva el símbolo del tipo en vez de
+   quedarse vacía o enseñar el icono de imagen rota del navegador. */
 .subastas__miniatura {
+  --subastas-halo: var(--acento-relleno);
   position: relative;
+  display: grid;
+  place-items: center;
   aspect-ratio: 4 / 3;
   margin: calc(var(--e-3) * -1) calc(var(--e-4) * -1) var(--e-2);
   overflow: hidden;
   border-radius: var(--radio) var(--radio) 0 0;
-  background: var(--pista);
+  background:
+    radial-gradient(
+      60% 80% at 50% 45%,
+      color-mix(in srgb, var(--subastas-halo) 55%, transparent),
+      transparent 72%
+    ),
+    var(--cromo);
 }
 
+.subastas__miniatura[data-tipo='ARMA'],
+.subastas__miniatura[data-tipo='HABILIDAD'] {
+  --subastas-halo: var(--primaria);
+}
+
+/* La imagen entera, sin recortar el objeto: `contain` sobre la ranura. Con
+   `cover` una espada en diagonal perdía la punta y la empuñadura. */
 .subastas__miniatura img {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+}
+
+.subastas__simbolo {
+  width: 40%;
+  max-width: 64px;
+  height: auto;
+  aspect-ratio: 1;
+  color: var(--texto-sobre-color);
+  opacity: 0.85;
 }
 
 .subastas__insignia-mdj {
@@ -194,8 +273,12 @@
   background: var(--rareza-epica-insignia);
 }
 
+/* PLAYER-07b — el oro de legendaria sobre su fondo tenue da 4,28:1 y la
+   insignia es texto pequeño: axe lo marcaba (serio) en cuanto el mercado
+   tenía un objeto legendario, cosa que el laboratorio no ejercitaba. Se
+   oscurece el oro con la tinta del texto (6,5:1), sin cambiar el token. */
 .subastas__rareza--legendaria {
-  color: var(--rareza-legendaria);
+  color: color-mix(in srgb, var(--rareza-legendaria) 70%, var(--texto));
   background: var(--rareza-legendaria-insignia);
 }
 
@@ -267,7 +350,39 @@
    copia de `.paginacion`, que vive en el kit desde PR-UX-6. El estado activo
    ademas se marcaba con una clase modificadora ADEMAS de `aria-current`, y
    las dos podian desincronizarse; el kit estiliza `[aria-current='page']`
-   directamente. */
+   directamente.
+
+   PLAYER-07b — y desde el punto 26 el control es tambien el compartido
+   (`comun/paginacion.js`), con flechas. Aqui solo se le da aire, el objetivo
+   tactil de 44 px y el aspecto de una flecha apagada en los extremos. */
+.mercado__paginacion {
+  margin-top: var(--e-5);
+}
+
+.mercado__paginacion .paginacion__pagina {
+  width: auto;
+  min-width: var(--objetivo-tactil);
+  height: var(--objetivo-tactil);
+  padding: 0 var(--e-2);
+}
+
+.mercado__paginacion .paginacion__pagina[data-direccion] {
+  font-family: var(--fuente-titulo);
+  font-size: var(--t-subtitulo-tam);
+  line-height: 1;
+}
+
+.mercado__paginacion .paginacion__pagina:disabled {
+  border-color: var(--borde);
+  background: var(--superficie-2);
+  color: var(--texto-3);
+  cursor: not-allowed;
+}
+
+.mercado__paginacion .paginacion__pagina:disabled:hover {
+  border-color: var(--borde);
+  color: var(--texto-3);
+}
 
 /* ---------------------------------------------------------------------
  * Reorganizacion en resoluciones inferiores -- mismos 3 puntos de
@@ -304,12 +419,35 @@
     padding: var(--e-3);
   }
 
+  /* PLAYER-07b — en un teléfono, «Filtros» ocupa su fila (dice cuántos hay
+     puestos) y debajo «Ordenar por», que estira, y «Por página». Los tres en
+     una sola fila dejaban «Más recientes» cortado a la mitad. El orden en
+     pantalla es el del documento, que es el que sigue el tabulador. */
+  .subastas-herramientas {
+    padding: var(--e-3);
+  }
+
   .subastas-orden {
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mercado__abrir-filtros {
+    grid-column: 1 / -1;
   }
 
   .subastas-orden__control {
     width: 100%;
+  }
+
+  /* La miniatura, más apaisada: a una columna, una ranura 4:3 del ancho del
+     teléfono se comía media pantalla por tarjeta. */
+  .subastas__miniatura {
+    aspect-ratio: 16 / 9;
+  }
+
+  .mercado__paginacion .paginacion__paginas {
+    gap: var(--e-1);
   }
 }
 
@@ -326,7 +464,8 @@
    contextual» en base.css). Son variables de contexto que apuntan a tokens,
    no una copia de la paleta: componen con el alto contraste.
    ======================================================================= */
-.subastas__producto {
+.subastas__producto,
+.subastas-herramientas {
   --tinta: var(--texto);
   --tinta-2: var(--texto-2);
   --tinta-3: var(--texto-3);

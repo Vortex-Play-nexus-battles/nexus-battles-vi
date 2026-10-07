@@ -86,7 +86,9 @@ jobs:
         id: canarios
         working-directory: frontend/app-web
         env:
-          E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+          # 6-oct — la direccion publica del entorno (PUBLIC_BASE_URL): con el
+          # dominio encendido, https://<dominio>, como entra un jugador.
+          E2E_AWS: ${{ vars.PUBLIC_BASE_URL || format('http://{0}', secrets.DEPLOY_HOST_DEV) }}
           MAILPIT_URL: http://localhost:18025/mailpit
         run: |
           set -o pipefail
