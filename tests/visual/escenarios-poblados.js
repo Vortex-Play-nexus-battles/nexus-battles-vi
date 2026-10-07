@@ -470,6 +470,55 @@ function rutasDeOchoHeroes() {
     ],
     // UXC-3 — la ficha trae las opiniones del producto (aquí, ninguna).
     ...rutasDeOpiniones(),
+    // PLAYER-07a — «Héroes del Nexo»: el catálogo de héroes (PaginaDeProductos
+    // de productos.yaml) con los ocho prototipos del laboratorio.
+    [
+      '**/api/v1/productos?*',
+      json({
+        content: catalogoDeHeroes(),
+        page: 0,
+        size: 50,
+        totalElements: OCHO_HEROES.length,
+        totalPages: 1,
+      }),
+    ],
+  ];
+}
+
+/** PLAYER-07a — los ocho héroes del laboratorio como productos del catálogo. */
+function catalogoDeHeroes() {
+  return OCHO_HEROES.map((heroe) => ({
+    id: heroe.elemento.productoId,
+    nombre: heroe.prototipo,
+    tipo: 'HEROE',
+    prototipo: heroe.prototipo,
+    descripcion: `Prototipo ${heroe.prototipo} del catálogo.`,
+    imagen: null,
+    estado: 'ACTIVO',
+    tiraje: -1,
+  }));
+}
+
+/**
+ * PLAYER-07a — una cuenta recién preparada: el héroe inicial y tres objetos.
+ * Es el caso del punto 25 («no solo uno»): «Mis héroes» con uno y «Héroes del
+ * Nexo» con los ocho, el suyo marcado.
+ */
+function rutasDeCuentaNueva() {
+  const elementos = [OCHO_HEROES[0].elemento, ...OBJETOS_DE_LABORATORIO.slice(0, 3)];
+  return [
+    ...rutasDeOchoHeroes(),
+    [
+      '**/api/v1/inventario/elementos?*',
+      json({
+        elementos,
+        numero: 0,
+        tamanio: 16,
+        totalElementos: elementos.length,
+        totalPaginas: 1,
+        ultima: true,
+      }),
+    ],
   ];
 }
 
@@ -3040,6 +3089,49 @@ export const ESCENARIOS = [
     sesion: () => sesionDe('qa_banner', 'JUGADOR'),
     rutas: [MISIONES_DE_LABORATORIO, ...rutasDeOchoHeroes()],
     exige: ['.inventario__banner-misiones .banner-misiones__diapositiva', '.hero-card'],
+  },
+  {
+    // PLAYER-07a (punto 25) — una cuenta recién preparada: «Mis héroes» con
+    // el inicial y «Héroes del Nexo» con los ocho del catálogo, el suyo
+    // marcado y los demás con «Conseguir en la tienda». Nada se regala.
+    id: 'inventario-heroes-del-nexo',
+    titulo: 'mi inventario de una cuenta nueva: mis héroes y los héroes del Nexo',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_nuevo', 'JUGADOR'),
+    rutas: rutasDeCuentaNueva(),
+    exige: [
+      '.inventario__seccion--mis-heroes .hero-card',
+      '.nexo-heroe[data-tuyo="true"]',
+      '.nexo-heroe [data-accion="conseguir-heroe"]',
+    ],
+  },
+  {
+    // PLAYER-07a (punto 25) — la búsqueda general, arriba: busca en héroes y
+    // objetos y enseña los resultados en la vitrina que pagina.
+    id: 'inventario-busqueda-general',
+    titulo: 'mi inventario: la búsqueda general con resultados de héroes y objetos',
+    ruta: 'contenido/inventario/inventario.html#heroes',
+    sesion: () => sesionDe('qa_busca', 'JUGADOR'),
+    rutas: [
+      ...rutasDeOchoHeroes(),
+      [
+        '**/api/v1/inventario/elementos/busqueda?*',
+        json({
+          elementos: [OCHO_HEROES[1].elemento, OBJETOS_DE_LABORATORIO[1]],
+          numero: 0,
+          tamanio: 16,
+          totalElementos: 2,
+          totalPaginas: 1,
+          ultima: true,
+        }),
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('.hero-card').first().waitFor({ timeout: 10_000 });
+      await pagina.locator('.inventario-busqueda__control').fill('Espada');
+      await pagina.locator('.inventario-busqueda__buscar').click();
+    },
+    exige: ['.inventario-busqueda--activa', '.inventario__contenido .vitrina__producto'],
   },
   {
     // UXC-6 — el chat general con conversación: «Tú», los demás con su

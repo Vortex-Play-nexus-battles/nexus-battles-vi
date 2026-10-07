@@ -43,3 +43,36 @@ export async function consultarProducto(
   }
   return respuesta.json();
 }
+
+/**
+ * Una pagina del catalogo publico, filtrada por tipo (`GET /api/v1/productos`,
+ * productos.yaml: publico, solo ACTIVO y UNICO por omision).
+ *
+ * PLAYER-07a — la usa «Héroes del Nexo» para enseñar los héroes que se pueden
+ * conseguir: el catalogo es la fuente, no una lista escrita en la vista.
+ *
+ * @param {{tipo?: string, pagina?: number, tamano?: number, fetchImpl?: Function}} [opciones]
+ *   `tamano` entre 1 y 50 (el maximo del contrato)
+ * @returns {Promise<{productos: object[], total: number|null}>}
+ */
+export async function listarProductos({
+  tipo,
+  pagina = 0,
+  tamano = 50,
+  fetchImpl = fetchWithHttpErrorInterceptor,
+} = {}) {
+  const parametros = new URLSearchParams({ page: String(pagina), size: String(tamano) });
+  if (tipo) {
+    parametros.set('tipo', tipo);
+  }
+  const respuesta = await fetchImpl(`${RUTA}?${parametros}`);
+  if (!respuesta.ok) {
+    throw new Error(`El catalogo de productos respondio ${respuesta.status} al listar`);
+  }
+  // `PaginaDeProductos`: la lista en `content` y el total en `totalElements`.
+  const cuerpo = await respuesta.json();
+  return {
+    productos: Array.isArray(cuerpo?.content) ? cuerpo.content : [],
+    total: Number.isInteger(cuerpo?.totalElements) ? cuerpo.totalElements : null,
+  };
+}
