@@ -425,6 +425,74 @@ repartir_credenciales_de_servicio() {
   AUTH_CLIENTES_SERVICIO="$lista"
 }
 
+# 6-oct — HTTPS: el origen del dominio en TODAS las listas de origenes.
+#
+# Detras del borde cada servicio recibe la peticion por HTTP plano y con el
+# `Host` que pidio el navegador, y Spring (sin forward-headers) se ve a si
+# mismo como http://<host>:80. Mientras la pagina tambien era http://<IP>, el
+# `Origin` que manda el navegador en un POST o en el handshake de un WebSocket
+# coincidia con eso y Spring lo trataba como del mismo origen: por eso hoy
+# entran el login, el carrito y el chatbot aunque sus listas de CORS no
+# nombren la IP. Con la pagina en https://<dominio> el esquema ya no coincide,
+# Spring lo trata como CORS y, si https://<dominio> no esta en la lista,
+# responde 403 al login, al carrito, al chatbot, a las pujas y al handshake de
+# los cuatro canales STOMP. Aqui se anade en un solo sitio, para que encender
+# el dominio sea poner UNA variable (DOMINIO_PUBLICO) y no ocho.
+#
+# Sin quitar nada: a cada lista se le suma https://<dominio>. Una lista que no
+# llega (nadie la fijo en GitHub) parte del origen publico de hoy, el de
+# PUBLIC_BASE_URL, para no perder lo que hasta ahora valia por omision.
+# Quien lee cada una: salas-partidas (SALAS_ y CHAT_WS_ORIGENES, por el .env),
+# notificaciones (NOTIFICACIONES_WS_ORIGENES, .env), ms-identidad
+# (IDENTIDAD_CORS_ORIGENES), ms-ecommerce (ECOMMERCE_CORS_ORIGENES), ms-chatbot
+# (CHATBOT_CORS_ORIGENES) y ms-subastas, en el host de contenido
+# (SUBASTAS_WS_ y SUBASTAS_CORS_ORIGENES); las cinco ultimas por la
+# interpolacion de Compose, que lee el entorno de este proceso.
+VARIABLES_DE_ORIGENES="SALAS_WS_ORIGENES CHAT_WS_ORIGENES NOTIFICACIONES_WS_ORIGENES \
+SUBASTAS_WS_ORIGENES IDENTIDAD_CORS_ORIGENES ECOMMERCE_CORS_ORIGENES \
+CHATBOT_CORS_ORIGENES SUBASTAS_CORS_ORIGENES"
+
+# unir_origenes LISTA... -> una lista separada por comas, sin repetidos, sin
+# huecos y sin barra final (un Origin nunca la lleva).
+unir_origenes() {
+  local entrada o salida="" visto=","
+  local -a partes
+  entrada="$(printf '%s,' "$@" | tr -d ' ')"
+  IFS=',' read -ra partes <<< "$entrada"
+  for o in "${partes[@]}"; do
+    o="${o%/}"
+    [ -z "$o" ] && continue
+    case "$visto" in *",$o,"*) continue ;; esac
+    visto="$visto$o,"
+    salida="${salida:+$salida,}$o"
+  done
+  printf '%s' "$salida"
+}
+
+abrir_origenes_al_dominio() {
+  local dominio
+  dominio="$(printf '%s' "${DOMINIO_PUBLICO:-}" | tr 'A-Z' 'a-z' | sed 's|^https\?://||; s|/.*$||')"
+  if [ -z "$dominio" ]; then
+    return 0
+  fi
+  if ! [[ "$dominio" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]] \
+    || [[ "$dominio" =~ ^[0-9.]+$ ]]; then
+    echo "::warning::DOMINIO_PUBLICO='$dominio' no es un nombre de dominio: no se toca ninguna lista de origenes."
+    return 0
+  fi
+  local nuevo="https://$dominio" de_hoy="" variable valor
+  if [[ "${PUBLIC_BASE_URL:-}" =~ ^(https?://[^/]+) ]]; then
+    de_hoy="${BASH_REMATCH[1]}"
+  fi
+  for variable in $VARIABLES_DE_ORIGENES; do
+    valor="${!variable:-}"
+    if [ -z "$valor" ]; then valor="$de_hoy"; fi
+    printf -v "$variable" '%s' "$(unir_origenes "$valor" "$nuevo")"
+    export "${variable?}"
+  done
+  echo "  $nuevo en las listas de origenes de CORS y WebSocket de este host"
+}
+
 # Las pruebas de scripts/cd/pruebas/ cargan este archivo solo por sus
 # funciones; con esta variable no se toca el servidor.
 if [ "${DESPLEGAR_SOLO_FUNCIONES:-0}" = "1" ]; then
@@ -454,6 +522,8 @@ if [ -f "$DIRECTORIO/scripts/cd/asegurar-swap.sh" ]; then
   chmod +x "$DIRECTORIO/scripts/cd/asegurar-swap.sh" 2>/dev/null || true
   "$DIRECTORIO/scripts/cd/asegurar-swap.sh" || true
 fi
+
+abrir_origenes_al_dominio
 
 echo "== 1) Generando .env efimero en el servidor (nunca se versiona) =="
 # Mismo nombre de variable que en .env.example, valor real desde los
@@ -497,10 +567,16 @@ EOF
 #
 # JWT_CLAVE_PRIVADA no esta en la lista a proposito: ver
 # asegurar_clave_de_firma, que la exporta solo para ms-identidad.
+#
+# 6-oct — las ocho listas de origenes van todas al .env (no solo las que leen
+# los servicios por env_file): las que Compose interpola (ecommerce, chatbot,
+# subastas, identidad) tambien las tiene que encontrar un `docker compose` que
+# no herede este entorno, como el de revertir.sh. Si no, una reversion despues
+# de encender el dominio volveria a los valores por omision y el carrito o el
+# chatbot responderian 403 desde https.
 for variable in SMTP_PORT SMTP_TLS SMTP_AUTENTICA MAIL_FROM CORREO_RESPONDER_A PUBLIC_BASE_URL \
-    LISTA_NEGRA_VERIFICAR_URL SALAS_WS_ORIGENES CHAT_WS_ORIGENES IDENTIDAD_JWKS_URL \
-    CHAT_HISTORIAL_TAMANO NOTIFICACIONES_WS_ORIGENES COMENTARIOS_FORMATOS_IMAGEN \
-    IDENTIDAD_CORS_ORIGENES; do
+    LISTA_NEGRA_VERIFICAR_URL IDENTIDAD_JWKS_URL CHAT_HISTORIAL_TAMANO \
+    COMENTARIOS_FORMATOS_IMAGEN $VARIABLES_DE_ORIGENES; do
   valor="${!variable:-}"
   if [ -n "$valor" ]; then
     echo "$variable=$valor" >> .env
