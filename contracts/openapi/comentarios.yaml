@@ -135,7 +135,11 @@ info:
     rapido del autor NO forma parte de esta version: no anade ninguna
     operacion ni campo para mostrar la sancion activa de un autor. Es menor:
     solo anade parametros opcionales, una operacion, esquemas y un valor.
-  version: 1.10.0
+
+    1.10.1 (HU-COM-005, #519): solo se quitan las marcas `x-implementacion` y `x-fase` de
+    `resolverEnLote`, porque el servicio ya la implementa. No cambia ninguna
+    ruta, campo, respuesta ni error. Es un parche.
+  version: 1.10.1
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -558,8 +562,6 @@ paths:
     post:
       summary: Resolver varios comentarios a la vez (RF-COM-008, 1.10.0)
       operationId: resolverEnLote
-      x-implementacion: pendiente
-      x-fase: "HU-COM-005 (#519)"
       description: >
         1.10.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Aplica
         la misma accion, con el mismo motivo, a todos los comentarios de
