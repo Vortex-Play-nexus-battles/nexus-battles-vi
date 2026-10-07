@@ -731,6 +731,15 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           `niveles en pantalla: ${enPantalla.join(', ')}`,
         ).toBe(true);
         await tarjeta.locator('[data-accion="iniciar"]').click();
+        // Revisión del modo jugador del 6-oct, puntos 22 y 23: la preparación
+        // es un asistente de cinco pasos (héroe, estadísticas, rotaciones,
+        // comprobación y confirmación).
+        const asistente = page.locator('.mision-asistente');
+        const siguiente = asistente.locator('[data-accion="paso-siguiente"]');
+        await expect(siguiente).toHaveAttribute('aria-disabled', 'false', { timeout: 30_000 });
+        await siguiente.click();
+        await expect(asistente).toHaveAttribute('data-paso', 'estadisticas');
+        await siguiente.click();
         const pasoDeLaEstrategia = page.locator('.estrategia__paso select').first();
         await expect(pasoDeLaEstrategia).toBeVisible({ timeout: 30_000 });
         const habilidad = await pasoDeLaEstrategia
@@ -739,10 +748,16 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           .getAttribute('value');
         expect(habilidad).toBeTruthy();
         await pasoDeLaEstrategia.selectOption(habilidad);
+        await siguiente.click();
         await page.locator('[data-accion="comprobar-estrategia"]').click();
         await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
           timeout: 30_000,
         });
+        await siguiente.click();
+        await expect(asistente).toHaveAttribute('data-paso', 'confirmar');
+        await expect(asistente.locator('[data-zona="confirmar"]')).toContainText(
+          'queda bloqueado',
+        );
         // La vista navega en cuanto la matrícula contesta: se lee al pasar.
         // La ruta no se quita (como en misiones.e2e): `page.unroute` justo
         // cuando la vista navega se quedó colgado hasta agotar la prueba en el
@@ -761,8 +776,8 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
           };
           await r.fulfill({ response: respuesta });
         });
+        // «Iniciar misión» en el último paso es la confirmación: sin diálogo.
         await page.locator('[data-accion="iniciar-mision"]').click();
-        await page.locator('[role="dialog"] [data-accion="confirmar"]').click();
         await expect.poll(() => matricula?.status, { timeout: 30_000 }).toBeTruthy();
         expect(matricula.status, JSON.stringify(matricula.cuerpo)).toBe(201);
         const ejecucionId = matricula.cuerpo.ejecucionId;
