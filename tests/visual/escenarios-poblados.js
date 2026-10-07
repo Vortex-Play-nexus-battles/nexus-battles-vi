@@ -608,20 +608,42 @@ const RUTAS_DEL_HEROE_EN_COMBATE = [
 function escenarioDeCombate(
   id,
   titulo,
-  { partida, mensajes = [], exige, canal = {}, interaccion },
+  { partida, mensajes = [], exige, canal = {}, interaccion, sala = null, otrosDestinos = {} },
 ) {
+  // Con `sala`, se llega como desde la sala de espera (`?sala=…&partida=…`):
+  // es lo que monta el chat grupal de esa sala (revisión del 6-oct, punto 15).
+  const consulta = sala ? `sala=${sala}&partida=${ID_PARTIDA}` : `partida=${ID_PARTIDA}`;
   return {
     id,
     titulo,
-    ruta: `plataforma/salas-partidas/sala-batalla.html?partida=${ID_PARTIDA}`,
+    ruta: `plataforma/salas-partidas/sala-batalla.html?${consulta}`,
     sesion: () => SESION_COMBATE,
     rutas: [
       [`**/api/v1/partidas/${partida.id ?? ID_PARTIDA}`, json(partida)],
       ...RUTAS_DEL_HEROE_EN_COMBATE,
     ],
-    canal: { mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes }, ...canal },
+    canal: {
+      mensajes: { [`/tema/partidas/${ID_PARTIDA}`]: mensajes, ...otrosDestinos },
+      ...canal,
+    },
     ...(interaccion ? { interaccion } : {}),
     exige,
+  };
+}
+
+/** La sala del combate del chat grupal (punto 15). DATOS DE LABORATORIO. */
+const ID_SALA_COMBATE = 'bbbbbbb9-9999-4999-8999-999999999999';
+
+/** Un mensaje del chat de sala con la forma de `chat.mensaje`. */
+function mensajeDeSala(id, autor, texto, minutosAtras) {
+  return {
+    id,
+    tipo: 'chat.mensaje',
+    idSala: ID_SALA_COMBATE,
+    autor,
+    texto,
+    logro: null,
+    enviadoEn: new Date(Date.now() - minutosAtras * 60_000).toISOString(),
   };
 }
 
@@ -2028,6 +2050,116 @@ export const ESCENARIOS = [
       '.impacto',
     ],
   }),
+  // Revisión del modo jugador del 6-oct, punto 19 — el historial ya no ocupa
+  // la barra de mando: «Historial» lo abre encima. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-historial', 'combate con el historial abierto', {
+    partida: partidaEnCurso({ vidaMia: 48, vidaRival: 51 }),
+    mensajes: [
+      accionResuelta(SESION_COMBATE.uid, 'CAUSAR_DANO_CRITICO', [
+        { idJugador: RIVAL_IA, vidaActual: 51, vidaMaxima: 60, diferencia: -9 },
+      ]),
+      accionResuelta(RIVAL_IA, 'CAUSAR_DANO', [
+        { idJugador: SESION_COMBATE.uid, vidaActual: 48, vidaMaxima: 52, diferencia: -4 },
+      ]),
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="ver-historial"]').click();
+    },
+    exige: [
+      '.combate__registro-cuerpo[data-abierto="si"] .registro-combate__linea',
+      '[data-accion="ver-historial"][aria-expanded="true"]',
+    ],
+  }),
+  // Punto 15 — el chat grupal abierto en pleno combate, en la misma página:
+  // panel lateral en escritorio, hoja inferior en móvil. DATOS DE LABORATORIO.
+  escenarioDeCombate('combate-chat-grupal', 'combate con el chat grupal abierto', {
+    partida: partidaEnCurso(),
+    sala: ID_SALA_COMBATE,
+    otrosDestinos: {
+      // El historial llega como UNA respuesta con la lista entera.
+      [`/app/salas/${ID_SALA_COMBATE}/chat/historial`]: [
+        [
+          mensajeDeSala(
+            'c-1',
+            { id: 'cccccc07-7777-4777-8777-777777777777', apodo: 'Kael_77' },
+            '¡Suerte en la arena!',
+            3,
+          ),
+          mensajeDeSala(
+            'c-2',
+            { id: SESION_COMBATE.uid, apodo: 'qa_combate' },
+            'Igualmente, vamos allá.',
+            2,
+          ),
+        ],
+      ],
+    },
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="abrir-chat-grupal"]').click();
+    },
+    exige: [
+      '[data-zona="chat-grupal"]:not([hidden])',
+      '#formulario-chat-grupal',
+      '[data-zona="chat-grupal"] [data-zona="mensajes"] li',
+    ],
+  }),
+  // Punto 17 — el comienzo: la sala de espera recibe `sala.partida.iniciada`
+  // y la presentación cuenta 5, 4, 3, 2, 1, ¡COMBATE! (la hora de inicio se
+  // toma al pedir la partida, así la cuenta siempre está entera).
+  {
+    id: 'combate-cuenta-atras',
+    titulo: 'comienzo del combate con la cuenta atrás',
+    ruta: `plataforma/salas-partidas/sala-batalla.html?sala=${ID_SALA_COMBATE}`,
+    sesion: () => SESION_COMBATE,
+    rutas: [
+      [
+        `**/api/v1/salas/${ID_SALA_COMBATE}`,
+        json({
+          id: ID_SALA_COMBATE,
+          estado: 'ABIERTA',
+          modalidad: 'CONTRA_IA',
+          maximoParticipantes: 2,
+          ocupacion: 2,
+          recompensaCreditos: 120,
+          incluirHeroeIA: true,
+          heroesIA: 1,
+          privada: false,
+          tamanoEquipo: null,
+          idAnfitrion: SESION_COMBATE.uid,
+          participantes: [SESION_COMBATE.uid],
+          idPartida: null,
+          creadaEn: new Date(Date.now() - 60_000).toISOString(),
+          apodoAnfitrion: 'qa_combate',
+          jugadores: [
+            { id: SESION_COMBATE.uid, apodo: 'qa_combate', anfitrion: true, heroe: 'Aquiles' },
+          ],
+        }),
+      ],
+      [
+        `**/api/v1/partidas/${ID_PARTIDA}`,
+        () =>
+          json({
+            ...partidaEnCurso(),
+            iniciadaEn: new Date().toISOString(),
+            turnoActual: { idJugador: SESION_COMBATE.uid, numeroTurno: 1, segundosRestantes: null },
+          }),
+      ],
+      ...RUTAS_DEL_HEROE_EN_COMBATE,
+    ],
+    canal: {
+      mensajes: {
+        [`/tema/salas/${ID_SALA_COMBATE}`]: [
+          {
+            tipo: 'sala.partida.iniciada',
+            idSala: ID_SALA_COMBATE,
+            idPartida: ID_PARTIDA,
+            turnoActual: { idJugador: SESION_COMBATE.uid, numeroTurno: 1 },
+          },
+        ],
+      },
+    },
+    exige: ['[data-zona="cuenta-atras"]', '[data-atacar]:disabled'],
+  },
   // UXC-2 — seis participantes, tres contra tres: el HUD con seis barras.
   escenarioDeCombate('combate-seis', 'combate de seis, tres contra tres', {
     partida: partidaDeSeis(),

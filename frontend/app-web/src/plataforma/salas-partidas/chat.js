@@ -199,7 +199,13 @@ function urlDelCanalDelChat() {
  *
  * @param {HTMLElement} raiz contenedor con [data-zona=mensajes|sin-mensajes|conexion], el form y su [data-zona=aviso]
  * @param {{canal: {idSala?: string}, token: string|null, conectar?: Function, url?: string,
- *   miId?: string|null, esperas?: readonly number[], reloj?: object}} opciones
+ *   miId?: string|null, esperas?: readonly number[], reloj?: object, discreto?: boolean,
+ *   indicador?: HTMLElement|null}} opciones
+ *   `discreto` (revisión del modo jugador del 6-oct): el estado del canal solo
+ *   se ve cuando hay algo que contar; «Conectado» no se enseña.
+ *   `indicador`: dónde pintar ese estado, si no es el `[data-zona=conexion]`
+ *   de la raíz (el chat grupal vive en la vista del combate, que ya tiene el
+ *   suyo para el canal de la partida).
  */
 export async function montarChat(
   raiz,
@@ -211,11 +217,12 @@ export async function montarChat(
     miId = null,
     esperas,
     reloj,
+    discreto = true,
+    indicador = raiz.querySelector('[data-zona="conexion"]'),
   },
 ) {
   const lista = raiz.querySelector('[data-zona="mensajes"]');
   const zonaSinMensajes = raiz.querySelector('[data-zona="sin-mensajes"]');
-  const indicador = raiz.querySelector('[data-zona="conexion"]');
   const formulario = raiz.querySelector('form');
   const destinos = destinosDe(canal);
 
@@ -278,7 +285,7 @@ export async function montarChat(
   });
 
   if (!token) {
-    pintarEstadoDelCanal(indicador, { estado: 'sin-conexion' });
+    pintarEstadoDelCanal(indicador, { estado: 'sin-conexion', discreto });
     redactor.bloquear({
       titulo: 'Inicia sesión para chatear',
       detalle: 'El chat necesita tu sesión iniciada para saber quién escribe.',
@@ -303,7 +310,11 @@ export async function montarChat(
 
   let caido = false;
   function alEstado(estado) {
-    pintarEstadoDelCanal(indicador, { ...estado, alReintentar: () => canalVivo?.reintentar() });
+    pintarEstadoDelCanal(indicador, {
+      ...estado,
+      alReintentar: () => canalVivo?.reintentar(),
+      discreto,
+    });
     const perdido = estado.estado === 'reconectando' || estado.estado === 'sin-conexion';
     conectado = !perdido;
     redactor.esperarConexion(perdido);
@@ -325,7 +336,7 @@ export async function montarChat(
   }
 
   async function abrir() {
-    pintarEstadoDelCanal(indicador, { estado: 'conectando' });
+    pintarEstadoDelCanal(indicador, { estado: 'conectando', discreto });
     redactor.esperarConexion(true, 'Conectando con el chat…');
     if (zonaSinMensajes && !historialRecibido) {
       pintarEstado(
@@ -353,7 +364,7 @@ export async function montarChat(
 
   /** El primer intento falló: se dice donde iría la conversación, con reintento. */
   function sinCanal() {
-    pintarEstadoDelCanal(indicador, { estado: 'sin-conexion' });
+    pintarEstadoDelCanal(indicador, { estado: 'sin-conexion', discreto });
     redactor.esperarConexion(true, 'Sin conexión: tu texto no se pierde.');
     const titulo = 'No pudimos abrir el chat';
     const detalle = 'El canal no respondió. Los mensajes no llegan hasta que vuelva.';
@@ -448,7 +459,8 @@ export function montarVistaDeChat(
   const tituloConversacion = documento.querySelector('[data-zona="titulo-conversacion"]');
 
   if (canal.idSala) {
-    titulo.textContent = 'Chat de la sala';
+    // Revisión del modo jugador del 6-oct (punto 15): «Chat grupal».
+    titulo.textContent = 'Chat grupal';
     tituloConversacion.textContent = 'Conversación de la sala';
     intro.textContent =
       'Solo lo leen quienes están en esta sala. Lo que escribes pasa por el filtro de contenido antes de salir.';

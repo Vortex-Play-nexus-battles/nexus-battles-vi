@@ -685,6 +685,9 @@ export async function montarMensajesPrivados(
     pintarEstadoDelCanal(abierta.pildora, {
       ...canal,
       alReintentar: typeof fuente.reintentar === 'function' ? () => fuente.reintentar() : undefined,
+      // Revisión del modo jugador del 6-oct: el estado del canal solo se ve
+      // cuando hay algo que contar.
+      discreto: true,
     });
     abierta.redactor.esperarConexion(
       canal.estado === 'reconectando' || canal.estado === 'sin-conexion',

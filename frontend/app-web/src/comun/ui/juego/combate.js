@@ -521,12 +521,19 @@ export function registroDeCombate({ maximo = 40 } = {}) {
  * @param {{cifra: string, etiqueta?: string|null, tono?: string}} impacto
  * @returns {HTMLElement}
  */
-export function impactoEnCampo({ cifra, etiqueta = null, tono = 'dano' }) {
+export function impactoEnCampo({ cifra, etiqueta = null, tono = 'dano', unidad = null }) {
   return h('span', {
     clase: `impacto impacto--${tono}`,
     atributos: { 'aria-hidden': 'true' },
     hijos: [
-      h('span', { clase: 'impacto__cifra', texto: cifra }),
+      h('span', {
+        clase: 'impacto__cifra',
+        texto: cifra,
+        hijos: [
+          // Revisión del 6-oct, punto 19: «−4 VIDA», «−2 PODER», «+3 VIDA».
+          unidad ? h('span', { clase: 'impacto__unidad', texto: ` ${unidad}` }) : null,
+        ],
+      }),
       etiqueta ? h('span', { clase: 'impacto__etiqueta', texto: etiqueta }) : null,
     ],
   });

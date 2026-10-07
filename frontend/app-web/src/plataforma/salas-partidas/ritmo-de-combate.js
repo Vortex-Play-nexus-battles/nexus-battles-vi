@@ -71,6 +71,12 @@ export function suscripcionConRitmo(suscribir, opciones = {}) {
   let ultimaAjena = -Infinity;
   /** Si lo último que se vio fue una acción ajena: lo siguiente espera a que se lea. */
   let trasAjena = false;
+  /**
+   * Hasta cuándo no se enseña nada (revisión del 6-oct, punto 17): durante la
+   * cuenta atrás del comienzo, lo que llegue —la IA puede abrir en el mismo
+   * instante— espera a que termine. Se retiene, no se descarta.
+   */
+  let retenidoHasta = -Infinity;
 
   const esAccion = (aviso) => aviso?.tipo === ACCION_RESUELTA;
   const esAjena = (aviso) => esAccion(aviso) && aviso.idEjecutor !== yo;
@@ -88,6 +94,10 @@ export function suscripcionConRitmo(suscribir, opciones = {}) {
 
   /** Cuánto falta para poder enseñar este aviso; 0 si ya se puede. */
   function faltaPara(aviso) {
+    const retenido = retenidoHasta - ahora();
+    if (retenido > 0) {
+      return retenido;
+    }
     if (esAjena(aviso)) {
       return ultimaAccion + pausaMs - ahora();
     }
@@ -121,7 +131,7 @@ export function suscripcionConRitmo(suscribir, opciones = {}) {
     }
   }
 
-  return function suscribirConRitmo(alRecibir) {
+  function suscribirConRitmo(alRecibir) {
     if (typeof alRecibir === 'function') {
       oyentes.push(alRecibir);
     }
@@ -132,5 +142,19 @@ export function suscripcionConRitmo(suscribir, opciones = {}) {
         avanzar();
       });
     }
+  }
+
+  /**
+   * Retiene todo lo que llegue hasta ese instante (punto 17: la cuenta atrás
+   * del comienzo). Solo alarga: una retención más corta no acorta la vigente.
+   *
+   * @param {number} instante milisegundos del mismo reloj que `ahora`
+   */
+  suscribirConRitmo.retenerHasta = (instante) => {
+    if (Number.isFinite(instante) && instante > retenidoHasta) {
+      retenidoHasta = instante;
+    }
   };
+
+  return suscribirConRitmo;
 }
