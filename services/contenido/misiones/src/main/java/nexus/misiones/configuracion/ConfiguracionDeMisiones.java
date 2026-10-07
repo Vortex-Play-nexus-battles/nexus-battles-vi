@@ -1,5 +1,6 @@
 package nexus.misiones.configuracion;
 
+import java.nio.file.Path;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
@@ -105,8 +106,10 @@ public class ConfiguracionDeMisiones {
 
     @Bean
     public CatalogoDeMisionesDesdeSemilla catalogoDeMisiones(
-            @Value("${misiones.semilla-provisional:false}") boolean conSemillaProvisional) {
-        return CatalogoDeMisionesDesdeSemilla.cargar(conSemillaProvisional);
+            @Value("${misiones.semilla-provisional:false}") boolean conSemillaProvisional,
+            @Value("${misiones.semilla-extra:}") String semillaExtra) {
+        return CatalogoDeMisionesDesdeSemilla.cargar(conSemillaProvisional,
+                semillaExtra == null || semillaExtra.isBlank() ? null : Path.of(semillaExtra.trim()));
     }
 
     @Bean

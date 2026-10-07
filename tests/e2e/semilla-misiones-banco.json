@@ -1,0 +1,80 @@
+{
+  "version": "1.0.0",
+  "notas": [
+    "SEMILLA EXTRA SOLO DEL BANCO E2E. No es contenido del juego y no vive en el servicio: la monta tests/e2e/compose.yml en srv-misiones con MISIONES_SEMILLA_EXTRA. docker-compose.contenido.yml (AWS DEV) no la monta ni la nombra.",
+    "Existe porque el Master del Templo aparece con un 15 % y dura 12 horas, y el de la Tabla 20 con un 0,01 a 0,1 %: a mano no se ve nunca. Esta mision tecnica lo hace aparecer siempre, para que el E2E recorra Master, epica e inventario.",
+    "El Master de prueba trae vida 1 y defensa 0 a proposito: el heroe del kit del banco (Guerrero Tanque de nivel 1) nunca vence a un Master de nivel 3 con las estadisticas del catalogo (0 de 2000 en la simulacion con el motor real). Los Master del juego conservan las del catalogo.",
+    "Su epica es la de la Tabla 20 para el Guerrero Tanque, con su productoId del catalogo oficial; sembrar.sh inserta ese producto en el catalogo del banco, que no carga la semilla oficial.",
+    "Su nombre empieza por «[PROVISIONAL DE DEV]» y su origen es PROVISIONAL_DEV: la interfaz nunca la confunde con una mision de verdad."
+  ],
+  "tabla20": [],
+  "misiones": [
+    {
+      "id": "dev-master-seguro",
+      "origen": "PROVISIONAL_DEV",
+      "nombre": "[PROVISIONAL DE DEV] Máster seguro",
+      "categoria": "HISTORIA",
+      "descripcionBreve": "Misión técnica del banco E2E: un Máster que siempre aparece y lleva una épica de la Tabla 20. No es contenido del juego.",
+      "imagen": null,
+      "dificultad": "FACIL",
+      "duracionHoras": 1,
+      "nivelRecomendado": null,
+      "requisitosPrevios": [],
+      "narrativa": "Misión técnica del banco E2E: un Máster de prueba que aparece con una probabilidad del 100 % y un jefe de un punto de vida, para comprobar que derrotar al Máster entrega su épica al inventario. No forma parte de la historia del juego.",
+      "escenario": null,
+      "objetivos": [
+        {
+          "texto": "Derrotar al jefe de prueba.",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Derrotar al Máster si aparece.",
+          "principal": false,
+          "tipo": "DERROTAR_MASTER",
+          "valor": null,
+          "botin": null
+        }
+      ],
+      "enemigos": [],
+      "jefe": {
+        "nombre": "Jefe de prueba",
+        "prototipo": "Guerrero Tanque",
+        "vida": 1,
+        "defensa": 0,
+        "descripcion": "Jefe técnico del banco.",
+        "rotaciones": []
+      },
+      "masters": [
+        {
+          "nombre": "Máster de prueba",
+          "prototipo": "Guerrero Tanque",
+          "probabilidad": 1.0,
+          "vida": 1,
+          "defensa": 0,
+          "epica": {
+            "nombre": "Golpe de defensa",
+            "efectoGeneral": "+1 al ataque",
+            "efectoPotenciado": "+4 al daño, +2% de crítico",
+            "productoId": "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d"
+          }
+        }
+      ],
+      "recompensas": {
+        "creditos": 3,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 0,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
+}

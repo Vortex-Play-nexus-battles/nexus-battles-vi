@@ -137,7 +137,8 @@ public class SimularEjecucion {
         for (MasterDeMision master : TiradaDeMasters.quienesAparecen(mision.get(), heroe.prototipo(),
                 catalogo.tabla20(), azar)) {
             masters.add(rival(master.nombre(), TipoDeRival.MASTER, master.prototipo(),
-                    MasterDeMision.nivelFrente(heroe.nivel()), null, null, List.of(), master, multiplicador, vistas));
+                    MasterDeMision.nivelFrente(heroe.nivel()), master.vida(), master.defensa(), List.of(), master,
+                    multiplicador, vistas));
         }
         Jefe jefe = mision.get().jefe();
         Rival rivalFinal = jefe == null ? null

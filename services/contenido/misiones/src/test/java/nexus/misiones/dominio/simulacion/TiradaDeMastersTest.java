@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.within;
 
 import java.util.List;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 import nexus.misiones.dominio.Epica;
 import nexus.misiones.dominio.EpicaDeTabla20;
 import nexus.misiones.dominio.MasterDeMision;
@@ -62,6 +63,27 @@ class TiradaDeMastersTest {
                 .count();
 
         assertThat(apariciones / 20_000.0).isBetween(0.14, 0.16);
+    }
+
+    @Test
+    @DisplayName("HU-SIM-005 C1: con probabilidad 1 aparece con cualquier semilla, y con 0 no aparece con ninguna")
+    void losExtremosNoDependenDeLaSemilla() {
+        MasterDeMision seguro = new MasterDeMision("Seguro", "Guerrero Tanque", 1.0, 1, 0,
+                new Epica("Golpe de defensa", null, null, "81af272d"));
+        MasterDeMision imposible = new MasterDeMision("Imposible", "Guerrero Tanque", 0.0, 1, 0,
+                new Epica("Golpe de defensa", null, null, "81af272d"));
+
+        assertThat(LongStream.range(0, 5_000)
+                .allMatch(semilla -> TiradaDeMasters.quienesAparecen(Misiones.historia("mision-s", List.of(seguro)),
+                        "Guerrero Tanque", List.of(), new AzarConSemilla(semilla)).equals(List.of(seguro))))
+                .as("con 1,0 aparece siempre, con la semilla que sea")
+                .isTrue();
+        assertThat(LongStream.range(0, 5_000)
+                .noneMatch(semilla -> !TiradaDeMasters.quienesAparecen(
+                        Misiones.historia("mision-i", List.of(imposible)), "Guerrero Tanque", List.of(),
+                        new AzarConSemilla(semilla)).isEmpty()))
+                .as("con 0,0 no aparece nunca")
+                .isTrue();
     }
 
     @Test
