@@ -94,4 +94,46 @@ class SancionesPersistenciaIT {
         assertThat(metricas.maximoEnUnDia()).isGreaterThanOrEqualTo(1);
         assertThat(servicio.metricas(ahora.minusDays(40), ahora.minusDays(39)).total()).isZero();
     }
+
+    private void advertir(Actor quien, UUID usuario, int veces) {
+        for (int i = 0; i < veces; i++) {
+            servicio.emitir(quien, new SancionesService.SolicitudDeSancion(usuario, Sancion.Tipo.ADVERTENCIA,
+                    "Lenguaje ofensivo", "Convivencia", null, null, false));
+        }
+    }
+
+    @Test
+    @DisplayName("D-45: reincidentes = 3 o mas sanciones NO revertidas (cualquier tipo), las mas sancionadas primero")
+    void reincidentes() {
+        UUID tres = UUID.randomUUID();
+        UUID dos = UUID.randomUUID();
+        UUID cuatro = UUID.randomUUID();
+        UUID conUnaRevertida = UUID.randomUUID();
+        Actor moderadora = new Actor(UUID.randomUUID(), "MODERADOR");
+        Actor admin = new Actor(UUID.randomUUID(), "ADMINISTRADOR");
+
+        advertir(moderadora, tres, 3);
+        advertir(moderadora, dos, 2);
+        advertir(moderadora, cuatro, 4);
+        // Tres sanciones, una revertida por apelacion: solo cuentan dos.
+        advertir(moderadora, conUnaRevertida, 2);
+        Sancion suspension = servicio.emitir(moderadora, new SancionesService.SolicitudDeSancion(conUnaRevertida,
+                Sancion.Tipo.SUSPENSION, "Reincidencia", null, null, 24L, false));
+        Apelacion apelacion = servicio.apelar(new Actor(conUnaRevertida, "JUGADOR"), suspension.id(), "No fui yo");
+        servicio.resolver(admin, apelacion.id(), Apelacion.Estado.REVERTIDA, "Tiene razon", null);
+
+        SancionesService.Reincidentes lista = servicio.reincidentes(moderadora, 3);
+
+        assertThat(lista.minimo()).isEqualTo(3);
+        java.util.List<UUID> ids = lista.usuarios().stream().map(SancionesService.UsuarioReincidente::usuarioId).toList();
+        assertThat(ids).contains(tres, cuatro).doesNotContain(dos, conUnaRevertida);
+        assertThat(ids.indexOf(cuatro)).as("el de cuatro sanciones va antes que el de tres").isLessThan(ids.indexOf(tres));
+        assertThat(lista.usuarios().get(ids.indexOf(cuatro)).sanciones()).isEqualTo(4);
+        assertThat(lista.total()).isGreaterThanOrEqualTo(2);
+
+        // Con minimo 2 entran los de dos y el que tenia una revertida (2 efectivas).
+        java.util.List<UUID> conDos = servicio.reincidentes(moderadora, 2).usuarios().stream()
+                .map(SancionesService.UsuarioReincidente::usuarioId).toList();
+        assertThat(conDos).contains(dos, conUnaRevertida, tres, cuatro);
+    }
 }

@@ -50,7 +50,16 @@ info:
     `correo.yaml` 1.4.0 no tiene tipo para el. Menor y no parche porque el
     levantamiento documenta su 400 y su 409, y el 409 trae un motivo nuevo en
     `ProblemDetail.motivo`: `SANCION_NO_VIGENTE`.
-  version: 1.2.0
+
+    1.3.0 (HU-USR-008, aditivo): nuevo `GET /sanciones/reincidentes`, la
+    lista de quienes tienen N sanciones o mas **no revertidas** (de cualquier
+    tipo; una revertida por apelacion o levantada ya no cuenta). Es una de las
+    dos senales de «comportamiento sospechoso» que fijo el Product Owner en la
+    historia (la otra, las cuentas bloqueadas por intentos fallidos, es de
+    ms-identidad). Sin `minimo` es 3, el numero del PO («con 3 tambien»,
+    D-45). Solo quien modera: lleva identificadores de personas, asi que no es
+    publica como `/sanciones/metricas`.
+  version: 1.3.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -111,6 +120,29 @@ paths:
                 items: { $ref: '#/components/schemas/Sancion' }
         '403':
           description: Un jugador pidiendo el historial de otro
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+
+  /sanciones/reincidentes:
+    get:
+      summary: Usuarios con varias sanciones no revertidas (comportamiento sospechoso, HU-USR-008)
+      operationId: reincidentesDeSanciones
+      parameters:
+        - name: minimo
+          in: query
+          required: false
+          description: Sanciones no revertidas desde las que un usuario entra en la lista. Por omision 3 (D-45, decision del PO).
+          schema: { type: integer, minimum: 1, default: 3 }
+      responses:
+        '200':
+          description: >
+            Del mas sancionado al menos y, a igual cantidad, del mas reciente. La lista se corta
+            en 100 usuarios; `total` dice cuantos cumplen el criterio en realidad.
+          content: { application/json: { schema: { $ref: '#/components/schemas/Reincidentes' } } }
+        '400':
+          description: '`minimo` menor que 1 (`solicitud-invalida`)'
+          content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
+        '403':
+          description: Un jugador (esta lista es de quien modera)
           content: { application/problem+json: { schema: { $ref: '#/components/schemas/ProblemDetail' } } }
 
   /sanciones/{sancionId}:
@@ -317,6 +349,25 @@ components:
         vigente:
           type: boolean
           description: No revertida y, si es suspension, no vencida. Una advertencia vigente no restringe.
+
+    Reincidentes:
+      type: object
+      required: [minimo, total, usuarios]
+      properties:
+        minimo: { type: integer, minimum: 1, description: El criterio aplicado (sanciones no revertidas o mas) }
+        total: { type: integer, minimum: 0, description: Cuantos usuarios lo cumplen, aunque `usuarios` venga cortada }
+        usuarios:
+          type: array
+          maxItems: 100
+          items: { $ref: '#/components/schemas/UsuarioReincidente' }
+
+    UsuarioReincidente:
+      type: object
+      required: [usuarioId, sanciones, ultimaEn]
+      properties:
+        usuarioId: { type: string, format: uuid }
+        sanciones: { type: integer, minimum: 1, description: Sanciones no revertidas, de cualquier tipo }
+        ultimaEn: { type: string, format: date-time, description: Cuando recibio la ultima de ellas }
 
     Apelacion:
       type: object

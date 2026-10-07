@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -50,6 +51,16 @@ public class SancionesAdminController {
     @GetMapping("/usuarios/{usuarioId}")
     public List<SancionResponse> historial(@AuthenticationPrincipal Jwt actor, @PathVariable UUID usuarioId) {
         return servicio.historialDe(actorDe(actor), usuarioId).stream().map(SancionResponse::desde).toList();
+    }
+
+    /**
+     * 1.3.0 (HU-USR-008, D-45): usuarios con {@code minimo} sanciones no
+     * revertidas o mas. Sin {@code minimo}, el que fijo el PO: 3.
+     */
+    @GetMapping("/reincidentes")
+    public SancionesService.Reincidentes reincidentes(@AuthenticationPrincipal Jwt actor,
+                                                      @RequestParam(defaultValue = "3") int minimo) {
+        return servicio.reincidentes(actorDe(actor), minimo);
     }
 
     @GetMapping("/{sancionId}")

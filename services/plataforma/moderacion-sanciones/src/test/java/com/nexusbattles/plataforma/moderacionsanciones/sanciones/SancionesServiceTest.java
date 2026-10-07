@@ -404,4 +404,51 @@ class SancionesServiceTest {
         assertThatThrownBy(() -> servicio.historialDe(OTRO_JUGADOR, JUGADOR))
                 .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
     }
+
+    // ---- D-45 (HU-USR-008): usuarios con 3 o mas sanciones no revertidas ----
+
+    private static SancionRepository.Reincidente reincidente(UUID usuario, long cuantas, String ultima) {
+        return new SancionRepository.Reincidente() {
+            @Override public UUID getUsuarioId() { return usuario; }
+            @Override public long getSanciones() { return cuantas; }
+            @Override public OffsetDateTime getUltimaEn() { return OffsetDateTime.parse(ultima); }
+        };
+    }
+
+    @Test
+    @DisplayName("quien modera ve a los reincidentes; el total dice cuantos hay aunque la lista se corte")
+    void reincidentesParaQuienModera() {
+        UUID a = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        UUID b = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        when(sanciones.reincidentes(eq(3L), any(org.springframework.data.domain.Pageable.class))).thenReturn(List.of(
+                reincidente(a, 5, "2026-09-20T10:00:00Z"), reincidente(b, 3, "2026-09-19T10:00:00Z")));
+        when(sanciones.contarReincidentes(3L)).thenReturn(7L);
+
+        SancionesService.Reincidentes reincidentes = servicio.reincidentes(MODERADORA, 3);
+
+        assertThat(reincidentes.minimo()).isEqualTo(3);
+        assertThat(reincidentes.total()).isEqualTo(7);
+        assertThat(reincidentes.usuarios()).extracting(SancionesService.UsuarioReincidente::usuarioId)
+                .containsExactly(a, b);
+        assertThat(reincidentes.usuarios().get(0).sanciones()).isEqualTo(5);
+        assertThat(reincidentes.usuarios().get(0).ultimaEn()).isEqualTo(OffsetDateTime.parse("2026-09-20T10:00:00Z"));
+    }
+
+    @Test
+    @DisplayName("la lista de reincidentes es de quien modera: un jugador no la ve y ni se consulta")
+    void unJugadorNoVeLosReincidentes() {
+        assertThatThrownBy(() -> servicio.reincidentes(OTRO_JUGADOR, 3))
+                .isInstanceOf(SancionRechazada.class)
+                .extracting("motivo").isEqualTo(SancionRechazada.Motivo.PERMISO_INSUFICIENTE);
+        verify(sanciones, never()).reincidentes(org.mockito.ArgumentMatchers.anyLong(),
+                any(org.springframework.data.domain.Pageable.class));
+    }
+
+    @Test
+    @DisplayName("un minimo menor que uno no es un criterio: se rechaza en vez de listar a todo el mundo")
+    void minimoSinSentido() {
+        assertThatThrownBy(() -> servicio.reincidentes(MODERADORA, 0))
+                .isInstanceOf(SancionRechazada.class)
+                .extracting("motivo").isEqualTo(SancionRechazada.Motivo.SOLICITUD_INVALIDA);
+    }
 }

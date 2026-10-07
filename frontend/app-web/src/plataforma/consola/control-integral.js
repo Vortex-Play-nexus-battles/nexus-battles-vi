@@ -847,7 +847,68 @@ function seccionModeracion(consultarApi) {
     pintar: (datos) => pintarAlertasDeModeracion(datos),
   });
 
-  return [alertas, auditoria, sanciones, comentarios];
+  // HU-USR-008 (D-45) — «comportamiento sospechoso», una de las dos señales que
+  // fijó el PO: quien acumula varias sanciones sin revertir. Sin `minimo` el
+  // servicio usa el del PO (3); el panel no lo repite, lo lee de la respuesta.
+  const reincidentes = panelDeRecurso({
+    id: 'reincidentes',
+    titulo: 'Usuarios con varias sanciones',
+    descripcion: 'Comportamiento sospechoso: cuentas con sanciones sin revertir acumuladas.',
+    recurso: '/sanciones/reincidentes',
+    consultarApi,
+    pintar: (datos) => pintarReincidentes(datos),
+  });
+
+  return [alertas, reincidentes, auditoria, sanciones, comentarios];
+}
+
+/**
+ * La lista de reincidentes tal como la publica moderacion-sanciones
+ * (`GET /sanciones/reincidentes`, 1.3.0). Un cuerpo que no tenga esa forma se
+ * trata como «sin datos»: no se inventa a nadie.
+ *
+ * @param {{minimo?: number, total?: number,
+ *          usuarios?: {usuarioId?: string, sanciones?: number, ultimaEn?: string}[]}} datos
+ * @returns {HTMLElement[]}
+ */
+export function pintarReincidentes(datos) {
+  const usuarios = (Array.isArray(datos?.usuarios) ? datos.usuarios : []).filter(
+    (u) => u?.usuarioId,
+  );
+  const minimo = Number.isInteger(datos?.minimo) ? datos.minimo : null;
+  const criterio = minimo === null ? 'varias' : `${minimo} o más`;
+  if (usuarios.length === 0) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'sin-reincidentes' },
+        texto: `Nadie tiene ${criterio} sanciones sin revertir.`,
+      }),
+    ];
+  }
+
+  const total =
+    Number.isInteger(datos?.total) && datos.total >= usuarios.length
+      ? datos.total
+      : usuarios.length;
+  const cortada =
+    total > usuarios.length ? ` Se muestran los ${usuarios.length} con más sanciones.` : '';
+  return [
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'resumen-reincidentes' },
+      texto: `${total} ${total === 1 ? 'usuario' : 'usuarios'} con ${criterio} sanciones sin revertir.${cortada}`,
+    }),
+    tabla({
+      columnas: ['Cuenta', 'Sanciones sin revertir', 'Última sanción', 'Historial'],
+      filas: usuarios.map((u) => [
+        enlaceAFicha({ uid: u.usuarioId }),
+        oSinDato(u.sanciones),
+        fechaOSinDato(u.ultimaEn),
+        enlaceASanciones({ uid: u.usuarioId }),
+      ]),
+    }),
+  ];
 }
 
 /**
