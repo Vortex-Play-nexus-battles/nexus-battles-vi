@@ -60,15 +60,28 @@ export function calcularVentana(paginaActual, totalPaginas, maximo = CASILLAS_VI
  * «Paginacion del inventario» a quien usa lector de pantalla, estuviera donde
  * estuviera.
  *
+ * PLAYER-07b — dos ajustes opcionales, para que el mercado de subastas deje su
+ * copia propia (con «Anterior» y «Siguiente» escritos en casillas de 32 px,
+ * que se desbordaban) y use este control. Sin pasarlos, todo sigue como pide
+ * RF-INV-002 para el inventario:
+ *
+ *   - `flechas: 'siempre'` pinta las dos flechas aunque no haya páginas
+ *     ocultas, apagadas en los extremos. En un listado que se recorre página a
+ *     página (el mercado) la flecha es el gesto principal y no puede aparecer y
+ *     desaparecer según cuántas páginas haya.
+ *   - `casillas` baja el número de casillas visibles (nunca por encima de
+ *     diez): en un teléfono, diez casillas de 44 px no caben en una fila.
+ *
  * @param {{paginaActual: number, totalPaginas: number}} estado
  * @param {(pagina: number) => void} alCambiarPagina
- * @param {{etiqueta?: string}} [opciones] nombre accesible del control
+ * @param {{etiqueta?: string, flechas?: 'si-hay-ocultas'|'siempre', casillas?: number}} [opciones]
+ *   `etiqueta` es el nombre accesible del control
  * @returns {HTMLElement} nav listo para insertar; oculto si no hay que paginar
  */
 export function construirPaginacion(
   { paginaActual, totalPaginas },
   alCambiarPagina,
-  { etiqueta = 'Paginación' } = {},
+  { etiqueta = 'Paginación', flechas = 'si-hay-ocultas', casillas = CASILLAS_VISIBLES } = {},
 ) {
   if (!Number.isInteger(totalPaginas) || totalPaginas < 0) {
     throw new RangeError(
@@ -106,11 +119,17 @@ export function construirPaginacion(
   const paginas = document.createElement('div');
   paginas.className = 'paginacion__paginas';
 
-  const { inicio, fin } = calcularVentana(paginaActual, totalPaginas);
+  // Nunca mas de diez (criterio 1), y al menos una: un valor raro no puede
+  // dejar el control sin casillas.
+  const maximo = Math.min(Math.max(Math.trunc(Number(casillas)) || 1, 1), CASILLAS_VISIBLES);
+  const { inicio, fin } = calcularVentana(paginaActual, totalPaginas, maximo);
+  const siempre = flechas === 'siempre';
 
-  if (inicio > 0) {
+  if (inicio > 0 || siempre) {
     paginas.appendChild(
-      construirFlecha('anterior', '‹', 'Página anterior', () => alCambiarPagina(paginaActual - 1)),
+      construirFlecha('anterior', '‹', 'Página anterior', () => alCambiarPagina(paginaActual - 1), {
+        apagada: paginaActual === 0,
+      }),
     );
   }
 
@@ -118,10 +137,14 @@ export function construirPaginacion(
     paginas.appendChild(construirCasilla(indice, paginaActual, alCambiarPagina));
   }
 
-  if (fin < totalPaginas) {
+  if (fin < totalPaginas || siempre) {
     paginas.appendChild(
-      construirFlecha('siguiente', '›', 'Página siguiente', () =>
-        alCambiarPagina(paginaActual + 1),
+      construirFlecha(
+        'siguiente',
+        '›',
+        'Página siguiente',
+        () => alCambiarPagina(paginaActual + 1),
+        { apagada: paginaActual + 1 >= totalPaginas },
       ),
     );
   }
@@ -153,14 +176,23 @@ function construirCasilla(indice, paginaActual, alCambiarPagina) {
   return casilla;
 }
 
-/** Flecha de navegacion. El simbolo es decorativo: el nombre va en aria-label. */
-function construirFlecha(direccion, simbolo, etiqueta, alPulsar) {
+/**
+ * Flecha de navegacion. El simbolo es decorativo: el nombre va en aria-label.
+ *
+ * Con `apagada` (solo en el modo `flechas: 'siempre'`, en la primera o la
+ * ultima pagina) queda deshabilitada en vez de desaparecer: la fila no salta
+ * de sitio al llegar a un extremo, y no pide una pagina que no existe.
+ */
+function construirFlecha(direccion, simbolo, etiqueta, alPulsar, { apagada = false } = {}) {
   const flecha = document.createElement('button');
   flecha.type = 'button';
   flecha.className = 'paginacion__pagina';
   flecha.dataset.direccion = direccion;
   flecha.textContent = simbolo;
   flecha.setAttribute('aria-label', etiqueta);
-  flecha.addEventListener('click', alPulsar);
+  flecha.disabled = apagada;
+  if (!apagada) {
+    flecha.addEventListener('click', alPulsar);
+  }
   return flecha;
 }
