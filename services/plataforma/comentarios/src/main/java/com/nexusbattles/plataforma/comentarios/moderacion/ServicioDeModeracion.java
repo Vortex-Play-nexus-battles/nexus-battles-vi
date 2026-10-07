@@ -25,6 +25,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * El flujo de moderacion de comentarios, de punta a punta — R10.1, ampliado en
@@ -83,6 +84,9 @@ public class ServicioDeModeracion {
     /** Contrato 1.4.0: {@code textoNuevo} de 1 a 2000 caracteres. */
     static final int TEXTO_NUEVO_MAXIMO = 2000;
 
+    /** Contrato 1.10.0: {@code comentarioIds} de la decision en lote admite hasta 100 ids, el mismo tope que la cola. */
+    static final int TOPE_DEL_LOTE = 100;
+
     /** Contrato 1.7.0: el historial del autor admite paginas de hasta 100, el mismo tope que la cola. */
     static final int TAMANO_MAXIMO_DEL_HISTORIAL = 100;
 
@@ -104,6 +108,7 @@ public class ServicioDeModeracion {
     private final AvisoAlAutor aviso;
     private final RegistroDeAuditoria auditoria;
     private final Clock reloj;
+    private final TransactionTemplate transaccion;
     private final int limiteDiarioDeReportes;
     private final int umbralDePrioridad;
     private final int umbralDeOcultamiento;
@@ -115,6 +120,7 @@ public class ServicioDeModeracion {
             AvisoAlAutor aviso,
             RegistroDeAuditoria auditoria,
             Clock reloj,
+            TransactionTemplate transaccion,
             @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes,
             @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad,
             @Value("${comentarios.reportes.umbral-ocultamiento:0}") int umbralDeOcultamiento) {
@@ -124,6 +130,7 @@ public class ServicioDeModeracion {
         this.aviso = aviso;
         this.auditoria = auditoria;
         this.reloj = reloj;
+        this.transaccion = transaccion;
         this.limiteDiarioDeReportes = limiteDiarioDeReportes;
         this.umbralDePrioridad = umbralDePrioridad;
         this.umbralDeOcultamiento = umbralDeOcultamiento;
@@ -503,6 +510,16 @@ public class ServicioDeModeracion {
         return new Decision(resultante, asiento, cierraReportesALaVista(comentario, accion));
     }
 
+    /**
+     * Esqueleto del commit en rojo (HU-COM-005, #519): la firma y los tipos de
+     * resultado existen para que compilen las pruebas, la logica no.
+     */
+    public ResueltoEnLote resolverEnLote(List<String> comentarioIds, String moderadorId,
+            String apodoModerador, AccionDeModeracion accion, String motivo, String confirmacion,
+            String ipOrigen) {
+        throw new UnsupportedOperationException("pendiente: HU-COM-005 (#519)");
+    }
+
     private static void exigirMotivo(String motivo) {
         if (motivo == null || motivo.strip().length() < MOTIVO_MINIMO || motivo.length() > MOTIVO_MAXIMO) {
             throw new MotivoRequerido();
@@ -540,6 +557,14 @@ public class ServicioDeModeracion {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {
+    }
+
+    /** Un {@link Resuelto} por comentario, en el orden de la lista de entrada. */
+    public record ResueltoEnLote(AccionDeModeracion accion, List<Resuelto> resultados) {
+
+        public int total() {
+            return resultados.size();
+        }
     }
 
     /** Lo que una accion decide para un comentario, antes de guardarlo, avisar o auditar. */
@@ -585,6 +610,47 @@ public class ServicioDeModeracion {
         public MotivoRequerido() {
             super("Toda decision de moderacion necesita un motivo, de " + MOTIVO_MINIMO + " a "
                     + MOTIVO_MAXIMO + " caracteres");
+        }
+    }
+
+    /** ELIMINAR en lote sin la confirmacion exacta {@code "ELIMINAR"} (400, {@code CONFIRMACION_REQUERIDA}). */
+    public static class ConfirmacionRequerida extends DecisionIncompleta {
+        public ConfirmacionRequerida() {
+            super("Eliminar en lote exige confirmacion con el valor ELIMINAR");
+        }
+    }
+
+    /** Ids del lote que no existen (404): todos los que faltan, en el orden de la lista de entrada. */
+    public static class ComentariosNoEncontrados extends RuntimeException {
+        private final List<String> ids;
+
+        public ComentariosNoEncontrados(List<String> ids) {
+            super("No existen los comentarios " + ids);
+            this.ids = List.copyOf(ids);
+        }
+
+        public List<String> ids() {
+            return ids;
+        }
+    }
+
+    /** Ids del lote que no admiten la accion (409): todos los afectados, en el orden de la lista de entrada. */
+    public static class TransicionInvalidaEnLote extends RuntimeException {
+        private final AccionDeModeracion accion;
+        private final List<String> ids;
+
+        public TransicionInvalidaEnLote(AccionDeModeracion accion, List<String> ids) {
+            super("No se puede " + accion + " los comentarios " + ids);
+            this.accion = accion;
+            this.ids = List.copyOf(ids);
+        }
+
+        public AccionDeModeracion accion() {
+            return accion;
+        }
+
+        public List<String> ids() {
+            return ids;
         }
     }
 
