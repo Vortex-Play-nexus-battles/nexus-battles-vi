@@ -1,19 +1,36 @@
-# Renovacion diaria del certificado HTTPS del borde de DEV (28-sep).
+# Certificado HTTPS del borde de DEV: renovacion diaria y vigilancia (28-sep;
+# 6-oct).
 #
 # ## Que hace
 #
 # Copia scripts/cd/certificado.sh y la plantilla TLS al host de plataforma y
 # lo ejecuta alli: con el certificado ya emitido hace `certbot renew` (no hace
-# nada si faltan mas de 30 dias) y recarga nginx; sin dominio o sin el
-# consentimiento de Let's Encrypt, deja el borde en HTTP y lo dice. Es el
-# mismo script que corre desplegar.sh en cada despliegue: esto solo cubre los
-# dias sin despliegues.
+# nada si no toca) y recarga nginx; sin dominio o sin el consentimiento de
+# Let's Encrypt, deja el borde en HTTP y lo dice. Es el mismo script que corre
+# desplegar.sh en cada despliegue: esto solo cubre los dias sin despliegues.
+#
+# 6-oct — ademas:
+#   - antes de tocar nada mira el DNS PUBLICO del dominio desde tres
+#     resolutores y desde sus servidores autoritativos (Let's Encrypt valida
+#     desde varios sitios: con medio mundo viendo otra IP, el reto falla), y
+#     sus registros CAA;
+#   - despues lo comprueba DESDE FUERA, como un navegador: 301 del 80, 200
+#     con certificado valido, TLS 1.2/1.3 si y 1.1 no, cabeceras de seguridad,
+#     handshake de los canales STOMP por wss:// con el Origin del dominio (y
+#     403 con uno ajeno) y dias de vigencia. A menos de 14 dias FALLA: Let's
+#     Encrypt ya no manda avisos de caducidad (4-jun-2025), asi que el aviso
+#     es este workflow en rojo;
+#   - a demanda: `estado` (que certificado hay, sin la llave) y
+#     `probar-renovacion` (certbot renew --dry-run contra el entorno de
+#     pruebas: demuestra que la renovacion automatica funcionara, sin tocar el
+#     certificado vigente).
 #
 # ## Sin coste nuevo
 #
 # Un runner de GitHub y una sesion SSH. NO enciende el host: si esta apagado,
 # el certificado no se usa y la siguiente corrida con el host encendido lo
-# renueva (Let's Encrypt emite con 90 dias y certbot renueva a los 60).
+# renueva (Let's Encrypt emite con 90 dias y certbot renueva con un tercio de
+# margen, o antes si Let's Encrypt se lo pide por ARI).
 #
 # ## Cuando
 #
@@ -26,6 +43,13 @@ on:
   schedule:
     - cron: "47 15 * * 1-5"
   workflow_dispatch:
+    inputs:
+      accion:
+        description: "asegurar (emitir o renovar y publicar), estado (que certificado hay) o probar-renovacion (certbot renew --dry-run)"
+        type: choice
+        required: true
+        default: asegurar
+        options: [asegurar, estado, probar-renovacion]
 
 concurrency:
   group: certificado-dev
@@ -38,10 +62,63 @@ jobs:
   renovar:
     name: Asegurar y renovar el certificado del borde
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     environment: dev
+    env:
+      ACCION: ${{ inputs.accion || 'asegurar' }}
+      DOMINIO: ${{ vars.DOMINIO_PUBLICO }}
+      ADICIONALES: ${{ vars.DOMINIOS_ADICIONALES }}
     steps:
       - uses: actions/checkout@v4
+
+      # Solo lectura y desde fuera de AWS: lo que vera Let's Encrypt.
+      - name: DNS publico del dominio
+        if: vars.DOMINIO_PUBLICO != ''
+        env:
+          DESTINO: ${{ secrets.DEPLOY_HOST_DEV }}
+        run: |
+          set -uo pipefail
+          D="$(printf '%s' "$DOMINIO" | tr 'A-Z' 'a-z' | sed 's|^https\?://||; s|/.*$||')"
+          bien=1
+          for nombre in $D $(printf '%s' "$ADICIONALES" | tr 'A-Z' 'a-z'); do
+            echo "== $nombre"
+            # Servidores autoritativos: el primer antepasado con NS.
+            zona="$nombre"
+            autoritativos=""
+            while [ -n "$zona" ] && [ "$zona" != "${zona#*.}" ]; do
+              autoritativos="$(dig +short NS "$zona" | sed 's/\.$//' | head -3)"
+              [ -n "$autoritativos" ] && break
+              zona="${zona#*.}"
+            done
+            for r in 1.1.1.1 8.8.8.8 9.9.9.9 $autoritativos; do
+              ips="$(dig +short +time=3 +tries=2 A "$nombre" @"$r" | grep -E '^[0-9.]+$' | sort -u | tr '\n' ' ')"
+              if [ "${ips% }" = "$DESTINO" ]; then
+                printf '  %-28s -> el host de plataforma\n' "$r"
+              else
+                printf '  %-28s -> %s\n' "$r" "${ips:-(no resuelve)}"
+                bien=0
+              fi
+            done
+            aaaa="$(dig +short AAAA "$nombre" @1.1.1.1 | head -3 | tr '\n' ' ')"
+            [ -n "$aaaa" ] && echo "::warning::$nombre tiene AAAA ($aaaa) y el host no tiene IPv6: los clientes IPv6 no llegarian."
+            # CAA: manda el del antepasado mas cercano que tenga.
+            zona="$nombre"
+            while [ -n "$zona" ] && [ "$zona" != "${zona#*.}" ]; do
+              caa="$(dig +short CAA "$zona" @1.1.1.1)"
+              if [ -n "$caa" ]; then
+                echo "  CAA de $zona: $(echo "$caa" | tr '\n' ' ')"
+                echo "$caa" | grep -q 'issue "letsencrypt.org"' \
+                  || echo "::warning::El CAA de $zona no autoriza a letsencrypt.org: Let's Encrypt se negara a emitir."
+                break
+              fi
+              zona="${zona#*.}"
+            done
+          done
+          if [ "$bien" = 1 ]; then
+            echo "El DNS publico lleva todos los nombres al host de plataforma."
+          else
+            echo "::warning::Algun resolutor no lleva el dominio al host de plataforma todavia (propagacion o registro A equivocado). certificado.sh no emitira hasta que el host lo vea apuntando a si mismo."
+          fi
 
       - name: Comprobar que el host contesta (sin encenderlo)
         id: host
@@ -81,7 +158,7 @@ jobs:
           target: "/opt/nexus/web"
           strip_components: 0
 
-      - name: Asegurar y renovar
+      - name: Certificado en el host (${{ env.ACCION }})
         if: steps.host.outputs.encendido == 'true'
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -90,12 +167,101 @@ jobs:
           ACME_ACEPTA_TERMINOS: ${{ vars.ACME_ACEPTA_TERMINOS }}
           ACME_CORREO: ${{ vars.ACME_CORREO }}
           ACME_PRUEBAS: ${{ vars.ACME_PRUEBAS }}
+          HSTS_SEGUNDOS: ${{ vars.HSTS_SEGUNDOS }}
         with:
           host: ${{ secrets.DEPLOY_HOST_DEV }}
           username: ${{ secrets.SSH_USER_DEV }}
           key: ${{ secrets.SSH_KEY_DEV }}
-          command_timeout: 5m
-          envs: DOMINIO_PUBLICO,DOMINIOS_ADICIONALES,ACME_ACEPTA_TERMINOS,ACME_CORREO,ACME_PRUEBAS
+          command_timeout: 8m
+          envs: ACCION,DOMINIO_PUBLICO,DOMINIOS_ADICIONALES,ACME_ACEPTA_TERMINOS,ACME_CORREO,ACME_PRUEBAS,HSTS_SEGUNDOS
           script: |
             chmod +x /opt/nexus/scripts/cd/certificado.sh
-            NEXUS_DIR=/opt/nexus /opt/nexus/scripts/cd/certificado.sh
+            NEXUS_DIR=/opt/nexus /opt/nexus/scripts/cd/certificado.sh "$ACCION"
+
+      # Lo que ve un navegador. Solo si el borde YA publica HTTPS (el 80 lo
+      # dice con su 301); si no, no hay nada que comprobar y no es un fallo.
+      - name: HTTPS desde fuera (certificado, TLS, cabeceras, wss y vigencia)
+        if: steps.host.outputs.encendido == 'true' && vars.DOMINIO_PUBLICO != '' && env.ACCION != 'probar-renovacion'
+        run: |
+          set -uo pipefail
+          D="$(printf '%s' "$DOMINIO" | tr 'A-Z' 'a-z' | sed 's|^https\?://||; s|/.*$||')"
+          fallos=0
+          ok() { echo "  ok    $*"; }
+          mal() { echo "::error::$*"; fallos=$((fallos + 1)); }
+
+          r=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 15 "http://$D/login?x=1" || true)
+          if [ "$r" != "301 https://$D/login?x=1" ]; then
+            echo "::notice::El borde aun no publica HTTPS para $D (http://$D/login -> '$r'). Nada que comprobar."
+            exit 0
+          fi
+          ok "http://$D/login -> 301 https://$D/login (conserva la consulta)"
+
+          # curl valida la cadena y el nombre con los certificados del sistema.
+          r=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$D/login") || r="error TLS"
+          [ "$r" = "200" ] && ok "https://$D/login -> 200 con certificado valido" || mal "https://$D/login -> $r"
+          r=$(curl -sS --max-time 15 "https://$D/salud-borde" | tr -d '\r\n') || true
+          [ "$r" = "UP" ] && ok "https://$D/salud-borde -> UP" || mal "salud-borde por https: '$r'"
+          r=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$D/api/v1/auth/jwks") || true
+          [ "$r" = "200" ] && ok "la API responde por el mismo dominio (/api/v1/auth/jwks 200)" || mal "/api/v1/auth/jwks por https -> $r"
+
+          echo "Certificado que se sirve:"
+          echo | openssl s_client -connect "$D:443" -servername "$D" 2>/dev/null \
+            | openssl x509 -noout -issuer -subject -ext subjectAltName -dates 2>/dev/null | sed 's/^/  /'
+          fin=$(echo | openssl s_client -connect "$D:443" -servername "$D" 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2)
+          if [ -n "$fin" ]; then
+            dias=$(( ( $(date -d "$fin" +%s) - $(date +%s) ) / 86400 ))
+            if [ "$dias" -ge 14 ]; then ok "vigencia: $dias dias"; else mal "el certificado caduca en $dias dias: la renovacion no esta funcionando"; fi
+          else
+            mal "no se pudo leer el certificado del 443"
+          fi
+
+          tls() { echo | openssl s_client -connect "$D:443" -servername "$D" "$@" 2>/dev/null | grep -q '^New, TLSv'; }
+          tls -tls1_3 && ok "TLS 1.3 aceptado" || mal "TLS 1.3 rechazado"
+          tls -tls1_2 && ok "TLS 1.2 aceptado" || mal "TLS 1.2 rechazado"
+          tls -tls1_1 -cipher 'DEFAULT@SECLEVEL=0' && mal "TLS 1.1 aceptado" || ok "TLS 1.1 rechazado"
+
+          cabeceras="$(curl -sS -o /dev/null -D - --max-time 15 "https://$D/login" | tr -d '\r')"
+          for c in "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: strict-origin-when-cross-origin"; do
+            printf '%s\n' "$cabeceras" | grep -qi "^$c$" && ok "cabecera $c" || mal "falta la cabecera $c"
+          done
+          printf '%s\n' "$cabeceras" | grep -i '^content-security-policy:' | grep -q "frame-ancestors 'none'" \
+            && ok "politica de contenido presente" || mal "falta Content-Security-Policy"
+          printf '%s\n' "$cabeceras" | grep -i '^strict-transport-security:' | sed 's/^/  (HSTS) /' || true
+
+          # Handshake WebSocket por wss:// con el Origin del dominio (101) y con
+          # uno ajeno (403): los canales aceptan la pagina y nada mas.
+          handshake() {
+            python3 - "$D" "$1" "$2" <<'PY'
+          import base64, os, socket, ssl, sys
+          host, ruta, origen = sys.argv[1:4]
+          try:
+              s = ssl.create_default_context().wrap_socket(
+                  socket.create_connection((host, 443), timeout=10), server_hostname=host)
+              s.sendall((f"GET {ruta} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\n"
+                         f"Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n"
+                         f"Sec-WebSocket-Key: {base64.b64encode(os.urandom(16)).decode()}\r\n"
+                         f"Origin: {origen}\r\n\r\n").encode())
+              print(s.recv(4096).decode(errors="replace").split("\r\n")[0].split(" ")[1])
+          except Exception as e:
+              print("error:" + type(e).__name__)
+          PY
+          }
+          for ruta in /ws /ws/notificaciones /api/v1/ws-subastas; do
+            r=$(handshake "$ruta" "https://$D")
+            if [ "$r" = "101" ]; then
+              ok "wss://$D$ruta acepta el Origin del dominio (101)"
+            elif [ "$ruta" = "/api/v1/ws-subastas" ]; then
+              echo "::warning::wss://$D$ruta -> $r (ms-subastas vive en el host de contenido; si no esta desplegado, esto no es del certificado)"
+            else
+              mal "wss://$D$ruta con el Origin del dominio -> $r (¿falta https://$D en su lista de origenes?)"
+            fi
+            r=$(handshake "$ruta" "https://otro-sitio.example")
+            [ "$r" = "403" ] && ok "wss://$D$ruta rechaza un Origin ajeno (403)" \
+              || echo "::warning::wss://$D$ruta con un Origin ajeno -> $r (esperado 403)"
+          done
+
+          if [ "$fallos" -gt 0 ]; then
+            echo "$fallos comprobacion(es) de HTTPS fallaron."
+            exit 1
+          fi
+          echo "HTTPS de $D en orden."

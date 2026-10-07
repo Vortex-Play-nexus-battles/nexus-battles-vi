@@ -107,7 +107,9 @@ jobs:
       - name: La prueba del profesor
         working-directory: frontend/app-web
         env:
-          PROFESOR_URL: http://${{ secrets.DEPLOY_HOST_DEV }}
+          # 6-oct — la direccion publica del entorno (PUBLIC_BASE_URL): con el
+          # dominio encendido, https://<dominio>, la que tendra el profesor.
+          PROFESOR_URL: ${{ vars.PUBLIC_BASE_URL || format('http://{0}', secrets.DEPLOY_HOST_DEV) }}
           MAILPIT_URL: http://localhost:18025/mailpit
         run: |
           set -o pipefail

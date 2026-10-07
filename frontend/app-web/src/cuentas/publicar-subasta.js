@@ -3,12 +3,14 @@ import { cuerpoDelToken } from '../comun/identidad.js';
 import { baseDeApi, rutaDeApi } from '../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { consultarPagina } from '../contenido/inventario/cliente-inventario.js';
-import { nombreDelTipo } from '../comun/ui/formato.js';
+import { consultarProducto as leerDelCatalogo } from '../contenido/inventario/cliente-productos.js';
+import { NOMBRE_DEL_TIPO, nombreDelTipo } from '../comun/ui/formato.js';
 import {
   publicarSubasta,
   crearClavePublicacion,
   ErrorPublicacion,
 } from './cliente-publicacion-subastas.js';
+import { SIN_NOMBRE, crearResolutorDeNombres, nombreLegible } from './nombre-de-producto.js';
 
 /**
  * Respaldo de la Tabla 25 por si las reglas del servidor no llegan. Desde B8
@@ -98,6 +100,7 @@ export async function montarPublicacion(
     publicar = publicarSubasta,
     crearClave = crearClavePublicacion,
     consultarReglas = consultarReglasDeSubastas,
+    consultarProducto = (id) => leerDelCatalogo(id, { fetchImpl: transporteInventario }),
   } = {},
 ) {
   const cabecera = document.querySelector('[data-cabecera-app]');
@@ -134,6 +137,10 @@ export async function montarPublicacion(
                 <button type="button" data-recargar class="boton boton--secundario" hidden>Reintentar carga</button>
               </nav>
             </fieldset>
+            <div data-aviso-catalogo class="publicacion__aviso-catalogo" hidden>
+              <p role="status">No pudimos consultar el catálogo de productos: mientras tanto ves el nombre que el objeto tiene en tu inventario.</p>
+              <button type="button" data-reintentar-catalogo class="boton boton--secundario boton--pequeno">Reintentar</button>
+            </div>
             <p class="publicacion__ayuda">Los productos no disponibles aparecen deshabilitados. Al publicar se comprobarán también el uso, la propiedad y si el producto es subastable.</p>
             <p class="publicacion__ayuda" data-incremento-minimo hidden></p>
           </section>
@@ -196,6 +203,52 @@ export async function montarPublicacion(
   );
   const almacenamiento = globalThis.sessionStorage;
   const claveAlmacen = sesion ? `nexus.hu-sub-001.intento:${sesion.uid}` : null;
+  // PLAYER-07b (punto 27) — el nombre que se lee sale del catálogo; los ids
+  // siguen viajando en la solicitud, pero ya no se pintan en ningún sitio.
+  const nombres = crearResolutorDeNombres({ consultar: consultarProducto });
+
+  /** Las etiquetas de la página de inventario que se ve, por id de elemento. */
+  function etiquetas() {
+    return etiquetasDelInventario(elementos, (productoId) => nombres.leer(productoId));
+  }
+
+  /** Pone al día el texto de las opciones ya pintadas (p. ej. llegó un nombre). */
+  function etiquetarOpciones() {
+    const porId = etiquetas();
+    for (const opcion of producto.options) {
+      const elemento = elementos.find((e) => e.id === opcion.value);
+      if (elemento) {
+        opcion.textContent = textoDeOpcion(porId.get(elemento.id), elemento);
+      }
+    }
+  }
+
+  /**
+   * Pide al catálogo los productos de la página. Se espera un tope corto: un
+   * catálogo lento no puede dejar la pantalla sin inventario. Lo que llegue
+   * después re-etiqueta las opciones solo. Devuelve null (y no se espera
+   * nada) si ya se conocen todos.
+   */
+  function nombrar(lista) {
+    const ids = [...new Set(lista.map((e) => e.productoId).filter(Boolean))];
+    if (ids.every((id) => (nombres.leer(id)?.estado ?? 'pendiente') !== 'pendiente')) {
+      return null;
+    }
+    const todos = Promise.all(ids.map((id) => nombres.resolver(id)));
+    todos.then(() => {
+      if (lista === elementos) {
+        etiquetarOpciones();
+        actualizar();
+      }
+    });
+    let tope;
+    return Promise.race([
+      todos,
+      new Promise((resolver) => {
+        tope = setTimeout(resolver, ESPERA_DEL_CATALOGO_MS);
+      }),
+    ]).finally(() => clearTimeout(tope));
+  }
 
   function avisar(texto, error = false) {
     mensaje.textContent = texto;
@@ -234,10 +287,24 @@ export async function montarPublicacion(
     const { seleccionado, duracion, errores } = datos();
     const solicitud = retenido ? intento.solicitud : null;
     const configuracion = duraciones[solicitud?.duracion ?? duracion];
-    const nombreSeleccionado = seleccionado
-      ? `${seleccionado.nombrePropio} · ${seleccionado.tipo} · ${seleccionado.id}`
-      : 'Sin seleccionar';
-    $('[data-resumen-producto]').textContent = retenido ? intento.nombre : nombreSeleccionado;
+    // PLAYER-07b — antes «Espada de luz · ARMA · 7c9e…»: la constante del tipo
+    // y el id interno del elemento. Ahora lo mismo que dice la opción elegida.
+    const etiqueta = seleccionado ? etiquetas().get(seleccionado.id) : null;
+    const resumenProducto = $('[data-resumen-producto]');
+    if (retenido) {
+      const guardado = nombreDelIntento(intento, nombres.leer(solicitud?.productoId));
+      resumenProducto.textContent = guardado.texto;
+      resumenProducto.dataset.origenNombre = guardado.origen;
+    } else {
+      resumenProducto.textContent = etiqueta?.texto ?? 'Sin seleccionar';
+      resumenProducto.dataset.origenNombre = etiqueta?.origen ?? 'ninguno';
+    }
+    // Si el catálogo no respondió para algo de lo que se ve, se dice una vez,
+    // con la salida al lado; el nombre de respaldo nunca es un código.
+    const enPantalla = retenido ? [solicitud?.productoId] : elementos.map((e) => e.productoId);
+    $('[data-aviso-catalogo]').hidden = !enPantalla.some(
+      (id) => nombres.leer(id)?.estado === 'error',
+    );
     $('[data-resumen-duracion]').textContent = configuracion
       ? `${configuracion.horas} horas`
       : 'Elige una duración';
@@ -340,6 +407,9 @@ export async function montarPublicacion(
       avisar(
         'Hay una publicación pendiente de confirmar. Reintenta la misma operación para conocer su resultado.',
       );
+      // PLAYER-07b — el nombre guardado se enseña ya (limpio de ids, por si
+      // lo guardó la versión anterior); si el catálogo responde, se pone el suyo.
+      nombres.resolver(intento.solicitud.productoId).then(() => actualizar());
     }
   } catch {
     avisar(
@@ -372,20 +442,20 @@ export async function montarPublicacion(
       elementos = respuesta.elementos;
       pagina = respuesta.numero;
       totalPaginas = respuesta.totalPaginas;
+      // PLAYER-07b — el nombre se pide al catálogo antes de pintar las
+      // opciones, con un tope corto (ver `nombrar`).
+      const nombrando = nombrar(elementos);
+      if (nombrando) {
+        await nombrando;
+      }
       producto.replaceChildren(new Option('Selecciona un producto', ''));
       // UXC-8 — la opción decía «Espada de luz · ARMA · 3f2a…»: la constante
       // del tipo y el identificador interno del elemento. Ahora el tipo en
-      // palabras y, si hay dos iguales, cuál es cuál («copia 2»).
-      const vistos = new Map();
+      // palabras y, si hay dos iguales, cuál es cuál («copia 2»). PLAYER-07b:
+      // y el nombre, el del catálogo (ver `etiquetasDelInventario`).
+      const porId = etiquetas();
       for (const elemento of elementos) {
-        const copia = (vistos.get(elemento.nombrePropio) ?? 0) + 1;
-        vistos.set(elemento.nombrePropio, copia);
-        const repetido =
-          elementos.filter((e) => e.nombrePropio === elemento.nombrePropio).length > 1;
-        const opcion = new Option(
-          `${elemento.nombrePropio} · ${nombreDelTipo(elemento.tipo)}${repetido ? ` · copia ${copia}` : ''}${elemento.disponible === false ? ' · No disponible' : ''}`,
-          elemento.id,
-        );
+        const opcion = new Option(textoDeOpcion(porId.get(elemento.id), elemento), elemento.id);
         opcion.disabled = elemento.disponible === false || !UUID.test(elemento.productoId ?? '');
         producto.appendChild(opcion);
       }
@@ -438,6 +508,18 @@ export async function montarPublicacion(
   $('[data-anterior]').addEventListener('click', () => cargar(pagina - 1));
   $('[data-siguiente]').addEventListener('click', () => cargar(pagina + 1));
   $('[data-recargar]').addEventListener('click', () => cargar(pagina));
+  // PLAYER-07b — volver a pedir al catálogo solo lo que falló.
+  const reintentarCatalogo = $('[data-reintentar-catalogo]');
+  reintentarCatalogo.addEventListener('click', async () => {
+    nombres.olvidarFallidos();
+    reintentarCatalogo.disabled = true;
+    const ids = retenido ? [intento?.solicitud?.productoId] : elementos.map((e) => e.productoId);
+    await Promise.all([...new Set(ids)].filter(Boolean).map((id) => nombres.resolver(id)));
+    // El boton solo se apaga mientras dura esta consulta.
+    reintentarCatalogo.disabled = false;
+    etiquetarOpciones();
+    actualizar();
+  });
   form.addEventListener('submit', async (evento) => {
     evento.preventDefault();
     if (enviando || terminado || sinSesion || (!retenido && sinIncremento)) {
@@ -458,7 +540,9 @@ export async function montarPublicacion(
       try {
         intento = {
           clave: crearClave(),
-          nombre: `${seleccionado.nombrePropio} · ${seleccionado.tipo} · ${seleccionado.id}`,
+          // PLAYER-07b — lo que se leyó al confirmar, sin identificadores: si
+          // hay que reintentar tras recargar, se vuelve a ver lo mismo.
+          nombre: etiquetas().get(seleccionado.id)?.texto ?? SIN_NOMBRE,
           solicitud: {
             elementoInventarioId: seleccionado.id,
             productoId: seleccionado.productoId,
@@ -535,4 +619,100 @@ export async function montarPublicacion(
   if (!retenido) {
     await cargar(0);
   }
+}
+
+/**
+ * PLAYER-07b — cuánto se espera al catálogo antes de pintar el inventario. Lo
+ * que tarde más llega después y re-etiqueta las opciones solo.
+ */
+const ESPERA_DEL_CATALOGO_MS = 2500;
+
+/**
+ * Cómo se llama un elemento del inventario en esta pantalla.
+ *
+ * El nombre del catálogo: es el que verá quien puje, porque ms-subastas lo
+ * copia del catálogo al publicar. El `nombrePropio` del inventario puede ser
+ * otro (uno que se copió al entregar el objeto, un nombre de pruebas como
+ * «Arma 1», o el propio id del producto cuando el catálogo no tenía nombre),
+ * así que solo sirve de respaldo si el catálogo no responde, y solo si es un
+ * nombre: si es un código, «Objeto sin nombre». Nunca un identificador.
+ *
+ * @param {object} elemento `ElementoInventario`
+ * @param {{estado: string, nombre: string|null}|null} conocido lo que se sabe del catálogo
+ * @returns {{texto: string, origen: 'catalogo'|'inventario'|'sin-nombre'}}
+ */
+function nombreParaElegir(elemento, conocido) {
+  const tipo = nombreDelTipo(elemento.tipo);
+  if (conocido?.estado === 'ok') {
+    return { texto: `${conocido.nombre} · ${tipo}`, origen: 'catalogo' };
+  }
+  const propio = nombreLegible(elemento.nombrePropio, {
+    respaldo: '',
+    identificadores: [elemento.id, elemento.productoId],
+  });
+  if (propio) {
+    return { texto: `${propio} · ${tipo}`, origen: 'inventario' };
+  }
+  return { texto: `${SIN_NOMBRE} · ${tipo}`, origen: 'sin-nombre' };
+}
+
+/**
+ * Las etiquetas de una página de inventario, por id de elemento. Si dos se
+ * leerían igual, se numeran («copia 2»): es lo único que las distingue sin
+ * enseñar su identificador.
+ *
+ * @param {Array<object>} lista
+ * @param {(productoId: string) => object|null} conocidoDe
+ * @returns {Map<string, {texto: string, origen: string}>}
+ */
+function etiquetasDelInventario(lista, conocidoDe) {
+  const base = lista.map((elemento) => ({
+    elemento,
+    ...nombreParaElegir(elemento, conocidoDe(elemento.productoId)),
+  }));
+  const repeticiones = new Map();
+  for (const { texto } of base) {
+    repeticiones.set(texto, (repeticiones.get(texto) ?? 0) + 1);
+  }
+  const vistas = new Map();
+  const porId = new Map();
+  for (const { elemento, texto, origen } of base) {
+    const copia = (vistas.get(texto) ?? 0) + 1;
+    vistas.set(texto, copia);
+    porId.set(elemento.id, {
+      texto: repeticiones.get(texto) > 1 ? `${texto} · copia ${copia}` : texto,
+      origen,
+    });
+  }
+  return porId;
+}
+
+/** El texto de la opción: la etiqueta y, si no se puede elegir, por qué. */
+function textoDeOpcion(etiqueta, elemento) {
+  const texto = etiqueta?.texto ?? `${SIN_NOMBRE} · ${nombreDelTipo(elemento.tipo)}`;
+  return `${texto}${elemento.disponible === false ? ' · No disponible' : ''}`;
+}
+
+/**
+ * El nombre de una publicación pendiente de confirmar (guardada antes del
+ * POST). La versión anterior guardaba «Espada de luz · ARMA · 7c9e…»: se
+ * enseña sin los identificadores y con el tipo en palabras. Si el catálogo ya
+ * respondió, su nombre sustituye al guardado.
+ *
+ * @param {{nombre?: string}|null} intento
+ * @param {{estado: string, nombre: string|null}|null} conocido
+ * @returns {{texto: string, origen: 'catalogo'|'guardado'}}
+ */
+function nombreDelIntento(intento, conocido) {
+  const [primero = '', ...resto] = String(intento?.nombre ?? '').split(' · ');
+  const nombre = nombreLegible(primero);
+  const detalles = resto
+    .map((parte) => parte.trim())
+    .filter((parte) => parte && nombreLegible(parte, { respaldo: '' }) !== '')
+    .map((parte) => (Object.hasOwn(NOMBRE_DEL_TIPO, parte) ? nombreDelTipo(parte) : parte));
+  const principal = conocido?.estado === 'ok' ? conocido.nombre : nombre;
+  return {
+    texto: [principal, ...detalles].join(' · '),
+    origen: conocido?.estado === 'ok' ? 'catalogo' : 'guardado',
+  };
 }

@@ -406,6 +406,14 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/certificado.sh
 
+      # 6-oct: con la pagina en https://<dominio> el Origin ya no es el de la
+      # IP y los servicios lo tratan como CORS. desplegar.sh suma el dominio a
+      # las ocho listas de origenes sin quitar nada; sin dominio no toca nada.
+      # Sin red ni Docker; segundos.
+      - name: Comprobar las listas de origenes del dominio (CORS y WebSocket)
+        shell: bash
+        run: bash scripts/cd/pruebas/origenes-del-dominio.sh
+
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
       # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java

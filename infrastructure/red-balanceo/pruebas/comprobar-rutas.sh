@@ -380,7 +380,9 @@ for par in \
     jugar:plataforma/salas-partidas/batallas.html \
     torneos:plataforma/torneos/torneos.html \
     verificar:cuentas/verificar-cuenta.html \
-    restablecer:cuentas/restablecer-confirmar.html; do
+    restablecer:cuentas/restablecer-confirmar.html \
+    recuperar:cuentas/restablecer-solicitar.html \
+    misiones:contenido/misiones/misiones.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -400,10 +402,10 @@ redirige /restablecer/                                "/restablecer"
 # Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
 sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
     "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
-# Pedir el codigo de recuperacion no tiene direccion limpia: /restablecer es
-# la del canje, y la regex de /restablecer no se la puede llevar.
-sirve /frontend/app-web/src/cuentas/restablecer-solicitar.html \
-    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# 6-oct — pedir el codigo de recuperacion tiene la suya, /recuperar; la del
+# canje sigue siendo /restablecer y ninguna de las dos se lleva a la otra.
+redirige /recuperar/                                  "/recuperar"
+redirige /misiones/                                   "/misiones"
 
 echo
 echo "Cabeceras de seguridad y cache (R17)"

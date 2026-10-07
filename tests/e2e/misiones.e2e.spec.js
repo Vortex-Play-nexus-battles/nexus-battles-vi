@@ -302,7 +302,9 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     ejecucionId = activa.ejecucionId;
 
     // Vuelve al tablón, en «En curso», con el aviso de que salió.
-    await expect(page).toHaveURL(/misiones\.html\?iniciada=dev-prueba-de-humo#en-curso$/);
+    // 6-oct — el tablón tiene dirección limpia: el borde lleva misiones.html a
+    // /misiones conservando la consulta (y el navegador, el fragmento).
+    await expect(page).toHaveURL(/\/misiones(?:\.html)?\?iniciada=dev-prueba-de-humo#en-curso$/);
     await expect(page.locator('.misiones__aviso')).toContainText('Tu héroe salió a la misión');
   });
 

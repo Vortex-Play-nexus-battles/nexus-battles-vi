@@ -222,4 +222,96 @@ describe('Control de paginacion', () => {
 
     expect(control.querySelector('.paginacion__info').textContent).toBe('Página 3 de 5');
   });
+
+  // --- PLAYER-07b: opciones del mercado de subastas -------------------------
+  //
+  // El mercado tenia su propia copia con «Anterior» y «Siguiente» escritos en
+  // casillas de 32 px, que se desbordaban. Pasa a este control con dos
+  // opciones; sin ellas, todo lo de arriba (RF-INV-002) sigue igual.
+
+  describe('con flechas siempre (PLAYER-07b)', () => {
+    test('aparecen las dos aunque no haya paginas ocultas', () => {
+      const control = construirPaginacion({ paginaActual: 1, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior')).not.toBeNull();
+      expect(flecha(control, 'siguiente')).not.toBeNull();
+      expect(numeros(control)).toEqual(['1', '2', '3']);
+    });
+
+    test('en la primera pagina la flecha izquierda esta apagada y no pide nada', () => {
+      const pedidas = [];
+      const control = construirPaginacion(
+        { paginaActual: 0, totalPaginas: 3 },
+        (n) => pedidas.push(n),
+        { flechas: 'siempre' },
+      );
+
+      expect(flecha(control, 'anterior').disabled).toBe(true);
+      expect(flecha(control, 'siguiente').disabled).toBe(false);
+      flecha(control, 'anterior').click();
+      flecha(control, 'siguiente').click();
+      expect(pedidas).toEqual([1]);
+    });
+
+    test('en la ultima pagina la flecha derecha esta apagada', () => {
+      const control = construirPaginacion({ paginaActual: 2, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior').disabled).toBe(false);
+      expect(flecha(control, 'siguiente').disabled).toBe(true);
+    });
+
+    test('las flechas conservan su nombre accesible, no un texto que se desborde', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 3 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(flecha(control, 'anterior').getAttribute('aria-label')).toBe('Página anterior');
+      expect(flecha(control, 'siguiente').getAttribute('aria-label')).toBe('Página siguiente');
+      expect(control.textContent).not.toMatch(/Anterior|Siguiente/);
+    });
+
+    test('con una sola pagina sigue sin pintarse', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 1 }, () => {}, {
+        flechas: 'siempre',
+      });
+
+      expect(control.hidden).toBe(true);
+    });
+
+    test('sin la opcion, el inventario sigue sin flechas cuando no hay paginas ocultas', () => {
+      const control = construirPaginacion({ paginaActual: 0, totalPaginas: 3 }, () => {});
+
+      expect(flecha(control, 'anterior')).toBeNull();
+      expect(flecha(control, 'siguiente')).toBeNull();
+    });
+  });
+
+  describe('con menos casillas (PLAYER-07b)', () => {
+    test('pinta como mucho las casillas pedidas, centradas en la actual', () => {
+      const control = construirPaginacion({ paginaActual: 10, totalPaginas: 40 }, () => {}, {
+        casillas: 5,
+      });
+
+      expect(numeros(control)).toEqual(['9', '10', '11', '12', '13']);
+      expect(
+        casillas(control).find((c) => c.getAttribute('aria-current') === 'page').textContent,
+      ).toBe('11');
+    });
+
+    test('nunca pasa de diez ni baja de una', () => {
+      const muchas = construirPaginacion({ paginaActual: 0, totalPaginas: 40 }, () => {}, {
+        casillas: 25,
+      });
+      const ninguna = construirPaginacion({ paginaActual: 0, totalPaginas: 40 }, () => {}, {
+        casillas: 0,
+      });
+
+      expect(casillas(muchas)).toHaveLength(CASILLAS_VISIBLES);
+      expect(casillas(ninguna)).toHaveLength(1);
+    });
+  });
 });
