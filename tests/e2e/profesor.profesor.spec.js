@@ -57,7 +57,8 @@ const EN = {
   jugar: /\/jugar(?:[?#]|$)/,
   torneos: /\/torneos(?:[?#]|$)/,
   subastas: /\/subastas(?:[?#]|$)/,
-  misiones: /misiones\.html(?:[?#]|$)/,
+  // 6-oct — el tablón de misiones también tiene dirección limpia.
+  misiones: /\/misiones(?:[?#]|$)/,
   sala: /sala-batalla\.html\?sala=/,
 };
 
