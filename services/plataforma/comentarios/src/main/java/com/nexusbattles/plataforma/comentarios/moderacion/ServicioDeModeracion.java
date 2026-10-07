@@ -262,11 +262,27 @@ public class ServicioDeModeracion {
      *   <li>{@code false}: lo mismo que sin filtro, pero sin los marcados.</li>
      * </ul>
      *
+     * <p>Contrato 1.10.0: {@code categoria} y {@code prioridadElevada} filtran
+     * ademas, y se combinan por Y con los anteriores:
+     * <ul>
+     *   <li>{@code categoria}: solo los comentarios con al menos un reporte de
+     *       esa categoria (la cuenta de {@code porCategoria}; un EN_REVISION sin
+     *       reportes no sale);</li>
+     *   <li>{@code prioridadElevada}: {@code true} solo los de prioridad
+     *       elevada, {@code false} los demas.</li>
+     * </ul>
+     * Se aplican en memoria sobre los candidatos que la cola ya carga, antes de
+     * ordenar y paginar, para que {@code total} sea el de la cola ya filtrada.
+     * La prioridad no se guarda, se deriva del conteo, asi que filtrar sobre la
+     * entrada usa el mismo valor que ve el cliente. Si la cola crece mucho, habra
+     * que mover los filtros a la consulta.
+     *
      * <p>Los reportes de todos los comentarios de la cola se leen en una sola
      * consulta, no uno por comentario.
      */
     @Transactional(readOnly = true)
-    public Cola cola(String productoId, Boolean marcado, int pagina, int tamano) {
+    public Cola cola(String productoId, Boolean marcado, CategoriaDeReporte categoria,
+            Boolean prioridadElevada, int pagina, int tamano) {
         List<Comentario> candidatos = candidatosDeLaCola(productoId, marcado).stream()
                 .map(RegistroDeComentario::aDominio)
                 .toList();
@@ -287,8 +303,14 @@ public class ServicioDeModeracion {
                 porCategoria.merge(r.categoria(), 1L, Long::sum);
             }
             Instant primero = suyos.isEmpty() ? c.fechaPublicacion() : suyos.get(0).fecha();
-            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero,
-                    elevaLaPrioridad(suyos.size())));
+            boolean elevada = elevaLaPrioridad(suyos.size());
+            if (categoria != null && !porCategoria.containsKey(categoria)) {
+                continue;
+            }
+            if (prioridadElevada != null && prioridadElevada != elevada) {
+                continue;
+            }
+            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero, elevada));
         }
 
         // Mas reportado primero; a igualdad, el que lleva mas tiempo esperando.
