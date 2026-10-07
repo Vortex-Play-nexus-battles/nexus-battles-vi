@@ -141,6 +141,17 @@ async function vitrinaDe(api, quien) {
   return productos;
 }
 
+/**
+ * El uid de un participante. `GET /partidas/{id}` lo da hoy como el uid a
+ * secas (`PartidaResponse.ParticipanteResponse.jugador`), y el contrato y el
+ * aviso de inicio del canal como `{id, apodo}` (`ResumenJugador`): se aceptan
+ * las dos formas para no medir la deriva sino el combate.
+ */
+function idDelJugador(participante) {
+  const { jugador } = participante ?? {};
+  return typeof jugador === 'string' ? jugador : jugador?.id;
+}
+
 /** La partida tal como la sabe el servidor (salas-partidas.yaml, `Partida`). */
 async function partidaDe(api, quien, idPartida) {
   const r = await api.get(`/api/v1/partidas/${idPartida}`, { headers: conToken(quien.token) });
@@ -382,7 +393,7 @@ async function cotejarHud(page, { api, quien, idPartida }) {
     return null;
   }
   const servidor = Object.fromEntries(
-    (partida.participantes ?? []).map((p) => [p.jugador?.id, p.heroe?.vidaActual]),
+    (partida.participantes ?? []).map((p) => [idDelJugador(p), p.heroe?.vidaActual]),
   );
   await expect
     .poll(
@@ -397,7 +408,7 @@ async function cotejarHud(page, { api, quien, idPartida }) {
       { timeout: 10_000, message: 'la vida del HUD es la del servidor' },
     )
     .toEqual(servidor);
-  const mio = (partida.participantes ?? []).find((p) => p.jugador?.id === quien.claims.uid);
+  const mio = (partida.participantes ?? []).find((p) => idDelJugador(p) === quien.claims.uid);
   const poder = mio?.heroe?.poderActual;
   if (Number.isInteger(poder)) {
     await expect(
