@@ -47,9 +47,14 @@
         <!-- HU-TOR-004: solo cuando se llega desde un encuentro de torneo. -->
         <p class="aviso aviso--info" data-zona="nota-torneo" hidden></p>
 
-        <!-- Dos campos a lo ancho, como en el diseno. -->
+        <!--
+          Dos campos a lo ancho, como en el diseno. Revision del modo jugador
+          del 6-oct (punto 11): sin «Exactamente 2 jugadores.» ni «Apostar es
+          libre.». Cuando la modalidad fija el aforo (1 contra 1, Solo) no hay
+          nada que elegir y el campo no se ensena.
+        -->
         <div class="fila">
-          <div class="campo">
+          <div class="campo" data-zona="campo-participantes">
             <label class="campo__etiqueta" for="maximoParticipantes">Número de participantes</label>
             <input
               class="campo__control"
@@ -75,7 +80,6 @@
               value="0"
               inputmode="numeric"
             />
-            <p class="campo__pista">Apostar es libre.</p>
           </div>
         </div>
 
@@ -109,9 +113,12 @@
                 id="modalidad-ia"
                 value="CONTRA_IA"
               />
+              <!-- Punto 11: «Solo». El valor del contrato sigue siendo CONTRA_IA. -->
               <label class="modalidad__cara" for="modalidad-ia">
-                <span class="modalidad__titulo">Contra la IA</span>
-                <span class="modalidad__detalle">Enfréntate a un rival controlado.</span>
+                <span class="modalidad__titulo">Solo</span>
+                <span class="modalidad__detalle"
+                  >Enfréntate a nuestro rival controlado por IA.</span
+                >
               </label>
             </div>
 
@@ -143,6 +150,11 @@
         </p>
 
         <div class="fila" data-zona="opciones-hasta-seis" hidden>
+          <!--
+            Punto 12: sin «Cada uno ocupa un cupo; tú siempre juegas.». El
+            numero no pasa del aforo menos tu puesto (6 como mucho en total):
+            si se escribe de mas se recorta y se dice por que, aqui debajo.
+          -->
           <div class="campo">
             <label class="campo__etiqueta" for="heroesIA">Héroes controlados por la IA</label>
             <input
@@ -154,8 +166,15 @@
               max="5"
               value="0"
               inputmode="numeric"
+              aria-describedby="aviso-maquinas"
             />
-            <p class="campo__pista">Cada uno ocupa un cupo; tú siempre juegas.</p>
+            <p
+              class="campo__error"
+              id="aviso-maquinas"
+              data-zona="aviso-maquinas"
+              role="alert"
+              hidden
+            ></p>
           </div>
 
           <div class="campo">

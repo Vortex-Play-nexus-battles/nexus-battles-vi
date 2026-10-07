@@ -5,7 +5,13 @@
 
 import { jest } from '@jest/globals';
 
-import { montarCampana, pintarEmergente, textoDeContador, fechaLegible } from './campana.js';
+import {
+  montarCampana,
+  pintarEmergente,
+  textoDeContador,
+  fechaLegible,
+  enlaceDeInvitacion,
+} from './campana.js';
 import { ESTADO_CANAL } from './bandeja.js';
 
 const HTML = `
@@ -263,5 +269,39 @@ describe('utilidades', () => {
 
   test('fechaLegible devuelve el original si no es fecha', () => {
     expect(fechaLegible('x')).toBe('x');
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct (punto 13): la invitacion a una sala
+ * llega como aviso; el id lleva la sala y, si es privada, el codigo.
+ */
+describe('enlaceDeInvitacion', () => {
+  const SALA = '77777777-7777-7777-7777-777777777777';
+  const YO = '22222222-2222-2222-2222-222222222222';
+
+  test('una invitación a una sala pública lleva al listado con la sala', () => {
+    const enlace = enlaceDeInvitacion(
+      { id: `sala:${SALA}:invitacion:${YO}` },
+      'http://localhost/jugar',
+    );
+    expect(enlace).toBe(`http://localhost/jugar?sala=${SALA}`);
+  });
+
+  test('una invitación a una privada lleva también el código', () => {
+    const enlace = enlaceDeInvitacion(
+      { id: `sala:${SALA}:invitacion:${YO}:codigo:K7Q2-M9XA` },
+      'http://localhost/jugar',
+    );
+    expect(new URL(enlace).searchParams.get('sala')).toBe(SALA);
+    expect(new URL(enlace).searchParams.get('codigo')).toBe('K7Q2-M9XA');
+  });
+
+  test('cualquier otro aviso no es una invitación', () => {
+    expect(enlaceDeInvitacion({ id: 'catalogo:123' }, 'http://localhost/jugar')).toBeNull();
+    expect(
+      enlaceDeInvitacion({ id: `sala:${SALA}:otra-cosa` }, 'http://localhost/jugar'),
+    ).toBeNull();
+    expect(enlaceDeInvitacion({}, 'http://localhost/jugar')).toBeNull();
   });
 });

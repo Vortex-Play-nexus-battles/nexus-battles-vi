@@ -307,3 +307,34 @@ describe('montarPanelVidas', () => {
     expect(panel.querySelectorAll('.barra-vida')).toHaveLength(3);
   });
 });
+
+/** salas-partidas 1.10.0 — rendirse deja la barra a cero, sin golpe. */
+describe('partida.participante.rendido', () => {
+  test('la barra de quien se rinde baja a 0 con el máximo que ya tenía, y queda marcada', () => {
+    pintarParticipantes(panel, participantes(), { idPartida: ID_PARTIDA, yo: ANA });
+
+    aplicarAccionResuelta(panel, {
+      tipo: 'partida.participante.rendido',
+      idPartida: ID_PARTIDA,
+      idJugador: BRUNO,
+      vidaActual: 0,
+    });
+
+    expect(valorDe(BRUNO)).toBe('0/100');
+    expect(barraDe(BRUNO).dataset.rendido).toBe('si');
+    expect(valorDe(ANA)).toBe('100/100');
+  });
+
+  test('de otra partida no se toca nada', () => {
+    pintarParticipantes(panel, participantes(), { idPartida: ID_PARTIDA, yo: ANA });
+
+    aplicarAccionResuelta(panel, {
+      tipo: 'partida.participante.rendido',
+      idPartida: 'otra',
+      idJugador: BRUNO,
+      vidaActual: 0,
+    });
+
+    expect(valorDe(BRUNO)).toBe('80/100');
+  });
+});

@@ -9937,3 +9937,286 @@ body:not([data-modo='combate']) .registro-combate {
 body:has(.chatbot-flotante) main:not(.combate) {
   padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
 }
+
+/* =========================================================================
+   Sala de espera — revisión del modo jugador del 6-oct (puntos 13, 14, 16)
+   -------------------------------------------------------------------------
+   Una sola pieza en tres zonas: A · estado (modalidad, pública o privada,
+   apuesta, anfitrión y el contador «1 / 2»), B · plazas (ocupada, de la IA o
+   libre) y C · acciones. Antes eran una tarjeta blanca genérica y botones
+   sueltos debajo. Mismo lenguaje que el resto del kit: superficie oscura de
+   la arena, borde tenue, el acento solo donde hay que mirar.
+   ========================================================================= */
+
+.sala-espera {
+  width: min(760px, 100%);
+  display: grid;
+  gap: var(--e-4);
+  padding: var(--e-5);
+  background: color-mix(in srgb, var(--cromo-elevado) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--enlace-sobre-cromo) 30%, transparent);
+  color: var(--texto-sobre-color);
+}
+
+.sala-espera[hidden] {
+  display: none;
+}
+
+.sala-espera__cabecera {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--e-4);
+}
+
+.sala-espera__identidad {
+  display: grid;
+  gap: var(--e-2);
+  min-width: 0;
+}
+
+.sala-espera__sobretitulo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--enlace-sobre-cromo);
+}
+
+.sala-espera__titulo {
+  margin: 0;
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-titulo-tam);
+  line-height: var(--t-titulo-alto);
+  font-weight: var(--t-titulo-peso);
+  color: var(--texto-sobre-color);
+}
+
+.sala-espera__datos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* El contador de plazas: la cifra que se mira primero. */
+.sala-espera__contador {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--e-2) var(--e-4);
+  border: 1px solid color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+  border-radius: var(--radio-pildora);
+  font-family: var(--t-titulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: var(--t-titulo-peso);
+  font-variant-numeric: var(--cifras-tabulares);
+  color: var(--texto-sobre-color);
+}
+
+.sala-espera__plazas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--e-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plaza {
+  display: flex;
+  align-items: center;
+  gap: var(--e-3);
+  min-height: var(--objetivo-tactil);
+  padding: var(--e-3);
+  border: 1px solid color-mix(in srgb, var(--enlace-sobre-cromo) 30%, transparent);
+  border-radius: var(--radio);
+  background: color-mix(in srgb, var(--cromo) 70%, transparent);
+}
+
+.plaza--ocupada {
+  border-color: color-mix(in srgb, var(--enlace-sobre-cromo) 60%, transparent);
+}
+
+.plaza[data-tu='si'] {
+  border-color: var(--enlace-sobre-cromo);
+  border-width: 2px;
+}
+
+.plaza--ia {
+  border-color: color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+}
+
+/* La libre se lee como un hueco: borde discontinuo y texto apagado. */
+.plaza--libre {
+  border-style: dashed;
+  background: transparent;
+}
+
+.plaza__avatar {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radio-pildora);
+  background: var(--primaria-relleno);
+  color: var(--texto-sobre-color);
+  font-family: var(--t-titulo-familia);
+  font-weight: var(--t-titulo-peso);
+}
+
+.plaza--ia .plaza__avatar {
+  background: var(--acento-relleno);
+}
+
+.plaza--libre .plaza__avatar {
+  background: transparent;
+  border: 1px dashed var(--enlace-sobre-cromo);
+  color: var(--enlace-sobre-cromo);
+}
+
+.plaza__cuerpo {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.plaza__nombre {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--texto-sobre-color);
+}
+
+.plaza__detalle {
+  font-size: var(--t-meta-tam);
+  color: var(--enlace-sobre-cromo);
+}
+
+.plaza--libre .plaza__nombre {
+  color: var(--enlace-sobre-cromo);
+  font-weight: var(--t-cuerpo-peso);
+}
+
+.sala-espera__estado {
+  margin: 0;
+  font-weight: var(--t-cuerpo-peso-enfasis);
+  color: var(--enlace-sobre-cromo);
+}
+
+/* Listo: el texto lo dice; el punto solo lo refuerza (no solo color). */
+.sala-espera__estado[data-listo='si'] {
+  color: var(--texto-sobre-color);
+}
+
+.sala-espera__estado[data-listo='si']::before {
+  content: '';
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--exito-insignia);
+  vertical-align: middle;
+}
+
+.sala-espera__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--e-3);
+}
+
+.sala-espera__acciones > .fila {
+  margin: 0;
+}
+
+/* Sobre la arena oscura, los metadatos van en el azul claro del cromo: el
+   gris de las superficies claras no se leería (contraste). */
+.sala-espera .t-meta {
+  color: var(--enlace-sobre-cromo);
+}
+
+.sala-espera__invitar {
+  display: grid;
+  gap: var(--e-3);
+  padding: var(--e-4);
+  border: 1px solid var(--borde-tenue);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  color: var(--texto);
+}
+
+.sala-espera__invitar[hidden] {
+  display: none;
+}
+
+/* El panel de invitar es una superficie clara: vuelve a los colores de lectura. */
+.sala-espera__invitar .t-meta {
+  color: var(--texto-3);
+}
+
+.sala-espera__invitar-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--e-3);
+}
+
+.sala-espera__acuse:empty {
+  display: none;
+}
+
+.sala-espera__acuse[data-tono='error'] {
+  color: var(--error);
+}
+
+/* Los datos sin variante (apuesta, anfitrión) como fichas discretas. */
+.sala-espera__datos .distintivo:not([class*='distintivo--']) {
+  border: 1px solid color-mix(in srgb, var(--enlace-sobre-cromo) 45%, transparent);
+  color: var(--texto-sobre-color);
+}
+
+/* En la sala de espera no hay campo de combate: el aviso de «pantalla
+   demasiado estrecha para el campo» no aplica y solo asustaba. */
+.combate[data-sin-partida='si'] .combate__aviso-tamano {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .sala-espera {
+    padding: var(--e-4);
+  }
+
+  .sala-espera__cabecera {
+    flex-direction: column;
+  }
+
+  /* Acciones apiladas a lo ancho: el pulgar las encuentra todas igual. */
+  .sala-espera__acciones,
+  .sala-espera__acciones > .fila {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .sala-espera__acciones .boton {
+    width: 100%;
+  }
+}
+
+/* --- La sala privada en el listado (punto 10) ---------------------------- */
+
+.sala-privada {
+  width: min(560px, 100%);
+}
+
+.sala-privada .tarjeta__cabecera {
+  align-items: center;
+}

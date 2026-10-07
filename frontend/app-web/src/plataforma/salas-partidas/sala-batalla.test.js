@@ -103,6 +103,8 @@ describe('montarSalaBatalla', () => {
 
     expect(conexion().className).toBe('conexion conexion--sin-conexion');
     expect(conexion().textContent).toMatch(/sin conexión/i);
+    // Sin conexion SI se ve: es lo que le pide algo a quien juega.
+    expect(conexion().hidden).toBe(false);
   });
 
   // R17.4 — la sala de espera sigue la SALA por el canal: todavia no hay
@@ -113,6 +115,10 @@ describe('montarSalaBatalla', () => {
     expect(sinPartida().hidden).toBe(false);
     expect(conexion().className).toBe('conexion conexion--estable');
     expect(conexion().textContent).toMatch(/^Canal en tiempo real: Conectado$/);
+    // Revisión del modo jugador del 6-oct (punto 13): «Canal en tiempo real:
+    // Conectado» no se enseña; el estado sigue pintado para quien lo lea.
+    expect(conexion().hidden).toBe(true);
+    expect(conexion().dataset.estadoCanal).toBe('conectado');
   });
 
   test('en la sala de espera, sin canal, sigue diciendo que no hay conexión', () => {
@@ -129,6 +135,7 @@ describe('montarSalaBatalla', () => {
     });
 
     expect(conexion().className).toBe('conexion conexion--estable');
+    expect(conexion().hidden).toBe(true);
   });
 
   test('un evento entregado por el canal llega hasta la barra', () => {

@@ -62,6 +62,66 @@ export function maximoDeMaquinas(modalidad, maximoParticipantes) {
   return Math.max(limites.min, Math.min(limites.max, maximoParticipantes - 1));
 }
 
+/** Tope de una batalla, contando a quien la crea (RF-JUE-004: hasta seis). */
+export const MAXIMO_DE_PARTICIPANTES = 6;
+
+/**
+ * Por que se recortaron los heroes de la IA — revision del modo jugador del
+ * 6-oct, punto 12 («me deja escribir 7 y mas»). El servicio rechaza lo mismo
+ * (`Sala.validarHeroesIA`); esto evita mandarle lo que va a rechazar y dice
+ * el motivo donde se escribio.
+ *
+ * @param {number} pedidas lo que se escribio
+ * @param {number} maximoParticipantes aforo elegido
+ * @param {number} tope maquinas que caben
+ * @returns {string}
+ */
+export function avisoDeMaquinas(pedidas, maximoParticipantes, tope) {
+  if (pedidas + 1 > MAXIMO_DE_PARTICIPANTES) {
+    return 'Esta batalla admite como máximo 6 participantes.';
+  }
+  const heroes = tope === 1 ? '1 héroe' : `${tope} héroes`;
+  return `Con ${maximoParticipantes} participantes caben como máximo ${heroes} de la IA: tú ocupas un puesto.`;
+}
+
+/**
+ * Recorta los heroes de la IA al aforo y lo dice — punto 12.
+ *
+ * @param {HTMLFormElement} formulario
+ * @param {{avisar?: boolean}} [opciones] avisar: decir el motivo si se recorta
+ * @returns {string|null} el aviso, si hubo que recortar
+ */
+export function limitarMaquinas(formulario, { avisar = true } = {}) {
+  const modalidad = new FormData(formulario).get('modalidad') ?? 'UNO_CONTRA_UNO';
+  const participantes = formulario.querySelector('[name="maximoParticipantes"]');
+  const maquinas = formulario.querySelector('[name="heroesIA"]');
+  const aviso = formulario.querySelector('[data-zona="aviso-maquinas"]');
+  if (!maquinas || !participantes) {
+    return null;
+  }
+  const aforo = Number(participantes.value);
+  const tope = maximoDeMaquinas(modalidad, aforo);
+  maquinas.max = String(tope);
+  const escrito = String(maquinas.value ?? '').trim();
+  const pedidas = Number(escrito);
+  let texto = '';
+  if (escrito === '') {
+    // Campo a medio escribir: se deja, el envio lo lee como 0.
+  } else if (!Number.isFinite(pedidas) || pedidas < 0) {
+    maquinas.value = '0';
+  } else if (pedidas > tope) {
+    maquinas.value = String(tope);
+    texto = avisoDeMaquinas(Math.trunc(pedidas), aforo, tope);
+  }
+  const decir = avisar && texto;
+  if (aviso) {
+    aviso.textContent = decir ? texto : '';
+    aviso.hidden = !decir;
+  }
+  maquinas.closest?.('.campo')?.classList.toggle('campo--invalido', Boolean(decir));
+  return texto || null;
+}
+
 /**
  * Lee el formulario y arma el cuerpo del contrato.
  *
@@ -192,6 +252,7 @@ export function ajustarPorModalidad(formulario) {
   const zonaSeis = formulario.querySelector('[data-zona="opciones-hasta-seis"]');
   const notaIa = formulario.querySelector('[data-zona="nota-contra-ia"]');
   const pista = formulario.querySelector('[data-zona="pista-participantes"]');
+  const fijo = limites.participantes.min === limites.participantes.max;
 
   if (participantes) {
     participantes.min = String(limites.participantes.min);
@@ -200,21 +261,26 @@ export function ajustarPorModalidad(formulario) {
     participantes.value = String(
       Math.max(limites.participantes.min, Math.min(limites.participantes.max, actual)),
     );
-    // Con un unico valor posible no hay nada que elegir.
-    participantes.readOnly = limites.participantes.min === limites.participantes.max;
+    // Con un unico valor posible no hay nada que elegir: el campo sigue
+    // viajando en el formulario, pero no se ensena (punto 11: «Exactamente 2
+    // jugadores.» sobraba).
+    participantes.readOnly = fijo;
+    const campo =
+      formulario.querySelector('[data-zona="campo-participantes"]') ??
+      participantes.closest('.campo');
+    if (campo) {
+      campo.hidden = fijo;
+    }
   }
   if (pista) {
-    pista.textContent =
-      limites.participantes.min === limites.participantes.max
-        ? `Exactamente ${limites.participantes.min} jugadores.`
-        : `Entre ${limites.participantes.min} y ${limites.participantes.max} jugadores.`;
+    pista.textContent = fijo
+      ? ''
+      : `Entre ${limites.participantes.min} y ${limites.participantes.max} jugadores.`;
   }
   if (maquinas && participantes) {
-    const tope = maximoDeMaquinas(modalidad, Number(participantes.value));
-    maquinas.max = String(tope);
-    if (Number(maquinas.value) > tope) {
-      maquinas.value = String(tope);
-    }
+    // Punto 12: el tope sigue al aforo; si hubo que recortar, se dice por que
+    // (solo donde se elige, en hasta seis).
+    limitarMaquinas(formulario, { avisar: limites.equipos });
   }
   if (zonaSeis) {
     zonaSeis.hidden = !limites.equipos;
@@ -371,6 +437,12 @@ export function montarCrearSala(
     const nombre = evento.target?.name;
     if (nombre === 'modalidad' || nombre === 'maximoParticipantes') {
       ajustarPorModalidad(formulario);
+    }
+  });
+  // Punto 12: escribir 7 heroes de la IA se recorta al momento, con su motivo.
+  formulario.addEventListener('input', (evento) => {
+    if (evento.target?.name === 'heroesIA') {
+      limitarMaquinas(formulario);
     }
   });
 

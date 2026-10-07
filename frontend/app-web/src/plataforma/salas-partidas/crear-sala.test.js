@@ -21,6 +21,7 @@ import {
   ajustarPorModalidad,
   rutaDeLaSala,
   textoDeSalaCreada,
+  avisoDeMaquinas,
 } from './crear-sala.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -228,9 +229,10 @@ describe('limites por modalidad (RF-JUE-004)', () => {
     expect(participantes.value).toBe('2');
     expect(participantes.max).toBe('2');
     expect(participantes.readOnly).toBe(true);
-    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toBe(
-      'Exactamente 2 jugadores.',
-    );
+    // Revision del modo jugador del 6-oct (punto 11): sin «Exactamente 2
+    // jugadores.»; con el aforo fijo no hay nada que elegir y el campo no se ve.
+    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toBe('');
+    expect(participantes.closest('.campo').hidden).toBe(true);
     expect(formulario.querySelector('[data-zona="opciones-hasta-seis"]').hidden).toBe(true);
     expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
   });
@@ -274,6 +276,84 @@ describe('limites por modalidad (RF-JUE-004)', () => {
     expect(participantes.readOnly).toBe(false);
     expect(participantes.max).toBe('6');
     expect(participantes.value).toBe('2');
+    expect(participantes.closest('.campo').hidden).toBe(false);
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct, punto 12: «me deja escribir 7 y mas».
+ * Los heroes de la IA no pasan del aforo menos tu puesto (6 en total como
+ * mucho); si se escribe de mas, se recorta y se dice por que.
+ */
+describe('punto 12 · héroes de la IA', () => {
+  function conAviso() {
+    const formulario = preparar();
+    const maquinas = formulario.querySelector('[name="heroesIA"]');
+    const aviso = document.createElement('p');
+    aviso.dataset.zona = 'aviso-maquinas';
+    aviso.hidden = true;
+    maquinas.after(aviso);
+    return { formulario, maquinas, aviso };
+  }
+
+  function escribir(control, valor) {
+    control.value = valor;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  test('escribir 7 se recorta a 5 y dice que la batalla admite como máximo 6 participantes', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+    formulario.querySelector('[name="maximoParticipantes"]').value = '6';
+    formulario
+      .querySelector('[name="maximoParticipantes"]')
+      .dispatchEvent(new Event('change', { bubbles: true }));
+
+    escribir(maquinas, '7');
+
+    expect(maquinas.value).toBe('5');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toBe('Esta batalla admite como máximo 6 participantes.');
+  });
+
+  test('con 4 participantes caben 3: escribir 4 se recorta y dice que tú ocupas un puesto', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '4');
+
+    expect(maquinas.value).toBe('3');
+    expect(aviso.textContent).toBe(
+      'Con 4 participantes caben como máximo 3 héroes de la IA: tú ocupas un puesto.',
+    );
+  });
+
+  test('un número que cabe no avisa; y el aviso se va al corregirlo', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '9');
+    expect(aviso.hidden).toBe(false);
+
+    escribir(maquinas, '2');
+    expect(maquinas.value).toBe('2');
+    expect(aviso.hidden).toBe(true);
+  });
+
+  test('lo que viaja al servicio nunca pasa del tope', () => {
+    const { formulario, maquinas } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '12');
+
+    expect(leerFormulario(formulario).heroesIA).toBe(3);
+  });
+
+  test('el aviso habla en singular cuando cabe uno', () => {
+    expect(avisoDeMaquinas(3, 2, 1)).toBe(
+      'Con 2 participantes caben como máximo 1 héroe de la IA: tú ocupas un puesto.',
+    );
+    expect(avisoDeMaquinas(6, 6, 5)).toBe('Esta batalla admite como máximo 6 participantes.');
   });
 });
 

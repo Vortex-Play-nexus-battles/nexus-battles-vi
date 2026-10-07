@@ -168,7 +168,9 @@ export async function ingresarASala(
   { codigoInvitacion = null, fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const codigo = typeof codigoInvitacion === 'string' ? codigoInvitacion.trim() : '';
-  const peticion = { method: 'POST' };
+  // Revisión del modo jugador del 6-oct (punto 10): el 403 de una sala privada
+  // lo pinta el listado en su formulario; no es un «permiso denegado» rojo.
+  const peticion = { method: 'POST', rechazoEsperado: true };
   if (codigo) {
     peticion.headers = { 'Content-Type': 'application/json' };
     // Se manda tal cual lo escribio la persona: el servidor normaliza
@@ -212,6 +214,9 @@ export async function comprobarIngreso(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(codigo ? { codigoInvitacion: codigo } : {}),
+    // El 403 de un código que no vale lo pinta el formulario de la sala
+    // privada («Código de invitación no válido»), no el aviso rojo genérico.
+    rechazoEsperado: true,
   };
 
   const respuesta = await fetchImpl(
@@ -332,6 +337,104 @@ export async function cancelarSala(idSala, { fetchImpl = fetchWithHttpErrorInter
 
   if (respuesta.ok) {
     return;
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/**
+ * Invita a un jugador a la sala — `invitarASala`, salas-partidas.yaml 1.10.0
+ * (revisión del modo jugador del 6-oct, punto 13).
+ *
+ * Solo el anfitrión, y lo comprueba el servidor con el token. El invitado
+ * viaja por su identificador, que la vista sacó de la búsqueda por apodo y
+ * que el jugador nunca ve. Al invitado le llega un aviso a su bandeja.
+ *
+ * @param {string} idSala
+ * @param {string} idJugador
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<{idJugador: string, apodo: string, enviada: boolean}>}
+ * @throws {ErrorDeApi} `invitacion-no-permitida` con el motivo en `detalle`
+ */
+export async function invitarASala(
+  idSala,
+  idJugador,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const respuesta = await fetchImpl(ruta(`/${encodeURIComponent(idSala)}/invitaciones`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idJugador }),
+    // Un rechazo (no eres el anfitrión, la sala está completa) se dice junto
+    // al buscador, con su motivo.
+    rechazoEsperado: true,
+  });
+
+  if (respuesta.ok) {
+    return respuesta.json();
+  }
+
+  throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);
+}
+
+/** Letras mínimas de una búsqueda de jugadores (`apodo.minLength`, ms-identidad-perfiles). */
+export const MINIMO_DE_BUSQUEDA_DE_JUGADOR = 3;
+
+/**
+ * Busca jugadores por apodo para invitarlos — `GET /api/v1/perfiles/publicos`
+ * de ms-identidad (la misma búsqueda que usan los mensajes privados y el
+ * compañero de torneo). Datos públicos; quien busca no sale en la lista.
+ *
+ * @param {string} apodo al menos 3 letras
+ * @param {{fetchImpl?: Function, yo?: string|null}} [opciones]
+ * @returns {Promise<Array<{uid: string, apodo: string}>>}
+ * @throws {Error} si la búsqueda no responde
+ */
+export async function buscarJugadores(
+  apodo,
+  { fetchImpl = fetchWithHttpErrorInterceptor, yo = null } = {},
+) {
+  const texto = String(apodo ?? '').trim();
+  if (texto.length < MINIMO_DE_BUSQUEDA_DE_JUGADOR) {
+    return [];
+  }
+  const respuesta = await fetchImpl(
+    `${baseDeApi()}/api/v1/perfiles/publicos?${new URLSearchParams({ apodo: texto })}`,
+    { headers: { Accept: 'application/json' } },
+  );
+  if (!respuesta.ok) {
+    throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'listado'), respuesta.status);
+  }
+  const lista = await respuesta.json();
+  return (Array.isArray(lista) ? lista : [])
+    .filter((perfil) => perfil && typeof perfil.uid === 'string' && perfil.uid !== yo)
+    .map((perfil) => ({
+      uid: perfil.uid,
+      apodo: String(perfil.apodo ?? '').trim() || 'Jugador',
+    }));
+}
+
+/**
+ * Rendirse — `rendirse`, salas-partidas.yaml 1.10.0 (revisión del modo
+ * jugador del 6-oct, punto 18: «Salir» cuenta como derrota).
+ *
+ * Quien se rinde sale del token. El servidor decide todo lo demás —quién
+ * gana, cómo se liquida la apuesta— y lo anuncia por el canal; esta llamada
+ * no manda ganador ni nada parecido. Es idempotente.
+ *
+ * @param {string} idPartida
+ * @param {{fetchImpl?: Function}} [opciones] inyeccion para las pruebas
+ * @returns {Promise<object>} la partida como quedó (esquema `Partida`)
+ * @throws {ErrorDeApi} 403 no juegas esta partida · 404 no existe
+ */
+export async function rendirse(idPartida, { fetchImpl = fetchWithHttpErrorInterceptor } = {}) {
+  const respuesta = await fetchImpl(
+    `${baseDeApi()}/api/v1/partidas/${encodeURIComponent(idPartida)}/rendicion`,
+    { method: 'POST' },
+  );
+
+  if (respuesta.ok) {
+    return respuesta.json();
   }
 
   throw new ErrorDeApi(await cuerpoDelProblema(respuesta, 'sala'), respuesta.status);

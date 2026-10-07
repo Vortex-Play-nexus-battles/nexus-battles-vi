@@ -1908,6 +1908,17 @@ export const ESCENARIOS = [
           idPartida: null,
           creadaEn: new Date(Date.now() - 120_000).toISOString(),
           codigoInvitacion: 'NEXO-7K2Q',
+          // salas-partidas 1.10.0 — los apodos de las plazas (revisión del 6-oct).
+          apodoAnfitrion: 'Bruma',
+          jugadores: [
+            { id: SESION_COMBATE.uid, apodo: 'Bruma', anfitrion: true, heroe: 'Sombra de Vael' },
+            {
+              id: 'cccccc03-3333-4333-8333-333333333333',
+              apodo: 'Kael_77',
+              anfitrion: false,
+              heroe: 'Arquero del Norte',
+            },
+          ],
         }),
       ],
     ],
@@ -1916,7 +1927,58 @@ export const ESCENARIOS = [
       '[data-zona="espera"]:not([hidden])',
       '[data-zona="invitacion"]:not([hidden])',
       '[data-accion="iniciar-partida"]',
+      // Revisión del 6-oct (puntos 13 y 14): la sala de espera en tres zonas.
+      '[data-zona="sala-espera"]:not([hidden])',
+      '[data-plaza="ia"]',
+      '[data-plaza="libre"]',
+      '[data-accion="abrir-invitar"]:not([hidden])',
     ],
+  },
+  {
+    // Revisión del 6-oct (punto 13) — el panel de invitar abierto, con un
+    // resultado de la búsqueda por apodo.
+    id: 'sala-en-espera-invitar',
+    titulo: 'sala de espera con el panel de invitar por apodo abierto',
+    ruta: 'plataforma/salas-partidas/sala-batalla.html?sala=bbbbbbb1-1111-4111-8111-111111111111',
+    sesion: () => SESION_COMBATE,
+    rutas: [
+      [
+        '**/api/v1/salas/bbbbbbb1-1111-4111-8111-111111111111',
+        json({
+          id: 'bbbbbbb1-1111-4111-8111-111111111111',
+          estado: 'ABIERTA',
+          modalidad: 'UNO_CONTRA_UNO',
+          maximoParticipantes: 2,
+          ocupacion: 1,
+          recompensaCreditos: 150,
+          incluirHeroeIA: false,
+          heroesIA: 0,
+          privada: false,
+          tamanoEquipo: null,
+          idAnfitrion: SESION_COMBATE.uid,
+          participantes: [SESION_COMBATE.uid],
+          idPartida: null,
+          creadaEn: new Date(Date.now() - 60_000).toISOString(),
+          apodoAnfitrion: 'Bruma',
+          jugadores: [
+            { id: SESION_COMBATE.uid, apodo: 'Bruma', anfitrion: true, heroe: 'Sombra de Vael' },
+          ],
+        }),
+      ],
+      [
+        '**/api/v1/perfiles/publicos?*',
+        json([
+          { uid: 'cccccc03-3333-4333-8333-333333333333', apodo: 'Kael_77', avatar: null },
+          { uid: 'cccccc04-4444-4444-8444-444444444444', apodo: 'Kaelith', avatar: null },
+        ]),
+      ],
+    ],
+    canal: { mensajes: {} },
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-accion="abrir-invitar"]').click();
+      await pagina.locator('#buscar-invitado').fill('Kael');
+    },
+    exige: ['[data-zona="panel-invitar"]:not([hidden])', '[data-invitar="jugador"]'],
   },
   escenarioDeCombate('combate-mi-turno', 'combate 1 contra la máquina, en mi turno', {
     partida: partidaEnCurso(),
@@ -2238,6 +2300,71 @@ export const ESCENARIOS = [
       ],
     ],
     exige: ['[data-sala]', '.distintivo--llena', '.distintivo--privada'],
+  },
+  {
+    // Revisión del 6-oct (puntos 11 y 12) — crear sala en «Hasta seis» con más
+    // héroes de la IA de los que caben: se recorta y se dice por qué.
+    id: 'crear-sala-maquinas-de-mas',
+    titulo: 'crear sala hasta seis con 7 héroes de la IA escritos',
+    ruta: 'plataforma/salas-partidas/crear-sala.html',
+    sesion: () => sesionDe('qa_salas', 'JUGADOR'),
+    rutas: [],
+    interaccion: async (pagina) => {
+      await pagina.locator('#modalidad-seis').check();
+      await pagina.locator('#maximoParticipantes').fill('6');
+      await pagina.locator('#maximoParticipantes').dispatchEvent('change');
+      await pagina.locator('#heroesIA').fill('7');
+    },
+    exige: ['[data-zona="aviso-maquinas"]:not([hidden])', '#modalidad-ia ~ .modalidad__cara'],
+  },
+  {
+    // Revisión del 6-oct (punto 10) — la sala privada pide su código: título,
+    // quién la creó y, tras un código que no vale, el error de verdad.
+    id: 'batallas-sala-privada',
+    titulo: 'listado con el formulario de una sala privada y un código no válido',
+    ruta: 'plataforma/salas-partidas/batallas.html',
+    sesion: () => sesionDe('qa_salas', 'JUGADOR'),
+    rutas: [
+      [
+        '**/api/v1/salas?*',
+        json({
+          contenido: [
+            {
+              ...sala({
+                id: 'bbbbbbb3-3333-4333-8333-333333333333',
+                estado: 'PRIVADA',
+                privada: true,
+                ocupacion: 1,
+              }),
+              apodoAnfitrion: 'Perez_Bro15',
+            },
+          ],
+          pagina: 0,
+          tamano: 16,
+          totalElementos: 1,
+          totalPaginas: 1,
+        }),
+      ],
+      [
+        '**/api/v1/salas/*/comprobacion-de-ingreso',
+        {
+          status: 403,
+          contentType: 'application/problem+json',
+          body: JSON.stringify({
+            type: 'https://nexusbattles.local/errores/sala-privada',
+            title: 'Esta sala es privada',
+            status: 403,
+            detail: 'A una sala privada se entra por invitación, no desde el listado.',
+          }),
+        },
+      ],
+    ],
+    interaccion: async (pagina) => {
+      await pagina.locator('[data-sala]').first().click();
+      await pagina.locator('[name="codigoInvitacion"]').fill('ZZZZ-9999');
+      await pagina.locator('[data-zona="pedir-codigo"] button[type="submit"]').click();
+    },
+    exige: ['[data-zona="pedir-codigo"]:not([hidden])', '[data-zona="aviso-codigo"]:not([hidden])'],
   },
   {
     // R16.1 sobre la superficie que R5 estreno: la ficha de un heroe con sus

@@ -24,6 +24,37 @@
 
 import { crearBandeja, ESTADO_CANAL } from './bandeja.js';
 import { vaciar } from '../../comun/ui/dom.js';
+import { RUTAS, resolver } from '../../comun/sesion.js';
+
+/**
+ * Invitación a una sala — salas-partidas 1.10.0 (revisión del modo jugador del
+ * 6-oct, punto 13). El aviso lo emite salas-partidas con un `id` que lleva la
+ * sala y, si es privada, el código: `sala:{idSala}:invitacion:{uid}` y
+ * `…:codigo:{CODIGO}`. Este módulo no sabe de salas: solo convierte ese id en
+ * el enlace de invitación que el listado ya entiende (`?sala=…&codigo=…`).
+ */
+const ID_DE_INVITACION =
+  /^sala:([0-9a-f-]{36}):invitacion:[0-9a-f-]{36}(?::codigo:([A-Za-z0-9-]{1,20}))?$/i;
+
+/**
+ * El enlace «Unirme» de un aviso de invitación, o null si no lo es.
+ *
+ * @param {{id?: string}} aviso
+ * @param {string} [destino] el listado de salas
+ * @returns {string|null}
+ */
+export function enlaceDeInvitacion(aviso, destino = resolver(RUTAS.batallas, import.meta.url)) {
+  const partes = ID_DE_INVITACION.exec(String(aviso?.id ?? ''));
+  if (!partes) {
+    return null;
+  }
+  const url = new URL(destino, globalThis.location?.href ?? 'http://localhost/');
+  url.searchParams.set('sala', partes[1]);
+  if (partes[2]) {
+    url.searchParams.set('codigo', partes[2]);
+  }
+  return url.href;
+}
 
 /**
  * UX-R3.8 — el texto sin canal decia «Sin canal en tiempo real: consultando
@@ -126,6 +157,17 @@ function nodoDeAviso(aviso, alMarcar) {
   fecha.dateTime = aviso.creadaEn ?? '';
   fecha.textContent = fechaLegible(aviso.creadaEn);
   pie.appendChild(fecha);
+
+  // Punto 13: una invitación a una sala se acepta desde aquí mismo.
+  const unirme = enlaceDeInvitacion(aviso);
+  if (unirme) {
+    const enlace = document.createElement('a');
+    enlace.className = 'boton boton--primario boton--pequeno';
+    enlace.dataset.accion = 'unirme-a-la-sala';
+    enlace.href = unirme;
+    enlace.textContent = 'Unirme';
+    pie.appendChild(enlace);
+  }
 
   if (aviso.leida) {
     const leida = document.createElement('span');

@@ -174,6 +174,8 @@ export function destinoDeAccion(idPartida) {
 export const ACCION_RESUELTA = 'partida.accion.resuelta';
 export const TURNO_CAMBIADO = 'partida.turno.cambiado';
 export const PARTIDA_FINALIZADA = 'partida.finalizada';
+/** AsyncAPI 1.8.0 (salas-partidas 1.10.0): alguien salio del combate rindiendose. */
+export const PARTICIPANTE_RENDIDO = 'partida.participante.rendido';
 
 /**
  * Manda la acción del turno.
@@ -264,6 +266,10 @@ function huellaDe(aviso, turno = null) {
   if (aviso.tipo === TURNO_CAMBIADO) {
     // El número de turno sube siempre: identifica el aviso por sí solo.
     return `${aviso.tipo}#${aviso.idPartida}#${aviso.numeroTurno}`;
+  }
+  if (aviso.tipo === PARTICIPANTE_RENDIDO) {
+    // Cada participante se rinde una vez como mucho.
+    return `${aviso.tipo}#${aviso.idPartida}#${aviso.idJugador}`;
   }
   if (aviso.tipo === PARTIDA_FINALIZADA) {
     // Una partida termina una sola vez... pero el servidor puede anunciar el
@@ -1457,6 +1463,24 @@ export function montarControlesDeCombate(
         anotar(narrarTurno(mensaje, participantes, yo));
         if (mensaje.idJugador === yo) {
           anotarPoder(poderAntes, 'turno');
+        }
+        return;
+      }
+      if (mensaje?.tipo === PARTICIPANTE_RENDIDO && mensaje.idPartida === idPartida) {
+        // 1.10.0 — alguien salio del combate: su heroe queda fuera, sin golpe
+        // ni ejecutor. Quien gana, si se acaba, lo dice `partida.finalizada`,
+        // que llega despues: aqui no se decide nada.
+        anotarVida(mensaje.idJugador, 0);
+        anotar({
+          texto:
+            mensaje.idJugador === yo
+              ? 'Abandonaste la batalla: cuenta como derrota.'
+              : `${nombreDe(mensaje.idJugador, participantes, yo)} abandonó la batalla.`,
+          tono: 'sistema',
+          icono: 'salir',
+        });
+        if (mensaje.idJugador === yo && !terminado) {
+          cerrarControles();
         }
         return;
       }

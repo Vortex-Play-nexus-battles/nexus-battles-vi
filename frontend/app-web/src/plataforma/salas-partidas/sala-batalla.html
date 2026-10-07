@@ -47,16 +47,21 @@
           la salida: vuelve a «Jugar online» y la partida sigue en curso. Solo
           se ve en ese modo (ver `body[data-modo='combate']` en el kit).
         -->
+        <!--
+          Revision del modo jugador del 6-oct (punto 18): «Salir», no «Jugar
+          online». Mientras sigues combatiendo pregunta antes, con lo que
+          cuesta abandonar (`salir-del-combate.js`); si no, lleva al listado.
+        -->
         <a
           class="combate__salir"
           data-zona="salir"
           href="./batallas.html"
-          title="Volver a Jugar online (la partida sigue en curso)"
+          title="Salir de la batalla"
         >
           <svg class="icono" aria-hidden="true" focusable="false">
             <use href="../../../../../shared/ui-kit/iconos/sprite.svg#salir"></use>
           </svg>
-          <span>Jugar online</span>
+          <span>Salir</span>
         </a>
         <div class="combate__hud-titulo">
           <h1 class="combate__titulo t-subtitulo">Sala en batalla</h1>
@@ -79,7 +84,9 @@
             Dice lo que hay de verdad: conectado, reconectando (con el intento)
             o sin conexion con «Reintentar» (UXC-2, `comun/ui/reconexion.js`).
           -->
-          <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status">
+          <!-- Punto 13 y 18: solo se ve cuando hay algo que contar (reconectando,
+               sin conexion); «Conectado» no se ensena. -->
+          <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status" hidden>
             Canal en tiempo real no conectado
           </span>
           <!--
@@ -149,57 +156,141 @@
         </div>
 
         <!--
-        HU-SAL-004: arranque del combate. Solo aparece cuando se llego desde una
-        sala; quien no sea el anfitrion recibe un 403 del servidor y lo ve aqui
-        mismo. No se oculta el boton adivinando quien es el anfitrion: esta vista
-        no lo sabe, y esconderlo por si acaso dejaria al anfitrion sin forma de
-        empezar cuando la suposicion falle.
-      -->
-        <!-- Auditoría de DEV del 30-sep: en pantalla ancha «Iniciar combate» y
-             «Cancelar sala» se estiraban (`.fila` reparte 280 px a cada hijo)
-             y quedaban descolocados. `fila--acciones`: miden su texto. -->
-        <div class="fila fila--acciones" data-zona="arranque" hidden>
-          <button class="boton boton--primario" type="button" data-accion="iniciar-partida">
-            Iniciar combate
-          </button>
-          <span class="t-meta" data-zona="aviso-arranque" role="status"></span>
-        </div>
-
-        <!--
-        HU-SAL-006: salir o cancelar ANTES de que empiece. Se ofrece el boton
-        que corresponde a quien mira (la vista lo sabe por `idAnfitrion` de
-        GET /salas/{id}) y ninguno de los dos cuando la partida ya arranco.
-        Cancelar pide confirmacion porque expulsa a los demas; salir no.
-      -->
-        <!--
-          FI-R4 · La invitacion de una sala privada. Solo se pinta cuando
-          `GET /salas/{id}` trae `codigoInvitacion`, y eso solo pasa si quien
-          mira es el anfitrion (`SalaResponse.segunQuienPregunta`). Antes el
-          codigo se generaba, se guardaba y no llegaba a ninguna pantalla: una
-          sala privada era una sala a la que no podia entrar nadie.
+          Revision del modo jugador del 6-oct (puntos 13, 14 y 16) — la sala de
+          espera como una sola pieza, en tres zonas:
+            A · Estado: la modalidad, publica o privada, la apuesta y quien la
+                abrio, con el contador de plazas («1 / 2»).
+            B · Participantes: una plaza por puesto — ocupada (con su apodo),
+                de la IA, o libre esperando a alguien.
+            C · Acciones: iniciar, invitar, copiar la invitacion, salir o
+                cancelar.
+          Antes eran una tarjeta blanca («La batalla todavía no empieza») y
+          botones sueltos debajo, con un texto generico de lo que faltaba.
+          Las zonas de siempre (`arranque`, `invitacion`, `espera`,
+          `ocupacion`) siguen con su nombre: las usan el guion y las pruebas.
         -->
-        <div class="fila fila--acciones fila--invitacion" data-zona="invitacion" hidden>
-          <span class="t-meta">Código para invitar:</span>
-          <code class="codigo-invitacion" data-zona="codigo-invitacion"></code>
-          <button class="boton boton--secundario" type="button" data-accion="copiar-codigo">
-            Copiar código
-          </button>
-          <button class="boton boton--secundario" type="button" data-accion="copiar-enlace">
-            Copiar enlace
-          </button>
-          <span class="t-meta" data-zona="acuse-copia" role="status" aria-live="polite"></span>
-        </div>
+        <section
+          class="tarjeta sala-espera"
+          data-zona="sala-espera"
+          aria-labelledby="titulo-sala-espera"
+          hidden
+        >
+          <header class="sala-espera__cabecera">
+            <div class="sala-espera__identidad">
+              <p class="sala-espera__sobretitulo">Sala de espera</p>
+              <h2 class="sala-espera__titulo" id="titulo-sala-espera" data-zona="titulo-sala">
+                Sala de batalla
+              </h2>
+              <ul
+                class="sala-espera__datos"
+                data-zona="datos-sala"
+                aria-label="Datos de la sala"
+              ></ul>
+            </div>
+            <p class="sala-espera__contador">
+              <span data-zona="contador-plazas" aria-hidden="true"></span>
+              <span
+                class="solo-lectores"
+                data-zona="ocupacion"
+                role="status"
+                aria-live="polite"
+              ></span>
+            </p>
+          </header>
 
-        <div class="fila fila--acciones" data-zona="espera" hidden>
-          <span class="t-meta" data-zona="ocupacion" role="status" aria-live="polite"></span>
-          <button class="boton boton--secundario" type="button" data-accion="salir-de-sala" hidden>
-            Salir de la sala
-          </button>
-          <button class="boton boton--peligro" type="button" data-accion="cancelar-sala" hidden>
-            Cancelar sala
-          </button>
-          <span class="t-meta" data-zona="aviso-espera" role="alert"></span>
-        </div>
+          <ol class="sala-espera__plazas" data-zona="plazas" aria-label="Plazas de la sala"></ol>
+
+          <p
+            class="sala-espera__estado"
+            data-zona="estado-espera"
+            role="status"
+            aria-live="polite"
+          ></p>
+
+          <div class="sala-espera__acciones">
+            <!--
+              HU-SAL-004: arranque del combate, solo para el anfitrion. Se
+              cierra mientras falte rival; las plazas dicen quien falta.
+            -->
+            <div class="fila fila--acciones" data-zona="arranque" hidden>
+              <button
+                class="boton boton--primario boton--grande"
+                type="button"
+                data-accion="iniciar-partida"
+              >
+                Iniciar combate
+              </button>
+              <span class="solo-lectores" data-zona="aviso-arranque" role="status"></span>
+            </div>
+            <!-- Punto 13: invitar buscando por apodo (el anfitrion, con plazas libres). -->
+            <button
+              class="boton boton--secundario"
+              type="button"
+              data-accion="abrir-invitar"
+              aria-expanded="false"
+              aria-controls="panel-invitar"
+              hidden
+            >
+              Invitar jugador
+            </button>
+            <!--
+              HU-SAL-006: salir o cancelar ANTES de que empiece. Se ofrece el
+              boton que corresponde a quien mira y ninguno cuando la partida ya
+              arranco. Cancelar pide confirmacion porque expulsa a los demas.
+            -->
+            <div class="fila fila--acciones" data-zona="espera" hidden>
+              <button
+                class="boton boton--secundario"
+                type="button"
+                data-accion="salir-de-sala"
+                hidden
+              >
+                Salir de la sala
+              </button>
+              <button class="boton boton--peligro" type="button" data-accion="cancelar-sala" hidden>
+                Cancelar sala
+              </button>
+              <span class="t-meta" data-zona="aviso-espera" role="alert"></span>
+            </div>
+          </div>
+
+          <!--
+            FI-R4 · La invitacion de una sala privada. Solo se pinta cuando
+            `GET /salas/{id}` trae `codigoInvitacion`, y eso solo pasa si quien
+            mira es el anfitrion (`SalaResponse.segunQuienPregunta`).
+          -->
+          <div class="fila fila--acciones fila--invitacion" data-zona="invitacion" hidden>
+            <span class="t-meta">Código de la sala:</span>
+            <code class="codigo-invitacion" data-zona="codigo-invitacion"></code>
+            <button
+              class="boton boton--secundario boton--pequeno"
+              type="button"
+              data-accion="copiar-codigo"
+            >
+              Copiar código
+            </button>
+            <button
+              class="boton boton--secundario boton--pequeno"
+              type="button"
+              data-accion="copiar-enlace"
+            >
+              Copiar enlace
+            </button>
+            <span class="t-meta" data-zona="acuse-copia" role="status" aria-live="polite"></span>
+          </div>
+
+          <!--
+            Punto 13 · «invitar amigos o buscar por nombre». Se busca por el
+            apodo (minimo 3 letras) y se invita: al invitado le llega un aviso
+            con la sala. El identificador no se ensena nunca.
+          -->
+          <div
+            class="sala-espera__invitar"
+            id="panel-invitar"
+            data-zona="panel-invitar"
+            hidden
+          ></div>
+        </section>
       </div>
 
       <!--
@@ -299,7 +390,10 @@
         obtenerSala,
         abandonarSala,
         cancelarSala,
+        rendirse,
       } from './cliente-salas.js';
+      import { montarInvitarJugador } from './invitar-jugador.js';
+      import { montarSalidaDelCombate } from './salir-del-combate.js';
       import {
         montarSalaDeEspera,
         montarInvitacion,
@@ -449,6 +543,20 @@
             ? suscribir
             : (alRecibir) => canal.suscribir(`/tema/partidas/${partida.id}`, alRecibir);
         escuchar((aviso) => {
+          // Punto 18 — lo que «Salir» necesita saber: si la partida acabo o si
+          // ya caiste (entonces salir no es rendirse, no hay nada que perder).
+          if (aviso?.tipo === 'partida.finalizada') {
+            vivo.terminada = true;
+          }
+          if (aviso?.tipo === 'partida.participante.rendido' && aviso.idJugador === yo) {
+            vivo.caido = true;
+          }
+          if (aviso?.tipo === 'partida.accion.resuelta') {
+            const propio = (aviso.afectados ?? []).find((a) => a.idJugador === yo);
+            if (propio && Number(propio.vidaActual) <= 0) {
+              vivo.caido = true;
+            }
+          }
           if (!registro.yaVisto(aviso)) {
             controles.recibir(aviso);
           }
@@ -492,6 +600,10 @@
 
       /** La sala de espera, mientras no haya partida (HU-SAL-006). */
       let espera = null;
+      /** Invitar por apodo (punto 13), solo para el anfitrion. */
+      let invitarJugador = null;
+      /** Lo que el canal ya dijo del combate: terminado, o que caiste. */
+      const vivo = { terminada: false, caido: false };
       /** La ficha de la sala, si se pudo leer. */
       let sala = null;
       const zonaInvitacion = document.querySelector('[data-zona="invitacion"]');
@@ -507,6 +619,7 @@
           zonaArranque.hidden = true;
         }
         espera?.ocultar();
+        invitarJugador?.cerrar();
         if (zonaInvitacion) {
           zonaInvitacion.hidden = true;
         }
@@ -558,6 +671,9 @@
               yo,
               abandonar: abandonarSala,
               cancelar: cancelarSala,
+              // Punto 13 — el aviso del canal trae solo quien entro; la plaza
+              // dice su apodo releyendo la sala.
+              releer: obtenerSala,
               // UXC-9 — el diálogo del kit, no el confirm() del navegador.
               confirmar: (texto) =>
                 confirmarDialogo({
@@ -587,13 +703,19 @@
             if (zonaArranque && !espera.esAnfitrion) {
               zonaArranque.hidden = true;
             }
-            // R17.4 — a quien abrio la sala no se le dice «el combate empieza
-            // cuando el anfitrion lo inicie»: el anfitrion es el. Se le dice
-            // que lo arranca el, y con que boton.
-            if (enEspera && espera.esAnfitrion && zonaVacia) {
-              zonaVacia.textContent =
-                'Esta sala es tuya. Cuando estén todos, pulsa «Iniciar combate»; ' +
-                'si cambias de idea, puedes cancelarla.';
+            // Puntos 13, 14 y 16 — en la sala de espera manda su tarjeta (estado,
+            // plazas y acciones): la tarjeta blanca de «La batalla todavía no
+            // empieza», con su texto generico, sobra.
+            if (enEspera) {
+              const sinPartida = document.querySelector('[data-zona="sin-partida"]');
+              if (sinPartida) {
+                sinPartida.hidden = true;
+              }
+              invitarJugador = montarInvitarJugador(document, {
+                sala,
+                esAnfitrion: espera.esAnfitrion,
+                yo,
+              });
             }
             // R18 — recargar a mitad de combate devolvia a la sala de espera:
             // «Iniciar combate» (que el servidor rechaza con 409) y ningun
@@ -652,6 +774,8 @@
               pintarEstadoDelCanal(zonaConexion, {
                 ...estado,
                 alReintentar: () => canal?.reintentar(),
+                // Punto 18: la pildora solo se ve cuando hay algo que contar.
+                discreto: true,
               });
               if (estado.estado === 'reconectando' || estado.estado === 'sin-conexion') {
                 // Sin canal no se puede jugar el turno: dejar los botones
@@ -717,7 +841,10 @@
             : { idSala, ocupacion: { actual: 0, maximo: 0 }, participantes: [] },
           {
             suscribir: (destino, alRecibir) => canal.suscribir(destino, alRecibir),
-            alCambiar: (estadoDeLaSala) => espera?.actualizar(estadoDeLaSala),
+            alCambiar: (estadoDeLaSala) => {
+              espera?.actualizar(estadoDeLaSala);
+              invitarJugador?.actualizar(estadoDeLaSala);
+            },
             alIniciarPartida: async (aviso) => {
               if (partida) {
                 return;
@@ -813,8 +940,36 @@
           // R17.4 — la sala de espera sigue la sala por el canal: si esta
           // abierto, se dice «conectado» aunque aun no haya partida.
           canalConectado: Boolean(canal),
+          // Puntos 13 y 14 — en la sala de espera se ve su tarjeta, no la de
+          // «no hay ninguna batalla».
+          salaDeEspera: Boolean(espera && sala && salaEnEspera(sala)),
         });
       }
+
+      // Punto 18 — «Salir» en pleno combate pregunta antes y, si se confirma,
+      // te rindes: el servidor decide el resto con las reglas de la partida.
+      montarSalidaDelCombate(salir, {
+        situacion: () => ({ partida, ...vivo }),
+        yo,
+        confirmar: confirmarDialogo,
+        rendirse,
+        alAbandonar: () =>
+          volverAlListado({
+            tono: 'advertencia',
+            titulo: 'Abandonaste la batalla.',
+            detalle: 'Cuenta como derrota; la apuesta se liquida con las reglas de la partida.',
+          }),
+        alFallar: (error) => {
+          const rechazo = document.querySelector('[data-zona="rechazo"]');
+          if (rechazo) {
+            rechazo.textContent = textoDeError(
+              error,
+              'No pudimos sacarte de la batalla. Inténtalo otra vez en un momento.',
+            );
+            rechazo.hidden = false;
+          }
+        },
+      });
 
       // RF-CHA-001 / HU-CHA-001 CA-03: el icono responde y dice la verdad.
       montarAsistente(document);

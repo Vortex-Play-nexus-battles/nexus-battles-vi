@@ -49,14 +49,20 @@
         Dos filtros, los dos del contrato. El buscador que tenia la maqueta se
         elimino de Figma en HU-SAL-002: buscaba por un nombre de sala que se
         retiro en HU-SAL-001 y que ningun requisito pide.
+
+        Revision del modo jugador del 6-oct (puntos 8 y 9): la etiqueta va
+        arriba y la opcion no la repite («Modalidad: todas» decia lo mismo dos
+        veces). Al entrar se ven las salas a las que se puede entrar
+        —abiertas y privadas—, que es la opcion por omision; las llenas, con
+        «Todos» o «Llenas».
       -->
       <div class="fila">
         <label class="campo">
           <span class="campo__etiqueta">Modalidad</span>
           <select class="campo__control" name="modalidad">
-            <option value="">Modalidad: todas</option>
+            <option value="">Todas</option>
             <option value="UNO_CONTRA_UNO">1 contra 1</option>
-            <option value="CONTRA_IA">Contra la IA</option>
+            <option value="CONTRA_IA">Solo contra la IA</option>
             <option value="HASTA_SEIS">Hasta seis</option>
           </select>
         </label>
@@ -64,10 +70,11 @@
         <label class="campo">
           <span class="campo__etiqueta">Estado</span>
           <select class="campo__control" name="estado">
-            <option value="">Estado: todos</option>
-            <option value="ABIERTA">Abierta</option>
-            <option value="LLENA">Llena</option>
-            <option value="PRIVADA">Privada</option>
+            <option value="">Disponibles</option>
+            <option value="TODOS">Todos</option>
+            <option value="ABIERTA">Abiertas</option>
+            <option value="PRIVADA">Privadas</option>
+            <option value="LLENA">Llenas</option>
           </select>
         </label>
       </div>
@@ -105,9 +112,23 @@
         mundo. No oculta la rejilla, porque quien se equivoco de sala tiene que
         poder elegir otra sin recargar.
       -->
-      <form class="tarjeta pila pila--compacta" data-zona="pedir-codigo" hidden>
-        <p class="tarjeta__titulo">Esta sala es privada</p>
-        <p class="t-cuerpo" data-zona="aviso-codigo" role="status" aria-live="polite"></p>
+      <!--
+        Revision del modo jugador del 6-oct (punto 10): titulo «Sala privada»
+        y quien la creo, sin la frase generica del servidor. El rojo solo
+        cuando hay un error de verdad: «Código de invitación no válido», o que
+        la sala se lleno o se cerro mientras tanto.
+      -->
+      <form
+        class="tarjeta sala-privada pila pila--compacta"
+        data-zona="pedir-codigo"
+        aria-labelledby="titulo-sala-privada"
+        hidden
+      >
+        <div class="tarjeta__cabecera">
+          <h2 class="tarjeta__titulo" id="titulo-sala-privada">Sala privada</h2>
+          <span class="distintivo distintivo--privada">Privada</span>
+        </div>
+        <p class="t-meta" data-zona="creador-sala" hidden></p>
         <div class="campo">
           <label class="campo__etiqueta" for="codigo-invitacion-sala">Código de invitación</label>
           <input
@@ -118,10 +139,18 @@
             autocomplete="off"
             spellcheck="false"
             placeholder="ABCD-2345"
+            aria-describedby="aviso-codigo-sala"
             required
           />
+          <p
+            class="campo__error"
+            id="aviso-codigo-sala"
+            data-zona="aviso-codigo"
+            role="alert"
+            hidden
+          ></p>
         </div>
-        <div class="fila">
+        <div class="fila fila--acciones">
           <button class="boton boton--primario" type="submit">Entrar con el código</button>
           <button class="boton boton--secundario" type="button" data-accion="cerrar-codigo">
             Cancelar
