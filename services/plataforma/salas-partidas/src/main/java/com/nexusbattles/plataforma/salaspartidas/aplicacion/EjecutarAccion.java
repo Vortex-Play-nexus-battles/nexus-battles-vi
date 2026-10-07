@@ -425,14 +425,33 @@ public class EjecutarAccion {
         }
         ResolucionDeAccion resolucion;
         try {
-            resolucion = motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null,
-                    partida);
+            resolucion = decisionDeLaMaquina(partida, maquina);
         } catch (AccionNoPermitida | MotorNoDisponible | DependenciaDegradada noSePudo) {
             BITACORA.warn("La maquina {} de la partida {} pasa el turno: {}", maquina.idJugador(), partida.id(),
                     noSePudo.getMessage());
             return pasarTurnoSinAccion(partida, POR_TURNO_PERDIDO);
         }
         return aplicarYAnunciar(partida, resolucion);
+    }
+
+    /**
+     * La decision de la maquina, con UNA segunda oportunidad si el motor no
+     * contesta (revision del modo jugador, 6-oct: en DEV la maquina perdio un
+     * turno por un corte de un instante entre los dos hosts, y quien jugaba vio
+     * a «la IA» quedarse quieta). Sin esperas: el motor no guarda estado y la
+     * peticion lleva la partida entera, asi que repetirla es seguro y no aplica
+     * nada dos veces — lo que se aplica es lo que devuelva. Un corta circuitos
+     * abierto ({@link DependenciaDegradada}) o un rechazo del reglamento no se
+     * reintentan: no cambiarian.
+     */
+    private ResolucionDeAccion decisionDeLaMaquina(Partida partida, ParticipanteDePartida maquina) {
+        try {
+            return motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null, partida);
+        } catch (MotorNoDisponible primerCorte) {
+            BITACORA.info("La maquina {} de la partida {} reintenta su decision: {}", maquina.idJugador(),
+                    partida.id(), primerCorte.getMessage());
+            return motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null, partida);
+        }
     }
 
     /**

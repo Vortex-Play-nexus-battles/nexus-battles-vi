@@ -7666,6 +7666,59 @@ body[data-modo='combate'] .accion-combate__etiqueta {
   font-variant-numeric: tabular-nums;
 }
 
+/* Revision del modo jugador (6-oct) — «Poder 10/10 no suma ni resta»: el
+   movimiento que mando el servidor, junto a la cifra. El texto lleva el signo,
+   asi que el color solo acompana. Sin movimiento con `prefers-reduced-motion`. */
+.medidor-poder__cambio {
+  padding: 0 var(--e-1);
+  border-radius: var(--radio);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+}
+
+.medidor-poder__cambio[data-signo='negativo'] {
+  color: var(--advertencia);
+  background: color-mix(in srgb, var(--advertencia) 14%, transparent);
+}
+
+.medidor-poder__cambio[data-signo='positivo'] {
+  color: var(--exito);
+  background: color-mix(in srgb, var(--exito) 14%, transparent);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .medidor-poder__cambio {
+    animation: poder-cambia 1.8s var(--curva-salida) both;
+  }
+}
+
+@keyframes poder-cambia {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  15%,
+  70% {
+    opacity: 1;
+    transform: none;
+  }
+
+  100% {
+    opacity: 0.35;
+  }
+}
+
+/* La barra propia lleva «Tu» en su etiqueta y un borde que la distingue de la
+   del rival (revision del 6-oct: el contragolpe parecia dano propio). */
+.barra-vida[data-propia='true'] .barra-vida__nombre {
+  font-weight: 700;
+}
+
+.barra-vida[data-propia='true'] .barra-vida__etiqueta {
+  color: var(--enlace-sobre-cromo);
+}
+
 .medidor-poder__pista {
   display: flex;
   gap: 2px;

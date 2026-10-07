@@ -196,6 +196,16 @@ describe('barraDeVida', () => {
     expect(nodo.querySelector('[data-etiqueta]').textContent).toBe('IA · Equipo 2');
   });
 
+  test('revisión 6-oct: la barra de quien mira dice «Tú», para no confundir su vida con la del rival', () => {
+    const propia = barraDeVida({ nombre: 'Guerrero Tanque', idJugador: 'u-1', esPropia: true });
+    expect(propia.dataset.propia).toBe('true');
+    expect(propia.querySelector('[data-etiqueta]').textContent).toBe('Tú');
+
+    const contraLaIA = barraDeVida({ nombre: 'Mago Fuego', esIA: true });
+    expect(contraLaIA.dataset.propia).toBeUndefined();
+    expect(contraLaIA.querySelector('[data-etiqueta]').textContent).toBe('IA');
+  });
+
   test('no pinta el valor: eso lo hace quien conoce los umbrales', () => {
     const nodo = barraDeVida({ nombre: 'Golem' });
     expect(nodo.querySelector('.barra-vida__valor').textContent).toBe('');
