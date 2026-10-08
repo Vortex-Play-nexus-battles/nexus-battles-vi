@@ -3,11 +3,13 @@ package nexus.misiones.dominio;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.within;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import nexus.misiones.dominio.simulacion.TiradaDeMasters;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -57,5 +59,14 @@ class HuMis005AceptacionTest {
 
         assertThat(ejecucion.progreso(inicio.plus(Duration.ofHours(12)))).isEqualTo(0.25);
         assertThat(ejecucion.terminaEn()).isEqualTo(inicio.plus(Duration.ofHours(48)));
+    }
+
+    @Test
+    @DisplayName("una exploración aplica una tirada de Máster por cada 24 horas")
+    void calculaAparicionAcumuladaDeMaster() {
+        Mision exploracion = Misiones.exploracion("expedicion", 48, Misiones.SOMBRA_DEL_OLVIDO);
+
+        assertThat(TiradaDeMasters.tiradas(exploracion)).isEqualTo(2);
+        assertThat(TiradaDeMasters.probabilidadDeAlguno(exploracion)).isCloseTo(0.2775, within(0.000001));
     }
 }
