@@ -132,7 +132,22 @@ export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
+  // comentarios.yaml 1.10.0: ELIMINAR en lote sin la confirmacion exacta (400).
+  CONFIRMACION_REQUERIDA: 'CONFIRMACION_REQUERIDA',
 });
+
+/**
+ * Las acciones que valen en lote (`AccionDeLote`, comentarios.yaml 1.10.0): las
+ * de `ACCIONES` menos EDITAR, que necesita un texto distinto por comentario.
+ */
+export const ACCIONES_EN_LOTE = Object.freeze(
+  ACCIONES.filter((a) => a.valor !== 'EDITAR').map(({ valor, etiqueta }) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
+
+/** Valor exacto de `confirmacion` que exige ELIMINAR en lote (7.3.9, contrato 1.10.0). */
+export const CONFIRMACION_DE_ELIMINAR = 'ELIMINAR';
 
 /** Largos del contrato (`DecisionRequest`). */
 export const MOTIVO_MINIMO = 3;
@@ -190,12 +205,20 @@ async function cuerpoDelProblema(respuesta) {
   }
 }
 
-async function pedir(url, opciones, fetchImpl) {
+/**
+ * @param {string} url
+ * @param {object} opciones
+ * @param {Function} fetchImpl
+ * @param {new (problema: object|null, estado: number) => ErrorDeApi} [FabricaDeError] el
+ *   error que se lanza ante un rechazo; por omision {@link ErrorDeApi}, asi que
+ *   quien no la pasa se comporta como siempre
+ */
+async function pedir(url, opciones, fetchImpl, FabricaDeError = ErrorDeApi) {
   const respuesta = await fetchImpl(url, opciones);
   if (respuesta.ok) {
     return respuesta.status === 204 ? null : respuesta.json();
   }
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new FabricaDeError(await cuerpoDelProblema(respuesta), respuesta.status);
 }
 
 /**
@@ -347,6 +370,82 @@ export async function resolverComentario(
       body: JSON.stringify(decision),
     },
     fetchImpl,
+  );
+}
+
+/**
+ * El rechazo de la decision en lote: un {@link ErrorDeApi} que ademas dice que
+ * comentarios lo causaron (`comentarioIds` del problem detail: en el 404 los que
+ * no existen, en el 409 los que no admiten la accion), en el orden en que los
+ * dio el servicio.
+ *
+ * Es una subclase y no un cambio en `ErrorDeApi` porque ese error lo comparten
+ * otras vistas, que no necesitan la lista. Del problema solo se leen textos:
+ * lo demas que traiga `comentarioIds` se ignora.
+ */
+export class ErrorDeLote extends ErrorDeApi {
+  /**
+   * @param {{comentarioIds?: unknown}|null} problema
+   * @param {number} estado
+   */
+  constructor(problema, estado) {
+    super(problema, estado);
+    const ids = problema?.comentarioIds;
+    /** @type {string[]} */
+    this.comentarioIds = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+  }
+}
+
+/**
+ * @typedef {object} DecisionEnLote
+ * @property {string[]} comentarioIds
+ * @property {string} accion una de {@link ACCIONES_EN_LOTE}
+ * @property {string} motivo
+ * @property {string} [confirmacion] solo cuenta con ELIMINAR: {@link CONFIRMACION_DE_ELIMINAR}
+ *
+ * @typedef {object} ItemDeDecisionEnLote
+ * @property {string} comentarioId
+ * @property {object} asiento
+ * @property {boolean} [autorNotificado] `false` no invalida la decision
+ *
+ * @typedef {object} ResultadoDelLote
+ * @property {string} accion
+ * @property {number} total
+ * @property {ItemDeDecisionEnLote[]} resultados
+ */
+
+/**
+ * La misma decision para varios comentarios a la vez, atomica — RF-COM-008,
+ * comentarios.yaml 1.10.1: o se resuelven todos o no cambia ninguno. Solo roles
+ * de moderacion.
+ *
+ * Quien firma sale del token, no de aqui: aunque `decision` traiga otros campos,
+ * el cuerpo lleva solo los ids, la accion, el motivo y, con ELIMINAR, la
+ * confirmacion. No se validan topes ni largos: los exige el servicio.
+ *
+ * @param {DecisionEnLote} decision
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<ResultadoDelLote>}
+ * @throws {ErrorDeLote} 400 (entrada o `CONFIRMACION_REQUERIDA`), 401, 403, 404 y 409
+ *   con `comentarioIds`
+ */
+export async function resolverEnLote(
+  { comentarioIds, accion, motivo, confirmacion },
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const cuerpo = { comentarioIds, accion, motivo };
+  if (accion === 'ELIMINAR') {
+    cuerpo.confirmacion = confirmacion;
+  }
+  return pedir(
+    `${rutaDeModeracion()}/decisiones-en-lote`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(cuerpo),
+    },
+    fetchImpl,
+    ErrorDeLote,
   );
 }
 
