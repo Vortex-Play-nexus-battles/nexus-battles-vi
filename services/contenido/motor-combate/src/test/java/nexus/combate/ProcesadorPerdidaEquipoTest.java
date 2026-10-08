@@ -117,6 +117,76 @@ class ProcesadorPerdidaEquipoTest {
     }
 
     @Test
+    @DisplayName("protege la ultima arma y pierde el siguiente objeto equipado")
+    void protegeUltimaArma() {
+        InventarioFalso inventario = new InventarioFalso();
+        inventario.registrar("jugador-perdedor", List.of(
+                candidato("ultima-arma", "producto-arma", TipoBotin.ARMA, OrigenBotin.EQUIPADO),
+                candidato("armadura", "producto-armadura", TipoBotin.ARMADURA, OrigenBotin.EQUIPADO)));
+        CatalogoFalso catalogo = new CatalogoFalso(
+                producto("producto-arma", TipoBotin.ARMA, 100),
+                producto("producto-armadura", TipoBotin.ARMADURA, 60));
+        TransferidorFalso transferidor = new TransferidorFalso();
+        ProcesadorPerdidaEquipo procesador = procesador(
+                participantesUnoContraUno(), inventario, catalogo, transferidor, cantidad -> 0);
+
+        procesador.procesar(resultado("equipo-ganador"));
+
+        assertEquals(1, transferidor.transferencias.size());
+        assertEquals("armadura", transferidor.transferencias.getFirst().elementoId());
+    }
+
+    @Test
+    @DisplayName("no transfiere equipo cuando la maquina gana la partida")
+    void maquinaGanadoraNoRecibeEquipo() {
+        InventarioFalso inventario = new InventarioFalso();
+        inventario.registrar("jugador-perdedor", List.of(
+                candidato("objeto", "producto", OrigenBotin.EQUIPADO)));
+        TransferidorFalso transferidor = new TransferidorFalso();
+        List<ParticipantePerdidaEquipo> participantes = List.of(
+                ParticipantePerdidaEquipo.maquina("maquina", "equipo-maquina"),
+                participante("jugador", "equipo-jugador", "jugador-perdedor"));
+        ProcesadorPerdidaEquipo procesador = procesador(
+                participantes,
+                inventario,
+                new CatalogoFalso(producto("producto", 100)),
+                transferidor,
+                cantidad -> 0);
+        Partida partida = Partida.iniciar(
+                List.of(
+                        Combatiente.nuevo("maquina", "equipo-maquina", 10),
+                        Combatiente.nuevo("jugador", "equipo-jugador", 10)),
+                procesador);
+
+        partida.aplicarDanio("jugador", 10);
+
+        assertTrue(partida.finalizada());
+        assertEquals("equipo-maquina", partida.resultado().orElseThrow().ganadorEquipoId());
+        assertEquals(0, transferidor.llamadas);
+        assertTrue(procesador.resultado().asignaciones().isEmpty());
+    }
+
+    @Test
+    @DisplayName("un jugador no recibe equipo de la maquina derrotada")
+    void maquinaDerrotadaNoEntregaEquipo() {
+        TransferidorFalso transferidor = new TransferidorFalso();
+        List<ParticipantePerdidaEquipo> participantes = List.of(
+                participante("jugador", "equipo-jugador", "jugador-ganador"),
+                ParticipantePerdidaEquipo.maquina("maquina", "equipo-maquina"));
+        ProcesadorPerdidaEquipo procesador = procesador(
+                participantes,
+                new InventarioFalso(),
+                new CatalogoFalso(),
+                transferidor,
+                cantidad -> 0);
+
+        procesador.procesar(resultado("equipo-jugador"));
+
+        assertEquals(0, transferidor.llamadas);
+        assertTrue(procesador.resultado().asignaciones().isEmpty());
+    }
+
+    @Test
     @DisplayName("procesar dos veces el mismo cierre no duplica transferencias")
     void cierreIdempotente() {
         InventarioFalso inventario = new InventarioFalso();
@@ -231,13 +301,34 @@ class ProcesadorPerdidaEquipoTest {
             String elementoId,
             String productoId,
             OrigenBotin origen) {
+        return candidato(elementoId, productoId, TipoBotin.ITEM, origen);
+    }
+
+    private static ElementoCandidatoBotin candidato(
+            String elementoId,
+            String productoId,
+            TipoBotin tipo,
+            OrigenBotin origen) {
         return new ElementoCandidatoBotin(
-                elementoId, productoId, TipoBotin.ITEM, "Objeto", null, origen);
+                elementoId,
+                productoId,
+                tipo,
+                "Objeto",
+                tipo == TipoBotin.ARMADURA ? ParteArmaduraBotin.CASCO : null,
+                origen);
     }
 
     private static ProductoBotin producto(String id, int tasa) {
+        return producto(id, TipoBotin.ITEM, tasa);
+    }
+
+    private static ProductoBotin producto(String id, TipoBotin tipo, int tasa) {
         return new ProductoBotin(
-                id, "Producto", TipoBotin.ITEM, null, BigDecimal.valueOf(tasa));
+                id,
+                "Producto",
+                tipo,
+                tipo == TipoBotin.ARMADURA ? ParteArmaduraBotin.CASCO : null,
+                BigDecimal.valueOf(tasa));
     }
 
     private static final class InventarioFalso implements InventarioBotin {

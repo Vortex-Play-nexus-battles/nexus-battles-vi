@@ -38,17 +38,25 @@ public final class ProcesadorPerdidaEquipo implements AlCerrarPartida {
             return;
         }
         Objects.requireNonNull(cierre, "El resultado de la partida es obligatorio");
-        List<ParticipantePerdidaEquipo> ganadores = participantes.stream()
+        List<ParticipantePerdidaEquipo> equipoGanador = participantes.stream()
                 .filter(participante -> participante.equipoId().equals(cierre.ganadorEquipoId()))
                 .toList();
-        if (ganadores.isEmpty()) {
+        if (equipoGanador.isEmpty()) {
             throw new IllegalArgumentException("El equipo ganador no pertenece a la partida");
+        }
+        List<ParticipantePerdidaEquipo> ganadores = equipoGanador.stream()
+                .filter(participante -> !participante.controladoPorIa())
+                .toList();
+        if (ganadores.isEmpty()) {
+            resultado = new ResultadoPerdidaEquipo(List.of());
+            return;
         }
 
         List<TransferenciaEquipo> transferencias = new ArrayList<>();
         List<PerdidaEquipoAsignada> asignaciones = new ArrayList<>();
         for (ParticipantePerdidaEquipo derrotado : participantes) {
-            if (derrotado.equipoId().equals(cierre.ganadorEquipoId())) {
+            if (derrotado.equipoId().equals(cierre.ganadorEquipoId())
+                    || derrotado.controladoPorIa()) {
                 continue;
             }
             seleccionarMayorTasa(derrotado).ifPresent(seleccion -> {
@@ -80,10 +88,16 @@ public final class ProcesadorPerdidaEquipo implements AlCerrarPartida {
     }
 
     private java.util.Optional<Seleccion> seleccionarMayorTasa(ParticipantePerdidaEquipo derrotado) {
-        return inventario.listarCandidatos(
+        List<ElementoCandidatoBotin> equipados = inventario.listarCandidatos(
                         derrotado.propietarioId(),
                         derrotado.heroeInventarioId()).stream()
                 .filter(elemento -> elemento.origen() == OrigenBotin.EQUIPADO)
+                .toList();
+        long armasEquipadas = equipados.stream()
+                .filter(elemento -> elemento.tipo() == TipoBotin.ARMA)
+                .count();
+        return equipados.stream()
+                .filter(elemento -> elemento.tipo() != TipoBotin.ARMA || armasEquipadas > 1)
                 .map(elemento -> new Seleccion(elemento, consultarYValidar(elemento)))
                 .sorted(Comparator
                         .comparing((Seleccion seleccion) -> seleccion.producto().tasaDeCaida())
