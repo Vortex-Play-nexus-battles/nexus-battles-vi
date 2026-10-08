@@ -14,6 +14,7 @@ import {
   consultarEstadisticasDelHeroe,
   equiparElemento,
   desequiparElemento,
+  eliminarElemento,
 } from './cliente-inventario.js';
 import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
 import { bloqueDeEstadisticas } from '../../comun/ui/juego/estadisticas.js';
@@ -103,6 +104,7 @@ export async function montarVitrina(
     consultar = consultarPagina,
     alEditar,
     alEquipar,
+    alEliminar,
     mensajeCarga,
     mensajeVacio,
     detalleVacio,
@@ -164,6 +166,7 @@ export async function montarVitrina(
     construirVitrina(pagina, {
       alEditar,
       alEquipar,
+      alEliminar,
       estadoDe,
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
       // solo guarda la referencia (RF-ADM-10).
@@ -457,6 +460,9 @@ export async function montarInventario(
     consultarEstadisticas = consultarEstadisticasDelHeroe,
     equipar = equiparElemento,
     desequipar = desequiparElemento,
+    eliminar = eliminarElemento,
+    // Inyectable: en las pruebas no hay dialogo del navegador.
+    confirmar = (texto) => globalThis.confirm(texto),
     consultarProducto = consultarProductoDelCatalogo,
     listarHeroesDelNexo = () => listarProductos({ tipo: 'HEROE' }),
     fuenteMisiones = fuenteDeMisiones(),
@@ -694,6 +700,61 @@ export async function montarInventario(
     vista.editor.hidden = false;
     mostrarMensaje('');
     vista.producto.control.focus();
+  }
+
+  /**
+   * Por que no se pudo eliminar, en el idioma del jugador.
+   *
+   * No se reutiliza `motivoDelRechazo`: ese traduce los codigos del
+   * equipamiento y habla de ranuras, que aqui no significan nada. El servicio
+   * manda el motivo real en el problem detail —si el elemento esta en una
+   * mision, publicado en una subasta o puesto a un heroe— y ese texto ya viene
+   * filtrado para que lo lea quien juega, asi que se prefiere. Los codigos
+   * quedan de respaldo, nunca a la vista.
+   */
+  function motivoDeNoPoderEliminar(fallo) {
+    if (typeof fallo?.detalle === 'string' && fallo.detalle.trim() !== '') {
+      return fallo.detalle;
+    }
+    switch (fallo?.status) {
+      case 403:
+        return 'Ese elemento no es tuyo.';
+      case 404:
+        return 'Ese elemento ya no está en tu inventario.';
+      case 409:
+        return 'No se puede eliminar: está en una misión, publicado en una subasta o puesto a un héroe.';
+      case 503:
+        return 'El inventario no responde ahora mismo. Vuelve a intentarlo en un momento.';
+      default:
+        return 'No pudimos eliminar el elemento. Inténtalo de nuevo.';
+    }
+  }
+
+  /**
+   * HU-INV-008 — retira un elemento del inventario.
+   *
+   * Se confirma antes porque no se puede deshacer. Quien decide si se puede es
+   * el servicio: rechaza el que esta en una mision, el publicado en una
+   * subasta, el que el heroe lleva puesto y el que no es de quien pide. Por
+   * eso el fallo se traduce con `motivoDelRechazo`, que da la razon en el
+   * idioma del jugador: el criterio pide explicar el bloqueo, y el cliente
+   * tiene dicho que un codigo HTTP no se le ensena a nadie.
+   */
+  async function eliminarDelInventario(elemento) {
+    if (
+      !confirmar(`¿Eliminar "${elemento.nombrePropio}" de tu inventario? No se puede deshacer.`)
+    ) {
+      return;
+    }
+    mostrarMensaje('Eliminando...');
+    try {
+      await eliminar(identidad, elemento.id);
+      await cargarColeccion();
+      await actualizar(paginaEnCurso());
+      mostrarMensaje('Elemento eliminado.');
+    } catch (fallo) {
+      mostrarMensaje(motivoDeNoPoderEliminar(fallo), true);
+    }
   }
 
   function abrirEdicion(elemento) {
@@ -935,6 +996,7 @@ export async function montarInventario(
         : consultaSinBusqueda,
       alEditar: abrirEdicion,
       alEquipar: abrirEquipamiento,
+      alEliminar: eliminarDelInventario,
       estadoDe: estadoDeTarjeta,
       mensajeCarga: busquedaActiva ? 'Buscando en tu inventario...' : 'Cargando tus objetos...',
       mensajeVacio: busquedaActiva
