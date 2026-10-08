@@ -15,6 +15,8 @@
 #     y /mailpit/ sigue negada (403), no redirigida;
 #   - por el 443 contesta el mismo borde: salud, una ruta de API hasta su eco,
 #     las cabeceras de seguridad y el HSTS pedido;
+#   - por el 443 solo se sirve el dominio: www y la IP van con 301 a
+#     https://nexus.test (7-oct), con ruta y consulta;
 #   - TLS 1.2 y 1.3 si; TLS 1.1 no.
 #
 # Necesita el banco levantado (docker compose up -d --wait, en esta carpeta):
@@ -56,6 +58,8 @@ docker run -d --name "$NOMBRE" --network "$RED" \
   -v "$TMP/tls:/etc/nginx/nexus-tls:ro" \
   -v "$TMP/le:/etc/letsencrypt:ro" \
   -v "$TMP/acme:/srv/acme:ro" \
+  -v "$RAIZ/frontend:/srv/nexus/frontend:ro" \
+  -v "$RAIZ/shared:/srv/nexus/shared:ro" \
   -p 8098:80 -p 8443:443 nginx:1.27-alpine >/dev/null
 # Tambien en la red "de internet" del banco, para verlo como lo ve un visitante.
 docker network connect "$RED_PUBLICA" "$NOMBRE" >/dev/null 2>&1 || true
@@ -101,21 +105,25 @@ r=$(desdeFuera -o /dev/null -w '%{http_code} %{redirect_url}' "http://$NOMBRE/")
 [ "$r" = "301 https://nexus.test/" ] && ok "fuera: la raiz (y la IP) llevan al dominio" || falla "fuera: 80 /: '$r'"
 r=$(desdeFuera -o /dev/null -w '%{http_code}' "http://$NOMBRE/mailpit/")
 [ "$r" = "403" ] && ok "fuera: /mailpit/ sigue negada (403), no redirigida" || falla "fuera: 80 /mailpit/: '$r' (esperado 403)"
-r=$(desdeFuera -k -o /dev/null -w '%{http_code}' "https://$NOMBRE/mailpit/")
+r=$(desdeFuera -k -H 'Host: nexus.test' -o /dev/null -w '%{http_code}' "https://$NOMBRE/mailpit/")
 [ "$r" = "403" ] && ok "fuera: tampoco por el 443" || falla "fuera: 443 /mailpit/: '$r' (esperado 403)"
 
 echo
 echo "Por el 443"
-r=$(curl -sk https://localhost:8443/salud-borde)
+# Con el nombre del certificado, como llega un navegador: el 443 solo sirve
+# el dominio (las demas formas de llegar redirigen, ver mas abajo). Sin proxy:
+# nexus.test no esta en el NO_PROXY de quien lo corra detras de uno.
+DOMINIO443=(--noproxy '*' --resolve nexus.test:8443:127.0.0.1)
+r=$(curl -sk "${DOMINIO443[@]}" https://nexus.test:8443/salud-borde)
 [ "$r" = "UP" ] && ok "443 contesta el mismo borde" || falla "443 /salud-borde: '$r'"
 
-r=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8443/api/v1/torneos)
+r=$(curl -sk "${DOMINIO443[@]}" -o /dev/null -w '%{http_code}' https://nexus.test:8443/api/v1/torneos)
 [ "$r" = "200" ] && ok "443 enruta la API hasta su servicio (eco de torneos)" || falla "443 /api/v1/torneos: '$r'"
 
-r=$(curl -sk -o /dev/null -w '%{http_code}' https://localhost:8443/.well-known/acme-challenge/prueba)
+r=$(curl -sk "${DOMINIO443[@]}" -o /dev/null -w '%{http_code}' https://nexus.test:8443/.well-known/acme-challenge/prueba)
 [ "$r" = "200" ] && ok "443 tambien sirve el reto" || falla "443 reto: '$r'"
 
-cabeceras="$(curl -sk -o /dev/null -D - https://localhost:8443/login | tr -d '\r')"
+cabeceras="$(curl -sk "${DOMINIO443[@]}" -o /dev/null -D - https://nexus.test:8443/login | tr -d '\r')"
 for c in "x-content-type-options: nosniff" "x-frame-options: DENY" "referrer-policy: strict-origin-when-cross-origin" \
          "strict-transport-security: max-age=300"; do
   printf '%s\n' "$cabeceras" | grep -qi "^$c$" && ok "443 /login lleva '$c'" || falla "443 /login sin '$c'"
@@ -124,6 +132,15 @@ printf '%s\n' "$cabeceras" | grep -i '^content-security-policy:' | grep -q "fram
   && ok "443 /login lleva la politica de contenido" || falla "443 /login sin Content-Security-Policy"
 printf '%s\n' "$cabeceras" | grep -i '^strict-transport-security:' | grep -qi 'includeSubDomains\|preload' \
   && falla "HSTS con includeSubDomains o preload" || ok "HSTS sin includeSubDomains ni preload"
+
+echo
+echo "Un solo origen por el 443 (7-oct)"
+r=$(curl -sk --noproxy '*' --resolve www.nexus.test:8443:127.0.0.1 -o /dev/null -w '%{http_code} %{redirect_url}' "https://www.nexus.test:8443/login?x=1")
+[ "$r" = "301 https://nexus.test/login?x=1" ] && ok "443 www -> 301 https://nexus.test/login?x=1" || falla "443 www /login?x=1: '$r'"
+r=$(curl -sk -o /dev/null -w '%{http_code} %{redirect_url}' https://127.0.0.1:8443/jugar)
+[ "$r" = "301 https://nexus.test/jugar" ] && ok "443 por la IP -> 301 https://nexus.test/jugar" || falla "443 IP /jugar: '$r'"
+r=$(curl -sk "${DOMINIO443[@]}" -o /dev/null -w '%{http_code}' https://nexus.test:8443/login)
+[ "$r" = "200" ] && ok "443 con el dominio sirve sin redirigir" || falla "443 dominio /login: '$r'"
 
 echo
 echo "Versiones de TLS"
