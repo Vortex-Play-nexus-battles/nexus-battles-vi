@@ -23,7 +23,12 @@
 #                      https://__DOMINIO__/mailpit/ desde internet y el propio
 #                      borde la negaria con 403;
 #   - la redireccion va al DOMINIO, no a $host: quien entre por la IP acaba en
-#     el nombre para el que vale el certificado.
+#     el nombre para el que vale el certificado;
+#   - por el 443 solo se sirve el DOMINIO: cualquier otro nombre (www, que va
+#     en el certificado por DOMINIOS_ADICIONALES, o la IP si alguien acepta el
+#     aviso) se redirige con 301 a https://__DOMINIO__ (7-oct). Las listas de
+#     origenes (CORS y WebSocket) y los enlaces de los correos conocen un solo
+#     origen; servido en www, el login y los canales responderian 403.
 # Los WebSocket no necesitan nada: el mismo /ws, /ws/notificaciones y
 # /api/v1/ws-subastas pasan por el 443 (wss://), y la interfaz ya deriva ws(s)
 # del protocolo de la pagina. X-Forwarded-Proto ya sale con $scheme. Lo que SI
@@ -68,5 +73,16 @@ if ($uri ~ ^/mailpit/) {
     set $nexus_a_https 0;
 }
 if ($nexus_a_https) {
+    return 301 https://__DOMINIO__$request_uri;
+}
+
+set $nexus_a_dominio 0;
+if ($scheme = https) {
+    set $nexus_a_dominio 1;
+}
+if ($host = __DOMINIO__) {
+    set $nexus_a_dominio 0;
+}
+if ($nexus_a_dominio) {
     return 301 https://__DOMINIO__$request_uri;
 }

@@ -227,7 +227,7 @@ Mientras no haya dominio todo sigue como antes: solo el 80.
 |---|---|---|
 | `include /etc/nginx/nexus-tls/*.conf;` | `borde-dev.conf`, dentro del `server` | Sin fragmento no incluye nada (un comodín sin coincidencias no es un error) |
 | `location ^~ /.well-known/acme-challenge/` | `borde-dev.conf` | Sirve el reto HTTP-01 desde `/opt/nexus/acme` |
-| Plantilla del fragmento | `tls/borde-tls.conf.plantilla` | `listen 443 ssl`, TLS 1.2/1.3 con suites AEAD, 301 del 80 a `https://DOMINIO` salvo `/salud-borde`, el reto y `/mailpit/`; HSTS opcional |
+| Plantilla del fragmento | `tls/borde-tls.conf.plantilla` | `listen 443 ssl`, TLS 1.2/1.3 con suites AEAD, 301 del 80 a `https://DOMINIO` salvo `/salud-borde`, el reto y `/mailpit/`; por el 443, 301 al `DOMINIO` desde cualquier otro nombre (`www`, la IP); HSTS opcional |
 | `scripts/cd/certificado.sh` | host de plataforma | Emite, renueva, amplía, activa o quita el fragmento; solo publica un certificado **de confianza**; nunca deja nginx sin recargar |
 | `abrir_origenes_al_dominio` | `scripts/cd/desplegar.sh` | Suma `https://DOMINIO` a las ocho listas de orígenes (CORS y WebSocket) en los dos hosts |
 | 443 en el grupo de seguridad | `entornos/plataforma/main.tf` | Abierto antes del certificado: sin él, nadie escucha en el 443 (aplicado: `sg-005c60a57c33baac1`) |
@@ -252,7 +252,9 @@ Mientras no haya dominio todo sigue como antes: solo el 80.
 
 **Para activarlo** (lo hace Grupo 6; una persona solo pone el dominio y su consentimiento):
 
-1. Registro **A** del dominio → `35.168.124.119` (TTL 300), sin AAAA, sin proxy de CDN delante.
+1. Registro **A** del dominio → `35.168.124.119` (TTL 300), sin AAAA, sin proxy de CDN delante. Si también se
+   publica `www` (CNAME al dominio), `DOMINIOS_ADICIONALES=www.DOMINIO` lo mete en el certificado y el borde lo
+   redirige con 301 al dominio: las listas de orígenes y los enlaces de los correos conocen un solo origen.
 2. Variables del entorno `dev`: `DOMINIO_PUBLICO` (sin `https://`) y `ACME_ACEPTA_TERMINOS=true` — esta última
    **solo tras el sí explícito de una persona** al Subscriber Agreement de Let's Encrypt. `ACME_CORREO` opcional.
 3. Ensayo: `ACME_PRUEBAS=1` y `certificado-dev.yml` (asegurar). Emite en el entorno de pruebas de Let's Encrypt,
