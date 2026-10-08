@@ -71,54 +71,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Solo lectura y desde fuera de AWS: lo que vera Let's Encrypt.
+      # Solo lectura y desde fuera de AWS: lo que vera Let's Encrypt. Solo
+      # avisa: un DNS raro nunca debe impedir la renovacion de abajo. El 7-oct,
+      # con www como CNAME, este paso murio a mitad (el destino del CNAME se
+      # tomaba por servidor de nombres) y la renovacion ni empezo; ahora es un
+      # script con prueba (scripts/cd/pruebas/dns-del-dominio.sh) y, por si
+      # acaso, continue-on-error.
       - name: DNS publico del dominio
         if: vars.DOMINIO_PUBLICO != ''
+        continue-on-error: true
         env:
           DESTINO: ${{ secrets.DEPLOY_HOST_DEV }}
-        run: |
-          set -uo pipefail
-          D="$(printf '%s' "$DOMINIO" | tr 'A-Z' 'a-z' | sed 's|^https\?://||; s|/.*$||')"
-          bien=1
-          for nombre in $D $(printf '%s' "$ADICIONALES" | tr 'A-Z' 'a-z'); do
-            echo "== $nombre"
-            # Servidores autoritativos: el primer antepasado con NS.
-            zona="$nombre"
-            autoritativos=""
-            while [ -n "$zona" ] && [ "$zona" != "${zona#*.}" ]; do
-              autoritativos="$(dig +short NS "$zona" | sed 's/\.$//' | head -3)"
-              [ -n "$autoritativos" ] && break
-              zona="${zona#*.}"
-            done
-            for r in 1.1.1.1 8.8.8.8 9.9.9.9 $autoritativos; do
-              ips="$(dig +short +time=3 +tries=2 A "$nombre" @"$r" | grep -E '^[0-9.]+$' | sort -u | tr '\n' ' ')"
-              if [ "${ips% }" = "$DESTINO" ]; then
-                printf '  %-28s -> el host de plataforma\n' "$r"
-              else
-                printf '  %-28s -> %s\n' "$r" "${ips:-(no resuelve)}"
-                bien=0
-              fi
-            done
-            aaaa="$(dig +short AAAA "$nombre" @1.1.1.1 | head -3 | tr '\n' ' ')"
-            [ -n "$aaaa" ] && echo "::warning::$nombre tiene AAAA ($aaaa) y el host no tiene IPv6: los clientes IPv6 no llegarian."
-            # CAA: manda el del antepasado mas cercano que tenga.
-            zona="$nombre"
-            while [ -n "$zona" ] && [ "$zona" != "${zona#*.}" ]; do
-              caa="$(dig +short CAA "$zona" @1.1.1.1)"
-              if [ -n "$caa" ]; then
-                echo "  CAA de $zona: $(echo "$caa" | tr '\n' ' ')"
-                echo "$caa" | grep -q 'issue "letsencrypt.org"' \
-                  || echo "::warning::El CAA de $zona no autoriza a letsencrypt.org: Let's Encrypt se negara a emitir."
-                break
-              fi
-              zona="${zona#*.}"
-            done
-          done
-          if [ "$bien" = 1 ]; then
-            echo "El DNS publico lleva todos los nombres al host de plataforma."
-          else
-            echo "::warning::Algun resolutor no lleva el dominio al host de plataforma todavia (propagacion o registro A equivocado). certificado.sh no emitira hasta que el host lo vea apuntando a si mismo."
-          fi
+        run: bash scripts/cd/dns-del-dominio.sh
 
       - name: Comprobar que el host contesta (sin encenderlo)
         id: host
@@ -203,6 +167,17 @@ jobs:
           [ "$r" = "UP" ] && ok "https://$D/salud-borde -> UP" || mal "salud-borde por https: '$r'"
           r=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 15 "https://$D/api/v1/auth/jwks") || true
           [ "$r" = "200" ] && ok "la API responde por el mismo dominio (/api/v1/auth/jwks 200)" || mal "/api/v1/auth/jwks por https -> $r"
+
+          # Los nombres adicionales (www): certificado valido para ellos y 301
+          # al dominio, que es el unico origen que conocen CORS, los WebSocket
+          # y los correos (7-oct).
+          for extra in ${ADICIONALES:-}; do
+            e="$(printf '%s' "$extra" | tr 'A-Z' 'a-z' | sed 's|^https\?://||; s|/.*$||')"
+            if [ -z "$e" ] || [ "$e" = "$D" ]; then continue; fi
+            r=$(curl -sS -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 15 "https://$e/login?x=1") || r="error TLS"
+            [ "$r" = "301 https://$D/login?x=1" ] && ok "https://$e/login -> 301 https://$D/login (certificado valido para $e)" \
+              || mal "https://$e/login?x=1 -> '$r' (esperado 301 https://$D/login?x=1)"
+          done
 
           echo "Certificado que se sirve:"
           echo | openssl s_client -connect "$D:443" -servername "$D" 2>/dev/null \
