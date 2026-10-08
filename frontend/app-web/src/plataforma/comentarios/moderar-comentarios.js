@@ -992,7 +992,10 @@ function construirBarraDeLote() {
         clase: 'fila fila--envuelta',
         hijos: [
           h('label', {
-            clase: 'casilla',
+            // `casilla--caja`: esta etiqueta queda suelta sobre la atmósfera oscura
+            // y con el color de texto del kit no tiene contraste suficiente; la caja
+            // le da superficie y borde. La de cada tarjeta no lo necesita: va dentro de ella.
+            clase: 'casilla casilla--caja',
             hijos: [
               maestra,
               h('span', { clase: 'casilla__etiqueta', texto: 'Seleccionar los de esta página' }),
