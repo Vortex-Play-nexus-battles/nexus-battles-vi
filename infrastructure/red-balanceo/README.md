@@ -218,10 +218,15 @@ aparecer un reparto por `$request_method`.
 recarga sin cortar conexiones. Un push que solo toque frontend, ui-kit o esta
 carpeta también despliega.
 
-## HTTPS con Let's Encrypt (28-sep; revisado el 6-oct) — listo, apagado hasta que haya dominio
+## HTTPS con Let's Encrypt (28-sep; revisado el 6-oct) — encendido el 7-oct en `https://nexusbattlesvi.com`
 
-El borde publica HTTPS **en el mismo nginx**, sin coste y sin cambiar rutas.
-Mientras no haya dominio todo sigue como antes: solo el 80.
+El borde publica HTTPS **en el mismo nginx**, sin coste y sin cambiar rutas. Sin `DOMINIO_PUBLICO` todo vuelve a
+ser como antes: solo el 80.
+
+**Estado (7-oct):** `DOMINIO_PUBLICO=nexusbattlesvi.com`, `DOMINIOS_ADICIONALES=www.nexusbattlesvi.com` (CNAME;
+redirige al dominio), `PUBLIC_BASE_URL=https://nexusbattlesvi.com`. Certificado de Let's Encrypt para los dos
+nombres, renovación simulada en verde (`probar-renovacion`) y HTTPS/WSS comprobados también después de apagar y
+encender el host. SSL Labs: A (TLS 1.2 y 1.3; sin HSTS todavía, a propósito).
 
 | Pieza | Dónde | Qué hace |
 |---|---|---|
@@ -231,7 +236,7 @@ Mientras no haya dominio todo sigue como antes: solo el 80.
 | `scripts/cd/certificado.sh` | host de plataforma | Emite, renueva, amplía, activa o quita el fragmento; solo publica un certificado **de confianza**; nunca deja nginx sin recargar |
 | `abrir_origenes_al_dominio` | `scripts/cd/desplegar.sh` | Suma `https://DOMINIO` a las ocho listas de orígenes (CORS y WebSocket) en los dos hosts |
 | 443 en el grupo de seguridad | `entornos/plataforma/main.tf` | Abierto antes del certificado: sin él, nadie escucha en el 443 (aplicado: `sg-005c60a57c33baac1`) |
-| `certificado-dev.yml` | Actions | Renovación diaria (lun-vie) sin encender el host, DNS público, comprobación desde fuera y aviso a 14 días de caducar; a demanda `estado` y `probar-renovacion` |
+| `certificado-dev.yml` | Actions | Renovación diaria (lun-vie) sin encender el host, DNS público (`scripts/cd/dns-del-dominio.sh`, solo avisa), comprobación desde fuera (también que `www` va con 301 al dominio) y aviso a 14 días de caducar; a demanda `estado` y `probar-renovacion` |
 | `pruebas/comprobar-tls.sh` | CI (banco del borde) | El mismo `borde-dev.conf` con el fragmento, un certificado autofirmado y un cliente «de internet» |
 | `tests/e2e/https-del-borde.smoke.spec.js` | smoke de DEV | Con `PUBLIC_BASE_URL` en https: 301, rutas limpias, contenido mixto 0, enlaces de correo y `wss://` |
 
