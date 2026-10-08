@@ -414,6 +414,14 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/origenes-del-dominio.sh
 
+      # 7-oct: el paso "DNS publico del dominio" de certificado-dev.yml. Con
+      # www como CNAME del dominio murio a mitad (el destino del CNAME se
+      # tomaba por servidor de nombres) y la renovacion de despues ni empezo.
+      # Con un dig falso, sin red; segundos.
+      - name: Comprobar el DNS publico del dominio (dominio y www como CNAME)
+        shell: bash
+        run: bash scripts/cd/pruebas/dns-del-dominio.sh
+
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
       # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java
