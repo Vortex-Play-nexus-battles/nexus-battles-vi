@@ -158,6 +158,15 @@ class VerificacionDelPactoDeMisionesTest {
         entregas.reiniciar();
     }
 
+    @State("el jugador ya tiene la epica")
+    void yaTieneLaEpica() {
+        // Epica unica (inventario 1.7.0): ya tiene «Segundo impulso», asi que la entrega no crea otra copia.
+        repositorio.reiniciar().guardar(Inventario.vacio(JUGADOR).agregar(vorn())
+                .agregar(new ElementoInventario("epica-del-jugador", EPICA, TipoElementoInventario.EPICA,
+                        "Segundo impulso")));
+        entregas.reiniciar();
+    }
+
     private static ElementoInventario vorn() {
         return new ElementoInventario(HEROE, PRODUCTO, TipoElementoInventario.HEROE, "Vorn");
     }

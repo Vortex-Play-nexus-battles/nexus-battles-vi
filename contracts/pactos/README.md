@@ -84,6 +84,7 @@ Los estados que hay que poder montar hoy:
 - el héroe está en esa misión
 - el héroe ya volvió de esa misión
 - el jugador puede recibir productos del catálogo
+- el jugador ya tiene la épica (inventario 1.7.0: la entrega no crea otra copia y la nombra en `yaTenia`)
 
 **productos** (B3; lo consume comentarios)
 - el producto existe en el catalogo

@@ -16,8 +16,9 @@ import static nexus.combate.reglas.Plan.Objetivo.RIVAL;
 import static nexus.combate.reglas.Plan.Objetivo.SI_MISMO;
 
 /**
- * Las reglas de las acciones: las 24 de la Tabla 7, las dos basicas y las 8
- * epicas de la Tabla 20 — §6.1.1 y §6.1.2.
+ * Las reglas de las acciones: las 24 de la Tabla 7, las dos basicas, las 8
+ * epicas de la Tabla 20 y «Velo de Sombras», la epica del Master del Templo
+ * (7.8.14) — §6.1.1 y §6.1.2.
  *
  * <p><b>Datos contra reglas.</b> El nombre, el coste, la carga y el nivel de
  * desbloqueo de cada accion de la Tabla 7 son DATOS del catalogo de heroes
@@ -55,10 +56,17 @@ public final class Reglamento {
     /** §6.1.2: las epicas «tienen dos turnos de recarga». */
     public static final int TURNOS_DE_RECARGA_EPICA = 2;
 
+    /** 7.8.14, Velo de Sombras: «+2 a la defensa». */
+    static final int VELO_DE_SOMBRAS_DEFENSA = 2;
+    /** 7.8.14, Velo de Sombras: «+3 de dano por veneno». */
+    static final int VELO_DE_SOMBRAS_VENENO_POR_TURNO = 3;
+    /** 7.8.14, Velo de Sombras: «durante 2 turnos». */
+    static final int VELO_DE_SOMBRAS_TURNOS_DE_VENENO = 2;
+
     /** Tabla 7: por nombre normalizado, la regla en funcion del multiplicador de nivel. */
     private static final Map<String, BiFunction<AccionDelCatalogo, Integer, Plan>> TABLA_7 = tabla7();
 
-    /** Tabla 20: por nombre normalizado. */
+    /** Tabla 20 y la epica de 7.8.14 (Velo de Sombras), por nombre normalizado. */
     private static final Map<String, Epica> TABLA_20 = tabla20();
 
     /**
@@ -358,6 +366,23 @@ public final class Reglamento {
         // este ultimo fallece, se reanima con el 20% de su salud.»
         t.put("reanimador 3000", new Epica("Reanimador 3000", "Médico", null,
                 epicaDeApoyo("Reanimador 3000", true, COMPANERO, 0, List.of(), true)));
+        // Velo de Sombras (Picaro Veneno): NO es de la Tabla 20, es la epica del Master
+        // «Sombra del Olvido» de la mision de ejemplo (7.8.14). «Efecto general: +2 a la
+        // defensa para todos los heroes» | «Efecto epico (solo Picaro Veneno): el heroe se
+        // vuelve intangible durante 1 turno, evitando todo el dano recibido y causando
+        // envenenamiento al atacante (+3 de dano por veneno durante 2 turnos)».
+        // Como en el resto de la tabla, el efecto epico incluye el general (la defensa
+        // +2) y suma lo suyo: la intangibilidad es la de Frio concentrado (INMUNE_TOTAL,
+        // hasta que empieza su siguiente turno) y el veneno lo deja en quien lo golpea.
+        PlantillaDeEfecto masDosDeDefensa = efecto("VELO_DE_SOMBRAS_DEFENSA", "Velo de Sombras",
+                TipoDeEfecto.BONO_DEFENSA, Tirada.fija(VELO_DE_SOMBRAS_DEFENSA), 1);
+        t.put("velo de sombras", new Epica("Velo de Sombras", "Pícaro Veneno",
+                epicaDeDefensa("Velo de Sombras", false, List.of(masDosDeDefensa)),
+                epicaDeDefensa("Velo de Sombras", true, List.of(masDosDeDefensa,
+                        efecto("VELO_DE_SOMBRAS_INTANGIBLE", "Velo de Sombras", TipoDeEfecto.INMUNE_TOTAL,
+                                Tirada.NINGUNA, 1),
+                        efecto("VELO_DE_SOMBRAS_VENENO", "Velo de Sombras", TipoDeEfecto.ENVENENA_AL_ATACANTE,
+                                Tirada.fija(VELO_DE_SOMBRAS_VENENO_POR_TURNO), VELO_DE_SOMBRAS_TURNOS_DE_VENENO)))));
         return Map.copyOf(t);
     }
 
@@ -378,6 +403,12 @@ public final class Reglamento {
                 TURNOS_DE_RECARGA_EPICA, null,
                 new Plan.Sanacion(Plan.Sanacion.Fuente.FIJA, cantidad, Plan.Sanacion.Destino.SI_MISMO, List.of()),
                 propios, 0, false);
+    }
+
+    /** Una epica que solo se protege: no golpea, no sana y no pide objetivo. */
+    private static Plan epicaDeDefensa(String nombre, boolean potenciada, List<PlantillaDeEfecto> propios) {
+        return new Plan(nombre, nombre, TipoDeAccion.DEFENSA, SI_MISMO, true, potenciada, null,
+                TURNOS_DE_RECARGA_EPICA, null, null, propios, 0, false);
     }
 
     private static Plan epicaDeApoyo(String nombre, boolean potenciada, Plan.Objetivo objetivo, int quitaPoder,

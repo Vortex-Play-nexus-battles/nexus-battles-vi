@@ -94,10 +94,14 @@ public record EventoDeCombate(
      * @param versionDelModelo la version del modelo que se consulto en este turno; nula si no se consulto
      * @param candidatas   las opciones legales que puntuo el modelo (sirven para reentrenarlo); vacia si no
      *                     se consulto
+     * @param estrategia   de donde salen las rotaciones con las que jugo un enemigo (HU-SIM-004); nula en el heroe
+     *                     y en un enemigo que juega siempre el ataque basico
+     * @param estrategiaId el id de la estrategia predefinida, si {@code estrategia} es PREDEFINIDA; nulo si no
      */
     public record Jugada(String decidida, String ejecutada, boolean enValorBase, int costoDecidido, int costoDePoder,
                          List<Rechazo> rechazadas, Resultado resultado, DecididaPor decididaPor,
-                         String versionDelModelo, List<DecisionDeTurno.Candidata> candidatas) {
+                         String versionDelModelo, List<DecisionDeTurno.Candidata> candidatas,
+                         OrigenDeEstrategia estrategia, String estrategiaId) {
 
         public Jugada {
             rechazadas = rechazadas == null ? List.of() : List.copyOf(rechazadas);
@@ -105,11 +109,19 @@ public record EventoDeCombate(
             candidatas = candidatas == null ? List.of() : List.copyOf(candidatas);
         }
 
+        /** Una jugada sin traza de estrategia (la del heroe, o la de un enemigo que no tiene). */
+        public Jugada(String decidida, String ejecutada, boolean enValorBase, int costoDecidido, int costoDePoder,
+                      List<Rechazo> rechazadas, Resultado resultado, DecididaPor decididaPor,
+                      String versionDelModelo, List<DecisionDeTurno.Candidata> candidatas) {
+            this(decidida, ejecutada, enValorBase, costoDecidido, costoDePoder, rechazadas, resultado, decididaPor,
+                    versionDelModelo, candidatas, null, null);
+        }
+
         /** Una jugada que decidio la regla sola. */
         public Jugada(String decidida, String ejecutada, boolean enValorBase, int costoDecidido, int costoDePoder,
                       List<Rechazo> rechazadas, Resultado resultado) {
             this(decidida, ejecutada, enValorBase, costoDecidido, costoDePoder, rechazadas, resultado,
-                    DecididaPor.REGLA, null, List.of());
+                    DecididaPor.REGLA, null, List.of(), null, null);
         }
     }
 

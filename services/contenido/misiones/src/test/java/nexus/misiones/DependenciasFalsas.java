@@ -89,6 +89,8 @@ public final class DependenciasFalsas implements AutoCloseable {
     public volatile String correoDelJugador = "jugador@ejemplo.com";
     /** Rutas que contestan un estado fijo (la clave es el final de la ruta), p. ej. «/liberacion» → 401. */
     public final Map<String, Integer> forzados = new ConcurrentHashMap<>();
+    /** Epicas que el jugador ya tiene: el inventario las devuelve en {@code yaTenia} al entregar. */
+    public final Set<String> epicasQueYaTiene = ConcurrentHashMap.newKeySet();
     /** La bandeja falsa de notificaciones: los avisos recibidos, por id. */
     public final Map<String, Map<String, Object>> avisos = new ConcurrentHashMap<>();
 
@@ -161,6 +163,7 @@ public final class DependenciasFalsas implements AutoCloseable {
         caidas.clear();
         correoDelJugador = "jugador@ejemplo.com";
         forzados.clear();
+        epicasQueYaTiene.clear();
         avisos.clear();
     }
 
@@ -431,9 +434,18 @@ public final class DependenciasFalsas implements AutoCloseable {
                 return problema(500, "caido");
             }
             Map<String, Object> cuerpo = p.json();
-            return json(201, Map.of("id", "entrega-1", "uid", cuerpo.get("uid"), "origen", cuerpo.get("origen"),
-                    "referencia", cuerpo.get("referencia"), "elementos", List.of(),
+            Map<String, Object> entrega = new LinkedHashMap<>(Map.of("id", "entrega-1", "uid", cuerpo.get("uid"),
+                    "origen", cuerpo.get("origen"), "referencia", cuerpo.get("referencia"), "elementos", List.of(),
                     "entregadaEn", "2026-09-25T12:00:00Z"));
+            if (!epicasQueYaTiene.isEmpty()) {
+                // inventario 1.7.0: lo que ya tenia el jugador va en yaTenia; sin epicas repetidas no hay campo
+                // (un inventario anterior tampoco lo trae).
+                entrega.put("yaTenia", ((List<?>) cuerpo.get("productos")).stream()
+                        .map(l -> (String) ((Map<?, ?>) l).get("productoId"))
+                        .filter(epicasQueYaTiene::contains)
+                        .toList());
+            }
+            return json(201, entrega);
         }
         return problema(404, "Ruta de inventario desconocida: " + ruta);
     }
