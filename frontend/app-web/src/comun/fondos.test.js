@@ -12,7 +12,8 @@
  * - el atributo sin la hoja, o la hoja sin el atributo (lo primero no pinta
  *   nada; lo segundo es una descarga inútil);
  * - un fondo en la consola de administración, que por decisión del PO se
- *   queda sin él.
+ *   queda sin él;
+ * - una vista del jugador sin escena (CA-02 de HU-UX-002).
  *
  * El contraste del texto sobre cada escena no se puede medir aquí (hace
  * falta pintar la página): lo mide `tests/visual/contraste-fondos.spec.js`.
@@ -125,6 +126,18 @@ describe('vistas con fondo', () => {
       }
     }
     expect(problemas).toEqual([]);
+  });
+
+  test('las 26 vistas del jugador tienen escena (CA-02)', () => {
+    // Portal y armazón de jugador de la matriz de acceso. Una vista nueva del
+    // jugador sin `data-fondo` se quedaría sobre la atmósfera lisa, fuera del
+    // mundo que comparten todas las demás: tiene que elegir escena.
+    const delJugador = Object.entries(MATRIZ).filter(([, entrada]) => entrada.armazon !== 'admin');
+    const sinEscena = delJugador
+      .filter(([, entrada]) => declaracion(entrada.ruta).fondo === null)
+      .map(([id]) => id);
+    expect(sinEscena).toEqual([]);
+    expect(delJugador).toHaveLength(26);
   });
 
   test('la consola de administración no lleva fondo', () => {
