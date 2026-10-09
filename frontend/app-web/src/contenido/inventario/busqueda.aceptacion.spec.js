@@ -144,7 +144,10 @@ test('Una búsqueda válida puede no tener coincidencias', async ({ page }) => {
     /no encontramos productos/i,
   );
   await expect(page.locator('.inventario__mensaje')).toContainText('0 resultados');
-  await expect(page.locator('.estado-error')).toHaveCount(0);
+  // `:visible` y no a secas: la pestana de heroes deja un `.estado-error`
+  // **oculto** cuando su catalogo no esta simulado, y aqui no lo esta. Lo que
+  // el criterio pide es que al jugador no se le **muestre** un error.
+  await expect(page.locator('.estado-error:visible')).toHaveCount(0);
 });
 
 test('El jugador limpia la búsqueda y vuelve a ver su inventario', async ({ page }) => {
