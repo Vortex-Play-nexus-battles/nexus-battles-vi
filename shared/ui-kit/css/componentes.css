@@ -5927,9 +5927,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
   border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   /* UX-GAME-4 — la arena es OSCURA: el lado propio con halo azul, el rival
      con halo violeta, y una linea de energia en el centro que separa los dos
-     bandos. Solo degradados: nada de imagenes ni de canvas. Antes era un
-     gris claro que, entre el HUD y los controles blancos, se leia como una
-     pantalla vacia. */
+     bandos. Antes era un gris claro que, entre el HUD y los controles
+     blancos, se leia como una pantalla vacia. HU-UX-002: en una vista con
+     fondo ilustrado, fondos.css sustituye estos degradados por la escena de
+     la arena (los mismos dos bandos y la linea, pintados); sin fondo, o con
+     «aumentar contraste», quedan estos. Sin canvas. */
   background:
     radial-gradient(
       55% 70% at 18% 62%,
