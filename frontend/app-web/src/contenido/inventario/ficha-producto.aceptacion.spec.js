@@ -137,7 +137,9 @@ test.describe('Ficha de detalle del producto', () => {
 
     await page.locator('.vitrina__detalle').click();
 
-    const aviso = page.locator('.estado-error');
+    // `:visible` porque la pestana de heroes deja uno oculto cuando su
+    // catalogo no esta simulado; el que importa es el que ve el jugador.
+    const aviso = page.locator('.estado-error:visible');
     await expect(aviso).toBeVisible();
     expect(await aviso.innerText()).not.toMatch(/\b[1-5]\d{2}\b/);
   });
@@ -183,6 +185,9 @@ test.describe('Ficha de detalle del producto', () => {
     await expect(page.locator('.ficha__no-disponible')).toBeVisible();
     await expect(page.locator('.ficha__no-disponible')).toContainText(/sigue en tu inventario/i);
     // Y no se presenta como un error: sigue siendo suyo.
-    await expect(page.locator('.estado-error')).toHaveCount(0);
+    // `:visible` y no a secas: la pestana de heroes deja un `.estado-error`
+    // **oculto** cuando su catalogo no esta simulado, y aqui no lo esta. Lo
+    // que el criterio pide es que al jugador no se le **muestre** un error.
+    await expect(page.locator('.estado-error:visible')).toHaveCount(0);
   });
 });
