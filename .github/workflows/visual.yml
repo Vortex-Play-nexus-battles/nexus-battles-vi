@@ -117,9 +117,9 @@ jobs:
           if-no-files-found: error
 
       # HU-UX-002 — `contraste-fondos.spec.js` mide el texto que cae sobre los
-      # fondos ilustrados y deja una captura por vista y ancho y un
-      # CONTRASTE.md por escena. Es evidencia aparte de la del laboratorio:
-      # otra carpeta, otro artefacto.
+      # fondos ilustrados y deja una captura por vista y ancho y un informe
+      # por vista (<escena>/<vista>.md). Es evidencia aparte de la del
+      # laboratorio: otra carpeta, otro artefacto.
       - name: Publicar capturas y contraste de los fondos ilustrados
         if: always()
         uses: actions/upload-artifact@v4
@@ -137,6 +137,6 @@ jobs:
           else
             echo "La corrida no llego a generar informe." >> "$GITHUB_STEP_SUMMARY"
           fi
-          for informe in docs/evidencia/fondos/*/CONTRASTE.md; do
+          for informe in docs/evidencia/fondos/*/*.md; do
             [ -f "$informe" ] && cat "$informe" >> "$GITHUB_STEP_SUMMARY"
           done

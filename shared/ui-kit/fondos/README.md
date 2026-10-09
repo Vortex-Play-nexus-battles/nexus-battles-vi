@@ -114,5 +114,6 @@ horizontal 3:2 (1536 × 1024).
 3. Declararla en el catálogo de `fondos.css` (las dos reglas: escritorio y móvil).
 4. En cada vista: enlazar `shared/ui-kit/css/fondos.css` después de `componentes.css` y poner
    `data-fondo="<nombre>"` en el `<body>`. Nunca en una vista con armazón de administración.
-5. Correr el laboratorio visual: `contraste-fondos.spec.js` tiene que quedar en verde y deja las
-   capturas y las cifras en `docs/evidencia/fondos/<nombre>/`.
+5. Correr el laboratorio visual: `contraste-fondos.spec.js` tiene que quedar en verde y deja en
+   `docs/evidencia/fondos/<nombre>/` las capturas (`<vista>-<ancho>.jpg`) y un informe por vista
+   (`<vista>.md`).

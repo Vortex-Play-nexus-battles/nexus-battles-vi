@@ -32,8 +32,13 @@
  * En el combate mide además los nombres de los héroes sobre la arena
  * (`.campo__nombre`), con una partida de seis.
  *
- * Deja las capturas (JPEG) y un CONTRASTE.md por escena en
- * `docs/evidencia/fondos/<escena>/`.
+ * Deja en `docs/evidencia/fondos/<escena>/` una captura por vista y ancho
+ * (`<vista>-<ancho>.jpg`) y un informe por vista (`<vista>.md`). Por vista y
+ * no por escena a propósito: cada grupo de pantallas llega en su propio PR, y
+ * dos PR que reescribieran el mismo informe de una escena chocarían.
+ *
+ * A menos de 768 px el combate retira el campo (componentes.css, «degradar no
+ * es apagar»): los nombres sobre la arena solo se miden en escritorio.
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -92,38 +97,50 @@ const CASOS = VISTAS.flatMap((vista) => {
   return casos;
 });
 
-/** Filas del informe, agrupadas por escena al terminar. */
+/** Filas del informe; al terminar se escribe uno por vista. */
 const informe = [];
 
+const ORDEN_ANCHOS = ANCHOS.map((p) => p.nombre);
+
 test.afterAll(() => {
-  const porEscena = new Map();
+  const porCaso = new Map();
   for (const fila of informe) {
-    if (!porEscena.has(fila.fondo)) {
-      porEscena.set(fila.fondo, []);
+    const clave = `${fila.fondo}/${fila.caso}`;
+    if (!porCaso.has(clave)) {
+      porCaso.set(clave, []);
     }
-    porEscena.get(fila.fondo).push(fila);
+    porCaso.get(clave).push(fila);
   }
-  for (const [fondo, filas] of porEscena) {
+  for (const [clave, filas] of porCaso) {
+    const [fondo, caso] = clave.split('/');
     const carpeta = join(EVIDENCIA, fondo);
     mkdirSync(carpeta, { recursive: true });
     const cuerpo = filas
-      .sort((a, b) => a.caso.localeCompare(b.caso) || a.ancho.localeCompare(b.ancho))
-      .map(
-        (f) =>
-          `| ${f.caso} | ${f.ancho} | ${f.estado} | ${f.cajas} | ${f.peor ? `${f.peor.texto} (\`${f.peor.sel}\`)` : '—'} | ${f.peor ? f.peor.p1.toFixed(2) : '—'} | ${f.peor ? f.peor.umbral : '—'} | ${f.fallos === 0 ? 'cumple' : `**${f.fallos} por debajo**`} |`,
+      .sort((a, b) => ORDEN_ANCHOS.indexOf(a.ancho) - ORDEN_ANCHOS.indexOf(b.ancho))
+      .map((f) =>
+        [
+          f.ancho,
+          f.estado,
+          f.cajas,
+          f.peor ? `${f.peor.texto} (\`${f.peor.sel}\`)` : '—',
+          f.peor ? f.peor.p1.toFixed(2) : '—',
+          f.peor ? f.peor.umbral : '—',
+          f.fallos === 0 ? 'cumple' : `**${f.fallos} por debajo**`,
+        ].join(' | '),
       )
+      .map((fila) => `| ${fila} |`)
       .join('\n');
     writeFileSync(
-      join(carpeta, 'CONTRASTE.md'),
-      `# Contraste sobre la escena «${fondo}»\n\n` +
-        'Generado por `tests/visual/contraste-fondos.spec.js` (HU-UX-002). Para cada vista y ancho, ' +
-        'el texto que cae directamente sobre la escena (sin superficie propia), medido píxel a píxel ' +
-        'contra la escena con su velo. Se exige AA en el percentil 1: 4,5:1 (3:1 en texto grande). ' +
-        'La columna «peor texto» es la caja con el percentil 1 más bajo de la vista.\n\n' +
-        '| Vista | Ancho | Estado | Cajas | Peor texto | p1 | Umbral | Resultado |\n' +
-        '|---|---|---|---|---|---|---|---|\n' +
+      join(carpeta, `${caso}.md`),
+      `# Contraste de «${caso}» sobre la escena «${fondo}»\n\n` +
+        'Generado por `tests/visual/contraste-fondos.spec.js` (HU-UX-002). El texto que cae ' +
+        'directamente sobre la escena (sin superficie propia), medido píxel a píxel contra la ' +
+        'escena con su velo. Se exige AA en el percentil 1: 4,5:1 (3:1 en texto grande). «Peor ' +
+        'texto» es la caja con el percentil 1 más bajo en ese ancho.\n\n' +
+        '| Ancho | Estado | Cajas | Peor texto | p1 | Umbral | Resultado |\n' +
+        '|---|---|---|---|---|---|---|\n' +
         `${cuerpo}\n\n` +
-        'Capturas: `<vista>-<ancho>.jpg` en esta carpeta.\n',
+        `Capturas: \`${caso}-<ancho>.jpg\` en esta carpeta.\n`,
     );
   }
 });
@@ -283,7 +300,8 @@ function urlDeEscena(soloCampo) {
 }
 
 for (const caso of CASOS) {
-  for (const pantalla of ANCHOS) {
+  const anchos = caso.campo ? ANCHOS.filter((p) => p.ancho >= 768) : ANCHOS;
+  for (const pantalla of anchos) {
     const nombre = `${caso.vista.id}${caso.campo ? '-campo' : ''}`;
     test(`${caso.fondo} · ${nombre} · ${pantalla.nombre}`, async ({ browser, baseURL }) => {
       const contexto = await browser.newContext({
