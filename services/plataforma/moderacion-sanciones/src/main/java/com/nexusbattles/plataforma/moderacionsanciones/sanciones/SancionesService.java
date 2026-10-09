@@ -392,6 +392,40 @@ public class SancionesService {
                 apelaciones.findByCreadaEnBetween(desde, hasta));
     }
 
+    /**
+     * Usuarios con {@code minimo} sanciones no revertidas o mas: una de las dos
+     * senales de «comportamiento sospechoso» que definio el PO para HU-USR-008
+     * (D-45). Solo quien modera: es una lista con identificadores de personas.
+     * La lista se corta en {@link #MAXIMO_DE_REINCIDENTES}; {@code total} dice
+     * cuantos hay en realidad.
+     */
+    @Transactional(readOnly = true)
+    public Reincidentes reincidentes(Actor actor, int minimo) {
+        if (!actor.puedeModerar()) {
+            throw new SancionRechazada(SancionRechazada.Motivo.PERMISO_INSUFICIENTE,
+                    "la lista de reincidentes es de quien modera");
+        }
+        if (minimo < 1) {
+            throw new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA,
+                    "el minimo de sanciones tiene que ser 1 o mas");
+        }
+        List<UsuarioReincidente> usuarios = sanciones
+                .reincidentes(minimo, org.springframework.data.domain.PageRequest.of(0, MAXIMO_DE_REINCIDENTES))
+                .stream()
+                .map(r -> new UsuarioReincidente(r.getUsuarioId(), r.getSanciones(), r.getUltimaEn()))
+                .toList();
+        return new Reincidentes(minimo, sanciones.contarReincidentes(minimo), usuarios);
+    }
+
+    /** Cuantos usuarios devuelve como mucho la lista de reincidentes. */
+    static final int MAXIMO_DE_REINCIDENTES = 100;
+
+    public record Reincidentes(int minimo, long total, List<UsuarioReincidente> usuarios) {
+    }
+
+    public record UsuarioReincidente(UUID usuarioId, long sanciones, OffsetDateTime ultimaEn) {
+    }
+
     private OffsetDateTime ahora() {
         return OffsetDateTime.now(reloj).withOffsetSameInstant(ZoneOffset.UTC);
     }

@@ -99,6 +99,11 @@ public class SecurityConfig {
                 // identificadores; los lee metricas-plataforma, que no lleva
                 // credencial de servicio.
                 .requestMatchers(HttpMethod.GET, "/api/v1/sanciones/metricas").permitAll()
+                // Lista de personas con varias sanciones (HU-USR-008, D-45):
+                // identificadores, asi que solo quien modera; el jugador entra
+                // por la regla general de abajo solo a lo suyo.
+                .requestMatchers(HttpMethod.GET, "/api/v1/sanciones/reincidentes")
+                .hasRole(JerarquiaDeRoles.MODERADOR)
                 .requestMatchers("/api/v1/sanciones/**", "/api/v1/apelaciones/**")
                 .hasAnyRole(JerarquiaDeRoles.JUGADOR, JerarquiaDeRoles.MODERADOR)
                 .anyRequest().authenticated());

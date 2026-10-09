@@ -346,4 +346,49 @@ class SancionesControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(cuerpo))
                 .andExpect(status().isForbidden());
     }
+
+    @Test
+    @DisplayName("HU-USR-008: reincidentes lo lee quien modera; sin minimo es el del PO (3) y con minimo, el pedido")
+    void reincidentes() throws Exception {
+        when(servicio.reincidentes(any(), eq(3))).thenReturn(new SancionesService.Reincidentes(3, 1,
+                List.of(new SancionesService.UsuarioReincidente(JUGADOR, 4, AHORA))));
+        when(servicio.reincidentes(any(), eq(5))).thenReturn(new SancionesService.Reincidentes(5, 0, List.of()));
+        String token = "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR");
+
+        mvc.perform(get("/api/v1/sanciones/reincidentes").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.minimo").value(3))
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.usuarios[0].usuarioId").value(JUGADOR.toString()))
+                .andExpect(jsonPath("$.usuarios[0].sanciones").value(4))
+                .andExpect(jsonPath("$.usuarios[0].ultimaEn").exists());
+        mvc.perform(get("/api/v1/sanciones/reincidentes").param("minimo", "5").header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.minimo").value(5))
+                .andExpect(jsonPath("$.usuarios").isEmpty());
+    }
+
+    @Test
+    @DisplayName("HU-USR-008: un jugador no ve la lista de reincidentes (403) ni sin token (401); el servicio ni se entera")
+    void reincidentesSoloParaQuienModera() throws Exception {
+        mvc.perform(get("/api/v1/sanciones/reincidentes")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("pepe", JUGADOR, "JUGADOR")))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/v1/sanciones/reincidentes")).andExpect(status().isUnauthorized());
+
+        org.mockito.Mockito.verify(servicio, org.mockito.Mockito.never())
+                .reincidentes(any(), org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    @DisplayName("HU-USR-008: un minimo sin sentido es 400 con su motivo, no un 500")
+    void reincidentesConMinimoInvalido() throws Exception {
+        when(servicio.reincidentes(any(), eq(0))).thenThrow(
+                new SancionRechazada(SancionRechazada.Motivo.SOLICITUD_INVALIDA, "el minimo tiene que ser 1 o mas"));
+
+        mvc.perform(get("/api/v1/sanciones/reincidentes").param("minimo", "0")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod", MODERADORA, "MODERADOR")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.motivo").value("SOLICITUD_INVALIDA"));
+    }
 }

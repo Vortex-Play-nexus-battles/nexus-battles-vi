@@ -17,6 +17,7 @@ import {
   formatearInstante,
   montarControlIntegral,
   pintarAlertasDeModeracion,
+  pintarReincidentes,
 } from './control-integral.js';
 
 const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -1094,6 +1095,133 @@ describe('alertas de moderación (UXC-9, §7.3.4)', () => {
     );
     expect(caja.querySelector('[data-zona="pendientes"]').textContent).toBe(
       'Pendiente: registro de usuarios sin contrato de lectura',
+    );
+  });
+});
+
+describe('HU-USR-008 — comportamiento sospechoso: usuarios con varias sanciones (D-45)', () => {
+  const REINCIDENTES = {
+    minimo: 3,
+    total: 2,
+    usuarios: [
+      {
+        usuarioId: '33333333-4444-5555-6666-777777777777',
+        sanciones: 5,
+        ultimaEn: '2026-10-05T14:00:00Z',
+      },
+      {
+        usuarioId: '44444444-5555-6666-7777-888888888888',
+        sanciones: 3,
+        ultimaEn: '2026-10-01T09:30:00Z',
+      },
+    ],
+  };
+
+  const contenedor = (partes) => {
+    const caja = document.createElement('div');
+    caja.append(...partes);
+    return caja;
+  };
+
+  test('el panel sale de GET /api/v1/sanciones/reincidentes y lista cuántas sanciones tiene cada cuenta', async () => {
+    const raiz = pagina();
+    const consultarApi = apiSimulada({ '/sanciones/reincidentes': conDatos(REINCIDENTES) });
+
+    montarControlIntegral(raiz, {}, { consultarApi });
+    await asentar();
+
+    const panelDeLista = raiz.querySelector('[data-panel="reincidentes"]');
+    expect(panelDeLista).not.toBeNull();
+    expect(panelDeLista.textContent).toContain('Fuente: GET /api/v1/sanciones/reincidentes');
+    const filas = panelDeLista.querySelectorAll('tbody tr');
+    expect(filas).toHaveLength(2);
+    expect(filas[0].textContent).toContain('5');
+    expect(filas[1].textContent).toContain('3');
+    expect(panelDeLista.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '2 usuarios con 3 o más sanciones sin revertir.',
+    );
+  });
+
+  test('cada fila lleva a la ficha y al historial de esa cuenta, sin pintar su identificador', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      { consultarApi: apiSimulada({ '/sanciones/reincidentes': conDatos(REINCIDENTES) }) },
+    );
+    await asentar();
+
+    const fila = raiz.querySelector('[data-panel="reincidentes"] tbody tr');
+    const historial = fila.querySelector('[data-accion="ver-sanciones"]');
+    const ficha = fila.querySelector('[data-accion="ver-ficha"]');
+    expect(new URL(historial.href).searchParams.get('usuario')).toBe(
+      '33333333-4444-5555-6666-777777777777',
+    );
+    expect(new URL(ficha.href).searchParams.get('usuario')).toBe(
+      '33333333-4444-5555-6666-777777777777',
+    );
+    // RFINAL-06: un UUID a la vista es un dato que nadie puede leer.
+    expect(fila.textContent).not.toMatch(UUID);
+  });
+
+  test('si nadie llega al mínimo lo dice con el mínimo, no pinta una tabla vacía', () => {
+    const caja = contenedor(pintarReincidentes({ minimo: 3, total: 0, usuarios: [] }));
+
+    expect(caja.querySelector('[data-zona="sin-reincidentes"]').textContent).toBe(
+      'Nadie tiene 3 o más sanciones sin revertir.',
+    );
+    expect(caja.querySelector('table')).toBeNull();
+  });
+
+  test('con un contrato viejo o un cuerpo inesperado no revienta: lo trata como sin datos', () => {
+    expect(() => contenedor(pintarReincidentes([]))).not.toThrow();
+    expect(contenedor(pintarReincidentes(null)).querySelector('table')).toBeNull();
+  });
+
+  test('si la lista se cortó, dice cuántos hay de verdad y cuántos se muestran', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 140, usuarios: REINCIDENTES.usuarios }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '140 usuarios con 3 o más sanciones sin revertir. Se muestran los 2 con más sanciones.',
+    );
+  });
+
+  test('uno solo va en singular', () => {
+    const caja = contenedor(
+      pintarReincidentes({ minimo: 3, total: 1, usuarios: [REINCIDENTES.usuarios[0]] }),
+    );
+
+    expect(caja.querySelector('[data-zona="resumen-reincidentes"]').textContent).toBe(
+      '1 usuario con 3 o más sanciones sin revertir.',
+    );
+  });
+
+  test('sin permiso o con el servicio caído lo dice ese panel y el resto sigue', async () => {
+    const raiz = pagina();
+
+    montarControlIntegral(
+      raiz,
+      {},
+      {
+        consultarApi: apiSimulada({
+          '/sanciones/reincidentes': conFallo(
+            RESULTADO.SERVICIO_DEGRADADO,
+            503,
+            '/sanciones/reincidentes',
+          ),
+        }),
+      },
+    );
+    await asentar();
+
+    expect(raiz.querySelector('[data-panel="reincidentes"] .sello-estado').textContent).toBe(
+      'SERVICIO DEGRADADO',
+    );
+    expect(raiz.querySelector('[data-panel="sanciones"] .sello-estado').textContent).toBe(
+      'EN LINEA',
     );
   });
 });
