@@ -2,6 +2,7 @@ package nexus.combate;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nexusbattles.comun.seguridad.servicio.TokenDeServicio;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -22,15 +23,21 @@ public final class ClienteInventarioBotinHttp implements InventarioBotin {
     private final URI baseUri;
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final TokenDeServicio token;
 
     public ClienteInventarioBotinHttp(URI baseUri) {
         this(baseUri, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build());
     }
 
     public ClienteInventarioBotinHttp(URI baseUri, HttpClient httpClient) {
+        this(baseUri, httpClient, null);
+    }
+
+    public ClienteInventarioBotinHttp(URI baseUri, HttpClient httpClient, TokenDeServicio token) {
         this.baseUri = Objects.requireNonNull(baseUri, "La URL de inventario es obligatoria");
         this.httpClient = Objects.requireNonNull(httpClient, "El cliente HTTP es obligatorio");
         this.objectMapper = new ObjectMapper();
+        this.token = token;
     }
 
     @Override
@@ -76,14 +83,15 @@ public final class ClienteInventarioBotinHttp implements InventarioBotin {
         } catch (IOException excepcion) {
             throw new IntegracionBotinException("No se pudo preparar el botin para inventario", excepcion);
         }
-        HttpRequest peticion = HttpRequest.newBuilder(
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(
                         construirUri("/api/v1/inventario/elementos", null))
                 .POST(HttpRequest.BodyPublishers.ofString(cuerpo))
                 .header(CABECERA_IDENTIDAD, jugadorId)
                 .header("Content-Type", "application/json")
                 .header("Accept", "application/json")
-                .timeout(Duration.ofSeconds(5))
-                .build();
+                .timeout(Duration.ofSeconds(5));
+        autenticar(constructor);
+        HttpRequest peticion = constructor.build();
         HttpResponse<String> respuesta = enviar(peticion, "otorgar el botin");
         if (respuesta.statusCode() != 201) {
             throw new IntegracionBotinException(
@@ -92,14 +100,15 @@ public final class ClienteInventarioBotinHttp implements InventarioBotin {
     }
 
     private Set<String> consultarEquipados(String propietarioId, String heroeId) {
-        HttpRequest peticion = HttpRequest.newBuilder(construirUri(
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(construirUri(
                         "/api/v1/inventario/heroes/" + heroeId + "/equipamiento",
                         null))
                 .GET()
                 .header(CABECERA_IDENTIDAD, propietarioId)
                 .header("Accept", "application/json")
-                .timeout(Duration.ofSeconds(5))
-                .build();
+                .timeout(Duration.ofSeconds(5));
+        autenticar(constructor);
+        HttpRequest peticion = constructor.build();
         HttpResponse<String> respuesta = enviar(peticion, "consultar el equipamiento enemigo");
         if (respuesta.statusCode() != 200) {
             throw new IntegracionBotinException(
@@ -128,14 +137,15 @@ public final class ClienteInventarioBotinHttp implements InventarioBotin {
     }
 
     private PaginaInventarioJson consultarPagina(String propietarioId, int pagina) {
-        HttpRequest peticion = HttpRequest.newBuilder(construirUri(
+        HttpRequest.Builder constructor = HttpRequest.newBuilder(construirUri(
                         "/api/v1/inventario/elementos",
                         "pagina=" + pagina))
                 .GET()
                 .header(CABECERA_IDENTIDAD, propietarioId)
                 .header("Accept", "application/json")
-                .timeout(Duration.ofSeconds(5))
-                .build();
+                .timeout(Duration.ofSeconds(5));
+        autenticar(constructor);
+        HttpRequest peticion = constructor.build();
         HttpResponse<String> respuesta = enviar(peticion, "consultar el inventario enemigo");
         if (respuesta.statusCode() != 200) {
             throw new IntegracionBotinException(
@@ -193,6 +203,12 @@ public final class ClienteInventarioBotinHttp implements InventarioBotin {
             return new URI(baseUri.getScheme(), baseUri.getAuthority(), ruta, consulta, null);
         } catch (URISyntaxException excepcion) {
             throw new IntegracionBotinException("No se pudo construir la URL de inventario", excepcion);
+        }
+    }
+
+    private void autenticar(HttpRequest.Builder peticion) {
+        if (token != null) {
+            peticion.header("Authorization", "Bearer " + token.portador());
         }
     }
 
