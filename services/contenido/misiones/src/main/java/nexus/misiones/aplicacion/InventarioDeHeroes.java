@@ -60,9 +60,17 @@ public interface InventarioDeHeroes {
      * {@code POST /api/v1/inventario/entregas}, origen MISION, idempotente por
      * {@code claveIdempotencia}.
      *
+     * <p>Una epica no se tiene dos veces (inventario 1.7.0): si el jugador ya
+     * la tenia, el inventario no la entrega otra vez y contesta igual que si
+     * la hubiera entregado. Para el liquidador eso es una entrega hecha.
+     *
+     * @return los productos que el jugador ya tenia y por eso no se entregaron
+     *         de nuevo; vacia si ninguno (y tambien con un inventario anterior,
+     *         que no informa de ello)
      * @throws RechazoDelServicio si el inventario lo rechaza de forma definitiva
      */
-    void entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos, String claveIdempotencia);
+    List<String> entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos,
+                          String claveIdempotencia);
 
     record HeroeDelInventario(
             String id,

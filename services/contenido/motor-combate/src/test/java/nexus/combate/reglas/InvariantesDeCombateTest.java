@@ -74,7 +74,7 @@ class InvariantesDeCombateTest {
 
     private static final List<String> TODAS_LAS_EPICAS = List.of("Golpe de defensa", "Segundo impulso",
             "Luz cegadora", "Frío concentrado", "Toma y lleva", "Intimidación sangrienta", "Té changua",
-            "Reanimador 3000");
+            "Reanimador 3000", "Velo de Sombras");
 
     /** Penalizaciones y sangrados: solo pueden estar en un rival de quien los puso. */
     private static final Set<TipoDeEfecto> CONTRA_RIVALES =

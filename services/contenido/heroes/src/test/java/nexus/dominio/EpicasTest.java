@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -24,6 +26,13 @@ class EpicasTest {
     @DisplayName("las ocho epicas de la Tabla 20 estan cargadas")
     void ochoEpicasCargadas() {
         assertEquals(8, EpicasIniciales.LISTA.size());
+    }
+
+    @Test
+    @DisplayName("la probabilidad de Master de la Tabla 20 va en porcentaje: «0.04%» es un 4 %")
+    void probabilidadDeMasterComoPorcentaje() {
+        assertEquals(List.of(4.0, 1.0, 3.0, 5.0, 2.0, 1.0, 10.0, 10.0),
+                EpicasIniciales.LISTA.stream().map(Epica::probabilidadDeMasterPorcentaje).toList());
     }
 
     @Test

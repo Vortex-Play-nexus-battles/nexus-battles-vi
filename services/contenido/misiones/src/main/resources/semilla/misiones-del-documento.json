@@ -5,9 +5,9 @@
     "PROVISIONAL (decision del PO, seccion 7.8.13 «las estadisticas de enemigos deben escalar segun nivel de mision»): el documento describe a los enemigos regulares solo con palabras. Para que el motor de combate los resuelva se les asigna un prototipo del catalogo de heroes y las estadisticas de ese prototipo en el nivel del heroe: Sombras Corrompidas = Guerrero Armas («ataque moderado»), Guardianes de Piedra = Guerrero Tanque («alta defensa»), Espectros Ancestrales = Mago Fuego («ataques magicos»).",
     "PROVISIONAL: «El Guardian Eterno» usa los 100 puntos de vida del documento y la defensa del Guerrero Tanque en el nivel del heroe; sus «habilidades potenciadas» no tienen cifra en el documento y pelea con ataque basico.",
     "PROVISIONAL: «Explorar las 5 camaras del templo» se cumple al superar todos los encuentros regulares (el documento no reparte los 18 enemigos entre las 5 camaras).",
-    "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
+    "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se lee con la misma convencion (decision del PO, 2026-10-06): «0.04%» es un 4 % de probabilidad, como el «0.15% (15% de probabilidad)» del ejemplo; la tabla queda en 4, 1, 3, 5, 2, 1, 10 y 10 %.",
     "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
-    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 y «Velo de Sombras» (7.8.14, la del Master del Templo; HU-SIM-006) si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
     "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento."
   ],
   "tabla20": [
@@ -19,7 +19,7 @@
         "efectoPotenciado": "+4 al daño, +2% de crítico",
         "productoId": "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d"
       },
-      "probabilidadPorcentaje": 0.04
+      "probabilidadPorcentaje": 4
     },
     {
       "prototipo": "Guerrero Armas",
@@ -29,7 +29,7 @@
         "efectoPotenciado": "+3 a la vida, +5% de crítico",
         "productoId": "4481eb34-384a-3fa0-ba9a-1aac9562c38f"
       },
-      "probabilidadPorcentaje": 0.01
+      "probabilidadPorcentaje": 1
     },
     {
       "prototipo": "Mago Fuego",
@@ -39,7 +39,7 @@
         "efectoPotenciado": "+2 al daño, +1% de crítico",
         "productoId": "5a969684-9f1b-3dcd-b1e7-1b407aef8c09"
       },
-      "probabilidadPorcentaje": 0.03
+      "probabilidadPorcentaje": 3
     },
     {
       "prototipo": "Mago Hielo",
@@ -49,7 +49,7 @@
         "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
         "productoId": "978446ae-c979-349b-b620-f4215852ab5f"
       },
-      "probabilidadPorcentaje": 0.05
+      "probabilidadPorcentaje": 5
     },
     {
       "prototipo": "Pícaro Veneno",
@@ -59,7 +59,7 @@
         "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
         "productoId": "ac841a0a-132a-392f-8cf5-5a9cfa9add0f"
       },
-      "probabilidadPorcentaje": 0.02
+      "probabilidadPorcentaje": 2
     },
     {
       "prototipo": "Pícaro Machete",
@@ -69,7 +69,7 @@
         "efectoPotenciado": "+2 a la vida, +2% de crítico",
         "productoId": "cd15a03a-57db-3159-a709-9632140db557"
       },
-      "probabilidadPorcentaje": 0.01
+      "probabilidadPorcentaje": 1
     },
     {
       "prototipo": "Chamán",
@@ -79,7 +79,7 @@
         "efectoPotenciado": "Sana a todos +(4d8)",
         "productoId": "0e616a1a-9298-3f7c-bac2-c5dcf601424a"
       },
-      "probabilidadPorcentaje": 0.1
+      "probabilidadPorcentaje": 10
     },
     {
       "prototipo": "Médico",
@@ -89,7 +89,7 @@
         "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
         "productoId": "005fb6b8-eab8-3f7f-879b-dbe7e3e6e439"
       },
-      "probabilidadPorcentaje": 0.1
+      "probabilidadPorcentaje": 10
     }
   ],
   "misiones": [
@@ -135,7 +135,7 @@
             "nombre": "Velo de Sombras",
             "efectoGeneral": "+2 a la defensa para todos los héroes.",
             "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
-            "productoId": null
+            "productoId": "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5"
           }
         }
       ],

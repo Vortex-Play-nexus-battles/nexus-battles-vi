@@ -553,7 +553,7 @@
       "id": "epica-guerrero-tanque-golpe-de-defensa",
       "efectoGeneral": "+1 al ataque",
       "efectoPotenciado": "+4 al daño, +2% de crítico",
-      "probabilidadMaster": "0.04%",
+      "probabilidadMaster": "4%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -563,7 +563,7 @@
       "id": "epica-guerrero-armas-segundo-impulso",
       "efectoGeneral": "Recupera 1d4 de vida",
       "efectoPotenciado": "+3 a la vida, +5% de crítico",
-      "probabilidadMaster": "0.01%",
+      "probabilidadMaster": "1%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -573,7 +573,7 @@
       "id": "epica-mago-fuego-luz-cegadora",
       "efectoGeneral": "+1 a la vida",
       "efectoPotenciado": "+2 al daño, +1% de crítico",
-      "probabilidadMaster": "0.03%",
+      "probabilidadMaster": "3%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -583,7 +583,7 @@
       "id": "epica-mago-hielo-frio-concentrado",
       "efectoGeneral": "-1 de poder al oponente",
       "efectoPotenciado": "No recibe ningún daño en el siguiente turno",
-      "probabilidadMaster": "0.05%",
+      "probabilidadMaster": "5%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -593,7 +593,7 @@
       "id": "epica-picaro-veneno-toma-y-lleva",
       "efectoGeneral": "+1 al ataque",
       "efectoPotenciado": "Disminuye a la mitad del daño causado por el oponente y se lo retorna",
-      "probabilidadMaster": "0.02%",
+      "probabilidadMaster": "2%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -603,7 +603,7 @@
       "id": "epica-picaro-machete-intimidacion-sangrienta",
       "efectoGeneral": "+1 al daño",
       "efectoPotenciado": "+2 a la vida, +2% de crítico",
-      "probabilidadMaster": "0.01%",
+      "probabilidadMaster": "1%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -613,7 +613,7 @@
       "id": "epica-chaman-te-changua",
       "efectoGeneral": "No aplica",
       "efectoPotenciado": "Sana a todos +(4d8)",
-      "probabilidadMaster": "0.1%",
+      "probabilidadMaster": "10%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
     },
     {
@@ -623,8 +623,18 @@
       "id": "epica-medico-reanimador-3000",
       "efectoGeneral": "No aplica",
       "efectoPotenciado": "Se asocia con un compañero. Si este último fallece, se reanima con el 20% de su salud.",
-      "probabilidadMaster": "0.1%",
+      "probabilidadMaster": "10%",
       "fuente": "Boveda/02-producto/reglas/epicas.md, Tabla 20: Habilidades Épicas de los Héroes"
+    },
+    {
+      "tipo": "EPICA",
+      "nombre": "Velo de Sombras",
+      "heroe": "Pícaro Veneno",
+      "id": "epica-picaro-veneno-velo-de-sombras",
+      "efectoGeneral": "+2 a la defensa para todos los héroes.",
+      "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
+      "probabilidadMaster": "15%",
+      "fuente": "Boveda/02-producto/requerimientos/modulo-misiones-ejemplo-diseno.md, 7.8.14: Enemigo Máster «Sombra del Olvido» de «El Templo Olvidado» (no es de la Tabla 20)"
     }
   ],
   "preciosDemostracion": {

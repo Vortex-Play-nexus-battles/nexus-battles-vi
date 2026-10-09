@@ -80,6 +80,9 @@ describe('cifras', () => {
 
   test('la probabilidad no se redondea hacia arriba cuando es menor que un 1 %', () => {
     expect(textoDeProbabilidad(0.15)).toBe('15 %');
+    // Tabla 20 (decisión del PO, 2026-10-06): «0.04%» del documento es un 4 %, es decir 0,04.
+    expect(textoDeProbabilidad(0.04)).toBe('4 %');
+    expect(textoDeProbabilidad(0.1)).toBe('10 %');
     expect(textoDeProbabilidad(0.6)).toBe('60 %');
     expect(textoDeProbabilidad(0.0015)).toBe('0,15 %');
     expect(textoDeProbabilidad(1.5)).toBeNull();

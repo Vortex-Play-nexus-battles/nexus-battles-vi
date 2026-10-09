@@ -36,7 +36,13 @@ info:
   # omision (1 y 0); la mision solo los hace avanzar. Equipar o desequipar un
   # heroe en mision responde 409. Aditivo: operaciones nuevas, propiedades
   # opcionales y una respuesta 409 mas; menor.
-  version: 1.6.0
+  # 1.7.0 (SIM-006, decision del PO del 2026-10-06 — epica unica): una epica
+  # que el jugador ya tiene no se entrega otra vez. POST /entregas no crea el
+  # elemento y lo dice en la propiedad nueva `yaTenia` de la entrega (los
+  # productos EPICA omitidos; vacia si no hubo ninguno). Sigue siendo 201 (o 200
+  # en la repeticion de la clave): la entrega se completa, solo que sin esa
+  # copia. Aditivo: propiedad nueva de respuesta, ninguna peticion cambia.
+  version: 1.7.0
   description: >
     Consulta paginada de la vitrina para HU-INV-001, y creacion y modificacion
     de elementos propios del jugador para HU-INV-003, y equipamiento de
@@ -741,6 +747,14 @@ paths:
         `referencia`. Los heroes entregados empiezan en nivel 1 con 0 de
         experiencia.
 
+        Una epica no se tiene dos veces (1.7.0): si el jugador ya tiene un
+        elemento EPICA de ese producto, o la misma entrega la pide dos veces,
+        no se crea otra copia; el producto va en `yaTenia` y el resto de la
+        entrega se hace con normalidad. Vale para toda entrega, venga de una
+        mision o del premio de un torneo. Si todo lo pedido era una epica que
+        ya tenia, `elementos` queda vacio y la respuesta es igual 201 (200 en la
+        repeticion de la clave).
+
         Todo o nada, sin transacciones multi-documento: primero se valida todo
         contra el catalogo (si algo falla no se guarda nada); despues se
         registra la entrega PENDIENTE con sus elementos ya planeados (indice
@@ -892,8 +906,18 @@ components:
           type: string
         elementos:
           type: array
+          description: Lo que el jugador recibio en esta entrega; vacio si todo era una epica que ya tenia.
           items:
             $ref: "#/components/schemas/ElementoInventario"
+        yaTenia:
+          type: array
+          description: >
+            1.7.0. Identificadores de producto EPICA que el jugador ya tenia y
+            que por eso no se entregaron otra vez. Vacia si no hubo ninguna.
+            Quien entrega (misiones, torneos) la trata como entregada y puede
+            decirle al jugador que ya la tenia.
+          items:
+            type: string
         entregadaEn:
           type: string
           format: date-time

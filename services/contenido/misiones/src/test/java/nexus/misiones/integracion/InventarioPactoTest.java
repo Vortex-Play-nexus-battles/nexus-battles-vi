@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import au.com.dius.pact.consumer.MockServer;
 import au.com.dius.pact.consumer.dsl.PactDslJsonBody;
+import au.com.dius.pact.consumer.dsl.PactDslJsonRootValue;
 import au.com.dius.pact.consumer.dsl.PactDslWithProvider;
 import au.com.dius.pact.consumer.junit5.PactConsumerTestExt;
 import au.com.dius.pact.consumer.junit5.PactTestFor;
@@ -311,6 +312,44 @@ class InventarioPactoTest {
                 .willRespondWith()
                 .status(201)
                 .toPact();
+    }
+
+    /**
+     * Epica unica (inventario 1.7.0): si el jugador ya la tiene, el inventario
+     * contesta igual 201, sin crear otra copia, y la nombra en {@code yaTenia}.
+     * Misiones lo lee para decirle al jugador que ya la tenia.
+     */
+    @Pact(consumer = CONSUMIDOR)
+    public RequestResponsePact entregaDeUnaEpicaQueYaSeTenia(PactDslWithProvider constructor) {
+        return constructor
+                .given("el jugador ya tiene la epica")
+                .uponReceiving("la entrega de una epica que el jugador ya tiene")
+                .path("/api/v1/inventario/entregas")
+                .method("POST")
+                .matchHeader("Idempotency-Key", ".+", "mision-" + EJECUCION + "-epica")
+                .headers(Map.of("Content-Type", "application/json"))
+                .body(new PactDslJsonBody()
+                        .uuid("uid", JUGADOR)
+                        .stringValue("origen", "MISION")
+                        .stringType("referencia", "mision-" + EJECUCION)
+                        .minArrayLike("productos", 1)
+                        .stringType("productoId", EPICA)
+                        .integerType("cantidad", 1)
+                        .closeObject()
+                        .closeArray())
+                .willRespondWith()
+                .status(201)
+                .body(new PactDslJsonBody()
+                        .minArrayLike("yaTenia", 1, PactDslJsonRootValue.stringType(EPICA), 1))
+                .toPact();
+    }
+
+    @Test
+    @PactTestFor(pactMethod = "entregaDeUnaEpicaQueYaSeTenia")
+    void unaEpicaQueYaSeTeniaNoEsUnFallo(MockServer servidor) {
+        assertThat(clienteContra(servidor).entregar(JUGADOR.toString(), EJECUCION,
+                List.of(new InventarioDeHeroes.ProductoAEntregar(EPICA, 1)), "mision-" + EJECUCION + "-epica"))
+                .containsExactly(EPICA);
     }
 
     @Test
