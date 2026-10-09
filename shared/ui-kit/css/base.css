@@ -1,7 +1,8 @@
 /* =======================================================================
    Base — normalizacion y tipografia
    Depende de tokens.css. Cargar siempre en este orden:
-     tokens.css -> base.css -> componentes.css -> css de la vista
+     tokens.css -> base.css -> componentes.css [-> fondos.css] -> css de la vista
+   (fondos.css solo en las vistas con fondo ilustrado, HU-UX-002)
    ======================================================================= */
 
 *,

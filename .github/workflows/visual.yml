@@ -14,6 +14,9 @@
 #   permisos          que la matriz de acceso se cumpla de verdad: 14 pruebas.
 #   accesibilidad     axe-core sobre las 32 vistas x 2 anchuras, con la persona
 #                     que abre cada una. Falla con serious y critical.
+#   contraste-fondos  HU-UX-002: el texto que cae sobre los fondos ilustrados,
+#                     medido pixel a pixel contra la escena en 1920, 1366 y
+#                     375. Falla por debajo de AA.
 #
 # NO compara imagenes pixel a pixel. Una comparacion de imagenes falla con
 # cada cambio de fuente y acaba desactivada; lo que hace falta detectar es
@@ -113,6 +116,19 @@ jobs:
           # `error` y no `warn`: si no hay capturas, es que algo fallo antes.
           if-no-files-found: error
 
+      # HU-UX-002 — `contraste-fondos.spec.js` mide el texto que cae sobre los
+      # fondos ilustrados y deja una captura por vista y ancho y un
+      # CONTRASTE.md por escena. Es evidencia aparte de la del laboratorio:
+      # otra carpeta, otro artefacto.
+      - name: Publicar capturas y contraste de los fondos ilustrados
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-fondos
+          path: docs/evidencia/fondos/
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Resumen del informe
         if: always()
         run: |
@@ -121,3 +137,6 @@ jobs:
           else
             echo "La corrida no llego a generar informe." >> "$GITHUB_STEP_SUMMARY"
           fi
+          for informe in docs/evidencia/fondos/*/CONTRASTE.md; do
+            [ -f "$informe" ] && cat "$informe" >> "$GITHUB_STEP_SUMMARY"
+          done
