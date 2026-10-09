@@ -51,7 +51,15 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
   await expect(tarjeta.getByText('No disponible')).toBeVisible();
   await expect(tarjeta.getByRole('button', { name: 'Editar Espada de Bruma' })).toBeDisabled();
 
+  // El #605 reescribio el equipamiento sobre las ranuras del kit: ya no hay un
+  // boton «No disponible», sino una ranura que abre el selector, y alli el
+  // objeto bloqueado aparece deshabilitado y **diciendo por que**.
   await page.locator('#pestana-heroes').click();
   await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-  await expect(page.getByRole('button', { name: 'No disponible' })).toBeDisabled();
+  await page.getByRole('button', { name: /Arma 1/ }).click();
+
+  const opcion = page.getByRole('button', { name: /Espada de Bruma . en subasta/ });
+  await expect(opcion).toBeDisabled();
+  // «No se esconde: el jugador tiene que poder entender por que no puede».
+  await expect(opcion).toHaveAttribute('title', 'Está publicado en una subasta');
 });
