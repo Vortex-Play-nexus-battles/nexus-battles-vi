@@ -173,6 +173,26 @@ class CalculadoraDeRecompensasTest {
     }
 
     @Test
+    @DisplayName("el mismo Master derrotado dos veces en una exploracion larga da su epica una sola vez")
+    void laMismaEpicaDosVeces() {
+        Epica golpe = new Epica("Golpe de defensa", "+1 al ataque", "+4 al daño", "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d");
+        ResultadoDeMision.MasterEnfrentado tanque = new ResultadoDeMision.MasterEnfrentado(
+                "Master afin a Guerrero Tanque", golpe, true);
+        ResultadoDeMision.MasterEnfrentado sombra = new ResultadoDeMision.MasterEnfrentado(
+                "Sombra del Olvido", Misiones.VELO_DE_SOMBRAS, true);
+
+        RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(Misiones.templo(), Escalon.NORMAL,
+                resultado(true, 80, List.of(tanque, sombra, tanque, sombra)), false, SIN_EXTRAS,
+                new AzarConSemilla(1));
+
+        assertThat(recompensas.epicas()).extracting(RecompensasDeEjecucion.EpicaGanada::nombre)
+                .containsExactly("Golpe de defensa", "Velo de Sombras");
+        // Y lo que se informa como no entregado tampoco se repite.
+        assertThat(recompensas.sinEntregar()).extracting(RecompensasDeEjecucion.SinEntregar::nombre)
+                .containsOnlyOnce("Épica «Velo de Sombras»");
+    }
+
+    @Test
     @DisplayName("un Master que aparecio y no cayo no da epica")
     void masterNoDerrotado() {
         RecompensasDeEjecucion recompensas = CalculadoraDeRecompensas.calcular(Misiones.templo(), Escalon.NORMAL,

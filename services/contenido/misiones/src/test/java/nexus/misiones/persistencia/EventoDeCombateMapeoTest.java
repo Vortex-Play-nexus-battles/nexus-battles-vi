@@ -44,7 +44,9 @@ class EventoDeCombateMapeoTest {
      */
     private static final Set<String> RUTAS_QUE_LOS_SINTETICOS_NO_USAN = Set.of(
             "estado.efectos.nombre", "estado.efectos.tipo", "estado.efectos.turnos", "estado.efectos.valor",
-            "jugada.rechazadas.accion", "jugada.rechazadas.motivo");
+            "jugada.rechazadas.accion", "jugada.rechazadas.motivo",
+            // HU-SIM-004: el generador sintetico no modela la estrategia de los enemigos (el entrenamiento no la lee).
+            "jugada.estrategia", "jugada.estrategiaId");
 
     private MappingMongoConverter conversor;
 
@@ -111,6 +113,30 @@ class EventoDeCombateMapeoTest {
     }
 
     @Test
+    @DisplayName("la estrategia que jugo un enemigo (HU-SIM-004) se escribe como estrategia y estrategiaId y vuelve identica")
+    void laEstrategiaDelEnemigo() {
+        EventoDeCombate evento = EventosDePrueba.eventoDeEnemigo(EJECUCION, 4);
+
+        Document jugada = (Document) escribir(EventoDeCombateDocumento.de(evento, Instant.now())).get("jugada");
+
+        assertThat(jugada.getString("estrategia")).isEqualTo("PREDEFINIDA");
+        assertThat(jugada.getString("estrategiaId")).isEqualTo("mago-fuego-n4");
+        EventoDeCombateDocumento leido = conversor.read(EventoDeCombateDocumento.class,
+                escribir(EventoDeCombateDocumento.de(evento, Instant.now())));
+        assertThat(leido.aDominio()).isEqualTo(evento);
+    }
+
+    @Test
+    @DisplayName("la jugada de quien no tiene estrategia (el heroe, o un enemigo con ataque basico siempre) no escribe esos campos")
+    void sinEstrategiaNoSeEscribe() {
+        Document jugada = (Document) escribir(EventoDeCombateDocumento.de(EventosDePrueba.evento(EJECUCION, 1),
+                Instant.now())).get("jugada");
+
+        assertThat(jugada.containsKey("estrategia")).isFalse();
+        assertThat(jugada.containsKey("estrategiaId")).isFalse();
+    }
+
+    @Test
     @DisplayName("los eventos sinteticos de Python se leen con el conversor real y se escriben igual: mismo formato")
     void sinteticosConElFormatoDeMisiones() throws IOException {
         List<String> lineas = Files.readAllLines(SINTETICOS, StandardCharsets.UTF_8).stream()
@@ -129,6 +155,9 @@ class EventoDeCombateMapeoTest {
 
         Set<String> rutasDeMisiones = new TreeSet<>();
         rutas("", escribir(EventoDeCombateDocumento.de(EventosDePrueba.evento(EJECUCION, 1), Instant.now())),
+                rutasDeMisiones);
+        // La estrategia solo la trae la jugada de un enemigo: el documento tiene que escribirla.
+        rutas("", escribir(EventoDeCombateDocumento.de(EventosDePrueba.eventoDeEnemigo(EJECUCION, 2), Instant.now())),
                 rutasDeMisiones);
         rutasDeMisiones.remove("_class");
 

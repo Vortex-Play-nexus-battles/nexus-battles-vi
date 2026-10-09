@@ -243,6 +243,80 @@ class RepositoriosMongoIT {
     }
 
     @Test
+    @DisplayName("HU-SIM-007: de dos barridos que reservan la misma ejecucion, Mongo deja pasar solo al primero")
+    void reservaDeLaSimulacionConVersionOptimista() {
+        Ejecucion guardada = ejecuciones.guardar(
+                nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion delBarridoA = ejecuciones.buscar(guardada.id()).orElseThrow();
+        Ejecucion delBarridoB = ejecuciones.buscar(guardada.id()).orElseThrow();
+
+        delBarridoA.reservarParaSimular(AHORA);
+        Ejecucion reservadaPorA = ejecuciones.guardar(delBarridoA);
+        delBarridoB.reservarParaSimular(AHORA);
+
+        assertThatThrownBy(() -> ejecuciones.guardar(delBarridoB))
+                .isInstanceOf(EjecucionModificadaConcurrentemente.class);
+        Ejecucion enLaBase = ejecuciones.buscar(guardada.id()).orElseThrow();
+        assertThat(enLaBase.intentosDeSimulacion()).isEqualTo(1);
+        assertThat(enLaBase.version()).isEqualTo(reservadaPorA.version());
+        assertThat(enLaBase.proximoIntento()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: la cola de vencidas no incluye las reservadas ni las aplazadas tras un fallo, y las incluye al vencer su arriendo o su espera")
+    void colaDeVencidasRespetaLaReserva() {
+        Ejecucion libre = ejecuciones.guardar(
+                nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion simulandose = ejecuciones.guardar(
+                nueva(JUGADOR, "m-2", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        Ejecucion esperando = ejecuciones.guardar(
+                nueva(JUGADOR, "m-3", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null));
+        simulandose.reservarParaSimular(AHORA);
+        ejecuciones.guardar(simulandose);
+        esperando.reservarParaSimular(AHORA);
+        esperando.simulacionAplazada(AHORA, Duration.ofSeconds(30), "heroes no responde");
+        ejecuciones.guardar(esperando);
+
+        assertThat(ejecuciones.vencidas(AHORA, 10)).extracting(Ejecucion::id).containsExactly(libre.id());
+        assertThat(ejecuciones.vencidas(AHORA.plusSeconds(30), 10)).extracting(Ejecucion::id)
+                .containsExactlyInAnyOrder(libre.id(), esperando.id());
+        assertThat(ejecuciones.vencidas(AHORA.plus(Ejecucion.ARRIENDO_DE_SIMULACION), 10)).hasSize(3);
+    }
+
+    @Test
+    @DisplayName("la cancelada sin penalizacion (su simulacion fallaba por un error del sistema) no cuenta como intento iniciado; la cancelada a mano, si")
+    void canceladaSinPenalizacionNoGastaElIntento() {
+        Instant desde = AHORA.minus(Duration.ofDays(1));
+        Ejecucion fallando = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(5)), Duration.ofHours(1), null);
+        fallando.simulacionAplazada(AHORA.minus(Duration.ofHours(3)), Duration.ofSeconds(30), "heroes no responde");
+        fallando.cancelar(AHORA.minus(Duration.ofHours(2)));
+        Ejecucion guardada = ejecuciones.guardar(fallando);
+        Ejecucion amano = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(4)), Duration.ofHours(1), null);
+        amano.cancelar(AHORA.minus(Duration.ofHours(3)));
+        ejecuciones.guardar(amano);
+
+        assertThat(ejecuciones.buscar(guardada.id()).orElseThrow().canceladaSinPenalizacion()).isTrue();
+        assertThat(ejecuciones.iniciadasDesde(JUGADOR, "m-1", desde)).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("HU-SIM-007: una ejecucion guardada antes de la reserva, sin el campo de intentos, se lee con cero y sigue entrando en la cola de vencidas")
+    void colaDeVencidasConDocumentosViejos() {
+        Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofHours(3)), Duration.ofHours(1), null);
+        ejecuciones.guardar(vieja);
+        // Como la dejaron las versiones anteriores: el documento no trae el campo de los intentos de simulacion.
+        mongo.getCollection("ejecuciones").updateOne(
+                new org.bson.Document("_id", vieja.id().toString()),
+                new org.bson.Document("$unset", new org.bson.Document("intentosDeSimulacion", "")));
+
+        List<Ejecucion> vencidas = ejecuciones.vencidas(AHORA, 10);
+
+        assertThat(vencidas).extracting(Ejecucion::id).containsExactly(vieja.id());
+        assertThat(vencidas.getFirst().intentosDeSimulacion()).isZero();
+        assertThat(vencidas.getFirst().listaParaSimular(AHORA)).isTrue();
+    }
+
+    @Test
     @DisplayName("las del jugador: de la mas reciente a la mas antigua, en curso e iniciadas desde")
     void delJugador() {
         Ejecucion vieja = nueva(JUGADOR, "m-1", AHORA.minus(Duration.ofDays(2)), Duration.ofHours(1), null);
