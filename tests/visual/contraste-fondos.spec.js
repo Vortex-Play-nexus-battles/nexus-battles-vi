@@ -303,95 +303,100 @@ for (const caso of CASOS) {
   const anchos = caso.campo ? ANCHOS.filter((p) => p.ancho >= 768) : ANCHOS;
   for (const pantalla of anchos) {
     const nombre = `${caso.vista.id}${caso.campo ? '-campo' : ''}`;
-    test(`${caso.fondo} · ${nombre} · ${pantalla.nombre}`, async ({ browser, baseURL }) => {
-      const contexto = await browser.newContext({
-        viewport: { width: pantalla.ancho, height: pantalla.alto },
-        baseURL,
-      });
-      try {
-        const sesion =
-          caso.escenario?.sesion?.() ??
-          (caso.vista.acceso === 'publica' ? null : sesionDe('qa_fondos', 'JUGADOR'));
-        await inyectarSesion(contexto, sesion);
-        const pagina = await contexto.newPage();
-        for (const [patron, respuesta] of caso.escenario?.rutas ?? []) {
-          await pagina.route(patron, (ruta) =>
-            ruta.fulfill(typeof respuesta === 'function' ? respuesta(ruta) : respuesta),
-          );
-        }
-        await pagina.route('**/ws-subastas/**', (ruta) => ruta.abort());
-        if (caso.escenario?.canal) {
-          await simularCanal(pagina, caso.escenario.canal);
-        }
-        await pagina.goto(`/${PREFIJO_WEB}/${caso.escenario?.ruta ?? caso.vista.ruta}`, {
-          waitUntil: 'domcontentloaded',
+    // `@fondos`: visual.yml corre estas pruebas en su propio job, en paralelo.
+    test(
+      `${caso.fondo} · ${nombre} · ${pantalla.nombre}`,
+      { tag: '@fondos' },
+      async ({ browser, baseURL }) => {
+        const contexto = await browser.newContext({
+          viewport: { width: pantalla.ancho, height: pantalla.alto },
+          baseURL,
         });
-        if (caso.escenario?.interaccion) {
-          await caso.escenario.interaccion(pagina);
-        }
-        for (const selector of caso.escenario?.exige ?? []) {
-          await expect(pagina.locator(selector).first()).toBeAttached({ timeout: 15_000 });
-        }
-        if (caso.campo) {
-          await expect(pagina.locator('.campo__nombre').first()).toBeVisible({ timeout: 15_000 });
-        }
-
-        const url = await pagina.evaluate(urlDeEscena, caso.campo);
-        expect(
-          url,
-          `${nombre}: la vista declara data-fondo y no pinta ninguna escena`,
-        ).toBeTruthy();
-        const cargada = await pagina.evaluate(async (src) => {
-          const prueba = new Image();
-          prueba.src = src;
-          try {
-            await prueba.decode();
-            return true;
-          } catch {
-            return false;
+        try {
+          const sesion =
+            caso.escenario?.sesion?.() ??
+            (caso.vista.acceso === 'publica' ? null : sesionDe('qa_fondos', 'JUGADOR'));
+          await inyectarSesion(contexto, sesion);
+          const pagina = await contexto.newPage();
+          for (const [patron, respuesta] of caso.escenario?.rutas ?? []) {
+            await pagina.route(patron, (ruta) =>
+              ruta.fulfill(typeof respuesta === 'function' ? respuesta(ruta) : respuesta),
+            );
           }
-        }, url);
-        expect(cargada, `${nombre}: la escena ${url} no se pudo descargar`).toBe(true);
-        await pagina.waitForTimeout(700);
+          await pagina.route('**/ws-subastas/**', (ruta) => ruta.abort());
+          if (caso.escenario?.canal) {
+            await simularCanal(pagina, caso.escenario.canal);
+          }
+          await pagina.goto(`/${PREFIJO_WEB}/${caso.escenario?.ruta ?? caso.vista.ruta}`, {
+            waitUntil: 'domcontentloaded',
+          });
+          if (caso.escenario?.interaccion) {
+            await caso.escenario.interaccion(pagina);
+          }
+          for (const selector of caso.escenario?.exige ?? []) {
+            await expect(pagina.locator(selector).first()).toBeAttached({ timeout: 15_000 });
+          }
+          if (caso.campo) {
+            await expect(pagina.locator('.campo__nombre').first()).toBeVisible({ timeout: 15_000 });
+          }
 
-        const cajas = await pagina.evaluate(cajasDeTexto, caso.campo);
+          const url = await pagina.evaluate(urlDeEscena, caso.campo);
+          expect(
+            url,
+            `${nombre}: la vista declara data-fondo y no pinta ninguna escena`,
+          ).toBeTruthy();
+          const cargada = await pagina.evaluate(async (src) => {
+            const prueba = new Image();
+            prueba.src = src;
+            try {
+              await prueba.decode();
+              return true;
+            } catch {
+              return false;
+            }
+          }, url);
+          expect(cargada, `${nombre}: la escena ${url} no se pudo descargar`).toBe(true);
+          await pagina.waitForTimeout(700);
 
-        const carpeta = join(EVIDENCIA, caso.fondo);
-        mkdirSync(carpeta, { recursive: true });
-        await pagina.screenshot({
-          path: join(carpeta, `${nombre}-${pantalla.nombre}.jpg`),
-          type: 'jpeg',
-          quality: 60,
-        });
+          const cajas = await pagina.evaluate(cajasDeTexto, caso.campo);
 
-        await pagina.addStyleTag({
-          content: caso.campo
-            ? '.campo__puesto { visibility: hidden !important; }'
-            : 'body > * { visibility: hidden !important; }',
-        });
-        await pagina.waitForTimeout(150);
-        const escena = (await pagina.screenshot({ type: 'png' })).toString('base64');
-        const medidas = await pagina.evaluate(medirContraste, { escena, cajas });
+          const carpeta = join(EVIDENCIA, caso.fondo);
+          mkdirSync(carpeta, { recursive: true });
+          await pagina.screenshot({
+            path: join(carpeta, `${nombre}-${pantalla.nombre}.jpg`),
+            type: 'jpeg',
+            quality: 60,
+          });
 
-        const fallos = medidas.filter((m) => m.p1 < m.umbral);
-        const peor = [...medidas].sort((a, b) => a.p1 / a.umbral - b.p1 / b.umbral)[0] ?? null;
-        informe.push({
-          fondo: caso.fondo,
-          caso: nombre,
-          ancho: pantalla.nombre,
-          estado: caso.escenario ? `con datos (\`${caso.escenario.id}\`)` : 'sin servicios',
-          cajas: medidas.length,
-          peor,
-          fallos: fallos.length,
-        });
+          await pagina.addStyleTag({
+            content: caso.campo
+              ? '.campo__puesto { visibility: hidden !important; }'
+              : 'body > * { visibility: hidden !important; }',
+          });
+          await pagina.waitForTimeout(150);
+          const escena = (await pagina.screenshot({ type: 'png' })).toString('base64');
+          const medidas = await pagina.evaluate(medirContraste, { escena, cajas });
 
-        expect(
-          fallos.map((f) => `${f.sel} «${f.texto}»: ${f.p1.toFixed(2)}:1 < ${f.umbral}:1`),
-          `${nombre} a ${pantalla.nombre}: texto por debajo de AA sobre la escena «${caso.fondo}»`,
-        ).toEqual([]);
-      } finally {
-        await contexto.close();
-      }
-    });
+          const fallos = medidas.filter((m) => m.p1 < m.umbral);
+          const peor = [...medidas].sort((a, b) => a.p1 / a.umbral - b.p1 / b.umbral)[0] ?? null;
+          informe.push({
+            fondo: caso.fondo,
+            caso: nombre,
+            ancho: pantalla.nombre,
+            estado: caso.escenario ? `con datos (\`${caso.escenario.id}\`)` : 'sin servicios',
+            cajas: medidas.length,
+            peor,
+            fallos: fallos.length,
+          });
+
+          expect(
+            fallos.map((f) => `${f.sel} «${f.texto}»: ${f.p1.toFixed(2)}:1 < ${f.umbral}:1`),
+            `${nombre} a ${pantalla.nombre}: texto por debajo de AA sobre la escena «${caso.fondo}»`,
+          ).toEqual([]);
+        } finally {
+          await contexto.close();
+        }
+      },
+    );
   }
 }

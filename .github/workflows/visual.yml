@@ -95,9 +95,11 @@ jobs:
       - name: Enlazar node_modules en la raiz para las pruebas de tests/
         run: ln -sfn frontend/app-web/node_modules node_modules
 
+      # Sin `@fondos`: el contraste sobre los fondos ilustrados corre en su
+      # propio job, en paralelo (ver `fondos` abajo).
       - name: Recorrer las vistas
         working-directory: frontend/app-web
-        run: npx playwright test --config=playwright.visual.config.js
+        run: npx playwright test --config=playwright.visual.config.js --grep-invert @fondos
 
       # Las capturas son la evidencia que se adjunta al acta del sprint
       # (Definition of Done, apartado k). Se suben pase o falle.
@@ -116,19 +118,6 @@ jobs:
           # `error` y no `warn`: si no hay capturas, es que algo fallo antes.
           if-no-files-found: error
 
-      # HU-UX-002 — `contraste-fondos.spec.js` mide el texto que cae sobre los
-      # fondos ilustrados y deja una captura por vista y ancho y un informe
-      # por vista (<escena>/<vista>.md). Es evidencia aparte de la del
-      # laboratorio: otra carpeta, otro artefacto.
-      - name: Publicar capturas y contraste de los fondos ilustrados
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: evidencia-fondos
-          path: docs/evidencia/fondos/
-          retention-days: 14
-          if-no-files-found: warn
-
       - name: Resumen del informe
         if: always()
         run: |
@@ -137,6 +126,52 @@ jobs:
           else
             echo "La corrida no llego a generar informe." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+  # HU-UX-002 — `contraste-fondos.spec.js` mide el texto que cae sobre los
+  # fondos ilustrados, pixel a pixel, y deja una captura por vista y ancho y un
+  # informe por vista (<escena>/<vista>.md). Va en un job aparte y no dentro de
+  # `auditoria` porque ese job ya roza su limite de 20 minutos (573 pruebas en
+  # 18 minutos en #926): en paralelo no alarga la espera del PR ni arriesga el
+  # limite. Falla igual que el resto del laboratorio: por debajo de AA, rojo.
+  fondos:
+    name: Contraste sobre los fondos ilustrados
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/app-web/package-lock.json
+
+      - name: Instalar dependencias y el navegador
+        working-directory: frontend/app-web
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: Enlazar node_modules en la raiz para las pruebas de tests/
+        run: ln -sfn frontend/app-web/node_modules node_modules
+
+      - name: Medir el texto sobre cada escena
+        working-directory: frontend/app-web
+        run: npx playwright test --config=playwright.visual.config.js --grep @fondos
+
+      - name: Publicar capturas e informes de contraste
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: evidencia-fondos
+          path: docs/evidencia/fondos/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Resumen del contraste
+        if: always()
+        run: |
           for informe in docs/evidencia/fondos/*/*.md; do
             [ -f "$informe" ] && cat "$informe" >> "$GITHUB_STEP_SUMMARY"
           done
