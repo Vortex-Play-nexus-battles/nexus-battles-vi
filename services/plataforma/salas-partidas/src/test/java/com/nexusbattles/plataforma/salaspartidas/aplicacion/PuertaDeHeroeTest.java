@@ -17,6 +17,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -161,6 +162,56 @@ class PuertaDeHeroeTest {
                     () -> assertEquals(HeroeNoDisponible.OCUPADO, error.tipo()),
                     () -> assertEquals(422, error.estado()),
                     () -> assertTrue(error.detalle().contains("Torre del Alba"), error.detalle()));
+        }
+    }
+
+    /**
+     * HU-MIS-009 criterio 3 y HU-MIS-011 criterios 2 y 3: el heroe reservado
+     * por una mision se rechaza en cualquier otro modo de juego, y el rechazo
+     * dice que esta ocupado en una mision, no que esta en otra partida.
+     */
+    @Nested
+    @DisplayName("con el heroe reservado por una mision (HU-MIS-009 C3, HU-MIS-011 C2 y C3)")
+    class HeroeEnMision {
+
+        private final InventarioEnMemoria inventario =
+                InventarioEnMemoria.conHeroeOcupado("una misión en curso");
+
+        private void diceQueEstaEnMision(HeroeNoDisponible error) {
+            assertAll(
+                    () -> assertEquals(422, error.estado()),
+                    () -> assertEquals(ResultadoVerificacion.HEROE_OCUPADO, error.resultado()),
+                    () -> assertEquals(HeroeNoDisponible.OCUPADO, error.tipo()),
+                    () -> assertTrue(error.titulo().contains("ocupado en una misión"), error.titulo()),
+                    () -> assertTrue(error.detalle().contains("ocupado en una misión"), error.detalle()),
+                    () -> assertFalse(error.detalle().contains("combatiendo"), error.detalle()));
+        }
+
+        @Test
+        @DisplayName("no se puede crear una sala")
+        void noPuedeCrear() {
+            diceQueEstaEnMision(assertThrows(HeroeNoDisponible.class,
+                    () -> crear(inventario).ejecutar(parametros(), como(ANFITRION))));
+        }
+
+        @Test
+        @DisplayName("no se puede entrar a una sala")
+        void noPuedeEntrar() {
+            Sala sala = salaAbierta();
+
+            diceQueEstaEnMision(assertThrows(HeroeNoDisponible.class,
+                    () -> ingresar(inventario).ejecutar(sala.id(), como(VISITANTE))));
+        }
+
+        @Test
+        @DisplayName("no se puede arrancar el combate")
+        void noPuedeEmpezar() {
+            Sala sala = salaAbierta();
+            sala.unirse(VISITANTE);
+            salas.guardar(sala);
+
+            diceQueEstaEnMision(assertThrows(HeroeNoDisponible.class,
+                    () -> iniciar(inventario).ejecutar(sala.id(), como(ANFITRION))));
         }
     }
 

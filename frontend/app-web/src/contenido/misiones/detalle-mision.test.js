@@ -196,6 +196,34 @@ describe('iniciar, repetir o no', () => {
       'misiones.html#en-curso',
     );
   });
+
+  test('en curso: nombra al héroe asignado, con su nombre propio y su prototipo (HU-MIS-009 C6)', () => {
+    const { elemento } = detalleDeMision(
+      { ...TEMPLO, estado: 'EN_PROGRESO' },
+      {
+        ...rutas,
+        configurador: configurador(),
+        heroeAsignado: { id: 'h-1', nombre: 'Aquiles', prototipo: 'Guerrero Armas' },
+      },
+    );
+    const bloque = elemento.querySelector('[data-seccion="en-curso"]');
+
+    expect(bloque.textContent).toContain('Tu héroe ya está en esta misión');
+    expect(bloque.querySelector('[data-heroe-asignado]').textContent).toBe(
+      'Aquiles · Guerrero Armas está asignado a esta misión.',
+    );
+  });
+
+  test('en curso sin héroe conocido: no inventa uno', () => {
+    const { elemento } = detalleDeMision(
+      { ...TEMPLO, estado: 'EN_PROGRESO' },
+      { ...rutas, configurador: configurador() },
+    );
+    const bloque = elemento.querySelector('[data-seccion="en-curso"]');
+
+    expect(bloque.textContent).toContain('Tu héroe ya está en esta misión');
+    expect(bloque.querySelector('[data-heroe-asignado]')).toBeNull();
+  });
 });
 
 /*

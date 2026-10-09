@@ -54,9 +54,10 @@ public class HeroeNoDisponible extends ErrorDeNegocio {
     }
 
     private static String tituloDe(EstadoDelHeroe estado) {
-        return exigirRechazo(estado) == ResultadoVerificacion.SIN_HEROE_EQUIPADO
-                ? "No tienes un héroe equipado"
-                : "Tu héroe está en otra partida";
+        if (exigirRechazo(estado) == ResultadoVerificacion.SIN_HEROE_EQUIPADO) {
+            return "No tienes un héroe equipado";
+        }
+        return estado.enMision() ? "Tu héroe está ocupado en una misión" : "Tu héroe está en otra partida";
     }
 
     /**
@@ -72,6 +73,11 @@ public class HeroeNoDisponible extends ErrorDeNegocio {
             return "Equipa un héroe en tu inventario antes de entrar a una batalla.";
         }
         String heroe = estado.heroe() == null ? "Tu héroe" : estado.heroe().nombre();
+        if (estado.enMision()) {
+            // HU-MIS-009 C3 / HU-MIS-011 C2 y C3: se dice que esta en una mision,
+            // no que «combate»: la mision corre sola y el jugador solo espera.
+            return heroe + " está ocupado en una misión. Espera a que termine o elige otro héroe.";
+        }
         return estado.ocupadoPor() == null
                 ? heroe + " ya está combatiendo en otra partida. Elige otro héroe."
                 : heroe + " está combatiendo en " + estado.ocupadoPor() + ". Elige otro héroe.";
