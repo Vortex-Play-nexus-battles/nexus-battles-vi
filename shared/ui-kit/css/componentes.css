@@ -4764,8 +4764,10 @@ button.tarjeta--partida:disabled {
    pantalla. Eso hace dos cosas a la vez: el portal se lee como juego, y el
    sitio donde hay que escribir es el punto más luminoso de la composición.
 
-   Sin fondo animado (§22) ni ilustración inventada: la profundidad sale de
-   dos degradados de cromo y de la sombra de la tarjeta.
+   Sin fondo animado (§22). Desde HU-UX-002 cada pantalla del portal lleva
+   detrás una escena fija de la Ciudadela del Nexo con su velo (fondos.css,
+   `data-fondo` en el body); sin ese atributo la profundidad sigue saliendo
+   de los degradados de cromo de base.css y de la sombra de la tarjeta.
    ======================================================================= */
 
 .portal {

@@ -88,6 +88,11 @@
                                    componente «Cabecera» de Figma       */
   --pista:            #CBD4E6;  /* riel de la barra de vida y de las
                                    barras de progreso                   */
+  --velo-fondo:       #0D1026;  /* velo de los fondos ilustrados
+                                   (fondos.css, HU-UX-002): la noche más
+                                   honda de la paleta del cromo. Sobre
+                                   él se mide el contraste del texto que
+                                   cae directamente sobre la escena     */
 
   --superficie-2:     #F2F5FA;  /* panel ANIDADO dentro de una tarjeta:
                                    la cabecera de una tabla, un bloque
