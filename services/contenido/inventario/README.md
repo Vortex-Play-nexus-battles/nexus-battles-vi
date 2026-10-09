@@ -125,6 +125,19 @@ DELETE /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}
   parte de la armadura sigue viniendo de la peticion. Las reglas de dos armas,
   seis partes y dos items no dependen de esto.
 
+## Una epica no se tiene dos veces (1.7.0)
+
+`POST /api/v1/inventario/entregas` no entrega una epica que el jugador ya tiene
+(un elemento `EPICA` con ese `productoId`): la entrega se completa igual, sin esa
+copia, y la respuesta la nombra en `yaTenia`. La regla vive aqui y no en quien
+entrega porque el inventario es la fuente unica de lo que el jugador tiene: vale
+para la mision que vence otra vez al mismo Master y para el premio de un torneo
+(RN-37). Decision del PO del 2026-10-06. Solo las epicas: un heroe, un arma o un
+item repetidos se entregan otra vez. Si el jugador la elimina o la pierde en una subasta, deja de
+tenerla y se le puede dar de nuevo. Se decide al planear la entrega, antes de
+registrarla; dos entregas distintas del mismo jugador que lleguen a la vez
+pueden ver las dos que no la tiene (la lectura no bloquea la escritura de la otra).
+
 ## Alcance actual
 
 Incluido en `SCRUM-326`:

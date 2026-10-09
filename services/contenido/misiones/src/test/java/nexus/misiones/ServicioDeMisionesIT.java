@@ -137,7 +137,7 @@ class ServicioDeMisionesIT {
                 .andExpect(status().isOk())
                 .andExpect(openApi().isValid(VALIDADOR))
                 .andReturn();
-        assertThat(cuerpo(tablon).get("misiones").toString()).contains("templo-olvidado", "dev-prueba-de-humo");
+        assertThat(cuerpo(tablon).get("misiones").toString()).contains("templo-olvidado", "la-forja-sumergida", "dev-prueba-de-humo");
 
         mvc.perform(conToken(get("/api/v1/misiones/destacadas")))
                 .andExpect(status().isOk())
@@ -246,6 +246,39 @@ class ServicioDeMisionesIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.misiones[0].id").value("dev-prueba-de-humo"))
                 .andExpect(jsonPath("$.misiones[0].ultimaEjecucionId").value(ejecucionId))
+                .andExpect(openApi().isValid(VALIDADOR));
+    }
+
+    @Test
+    @DisplayName("HU-MIS-012: «La Forja Sumergida» esta en el tablon de Historia, bloqueada hasta completar el Templo, y su detalle cumple el contrato")
+    void laForjaSumergida() throws Exception {
+        mvc.perform(conToken(get("/api/v1/misiones").param("categoria", "HISTORIA").param("dificultad", "DIFICIL")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].origen").value("EQUIPO"))
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].estado").value("BLOQUEADA"))
+                .andExpect(jsonPath("$.misiones[?(@.id=='la-forja-sumergida')].destacada").value(false))
+                .andExpect(openApi().isValid(VALIDADOR));
+
+        mvc.perform(conToken(get("/api/v1/misiones/{id}", "la-forja-sumergida")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.nombre").value("La Forja Sumergida"))
+                .andExpect(jsonPath("$.origen").value("EQUIPO"))
+                .andExpect(jsonPath("$.dificultad").value("DIFICIL"))
+                .andExpect(jsonPath("$.requisitosPrevios[0]").value("El Templo Olvidado"))
+                .andExpect(jsonPath("$.jefe.nombre").value("El Herrero Ahogado"))
+                .andExpect(jsonPath("$.enemigos.length()").value(3))
+                .andExpect(jsonPath("$.masters[0].nombre").value("Hija de la Escarcha"))
+                .andExpect(jsonPath("$.masters[0].probabilidad").value(0.2))
+                .andExpect(jsonPath("$.masters[0].epica.efectoGeneral").value("-1 de poder al oponente"))
+                .andExpect(jsonPath("$.masters[0].epica.efectoPotenciado")
+                        .value("No recibe ningún daño en el siguiente turno"))
+                .andExpect(jsonPath("$.recompensas.primeraVez[1]").value("Título «Forjador del Lago»"))
+                .andExpect(openApi().isValid(VALIDADOR));
+
+        mvc.perform(conToken(get("/api/v1/misiones/destacadas")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value("templo-olvidado"))
                 .andExpect(openApi().isValid(VALIDADOR));
     }
 

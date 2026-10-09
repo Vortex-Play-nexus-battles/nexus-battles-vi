@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de misiones
-  version: 1.2.0
+  version: 1.3.0
   description: >
     Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
     RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
@@ -567,7 +567,10 @@ components:
         con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
         PROGRESION (1.1.0, D-42): misión de historia del catálogo de progresión
         de nivel 1 a 7, diseñada por el equipo 6; contenido del juego.
-      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION]
+        EQUIPO (1.3.0, HU-MIS-012): misión que diseña el equipo (§7.8.4,
+        RF-MIS-56): trae enemigos regulares, jefe final y al menos un Máster
+        con su épica; contenido del juego, no del documento.
+      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION, EQUIPO]
     PaginaDeMisiones:
       type: object
       required: [misiones, total, pagina, totalPaginas, tamanio]

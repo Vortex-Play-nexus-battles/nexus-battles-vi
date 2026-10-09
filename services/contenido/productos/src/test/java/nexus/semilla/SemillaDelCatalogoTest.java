@@ -3,6 +3,7 @@ package nexus.semilla;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -170,15 +171,15 @@ class SemillaDelCatalogoTest {
     }
 
     @Test
-    @DisplayName("primera corrida: crea los 56 productos, activos, con el id derivado del slug y las marcas de la semilla")
+    @DisplayName("primera corrida: crea los 57 productos, activos, con el id derivado del slug y las marcas de la semilla")
     void primeraCorrida() {
         ResultadoSemilla resultado = semilla(true, CATALOGO_REAL).sembrar();
 
         assertTrue(resultado.habilitada());
         assertEquals(VERSION_DEL_CATALOGO, resultado.version());
-        assertEquals(56, resultado.insertados().size());
+        assertEquals(57, resultado.insertados().size());
         assertTrue(resultado.rechazados().isEmpty(), resultado.rechazados().toString());
-        assertEquals(56, base.size());
+        assertEquals(57, base.size());
         assertTrue(base.values().stream().allMatch(p -> p.estado() == EstadoProducto.ACTIVO));
         // B4: cada documento sembrado dice de donde salio y con que version.
         assertTrue(base.values().stream().allMatch(p -> p.origen() == OrigenProducto.SEMILLA));
@@ -195,13 +196,13 @@ class SemillaDelCatalogoTest {
     }
 
     @Test
-    @DisplayName("RG-085: la semilla no deja ninguna epica con precio de venta (ni en pesos ni en creditos), pero las 8 existen activas")
+    @DisplayName("RG-085: la semilla no deja ninguna epica con precio de venta (ni en pesos ni en creditos), pero las 9 existen activas")
     void ningunaEpicaSeVende() {
         semilla(true, CATALOGO_REAL).sembrar();
 
         List<Producto> epicas = base.values().stream().filter(p -> p.tipo() == TipoProducto.EPICA).toList();
 
-        assertEquals(8, epicas.size(), "las misiones las entregan por productoId: tienen que existir");
+        assertEquals(9, epicas.size(), "las misiones las entregan por productoId: tienen que existir");
         for (Producto epica : epicas) {
             assertEquals(EstadoProducto.ACTIVO, epica.estado(), epica.nombre());
             assertEquals(0, epica.precioCreditos(), epica.nombre() + " no tiene precio en creditos");
@@ -214,6 +215,47 @@ class SemillaDelCatalogoTest {
                 .filter(p -> p.tipo() != TipoProducto.EPICA)
                 .filter(p -> p.precioMonedaReal().signum() > 0)
                 .count());
+    }
+
+    /** El id de «Velo de Sombras»: el UUID v3 del slug, el mismo que escribe la semilla de misiones. */
+    private static final String ID_DE_VELO_DE_SOMBRAS = "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5";
+
+    @Test
+    @DisplayName("§7.8.14: «Velo de Sombras», la epica del Master del Templo, es un producto EPICA del Picaro Veneno, sin precio")
+    void veloDeSombrasEsUnProductoSinPrecio() {
+        semilla(true, CATALOGO_REAL).sembrar();
+
+        assertEquals(ID_DE_VELO_DE_SOMBRAS, MapeadorDelCatalogo.identificador("epica-picaro-veneno-velo-de-sombras"),
+                "misiones lo entrega por este id");
+        Producto velo = base.get(ID_DE_VELO_DE_SOMBRAS);
+        assertNotNull(velo, "sin producto, derrotar al Master no le da la epica al jugador");
+        assertEquals("Velo de Sombras", velo.nombre());
+        assertEquals(TipoProducto.EPICA, velo.tipo());
+        assertEquals(EstadoProducto.ACTIVO, velo.estado());
+        assertEquals(0, velo.precioCreditos());
+        assertEquals(0, BigDecimal.ZERO.compareTo(velo.precioMonedaReal()));
+        assertFalse(velo.premium());
+        assertEquals(MapeadorDelCatalogo.identificador("heroe-picaro-veneno"), velo.heroe(),
+                "es del Picaro Veneno: su efecto epico es el suyo");
+        assertTrue(velo.efectoGeneral().contains("+2 a la defensa"), velo.efectoGeneral());
+        assertTrue(velo.efectoPotenciado().contains("intangible durante 1 turno"), velo.efectoPotenciado());
+    }
+
+    @Test
+    @DisplayName("una base ya sembrada con las 56 de la version 2 recibe solo «Velo de Sombras»: agregar un producto no obliga a subir la version")
+    void unaBaseYaSembradaRecibeSoloVelo() {
+        semilla(true, CATALOGO_REAL).sembrar();
+        Producto velo = base.remove(ID_DE_VELO_DE_SOMBRAS);
+        assertNotNull(velo);
+        Map<String, Producto> antes = new LinkedHashMap<>(base);
+        assertEquals(56, antes.size());
+
+        ResultadoSemilla resultado = semilla(true, CATALOGO_REAL).sembrar();
+
+        assertEquals(List.of(ID_DE_VELO_DE_SOMBRAS), resultado.insertados());
+        assertTrue(resultado.actualizados().isEmpty(), "lo que ya estaba no se toca");
+        assertEquals(56, resultado.existentes().size());
+        antes.forEach((id, p) -> assertSame(p, base.get(id), id));
     }
 
     @Test
@@ -251,7 +293,7 @@ class SemillaDelCatalogoTest {
         assertEquals(0, new BigDecimal("10000").compareTo(base.get(editada).precioMonedaReal()));
         List<Producto> epicas = base.values().stream()
                 .filter(p -> p.tipo() == TipoProducto.EPICA && !p.id().equals(editada)).toList();
-        assertEquals(7, epicas.size());
+        assertEquals(8, epicas.size());
         for (Producto epica : epicas) {
             assertEquals(0, epica.precioCreditos(), epica.nombre());
             assertEquals(0, BigDecimal.ZERO.compareTo(epica.precioMonedaReal()), epica.nombre());
@@ -273,7 +315,7 @@ class SemillaDelCatalogoTest {
                 .filter(p -> p.tipo() == TipoProducto.EPICA)
                 .toList();
 
-        assertEquals(8, epicas.size());
+        assertEquals(9, epicas.size());
         for (ProductoCreado epica : epicas) {
             assertEquals(0, epica.precioCreditos(), epica.nombre());
             assertEquals(0, BigDecimal.ZERO.compareTo(epica.precioMonedaReal()), epica.nombre());
@@ -290,7 +332,7 @@ class SemillaDelCatalogoTest {
 
         assertTrue(segunda.insertados().isEmpty());
         assertTrue(segunda.actualizados().isEmpty());
-        assertEquals(56, segunda.existentes().size());
+        assertEquals(57, segunda.existentes().size());
         assertEquals(despuesDeLaPrimera, base);
         verify(repositorio, never()).reemplazarSemillaSiNoCambio(any(Producto.class), anyInt());
     }
@@ -308,7 +350,7 @@ class SemillaDelCatalogoTest {
 
         assertEquals(VERSION_DEL_CATALOGO + 1, v2.version());
         assertEquals(List.of(tocado), v2.respetados());
-        assertEquals(55, v2.actualizados().size());
+        assertEquals(56, v2.actualizados().size());
         assertSame(editado, base.get(tocado), "lo que edito el administrador no se toca");
         Producto puesto = base.get(intacto);
         assertEquals(999, puesto.precioCreditos());
@@ -356,7 +398,7 @@ class SemillaDelCatalogoTest {
         assertTrue(resultado.actualizados().contains(id));
         assertEquals(OrigenProducto.SEMILLA, base.get(id).origen());
         assertEquals(VERSION_DEL_CATALOGO, base.get(id).semillaVersion());
-        assertEquals(55, resultado.insertados().size());
+        assertEquals(56, resultado.insertados().size());
     }
 
     @Test
@@ -373,7 +415,7 @@ class SemillaDelCatalogoTest {
 
         assertSame(editado, base.get(id));
         assertTrue(resultado.respetados().contains(id));
-        assertEquals(55, resultado.insertados().size());
+        assertEquals(56, resultado.insertados().size());
         verify(repositorio, never()).save(any(Producto.class));
     }
 
@@ -415,7 +457,7 @@ class SemillaDelCatalogoTest {
         ResultadoSemilla resultado = semilla(true, CATALOGO_REAL).sembrar();
 
         assertTrue(resultado.existentes().contains(id));
-        assertEquals(55, resultado.insertados().size());
+        assertEquals(56, resultado.insertados().size());
     }
 
     @Test
@@ -450,6 +492,19 @@ class SemillaDelCatalogoTest {
                 resultado.rechazados().toString());
         assertTrue(resultado.rechazados().get(1).startsWith("epica-huerfana"),
                 resultado.rechazados().toString());
+    }
+
+    @Test
+    @DisplayName("Tabla 20: la probabilidad de Master de las ocho epicas va en porcentaje, «0.04%» es un 4 %; "
+            + "la de «Velo de Sombras» (Master del Templo) usa la misma convencion: 15 %")
+    void laTabla20SeLeeComoPorcentaje() throws IOException {
+        CatalogoInicial catalogo;
+        try (InputStream json = CATALOGO_REAL.getInputStream()) {
+            catalogo = SemillaDelCatalogo.leer(json);
+        }
+
+        assertEquals(List.of("4%", "1%", "3%", "5%", "2%", "1%", "10%", "10%", "15%"),
+                catalogo.epicas().stream().map(CatalogoInicial.EntradaCatalogo::probabilidadMaster).toList());
     }
 
     @Test

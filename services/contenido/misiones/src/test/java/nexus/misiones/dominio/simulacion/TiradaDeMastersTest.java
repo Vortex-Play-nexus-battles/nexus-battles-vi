@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.within;
 import java.util.List;
 import java.util.stream.IntStream;
 import java.util.stream.LongStream;
+import nexus.misiones.catalogo.CatalogoDeMisionesDesdeSemilla;
 import nexus.misiones.dominio.Epica;
 import nexus.misiones.dominio.EpicaDeTabla20;
 import nexus.misiones.dominio.MasterDeMision;
@@ -21,17 +22,17 @@ import org.junit.jupiter.api.Test;
 class TiradaDeMastersTest {
 
     private static final EpicaDeTabla20 TANQUE = new EpicaDeTabla20("Guerrero Tanque",
-            new Epica("Golpe de defensa", "+1 al ataque", "+4 al daño, +2% de crítico", "81af272d"), 0.04);
+            new Epica("Golpe de defensa", "+1 al ataque", "+4 al daño, +2% de crítico", "81af272d"), 4);
     private static final EpicaDeTabla20 ARMAS = new EpicaDeTabla20("Guerrero Armas",
-            new Epica("Segundo impulso", "Recupera 1d4 de vida", "+3 a la vida, +5% de crítico", "4481eb34"), 0.01);
+            new Epica("Segundo impulso", "Recupera 1d4 de vida", "+3 a la vida, +5% de crítico", "4481eb34"), 1);
 
     @Test
-    @DisplayName("la Tabla 20 da el Master del tipo del heroe y su porcentaje pasa a proporcion")
+    @DisplayName("la Tabla 20 da el Master del tipo del heroe y su porcentaje pasa a proporcion (4 % = 0,04)")
     void masterDeTabla20() {
         MasterDeMision master = TANQUE.comoMaster();
 
         assertThat(master.prototipo()).isEqualTo("Guerrero Tanque");
-        assertThat(master.probabilidad()).isEqualTo(0.0004);
+        assertThat(master.probabilidad()).isEqualTo(0.04);
         assertThat(master.epica().nombre()).isEqualTo("Golpe de defensa");
     }
 
@@ -84,6 +85,23 @@ class TiradaDeMastersTest {
                         new AzarConSemilla(semilla)).isEmpty()))
                 .as("con 0,0 no aparece nunca")
                 .isTrue();
+    }
+
+    @Test
+    @DisplayName("la Tabla 20 de la semilla se lee como el ejemplo del Templo: «0.04%» es un 4 % de probabilidad")
+    void tabla20SeLeeComoPorcentaje() {
+        List<EpicaDeTabla20> tabla = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20();
+        AzarConSemilla azar = new AzarConSemilla(2026);
+        var sinMasterPropio = Misiones.historia("mision-m", List.of());
+
+        long apariciones = IntStream.range(0, 20_000)
+                .filter(i -> !TiradaDeMasters.quienesAparecen(sinMasterPropio, "Guerrero Tanque", tabla, azar)
+                        .isEmpty())
+                .count();
+
+        assertThat(apariciones / 20_000.0).as("Guerrero Tanque, Tabla 20: 0.04").isBetween(0.035, 0.045);
+        assertThat(tabla).extracting(fila -> fila.comoMaster().probabilidad())
+                .containsExactly(0.04, 0.01, 0.03, 0.05, 0.02, 0.01, 0.10, 0.10);
     }
 
     @Test

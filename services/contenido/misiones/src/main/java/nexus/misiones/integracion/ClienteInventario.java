@@ -248,11 +248,11 @@ public class ClienteInventario implements InventarioDeHeroes {
      * respuesta y la entrega se reintenta, en vez de darla por perdida.
      */
     @Override
-    public void entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos,
-                         String claveIdempotencia) {
+    public List<String> entregar(String jugadorUid, UUID ejecucionId, List<ProductoAEntregar> productos,
+                                 String claveIdempotencia) {
         SolicitudDeEntrega solicitud = new SolicitudDeEntrega(jugadorUid, "MISION", "mision-" + ejecucionId,
                 productos.stream().map(p -> new ProductoEntregado(p.productoId(), p.cantidad())).toList());
-        Contestacion<Object> c = Contestacion.protegida(cortaEntregas, () -> {
+        Contestacion<EntregaRealizada> c = Contestacion.protegida(cortaEntregas, () -> {
             try {
                 return http.post()
                         .uri(base + "/api/v1/inventario/entregas")
@@ -260,7 +260,7 @@ public class ClienteInventario implements InventarioDeHeroes {
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(solicitud)
                         .retrieve()
-                        .body(Object.class);
+                        .body(EntregaRealizada.class);
             } catch (HttpClientErrorException.NotFound | HttpClientErrorException.MethodNotAllowed sinRuta) {
                 throw new IllegalStateException("El inventario no expone todavia POST /api/v1/inventario/entregas",
                         sinRuta);
@@ -269,6 +269,8 @@ public class ClienteInventario implements InventarioDeHeroes {
         if (c.rechazada()) {
             throw c.comoRechazo(DEPENDENCIA);
         }
+        EntregaRealizada entrega = c.cuerpo();
+        return entrega == null || entrega.yaTenia() == null ? List.of() : List.copyOf(entrega.yaTenia());
     }
 
     private static RuntimeException noEncontradoOAjeno(Contestacion<?> c) {
@@ -337,6 +339,11 @@ public class ClienteInventario implements InventarioDeHeroes {
     }
 
     record SolicitudDeEntrega(String uid, String origen, String referencia, List<ProductoEntregado> productos) {
+    }
+
+    /** Solo lo que misiones lee de la entrega: lo que el jugador ya tenia (inventario 1.7.0; ausente antes). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record EntregaRealizada(List<String> yaTenia) {
     }
 
     record ProductoEntregado(String productoId, int cantidad) {

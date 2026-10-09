@@ -32,6 +32,21 @@ public final class EventosDePrueba {
                 antes, List.of(new Suceso("PODER_RECUPERADO", "HEROE", null, null, 2)), jugada, despues);
     }
 
+    /** Un turno de un enemigo que juega una estrategia predefinida: el dato nuevo de HU-SIM-004 en la jugada. */
+    public static EventoDeCombate eventoDeEnemigo(UUID ejecucion, int secuencia) {
+        EventoDeCombate completo = evento(ejecucion, secuencia);
+        EventoDeCombate.Jugada de = completo.jugada();
+        EventoDeCombate.Jugada conEstrategia = new EventoDeCombate.Jugada(de.decidida(), de.ejecutada(),
+                de.enValorBase(), de.costoDecidido(), de.costoDePoder(), de.rechazadas(), de.resultado(),
+                de.decididaPor(), de.versionDelModelo(), de.candidatas(), OrigenDeEstrategia.PREDEFINIDA,
+                "mago-fuego-n4");
+        return new EventoDeCombate(ejecucion, completo.misionId(), secuencia, completo.encuentro(),
+                completo.enemigo(), completo.turno(),
+                new EventoDeCombate.Actor(EventoDeCombate.Lado.ENEMIGO, "Espectros Ancestrales", "Mago Fuego", 5),
+                new EventoDeCombate.Actor(EventoDeCombate.Lado.HEROE, "Vorn", "Guerrero Armas", 5),
+                completo.antes(), completo.alIniciar(), conEstrategia, completo.despues());
+    }
+
     /** Un turno en que el actor cayo al empezar: sin jugada, con campos nulos. */
     public static EventoDeCombate eventoSinJugada(UUID ejecucion, int secuencia) {
         EventoDeCombate completo = evento(ejecucion, secuencia);

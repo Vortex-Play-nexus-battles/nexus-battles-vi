@@ -16,10 +16,11 @@ import org.springframework.context.annotation.Configuration;
 /**
  * La IA de combate con red neuronal propia (HU-SIM-008, RF-MOT-59): quien decide la jugada de cada turno.
  *
- * <p>Por omision es la regla de heroes de siempre. Con {@code misiones.ia.modelo.habilitado=true} y un modelo
- * valido en {@code misiones.ia.modelo.ruta}, el decisor es {@link DecisorConModelo}, que la envuelve (el modelo
- * propone y la regla acota). Si el modelo no esta, esta danado o no cuadra, el servicio arranca igual y decide la
- * regla: se registra en la bitacora, no se detiene nada.
+ * <p>Por omision esta encendida ({@code misiones.ia.modelo.habilitado=true}) y busca el modelo de la imagen en
+ * {@code misiones.ia.modelo.ruta} ({@code /app/ia/modelo.onnx}). Con un modelo valido ahi, el decisor es
+ * {@link DecisorConModelo}, que envuelve a la regla de heroes (el modelo propone y la regla acota). Si el modelo no
+ * esta (pruebas locales), esta danado o no cuadra, el servicio arranca igual y decide la regla de siempre: se
+ * registra en la bitacora, no se detiene nada. Con {@code habilitado=false} es la regla, sin mirar el archivo.
  */
 @Configuration
 public class ConfiguracionDeIa {
@@ -33,8 +34,8 @@ public class ConfiguracionDeIa {
      */
     @Bean
     public DecisorDeLaSimulacion decisorDeTurnoConfigurado(ServicioDeHeroes heroes,
-                                                           @Value("${misiones.ia.modelo.habilitado:false}") boolean habilitado,
-                                                           @Value("${misiones.ia.modelo.ruta:}") String ruta,
+                                                           @Value("${misiones.ia.modelo.habilitado:true}") boolean habilitado,
+                                                           @Value("${misiones.ia.modelo.ruta:/app/ia/modelo.onnx}") String ruta,
                                                            @Value("${misiones.ia.modelo.confianza-minima:0.6}") double confianza) {
         return new DecisorDeLaSimulacion(elegirDecisor(heroes, habilitado, ruta, confianza));
     }

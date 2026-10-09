@@ -33,7 +33,8 @@ import static org.junit.jupiter.api.Assertions.fail;
 class MatrizDeAccionesTest {
 
     private static final List<String> EPICAS = List.of("Golpe de defensa", "Segundo impulso", "Luz cegadora",
-            "Frío concentrado", "Toma y lleva", "Intimidación sangrienta", "Té changua", "Reanimador 3000");
+            "Frío concentrado", "Toma y lleva", "Intimidación sangrienta", "Té changua", "Reanimador 3000",
+            "Velo de Sombras");
 
     private final CatalogoDePrueba catalogo = new CatalogoDePrueba();
     private final MotorDeAcciones motor = new MotorDeAcciones(catalogo, IndiceNormal.porOmision());
