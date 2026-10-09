@@ -7,7 +7,7 @@
     "PROVISIONAL: «Explorar las 5 camaras del templo» se cumple al superar todos los encuentros regulares (el documento no reparte los 18 enemigos entre las 5 camaras).",
     "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
     "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
-    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 y «Velo de Sombras» (7.8.14, la del Master del Templo; HU-SIM-006) si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
     "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento."
   ],
   "tabla20": [
@@ -135,7 +135,7 @@
             "nombre": "Velo de Sombras",
             "efectoGeneral": "+2 a la defensa para todos los héroes.",
             "efectoPotenciado": "El héroe se vuelve intangible durante 1 turno, evitando todo el daño recibido y causando envenenamiento al atacante (+3 de daño por veneno durante 2 turnos).",
-            "productoId": null
+            "productoId": "9c1ea3fd-2f97-33ae-bb4f-2777cea501a5"
           }
         }
       ],

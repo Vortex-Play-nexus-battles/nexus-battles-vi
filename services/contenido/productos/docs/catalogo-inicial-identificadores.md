@@ -62,3 +62,4 @@ Esta tabla se genera a partir de `src/main/resources/semilla/catalogo-inicial.js
 | `epica-picaro-machete-intimidacion-sangrienta` | `cd15a03a-57db-3159-a709-9632140db557` | EPICA | Intimidación sangrienta |
 | `epica-chaman-te-changua` | `0e616a1a-9298-3f7c-bac2-c5dcf601424a` | EPICA | Té changua |
 | `epica-medico-reanimador-3000` | `005fb6b8-eab8-3f7f-879b-dbe7e3e6e439` | EPICA | Reanimador 3000 |
+| `epica-picaro-veneno-velo-de-sombras` | `9c1ea3fd-2f97-33ae-bb4f-2777cea501a5` | EPICA | Velo de Sombras |

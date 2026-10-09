@@ -1,7 +1,7 @@
 package nexus.misiones.aplicacion;
 
 import java.time.Clock;
-import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionModificadaConcurrentemente;
@@ -21,7 +21,13 @@ import org.slf4j.LoggerFactory;
  * que un reinicio del servicio no pierde nada. Una simulacion que falla se
  * APLAZA ({@link Ejecucion#simulacionAplazada}): sin eso, las que no se pueden
  * simular, que son las mas antiguas, ocupaban el lote entero en cada vuelta y
- * ninguna otra ejecucion vencida se simulaba.
+ * ninguna otra ejecucion vencida se simulaba. Tampoco un fallo de la consulta
+ * de una fase (Mongo que no contesta) le quita su vuelta a la otra.
+ *
+ * <p>Pueden correr varias instancias y varias vueltas a la vez (HU-SIM-007):
+ * cada simulacion se reserva antes de empezar ({@link SimularEjecucion}) y
+ * cada paso de entrega es idempotente de quien lo recibe
+ * ({@link LiquidarEjecucion}).
  */
 public class TrabajoDeMisiones {
 
@@ -43,23 +49,59 @@ public class TrabajoDeMisiones {
     }
 
     public void ejecutar() {
-        Instant ahora = reloj.instant();
-        for (Ejecucion vencida : ejecuciones.vencidas(ahora, parametros.loteDelTrabajo())) {
+        int simuladas = simularLasVencidas();
+        int liquidadas = liquidarLasPendientes();
+        if (simuladas + liquidadas > 0) {
+            BITACORA.info("Vuelta del trabajo: {} ejecuciones simuladas, {} liquidadas", simuladas, liquidadas);
+        }
+    }
+
+    private int simularLasVencidas() {
+        List<Ejecucion> vencidas;
+        try {
+            vencidas = ejecuciones.vencidas(reloj.instant(), parametros.loteDelTrabajo());
+        } catch (RuntimeException sinConsulta) {
+            BITACORA.warn("No se pudieron consultar las ejecuciones vencidas; se sigue con las entregas y se"
+                    + " reintenta en la siguiente vuelta: {}", sinConsulta.getMessage());
+            return 0;
+        }
+        int simuladas = 0;
+        for (Ejecucion vencida : vencidas) {
+            // La reserva se anota en la propia ejecucion (cuenta un intento): se recuerda cuantos llevaba.
+            int reservasAntes = vencida.intentosDeSimulacion();
             try {
-                simular.simular(vencida);
+                if (simular.simular(vencida).isPresent()) {
+                    simuladas++;
+                }
             } catch (RuntimeException fallo) {
                 BITACORA.warn("No se pudo simular la ejecucion {}; se aplaza: {}", vencida.id(), fallo.getMessage());
-                aplazar(vencida, ahora, fallo);
+                aplazar(vencida, reservasAntes, fallo);
             }
         }
-        for (Ejecucion pendiente : ejecuciones.conLiquidacionPendiente(reloj.instant(), parametros.loteDelTrabajo())) {
+        return simuladas;
+    }
+
+    private int liquidarLasPendientes() {
+        List<Ejecucion> pendientes;
+        try {
+            pendientes = ejecuciones.conLiquidacionPendiente(reloj.instant(), parametros.loteDelTrabajo());
+        } catch (RuntimeException sinConsulta) {
+            BITACORA.warn("No se pudieron consultar las entregas pendientes; se reintenta en la siguiente vuelta: {}",
+                    sinConsulta.getMessage());
+            return 0;
+        }
+        int liquidadas = 0;
+        for (Ejecucion pendiente : pendientes) {
             try {
-                liquidar.liquidar(pendiente);
+                if (!liquidar.liquidar(pendiente).liquidacionPendiente()) {
+                    liquidadas++;
+                }
             } catch (RuntimeException fallo) {
                 BITACORA.warn("No se pudo liquidar la ejecucion {}; se reintenta en la siguiente vuelta: {}",
                         pendiente.id(), fallo.getMessage());
             }
         }
+        return liquidadas;
     }
 
     /**
@@ -68,14 +110,31 @@ public class TrabajoDeMisiones {
      * no se debe escribir. Si entre tanto el jugador la cancelo, o ya no se
      * puede ni leer ni guardar, no se aplaza nada: la vuelta siguiente vera
      * lo que haya.
+     *
+     * <p>Y solo se aplaza la reserva propia (HU-SIM-007): si la simulacion
+     * tardo tanto que el arriendo vencio y otra vuelta reservo la ejecucion
+     * (mas reservas de las que esta vuelta pudo hacer), la espera de este
+     * fallo no debe pisar el arriendo de la otra.
+     *
+     * @param reservasAntes las reservas que llevaba la ejecucion antes de esta vuelta; la propia suma una
      */
-    private void aplazar(Ejecucion vencida, Instant ahora, RuntimeException fallo) {
+    private void aplazar(Ejecucion vencida, int reservasAntes, RuntimeException fallo) {
         try {
             ejecuciones.buscar(vencida.id())
                     .filter(e -> e.estado() == EstadoEjecucion.EN_PROGRESO)
+                    .filter(e -> {
+                        boolean esLaNuestra = e.intentosDeSimulacion() <= reservasAntes + 1;
+                        if (!esLaNuestra) {
+                            BITACORA.info("Ejecucion {}: fallo la simulacion, pero otra vuelta ya la tiene reservada;"
+                                    + " no se aplaza", vencida.id());
+                        }
+                        return esLaNuestra;
+                    })
                     .ifPresent(e -> {
-                        e.simulacionAplazada(ahora, parametros.reintentoBase(), fallo.getMessage());
-                        ejecuciones.guardar(e);
+                        e.simulacionAplazada(reloj.instant(), parametros.reintentoBase(), fallo.getMessage());
+                        Ejecucion guardada = ejecuciones.guardar(e);
+                        BITACORA.info("Ejecucion {}: simulacion aplazada (intento fallido {}); se reintenta a las {}",
+                                guardada.id(), guardada.intentosDeLiquidacion(), guardada.proximoIntento());
                     });
         } catch (EjecucionModificadaConcurrentemente cambio) {
             BITACORA.info("Ejecucion {} cambio mientras se aplazaba su simulacion; se relee la proxima vuelta",

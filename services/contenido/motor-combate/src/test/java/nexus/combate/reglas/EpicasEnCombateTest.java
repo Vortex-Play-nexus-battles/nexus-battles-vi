@@ -10,11 +10,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Las ocho epicas de la Tabla 20 en combate — §6.1.2: «otorgan mejoras al
+ * Las ocho epicas de la Tabla 20 y la del Master del Templo, «Velo de Sombras»
+ * (7.8.14), en combate — §6.1.2: «otorgan mejoras al
  * ataque del heroe si coincide con su tipo ... no usan puntos de poder y tienen
  * dos turnos de recarga». El efecto general vale para todos; el epico, solo
  * para su tipo de heroe afin.
@@ -42,6 +44,10 @@ class EpicasEnCombateTest {
 
     private static Contendiente de(ResultadoDeAccion r, String id) {
         return MotorDeAccionesTest.de(r, id);
+    }
+
+    private static Contendiente enTurno(ResultadoDeTurno r, String id) {
+        return r.combatientes().stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();
     }
 
     @Test
@@ -218,6 +224,173 @@ class EpicasEnCombateTest {
         assertEquals(8, de(golpe, "armas").vida(), "20 % de 44");
         assertFalse(de(golpe, "armas").tiene(TipoDeEfecto.VINCULO_REANIMACION), "se gasta");
         assertTrue(golpe.eventos().stream().anyMatch(e -> e.tipo() == TipoDeEvento.REANIMACION));
+    }
+
+    // ------------------------------------------------------------------
+    // «Velo de Sombras» (7.8.14): la epica del Master del Templo, no de la Tabla 20.
+    // «Efecto general: +2 a la defensa para todos los heroes. Efecto epico (solo
+    // Picaro Veneno): intangible durante 1 turno, evitando todo el dano recibido y
+    // causando envenenamiento al atacante (+3 de dano por veneno durante 2 turnos).»
+    // ------------------------------------------------------------------
+
+    private static Contendiente veneno(String id, List<EfectoActivo> efectos) {
+        return new Contendiente(id, null, "Pícaro Veneno", 1, null, Integer.MAX_VALUE, Integer.MAX_VALUE, 0,
+                Map.of(), efectos, List.of(), List.of(), null);
+    }
+
+    /** El Picaro Veneno que acaba de jugar Velo de Sombras, con el azar que no gasta. */
+    private ResultadoDeAccion venenoConVelo() {
+        return jugar("Velo de Sombras", "veneno", null, false, new AzarGuionado(),
+                conEpica("veneno", "Pícaro Veneno", null, "Velo de Sombras"), heroe("tanque", "Guerrero Tanque", null));
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras (general): +2 a la defensa para quien la juega, no cuesta poder y recarga dos turnos")
+    void veloDeSombrasGeneral() {
+        ResultadoDeAccion r = jugar("Velo de Sombras", "armas", null, false, new AzarGuionado(),
+                conEpica("armas", "Guerrero Armas", null, "Velo de Sombras"), heroe("tanque", "Guerrero Tanque", null));
+
+        assertTrue(r.esEpica());
+        assertFalse(r.potenciada());
+        assertEquals(TipoDeAccion.DEFENSA, r.tipo());
+        assertNull(r.ataque());
+        Contendiente armas = de(r, "armas");
+        assertEquals(2, armas.sumaDe(TipoDeEfecto.BONO_DEFENSA));
+        assertFalse(armas.tiene(TipoDeEfecto.INMUNE_TOTAL), "la intangibilidad es solo del Picaro Veneno");
+        assertFalse(armas.tiene(TipoDeEfecto.ENVENENA_AL_ATACANTE), "el veneno es solo del Picaro Veneno");
+        assertEquals(8, armas.poder(), "las epicas no usan poder");
+        assertEquals(Map.of("Velo de Sombras", 2), r.recargas().get("armas"));
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras (general): con +2 a la defensa, un ataque que antes pasaba (12 contra 11) ya no la supera (12 contra 13)")
+    void veloDeSombrasSubeLaDefensaDeVerdad() {
+        ResultadoDeAccion velo = jugar("Velo de Sombras", "armas", null, false, new AzarGuionado(),
+                conEpica("armas", "Guerrero Armas", null, "Velo de Sombras"), heroe("tanque", "Guerrero Tanque", null));
+
+        ResultadoDeAccion golpe = jugar("ATAQUE_BASICO", "tanque", null, false, new AzarGuionado().dados(2),
+                de(velo, "tanque"), de(velo, "armas"));
+
+        assertEquals(12, golpe.ataque().ataqueResuelto());
+        assertEquals(13, golpe.ataque().defensaObjetivo(), "11 de la Tabla 6 + 2");
+        assertFalse(golpe.ataque().acierta());
+        assertEquals(44, de(golpe, "armas").vida());
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras (potenciada, Picaro Veneno): ademas del +2, intangible un turno y con veneno para el atacante")
+    void veloDeSombrasPotenciada() {
+        ResultadoDeAccion r = venenoConVelo();
+
+        assertTrue(r.esEpica());
+        assertTrue(r.potenciada());
+        Contendiente veneno = de(r, "veneno");
+        assertEquals(2, veneno.sumaDe(TipoDeEfecto.BONO_DEFENSA), "la potenciada incluye el efecto general");
+        assertTrue(veneno.tiene(TipoDeEfecto.INMUNE_TOTAL));
+        assertTrue(veneno.tiene(TipoDeEfecto.ENVENENA_AL_ATACANTE));
+        assertEquals(8, veneno.poder(), "no cuesta poder");
+        assertEquals(Map.of("Velo de Sombras", 2), r.recargas().get("veneno"));
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras: el golpe que llega al intangible no le hace dano y deja al atacante con +3 de veneno por 2 turnos")
+    void veloDeSombrasEvitaElDanoYEnvenenaAlAtacante() {
+        ResultadoDeAccion velo = venenoConVelo();
+
+        ResultadoDeAccion golpe = jugar("ATAQUE_BASICO", "tanque", null, false,
+                new AzarGuionado().dados(6).filas(1000).dados(4), de(velo, "tanque"), de(velo, "veneno"));
+
+        assertTrue(golpe.ataque().acierta());
+        assertEquals(0, golpe.ataque().danoAplicado(), "evita todo el dano recibido");
+        assertEquals(36, de(golpe, "veneno").vida());
+        Contendiente tanque = de(golpe, "tanque");
+        EfectoActivo veneno = tanque.efectos().stream()
+                .filter(e -> e.tipo() == TipoDeEfecto.DANO_POR_TURNO).findFirst().orElseThrow();
+        assertEquals(3, veneno.valor(), "+3 de dano por veneno");
+        assertEquals(2, veneno.turnos(), "durante 2 turnos");
+        assertEquals("Velo de Sombras", veneno.nombre());
+        assertEquals("veneno", veneno.origen(), "es el Picaro Veneno quien lo envenena");
+        assertEquals(44, tanque.vida(), "el veneno actua al empezar su turno, no al recibirlo");
+        assertTrue(golpe.eventos().stream().anyMatch(e -> e.tipo() == TipoDeEvento.PROTEGIDO
+                && e.combatiente().equals("veneno")), "el motor cuenta que no recibio dano");
+        assertTrue(golpe.eventos().stream().anyMatch(e -> e.tipo() == TipoDeEvento.EFECTO_APLICADO
+                && e.combatiente().equals("tanque") && "Velo de Sombras".equals(e.efecto())));
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras: el veneno quita 3 al empezar cada uno de los dos turnos del atacante y se acaba")
+    void elVenenoDelVeloActuaDosTurnos() {
+        ResultadoDeAccion velo = venenoConVelo();
+        ResultadoDeAccion golpe = jugar("ATAQUE_BASICO", "tanque", null, false,
+                new AzarGuionado().dados(6).filas(1000).dados(4), de(velo, "tanque"), de(velo, "veneno"));
+
+        ResultadoDeTurno primero = motor.iniciarTurno(new SolicitudDeTurno("tanque", false,
+                List.of(de(golpe, "tanque"), de(golpe, "veneno"))), new AzarGuionado());
+        assertEquals(41, enTurno(primero, "tanque").vida());
+        assertTrue(primero.eventos().stream().anyMatch(e -> e.tipo() == TipoDeEvento.DANO_POR_TURNO
+                && e.combatiente().equals("tanque") && "Velo de Sombras".equals(e.efecto()) && e.cantidad() == 3));
+
+        ResultadoDeTurno segundo = motor.iniciarTurno(new SolicitudDeTurno("tanque", false,
+                List.of(enTurno(primero, "tanque"), enTurno(primero, "veneno"))),
+                new AzarGuionado());
+        assertEquals(38, enTurno(segundo, "tanque").vida());
+        assertFalse(enTurno(segundo, "tanque").tiene(TipoDeEfecto.DANO_POR_TURNO),
+                "dos turnos y se acaba");
+
+        ResultadoDeTurno tercero = motor.iniciarTurno(new SolicitudDeTurno("tanque", false,
+                List.of(enTurno(segundo, "tanque"), enTurno(segundo, "veneno"))),
+                new AzarGuionado());
+        assertEquals(38, enTurno(tercero, "tanque").vida(), "el tercer turno ya no pierde vida");
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras: dura un turno, hasta que empieza el del Picaro Veneno; despues el golpe lo daña y no envenena")
+    void veloDeSombrasTerminaAlEmpezarSuTurno() {
+        ResultadoDeAccion velo = venenoConVelo();
+
+        ResultadoDeTurno turno = motor.iniciarTurno(new SolicitudDeTurno("veneno", false,
+                List.of(de(velo, "tanque"), de(velo, "veneno"))), new AzarGuionado());
+        Contendiente veneno = enTurno(turno, "veneno");
+        assertFalse(veneno.tiene(TipoDeEfecto.INMUNE_TOTAL));
+        assertFalse(veneno.tiene(TipoDeEfecto.ENVENENA_AL_ATACANTE));
+        assertFalse(veneno.tiene(TipoDeEfecto.BONO_DEFENSA));
+
+        ResultadoDeAccion golpe = jugar("ATAQUE_BASICO", "tanque", null, false,
+                new AzarGuionado().dados(6).filas(1000).dados(4),
+                enTurno(turno, "tanque"), veneno);
+        assertEquals(4, golpe.ataque().danoAplicado());
+        assertEquals(32, de(golpe, "veneno").vida());
+        assertTrue(de(golpe, "tanque").efectos().isEmpty(), "ya no hay veneno que devolver");
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras: un golpe que no supera la defensa no toca al intangible y tampoco envenena")
+    void veloDeSombrasNoEnvenenaSiElGolpeNoLlega() {
+        Contendiente blindado = veneno("veneno", List.of(
+                new EfectoActivo("VELO_DE_SOMBRAS", "Velo de Sombras", TipoDeEfecto.INMUNE_TOTAL, 0, 1, "veneno"),
+                new EfectoActivo("VELO_DE_SOMBRAS_VENENO", "Velo de Sombras", TipoDeEfecto.ENVENENA_AL_ATACANTE, 3, 2,
+                        "veneno"),
+                new EfectoActivo("MANO_DE_PIEDRA", "Mano de piedra", TipoDeEfecto.BONO_DEFENSA, 12, 1, "veneno")));
+
+        ResultadoDeAccion golpe = jugar("ATAQUE_BASICO", "tanque", null, false, new AzarGuionado().dados(6),
+                heroe("tanque", "Guerrero Tanque", null), blindado);
+
+        assertFalse(golpe.ataque().acierta());
+        assertTrue(de(golpe, "tanque").efectos().isEmpty());
+    }
+
+    @Test
+    @DisplayName("Velo de Sombras: si lo golpean dos veces en su turno, el veneno se renueva y no se acumula")
+    void elVenenoDelVeloNoSeAcumula() {
+        ResultadoDeAccion velo = venenoConVelo();
+        ResultadoDeAccion primero = jugar("ATAQUE_BASICO", "tanque", null, false,
+                new AzarGuionado().dados(6).filas(1000).dados(4), de(velo, "tanque"), de(velo, "veneno"));
+        ResultadoDeAccion segundo = jugar("ATAQUE_BASICO", "tanque", null, false,
+                new AzarGuionado().dados(6).filas(1000).dados(4), de(primero, "tanque"), de(primero, "veneno"));
+
+        assertEquals(1, de(segundo, "tanque").efectos().stream()
+                .filter(e -> e.tipo() == TipoDeEfecto.DANO_POR_TURNO).count());
+        assertEquals(3, de(segundo, "tanque").sumaDe(TipoDeEfecto.DANO_POR_TURNO));
     }
 
     @Test

@@ -34,6 +34,10 @@ es un efecto que nunca se aplica.
     armaduras, ademas, la parte del cuerpo (Tablas 8-19) — en la semilla.
   * epicas: nombre, heroe afin y probabilidad de Master (Tabla 20) — en la
     semilla y en EpicasIniciales.
+  * epicasdemision: las epicas que el documento define dentro de una mision
+    (7.8.14, «Velo de Sombras»): la semilla de productos las exige junto a las
+    de la Tabla 20; EpicasIniciales (heroes) NO las admite, porque son solo de
+    la Tabla 20.
 
 Sin Docker ni compilacion: lee el Java como texto con un analizador minimo de
 llamadas `new X(...)`, en decimas de segundo.
@@ -326,8 +330,9 @@ def comparar_semilla(informe: Informe, canonico: dict, ruta: pathlib.Path) -> No
                 comparar_campo(informe, ruta, singular, nombre, "parte",
                                sin_tildes(oficial["parte"]), sin_tildes(str(entrada.get("parte"))))
 
-    # Epicas: nombre, heroe afin y probabilidad de Master.
-    oficiales = {e["nombre"]: e for e in canonico["epicas"]}
+    # Epicas: nombre, heroe afin y probabilidad de Master. Las de la Tabla 20 y
+    # las que el documento define dentro de una mision (7.8.14) son productos EPICA.
+    oficiales = {e["nombre"]: e for e in canonico["epicas"] + (canonico.get("epicasdemision") or [])}
     comunes = comparar_nombres(informe, ruta, "epica", list(oficiales),
                                [e.get("nombre") for e in semilla.get("epicas") or []])
     for nombre in sorted(comunes):
@@ -388,6 +393,13 @@ def comprobar(canonico_ruta: pathlib.Path, semilla: pathlib.Path, prototipos: pa
               epicas: pathlib.Path, efectos: pathlib.Path | None) -> Informe:
     informe = Informe()
     canonico = yaml.safe_load(canonico_ruta.read_text(encoding="utf-8"))
+    # tests/e2e/contrato-del-profesor.smoke.spec.js cuenta los nombres de cada seccion leyendo
+    # este archivo linea a linea con /^([a-z]+):/. Una clave con mayusculas o guiones no cierra
+    # la seccion anterior y sus entradas se sumarian a ella (la epica de mision, a las de la Tabla 20).
+    for clave in canonico:
+        if not re.fullmatch(r"[a-z]+", str(clave)):
+            informe.error(canonico_ruta, f"la clave «{clave}» no es solo minusculas: el spec E2E del profesor "
+                                         f"la leeria como parte de la seccion anterior")
     for fuente, comparador in ((semilla, comparar_semilla), (prototipos, comparar_prototipos),
                                (epicas, comparar_epicas), (efectos, comparar_efectos)):
         if fuente is None:
@@ -422,6 +434,7 @@ def autoprueba() -> int:
     semilla = json.loads(SEMILLA.read_text(encoding="utf-8"))
     prototipos = PROTOTIPOS.read_text(encoding="utf-8")
     epicas = EPICAS.read_text(encoding="utf-8")
+    canonico = CANONICO.read_text(encoding="utf-8")
 
     def semilla_con(cambio):
         copia = copy.deepcopy(semilla)
@@ -467,16 +480,38 @@ def autoprueba() -> int:
          epicas.replace('"Té changua", "Chamán", null, "Sana a todos +(4d8)", 0.1',
                         '"Té changua", "Chamán", null, "Sana a todos +(4d8)", 0.2'),
          "probabilidadMaster es 0.2"),
+        # 7.8.14: la epica de la mision es producto del catalogo, no de la Tabla 20.
+        ("falta la epica de la mision (Velo de Sombras) en la semilla", "semilla",
+         semilla_con(lambda s: s.__setitem__("epicas", [e for e in s["epicas"] if e["nombre"] != "Velo de Sombras"])),
+         "falta «Velo de Sombras»"),
+        ("epica de la mision con otro heroe (Velo de Sombras del Mago Fuego)", "semilla",
+         semilla_con(lambda s: [e.__setitem__("heroe", "Mago Fuego")
+                                for e in s["epicas"] if e["nombre"] == "Velo de Sombras"]),
+         "«Velo de Sombras»: heroe es 'Mago Fuego'"),
+        ("epica de la mision con otra probabilidad (Velo de Sombras al 0.15 %)", "semilla",
+         semilla_con(lambda s: [e.__setitem__("probabilidadMaster", "0.15%")
+                                for e in s["epicas"] if e["nombre"] == "Velo de Sombras"]),
+         "«Velo de Sombras»: probabilidadMaster"),
+        ("la epica de la mision colada entre las de la Tabla 20 (heroes)", "epicas",
+         epicas.replace('new Epica("Reanimador 3000"',
+                        'new Epica("Velo de Sombras", "Pícaro Veneno", "+2 a la defensa", "Intangible", 15),\n'
+                        '            new Epica("Reanimador 3000"'),
+         "sobra «Velo de Sombras»"),
+        # tests/e2e/contrato-del-profesor.smoke.spec.js lee este archivo con /^([a-z]+):/: una
+        # clave con mayusculas no cierra la seccion anterior y sus entradas se cuentan en ella.
+        ("una clave del canonico con mayusculas (epicasDeMision)", "canonico",
+         canonico.replace("\nepicasdemision:\n", "\nepicasDeMision:\n"),
+         "la clave «epicasDeMision»"),
     ]
 
     with tempfile.TemporaryDirectory() as carpeta:
         base = pathlib.Path(carpeta)
         for titulo, fuente, contenido, esperado in casos:
-            rutas = {"semilla": SEMILLA, "prototipos": PROTOTIPOS, "epicas": EPICAS}
+            rutas = {"semilla": SEMILLA, "prototipos": PROTOTIPOS, "epicas": EPICAS, "canonico": CANONICO}
             rota = base / f"{fuente}{pathlib.Path(rutas[fuente]).suffix}"
             rota.write_text(contenido, encoding="utf-8")
             rutas[fuente] = rota
-            informe = comprobar(CANONICO, rutas["semilla"], rutas["prototipos"], rutas["epicas"], None)
+            informe = comprobar(rutas["canonico"], rutas["semilla"], rutas["prototipos"], rutas["epicas"], None)
             mensajes = [m for _, m in informe.errores]
             if informe.errores and any(esperado in m for m in mensajes):
                 print(f"ok    rojo como debe: {titulo}")
@@ -484,7 +519,7 @@ def autoprueba() -> int:
                 print(f"::error::el guardian NO detecto: {titulo} (esperaba «{esperado}», obtuvo {mensajes})")
                 fallos += 1
             if contenido == {"semilla": json.dumps(semilla, ensure_ascii=False),
-                             "prototipos": prototipos, "epicas": epicas}[fuente]:
+                             "prototipos": prototipos, "epicas": epicas, "canonico": canonico}[fuente]:
                 print(f"::error::el caso «{titulo}» no cambio nada: la autoprueba esta mal escrita")
                 fallos += 1
 
@@ -513,7 +548,8 @@ def main(argumentos: list[str]) -> int:
     print(f"\nEl catalogo del codigo coincide con el documento (catalogo oficial v{canonico['version']}): "
           f"{len(canonico['heroes'])} heroes, {len(canonico['acciones'])} acciones, "
           f"{len(canonico['armas'])} armas, {len(canonico['armaduras'])} armaduras, "
-          f"{len(canonico['items'])} items, {len(canonico['epicas'])} epicas.")
+          f"{len(canonico['items'])} items, {len(canonico['epicas'])} epicas de la Tabla 20 y "
+          f"{len(canonico.get('epicasdemision') or [])} de mision.")
     return 0
 
 

@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
+import nexus.misiones.catalogo.CatalogoDeMisionesDesdeSemilla;
 import nexus.misiones.dominio.Ejecucion;
 import nexus.misiones.dominio.EjecucionNoEncontrada;
 import nexus.misiones.dominio.Epica;
@@ -35,6 +36,7 @@ import nexus.misiones.dominio.simulacion.Combatiente;
 import nexus.misiones.dominio.simulacion.EstadisticasDeCombate;
 import nexus.misiones.dominio.simulacion.EventoDeCombate;
 import nexus.misiones.dominio.simulacion.Formula;
+import nexus.misiones.dominio.simulacion.ReglaDelMaster;
 import nexus.misiones.dominio.simulacion.TurnoParaDecidir;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -102,6 +104,11 @@ class CicloDeUnaMisionTest {
 
     private void prepararCon(List<EpicaDeTabla20> tabla20, int lote) {
         prepararCon(tabla20, lote, List.of());
+    }
+
+    /** {@code extras}: misiones que se suman a las de siempre (por ejemplo, una con un Master seguro). */
+    private void prepararCon(List<Mision> extras, List<EpicaDeTabla20> tabla20, int lote) {
+        prepararCon(tabla20, lote, extras);
     }
 
     private void prepararCon(List<EpicaDeTabla20> tabla20, int lote, List<Mision> extras) {
@@ -251,6 +258,33 @@ class CicloDeUnaMisionTest {
         assertThat(inventario.clavesDeEntrega).containsExactly("mision-" + ejecucion.id() + "-epica");
         assertThat(inventario.entregas.getFirst())
                 .containsExactly(new InventarioDeHeroes.ProductoAEntregar("4481eb34-384a-3fa0-ba9a-1aac9562c38f", 1));
+        assertThat(correo.enviados).containsKey("mision-" + ejecucion.id() + "-correo-epica");
+    }
+
+    @Test
+    @DisplayName("HU-SIM-006 C3: derrotar a «Sombra del Olvido» entrega al inventario el producto EPICA «Velo de Sombras», con el id de la semilla")
+    void veloDeSombrasLlegaAlInventario() {
+        // El Master y su epica tal como los publica la semilla del documento (7.8.14), con la certeza
+        // de que aparece (en el Templo sale el 15 % de las veces).
+        MasterDeMision delDocumento = CatalogoDeMisionesDesdeSemilla.cargar(false).buscar("templo-olvidado")
+                .orElseThrow().masters().get(0);
+        MasterDeMision seguro = new MasterDeMision(delDocumento.nombre(), delDocumento.prototipo(), 1.0,
+                delDocumento.epica());
+        prepararCon(List.of(Misiones.historia("sombra-segura", List.of(seguro))), List.of(), 20);
+        heroes.vidaDeLosEnemigos = 5;
+        Ejecucion ejecucion = enviar("sombra-segura");
+        ahora.set(INICIO.plus(Duration.ofHours(1)));
+
+        trabajo.ejecutar();
+
+        Ejecucion terminada = ejecuciones.buscar(ejecucion.id()).orElseThrow();
+        assertThat(terminada.recompensas().epicas()).containsExactly(new RecompensasDeEjecucion.EpicaGanada(
+                "Velo de Sombras", "Sombra del Olvido", Misiones.ID_DE_VELO_DE_SOMBRAS));
+        assertThat(inventario.clavesDeEntrega).containsExactly("mision-" + ejecucion.id() + "-epica");
+        assertThat(inventario.entregas.getFirst()).containsExactly(
+                new InventarioDeHeroes.ProductoAEntregar(Misiones.ID_DE_VELO_DE_SOMBRAS, 1));
+        assertThat(terminada.recompensas().sinEntregar()).extracting(s -> s.nombre())
+                .doesNotContain("Épica «Velo de Sombras»");
         assertThat(correo.enviados).containsKey("mision-" + ejecucion.id() + "-correo-epica");
     }
 
@@ -645,7 +679,8 @@ class CicloDeUnaMisionTest {
     }
 
     @Test
-    @DisplayName("un Master sin vida fijada (todos los del juego) pelea con la de su prototipo en su nivel")
+    @DisplayName("un Master sin vida fijada (todos los del juego) pelea con la fraccion de la vida de su prototipo "
+            + "en su nivel que fija la regla de equilibrio")
     void masterSinVidaFijada() {
         MasterDeMision delJuego = new MasterDeMision("Sombra del Olvido", "Pícaro Veneno", 1.0,
                 Misiones.VELO_DE_SOMBRAS);
@@ -660,8 +695,12 @@ class CicloDeUnaMisionTest {
                 .filteredOn(c -> c.id().equals("rival") && c.prototipo().equals("Pícaro Veneno"))
                 .isNotEmpty()
                 .allSatisfy(c -> {
-                    assertThat(c.estadisticas().vida()).isEqualTo(50);
-                    assertThat(c.estadisticas().defensa()).isEqualTo(5);
+                    // La regla de HU-SIM-006 reduce la vida del prototipo (50 aqui) segun el nivel del heroe (1);
+                    // solo un Master que la semilla fija (el del banco E2E) pelea con otra cosa.
+                    assertThat(c.estadisticas().vida()).isEqualTo(ReglaDelMaster.publicada().vida(50, 1));
+                    assertThat(c.estadisticas().vida()).isGreaterThan(1);
+                    assertThat(c.estadisticas().defensa()).isGreaterThanOrEqualTo(
+                            ReglaDelMaster.publicada().defensa(5, 1));
                 });
         assertThat(heroes.nivelesPedidos).contains("Pícaro Veneno@3");
     }

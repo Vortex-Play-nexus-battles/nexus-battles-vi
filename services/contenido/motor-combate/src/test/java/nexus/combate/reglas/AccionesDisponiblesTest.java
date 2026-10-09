@@ -85,6 +85,17 @@ class AccionesDisponiblesTest {
     }
 
     @Test
+    @DisplayName("«Velo de Sombras» (7.8.14) se ofrece como cualquier epica: sin coste, dos turnos de carga, de defensa")
+    void veloDeSombras() {
+        List<EstadoDeAccion> acciones = accionesDe(tanque(10, Map.of(), 0, List.of("Velo de Sombras")));
+        EstadoDeAccion velo = la(acciones, "Velo de Sombras");
+        assertTrue(velo.esEpica());
+        assertTrue(velo.disponible(), velo.motivo());
+        assertEquals(TipoDeAccion.DEFENSA, velo.tipo());
+        assertEquals(2, velo.turnosDeCarga());
+    }
+
+    @Test
     @DisplayName("un caido no puede jugar nada")
     void caido() {
         List<EstadoDeAccion> acciones = accionesDe(new Contendiente("tanque", null, "Guerrero Tanque", 1, null, 0,
