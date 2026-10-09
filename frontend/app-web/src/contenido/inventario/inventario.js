@@ -25,6 +25,7 @@ import { construirCarga, construirVacio, construirError } from './estados-vista.
 import { abrirFicha } from './ficha-producto.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
 import { acusar } from '../../comun/ui/acuse.js';
+import { confirmar as confirmarEnDialogo } from '../../comun/ui/dialogo.js';
 import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { consultarProducto as consultarProductoDelCatalogo } from './cliente-productos.js';
 import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
@@ -461,8 +462,11 @@ export async function montarInventario(
     equipar = equiparElemento,
     desequipar = desequiparElemento,
     eliminar = eliminarElemento,
-    // Inyectable: en las pruebas no hay dialogo del navegador.
-    confirmar = (texto) => globalThis.confirm(texto),
+    // El dialogo del kit, no el del navegador: UXC-7 los prohibe —no se
+    // estilan, bloquean la pagina, no devuelven el foco y se leen mal con
+    // lector de pantalla—, y hay una prueba guardiana que lo vigila.
+    // Inyectable para que las pruebas decidan sin abrir nada.
+    confirmar = confirmarEnDialogo,
     consultarProducto = consultarProductoDelCatalogo,
     listarHeroesDelNexo = () => listarProductos({ tipo: 'HEROE' }),
     fuenteMisiones = fuenteDeMisiones(),
