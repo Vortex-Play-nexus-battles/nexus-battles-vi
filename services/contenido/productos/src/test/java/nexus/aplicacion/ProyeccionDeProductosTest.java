@@ -89,6 +89,29 @@ class ProyeccionDeProductosTest {
         }
 
         @Test
+        @DisplayName("la proyeccion publica clasifica la rareza y expone las habilidades existentes")
+        void rarezaYHabilidadesPublicas() {
+                Producto arma = new Producto(
+                        "arma-1", "Espada", "img", "Arma. Efectos: +3 al ataque. Probabilidad de caída: 10%.",
+                        TipoProducto.ARMA, 10, 300, null, false, null, null, null, null, null, null,
+                        null, null, null, null, null, 3, new BigDecimal("10"), EstadoProducto.ACTIVO, 1,
+                        AHORA, AHORA);
+                Producto epica = new Producto(
+                        "epica-1", "Tormenta", "img", "Habilidad épica", TipoProducto.EPICA, 1, 900,
+                        null, true, null, "heroe-1", null, null, null, 2, "Daño en área",
+                        "Duplica el daño", null, null, null, null, null, EstadoProducto.UNICO, 1,
+                        AHORA, AHORA);
+
+                ProductoCreado armaPublica = proyeccion.proyectar(arma, Visibilidad.PUBLICA);
+                ProductoCreado epicaPublica = proyeccion.proyectar(epica, Visibilidad.PUBLICA);
+
+                assertEquals("COMUN", armaPublica.rareza());
+                assertEquals(List.of("+3 al ataque"), armaPublica.habilidades());
+                assertEquals("EPICA", epicaPublica.rareza());
+                assertEquals(List.of("Daño en área", "Duplica el daño"), epicaPublica.habilidades());
+        }
+
+        @Test
         @DisplayName("un SUSPENDIDO existe para un jugador y para la administracion, no para el publico")
         void suspendidos() {
                 Producto suspendido = new Producto("s", "S", "img", "d", TipoProducto.ARMA, 1, 1, null, false,

@@ -2,6 +2,7 @@ package nexus.api;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.OrigenProducto;
@@ -29,6 +30,10 @@ public record ProductoCreado(
         String descripcion,
 
         TipoProducto tipo,
+
+        String rareza,
+
+        List<String> habilidades,
 
         int tiraje,
 
