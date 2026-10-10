@@ -181,16 +181,17 @@ AWS y los recordatorios de salida por SNS + EventBridge Scheduler.
 Ningún host se queda encendido las 24 horas. `infra-dev.yml` cubre **los dos** con
 la misma política horaria, en una matriz:
 
-| Acción | Cron (UTC) | Hora Colombia |
+| Acción | Cron | Hora Colombia |
 |---|---|---|
-| apagar | `23 4 * * *` y `23 5 * * *` | 23:23 y 00:23, todos los días |
-| encender | `17 12 * * 1-5` y `17 13 * * 1-5` | 07:17 y 08:17, lunes a viernes |
+| apagar | `23 23 * * *` y `23 0 * * *` (zona `America/Bogota`) | 23:23 y 00:23, todos los días |
+| encender | `47 6 * * *`, `17 7 * * *` y `47 7 * * *` (zona `America/Bogota`) | 06:47, 07:17 y 07:47, todos los días (fines de semana incluidos desde el 10-oct) |
 
 Cada acción se intenta dos veces con una hora de diferencia, y los minutos van
 fuera de punto. La razón es concreta: GitHub retrasa las tareas programadas cuando
 hay carga y, si el retraso es grande, las descarta sin más. Repetir no molesta
 porque encender y apagar son idempotentes; una noche sin apagar sí cuesta dinero.
-Los fines de semana quedan apagados a propósito.
+Desde el 10-oct también se encienden el fin de semana (antes quedaban apagados y
+el juego no estaba disponible sábado y domingo).
 
 Quien necesite desplegar fuera de horario no tiene que hacer nada: el propio CD
 enciende el host que le toca con la acción local

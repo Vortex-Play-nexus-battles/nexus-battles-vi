@@ -43,10 +43,11 @@ Nada más se crea a mano. Todo lo demás sale de esta carpeta por `infra-dev.yml
 | parámetro SecureString `/nexus/dev/plataforma/llave-ssh-despliegue` | llave privada del par de despliegue | 0 |
 | 2 `aws_budgets_budget` | crédito total (10/25/50/75/90 %) y tope mensual (50/80/100 % + pronóstico) | 0 (dos primeros presupuestos gratis) |
 | SNS + EventBridge Scheduler | recordatorios de salida 2026-10-30, 2027-01-14, 2027-02-12 | 0 |
-| EventBridge Scheduler (`horario.tf`) | apaga el host todos los días a las 23:23 y lo enciende de lunes a viernes a las 06:47, **hora de Colombia** (`America/Bogota`), a la hora exacta; el rol del planificador solo puede encender y apagar esta instancia. `horario_activo = false` lo suspende (p. ej. la semana de la demo) | 0 (14 M invocaciones/mes gratis) |
+| EventBridge Scheduler (`horario.tf`) | apaga el host todos los días a las 23:23 y lo enciende todos los días a las 06:47 (fines de semana incluidos desde el 10-oct), **hora de Colombia** (`America/Bogota`), a la hora exacta; el rol del planificador solo puede encender y apagar esta instancia. `horario_activo = false` lo suspende (p. ej. la semana de la demo) | 0 (14 M invocaciones/mes gratis) |
 
-Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches y fines de
-semana, hora de Colombia) ≈ **36 USD/mes**, contra el crédito del Free Plan
+Total 24×7 ≈ **67 USD/mes**; con el apagado programado (noches, hora de
+Colombia; encendido también el fin de semana desde el 10-oct) ≈ **48 USD/mes**
+(≈36 cuando el fin de semana quedaba apagado), contra el crédito del Free Plan
 (USD 113,75 el 29-sep; `diagnostico-dev.yml` lo muestra). Con `t3.small` eran
 ≈20,2 y ≈11,5.
 
@@ -159,7 +160,7 @@ Si la IP elástica de contenido cambia algún día, se cambian a la vez
 |---|---|---|
 | `plan` | muestra cambios y los comenta en el PR | sola, en cada PR que toque esta carpeta |
 | `apply` | crea o actualiza | **sola, al fusionar en `develop`** (el plan aprobado en el PR es la confirmación); a mano, escribiendo `apply` |
-| `start` / `stop` | enciende / apaga la instancia | cron (23:00 Colombia apaga; 07:00 lun-vie enciende) o a mano |
+| `start` / `stop` | enciende / apaga la instancia | EventBridge (23:23 Colombia apaga; 06:47 todos los días enciende) o a mano |
 | `destroy` | borra todo, incluida la IP | solo a mano, escribiendo `destroy` |
 
 > Límite de GitHub: el botón *Run workflow* y los `cron` solo funcionan cuando el

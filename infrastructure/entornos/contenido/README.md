@@ -71,14 +71,14 @@ Si en vez de eso aparece **un solo** `destroy` o `replace` sobre la instancia, l
 
 Este host **ya no se queda encendido las 24 h**. `infra-dev.yml` cubre ahora los dos hosts con la misma política horaria, sin cambiar ni un horario:
 
-| Acción | Cron (UTC) | Hora Colombia |
+| Acción | Cron | Hora Colombia |
 |---|---|---|
-| apagar | `23 4 * * *` y `23 5 * * *` | 23:23 y 00:23, todos los días |
-| encender | `17 12 * * 1-5` y `17 13 * * 1-5` | 07:17 y 08:17, lunes a viernes |
+| apagar | `23 23 * * *` y `23 0 * * *` (zona `America/Bogota`) | 23:23 y 00:23, todos los días |
+| encender | `47 6 * * *`, `17 7 * * *` y `47 7 * * *` (zona `America/Bogota`) | 06:47, 07:17 y 07:47, todos los días (fines de semana incluidos desde el 10-oct) |
 
 Cada acción se intenta dos veces con una hora de diferencia, y los minutos van fuera de punto: GitHub retrasa las tareas programadas cuando hay carga y, si el retraso es grande, las descarta. Repetir no molesta porque la acción es idempotente.
 
-Los fines de semana queda apagado a propósito. Quien necesite desplegar un sábado no tiene que hacer nada: el propio CD lo enciende (R9.2).
+Desde el 10-oct también se enciende el fin de semana: antes quedaba apagado sábado y domingo y el juego no estaba disponible. Si un despliegue encuentra el host apagado, el propio CD lo enciende (R9.2).
 
 ## Despliegue fuera de horario — R9.2
 
@@ -252,8 +252,8 @@ Con el rol puesto:
   `scripts/cd/pruebas/reglas-sg-contenido.sh`). Si el dueño solo hace el paso B, Grupo 6
   hace el A desde ahí.
 - **El horario de plataforma pasa a aplicarse también a este host:** se apaga a las 23:23 y
-  se enciende a las 07:17 (hora Colombia) de lunes a viernes, y queda apagado el fin de
-  semana. Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
+  se enciende a las 06:47 (hora Colombia) todos los días (hasta el 10-oct, de lunes a
+  viernes). Si el Grupo 2 necesita su host encendido 24 h, que el rol **no** incluya
   `ec2:StopInstances`.
 
 ### Lo que ya está en este host antes del paso A, y lo que queda después

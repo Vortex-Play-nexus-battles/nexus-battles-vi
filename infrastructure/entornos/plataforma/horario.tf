@@ -76,7 +76,7 @@ resource "aws_scheduler_schedule" "apagar_plataforma" {
 
 resource "aws_scheduler_schedule" "encender_plataforma" {
   name                         = "nexus-plataforma-encender"
-  description                  = "Enciende nexus-plataforma-dev antes de la jornada, de lunes a viernes (hora de Colombia). Ver horario.tf."
+  description                  = "Enciende nexus-plataforma-dev antes de la jornada, todos los dias (hora de Colombia). Ver horario.tf."
   schedule_expression          = var.horario_encender
   schedule_expression_timezone = local.horario_zona
   state                        = var.horario_activo ? "ENABLED" : "DISABLED"

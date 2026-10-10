@@ -94,10 +94,11 @@ variable "tope_mensual_usd" {
     previsto y no mucho mas: si el gasto normal lo supera, sus avisos pasan a
     ser ruido y nadie los lee.
     Con t3.small, IP y disco 24x7 el gasto era ~20 USD/mes (tope 30). Con
-    c7i-flex.large (opcion E, 29-sep) y el apagado programado (~83 h por
-    semana), ~36 USD/mes (instancia ~30,5 + IP 3,65 + disco 1,60); 24x7
-    serian ~67. Tope 50: el pronostico avisa si el host se queda encendido de
-    noche o los fines de semana.
+    c7i-flex.large (opcion E, 29-sep) y el apagado programado de lunes a
+    viernes (~83 h encendido por semana), ~36 USD/mes (instancia ~30,5 + IP
+    3,65 + disco 1,60); desde el 10-oct se enciende tambien el fin de semana
+    (~116 h por semana), ~48 USD/mes (instancia ~42,7); 24x7 serian ~67.
+    Tope 50: el pronostico avisa si el host se queda encendido de noche.
   EOT
   type        = number
   default     = 50
@@ -116,9 +117,9 @@ variable "horario_apagar" {
 }
 
 variable "horario_encender" {
-  description = "Cuando se enciende el host, en hora de Colombia (America/Bogota), sintaxis cron de EventBridge Scheduler. Por omision, de lunes a viernes a las 06:47: las JVM arrancan por turnos (unos 5 minutos) y el entorno queda listo antes de la jornada. Los fines de semana no se enciende solo; el CD lo enciende si hace falta desplegar."
+  description = "Cuando se enciende el host, en hora de Colombia (America/Bogota), sintaxis cron de EventBridge Scheduler. Por omision, todos los dias a las 06:47 (hasta el 10-oct era de lunes a viernes y el fin de semana el juego no estaba disponible): las JVM arrancan por turnos (unos 5 minutos) y el entorno queda listo antes de la jornada. El apagado nocturno no cambia."
   type        = string
-  default     = "cron(47 6 ? * MON-FRI *)"
+  default     = "cron(47 6 * * ? *)"
 }
 
 variable "recordatorios" {

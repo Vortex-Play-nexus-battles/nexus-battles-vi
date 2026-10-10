@@ -41,8 +41,8 @@
 #               es la confirmacion humana). Sobre contenido NUNCA corre sola.
 #               A mano exige escribir "apply" en `confirmar`.
 #   start    -> enciende la instancia. Programado: plataforma, EventBridge
-#               Scheduler lun-vie 06:47 Colombia (plataforma/horario.tf);
-#               contenido, cron lun-vie 06:47, 07:17 y 07:47 Colombia.
+#               Scheduler todos los dias 06:47 Colombia (plataforma/horario.tf);
+#               contenido, cron todos los dias 06:47, 07:17 y 07:47 Colombia.
 #   stop     -> apaga la instancia. Programado: todos los dias 23:23 Colombia
 #               (EventBridge para plataforma, cron 23:23 y 00:23 para
 #               contenido). Apagada solo factura la IP elastica y el disco.
@@ -130,15 +130,17 @@ on:
       timezone: "America/Bogota"
     - cron: "23 0 * * *"
       timezone: "America/Bogota"
-    # Encender: 06:47, 07:17 y 07:47 hora de Colombia, de lunes a viernes. Los
-    # fines de semana los hosts quedan apagados a proposito, por coste; quien
-    # necesite desplegar un sabado no tiene que hacer nada: el propio CD los
-    # enciende (ver "Asegurar que el host esta encendido" en cd.yml).
-    - cron: "47 6 * * 1-5"
+    # Encender: 06:47, 07:17 y 07:47 hora de Colombia, TODOS los dias. Hasta
+    # el 10-oct era de lunes a viernes y el fin de semana el juego no estaba
+    # disponible; ahora tambien se trabaja sobre DEV sabado y domingo. El
+    # apagado nocturno no cambia. Un despliegue con el host apagado sigue sin
+    # depender de esto: el propio CD lo enciende ("Asegurar que el host esta
+    # encendido" en cd.yml).
+    - cron: "47 6 * * *"
       timezone: "America/Bogota"
-    - cron: "17 7 * * 1-5"
+    - cron: "17 7 * * *"
       timezone: "America/Bogota"
-    - cron: "47 7 * * 1-5"
+    - cron: "47 7 * * *"
       timezone: "America/Bogota"
 
 permissions:
@@ -218,7 +220,7 @@ jobs:
               # credito sin que nadie se entere.
               case "${{ github.event.schedule }}" in
                 "23 23 * * *"|"23 0 * * *")                     accion=stop ;;
-                "47 6 * * 1-5"|"17 7 * * 1-5"|"47 7 * * 1-5")   accion=start ;;
+                "47 6 * * *"|"17 7 * * *"|"47 7 * * *")         accion=start ;;
                 *) echo "::error::Cron no reconocido: '${{ github.event.schedule }}'. Revisa el bloque schedule de este workflow."; exit 1 ;;
               esac
               # El planificador de GitHub llega tarde, a veces horas (28-sep:
