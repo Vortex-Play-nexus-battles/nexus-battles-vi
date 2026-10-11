@@ -45,6 +45,14 @@ public class ModificarProductoServicio {
          *         API lo responde con 409 y el respaldo ya se revirtio
          */
         public Producto modificar(String id, SolicitudModificarProducto cambios, String autor) {
+                return modificar(id, cambios, autor, TipoCambioProducto.MODIFICACION);
+        }
+
+        public Producto modificar(
+                        String id,
+                        SolicitudModificarProducto cambios,
+                        String autor,
+                        TipoCambioProducto tipoCambio) {
                 Producto existente = repositorio.findById(id)
                         .orElseThrow(ProductoNoEncontradoException::new);
                 if (existente.version() == 0) {
@@ -77,7 +85,7 @@ public class ModificarProductoServicio {
                         resultadoEsperado,
                         ahora,
                         autor,
-                        TipoCambioProducto.MODIFICACION,
+                        tipoCambio,
                         null);
 
                 // El respaldo se guarda ANTES de tocar el producto: si esto falla,

@@ -250,6 +250,70 @@ describe('la ficha de gestión (ProductAdminSheet)', () => {
     );
   });
 
+  test('HU-PRD-011 lista versiones e importa una plantilla sin cambiar los demás datos', async () => {
+    const confirmarAccion = jest.fn(async () => true);
+    const alCambiar = jest.fn();
+    const plantilla = {
+      formato: 'nexus-producto-diseno',
+      versionFormato: 1,
+      productoOrigenId: 'producto-origen',
+      versionProducto: 5,
+      imagen: 'productos/diseno-importado.webp',
+      descripcion: 'Diseño importado',
+      exportadaEn: '2026-10-11T15:00:00Z',
+    };
+    const fetchImpl = jest.fn(async (url, opciones = {}) => {
+      if (url.endsWith('/diseno/versiones')) {
+        return respuesta([
+          {
+            version: 3,
+            fecha: '2026-10-11T14:00:00Z',
+            autor: 'admin-uid',
+            imagen: YELMO.imagen,
+            descripcion: YELMO.descripcion,
+            actual: true,
+          },
+        ]);
+      }
+      if (url.endsWith('/diseno/importaciones') && opciones.method === 'POST') {
+        return respuesta({
+          ...YELMO,
+          imagen: plantilla.imagen,
+          descripcion: plantilla.descripcion,
+          version: 4,
+        });
+      }
+      throw new Error(`Petición inesperada: ${url}`);
+    });
+
+    abrirHojaDeProducto(YELMO, { fetchImpl, confirmarAccion, alCambiar });
+    ficha().querySelector('[data-accion="consultar-versiones-diseno"]').click();
+    await esperar();
+
+    expect(ficha().querySelector('[data-version="3"]').textContent).toContain('admin-uid');
+
+    const archivo = ficha().querySelector('[data-accion="archivo-plantilla-diseno"]');
+    Object.defineProperty(archivo, 'files', {
+      configurable: true,
+      value: [{ text: async () => JSON.stringify(plantilla) }],
+    });
+    archivo.dispatchEvent(new Event('change'));
+    await esperar();
+    await esperar();
+
+    expect(confirmarAccion).toHaveBeenCalledWith(
+      expect.objectContaining({ textoConfirmar: 'Importar' }),
+    );
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `/api/v1/productos/${YELMO.id}/diseno/importaciones`,
+      expect.objectContaining({ method: 'POST', body: JSON.stringify(plantilla) }),
+    );
+    expect(alCambiar).toHaveBeenCalledWith(
+      expect.objectContaining({ imagen: plantilla.imagen, descripcion: plantilla.descripcion }),
+    );
+    expect(ficha().querySelector('.aviso--exito').textContent).toContain('Diseño importado');
+  });
+
   test('RFINAL-07: sin promoción el resumen no escribe «null» (revisión de DEV del 4-oct)', () => {
     abrirHojaDeProducto({ ...YELMO, promocion: null }, { fetchImpl: jest.fn() });
 

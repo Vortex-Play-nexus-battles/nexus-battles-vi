@@ -1,14 +1,14 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.8.0
+  version: 1.9.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
     respaldo (HU-PRD-003) y suspensión lógica con reactivación
     (HU-PRD-004), además de alertas de cambios al iniciar sesión
     (HU-PRD-014), además de historial y reversión auditada
-    (HU-PRD-007). Contrato publicado antes de la
+    (HU-PRD-007) y versiones portables del diseño (HU-PRD-011). Contrato publicado antes de la
     implementación, conforme a la regla de plataforma "contrato primero".
 
     1.2.0 (R16): se añade GET /api/v1/productos, el listado público y
@@ -98,6 +98,12 @@ info:
     reversión al último estado respaldado. La reversión restaura el contenido
     del producto, queda registrada como un nuevo cambio y rechaza con 409 un
     respaldo obsoleto para no borrar escrituras posteriores.
+
+    1.9.0 (HU-PRD-011): añade el historial específico del diseño y la
+    exportación/importación de una plantilla JSON versionada. En la versión 1
+    del formato el diseño portable contiene imagen y descripción; no altera
+    identidad, tipo, precios, tiraje ni reglas de combate. Una plantilla
+    inválida responde 400 antes de escribir el producto.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -710,6 +716,139 @@ paths:
                 $ref: "#/components/schemas/DetalleDeProblema"
         "409":
           description: El producto cambió después de crear el respaldo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/versiones:
+    get:
+      summary: Consulta las versiones del diseño de un producto
+      operationId: consultarVersionesDiseno
+      description: >
+        HU-PRD-011. Lista la versión actual y los diseños anteriores que
+        cambiaron la imagen o la descripción, con fecha y autor. Solo está
+        disponible para administradores del catálogo.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Versiones del diseño, de la más reciente a la más antigua
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VersionDisenoProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/plantilla:
+    get:
+      summary: Exporta el diseño actual como una plantilla JSON
+      operationId: exportarPlantillaDiseno
+      description: >
+        HU-PRD-011. Devuelve un documento portable y versionado. No contiene
+        identidad, tipo, precios, tiraje ni reglas de combate del producto.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Plantilla del diseño actual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantillaDisenoProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/importaciones:
+    post:
+      summary: Importa una plantilla sobre otro producto
+      operationId: importarPlantillaDiseno
+      description: >
+        HU-PRD-011. Aplica únicamente la imagen y la descripción de la
+        plantilla. La modificación queda en el historial; una plantilla con
+        formato, versión o campos inválidos se rechaza antes de escribir.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantillaDisenoProducto"
+      responses:
+        "200":
+          description: Producto destino con el diseño importado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: La plantilla es inválida o usa una versión no compatible
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto destino
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: El producto cambió mientras se importaba el diseño
           content:
             application/problem+json:
               schema:
@@ -1438,7 +1577,7 @@ components:
           format: uuid
         tipo:
           type: string
-          enum: [CREACION, MODIFICACION, SUSPENSION, REACTIVACION, REVERSION]
+          enum: [CREACION, MODIFICACION, SUSPENSION, REACTIVACION, REVERSION, IMPORTACION_DISENO]
         campos:
           type: array
           description: Campos de negocio que cambiaron entre los dos estados auditados.
@@ -1463,6 +1602,62 @@ components:
         revertible:
           type: boolean
           description: Indica si esta entrada produjo la versión actual y puede revertirse sin pisar otro cambio.
+
+    VersionDisenoProducto:
+      type: object
+      additionalProperties: false
+      required: [version, fecha, autor, imagen, descripcion, actual]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        fecha:
+          type: string
+          format: date-time
+        autor:
+          type: string
+        imagen:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+          minLength: 1
+        actual:
+          type: boolean
+
+    PlantillaDisenoProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - formato
+        - versionFormato
+        - productoOrigenId
+        - versionProducto
+        - imagen
+        - descripcion
+        - exportadaEn
+      properties:
+        formato:
+          type: string
+          const: nexus-producto-diseno
+        versionFormato:
+          type: integer
+          const: 1
+        productoOrigenId:
+          type: string
+          minLength: 1
+        versionProducto:
+          type: integer
+          minimum: 1
+        imagen:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+          minLength: 1
+        exportadaEn:
+          type: string
+          format: date-time
 
     ProductoCreado:
       description: >
