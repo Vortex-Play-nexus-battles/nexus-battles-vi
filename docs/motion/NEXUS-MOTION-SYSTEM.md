@@ -154,5 +154,13 @@ color + icono, número) siguen diciéndolo.
 
 60 fps en escritorio y ≥ 50 en móvil medio (CPU ×4) en batalla; 0 long
 tasks por golpe; CLS ≈ 0; 0 KB de dependencias; lo de batalla se importa en
-`sala-batalla` y no en el login ni en Inicio. Se mide con el banco de
-`tests/visual` (MOTION-4) sobre el escenario `combate-seis`.
+`sala-batalla` y no en el login ni en Inicio.
+
+Lo mide `tests/visual/motion-rendimiento.spec.js` (MOTION-4, job `motion`
+del laboratorio) sobre `combate-seis` con una ráfaga de cuatro golpes a
+CPU ×4, y deja las cifras en `docs/evidencia/motion/rendimiento.md`.
+Compuerta: CLS < 0,02 · long tasks ≤ 3 · p95 ≤ 40 ms · cuadros > 33 ms
+≤ 10 %. Medido al cerrar MOTION-4 (Chromium headless, 11-oct-2026): 55 fps
+de media, p50 16,7 ms, p95 16,8–33,3 ms, 0–2 long tasks por ráfaga (≤ 115 ms en total), CLS 0, 2–4 % de
+cuadros por encima de 33 ms, 9,5 MB de heap. El login y la portada no
+cargan ningún módulo de batalla (`coreografia-de-combate.js`, `fx.js`).
