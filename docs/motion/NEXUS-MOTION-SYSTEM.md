@@ -84,9 +84,18 @@ await secuencia([
 
 `permitido()` se consulta en cada llamada: la preferencia del sistema puede
 cambiar con la página abierta. `transicionDePagina(fn)` usa
-`document.startViewTransition` si existe; entre documentos, `base.css`
-declara `@view-transition { navigation: auto }` (Chrome 126, Edge 126,
-Safari 18.2; en Firefox la navegación es la de siempre).
+`document.startViewTransition` si existe (dentro de una misma página) y
+gestiona sus promesas.
+
+**Entre documentos no hay View Transition.** MOTION-1 declaró
+`@view-transition { navigation: auto }` en `base.css` y MOTION-4 lo retiró:
+cuando Chrome salta una transición entre documentos —navegación rápida,
+pestaña oculta, página que tarda en pintar— rechaza las promesas del
+`ViewTransition` y queda como error no capturado («Transition was skipped»)
+en cada página; la prueba del profesor (`tests/e2e`) trata todo error de
+página como fallo, y un fundido de 200 ms no vale un error de consola por
+navegación. Si un día se quiere, hay que gestionar `pageswap`/`pagereveal`
+en un módulo que carguen las 42 vistas, que hoy no existe.
 
 ## Batalla (MOTION-2)
 
@@ -131,7 +140,7 @@ Microinteracciones con el mismo sistema, una vez cada una y nunca como
 | Tienda | la insignia del carrito pulsa una vez al añadir; la compra entregada entra y el título encaja (`reward`) | `motion.pulse`, `motion.enter`, `motion.reward` |
 | Subastas | el importe de la subasta que acaba de cambiar se acusa una vez (`acuse--puja`); la cuenta atrás urgente y «Ir ahora» laten tres veces, no para siempre | `acusar` + CSS (`pujas.css`) |
 | Notificaciones | la campana pulsa una vez cuando suben las no leídas, nunca al bajar | `motion.pulse` |
-| Navegación | fundido entre páginas (View Transition, MOTION-1) | `base.css` |
+| Navegación | sin fundido entre documentos (retirado en MOTION-4, ver arriba); `transicionDePagina()` para cambios dentro de una página | `motion.js` |
 
 Con movimiento reducido todo esto queda quieto: los estados (halo, sello,
 color + icono, número) siguen diciéndolo.

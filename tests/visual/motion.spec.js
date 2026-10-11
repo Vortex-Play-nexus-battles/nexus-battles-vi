@@ -4,8 +4,8 @@
  * Jest prueba el sistema sobre jsdom, que no tiene Web Animations API. Aquí
  * se comprueba lo que solo un navegador puede decir: que el movimiento
  * existe cuando se permite, que NO existe con `prefers-reduced-motion` ni
- * en el modo determinista, y que la transición entre páginas está declarada
- * (y es inocua donde no se entiende). Se prueba el comportamiento —hay o no
+ * en el modo determinista, que los tokens resuelven y que ninguna página opta
+ * a transiciones entre documentos (MOTION-4 las retiró). Se prueba el comportamiento —hay o no
  * hay animación—, nunca un milisegundo exacto.
  */
 
@@ -100,7 +100,7 @@ test(
 );
 
 test(
-  'la transición entre páginas está declarada en el kit y los tokens de movimiento resuelven',
+  'los tokens de movimiento resuelven y ninguna página opta a transiciones entre documentos',
   { tag: '@motion' },
   async ({ browser, baseURL }) => {
     const contexto = await browser.newContext({ baseURL });
@@ -124,7 +124,10 @@ test(
           impact: estilo.getPropertyValue('--ease-impact').trim(),
         };
       });
-      expect(r.viewTransition).toBe(true);
+      // MOTION-4: sin `@view-transition` entre documentos. Chrome deja un
+      // error no capturado («Transition was skipped») en cada transición que
+      // salta, y la prueba del profesor trata todo error de página como fallo.
+      expect(r.viewTransition).toBe(false);
       expect(r.fast).toBe('120ms');
       expect(r.impact).toBe('cubic-bezier(0.2, 0.9, 0.3, 1)');
     } finally {
