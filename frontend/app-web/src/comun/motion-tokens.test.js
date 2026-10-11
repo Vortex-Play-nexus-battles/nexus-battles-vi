@@ -62,6 +62,10 @@ const INFINITAS_PERMITIDAS = new Map([
   ['girar', 'indicador de carga de las subastas'],
   ['halo-del-nexo', 'el halo del asistente: ambiental, pequeño y lento'],
   ['motion-idle', 'la respiración de un héroe en el campo (MOTION-2)'],
+  [
+    'motion-pensando',
+    'la IA «piensa»: indicador de espera acotado por su estado (≤ 2,2 s, MOTION-2)',
+  ],
   // Deuda que retira MOTION-3 (feat/game-world-motion): pulsos infinitos que
   // pasan a acuses únicos con color + icono + texto.
   ['pulso-urgente', 'DEUDA MOTION-3: cuenta atrás urgente de subastas'],

@@ -24,7 +24,7 @@
 
 import { actualizar } from '../../../../../shared/ui-kit/js/barra-vida.js';
 import { acusarCambioDeVida } from '../../comun/ui/acuse.js';
-import { barraDeVida } from '../../comun/ui/juego/combate.js';
+import { barraDeVida, estelaDeVida } from '../../comun/ui/juego/combate.js';
 
 /** Tipo del mensaje del contrato AsyncAPI que mueve las barras. */
 const ACCION_RESUELTA = 'partida.accion.resuelta';
@@ -143,6 +143,9 @@ export function aplicarAccionResuelta(contenedor, evento) {
 
     if (Number.isFinite(antes)) {
       acusarCambioDeVida(barra, antes, afectado.vidaActual);
+      // MOTION-2 — lo perdido se ve encoger (solo transform/opacity; sin
+      // movimiento no hay estela: el acuse y la cifra ya lo dijeron).
+      estelaDeVida(barra, antes, afectado.vidaActual, afectado.vidaMaxima);
     }
   }
 }

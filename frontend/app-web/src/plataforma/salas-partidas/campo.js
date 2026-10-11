@@ -99,6 +99,11 @@ export function repartirEnElCampo(participantes, yo) {
   return puestos;
 }
 
+/** Desfase del idle de un heroe (0–3,4 s), estable por id. */
+export function retardoDeIdle(id) {
+  return (dispersion(id ?? '', 3) * 3.4).toFixed(2);
+}
+
 /**
  * Pinta el campo con sus participantes.
  *
@@ -128,7 +133,11 @@ export function pintarCampo(contenedor, participantes, yo, { caidos } = {}) {
       h('div', {
         clase: clases('campo__puesto', `campo__puesto--${lado}`, caido && 'campo__puesto--caido'),
         datos: { puesto: id ?? '', lado },
-        atributos: { style: `left:${izquierda}%; top:${arriba}%` },
+        // MOTION-2: cada heroe respira a su ritmo (idle del kit); el desfase
+        // sale del id, como la posicion, para que no respiren todos a la vez.
+        atributos: {
+          style: `left:${izquierda}%; top:${arriba}%; --idle-retardo:${retardoDeIdle(id)}s`,
+        },
         hijos: [
           retratoDeHeroe(
             {
