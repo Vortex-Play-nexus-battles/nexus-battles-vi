@@ -41,6 +41,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
 
 // ------------------------------------------------------------------ rutas
@@ -114,8 +115,9 @@ function rutaDe(url) {
   }
 }
 
-/** axe sobre lo que se ve: sin hallazgos serios ni críticos. */
+/** axe sobre lo que se ve, con la página quieta: sin hallazgos serios ni críticos. */
 async function sinBarrerasGraves(page, donde) {
+  await conLaPaginaQuieta(page);
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
   // Con el elemento: «1× aria-prohibited-attr» sin decir cuál no se puede

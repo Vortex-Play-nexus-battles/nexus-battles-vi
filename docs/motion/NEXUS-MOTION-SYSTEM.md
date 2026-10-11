@@ -57,6 +57,11 @@ lee `--motion-*` del CSS y, sin hoja (jsdom), usa los mismos números.
   hace con pruebas de comportamiento (el actor pasa a su estado, el
   objetivo al suyo, la cifra aparece, el HUD acaba en el valor del
   servidor), nunca con milisegundos exactos.
+- **E2E con movimiento** (`tests/e2e`, banco real): el juego corre tal cual.
+  axe mide el contraste con la opacidad del instante, así que una tarjeta a
+  medio fundido daría un falso «color-contrast»; las auditorías esperan a la
+  página quieta con `conLaPaginaQuieta()` (`tests/e2e/ayudantes/movimiento.js`),
+  igual que ya hacía `axe-con-datos.spec.js` en el laboratorio.
 
 ## El módulo (`src/comun/ui/motion.js`)
 
