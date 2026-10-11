@@ -707,13 +707,37 @@
   overflow: hidden;
 }
 
+/* MOTION-2: el relleno mide siempre el 100 % y se ESCALA a la vida
+   (`transform`, que se compone fuera del hilo principal y no empuja nada;
+   antes animaba `width`). La cifra de al lado cambia al instante: es la
+   verdad del servidor (RF-JUE-009); el relleno la alcanza en 200 ms. */
+.barra-vida__pista {
+  position: relative;
+}
+
 .barra-vida__relleno {
   height: 100%;
-  width: calc(var(--vida, 100) * 1%);
+  width: 100%;
   border-radius: inherit;
+  transform: scaleX(calc(var(--vida, 100) / 100));
+  transform-origin: left center;
   transition:
-    width var(--transicion),
+    transform var(--duracion-normal) var(--curva-salida),
     background var(--transicion);
+}
+
+/* La estela del golpe: lo que la barra acaba de perder se queda un instante
+   en claro y se encoge hacia la vida que queda (`estelaDeVida`, panel de
+   vidas). Es adorno: la cifra y el acuse ya lo dijeron. */
+.barra-vida__estela {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--estela-desde, 0) * 1%);
+  width: calc(var(--estela-ancho, 0) * 1%);
+  background: color-mix(in srgb, var(--texto-sobre-color) 85%, var(--error));
+  transform-origin: left center;
+  pointer-events: none;
 }
 
 .barra-vida[data-estado='alto'] .barra-vida__relleno {
@@ -8149,28 +8173,189 @@ body:not([data-modo='combate']) .registro-combate {
   background: var(--info);
 }
 
+/* MOTION-2: la cifra la mueve y la retira `motion.float` (Web Animations
+   API, `coreografia-de-combate.js`): nace en el instante del impacto, no al
+   llegar el aviso. Aqui solo se coloca; sin movimiento se queda quieta el
+   tiempo de leerla. */
+.impacto__icono {
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.1em;
+  vertical-align: -0.08em;
+  color: currentColor;
+}
+
+.impacto--curacion .impacto__cifra {
+  color: var(--exito-insignia);
+}
+
+.impacto--critico .impacto__cifra {
+  text-shadow:
+    0 0 14px color-mix(in srgb, var(--error) 80%, transparent),
+    0 2px 6px color-mix(in srgb, var(--cromo) 90%, transparent);
+}
+
+/* =======================================================================
+   Game feel del combate — HU-UX-003, MOTION-2
+   -----------------------------------------------------------------------
+   La coreografia (coreografia-de-combate.js) mueve la figura del heroe con
+   la Web Animations API y deja ESTADOS en el DOM. Aqui se pinta lo que esos
+   estados significan sin moverse (vale tambien con movimiento reducido) y
+   lo unico que respira solo: el idle del heroe.
+   ======================================================================= */
+
+/* Idle: el heroe respira, dos pixeles, despacio, cada uno a su ritmo
+   (`--idle-retardo` lo pone campo.js desde el id). Lo unico permanente del
+   campo; con movimiento reducido, quieto. */
 @media (prefers-reduced-motion: no-preference) {
-  .impacto {
-    animation: impacto-sube 1.6s var(--curva-salida) both;
+  .campo__puesto:not(.campo__puesto--caido) .marco-heroe__retrato {
+    animation: motion-idle 3.4s ease-in-out var(--idle-retardo, 0s) infinite;
   }
 }
 
-@keyframes impacto-sube {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 8px) scale(0.9);
-  }
-  12% {
-    opacity: 1;
-    transform: translate(-50%, -4px) scale(1.08);
-  }
-  80% {
-    opacity: 1;
-    transform: translate(-50%, -18px) scale(1);
-  }
+@keyframes motion-idle {
+  0%,
   100% {
-    opacity: 0;
-    transform: translate(-50%, -26px) scale(1);
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Quien actua y quien recibe: el anillo lo dice aunque nada se mueva. */
+.campo__puesto[data-accion] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--enlace-sobre-cromo),
+    0 0 24px color-mix(in srgb, var(--enlace-sobre-cromo) 70%, transparent);
+}
+
+.campo__puesto[data-accion='cura'] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--exito-insignia),
+    0 0 24px color-mix(in srgb, var(--exito) 70%, transparent);
+}
+
+.campo__puesto[data-epica='si'] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--credito-oro-sobre-cromo),
+    0 0 32px color-mix(in srgb, var(--credito-oro-sobre-cromo) 75%, transparent);
+}
+
+.campo__puesto[data-golpe] .marco-heroe__retrato {
+  outline: 3px solid var(--error);
+  outline-offset: 2px;
+}
+
+.campo__puesto[data-golpe='critico'] .marco-heroe__retrato {
+  outline-width: 4px;
+  outline-color: var(--credito-oro-sobre-cromo);
+}
+
+.campo__puesto[data-golpe='curacion'] .marco-heroe__retrato {
+  outline-color: var(--exito-insignia);
+}
+
+.campo__puesto[data-golpe='esquiva'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='resistencia'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='escape'] .marco-heroe__retrato {
+  outline-color: var(--info-insignia);
+}
+
+.campo__puesto[data-golpe='fallo'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='sinCambio'] .marco-heroe__retrato {
+  outline-color: var(--pista);
+}
+
+/* La IA piensa: tres puntos junto al nombre mientras dura su pausa (2,2 s,
+   ritmo-de-combate.js). Es un indicador de espera acotado, como el giro de
+   un boton: late mientras el estado esta, y el estado se va con su accion. */
+.campo__puesto[data-pensando='si'] .campo__nombre::after {
+  content: '\00a0···';
+  display: inline-block;
+  letter-spacing: 0.08em;
+  color: var(--enlace-sobre-cromo);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .campo__puesto[data-pensando='si'] .campo__nombre::after {
+    animation: motion-pensando 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes motion-pensando {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* El desenlace sobre el campo: la derrota pierde color (sobria), el empate
+   no cambia nada, la victoria se celebra con la capa de abajo. */
+.combate__campo[data-desenlace='derrota'] {
+  filter: saturate(0.55) brightness(0.9);
+  transition: filter var(--duracion-turno) var(--curva-estandar);
+}
+
+/* Celebracion contenida (solo VICTORIA): 60 particulas que nacen en el
+   centro del campo, suben, caen y se van. Las mueve WAAPI
+   (coreografia-de-combate.js); con movimiento reducido no se crean. */
+.celebracion {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.celebracion__particula {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--credito-oro-sobre-cromo);
+  will-change: transform, opacity;
+}
+
+.celebracion__particula--1 {
+  background: var(--enlace-sobre-cromo);
+}
+
+.celebracion__particula--2 {
+  background: var(--exito-insignia);
+}
+
+.celebracion__particula--3 {
+  background: var(--texto-sobre-color);
+}
+
+.celebracion__particula--4 {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+}
+
+@media (forced-colors: active) {
+  .campo__puesto[data-accion] .marco-heroe__retrato,
+  .campo__puesto[data-epica='si'] .marco-heroe__retrato {
+    box-shadow: none;
+    outline: 3px solid Highlight;
+  }
+
+  .combate__campo[data-desenlace='derrota'] {
+    filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .combate__campo[data-desenlace='derrota'] {
+    filter: none;
   }
 }
 
@@ -8378,33 +8563,70 @@ body:not([data-modo='combate']) .chat-grupal {
   }
 }
 
+/* MOTION-2: cada numero llega grande y desenfocado y se clava nitido en el
+   centro; «¡COMBATE!» entra con un destello. Sin tocar los tiempos del
+   servidor ni la retencion del canal (presentacion.js, ritmo-de-combate.js). */
 @keyframes cuenta-atras-a {
   0% {
     opacity: 0;
-    transform: scale(1.5);
+    transform: scale(1.6);
+    filter: blur(6px);
   }
   22% {
     opacity: 1;
     transform: scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0.9;
     transform: scale(0.94);
+    filter: blur(0);
   }
 }
 
 @keyframes cuenta-atras-b {
   0% {
     opacity: 0;
-    transform: scale(1.5);
+    transform: scale(1.6);
+    filter: blur(6px);
   }
   22% {
     opacity: 1;
     transform: scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0.9;
     transform: scale(0.94);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .presentacion__cuenta[data-final='si'] {
+    animation: cuenta-atras-combate 800ms var(--curva-salida) both;
+  }
+}
+
+@keyframes cuenta-atras-combate {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+    filter: blur(8px) brightness(2);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(0.98);
+    filter: blur(0) brightness(1.6);
+  }
+  30% {
+    transform: scale(1.02);
+    filter: blur(0) brightness(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0) brightness(1);
   }
 }
 

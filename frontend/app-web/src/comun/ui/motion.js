@@ -412,8 +412,9 @@ export const motion = Object.freeze({
   /**
    * Un texto que flota y se va (la cifra del golpe). Quien llama ya lo puso en
    * el DOM con su texto; aquí solo sube. Se retira al terminar si se pide.
+   * Sin movimiento no sube, pero SE LEE: se queda quieto `lectura` ms.
    */
-  float(elemento, { subida = 40, duracion: d = 1200, retirar = true } = {}) {
+  float(elemento, { subida = 40, duracion: d = 1200, lectura = null, retirar = true } = {}) {
     const animacion = animar(
       elemento,
       [
@@ -430,10 +431,8 @@ export const motion = Object.freeze({
     );
     if (retirar) {
       if (animacion === NADA) {
-        // Sin movimiento el texto no sube, pero SE LEE: se queda quieto el
-        // tiempo que habría durado y entonces se retira.
-        const lectura = typeof d === 'number' ? d : DURACION[d];
-        setTimeout(() => elemento.remove(), lectura);
+        const quieto = lectura ?? (typeof d === 'number' ? d : DURACION[d]);
+        setTimeout(() => elemento.remove(), quieto);
       } else {
         animacion.finished.then(() => elemento.remove()).catch(() => elemento.remove());
       }

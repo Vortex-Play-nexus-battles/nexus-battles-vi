@@ -88,6 +88,35 @@ cambiar con la página abierta. `transicionDePagina(fn)` usa
 declara `@view-transition { navigation: auto }` (Chrome 126, Edge 126,
 Safari 18.2; en Firefox la navegación es la de siempre).
 
+## Batalla (MOTION-2)
+
+`plataforma/salas-partidas/coreografia-de-combate.js` dibuja cada aviso del
+canal con el sistema; `comun/ui/juego/fx.js` dice QUÉ fue (semántica) sin
+calcular nada: el tipo de acción, la categoría del golpe, si fue épica y los
+efectos vienen en el aviso; el prototipo del ejecutor, en los participantes.
+
+| Clave FX | Cuándo | Qué se ve |
+|---|---|---|
+| PHYSICAL_HIT | ataque de Guerrero Tanque, Guerrero Armas, Pícaro Machete | anticipa 120 → lunge 44 px → flash + recoil 14 px + cifra (espada) → hit-stop 60 → regreso |
+| MAGIC_FIRE / MAGIC_ICE | ataque de Mago Fuego / Mago Hielo | lo mismo, con icono de fuego / copo |
+| POISON | ataque de Pícaro Veneno; tick de DANO_POR_TURNO | recoil más suave (8 px), gota; el tick no mueve a quien lo causó |
+| HEAL | sanación, reanimación, tick de SANACION_POR_TURNO | brillo en quien cura y en quien recibe; «+X VIDA» con cruz |
+| SHIELD | DEFENSA (Mano de piedra, Defensa feroz) y efectos de protección | encaje (scale 0,96 → 1), anillo |
+| BUFF / DEBUFF | APOYO sobre compañero / rival; efecto nuevo que mejora / perjudica | se eleva y brilla / pierde color un instante |
+| EPIC | `esEpica` | halo dorado del actor antes del golpe + `data-epica` |
+| CRÍTICO | categoría CAUSAR_DANO_CRITICO | lunge 56 px, hit-stop 90, flash fuerte, sacudida local 2 px, cifra grande con rayo |
+| EVADE / RESISTE / ESCAPA / SIN EFECTO | las otras categorías | paso de lado / encaje / nada; la cifra lo dice con escudo o cerrar |
+
+Estados que deja en el DOM (los pinta el CSS también sin movimiento y los
+afirman las pruebas): `data-accion="ataca|cura|defiende|apoya"`,
+`data-fx`, `data-epica` en quien actúa; `data-golpe="<resultado>"` en quien
+recibe; `data-pensando="si"` en la IA mientras dura su pausa;
+`data-desenlace="victoria|derrota|empate"` en el campo. El HUD recibe el
+valor del servidor al instante; el relleno de la barra lo alcanza con
+`transform: scaleX()` y la estela del daño (`estelaDeVida`) se encoge.
+VICTORIA: la palabra encaja y 60 partículas DOM+WAAPI, una vez; DERROTA:
+el campo pierde color; EMPATE: nada.
+
 ## Cómo añadir una animación
 
 1. Escribe primero el dato (texto, `aria-live`, color + icono).
