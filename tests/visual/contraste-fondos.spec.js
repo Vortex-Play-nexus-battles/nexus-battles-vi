@@ -55,6 +55,7 @@ import {
   sesionDe,
 } from './escenarios-poblados.js';
 import { inyectarSesion } from './identidad.js';
+import { sinMovimiento } from './movimiento.js';
 import { PREFIJO_WEB, VISTAS } from './vistas.js';
 
 // Playwright transpila estos specs a CommonJS (no hay package.json con
@@ -317,6 +318,7 @@ for (const caso of CASOS) {
             caso.escenario?.sesion?.() ??
             (caso.vista.acceso === 'publica' ? null : sesionDe('qa_fondos', 'JUGADOR'));
           await inyectarSesion(contexto, sesion);
+          await sinMovimiento(contexto);
           const pagina = await contexto.newPage();
           for (const [patron, respuesta] of caso.escenario?.rutas ?? []) {
             await pagina.route(patron, (ruta) =>
