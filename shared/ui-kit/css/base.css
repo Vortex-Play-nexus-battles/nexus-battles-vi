@@ -272,3 +272,39 @@ a:hover { color: var(--tinta-enlace-hover); }
   white-space: nowrap;
   border: 0;
 }
+
+/* --- Transicion entre paginas — MOTION-1 ---------------------------- */
+/* Cada vista es un documento (no hay router): al pasar de Inicio a un
+   modulo, del listado a la sala o de la batalla al resultado, el navegador
+   que tiene View Transitions entre documentos (Chrome 126, Edge 126 y
+   Safari 18.2; Firefox todavia no) funde la pagina vieja con la nueva en
+   vez de parpadear en blanco. Donde no existe, la navegacion es la de
+   siempre: mejora progresiva, no dependencia. Un fundido no es movimiento,
+   pero con movimiento reducido y en el modo determinista de pruebas dura
+   un cuadro, por la misma regla que el resto del kit.                  */
+
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation-duration: var(--duracion-rapido);
+  animation-timing-function: var(--curva-entrada);
+}
+
+::view-transition-new(root) {
+  animation-duration: var(--duracion-normal);
+  animation-timing-function: var(--curva-salida);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.01ms;
+  }
+}
+
+html[data-test-motion='off']::view-transition-old(root),
+html[data-test-motion='off']::view-transition-new(root) {
+  animation-duration: 0.01ms;
+}

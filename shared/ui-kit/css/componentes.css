@@ -5409,9 +5409,13 @@ button.tarjeta--partida:disabled {
   padding-left: var(--e-2);
 }
 
+/* MOTION-1: el punto late DOS veces al llegar el turno y se queda quieto. Un
+   latido infinito compite con el campo durante todo el turno y, para quien
+   lo mira de reojo, deja de significar «ahora»: el estado lo dice el color
+   del indicador, que no se mueve. */
 @media (prefers-reduced-motion: no-preference) {
   .turno-actual[data-mio='true']::before {
-    animation: latido-turno var(--duracion-turno, 1.2s) ease-in-out infinite;
+    animation: latido-turno var(--duracion-turno, 1.2s) ease-in-out 2;
   }
 }
 
@@ -5830,24 +5834,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
-/* La entrada del panel solo para quien no ha pedido lo contrario. El panel se
-   ve igual de bien sin ella; la animacion es adorno, no informacion. */
-@media (prefers-reduced-motion: no-preference) {
-  .panel-resultado {
-    animation: aparecer-resultado var(--duracion-pausado) var(--curva-estandar);
-  }
-}
-
-@keyframes aparecer-resultado {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
+/* La entrada del panel (`entrar-desenlace`, mas arriba) solo para quien no ha
+   pedido lo contrario. MOTION-1: aqui habia una segunda animacion de entrada
+   (`aparecer-resultado`) que pisaba a la primera; queda una sola. */
 
 /* =======================================================================
    Pantalla de combate — HU-JUE-017 · RF-JUE-017 (UX-R2.3)
