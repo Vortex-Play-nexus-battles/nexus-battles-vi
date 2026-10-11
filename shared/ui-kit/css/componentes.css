@@ -2822,7 +2822,6 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
-
 /* 7.4.6 — historial por páginas: «Ver mensajes anteriores» encabeza la lista
    mientras puede haber más hacia atrás. */
 .chatbot-ventana__anteriores {
@@ -3085,7 +3084,6 @@ button.tarjeta--partida:disabled {
 .chatbot-soporte__respuesta {
   margin-top: var(--e-2);
 }
-
 
 /* 7.4.5 — «Preferencias» del asistente: ocupa el sitio de la conversación,
    como «Soporte», y se oculta con la ventana minimizada. */
@@ -3750,7 +3748,9 @@ button.tarjeta--partida:disabled {
     transform var(--transicion);
 }
 
-.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(.accion-combate--sin-poder) {
+.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(
+    .accion-combate--sin-poder
+  ) {
   border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde-int));
   box-shadow: var(--sombra-1);
 }
@@ -3978,11 +3978,7 @@ button.tarjeta--partida:disabled {
   border: 0;
   border-radius: 50%;
   isolation: isolate;
-  background: radial-gradient(
-    circle at 50% 38%,
-    var(--cromo-elevado),
-    var(--cromo) 72%
-  );
+  background: radial-gradient(circle at 50% 38%, var(--cromo-elevado), var(--cromo) 72%);
   color: var(--texto-sobre-color);
   font-family: var(--t-etiqueta-familia);
   font-weight: var(--t-etiqueta-peso);
@@ -4479,7 +4475,9 @@ button.tarjeta--partida:disabled {
     gap: 0;
     padding: var(--e-2);
     /* UX-GAME-2: el panel remata con el filo de energia, como la consola. */
-    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+    background:
+      var(--energia) bottom / 100% 2px no-repeat,
+      var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -5605,6 +5603,48 @@ button.tarjeta-heroe {
   cursor: pointer;
 }
 
+/* MOTION-3 — la carta se acerca al pasar el cursor (dos pixeles y sombra,
+   nada de 3D) y las estadisticas de la carta propia entran escalonadas una
+   vez. Con movimiento reducido: sombra sin desplazamiento, sin entrada. */
+@media (prefers-reduced-motion: no-preference) {
+  button.tarjeta-heroe {
+    transition:
+      transform var(--motion-fast) var(--ease-enter),
+      box-shadow var(--motion-fast) var(--ease-enter);
+  }
+
+  button.tarjeta-heroe:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--sombra-2);
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra {
+    animation: entrar-dialogo var(--motion-normal) var(--ease-enter) both;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(2) {
+    animation-delay: 40ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(3) {
+    animation-delay: 80ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(4) {
+    animation-delay: 120ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(n + 5) {
+    animation-delay: 160ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.tarjeta-heroe:hover:not(:disabled) {
+    box-shadow: var(--sombra-2);
+  }
+}
+
 .tarjeta-heroe__identidad {
   display: grid;
   gap: var(--e-1);
@@ -5900,7 +5940,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
      cromo que sobre blanco. */
   background:
     var(--energia) top left / 100% 2px no-repeat,
-    linear-gradient(180deg, var(--cromo-elevado), color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo)));
+    linear-gradient(
+      180deg,
+      var(--cromo-elevado),
+      color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo))
+    );
   border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   border-radius: var(--radio);
   box-shadow: var(--sombra-atmosfera);
@@ -6749,7 +6793,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
     align-items: stretch;
     gap: 0;
     padding: var(--e-2) var(--e-4) var(--e-4);
-    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+    background:
+      var(--energia) bottom / 100% 2px no-repeat,
+      var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -6860,7 +6906,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .cabecera--consola {
   /* UX-GAME-2: el filo es el gradiente de energia, el mismo de las tarjetas
      y del destino activo; antes era el acento plano. */
-  background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+  background:
+    var(--energia) bottom / 100% 2px no-repeat,
+    var(--cromo);
 }
 
 /* La salida al juego es secundaria, pero tiene que existir: un administrador
@@ -10671,7 +10719,9 @@ body:not([data-modo='combate']) .chat-grupal {
 
 .encuentro--mio {
   border-color: var(--acento-relleno);
-  box-shadow: var(--sombra-1), inset 0 0 0 1px var(--acento-relleno);
+  box-shadow:
+    var(--sombra-1),
+    inset 0 0 0 1px var(--acento-relleno);
 }
 
 .encuentro__tuyo {
