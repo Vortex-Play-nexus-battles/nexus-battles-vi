@@ -149,6 +149,11 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * propios) y el distintivo «Va ganando»/«Ganadora», texto fijo elegido por
  * el estado, sin ningún dato del servidor dentro.
  *
+ * MOTION-3 (HU-UX-003) — las cuatro de `pujas.js` bajan 26 líneas:
+ * `resaltarPrecioDe()` (el acuse del importe que acaba de cambiar por el
+ * canal) y su llamada entran ARRIBA de `render()`. Revisadas: las cuatro
+ * plantillas iguales, sin una interpolación nueva.
+ *
  * PLAYER-07b — la de `publicar-subasta.js` bajó tres líneas: dos `import`
  * (el catálogo de productos y `nombre-de-producto.js`) y la dependencia
  * `consultarProducto` entran ARRIBA de la plantilla. Revisada: sigue sin una
@@ -169,15 +174,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2797', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2815', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2823', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2841', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2841',
+    'cuentas/pujas.js:2867',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2883',
+    'cuentas/pujas.js:2909',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

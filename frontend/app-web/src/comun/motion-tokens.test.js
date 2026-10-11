@@ -66,11 +66,6 @@ const INFINITAS_PERMITIDAS = new Map([
     'motion-pensando',
     'la IA «piensa»: indicador de espera acotado por su estado (≤ 2,2 s, MOTION-2)',
   ],
-  // Deuda que retira MOTION-3 (feat/game-world-motion): pulsos infinitos que
-  // pasan a acuses únicos con color + icono + texto.
-  ['pulso-urgente', 'DEUDA MOTION-3: cuenta atrás urgente de subastas'],
-  ['latido', 'DEUDA MOTION-3: «ir ahora» y reloj de subastas'],
-  ['torneo-hito-actual', 'DEUDA MOTION-3: hito actual del torneo'],
 ]);
 
 describe('Nexus Motion System en tokens.css', () => {

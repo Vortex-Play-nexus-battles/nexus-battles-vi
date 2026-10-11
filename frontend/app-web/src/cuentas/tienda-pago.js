@@ -53,6 +53,7 @@ import { RUTAS, resolver } from '../comun/sesion.js';
 import { abrirDialogo } from '../comun/ui/dialogo.js';
 import { clases, h } from '../comun/ui/dom.js';
 import { CREDITOS, aImporte, textoDeCreditos, textoDePrecio } from './tienda-adaptador.js';
+import { motion } from '../comun/ui/motion.js';
 
 /** Las formas de pago del diálogo (`Orden.formaDePago`, contrato 1.6.0). */
 export const FORMAS_DE_PAGO = Object.freeze({ CREDITOS: 'CREDITOS', TARJETA: 'TARJETA' });
@@ -1005,6 +1006,13 @@ export function abrirPago({
     });
     resumen.hidden = false;
     formulario.replaceWith(panel);
+    // MOTION-3 — el resultado entra; si lo comprado ya esta en el inventario,
+    // el titulo encaja como una recompensa. Con movimiento reducido: el
+    // panel aparece y el texto lo dice.
+    motion.enter(panel);
+    if (entregada) {
+      motion.reward(titulo);
+    }
     titulo.focus();
   };
 

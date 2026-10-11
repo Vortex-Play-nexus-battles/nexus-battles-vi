@@ -117,6 +117,25 @@ valor del servidor al instante; el relleno de la barra lo alcanza con
 VICTORIA: la palabra encaja y 60 partículas DOM+WAAPI, una vez; DERROTA:
 el campo pierde color; EMPATE: nada.
 
+## Mundo de juego (MOTION-3)
+
+Microinteracciones con el mismo sistema, una vez cada una y nunca como
+única información:
+
+| Dónde | Qué | Cómo |
+|---|---|---|
+| Misiones | las tarjetas del tablón entran escalonadas (40 ms); EN PROGRESO lleva halo quieto; hover de 2 px | CSS (`misiones.css`) con los tokens |
+| Torneos | el hito actual late dos veces al aparecer y se queda con su halo; el camino del jugador ya va resaltado (`.encuentro--mio`) | CSS (`torneos.css`) |
+| Inventario / héroes | la carta del héroe se acerca 2 px al pasar; las estadísticas de la carta propia entran escalonadas; equipar sigue acusando la ranura (UX-R2.10) | CSS del kit |
+| Mis cofres | los cofres entran escalonados | CSS (`mis-cofres.css`) |
+| Tienda | la insignia del carrito pulsa una vez al añadir; la compra entregada entra y el título encaja (`reward`) | `motion.pulse`, `motion.enter`, `motion.reward` |
+| Subastas | el importe de la subasta que acaba de cambiar se acusa una vez (`acuse--puja`); la cuenta atrás urgente y «Ir ahora» laten tres veces, no para siempre | `acusar` + CSS (`pujas.css`) |
+| Notificaciones | la campana pulsa una vez cuando suben las no leídas, nunca al bajar | `motion.pulse` |
+| Navegación | fundido entre páginas (View Transition, MOTION-1) | `base.css` |
+
+Con movimiento reducido todo esto queda quieto: los estados (halo, sello,
+color + icono, número) siguen diciéndolo.
+
 ## Cómo añadir una animación
 
 1. Escribe primero el dato (texto, `aria-live`, color + icono).
