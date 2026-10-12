@@ -8160,9 +8160,20 @@ body:not([data-modo='combate']) .registro-combate {
   padding: 1px 3px;
 }
 
+/* MOTION-4 — los chips cuelgan DEBAJO del puesto sin entrar en su caja: el
+   puesto se centra con `translate(-50%, -50%)`, asi que un chip que llega
+   (un veneno, un escudo) le cambiaba el alto y movia al heroe hacia arriba
+   medio chip (CLS 0,013 medido en motion-rendimiento.spec.js). Colgados, el
+   heroe no se mueve de su sitio nunca. */
 .campo__puesto .efectos {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   justify-content: center;
+  width: max-content;
   max-width: 140px;
+  margin-top: var(--e-1);
 }
 
 /* --- La cifra del golpe (DamageCallout) --------------------------------- */
