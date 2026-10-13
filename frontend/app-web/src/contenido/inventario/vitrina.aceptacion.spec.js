@@ -160,8 +160,10 @@ test.describe('Vitrina del inventario', () => {
     await expect(vacio).toBeVisible();
     await expect(vacio).toContainText(/todav[ií]a no tienes objetos/i);
 
-    // "no se muestra ningun mensaje de error"
-    await expect(page.locator('.estado-error')).toHaveCount(0);
+    // "no se muestra ningun mensaje de error". La vista conserva un
+    // contenedor oculto para errores posteriores; lo importante es que no se
+    // presente como estado actual del inventario vacio.
+    await expect(page.locator('.estado-error:visible')).toHaveCount(0);
     const texto = await page.locator('body').innerText();
     expect(texto).not.toMatch(/error/i);
 
