@@ -9,14 +9,15 @@
  *   - §7.1: el inventario «debe incluir un banner de presentación para las
  *     misiones disponibles». Eso es todo lo que pide el documento.
  *
- * **Corrección del 13 de octubre de 2026.** Hasta hoy este comentario citaba un
- * «RF-INV-003» que exigía «contenido promocional alternativo» cuando no hubiera
- * misiones. Ese identificador **no existe en el catálogo de requisitos** y esa
- * cláusula no aparece en ninguna parte del documento del cliente: §7.1 dice
- * solo la frase de arriba. Sobre esa cita inventada se construyó la promoción
- * de estrategia, que contradecía el criterio 3 de HU-INV-012 —«sin misiones
- * disponibles el banner no se muestra»—. El Product Owner lo resolvió a favor
- * de la historia, así que el inventario ya no pide esa promoción.
+ * **Decisión del Product Owner del 13 de octubre de 2026 (Simón Pérez).** El
+ * SRS de Empresa A (RF-INV-003, «Banner de misiones disponibles»,
+ * `docs/gobierno/MAPA-RESPONSABILIDAD-RF.md`) pedía «contenido promocional
+ * alternativo» cuando no hubiera misiones que mostrar; el criterio 3 de
+ * HU-INV-012 (#105) pide lo contrario: «sin misiones disponibles el banner no
+ * se muestra y la cuadrícula ocupa su lugar». El PO resolvió la divergencia a
+ * favor de la historia, que es además lo único que fija §7.1 (un banner
+ * para las misiones *disponibles*): el inventario ya no pide la promoción de
+ * estrategia.
  *
  * Sin misiones que presentar, o con el módulo caído o inexistente, **el banner
  * se oculta sin afectar al resto de la vista**: `fuente-misiones.js` devuelve
@@ -348,8 +349,10 @@ export function bannerDeMisiones(
 }
 
 /**
- * El contenido promocional que RF-INV-003 pide cuando no hay misiones que
- * enseñar: el siguiente paso real, que es preparar la estrategia.
+ * El contenido promocional que RF-INV-003 pedía cuando no hay misiones que
+ * enseñar: el siguiente paso real, que es preparar la estrategia. Desde la
+ * decisión del PO del 13-oct-2026 (HU-INV-012, criterio 3) el inventario ya no
+ * la pide; queda para la vista que la pase con `hrefEstrategia`.
  *
  * @param {string} hrefEstrategia
  * @returns {HTMLElement}

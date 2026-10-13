@@ -372,7 +372,7 @@ function construirGestion() {
   // el resto de la vista».
   //
   // PLAYER-07a (punto 25) — «aparece el mismo comienzo del módulo de
-  // misiones y eso no debería estar ahí». RF-INV-003 (confirmado) SÍ pide un
+  // misiones y eso no debería estar ahí». §7.1 y RF-INV-003 SÍ piden un
   // banner de misiones en el inventario, así que no se quita: deja de ser lo
   // primero de la página —donde parecía la cabecera de Misiones— y pasa al
   // final, con su propio título y en formato compacto (inventario-jugador.css).
