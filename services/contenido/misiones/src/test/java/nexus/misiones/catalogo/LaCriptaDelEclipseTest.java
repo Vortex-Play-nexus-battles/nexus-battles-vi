@@ -75,7 +75,7 @@ class LaCriptaDelEclipseTest {
 
         assertThat(cripta.enemigos()).extracting("nombre", "cantidad", "prototipo", "vida", "defensa")
                 .containsExactly(
-                        tuple("Centinelas de Obsidiana", 8, "Guerrero Tanque", 36, 82),
+                        tuple("Centinelas de Obsidiana", 8, "Guerrero Tanque", 36, 78),
                         tuple("Oráculos de Ceniza", 2, "Mago Fuego", 18, 68),
                         tuple("Acechadores sin Rostro", 2, "Pícaro Veneno", 18, 60));
         assertThat(cripta.encuentrosRegulares()).isEqualTo(12);

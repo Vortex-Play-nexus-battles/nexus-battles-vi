@@ -11,7 +11,7 @@
     "PROVISIONAL DE EQUILIBRIO (revision del 4-oct; el PO puede ajustarlo): con las estadisticas completas de su prototipo en el nivel 8 la mision se ganaba el 0 % de las veces (0 de 72 ejecuciones en BalanceDeMisionesTest, motor-combate), porque la vida del heroe se arrastra de un encuentro al siguiente. Solo fijar vida y defensa tampoco bastaba: aun con enemigos de 1 punto de vida la tasa no pasa del 8 %, porque cada enemigo golpea una vez antes de caer. Se fijan por eso, como en el Templo, vida y defensa de los regulares (Automatas 40/84, Salamandras 20/70, Ladrones 20/60; el jefe conserva sus 120 puntos de vida) y se pasa de 18 a 13 enemigos regulares (8 Automatas, 3 Salamandras, 2 Ladrones). Resultado medido: 28 % de exito en el nivel 8 (10 % en el 7), mas dificil que el Templo (38 %), como corresponde a la dificultad Dificil, y dentro del 15-90 % que exige la prueba.",
     "PROVISIONAL: no va destacada en el banner; la destacada sigue siendo «El Templo Olvidado». El nivel recomendado es 8 (decision del PO tras la revision del 4-oct): los heroes llegan como mucho al nivel 8 (6.1.1: «puede incrementarse hasta el nivel 8») y esta mision sigue al Templo, que tambien lo recomienda; un nivel mayor no lo alcanza nadie y el catalogo lo rechaza.",
     "HU-MIS-013, segunda mision del equipo: «La Cripta del Eclipse». Historia distinta que sigue a «La Forja Sumergida», dificultad Extremo, 24 horas y nivel recomendado 8. Su Master usa exactamente la epica de Picaro Veneno de la Tabla 20 y aparece con el 25 % aprobado para esa dificultad.",
-    "PROVISIONAL DE EQUILIBRIO: cantidades, vida, defensa y recompensas de «La Cripta del Eclipse» se validan con BalanceDeMisionesTest. Los productos entregables usan identificadores del catalogo oficial; el Sello del Eclipse y el titulo se informan sin inventar productos."
+    "PROVISIONAL DE EQUILIBRIO (revision del 13-oct; el PO puede ajustarlo): cantidades, vida, defensa y recompensas de «La Cripta del Eclipse» se validan con BalanceDeMisionesTest. Con defensa 78 para los Centinelas de Obsidiana, el resultado medido es 17 % de exito en el nivel 8 y 6 % en el nivel 7, dentro del 15-90 % exigido y mas dificil que la Forja. Los productos entregables usan identificadores del catalogo oficial; el Sello del Eclipse y el titulo se informan sin inventar productos."
   ],
   "misiones": [
     {
@@ -98,7 +98,7 @@
         { "texto": "Recuperar los 3 fragmentos del Sello del Eclipse.", "principal": false, "tipo": "OBTENER_BOTIN", "valor": 3, "botin": "Fragmento del Sello del Eclipse" }
       ],
       "enemigos": [
-        { "nombre": "Centinelas de Obsidiana", "cantidad": 8, "descripcion": "Guardianes resistentes que cubren los accesos a la cripta.", "prototipo": "Guerrero Tanque", "vida": 36, "defensa": 82, "rotaciones": [] },
+        { "nombre": "Centinelas de Obsidiana", "cantidad": 8, "descripcion": "Guardianes resistentes que cubren los accesos a la cripta.", "prototipo": "Guerrero Tanque", "vida": 36, "defensa": 78, "rotaciones": [] },
         { "nombre": "Oráculos de Ceniza", "cantidad": 2, "descripcion": "Canalizan el calor atrapado durante el eclipse.", "prototipo": "Mago Fuego", "vida": 18, "defensa": 68, "rotaciones": [] },
         { "nombre": "Acechadores sin Rostro", "cantidad": 2, "descripcion": "Atacan desde las sombras con venenos antiguos.", "prototipo": "Pícaro Veneno", "vida": 18, "defensa": 60, "rotaciones": [] }
       ],
