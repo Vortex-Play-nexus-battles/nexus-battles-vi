@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.7.1
+  version: 1.8.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
@@ -92,6 +92,11 @@ info:
     esquemas no cambian (el 400 por validacion ya existia en `crearProducto`
     y `modificarProducto`); se documenta el motivo nuevo. Dejar en cero el
     precio de una epica que ya lo tenia sigue siendo valido.
+
+    1.8.0 (#798): el detalle y el listado publico incorporan `rareza` y
+    `habilidades`. Ambos campos se calculan a partir de la clasificacion y los
+    efectos ya existentes en el catalogo para que tienda y subastas puedan
+    mostrarlos, buscarlos y filtrarlos sin duplicar reglas.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -1313,6 +1318,8 @@ components:
             - estado
             - creadoEn
             - modificadoEn
+            - rareza
+            - habilidades
           properties:
             id:
               type: string
@@ -1351,6 +1358,21 @@ components:
               description: >
                 (1.4.0) Identificador estable (uid) del ultimo administrador
                 que edito el contenido. Solo en la proyeccion completa.
+            rareza:
+              type: string
+              enum: [COMUN, EPICA]
+              description: >
+                (1.8.0, #798) Clasificacion publica del producto. Las
+                habilidades epicas se publican como EPICA y los demas tipos
+                del catalogo actual como COMUN.
+            habilidades:
+              type: array
+              description: >
+                (1.8.0, #798) Efectos o capacidades visibles y buscables del
+                producto. Vacio cuando el catalogo no define ninguna.
+              items:
+                type: string
+                minLength: 1
 
     PaginaDeProductos:
       type: object
