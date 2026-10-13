@@ -6,14 +6,24 @@
  *   - RF-MIS-001 (§7.8.9): el tablón empieza con un «banner rotativo» de
  *     misiones destacadas, eventos especiales, novedades y misiones de tiempo
  *     limitado.
- *   - RF-INV-003 (§7.1): el inventario presenta un banner con las misiones
- *     disponibles y acceso directo al tablón. Sin misiones que mostrar,
- *     «contenido promocional alternativo»; con el módulo de misiones caído o
- *     inexistente, **el banner se oculta sin afectar el resto de la vista**.
+ *   - §7.1: el inventario «debe incluir un banner de presentación para las
+ *     misiones disponibles». Eso es todo lo que pide el documento.
  *
- * Esto último es lo que pasa cuando el servicio de misiones no responde (ver
- * `fuente-misiones.js`): en el inventario el banner no aparece. No es un
- * hueco: es la excepción que el requisito escribe para este caso.
+ * **Corrección del 13 de octubre de 2026.** Hasta hoy este comentario citaba un
+ * «RF-INV-003» que exigía «contenido promocional alternativo» cuando no hubiera
+ * misiones. Ese identificador **no existe en el catálogo de requisitos** y esa
+ * cláusula no aparece en ninguna parte del documento del cliente: §7.1 dice
+ * solo la frase de arriba. Sobre esa cita inventada se construyó la promoción
+ * de estrategia, que contradecía el criterio 3 de HU-INV-012 —«sin misiones
+ * disponibles el banner no se muestra»—. El Product Owner lo resolvió a favor
+ * de la historia, así que el inventario ya no pide esa promoción.
+ *
+ * Sin misiones que presentar, o con el módulo caído o inexistente, **el banner
+ * se oculta sin afectar al resto de la vista**: `fuente-misiones.js` devuelve
+ * no disponible y aquí se devuelve `'oculto'`.
+ *
+ * `promocionDeEstrategia` sigue existiendo pero **ya no la usa ninguna vista**.
+ * Es del módulo de misiones: la deja o la retira su dueño.
  *
  * ## Carrusel accesible
  *

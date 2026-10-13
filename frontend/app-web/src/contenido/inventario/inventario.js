@@ -471,13 +471,14 @@ export async function montarInventario(
   vista.botonNuevo.hidden = !daDeAlta;
 
   // RF-INV-003: sin módulo de misiones se queda oculto y no hace ninguna
-  // petición; con él, las destacadas o, si no hay, la estrategia. Su sección
+  // peticion; con el, las destacadas. Sin misiones que presentar no hay
+  // banner (HU-INV-012, criterio 3): el §7.1 pide «un banner de presentacion
+  // para las misiones disponibles» y nada mas. Su seccion
   // (con su título) se enseña solo si el banner se enseña.
   montarBannerDeMisiones(vista.bannerMisiones, {
     fuente: fuenteMisiones,
     hrefDe: (mision) => `../misiones/misiones.html?mision=${encodeURIComponent(mision.id)}`,
     hrefTablon: '../misiones/misiones.html',
-    hrefEstrategia: '../misiones/misiones.html#estrategia',
   })
     .catch(() => 'oculto')
     .then(() => {
