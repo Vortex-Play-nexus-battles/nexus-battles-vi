@@ -161,7 +161,10 @@ test.describe('Vitrina del inventario', () => {
     await expect(vacio).toContainText(/todav[ií]a no tienes objetos/i);
 
     // "no se muestra ningun mensaje de error"
-    await expect(page.locator('.estado-error')).toHaveCount(0);
+    // `:visible` y no a secas: la pestana de heroes deja un `.estado-error`
+    // **oculto** cuando su catalogo no esta simulado, y aqui no lo esta. Lo
+    // que el criterio pide es que al jugador no se le **muestre** un error.
+    await expect(page.locator('.estado-error:visible')).toHaveCount(0);
     const texto = await page.locator('body').innerText();
     expect(texto).not.toMatch(/error/i);
 
