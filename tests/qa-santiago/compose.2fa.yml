@@ -1,0 +1,9 @@
+# Fase 2FA de la campaña QA: obligatoriedad del segundo factor por rol (HU-AUT-007/USR-002)
+# y consulta de auditoría solo con sesión verificada por 2FA (HU-AUD-002).
+services:
+  srv-ms-identidad:
+    environment:
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: "MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR"
+  srv-ms-cumplimiento:
+    environment:
+      AUDITORIA_EXIGIR_2FA: "true"
