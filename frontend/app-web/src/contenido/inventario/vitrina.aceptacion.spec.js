@@ -319,64 +319,70 @@ async function conEquipamiento(page, { rechazar = false } = {}) {
 }
 
 test.describe('Equipamiento del héroe con limites', () => {
+  /*
+   * El PR #605 reescribio esta pantalla sobre las ranuras del kit. Ya no hay
+   * un boton «Equipar» ni un contador «Armas 0/2»: **las diez ranuras son el
+   * limite**, y se lee mirando cuales estan ocupadas. Equipar es elegir en una
+   * ranura vacia; desequipar es pulsar la que esta ocupada.
+   */
+
+  /** Abre el equipamiento de Ayla desde la pestana de heroes. */
+  async function abrirEquipoDeAyla(page) {
+    await page.locator('#pestana-heroes').click();
+    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
+  }
+
   test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
     await conEquipamiento(page);
     // Comprueba también el color de «Agregar elemento», que solo ve la administración.
     await abrirVitrina(page, { rol: 'ADMINISTRADOR' });
+    await abrirEquipoDeAyla(page);
 
-    await page.locator('#pestana-heroes').click();
-    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-
-    await expect(page.locator('.vitrina-pagina')).toHaveCSS(
-      'background-color',
-      'rgb(215, 222, 237)',
-    );
-    await expect(page.locator('.barra')).toHaveCSS('background-color', 'rgb(28, 35, 64)');
+    // El fondo claro `--fondo` dejo de ser el de la pagina con las escenas
+    // ilustradas de HU-UX-002 (#932, #935): ahora la vista va sobre el cromo.
+    // Se comprueba el cromo, que si es token de la paleta, y se deja anotado
+    // el cambio para su dueno.
+    // El cromo de la cabecera: `.barra` paso a ser `.cabecera` con el shell.
+    await expect(page.locator('.cabecera')).toHaveCSS('background-color', 'rgb(28, 35, 64)');
     await expect(page.locator('.vitrina__producto').first()).toHaveCSS(
       'background-color',
       'rgb(255, 255, 255)',
     );
-    await expect(page.locator('.inventario-equipo__elemento').first()).toHaveCSS(
-      'border-color',
-      'rgb(159, 171, 201)',
-    );
     await expect(page.getByRole('button', { name: 'Agregar elemento' })).toHaveCSS(
       'background-color',
       'rgb(30, 63, 184)',
-    );
-    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
-      'background-color',
-      'rgb(30, 63, 184)',
-    );
-    await expect(page.getByRole('button', { name: 'Equipar', exact: true })).toHaveCSS(
-      'color',
-      'rgb(255, 255, 255)',
     );
   });
 
   test('El jugador equipa y desequipa un arma desde la vitrina', async ({ page }) => {
     await conEquipamiento(page);
     await abrirVitrina(page);
+    await abrirEquipoDeAyla(page);
 
-    await page.locator('#pestana-heroes').click();
-    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
-    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 1/2');
-    await page.getByRole('button', { name: 'Desequipar', exact: true }).click();
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
+    // Vacia: el limite se lee en la ranura, no en un contador.
+    const arma1 = page.getByRole('button', { name: /Arma 1/ });
+    await expect(arma1).toHaveAccessibleName(/vacia/i);
+
+    await arma1.click();
+    await page.getByRole('button', { name: 'Espada', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Arma 1/ })).toHaveAccessibleName(/Espada/);
+
+    // Pulsar la ranura ocupada la libera.
+    await page.getByRole('button', { name: /Arma 1/ }).click();
+    await expect(page.getByRole('button', { name: /Arma 1/ })).toHaveAccessibleName(/vacia/i);
   });
 
   test('Un límite rechazado conserva el equipo y se explica sin código', async ({ page }) => {
     await conEquipamiento(page, { rechazar: true });
     await abrirVitrina(page);
+    await abrirEquipoDeAyla(page);
 
-    await page.locator('#pestana-heroes').click();
-    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
-    await page.getByRole('button', { name: 'Equipar', exact: true }).click();
+    await page.getByRole('button', { name: /Arma 1/ }).click();
+    await page.getByRole('button', { name: 'Espada', exact: true }).click();
 
-    await expect(page.locator('.inventario-equipo__resumen')).toContainText('Armas 0/2');
-    await expect(page.locator('.inventario__mensaje')).toContainText(/límites/i);
+    // La ranura sigue vacia: el rechazo no deja el equipo a medias.
+    await expect(page.getByRole('button', { name: /Arma 1/ })).toHaveAccessibleName(/vacia/i);
+    await expect(page.locator('.inventario__mensaje')).toContainText(/límite/i);
     await expect(page.locator('.inventario__mensaje')).not.toContainText('409');
   });
 });
