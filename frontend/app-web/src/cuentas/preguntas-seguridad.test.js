@@ -184,6 +184,16 @@ describe('rechazoDePreguntas', () => {
 // -------------------------------------------------------------------- vista
 
 describe('lo que se ve al abrir la pestaña', () => {
+  test('G1 — el formulario va por POST y su botón nace apagado hasta montar', async () => {
+    const guardarBoton = en('[data-accion="guardar-preguntas"]');
+    expect(en('form').getAttribute('method')).toBe('post');
+    expect(guardarBoton.disabled).toBe(true);
+
+    await montar();
+
+    expect(guardarBoton.disabled).toBe(false);
+  });
+
   test('sin preguntas: lo dice y ofrece configurarlas; no propone ninguna', async () => {
     await montar();
     expect(en('[data-zona="estado-preguntas"]').textContent).toContain(

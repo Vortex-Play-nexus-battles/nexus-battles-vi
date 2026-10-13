@@ -48,7 +48,8 @@ test('crear vuelve a consultar y muestra el elemento nuevo', async () => {
   };
   const consultar = async () => pagina(elementos);
 
-  await montarInventario(raiz, 'jugador-A', 0, { consultar, crear });
+  // RFINAL-04 — el alta manual es de la administración (inventario.yaml, B4).
+  await montarInventario(raiz, 'jugador-A', 0, { consultar, crear, rol: 'ADMINISTRADOR' });
   raiz.querySelector('.inventario__nuevo').click();
   raiz.querySelector('[name="productoId"]').value = 'producto-1';
   raiz.querySelector('[name="tipo"]').value = 'ITEM';
@@ -60,6 +61,27 @@ test('crear vuelve a consultar y muestra el elemento nuevo', async () => {
   await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
   expect(raiz.querySelector('.vitrina__nombre').textContent).toBe('Amuleto de Niebla');
   expect(raiz.querySelector('.inventario__mensaje').textContent).toMatch(/creado/i);
+});
+
+test('RFINAL-04: al jugador no se le ofrece «Agregar elemento» (el servidor le respondería 403)', async () => {
+  const crear = jest.fn();
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([]),
+    crear,
+    rol: 'JUGADOR',
+  });
+
+  const boton = raiz.querySelector('.inventario__nuevo');
+  expect(boton.hidden).toBe(true);
+  boton.click();
+  expect(raiz.querySelector('.inventario-editor').hidden).toBe(true);
+  expect(crear).not.toHaveBeenCalled();
+});
+
+test('RFINAL-04: sin rol conocido tampoco: el alta es solo de la administración', async () => {
+  await montarInventario(raiz, 'jugador-A', 0, { consultar: async () => pagina([]), rol: null });
+
+  expect(raiz.querySelector('.inventario__nuevo').hidden).toBe(true);
 });
 
 test('editar vuelve a consultar y muestra el nombre modificado', async () => {
@@ -119,7 +141,7 @@ test('si el servidor rechaza el producto, el formulario muestra su mensaje', asy
     throw fallo;
   };
 
-  await montarInventario(raiz, 'jugador-A', 0, { consultar, crear });
+  await montarInventario(raiz, 'jugador-A', 0, { consultar, crear, rol: 'ADMINISTRADOR' });
   raiz.querySelector('.inventario__nuevo').click();
   raiz.querySelector('[name="productoId"]').value = 'espada-corta';
   raiz.querySelector('[name="tipo"]').value = 'ARMA';

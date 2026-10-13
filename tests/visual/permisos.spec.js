@@ -82,6 +82,10 @@ async function abrir(browser, baseURL, vista, persona) {
 
 test.describe('un visitante no ve la aplicación', () => {
   test('toda vista privada lo manda al login, con vuelta', async ({ browser, baseURL }) => {
+    // Recorre las ~40 vistas privadas, una por contexto, con su espera de
+    // 700 ms: ya rozaba los 45 s del laboratorio (38-42 s en CI). El límite
+    // es de cada prueba; esta hace cuarenta.
+    test.setTimeout(120_000);
     const fallos = [];
     for (const vista of [...PRIVADAS_DE_JUGADOR, ...TRASTIENDA]) {
       const visto = await abrir(browser, baseURL, vista, 'anonimo');

@@ -14,6 +14,7 @@ import {
   crearSala,
   listarSalas,
   ingresarASala,
+  comprobarIngreso,
   verificarHeroe,
   iniciarPartida,
   obtenerPartida,
@@ -24,6 +25,9 @@ import {
   esSalaPrivada,
   esHeroeNoDisponible,
   ErrorDeApi,
+  invitarASala,
+  buscarJugadores,
+  rendirse,
 } from './cliente-salas.js';
 
 const PARAMETROS = {
@@ -96,6 +100,50 @@ describe('listarSalas', () => {
     const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, paginaDelContrato));
 
     expect(await listarSalas({}, { fetchImpl })).toEqual(paginaDelContrato);
+  });
+});
+
+/**
+ * RFINAL-04 — «¿me dejaría entrar con este código?», sin efectos
+ * (salas-partidas.yaml 1.9.0).
+ */
+describe('comprobarIngreso', () => {
+  test('pregunta a su ruta con POST y el código en el cuerpo, nunca en la dirección', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+    const sala = await comprobarIngreso('abc', { codigoInvitacion: ' WXYZ-2345 ', fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/abc/comprobacion-de-ingreso');
+    expect(url).not.toContain('WXYZ');
+    expect(opciones.method).toBe('POST');
+    expect(JSON.parse(opciones.body)).toEqual({ codigoInvitacion: 'WXYZ-2345' });
+    expect(sala).toEqual({ id: 'abc' });
+  });
+
+  test('sin código manda un cuerpo vacío: la sala pública no lo pide', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(200, { id: 'abc' }));
+
+    await comprobarIngreso('abc', { fetchImpl });
+
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({});
+  });
+
+  test('un código que no vale llega como el 403 de sala privada que la vista ya entiende', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(403, {
+        type: 'https://nexusbattles.local/errores/sala-privada',
+        title: 'Esta sala es privada',
+        status: 403,
+      }),
+    );
+
+    const error = await comprobarIngreso('abc', { codigoInvitacion: 'ZZZZ-9999', fetchImpl }).catch(
+      (e) => e,
+    );
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(esSalaPrivada(error)).toBe(true);
   });
 });
 
@@ -754,5 +802,99 @@ describe('FI-R6 - esHeroeNoDisponible', () => {
     expect(esHeroeNoDisponible(privada)).toBe(false);
     expect(esSalaPrivada(heroe)).toBe(false);
     expect(esHeroeNoDisponible(heroe)).toBe(true);
+  });
+});
+
+/** salas-partidas 1.10.0 — revisión del modo jugador del 6-oct. */
+describe('invitarASala', () => {
+  test('POST a /invitaciones con el jugador en el cuerpo; un rechazo no saca el aviso rojo genérico', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(200, { idJugador: 'u2', apodo: 'Perez_Bro15', enviada: true }));
+
+    const resultado = await invitarASala('s1', 'u2', { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/salas/s1/invitaciones');
+    expect(opciones.method).toBe('POST');
+    expect(JSON.parse(opciones.body)).toEqual({ idJugador: 'u2' });
+    expect(opciones.rechazoEsperado).toBe(true);
+    expect(resultado.apodo).toBe('Perez_Bro15');
+  });
+
+  test('un rechazo llega con su motivo', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(
+      respuesta(
+        409,
+        {
+          type: 'https://nexusbattles.local/errores/invitacion-no-permitida',
+          title: 'No se pudo invitar',
+          detail: 'La sala está completa.',
+          status: 409,
+        },
+        'application/problem+json',
+      ),
+    );
+
+    const error = await invitarASala('s1', 'u2', { fetchImpl }).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(409);
+    expect(error.detalle).toBe('La sala está completa.');
+  });
+});
+
+describe('buscarJugadores', () => {
+  test('con menos de 3 letras no pregunta', async () => {
+    const fetchImpl = jest.fn();
+    expect(await buscarJugadores('Pe', { fetchImpl })).toEqual([]);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('pregunta a perfiles públicos por apodo y deja fuera a quien busca', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        respuesta(200, [
+          { uid: 'u1', apodo: 'Perez_Bro15' },
+          { uid: 'yo', apodo: 'Pereira' },
+          { apodo: 'sin-uid' },
+        ]),
+      );
+
+    const jugadores = await buscarJugadores(' Per ', { fetchImpl, yo: 'yo' });
+
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/perfiles/publicos?apodo=Per');
+    expect(jugadores).toEqual([{ uid: 'u1', apodo: 'Perez_Bro15' }]);
+  });
+});
+
+describe('rendirse', () => {
+  test('POST a /partidas/{id}/rendicion sin cuerpo: quien se rinde sale del token', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(respuesta(200, { id: 'p1', estado: 'FINALIZADA' }));
+
+    const partida = await rendirse('p1', { fetchImpl });
+
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/partidas/p1/rendicion');
+    expect(opciones.method).toBe('POST');
+    expect(opciones.body).toBeUndefined();
+    expect(partida.estado).toBe('FINALIZADA');
+  });
+
+  test('en una partida ajena llega el 403', async () => {
+    const fetchImpl = jest
+      .fn()
+      .mockResolvedValue(
+        respuesta(
+          403,
+          { type: 'https://nexusbattles.local/errores/partida-ajena', status: 403 },
+          'application/problem+json',
+        ),
+      );
+    const error = await rendirse('p1', { fetchImpl }).catch((e) => e);
+    expect(error.estado).toBe(403);
   });
 });

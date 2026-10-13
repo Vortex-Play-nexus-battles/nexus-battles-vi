@@ -6,6 +6,9 @@ abiertas, no se pierde cuando no hay ninguna, y la sesion que vuelve de una
 caida recupera unicamente lo que se perdio. El estado de lectura es del
 jugador, no del dispositivo.
 
+Desde la 1.3.0 del contrato HTTP cubre ademas HU-NOT-001 CA-02 (#532): marcar
+todos los avisos como leidos de una vez, sin dejar la bandeja a medias.
+
 ## Como correrlo
 
 1. Levantar la base con `docker compose up -d plataforma-db`.

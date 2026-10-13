@@ -15,6 +15,6 @@ public class PartidaNoEncontrada extends ErrorDeNegocio {
         super(TIPO,
               "Esa partida no existe",
               404,
-              "La partida " + idPartida + " no existe o ya termino.");
+              "La partida " + idPartida + " no existe o ya terminó.");
     }
 }

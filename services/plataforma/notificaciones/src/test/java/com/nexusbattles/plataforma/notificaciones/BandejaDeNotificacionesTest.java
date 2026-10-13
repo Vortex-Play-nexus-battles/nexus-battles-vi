@@ -93,6 +93,41 @@ class BandejaDeNotificacionesTest {
     }
 
     @Test
+    @DisplayName("HU-NOT-001 CA-02: marcar todas deja leido cada aviso que faltaba y la cuenta en cero")
+    void marcarTodasDejaLaBandejaLeida() {
+        BandejaDeNotificaciones bandeja = BandejaDeNotificaciones.de("jugador-5");
+        bandeja.abrirSesion("computador");
+        bandeja.abrirSesion("celular");
+        bandeja.recibir(aviso("aviso-1"));
+        bandeja.recibir(aviso("aviso-2"));
+        bandeja.recibir(aviso("aviso-3"));
+        bandeja.marcarLeida("aviso-2");
+
+        int marcadas = bandeja.marcarTodasLeidas();
+
+        assertEquals(2, marcadas);
+        assertEquals(0, bandeja.noLeidas());
+        assertTrue(bandeja.estaLeida("aviso-1"));
+        assertTrue(bandeja.estaLeida("aviso-2"));
+        assertTrue(bandeja.estaLeida("aviso-3"));
+    }
+
+    @Test
+    @DisplayName("marcar todas es idempotente: repetirlo no cambia nada ni falla, tampoco con la bandeja vacia")
+    void marcarTodasEsIdempotente() {
+        BandejaDeNotificaciones bandeja = BandejaDeNotificaciones.de("jugador-6");
+        assertEquals(0, bandeja.marcarTodasLeidas());
+        assertEquals(0, bandeja.noLeidas());
+
+        bandeja.recibir(aviso("aviso-1"));
+        assertEquals(1, bandeja.marcarTodasLeidas());
+        assertEquals(0, bandeja.marcarTodasLeidas());
+
+        assertEquals(0, bandeja.noLeidas());
+        assertEquals(Set.of("aviso-1"), bandeja.leidas());
+    }
+
+    @Test
     @DisplayName("la bandeja rechaza usuarios, sesiones y avisos invalidos o repetidos")
     void rechazaEntradasInvalidas() {
         assertThrows(IllegalArgumentException.class, () -> BandejaDeNotificaciones.de(" "));

@@ -17,6 +17,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Los seis servicios con los que habla la compra, en un servidor HTTP del JDK
@@ -67,6 +68,27 @@ final class ServiciosSimulados {
     final AtomicInteger llamadasDeCorreo = new AtomicInteger();
     final AtomicInteger fallosDeCorreo = new AtomicInteger();
 
+    /**
+     * D-44 — el libro de creditos de ms-finanzas (creditos.yaml): el saldo de
+     * cada jugador y los debitos por {@code refId}, idempotentes como los de
+     * verdad (el mismo refId devuelve el debito original sin descontar otra vez).
+     */
+    final Map<String, AtomicLong> saldos = new ConcurrentHashMap<>();
+    final Map<String, Debito> debitos = new ConcurrentHashMap<>();
+    final Map<String, Integer> preciosEnCreditos = new ConcurrentHashMap<>();
+    final AtomicInteger llamadasDeDebito = new AtomicInteger();
+    final AtomicInteger debitosAplicados = new AtomicInteger();
+    /** Las proximas N peticiones de debito fallan con 503 sin descontar nada. */
+    final AtomicInteger fallosDeDebito = new AtomicInteger();
+    /** Los proximos N debitos se aplican pero la respuesta se pierde (503): la tienda no sabe si cobro. */
+    final AtomicInteger debitosSinRespuesta = new AtomicInteger();
+    final AtomicInteger reversosAplicados = new AtomicInteger();
+    final AtomicInteger fallosDeReverso = new AtomicInteger();
+
+    /** Un debito del libro: de quien, cuanto y si sigue cobrado (CONSUMIDA) o se devolvio (LIBERADA). */
+    record Debito(String uid, long monto, String estado) {
+    }
+
     volatile String tasaUsd = null;
     final AtomicInteger tokensEmitidos = new AtomicInteger();
     final List<String> sinCredencial = new CopyOnWriteArrayList<>();
@@ -111,6 +133,15 @@ final class ServiciosSimulados {
         correos.clear();
         llamadasDeCorreo.set(0);
         fallosDeCorreo.set(0);
+        saldos.clear();
+        debitos.clear();
+        preciosEnCreditos.clear();
+        llamadasDeDebito.set(0);
+        debitosAplicados.set(0);
+        fallosDeDebito.set(0);
+        debitosSinRespuesta.set(0);
+        reversosAplicados.set(0);
+        fallosDeReverso.set(0);
         tasaUsd = null;
         sinCredencial.clear();
         trazas.clear();
@@ -122,13 +153,38 @@ final class ServiciosSimulados {
     }
 
     void producto(String id, String nombre, String precio, int tiraje, String promocion) {
+        producto(id, nombre, precio, null, false, tiraje, promocion);
+    }
+
+    /**
+     * D-44: un producto con precio en creditos ({@code precioCreditos} del
+     * catalogo; null = sin precio en creditos) y la marca premium (solo moneda
+     * real, productos.yaml).
+     */
+    void producto(String id, String nombre, String precio, Integer precioCreditos, boolean premium, int tiraje,
+                  String promocion) {
         tirajes.put(id, new AtomicInteger(tiraje));
         estados.put(id, "ACTIVO");
+        if (precioCreditos != null) {
+            preciosEnCreditos.put(id, precioCreditos);
+        }
+        String creditos = precioCreditos == null ? "" : "\"precioCreditos\":" + precioCreditos + ",";
         productos.put(id, """
                 {"id":"%s","nombre":"%s","imagen":"img/%s.png","descripcion":"Descripcion de %s","tipo":"ARMA",\
-                "tiraje":%%d,"precioMonedaReal":%s,"premium":false,"estado":"%%s"%s,\
+                "tiraje":%%d,%s"precioMonedaReal":%s,"premium":%s,"estado":"%%s"%s,\
                 "creadoEn":"2026-09-01T10:00:00Z","modificadoEn":"2026-09-20T10:00:00Z"}"""
-                .formatted(id, nombre, id, nombre, precio, promocion == null ? "" : ",\"promocion\":" + promocion));
+                .formatted(id, nombre, id, nombre, creditos, precio, premium,
+                        promocion == null ? "" : ",\"promocion\":" + promocion));
+    }
+
+    /** D-44: el saldo de creditos con el que empieza un jugador. */
+    void saldo(String uid, long creditos) {
+        saldos.put(uid, new AtomicLong(creditos));
+    }
+
+    long saldoDe(String uid) {
+        AtomicLong saldo = saldos.get(uid);
+        return saldo == null ? 0 : saldo.get();
     }
 
     private String jsonDe(String id) {
@@ -233,6 +289,11 @@ final class ServiciosSimulados {
                 responder(intercambio, 202, "");
                 return;
             }
+            if (ruta.startsWith("/api/v1/creditos/")) {
+                exigirCredencial(intercambio, ruta);
+                creditos(intercambio, ruta.substring("/api/v1/creditos/".length()), metodo, cuerpo);
+                return;
+            }
             responder(intercambio, 404, "{\"status\":404}");
         } catch (SinCredencial sin) {
             responder(intercambio, 401, "{}");
@@ -301,6 +362,105 @@ final class ServiciosSimulados {
         } else {
             responder(intercambio, 409, "{}");
         }
+    }
+
+    // ------------------------------------------------- D-44: libro de creditos
+
+    private static final String TIPO_DE_FINANZAS = "https://nexusbattles.upb.edu.co/errors/";
+
+    private void creditos(HttpExchange intercambio, String resto, String metodo, String cuerpo) throws IOException {
+        if (resto.equals("debitar") && metodo.equals("POST")) {
+            debitar(intercambio, cuerpo);
+        } else if (resto.equals("reversar") && metodo.equals("POST")) {
+            reversar(intercambio, cuerpo);
+        } else if (resto.startsWith("operaciones/") && metodo.equals("GET")) {
+            Debito debito = debitos.get(resto.substring("operaciones/".length()));
+            if (debito == null) {
+                responder(intercambio, 404, problemaDeFinanzas("reserva-no-encontrada", 404));
+            } else {
+                responder(intercambio, 200, "{\"refId\":\"" + resto.substring("operaciones/".length()) + "\",\"uid\":\""
+                        + debito.uid() + "\",\"monto\":" + debito.monto() + ",\"concepto\":\"-\",\"estado\":\""
+                        + debito.estado() + "\",\"fecha\":\"2026-10-04T12:00:00Z\"}");
+            }
+        } else if (resto.endsWith("/saldo") && metodo.equals("GET")) {
+            String uid = resto.substring(0, resto.length() - "/saldo".length());
+            long saldo = saldoDe(uid);
+            responder(intercambio, 200, "{\"jugadorUid\":\"" + uid + "\",\"saldoBruto\":" + saldo
+                    + ",\"saldoReservado\":0,\"saldoDisponible\":" + saldo + "}");
+        } else {
+            // Una ruta que no existe: el 404 de Spring, sin `type`.
+            responder(intercambio, 404, "{\"status\":404}");
+        }
+    }
+
+    /** POST /creditos/debitar: idempotente por refId; 422 saldo-insuficiente sin tocar nada. */
+    private void debitar(HttpExchange intercambio, String cuerpo) throws IOException {
+        llamadasDeDebito.incrementAndGet();
+        if (fallosDeDebito.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+            responder(intercambio, 503, "{}");
+            return;
+        }
+        String refId = JsonPath.read(cuerpo, "$.refId");
+        String uid = JsonPath.read(cuerpo, "$.uid");
+        long monto = ((Number) JsonPath.read(cuerpo, "$.monto")).longValue();
+        Debito previo;
+        long saldoQueQueda;
+        synchronized (this) {
+            previo = debitos.get(refId);
+            AtomicLong saldo = saldos.computeIfAbsent(uid, u -> new AtomicLong());
+            if (previo == null) {
+                if (saldo.get() < monto) {
+                    responder(intercambio, 422, problemaDeFinanzas("saldo-insuficiente", 422));
+                    return;
+                }
+                saldo.addAndGet(-monto);
+                debitos.put(refId, new Debito(uid, monto, "CONSUMIDA"));
+                debitosAplicados.incrementAndGet();
+            }
+            saldoQueQueda = saldo.get();
+        }
+        if (previo == null && debitosSinRespuesta.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+            // Se desconto, pero la respuesta no llega.
+            responder(intercambio, 503, "{}");
+            return;
+        }
+        long debitado = previo == null ? monto : previo.monto();
+        responder(intercambio, 200, "{\"transaccionId\":\"TX-DEB-" + Math.abs(refId.hashCode()) + "\",\"refId\":\""
+                + refId + "\",\"estado\":\"EXITOSO\",\"montoDebitado\":" + debitado + ",\"nuevoSaldoDisponible\":"
+                + saldoQueQueda + "}");
+    }
+
+    /** POST /creditos/reversar: devuelve un debito; el segundo reverso no devuelve otra vez. */
+    private void reversar(HttpExchange intercambio, String cuerpo) throws IOException {
+        if (fallosDeReverso.getAndUpdate(n -> Math.max(0, n - 1)) > 0) {
+            responder(intercambio, 503, "{}");
+            return;
+        }
+        String refId = JsonPath.read(cuerpo, "$.refId");
+        String estado;
+        Debito debito;
+        synchronized (this) {
+            debito = debitos.get(refId);
+            if (debito == null) {
+                responder(intercambio, 404, problemaDeFinanzas("reserva-no-encontrada", 404));
+                return;
+            }
+            if (debito.estado().equals("LIBERADA")) {
+                estado = "YA_REVERSADO";
+            } else {
+                saldos.computeIfAbsent(debito.uid(), u -> new AtomicLong()).addAndGet(debito.monto());
+                debitos.put(refId, new Debito(debito.uid(), debito.monto(), "LIBERADA"));
+                reversosAplicados.incrementAndGet();
+                estado = "REVERSADO";
+            }
+        }
+        responder(intercambio, 200, "{\"refId\":\"" + refId + "\",\"estado\":\"" + estado + "\",\"montoReversado\":"
+                + debito.monto() + ",\"motivo\":\"-\"}");
+    }
+
+    private static String problemaDeFinanzas(String tipo, int estado) {
+        return "{\"type\":\"" + TIPO_DE_FINANZAS + tipo + "\",\"title\":\"-\",\"status\":" + estado
+                + ",\"detail\":\"-\"}";
     }
 
     private void exigirCredencial(HttpExchange intercambio, String ruta) {

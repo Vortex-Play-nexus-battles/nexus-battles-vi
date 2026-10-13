@@ -6,6 +6,7 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.PaginaDeSalas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
 
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Listado paginado de salas disponibles — HU-SAL-002, RF-JUE-002.
@@ -30,6 +31,17 @@ public class ListarSalas {
      */
     public PaginaDeSalas ejecutar(Integer pagina, Integer tamano,
                                   Modalidad modalidad, EstadoSala estado) {
+        return ejecutarEnEstados(pagina, tamano, modalidad, estado == null ? Set.of() : Set.of(estado));
+    }
+
+    /**
+     * Igual, con varios estados (1.10.0): el listado de «Jugar online» pide por
+     * omision las salas a las que se puede entrar, ABIERTA y PRIVADA.
+     *
+     * @param estados estados admitidos; vacio no filtra
+     */
+    public PaginaDeSalas ejecutarEnEstados(Integer pagina, Integer tamano,
+                                           Modalidad modalidad, Set<EstadoSala> estados) {
 
         // Se acotan en vez de rechazar: una pagina negativa o un tamano absurdo
         // llegan de una URL escrita a mano, no de un error del jugador. El
@@ -38,6 +50,7 @@ public class ListarSalas {
         int tamanoPedido = tamano == null ? PaginaDeSalas.TAMANO_POR_DEFECTO : tamano;
         tamanoPedido = Math.clamp(tamanoPedido, 1, 50);
 
-        return repositorio.listar(modalidad, estado, paginaPedida, tamanoPedido);
+        return repositorio.listarEnEstados(modalidad, estados == null ? Set.of() : estados, paginaPedida,
+                tamanoPedido);
     }
 }

@@ -13,6 +13,8 @@ import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRechazadoException;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
 import com.nexusbattles.ms_identidad.auth.service.RegistroService;
 import com.nexusbattles.ms_identidad.onboarding.auditoria.AuditoriaDeCuenta;
@@ -123,6 +125,20 @@ public class AuthController {
         } catch (CuentaBloqueadaException e) {
             return rechazo(request, HttpStatus.LOCKED, URI.create(TIPOS + "cuenta-bloqueada"),
                 "Cuenta bloqueada temporalmente", e.getMessage(), null);
+        } catch (SegundoFactorRequeridoException e) {
+            // HU-AUT-007 (contrato 2.2.0): la contraseña es correcta pero falta
+            // el segundo paso. 403 y no 200: un cliente anterior lo trata como
+            // rechazo, nunca como sesión. El desafío solo viaja en problem
+            // details; en texto plano llega el `detail`.
+            return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + e.tipo()), e.titulo(),
+                e.getMessage(), null, Map.of(
+                    "desafio", e.getDesafio().valor(),
+                    "expiraEn", e.getDesafio().expiraEn().toString()));
+        } catch (SegundoFactorRechazadoException e) {
+            // HU-AUT-007: el rol exige segundo factor y el servicio no puede
+            // enrolar (falta IDENTIDAD_2FA_CLAVE): 503, nunca una sesión sin él.
+            return rechazo(request, HttpStatus.valueOf(e.getMotivo().estado()),
+                URI.create(TIPOS + e.getMotivo().tipo()), e.getMotivo().titulo(), e.getMessage(), null);
         }
     }
 

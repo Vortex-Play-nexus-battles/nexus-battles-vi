@@ -91,6 +91,33 @@ public class ServicioDeNotificaciones {
         return noLeidas;
     }
 
+    /**
+     * Marca como leidos todos los avisos del jugador de una vez. HU-NOT-001 CA-02.
+     *
+     * <p>Una sola sentencia en bloque y el recuento, en la misma transaccion:
+     * o quedan leidos todos los que estaban sin leer o no cambia ninguno. No
+     * carga la bandeja. Los dos numeros salen de la base, porque un aviso que
+     * llegue mientras tanto puede quedar sin leer, y dos sesiones que marcan a
+     * la vez no deben contar dos veces los mismos.
+     *
+     * <p>Es idempotente: repetirlo marca 0 y no falla, tampoco con la bandeja
+     * vacia. Como al marcar uno, el contador sale tras el commit aunque no
+     * cambie, y llega a todas las sesiones.
+     *
+     * @return cuantos se marcaron con esta llamada y cuantos quedan sin leer
+     */
+    @Transactional
+    public Lectura marcarTodasLeidas(String usuarioId) {
+        int marcadas = repositorio.marcarTodasLeidas(usuarioId);
+        int noLeidas = repositorio.contarNoLeidas(usuarioId);
+        publicarTrasCommit(() -> canal.actualizarContador(usuarioId, noLeidas));
+        return new Lectura(marcadas, noLeidas);
+    }
+
+    /** Resultado de marcar todas: cuantos avisos cambiaron y cuantos quedan sin leer. */
+    public record Lectura(int marcadas, int noLeidas) {
+    }
+
     /** Bandeja completa del jugador, para pintar la vista al entrar. */
     @Transactional(readOnly = true)
     public BandejaDeNotificaciones consultar(String usuarioId) {

@@ -132,10 +132,39 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * (7.7.9) entra ARRIBA de `render()`. Lo único nuevo en `contenidoHtml` es el
  * botón «Compartir», marcado fijo sin ningún dato; el enlace se arma con
  * `encodeURIComponent` y viaja por la API del navegador, no por el HTML.
+ *
+ * D-43 — la de `publicar-subasta.js` bajó 13 líneas: el texto neutro para un
+ * incremento sin configurar y `textoDeCreditos()` entran ARRIBA de la
+ * plantilla. Revisada: sigue sin una sola interpolación; el aviso de
+ * DECISIÓN PO se cambió por un `<p data-incremento-minimo hidden>` vacío, y
+ * «Incremento mínimo: N créditos» entra después por `textContent` con la cifra
+ * de `GET /subastas/reglas`.
+ *
+ * G5 (7.7.9, privacidad) — las cuatro de `pujas.js` bajan 17 líneas: la ficha
+ * guarda `esPropia`, el método de pago, el precio mínimo y la fecha de fin, y
+ * el historial marca la puja que va ganando, todo ARRIBA de `render()`.
+ * Revisadas: carga, error y vacío iguales. `contenidoHtml` gana
+ * `datosDeLaSubasta()` (etiquetas fijas; el precio por `formatearCreditos()`,
+ * la fecha por `momentoLegible()` y `esc()`, el método de pago con textos
+ * propios) y el distintivo «Va ganando»/«Ganadora», texto fijo elegido por
+ * el estado, sin ningún dato del servidor dentro.
+ *
+ * MOTION-3 (HU-UX-003) — las cuatro de `pujas.js` bajan 26 líneas:
+ * `resaltarPrecioDe()` (el acuse del importe que acaba de cambiar por el
+ * canal) y su llamada entran ARRIBA de `render()`. Revisadas: las cuatro
+ * plantillas iguales, sin una interpolación nueva.
+ *
+ * PLAYER-07b — la de `publicar-subasta.js` bajó tres líneas: dos `import`
+ * (el catálogo de productos y `nombre-de-producto.js`) y la dependencia
+ * `consultarProducto` entran ARRIBA de la plantilla. Revisada: sigue sin una
+ * sola interpolación; lo único nuevo dentro es el aviso fijo de «catálogo sin
+ * respuesta» con su botón «Reintentar», y el nombre del producto sigue
+ * entrando después por `textContent` (y por `new Option`, que tampoco
+ * interpreta marcado).
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:95', 'plantilla fija del formulario, sin interpolación'],
+  ['cuentas/publicar-subasta.js:111', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -145,15 +174,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2780', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2798', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2823', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2841', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2824',
+    'cuentas/pujas.js:2867',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2866',
+    'cuentas/pujas.js:2909',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

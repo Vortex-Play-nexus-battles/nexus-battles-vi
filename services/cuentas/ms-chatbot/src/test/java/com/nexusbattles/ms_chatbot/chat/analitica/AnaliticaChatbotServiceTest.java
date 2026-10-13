@@ -2,10 +2,14 @@ package com.nexusbattles.ms_chatbot.chat.analitica;
 
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PuntoDeTendencia;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.CalificacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.soporte.EstadoTicket;
+import com.nexusbattles.ms_chatbot.chat.soporte.RegistroDeTicket;
+import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,12 +42,15 @@ class AnaliticaChatbotServiceTest {
     private CalificacionRepository calificacionRepository;
     @Mock
     private TemaConocimientoRepository temaConocimientoRepository;
+    @Mock
+    private TicketSoporteRepository ticketSoporteRepository;
 
     private AnaliticaChatbotService servicio;
 
     @BeforeEach
     void configurar() {
-        servicio = new AnaliticaChatbotService(mensajeRepository, calificacionRepository, temaConocimientoRepository);
+        servicio = new AnaliticaChatbotService(mensajeRepository, calificacionRepository, temaConocimientoRepository,
+            ticketSoporteRepository);
     }
 
     @Test
@@ -80,6 +87,36 @@ class AnaliticaChatbotServiceTest {
             .satisfies(t -> {
                 assertThat(t.titulo()).isEqualTo("Como crear una cuenta");
                 assertThat(t.respuestas()).isEqualTo(3);
+            });
+    }
+
+    // 1.3.7: los tickets del periodo y las palabras clave de sus preguntas.
+    @Test
+    void calcular_incluyeTicketsYPalabrasClave() {
+        sinDatos();
+        UUID conversacionA = UUID.randomUUID();
+        UUID conversacionB = UUID.randomUUID();
+        when(ticketSoporteRepository.buscarCreadosEntre(any(), any())).thenReturn(List.of(
+            new RegistroDeTicket(EstadoTicket.ABIERTO, Categoria.SOPORTE_TECNICO,
+                Instant.parse("2026-09-09T15:00:00Z"), Instant.parse("2026-09-09T15:00:00Z")),
+            new RegistroDeTicket(EstadoTicket.RESUELTO, Categoria.SOPORTE_TECNICO,
+                Instant.parse("2026-09-09T15:00:00Z"), Instant.parse("2026-09-09T17:00:00Z"))));
+        when(mensajeRepository.buscarTextosDePreguntasEntre(eq(Remitente.USUARIO), any(), any(), any()))
+            .thenReturn(List.of(
+                new RegistroDeTexto(conversacionA, "como funciona el torneo"),
+                new RegistroDeTexto(conversacionB, "el torneo empieza cuando")));
+
+        AnaliticaChatbot analitica = servicio.calcular(DIA_1, DIA_2, AnaliticaChatbotService.ZONA_POR_DEFECTO);
+
+        assertThat(analitica.tickets().total()).isEqualTo(2);
+        assertThat(analitica.tickets().abiertos()).isEqualTo(1);
+        assertThat(analitica.tickets().resueltos()).isEqualTo(1);
+        assertThat(analitica.tickets().horasPromedioDeAtencion()).isEqualTo(2.0);
+        assertThat(analitica.palabrasClave()).singleElement()
+            .satisfies(p -> {
+                assertThat(p.palabra()).isEqualTo("torneo");
+                assertThat(p.preguntas()).isEqualTo(2);
+                assertThat(p.conversaciones()).isEqualTo(2);
             });
     }
 

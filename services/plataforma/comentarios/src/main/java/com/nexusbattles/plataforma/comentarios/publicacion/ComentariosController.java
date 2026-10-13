@@ -56,13 +56,40 @@ public class ComentariosController {
      * <p>Siempre 200: un producto sin comentarios es un hilo vacio, no un
      * recurso inexistente. El promedio va nulo cuando nadie califico, para que
      * la ficha diga «sin valoraciones» en vez de pintar un cero.
+     *
+     * <p><b>G4 (contrato 1.9.0): el hilo no publica el {@code uid} de nadie.</b>
+     * Lo lee cualquiera, tambien sin cuenta, y el {@code autorId} de cada
+     * comentario permitia seguir a un jugador por todos los productos en los
+     * que opino. De su autor solo sale el apodo, que RN-CMT-001 manda
+     * ensenar. Lo que el cliente necesitaba del {@code uid} —saber cuales son
+     * los suyos para ofrecer «Eliminar» en vez de «Reportar»— lo dice el
+     * servidor en {@code propio}, comparando con el token de quien mira si lo
+     * trae (sin token, o con uno que no es de usuario, nada es propio).
      */
     @GetMapping
     public HiloDeComentariosResponse consultar(
             @PathVariable String productId,
             @RequestParam(defaultValue = "0") int pagina,
-            @RequestParam(defaultValue = "" + ServicioDePublicacionDeComentarios.TAMANO_POR_OMISION) int tamano) {
-        return HiloDeComentariosResponse.desde(servicio.consultarHilo(productId, pagina, tamano));
+            @RequestParam(defaultValue = "" + ServicioDePublicacionDeComentarios.TAMANO_POR_OMISION) int tamano,
+            @AuthenticationPrincipal Jwt quienMira) {
+        return HiloDeComentariosResponse.desde(
+                servicio.consultarHilo(productId, pagina, tamano), uidDeQuienMira(quienMira));
+    }
+
+    /**
+     * El {@code uid} de quien lee el hilo, o null si no hay token de usuario.
+     * Un token de servicio no identifica a un jugador: no es error, solo no
+     * tiene comentarios propios.
+     */
+    static String uidDeQuienMira(Jwt quienMira) {
+        if (quienMira == null) {
+            return null;
+        }
+        try {
+            return IdentidadDelToken.idDe(quienMira).toString();
+        } catch (IllegalArgumentException | NullPointerException sinUsuario) {
+            return null;
+        }
     }
 
     @PostMapping
@@ -136,11 +163,17 @@ public class ComentariosController {
      * solo viaja en sus respuestas: en el hilo publico va nulo y no se
      * serializa. {@code editado} si es publico: quien lee tiene que saber que
      * un moderador cambio el texto.
+     *
+     * <p>G4 (1.9.0): {@code autorId} ya no sale en el hilo publico —va nulo y
+     * no se serializa—; sigue en la respuesta de publicar (es el {@code uid}
+     * de quien publica, que lo pide) y en las de moderacion, que lo necesitan
+     * para el historial del autor. {@code propio} sale en el hilo y en la
+     * respuesta de publicar; en moderacion no.
      */
     public record ComentarioResponse(
             String id,
             String productoId,
-            String autorId,
+            @JsonInclude(JsonInclude.Include.NON_NULL) String autorId,
             String apodoAutor,
             String texto,
             List<String> imagenes,
@@ -149,17 +182,24 @@ public class ComentariosController {
             String estado,
             boolean calificacionDescartada,
             boolean editado,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean marcado) {
+            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean marcado,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Boolean propio) {
 
-        /** Como se ve en el hilo publico. */
-        public static ComentarioResponse publico(Comentario comentario, Integer estrellas) {
-            return construir(comentario, estrellas, false, null);
+        /**
+         * Como se ve en el hilo publico: sin el {@code uid} del autor, y con
+         * {@code propio} si quien mira es su autor.
+         *
+         * @param uidDeQuienMira el {@code uid} del token de quien lee, o null
+         */
+        public static ComentarioResponse publico(Comentario comentario, Integer estrellas, String uidDeQuienMira) {
+            boolean propio = uidDeQuienMira != null && uidDeQuienMira.equals(comentario.autorId());
+            return construir(comentario, false, estrellas, false, null, propio);
         }
 
-        /** La respuesta de publicar. */
+        /** La respuesta de publicar: es de quien la pide, asi que es suya. */
         public static ComentarioResponse publicado(
                 Comentario comentario, Integer estrellas, boolean calificacionDescartada) {
-            return construir(comentario, estrellas, calificacionDescartada, null);
+            return construir(comentario, true, estrellas, calificacionDescartada, null, true);
         }
 
         /**
@@ -172,15 +212,16 @@ public class ComentariosController {
          * se modera.
          */
         public static ComentarioResponse paraModeracion(Comentario comentario) {
-            return construir(comentario, null, false, comentario.marcado());
+            return construir(comentario, true, null, false, comentario.marcado(), null);
         }
 
         private static ComentarioResponse construir(
-                Comentario comentario, Integer estrellas, boolean calificacionDescartada, Boolean marcado) {
+                Comentario comentario, boolean conAutorId, Integer estrellas, boolean calificacionDescartada,
+                Boolean marcado, Boolean propio) {
             return new ComentarioResponse(
                     comentario.id(),
                     comentario.productoId(),
-                    comentario.autorId(),
+                    conAutorId ? comentario.autorId() : null,
                     comentario.apodoAutor(),
                     comentario.texto(),
                     comentario.imagenes(),
@@ -189,7 +230,8 @@ public class ComentariosController {
                     comentario.estado().name(),
                     calificacionDescartada,
                     comentario.editado(),
-                    marcado);
+                    marcado,
+                    propio);
         }
     }
 
@@ -209,10 +251,11 @@ public class ComentariosController {
             Double calificacionPromedio,
             long totalCalificaciones) {
 
-        static HiloDeComentariosResponse desde(ServicioDePublicacionDeComentarios.HiloConsultado hilo) {
+        static HiloDeComentariosResponse desde(
+                ServicioDePublicacionDeComentarios.HiloConsultado hilo, String uidDeQuienMira) {
             List<ComentarioResponse> comentarios = hilo.comentarios().stream()
                     .map(comentario -> ComentarioResponse.publico(
-                            comentario, hilo.estrellasPorAutor().get(comentario.autorId())))
+                            comentario, hilo.estrellasPorAutor().get(comentario.autorId()), uidDeQuienMira))
                     .toList();
             return new HiloDeComentariosResponse(
                     hilo.productoId(), comentarios, hilo.pagina(), hilo.tamano(),

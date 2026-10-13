@@ -17,8 +17,8 @@ import com.nexusbattles.plataforma.notificaciones.Notificacion;
  *
  * <p>Guarda por diferencia y no borrando y reescribiendo. Un aviso ya guardado
  * no vuelve a insertarse, una entrega ya registrada tampoco, y la lectura solo
- * cambia la fila del aviso que se marco. Asi dos sesiones que trabajan sobre la
- * misma bandeja no se pisan lo que la otra acaba de escribir.
+ * cambia las filas de los avisos que se marcan. Asi dos sesiones que trabajan
+ * sobre la misma bandeja no se pisan lo que la otra acaba de escribir.
  */
 @Component
 public class RepositorioDeBandejas {
@@ -100,6 +100,21 @@ public class RepositorioDeBandejas {
                     fila.marcarLeida();
                     avisos.save(fila);
                 });
+    }
+
+    /**
+     * Marca como leidos todos los avisos sin leer del jugador con una sola
+     * sentencia en bloque, sin cargar ni guardar fila por fila.
+     *
+     * @return cuantos avisos cambiaron
+     */
+    public int marcarTodasLeidas(String usuarioId) {
+        return avisos.marcarTodasLeidas(usuarioId);
+    }
+
+    /** Cuantos avisos sin leer tiene el jugador, segun la base. */
+    public int contarNoLeidas(String usuarioId) {
+        return Math.toIntExact(avisos.countByUsuarioIdAndLeidaFalse(usuarioId));
     }
 
     /** Si ese jugador ya tiene un aviso con ese identificador. */

@@ -180,6 +180,47 @@ class MotorPujasServiceTest {
         assertEquals(PujaRechazadaException.Motivo.LIMITE_PUJAS_ACTIVAS, ex.getMotivo());
     }
 
+    /**
+     * G5 (7.7.10): con exactamente el tope de pujas activas, subir la propia
+     * puja vigente la REEMPLAZA (pasa a SUPERADA): no suma una mas. Antes se
+     * contaba y no se podia mejorar ni la subasta que ya se iba ganando.
+     */
+    @Test
+    void enElLimiteSePuedeSubirLaPropiaPujaVigentePorqueLaReemplaza() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+        Puja suya = motor.pujar(subasta, null, jugador, new BigDecimal("110"), ContextoParticipacion.sinHistorial(),
+                claveUnica(), TipoPuja.MANUAL);
+        clock.avanzar(Duration.ofSeconds(10));
+        ContextoParticipacion enElLimite = new ContextoParticipacion(null, parametros.getMaxPujasActivasPorJugador());
+
+        Puja mejor = motor.pujar(subasta, suya, jugador, new BigDecimal("130"), enElLimite, claveUnica(),
+                TipoPuja.MANUAL);
+
+        assertEquals(EstadoPuja.ACTIVA, mejor.getEstado());
+        assertEquals(EstadoPuja.SUPERADA, suya.getEstado());
+        assertEquals(0, new BigDecimal("130").compareTo(subasta.getOfertaVigente()));
+    }
+
+    @Test
+    void enElLimiteNoSePuedeSuperarLaPujaDeOtro() {
+        Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));
+        UUID otro = UUID.randomUUID();
+        UUID jugador = UUID.randomUUID();
+        creditoClient.acreditar(otro, new BigDecimal("1000"));
+        creditoClient.acreditar(jugador, new BigDecimal("1000"));
+        Puja deOtro = motor.pujar(subasta, null, otro, new BigDecimal("110"), ContextoParticipacion.sinHistorial(),
+                claveUnica(), TipoPuja.MANUAL);
+        ContextoParticipacion enElLimite = new ContextoParticipacion(null, parametros.getMaxPujasActivasPorJugador());
+
+        PujaRechazadaException ex = assertThrows(PujaRechazadaException.class,
+                () -> motor.pujar(subasta, deOtro, jugador, new BigDecimal("130"), enElLimite, claveUnica(),
+                        TipoPuja.MANUAL));
+
+        assertEquals(PujaRechazadaException.Motivo.LIMITE_PUJAS_ACTIVAS, ex.getMotivo());
+    }
+
     @Test
     void alSerSuperadoElPostorAnteriorLiberaSuReservaYQuedaSuperado() {
         Subasta subasta = nuevaSubasta(new BigDecimal("100"), new BigDecimal("10"));

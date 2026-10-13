@@ -645,6 +645,30 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
+  test('MOTION-3 · tras releer, el importe de la subasta que cambió se acusa una vez', async () => {
+    const caja = document.createElement('div');
+    document.body.append(caja);
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    expect(ctrl.alLlegarActualizacion({ id: 's1', oferta: 150 })).toBe(true);
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    const reloj = caja.querySelector('[data-tiempo-subasta="s1"]');
+    const importe = reloj?.closest('.tarjeta-finanzas')?.querySelector('.monto-destacado');
+    expect(importe).not.toBeNull();
+    expect(importe.classList.contains('acuse--puja')).toBe(true);
+    // Un id que no está en pantalla no acusa nada ni rompe.
+    expect(ctrl.resaltarPrecioDe('no-existe')).toBeNull();
+    ctrl.destruir();
+    caja.remove();
+  });
+
   test('un cambio en una subasta que no tengo no relee nada', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();
@@ -819,7 +843,7 @@ describe('B8 — las reglas las dice el servidor', () => {
     ctrl.destruir();
   });
 
-  test('sin incremento configurado no inventa uno y el detalle dice DECISIÓN PO pendiente', async () => {
+  test('sin incremento configurado no inventa uno y el detalle dice que falta configurarlo', async () => {
     const api = apiFalsa({
       reglas: jest.fn(async () => ({
         ...REGLAS,
@@ -835,9 +859,10 @@ describe('B8 — las reglas las dice el servidor', () => {
     await ctrl.cargarDetalle('sub-1');
 
     expect(ctrl.config.incrementoMinimo).toBeNull();
-    expect(caja.querySelector('[data-decision-po="incremento-minimo"]').textContent).toContain(
-      'DECISIÓN PO pendiente',
+    expect(caja.querySelector('[data-incremento-minimo="sin-configurar"]').textContent).toContain(
+      'no está configurado',
     );
+    expect(caja.textContent).not.toContain('DECISIÓN PO');
     expect(caja.textContent).not.toContain('(+50)');
     ctrl.destruir();
   });
@@ -883,7 +908,7 @@ describe('B8 — la ficha de la subasta (GET /subastas/{id})', () => {
     const atajo = caja.querySelector('.btn-atajo');
     expect(atajo.getAttribute('data-monto')).toBe('1360');
     expect(atajo.textContent).toContain('(+10)');
-    expect(caja.textContent).toContain('Incremento mínimo entre pujas en esta subasta: 10 cr');
+    expect(caja.textContent).toContain('Incremento mínimo: 10 créditos');
     ctrl.destruir();
   });
 

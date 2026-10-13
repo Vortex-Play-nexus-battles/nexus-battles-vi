@@ -68,7 +68,7 @@ import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-err
  * @property {boolean} [nueva]
  * @property {string|null} [disponibleHasta] ISO 8601, si es de tiempo limitado
  * @property {boolean} [favorita]
- * @property {'DOCUMENTO'|'PROVISIONAL_DEV'} [origen]
+ * @property {'DOCUMENTO'|'PROVISIONAL_DEV'|'PROGRESION'} [origen]
  */
 
 /**

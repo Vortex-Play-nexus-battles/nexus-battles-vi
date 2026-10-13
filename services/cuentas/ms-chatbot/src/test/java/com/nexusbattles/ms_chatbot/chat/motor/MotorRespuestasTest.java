@@ -1,10 +1,14 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +57,86 @@ class MotorRespuestasTest {
 
         assertThat(resultado.requiereEscalamiento()).isFalse();
         assertThat(resultado.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+    }
+
+    // 1.3.4: una respuesta de un tema trae su parte enriquecida.
+    @Test
+    void generarRespuesta_deUnTema_traeSuEnlaceYOtrasPreguntasDeSuCategoria() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("olvide mi contrasena");
+
+        assertThat(resultado.enriquecido().pasos()).containsExactly("Ve al inicio.", "Responde las preguntas.");
+        assertThat(resultado.enriquecido().enlaces()).extracting(e -> e.destino()).containsExactly("login");
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Cómo crear una cuenta");
+    }
+
+    @Test
+    void generarRespuesta_escalada_ofreceSoporteHumano() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("xk fmk qzr blublu", VistaDelChat.SUBASTAS);
+
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        assertThat(resultado.enriquecido().ofrecerSoporteHumano()).isTrue();
+        assertThat(resultado.enriquecido().respuestasRapidas()).contains("Cómo publicar en subasta");
+    }
+
+    // Un saludo nunca sale como "pregunta relacionada" de un escalamiento.
+    @Test
+    void generarRespuesta_escalada_noSugiereTemasDeCortesia() {
+        TemaConocimiento saludo = new TemaConocimiento(null, "clave-saludo", Categoria.FAQ_GENERAL,
+            TipoRespuesta.DIRECTA, "Saludo", "hola, inventarioz", null, "¡Hola!", null, 0, true);
+        // "inventarioz" se parece a "inventario" (+2): el saludo queda como
+        // candidato, pero por debajo del umbral, asi que la consulta se escala.
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(saludo, temaRegistro(0)));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("llevame a mi inventario");
+
+        assertThat(resultado.requiereEscalamiento()).isTrue();
+        assertThat(resultado.temasSugeridos()).doesNotContain("Saludo");
+        assertThat(resultado.enriquecido().respuestasRapidas()).doesNotContain("Saludo");
+    }
+
+    // 1.3.4: a igual puntaje, la vista del jugador decide antes que la prioridad.
+    @Test
+    void generarRespuesta_conEmpate_ganaElTemaDeLaCategoriaDeLaVista() {
+        TemaConocimiento tienda = new TemaConocimiento(null, "clave-tienda", Categoria.PRODUCTO,
+            TipoRespuesta.DIRECTA, "Comprar en la tienda", "comprar", null, "En la tienda.", null, 9, true);
+        TemaConocimiento subasta = new TemaConocimiento(null, "clave-compra-subasta", Categoria.SUBASTA_Y_COMERCIO,
+            TipoRespuesta.DIRECTA, "Comprar en subasta", "comprar", null, "En la subasta.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(tienda, subasta));
+
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo").temaClave()).isEqualTo("clave-tienda");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.SUBASTAS).temaClave())
+            .isEqualTo("clave-compra-subasta");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INICIO).temaClave())
+            .isEqualTo("clave-tienda");
+    }
+
+    // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.
+    @Test
+    void generarRespuesta_conElTituloDeUnTema_respondeConEseTema() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("  cómo PUBLICAR en subasta ");
+
+        assertThat(resultado.requiereEscalamiento()).isFalse();
+        assertThat(resultado.temaClave()).isEqualTo("clave-subasta");
+        assertThat(resultado.texto()).contains("Elige el ítem");
+    }
+
+    @Test
+    void generarRespuesta_conDosTemasDelMismoTitulo_ganaElDeMayorPrioridad() {
+        TemaConocimiento otro = new TemaConocimiento(null, "clave-registro-2", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Cómo crear una cuenta", "alta", null, "Versión prioritaria.", null, 9, true);
+
+        ResultadoMotor resultado = motorRespuestas.responderCon("Cómo crear una cuenta",
+            List.of(temaRegistro(0), otro));
+
+        assertThat(resultado.temaClave()).isEqualTo("clave-registro-2");
     }
 
     @Test
@@ -110,6 +194,75 @@ class MotorRespuestasTest {
             List.of(temaRegistro(0), registroPrioritario));
 
         assertThat(resultado.temaClave()).isEqualTo("clave-registro-nuevo");
+    }
+
+    // 1.3.6 (7.4.5): preferencias de idioma y de nivel de detalle.
+    @Test
+    void generarRespuesta_conIdiomaEs_respondeEnEspanolAunqueLaPreguntaSeaEnIngles() {
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("how do i sign up for an account", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL));
+
+        assertThat(resultado.texto()).contains("Para crear tu cuenta");
+    }
+
+    @Test
+    void generarRespuesta_conIdiomaEn_respondeEnInglesTambienAlPulsarUnTitulo() {
+        PreferenciasDeRespuesta ingles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL);
+
+        assertThat(motorRespuestas.generarRespuesta("como me registro", null, ingles).texto())
+            .contains("To create your account");
+        assertThat(motorRespuestas.generarRespuesta("Cómo crear una cuenta", null, ingles).texto())
+            .contains("To create your account");
+    }
+
+    @Test
+    void generarRespuesta_conIdiomaEnYUnTemaSinIngles_quedaEnEspanol() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaTorneoSoloEnEspanol()));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("torneo", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL));
+
+        assertThat(resultado.texto()).isEqualTo("El torneo se juega en equipos. Tiene 8 encuentros.");
+    }
+
+    @Test
+    void generarRespuesta_breve_dejaLaPrimeraOracionSalvoEnLosTemasPasoAPaso() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaTorneoSoloEnEspanol(), temaRegistro(0)));
+        PreferenciasDeRespuesta breve = new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.BREVE);
+
+        assertThat(motorRespuestas.generarRespuesta("torneo", null, breve).texto())
+            .isEqualTo("El torneo se juega en equipos.");
+        assertThat(motorRespuestas.generarRespuesta("como me registro", null, breve).texto())
+            .isEqualTo("Para crear tu cuenta necesitas nombres, correo, contraseña, apodo y avatar.");
+    }
+
+    @Test
+    void generarRespuesta_detallado_agregaLosTemasRelacionadosAlTexto() {
+        TemaConocimiento recuperar = new TemaConocimiento(null, "clave-recuperar", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.PASO_A_PASO, "Recuperar mi contraseña", "olvide mi contrasena", null,
+            "Para recuperarla: 1) Ve al inicio. 2) Responde las preguntas.", null, 0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaRegistro(0), recuperar));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("como me registro", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.DETALLADO));
+
+        assertThat(resultado.texto()).endsWith("Temas relacionados: Recuperar mi contraseña.");
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly("Recuperar mi contraseña");
+    }
+
+    @Test
+    void generarRespuesta_conPreferenciasNulas_respondeComoSinPreferencias() {
+        assertThat(motorRespuestas.generarRespuesta("how do i sign up for an account", null, null).texto())
+            .isEqualTo(motorRespuestas.generarRespuesta("how do i sign up for an account").texto());
+    }
+
+    private static TemaConocimiento temaTorneoSoloEnEspanol() {
+        return new TemaConocimiento(null, "clave-torneo", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA,
+            "Cómo funciona el Torneo", "torneo, torneos", null,
+            "El torneo se juega en equipos. Tiene 8 encuentros.", null, 0, true);
     }
 
     private static TemaConocimiento temaRegistro(int prioridad) {

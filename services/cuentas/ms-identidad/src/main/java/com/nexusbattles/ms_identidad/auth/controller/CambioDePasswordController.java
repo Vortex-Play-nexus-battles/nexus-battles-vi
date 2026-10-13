@@ -4,6 +4,7 @@ import com.nexusbattles.ms_identidad.auth.dto.CambiarPasswordRequest;
 import com.nexusbattles.ms_identidad.auth.dto.CambioDePasswordResponse;
 import com.nexusbattles.ms_identidad.auth.exception.CambioDePasswordRechazadoException;
 import com.nexusbattles.ms_identidad.auth.service.CambioDePasswordService;
+import com.nexusbattles.ms_identidad.auth.service.JwtService;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
 import jakarta.servlet.http.HttpServletRequest;
@@ -17,6 +18,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 /**
  * {@code PUT /api/v1/auth/password} — HU-AUT-006: cambiar mi contraseña.
@@ -49,7 +52,19 @@ public class CambioDePasswordController {
             // alguien registra el controlador sin él.
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Hace falta iniciar sesión.");
         }
-        return ResponseEntity.ok(servicio.cambiar(apodo, datos, ipDe(request)));
+        // HU-AUT-007: el token nuevo conserva cómo se autenticó esta sesión
+        // (amr): una sesión con segundo factor no lo pierde al cambiar la clave.
+        // Sin segundo factor, el camino de siempre, sin tocar.
+        List<String> metodos = metodosDe(request);
+        return ResponseEntity.ok(JwtService.conSegundoFactor(metodos)
+                ? servicio.cambiar(apodo, datos, ipDe(request), metodos)
+                : servicio.cambiar(apodo, datos, ipDe(request)));
+    }
+
+    private static List<String> metodosDe(HttpServletRequest request) {
+        return request.getAttribute("amrActual") instanceof List<?> lista
+                ? lista.stream().map(String::valueOf).toList()
+                : List.of();
     }
 
     @ExceptionHandler(CambioDePasswordRechazadoException.class)

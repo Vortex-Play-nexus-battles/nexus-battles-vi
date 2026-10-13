@@ -124,9 +124,11 @@ describe('la matriz cubre lo que hay en disco', () => {
     // jugador, es el formulario de alta del catálogo, y el servidor ya lo
     // restringía a ADMINISTRADOR (Tabla 24: «Gestionar productos»).
     // B1 — `verificar-cuenta` entra: la usa quien todavía no puede iniciar
-    // sesión, porque su correo está sin confirmar.
+    // sesión, porque su correo está sin confirmar. F6 — `portada` entra: es
+    // la raíz pública con la tienda, para quien aún no tiene cuenta.
     expect(publicas).toEqual([
       'login',
+      'portada',
       'pujas',
       'registro',
       'restablecer-confirmar',
@@ -171,6 +173,21 @@ describe('puedeVer (RF-RBAC-002)', () => {
     expect(puedeVer('lista-negra-admin', moderador).veredicto).toBe(VEREDICTO.VISIBLE);
     expect(puedeVer('gestion-usuarios', moderador).veredicto).toBe(VEREDICTO.DENEGADA);
     expect(puedeVer('parametros-admin', moderador).veredicto).toBe(VEREDICTO.DENEGADA);
+  });
+
+  test('HU-PRD-013: los banners los gestiona la administración, como el resto del catálogo', () => {
+    // Mismo nivel que exige productos en `SeguridadConfig` para
+    // POST/PUT/DELETE /api/v1/banners y para el listado completo.
+    expect(MATRIZ.banners).toEqual({
+      ruta: 'contenido/productos/banners.html',
+      acceso: ACCESO.ADMINISTRACION,
+      armazon: 'admin',
+    });
+    expect(puedeVer('banners', admin).veredicto).toBe(VEREDICTO.VISIBLE);
+    expect(puedeVer('banners', superAdmin).veredicto).toBe(VEREDICTO.VISIBLE);
+    expect(puedeVer('banners', moderador).veredicto).toBe(VEREDICTO.DENEGADA);
+    expect(puedeVer('banners', jugador).veredicto).toBe(VEREDICTO.DENEGADA);
+    expect(vistaDeRuta('/frontend/app-web/src/contenido/productos/banners.html')).toBe('banners');
   });
 
   test('el administrador no crea administradores ni lee la auditoría (RF-RBAC-003)', () => {
@@ -235,17 +252,22 @@ describe('vistaDeRuta y urlDeVista', () => {
     );
   });
 
-  test('R17.3 y B1 — once direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
+  test('R17.3, B1, F6 y 6-oct — catorce direcciones limpias, únicas, y cada una de una vista del jugador o del portal', () => {
     const limpias = Object.entries(MATRIZ).filter(([, v]) => v.limpia);
     // B1 suma las dos a las que llevan los enlaces del correo (correo 1.4.0):
-    // la verificación de la cuenta y el canje del código de recuperación.
+    // la verificación de la cuenta y el canje del código de recuperación. F6
+    // suma la raíz: la portada pública con la tienda. El 6-oct, pedir el
+    // código de recuperación y el tablón de misiones.
     expect(limpias.map(([, v]) => v.limpia).sort()).toEqual([
+      '/',
       '/cuenta',
       '/inicio',
       '/inventario',
       '/jugar',
       '/login',
+      '/misiones',
       '/preparando',
+      '/recuperar',
       '/registro',
       '/restablecer',
       '/subastas',
@@ -254,8 +276,36 @@ describe('vistaDeRuta y urlDeVista', () => {
     ]);
     for (const [, entrada] of limpias) {
       expect(['publico', 'jugador']).toContain(entrada.armazon);
-      expect(entrada.limpia).toMatch(/^\/[a-z]+$/);
+      expect(entrada.limpia).toMatch(/^\/[a-z]*$/);
     }
+    // Las direcciones no se repiten: dos vistas no pueden servirse en la misma.
+    expect(new Set(limpias.map(([, v]) => v.limpia)).size).toBe(limpias.length);
+  });
+
+  test('6-oct — /recuperar y /misiones abren su vista, y cada una con su acceso', () => {
+    expect(vistaDeRuta('/recuperar')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/recuperar/')).toBe('restablecer-solicitar');
+    expect(vistaDeRuta('/misiones?categoria=HISTORIA')).toBe('misiones');
+    expect(vistaDeRuta('/frontend/app-web/src/contenido/misiones/misiones.html')).toBe('misiones');
+    // Pedir el código es del portal (aún no hay sesión); el tablón, del jugador.
+    expect(armazonDeVista('restablecer-solicitar')).toBe('publico');
+    expect(puedeVer('restablecer-solicitar', { autenticado: false }).veredicto).toBe(
+      VEREDICTO.VISIBLE,
+    );
+    expect(armazonDeVista('misiones')).toBe('jugador');
+    expect(puedeVer('misiones', { autenticado: false }).veredicto).not.toBe(VEREDICTO.VISIBLE);
+    // La del canje no se confunde con la de pedir el código.
+    expect(vistaDeRuta('/restablecer')).toBe('restablecer-confirmar');
+  });
+
+  test('F6 — la raíz es la portada pública, y solo la raíz', () => {
+    expect(vistaDeRuta('/')).toBe('portada');
+    expect(vistaDeRuta('/frontend/app-web/src/cuentas/portada.html')).toBe('portada');
+    expect(armazonDeVista('portada')).toBe('publico');
+    expect(puedeVer('portada', { autenticado: false }).veredicto).toBe(VEREDICTO.VISIBLE);
+    // Las demás direcciones siguen siendo de su vista.
+    expect(vistaDeRuta('/login')).toBe('login');
+    expect(vistaDeRuta('/registro')).toBe('registro');
   });
 
   test('la URL de una vista sale igual desde cualquier base servida', () => {

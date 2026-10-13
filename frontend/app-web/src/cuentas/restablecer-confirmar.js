@@ -47,6 +47,7 @@ import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { campo, marcarErrorDe, mejorarContrasena } from '../comun/ui/campo.js';
 import { vaciar } from '../comun/ui/dom.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 
 // Se reexportan con su nombre de siempre: las llamadas viven en `comun/`.
 export { confirmarRestablecimiento, consultarPreguntas };
@@ -426,6 +427,11 @@ export function montarRestablecimiento(
     });
   }
 
+  // G1 — los dos formularios ya escuchan `submit`: sus botones se pueden
+  // encender. Antes del foco de abajo, que no llega a un botón desactivado.
+  formularioListo(formCodigo);
+  formularioListo(formClave);
+
   // ------------------------------------------------------------- arranque
   if (delEnlace?.codigo && campoCorreo.value) {
     botonContinuar.focus();
@@ -439,6 +445,10 @@ export function montarRestablecimiento(
 // ---------------------------------------------------------------- arranque
 
 if (document.body?.dataset.vista === 'restablecer-confirmar') {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra
+  // (`?codigo=…`, `?nuevaPassword=…`). El fragmento del enlace del correo no
+  // se toca: lo lee y lo borra la propia vista.
+  sinCredencialesEnLaDireccion();
   montarCabecera(document.querySelector('[data-cabecera-app]'), {
     vista: 'restablecer-confirmar',
     seccionActiva: null,

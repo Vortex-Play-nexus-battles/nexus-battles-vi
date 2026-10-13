@@ -35,9 +35,11 @@ class CanalDeSesionesController {
     static final String ATRIBUTO_SESION = "sesionId";
 
     private final ServicioDeNotificaciones servicio;
+    private final AvisosPorIncorporar avisos;
 
-    CanalDeSesionesController(ServicioDeNotificaciones servicio) {
+    CanalDeSesionesController(ServicioDeNotificaciones servicio, AvisosPorIncorporar avisos) {
         this.servicio = servicio;
+        this.avisos = avisos;
     }
 
     @MessageMapping("/notificaciones/sesion")
@@ -50,6 +52,9 @@ class CanalDeSesionesController {
         if (atributos != null) {
             atributos.put(ATRIBUTO_SESION, mensaje.sesionId());
         }
+        // HU-NOT-001: lo mismo que POST .../pending, porque este es el camino
+        // normal de la interfaz (pending solo se usa sin canal). Nunca falla.
+        avisos.incorporar(usuarioId);
         servicio.registrarSesion(usuarioId, mensaje.sesionId());
     }
 

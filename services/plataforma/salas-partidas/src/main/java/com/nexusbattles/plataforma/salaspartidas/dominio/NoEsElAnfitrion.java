@@ -23,8 +23,8 @@ public class NoEsElAnfitrion extends ErrorDeNegocio {
 
     public NoEsElAnfitrion() {
         super(TIPO,
-              "No eres el anfitrion de esta sala",
+              "No eres el anfitrión de esta sala",
               403,
-              "Solo quien creo la sala puede cancelarla.");
+              "Solo quien creó la sala puede cancelarla.");
     }
 }

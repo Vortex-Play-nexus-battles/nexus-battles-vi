@@ -184,21 +184,39 @@ export function crearClienteChatbot({
   return {
     /**
      * @param {string} contenido
-     * @param {string|null} [adjuntoUrl]
+     * @param {{vista?: string|null}} [opciones] `vista`: la sección donde
+     *   está el jugador (`INICIO`, `INVENTARIO`…), para la respuesta contextual
      * @returns {Promise<{id: string, remitente: string, contenido: string,
-     *          adjuntoUrl: string|null, fechaEnvio: string}>} la respuesta del bot
+     *          adjuntoUrl: string|null, fechaEnvio: string, enriquecido?: object|null}>}
+     *          la respuesta del bot
      */
-    enviarMensaje(contenido, adjuntoUrl = null) {
+    enviarMensaje(contenido, { vista = null } = {}) {
       const cuerpo = { contenido };
-      if (adjuntoUrl) {
-        cuerpo.adjuntoUrl = adjuntoUrl;
+      if (vista) {
+        cuerpo.vista = vista;
       }
       return llamar('POST', '/chat/mensajes', cuerpo, { rutaFija: true });
     },
 
-    /** @returns {Promise<Array<object>>} del más antiguo al más reciente */
-    async obtenerHistorial() {
-      return (await llamar('GET', '/chat/historial', undefined, { rutaFija: true })) ?? [];
+    /**
+     * Sin opciones, toda la conversación. Con `limite` (y opcionalmente
+     * `antesDe`, el id del mensaje más antiguo que ya se tiene), una página:
+     * los más recientes, o los anteriores a ese mensaje.
+     *
+     * @param {{antesDe?: string|null, limite?: number|null}} [pagina]
+     * @returns {Promise<Array<object>>} del más antiguo al más reciente
+     */
+    async obtenerHistorial({ antesDe = null, limite = null } = {}) {
+      const parametros = new URLSearchParams();
+      if (antesDe) {
+        parametros.set('antesDe', antesDe);
+      }
+      if (limite) {
+        parametros.set('limite', String(limite));
+      }
+      const consulta = parametros.toString();
+      const ruta = consulta ? `/chat/historial?${consulta}` : '/chat/historial';
+      return (await llamar('GET', ruta, undefined, { rutaFija: true })) ?? [];
     },
 
     /** @returns {Promise<null>} */
@@ -217,6 +235,65 @@ export function crearClienteChatbot({
         cuerpo.comentario = comentario.trim();
       }
       return llamar('POST', `/chat/mensajes/${encodeURIComponent(mensajeId)}/calificacion`, cuerpo);
+    },
+
+    /**
+     * Abre una solicitud de soporte humano (solo con sesión; el servidor
+     * responde 401 SESION_REQUERIDA a un visitante).
+     *
+     * @param {{categoria: string, asunto: string, mensaje: string}} datos
+     * @returns {Promise<object>} la solicitud como la ve el jugador
+     */
+    abrirTicket({ categoria, asunto, mensaje }) {
+      return llamar('POST', '/chat/tickets', { categoria, asunto, mensaje }, { rutaFija: true });
+    },
+
+    /**
+     * Preguntas rápidas, temas frecuentes o autocompletado (con `q`). Salen
+     * de la versión en producción de la base de conocimiento.
+     *
+     * @param {{q?: string, categoria?: string|null, limite?: number}} [filtro]
+     * @returns {Promise<Array<{clave: string, titulo: string, categoria: string, pregunta: string}>>}
+     */
+    async sugerencias({ q = '', categoria = null, limite = 6 } = {}) {
+      const parametros = new URLSearchParams();
+      if (q && q.trim()) {
+        parametros.set('q', q.trim().slice(0, 100));
+      }
+      if (categoria) {
+        parametros.set('categoria', categoria);
+      }
+      parametros.set('limite', String(limite));
+      return (
+        (await llamar('GET', `/chat/sugerencias?${parametros.toString()}`, undefined, {
+          rutaFija: true,
+        })) ?? []
+      );
+    },
+
+    /**
+     * Preferencias de respuesta de esta sesión (idioma y nivel de detalle).
+     * Sin identidad, el servidor responde las de por defecto.
+     *
+     * @returns {Promise<{idioma: string, nivelDetalle: string}>}
+     */
+    preferencias() {
+      return llamar('GET', '/chat/preferencias', undefined, { rutaFija: true });
+    },
+
+    /**
+     * Guarda las preferencias (el par completo).
+     *
+     * @param {{idioma: string, nivelDetalle: string}} preferencias
+     * @returns {Promise<{idioma: string, nivelDetalle: string}>} las guardadas
+     */
+    guardarPreferencias({ idioma, nivelDetalle }) {
+      return llamar('PUT', '/chat/preferencias', { idioma, nivelDetalle }, { rutaFija: true });
+    },
+
+    /** @returns {Promise<Array<object>>} las solicitudes del jugador, la más reciente primero */
+    async misTickets() {
+      return (await llamar('GET', '/chat/tickets', undefined, { rutaFija: true })) ?? [];
     },
   };
 }

@@ -64,14 +64,18 @@ public class ModeracionController {
     /**
      * La cola priorizada. Vacia es 200 con lista vacia, no 404 (CA-03).
      * {@code marcado=true} es la lista de seguimiento especial (7.3.3).
+     * {@code categoria} y {@code prioridadElevada} (1.10.0) filtran ademas.
      */
     @GetMapping
     public ColaResponse cola(
             @RequestParam(required = false) String productoId,
             @RequestParam(required = false) Boolean marcado,
+            @RequestParam(required = false) CategoriaDeReporte categoria,
+            @RequestParam(required = false) Boolean prioridadElevada,
             @RequestParam(defaultValue = "0") int pagina,
             @RequestParam(defaultValue = "20") int tamano) {
-        return ColaResponse.desde(servicio.cola(productoId, marcado, pagina, Math.min(tamano, 100)));
+        return ColaResponse.desde(servicio.cola(
+                productoId, marcado, categoria, prioridadElevada, pagina, Math.min(tamano, 100)));
     }
 
     /** El comentario con sus reportes y su historial: todo lo que hace falta para decidir. */
@@ -114,7 +118,34 @@ public class ModeracionController {
         return ResponseEntity.status(HttpStatus.OK).body(DecisionResponse.desde(resuelto));
     }
 
+    /**
+     * La misma decision para varios comentarios, atomica (1.10.0). Moderador,
+     * apodo e IP salen del token y de la peticion, nunca del cuerpo; la
+     * validacion y las reglas de transicion son del servicio. El literal
+     * {@code /decisiones-en-lote} le gana al patron {@code /{commentId}} del GET.
+     */
+    @PostMapping("/decisiones-en-lote")
+    public DecisionEnLoteResponse resolverEnLote(
+            @AuthenticationPrincipal Jwt moderador,
+            @RequestBody DecisionEnLoteRequest peticion,
+            HttpServletRequest origen) {
+
+        return DecisionEnLoteResponse.desde(servicio.resolverEnLote(
+                peticion.comentarioIds(),
+                IdentidadDelToken.idDe(moderador).toString(),
+                IdentidadDelToken.apodoDe(moderador),
+                peticion.accion(),
+                peticion.motivo(),
+                peticion.confirmacion(),
+                OrigenDeLaPeticion.ipDe(origen)));
+    }
+
     // ------------------------------------------------------------------ DTOs
+
+    /** {@code DecisionEnLoteRequest}; {@code confirmacion} solo cuenta con ELIMINAR (1.10.0). */
+    public record DecisionEnLoteRequest(List<String> comentarioIds, AccionDeModeracion accion,
+            String motivo, String confirmacion) {
+    }
 
     /** {@code DecisionRequest}; {@code textoNuevo} solo cuenta con EDITAR (1.4.0). */
     public record DecisionRequest(AccionDeModeracion accion, String motivo, String textoNuevo) {
@@ -204,6 +235,26 @@ public class ModeracionController {
             return new HistorialDelAutorResponse(h.autorId(), h.apodoAutor(),
                     h.comentarios().stream().map(ItemDelHistorialResponse::desde).toList(),
                     h.total(), h.pagina(), h.tamano());
+        }
+    }
+
+    /** {@code ItemDeDecisionEnLote}: el asiento ya dice el estado anterior y el nuevo. */
+    public record ItemDeDecisionEnLoteResponse(String comentarioId, AsientoResponse asiento,
+            boolean autorNotificado) {
+
+        static ItemDeDecisionEnLoteResponse desde(ServicioDeModeracion.Resuelto r) {
+            return new ItemDeDecisionEnLoteResponse(
+                    r.comentario().id(), AsientoResponse.desde(r.asiento()), r.autorNotificado());
+        }
+    }
+
+    /** {@code DecisionEnLoteResponse}: no repite el comentario completo de cada decision. */
+    public record DecisionEnLoteResponse(AccionDeModeracion accion, int total,
+            List<ItemDeDecisionEnLoteResponse> resultados) {
+
+        static DecisionEnLoteResponse desde(ServicioDeModeracion.ResueltoEnLote r) {
+            return new DecisionEnLoteResponse(r.accion(), r.total(),
+                    r.resultados().stream().map(ItemDeDecisionEnLoteResponse::desde).toList());
         }
     }
 

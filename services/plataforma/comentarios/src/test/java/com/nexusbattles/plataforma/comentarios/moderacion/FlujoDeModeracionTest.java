@@ -5,11 +5,13 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 
 import com.nexusbattles.plataforma.comentarios.Comentario;
@@ -26,6 +28,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -35,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyIterable;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doThrow;
@@ -79,14 +85,23 @@ class FlujoDeModeracionTest {
     private List<String> avisos;
     private List<String> auditados;
     private ServicioDeModeracion servicio;
+    private PlatformTransactionManager gestorDeTransacciones;
+    private TransactionTemplate plantilla;
 
     @BeforeEach
     void montar() {
+        // El gestor es un simulacro: no hay base que revertir, pero se puede
+        // afirmar que la escritura iba dentro de una transaccion y que se
+        // confirmo o se revirtio (la reversion real la prueba DecisionEnLoteIT).
+        gestorDeTransacciones = mock(PlatformTransactionManager.class);
+        when(gestorDeTransacciones.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+        plantilla = new TransactionTemplate(gestorDeTransacciones);
+
         filasDeComentarios = new LinkedHashMap<>();
         filasDeReportes = new ArrayList<>();
         filasDeAsientos = new ArrayList<>();
         comentarios = comentariosEnMemoria(filasDeComentarios);
-        reportes = reportesEnMemoria(filasDeReportes);
+        reportes = reportesEnMemoria(filasDeReportes, filasDeAsientos);
         asientos = asientosEnMemoria(filasDeAsientos);
         avisos = new ArrayList<>();
         auditados = new ArrayList<>();
@@ -96,6 +111,14 @@ class FlujoDeModeracionTest {
     }
 
     private ServicioDeModeracion servicioConUmbral(int umbral) {
+        return servicioConUmbrales(umbral, 0, Clock.fixed(AHORA, ZoneOffset.UTC));
+    }
+
+    /**
+     * @param prioridad    umbral de prioridad elevada (CA-02)
+     * @param ocultamiento umbral de ocultamiento (1.8.0, D-36); 0 = nunca
+     */
+    private ServicioDeModeracion servicioConUmbrales(int prioridad, int ocultamiento, Clock reloj) {
         return new ServicioDeModeracion(
                 comentarios, reportes, asientos,
                 (comentario, asiento) -> {
@@ -103,8 +126,17 @@ class FlujoDeModeracionTest {
                     return true;
                 },
                 asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
-                Clock.fixed(AHORA, ZoneOffset.UTC),
-                3, umbral);
+                reloj, plantilla,
+                3, prioridad, ocultamiento);
+    }
+
+    /** Un comentario que el filtro automatico retuvo al publicarlo (RF-COM-007). */
+    private Comentario retenido(String id, String autor) {
+        Comentario c = new Comentario(id, PRODUCTO, autor, "apodo-" + autor,
+                "texto", List.of(), AHORA.minusSeconds(3600),
+                Comentario.Estado.EN_REVISION);
+        comentarios.save(RegistroDeComentario.desde(c));
+        return c;
     }
 
     private Comentario publicar(String id, String autor) {
@@ -134,12 +166,14 @@ class FlujoDeModeracionTest {
         ServicioDeModeracion.Reportado reportado = servicio.reportar(
                 PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, "me insulta");
 
-        assertEquals(Comentario.Estado.EN_REVISION, reportado.comentario().estado(),
-                "el primer reporte tiene que encolarlo");
+        // Contrato 1.8.0 (auditoria de DEV del 30-sep): encolar no es ocultar.
+        assertEquals(Comentario.Estado.PUBLICADO, reportado.comentario().estado(),
+                "un reporte lo encola sin sacarlo del hilo");
+        assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
         assertEquals(1, reportado.totales());
 
         // 2. aparece en la cola del moderador
-        ServicioDeModeracion.Cola cola = servicio.cola(null, null, 0, 20);
+        ServicioDeModeracion.Cola cola = servicio.cola(null, null, null, null, 0, 20);
         assertEquals(1, cola.total());
         assertEquals("c-1", cola.entradas().get(0).comentario().id());
         assertEquals(1, cola.entradas().get(0).reportes());
@@ -150,7 +184,7 @@ class FlujoDeModeracionTest {
 
         // 4. SALE del estado en el que entro. Esto es el defecto que R10.1 cierra.
         assertEquals(Comentario.Estado.OCULTO, resuelto.comentario().estado());
-        assertEquals(0, servicio.cola(null, null, 0, 20).total(),
+        assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total(),
                 "resuelto es resuelto: deja de estar en la cola");
 
         // 5. queda el asiento, con las cinco cosas que pide la ficha y la IP (B3)
@@ -158,7 +192,7 @@ class FlujoDeModeracionTest {
         assertEquals("mod-1", asiento.moderadorId());
         assertEquals("moderadora", asiento.apodoModerador());
         assertEquals("acoso confirmado", asiento.motivo());
-        assertEquals(Comentario.Estado.EN_REVISION, asiento.estadoAnterior());
+        assertEquals(Comentario.Estado.PUBLICADO, asiento.estadoAnterior());
         assertEquals(Comentario.Estado.OCULTO, asiento.estadoNuevo());
         assertEquals(AHORA, asiento.fecha());
         assertEquals(IP, asiento.ipOrigen());
@@ -187,7 +221,7 @@ class FlujoDeModeracionTest {
         }
 
         @Test
-        @DisplayName("varias personas distintas suman, y el comentario no se reencola")
+        @DisplayName("varias personas distintas suman, en una sola entrada, y sin umbral el comentario sigue a la vista")
         void variosReportantes() {
             publicar("c-1", "autor-1");
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
@@ -195,7 +229,35 @@ class FlujoDeModeracionTest {
                     PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
 
             assertEquals(2, segundo.totales());
-            assertEquals(Comentario.Estado.EN_REVISION, segundo.comentario().estado());
+            assertEquals(Comentario.Estado.PUBLICADO, segundo.comentario().estado());
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "agrupados: una sola entrada");
+        }
+
+        @Test
+        @DisplayName("1.8.0: con umbral de ocultamiento 2, el primero no oculta y el segundo saca el comentario del hilo")
+        void umbralDeOcultamiento() {
+            servicio = servicioConUmbrales(0, 2, Clock.fixed(AHORA, ZoneOffset.UTC));
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.Reportado primero = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            assertEquals(Comentario.Estado.PUBLICADO, primero.comentario().estado(), "1 < 2: sigue a la vista");
+
+            ServicioDeModeracion.Reportado segundo = servicio.reportar(
+                    PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            assertEquals(Comentario.Estado.EN_REVISION, segundo.comentario().estado(), "el umbral es inclusivo");
+            assertEquals(Comentario.Estado.EN_REVISION, leido("c-1").estado());
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "sigue siendo una sola entrada");
+        }
+
+        @Test
+        @DisplayName("1.8.0: sin umbral (0) ningun numero de reportes saca el comentario del hilo")
+        void sinUmbralNuncaOculta() {
+            publicar("c-1", "autor-1");
+            for (String jugador : List.of("a", "b", "c", "d", "e")) {
+                servicio.reportar(PRODUCTO, "c-1", "jugador-" + jugador, CategoriaDeReporte.SPAM, null);
+            }
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
         }
 
         @Test
@@ -316,7 +378,7 @@ class FlujoDeModeracionTest {
                     servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null));
 
             assertEquals(1, filasDeReportes.size());
-            assertTrue(servicio.cola(null, null, 0, 20).entradas().stream()
+            assertTrue(servicio.cola(null, null, null, null, 0, 20).entradas().stream()
                     .noneMatch(ServicioDeModeracion.Entrada::prioridadElevada));
         }
 
@@ -338,7 +400,7 @@ class FlujoDeModeracionTest {
         @Test
         @DisplayName("vacia es una respuesta correcta, no un 404 (CA-03)")
         void vacia() {
-            ServicioDeModeracion.Cola cola = servicio.cola(null, null, 0, 20);
+            ServicioDeModeracion.Cola cola = servicio.cola(null, null, null, null, 0, 20);
             assertEquals(0, cola.total());
             assertTrue(cola.entradas().isEmpty());
         }
@@ -354,7 +416,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
             servicio.reportar(PRODUCTO, "mucho", "jugador-c", CategoriaDeReporte.SPAM, null);
 
-            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, null, null, 0, 20).entradas();
             assertEquals("mucho", entradas.get(0).comentario().id());
             assertEquals(3, entradas.get(0).reportes());
             assertEquals(2L, entradas.get(0).porCategoria().get(CategoriaDeReporte.ACOSO));
@@ -372,7 +434,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "mucho", "jugador-a", CategoriaDeReporte.ACOSO, null);
             servicio.reportar(PRODUCTO, "mucho", "jugador-b", CategoriaDeReporte.ACOSO, null);
 
-            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, 0, 20).entradas();
+            List<ServicioDeModeracion.Entrada> entradas = servicio.cola(null, null, null, null, 0, 20).entradas();
             assertEquals("mucho", entradas.get(0).comentario().id());
             assertTrue(entradas.get(0).prioridadElevada());
             assertEquals("poco", entradas.get(1).comentario().id());
@@ -386,7 +448,7 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
             servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
 
-            assertFalse(servicio.cola(null, null, 0, 20).entradas().get(0).prioridadElevada());
+            assertFalse(servicio.cola(null, null, null, null, 0, 20).entradas().get(0).prioridadElevada());
         }
 
         @Test
@@ -397,9 +459,9 @@ class FlujoDeModeracionTest {
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
             servicio.reportar(PRODUCTO, "c-2", "jugador-b", CategoriaDeReporte.SPAM, null);
 
-            assertEquals(2, servicio.cola(PRODUCTO, null, 0, 20).total());
-            assertEquals(0, servicio.cola("otro", null, 0, 20).total());
-            ServicioDeModeracion.Cola segunda = servicio.cola(PRODUCTO, null, 1, 1);
+            assertEquals(2, servicio.cola(PRODUCTO, null, null, null, 0, 20).total());
+            assertEquals(0, servicio.cola("otro", null, null, null, 0, 20).total());
+            ServicioDeModeracion.Cola segunda = servicio.cola(PRODUCTO, null, null, null, 1, 1);
             assertEquals(1, segunda.entradas().size());
             assertEquals(2, segunda.total());
         }
@@ -415,13 +477,153 @@ class FlujoDeModeracionTest {
             resolver("eliminado-marcado", AccionDeModeracion.MARCAR, "vigilar");
             resolver("eliminado-marcado", AccionDeModeracion.ELIMINAR, "reincide");
 
-            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(null, true, 0, 20)));
-            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(PRODUCTO, true, 0, 20)));
-            assertEquals(List.of("en-revision"), ids(servicio.cola(null, false, 0, 20)),
+            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(null, true, null, null, 0, 20)));
+            assertEquals(List.of("publicado-marcado"), ids(servicio.cola(PRODUCTO, true, null, null, 0, 20)));
+            assertEquals(List.of("en-revision"), ids(servicio.cola(null, false, null, null, 0, 20)),
                     "marcado=false son los EN_REVISION sin marcar");
-            assertEquals(List.of("en-revision"), ids(servicio.cola(PRODUCTO, false, 0, 20)));
-            assertEquals(List.of("en-revision"), ids(servicio.cola(null, null, 0, 20)),
+            assertEquals(List.of("en-revision"), ids(servicio.cola(PRODUCTO, false, null, null, 0, 20)));
+            assertEquals(List.of("en-revision"), ids(servicio.cola(null, null, null, null, 0, 20)),
                     "sin filtro, la cola de siempre");
+        }
+
+        @Test
+        @DisplayName("categoria deja solo los comentarios con al menos un reporte de esa categoria (1.10.0)")
+        void filtroPorCategoria() {
+            publicar("acoso-1", "autor-1");
+            publicar("spam-1", "autor-2");
+            retenido("retenido", "autor-3");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "spam-1", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            assertEquals(List.of("acoso-1"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, null, 0, 20)));
+            assertEquals(List.of("acoso-1", "spam-1"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 0, 20)),
+                    "un comentario con dos categorias sale con cada una de ellas");
+            assertEquals(List.of(),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.INFORMACION_FALSA, null, 0, 20)));
+            assertEquals(3, servicio.cola(null, null, null, null, 0, 20).total(),
+                    "sin el filtro entra tambien el retenido sin reportes");
+        }
+
+        @Test
+        @DisplayName("con categoria, la entrada conserva el recuento completo por categoria")
+        void categoriaNoRecortaPorCategoria() {
+            publicar("acoso-1", "autor-1");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Entrada entrada =
+                    servicio.cola(null, null, CategoriaDeReporte.ACOSO, null, 0, 20).entradas().get(0);
+
+            assertEquals(2, entrada.reportes());
+            assertEquals(1L, entrada.porCategoria().get(CategoriaDeReporte.ACOSO));
+            assertEquals(1L, entrada.porCategoria().get(CategoriaDeReporte.SPAM));
+        }
+
+        @Test
+        @DisplayName("el total y la pagina cuentan la cola ya filtrada")
+        void totalDeLaColaFiltrada() {
+            publicar("acoso-1", "autor-1");
+            publicar("spam-1", "autor-2");
+            publicar("spam-2", "autor-3");
+            servicio.reportar(PRODUCTO, "acoso-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "spam-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "spam-2", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola primera =
+                    servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 0, 1);
+            ServicioDeModeracion.Cola segunda =
+                    servicio.cola(null, null, CategoriaDeReporte.SPAM, null, 1, 1);
+
+            assertEquals(2, primera.total(), "los dos de SPAM, no los tres de la cola");
+            assertEquals(1, primera.entradas().size());
+            assertEquals(1, segunda.entradas().size());
+            assertEquals(2, segunda.total());
+            assertEquals(List.of("spam-1", "spam-2"),
+                    List.of(primera.entradas().get(0).comentario().id(),
+                            segunda.entradas().get(0).comentario().id()));
+        }
+
+        @Test
+        @DisplayName("prioridadElevada=true deja solo los que alcanzaron el umbral; false, los demas")
+        void filtroPorPrioridadElevada() {
+            servicio = servicioConUmbral(2);
+            publicar("alta", "autor-1");
+            publicar("baja", "autor-2");
+            retenido("sin-reportes", "autor-3");
+            servicio.reportar(PRODUCTO, "alta", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "baja", "jugador-c", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola elevadas = servicio.cola(null, null, null, true, 0, 20);
+            ServicioDeModeracion.Cola demas = servicio.cola(null, null, null, false, 0, 20);
+
+            assertEquals(List.of("alta"), ids(elevadas));
+            assertEquals(1, elevadas.total());
+            assertEquals(List.of("baja", "sin-reportes"), ids(demas));
+            assertEquals(2, demas.total());
+        }
+
+        @Test
+        @DisplayName("sin umbral configurado nadie tiene prioridad elevada: true es cola vacia, false es todo")
+        void prioridadElevadaSinUmbral() {
+            publicar("c-1", "autor-1");
+            publicar("c-2", "autor-2");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "c-2", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Cola elevadas = servicio.cola(null, null, null, true, 0, 20);
+
+            assertEquals(List.of(), ids(elevadas));
+            assertEquals(0, elevadas.total());
+            assertEquals(List.of("c-1", "c-2"), ids(servicio.cola(null, null, null, false, 0, 20)));
+        }
+
+        @Test
+        @DisplayName("categoria y prioridadElevada se combinan entre si por Y")
+        void categoriaYPrioridad() {
+            servicio = servicioConUmbral(2);
+            publicar("alta-acoso", "autor-1");
+            publicar("baja-acoso", "autor-2");
+            publicar("alta-spam", "autor-3");
+            servicio.reportar(PRODUCTO, "alta-acoso", "jugador-a", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta-acoso", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "baja-acoso", "jugador-c", CategoriaDeReporte.ACOSO, null);
+            servicio.reportar(PRODUCTO, "alta-spam", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "alta-spam", "jugador-b", CategoriaDeReporte.SPAM, null);
+
+            assertEquals(List.of("alta-acoso"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, true, 0, 20)));
+            assertEquals(List.of("baja-acoso"),
+                    ids(servicio.cola(null, null, CategoriaDeReporte.ACOSO, false, 0, 20)));
+        }
+
+        @Test
+        @DisplayName("los filtros nuevos se combinan por Y con productoId y con marcado")
+        void filtrosConProductoYMarcado() {
+            publicar("vigilado", "autor-1");
+            publicar("suelto", "autor-2");
+            Comentario deOtroProducto = new Comentario("otro-prod", "otro", "autor-3", "apodo-autor-3",
+                    "texto", List.of(), AHORA.minusSeconds(3600), Comentario.Estado.PUBLICADO);
+            comentarios.save(RegistroDeComentario.desde(deOtroProducto));
+            servicio.reportar(PRODUCTO, "vigilado", "jugador-a", CategoriaDeReporte.SPAM, null);
+            servicio.reportar(PRODUCTO, "suelto", "jugador-b", CategoriaDeReporte.SPAM, null);
+            servicio.reportar("otro", "otro-prod", "jugador-c", CategoriaDeReporte.SPAM, null);
+            resolver("vigilado", AccionDeModeracion.MARCAR, "vigilar a este autor");
+
+            assertEquals(List.of("vigilado"),
+                    ids(servicio.cola(null, true, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("suelto", "otro-prod"),
+                    ids(servicio.cola(null, false, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("suelto"),
+                    ids(servicio.cola(PRODUCTO, false, CategoriaDeReporte.SPAM, null, 0, 20)));
+            assertEquals(List.of("otro-prod"),
+                    ids(servicio.cola("otro", null, CategoriaDeReporte.SPAM, false, 0, 20)));
+            assertEquals(List.of(),
+                    ids(servicio.cola(PRODUCTO, true, CategoriaDeReporte.ACOSO, null, 0, 20)));
         }
 
         private List<String> ids(ServicioDeModeracion.Cola cola) {
@@ -461,13 +663,67 @@ class FlujoDeModeracionTest {
 
             servicio.resolver("c-1", "mod-1", "primera", AccionDeModeracion.APROBAR, "es legitimo", null, IP);
 
-            // La segunda llega tarde: APROBAR solo vale desde EN_REVISION.
+            // La segunda llega tarde: el comentario ya no tiene reportes pendientes.
             assertThrows(ServicioDeModeracion.TransicionInvalida.class, () ->
                     servicio.resolver("c-1", "mod-2", "segunda",
                             AccionDeModeracion.APROBAR, "yo tambien lo veo bien", null, IP));
 
             assertEquals(1, filasDeAsientos.size(),
                     "el intento fallido no deja asiento: nada cambio");
+        }
+
+        @Test
+        @DisplayName("1.8.0: aprobar uno reportado que sigue publicado cierra sus reportes, sin avisar al autor")
+        void aprobarUnoPublicado() {
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ServicioDeModeracion.Resuelto resuelto = resolver("c-1", AccionDeModeracion.APROBAR, "es una opinion");
+
+            assertEquals(Comentario.Estado.PUBLICADO, resuelto.comentario().estado());
+            assertEquals(Comentario.Estado.PUBLICADO, resuelto.asiento().estadoAnterior());
+            assertFalse(resuelto.autorNotificado(), "para el autor nada cambio: avisarle solo diria que lo reportaron");
+            assertTrue(avisos.isEmpty());
+            assertEquals(List.of("c-1:APROBAR"), auditados, "pero queda auditado");
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total(), "ya no tiene reportes pendientes");
+        }
+
+        @Test
+        @DisplayName("1.8.0: aprobar uno publicado SIN reportes pendientes es 409 y no deja asiento")
+        void aprobarSinReportesPendientes() {
+            publicar("c-1", "autor-1");
+
+            ServicioDeModeracion.TransicionInvalida error = assertThrows(ServicioDeModeracion.TransicionInvalida.class,
+                    () -> resolver("c-1", AccionDeModeracion.APROBAR, "nada que aprobar"));
+            assertTrue(error.getMessage().contains("reportes pendientes"), error.getMessage());
+            assertTrue(filasDeAsientos.isEmpty());
+        }
+
+        @Test
+        @DisplayName("1.8.0: un reporte posterior a la decision lo devuelve a la cola; uno anterior no")
+        void reportePosteriorALaDecision() {
+            java.util.concurrent.atomic.AtomicReference<Instant> ahora = new java.util.concurrent.atomic.AtomicReference<>(AHORA);
+            Clock movil = new Clock() {
+                @Override public java.time.ZoneId getZone() { return ZoneOffset.UTC; }
+                @Override public Clock withZone(java.time.ZoneId zona) { return this; }
+                @Override public Instant instant() { return ahora.get(); }
+            };
+            servicio = servicioConUmbrales(0, 0, movil);
+            publicar("c-1", "autor-1");
+            servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.SPAM, null);
+
+            ahora.set(AHORA.plusSeconds(60));
+            resolver("c-1", AccionDeModeracion.APROBAR, "es una opinion");
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total());
+
+            ahora.set(AHORA.plusSeconds(120));
+            servicio.reportar(PRODUCTO, "c-1", "jugador-b", CategoriaDeReporte.ACOSO, null);
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "el reporte nuevo esta pendiente");
+
+            // MARCAR es una nota interna: no atiende el reporte.
+            ahora.set(AHORA.plusSeconds(180));
+            resolver("c-1", AccionDeModeracion.MARCAR, "vigilar");
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(), "marcar no cierra reportes");
         }
 
         @Test
@@ -496,7 +752,7 @@ class FlujoDeModeracionTest {
                     comentarios, reportes, asientos,
                     (c, a) -> false,
                     asiento -> { },
-                    Clock.fixed(AHORA, ZoneOffset.UTC), 10, 0);
+                    Clock.fixed(AHORA, ZoneOffset.UTC), plantilla, 10, 0, 0);
 
             publicar("c-1", "autor-1");
             conAvisoCaido.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.ACOSO, null);
@@ -534,7 +790,7 @@ class FlujoDeModeracionTest {
         @Test
         @DisplayName("EDITAR cambia el texto, lo deja editado, no mueve el estado y registra antes y despues")
         void editar() {
-            publicar("c-1", "autor-1");
+            retenido("c-1", "autor-1");
             servicio.reportar(PRODUCTO, "c-1", "jugador-a", CategoriaDeReporte.CONTENIDO_OFENSIVO, null);
 
             ServicioDeModeracion.Resuelto resuelto = servicio.resolver("c-1", "mod-1", "moderadora",
@@ -770,6 +1026,576 @@ class FlujoDeModeracionTest {
         }
     }
 
+    /**
+     * La decision en lote — HU-COM-005 (#519), contrato 1.10.0: atomica (todo o
+     * nada), un asiento por comentario, avisos fail-open por comentario.
+     *
+     * <p>Los dobles no pueden demostrar una reversion de verdad: aqui se prueba
+     * que se valida el lote entero antes de escribir, que la escritura va dentro de una
+     * transaccion y que el aviso y la auditoria solo salen despues. La
+     * reversion real, contra PostgreSQL, la prueba DecisionEnLoteIT.
+     */
+    @Nested
+    @DisplayName("Decision en lote (HU-COM-005, contrato 1.10.0)")
+    class DecisionEnLote {
+
+        private Comentario sembrado(String id, Comentario.Estado estado) {
+            Comentario c = new Comentario(id, PRODUCTO, "autor-" + id, "apodo-" + id,
+                    "texto", List.of(), AHORA.minusSeconds(3600), estado);
+            comentarios.save(RegistroDeComentario.desde(c));
+            return c;
+        }
+
+        private Comentario sembradoMarcado(String id, Comentario.Estado estado) {
+            Comentario c = sembrado(id, estado).conMarca(true);
+            comentarios.save(RegistroDeComentario.desde(c));
+            return c;
+        }
+
+        /** Publicado y con un reporte pendiente: lo unico que deja APROBAR sobre un PUBLICADO. */
+        private void sembradoYReportado(String id) {
+            sembrado(id, Comentario.Estado.PUBLICADO);
+            servicio.reportar(PRODUCTO, id, "jugador-" + id, CategoriaDeReporte.SPAM, null);
+        }
+
+        private List<String> publicados(String... ids) {
+            for (String id : ids) {
+                sembrado(id, Comentario.Estado.PUBLICADO);
+            }
+            return List.of(ids);
+        }
+
+        private ServicioDeModeracion.ResueltoEnLote lote(
+                List<String> ids, AccionDeModeracion accion, String motivo, String confirmacion) {
+            return servicio.resolverEnLote(ids, "mod-1", "moderadora", accion, motivo, confirmacion, IP);
+        }
+
+        private ServicioDeModeracion.ResueltoEnLote lote(List<String> ids, AccionDeModeracion accion) {
+            return lote(ids, accion, "decision del lote", null);
+        }
+
+        private void sinEfectos() {
+            assertTrue(filasDeAsientos.isEmpty(), "no debe quedar ningun asiento");
+            assertTrue(avisos.isEmpty(), "no se debe avisar a nadie");
+            assertTrue(auditados.isEmpty(), "no se debe auditar nada");
+        }
+
+        /** Una entrada invalida se rechaza antes de abrir transaccion y de leer la base. */
+        private void sinTocarLaBase() {
+            verifyNoInteractions(comentarios, asientos, gestorDeTransacciones);
+        }
+
+        private List<String> idsDe(ServicioDeModeracion.ResueltoEnLote resultado) {
+            return resultado.resultados().stream().map(r -> r.comentario().id()).toList();
+        }
+
+        // ------------------------------------------------- 400: la entrada
+
+        @Test
+        @DisplayName("1: una lista vacia (o nula) es 400 y no toca la base")
+        void listaVacia() {
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(List.of(), AccionDeModeracion.OCULTAR));
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(null, AccionDeModeracion.OCULTAR));
+
+            sinTocarLaBase();
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("2: ids repetidos es 400, nada cambia")
+        void idsRepetidos() {
+            publicados("c-1", "c-2");
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(List.of("c-1", "c-2", "c-1"), AccionDeModeracion.OCULTAR));
+
+            sinTocarLaBase();
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("2b: un id nulo en la lista es 400 (el contrato declara items: string) y no toca la base")
+        void idNulo() {
+            publicados("c-1");
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(java.util.Arrays.asList("c-1", null), AccionDeModeracion.OCULTAR));
+
+            sinTocarLaBase();
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("3a: mas de 100 ids (el tope del contrato) es 400")
+        void masDeCien() {
+            List<String> ciento1 = new ArrayList<>();
+            for (int i = 1; i <= ServicioDeModeracion.TOPE_DEL_LOTE + 1; i++) {
+                ciento1.add(sembrado("c-" + i, Comentario.Estado.PUBLICADO).id());
+            }
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(ciento1, AccionDeModeracion.OCULTAR));
+
+            sinTocarLaBase();
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("3b: exactamente 100 ids es la frontera y pasa")
+        void exactamenteCien() {
+            List<String> cien = new ArrayList<>();
+            for (int i = 1; i <= ServicioDeModeracion.TOPE_DEL_LOTE; i++) {
+                cien.add(sembrado("c-" + i, Comentario.Estado.PUBLICADO).id());
+            }
+
+            ServicioDeModeracion.ResueltoEnLote resultado = lote(cien, AccionDeModeracion.OCULTAR);
+
+            assertEquals(100, resultado.total());
+            assertEquals(100, filasDeAsientos.size());
+        }
+
+        @Test
+        @DisplayName("4a: EDITAR no vale en lote (necesita un texto por comentario): 400, no 404 ni 409")
+        void editarNoVale() {
+            publicados("c-1");
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () ->
+                    lote(List.of("c-1"), AccionDeModeracion.EDITAR));
+
+            sinTocarLaBase();
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("4b: sin accion es 400")
+        void sinAccion() {
+            publicados("c-1");
+            clearInvocations(comentarios, asientos);
+
+            assertThrows(ServicioDeModeracion.DecisionIncompleta.class, () -> lote(List.of("c-1"), null));
+
+            sinTocarLaBase();
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("5: el motivo es obligatorio, de 3 a 500 caracteres")
+        void motivoInvalido() {
+            publicados("c-1");
+            clearInvocations(comentarios, asientos);
+
+            for (String motivo : new String[] {null, "", "ab", "  a ", "x".repeat(501)}) {
+                assertThrows(ServicioDeModeracion.MotivoRequerido.class, () ->
+                        lote(List.of("c-1"), AccionDeModeracion.OCULTAR, motivo, null), String.valueOf(motivo));
+            }
+
+            sinTocarLaBase();
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("6: ELIMINAR sin la confirmacion exacta ELIMINAR es 400 CONFIRMACION_REQUERIDA y no cambia nada")
+        void eliminarSinConfirmacion() {
+            publicados("c-1", "c-2");
+            clearInvocations(comentarios, asientos);
+
+            for (String confirmacion : new String[] {null, "", "eliminar", " ELIMINAR", "ELIMINAR ", "BORRAR"}) {
+                assertThrows(ServicioDeModeracion.ConfirmacionRequerida.class, () ->
+                        lote(List.of("c-1", "c-2"), AccionDeModeracion.ELIMINAR, "limpieza", confirmacion),
+                        String.valueOf(confirmacion));
+            }
+
+            sinTocarLaBase();
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("6b: en las demas acciones la confirmacion se ignora, sea o no la correcta")
+        void confirmacionIgnoradaFueraDeEliminar() {
+            publicados("c-1", "c-2");
+
+            assertEquals(1, lote(List.of("c-1"), AccionDeModeracion.OCULTAR, "motivo ok", null).total());
+            assertEquals(1, lote(List.of("c-2"), AccionDeModeracion.OCULTAR, "motivo ok", "lo que sea").total());
+
+            assertEquals(Comentario.Estado.OCULTO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.OCULTO, leido("c-2").estado());
+        }
+
+        @Test
+        @DisplayName("6c: ELIMINAR con la confirmacion ELIMINAR resuelve el lote")
+        void eliminarConConfirmacion() {
+            publicados("c-1", "c-2");
+
+            ServicioDeModeracion.ResueltoEnLote resultado =
+                    lote(List.of("c-1", "c-2"), AccionDeModeracion.ELIMINAR, "limpieza", "ELIMINAR");
+
+            assertEquals(2, resultado.total());
+            assertEquals(Comentario.Estado.ELIMINADO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.ELIMINADO, leido("c-2").estado());
+            assertEquals(2, filasDeAsientos.size());
+        }
+
+        // ------------------------------------------- 404 y 409: la base
+
+        @Test
+        @DisplayName("7: ids que no existen son 404 con TODOS los que faltan, en el orden de entrada; los demas no cambian")
+        void idsInexistentes() {
+            publicados("c-1", "c-2");
+
+            // c-z va antes que c-a a proposito: ni el orden alfabetico ni el
+            // que devuelva findAllById (invertido en el doble) es el de entrada.
+            ServicioDeModeracion.ComentariosNoEncontrados error = assertThrows(
+                    ServicioDeModeracion.ComentariosNoEncontrados.class, () ->
+                            lote(List.of("c-z", "c-1", "c-a", "c-2"), AccionDeModeracion.OCULTAR));
+
+            assertEquals(List.of("c-z", "c-a"), error.ids());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("7b: si falta uno y otro no admite la accion, gana el 404 (se decide antes que el 409)")
+        void elCuatrocientosCuatroVaAntesQueElCuatrocientosNueve() {
+            sembrado("c-1", Comentario.Estado.ELIMINADO);
+            publicados("c-2");
+
+            assertThrows(ServicioDeModeracion.ComentariosNoEncontrados.class, () ->
+                    lote(List.of("c-1", "c-2", "c-fantasma"), AccionDeModeracion.OCULTAR));
+
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado());
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("8: es 409 con TODOS los afectados, no solo el primero, en el orden de entrada; el valido no cambia")
+        void conflictoConTodosLosAfectados() {
+            sembrado("c-1", Comentario.Estado.ELIMINADO);
+            sembrado("c-2", Comentario.Estado.PUBLICADO);
+            sembrado("c-3", Comentario.Estado.ELIMINADO);
+
+            ServicioDeModeracion.TransicionInvalidaEnLote error = assertThrows(
+                    ServicioDeModeracion.TransicionInvalidaEnLote.class, () ->
+                            lote(List.of("c-3", "c-1", "c-2"), AccionDeModeracion.OCULTAR));
+
+            assertEquals(List.of("c-3", "c-1"), error.ids());
+            assertEquals(AccionDeModeracion.OCULTAR, error.accion());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado(),
+                    "el unico valido tampoco cambia: es todo o nada");
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("8b: MARCAR sobre uno ya marcado es afectado")
+        void marcarSobreMarcado() {
+            sembradoMarcado("c-1", Comentario.Estado.PUBLICADO);
+            sembrado("c-2", Comentario.Estado.PUBLICADO);
+
+            ServicioDeModeracion.TransicionInvalidaEnLote error = assertThrows(
+                    ServicioDeModeracion.TransicionInvalidaEnLote.class, () ->
+                            lote(List.of("c-2", "c-1"), AccionDeModeracion.MARCAR));
+
+            assertEquals(List.of("c-1"), error.ids());
+            assertFalse(leido("c-2").marcado(), "c-2 no se marco: todo o nada");
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("8b: DESMARCAR sobre uno sin marca es afectado")
+        void desmarcarSinMarca() {
+            sembradoMarcado("c-1", Comentario.Estado.PUBLICADO);
+            sembrado("c-2", Comentario.Estado.PUBLICADO);
+
+            ServicioDeModeracion.TransicionInvalidaEnLote error = assertThrows(
+                    ServicioDeModeracion.TransicionInvalidaEnLote.class, () ->
+                            lote(List.of("c-1", "c-2"), AccionDeModeracion.DESMARCAR));
+
+            assertEquals(List.of("c-2"), error.ids());
+            assertTrue(leido("c-1").marcado(), "c-1 conserva su marca: todo o nada");
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("8b: APROBAR sobre uno publicado sin reportes pendientes es afectado")
+        void aprobarSinReportesPendientes() {
+            sembrado("c-1", Comentario.Estado.PUBLICADO);
+            sembradoYReportado("c-2");
+
+            ServicioDeModeracion.TransicionInvalidaEnLote error = assertThrows(
+                    ServicioDeModeracion.TransicionInvalidaEnLote.class, () ->
+                            lote(List.of("c-2", "c-1"), AccionDeModeracion.APROBAR));
+
+            assertEquals(List.of("c-1"), error.ids());
+            assertEquals(1, servicio.cola(null, null, null, null, 0, 20).total(),
+                    "c-2 sigue con su reporte pendiente: no se atendio");
+            sinEfectos();
+        }
+
+        // ------------------------------------------------------- el exito
+
+        @Test
+        @DisplayName("9: un lote resuelve todos, con un asiento por comentario y los resultados en el orden de entrada")
+        void loteExitoso() {
+            publicados("c-1", "c-2", "c-3");
+
+            // El doble devuelve findAllById invertido: el orden del resultado
+            // es el de la lista de entrada, no el de la base.
+            ServicioDeModeracion.ResueltoEnLote resultado =
+                    lote(List.of("c-3", "c-1", "c-2"), AccionDeModeracion.OCULTAR, "spam coordinado", null);
+
+            assertEquals(AccionDeModeracion.OCULTAR, resultado.accion());
+            assertEquals(3, resultado.total());
+            assertEquals(List.of("c-3", "c-1", "c-2"), idsDe(resultado));
+            for (String id : List.of("c-1", "c-2", "c-3")) {
+                assertEquals(Comentario.Estado.OCULTO, leido(id).estado(), id);
+            }
+
+            assertEquals(3, filasDeAsientos.size(), "un asiento por comentario");
+            assertEquals(List.of("c-3", "c-1", "c-2"),
+                    filasDeAsientos.stream().map(AsientoDeModeracion::comentarioId).toList());
+            for (ServicioDeModeracion.Resuelto r : resultado.resultados()) {
+                AsientoDeModeracion a = r.asiento();
+                assertTrue(filasDeAsientos.contains(a), "el asiento de la respuesta es el que se guardo");
+                assertEquals("mod-1", a.moderadorId());
+                assertEquals("moderadora", a.apodoModerador());
+                assertEquals(AccionDeModeracion.OCULTAR, a.accion());
+                assertEquals("spam coordinado", a.motivo());
+                assertEquals(Comentario.Estado.PUBLICADO, a.estadoAnterior());
+                assertEquals(Comentario.Estado.OCULTO, a.estadoNuevo());
+                assertEquals(AHORA, a.fecha());
+                assertEquals(IP, a.ipOrigen());
+                assertNull(a.textoAnterior(), "solo EDITAR registra textos");
+                assertTrue(r.autorNotificado());
+            }
+            assertEquals(List.of("autor-c-3:OCULTAR", "autor-c-1:OCULTAR", "autor-c-2:OCULTAR"), avisos);
+            assertEquals(List.of("c-3:OCULTAR", "c-1:OCULTAR", "c-2:OCULTAR"), auditados);
+        }
+
+        @Test
+        @DisplayName("9b: APROBAR desde EN_REVISION lo devuelve al hilo y avisa")
+        void aprobarDesdeEnRevision() {
+            sembrado("c-1", Comentario.Estado.EN_REVISION);
+            sembrado("c-2", Comentario.Estado.EN_REVISION);
+
+            ServicioDeModeracion.ResueltoEnLote resultado =
+                    lote(List.of("c-1", "c-2"), AccionDeModeracion.APROBAR);
+
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado());
+            assertEquals(Comentario.Estado.EN_REVISION, resultado.resultados().get(0).asiento().estadoAnterior());
+            assertEquals(List.of("autor-c-1:APROBAR", "autor-c-2:APROBAR"), avisos);
+        }
+
+        @Test
+        @DisplayName("9b: RESTAURAR desde OCULTO lo deja publicado")
+        void restaurarDesdeOculto() {
+            sembrado("c-1", Comentario.Estado.OCULTO);
+            sembrado("c-2", Comentario.Estado.OCULTO);
+
+            lote(List.of("c-1", "c-2"), AccionDeModeracion.RESTAURAR);
+
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-2").estado());
+            assertEquals(2, filasDeAsientos.size());
+        }
+
+        @Test
+        @DisplayName("9b: MARCAR marca sin cambiar el estado y sin avisar al autor")
+        void marcarEnLote() {
+            publicados("c-1", "c-2");
+
+            lote(List.of("c-1", "c-2"), AccionDeModeracion.MARCAR);
+
+            assertTrue(leido("c-1").marcado());
+            assertTrue(leido("c-2").marcado());
+            assertEquals(Comentario.Estado.PUBLICADO, leido("c-1").estado());
+            assertTrue(avisos.isEmpty(), "la marca es una nota interna");
+            assertEquals(List.of("c-1:MARCAR", "c-2:MARCAR"), auditados);
+        }
+
+        @Test
+        @DisplayName("9b: DESMARCAR quita la marca sin avisar al autor")
+        void desmarcarEnLote() {
+            sembradoMarcado("c-1", Comentario.Estado.OCULTO);
+            sembradoMarcado("c-2", Comentario.Estado.OCULTO);
+
+            lote(List.of("c-1", "c-2"), AccionDeModeracion.DESMARCAR);
+
+            assertFalse(leido("c-1").marcado());
+            assertFalse(leido("c-2").marcado());
+            assertEquals(Comentario.Estado.OCULTO, leido("c-1").estado());
+            assertTrue(avisos.isEmpty());
+            assertEquals(2, filasDeAsientos.size());
+        }
+
+        // ------------------------------------------------- atomicidad
+
+        @Test
+        @DisplayName("10: si uno falla no cambia ninguno: ni estados, ni asientos, ni avisos, ni auditoria")
+        void atomicidadDeLaValidacion() {
+            publicados("c-1", "c-2", "c-3");
+            sembrado("c-4", Comentario.Estado.ELIMINADO);
+
+            assertThrows(ServicioDeModeracion.TransicionInvalidaEnLote.class, () ->
+                    lote(List.of("c-1", "c-2", "c-3", "c-4"), AccionDeModeracion.OCULTAR));
+
+            for (String id : List.of("c-1", "c-2", "c-3")) {
+                assertEquals(Comentario.Estado.PUBLICADO, leido(id).estado(), id);
+            }
+            verify(comentarios, never()).saveAndFlush(any(RegistroDeComentario.class));
+            verify(asientos, never()).saveAndFlush(any(AsientoDeModeracion.class));
+            sinEfectos();
+        }
+
+        @Test
+        @DisplayName("10b: si falla la escritura se revierte la transaccion y no se avisa ni se audita")
+        void fallaLaEscritura() {
+            publicados("c-1", "c-2", "c-3");
+            AtomicInteger guardados = new AtomicInteger();
+            when(comentarios.saveAndFlush(any(RegistroDeComentario.class))).thenAnswer(inv -> {
+                RegistroDeComentario r = inv.getArgument(0);
+                if (guardados.incrementAndGet() == 2) {
+                    throw new DataIntegrityViolationException("simulado: restriccion de la base");
+                }
+                filasDeComentarios.put(r.aDominio().id(), r);
+                return r;
+            });
+
+            assertThrows(DataIntegrityViolationException.class, () ->
+                    lote(List.of("c-1", "c-2", "c-3"), AccionDeModeracion.OCULTAR));
+
+            // El doble no deshace el primer guardado (eso lo hace la base): aqui
+            // solo se afirma que se pidio la reversion, que nunca se confirmo y
+            // que no se aviso ni se audito. La reversion real contra PostgreSQL,
+            // con el estado y los asientos ya enviados a la base, la prueba
+            // IT-c en DecisionEnLoteIT.
+            verify(gestorDeTransacciones).rollback(any());
+            verify(gestorDeTransacciones, never()).commit(any());
+            assertTrue(avisos.isEmpty(), "no se debe avisar a nadie");
+            assertTrue(auditados.isEmpty(), "no se debe auditar nada");
+        }
+
+        @Test
+        @DisplayName("10c: un lote que sale bien confirma la transaccion y no la revierte")
+        void confirmaLaTransaccion() {
+            publicados("c-1", "c-2");
+
+            lote(List.of("c-1", "c-2"), AccionDeModeracion.OCULTAR);
+
+            verify(gestorDeTransacciones).commit(any());
+            verify(gestorDeTransacciones, never()).rollback(any());
+        }
+
+        // -------------------------------------------- avisos fail-open
+
+        @Test
+        @DisplayName("11: un autor sin notificar no invalida el lote: autorNotificado=false solo en su item")
+        void autorNoNotificado() {
+            ServicioDeModeracion conAvisoQueFalla = new ServicioDeModeracion(
+                    comentarios, reportes, asientos,
+                    (c, a) -> {
+                        avisos.add(c.autorId() + ":" + a.accion());
+                        return !c.id().equals("c-2");
+                    },
+                    asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
+                    Clock.fixed(AHORA, ZoneOffset.UTC), plantilla, 3, 0, 0);
+            publicados("c-1", "c-2", "c-3");
+
+            ServicioDeModeracion.ResueltoEnLote resultado = conAvisoQueFalla.resolverEnLote(
+                    List.of("c-1", "c-2", "c-3"), "mod-1", "moderadora",
+                    AccionDeModeracion.OCULTAR, "spam", null, IP);
+
+            assertEquals(List.of(true, false, true),
+                    resultado.resultados().stream().map(ServicioDeModeracion.Resuelto::autorNotificado).toList());
+            for (String id : List.of("c-1", "c-2", "c-3")) {
+                assertEquals(Comentario.Estado.OCULTO, leido(id).estado(), id);
+            }
+            assertEquals(3, filasDeAsientos.size());
+            assertEquals(3, auditados.size(), "tambien el de c-2: la decision sigue siendo valida");
+        }
+
+        @Test
+        @DisplayName("11b: un aviso que lanza tampoco invalida el lote ni corta los avisos de los demas")
+        void avisoQueLanza() {
+            ServicioDeModeracion conAvisoQueExplota = new ServicioDeModeracion(
+                    comentarios, reportes, asientos,
+                    (c, a) -> {
+                        if (c.id().equals("c-2")) {
+                            throw new IllegalStateException("simulado: servicio de avisos caido");
+                        }
+                        avisos.add(c.autorId() + ":" + a.accion());
+                        return true;
+                    },
+                    asiento -> auditados.add(asiento.comentarioId() + ":" + asiento.accion()),
+                    Clock.fixed(AHORA, ZoneOffset.UTC), plantilla, 3, 0, 0);
+            publicados("c-1", "c-2", "c-3");
+
+            ServicioDeModeracion.ResueltoEnLote resultado = conAvisoQueExplota.resolverEnLote(
+                    List.of("c-1", "c-2", "c-3"), "mod-1", "moderadora",
+                    AccionDeModeracion.OCULTAR, "spam", null, IP);
+
+            assertEquals(List.of(true, false, true),
+                    resultado.resultados().stream().map(ServicioDeModeracion.Resuelto::autorNotificado).toList());
+            assertEquals(List.of("autor-c-1:OCULTAR", "autor-c-3:OCULTAR"), avisos);
+            assertEquals(3, filasDeAsientos.size());
+            assertEquals(3, auditados.size());
+        }
+
+        // ------------------------------------------------- paridad
+
+        @Test
+        @DisplayName("12: aprobar uno publicado con reportes cierra sus reportes y no avisa, como la decision individual")
+        void aprobarPublicadoConReportes() {
+            sembradoYReportado("c-1");
+
+            ServicioDeModeracion.ResueltoEnLote resultado = lote(List.of("c-1"), AccionDeModeracion.APROBAR);
+
+            assertFalse(resultado.resultados().get(0).autorNotificado());
+            assertTrue(avisos.isEmpty());
+            assertEquals(List.of("c-1:APROBAR"), auditados);
+            assertEquals(0, servicio.cola(null, null, null, null, 0, 20).total());
+        }
+
+        @Test
+        @DisplayName("13: un lote de uno deja el mismo asiento que la decision individual")
+        void paridadConLaDecisionIndividual() {
+            publicados("c-1", "c-2");
+
+            ServicioDeModeracion.Resuelto individual =
+                    servicio.resolver("c-1", "mod-1", "moderadora", AccionDeModeracion.OCULTAR, "spam", null, IP);
+            ServicioDeModeracion.Resuelto enLote =
+                    lote(List.of("c-2"), AccionDeModeracion.OCULTAR, "spam", null).resultados().get(0);
+
+            assertEquals(individual.comentario().estado(), enLote.comentario().estado());
+            assertEquals(individual.autorNotificado(), enLote.autorNotificado());
+            AsientoDeModeracion a = individual.asiento();
+            AsientoDeModeracion b = enLote.asiento();
+            assertEquals(a.accion(), b.accion());
+            assertEquals(a.moderadorId(), b.moderadorId());
+            assertEquals(a.apodoModerador(), b.apodoModerador());
+            assertEquals(a.motivo(), b.motivo());
+            assertEquals(a.estadoAnterior(), b.estadoAnterior());
+            assertEquals(a.estadoNuevo(), b.estadoNuevo());
+            assertEquals(a.fecha(), b.fecha());
+            assertEquals(a.textoAnterior(), b.textoAnterior());
+            assertEquals(a.textoNuevo(), b.textoNuevo());
+            assertEquals(a.ipOrigen(), b.ipOrigen());
+        }
+    }
+
     @Nested
     @DisplayName("Las transiciones, en una tabla")
     class Transiciones {
@@ -783,8 +1609,9 @@ class FlujoDeModeracionTest {
                             AccionDeModeracion.MARCAR, AccionDeModeracion.DESMARCAR),
                     AccionDeModeracion.desde(Comentario.Estado.EN_REVISION));
 
+            // 1.8.0: APROBAR tambien desde PUBLICADO (cierra los reportes pendientes).
             assertEquals(
-                    java.util.Set.of(AccionDeModeracion.OCULTAR, AccionDeModeracion.ELIMINAR,
+                    java.util.Set.of(AccionDeModeracion.APROBAR, AccionDeModeracion.OCULTAR, AccionDeModeracion.ELIMINAR,
                             AccionDeModeracion.EDITAR, AccionDeModeracion.MARCAR, AccionDeModeracion.DESMARCAR),
                     AccionDeModeracion.desde(Comentario.Estado.PUBLICADO));
 
@@ -843,8 +1670,29 @@ class FlujoDeModeracionTest {
             datos.put(r.aDominio().id(), r);
             return r;
         });
+        // La decision en lote guarda con saveAndFlush (con id asignado a mano
+        // `save` difiere el INSERT/UPDATE al flush): mismo efecto que save.
+        when(repo.saveAndFlush(any(RegistroDeComentario.class))).thenAnswer(inv -> {
+            RegistroDeComentario r = inv.getArgument(0);
+            datos.put(r.aDominio().id(), r);
+            return r;
+        });
         when(repo.findById(anyString())).thenAnswer(inv ->
                 Optional.ofNullable(datos.get(inv.<String>getArgument(0))));
+        // findAllById no garantiza orden. Este doble lo estropea a proposito
+        // (invertido, y solo los que existen): quien lo use tiene que ordenar
+        // por la lista de entrada, no fiarse de lo que devuelve la base.
+        when(repo.findAllById(anyIterable())).thenAnswer(inv -> {
+            List<RegistroDeComentario> encontrados = new ArrayList<>();
+            for (String id : inv.<Iterable<String>>getArgument(0)) {
+                RegistroDeComentario fila = datos.get(id);
+                if (fila != null) {
+                    encontrados.add(fila);
+                }
+            }
+            Collections.reverse(encontrados);
+            return encontrados;
+        });
         // La base es la que ordena y corta la pagina. Este doble lo imita para
         // poder leer el resultado; que el servicio le PIDA el orden y la pagina
         // correctos se afirma mirando el Pageable que recibe, y el orden real
@@ -897,11 +1745,41 @@ class FlujoDeModeracionTest {
                     return filtrados(datos, c -> c.marcado() && estados.contains(c.estado())
                             && c.productoId().equals(producto));
                 });
+        when(repo.findByIdInAndEstadoOrderByFechaPublicacionAsc(anyCollection(), any())).thenAnswer(inv -> {
+            Collection<String> ids = inv.getArgument(0);
+            Comentario.Estado estado = inv.getArgument(1);
+            return filtrados(datos, c -> ids.contains(c.id()) && c.estado() == estado);
+        });
         return repo;
     }
 
-    private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos) {
+    /**
+     * Pendiente es lo que dice la JPQL de {@link ReporteRepository}: un reporte
+     * sin ninguna decision que atienda reportes en la misma fecha o despues.
+     */
+    private static boolean pendiente(RegistroDeReporte reporte, List<AsientoDeModeracion> asientos,
+            Collection<AccionDeModeracion> resolutivas) {
+        return asientos.stream().noneMatch(a -> a.comentarioId().equals(reporte.comentarioId())
+                && !a.fecha().isBefore(reporte.fecha())
+                && resolutivas.contains(a.accion()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private static ReporteRepository reportesEnMemoria(List<RegistroDeReporte> datos,
+            List<AsientoDeModeracion> asientos) {
         ReporteRepository repo = mock(ReporteRepository.class);
+
+        when(repo.contarPendientes(anyString(), anyCollection())).thenAnswer(inv -> {
+            String comentario = inv.getArgument(0);
+            Collection<AccionDeModeracion> resolutivas = inv.getArgument(1);
+            return datos.stream().filter(r -> r.comentarioId().equals(comentario)
+                    && pendiente(r, asientos, resolutivas)).count();
+        });
+        when(repo.comentariosConReportesPendientes(anyCollection())).thenAnswer(inv -> {
+            Collection<AccionDeModeracion> resolutivas = inv.getArgument(0);
+            return datos.stream().filter(r -> pendiente(r, asientos, resolutivas))
+                    .map(RegistroDeReporte::comentarioId).distinct().toList();
+        });
 
         when(repo.saveAndFlush(any(RegistroDeReporte.class))).thenAnswer(inv -> {
             RegistroDeReporte r = inv.getArgument(0);
@@ -936,6 +1814,11 @@ class FlujoDeModeracionTest {
         AsientoRepository repo = mock(AsientoRepository.class);
 
         when(repo.save(any(AsientoDeModeracion.class))).thenAnswer(inv -> {
+            AsientoDeModeracion a = inv.getArgument(0);
+            datos.add(a);
+            return a;
+        });
+        when(repo.saveAndFlush(any(AsientoDeModeracion.class))).thenAnswer(inv -> {
             AsientoDeModeracion a = inv.getArgument(0);
             datos.add(a);
             return a;

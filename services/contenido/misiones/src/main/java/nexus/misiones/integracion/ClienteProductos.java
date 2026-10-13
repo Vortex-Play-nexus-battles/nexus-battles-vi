@@ -40,6 +40,25 @@ public class ClienteProductos implements CatalogoDeProductos {
         return "HEROE".equals(c.cuerpo().tipo()) ? c.cuerpo().prototipo() : null;
     }
 
+    /**
+     * El nombre del producto, que es como lo conoce el motor de combate (Tablas 8
+     * a 20). Un producto que ya no esta en el catalogo no tiene nombre: nulo.
+     */
+    @Override
+    public String nombreDe(String productoId) {
+        Contestacion<Producto> c = Contestacion.protegida(corta, () -> http.get()
+                .uri(base + "/api/v1/productos/{id}", productoId)
+                .retrieve()
+                .body(Producto.class));
+        if (c.rechazada()) {
+            if (c.estado() == 404 || c.estado() == 400) {
+                return null;
+            }
+            throw c.comoRechazo(DEPENDENCIA);
+        }
+        return c.cuerpo().nombre();
+    }
+
     @JsonIgnoreProperties(ignoreUnknown = true)
     record Producto(String id, String tipo, String nombre, String prototipo) {
     }

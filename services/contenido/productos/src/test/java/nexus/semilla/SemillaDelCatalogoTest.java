@@ -21,7 +21,10 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +34,10 @@ import java.util.Properties;
 import jakarta.validation.Validation;
 import jakarta.validation.Validator;
 import jakarta.validation.ValidatorFactory;
+import nexus.api.ProductoCreado;
+import nexus.aplicacion.ProductoMapper;
+import nexus.aplicacion.ProyeccionDeProductos;
+import nexus.aplicacion.Visibilidad;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.OrigenProducto;
 import nexus.dominio.Producto;
@@ -40,6 +47,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
@@ -56,6 +64,13 @@ class SemillaDelCatalogoTest {
 
     private static final Resource CATALOGO_REAL =
             new ClassPathResource("semilla/catalogo-inicial.json");
+
+    /**
+     * La version del contenido del catalogo real. Sube cuando cambia un
+     * producto del JSON: la 2 es la que quita el precio de venta a las epicas
+     * (RG-085) en las bases que ya las tenian sembradas con la 1.
+     */
+    private static final int VERSION_DEL_CATALOGO = 2;
 
     private ValidatorFactory fabrica;
     private Validator validador;
@@ -160,21 +175,109 @@ class SemillaDelCatalogoTest {
         ResultadoSemilla resultado = semilla(true, CATALOGO_REAL).sembrar();
 
         assertTrue(resultado.habilitada());
-        assertEquals(1, resultado.version());
+        assertEquals(VERSION_DEL_CATALOGO, resultado.version());
         assertEquals(56, resultado.insertados().size());
         assertTrue(resultado.rechazados().isEmpty(), resultado.rechazados().toString());
         assertEquals(56, base.size());
         assertTrue(base.values().stream().allMatch(p -> p.estado() == EstadoProducto.ACTIVO));
         // B4: cada documento sembrado dice de donde salio y con que version.
         assertTrue(base.values().stream().allMatch(p -> p.origen() == OrigenProducto.SEMILLA));
-        assertTrue(base.values().stream().allMatch(p -> Integer.valueOf(1).equals(p.semillaVersion())));
-        // La tienda solo proyecta productos con precio en pesos mayor que cero.
         assertTrue(base.values().stream().allMatch(
+                p -> Integer.valueOf(VERSION_DEL_CATALOGO).equals(p.semillaVersion())));
+        // La tienda solo proyecta productos con precio en pesos mayor que cero;
+        // las epicas son la excepcion (RG-085): no se venden, ver ningunaEpicaSeVende.
+        assertTrue(base.values().stream().filter(p -> p.tipo() != TipoProducto.EPICA).allMatch(
                 p -> p.precioMonedaReal() != null && p.precioMonedaReal().signum() > 0));
 
         Producto tanque = base.get(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"));
         assertEquals("Guerrero Tanque", tanque.nombre());
         assertEquals(TipoProducto.HEROE, tanque.tipo());
+    }
+
+    @Test
+    @DisplayName("RG-085: la semilla no deja ninguna epica con precio de venta (ni en pesos ni en creditos), pero las 8 existen activas")
+    void ningunaEpicaSeVende() {
+        semilla(true, CATALOGO_REAL).sembrar();
+
+        List<Producto> epicas = base.values().stream().filter(p -> p.tipo() == TipoProducto.EPICA).toList();
+
+        assertEquals(8, epicas.size(), "las misiones las entregan por productoId: tienen que existir");
+        for (Producto epica : epicas) {
+            assertEquals(EstadoProducto.ACTIVO, epica.estado(), epica.nombre());
+            assertEquals(0, epica.precioCreditos(), epica.nombre() + " no tiene precio en creditos");
+            assertEquals(0, BigDecimal.ZERO.compareTo(epica.precioMonedaReal()),
+                    epica.nombre() + " no tiene precio en pesos: la vitrina no la muestra");
+            assertFalse(epica.premium(), epica.nombre());
+        }
+        // El resto del catalogo sigue a la venta (la vitrina pide pesos > 0).
+        assertEquals(48, base.values().stream()
+                .filter(p -> p.tipo() != TipoProducto.EPICA)
+                .filter(p -> p.precioMonedaReal().signum() > 0)
+                .count());
+    }
+
+    @Test
+    @DisplayName("RG-085: aunque el JSON de la semilla traiga precio para las epicas, la semilla no se lo pone")
+    void unPrecioDeEpicaEnElJsonNoSeAplica() {
+        String json = leerCatalogoReal()
+                .replace("\"creditos\": {", "\"creditos\": {\"EPICA\": 500,")
+                .replace("\"cop\": {", "\"cop\": {\"EPICA\": 10000,");
+        assertTrue(json.contains("\"EPICA\": 10000"), "la prueba necesita que el JSON traiga el precio");
+        Resource conPrecio = new ByteArrayResource(json.getBytes(StandardCharsets.UTF_8));
+
+        semilla(true, conPrecio).sembrar();
+
+        assertTrue(base.values().stream().filter(p -> p.tipo() == TipoProducto.EPICA)
+                .allMatch(p -> p.precioCreditos() == 0 && p.precioMonedaReal().signum() == 0));
+    }
+
+    @Test
+    @DisplayName("RG-085: la version nueva quita el precio a las epicas ya sembradas con la 1 y no toca la que edito un administrador")
+    void laVersionNuevaQuitaElPrecioALasEpicasYaSembradas() {
+        semilla(true, CATALOGO_REAL).sembrar();
+        // DEV tal como quedo con la semilla 1: todo con la version 1 y las epicas a 500 creditos / 10.000 COP.
+        base.replaceAll((id, p) -> p.tipo() == TipoProducto.EPICA
+                ? conPrecioYVersionDeSemilla(p, 500, new BigDecimal("10000"), 1)
+                : conPrecioYVersionDeSemilla(p, p.precioCreditos(), p.precioMonedaReal(), 1));
+        String editada = MapeadorDelCatalogo.identificador("epica-mago-hielo-frio-concentrado");
+        Producto delAdmin = editadoPor(base.get(editada), "uid-del-admin", "Frio concentrado (promocion)");
+        base.put(editada, delAdmin);
+
+        ResultadoSemilla resultado = semilla(true, CATALOGO_REAL).sembrar();
+
+        assertEquals(List.of(editada), resultado.respetados());
+        assertSame(delAdmin, base.get(editada), "lo que edito un administrador no se toca");
+        assertEquals(500, base.get(editada).precioCreditos());
+        assertEquals(0, new BigDecimal("10000").compareTo(base.get(editada).precioMonedaReal()));
+        List<Producto> epicas = base.values().stream()
+                .filter(p -> p.tipo() == TipoProducto.EPICA && !p.id().equals(editada)).toList();
+        assertEquals(7, epicas.size());
+        for (Producto epica : epicas) {
+            assertEquals(0, epica.precioCreditos(), epica.nombre());
+            assertEquals(0, BigDecimal.ZERO.compareTo(epica.precioMonedaReal()), epica.nombre());
+            assertEquals(VERSION_DEL_CATALOGO, epica.semillaVersion(), epica.nombre());
+            assertEquals(EstadoProducto.ACTIVO, epica.estado(), epica.nombre());
+        }
+    }
+
+    @Test
+    @DisplayName("RG-085: la vista publica de lo sembrado no muestra ninguna epica con precio")
+    void laProyeccionPublicaNoTraePrecioDeEpicas() {
+        semilla(true, CATALOGO_REAL).sembrar();
+        ProyeccionDeProductos proyeccion = new ProyeccionDeProductos(
+                Mappers.getMapper(ProductoMapper.class),
+                Clock.fixed(Instant.parse("2026-10-05T12:00:00Z"), ZoneOffset.UTC));
+
+        List<ProductoCreado> epicas = base.values().stream()
+                .map(p -> proyeccion.proyectar(p, Visibilidad.PUBLICA))
+                .filter(p -> p.tipo() == TipoProducto.EPICA)
+                .toList();
+
+        assertEquals(8, epicas.size());
+        for (ProductoCreado epica : epicas) {
+            assertEquals(0, epica.precioCreditos(), epica.nombre());
+            assertEquals(0, BigDecimal.ZERO.compareTo(epica.precioMonedaReal()), epica.nombre());
+        }
     }
 
     @Test
@@ -201,15 +304,15 @@ class SemillaDelCatalogoTest {
         Producto editado = editadoPor(base.get(tocado), "uid-del-admin", "Espada editada por el admin");
         base.put(tocado, editado);
 
-        ResultadoSemilla v2 = semilla(true, conVersionYPrecioDeArma(2, 999)).sembrar();
+        ResultadoSemilla v2 = semilla(true, conVersionYPrecioDeArma(VERSION_DEL_CATALOGO + 1, 999)).sembrar();
 
-        assertEquals(2, v2.version());
+        assertEquals(VERSION_DEL_CATALOGO + 1, v2.version());
         assertEquals(List.of(tocado), v2.respetados());
         assertEquals(55, v2.actualizados().size());
         assertSame(editado, base.get(tocado), "lo que edito el administrador no se toca");
         Producto puesto = base.get(intacto);
         assertEquals(999, puesto.precioCreditos());
-        assertEquals(2, puesto.semillaVersion());
+        assertEquals(VERSION_DEL_CATALOGO + 1, puesto.semillaVersion());
         assertEquals(2, puesto.version(), "la puesta al dia sube la version, como un guardado");
         assertNull(puesto.modificadoPor());
     }
@@ -231,7 +334,7 @@ class SemillaDelCatalogoTest {
                 EstadoProducto.ACTIVO, List.of("compra-1"));
         base.put(id, suspendido);
 
-        semilla(true, conVersionYPrecioDeArma(2, 999)).sembrar();
+        semilla(true, conVersionYPrecioDeArma(VERSION_DEL_CATALOGO + 1, 999)).sembrar();
 
         Producto puesto = base.get(id);
         assertEquals(EstadoProducto.SUSPENDIDO, puesto.estado());
@@ -252,7 +355,7 @@ class SemillaDelCatalogoTest {
 
         assertTrue(resultado.actualizados().contains(id));
         assertEquals(OrigenProducto.SEMILLA, base.get(id).origen());
-        assertEquals(1, base.get(id).semillaVersion());
+        assertEquals(VERSION_DEL_CATALOGO, base.get(id).semillaVersion());
         assertEquals(55, resultado.insertados().size());
     }
 
@@ -357,7 +460,7 @@ class SemillaDelCatalogoTest {
             catalogo = SemillaDelCatalogo.leer(json);
         }
 
-        assertEquals(1, catalogo.versionDelContenido());
+        assertEquals(VERSION_DEL_CATALOGO, catalogo.versionDelContenido());
         assertEquals("Pícaro Veneno", catalogo.heroes().get(4).prototipo());
         assertEquals("1d4", catalogo.heroes().get(0).estadisticasNivel1().get("daño"));
         assertEquals(300, catalogo.preciosDemostracion().creditos().get("ARMA"));
@@ -407,12 +510,32 @@ class SemillaDelCatalogoTest {
     private static Resource conVersionYPrecioDeArma(int version, int precioArma) {
         try (InputStream json = CATALOGO_REAL.getInputStream()) {
             String texto = new String(json.readAllBytes(), StandardCharsets.UTF_8)
-                    .replaceFirst("\"version\": 1,", "\"version\": " + version + ",")
+                    .replaceFirst("\"version\": \\d+,", "\"version\": " + version + ",")
                     .replaceFirst("\"ARMA\": 300", "\"ARMA\": " + precioArma);
             return new ByteArrayResource(texto.getBytes(StandardCharsets.UTF_8));
         } catch (IOException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    private static String leerCatalogoReal() {
+        try (InputStream json = CATALOGO_REAL.getInputStream()) {
+            return new String(json.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /** El producto como lo dejo una version anterior de la semilla: otro precio y otra version. */
+    private static Producto conPrecioYVersionDeSemilla(
+            Producto p, Integer precioCreditos, BigDecimal precioMonedaReal, int semillaVersion) {
+        return new Producto(p.id(), p.nombre(), p.imagen(), p.descripcion(), p.tipo(), p.tiraje(),
+                precioCreditos, precioMonedaReal, p.premium(), p.prototipo(), p.heroe(),
+                p.costoPoder(), p.multiplicadorNivel(), p.turnosCarga(), p.turnosRecarga(),
+                p.efectoGeneral(), p.efectoPotenciado(), p.defensa(), p.parte(), p.efecto(),
+                p.poderDeAtaque(), p.tasaDeCaida(), p.estado(), p.version(), p.creadoEn(),
+                p.modificadoEn(), p.promocion(), p.origen(), semillaVersion, p.modificadoPor(),
+                p.estadoAnteriorSuspension(), p.reservasRecientes());
     }
 
     private static Producto editadoPor(Producto p, String autor, String nombre) {

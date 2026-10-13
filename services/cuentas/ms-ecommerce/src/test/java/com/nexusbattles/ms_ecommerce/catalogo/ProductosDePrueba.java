@@ -52,6 +52,12 @@ public final class ProductosDePrueba {
                 precioCreditos, null, false, p.estado(), p.habilidades());
     }
 
+    /** G3: el mismo producto, con precio tambien en creditos (no premium): se vende de las dos formas. */
+    public static ProductoDelCatalogo conCreditos(ProductoDelCatalogo p, int precioCreditos) {
+        return new ProductoDelCatalogo(p.id(), p.nombre(), p.imagen(), p.descripcion(), p.tipo(), p.tiraje(),
+                precioCreditos, p.precioMonedaReal(), false, p.estado(), p.habilidades());
+    }
+
     public static ProductoDelCatalogo conHabilidades(ProductoDelCatalogo p, Object habilidades) {
         return new ProductoDelCatalogo(p.id(), p.nombre(), p.imagen(), p.descripcion(), p.tipo(), p.tiraje(),
                 p.precioCreditos(), p.precioMonedaReal(), p.premium(), p.estado(), habilidades);

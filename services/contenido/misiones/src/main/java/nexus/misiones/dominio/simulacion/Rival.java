@@ -10,6 +10,9 @@ import nexus.misiones.dominio.Epica;
  *
  * @param rotaciones su estrategia predefinida (7.8.6); vacia = ataque basico
  * @param epica      solo en un Master: la que entrega al ser derrotado
+ * @param ataque     sus formulas, de la vista por nivel de heroes: con ellas el
+ *                   motor puede mantener la vida y la defensa de la semilla y del
+ *                   escalon (nulas las tres = el motor usa las del catalogo)
  */
 public record Rival(
         String nombre,
@@ -20,7 +23,16 @@ public record Rival(
         int defensa,
         int poder,
         List<List<String>> rotaciones,
-        Epica epica) {
+        Epica epica,
+        Formula ataque,
+        Formula dano,
+        Formula sanar) {
+
+    /** Un rival sin formulas conocidas: el motor lo resuelve con las del catalogo. */
+    public Rival(String nombre, TipoDeRival tipo, String prototipo, int nivel, int vida, int defensa, int poder,
+                 List<List<String>> rotaciones, Epica epica) {
+        this(nombre, tipo, prototipo, nivel, vida, defensa, poder, rotaciones, epica, null, null, null);
+    }
 
     public Rival {
         Objects.requireNonNull(nombre, "Un rival necesita nombre.");

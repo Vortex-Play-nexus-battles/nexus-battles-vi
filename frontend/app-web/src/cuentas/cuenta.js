@@ -30,6 +30,7 @@ import { h, vaciar } from '../comun/ui/dom.js';
 import { creditos as formatoCreditos, fechaHora } from '../comun/ui/formato.js';
 import { boton, conCarga } from '../comun/ui/boton.js';
 import { distintivo } from '../comun/ui/distintivo.js';
+import { fotoDeCuenta } from '../comun/ui/avatar.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
@@ -44,8 +45,55 @@ import {
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
 import { textoDelServidor } from '../comun/ui/texto-de-fallo.js';
+import { tipoDelProblema } from '../comun/codigo-de-correo.js';
 
 const PERFILES = '/api/v1/perfiles';
+
+/**
+ * RFINAL-03 — lo que se le dice a quien guarda su perfil cuando el servidor
+ * lo rechaza, por el `type` estable del problem details
+ * (ms-identidad-perfiles.yaml 1.3.0). El servidor decide —aquí no se
+ * comprueba ninguna lista negra—; solo se explica su respuesta sin revelar
+ * qué término saltó. `campo` es el control que se marca, si lo hay.
+ *
+ * Antes el 400 llegaba en texto plano, `json()` fallaba y «batman» se
+ * despedía con «Revisa los datos e inténtalo otra vez» (informe del jugador
+ * del 4-oct).
+ */
+export const MOTIVOS_DEL_PERFIL = Object.freeze({
+  'apodo-no-permitido': { campo: 'apodo', texto: 'Ese apodo no está permitido. Elige otro.' },
+  'apodo-en-uso': { campo: 'apodo', texto: 'Ese apodo ya lo usa otro jugador. Elige otro.' },
+  // Nada está mal en lo escrito: la lista negra no respondió y, como es
+  // fail-closed, no se guardó nada. No se marca el campo.
+  'moderacion-no-disponible': {
+    campo: null,
+    texto:
+      'No pudimos comprobar tu apodo en este momento, así que no se guardó nada. Inténtalo de nuevo en unos segundos.',
+  },
+});
+
+/**
+ * El cuerpo de un rechazo: problem details si es JSON, el texto si no (un
+ * servidor anterior a 1.3.0), `null` si no se pudo leer.
+ *
+ * @param {Response} respuesta
+ * @returns {Promise<unknown>}
+ */
+async function cuerpoDelRechazo(respuesta) {
+  try {
+    if (typeof respuesta.text !== 'function') {
+      return await respuesta.json();
+    }
+    const texto = await respuesta.text();
+    try {
+      return JSON.parse(texto);
+    } catch {
+      return texto;
+    }
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Una lectura que puede no estar disponible en este entorno.
@@ -114,8 +162,12 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   const textos = h('div', { clase: 'pila pila--ajustada' });
   textos.append(
     h('h3', { clase: 'tarjeta__titulo', texto: perfil?.apodo ?? sesion.apodo ?? 'Sin apodo' }),
-    h('p', { clase: 't-meta', texto: perfil?.email ?? '' }),
   );
+  // El perfil (ms-identidad-perfiles.yaml) no publica el correo: un párrafo
+  // vacío no dice nada. Si algún día llega, se enseña.
+  if (perfil?.email) {
+    textos.append(h('p', { clase: 't-meta', texto: perfil.email }));
+  }
   cabeza.append(textos);
   if (sesion.rol) {
     cabeza.append(
@@ -127,12 +179,9 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
   }
   identidad.append(cabeza);
   if (perfil?.avatar) {
-    identidad.append(
-      h('img', {
-        clase: 'avatar-vista-previa',
-        atributos: { src: perfil.avatar, alt: `Avatar de ${perfil.apodo ?? ''}` },
-      }),
-    );
+    // Si la foto no carga queda la inicial, no el texto alternativo suelto
+    // (auditoría de DEV del 30-sep).
+    identidad.append(fotoDeCuenta({ url: perfil.avatar, apodo: perfil.apodo ?? sesion.apodo }));
   }
   zona.append(identidad);
 
@@ -166,6 +215,8 @@ async function pintarResumen(zona, { sesion, fetchImpl, perfil }) {
     tarjetaDeCifra({
       etiqueta: 'Apartado en apuestas',
       valor: formatoCreditos(saldo.datos.saldoReservado),
+      // Cuándo vuelve (auditoría de DEV del 30-sep, D-39).
+      detalle: 'Vuelve al cancelar la sala, al terminar la partida o a las 72 h si nadie la juega',
     }),
   );
   vaciar(zonaSaldo).append(rejilla);
@@ -244,15 +295,17 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
     return;
   }
 
-  const tabla = h('table', { clase: 'tabla', datos: { zona: 'movimientos' } });
+  // `tabla--datos`: la <table> lleva sus propias reglas de celda (shared/ui-kit);
+  // el importe, como toda cifra, a la derecha en el encabezado y en la celda.
+  const tabla = h('table', { clase: 'tabla tabla--datos', datos: { zona: 'movimientos' } });
   const cabecera = h('thead');
   cabecera.append(
     h('tr', {
       hijos: [
-        h('th', { texto: 'Concepto' }),
-        h('th', { texto: 'Importe' }),
-        h('th', { texto: 'Estado' }),
-        h('th', { texto: 'Cuándo' }),
+        h('th', { texto: 'Concepto', atributos: { scope: 'col' } }),
+        h('th', { clase: 'tabla__numero', texto: 'Importe', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Estado', atributos: { scope: 'col' } }),
+        h('th', { texto: 'Cuándo', atributos: { scope: 'col' } }),
       ],
     }),
   );
@@ -265,7 +318,7 @@ export async function pintarHistorial(zona, { sesion, fetchImpl }) {
         hijos: [
           h('td', { texto: nombreDelConcepto(movimiento.concepto) }),
           h('td', {
-            clase: 'movimiento__importe',
+            clase: 'movimiento__importe tabla__numero',
             texto: importe.texto,
             datos: { tono: importe.tono },
           }),
@@ -371,6 +424,11 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       llenarFormulario(formulario, perfil);
     }
     if (vistaAvatar && perfil?.avatar) {
+      // Auditoría de DEV del 30-sep: una foto que no carga no deja el texto
+      // alternativo en medio del formulario; se retira y se puede subir otra.
+      vistaAvatar.onerror = () => {
+        vistaAvatar.hidden = true;
+      };
       vistaAvatar.src = perfil.avatar;
       vistaAvatar.hidden = false;
     }
@@ -381,6 +439,7 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
     limpiarAviso(zonaAviso);
     marcarErrorDe(formulario.elements.nombres, null);
     marcarErrorDe(formulario.elements.apellidos, null);
+    marcarErrorDe(formulario.elements.apodo, null);
 
     const nombres = formulario.elements.nombres.value.trim();
     const apellidos = formulario.elements.apellidos.value.trim();
@@ -416,26 +475,34 @@ export function montarCuenta(raiz, { sesion, fetchImpl = fetchWithHttpErrorInter
       const respuesta = await fetchImpl(
         `${baseDeApi()}${PERFILES}/${encodeURIComponent(sesion.uid)}`,
         // Sin Content-Type a mano: el navegador arma el multipart con su
-        // frontera solo cuando el cuerpo es un FormData.
-        { method: 'PUT', body: cuerpo },
+        // frontera solo cuando el cuerpo es un FormData. El Accept pide el
+        // problem details con motivo (perfiles 1.3.0).
+        {
+          method: 'PUT',
+          headers: { Accept: 'application/problem+json, application/json' },
+          body: cuerpo,
+        },
       );
       if (!respuesta.ok) {
-        let problema = null;
-        try {
-          problema = await respuesta.json();
-        } catch {
-          problema = null;
+        const problema = await cuerpoDelRechazo(respuesta);
+        const conocido = MOTIVOS_DEL_PERFIL[tipoDelProblema(problema)];
+        if (conocido?.campo) {
+          const control = formulario.elements.namedItem(conocido.campo);
+          marcarErrorDe(control, conocido.texto);
+          control?.focus();
         }
         pintarAviso(zonaAviso, {
           tono: tonoPorEstado(respuesta.status),
           titulo: 'No pudimos guardar los cambios',
-          detalle: textoDelServidor(
-            problema,
-            respuesta.status,
-            respuesta.status >= 500
-              ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
-              : 'Revisa los datos e inténtalo otra vez.',
-          ),
+          detalle:
+            conocido?.texto ??
+            textoDelServidor(
+              problema,
+              respuesta.status,
+              respuesta.status >= 500
+                ? 'Tu perfil no se pudo guardar ahora mismo. Vuelve a intentarlo en un momento.'
+                : 'Revisa los datos e inténtalo otra vez.',
+            ),
         });
         return;
       }

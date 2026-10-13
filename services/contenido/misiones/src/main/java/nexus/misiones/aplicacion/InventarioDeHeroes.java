@@ -2,6 +2,7 @@ package nexus.misiones.aplicacion;
 
 import java.util.List;
 import java.util.UUID;
+import nexus.misiones.dominio.simulacion.Formula;
 
 /**
  * Lo que misiones necesita del inventario (inventario.yaml 1.6.0). El
@@ -24,8 +25,20 @@ public interface InventarioDeHeroes {
     /** Si lleva algo equipado ({@code GET .../heroes/{id}/equipamiento}). */
     boolean equipado(String jugadorUid, String heroeId);
 
-    /** Poder, vida y defensa con el equipamiento aplicado ({@code GET .../estadisticas}). */
+    /**
+     * Poder, vida y defensa con el equipamiento aplicado, en el nivel del heroe, y
+     * sus formulas de ataque, dano y sanacion ({@code GET .../estadisticas}).
+     */
     EstadisticasDelHeroe estadisticas(String jugadorUid, String heroeId);
+
+    /**
+     * Lo que lleva el heroe y las epicas del jugador, para que el motor aplique
+     * sus efectos de combate: {@code GET .../heroes/{id}/equipamiento} y la
+     * vitrina del jugador ({@code GET /api/v1/inventario/elementos}).
+     *
+     * @throws HeroeNoEncontrado si no existe o no es del jugador
+     */
+    EquipoDelHeroe equipo(String jugadorUid, String heroeId);
 
     /**
      * {@code PUT .../bloqueo-mision}: desde aqui el heroe esta En mision.
@@ -68,7 +81,28 @@ public interface InventarioDeHeroes {
         }
     }
 
-    record EstadisticasDelHeroe(int poder, int vida, int defensa) {
+    /**
+     * @param ataque formulas como datos; nulas si el inventario no las publica
+     *               (un sanador no tiene ataque ni dano, un guerrero no sana)
+     */
+    record EstadisticasDelHeroe(int poder, int vida, int defensa, Formula ataque, Formula dano, Formula sanar) {
+
+        public EstadisticasDelHeroe(int poder, int vida, int defensa) {
+            this(poder, vida, defensa, null, null, null);
+        }
+    }
+
+    /**
+     * Los productos del catalogo de lo que lleva puesto el heroe (armas,
+     * armaduras e items) y de las epicas disponibles del jugador. Son ids de
+     * producto: el nombre, que es lo que entiende el motor, lo da el catalogo.
+     */
+    record EquipoDelHeroe(List<String> productosEquipados, List<String> productosDeEpicas) {
+
+        public EquipoDelHeroe {
+            productosEquipados = productosEquipados == null ? List.of() : List.copyOf(productosEquipados);
+            productosDeEpicas = productosDeEpicas == null ? List.of() : List.copyOf(productosDeEpicas);
+        }
     }
 
     record ProgresionDelHeroe(int nivel, double experiencia) {

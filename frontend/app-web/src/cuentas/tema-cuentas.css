@@ -195,13 +195,11 @@ form > label,
   top: -120px;
   left: -120px;
   background: color-mix(in srgb, var(--primaria) 16%, transparent);
-  animation: flotar1 14s ease-in-out infinite;
 }
 .pagina-auth::after {
   bottom: -140px;
   right: -140px;
   background: color-mix(in srgb, var(--acento-relleno) 16%, transparent);
-  animation: flotar2 16s ease-in-out infinite;
 }
 .pagina-auth .tarjeta {
   position: relative;
@@ -305,42 +303,6 @@ input[aria-invalid='true'] {
   to {
     opacity: 1;
     transform: translateY(0);
-  }
-}
-
-@keyframes flotar1 {
-  0% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(220px, 120px);
-  }
-  50% {
-    transform: translate(100px, 280px);
-  }
-  75% {
-    transform: translate(-120px, 100px);
-  }
-  100% {
-    transform: translate(0, 0);
-  }
-}
-
-@keyframes flotar2 {
-  0% {
-    transform: translate(0, 0);
-  }
-  25% {
-    transform: translate(-200px, -100px);
-  }
-  50% {
-    transform: translate(-80px, -260px);
-  }
-  75% {
-    transform: translate(140px, -90px);
-  }
-  100% {
-    transform: translate(0, 0);
   }
 }
 

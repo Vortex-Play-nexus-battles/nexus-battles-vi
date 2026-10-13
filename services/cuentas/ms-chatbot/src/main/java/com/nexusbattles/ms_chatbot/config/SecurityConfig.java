@@ -62,7 +62,8 @@ public class SecurityConfig {
 
         CorsConfiguration configuracion = new CorsConfiguration();
         configuracion.setAllowedOrigins(origenesPermitidos);
-        configuracion.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        // 1.3.0: PATCH para atender un ticket desde el panel (PATCH /chatbot/admin/tickets/{id}).
+        configuracion.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuracion.setAllowedHeaders(List.of(
             "Authorization", "Content-Type", "Accept", "X-Id-Sesion-Anonima", "traceparent"));
         // El panel descarga la exportacion (CSV y JSON) y necesita leer el

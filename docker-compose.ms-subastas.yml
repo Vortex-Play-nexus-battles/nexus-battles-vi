@@ -170,13 +170,20 @@ services:
       # disponible para el ganador, que ya pago). Respaldo del parametro
       # `subastas.pendientes.al-vencer`, que aun no esta en el catalogo.
       SUBASTAS_PENDIENTES_AL_VENCER: ${SUBASTAS_PENDIENTES_AL_VENCER:-ENTREGAR}
-      # Avisos por correo (7.7.8, POST /api/v1/correos/subasta). VACIO por
-      # omision: el contacto se pide a ms-identidad
-      # (GET /api/v1/internal/usuarios/{uid}/contacto), que figura como
-      # pendiente (B2). Con CORREO_URL puesta y esa ruta sin desplegar, los
-      # correos se reintentarian hasta FALLIDO. Se enciende con
-      # SUBASTAS_CORREO_URL=http://srv-correo:8082 cuando B2 este en develop.
-      CORREO_URL: ${SUBASTAS_CORREO_URL:-}
+      # Avisos por correo (7.7.8, RF-COR-005 / RF-NOT-003,
+      # POST /api/v1/correos/subasta). Encendidos por omision desde el 5-oct
+      # (RFINAL-01). Lo que los tenia apagados ya no falta:
+      #   - el contacto del jugador: GET /api/v1/internal/usuarios/{uid}/contacto
+      #     de ms-identidad (ms-identidad-admin.yaml 1.1.0, implementada);
+      #   - la red: este servicio vive en el host de CONTENIDO, asi que
+      #     srv-correo (el nombre del contenedor en plataforma) no resuelve aqui.
+      #     Va por la IP elastica de plataforma, como notificaciones y
+      #     sanciones: el 8082 esta en el bloque 8081-8088 que su grupo de
+      #     seguridad admite desde este host (corrida 37264710414).
+      # SIN /api/v1: el cliente (CorreoSubastaClientHttp) ya lo anade. Vacio =
+      # sin correo (los avisos de la bandeja siguen igual): para apagarlo se
+      # pone SUBASTAS_CORREO_URL= en el entorno, no se toca este archivo.
+      CORREO_URL: ${SUBASTAS_CORREO_URL-http://35.168.124.119:8082}
       # Del host de plataforma, por su IP elastica (ver la cabecera).
       IDENTIDAD_URL: ${IDENTIDAD_URL_INTERNA:-http://35.168.124.119:8089}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://35.168.124.119:8085/api/v1}

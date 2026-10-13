@@ -56,6 +56,38 @@ class BandejaDeMensajesDirectosTest {
     }
 
     @Test
+    @DisplayName("D-40: cada conversacion dice si se puede escribir, y bloquear no borra el historial")
+    void estadoDeCadaConversacion() {
+        RepositorioDeBloqueosEnMemoria bloqueados = new RepositorioDeBloqueosEnMemoria();
+        BloqueosDeMensajes bloqueos = new BloqueosDeMensajes(bloqueados, Clock.fixed(T0, ZoneOffset.UTC));
+        BandejaDeMensajesDirectos conBloqueos = new BandejaDeMensajesDirectos(repositorio,
+                Clock.fixed(T0.plusSeconds(3600), ZoneOffset.UTC), bloqueos);
+        escribe(ANA, "ana", BRUNO, "bruno", "hola bruno", 1);
+        escribe(CARLA, "carla", ANA, "ana", "hola ana", 2);
+        UUID dario = UUID.randomUUID();
+        escribe(dario, "dario", ANA, "ana", "soy dario", 3);
+        bloqueos.bloquear(ANA, BRUNO);
+        bloqueos.bloquear(CARLA, ANA);
+
+        List<ResumenDeConversacion> deAna = conBloqueos.conversacionesDe(ANA);
+        List<ResumenDeConversacion> deBruno = conBloqueos.conversacionesDe(BRUNO);
+
+        assertAll(
+                () -> assertEquals(List.of(dario, CARLA, BRUNO),
+                        deAna.stream().map(ResumenDeConversacion::uidOtro).toList()),
+                () -> assertEquals(List.of(EstadoDeConversacion.ACTIVA, EstadoDeConversacion.NO_ADMITE,
+                        EstadoDeConversacion.BLOQUEADA),
+                        deAna.stream().map(ResumenDeConversacion::estado).toList()),
+                () -> assertEquals(EstadoDeConversacion.NO_ADMITE, deBruno.get(0).estado(),
+                        "Bruno ve que no puede escribirle, no que lo bloqueo"),
+                () -> assertEquals(List.of("hola bruno"), conBloqueos.historial(BRUNO, ANA, null, null).stream()
+                        .map(MensajeDirecto::texto).toList(), "el historial se queda para los dos"),
+                () -> assertTrue(bandeja.conversacionesDe(ANA).stream()
+                        .allMatch(c -> c.estado() == EstadoDeConversacion.ACTIVA),
+                        "sin almacen de bloqueos todas estan activas"));
+    }
+
+    @Test
     @DisplayName("el apodo del otro sale del ultimo mensaje, lo escribiera quien lo escribiera")
     void apodoDelOtroEnAmbosSentidos() {
         escribe(ANA, "ana", BRUNO, "bruno", "hola", 1);

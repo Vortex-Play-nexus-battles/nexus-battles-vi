@@ -51,6 +51,16 @@ public class SeguridadConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.POST, "/api/v1/banners")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.PUT, "/api/v1/banners/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.DELETE, "/api/v1/banners/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/banners")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/banners/vigentes")
+                                .permitAll()
                                 .requestMatchers(HttpMethod.GET, "/api/v1/productos/estadisticas")
                                 .authenticated()
                                 .requestMatchers(HttpMethod.PATCH, "/api/v1/productos/{id}")
@@ -67,6 +77,15 @@ public class SeguridadConfig {
                                 // ni un jugador ni un administrador descuentan
                                 // unidades a mano.
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos/{id}/adquisiciones")
+                                .hasRole("SERVICIO")
+                                // HU-NOT-001 (contrato 1.6.0): los cambios del
+                                // catalogo los lee otro servicio (notificaciones)
+                                // con su credencial; ningun usuario, tampoco un
+                                // administrador. Va ANTES de la regla publica de
+                                // GET /{id} de abajo: la primera regla que casa
+                                // es la que manda, y esta ruta no puede quedar
+                                // nunca a merced de un patron publico.
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/alertas/cambios")
                                 .hasRole("SERVICIO")
                                 // Lectura publica del catalogo: el detalle por id y, desde
                                 // R16 (contrato 1.2.0), el listado paginado de la coleccion

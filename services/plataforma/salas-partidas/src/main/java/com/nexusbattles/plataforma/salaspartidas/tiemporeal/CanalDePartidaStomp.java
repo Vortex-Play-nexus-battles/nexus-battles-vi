@@ -62,6 +62,12 @@ class CanalDePartidaStomp implements CanalDePartida {
         mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeTurno.de(partida, motivo, java.time.Instant.now()));
     }
 
+    /** Quien se rindio, antes del turno o del fin que provoca (canal 1.10.0). */
+    @Override
+    public void anunciarRendicion(Partida partida, UUID idJugador) {
+        mensajeria.convertAndSend(destinoDe(partida.id()), AvisoDeRendicion.de(partida, idJugador));
+    }
+
     @Override
     public void anunciarFin(Partida partida,
                             java.util.List<com.nexusbattles.plataforma.salaspartidas.dominio.RepartoDeCreditos> reparto) {

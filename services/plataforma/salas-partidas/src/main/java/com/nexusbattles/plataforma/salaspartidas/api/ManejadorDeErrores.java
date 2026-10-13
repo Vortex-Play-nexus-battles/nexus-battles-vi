@@ -56,9 +56,9 @@ class ManejadorDeErrores {
     ProblemDetail cuerpoIlegible(Exception error) {
         ProblemDetail problema = ProblemDetail.forStatusAndDetail(
                 HttpStatus.BAD_REQUEST,
-                "No se pudo leer la peticion. Revisa que los valores tengan el formato del contrato.");
+                "No se pudo leer la petición. Revisa que los valores tengan el formato del contrato.");
         problema.setType(java.net.URI.create("https://nexusbattles.local/errores/peticion-ilegible"));
-        problema.setTitle("Peticion mal formada");
+        problema.setTitle("Petición mal formada");
         return problema;
     }
 

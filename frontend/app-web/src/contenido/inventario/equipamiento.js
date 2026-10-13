@@ -299,6 +299,18 @@ export function pintarEquipamiento(
     });
   }
 
+  // RFINAL-04 (revisión de AWS DEV del 4-oct) — «las ranuras vacías no
+  // permiten entender cómo equipar»: el gesto existía (pulsar la ranura abre
+  // la lista de piezas compatibles) pero nada lo decía.
+  contenedor.append(
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'instrucciones-equipo' },
+      texto:
+        'Pulsa una ranura vacía para elegir qué pieza de tu inventario ponerle; ' +
+        'pulsa una ocupada para quitársela. Las estadísticas se actualizan al momento.',
+    }),
+  );
   for (const grupo of Object.values(porGrupo)) {
     contenedor.append(grupoDeRanuras(grupo.titulo, grupo.ranuras));
   }

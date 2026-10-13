@@ -29,7 +29,7 @@
  */
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
-import { h, vaciar } from '../comun/ui/dom.js';
+import { clases, h, vaciar } from '../comun/ui/dom.js';
 import { fechaHora, numero } from '../comun/ui/formato.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import {
@@ -53,6 +53,22 @@ export const PARTIDAS_POR_PAGINA = 16;
 
 const RUTA_MISIONES = '../contenido/misiones/misiones.html';
 const RUTA_SALA = '../plataforma/salas-partidas/sala-batalla.html';
+
+/**
+ * Las columnas de «Tus batallas» con su alineación. El encabezado y la celda
+ * de cada columna llevan la misma clase, así que no pueden desalinearse:
+ * auditoría de DEV del 30-sep, los encabezados salían centrados (el estilo
+ * del navegador) y las celdas a la izquierda y sin aire. Las cifras y la
+ * acción van a la derecha; lo demás, al inicio.
+ */
+export const COLUMNAS_DE_PARTIDAS = Object.freeze([
+  { titulo: 'Resultado', clase: '' },
+  { titulo: 'Héroe', clase: '' },
+  { titulo: 'Modalidad', clase: '' },
+  { titulo: 'Jugadores', clase: 'tabla__numero' },
+  { titulo: 'Cuándo', clase: '' },
+  { titulo: 'Acción', clase: 'tabla__accion' },
+]);
 
 /**
  * «Una partida» / «16 partidas».
@@ -96,27 +112,47 @@ export function fraseDelRecuento(partidas) {
  */
 function filaDePartida(partida) {
   const cuando = partida.finalizadaEn ?? partida.iniciadaEn;
-  const accion =
-    partida.estado === 'EN_CURSO' && partida.idSala
-      ? h('a', {
-          clase: 'boton boton--secundario boton--pequeno',
-          texto: 'Volver a la partida',
-          atributos: { href: `${RUTA_SALA}?sala=${encodeURIComponent(partida.idSala)}` },
-        })
-      : null;
+  // En el orden de COLUMNAS_DE_PARTIDAS.
+  const celdas = [
+    { hijos: [distintivoDeResultado(partida)] },
+    { texto: partida.heroe || 'Héroe sin nombre' },
+    { texto: nombreDeModalidad(partida.modalidad) },
+    { texto: Number.isInteger(partida.participantes) ? numero(partida.participantes) : '—' },
+    { clase: 't-meta', texto: cuando ? fechaHora(cuando) : '—' },
+    { hijos: [accionDePartida(partida)] },
+  ];
   return h('tr', {
     datos: { partida: partida.id, estado: partida.estado ?? '' },
-    hijos: [
-      h('td', { hijos: [distintivoDeResultado(partida)] }),
-      h('td', { texto: partida.heroe || 'Héroe sin nombre' }),
-      h('td', { texto: nombreDeModalidad(partida.modalidad) }),
-      h('td', {
-        texto: Number.isInteger(partida.participantes) ? numero(partida.participantes) : '—',
-      }),
-      h('td', { clase: 't-meta', texto: cuando ? fechaHora(cuando) : '—' }),
-      h('td', { hijos: accion ? [accion] : [] }),
-    ],
+    hijos: celdas.map((celda, indice) =>
+      h('td', { ...celda, clase: clases(COLUMNAS_DE_PARTIDAS[indice].clase, celda.clase) }),
+    ),
   });
+}
+
+/**
+ * Qué se puede hacer con una partida desde la tabla: volver a la que sigue en
+ * curso, o ver cómo terminó la que ya acabó (el campo de combate la pinta con
+ * su desenlace). Auditoría de DEV del 30-sep: la columna «Acción» salía vacía
+ * en las terminadas.
+ *
+ * @param {object} partida `ResumenDePartida`
+ * @returns {HTMLElement}
+ */
+export function accionDePartida(partida) {
+  if (partida.idSala && (partida.estado === 'EN_CURSO' || partida.estado === 'FINALIZADA')) {
+    const enCurso = partida.estado === 'EN_CURSO';
+    const consulta = new URLSearchParams({ sala: partida.idSala });
+    if (!enCurso && partida.id) {
+      consulta.set('partida', partida.id);
+    }
+    return h('a', {
+      clase: 'boton boton--secundario boton--pequeno',
+      texto: enCurso ? 'Volver a la partida' : 'Ver resultado',
+      atributos: { href: `${RUTA_SALA}?${consulta}` },
+    });
+  }
+  // Sin sala a la que ir no hay acción, y se dice en vez de dejar la celda vacía.
+  return h('span', { clase: 't-meta', texto: '—', atributos: { 'aria-label': 'Sin acción' } });
 }
 
 /**
@@ -173,7 +209,7 @@ export async function pintarPartidas(zona, { fetchImpl, pagina = 0, alPintar = n
   });
 
   const tabla = h('table', {
-    clase: 'tabla',
+    clase: 'tabla tabla--datos',
     datos: { zona: 'mis-partidas' },
     hijos: [
       h('caption', {
@@ -183,8 +219,8 @@ export async function pintarPartidas(zona, { fetchImpl, pagina = 0, alPintar = n
       h('thead', {
         hijos: [
           h('tr', {
-            hijos: ['Resultado', 'Héroe', 'Modalidad', 'Jugadores', 'Cuándo', 'Acción'].map(
-              (titulo) => h('th', { texto: titulo, atributos: { scope: 'col' } }),
+            hijos: COLUMNAS_DE_PARTIDAS.map(({ titulo, clase }) =>
+              h('th', { clase, texto: titulo, atributos: { scope: 'col' } }),
             ),
           }),
         ],

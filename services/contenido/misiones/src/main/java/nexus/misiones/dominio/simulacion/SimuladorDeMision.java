@@ -3,10 +3,13 @@ package nexus.misiones.dominio.simulacion;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
 import nexus.misiones.dominio.HeroeEnMision;
 
 /**
@@ -19,27 +22,40 @@ import nexus.misiones.dominio.HeroeEnMision;
  *   <li>La jugada de cada turno la decide heroes ({@link DecisorDeTurno}):
  *       rotaciones con prioridad, poder, recarga y ataque basico de respaldo
  *       (7.8.5). Aqui no se reimplementa.</li>
- *   <li>El golpe lo resuelve el motor de combate ({@link ResolutorDeGolpes}):
- *       tirada, defensa y tabla de efectos (6.1.4). Aqui no hay un segundo
- *       motor.</li>
+ *   <li>Cada turno y cada accion los resuelve el MOTOR DE COMBATE
+ *       ({@link MotorDeCombate}), el mismo de las batallas en linea
+ *       (7.8.12): el poder que se recupera, las cargas, las 24 acciones de la
+ *       Tabla 7, las epicas, los efectos del equipo y el sorteo sobre la tabla
+ *       de 8.000 filas (6.1.4). Aqui no hay un segundo motor: el simulador
+ *       solo guarda el estado que el motor devuelve y se lo manda de nuevo.</li>
  *   <li>Lo que SI es de aqui: el orden de los encuentros, quien empieza cada
  *       duelo («el orden de los turnos para la primera ronda se determina
- *       aleatoriamente», 6.1.3), la vida que el heroe arrastra de un encuentro
- *       al siguiente, el poder que se gasta y se recupera («cada dos puntos por
- *       turno durante el combate» y «al concluir el combate», 6.1.1), la
- *       experiencia por enemigo derrotado con el 1d8 que tira el servidor, y lo
- *       que se cuenta para el reporte (7.8.8).</li>
+ *       aleatoriamente», 6.1.3), la vida que el heroe arrastra de un
+ *       encuentro al siguiente, la experiencia por enemigo derrotado con el
+ *       1d8 que tira el servidor, lo que se cuenta para el reporte (7.8.8) y el
+ *       registro de cada turno ({@link EventoDeCombate}).</li>
  * </ul>
  *
  * <p>La vida NO se recupera entre encuentros: el documento no dice que lo haga,
  * y el objetivo «completar la mision sin que la vida del heroe baje del 50 %»
- * (7.8.14) solo tiene sentido si la vida se arrastra.
+ * (7.8.14) solo tiene sentido si la vida se arrastra. El poder, las cargas y
+ * los efectos si empiezan de cero en cada duelo: «el poder se recupera
+ * instantaneamente al concluir el combate» (6.1.1).
  *
- * <p>Las acciones de la Tabla 7 se deciden, gastan su poder y se cuentan en el
- * reporte, pero el efecto sobre el golpe es del motor: mientras su contrato
- * (motor-combate.yaml 1.1.0) no reciba la accion, resuelve el ataque basico.
+ * <h2>Cuando el motor rechaza la jugada</h2>
+ *
+ * <p>La recarga de heroes (HU-HER-007) y la del motor cuentan los turnos cada
+ * una a su manera; si el motor responde 409 a la accion que eligio la IA, no
+ * se rompe nada: se anota el rechazo, se le dice al decisor que esa opcion ya
+ * no esta disponible en este turno y se le pregunta de nuevo, asi que cae a la
+ * siguiente de su rotacion y, al final, al ataque basico. Una simulacion nunca
+ * se queda a medias por esto.
  */
 public class SimuladorDeMision {
+
+    /** El id del heroe y del rival en cada duelo, tal como se los manda al motor. */
+    public static final String ID_DEL_HEROE = "heroe";
+    public static final String ID_DEL_RIVAL = "rival";
 
     /**
      * Un duelo que nadie puede ganar (ninguno supera la defensa del otro) se
@@ -49,38 +65,44 @@ public class SimuladorDeMision {
      */
     public static final int RONDAS_MAXIMAS_POR_COMBATE = 100;
 
-    /** Seccion 6.1.1: el poder se recupera dos puntos por turno. */
-    public static final int PODER_RECUPERADO_POR_TURNO = 2;
-
     private static final int HABILIDADES_EN_EL_REPORTE = 5;
 
+    /** Las tres rotaciones de una estrategia (7.8.5) y el ataque basico de respaldo. */
+    private static final int OPCIONES_MAXIMAS_POR_TURNO = 4;
+
+    private static final String SANACION_BASICA = "Sanación básica";
+
     private final DecisorDeTurno decisor;
-    private final ResolutorDeGolpes resolutor;
+    private final MotorDeCombate motor;
     private final TablaDeExperiencia experiencia;
 
-    public SimuladorDeMision(DecisorDeTurno decisor, ResolutorDeGolpes resolutor, TablaDeExperiencia experiencia) {
+    public SimuladorDeMision(DecisorDeTurno decisor, MotorDeCombate motor, TablaDeExperiencia experiencia) {
         this.decisor = Objects.requireNonNull(decisor);
-        this.resolutor = Objects.requireNonNull(resolutor);
+        this.motor = Objects.requireNonNull(motor);
         this.experiencia = Objects.requireNonNull(experiencia);
     }
 
     /**
+     * @param ejecucionId     la ejecucion que se simula: los eventos quedan a su nombre
+     * @param perfil          lo que el heroe lleva al combate (estadisticas con equipo, equipo, epicas)
      * @param estrategia      las rotaciones del heroe, ya validadas por heroes
      * @param rivales         en el orden en que se enfrentan (el jefe al final)
      * @param azar            la fuente de azar de esta ejecucion
-     * @param semillaDeGolpes solo en pruebas reproducibles: cada golpe pide al
-     *                        motor la semilla siguiente; nula en juego real
+     * @param semillaDeGolpes solo en pruebas reproducibles: cada llamada al
+     *                        motor lleva la semilla siguiente; nula en juego real
      */
-    public ResultadoDeMision simular(HeroeEnMision heroe, List<List<String>> estrategia,
-                                     List<Rival> rivales, Azar azar, Long semillaDeGolpes) {
+    public Simulacion simular(UUID ejecucionId, String misionId, HeroeEnMision heroe, PerfilDeCombate perfil,
+                              List<List<String>> estrategia, List<Rival> rivales, Azar azar, Long semillaDeGolpes) {
         int regulares = (int) rivales.stream().filter(r -> r.tipo() == TipoDeRival.REGULAR).count();
-        Registro registro = new Registro(heroe, semillaDeGolpes, regulares);
-        int vidaDelHeroe = heroe.vida();
+        Registro registro = new Registro(ejecucionId, misionId, heroe, perfil, semillaDeGolpes, regulares);
+        int vidaDelHeroe = registro.vidaMaximaDelHeroe;
 
+        int encuentro = 0;
         for (Rival rival : rivales) {
-            Duelo duelo = new Duelo(heroe, estrategia, rival, vidaDelHeroe, registro);
+            encuentro++;
+            Duelo duelo = new Duelo(heroe, perfil, estrategia, rival, encuentro, vidaDelHeroe, registro);
             duelo.jugar(azar.acierta(0.5));
-            vidaDelHeroe = duelo.vidaDelHeroe;
+            vidaDelHeroe = duelo.vidaDelHeroe();
             if (!duelo.rivalDerrotado()) {
                 if (rival.tipo() == TipoDeRival.MASTER) {
                     registro.masterEnfrentado(rival, false);
@@ -95,121 +117,319 @@ public class SimuladorDeMision {
         return registro.cerrar(true);
     }
 
+    /** Uno de los dos que pelean en un duelo, con lo que la IA recuerda de el entre turno y turno. */
+    private static final class Bando {
+        final String id;
+        final EventoDeCombate.Actor actor;
+        final List<List<String>> rotaciones;
+        /** El heroe siempre pregunta al decisor; un rival sin estrategia juega el ataque basico sin preguntar. */
+        final boolean consultaAlDecisor;
+        final Map<String, Integer> usos = new HashMap<>();
+        List<Integer> cursores = List.of();
+
+        Bando(String id, EventoDeCombate.Actor actor, List<List<String>> rotaciones, boolean consultaAlDecisor) {
+            this.id = id;
+            this.actor = actor;
+            this.rotaciones = rotaciones == null ? List.of() : rotaciones;
+            this.consultaAlDecisor = consultaAlDecisor;
+        }
+    }
+
     /** Un combate uno contra uno. El heroe llega con la vida que le quedaba. */
     private final class Duelo {
 
-        private final HeroeEnMision heroe;
-        private final List<List<String>> estrategia;
         private final Rival rival;
+        private final int encuentro;
         private final Registro registro;
+        private final Bando elHeroe;
+        private final Bando elRival;
 
-        private int vidaDelHeroe;
-        private int vidaDelRival;
-        // «El poder se recupera instantaneamente al concluir el combate»: cada
-        // duelo empieza con el poder al maximo, sin recargas pendientes y con
-        // las rotaciones en su primer paso.
-        private int poderDelHeroe;
-        private int poderDelRival;
-        private final Map<String, Integer> usosDelHeroe = new HashMap<>();
-        private final Map<String, Integer> usosDelRival = new HashMap<>();
-        private List<Integer> cursoresDelHeroe = List.of();
-        private List<Integer> cursoresDelRival = List.of();
+        /** El estado de los dos, tal como lo devolvio el motor la ultima vez. */
+        private List<Combatiente> mesa;
 
-        Duelo(HeroeEnMision heroe, List<List<String>> estrategia, Rival rival, int vidaDelHeroe, Registro registro) {
-            this.heroe = heroe;
-            this.estrategia = estrategia == null ? List.of() : estrategia;
+        Duelo(HeroeEnMision heroe, PerfilDeCombate perfil, List<List<String>> estrategia, Rival rival, int encuentro,
+              int vidaDelHeroe, Registro registro) {
             this.rival = rival;
+            this.encuentro = encuentro;
             this.registro = registro;
-            this.vidaDelHeroe = vidaDelHeroe;
-            this.vidaDelRival = rival.vida();
-            this.poderDelHeroe = heroe.poder();
-            this.poderDelRival = rival.poder();
+            this.elHeroe = new Bando(ID_DEL_HEROE,
+                    new EventoDeCombate.Actor(EventoDeCombate.Lado.HEROE, heroe.nombre(), heroe.prototipo(),
+                            heroe.nivel()),
+                    estrategia, true);
+            this.elRival = new Bando(ID_DEL_RIVAL,
+                    new EventoDeCombate.Actor(ladoDe(rival.tipo()), rival.nombre(), rival.prototipo(), rival.nivel()),
+                    rival.rotaciones(), !rival.rotaciones().isEmpty());
+            // «El poder se recupera instantaneamente al concluir el combate»:
+            // cada duelo empieza con el poder al maximo (poder nulo), sin
+            // cargas ni efectos y con las rotaciones en su primer paso.
+            this.mesa = List.of(
+                    Combatiente.alEmpezar(ID_DEL_HEROE, heroe.prototipo(), heroe.nivel(), perfil.estadisticas(),
+                            vidaDelHeroe, perfil.equipamiento(), perfil.epicas()),
+                    Combatiente.alEmpezar(ID_DEL_RIVAL, rival.prototipo(), rival.nivel(), estadisticasDelRival(),
+                            rival.vida(), List.of(), List.of()));
+        }
+
+        /**
+         * Con las formulas del catalogo en la mano, el rival entra con la vida y
+         * la defensa de la semilla (y del escalon); sin ellas, con las del
+         * catalogo, porque una estadistica sin formula de ataque no podria golpear.
+         */
+        private EstadisticasDeCombate estadisticasDelRival() {
+            if (rival.ataque() == null && rival.sanar() == null) {
+                return null;
+            }
+            return new EstadisticasDeCombate(rival.poder(), rival.vida(), rival.defensa(), rival.ataque(),
+                    rival.dano(), rival.sanar());
         }
 
         void jugar(boolean empiezaElHeroe) {
             for (int ronda = 1; ronda <= RONDAS_MAXIMAS_POR_COMBATE && ambosEnPie(); ronda++) {
                 registro.turnos++;
                 if (empiezaElHeroe) {
-                    turnoDelHeroe(ronda);
-                    turnoDelRival(ronda);
+                    turnoDe(elHeroe, elRival, ronda);
+                    turnoDe(elRival, elHeroe, ronda);
                 } else {
-                    turnoDelRival(ronda);
-                    turnoDelHeroe(ronda);
+                    turnoDe(elRival, elHeroe, ronda);
+                    turnoDe(elHeroe, elRival, ronda);
                 }
             }
+        }
+
+        int vidaDelHeroe() {
+            return combatiente(ID_DEL_HEROE).vidaActual();
         }
 
         boolean rivalDerrotado() {
-            return vidaDelRival <= 0;
+            return !combatiente(ID_DEL_RIVAL).enPie();
         }
 
         private boolean ambosEnPie() {
-            return vidaDelHeroe > 0 && vidaDelRival > 0;
+            return combatiente(ID_DEL_HEROE).enPie() && combatiente(ID_DEL_RIVAL).enPie();
         }
 
-        private void turnoDelHeroe(int ronda) {
+        private Combatiente combatiente(String id) {
+            return mesa.stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();
+        }
+
+        private void actualizar(List<Combatiente> nuevos) {
+            mesa = List.copyOf(nuevos);
+            registro.vidaMinima = Math.min(registro.vidaMinima, Math.max(0, combatiente(ID_DEL_HEROE).vidaActual()));
+        }
+
+        /** El turno de un combatiente: empezarlo (motor), decidir (heroes), jugarlo (motor) y dejar constancia. */
+        private void turnoDe(Bando quien, Bando contra, int ronda) {
             if (!ambosEnPie()) {
                 return;
             }
-            DecisionDeTurno decision = decisor.decidir(new TurnoParaDecidir(
-                    heroe.prototipo(), heroe.nivel(), estrategia, ronda, poderDelHeroe, vidaDelHeroe,
-                    usosDelHeroe, cursoresDelHeroe));
-            poderDelHeroe = Math.max(0, poderDelHeroe - decision.costoDePoder());
-            cursoresDelHeroe = decision.cursoresSiguientes();
-            if (!decision.esAtaqueBasico()) {
-                usosDelHeroe.put(decision.accion(), ronda);
-            }
-            registro.habilidadUsada(decision.accion());
+            ResultadoDeTurno inicio = motor.iniciarTurno(quien.id, mesa, registro.siguienteSemilla());
+            actualizar(inicio.combatientes());
+            List<Suceso> alIniciar = traducir(inicio.sucesos());
+            EventoDeCombate.Estados antes = estados(quien, contra);
 
-            Golpe golpe = golpear(heroe.prototipo(), rival.defensa());
-            vidaDelRival -= golpe.dano();
-            registro.danoInfligido += golpe.dano();
-            if (golpe.critico()) {
-                registro.criticos++;
+            EventoDeCombate.Jugada jugada = null;
+            if (combatiente(quien.id).enPie()) {
+                jugada = jugar(quien, contra, ronda);
             }
-            poderDelHeroe = Math.min(heroe.poder(), poderDelHeroe + PODER_RECUPERADO_POR_TURNO);
+            registro.evento(encuentro, rival.nombre(), ronda, quien.actor, contra.actor, antes, alIniciar, jugada,
+                    estados(quien, contra));
         }
 
-        private void turnoDelRival(int ronda) {
-            if (!ambosEnPie()) {
-                return;
+        private EventoDeCombate.Jugada jugar(Bando quien, Bando contra, int ronda) {
+            Combatiente actor = combatiente(quien.id);
+            String basica = actor.acciones().contains(MotorDeCombate.SANACION_BASICA)
+                    && !actor.acciones().contains(MotorDeCombate.ATAQUE_BASICO)
+                    ? MotorDeCombate.SANACION_BASICA : MotorDeCombate.ATAQUE_BASICO;
+            int poderAntes = poderDe(actor);
+
+            Map<String, Integer> usosDeEsteTurno = new HashMap<>(quien.usos);
+            Set<String> descartadas = new HashSet<>();
+            List<EventoDeCombate.Rechazo> rechazadas = new ArrayList<>();
+            ResultadoDeAccion resultado = null;
+            DecisionDeTurno decision = null;
+            boolean forzadaALaBasica = false;
+            boolean intentoLaBasica = false;
+
+            for (int intento = 0; intento < OPCIONES_MAXIMAS_POR_TURNO && resultado == null; intento++) {
+                decision = decidir(quien, contra, actor, ronda, usosDeEsteTurno);
+                // Un decisor que insiste en una opcion que el motor ya rechazo
+                // este turno no puede colgar la simulacion: ataque basico.
+                forzadaALaBasica = !decision.esAtaqueBasico() && descartadas.contains(decision.accion());
+                boolean esBasica = decision.esAtaqueBasico() || forzadaALaBasica;
+                resultado = intentar(esBasica ? basica : decision.accion(), quien, contra, rechazadas);
+                if (resultado == null) {
+                    if (esBasica) {
+                        intentoLaBasica = true;
+                        break;
+                    }
+                    descartadas.add(decision.accion());
+                    // Para el decisor, la opcion rechazada ya se uso este turno: pasa a la siguiente.
+                    usosDeEsteTurno.put(decision.accion(), ronda);
+                }
             }
-            if (!rival.rotaciones().isEmpty()) {
+            if (resultado == null && !intentoLaBasica) {
+                forzadaALaBasica = true;
+                resultado = intentar(basica, quien, contra, rechazadas);
+            }
+
+            if (resultado == null) {
+                // Ni el ataque basico fue admitido: el turno se pierde, la
+                // simulacion sigue (el tope de rondas la corta si no hay salida).
+                return new EventoDeCombate.Jugada(nombreDe(decision.accion()), null, false, decision.costoDePoder(),
+                        0, rechazadas, null, decision.decididaPor(), decision.versionDelModelo(),
+                        decision.candidatas());
+            }
+
+            actualizar(resultado.combatientes());
+            if (!forzadaALaBasica) {
+                quien.cursores = decision.cursoresSiguientes();
+            }
+            String ejecutada = nombreDe(resultado.accionEjecutada());
+            // Solo lo que el motor de verdad ejecuto entra en recarga: una
+            // accion jugada en valor base no gasto poder ni quedo en carga.
+            if (!resultado.enValorBase() && !esBasica(resultado.accionEjecutada())) {
+                quien.usos.put(resultado.accionEjecutada(), ronda);
+            }
+            contar(quien, resultado, ejecutada);
+            // Si el simulador tuvo que caer al ataque basico por su cuenta, la decision no fue ni del modelo
+            // ni de la regla de heroes: queda como de la regla y sin lo que el modelo puntuo.
+            boolean delDecisor = !forzadaALaBasica;
+            return new EventoDeCombate.Jugada(nombreDe(decision.accion()), ejecutada, resultado.enValorBase(),
+                    decision.costoDePoder(), Math.max(0, poderAntes - poderDe(combatiente(quien.id))), rechazadas,
+                    resultadoDe(resultado), delDecisor ? decision.decididaPor() : DecididaPor.REGLA,
+                    delDecisor ? decision.versionDelModelo() : null, delDecisor ? decision.candidatas() : List.of());
+        }
+
+        /** Pide la accion al motor; si la rechaza (409) deja constancia y devuelve nulo. */
+        private ResultadoDeAccion intentar(String codigo, Bando quien, Bando contra,
+                                           List<EventoDeCombate.Rechazo> rechazadas) {
+            try {
+                return motor.resolverAccion(codigo, quien.id, contra.id, mesa, registro.siguienteSemilla());
+            } catch (AccionNoPermitida rechazo) {
+                rechazadas.add(new EventoDeCombate.Rechazo(nombreDe(codigo), rechazo.motivo()));
+                return null;
+            }
+        }
+
+        private DecisionDeTurno decidir(Bando quien, Bando contra, Combatiente actor, int ronda,
+                                        Map<String, Integer> usos) {
+            if (!quien.consultaAlDecisor) {
                 // «La IA controla a los enemigos con estrategias predefinidas»
                 // (7.8.6). Sin estrategia, su jugada es el ataque basico y no
                 // hace falta preguntarla.
-                DecisionDeTurno decision = decisor.decidir(new TurnoParaDecidir(
-                        rival.prototipo(), rival.nivel(), rival.rotaciones(), ronda, poderDelRival,
-                        vidaDelRival, usosDelRival, cursoresDelRival));
-                poderDelRival = Math.max(0, poderDelRival - decision.costoDePoder());
-                cursoresDelRival = decision.cursoresSiguientes();
-                if (!decision.esAtaqueBasico()) {
-                    usosDelRival.put(decision.accion(), ronda);
-                }
+                return new DecisionDeTurno(DecisionDeTurno.ATAQUE_BASICO, 0, List.of());
             }
-            Golpe golpe = golpear(rival.prototipo(), heroe.defensa());
-            vidaDelHeroe -= golpe.dano();
-            registro.danoRecibido += golpe.dano();
-            registro.vidaMinima = Math.min(registro.vidaMinima, Math.max(0, vidaDelHeroe));
-            poderDelRival = Math.min(rival.poder(), poderDelRival + PODER_RECUPERADO_POR_TURNO);
+            Combatiente oponente = combatiente(contra.id);
+            ContextoDelDuelo contexto = new ContextoDelDuelo(estadoDe(actor), estadoDe(oponente),
+                    contra.actor.prototipo(), contra.actor.nivel());
+            return decisor.decidir(new TurnoParaDecidir(quien.actor.prototipo(), quien.actor.nivel(), quien.rotaciones,
+                    ronda, poderDe(actor), actor.vidaActual(), usos, quien.cursores, contexto));
         }
 
-        private Golpe golpear(String atacante, int defensa) {
-            try {
-                return resolutor.resolver(atacante, defensa, registro.siguienteSemilla());
-            } catch (SinCapacidadDeAtaque sanador) {
-                return new Golpe(0, false);
+        /** Lo que se cuenta para el reporte (7.8.8): el dano y los criticos, y las habilidades del heroe. */
+        private void contar(Bando quien, ResultadoDeAccion resultado, String ejecutada) {
+            boolean esElHeroe = quien == elHeroe;
+            DetalleDeAtaque golpe = resultado.ataque();
+            if (golpe != null) {
+                if (esElHeroe) {
+                    registro.danoInfligido += golpe.danoAplicado();
+                    if (golpe.critico()) {
+                        registro.criticos++;
+                    }
+                } else {
+                    registro.danoRecibido += golpe.danoAplicado();
+                }
             }
+            if (esElHeroe) {
+                registro.habilidadUsada(ejecutada);
+            }
+        }
+
+        // ------------------------------------------------ lo que queda en el evento
+
+        private EventoDeCombate.Estados estados(Bando quien, Bando contra) {
+            return new EventoDeCombate.Estados(estadoDe(combatiente(quien.id)), estadoDe(combatiente(contra.id)));
+        }
+
+        private EventoDeCombate.EstadoDeCombatiente estadoDe(Combatiente c) {
+            EstadisticasDeCombate e = c.estadisticas();
+            int vidaMaxima = e == null ? Math.max(1, c.vidaActual()) : e.vida();
+            int poderMaximo = e == null ? poderDe(c) : e.poder();
+            List<EventoDeCombate.Recarga> recargas = c.recargas().entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(r -> new EventoDeCombate.Recarga(r.getKey(), r.getValue())).toList();
+            List<EventoDeCombate.EfectoVigente> efectos = c.efectos().stream()
+                    .map(f -> new EventoDeCombate.EfectoVigente(f.nombre(), f.tipo(), f.valor(), f.turnos())).toList();
+            return new EventoDeCombate.EstadoDeCombatiente(c.vidaActual(), vidaMaxima, poderDe(c), poderMaximo,
+                    recargas, efectos);
+        }
+
+        private EventoDeCombate.Resultado resultadoDe(ResultadoDeAccion r) {
+            DetalleDeAtaque a = r.ataque();
+            List<Suceso> sucesos = traducir(r.sucesos());
+            if (a == null) {
+                return new EventoDeCombate.Resultado(null, null, null, null, null, null, null, false, sucesos);
+            }
+            return new EventoDeCombate.Resultado(a.categoria(), a.acierta(), a.ataqueResuelto(), a.defensaObjetivo(),
+                    a.porcentajeDano(), a.danoBase(), a.danoAplicado(), a.critico(), sucesos);
+        }
+
+        /** Los sucesos hablan de HEROE, ENEMIGO, JEFE o MASTER, no de los ids que se le mandaron al motor. */
+        private List<Suceso> traducir(List<Suceso> sucesos) {
+            return sucesos.stream().map(s -> new Suceso(s.tipo(), lado(s.combatiente()), lado(s.origen()),
+                    s.efecto(), s.cantidad())).toList();
+        }
+
+        private String lado(String id) {
+            if (ID_DEL_HEROE.equals(id)) {
+                return EventoDeCombate.Lado.HEROE.name();
+            }
+            if (ID_DEL_RIVAL.equals(id)) {
+                return elRival.actor.lado().name();
+            }
+            return id;
         }
     }
 
-    /** Lo que se va contando para el reporte. */
+    private static EventoDeCombate.Lado ladoDe(TipoDeRival tipo) {
+        return switch (tipo) {
+            case REGULAR -> EventoDeCombate.Lado.ENEMIGO;
+            case MASTER -> EventoDeCombate.Lado.MASTER;
+            case JEFE -> EventoDeCombate.Lado.JEFE;
+        };
+    }
+
+    private static int poderDe(Combatiente c) {
+        if (c.poderActual() != null) {
+            return c.poderActual();
+        }
+        return c.estadisticas() == null ? 0 : c.estadisticas().poder();
+    }
+
+    private static boolean esBasica(String codigo) {
+        return MotorDeCombate.ATAQUE_BASICO.equals(codigo) || MotorDeCombate.SANACION_BASICA.equals(codigo);
+    }
+
+    /** El nombre legible de una accion: las basicas del motor se llaman como las llama heroes. */
+    private static String nombreDe(String codigo) {
+        if (MotorDeCombate.ATAQUE_BASICO.equals(codigo)) {
+            return DecisionDeTurno.ATAQUE_BASICO;
+        }
+        if (MotorDeCombate.SANACION_BASICA.equals(codigo)) {
+            return SANACION_BASICA;
+        }
+        return codigo;
+    }
+
+    /** Lo que se va contando para el reporte y los turnos que se van registrando. */
     private static final class Registro {
 
-        private final HeroeEnMision heroe;
+        private final UUID ejecucionId;
+        private final String misionId;
         private final Long semillaDeGolpes;
         private final int regularesTotales;
-        private long golpesDados;
+        final int vidaMaximaDelHeroe;
+        private long llamadasAlMotor;
+        private int secuencia;
 
         int danoInfligido;
         int danoRecibido;
@@ -223,24 +443,37 @@ public class SimuladorDeMision {
         final Map<String, Integer> usos = new LinkedHashMap<>();
         final Map<String, Integer> derrotados = new LinkedHashMap<>();
         final List<ResultadoDeMision.MasterEnfrentado> masters = new ArrayList<>();
+        final List<EventoDeCombate> eventos = new ArrayList<>();
         int regularesDerrotados;
 
-        Registro(HeroeEnMision heroe, Long semillaDeGolpes, int regularesTotales) {
-            this.heroe = heroe;
+        Registro(UUID ejecucionId, String misionId, HeroeEnMision heroe, PerfilDeCombate perfil,
+                 Long semillaDeGolpes, int regularesTotales) {
+            this.ejecucionId = Objects.requireNonNull(ejecucionId);
+            this.misionId = misionId;
             this.semillaDeGolpes = semillaDeGolpes;
             this.regularesTotales = regularesTotales;
-            this.vidaMinima = heroe.vida();
+            // La vida con que sale el heroe: la de sus estadisticas con equipo; si no se conocen, la de la foto.
+            this.vidaMaximaDelHeroe = perfil.estadisticas() != null ? perfil.estadisticas().vida() : heroe.vida();
+            this.vidaMinima = vidaMaximaDelHeroe;
         }
 
+        /** Cada llamada al motor lleva la semilla siguiente, para que una prueba reproduzca el combate. */
         Long siguienteSemilla() {
             if (semillaDeGolpes == null) {
                 return null;
             }
-            return semillaDeGolpes + golpesDados++;
+            return semillaDeGolpes + llamadasAlMotor++;
         }
 
         void habilidadUsada(String accion) {
             usos.merge(accion, 1, Integer::sum);
+        }
+
+        void evento(int encuentro, String enemigo, int turno, EventoDeCombate.Actor actor,
+                    EventoDeCombate.Actor oponente, EventoDeCombate.Estados antes, List<Suceso> alIniciar,
+                    EventoDeCombate.Jugada jugada, EventoDeCombate.Estados despues) {
+            eventos.add(new EventoDeCombate(ejecucionId, misionId, ++secuencia, encuentro, enemigo, turno, actor,
+                    oponente, antes, alIniciar, jugada, despues));
         }
 
         void derrotado(Rival rival, int dado, double puntos) {
@@ -266,7 +499,7 @@ public class SimuladorDeMision {
          * cayeron todos los regulares, aunque despues el jefe o un Master
          * derrotara al heroe.
          */
-        ResultadoDeMision cerrar(boolean exito) {
+        Simulacion cerrar(boolean exito) {
             boolean regularesCompletos = regularesDerrotados == regularesTotales;
             List<ResultadoDeMision.UsoDeHabilidad> habilidades = usos.entrySet().stream()
                     .sorted(Map.Entry.<String, Integer>comparingByValue(Comparator.reverseOrder()))
@@ -276,10 +509,12 @@ public class SimuladorDeMision {
             List<ResultadoDeMision.EnemigoDerrotado> enemigos = derrotados.entrySet().stream()
                     .map(e -> new ResultadoDeMision.EnemigoDerrotado(e.getKey(), e.getValue()))
                     .toList();
-            int porcentaje = (int) Math.floor(100.0 * vidaMinima / heroe.vida());
-            return new ResultadoDeMision(exito, jefeDerrotado, encuentrosCompletados, regularesCompletos,
-                    danoInfligido, danoRecibido, turnos, criticos, habilidades, enemigos, masters,
+            int porcentaje = (int) Math.floor(100.0 * vidaMinima / vidaMaximaDelHeroe);
+            porcentaje = Math.max(0, Math.min(100, porcentaje));
+            ResultadoDeMision resultado = new ResultadoDeMision(exito, jefeDerrotado, encuentrosCompletados,
+                    regularesCompletos, danoInfligido, danoRecibido, turnos, criticos, habilidades, enemigos, masters,
                     porcentaje, experiencia, dados);
+            return new Simulacion(resultado, eventos);
         }
     }
 }

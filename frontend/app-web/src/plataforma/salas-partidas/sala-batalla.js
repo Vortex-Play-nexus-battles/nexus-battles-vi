@@ -137,7 +137,9 @@ function pintarConexion(zona, hayCanal) {
   if (hayCanal && (actual === 'reconectando' || actual === 'sin-conexion')) {
     return;
   }
-  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion' });
+  // Revisión del modo jugador del 6-oct (puntos 13 y 18): discreto, la
+  // píldora solo se ve cuando hay algo que contar; «Conectado» no se enseña.
+  pintarEstadoDelCanal(zona, { estado: hayCanal ? 'conectado' : 'sin-conexion', discreto: true });
 }
 
 /**
@@ -175,6 +177,11 @@ function explicarVacio(zona, texto) {
  *   abierto aunque todavia no haya partida a la que suscribirse (la sala de
  *   espera sigue la SALA por el canal). Sin el, el indicador se deduce de
  *   `suscribir`.
+ * @param {boolean} [opciones.salaDeEspera] se esta en la sala de espera: se ve
+ *   su tarjeta, no el estado vacio de «no hay ninguna batalla» (revision del
+ *   modo jugador del 6-oct, puntos 13 y 14)
+ * @param {number} [opciones.cuentaAtras] segundos de cuenta atras al presentar
+ *   (punto 17); con ella la presentacion se cierra sola al llegar a cero
  */
 export function montarSalaBatalla(
   raiz,
@@ -187,6 +194,8 @@ export function montarSalaBatalla(
     turnoActual = null,
     presentar = false,
     canalConectado,
+    salaDeEspera = false,
+    cuentaAtras = 0,
   } = {},
 ) {
   const zonaConexion = raiz.querySelector('[data-zona="conexion"]');
@@ -218,7 +227,7 @@ export function montarSalaBatalla(
   }
 
   if (zonaSinPartida) {
-    zonaSinPartida.hidden = hayPartida;
+    zonaSinPartida.hidden = hayPartida || salaDeEspera;
   }
   if (panel) {
     panel.hidden = !hayPartida;
@@ -267,7 +276,7 @@ export function montarSalaBatalla(
     return;
   }
 
-  montarPanelVidas(vidas, { idPartida: id, participantes: enPantalla, suscribir });
+  montarPanelVidas(vidas, { idPartida: id, participantes: enPantalla, suscribir, yo: yo ?? null });
 
   // HU-JUE-017 CA-04 · la presentacion de los heroes.
   //
@@ -284,8 +293,11 @@ export function montarSalaBatalla(
       participantes: enPantalla,
       turnoActual,
       yo: yo ?? null,
+      cuentaAtras,
     });
-    if (typeof suscribir === 'function') {
+    // Con cuenta atras (punto 17) se cierra sola al llegar a cero: lo que
+    // llegue mientras tanto espera en el ritmo del combate.
+    if (typeof suscribir === 'function' && !(cuentaAtras > 0)) {
       suscribir((aviso) => {
         // Cualquier aviso de la partida significa que el combate ya corre.
         if (aviso?.idPartida === id) {
@@ -294,4 +306,49 @@ export function montarSalaBatalla(
       });
     }
   }
+}
+
+/**
+ * El historial del combate — revisión del modo jugador del 6-oct, punto 19:
+ * «Lo que ha pasado» ocupaba la barra de mando y en ese espacio no se leía.
+ * Ahora es un botón «Historial» que lo abre encima de la barra. Cerrado se
+ * oculta a la vista, no al lector de pantalla: lo que pasa se sigue
+ * anunciando una vez, por el registro.
+ *
+ * @param {ParentNode} raiz
+ * @returns {{abrir: () => void, cerrar: () => void}|null}
+ */
+export function montarHistorial(raiz) {
+  const boton = raiz.querySelector('[data-accion="ver-historial"]');
+  const cuerpo = raiz.querySelector('[data-zona="registro"]');
+  if (!boton || !cuerpo) {
+    return null;
+  }
+  // Cerrado no se alcanza con el tabulador (no se ve, y un foco invisible
+  // despista); abierto vuelve a ser alcanzable para desplazarlo con teclado.
+  // El registro se crea al montar los controles, que puede ser antes o
+  // después de esto: se ajusta también cuando aparece.
+  const ajustarFoco = () => {
+    cuerpo
+      .querySelector('[role="log"]')
+      ?.setAttribute('tabindex', cuerpo.dataset.abierto === 'si' ? '0' : '-1');
+  };
+  const poner = (abierto) => {
+    cuerpo.dataset.abierto = abierto ? 'si' : 'no';
+    boton.setAttribute('aria-expanded', String(abierto));
+    boton.textContent = abierto ? 'Ocultar historial' : 'Historial';
+    ajustarFoco();
+  };
+  if (typeof MutationObserver === 'function') {
+    new MutationObserver(ajustarFoco).observe(cuerpo, { childList: true });
+  }
+  boton.addEventListener('click', () => poner(cuerpo.dataset.abierto !== 'si'));
+  (boton.parentElement ?? cuerpo).addEventListener('keydown', (evento) => {
+    if (evento.key === 'Escape' && cuerpo.dataset.abierto === 'si') {
+      poner(false);
+      boton.focus();
+    }
+  });
+  poner(false);
+  return { abrir: () => poner(true), cerrar: () => poner(false) };
 }

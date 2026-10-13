@@ -12,6 +12,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 import java.util.concurrent.Executor;
 
@@ -76,6 +77,28 @@ public class AuditoriaDeCuenta {
         enviar(new Evento("OTRO", quien, quien, null, null, "CIERRE_SESION", ip));
     }
 
+    /** RFINAL-05 (HU-PRV-005) — la persona pidio cerrar su cuenta: cuando se ejecutara. */
+    public void cierreDeCuentaSolicitado(UUID uid, LocalDateTime programadoPara, String ip) {
+        enviar(new Evento("OTRO", texto(uid), texto(uid), null, "programado=" + programadoPara,
+                "CIERRE_CUENTA_SOLICITADO", ip));
+    }
+
+    /** RFINAL-05 (HU-PRV-005) — la persona se arrepintio antes del plazo. */
+    public void cierreDeCuentaCancelado(UUID uid, String ip) {
+        enviar(new Evento("OTRO", texto(uid), texto(uid), "PROGRAMADO", "CANCELADO",
+                "CIERRE_CUENTA_CANCELADO", ip));
+    }
+
+    /**
+     * RFINAL-05 (HU-PRV-005) — vencido el plazo, el sistema anonimizo la
+     * cuenta. Solo el uid: despues de esto no hay otro dato que lo una a una
+     * persona, y este asiento se conserva (RF-AUD-005).
+     */
+    public void cuentaAnonimizada(UUID uid) {
+        enviar(new Evento("ELIMINACION_LOGICA", SISTEMA, texto(uid), null, "ELIMINADO",
+                "DERECHO_AL_OLVIDO", null));
+    }
+
     /** B1 — la cuenta confirmo su correo con el codigo y paso a ACTIVO. */
     public void correoVerificado(UUID uid, String ip) {
         enviar(new Evento("ACTUALIZACION", texto(uid), texto(uid), "PENDIENTE_VERIFICACION", "ACTIVO",
@@ -98,6 +121,19 @@ public class AuditoriaDeCuenta {
     public void preguntasConfiguradas(String afectado, int cantidad, String ip) {
         enviar(new Evento("ACTUALIZACION", afectado, afectado, null, "preguntas=" + cantidad,
                 "PREGUNTAS_SEGURIDAD", ip));
+    }
+
+    /**
+     * HU-AUT-007 — la persona activo o desactivo su segundo factor, o entro con
+     * un codigo de recuperacion. Nunca lleva el secreto ni ningun codigo.
+     *
+     * @param afectado   uid de la cuenta, o su clave interna si no tiene uid
+     * @param motivo     {@code SEGUNDO_FACTOR_ACTIVADO}, {@code SEGUNDO_FACTOR_DESACTIVADO}
+     *                   o {@code CODIGO_RECUPERACION_USADO}
+     * @param valorNuevo {@code totp}, {@code sin-segundo-factor} o cuantos codigos quedan
+     */
+    public void segundoFactor(String afectado, String motivo, String valorNuevo, String ip) {
+        enviar(new Evento("ACTUALIZACION", afectado, afectado, null, valorNuevo, motivo, ip));
     }
 
     public void altaCompletada(UUID uid, String resumen) {

@@ -1,0 +1,84 @@
+/* =======================================================================
+   Banner informativo rotativo de la home — RF-NOT-002 (HU-NOT-002, #533)
+   -----------------------------------------------------------------------
+   La forma del aviso es la del kit (`.banner`, `.banner__icono`,
+   `.banner__cuerpo`, `.banner__titulo`, `.banner__vigencia`). Aquí solo va
+   lo que el kit no trae: el reparto en pantallas estrechas y los controles
+   del carrusel. El `.banner__punto` del kit mide 8 px y su relleno
+   (`--pista`) no llega a 3:1 sobre `--info-insignia` (WCAG 1.4.11); estos
+   puntos ocupan 24 × 44 px y se dibujan con `--info`, como los del banner
+   de misiones.
+   ======================================================================= */
+
+/* El fondo del aviso es claro (`--info-insignia`) pero la home pinta su texto
+   sobre la atmósfera oscura: sin fijar la tinta aquí, el título heredaba el
+   color claro de la portada y no llegaba al contraste AA (axe, home-poblada). */
+.banner-rotativo {
+  flex-wrap: wrap;
+  color: var(--texto);
+}
+
+.banner-rotativo .banner__cuerpo {
+  min-width: min(100%, 16rem);
+}
+
+.banner-rotativo .banner__titulo,
+.banner-rotativo .banner__vigencia {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.banner-rotativo .banner__vigencia {
+  margin-top: var(--e-1);
+}
+
+.banner-rotativo__controles {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin-left: auto;
+}
+
+/* Anterior apunta a la izquierda: es el mismo chevron, girado. */
+.banner-rotativo__anterior .icono {
+  transform: rotate(180deg);
+}
+
+.banner-rotativo__puntos {
+  display: flex;
+  align-items: center;
+}
+
+/* El punto se ve de 10 px, pero el objetivo es el botón entero (24 × 44). */
+.banner-rotativo__punto {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: var(--objetivo-tactil);
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.banner-rotativo__punto::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--info);
+  background: transparent;
+}
+
+/* El actual va relleno Y más ancho: no se distingue solo por el color. */
+.banner-rotativo__punto[aria-current='true']::before {
+  width: 20px;
+  border-radius: var(--radio-pildora);
+  background: var(--info);
+}
+
+.banner-rotativo__punto:focus-visible {
+  outline: var(--foco-grosor) solid var(--primaria);
+  outline-offset: -2px;
+  border-radius: var(--radio-chico);
+}

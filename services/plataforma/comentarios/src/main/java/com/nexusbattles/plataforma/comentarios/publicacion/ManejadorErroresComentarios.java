@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
@@ -79,6 +80,22 @@ public class ManejadorErroresComentarios {
     @ExceptionHandler(IllegalArgumentException.class)
     public ProblemDetail manejarSolicitudInvalida(IllegalArgumentException ex) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
+    /**
+     * Un parametro de consulta o de ruta que no se puede convertir a su tipo (un
+     * valor fuera de un enum, un texto donde va un numero): 400 con el nombre del
+     * parametro. Sin este manejador la excepcion llegaba al de
+     * {@link IllegalArgumentException} por su cadena de causas, y el detalle
+     * mostraba el texto crudo de Spring con el nombre de una clase interna.
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ProblemDetail manejarParametroInvalido(MethodArgumentTypeMismatchException ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
+                "El parametro '" + ex.getName() + "' no tiene un valor valido");
+        problema.setType(URI.create(ERRORES + "parametro-invalido"));
+        problema.setTitle("Parametro no valido");
+        return problema;
     }
 
     /** RF-USR-004 (HU-COM-001, CA-03): sin poder comprobar la sancion no se publica. */
@@ -207,6 +224,35 @@ public class ManejadorErroresComentarios {
         ProblemDetail problema =
                 ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
         problema.setProperty("motivo", "TRANSICION_INVALIDA");
+        return problema;
+    }
+
+    /**
+     * ELIMINAR en lote sin la confirmacion exacta (7.3.9): 400 con su propio
+     * motivo. Es mas especifico que el de {@code DecisionIncompleta}, de la que
+     * hereda, asi que Spring elige este.
+     */
+    @ExceptionHandler(ServicioDeModeracion.ConfirmacionRequerida.class)
+    public ProblemDetail manejarConfirmacionRequerida(ServicioDeModeracion.ConfirmacionRequerida ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, ex.getMessage());
+        problema.setProperty("motivo", "CONFIRMACION_REQUERIDA");
+        return problema;
+    }
+
+    /** Decision en lote (contrato 1.10.0): 404 con todos los ids que faltan, en el orden recibido. */
+    @ExceptionHandler(ServicioDeModeracion.ComentariosNoEncontrados.class)
+    public ProblemDetail manejarComentariosNoEncontrados(ServicioDeModeracion.ComentariosNoEncontrados ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, ex.getMessage());
+        problema.setProperty("comentarioIds", ex.ids());
+        return problema;
+    }
+
+    /** Decision en lote (contrato 1.10.0): 409 con todos los ids que no admiten la accion, en el orden recibido. */
+    @ExceptionHandler(ServicioDeModeracion.TransicionInvalidaEnLote.class)
+    public ProblemDetail manejarTransicionInvalidaEnLote(ServicioDeModeracion.TransicionInvalidaEnLote ex) {
+        ProblemDetail problema = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, ex.getMessage());
+        problema.setProperty("motivo", "TRANSICION_INVALIDA");
+        problema.setProperty("comentarioIds", ex.ids());
         return problema;
     }
 

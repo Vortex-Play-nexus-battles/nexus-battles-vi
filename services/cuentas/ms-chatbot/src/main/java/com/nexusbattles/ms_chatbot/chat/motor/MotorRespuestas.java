@@ -1,8 +1,14 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
+import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 import org.springframework.stereotype.Service;
 
@@ -10,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -65,8 +72,30 @@ public class MotorRespuestas {
 
     /** Responde con la versión de la base de conocimiento que está en producción. */
     public ResultadoMotor generarRespuesta(String mensajeUsuario) {
-        return responderCon(mensajeUsuario,
-            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION));
+        return generarRespuesta(mensajeUsuario, null);
+    }
+
+    /**
+     * ms-chatbot.yaml 1.3.4: como {@link #generarRespuesta(String)}, sabiendo
+     * en qué sección está el jugador. La vista desempata entre temas con el
+     * mismo puntaje y, si la consulta se escala, aporta preguntas de su tema.
+     */
+    public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista) {
+        return generarRespuesta(mensajeUsuario, vista, PreferenciasDeRespuesta.POR_DEFECTO);
+    }
+
+    /**
+     * ms-chatbot.yaml 1.3.6 (7.4.5): como {@link #generarRespuesta(String, VistaDelChat)},
+     * con las preferencias de quien pregunta: el idioma de la respuesta (si el
+     * tema lo tiene) y el nivel de detalle. Con las preferencias por defecto
+     * responde exactamente igual que sin ellas.
+     */
+    public ResultadoMotor generarRespuesta(String mensajeUsuario, VistaDelChat vista,
+                                           PreferenciasDeRespuesta preferencias) {
+        List<TemaConocimiento> temas =
+            temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION);
+        return responderCon(mensajeUsuario, temas, vista,
+            preferencias == null ? PreferenciasDeRespuesta.POR_DEFECTO : preferencias);
     }
 
     /**
@@ -75,7 +104,17 @@ public class MotorRespuestas {
      * sin activarla. Solo se tienen en cuenta los temas activos.
      */
     public ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas) {
+        return responderCon(mensajeUsuario, temas, null, PreferenciasDeRespuesta.POR_DEFECTO);
+    }
+
+    private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temas, VistaDelChat vista,
+                                        PreferenciasDeRespuesta preferencias) {
+        Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
+        Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
+        if (porTitulo.isPresent()) {
+            return deTema(porTitulo.get(), false, temas, preferencias);
+        }
         List<String> palabrasMensaje = List.of(mensajeNormalizado.split(" "));
 
         Coincidencia mejor = null;
@@ -94,22 +133,20 @@ public class MotorRespuestas {
             if (puntaje > 0) {
                 Coincidencia coincidencia = new Coincidencia(tema, puntaje, esIngles);
                 todas.add(coincidencia);
-                if (esMejor(coincidencia, mejor)) {
+                if (esMejor(coincidencia, mejor, preferida)) {
                     mejor = coincidencia;
                 }
             }
         }
 
         if (mejor != null && mejor.puntaje() >= UMBRAL_CONFIANZA) {
-            TemaConocimiento tema = mejor.tema();
-            String texto = mejor.esIngles() ? tema.getContenidoRespuestaEn() : tema.getContenidoRespuestaEs();
-            if (texto == null || texto.isBlank()) {
-                texto = tema.getContenidoRespuestaEs();
-            }
-            return ResultadoMotor.deTema(texto, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave());
+            return deTema(mejor.tema(), mejor.esIngles(), temas, preferencias);
         }
 
+        // Los temas de cortesia (saludo, despedida) no son "preguntas
+        // relacionadas": nadie necesita que le sugieran decir "hola".
         List<String> sugerencias = todas.stream()
+            .filter(c -> !Enriquecedor.esDeCortesia(c.tema()))
             .sorted(Comparator.comparingInt(Coincidencia::puntaje).reversed())
             .map(c -> c.tema().getTitulo())
             .distinct()
@@ -120,18 +157,74 @@ public class MotorRespuestas {
             + "Puedo ponerte en contacto con soporte humano para resolverla; "
             + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
 
-        return ResultadoMotor.escalado(textoEscalamiento, sugerencias);
+        return ResultadoMotor.escalado(textoEscalamiento, sugerencias)
+            .conEnriquecido(Enriquecedor.paraEscalamiento(sugerencias, temas, vista));
+    }
+
+    // 1.3.4: la respuesta de un tema lleva sus pasos, el enlace a su sección y
+    // otras preguntas de su categoría.
+    // 1.3.6: el idioma lo decide la preferencia (AUTOMATICO: el de la
+    // pregunta) y, si el tema no tiene texto en ingles, queda en espanol. Lo
+    // enriquecido se arma con el texto completo; el nivel de detalle solo
+    // cambia el texto que se muestra.
+    private static ResultadoMotor deTema(TemaConocimiento tema, boolean preguntaEnIngles, List<TemaConocimiento> temas,
+                                         PreferenciasDeRespuesta preferencias) {
+        boolean ingles = enIngles(preguntaEnIngles, preferencias.idioma());
+        String texto = ingles ? tema.getContenidoRespuestaEn() : tema.getContenidoRespuestaEs();
+        if (texto == null || texto.isBlank()) {
+            texto = tema.getContenidoRespuestaEs();
+            ingles = false;
+        }
+        RespuestaEnriquecida enriquecida = Enriquecedor.paraTema(tema, texto, temas);
+        String mostrado = AjusteDeDetalle.aplicar(texto, tema.getTipoRespuesta(), preferencias.nivelDetalle(),
+            enriquecida.respuestasRapidas(), ingles);
+        return ResultadoMotor.deTema(mostrado, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
+            .conEnriquecido(enriquecida);
+    }
+
+    private static boolean enIngles(boolean preguntaEnIngles, IdiomaPreferido idioma) {
+        return switch (idioma) {
+            case ES -> false;
+            case EN -> true;
+            case AUTOMATICO -> preguntaEnIngles;
+        };
+    }
+
+    // ms-chatbot.yaml 1.3.3: el titulo de un tema, tal cual (sin importar
+    // tildes ni mayusculas), es una pregunta de ese tema. Es lo que manda la
+    // ventana al pulsar una sugerencia (GET /chat/sugerencias) o una de las
+    // "preguntas relacionadas" de un escalamiento, que tambien son titulos.
+    // Sin esto, pulsar una sugerencia podia no alcanzar el umbral y escalar.
+    private static Optional<TemaConocimiento> temaConElTitulo(String mensajeNormalizado,
+                                                              List<TemaConocimiento> temas) {
+        if (mensajeNormalizado.isEmpty()) {
+            return Optional.empty();
+        }
+        return temas.stream()
+            .filter(TemaConocimiento::isActivo)
+            .filter(tema -> mensajeNormalizado.equals(NormalizadorTexto.normalizar(tema.getTitulo())))
+            .max(Comparator.comparingInt(TemaConocimiento::getPrioridad));
     }
 
     // HU-CHA-012: a igual puntaje gana el tema de mayor prioridad. Sin esto,
     // un empate lo decidia el orden en que la base devolvia las filas, que no
     // esta garantizado y podia cambiar entre una consulta y otra.
-    private static boolean esMejor(Coincidencia candidata, Coincidencia actual) {
+    // 1.3.4: con la vista del jugador, a igual puntaje gana primero el tema de
+    // la categoria de esa vista (en «Subastas», una duda sobre "comprar" es de
+    // subastas antes que de la tienda); despues, la prioridad.
+    private static boolean esMejor(Coincidencia candidata, Coincidencia actual, Categoria preferida) {
         if (actual == null || candidata.puntaje() > actual.puntaje()) {
             return true;
         }
-        return candidata.puntaje() == actual.puntaje()
-            && candidata.tema().getPrioridad() > actual.tema().getPrioridad();
+        if (candidata.puntaje() != actual.puntaje()) {
+            return false;
+        }
+        boolean candidataEsDeLaVista = preferida != null && candidata.tema().getCategoria() == preferida;
+        boolean actualEsDeLaVista = preferida != null && actual.tema().getCategoria() == preferida;
+        if (candidataEsDeLaVista != actualEsDeLaVista) {
+            return candidataEsDeLaVista;
+        }
+        return candidata.tema().getPrioridad() > actual.tema().getPrioridad();
     }
 
     private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas) {

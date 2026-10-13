@@ -13,10 +13,14 @@
  *    rinde peor, el servicio responde 409 con los dos resultados y aquí se
  *    muestran los casos que fallan.
  * 4. **Revertir**: vuelve a la versión que estuvo en producción justo antes.
+ * 5. **Programar** (ms-chatbot.yaml 1.3.8, 7.4.10): la candidata se publica
+ *    sola en una fecha y hora, con la misma evaluación del paso 3. Si no la
+ *    pasa, queda sin programar y aquí se avisa.
  *
  * @module cuentas/panel-chatbot-reentrenamiento
  */
 
+import { aviso as crearAviso } from '../comun/ui/aviso.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { campo } from '../comun/ui/campo.js';
 import { abrirDialogo, confirmar } from '../comun/ui/dialogo.js';
@@ -28,7 +32,7 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../comun/ui/estado-vista.js';
-import { numero, porcentaje } from '../comun/ui/formato.js';
+import { fechaHora, numero, porcentaje } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
 import { textoDeArchivo } from './panel-chatbot-base.js';
@@ -36,6 +40,39 @@ import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
 
 /** Texto del «tema esperado» cuando el caso pide escalar. */
 export const DEBE_ESCALAR = 'Debe escalar a soporte';
+
+/** Anticipación mínima de una publicación programada (la del servicio). */
+export const ANTICIPACION_MINIMA_MS = 60_000;
+
+/**
+ * Instante ISO-8601 de lo que eligió el administrador en un campo
+ * `datetime-local` (hora de su navegador), o null si está vacío o no es una
+ * fecha.
+ *
+ * @param {string} valor p. ej. `2026-10-01T10:00`
+ * @returns {string|null}
+ */
+export function instanteDeFechaLocal(valor) {
+  if (!valor) {
+    return null;
+  }
+  const momento = new Date(valor);
+  return Number.isNaN(momento.getTime()) ? null : momento.toISOString();
+}
+
+/**
+ * Valor para el `min` de un `datetime-local`: el momento dado, en hora local
+ * y sin segundos.
+ *
+ * @param {Date} momento
+ * @returns {string} `AAAA-MM-DDTHH:MM`
+ */
+export function fechaLocalParaCampo(momento) {
+  const dos = (n) => String(n).padStart(2, '0');
+  return `${momento.getFullYear()}-${dos(momento.getMonth() + 1)}-${dos(momento.getDate())}T${dos(
+    momento.getHours(),
+  )}:${dos(momento.getMinutes())}`;
+}
 
 /**
  * Nombre legible de una clave de tema: su título si se conoce.
@@ -407,7 +444,105 @@ export function montarReentrenamiento(
       encabezado,
       h('div', { clase: 'acciones', hijos: [evaluar, desplegar] }),
       resultado,
+      bloqueDeProgramacion(candidata),
     );
+  }
+
+  // ------------------------------------------- publicación programada
+
+  function bloqueDeProgramacion(candidata) {
+    const bloque = h('div', { clase: 'pila', datos: { zona: 'programacion' } });
+    if (candidata.programacionRechazadaEn) {
+      bloque.append(
+        crearAviso({
+          tono: 'advertencia',
+          titulo: `La publicación programada no se hizo (${fechaHora(candidata.programacionRechazadaEn)}).`,
+          detalle:
+            'Al llegar la hora, la candidata rendía peor que producción o no había casos de evaluación activos. Revísala y vuelve a programarla.',
+        }),
+      );
+    }
+    if (candidata.despliegueProgramadoEn) {
+      const cancelar = h('button', {
+        clase: 'boton boton--secundario',
+        texto: 'Cancelar programación',
+        atributos: { type: 'button' },
+        datos: { accion: 'cancelar-programacion' },
+      });
+      cancelar.addEventListener('click', async () => {
+        avisar(null);
+        conCarga(cancelar, true, 'Cancelando…');
+        let mensaje;
+        try {
+          await cliente.cancelarProgramacion();
+          mensaje = 'Se canceló la publicación programada.';
+        } catch (error) {
+          mensaje = textoDeErrorDelPanel(error).titulo;
+        }
+        await recargarYAvisar(mensaje);
+      });
+      bloque.append(
+        h('p', {
+          datos: { zona: 'programada' },
+          texto: `La versión ${candidata.numero} se publicará sola el ${fechaHora(
+            candidata.despliegueProgramadoEn,
+          )}, si al llegar la hora no rinde peor que producción.`,
+        }),
+        h('div', { clase: 'acciones', hijos: [cancelar] }),
+      );
+      return bloque;
+    }
+
+    const cuando = campo({
+      nombre: 'desplegarEn',
+      etiqueta: 'Publicar automáticamente el',
+      tipo: 'datetime-local',
+      pista: 'Hora de tu navegador. Al llegar, se evalúa igual que con «Desplegar».',
+      atributos: { min: fechaLocalParaCampo(new Date(Date.now() + ANTICIPACION_MINIMA_MS)) },
+    });
+    const programar = h('button', {
+      clase: 'boton boton--secundario',
+      texto: 'Programar publicación',
+      atributos: { type: 'submit' },
+      datos: { accion: 'programar' },
+    });
+    const formulario = h('form', {
+      clase: 'panel-chatbot__filtros',
+      atributos: { novalidate: true },
+      hijos: [cuando.elemento, programar],
+    });
+    formulario.addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      const instante = instanteDeFechaLocal(cuando.control.value);
+      if (!instante) {
+        cuando.marcarError('Elige la fecha y la hora.');
+        cuando.control.focus();
+        return;
+      }
+      if (new Date(instante).getTime() < Date.now() + ANTICIPACION_MINIMA_MS) {
+        cuando.marcarError('Elige un momento al menos un minuto en el futuro.');
+        cuando.control.focus();
+        return;
+      }
+      cuando.marcarError(null);
+      avisar(null);
+      conCarga(programar, true, 'Programando…');
+      let mensaje;
+      try {
+        const version = await cliente.programarDespliegue(instante);
+        mensaje = `La versión ${version.numero} se publicará sola el ${fechaHora(
+          version.despliegueProgramadoEn,
+        )}.`;
+      } catch (error) {
+        mensaje =
+          error?.estado === 400
+            ? 'No se pudo programar: elige un momento entre un minuto y 90 días desde ahora.'
+            : textoDeErrorDelPanel(error).titulo;
+      }
+      await recargarYAvisar(mensaje);
+    });
+    bloque.append(formulario);
+    return bloque;
   }
 
   function textoDeFalloDeEvaluacion(error) {

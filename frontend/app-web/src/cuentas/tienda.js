@@ -80,6 +80,7 @@ import { olvidarSesion } from '../comun/sesion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
 import { h } from '../comun/ui/dom.js';
+import { motion } from '../comun/ui/motion.js';
 import { construirPaginacion } from '../comun/paginacion.js';
 import { abrirFicha } from '../contenido/inventario/ficha-producto.js';
 import { complementoDeOpiniones } from '../plataforma/comentarios/hilo-comentarios.js';
@@ -93,6 +94,7 @@ import {
 } from './tienda-catalogo.js';
 import {
   MODOS,
+  apagarAnadirPorPropio,
   bloqueDeCompra,
   distintivoDePropiedad,
   tarjetaDeProducto,
@@ -145,8 +147,9 @@ const MOTIVOS_DE_CANTIDAD = Object.freeze({
  *
  * La clave es el `type` del problem detail: la interfaz decide por él y nunca
  * por el texto del servidor, que puede cambiar de redacción sin aviso
- * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco son los que declara
- * `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0.
+ * (`shared/ui-kit/MAPEO-ERRORES.md` §2). Los cinco primeros son los que
+ * declara `POST /carrito/items` en `ecommerce-carrito.yaml` 1.2.0; el sexto,
+ * lo ya adquirido, llegó en la 1.5.0.
  */
 const MOTIVOS_DEL_CARRITO = Object.freeze({
   'urn:nexus:problema:producto-inexistente': {
@@ -168,6 +171,11 @@ const MOTIVOS_DEL_CARRITO = Object.freeze({
   [TIPO_CATALOGO_NO_DISPONIBLE]: {
     titulo: 'La tienda no puede consultar el catálogo ahora mismo',
     detalle: 'Tu carrito no cambió. Inténtalo de nuevo en unos segundos.',
+  },
+  // ecommerce-carrito 1.5.0 — RF-CAR-004: lo ya adquirido no entra a la cesta.
+  'urn:nexus:problema:producto-ya-adquirido': {
+    titulo: 'Ya tienes este producto',
+    detalle: 'Está en tu inventario: la tienda no lo vende dos veces.',
   },
 });
 
@@ -459,6 +467,26 @@ export function pintarCatalogo(doc = document) {
     const { precioMinimo, precioMaximo } = vista.criterios;
     const rangoAlReves =
       Number.isFinite(precioMinimo) && Number.isFinite(precioMaximo) && precioMinimo > precioMaximo;
+    if (soloLaListaDeDeseos(vista.criterios)) {
+      // La lista de deseos vacía no es «ningún producto coincide»: es que
+      // todavía no se guardó nada, y se dice cómo.
+      pintarEn(
+        rejilla,
+        estadoVacio({
+          titulo: 'Tu lista de deseos está vacía',
+          detalle: 'Pulsa el corazón de un producto para guardarlo aquí y encontrarlo después.',
+          icono: '♡',
+          accion: {
+            texto: 'Ver toda la tienda',
+            nombre: 'limpiar-filtros',
+            alPulsar: () => limpiarFiltros(doc),
+          },
+        }),
+      );
+      pintarResultado(doc, 'Tu lista de deseos está vacía.');
+      pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
+      return;
+    }
     pintarEn(
       rejilla,
       estadoVacio({
@@ -474,7 +502,12 @@ export function pintarCatalogo(doc = document) {
         },
       }),
     );
-    pintarResultado(doc, `Ningún producto coincide de ${vista.productos.length} a la venta.`);
+    // Auditoría de DEV del 30-sep: «Ningún producto coincide de 56 a la
+    // venta.» sonaba raro.
+    pintarResultado(
+      doc,
+      `Ningún producto coincide; hay ${textoDeUnidades(vista.productos.length)} a la venta.`,
+    );
     pintarPaginacion(doc, { paginaActual: 0, totalPaginas: 0 });
     return;
   }
@@ -492,15 +525,34 @@ export function pintarCatalogo(doc = document) {
   );
 
   const total = vista.productos.length;
-  let resumen = hayCriterios(vista.criterios)
-    ? `${encontrados.length} de ${total} productos coinciden.`
-    : `${textoDeUnidades(total)} a la venta.`;
+  let resumen;
+  if (soloLaListaDeDeseos(vista.criterios)) {
+    resumen =
+      encontrados.length === 1
+        ? '1 producto en tu lista de deseos.'
+        : `${encontrados.length} productos en tu lista de deseos.`;
+  } else {
+    resumen = hayCriterios(vista.criterios)
+      ? `${encontrados.length} de ${total} productos coinciden.`
+      : `${textoDeUnidades(total)} a la venta.`;
+  }
   if (!vista.completo) {
     resumen +=
       ' Hay más en el catálogo de los que se cargan de una vez: busca o filtra por tipo para encontrarlos.';
   }
   pintarResultado(doc, resumen);
   pintarPaginacion(doc, { paginaActual: vista.pagina, totalPaginas });
+}
+
+/**
+ * ¿Se está mirando solo la lista de deseos, sin más criterios? Entonces la
+ * vista habla de «tu lista» y no de coincidencias.
+ *
+ * @param {import('./tienda-catalogo.js').Criterios} criterios
+ * @returns {boolean}
+ */
+function soloLaListaDeDeseos(criterios = {}) {
+  return Boolean(criterios.soloDeseos) && !hayCriterios({ ...criterios, soloDeseos: false });
 }
 
 /** La línea de resultados (`role="status"`), si la vista la tiene. */
@@ -545,6 +597,13 @@ function marcarPropias(doc) {
       continue;
     }
     tarjeta.dataset.propio = 'si';
+    const anadir = tarjeta.querySelector('.btn-add');
+    if (anadir) {
+      apagarAnadirPorPropio(
+        anadir,
+        tarjeta.querySelector('.product-card__nombre')?.textContent?.trim() || null,
+      );
+    }
     let zona = tarjeta.querySelector('.product-card__distintivos');
     if (!zona) {
       zona = h('div', { clase: 'product-card__distintivos' });
@@ -575,6 +634,7 @@ export function leerCriterios(formulario) {
     precioMinimo: numero('precioMinimo'),
     precioMaximo: numero('precioMaximo'),
     soloPromocion: Boolean(formulario.elements.namedItem('soloPromocion')?.checked),
+    soloDeseos: Boolean(formulario.elements.namedItem('soloDeseos')?.checked),
     orden: formulario.elements.namedItem('orden')?.value ?? 'catalogo',
   };
 }
@@ -596,6 +656,7 @@ function pintarResumenDeFiltros(formulario, criterios) {
     Number.isFinite(criterios.precioMinimo),
     Number.isFinite(criterios.precioMaximo),
     criterios.soloPromocion,
+    criterios.soloDeseos,
   ].filter(Boolean).length;
   let texto = 'Filtros y orden';
   if (activos === 1) {
@@ -827,6 +888,14 @@ export async function agregarAlCarrito(productoId, doc = document) {
     // despliega para que se lea donde se esperaba ver el producto.
     desplegarCarrito(doc);
     console.error('El carrito rechazó el producto:', respuesta.status, problema?.type);
+    // RFINAL-04 — el servidor es la autoridad: si dice que ya lo tienes, la
+    // vista lo aprende y apaga «Añadir» de ese producto (tarjeta y detalle).
+    if (problema?.type === 'urn:nexus:problema:producto-ya-adquirido') {
+      const { propias } = estadoDe(doc);
+      propias.set(String(productoId), Math.max(1, propias.get(String(productoId)) ?? 0));
+      marcarPropias(doc);
+      return { ok: false, propio: true, ...mensaje };
+    }
     return { ok: false, ...mensaje };
   }
 
@@ -834,6 +903,13 @@ export async function agregarAlCarrito(productoId, doc = document) {
   olvidarIntentoDePago(doc);
   await cargarCarrito(doc);
   anunciarEnLaInsignia(doc, 'Añadido al carrito.');
+  // MOTION-3 — la insignia del carrito pulsa una vez: el ojo va a donde
+  // acaba de cambiar el numero. El texto de arriba ya lo dijo.
+  const insignia =
+    doc.querySelector('.insignia-carrito__cuenta') ?? doc.getElementById('insignia-carrito');
+  if (insignia) {
+    motion.pulse(insignia, { escala: 1.15 });
+  }
   return { ok: true };
 }
 
@@ -1009,6 +1085,10 @@ export async function alternarDeseo(productoId, doc = document) {
     texto = desear
       ? `«${nombre}» está en tu lista de deseos.`
       : `«${nombre}» salió de tu lista de deseos.`;
+    // Mirando la lista de deseos, lo que sale de ella deja de verse.
+    if (!desear && vista.criterios?.soloDeseos) {
+      pintarCatalogo(doc);
+    }
   } else {
     texto = textoDelFalloDeDeseo(resultado, desear);
   }
@@ -1263,10 +1343,36 @@ export function actualizarUI(carrito, doc = document) {
 
   contenedor.replaceChildren(...carrito.items.map((item) => lineaDelCarrito(item, moneda)));
 
-  const totalTexto = textoDePrecio(aImporte(carrito.total), moneda) ?? 'Sin total';
+  const totalTexto = textoDelTotal(carrito, moneda);
   subtotal.textContent = totalTexto;
   total.textContent = totalTexto;
   prepararBotonDePago(botonPagar, carrito, doc);
+}
+
+/**
+ * El total del carrito, como lo da el servidor (`total`, en dinero real).
+ *
+ * G3 (1.7.0): las líneas que solo se venden en créditos no suman a ese total.
+ * Si las hay, se dice que se pagan con créditos —la cifra en créditos la da
+ * el servidor al pagar (`GET /checkout/creditos`)— en vez de enseñar «0 COP»
+ * como si no costaran nada.
+ *
+ * @param {object} carrito
+ * @param {string|null} moneda
+ * @returns {string}
+ */
+function textoDelTotal(carrito, moneda) {
+  const importe = aImporte(carrito.total);
+  const texto = textoDePrecio(importe, moneda);
+  const conCreditos = carrito.items.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
+  if (!conCreditos) {
+    return texto ?? 'Sin total';
+  }
+  return importe !== null && importe > 0
+    ? `${texto} + créditos del juego`
+    : 'Con créditos del juego';
 }
 
 /**
@@ -1324,14 +1430,10 @@ function lineaDelCarrito(item, moneda) {
     datos: {
       ...(lineaId !== null ? { itemId: String(lineaId) } : {}),
       disponible: fila.disponible ? 'si' : 'no',
+      ...(fila.soloEnCreditos ? { soloEnCreditos: 'si' } : {}),
     },
     hijos: [
-      fila.imagen
-        ? h('img', {
-            clase: 'item-imagen',
-            atributos: { src: fila.imagen, alt: '', loading: 'lazy', decoding: 'async' },
-          })
-        : null,
+      fila.imagen ? imagenDeLinea(fila.imagen) : null,
       h('div', {
         clase: 'item-info',
         hijos: [
@@ -1353,6 +1455,22 @@ function lineaDelCarrito(item, moneda) {
       }),
     ],
   });
+}
+
+/**
+ * La miniatura de una línea del carrito. Si la imagen del catálogo no existe,
+ * se quita: una línea sin miniatura se lee igual, una imagen rota no.
+ *
+ * @param {string} src
+ * @returns {HTMLImageElement}
+ */
+function imagenDeLinea(src) {
+  const imagen = h('img', {
+    clase: 'item-imagen',
+    atributos: { src, alt: '', loading: 'lazy', decoding: 'async' },
+  });
+  imagen.addEventListener('error', () => imagen.remove(), { once: true });
+  return imagen;
 }
 
 /**
@@ -1397,13 +1515,18 @@ function prepararBotonDePago(boton, carrito, doc) {
   }
   const lineas = Array.isArray(carrito?.items) ? carrito.items : [];
   const total = aImporte(carrito?.total);
+  // G3 (1.7.0): una línea que solo se vende en créditos no suma al total en
+  // dinero real, pero se paga (con créditos): también es algo que pagar.
+  const hayQuePagarConCreditos = lineas.some(
+    (item) => item?.soloEnCreditos === true && item?.disponible !== false,
+  );
   let motivo = '';
   if (lineas.some((item) => item?.disponible === false)) {
     motivo = 'Quita o corrige lo que ya no se puede comprar para pagar el resto.';
   } else if (carrito?.preciosVigentes === false) {
     motivo =
       'No se pudieron confirmar los precios con el catálogo. Vuelve a intentarlo en unos segundos.';
-  } else if (total === null || total <= 0) {
+  } else if ((total === null || total <= 0) && !hayQuePagarConCreditos) {
     motivo = 'Tu carrito no tiene un total que pagar.';
   }
   boton.disabled = motivo !== '';
@@ -1511,6 +1634,12 @@ export function montarTienda(doc = document) {
   doc.getElementById('btn-mis-compras')?.addEventListener('click', () => abrirMisCompras());
 
   vista.cajon = montarCajonDelCarrito(doc);
+  // La lista de deseos es de la cuenta: sin sesión la vitrina no la marca y
+  // el filtro no tendría nada que enseñar.
+  const filtroDeDeseos = doc.querySelector('[data-zona="filtro-deseos"]');
+  if (filtroDeDeseos) {
+    filtroDeDeseos.hidden = !haySesion();
+  }
   montarFiltros(doc);
   montarMoneda(doc);
 

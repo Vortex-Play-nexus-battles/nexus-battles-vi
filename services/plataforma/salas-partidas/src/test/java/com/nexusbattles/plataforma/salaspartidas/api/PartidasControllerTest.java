@@ -58,6 +58,9 @@ class PartidasControllerTest {
     @MockitoBean
     private MisPartidas misPartidas;
 
+    @MockitoBean
+    private com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion ejecutarAccion;
+
     private static RequestPostProcessor jugador() {
         return conRol("ROLE_JUGADOR");
     }
@@ -203,5 +206,48 @@ class PartidasControllerTest {
 
         mockMvc.perform(get("/api/v1/partidas/mias"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    // ---- 1.10.0 · rendirse (revision del modo jugador, punto 19) ----
+
+    @Test
+    @DisplayName("1.10.0 · rendirse devuelve la partida como queda; quien se rinde sale del token")
+    void rendirseDevuelveLaPartida() throws Exception {
+        when(ejecutarAccion.rendirse(any(), any())).thenReturn(partidaDeEjemplo());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/partidas/{id}/rendicion", ID_PARTIDA).with(jugador()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.participantes.length()").value(2));
+
+        verify(ejecutarAccion).rendirse(ID_PARTIDA, ANFITRION);
+    }
+
+    @Test
+    @DisplayName("1.10.0 · quien no combate en la partida no puede rendirse en ella: 403")
+    void rendirseEnPartidaAjena() throws Exception {
+        when(ejecutarAccion.rendirse(any(), any())).thenThrow(new PartidaAjena());
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/partidas/{id}/rendicion", ID_PARTIDA).with(jugador()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("1.10.0 · un moderador no se rinde por nadie: 403 sin llegar al caso de uso")
+    void unModeradorNoSeRinde() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/partidas/{id}/rendicion", ID_PARTIDA).with(conRol("ROLE_MODERADOR")))
+                .andExpect(status().isForbidden());
+        org.mockito.Mockito.verifyNoInteractions(ejecutarAccion);
+    }
+
+    @Test
+    @DisplayName("1.10.0 · rendirse sin sesion es 401")
+    void rendirseSinSesion() throws Exception {
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .post("/api/v1/partidas/{id}/rendicion", ID_PARTIDA))
+                .andExpect(status().isUnauthorized());
+        org.mockito.Mockito.verifyNoInteractions(ejecutarAccion);
     }
 }

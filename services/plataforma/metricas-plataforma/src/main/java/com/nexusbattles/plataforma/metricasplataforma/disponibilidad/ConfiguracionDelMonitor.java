@@ -1,15 +1,14 @@
 package com.nexusbattles.plataforma.metricasplataforma.disponibilidad;
 
 import java.time.Clock;
+import java.time.Duration;
 
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.web.client.RestClient;
 
 /**
  * Cablea el monitor de disponibilidad (HU-DIS-001).
@@ -57,14 +56,15 @@ public class ConfiguracionDelMonitor {
      * responde— bloquearia la ronda entera y dejaria de medirse el resto del
      * bloque, que es justo lo contrario de lo que pide CA-01. Dos segundos es
      * lo que ya usan los clientes HTTP del monorepo.
+     *
+     * <p>Estos plazos son los del monitor y no cambian con RFINAL-08: la
+     * pantalla «Sistema» y el tablero tecnico tienen los suyos (sondeo.* en
+     * application.yml), para que acortar la espera de una pantalla no mueva
+     * la cifra de disponibilidad.
      */
     @Bean
     SondaDeSalud sondaDeSalud() {
-        SimpleClientHttpRequestFactory fabrica = new SimpleClientHttpRequestFactory();
-        fabrica.setConnectTimeout(2000);
-        fabrica.setReadTimeout(2000);
-
-        return new SondaDeActuator(RestClient.builder().requestFactory(fabrica).build());
+        return SondaDeActuator.conPlazos(Duration.ofMillis(2000), Duration.ofMillis(2000));
     }
 
     @Bean

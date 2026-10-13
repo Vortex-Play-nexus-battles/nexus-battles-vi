@@ -42,6 +42,7 @@ public class RegistroDeConversaciones {
         Mensaje respuestaBot = new Mensaje(conversacion, Remitente.BOT, textoRespuesta, null);
         respuestaBot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
             resultado.requiereEscalamiento(), tiempoRespuestaMs);
+        respuestaBot.registrarEnriquecido(resultado.enriquecido());
         mensajeRepository.save(respuestaBot);
 
         if (identidad.sesion() != null) {

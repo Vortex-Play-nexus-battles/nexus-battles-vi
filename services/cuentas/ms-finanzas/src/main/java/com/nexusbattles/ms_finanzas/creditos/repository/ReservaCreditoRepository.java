@@ -6,6 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -24,4 +26,14 @@ public interface ReservaCreditoRepository extends JpaRepository<ReservaCredito, 
      * `transacciones`, que solo guarda pagos en moneda real.
      */
     Page<ReservaCredito> findByJugadorUidOrderByCreadoDesc(String jugadorUid, Pageable pagina);
+
+    /**
+     * Las reservas de un concepto que siguen ACTIVAS despues de su
+     * {@code expira_en} — auditoria de DEV del 30-sep (500 creditos apartados
+     * en una apuesta del 28 de septiembre sin sala ni forma de liberarlos).
+     * El vencimiento existia desde el principio (72 h) pero nadie lo leia.
+     */
+    List<ReservaCredito> findByEstadoAndTipoOperacionAndConceptoAndExpiraEnBefore(
+            ReservaCredito.EstadoReserva estado, ReservaCredito.TipoOperacion tipoOperacion,
+            String concepto, OffsetDateTime antesDe, Pageable lote);
 }

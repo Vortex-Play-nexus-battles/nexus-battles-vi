@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.metricasplataforma.tecnicas;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.nexusbattles.plataforma.metricasplataforma.sondeo.MotivoDeFallo;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -56,7 +57,9 @@ public class RecolectorDeActuator implements RecolectorDeMetricas {
                     errores.map(m -> (long) m.valor("COUNT")).orElse(0L),
                     null);
         } catch (RuntimeException fallo) {
-            return MetricasDeServicio.brecha(servicio, mensajeDe(fallo));
+            // RFINAL-08: el motivo en las palabras del panel («sin respuesta
+            // dentro del plazo», «conexión rechazada»), no el de la envoltura.
+            return MetricasDeServicio.brecha(servicio, MotivoDeFallo.describir(fallo, null, null));
         }
     }
 
@@ -67,15 +70,6 @@ public class RecolectorDeActuator implements RecolectorDeMetricas {
         } catch (org.springframework.web.client.HttpClientErrorException.NotFound ausente) {
             return Optional.empty();
         }
-    }
-
-    private static String mensajeDe(RuntimeException e) {
-        Throwable causa = e;
-        while (causa.getCause() != null) {
-            causa = causa.getCause();
-        }
-        String mensaje = causa.getMessage();
-        return mensaje == null || mensaje.isBlank() ? causa.getClass().getSimpleName() : mensaje;
     }
 
     /** Forma de la respuesta de Actuator: {@code {name, measurements:[{statistic, value}], availableTags}}. */

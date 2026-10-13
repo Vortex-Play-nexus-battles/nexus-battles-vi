@@ -50,9 +50,19 @@ const DESENLACES = Object.freeze({
  * @param {number|null} [opciones.creditos] variacion NETA de creditos, con
  *        signo: la apuesta mas la recompensa. Ver la nota de `combate.js`.
  * @param {Array<HTMLElement>} [opciones.acciones] botones de «que hago ahora»
+ * @param {Array<{etiqueta: string, valor: string, signo?: string, total?: boolean}>} [opciones.desglose]
+ *        los créditos fila a fila (revisión del modo jugador del 6-oct, punto 20):
+ *        apuesta, recompensa y cambio neto, tal como los dio el servidor
  * @returns {HTMLElement}
  */
-export function panelDeResultado({ victoria, desenlace, detalle, creditos = null, acciones = [] }) {
+export function panelDeResultado({
+  victoria,
+  desenlace,
+  detalle,
+  creditos = null,
+  acciones = [],
+  desglose = [],
+}) {
   const cual = desenlace ?? (victoria ? 'victoria' : 'derrota');
   const { palabra, icono: nombreDelIcono } = DESENLACES[cual] ?? DESENLACES.derrota;
 
@@ -74,6 +84,28 @@ export function panelDeResultado({ victoria, desenlace, detalle, creditos = null
             clase: 'panel-resultado__creditos',
             texto: `${creditos > 0 ? '+' : ''}${formatearCreditos(creditos)}`,
             datos: { signo: creditos > 0 ? 'positivo' : 'negativo' },
+          })
+        : null,
+      desglose.length > 0
+        ? h('dl', {
+            clase: 'panel-resultado__desglose',
+            hijos: desglose.flatMap((fila) => [
+              h('dt', {
+                clase: clases(
+                  'panel-resultado__concepto',
+                  fila.total && 'panel-resultado__concepto--total',
+                ),
+                texto: fila.etiqueta,
+              }),
+              h('dd', {
+                clase: clases(
+                  'panel-resultado__valor',
+                  fila.total && 'panel-resultado__valor--total',
+                ),
+                texto: fila.valor,
+                datos: { signo: fila.signo ?? 'neutro' },
+              }),
+            ]),
           })
         : null,
       acciones.length > 0

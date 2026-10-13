@@ -1,0 +1,512 @@
+{
+  "descripcion": "Temas nuevos de la sección 7.4.2 (guías, mazos, estrategias, inventario, sinergias, progresión, precios, requisitos, mantenimiento y soporte humano).",
+  "temas": [
+    {
+      "clave": "guia-nuevos-jugadores",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Guía para nuevos jugadores",
+      "variantesEs": [
+        "soy nuevo",
+        "nuevo jugador",
+        "guia para principiantes",
+        "como empiezo",
+        "por donde empiezo",
+        "primeros pasos",
+        "acabo de empezar",
+        "principiante",
+        "tutorial"
+      ],
+      "variantesEn": [
+        "new player",
+        "beginner guide",
+        "how do i start",
+        "getting started",
+        "first steps",
+        "tutorial"
+      ],
+      "respuestaEs": "Bienvenido a THE NEXUS BATTLES VI. Para empezar: 1) Crea tu cuenta con tu correo, un apodo y un avatar, e inicia sesión. 2) Revisa Mi inventario: ahí están tus personajes e ítems, y puedes buscar cualquiera por su información. 3) Equipa a tu héroe antes de jugar: hasta 2 armas, 2 ítems y 6 piezas de armadura; cuando empieza el combate ya no puedes cambiarlos. 4) Juega tu primera misión en dificultad Normal, que no pide requisitos previos, o enfrenta a otro jugador en Jugar online. 5) Con los créditos que ganes puedes pujar en las Subastas. Si tienes dudas, pregúntame o pulsa «Soporte» para hablar con una persona del equipo.",
+      "respuestaEn": "Welcome to THE NEXUS BATTLES VI. To get started: 1) Create your account with your email, a nickname and an avatar, and sign in. 2) Check My inventory: your characters and items are there, and you can search any of them by their details. 3) Equip your hero before playing: up to 2 weapons, 2 items and 6 armor pieces; once combat starts you can no longer change them. 4) Play your first mission on Normal difficulty, which has no prerequisites, or face another player in Play online. 5) Use the credits you earn to bid in Auctions. If you have questions, ask me or press «Support» to talk to a person from the team.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "completar-mazo",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo completar el mazo de tu héroe",
+      "variantesEs": [
+        "mazo",
+        "armar mazo",
+        "completar mazo",
+        "mazo completo",
+        "mazo incompleto",
+        "deck",
+        "equipar heroe",
+        "como equipo a mi heroe",
+        "preparar heroe"
+      ],
+      "variantesEn": [
+        "deck",
+        "build deck",
+        "complete deck",
+        "incomplete deck",
+        "equip my hero",
+        "prepare my hero"
+      ],
+      "respuestaEs": "Para completar el mazo de tu héroe: 1) Abre Mi inventario y elige el héroe. 2) Equípale hasta 2 armas y hasta 2 ítems. 3) Ponle las piezas de armadura: casco, pecho, guantes, brazaletes, pantalón y zapatos (hasta 6). 4) Si tienes una habilidad épica de su tipo, equípala: además del efecto general, recibe el efecto potenciado de su tipo. 5) Revisa que el héroe no esté «En misión» ni en un torneo: solo un héroe con el mazo completo y libre puede empezar una misión.",
+      "respuestaEn": "To complete your hero's deck: 1) Open My inventory and choose the hero. 2) Equip up to 2 weapons and up to 2 items. 3) Add the armor pieces: helmet, chest, gloves, bracers, pants and shoes (up to 6). 4) If you have an epic ability of its type, equip it: besides the general effect, it gets the boosted effect for its type. 5) Make sure the hero is not «On a mission» or in a tournament: only a free hero with a complete deck can start a mission.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "estrategias-basicas",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "SUGERENCIA_PROACTIVA",
+      "titulo": "Estrategias básicas de combate",
+      "variantesEs": [
+        "estrategia",
+        "estrategias",
+        "consejos de combate",
+        "tips",
+        "como ganar un combate",
+        "como mejorar en combate",
+        "tacticas"
+      ],
+      "variantesEn": [
+        "strategy",
+        "strategies",
+        "combat tips",
+        "how to win a fight",
+        "tactics"
+      ],
+      "respuestaEs": "Algunas estrategias básicas: prepara el equipo antes de entrar, porque cuando empieza el combate no puedes cambiar armas ni ítems. Aprovecha el papel de cada héroe: el Guerrero Tanque aguanta los golpes, el Guerrero Armas y el Mago Fuego ponen el daño, el Mago Hielo y el Pícaro Veneno debilitan al rival, y el Chamán y el Médico sostienen al equipo. Busca armas, armaduras e ítems con bonos de crítico o esquive: mejoran tus probabilidades en la tabla de efectos. Administra el poder, que se recupera con el tiempo, y recuerda que las habilidades épicas no lo consumen. En las misiones, ordena bien tus rotaciones de habilidades (hasta 3, por prioridad), porque la IA las usará tal cual.",
+      "respuestaEn": "Some basic strategies: prepare your gear before you go in, because once combat starts you cannot change weapons or items. Use each hero's role: the Tank Warrior absorbs hits, the Weapons Warrior and the Fire Mage deal the damage, the Ice Mage and the Poison Rogue weaken the opponent, and the Shaman and the Medic keep the team going. Look for weapons, armor and items with critical or dodge bonuses: they improve your odds on the effects table. Manage your power, which recovers over time, and remember that epic abilities do not use it. In missions, order your ability rotations carefully (up to 3, by priority), because the AI will use them exactly as set.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "sinergias-equipo",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Sinergias y combinaciones de equipo",
+      "variantesEs": [
+        "sinergia",
+        "sinergias",
+        "combinaciones",
+        "combinar heroes",
+        "que heroes combinan",
+        "mejor equipo",
+        "formar equipo"
+      ],
+      "variantesEn": [
+        "synergy",
+        "synergies",
+        "combos",
+        "hero combinations",
+        "best team"
+      ],
+      "respuestaEs": "En Jugar online puedes formar equipos de hasta 3 jugadores (hasta 6 personajes en total), y en el modo cooperativo tus ataques no dañan a tus compañeros. Algunas combinaciones que aprovechan el papel de cada prototipo: un Guerrero Tanque que aguante al frente mientras un Mago Fuego o un Guerrero Armas ponen el daño; un Mago Hielo que debilite al rival y un Pícaro Veneno que le baje la precisión; y un Chamán o un Médico que mantengan con vida al equipo. Las habilidades épicas también suman: cada una tiene un efecto general para cualquier héroe y un efecto potenciado solo para su tipo, así que rinde más en un héroe de ese tipo.",
+      "respuestaEn": "In Play online you can form teams of up to 3 players (up to 6 characters in total), and in cooperative mode your attacks do not harm your teammates. Some combinations that make the most of each prototype's role: a Tank Warrior holding the front while a Fire Mage or a Weapons Warrior deals the damage; an Ice Mage weakening the opponent and a Poison Rogue lowering its accuracy; and a Shaman or a Medic keeping the team alive. Epic abilities help too: each one has a general effect for any hero and a boosted effect only for its type, so it performs better on a hero of that type.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "consejos-objetos",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "SUGERENCIA_PROACTIVA",
+      "titulo": "Consejos para organizar tus objetos",
+      "variantesEs": [
+        "consejos de inventario",
+        "organizar inventario",
+        "tips de inventario",
+        "ordenar objetos",
+        "objeto bloqueado",
+        "producto bloqueado",
+        "no puedo eliminar un objeto",
+        "por que no puedo usar un objeto"
+      ],
+      "variantesEn": [
+        "inventory tips",
+        "organize inventory",
+        "locked item",
+        "cannot delete item"
+      ],
+      "respuestaEs": "Algunos consejos para tu inventario: usa la búsqueda para encontrar un producto por su información en vez de recorrer todas las páginas. Fíjate en las marcas: un héroe «En misión» o un producto publicado en subasta no se puede usar, modificar ni eliminar hasta que termine la misión o se cierre la subasta. Antes de un combate revisa qué llevas equipado: si tu héroe es derrotado pierde una sola pieza, la de mayor porcentaje de caída, mientras que lo guardado en el inventario y la épica equipada nunca se pierden. Lo que ya no uses puedes eliminarlo o publicarlo en subasta para ganar créditos. Y las recompensas de las misiones llegan solas a tu inventario.",
+      "respuestaEn": "Some tips for your inventory: use the search to find a product by its details instead of going through every page. Watch the markers: a hero «On a mission» or a product listed in an auction cannot be used, changed or deleted until the mission ends or the auction closes. Before a fight, check what you have equipped: if your hero is defeated it loses a single piece, the one with the highest drop rate, while whatever is stored in the inventory and the equipped epic are never lost. Anything you no longer use can be deleted or listed in an auction to earn credits. And mission rewards arrive in your inventory automatically.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "derrota-del-heroe",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Qué pierdes al ser derrotado",
+      "variantesEs": [
+        "si me derrotan",
+        "heroe derrotado",
+        "que pierdo si pierdo",
+        "si pierdo un combate",
+        "perder equipo",
+        "me quitan objetos",
+        "pierdo mis objetos"
+      ],
+      "variantesEn": [
+        "hero defeated",
+        "what do i lose",
+        "lose my gear",
+        "if i lose a fight"
+      ],
+      "respuestaEs": "Si tu héroe es derrotado en un combate, pierde un único objeto de los que llevaba equipados: el de mayor porcentaje de caída. Los objetos guardados en tu inventario nunca se pierden, y tampoco la habilidad épica que tuviera equipada. En un combate por equipos, los objetos caídos se reparten al azar entre los vencedores.",
+      "respuestaEn": "If your hero is defeated in combat, it loses a single item from those it had equipped: the one with the highest drop rate. Items stored in your inventory are never lost, and neither is the epic ability it had equipped. In a team fight, the dropped items are shared at random among the winners.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "tipos-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Tipos de misiones: Historia, Desafío y Exploración",
+      "variantesEs": [
+        "tipos de misiones",
+        "tipos",
+        "misiones de historia",
+        "de historia",
+        "misiones de desafio",
+        "desafio",
+        "misiones de exploracion",
+        "exploracion",
+        "campaña",
+        "intentos limitados"
+      ],
+      "variantesEn": [
+        "mission types",
+        "types",
+        "story missions",
+        "story",
+        "challenge missions",
+        "challenge",
+        "exploration missions",
+        "exploration",
+        "campaign"
+      ],
+      "respuestaEs": "Hay tres tipos de misiones. Historia: se juegan en el orden de la campaña y dan su recompensa la primera vez que las completas. Desafío: piden requisitos especiales de nivel o equipamiento y tienen intentos limitados, que se renuevan en cada periodo. Exploración: son de larga duración, con varios encuentros, y acumulan recompensas según el avance; puedes consultar su progreso mientras están en curso. En el tablón puedes filtrar las misiones por dificultad, estado y duración.",
+      "respuestaEn": "There are three types of missions. Story: they are played in campaign order and give their reward the first time you complete them. Challenge: they have special level or equipment requirements and limited attempts, which renew every period. Exploration: they are long, with several encounters, and accumulate rewards as you progress; you can check their progress while they run. On the mission board you can filter missions by difficulty, status and duration.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "recompensas-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Recompensas de las misiones",
+      "variantesEs": [
+        "recompensas",
+        "recompensa",
+        "recompensas de las misiones",
+        "que gano en una mision",
+        "botin",
+        "premios",
+        "progresion",
+        "cuanta experiencia"
+      ],
+      "variantesEn": [
+        "rewards",
+        "reward",
+        "loot",
+        "what do i earn",
+        "progression",
+        "how much experience"
+      ],
+      "respuestaEs": "Al completar una misión recibes créditos base, experiencia, botín aleatorio y bonificaciones por los objetivos cumplidos; si derrotas a un enemigo Máster, también su habilidad épica. Todo llega solo a tu inventario y al final ves un reporte con cada recompensa y su cantidad. Las recompensas dependen de la dificultad y la duración de la misión. La experiencia hace subir de nivel a tu héroe: pasar del nivel N al siguiente pide 100 × 1,2^(N−1) puntos, y cada enemigo derrotado da 10 × 1,2^(1d8), donde 1d8 es un dado de ocho caras.",
+      "respuestaEn": "When you complete a mission you get base credits, experience, random loot and bonuses for the objectives you met; if you defeat a Master enemy, you also get its epic ability. Everything goes to your inventory automatically, and at the end you see a report with each reward and its amount. Rewards depend on the mission's difficulty and duration. Experience levels up your hero: going from level N to the next one takes 100 × 1.2^(N−1) points, and each defeated enemy gives 10 × 1.2^(1d8), where 1d8 is an eight-sided die.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "dificultades-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Niveles de dificultad de las misiones",
+      "variantesEs": [
+        "dificultad",
+        "dificultades",
+        "niveles de dificultad",
+        "heroico",
+        "legendario",
+        "mitico",
+        "desbloquear dificultad",
+        "modo dificil"
+      ],
+      "variantesEn": [
+        "difficulty",
+        "difficulty levels",
+        "heroic",
+        "legendary",
+        "mythic",
+        "hard mode"
+      ],
+      "respuestaEs": "Las misiones escalonadas tienen cuatro dificultades: Normal, Heroico, Legendario y Mítico. Normal está disponible desde el principio; cada una de las siguientes se desbloquea al completar al menos una vez la anterior, y si después fallas en un nivel ya desbloqueado, sigue disponible. En Heroico los enemigos tienen un 50 % más de estadísticas que en Normal y en Legendario un 100 % más. Mítico da recompensas únicas y exclusivas de ese nivel.",
+      "respuestaEn": "Tiered missions have four difficulties: Normal, Heroic, Legendary and Mythic. Normal is available from the start; each of the next ones unlocks when you complete the previous one at least once, and if you later fail on a level you already unlocked, it stays available. On Heroic, enemies have 50% more stats than on Normal, and on Legendary 100% more. Mythic gives unique rewards exclusive to that level.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "logros-titulos-insignias",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Logros, títulos e insignias",
+      "variantesEs": [
+        "logros",
+        "logro",
+        "titulos",
+        "insignias",
+        "medallas",
+        "hazañas",
+        "trofeos"
+      ],
+      "variantesEn": [
+        "achievements",
+        "achievement",
+        "titles",
+        "badges",
+        "trophies"
+      ],
+      "respuestaEs": "El juego reconoce tus hazañas con logros, por ejemplo: completar todas las misiones de una categoría, derrotar a todos los Máster disponibles, terminar misiones sin recibir daño o en tiempo récord, y coleccionar todas las épicas de Máster. Cada logro queda en tu perfil una sola vez y puede darte un título, una insignia o una recompensa cosmética. Puedes revisar tus logros, tu historial de misiones y tu colección de épicas desde Mi Cuenta.",
+      "respuestaEn": "The game recognizes your feats with achievements, for example: completing every mission in a category, defeating every available Master, finishing missions without taking damage or in record time, and collecting every Master epic. Each achievement is recorded on your profile only once and may give you a title, a badge or a cosmetic reward. You can check your achievements, your mission history and your epic collection from My Account.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "precios-y-disponibilidad",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Precios y disponibilidad de productos",
+      "variantesEs": [
+        "precio",
+        "precios",
+        "cuanto cuesta",
+        "disponibilidad",
+        "esta disponible",
+        "tienda",
+        "comprar con dinero real",
+        "descuentos",
+        "promociones"
+      ],
+      "variantesEn": [
+        "price",
+        "prices",
+        "how much does it cost",
+        "availability",
+        "store",
+        "shop",
+        "discounts",
+        "promotions"
+      ],
+      "respuestaEs": "Los productos que publica UPB-COMPANY a través del Maestro de Juego se compran con dinero real en la tienda; los que venden otros jugadores se consiguen con créditos en las Subastas. En la tienda puedes buscar por cualquier atributo, incluido el precio, filtrar por precio, tipo o promoción y elegir la moneda en la que ves los precios; los productos en promoción muestran su porcentaje de descuento hasta que la promoción vence. Si un producto está suspendido no se puede adquirir, aunque quienes ya lo tienen lo conservan.",
+      "respuestaEn": "Products published by UPB-COMPANY through the Game Master are bought with real money in the store; those sold by other players are obtained with credits in Auctions. In the store you can search by any attribute, including price, filter by price, type or promotion, and choose the currency you see prices in; products on promotion show their discount percentage until the promotion ends. If a product is suspended it cannot be acquired, although those who already own it keep it.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "requisitos-del-sistema",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Requisitos del sistema",
+      "variantesEs": [
+        "requisitos",
+        "requisitos del sistema",
+        "requisitos minimos",
+        "que necesito para jugar",
+        "navegador",
+        "se puede jugar en celular",
+        "descargar el juego",
+        "instalar",
+        "compatible"
+      ],
+      "variantesEn": [
+        "system requirements",
+        "minimum requirements",
+        "browser",
+        "download the game",
+        "install",
+        "play on mobile"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI se juega desde el navegador web: no hace falta instalar nada, solo una conexión a internet y un navegador actualizado. La interfaz se adapta al tamaño de tu pantalla. Las misiones se ejecutan en el servidor, así que puedes cerrar el navegador y consultar el resultado después sin perder su progreso.",
+      "respuestaEn": "THE NEXUS BATTLES VI is played in the web browser: there is nothing to install, you only need an internet connection and an up-to-date browser. The interface adapts to your screen size. Missions run on the server, so you can close the browser and check the result later without losing their progress.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "mantenimiento-y-actualizaciones",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Mantenimiento y actualizaciones",
+      "variantesEs": [
+        "mantenimiento",
+        "actualizacion",
+        "actualizaciones",
+        "servidor caido",
+        "el juego esta caido",
+        "parche",
+        "novedades",
+        "nueva version"
+      ],
+      "variantesEn": [
+        "maintenance",
+        "update",
+        "updates",
+        "server down",
+        "patch",
+        "new version"
+      ],
+      "respuestaEs": "Cuando el equipo actualiza un producto del juego, el cambio se aplica también a las unidades que ya tienen los jugadores; antes se guarda un respaldo y, si algo falla, se revierte por completo, así que tu inventario nunca queda a medio actualizar. Si en algún momento el juego no carga, espera unos minutos y vuelve a intentarlo; si el problema sigue, pulsa «Soporte» y cuéntanos qué ves.",
+      "respuestaEn": "When the team updates a game product, the change also applies to the units players already own; a backup is saved first and, if something fails, it is fully rolled back, so your inventory is never left half-updated. If at some point the game does not load, wait a few minutes and try again; if the problem continues, press «Support» and tell us what you see.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "hablar-con-soporte",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Hablar con soporte humano",
+      "variantesEs": [
+        "hablar con soporte",
+        "soporte humano",
+        "hablar con una persona",
+        "agente humano",
+        "abrir un ticket",
+        "ticket",
+        "contactar soporte",
+        "atencion al cliente",
+        "quiero hablar con alguien"
+      ],
+      "variantesEn": [
+        "talk to support",
+        "human support",
+        "talk to a person",
+        "open a ticket",
+        "contact support",
+        "customer service"
+      ],
+      "respuestaEs": "Para hablar con una persona del equipo: 1) Inicia sesión: las solicitudes de soporte son para jugadores registrados. 2) En la ventana del asistente pulsa «Soporte». 3) Elige el tema, escribe el asunto y cuéntanos qué pasa (no escribas contraseñas ni datos de tarjetas). 4) Pulsa «Enviar solicitud»: solo puedes tener una solicitud abierta a la vez. 5) Revisa «Tus solicitudes» en esa misma pantalla: ahí verás su estado y la respuesta de soporte.",
+      "respuestaEn": "To talk to a person from the team: 1) Sign in: support requests are for registered players. 2) In the assistant window, press «Support». 3) Choose the topic, write the subject and tell us what is happening (do not write passwords or card details). 4) Press «Send request»: you can only have one open request at a time. 5) Check «Your requests» on that same screen: you will see its status and the support reply there.",
+      "prioridad": 0,
+      "activo": true
+    }
+  ],
+  "casos": [
+    {
+      "pregunta": "soy nuevo, como empiezo a jugar",
+      "temaClaveEsperada": "guia-nuevos-jugadores"
+    },
+    {
+      "pregunta": "I'm a new player, how do I start?",
+      "temaClaveEsperada": "guia-nuevos-jugadores"
+    },
+    {
+      "pregunta": "como completo el mazo de mi heroe",
+      "temaClaveEsperada": "completar-mazo"
+    },
+    {
+      "pregunta": "me dice que mi mazo esta incompleto",
+      "temaClaveEsperada": "completar-mazo"
+    },
+    {
+      "pregunta": "que estrategias me recomiendas",
+      "temaClaveEsperada": "estrategias-basicas"
+    },
+    {
+      "pregunta": "como ganar un combate facil",
+      "temaClaveEsperada": "estrategias-basicas"
+    },
+    {
+      "pregunta": "que heroes combinan bien",
+      "temaClaveEsperada": "sinergias-equipo"
+    },
+    {
+      "pregunta": "hay sinergias entre personajes?",
+      "temaClaveEsperada": "sinergias-equipo"
+    },
+    {
+      "pregunta": "tienes consejos de inventario",
+      "temaClaveEsperada": "consejos-objetos"
+    },
+    {
+      "pregunta": "por que no puedo usar un objeto",
+      "temaClaveEsperada": "consejos-objetos"
+    },
+    {
+      "pregunta": "que pierdo si pierdo un combate",
+      "temaClaveEsperada": "derrota-del-heroe"
+    },
+    {
+      "pregunta": "si me derrotan me quitan objetos?",
+      "temaClaveEsperada": "derrota-del-heroe"
+    },
+    {
+      "pregunta": "que tipos de misiones hay",
+      "temaClaveEsperada": "tipos-de-misiones"
+    },
+    {
+      "pregunta": "como funcionan las misiones de desafio",
+      "temaClaveEsperada": "tipos-de-misiones"
+    },
+    {
+      "pregunta": "que recompensas dan las misiones",
+      "temaClaveEsperada": "recompensas-de-misiones"
+    },
+    {
+      "pregunta": "cuanta experiencia da un enemigo",
+      "temaClaveEsperada": "recompensas-de-misiones"
+    },
+    {
+      "pregunta": "que niveles de dificultad hay",
+      "temaClaveEsperada": "dificultades-de-misiones"
+    },
+    {
+      "pregunta": "como desbloqueo la dificultad legendario",
+      "temaClaveEsperada": "dificultades-de-misiones"
+    },
+    {
+      "pregunta": "como consigo logros e insignias",
+      "temaClaveEsperada": "logros-titulos-insignias"
+    },
+    {
+      "pregunta": "what achievements are there",
+      "temaClaveEsperada": "logros-titulos-insignias"
+    },
+    {
+      "pregunta": "cuanto cuesta un producto en la tienda",
+      "temaClaveEsperada": "precios-y-disponibilidad"
+    },
+    {
+      "pregunta": "hay descuentos o promociones",
+      "temaClaveEsperada": "precios-y-disponibilidad"
+    },
+    {
+      "pregunta": "cuales son los requisitos del sistema",
+      "temaClaveEsperada": "requisitos-del-sistema"
+    },
+    {
+      "pregunta": "tengo que descargar el juego o se juega en el navegador",
+      "temaClaveEsperada": "requisitos-del-sistema"
+    },
+    {
+      "pregunta": "el juego esta en mantenimiento?",
+      "temaClaveEsperada": "mantenimiento-y-actualizaciones"
+    },
+    {
+      "pregunta": "cuando sale la nueva version",
+      "temaClaveEsperada": "mantenimiento-y-actualizaciones"
+    },
+    {
+      "pregunta": "quiero hablar con una persona",
+      "temaClaveEsperada": "hablar-con-soporte"
+    },
+    {
+      "pregunta": "como abro un ticket de soporte",
+      "temaClaveEsperada": "hablar-con-soporte"
+    }
+  ]
+}

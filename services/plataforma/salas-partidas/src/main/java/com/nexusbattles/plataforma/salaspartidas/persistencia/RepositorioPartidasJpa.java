@@ -88,4 +88,13 @@ class RepositorioPartidasJpa implements RepositorioDePartidas {
                 .map(PartidaEntidad::aDominio)
                 .toList();
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Partida> enCursoDesde(Instant limite, int lote) {
+        return almacen.iniciadasAntesDe(EstadoPartida.EN_CURSO, limite,
+                        org.springframework.data.domain.PageRequest.of(0, lote)).stream()
+                .map(PartidaEntidad::aDominio)
+                .toList();
+    }
 }

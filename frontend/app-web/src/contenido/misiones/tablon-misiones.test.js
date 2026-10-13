@@ -21,7 +21,7 @@ const TEMPLO = {
   descripcionBreve: 'Un antiguo templo en el Bosque Sombrío, custodiado por un guardián milenario.',
   dificultad: 'NORMAL',
   duracionHoras: 12,
-  nivelRecomendado: 15,
+  nivelRecomendado: 8,
   recompensasDestacadas: [
     '50 créditos',
     '1 Cofre de Bronce',
@@ -59,7 +59,7 @@ describe('MissionCard', () => {
     expect(tarjeta.querySelector('.mision-estado').textContent).toBe('Disponible');
     expect(tarjeta.querySelector('.dificultad').textContent).toBe('Normal');
     expect(tarjeta.textContent).toContain('12 horas');
-    expect(tarjeta.textContent).toContain('Nivel recomendado15');
+    expect(tarjeta.textContent).toContain('Nivel recomendado8');
     // Como mucho tres recompensas en la tarjeta: el resto, en el detalle.
     expect(tarjeta.querySelectorAll('.mision-card__recompensas li')).toHaveLength(3);
   });

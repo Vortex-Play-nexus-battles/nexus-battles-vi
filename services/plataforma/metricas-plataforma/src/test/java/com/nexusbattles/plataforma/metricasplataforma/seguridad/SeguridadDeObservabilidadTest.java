@@ -3,6 +3,7 @@ package com.nexusbattles.plataforma.metricasplataforma.seguridad;
 import com.nexusbattles.comun.seguridad.pruebas.DecodificadorDePrueba;
 import com.nexusbattles.comun.seguridad.pruebas.EmisorDeTokensDePrueba;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeModeracion;
+import com.nexusbattles.plataforma.metricasplataforma.moderacion.FuenteDeUsuarios;
 import com.nexusbattles.plataforma.metricasplataforma.moderacion.ModeracionController;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,12 +63,17 @@ class SeguridadDeObservabilidadTest {
     @MockitoBean
     private FuenteDeModeracion fuente;
 
+    @MockitoBean
+    private FuenteDeUsuarios usuarios;
+
     private final EmisorDeTokensDePrueba emisor = EmisorDeTokensDePrueba.emisor();
 
     private void conAgregadosVacios() {
         OffsetDateTime hasta = OffsetDateTime.parse("2026-09-22T10:00:00Z");
         when(fuente.consultar(any(), any())).thenReturn(new FuenteDeModeracion.Agregados(
                 hasta.minusDays(30), hasta, 0, Map.of(), List.of(), Map.of(), 0, 0));
+        when(usuarios.consultar(any(), any(), any()))
+                .thenThrow(new FuenteDeUsuarios.NoDisponible("ms-identidad no responde"));
     }
 
     @Test

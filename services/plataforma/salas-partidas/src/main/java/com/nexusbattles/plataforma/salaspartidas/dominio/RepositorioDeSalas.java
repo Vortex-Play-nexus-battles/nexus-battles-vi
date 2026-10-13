@@ -1,5 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.dominio;
 
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -50,4 +52,35 @@ public interface RepositorioDeSalas {
      * @param tamano    elementos por pagina
      */
     PaginaDeSalas listar(Modalidad modalidad, EstadoSala estado, int pagina, int tamano);
+
+    /**
+     * Igual, con varios estados a la vez (salas-partidas.yaml 1.10.0, revision
+     * del modo jugador del 6-oct): al entrar a «Jugar online» se ven las salas a
+     * las que se puede entrar, ABIERTA y PRIVADA, no las llenas.
+     *
+     * <p>Por omision solo sabe de cero o un estado; el almacen real y el de las
+     * pruebas lo sobrescriben para varios. Lleva otro nombre para que
+     * {@code listar(null, null, ...)} siga sin ser ambiguo.
+     *
+     * @param estados estados admitidos; vacio o nulo no filtra
+     */
+    default PaginaDeSalas listarEnEstados(Modalidad modalidad, java.util.Set<EstadoSala> estados, int pagina,
+                                          int tamano) {
+        if (estados == null || estados.isEmpty()) {
+            return listar(modalidad, (EstadoSala) null, pagina, tamano);
+        }
+        if (estados.size() == 1) {
+            return listar(modalidad, estados.iterator().next(), pagina, tamano);
+        }
+        throw new UnsupportedOperationException("Este almacen no lista varios estados a la vez.");
+    }
+
+    /**
+     * Las salas que nadie llego a jugar —abiertas, llenas o privadas— creadas
+     * antes de {@code limite}, como mucho {@code lote}. Las cierra
+     * {@code CerrarAbandonadas} (auditoria de DEV del 30-sep).
+     */
+    default List<Sala> sinEmpezarDesde(Instant limite, int lote) {
+        return List.of();
+    }
 }

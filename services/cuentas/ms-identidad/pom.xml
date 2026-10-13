@@ -400,6 +400,45 @@
           </execution>
 
           <!--
+            RFINAL-05 (HU-AUT-007): la misma compuerta (>=80 %) para el segundo
+            factor, codigo nuevo de principio a fin: TOTP, cifrado del secreto,
+            codigos de recuperacion y el segundo paso del login. Es el control
+            que protege las cuentas administrativas; no puede quedar sin probar.
+          -->
+          <execution>
+            <id>check-cobertura-segundo-factor</id>
+            <phase>test</phase>
+
+            <goals>
+              <goal>check</goal>
+            </goals>
+
+            <configuration>
+              <includes>
+                <include>com/nexusbattles/ms_identidad/auth/segundofactor/**</include>
+              </includes>
+
+              <rules>
+                <rule>
+                  <element>BUNDLE</element>
+                  <limits>
+                    <limit>
+                      <counter>LINE</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.80</minimum>
+                    </limit>
+                    <limit>
+                      <counter>INSTRUCTION</counter>
+                      <value>COVEREDRATIO</value>
+                      <minimum>0.80</minimum>
+                    </limit>
+                  </limits>
+                </rule>
+              </rules>
+            </configuration>
+          </execution>
+
+          <!--
             B6: la misma compuerta (>=80 %) para el perfil del jugador, donde
             vive la busqueda de jugadores por apodo (GET /perfiles/publicos):
             decide que datos de una persona ve cualquier otra con sesion, y no

@@ -36,6 +36,6 @@ public class SalaPrivadaSinInvitacion extends ErrorDeNegocio {
         super(TIPO,
               "Esta sala es privada",
               403,
-              "A una sala privada se entra por invitacion, no desde el listado.");
+              "A una sala privada se entra por invitación, no desde el listado.");
     }
 }

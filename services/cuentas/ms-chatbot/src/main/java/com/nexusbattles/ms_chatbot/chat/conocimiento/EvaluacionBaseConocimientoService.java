@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,6 +34,9 @@ import java.util.Optional;
 //                 antes de la actual.
 //   vigilar    -> evaluacion periodica de produccion para detectar desempeno
 //                 degradado (VigilanciaBaseConocimientoTarea).
+//   programar  -> (1.3.8) deja la candidata lista para desplegarse sola en
+//                 una fecha; al llegar, DespliegueProgramadoTarea hace
+//                 exactamente lo mismo que desplegar.
 //
 // El motor lee la version en produccion en cada mensaje, asi que un
 // despliegue o una reversion rigen desde el mensaje siguiente.
@@ -44,6 +48,13 @@ public class EvaluacionBaseConocimientoService {
     private static final String SIN_CASOS =
         "No hay casos de evaluacion activos. Sin casos, cualquier candidata pasaria la evaluacion.";
     private static final String SIN_ANTERIOR = "No hay una version anterior a la cual revertir.";
+    private static final String MUY_PRONTO = "La publicacion se programa al menos un minuto en el futuro.";
+    private static final String MUY_LEJOS = "La publicacion se programa como maximo 90 dias en el futuro.";
+
+    // 1.3.8: ni tan pronto que la tarea (cada minuto) ya la hubiera pasado,
+    // ni tan lejos que la candidata quede olvidada.
+    static final Duration ANTICIPACION_MINIMA = Duration.ofMinutes(1);
+    static final Duration ANTICIPACION_MAXIMA = Duration.ofDays(90);
 
     private final VersionBaseConocimientoRepository versionRepository;
     private final TemaConocimientoRepository temaRepository;
@@ -84,6 +95,61 @@ public class EvaluacionBaseConocimientoService {
 
         cambiarProduccion(produccion, candidata, ahora);
         return candidata;
+    }
+
+    // 1.3.8: programar (o reprogramar) la publicacion de la candidata.
+    @Transactional
+    public VersionBaseConocimiento programarDespliegue(Instant cuando) {
+        Instant ahora = Instant.now();
+        if (cuando == null || cuando.isBefore(ahora.plus(ANTICIPACION_MINIMA))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, MUY_PRONTO);
+        }
+        if (cuando.isAfter(ahora.plus(ANTICIPACION_MAXIMA))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, MUY_LEJOS);
+        }
+        VersionBaseConocimiento candidata = requerirCandidata();
+        candidata.programarDespliegue(cuando);
+        return versionRepository.save(candidata);
+    }
+
+    @Transactional
+    public VersionBaseConocimiento cancelarProgramacion() {
+        VersionBaseConocimiento candidata = requerirCandidata();
+        candidata.cancelarProgramacion();
+        return versionRepository.save(candidata);
+    }
+
+    // 1.3.8: lo llama DespliegueProgramadoTarea. Si la candidata tiene una
+    // publicacion vencida, la reclama (una sola instancia lo logra) y la
+    // despliega con la misma evaluacion que el boton del panel. Si no pasa
+    // la evaluacion, o faltan casos o produccion, queda sin programar y con
+    // la marca de rechazo. Vacio si no habia nada que hacer.
+    @Transactional(noRollbackFor = DespliegueRechazadoException.class)
+    public Optional<DespliegueProgramado> desplegarSiCorresponde(Instant ahora) {
+        Optional<VersionBaseConocimiento> candidata = versionRepository.findByEstado(EstadoVersion.BORRADOR);
+        if (candidata.isEmpty() || !candidata.get().despliegueVencido(ahora)) {
+            return Optional.empty();
+        }
+        int numero = candidata.get().getNumero();
+        if (versionRepository.reclamarDespliegueProgramado(candidata.get().getId(), ahora) == 0) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(DespliegueProgramado.desplegada(desplegarCandidata().getNumero()));
+        } catch (DespliegueRechazadoException rechazo) {
+            marcarProgramacionRechazada(ahora);
+            return Optional.of(DespliegueProgramado.rechazada(numero, rechazo.getBody().getDetail()));
+        } catch (ResponseStatusException sinCondiciones) {
+            marcarProgramacionRechazada(ahora);
+            return Optional.of(DespliegueProgramado.rechazada(numero, sinCondiciones.getReason()));
+        }
+    }
+
+    private void marcarProgramacionRechazada(Instant ahora) {
+        versionRepository.findByEstado(EstadoVersion.BORRADOR).ifPresent(candidata -> {
+            candidata.rechazarProgramacion(ahora);
+            versionRepository.save(candidata);
+        });
     }
 
     @Transactional

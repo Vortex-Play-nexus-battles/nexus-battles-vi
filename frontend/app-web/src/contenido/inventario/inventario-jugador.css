@@ -1,0 +1,248 @@
+/* =======================================================================
+   Mi inventario — revisión del modo jugador del 6-oct, punto 25 (PLAYER-07a)
+   -----------------------------------------------------------------------
+   Va después de vitrina.css y solo trae lo nuevo:
+
+   - la búsqueda general, arriba, con su etiqueta a la vista;
+   - «Mis héroes» y «Héroes del Nexo» (posesión y catálogo, separados);
+   - el banner de misiones (RF-INV-003) al final y compacto, con su título,
+     para que no parezca la cabecera del módulo de Misiones.
+
+   Tokens del kit y nada más: ni hexadecimales ni copias de la paleta.
+   ======================================================================= */
+
+/* --- Búsqueda general ------------------------------------------------- */
+
+.inventario-busqueda--general {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  max-width: 760px;
+  margin-bottom: var(--e-5);
+}
+
+/* La etiqueta deja de estar oculta: quien mira sabe qué busca y dónde. Va
+   sobre la atmósfera, con la tinta clara. */
+.inventario-busqueda--general .inventario-busqueda__etiqueta {
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  margin: 0 0 var(--e-1);
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--tinta);
+}
+
+.inventario-busqueda__pista {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--tinta-2);
+}
+
+/* El mensaje de la búsqueda («2 resultados para…», «Ingresa al menos cuatro
+   caracteres») va sobre la atmósfera: con el gris de la paleta daba 1,59:1,
+   y el laboratorio no lo veía porque ningún escenario buscaba. Tinta. */
+.inventario__mensaje {
+  color: var(--tinta-2);
+}
+
+@media (max-width: 640px) {
+  .inventario-busqueda--general {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .inventario-busqueda--general .inventario-busqueda__campo {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- Secciones del panel de héroes ------------------------------------ */
+
+.inventario__seccion {
+  display: grid;
+  gap: var(--e-3);
+  align-content: start;
+}
+
+.inventario__seccion + .inventario__seccion {
+  margin-top: var(--e-6);
+}
+
+.inventario__seccion-titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+  color: var(--tinta);
+}
+
+/* --- Héroes del Nexo ---------------------------------------------------- */
+
+.heroes-del-nexo {
+  display: grid;
+  gap: var(--e-3);
+}
+
+.heroes-del-nexo__cuenta {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-etiqueta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--tinta-2);
+}
+
+.heroes-del-nexo__lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: var(--e-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.heroes-del-nexo__lista > li {
+  display: flex;
+}
+
+.nexo-heroe {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--e-3) var(--e-4);
+  width: 100%;
+}
+
+/* Los que ya son tuyos: el borde del acento y la marca escrita. */
+.nexo-heroe[data-tuyo='true'] {
+  border-color: var(--acento-relleno);
+  box-shadow:
+    var(--sombra-atmosfera),
+    inset 0 0 0 1px var(--acento-relleno);
+}
+
+/* El retrato del kit mide 112 px (y su marco, 160 de ancho): en una carta de
+   catálogo se queda en 72, para que el nombre y la acción no se partan en
+   tres líneas. */
+.nexo-heroe .marco-heroe {
+  width: auto;
+}
+
+.nexo-heroe .marco-heroe__retrato {
+  width: 72px;
+  height: 72px;
+}
+
+.nexo-heroe .marco-heroe__imagen {
+  width: 58px;
+  height: 58px;
+}
+
+.nexo-heroe .marco-heroe__simbolo {
+  width: 32px;
+  height: 32px;
+}
+
+.nexo-heroe__cuerpo {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
+  min-width: 0;
+}
+
+.nexo-heroe__nombre {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.nexo-heroe__prototipo {
+  margin: 0;
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--texto-2);
+}
+
+.nexo-heroe__descripcion {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--texto-2);
+  font-size: var(--t-meta-tam);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+.nexo-heroe__tuyo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  margin: var(--e-2) 0 0;
+  padding: 2px var(--e-2);
+  border-radius: var(--radio-pildora);
+  background: var(--exito-insignia);
+  color: var(--exito);
+  font-family: var(--t-etiqueta-familia);
+  font-size: var(--t-meta-tam);
+  font-weight: var(--t-etiqueta-peso);
+}
+
+.nexo-heroe__tuyo .icono {
+  width: var(--icono-menudo);
+  height: var(--icono-menudo);
+}
+
+.nexo-heroe__conseguir {
+  margin-top: var(--e-2);
+}
+
+/* --- Misiones para tus héroes (RF-INV-003), al final y compacto ------- */
+
+.inventario__misiones {
+  margin-top: var(--e-6);
+}
+
+.inventario__misiones .inventario__banner-misiones {
+  margin-bottom: 0;
+}
+
+.inventario__misiones .banner-misiones {
+  gap: var(--e-3);
+  padding: var(--e-4) var(--e-5);
+}
+
+.inventario__misiones .banner-misiones__diapositiva,
+.inventario__misiones .banner-misiones--promocion {
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: var(--e-4);
+}
+
+.inventario__misiones .banner-misiones__arte {
+  width: 64px;
+  height: 64px;
+}
+
+.inventario__misiones .banner-misiones__emblema {
+  width: 32px;
+  height: 32px;
+}
+
+.inventario__misiones .banner-misiones .banner-misiones__nombre {
+  font-size: var(--t-subtitulo-tam);
+  line-height: var(--t-subtitulo-alto);
+}
+
+/* El resumen largo es del tablón; aquí basta el nombre, sus datos y la
+   acción. */
+.inventario__misiones .banner-misiones__texto {
+  display: none;
+}

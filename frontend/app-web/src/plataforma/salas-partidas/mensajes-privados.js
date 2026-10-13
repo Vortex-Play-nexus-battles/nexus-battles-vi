@@ -73,7 +73,7 @@ export function motivoDeBloqueo(estado, apodo) {
       return {
         titulo: `La cuenta de ${apodo} está sancionada`,
         detalle:
-          'Mientras dure la sanción no puede recibir mensajes. Lo que ya os escribisteis sigue aquí.',
+          'Mientras dure la sanción no puede recibir mensajes. Lo que ya se escribieron sigue aquí.',
         distintivo: 'Cuenta sancionada',
       };
     default:
@@ -685,6 +685,9 @@ export async function montarMensajesPrivados(
     pintarEstadoDelCanal(abierta.pildora, {
       ...canal,
       alReintentar: typeof fuente.reintentar === 'function' ? () => fuente.reintentar() : undefined,
+      // Revisión del modo jugador del 6-oct: el estado del canal solo se ve
+      // cuando hay algo que contar.
+      discreto: true,
     });
     abierta.redactor.esperarConexion(
       canal.estado === 'reconectando' || canal.estado === 'sin-conexion',
@@ -729,6 +732,16 @@ export async function montarMensajesPrivados(
           detalle: detalleDeFallo(error),
         });
         anunciar(`Tu mensaje no se envió. ${detalleDeFallo(error)}`);
+      }
+      // D-40: si el rechazo es un bloqueo (te bloquearon con la conversación
+      // abierta), la conversación cambia de estado y el campo deja de estar.
+      if (error?.estadoDeConversacion) {
+        actualizarResumenSinMover(id, { estado: error.estadoDeConversacion });
+        if (abierta?.id === id) {
+          abierta.resumen = { ...abierta.resumen, estado: error.estadoDeConversacion };
+          pintarCabecera();
+          aplicarBloqueo();
+        }
       }
       return reintentable;
     }
@@ -822,7 +835,7 @@ export async function montarMensajesPrivados(
         pintarEstado(
           zonaEstado,
           estadoVacio({
-            titulo: 'Todavía no os habéis escrito',
+            titulo: 'Todavía no se han escrito',
             detalle: `Escribe el primer mensaje a ${resumen.con.apodo}.`,
           }),
         );

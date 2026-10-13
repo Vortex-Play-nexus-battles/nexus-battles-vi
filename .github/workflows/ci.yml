@@ -81,6 +81,12 @@ jobs:
           # servicio de tercer nivel: services/<equipo>/<servicio>/...
           ARCHIVOS=$(git diff --name-only "$BASE" "$HEAD")
           CARPETAS=$(echo "$ARCHIVOS" | grep -E '^services/[^/]+/[^/]+/' | awk -F'/' '{print $1"/"$2"/"$3}' | sort -u || true)
+          # D-42: el equilibrio de las misiones se comprueba con el motor de
+          # combate real (BalanceDeMisionesTest, en motor-combate). Si cambia
+          # una semilla de misiones, tambien corre la CI de motor-combate.
+          if echo "$ARCHIVOS" | grep -qE '^services/contenido/misiones/src/main/resources/semilla/'; then
+            CARPETAS=$(printf '%s\nservices/contenido/motor-combate\n' "$CARPETAS" | grep -v '^$' | sort -u)
+          fi
 
           # 3) Para cada carpeta, decidir la herramienta de build mirando si
           # existe build.gradle (Gradle) o pom.xml (Maven) ahi mismo. Una
@@ -400,6 +406,22 @@ jobs:
         shell: bash
         run: bash scripts/cd/pruebas/certificado.sh
 
+      # 6-oct: con la pagina en https://<dominio> el Origin ya no es el de la
+      # IP y los servicios lo tratan como CORS. desplegar.sh suma el dominio a
+      # las ocho listas de origenes sin quitar nada; sin dominio no toca nada.
+      # Sin red ni Docker; segundos.
+      - name: Comprobar las listas de origenes del dominio (CORS y WebSocket)
+        shell: bash
+        run: bash scripts/cd/pruebas/origenes-del-dominio.sh
+
+      # 7-oct: el paso "DNS publico del dominio" de certificado-dev.yml. Con
+      # www como CNAME del dominio murio a mitad (el destino del CNAME se
+      # tomaba por servidor de nombres) y la renovacion de despues ni empezo.
+      # Con un dig falso, sin red; segundos.
+      - name: Comprobar el DNS publico del dominio (dominio y www como CNAME)
+        shell: bash
+        run: bash scripts/cd/pruebas/dns-del-dominio.sh
+
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
       # sesiones y dejaba 15 min de 401 entre servicios. Con openssl y java
@@ -407,6 +429,20 @@ jobs:
       - name: Comprobar la clave de firma estable de ms-identidad
         shell: bash
         run: bash scripts/cd/pruebas/clave-de-firma.sh
+
+      # 5-oct: la deteccion de servicios del CD se saltaba en silencio los que
+      # cambiaban al principio de una lista larga (echo | grep -q con
+      # pipefail: "Broken pipe"). Sin red ni servicios; segundos.
+      - name: Comprobar que el CD detecta todos los servicios de un rango largo
+        shell: bash
+        run: bash scripts/cd/pruebas/deteccion-de-servicios.sh
+
+      # HU-AUT-007: la clave que cifra los secretos TOTP se genera una vez en
+      # el host y se reutiliza; si cambiara, nadie con segundo factor podria
+      # entrar. Con openssl del runner; segundos.
+      - name: Comprobar la clave estable del segundo factor de ms-identidad
+        shell: bash
+        run: bash scripts/cd/pruebas/clave-de-segundo-factor.sh
 
       # 27-sep: el paso 3d recreo ms-identidad sin su clave de firma (par
       # efimero: sesiones cerradas, 401 entre servicios, registro en 503).

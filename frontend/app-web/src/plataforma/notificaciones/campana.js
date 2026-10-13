@@ -14,6 +14,8 @@
  *   [data-zona="conexion"]     `.conexion`, estado del canal (mapeo §5.4)
  *   [data-zona="lista"]        lista de avisos
  *   [data-zona="lista-vacia"]  estado vacio de la lista
+ *   [data-zona="marcar-todas"] boton «Marcar todas como leídas» (HU-NOT-001 CA-02),
+ *                              deshabilitado sin no leidos y mientras responde
  *   [data-zona="emergentes"]   region viva donde aparecen los avisos nuevos
  *
  * La emergente no bloquea: es un `Aviso` de informacion en una region
@@ -22,6 +24,37 @@
 
 import { crearBandeja, ESTADO_CANAL } from './bandeja.js';
 import { vaciar } from '../../comun/ui/dom.js';
+import { RUTAS, resolver } from '../../comun/sesion.js';
+
+/**
+ * Invitación a una sala — salas-partidas 1.10.0 (revisión del modo jugador del
+ * 6-oct, punto 13). El aviso lo emite salas-partidas con un `id` que lleva la
+ * sala y, si es privada, el código: `sala:{idSala}:invitacion:{uid}` y
+ * `…:codigo:{CODIGO}`. Este módulo no sabe de salas: solo convierte ese id en
+ * el enlace de invitación que el listado ya entiende (`?sala=…&codigo=…`).
+ */
+const ID_DE_INVITACION =
+  /^sala:([0-9a-f-]{36}):invitacion:[0-9a-f-]{36}(?::codigo:([A-Za-z0-9-]{1,20}))?$/i;
+
+/**
+ * El enlace «Unirme» de un aviso de invitación, o null si no lo es.
+ *
+ * @param {{id?: string}} aviso
+ * @param {string} [destino] el listado de salas
+ * @returns {string|null}
+ */
+export function enlaceDeInvitacion(aviso, destino = resolver(RUTAS.batallas, import.meta.url)) {
+  const partes = ID_DE_INVITACION.exec(String(aviso?.id ?? ''));
+  if (!partes) {
+    return null;
+  }
+  const url = new URL(destino, globalThis.location?.href ?? 'http://localhost/');
+  url.searchParams.set('sala', partes[1]);
+  if (partes[2]) {
+    url.searchParams.set('codigo', partes[2]);
+  }
+  return url.href;
+}
 
 /**
  * UX-R3.8 — el texto sin canal decia «Sin canal en tiempo real: consultando
@@ -35,7 +68,9 @@ import { vaciar } from '../../comun/ui/dom.js';
  *     rojo es para lo que esta roto.
  */
 const TEXTO_CONEXION = Object.freeze({
-  [ESTADO_CANAL.ESTABLE]: 'Notificaciones al instante',
+  // Auditoría de DEV del 30-sep: «Notificaciones al instante» se leía como un
+  // interruptor. Es un estado, y lo dice.
+  [ESTADO_CANAL.ESTABLE]: 'Conectado: los avisos llegan al instante',
   [ESTADO_CANAL.RECONECTANDO]: 'Reconectando…',
   [ESTADO_CANAL.SIN_CONEXION]: 'Los avisos pueden tardar un poco en llegar',
 });
@@ -68,6 +103,14 @@ function pintarContador(raiz, noLeidas) {
   }
   if (boton) {
     boton.setAttribute('aria-label', textoDeContador(noLeidas));
+  }
+}
+
+/** HU-NOT-001 CA-02: sin no leidos no hay nada que marcar; mientras responde, tampoco. */
+function pintarMarcarTodas(raiz, noLeidas, enCurso) {
+  const boton = raiz.querySelector('[data-zona="marcar-todas"]');
+  if (boton) {
+    boton.disabled = enCurso || noLeidas === 0;
   }
 }
 
@@ -115,17 +158,28 @@ function nodoDeAviso(aviso, alMarcar) {
   fecha.textContent = fechaLegible(aviso.creadaEn);
   pie.appendChild(fecha);
 
+  // Punto 13: una invitación a una sala se acepta desde aquí mismo.
+  const unirme = enlaceDeInvitacion(aviso);
+  if (unirme) {
+    const enlace = document.createElement('a');
+    enlace.className = 'boton boton--primario boton--pequeno';
+    enlace.dataset.accion = 'unirme-a-la-sala';
+    enlace.href = unirme;
+    enlace.textContent = 'Unirme';
+    pie.appendChild(enlace);
+  }
+
   if (aviso.leida) {
     const leida = document.createElement('span');
     leida.className = 'tarjeta__meta';
-    leida.textContent = 'Leida';
+    leida.textContent = 'Leída';
     pie.appendChild(leida);
   } else {
     const marcar = document.createElement('button');
     marcar.type = 'button';
     marcar.className = 'boton boton--secundario boton--pequeno';
     marcar.dataset.accion = 'marcar-leida';
-    marcar.textContent = 'Marcar como leida';
+    marcar.textContent = 'Marcar como leída';
     marcar.addEventListener('click', () => alMarcar(aviso.id));
     pie.appendChild(marcar);
   }
@@ -214,11 +268,27 @@ export function montarCampana(
 
   const marcar = (id) => bandeja.marcarLeida(id).catch(alError);
 
+  let noLeidas = 0;
+  let marcandoTodas = false;
+  const marcarTodas = () => {
+    marcandoTodas = true;
+    pintarMarcarTodas(raiz, noLeidas, marcandoTodas);
+    return bandeja
+      .marcarTodasLeidas()
+      .catch(alError)
+      .finally(() => {
+        marcandoTodas = false;
+        pintarMarcarTodas(raiz, noLeidas, marcandoTodas);
+      });
+  };
+
   const bandeja = fabrica({
     alCambiar(estado) {
+      noLeidas = estado.noLeidas;
       pintarContador(raiz, estado.noLeidas);
       pintarConexion(raiz, estado.canal);
       pintarLista(raiz, estado.avisos, marcar);
+      pintarMarcarTodas(raiz, estado.noLeidas, marcandoTodas);
     },
     alAviso(aviso) {
       if (emergentes) {
@@ -252,8 +322,11 @@ export function montarCampana(
     });
   }
 
+  raiz.querySelector('[data-zona="marcar-todas"]')?.addEventListener('click', marcarTodas);
+
   pintarContador(raiz, 0);
   pintarConexion(raiz, ESTADO_CANAL.SIN_CONEXION);
+  pintarMarcarTodas(raiz, 0, marcandoTodas);
   bandeja.iniciar();
 
   return { bandeja, abrir, cerrar };

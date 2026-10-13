@@ -41,6 +41,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
 import { verificarDesdeLaVista } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 import { servicioNoDesplegadoDe } from './ayudantes/no-desplegados.js';
 
 // ------------------------------------------------------------------ rutas
@@ -57,7 +58,8 @@ const EN = {
   jugar: /\/jugar(?:[?#]|$)/,
   torneos: /\/torneos(?:[?#]|$)/,
   subastas: /\/subastas(?:[?#]|$)/,
-  misiones: /misiones\.html(?:[?#]|$)/,
+  // 6-oct — el tablón de misiones también tiene dirección limpia.
+  misiones: /\/misiones(?:[?#]|$)/,
   sala: /sala-batalla\.html\?sala=/,
 };
 
@@ -113,8 +115,9 @@ function rutaDe(url) {
   }
 }
 
-/** axe sobre lo que se ve: sin hallazgos serios ni críticos. */
+/** axe sobre lo que se ve, con la página quieta: sin hallazgos serios ni críticos. */
 async function sinBarrerasGraves(page, donde) {
+  await conLaPaginaQuieta(page);
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
   // Con el elemento: «1× aria-prohibited-attr» sin decir cuál no se puede
@@ -310,13 +313,16 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
 
   await paso(1, 'Entrar a la URL pública', async () => {
     await page.goto('/');
-    await expect(page).toHaveURL(EN.login);
-    expect(new URL(page.url()).pathname, 'la dirección es la limpia, no la del fichero').toBe(
-      '/login',
-    );
-    await expect(page.locator('#formLogin')).toBeVisible();
-    // La vitrina pública (UXC-4) pinta sus productos después del formulario:
-    // se espera a que sus imágenes lleguen en vez de mirar un instante al azar
+    // F6 (auditoría del 4-oct, cambio autorizado n.º 3): la raíz es la portada
+    // pública con la tienda; ya no redirige al login.
+    expect(new URL(page.url()).pathname, 'la portada se sirve en la raíz').toBe('/');
+    await expect(page.locator('body[data-vista="portada"]')).toBeVisible();
+    // La tienda con productos reales, antes de tener cuenta, y sin «Añadir».
+    await expect(page.locator('.vitrina-publica .product-card').first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.vitrina-publica .btn-add')).toHaveCount(0);
+    // Se espera a que las imágenes lleguen en vez de mirar un instante al azar
     // (una vez falló a los 338 ms con las imágenes aún en camino). Una imagen
     // rota sigue fallando: nunca llega a cargar.
     await expect
@@ -325,9 +331,9 @@ async function entrarPorPrimeraVez(page, testInfo, { paso }, cuenta, clave) {
         timeout: 15_000,
       })
       .toBe(true);
-    const avisos = await sinBarrerasGraves(page, 'login');
-    await capturar(page, testInfo, '01-login');
-    return `/ → /login; axe sin graves (${avisos} avisos menores)`;
+    const avisos = await sinBarrerasGraves(page, 'portada');
+    await capturar(page, testInfo, '01-portada');
+    return `/ (portada pública con la tienda); axe sin graves (${avisos} avisos menores)`;
   });
 
   await paso(2, 'Pulsar «Crear cuenta»', async () => {
@@ -581,16 +587,22 @@ test.describe('R17 · la prueba del profesor', () => {
         const resultado = page.locator('[data-zona="resultado"]');
         const ataque = page.locator('[data-zona="acciones"] [data-atacar]').first();
         // HU-JUE-017 CA-04: al arrancar, la presentación de los héroes cubre el
-        // campo hasta que se entra al combate (o hasta el primer aviso del
-        // canal, si abre el rival). Una persona pulsa «Entrar al combate».
+        // campo. Revisión del 6-oct, punto 17: recién empezada cuenta 5…1 y
+        // «¡COMBATE!» y se cierra sola (los botones esperan mientras tanto);
+        // si se llega tarde, queda «Entrar al combate» para quitarla.
         const entrar = page.locator('[data-accion="entrar-al-combate"]');
+        const cuentaAtras = page.locator('[data-zona="cuenta-atras"]');
         // B7: el combate real dura mas que el simplificado (Tablas 21-23, D-B7-01).
         const limite = Date.now() + 8 * 60_000;
         let golpes = 0;
         let recargada = false;
         let presentacion = false;
+        let cuenta = false;
         while (Date.now() < limite && !(await resultado.isVisible())) {
-          if (await entrar.isVisible()) {
+          if (await cuentaAtras.isVisible()) {
+            cuenta = true;
+            await page.waitForTimeout(500);
+          } else if (await entrar.isVisible()) {
             presentacion = true;
             // El primer aviso del canal también la cierra: si se adelanta al
             // clic, no pasa nada.
@@ -641,6 +653,7 @@ test.describe('R17 · la prueba del profesor', () => {
           'las barras de vida se movieron',
         ).toBe(true);
         return (
+          `${cuenta ? 'presentación con cuenta atrás 5…1 «¡COMBATE!»; ' : ''}` +
           `${presentacion ? 'presentación de los héroes → «Entrar al combate»; ' : ''}` +
           `${golpes} golpes; vida propia ${alEmpezar.mia}→${alTerminar.mia}, ` +
           `rival ${alEmpezar.rival}→${alTerminar.rival}; un F5 a mitad volvió al combate`
@@ -651,16 +664,22 @@ test.describe('R17 · la prueba del profesor', () => {
         const resultado = page.locator('[data-zona="resultado"]');
         await expect(resultado).toContainText(/has ganado|has perdido|empate/i);
         // El desenlace ocupa toda la pantalla, barra incluida: tiene que llevar
-        // sus propias salidas (R17.4) o el profesor se queda sin camino.
-        await expect(resultado.locator('[data-accion="volver-a-jugar"]')).toBeVisible();
-        await expect(resultado.locator('[data-accion="ver-mi-cuenta"]')).toBeVisible();
+        // su propia salida (R17.4) o el profesor se queda sin camino. Revisión
+        // del 6-oct, punto 20: una sola, «Volver a las salas», no a la cuenta.
+        const volver = resultado.locator('[data-accion="volver-a-jugar"]');
+        await expect(volver).toBeVisible();
+        await expect(volver).toHaveText('Volver a las salas');
+        await expect(resultado.locator('[data-accion="ver-mi-cuenta"]')).toHaveCount(0);
         await capturar(page, testInfo, '15-resultado');
-        return `${desenlace.slice(0, 160)} → salidas «Volver a Jugar online» y «Ver mi cuenta»`;
+        return `${desenlace.slice(0, 160)} → salida «Volver a las salas»`;
       });
 
       await paso(16, 'Revisar la cuenta y el historial', async () => {
-        // Desde el propio panel del desenlace, como lo haría una persona.
-        await page.locator('[data-zona="resultado"] [data-accion="ver-mi-cuenta"]').click();
+        // «Volver a las salas» lleva al listado; la cuenta, desde la barra,
+        // como lo haría una persona.
+        await page.locator('[data-zona="resultado"] [data-accion="volver-a-jugar"]').click();
+        await expect(page).toHaveURL(EN.jugar);
+        await irA(page, 'cuenta');
         await expect(page).toHaveURL(EN.cuenta);
         // La apuesta se liquida justo detrás del final (HU-JUE-014). Se espera
         // a que no quede nada apartado, recargando como lo haría una persona:
@@ -827,8 +846,8 @@ test.describe('R17 · la prueba del profesor', () => {
 
       // Ningún error de página en todo el recorrido, y ningún 5xx fuera de los
       // servicios que el catálogo declara fuera de DEV (`desplegableDev:
-      // false`) o sin acceso desde el borde (`accesoPendiente`: hoy subastas y
-      // misiones, a la espera del grupo de seguridad del Grupo 2), cuya vista
+      // false`) o sin acceso desde el borde (`accesoPendiente`; ninguno desde el 2-oct,
+      // cuando el grupo de seguridad del Grupo 2 admitió 8092 y 8105), cuya vista
       // dice que no están —se comprobó arriba—. Al quitar la marca, su 5xx cuenta.
       const graves = bitacora.incidencias.filter((i) => {
         if (i.tipo === 'pagina') return true;

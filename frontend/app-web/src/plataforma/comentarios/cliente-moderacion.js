@@ -17,6 +17,9 @@
  * y el borde lo enruta a otro servicio. Cambiarlo aqui a la ruta «bonita»
  * rompe la vista en el navegador aunque las pruebas sigan verdes.
  *
+ * Contrato 1.10.0 (HU-COM-005): la cola acepta ademas `categoria` y
+ * `prioridadElevada` como filtros opcionales.
+ *
  * Los errores salen como {@link ErrorDeApi} —el mismo de
  * `cliente-comentarios.js`— para que la vista decida por `motivo` y nunca
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
@@ -52,7 +55,15 @@ const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);
  * que manda es la suya y la vista se entera por el problem detail.
  */
 export const ACCIONES = Object.freeze([
-  { valor: 'APROBAR', etiqueta: 'Aprobar', desde: ['EN_REVISION'] },
+  // comentarios.yaml 1.8.0: un reporte encola sin ocultar, asi que se aprueba
+  // tambien uno PUBLICADO —pero solo si tiene reportes pendientes: sin ellos,
+  // el servicio contesta 409 (otro moderador ya lo atendio)—.
+  {
+    valor: 'APROBAR',
+    etiqueta: 'Aprobar',
+    desde: ['EN_REVISION', 'PUBLICADO'],
+    publicadoConReportes: true,
+  },
   { valor: 'OCULTAR', etiqueta: 'Ocultar', desde: ['EN_REVISION', 'PUBLICADO'] },
   { valor: 'ELIMINAR', etiqueta: 'Eliminar', desde: ['EN_REVISION', 'PUBLICADO', 'OCULTO'] },
   { valor: 'RESTAURAR', etiqueta: 'Restaurar', desde: ['OCULTO'] },
@@ -65,6 +76,38 @@ export const ACCIONES = Object.freeze([
     marca: true,
   },
 ]);
+
+/**
+ * Las decisiones que atienden los reportes recibidos hasta ese momento
+ * (comentarios.yaml 1.8.0, `AccionDeModeracion.RESUELVEN_REPORTES`): un
+ * reporte anterior a una de ellas ya no esta pendiente. MARCAR y DESMARCAR no.
+ */
+export const ACCIONES_QUE_RESUELVEN_REPORTES = Object.freeze([
+  'APROBAR',
+  'OCULTAR',
+  'ELIMINAR',
+  'RESTAURAR',
+  'EDITAR',
+]);
+
+/**
+ * Si el comentario tiene reportes PENDIENTES: alguno posterior a la ultima
+ * decision que atiende reportes. Es la misma regla que aplica el servicio, con
+ * lo que ya trae el detalle (sus reportes y su historial).
+ *
+ * @param {{reportes?: Array<{fecha?: string}>, historial?: Array<{accion?: string, fecha?: string}>}} detalle
+ * @returns {boolean}
+ */
+export function hayReportesPendientes(detalle) {
+  const reportes = detalle?.reportes ?? [];
+  if (reportes.length === 0) {
+    return false;
+  }
+  const ultimaDecision = (detalle?.historial ?? [])
+    .filter((a) => ACCIONES_QUE_RESUELVEN_REPORTES.includes(a.accion))
+    .reduce((max, a) => Math.max(max, Date.parse(a.fecha ?? '') || 0), 0);
+  return reportes.some((r) => (Date.parse(r.fecha ?? '') || 0) > ultimaDecision);
+}
 
 /**
  * Las que dejan el comentario en el estado en que estaba (1.5.0): tras ellas
@@ -89,7 +132,22 @@ export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
+  // comentarios.yaml 1.10.0: ELIMINAR en lote sin la confirmacion exacta (400).
+  CONFIRMACION_REQUERIDA: 'CONFIRMACION_REQUERIDA',
 });
+
+/**
+ * Las acciones que valen en lote (`AccionDeLote`, comentarios.yaml 1.10.0): las
+ * de `ACCIONES` menos EDITAR, que necesita un texto distinto por comentario.
+ */
+export const ACCIONES_EN_LOTE = Object.freeze(
+  ACCIONES.filter((a) => a.valor !== 'EDITAR').map(({ valor, etiqueta }) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
+
+/** Valor exacto de `confirmacion` que exige ELIMINAR en lote (7.3.9, contrato 1.10.0). */
+export const CONFIRMACION_DE_ELIMINAR = 'ELIMINAR';
 
 /** Largos del contrato (`DecisionRequest`). */
 export const MOTIVO_MINIMO = 3;
@@ -97,24 +155,40 @@ export const MOTIVO_MAXIMO = 500;
 export const TEXTO_NUEVO_MAXIMO = 2000;
 
 /**
- * Que mirar en la cola (`marcado`, 1.5.0): sin filtro, la de siempre (los
- * EN_REVISION); `true`, la lista de seguimiento (los marcados en cualquier
- * estado salvo ELIMINADO); `false`, los EN_REVISION sin marcar.
+ * Que mirar en la cola (`marcado`, 1.5.0): sin filtro, lo pendiente —los
+ * EN_REVISION y, desde la 1.8.0, los PUBLICADOS con reportes pendientes—;
+ * `true`, la lista de seguimiento (los marcados en cualquier estado salvo
+ * ELIMINADO); `false`, lo pendiente sin marcar.
  */
 export const FILTROS_DE_COLA = Object.freeze([
-  { valor: 'en-revision', etiqueta: 'En revisión', marcado: null },
+  { valor: 'en-revision', etiqueta: 'Pendientes de revisión', marcado: null },
   { valor: 'marcados', etiqueta: 'Marcados para seguimiento', marcado: true },
-  { valor: 'sin-marcar', etiqueta: 'En revisión sin marcar', marcado: false },
+  { valor: 'sin-marcar', etiqueta: 'Pendientes sin marcar', marcado: false },
+]);
+
+/**
+ * Que prioridad mirar en la cola (`prioridadElevada`, 1.10.0): todas, solo las de
+ * prioridad elevada o solo las demas. `prioridadElevada: null` no viaja.
+ */
+export const FILTROS_DE_PRIORIDAD = Object.freeze([
+  { valor: 'todas', etiqueta: 'Todas', prioridadElevada: null },
+  { valor: 'elevada', etiqueta: 'Solo prioridad elevada', prioridadElevada: true },
+  { valor: 'sin-elevada', etiqueta: 'Sin prioridad elevada', prioridadElevada: false },
 ]);
 
 /**
  * @param {string} estado estado actual del comentario
  * @param {boolean} [marcado] si tiene la marca de seguimiento (1.5.0)
+ * @param {{reportesPendientes?: boolean}} [contexto] si tiene reportes pendientes
+ *   ({@link hayReportesPendientes}): sin ellos no se ofrece aprobar uno PUBLICADO
  * @returns {Array<{valor: string, etiqueta: string}>} acciones que tienen sentido
  */
-export function accionesDesde(estado, marcado = false) {
+export function accionesDesde(estado, marcado = false, { reportesPendientes = false } = {}) {
   return ACCIONES.filter(
-    (a) => a.desde.includes(estado) && (a.marca === undefined || a.marca === Boolean(marcado)),
+    (a) =>
+      a.desde.includes(estado) &&
+      (a.marca === undefined || a.marca === Boolean(marcado)) &&
+      !(a.publicadoConReportes && estado === 'PUBLICADO' && !reportesPendientes),
   ).map(({ valor, etiqueta }) => ({ valor, etiqueta }));
 }
 
@@ -131,12 +205,20 @@ async function cuerpoDelProblema(respuesta) {
   }
 }
 
-async function pedir(url, opciones, fetchImpl) {
+/**
+ * @param {string} url
+ * @param {object} opciones
+ * @param {Function} fetchImpl
+ * @param {new (problema: object|null, estado: number) => ErrorDeApi} [FabricaDeError] el
+ *   error que se lanza ante un rechazo; por omision {@link ErrorDeApi}, asi que
+ *   quien no la pasa se comporta como siempre
+ */
+async function pedir(url, opciones, fetchImpl, FabricaDeError = ErrorDeApi) {
   const respuesta = await fetchImpl(url, opciones);
   if (respuesta.ok) {
     return respuesta.status === 204 ? null : respuesta.json();
   }
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new FabricaDeError(await cuerpoDelProblema(respuesta), respuesta.status);
 }
 
 /**
@@ -176,14 +258,24 @@ export async function reportarComentario(
  * Vacia es `200` con lista vacia, no un 404: no tener trabajo pendiente es
  * una respuesta correcta, y la vista lo pinta como tal.
  *
- * @param {{productoId?: string|null, marcado?: boolean|null, pagina?: number, tamano?: number}} [filtro]
+ * @param {{productoId?: string|null, marcado?: boolean|null, categoria?: string|null,
+ *   prioridadElevada?: boolean|null, pagina?: number, tamano?: number}} [filtro]
  *   `marcado` (1.5.0): `true` la lista de seguimiento, `false` los en revision
  *   sin marcar; `null` no viaja y el servicio da la cola de siempre.
+ *   `categoria` y `prioridadElevada` (1.10.0) filtran ademas: «Todas» llega aqui como
+ *   `null` o `''` y no genera parametro. El servicio decide si una categoria existe.
  * @param {{fetchImpl?: Function}} [opciones]
  * @returns {Promise<{entradas: object[], total: number, pagina: number, tamano: number}>}
  */
 export async function consultarCola(
-  { productoId = null, marcado = null, pagina = 0, tamano = 20 } = {},
+  {
+    productoId = null,
+    marcado = null,
+    categoria = null,
+    prioridadElevada = null,
+    pagina = 0,
+    tamano = 20,
+  } = {},
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
@@ -192,6 +284,12 @@ export async function consultarCola(
   }
   if (marcado === true || marcado === false) {
     parametros.set('marcado', String(marcado));
+  }
+  if (typeof categoria === 'string' && categoria !== '') {
+    parametros.set('categoria', categoria);
+  }
+  if (prioridadElevada === true || prioridadElevada === false) {
+    parametros.set('prioridadElevada', String(prioridadElevada));
   }
   return pedir(
     `${rutaDeModeracion()}?${parametros}`,
@@ -272,6 +370,82 @@ export async function resolverComentario(
       body: JSON.stringify(decision),
     },
     fetchImpl,
+  );
+}
+
+/**
+ * El rechazo de la decision en lote: un {@link ErrorDeApi} que ademas dice que
+ * comentarios lo causaron (`comentarioIds` del problem detail: en el 404 los que
+ * no existen, en el 409 los que no admiten la accion), en el orden en que los
+ * dio el servicio.
+ *
+ * Es una subclase y no un cambio en `ErrorDeApi` porque ese error lo comparten
+ * otras vistas, que no necesitan la lista. Del problema solo se leen textos:
+ * lo demas que traiga `comentarioIds` se ignora.
+ */
+export class ErrorDeLote extends ErrorDeApi {
+  /**
+   * @param {{comentarioIds?: unknown}|null} problema
+   * @param {number} estado
+   */
+  constructor(problema, estado) {
+    super(problema, estado);
+    const ids = problema?.comentarioIds;
+    /** @type {string[]} */
+    this.comentarioIds = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+  }
+}
+
+/**
+ * @typedef {object} DecisionEnLote
+ * @property {string[]} comentarioIds
+ * @property {string} accion una de {@link ACCIONES_EN_LOTE}
+ * @property {string} motivo
+ * @property {string} [confirmacion] solo cuenta con ELIMINAR: {@link CONFIRMACION_DE_ELIMINAR}
+ *
+ * @typedef {object} ItemDeDecisionEnLote
+ * @property {string} comentarioId
+ * @property {object} asiento
+ * @property {boolean} [autorNotificado] `false` no invalida la decision
+ *
+ * @typedef {object} ResultadoDelLote
+ * @property {string} accion
+ * @property {number} total
+ * @property {ItemDeDecisionEnLote[]} resultados
+ */
+
+/**
+ * La misma decision para varios comentarios a la vez, atomica — RF-COM-008,
+ * comentarios.yaml 1.10.1: o se resuelven todos o no cambia ninguno. Solo roles
+ * de moderacion.
+ *
+ * Quien firma sale del token, no de aqui: aunque `decision` traiga otros campos,
+ * el cuerpo lleva solo los ids, la accion, el motivo y, con ELIMINAR, la
+ * confirmacion. No se validan topes ni largos: los exige el servicio.
+ *
+ * @param {DecisionEnLote} decision
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<ResultadoDelLote>}
+ * @throws {ErrorDeLote} 400 (entrada o `CONFIRMACION_REQUERIDA`), 401, 403, 404 y 409
+ *   con `comentarioIds`
+ */
+export async function resolverEnLote(
+  { comentarioIds, accion, motivo, confirmacion },
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const cuerpo = { comentarioIds, accion, motivo };
+  if (accion === 'ELIMINAR') {
+    cuerpo.confirmacion = confirmacion;
+  }
+  return pedir(
+    `${rutaDeModeracion()}/decisiones-en-lote`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(cuerpo),
+    },
+    fetchImpl,
+    ErrorDeLote,
   );
 }
 

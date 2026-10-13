@@ -43,7 +43,9 @@ class SubastaRealtimePublisherTest {
         assertEquals(new BigDecimal("125.00"), resumen.ofertaVigente());
         assertEquals(3, resumen.cantidadPujas());
         assertEquals(subasta.getFechaFin(), resumen.fechaFin());
-        assertNull(resumen.vendedorId());
+        // G5: el canal va a todos: ni el uid del vendedor (ya no existe en el
+        // resumen) ni esPropia.
+        assertNull(resumen.esPropia());
         // B8: el mismo mensaje llega al canal de ESA subasta, para la ficha.
         verify(mensajeria).convertAndSend("/topic/subastas/" + subasta.getId(), resumen);
         verifyNoMoreInteractions(mensajeria);

@@ -559,6 +559,122 @@ class EjecutarAccionTest {
     }
 
     /**
+     * Auditoria del 4-oct: «cuando yo ataco, tambien me hago dano a mi mismo».
+     *
+     * <p>El servidor nunca dirige un ataque contra quien lo lanza. Lo que el
+     * jugador veia era el contragolpe de la maquina, que llega en la misma
+     * rafaga, o un reflejo (Pinchos de escudo) anunciado sin su causa. Desde el
+     * canal 1.7.0 cada aviso dice a quien apunto y por que cambio cada vida.
+     */
+    @Nested
+    @DisplayName("sin auto-dano al atacar (auditoria del 4-oct)")
+    class SinAutoDano {
+
+        private Partida contraLaMaquina() {
+            Sala sala = Sala.crear(new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
+                    new FichaDeParticipante("Ana", heroe("Arquero", 100)));
+            return partidas.guardar(Partida.iniciar(sala, AHORA));
+        }
+
+        private UUID maquinaDe(Partida partida) {
+            return partida.participantes().stream()
+                    .filter(com.nexusbattles.plataforma.salaspartidas.dominio.ParticipanteDePartida::esIA)
+                    .findFirst().orElseThrow().idJugador();
+        }
+
+        private AccionResuelta.Afectado afectado(AccionResuelta aviso, UUID id) {
+            return aviso.afectados().stream().filter(a -> a.idJugador().equals(id)).findFirst().orElseThrow();
+        }
+
+        @Test
+        @DisplayName("al atacar a la maquina baja la vida del objetivo y nunca la de quien ataca")
+        void elAtaqueNoLeQuitaVidaAlAtacante() {
+            Partida partida = contraLaMaquina();
+            UUID maquina = maquinaDe(partida);
+            motor.dano = 12;
+
+            casoDeUso().ejecutar(partida.id(), ANA, maquina, MotorDeCombate.ATAQUE_BASICO);
+
+            AccionResuelta golpe = canal.acciones.get(0);
+            AccionResuelta.Afectado deAna = afectado(golpe, ANA);
+            AccionResuelta.Afectado deLaMaquina = afectado(golpe, maquina);
+            assertAll(
+                    () -> assertEquals(ANA, golpe.idEjecutor()),
+                    () -> assertEquals(maquina, golpe.idObjetivo(), "el aviso dice a quien apunto"),
+                    () -> assertEquals(-12, deLaMaquina.diferencia()),
+                    () -> assertEquals(List.of(new AccionResuelta.Causa("DANO", ANA, MotorDeCombate.ATAQUE_BASICO, 12)),
+                            deLaMaquina.causas()),
+                    () -> assertEquals(0, deAna.diferencia(), "Ana viaja por su poder, no porque se golpeara"),
+                    () -> assertEquals(100, deAna.vidaActual()),
+                    () -> assertTrue(deAna.causas().isEmpty(), "nada le cambio la vida a Ana con su golpe"));
+        }
+
+        @Test
+        @DisplayName("el contragolpe de la maquina llega en su propio aviso, con la maquina como ejecutora")
+        void elContragolpeEsDeLaMaquina() {
+            Partida partida = contraLaMaquina();
+            UUID maquina = maquinaDe(partida);
+            motor.dano = 12;
+
+            Partida despues = casoDeUso().ejecutar(partida.id(), ANA, maquina, MotorDeCombate.ATAQUE_BASICO);
+
+            AccionResuelta contragolpe = canal.acciones.get(1);
+            assertAll(
+                    () -> assertEquals(List.of("accion", "turno", "accion", "turno"), canal.tipos(),
+                            "tu golpe, su turno, su golpe, tu turno: dos avisos de accion distintos"),
+                    () -> assertEquals(maquina, contragolpe.idEjecutor()),
+                    () -> assertEquals(ANA, contragolpe.idObjetivo()),
+                    () -> assertEquals(-12, afectado(contragolpe, ANA).diferencia()),
+                    () -> assertEquals(List.of(new AccionResuelta.Causa("DANO", maquina, MotorDeCombate.ATAQUE_BASICO,
+                            12)), afectado(contragolpe, ANA).causas(), "el dano de Ana lo causo la maquina"),
+                    () -> assertEquals(88, despues.participante(ANA).orElseThrow().heroe().vidaActual()));
+        }
+
+        @Test
+        @DisplayName("si el objetivo le devuelve dano (Pinchos de escudo), viaja como REFLEJO con quien lo causo")
+        void elReflejoViajaConSuCausa() {
+            Partida partida = partidaDe(ANA, BRUNO);
+            motor.reflejo = 1;
+
+            casoDeUso().ejecutar(partida.id(), ANA, BRUNO, MotorDeCombate.ATAQUE_BASICO);
+
+            AccionResuelta.Afectado deAna = afectado(canal.acciones.get(0), ANA);
+            assertAll(
+                    () -> assertEquals(-1, deAna.diferencia()),
+                    () -> assertEquals(List.of(new AccionResuelta.Causa("REFLEJO", BRUNO, "Pinchos de escudo", 1)),
+                            deAna.causas(), "no es un golpe propio: se lo devolvio Bruno"),
+                    () -> assertEquals(99, enBase(partida).participante(ANA).orElseThrow().heroe().vidaActual()));
+        }
+
+        @Test
+        @DisplayName("un ataque basico contra uno mismo se rechaza sin preguntarle al motor")
+        void contraUnoMismoNiSeLePreguntaAlMotor() {
+            Partida partida = partidaDe(ANA, BRUNO);
+
+            AccionNoPermitida rechazo = assertThrows(AccionNoPermitida.class,
+                    () -> casoDeUso().ejecutar(partida.id(), ANA, ANA, MotorDeCombate.ATAQUE_BASICO));
+
+            assertAll(
+                    () -> assertEquals("OBJETIVO_INVALIDO", rechazo.motivo()),
+                    () -> assertTrue(motor.acciones.isEmpty(), "ni se le pregunta al motor"),
+                    () -> assertTrue(canal.anuncios.isEmpty()),
+                    () -> assertEquals(100, enBase(partida).participante(ANA).orElseThrow().heroe().vidaActual()));
+        }
+
+        @Test
+        @DisplayName("una accion que no es el ataque basico la decide el motor: una sanacion si puede ir a uno mismo")
+        void otrasAccionesLasDecideElMotor() {
+            Partida partida = partidaDe(ANA, BRUNO);
+
+            assertThrows(AccionNoPermitida.class,
+                    () -> casoDeUso().ejecutar(partida.id(), ANA, ANA, "Toque de la Vida"));
+
+            assertEquals("Toque de la Vida " + ANA + "->" + ANA, motor.acciones.get(0),
+                    "el doble trata todo como ataque y lo rechaza, pero la pregunta llego al motor");
+        }
+    }
+
+    /**
      * RF-JUE-004 — HU-SAL-004: modo cooperativo. Equipos de dos: Ana y Bruno
      * contra Carla y Dario. Ana abre (orden de entrada).
      */
@@ -589,7 +705,9 @@ class EjecutarAccionTest {
             assertAll(
                     () -> assertTrue(rechazo.getMessage().contains("equipo"), rechazo.getMessage()),
                     () -> assertEquals(100, enBase(partida).participantes().get(1).heroe().vidaActual(),
-                            "Bruno intacto"));
+                            "Bruno intacto"),
+                    () -> assertTrue(motor.acciones.isEmpty(),
+                            "el ataque basico a un companero se rechaza antes de llegar al motor"));
         }
 
         @Test

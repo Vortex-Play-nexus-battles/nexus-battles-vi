@@ -1,12 +1,15 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
 import org.slf4j.Logger;
@@ -15,8 +18,14 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.data.domain.PageRequest;
+
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 // HU-CHA-001/004/008/011 con el endurecimiento de B11 (ms-chatbot.yaml 1.2.0):
 //
@@ -43,11 +52,13 @@ public class ChatService {
     private final LimitadorDeFrecuencia limitador;
     private final ModeracionDeContenido moderacion;
     private final RegistroDeConversaciones registro;
+    private final PreferenciasService preferenciasService;
 
     public ChatService(ConversacionRepository conversacionRepository, MensajeRepository mensajeRepository,
                        MotorRespuestas motorRespuestas, MotorConsultasAsistidas motorConsultasAsistidas,
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
-                       ModeracionDeContenido moderacion, RegistroDeConversaciones registro) {
+                       ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
+                       PreferenciasService preferenciasService) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -56,9 +67,17 @@ public class ChatService {
         this.limitador = limitador;
         this.moderacion = moderacion;
         this.registro = registro;
+        this.preferenciasService = preferenciasService;
     }
 
     public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl) {
+        return enviarMensaje(identidad, contenido, adjuntoUrl, null);
+    }
+
+    // ms-chatbot.yaml 1.3.4: `vista` es la seccion donde esta el jugador; la
+    // usa MotorRespuestas para la respuesta contextual. Puede ser null.
+    public Mensaje enviarMensaje(IdentidadDelChat identidad, String contenido, String adjuntoUrl,
+                                 VistaDelChat vista) {
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, identidad.claveDeLimite());
         moderacion.verificar(contenido);
 
@@ -67,7 +86,7 @@ public class ChatService {
         Instant recibido = Instant.now();
         long inicio = System.nanoTime();
 
-        ResultadoMotor resultado = generarRespuesta(identidad, contenido);
+        ResultadoMotor resultado = generarRespuesta(identidad, contenido, vista);
         if (resultado.requiereEscalamiento()) {
             registrarPreguntaNoCubierta(contenido);
         }
@@ -89,12 +108,36 @@ public class ChatService {
     // intencion no aplica (Optional vacio), se sigue exactamente igual que en
     // HU-CHA-004 con MotorRespuestas. Un visitante nunca pasa por el primer
     // motor.
-    private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido) {
+    private ResultadoMotor generarRespuesta(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
         if (identidad.autenticado() && identidad.tokenCrudo() != null) {
             return motorConsultasAsistidas.generarRespuesta(contenido, identidad.tokenCrudo(), identidad.uid())
-                .orElseGet(() -> motorRespuestas.generarRespuesta(contenido));
+                .orElseGet(() -> responderConLaBase(identidad, contenido, vista));
         }
-        return motorRespuestas.generarRespuesta(contenido);
+        return responderConLaBase(identidad, contenido, vista);
+    }
+
+    // 1.3.6: con preferencias propias (idioma o nivel de detalle), la base
+    // responde con ellas; con las de por defecto, exactamente como antes.
+    private ResultadoMotor responderConLaBase(IdentidadDelChat identidad, String contenido, VistaDelChat vista) {
+        PreferenciasDeRespuesta preferencias = preferenciasDe(identidad);
+        if (!preferencias.sonPorDefecto()) {
+            return motorRespuestas.generarRespuesta(contenido, vista, preferencias);
+        }
+        return vista == null
+            ? motorRespuestas.generarRespuesta(contenido)
+            : motorRespuestas.generarRespuesta(contenido, vista);
+    }
+
+    // Si no se pueden leer las preferencias, se responde con las de por
+    // defecto: contestar importa mas que el formato de la respuesta.
+    private PreferenciasDeRespuesta preferenciasDe(IdentidadDelChat identidad) {
+        try {
+            PreferenciasDeRespuesta guardadas = preferenciasService.de(identidad);
+            return guardadas == null ? PreferenciasDeRespuesta.POR_DEFECTO : guardadas;
+        } catch (RuntimeException excepcion) {
+            log.warn("No se pudieron leer las preferencias del chat; se responde con las de por defecto", excepcion);
+            return PreferenciasDeRespuesta.POR_DEFECTO;
+        }
     }
 
     // HU-CHA-011: una pregunta que MotorRespuestas no entendio y escalo es,
@@ -131,6 +174,35 @@ public class ChatService {
         return conversacionRepository.findByIdentificadorSesion(identidad.claveDeConversacion())
             .map(c -> mensajeRepository.findByConversacionIdOrderByFechaEnvioAsc(c.getId()))
             .orElseGet(List::of);
+    }
+
+    // ms-chatbot.yaml 1.3.5: una pagina del historial. Sin cursor, los
+    // 'limite' mensajes mas recientes; con cursor, los 'limite' anteriores a
+    // el. Siempre en orden cronologico, como el historial completo. Un cursor
+    // de otra conversacion (o ya borrado) da lista vacia: no revela nada.
+    @Transactional(readOnly = true)
+    public List<Mensaje> obtenerHistorial(IdentidadDelChat identidad, UUID antesDe, int limite) {
+        return conversacionRepository.findByIdentificadorSesion(identidad.claveDeConversacion())
+            .map(c -> paginaDelHistorial(c.getId(), antesDe, limite))
+            .orElseGet(List::of);
+    }
+
+    private List<Mensaje> paginaDelHistorial(UUID conversacionId, UUID antesDe, int limite) {
+        PageRequest pagina = PageRequest.of(0, limite);
+        List<Mensaje> recientesPrimero;
+        if (antesDe == null) {
+            recientesPrimero = mensajeRepository.findByConversacionIdOrderByFechaEnvioDescIdDesc(conversacionId, pagina);
+        } else {
+            Optional<Mensaje> cursor = mensajeRepository.findByIdAndConversacionId(antesDe, conversacionId);
+            if (cursor.isEmpty()) {
+                return List.of();
+            }
+            recientesPrimero = mensajeRepository.buscarAnteriores(conversacionId, cursor.get().getFechaEnvio(),
+                antesDe, pagina);
+        }
+        List<Mensaje> cronologico = new ArrayList<>(recientesPrimero);
+        Collections.reverse(cronologico);
+        return cronologico;
     }
 
     @Transactional

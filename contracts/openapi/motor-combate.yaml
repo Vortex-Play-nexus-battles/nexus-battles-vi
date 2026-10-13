@@ -42,11 +42,20 @@ openapi: 3.1.0
 # La «decision funcional pendiente» de 1.1.0 (mapeo heroe -> prototipo de la
 # Tabla 21) no lo era: la Tabla 21 esta escrita por TIPO DE HEROE, y el tipo
 # de heroe es el prototipo del catalogo. /acciones lo deduce del prototipo.
+#
+# ---------------------------------------------------------------------------
+# 1.2.1 (auditoria del 4-oct, D-41) — SOLO DESCRIPCION, sin cambio de forma.
+#
+#   `DECISION_DE_LA_MAQUINA` decide con una IA TACTICA POR REGLAS en lugar de
+#   la politica fija de D-B7-12: ensaya cada jugada legal con estas mismas
+#   reglas y juega la de mejor puntaje esperado, con dificultad FACIL, NORMAL
+#   o DIFICIL (`MOTOR_IA_DIFICULTAD`, NORMAL por omision). La peticion y la
+#   respuesta no cambian: `accion` sigue siendo la que decidio el motor.
 # =============================================================================
 
 info:
   title: Nexus Battles VI — Motor de combate
-  version: 1.2.0
+  version: 1.2.1
   description: |
     Reglas del combate de THE NEXUS BATTLES VI (seccion 6 del documento del
     curso): tirada de ataque contra la defensa, tabla de efectos de 8.000
@@ -113,11 +122,18 @@ paths:
         `enValorBase: true`.
 
         **La accion `DECISION_DE_LA_MAQUINA`** hace que el motor elija por el
-        ejecutor con una politica simple y determinista (D-B7-12): la accion
-        especial disponible mas cara de tipo ATAQUE (empate: orden de la
-        Tabla 7), si no el ataque basico; objetivo, el rival en pie con menos
-        vida (empate: el primero de `combatientes`). No hay aprendizaje: el
-        «aprendizaje profundo» del §7.6 queda fuera (D-B7-13).
+        ejecutor con una IA tactica por reglas (D-41, sustituye a D-B7-12):
+        enumera cada accion disponible con cada objetivo que esa accion admite
+        (un ataque, solo rivales en pie; nunca uno mismo ni un companero), la
+        ensaya varias veces con estas mismas reglas sobre una copia del estado
+        y juega la de mejor puntaje esperado (vida y caidas de cada bando,
+        efectos, poder util; en DIFICIL, ademas, la respuesta esperada de los
+        rivales). Los ensayos usan un generador propio sembrado con el estado:
+        la decision no ve ni consume el azar de la partida, y el mismo estado
+        da la misma decision. Una jugada que el reglamento rechazaria nunca se
+        elige. Dificultad FACIL, NORMAL o DIFICIL segun `MOTOR_IA_DIFICULTAD`
+        (NORMAL por omision). No hay aprendizaje: el «aprendizaje profundo» del
+        §7.6 queda fuera (D-B7-13).
       requestBody:
         required: true
         content:

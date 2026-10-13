@@ -17,9 +17,10 @@
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../../shared/ui-kit/css/fondos.css" />
   </head>
 
-  <body>
+  <body data-fondo="cuenta">
     <!--
       Cabecera de 64 px con los seis destinos de RF-INV-008 y el buscador de
       productos de RF-INV-004. Se repite en cada vista mientras no exista una
@@ -56,6 +57,18 @@
           <span class="conexion conexion--sin-conexion" data-zona="conexion" role="status"
             >Sin canal en tiempo real</span
           >
+        </div>
+
+        <!-- HU-NOT-001 CA-02: todo de una vez. Lo habilita `campana.js` cuando hay no leidas. -->
+        <div class="acciones">
+          <button
+            type="button"
+            class="boton boton--secundario boton--pequeno"
+            data-zona="marcar-todas"
+            disabled
+          >
+            Marcar todas como leídas
+          </button>
         </div>
 
         <p class="t-meta" data-zona="lista-vacia">

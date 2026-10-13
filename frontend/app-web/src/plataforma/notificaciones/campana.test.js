@@ -5,7 +5,13 @@
 
 import { jest } from '@jest/globals';
 
-import { montarCampana, pintarEmergente, textoDeContador, fechaLegible } from './campana.js';
+import {
+  montarCampana,
+  pintarEmergente,
+  textoDeContador,
+  fechaLegible,
+  enlaceDeInvitacion,
+} from './campana.js';
 import { ESTADO_CANAL } from './bandeja.js';
 
 const HTML = `
@@ -18,6 +24,7 @@ const HTML = `
     <div data-zona="emergentes" aria-live="polite"></div>
     <section id="panel" data-zona="panel" hidden>
       <span class="conexion conexion--sin-conexion" data-zona="conexion"></span>
+      <button type="button" data-zona="marcar-todas" disabled>Marcar todas como leídas</button>
       <p data-zona="lista-vacia">Todavia no tienes notificaciones.</p>
       <ul data-zona="lista"></ul>
     </section>
@@ -34,12 +41,13 @@ const aviso = (id, extra = {}) => ({
   ...extra,
 });
 
-function preparar() {
+function preparar({ alError } = {}) {
   document.body.innerHTML = HTML;
   let callbacks;
   const bandeja = {
     iniciar: jest.fn(),
     marcarLeida: jest.fn(async () => 0),
+    marcarTodasLeidas: jest.fn(async () => 0),
     detener: jest.fn(),
   };
   const fabrica = jest.fn((cb) => {
@@ -47,9 +55,11 @@ function preparar() {
     return bandeja;
   });
   const programar = jest.fn();
-  const montado = montarCampana(document, { fabrica, programar, duracionEmergente: 5000 });
+  const montado = montarCampana(document, { fabrica, programar, duracionEmergente: 5000, alError });
   return { ...montado, callbacks: () => callbacks, bandeja, programar };
 }
+
+const asentar = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe('montarCampana', () => {
   test('arranca la bandeja y pinta el estado inicial: sin contador, sin canal', () => {
@@ -86,6 +96,10 @@ describe('montarCampana', () => {
     expect(items[0].dataset.avisoId).toBe('n-2');
     expect(items[0].querySelector('.tarjeta__titulo').textContent).toBe('Titulo n-2');
     expect(items[1].querySelector('[data-accion="marcar-leida"]')).toBeNull();
+    expect(items[0].querySelector('[data-accion="marcar-leida"]').textContent).toBe(
+      'Marcar como leída',
+    );
+    expect(items[1].querySelector('span.tarjeta__meta').textContent).toBe('Leída');
 
     items[0].querySelector('[data-accion="marcar-leida"]').click();
     expect(bandeja.marcarLeida).toHaveBeenCalledWith('n-2');
@@ -113,6 +127,36 @@ describe('montarCampana', () => {
     expect(document.querySelector('[data-zona="emergentes"] .aviso--error')).toBeNull();
   });
 
+  test('HU-NOT-001: un cambio del catálogo (CAMBIO_CATALOGO) se pinta como cualquier aviso, con su descripción, su fecha y «Marcar como leída»', () => {
+    const { callbacks, bandeja } = preparar();
+    const delCatalogo = aviso('catalogo:alerta-1', {
+      tipo: 'CAMBIO_CATALOGO',
+      titulo: 'Producto modificado',
+      cuerpo:
+        'El producto Espada solar fue modificado. Fecha de implementación: 5 de octubre de 2026, 10:30.',
+      creadaEn: '2026-10-05T15:30:00Z',
+    });
+
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 1, avisos: [delCatalogo] });
+
+    const item = document.querySelector('[data-zona="lista"] li');
+    expect(item.dataset.avisoId).toBe('catalogo:alerta-1');
+    expect(item.querySelector('.tarjeta__titulo').textContent).toBe('Producto modificado');
+    expect(item.querySelector('.t-cuerpo').textContent).toBe(delCatalogo.cuerpo);
+    const fecha = item.querySelector('time');
+    expect(fecha.dateTime).toBe('2026-10-05T15:30:00Z');
+    expect(fecha.textContent).toBe(fechaLegible('2026-10-05T15:30:00Z'));
+    expect(document.querySelector('[data-zona="contador"]').textContent).toBe('1');
+
+    item.querySelector('[data-accion="marcar-leida"]').click();
+    expect(bandeja.marcarLeida).toHaveBeenCalledWith('catalogo:alerta-1');
+
+    callbacks().alAviso(delCatalogo);
+    const emergente = document.querySelector('[data-zona="emergentes"] .aviso--info');
+    expect(emergente.querySelector('.aviso__titulo').textContent).toBe('Producto modificado');
+    expect(emergente.textContent).toContain('Fecha de implementación: 5 de octubre de 2026');
+  });
+
   test('alAviso pinta una emergente no bloqueante con cierre propio y automático', () => {
     const { callbacks, programar } = preparar();
 
@@ -127,6 +171,72 @@ describe('montarCampana', () => {
 
     emergente.querySelector('[data-accion="cerrar-emergente"]').click();
     expect(document.querySelector('[data-zona="emergentes"] .aviso--info')).toBeNull();
+  });
+
+  test('HU-NOT-001 CA-02: «Marcar todas como leídas» está deshabilitado sin no leídas', () => {
+    const { callbacks } = preparar();
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+    expect(marcarTodas.disabled).toBe(true);
+
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 2, avisos: [aviso('n-1')] });
+    expect(marcarTodas.disabled).toBe(false);
+
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 0,
+      avisos: [aviso('n-1', { leida: true })],
+    });
+    expect(marcarTodas.disabled).toBe(true);
+  });
+
+  test('al pulsarlo marca todas una sola vez y la vista queda leída y sin contador', async () => {
+    const { callbacks, bandeja } = preparar();
+    let responder;
+    bandeja.marcarTodasLeidas.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          responder = resolve;
+        }),
+    );
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 2,
+      avisos: [aviso('n-2'), aviso('n-1')],
+    });
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+
+    marcarTodas.click();
+    // Mientras el servidor responde no se puede lanzar otra.
+    expect(marcarTodas.disabled).toBe(true);
+    marcarTodas.click();
+    expect(bandeja.marcarTodasLeidas).toHaveBeenCalledTimes(1);
+
+    // La bandeja publica el resultado: todo leído y la cuenta en 0.
+    callbacks().alCambiar({
+      canal: ESTADO_CANAL.ESTABLE,
+      noLeidas: 0,
+      avisos: [aviso('n-2', { leida: true }), aviso('n-1', { leida: true })],
+    });
+    responder(0);
+    await asentar();
+
+    expect(marcarTodas.disabled).toBe(true);
+    expect(document.querySelectorAll('[data-accion="marcar-leida"]')).toHaveLength(0);
+    expect(document.querySelector('[data-zona="contador"]').hidden).toBe(true);
+  });
+
+  test('si marcar todas falla, el error no se calla y el botón vuelve a estar disponible', async () => {
+    const alError = jest.fn();
+    const { callbacks, bandeja } = preparar({ alError });
+    bandeja.marcarTodasLeidas.mockRejectedValueOnce(new Error('sin red'));
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 1, avisos: [aviso('n-1')] });
+    const marcarTodas = document.querySelector('[data-zona="marcar-todas"]');
+
+    marcarTodas.click();
+    await asentar();
+
+    expect(alError).toHaveBeenCalledWith(expect.objectContaining({ message: 'sin red' }));
+    expect(marcarTodas.disabled).toBe(false);
   });
 
   test('el boton de la campana abre y cierra el panel', () => {
@@ -159,5 +269,39 @@ describe('utilidades', () => {
 
   test('fechaLegible devuelve el original si no es fecha', () => {
     expect(fechaLegible('x')).toBe('x');
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct (punto 13): la invitacion a una sala
+ * llega como aviso; el id lleva la sala y, si es privada, el codigo.
+ */
+describe('enlaceDeInvitacion', () => {
+  const SALA = '77777777-7777-7777-7777-777777777777';
+  const YO = '22222222-2222-2222-2222-222222222222';
+
+  test('una invitación a una sala pública lleva al listado con la sala', () => {
+    const enlace = enlaceDeInvitacion(
+      { id: `sala:${SALA}:invitacion:${YO}` },
+      'http://localhost/jugar',
+    );
+    expect(enlace).toBe(`http://localhost/jugar?sala=${SALA}`);
+  });
+
+  test('una invitación a una privada lleva también el código', () => {
+    const enlace = enlaceDeInvitacion(
+      { id: `sala:${SALA}:invitacion:${YO}:codigo:K7Q2-M9XA` },
+      'http://localhost/jugar',
+    );
+    expect(new URL(enlace).searchParams.get('sala')).toBe(SALA);
+    expect(new URL(enlace).searchParams.get('codigo')).toBe('K7Q2-M9XA');
+  });
+
+  test('cualquier otro aviso no es una invitación', () => {
+    expect(enlaceDeInvitacion({ id: 'catalogo:123' }, 'http://localhost/jugar')).toBeNull();
+    expect(
+      enlaceDeInvitacion({ id: `sala:${SALA}:otra-cosa` }, 'http://localhost/jugar'),
+    ).toBeNull();
+    expect(enlaceDeInvitacion({}, 'http://localhost/jugar')).toBeNull();
   });
 });

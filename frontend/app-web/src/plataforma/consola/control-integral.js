@@ -24,16 +24,47 @@
  * @module plataforma/consola/control-integral
  */
 
-import { consultar, filasDe, totalDe, RESULTADO } from './cliente-consola.js';
+import { consultar, descargar, filasDe, totalDe, RESULTADO } from './cliente-consola.js';
 import { indicador, moduloNoImplementado, panel, pintarDesenlace, tabla } from './panel.js';
+import {
+  ESTADOS_DE_CUENTA,
+  exportarDirectorio,
+  guardarArchivo,
+  panelDeUsuarios,
+  recursoDelDirectorio,
+} from './panel-usuarios.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { RUTAS, resolver } from '../../comun/sesion.js';
+import { urlDeVista } from '../../comun/acceso.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
+import { nombreDeModalidad } from '../../comun/ui/juego/partida.js';
 
 /** Tamano de pagina del directorio. Coincide con el techo comodo del backend. */
 const FILAS_POR_PAGINA = 20;
+
+/**
+ * RFINAL-06 — lo que se pinta cuando el contrato de la fuente no trae el dato.
+ * Un guion parecia un fallo de la pantalla y un identificador no lo lee nadie;
+ * «sin dato» dice exactamente lo que pasa.
+ */
+export const SIN_DATO = 'sin dato';
+
+/** @param {*} valor */
+function oSinDato(valor) {
+  return valor === null || valor === undefined || valor === '' ? SIN_DATO : valor;
+}
+
+/** Fecha legible, o «sin dato»: nunca la de hoy, nunca un guion. */
+function fechaOSinDato(valor) {
+  return valor ? formatearFecha(valor) : SIN_DATO;
+}
+
+/** «3 de 8», solo si el servidor dio las dos cifras. */
+function deCuantos(parte, total) {
+  return Number.isFinite(parte) && Number.isFinite(total) ? `${parte} de ${total}` : SIN_DATO;
+}
 
 /**
  * Las ocho secciones, con el recurso del que se alimenta cada una.
@@ -57,9 +88,14 @@ export const SECCIONES = Object.freeze([
  *
  * @param {Document|HTMLElement} raiz
  * @param {{apodo?: string, rol?: string|null}} sesion
- * @param {{consultarApi?: typeof consultar}} [dependencias] inyectable en pruebas
+ * @param {{consultarApi?: typeof consultar, descargarApi?: typeof descargar,
+ *          guardar?: typeof guardarArchivo}} [dependencias] inyectables en pruebas
  */
-export function montarControlIntegral(raiz, sesion, { consultarApi = consultar } = {}) {
+export function montarControlIntegral(
+  raiz,
+  sesion,
+  { consultarApi = consultar, descargarApi = descargar, guardar = guardarArchivo } = {},
+) {
   const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
   if (zonaEncabezado) {
     zonaEncabezado.replaceChildren(
@@ -79,8 +115,8 @@ export function montarControlIntegral(raiz, sesion, { consultarApi = consultar }
   vaciar(zonaSecciones);
 
   const paneles = {
-    resumen: seccionResumen(consultarApi),
-    jugadores: seccionJugadores(consultarApi),
+    resumen: seccionResumen(consultarApi, { guardar }),
+    jugadores: seccionJugadores(consultarApi, { descargarApi, guardar }),
     partidas: seccionPartidas(consultarApi),
     economia: seccionEconomia(consultarApi),
     subastas: seccionSubastas(consultarApi),
@@ -139,7 +175,7 @@ function panelDeRecurso({ id, titulo, descripcion, recurso, pintar, consultarApi
    1. Resumen
    ------------------------------------------------------------------------- */
 
-function seccionResumen(consultarApi) {
+function seccionResumen(consultarApi, { guardar } = {}) {
   const jugadores = panelDeRecurso({
     id: 'resumen-jugadores',
     titulo: 'Cuentas registradas',
@@ -192,20 +228,43 @@ function seccionResumen(consultarApi) {
     pintar: (datos) => indicador({ etiqueta: 'torneos', valor: totalDe(datos) }),
   });
 
-  return [jugadores, servicios, sanciones, torneos];
+  // HU-USR-008 (§7.3.4): cuentas por estado, registros por día, periodo y
+  // exportación. Va el último porque ocupa el ancho entero.
+  const usuarios = panelDeUsuarios(consultarApi, { guardar });
+
+  return [jugadores, servicios, sanciones, torneos, usuarios];
 }
 
 /* -------------------------------------------------------------------------
    2. Jugadores
    ------------------------------------------------------------------------- */
 
-function seccionJugadores(consultarApi) {
-  const estado = { pagina: 0, buscar: '' };
+function seccionJugadores(
+  consultarApi,
+  { descargarApi = descargar, guardar = guardarArchivo } = {},
+) {
+  // RFINAL-06 — las cuentas de las pruebas automáticas se ocultan por omisión
+  // y las excluye el servidor antes de paginar (ms-identidad-admin.yaml 1.2.0,
+  // `ocultarPruebas`). Qué cuenta es de pruebas lo decide su configuración,
+  // no esta pantalla.
+  //
+  // HU-USR-008 (1.3.0) — rol, estado y fecha de registro. Son los filtros
+  // APLICADOS: los de la página que se ve y los de la exportación.
+  const estado = {
+    pagina: 0,
+    buscar: '',
+    ocultarPruebas: true,
+    rol: '',
+    estadoCuenta: '',
+    desde: '',
+    hasta: '',
+  };
   const partes = panel({
     id: 'directorio',
     titulo: 'Directorio de jugadores',
     descripcion:
-      'Busca por apodo o correo. El filtrado y la paginación los hace el servidor, no el navegador.',
+      'Busca por apodo, correo o nombre y filtra por rol, estado y fecha de registro. El ' +
+      'filtrado, la paginación y la exportación los hace el servidor, no el navegador.',
     fuente: 'GET /api/v1/admin/jugadores',
   });
 
@@ -215,8 +274,8 @@ function seccionJugadores(consultarApi) {
     atributos: {
       type: 'search',
       name: 'buscar',
-      placeholder: 'Apodo o correo',
-      'aria-label': 'Buscar jugador por apodo o correo',
+      placeholder: 'Apodo, correo o nombre',
+      'aria-label': 'Buscar jugador por apodo, correo o nombre',
     },
   });
   const boton = h('button', {
@@ -224,28 +283,168 @@ function seccionJugadores(consultarApi) {
     texto: 'Buscar',
     atributos: { type: 'submit' },
   });
-  buscador.append(campo, boton);
+  const filtros = filtrosDelDirectorio();
+  buscador.append(campo, boton, filtros.fila);
   partes.elemento.insertBefore(buscador, partes.zona);
 
+  const ocultarPruebas = h('input', {
+    clase: 'casilla__entrada',
+    atributos: { type: 'checkbox', name: 'ocultarPruebas' },
+  });
+  ocultarPruebas.checked = estado.ocultarPruebas;
+  partes.elemento.insertBefore(
+    h('label', {
+      clase: 'casilla',
+      hijos: [
+        ocultarPruebas,
+        h('span', {
+          clase: 'casilla__etiqueta',
+          texto: 'Ocultar cuentas de pruebas automáticas',
+        }),
+      ],
+    }),
+    partes.zona,
+  );
+
+  // HU-USR-008 — exportar el listado con los filtros vigentes. Lo arma el
+  // servidor (una consulta, sin páginas que se corran mientras alguien se
+  // registra); aquí se descarga y se dice cómo fue.
+  const exportar = h('button', {
+    clase: 'boton boton--secundario',
+    texto: 'Exportar listado (CSV)',
+    atributos: { type: 'button' },
+    datos: { accion: 'exportar-directorio' },
+  });
+  const aviso = h('p', {
+    clase: 't-meta',
+    datos: { zona: 'aviso-directorio' },
+    atributos: { role: 'status', 'aria-live': 'polite' },
+  });
+  partes.elemento.insertBefore(
+    h('div', { clase: 'fila fila--acciones', hijos: [exportar] }),
+    partes.zona,
+  );
+  partes.elemento.insertBefore(aviso, partes.zona);
+
   const cargar = async () => {
-    const recurso = `/admin/jugadores?page=${estado.pagina}&size=${FILAS_POR_PAGINA}${
-      estado.buscar ? `&buscar=${encodeURIComponent(estado.buscar)}` : ''
-    }`;
-    const desenlace = await consultarApi(recurso);
+    const desenlace = await consultarApi(recursoDelDirectorio(estado, FILAS_POR_PAGINA));
     pintarDesenlace(partes, desenlace, (datos) => pintarDirectorio(datos, estado, cargar), {
       alReintentar: cargar,
     });
     return desenlace;
   };
 
+  /** Aplica lo que dice el formulario y vuelve a la primera página. */
+  const aplicar = () => {
+    const valores = filtros.leer();
+    if (valores.desde && valores.hasta && valores.desde > valores.hasta) {
+      // El servidor lo rechazaría igual (400); aquí se explica sin preguntar.
+      filtros.marcarRangoInvalido(true);
+      aviso.textContent = 'La fecha «Registrada desde» es posterior a «hasta»: corrige el periodo.';
+      return;
+    }
+    filtros.marcarRangoInvalido(false);
+    aviso.textContent = '';
+    Object.assign(estado, valores, { buscar: campo.value.trim(), pagina: 0 });
+    cargar();
+  };
+
   buscador.addEventListener('submit', (evento) => {
     evento.preventDefault();
-    estado.buscar = campo.value.trim();
+    aplicar();
+  });
+  for (const control of filtros.controles) {
+    control.addEventListener('change', aplicar);
+  }
+
+  ocultarPruebas.addEventListener('change', () => {
+    estado.ocultarPruebas = ocultarPruebas.checked;
     estado.pagina = 0;
     cargar();
   });
 
+  exportar.addEventListener('click', async () => {
+    exportar.disabled = true;
+    aviso.textContent = 'Preparando el archivo…';
+    try {
+      const desenlace = await exportarDirectorio(estado, { descargarApi, guardar });
+      aviso.textContent =
+        desenlace.resultado === RESULTADO.DATOS
+          ? `Listado descargado: ${desenlace.nombreArchivo ?? 'directorio-de-cuentas.csv'}.`
+          : desenlace.motivo || 'No se pudo exportar el listado.';
+    } finally {
+      exportar.disabled = false;
+    }
+  });
+
   return [{ ...partes, cargar, id: 'directorio' }];
+}
+
+/**
+ * HU-USR-008 — rol, estado y fecha de registro del directorio, cada uno con su
+ * etiqueta visible. «Todos» es no filtrar.
+ *
+ * @returns {{fila: HTMLElement, controles: HTMLElement[],
+ *   leer: () => {rol: string, estadoCuenta: string, desde: string, hasta: string},
+ *   marcarRangoInvalido: (invalido: boolean) => void}}
+ */
+function filtrosDelDirectorio() {
+  const desplegable = (nombre, etiqueta, opciones) => {
+    const control = h('select', {
+      clase: 'desplegable__control',
+      atributos: { name: nombre },
+      hijos: [
+        h('option', { texto: 'Todos', atributos: { value: '' } }),
+        ...opciones.map(([valor, texto]) => h('option', { texto, atributos: { value: valor } })),
+      ],
+    });
+    const caja = h('label', {
+      clase: 'desplegable',
+      hijos: [h('span', { clase: 'campo__etiqueta', texto: etiqueta }), control],
+    });
+    return { caja, control };
+  };
+  const fecha = (nombre, etiqueta) => {
+    const control = h('input', {
+      clase: 'campo__control',
+      atributos: { type: 'date', name: nombre },
+    });
+    const caja = h('label', {
+      clase: 'campo',
+      hijos: [h('span', { clase: 'campo__etiqueta', texto: etiqueta }), control],
+    });
+    return { caja, control };
+  };
+
+  const rol = desplegable('rol', 'Rol', Object.entries(NOMBRE_DE_ROL));
+  const estadoCuenta = desplegable(
+    'estado',
+    'Estado',
+    ESTADOS_DE_CUENTA.map(({ estado, nombre }) => [estado, nombre]),
+  );
+  const desde = fecha('registradoDesde', 'Registrada desde');
+  const hasta = fecha('registradoHasta', 'Registrada hasta');
+
+  return {
+    fila: h('div', {
+      clase: 'consola-integral__filtros',
+      hijos: [rol.caja, estadoCuenta.caja, desde.caja, hasta.caja],
+    }),
+    controles: [rol.control, estadoCuenta.control, desde.control, hasta.control],
+    leer: () => ({
+      rol: rol.control.value,
+      estadoCuenta: estadoCuenta.control.value,
+      desde: desde.control.value,
+      hasta: hasta.control.value,
+    }),
+    marcarRangoInvalido: (invalido) => {
+      if (invalido) {
+        desde.control.setAttribute('aria-invalid', 'true');
+      } else {
+        desde.control.removeAttribute('aria-invalid');
+      }
+    },
+  };
 }
 
 export function pintarDirectorio(datos, estado, recargar) {
@@ -256,15 +455,30 @@ export function pintarDirectorio(datos, estado, recargar) {
     jugador.bloqueada ? 'BLOQUEADA' : (jugador.estado ?? '--'),
     formatearFecha(jugador.creadoEn),
     jugador.ultimoAcceso ? formatearFecha(jugador.ultimoAcceso) : 'Nunca ha entrado',
+    enlaceAFicha(jugador),
+    enlaceAGestion(jugador),
     enlaceASanciones(jugador),
   ]);
 
+  const cuantas = estado?.ocultarPruebas
+    ? 'cuentas sin contar las de pruebas automáticas'
+    : 'cuentas en total';
   const cuerpo = tabla({
-    columnas: ['Apodo', 'Correo', 'Rol', 'Estado', 'Registro', 'Última entrada', 'Sanciones'],
+    columnas: [
+      'Apodo',
+      'Correo',
+      'Rol',
+      'Estado',
+      'Registro',
+      'Última entrada',
+      'Ficha',
+      'Gestión',
+      'Sanciones',
+    ],
     filas,
     resumen: `Página ${(datos?.pagina ?? 0) + 1} de ${datos?.totalPaginas ?? 1}, ${
       datos?.total ?? filas.length
-    } cuentas en total`,
+    } ${cuantas}`,
   });
 
   const navegacion = h('nav', {
@@ -318,6 +532,59 @@ function enlaceASanciones(jugador) {
       href: destino.href,
       'aria-label': `Ver las sanciones de ${jugador.apodo ?? 'esta cuenta'}`,
     },
+    datos: { accion: 'ver-sanciones' },
+  });
+}
+
+/**
+ * HU-USR-010 — de la fila a la ficha administrativa de esa cuenta: lo que cada
+ * servicio publica de ella, con su línea de tiempo y la consulta auditada. Va
+ * por la clave de la cuenta (`id`, la tienen todas); sin ella, por el `uid`.
+ *
+ * @param {{id?: number, uid?: string|null, apodo?: string}} jugador
+ * @returns {HTMLAnchorElement|string}
+ */
+function enlaceAFicha(jugador) {
+  const clave = Number(jugador?.id);
+  const cuenta = Number.isInteger(clave) && clave > 0 ? String(clave) : jugador?.uid;
+  if (!cuenta) {
+    return SIN_DATO;
+  }
+  const destino = new URL(urlDeVista('ficha-usuario'));
+  destino.searchParams.set('usuario', cuenta);
+  return h('a', {
+    texto: 'Ver ficha',
+    atributos: {
+      href: destino.href,
+      'aria-label': `Ver la ficha de ${jugador.apodo ?? 'esta cuenta'}`,
+    },
+    datos: { accion: 'ver-ficha' },
+  });
+}
+
+/**
+ * RFINAL-06 — de la fila a la ficha de gestión de esa cuenta, sin copiar su
+ * identificador: la gestión espera la clave interna de la cuenta, que el
+ * directorio publica desde ms-identidad-admin.yaml 1.2.0 (`id`). Sin ella
+ * (un servicio anterior) se dice, en vez de pintar un enlace que no abre nada.
+ *
+ * @param {{id?: number, apodo?: string}} jugador
+ * @returns {HTMLAnchorElement|string}
+ */
+function enlaceAGestion(jugador) {
+  const clave = Number(jugador?.id);
+  if (!Number.isInteger(clave) || clave <= 0) {
+    return SIN_DATO;
+  }
+  const destino = new URL(resolver(RUTAS.gestionUsuarios));
+  destino.searchParams.set('usuario', String(clave));
+  return h('a', {
+    texto: 'Gestionar',
+    atributos: {
+      href: destino.href,
+      'aria-label': `Gestionar la cuenta de ${jugador.apodo ?? 'esta cuenta'}`,
+    },
+    datos: { accion: 'gestionar' },
   });
 }
 
@@ -332,19 +599,30 @@ function seccionPartidas(consultarApi) {
     descripcion: 'Partidas y salas abiertas en este momento.',
     recurso: '/salas',
     consultarApi,
+    // `Sala` de salas-partidas.yaml: no tiene nombre («las salas no tienen
+    // nombre») y del anfitrion solo trae `idAnfitrion`, un UUID; su apodo es
+    // de identidad y no se replica alli. La sala se describe por su modalidad
+    // y el anfitrion queda «sin dato» en vez de un identificador ilegible.
     pintar: (datos) =>
       tabla({
-        columnas: ['Sala', 'Estado', 'Jugadores', 'Anfitrión'],
+        columnas: ['Sala', 'Estado', 'Jugadores', 'Creada', 'Anfitrión'],
         filas: filasDe(datos).map((sala) => [
-          sala.nombre ?? sala.idSala ?? sala.id ?? '--',
-          sala.estado ?? '--',
-          sala.participantes?.length ?? sala.jugadores ?? '--',
-          sala.anfitrion ?? sala.creador ?? '--',
+          descripcionDeSala(sala),
+          oSinDato(sala.estado),
+          deCuantos(sala.ocupacion, sala.maximoParticipantes),
+          fechaOSinDato(sala.creadaEn),
+          SIN_DATO,
         ]),
       }),
   });
 
   return [salas, panelDeMisiones()];
+}
+
+/** «1 contra 1 · privada»: lo que identifica una sala que no tiene nombre. */
+function descripcionDeSala(sala) {
+  const modalidad = nombreDeModalidad(sala?.modalidad, SIN_DATO);
+  return sala?.privada ? `${modalidad} · privada` : modalidad;
 }
 
 /**
@@ -432,18 +710,25 @@ function seccionSubastas(consultarApi) {
       descripcion: 'Publicaciones abiertas ahora mismo.',
       recurso: '/subastas',
       consultarApi,
-      pintar: (datos) =>
-        tabla({
-          columnas: ['Subasta', 'Elemento', 'Precio actual', 'Cierra'],
-          filas: filasDe(datos)
-            .slice(0, 25)
-            .map((s) => [
-              s.id ?? s.subastaId ?? '--',
-              s.elemento?.nombre ?? s.nombreElemento ?? '--',
-              s.precioActual ?? s.precioInicial ?? '--',
-              formatearFecha(s.cierraEn ?? s.fechaCierre),
-            ]),
-        }),
+      // `SubastaResumen` de ms-subastas-listado.yaml: el producto viene en
+      // `nombreProducto`, la puja mas alta en `ofertaVigente` y el cierre en
+      // `fechaFin`. El `id` es un UUID: no se pinta.
+      pintar: (datos) => {
+        const filas = filasDe(datos)
+          .slice(0, 25)
+          .map((s) => [
+            oSinDato(s.nombreProducto),
+            oSinDato(s.ofertaVigente),
+            oSinDato(s.cantidadPujas),
+            fechaOSinDato(s.fechaFin),
+          ]);
+        const total = datos?.totalElementos;
+        return tabla({
+          columnas: ['Elemento', 'Precio actual', 'Pujas', 'Cierra'],
+          filas,
+          resumen: Number.isFinite(total) ? `${filas.length} de ${total} subastas activas` : '',
+        });
+      },
     }),
   ];
 }
@@ -460,14 +745,18 @@ function seccionTorneos(consultarApi) {
       descripcion: 'Convocatorias que publica el servicio de torneos.',
       recurso: '/torneos',
       consultarApi,
+      // `TorneoResumen` de torneos.yaml: equipos en `equiposInscritos` de
+      // `cupos`. El listado no publica fecha de inicio (el inicio real lo da
+      // un administrador y solo sale en la ficha, `iniciadoEn`); lo que si
+      // trae es el cierre de inscripciones.
       pintar: (datos) =>
         tabla({
-          columnas: ['Torneo', 'Estado', 'Equipos', 'Inicio'],
+          columnas: ['Torneo', 'Estado', 'Equipos', 'Inscripciones hasta'],
           filas: filasDe(datos).map((t) => [
-            t.nombre ?? t.id ?? '--',
-            t.estado ?? '--',
-            t.equipos?.length ?? t.totalEquipos ?? '--',
-            formatearFecha(t.fechaInicio ?? t.inicio),
+            oSinDato(t.nombre),
+            oSinDato(t.estado),
+            deCuantos(t.equiposInscritos, t.cupos),
+            fechaOSinDato(t.inscripcionesCierranEn),
           ]),
         }),
     }),
@@ -485,7 +774,11 @@ function seccionModeracion(consultarApi) {
     // La ruta de LECTURA es /admin/auditoria. /admin/auditoria/eventos es la
     // de escritura: acepta POST y a un GET responde 405. Comprobado contra
     // dev con un token de administrador.
-    recurso: '/admin/auditoria?page=0&size=15',
+    //
+    // RFINAL-06: sin `sort` el orden lo decidia la base de datos y «los
+    // ultimos quince» eran los primeros que se registraron. Fecha descendente
+    // y el `id` como desempate (ms-cumplimiento-auditoria.yaml, `sort`).
+    recurso: '/admin/auditoria?page=0&size=15&sort=fechaHora,desc&sort=id,desc',
     consultarApi,
     pintar: (datos) =>
       tabla({
@@ -624,8 +917,8 @@ function seccionSistema(consultarApi) {
     id: 'sistema',
     titulo: 'Estado de los servicios',
     descripcion:
-      'Sondeo real de la salud de cada servicio. Caído, fuera del host y no observable ' +
-      'son tres cosas distintas.',
+      'Sondeo real de la salud de cada servicio. Caído, lento, fuera del host y no observable ' +
+      'son cuatro cosas distintas.',
     recurso: '/admin/sistema/servicios',
     consultarApi,
     pintar: (datos) => {
@@ -635,11 +928,12 @@ function seccionSistema(consultarApi) {
         selloDeServicio(s.estado),
         s.detalle ?? '--',
       ]);
-      const partes = [
-        `${datos?.operativos ?? 0} operativos`,
-        `${datos?.caidos ?? 0} caídos`,
-        `${datos?.noDesplegados ?? 0} fuera del host`,
-      ];
+      const partes = [`${datos?.operativos ?? 0} operativos`, `${datos?.caidos ?? 0} caídos`];
+      // RFINAL-08: conectó y no contestó a tiempo. Solo se nombra si hay alguno.
+      if (datos?.lentos) {
+        partes.push(`${datos.lentos} lentos`);
+      }
+      partes.push(`${datos?.noDesplegados ?? 0} fuera del host`);
       if (datos?.noObservables) {
         partes.push(`${datos.noObservables} en otro host`);
       }
@@ -647,7 +941,19 @@ function seccionSistema(consultarApi) {
         clase: 't-meta',
         texto: `${partes.join(', ')}, de ${datos?.total ?? filas.length} catalogados.`,
       });
-      return [resumen, tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas })];
+      const piezas = [resumen];
+      // La ronda se reutiliza unos segundos (desdeCache): la hora dice de cuándo es.
+      if (datos?.instante) {
+        piezas.push(
+          h('p', {
+            clase: 't-meta',
+            datos: { zona: 'medido' },
+            texto: `Medido a las ${formatearInstante(datos.instante)}.`,
+          }),
+        );
+      }
+      piezas.push(tabla({ columnas: ['Servicio', 'Estado', 'Detalle'], filas }));
+      return piezas;
     },
   });
 
@@ -675,6 +981,8 @@ function selloDeServicio(estado) {
     {
       OPERATIVO: 'ok',
       CAIDO: 'malo',
+      // Conectó y no contestó a tiempo: ni verde ni rojo (RFINAL-08).
+      LENTO: 'aviso',
       NO_DESPLEGADO: 'neutro',
       // Un servicio de otro host no va en rojo: no esta roto, esta fuera del
       // alcance de la sonda.

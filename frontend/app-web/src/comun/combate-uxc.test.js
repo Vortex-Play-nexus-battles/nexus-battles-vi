@@ -7,12 +7,13 @@ import { jest } from '@jest/globals';
 import {
   accionDeCombate,
   chipDeEfecto,
+  estelaDeVida,
   impactoEnCampo,
   medidorDePoder,
   registroDeCombate,
 } from './ui/juego/combate.js';
 import { canalReconectable, ESTADOS_DE_CANAL } from './canal-reconectable.js';
-import { pintarEstadoDelCanal } from './ui/reconexion.js';
+import { pintarEstadoDelCanal, RECUPERADA_VISIBLE_MS } from './ui/reconexion.js';
 import { buscarElementoPropio, cargarHeroePropio, puntosDePoder } from './heroe-propio.js';
 
 describe('medidorDePoder (PowerMeter)', () => {
@@ -33,6 +34,29 @@ describe('medidorDePoder (PowerMeter)', () => {
 
   test('sin maximo no se pinta', () => {
     expect(medidorDePoder({ maximo: null })).toBeNull();
+  });
+
+  test('revisión 6-oct: enseña el movimiento que mandó el servidor (−2 al gastar, +2 al recuperar)', () => {
+    const gasto = medidorDePoder({ maximo: 10, actual: 8, cambio: -2 });
+    const cambio = gasto.querySelector('.medidor-poder__cambio');
+    expect(gasto.querySelector('.medidor-poder__valor').textContent).toBe('8/10');
+    expect(cambio.textContent).toBe('−2');
+    expect(cambio.dataset.signo).toBe('negativo');
+    // Lo dice el registro con palabras: para el lector, el medidor ya trae su valor.
+    expect(cambio.getAttribute('aria-hidden')).toBe('true');
+
+    const recupera = medidorDePoder({ maximo: 10, actual: 10, cambio: 2 });
+    expect(recupera.querySelector('.medidor-poder__cambio').textContent).toBe('+2');
+    expect(recupera.querySelector('.medidor-poder__cambio').dataset.signo).toBe('positivo');
+  });
+
+  test('sin movimiento (o sin valor actual) no hay cifra de cambio', () => {
+    expect(
+      medidorDePoder({ maximo: 10, actual: 10, cambio: 0 }).querySelector('.medidor-poder__cambio'),
+    ).toBeNull();
+    expect(
+      medidorDePoder({ maximo: 10, cambio: -2 }).querySelector('.medidor-poder__cambio'),
+    ).toBeNull();
   });
 });
 
@@ -89,6 +113,86 @@ describe('impactoEnCampo (DamageCallout)', () => {
     expect(impacto.getAttribute('aria-hidden')).toBe('true');
     expect(impacto.className).toContain('impacto--critico');
     expect(impacto.textContent).toBe('−9Crítico');
+  });
+
+  test('revisión del 6-oct, punto 19: la cifra lleva su unidad («−4 VIDA», «−2 PODER»)', () => {
+    const vida = impactoEnCampo({ cifra: '−4', unidad: 'VIDA', tono: 'dano' });
+    expect(vida.querySelector('.impacto__cifra').textContent).toBe('−4 VIDA');
+    expect(vida.querySelector('.impacto__unidad').textContent).toBe(' VIDA');
+    expect(vida.querySelector('.impacto__etiqueta')).toBeNull();
+
+    const poder = impactoEnCampo({ cifra: '−2', unidad: 'PODER', tono: 'poder' });
+    expect(poder.className).toContain('impacto--poder');
+    expect(poder.textContent).toBe('−2 PODER');
+
+    // Sin unidad, como antes.
+    expect(impactoEnCampo({ cifra: '+3', tono: 'curacion' }).textContent).toBe('+3');
+  });
+});
+
+describe('impactoEnCampo con icono (MOTION-2)', () => {
+  test('la cifra lleva el icono del golpe delante, decorativo, y el texto no cambia', () => {
+    const golpe = impactoEnCampo({ cifra: '−4', unidad: 'VIDA', tono: 'dano', icono: 'fuego' });
+    const svg = golpe.querySelector('.impacto__icono');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
+    expect(svg.querySelector('use').getAttribute('href')).toMatch(/#fuego$/);
+    expect(golpe.querySelector('.impacto__cifra').textContent).toBe('−4 VIDA');
+  });
+
+  test('un icono que no está en el sprite no se pinta (ni rompe)', () => {
+    expect(
+      impactoEnCampo({ cifra: '−4', icono: 'meteorito' }).querySelector('.impacto__icono'),
+    ).toBeNull();
+    expect(impactoEnCampo({ cifra: '−4' }).querySelector('.impacto__icono')).toBeNull();
+  });
+});
+
+describe('estelaDeVida (MOTION-2)', () => {
+  function barra() {
+    const el = document.createElement('div');
+    el.className = 'barra-vida';
+    el.innerHTML = '<div class="barra-vida__pista"><div class="barra-vida__relleno"></div></div>';
+    document.body.append(el);
+    return el;
+  }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+    delete Element.prototype.animate;
+    delete globalThis.matchMedia;
+  });
+
+  test('lo que se perdió queda en la pista, desde la vida que queda y con el ancho perdido', () => {
+    const terminada = { finished: Promise.resolve(), cancel() {} };
+    Element.prototype.animate = jest.fn(() => terminada);
+    const el = barra();
+    const estela = estelaDeVida(el, 40, 25, 50);
+    expect(estela).not.toBeNull();
+    expect(estela.parentElement.className).toBe('barra-vida__pista');
+    expect(estela.style.getPropertyValue('--estela-desde')).toBe('50.00');
+    expect(estela.style.getPropertyValue('--estela-ancho')).toBe('30.00');
+    const [cuadros, opciones] = Element.prototype.animate.mock.calls[0];
+    expect(cuadros.at(-1).transform).toBe('scaleX(0)');
+    expect(opciones.duration).toBe(600);
+  });
+
+  test('una segunda estela sustituye a la primera: no se apilan', () => {
+    Element.prototype.animate = jest.fn(() => ({ finished: new Promise(() => {}), cancel() {} }));
+    const el = barra();
+    estelaDeVida(el, 50, 40, 50);
+    estelaDeVida(el, 40, 20, 50);
+    expect(el.querySelectorAll('.barra-vida__estela')).toHaveLength(1);
+  });
+
+  test('sin golpe (curación), sin Web Animations API o con movimiento reducido no hay estela', () => {
+    const el = barra();
+    expect(estelaDeVida(el, 25, 40, 50)).toBeNull();
+    expect(estelaDeVida(el, 40, 25, 50)).toBeNull();
+    globalThis.matchMedia = () => ({ matches: true });
+    Element.prototype.animate = jest.fn(() => ({ finished: Promise.resolve(), cancel() {} }));
+    expect(estelaDeVida(el, 40, 25, 50)).toBeNull();
+    expect(Element.prototype.animate).not.toHaveBeenCalled();
   });
 });
 
@@ -412,5 +516,45 @@ describe('pintarEstadoDelCanal (ReconnectBanner)', () => {
     pintarEstadoDelCanal(pildora, { estado: 'reconectado' });
     expect(contenedor.querySelector('[data-accion="reintentar-canal"]')).toBeNull();
     expect(pildora.textContent).toMatch(/Conexión recuperada$/);
+  });
+
+  /*
+   * Revisión del modo jugador del 6-oct (puntos 9, 13 y 18): «Canal en tiempo
+   * real: Conectado» a la vista todo el rato era texto técnico. En discreto
+   * solo se ve cuando hay algo que contar; el estado se sigue pintando.
+   */
+  test('discreto: conectado no se ve; reconectando y sin conexión sí; recuperada solo un momento', () => {
+    jest.useFakeTimers();
+    try {
+      const pildora = document.createElement('span');
+      document.body.append(pildora);
+
+      pintarEstadoDelCanal(pildora, { estado: 'conectando', discreto: true });
+      expect(pildora.hidden).toBe(true);
+
+      pintarEstadoDelCanal(pildora, { estado: 'conectado', discreto: true });
+      expect(pildora.hidden).toBe(true);
+      expect(pildora.dataset.estadoCanal).toBe('conectado');
+      expect(pildora.textContent).toMatch(/Conectado$/);
+
+      pintarEstadoDelCanal(pildora, { estado: 'reconectando', intento: 1, de: 5, discreto: true });
+      expect(pildora.hidden).toBe(false);
+
+      pintarEstadoDelCanal(pildora, { estado: 'sin-conexion', discreto: true });
+      expect(pildora.hidden).toBe(false);
+
+      pintarEstadoDelCanal(pildora, { estado: 'reconectado', discreto: true });
+      expect(pildora.hidden).toBe(false);
+      jest.advanceTimersByTime(RECUPERADA_VISIBLE_MS);
+      expect(pildora.hidden).toBe(true);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('sin discreto, la píldora no toca su visibilidad (chat y mensajes privados siguen igual)', () => {
+    const pildora = document.createElement('span');
+    pintarEstadoDelCanal(pildora, { estado: 'conectado' });
+    expect(pildora.hidden).toBe(false);
   });
 });

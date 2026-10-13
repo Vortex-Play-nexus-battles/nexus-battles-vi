@@ -43,7 +43,7 @@ public class ApodoBlacklistValidator {
             String motivo = respuesta.getMotivo() != null && !respuesta.getMotivo().isBlank()
                 ? respuesta.getMotivo()
                 : MOTIVO_POR_OMISION;
-            throw new IllegalArgumentException(motivo);
+            throw new ApodoNoPermitidoException(motivo);
         }
     }
 }

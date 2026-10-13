@@ -1,6 +1,19 @@
 /* Panel de administración del asistente (HU-CHA-012). Solo lo propio de esta
    vista; tarjetas, pestañas, campos y botones vienen del kit. */
 
+/* Superficies claras de esta vista: la tinta vuelve a oscuro (ver «Tinta
+   contextual» en base.css). La página vive sobre la atmósfera oscura, así que
+   sin esto el texto de las tablas y de la gráfica salía blanco sobre blanco. */
+.tabla-panel,
+.panel-chatbot__grafica {
+  --tinta: var(--texto);
+  --tinta-2: var(--texto-2);
+  --tinta-3: var(--texto-3);
+  --tinta-enlace: var(--primaria);
+  --tinta-enlace-hover: var(--primaria-relleno);
+  color: var(--texto);
+}
+
 .panel-chatbot__filtros {
   display: flex;
   flex-wrap: wrap;
@@ -76,4 +89,65 @@
   max-height: min(60vh, 560px);
   overflow-y: auto;
   padding-right: var(--e-2);
+}
+
+/* Pestaña «Soporte»: el detalle de una solicitud dentro del diálogo. Se
+   desplaza por dentro para que Guardar/Cerrar queden a la vista. */
+.panel-chatbot__ticket {
+  max-height: min(60vh, 560px);
+  overflow-y: auto;
+  padding-right: var(--e-2);
+}
+
+.panel-chatbot__datos {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--e-1) var(--e-3);
+  margin: 0;
+}
+
+.panel-chatbot__datos dt {
+  color: var(--texto-2);
+}
+
+.panel-chatbot__datos dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.panel-chatbot__estado-ticket {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  margin: 0;
+}
+
+.panel-chatbot__mensaje-ticket {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.panel-chatbot__conversacion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.panel-chatbot__contexto {
+  padding: var(--e-2) var(--e-3);
+  border-radius: var(--radio);
+  background: var(--superficie-2);
+  overflow-wrap: anywhere;
+}
+
+.panel-chatbot__contexto p {
+  margin: 0;
+}
+
+.panel-chatbot__contexto--jugador {
+  border-left: 3px solid var(--primaria);
 }

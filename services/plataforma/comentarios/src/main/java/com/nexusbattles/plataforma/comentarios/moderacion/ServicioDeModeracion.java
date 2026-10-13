@@ -7,9 +7,11 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.EnumSet;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -18,6 +20,8 @@ import com.nexusbattles.plataforma.comentarios.publicacion.ComentarioRepository;
 import com.nexusbattles.plataforma.comentarios.publicacion.RegistroDeComentario;
 import com.nexusbattles.plataforma.comentarios.publicacion.ResumenDeComentario;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -25,6 +29,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * El flujo de moderacion de comentarios, de punta a punta — R10.1, ampliado en
@@ -42,16 +47,33 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <pre>
  *   jugador reporta (RF-COM-006)
- *     -> comentario a EN_REVISION
- *     -> aparece en la cola (RF-COM-005)
+ *     -> se agrupa con los demas reportes del comentario
+ *     -> aparece en la cola (RF-COM-005), SIGUIENDO PUBLICADO
  *     -> el moderador lo abre con su contexto
- *     -> decide (RF-COM-008)
+ *     -> decide (RF-COM-008): aprobar, ocultar, eliminar, editar...
  *     -> queda el asiento
  *     -> se avisa al autor
  * </pre>
  *
  * <p>Por eso viven en un solo servicio: implementarlas por separado habria
  * dejado otra vez una cola sin salida o una accion sin cola.
+ *
+ * <h2>Encolar no es ocultar (contrato 1.8.0, auditoria de DEV del 30-sep)</h2>
+ *
+ * Hasta la 1.7.0 el PRIMER reporte pasaba el comentario a EN_REVISION y lo
+ * sacaba del hilo para todos: en DEV un solo reporte bajo el contador de
+ * «Espada de una mano» de 28 a 27 opiniones. La ficha (RF-COM-006, CA-01 y
+ * CA-04) pide otra cosa: registrar el reporte, agruparlo e incorporar el
+ * comentario a la cola, «sujeto a revision». Ocultar es una decision del
+ * moderador (RF-COM-008), no el efecto de una sola persona pulsando un boton.
+ *
+ * <p>Ahora el comentario reportado sigue a la vista y entra en la cola por
+ * sus reportes PENDIENTES (los posteriores a la ultima decision que los
+ * atiende). Solo si el Product Owner fija un umbral de ocultamiento
+ * ({@code comentarios.reportes.umbral-ocultamiento}, D-36; 0 = nunca) y los
+ * reportes pendientes lo alcanzan, el comentario se retira de la vista
+ * mientras se revisa. Lo que el filtro automatico retiene al publicar
+ * (RF-COM-007) sigue entrando en EN_REVISION, como siempre.
  */
 @Service
 public class ServicioDeModeracion {
@@ -65,6 +87,14 @@ public class ServicioDeModeracion {
 
     /** Contrato 1.4.0: {@code textoNuevo} de 1 a 2000 caracteres. */
     static final int TEXTO_NUEVO_MAXIMO = 2000;
+
+    /** Contrato 1.10.0: {@code comentarioIds} de la decision en lote admite hasta 100 ids, el mismo tope que la cola. */
+    static final int TOPE_DEL_LOTE = 100;
+
+    /** Contrato 1.10.0 (7.3.9): valor exacto de {@code confirmacion} que exige ELIMINAR en lote. */
+    static final String CONFIRMACION_DE_ELIMINAR = "ELIMINAR";
+
+    private static final Logger log = LoggerFactory.getLogger(ServicioDeModeracion.class);
 
     /** Contrato 1.7.0: el historial del autor admite paginas de hasta 100, el mismo tope que la cola. */
     static final int TAMANO_MAXIMO_DEL_HISTORIAL = 100;
@@ -87,8 +117,10 @@ public class ServicioDeModeracion {
     private final AvisoAlAutor aviso;
     private final RegistroDeAuditoria auditoria;
     private final Clock reloj;
+    private final TransactionTemplate transaccion;
     private final int limiteDiarioDeReportes;
     private final int umbralDePrioridad;
+    private final int umbralDeOcultamiento;
 
     public ServicioDeModeracion(
             ComentarioRepository comentarios,
@@ -97,16 +129,31 @@ public class ServicioDeModeracion {
             AvisoAlAutor aviso,
             RegistroDeAuditoria auditoria,
             Clock reloj,
+            TransactionTemplate transaccion,
             @Value("${comentarios.reportes.maximo-por-usuario-por-dia:20}") int limiteDiarioDeReportes,
-            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad) {
+            @Value("${comentarios.reportes.umbral-prioridad-elevada:0}") int umbralDePrioridad,
+            @Value("${comentarios.reportes.umbral-ocultamiento:0}") int umbralDeOcultamiento) {
         this.comentarios = comentarios;
         this.reportes = reportes;
         this.asientos = asientos;
         this.aviso = aviso;
         this.auditoria = auditoria;
         this.reloj = reloj;
+        this.transaccion = transaccion;
         this.limiteDiarioDeReportes = limiteDiarioDeReportes;
         this.umbralDePrioridad = umbralDePrioridad;
+        this.umbralDeOcultamiento = umbralDeOcultamiento;
+    }
+
+    /**
+     * Contrato 1.8.0: cuantos reportes PENDIENTES retiran el comentario de la
+     * vista mientras se revisa. La ficha no fija ninguno, asi que nace en 0 =
+     * nunca: el comentario reportado sigue publicado y es el moderador quien
+     * decide (D-36, pendiente del Product Owner). Mismo criterio que
+     * {@link #elevaLaPrioridad}: 0 o menos no oculta nunca.
+     */
+    private boolean seOcultaPorReportes(long reportesPendientes) {
+        return umbralDeOcultamiento > 0 && reportesPendientes >= umbralDeOcultamiento;
     }
 
     /**
@@ -180,9 +227,12 @@ public class ServicioDeModeracion {
             throw new ReporteDuplicado(comentarioId);
         }
 
-        // El primer reporte encola; los siguientes solo suben la prioridad.
+        // Contrato 1.8.0: el reporte ya lo pone en la cola por si solo (tiene un
+        // reporte pendiente) y el comentario SIGUE PUBLICADO. Solo un umbral de
+        // ocultamiento fijado por el PO lo retira de la vista mientras se revisa.
         Comentario resultante = comentario;
-        if (comentario.estaPublicado()) {
+        if (comentario.estaPublicado() && umbralDeOcultamiento > 0
+                && seOcultaPorReportes(reportes.contarPendientes(comentarioId, AccionDeModeracion.RESUELVEN_REPORTES))) {
             resultante = comentario.con(Comentario.Estado.EN_REVISION);
             comentarios.save(RegistroDeComentario.desde(resultante));
         }
@@ -220,18 +270,35 @@ public class ServicioDeModeracion {
      *
      * <p>{@code marcado} (B3, 7.3.3) elige que se mira:
      * <ul>
-     *   <li>sin filtro: la cola de siempre, los EN_REVISION;</li>
+     *   <li>sin filtro: la cola de siempre, los EN_REVISION y, desde la 1.8.0,
+     *       los PUBLICADOS con reportes pendientes;</li>
      *   <li>{@code true}: la lista de seguimiento especial, los marcados en
      *       cualquier estado salvo ELIMINADO —un comentario aprobado pero
      *       marcado sigue necesitando que alguien lo mire—;</li>
-     *   <li>{@code false}: los EN_REVISION sin marcar.</li>
+     *   <li>{@code false}: lo mismo que sin filtro, pero sin los marcados.</li>
      * </ul>
+     *
+     * <p>Contrato 1.10.0: {@code categoria} y {@code prioridadElevada} filtran
+     * ademas, y se combinan por Y con los anteriores:
+     * <ul>
+     *   <li>{@code categoria}: solo los comentarios con al menos un reporte de
+     *       esa categoria (la cuenta de {@code porCategoria}; un EN_REVISION sin
+     *       reportes no sale);</li>
+     *   <li>{@code prioridadElevada}: {@code true} solo los de prioridad
+     *       elevada, {@code false} los demas.</li>
+     * </ul>
+     * Se aplican en memoria sobre los candidatos que la cola ya carga, antes de
+     * ordenar y paginar, para que {@code total} sea el de la cola ya filtrada.
+     * La prioridad no se guarda, se deriva del conteo, asi que filtrar sobre la
+     * entrada usa el mismo valor que ve el cliente. Si la cola crece mucho, habra
+     * que mover los filtros a la consulta.
      *
      * <p>Los reportes de todos los comentarios de la cola se leen en una sola
      * consulta, no uno por comentario.
      */
     @Transactional(readOnly = true)
-    public Cola cola(String productoId, Boolean marcado, int pagina, int tamano) {
+    public Cola cola(String productoId, Boolean marcado, CategoriaDeReporte categoria,
+            Boolean prioridadElevada, int pagina, int tamano) {
         List<Comentario> candidatos = candidatosDeLaCola(productoId, marcado).stream()
                 .map(RegistroDeComentario::aDominio)
                 .toList();
@@ -252,8 +319,14 @@ public class ServicioDeModeracion {
                 porCategoria.merge(r.categoria(), 1L, Long::sum);
             }
             Instant primero = suyos.isEmpty() ? c.fechaPublicacion() : suyos.get(0).fecha();
-            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero,
-                    elevaLaPrioridad(suyos.size())));
+            boolean elevada = elevaLaPrioridad(suyos.size());
+            if (categoria != null && !porCategoria.containsKey(categoria)) {
+                continue;
+            }
+            if (prioridadElevada != null && prioridadElevada != elevada) {
+                continue;
+            }
+            entradas.add(new Entrada(c, suyos.size(), porCategoria, primero, elevada));
         }
 
         // Mas reportado primero; a igualdad, el que lleva mas tiempo esperando.
@@ -276,17 +349,45 @@ public class ServicioDeModeracion {
                     : comentarios.findByMarcadoTrueAndEstadoInAndProductoIdOrderByFechaPublicacionAsc(
                             ESTADOS_CON_SEGUIMIENTO, productoId);
         }
+        List<RegistroDeComentario> enRevision;
         if (Boolean.FALSE.equals(marcado)) {
-            return productoId == null
+            enRevision = productoId == null
                     ? comentarios.findByEstadoAndMarcadoOrderByFechaPublicacionAsc(
                             Comentario.Estado.EN_REVISION, false)
                     : comentarios.findByEstadoAndMarcadoAndProductoIdOrderByFechaPublicacionAsc(
                             Comentario.Estado.EN_REVISION, false, productoId);
+        } else {
+            enRevision = productoId == null
+                    ? comentarios.findByEstadoOrderByFechaPublicacionAsc(Comentario.Estado.EN_REVISION)
+                    : comentarios.findByEstadoAndProductoIdOrderByFechaPublicacionAsc(
+                            Comentario.Estado.EN_REVISION, productoId);
         }
-        return productoId == null
-                ? comentarios.findByEstadoOrderByFechaPublicacionAsc(Comentario.Estado.EN_REVISION)
-                : comentarios.findByEstadoAndProductoIdOrderByFechaPublicacionAsc(
-                        Comentario.Estado.EN_REVISION, productoId);
+
+        List<RegistroDeComentario> reportadosALaVista = publicadosConReportesPendientes(productoId, marcado);
+        if (reportadosALaVista.isEmpty()) {
+            return enRevision;
+        }
+        List<RegistroDeComentario> todos = new ArrayList<>(enRevision);
+        todos.addAll(reportadosALaVista);
+        return todos;
+    }
+
+    /**
+     * Contrato 1.8.0: los PUBLICADOS con algun reporte posterior a la ultima
+     * decision que atiende reportes. Siguen a la vista del jugador y esperan
+     * igual la decision del moderador (RF-COM-006 CA-01: «incorpora el
+     * comentario a la cola de moderacion»).
+     */
+    private List<RegistroDeComentario> publicadosConReportesPendientes(String productoId, Boolean marcado) {
+        List<String> pendientes = reportes.comentariosConReportesPendientes(AccionDeModeracion.RESUELVEN_REPORTES);
+        if (pendientes.isEmpty()) {
+            return List.of();
+        }
+        return comentarios.findByIdInAndEstadoOrderByFechaPublicacionAsc(pendientes, Comentario.Estado.PUBLICADO)
+                .stream()
+                .filter(r -> productoId == null || productoId.equals(r.getProductoId()))
+                .filter(r -> !Boolean.FALSE.equals(marcado) || !r.aDominio().marcado())
+                .toList();
     }
 
     /** Un comentario en revision con todo lo que el moderador necesita para decidir. */
@@ -362,29 +463,195 @@ public class ServicioDeModeracion {
                 .map(RegistroDeComentario::aDominio)
                 .orElseThrow(() -> new ComentarioNoEncontrado(comentarioId));
 
-        Comentario.Estado anterior = comentario.estado();
-        if (!accion.aplicableA(comentario)) {
+        if (!admite(comentario, accion)) {
             // Es el caso que CA-03 nombra: otro moderador lo resolvio mientras
             // este miraba la pantalla. Nada cambia.
             throw new TransicionInvalida(accion, comentario);
         }
 
+        Decision decision = decidir(comentario, accion, moderadorId, apodoModerador, motivo,
+                textoNuevo, ipOrigen);
+        comentarios.save(RegistroDeComentario.desde(decision.resultante()));
+        asientos.save(decision.asiento());
+
+        // Aprobar uno que siguio a la vista no cambia nada para su autor: avisarle
+        // solo le diria que alguien lo reporto. Queda el asiento y la auditoria.
+        boolean avisado = accion.seAvisaAlAutor() && !decision.cierraReportesALaVista()
+                && aviso.notificar(decision.resultante(), decision.asiento());
+        auditoria.registrar(decision.asiento());
+
+        return new Resuelto(decision.resultante(), decision.asiento(), avisado);
+    }
+
+    /**
+     * Si la accion vale sobre el comentario tal como esta ahora: la transicion
+     * del enum y, contrato 1.8.0, que aprobar uno que sigue publicado solo sirve
+     * para cerrar sus reportes pendientes. Si ya no tiene ninguno, otro
+     * moderador se adelanto (CA-03): el mismo 409, sin asiento.
+     */
+    private boolean admite(Comentario comentario, AccionDeModeracion accion) {
+        if (!accion.aplicableA(comentario)) {
+            return false;
+        }
+        return !cierraReportesALaVista(comentario, accion)
+                || reportes.contarPendientes(comentario.id(), AccionDeModeracion.RESUELVEN_REPORTES) != 0;
+    }
+
+    private static boolean cierraReportesALaVista(Comentario comentario, AccionDeModeracion accion) {
+        return accion == AccionDeModeracion.APROBAR && comentario.estado() == Comentario.Estado.PUBLICADO;
+    }
+
+    /**
+     * El comentario despues de la accion y su asiento, sin guardar nada. Quien
+     * llama ya comprobo {@link #admite}.
+     */
+    private Decision decidir(Comentario comentario, AccionDeModeracion accion, String moderadorId,
+            String apodoModerador, String motivo, String textoNuevo, String ipOrigen) {
         Comentario resultante = accion.aplicarA(comentario, textoNuevo);
-        comentarios.save(RegistroDeComentario.desde(resultante));
 
         boolean edita = accion == AccionDeModeracion.EDITAR;
         AsientoDeModeracion asiento = new AsientoDeModeracion(
-                UUID.randomUUID().toString(), comentarioId, moderadorId, apodoModerador,
-                accion, motivo, anterior, resultante.estado(), Instant.now(reloj),
+                UUID.randomUUID().toString(), comentario.id(), moderadorId, apodoModerador,
+                accion, motivo, comentario.estado(), resultante.estado(), Instant.now(reloj),
                 edita ? comentario.texto() : null,
                 edita ? resultante.texto() : null,
                 ipOrigen);
-        asientos.save(asiento);
+        return new Decision(resultante, asiento, cierraReportesALaVista(comentario, accion));
+    }
 
-        boolean avisado = accion.seAvisaAlAutor() && aviso.notificar(resultante, asiento);
-        auditoria.registrar(asiento);
+    /**
+     * La misma decision aplicada a varios comentarios a la vez, atomica: se
+     * resuelven todos los comentarios o ninguno — HU-COM-005 (#519), contrato 1.10.0.
+     *
+     * <h3>Tres fases, y por que este metodo NO es {@code @Transactional}</h3>
+     * <ol>
+     *   <li><b>Entrada, fuera de la transaccion.</b> Lista nula o vacia, mas de
+     *       {@link #TOPE_DEL_LOTE}, ids repetidos, accion ausente o EDITAR (necesita
+     *       un texto por comentario), motivo y, con ELIMINAR, la confirmacion exacta
+     *       {@code "ELIMINAR"} (7.3.9). Un 400 no abre transaccion ni lee la base.</li>
+     *   <li><b>Validacion y escritura, dentro de UNA transaccion.</b> Se cargan los
+     *       comentarios, se juntan <i>todos</i> los fallos (no solo el primero) y solo
+     *       si no hay ninguno se guarda cada estado y su asiento. Se usa
+     *       {@code saveAndFlush} y no {@code save}: con el id asignado a mano
+     *       {@code save} hace un merge y difiere el INSERT y el UPDATE al commit, de
+     *       modo que un fallo de la base saltaria despues, fuera de aqui.</li>
+     *   <li><b>Aviso y auditoria, DESPUES del commit.</b> Si la anotacion
+     *       {@code @Transactional} envolviera el metodo entero, el aviso saldria antes
+     *       de confirmar y un fallo del commit dejaria avisos de algo que no ocurrio.
+     *       Cada aviso y cada registro es fail-open por comentario (HU-DIS-003):
+     *       {@code autorNotificado=false} en ese item y el lote sigue.</li>
+     * </ol>
+     *
+     * <h3>Decisiones de diseno</h3>
+     * <ul>
+     *   <li><b>404 antes que 409.</b> Si faltan ids se responde 404 con todos los que
+     *       faltan, aunque ademas haya comentarios que no admitan la accion: no se
+     *       puede evaluar la transicion de un comentario que no existe.</li>
+     *   <li>Un comentario ELIMINADO no admite ninguna accion: 409, como en
+     *       {@link #resolver}.</li>
+     *   <li><b>Sin bloqueo nuevo ante concurrencia.</b> No hay lock ni se cambia el
+     *       aislamiento. Con el READ COMMITTED de PostgreSQL esto da una sola
+     *       transaccion y un solo contexto de persistencia, <i>no</i> un snapshot
+     *       estricto: si otro moderador cambia un comentario entre la lectura y el
+     *       commit, la exposicion es la de la decision individual.</li>
+     *   <li>Los resultados y los {@code comentarioIds} de los rechazos salen en el
+     *       orden de la lista de entrada; {@code findAllById} no garantiza ninguno.</li>
+     * </ul>
+     *
+     * @param confirmacion solo cuenta con ELIMINAR; en las demas acciones se ignora
+     */
+    public ResueltoEnLote resolverEnLote(List<String> comentarioIds, String moderadorId,
+            String apodoModerador, AccionDeModeracion accion, String motivo, String confirmacion,
+            String ipOrigen) {
 
-        return new Resuelto(resultante, asiento, avisado);
+        exigirLoteValido(comentarioIds, accion, motivo, confirmacion);
+
+        List<Decision> decisiones = transaccion.execute(estado -> {
+            Map<String, Comentario> porId = new LinkedHashMap<>();
+            for (RegistroDeComentario fila : comentarios.findAllById(comentarioIds)) {
+                Comentario c = fila.aDominio();
+                porId.put(c.id(), c);
+            }
+
+            List<String> ausentes = comentarioIds.stream().filter(id -> !porId.containsKey(id)).toList();
+            if (!ausentes.isEmpty()) {
+                throw new ComentariosNoEncontrados(ausentes);
+            }
+            List<String> afectados = comentarioIds.stream()
+                    .filter(id -> !admite(porId.get(id), accion))
+                    .toList();
+            if (!afectados.isEmpty()) {
+                throw new TransicionInvalidaEnLote(accion, afectados);
+            }
+
+            List<Decision> hechas = new ArrayList<>();
+            for (String id : comentarioIds) {
+                Decision decision = decidir(porId.get(id), accion, moderadorId, apodoModerador,
+                        motivo, null, ipOrigen);
+                comentarios.saveAndFlush(RegistroDeComentario.desde(decision.resultante()));
+                asientos.saveAndFlush(decision.asiento());
+                hechas.add(decision);
+            }
+            return hechas;
+        });
+
+        List<Resuelto> resultados = new ArrayList<>();
+        for (Decision decision : decisiones) {
+            boolean avisado = accion.seAvisaAlAutor() && !decision.cierraReportesALaVista()
+                    && avisarSinFallar(decision);
+            auditarSinFallar(decision.asiento());
+            resultados.add(new Resuelto(decision.resultante(), decision.asiento(), avisado));
+        }
+        return new ResueltoEnLote(accion, resultados);
+    }
+
+    private void exigirLoteValido(List<String> comentarioIds, AccionDeModeracion accion,
+            String motivo, String confirmacion) {
+        if (comentarioIds == null || comentarioIds.isEmpty()) {
+            throw new DecisionIncompleta("La decision en lote necesita al menos un comentario");
+        }
+        if (comentarioIds.size() > TOPE_DEL_LOTE) {
+            throw new DecisionIncompleta("La decision en lote admite hasta " + TOPE_DEL_LOTE + " comentarios");
+        }
+        if (comentarioIds.stream().anyMatch(Objects::isNull)) {
+            throw new DecisionIncompleta("La lista de comentarios trae un id vacio");
+        }
+        if (new HashSet<>(comentarioIds).size() != comentarioIds.size()) {
+            throw new DecisionIncompleta("La lista de comentarios trae ids repetidos");
+        }
+        if (accion == null) {
+            throw new DecisionIncompleta("Falta la accion de moderacion");
+        }
+        if (accion == AccionDeModeracion.EDITAR) {
+            throw new DecisionIncompleta(
+                    "EDITAR no vale en lote: necesita un texto distinto por comentario");
+        }
+        exigirMotivo(motivo);
+        if (accion == AccionDeModeracion.ELIMINAR && !CONFIRMACION_DE_ELIMINAR.equals(confirmacion)) {
+            throw new ConfirmacionRequerida();
+        }
+    }
+
+    /** Fail-open por comentario (HU-DIS-003): un aviso que falla o que lanza no invalida el lote. */
+    private boolean avisarSinFallar(Decision decision) {
+        try {
+            return aviso.notificar(decision.resultante(), decision.asiento());
+        } catch (RuntimeException fallo) {
+            // Solo el id y la clase de la excepcion: el mensaje puede arrastrar
+            // texto del comentario, el motivo o una direccion.
+            log.warn("El aviso de moderacion sobre {} no salio: {}",
+                    decision.resultante().id(), fallo.getClass().getName());
+            return false;
+        }
+    }
+
+    private void auditarSinFallar(AsientoDeModeracion asiento) {
+        try {
+            auditoria.registrar(asiento);
+        } catch (RuntimeException fallo) {
+            log.warn("El registro de auditoria de {} no salio: {}", asiento.comentarioId(),
+                    fallo.getClass().getName());
+        }
     }
 
     private static void exigirMotivo(String motivo) {
@@ -424,6 +691,19 @@ public class ServicioDeModeracion {
     }
 
     public record Resuelto(Comentario comentario, AsientoDeModeracion asiento, boolean autorNotificado) {
+    }
+
+    /** Un {@link Resuelto} por comentario, en el orden de la lista de entrada. */
+    public record ResueltoEnLote(AccionDeModeracion accion, List<Resuelto> resultados) {
+
+        public int total() {
+            return resultados.size();
+        }
+    }
+
+    /** Lo que una accion decide para un comentario, antes de guardarlo, avisar o auditar. */
+    private record Decision(Comentario resultante, AsientoDeModeracion asiento,
+            boolean cierraReportesALaVista) {
     }
 
     // ------------------------------------------------------------- excepciones
@@ -467,6 +747,47 @@ public class ServicioDeModeracion {
         }
     }
 
+    /** ELIMINAR en lote sin la confirmacion exacta {@code "ELIMINAR"} (400, {@code CONFIRMACION_REQUERIDA}). */
+    public static class ConfirmacionRequerida extends DecisionIncompleta {
+        public ConfirmacionRequerida() {
+            super("Eliminar en lote exige confirmacion con el valor ELIMINAR");
+        }
+    }
+
+    /** Ids del lote que no existen (404): todos los que faltan, en el orden de la lista de entrada. */
+    public static class ComentariosNoEncontrados extends RuntimeException {
+        private final List<String> ids;
+
+        public ComentariosNoEncontrados(List<String> ids) {
+            super("No existen los comentarios " + ids);
+            this.ids = List.copyOf(ids);
+        }
+
+        public List<String> ids() {
+            return ids;
+        }
+    }
+
+    /** Ids del lote que no admiten la accion (409): todos los afectados, en el orden de la lista de entrada. */
+    public static class TransicionInvalidaEnLote extends RuntimeException {
+        private final AccionDeModeracion accion;
+        private final List<String> ids;
+
+        public TransicionInvalidaEnLote(AccionDeModeracion accion, List<String> ids) {
+            super("No se puede aplicar " + accion + " a los comentarios " + ids);
+            this.accion = accion;
+            this.ids = List.copyOf(ids);
+        }
+
+        public AccionDeModeracion accion() {
+            return accion;
+        }
+
+        public List<String> ids() {
+            return ids;
+        }
+    }
+
     public static class TransicionInvalida extends RuntimeException {
         public TransicionInvalida(AccionDeModeracion accion, Comentario actual) {
             super(explicar(accion, actual));
@@ -478,6 +799,9 @@ public class ServicioDeModeracion {
             }
             if (accion == AccionDeModeracion.DESMARCAR && !actual.marcado()) {
                 return "El comentario no esta marcado";
+            }
+            if (accion == AccionDeModeracion.APROBAR && actual.estaPublicado()) {
+                return "El comentario sigue publicado y ya no tiene reportes pendientes";
             }
             return "No se puede " + accion + " un comentario que esta en " + actual.estado();
         }

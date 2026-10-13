@@ -9,9 +9,21 @@
  * Qué ofrece:
  *
  * - conversación con el asistente, para visitantes y jugadores con sesión;
- * - el historial de la conversación de esta sesión, y borrarlo;
- * - adjuntar la URL de una captura ya subida (el servicio solo guarda la URL);
+ * - el historial de la conversación de esta sesión, y borrarlo. Llega por
+ *   páginas (7.4.6): al abrir, los últimos mensajes; al subir hasta arriba, o
+ *   con «Ver mensajes anteriores», los de antes, sin mover lo que se está leyendo;
+ * - ver los enlaces a capturas que ya tuviera el historial (ya no se piden:
+ *   el cliente decidió que el asistente no recibe imágenes);
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
+ * - respuestas enriquecidas: pasos, enlaces a secciones del sitio, tarjetas,
+ *   botones de respuesta rápida y «Hablar con soporte» (`enriquecido-chatbot.js`);
+ *   cada mensaje manda la sección donde está el jugador (`vista`);
+ * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
+ *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
+ * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
+ *   (`soporte-chatbot.js`); el visitante recibe la invitación a iniciar sesión;
+ * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
+ *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
  *   conversación, y cambiarle el tamaño arrastrando la esquina o con las
  *   flechas del teclado sobre ella. El tamaño se recuerda en esta sesión.
@@ -24,20 +36,34 @@
  * @module comun/ui/ventana-chatbot
  */
 
+import { urlDeVista } from '../acceso.js';
 import { crearClienteChatbot } from '../cliente-chatbot.js';
 import { leerSesion } from '../sesion.js';
 import { conCarga } from './boton.js';
 import { campo } from './campo.js';
 import { confirmar } from './dialogo.js';
 import { h, vaciar } from './dom.js';
+import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecido-chatbot.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
+import { crearPanelPreferencias } from './preferencias-chatbot.js';
+import { crearPanelSoporte } from './soporte-chatbot.js';
+import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
 
 /** Límites del contrato (`EnviarMensaje`, `CalificarRespuesta`). */
-export const LIMITES = Object.freeze({ mensaje: 4000, adjunto: 500, comentario: 1000 });
+export const LIMITES = Object.freeze({ mensaje: 4000, comentario: 1000 });
+
+/**
+ * Mensajes por página del historial (`GET /chat/historial?limite=`, 1 a 100).
+ * Una página llena indica que puede haber más hacia atrás.
+ */
+export const PAGINA_DEL_HISTORIAL = 30;
+
+/** A cuántos px del borde superior se piden los mensajes anteriores. */
+const UMBRAL_DE_ANTERIORES = 48;
 
 /**
  * UXC-9 — tamaños de la ventana (px). El mínimo deja leer una respuesta y
@@ -90,13 +116,12 @@ export const TEXTOS = Object.freeze({
   etiquetaMensaje: 'Tu pregunta',
   enviar: 'Enviar',
   enviando: 'Enviando…',
-  adjuntar: 'Adjuntar captura',
-  quitarAdjunto: 'Quitar captura',
-  etiquetaAdjunto: 'URL de la captura',
-  pistaAdjunto: 'Pega el enlace a una imagen que ya subiste.',
-  adjuntoInvalido: 'Escribe un enlace que empiece por http:// o https://.',
   verCaptura: 'Ver captura adjunta',
+  anteriores: 'Ver mensajes anteriores',
+  cargandoAnteriores: 'Cargando mensajes anteriores…',
   borrar: 'Borrar conversación',
+  soporte: 'Soporte',
+  preferencias: 'Preferencias',
   confirmarBorrarTitulo: '¿Borrar la conversación?',
   confirmarBorrarMensaje:
     'Se borrarán todos los mensajes de esta conversación. No se puede deshacer.',
@@ -126,7 +151,8 @@ let contador = 0;
  *
  * @param {{cliente?: ReturnType<typeof crearClienteChatbot>,
  *          sesion?: () => {autenticado: boolean, apodo: string},
- *          raiz?: HTMLElement, chatGeneral?: string,
+ *          raiz?: HTMLElement, chatGeneral?: string, login?: string|null,
+ *          esperaAutocompletar?: number, vista?: () => string|null,
  *          confirmarBorrado?: (opciones: object) => Promise<boolean>}} [opciones]
  * @returns {{elemento: HTMLElement, abrir: (desde?: HTMLElement|null) => void,
  *            cerrar: () => void, alternar: (desde?: HTMLElement|null) => void,
@@ -137,7 +163,10 @@ export function crearVentanaChatbot({
   sesion = () => leerSesion(),
   raiz = document.body,
   chatGeneral = new URL(CHAT_GENERAL, import.meta.url).href,
+  login = urlDeVista('login'),
   confirmarBorrado = confirmar,
+  esperaAutocompletar = 250,
+  vista = () => vistaDelChat(),
 } = {}) {
   contador += 1;
   const idTitulo = `chatbot-ventana-titulo-${contador}`;
@@ -146,12 +175,32 @@ export function crearVentanaChatbot({
   let enviando = false;
   let devolverFocoA = null;
 
+  // Historial por páginas: el mensaje más antiguo que ya se ve (cursor para
+  // pedir los anteriores), si puede haber más, y los ya pintados (así un
+  // servidor que devuelva de más no repite ninguno).
+  let masAntiguoId = null;
+  let hayAnteriores = false;
+  let cargandoAnteriores = false;
+  const idsPintados = new Set();
+
   // ------------------------------------------------------------ estructura
 
   const titulo = h('h2', { clase: 'chatbot-ventana__titulo', texto: TEXTOS.titulo });
   titulo.id = idTitulo;
   const estado = h('p', { clase: 'chatbot-ventana__estado' });
 
+  const botonPreferencias = h('button', {
+    clase: 'chatbot-ventana__accion',
+    texto: TEXTOS.preferencias,
+    atributos: { type: 'button', 'aria-expanded': 'false' },
+    datos: { accion: 'preferencias-asistente' },
+  });
+  const botonSoporte = h('button', {
+    clase: 'chatbot-ventana__accion',
+    texto: TEXTOS.soporte,
+    atributos: { type: 'button', 'aria-expanded': 'false' },
+    datos: { accion: 'hablar-con-soporte' },
+  });
   const botonBorrar = h('button', {
     clase: 'chatbot-ventana__accion',
     texto: TEXTOS.borrar,
@@ -187,7 +236,7 @@ export function crearVentanaChatbot({
       titulo,
       h('div', {
         clase: 'chatbot-ventana__acciones',
-        hijos: [botonBorrar, botonMinimizar, botonCerrar],
+        hijos: [botonPreferencias, botonSoporte, botonBorrar, botonMinimizar, botonCerrar],
       }),
       estado,
     ],
@@ -202,6 +251,20 @@ export function crearVentanaChatbot({
   });
   const zonaAviso = h('div', { clase: 'chatbot-ventana__aviso', atributos: { hidden: true } });
 
+  // Va siempre primero en la lista, solo mientras puede haber mensajes
+  // anteriores. Es la vía de teclado y de lector de pantalla del scroll
+  // infinito: llegar arriba con la rueda hace lo mismo.
+  const botonAnteriores = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: TEXTOS.anteriores,
+    atributos: { type: 'button' },
+    datos: { accion: 'ver-anteriores' },
+  });
+  const filaAnteriores = h('li', {
+    clase: 'chatbot-ventana__anteriores',
+    hijos: [botonAnteriores],
+  });
+
   const entrada = h('textarea', {
     clase: 'campo__control chatbot-ventana__entrada',
     atributos: {
@@ -212,35 +275,32 @@ export function crearVentanaChatbot({
       'aria-label': TEXTOS.etiquetaMensaje,
     },
   });
-  const adjunto = campo({
-    nombre: 'adjuntoUrl',
-    etiqueta: TEXTOS.etiquetaAdjunto,
-    tipo: 'url',
-    pista: TEXTOS.pistaAdjunto,
-    atributos: { maxlength: LIMITES.adjunto, inputmode: 'url' },
-  });
-  adjunto.elemento.classList.add('chatbot-ventana__captura');
-  adjunto.elemento.hidden = true;
-
-  const botonAdjuntar = h('button', {
-    clase: 'chatbot-ventana__accion',
-    texto: TEXTOS.adjuntar,
-    atributos: { type: 'button', 'aria-expanded': 'false' },
-    datos: { accion: 'adjuntar-captura' },
-  });
   const botonEnviar = h('button', {
     clase: 'boton boton--primario',
     texto: TEXTOS.enviar,
     atributos: { type: 'submit' },
   });
 
+  // Preguntas rápidas y autocompletado. El autocompletado se conecta aquí,
+  // antes del manejador de Enter de más abajo, para que Enter elija la
+  // sugerencia marcada en vez de enviar lo escrito.
+  const rapidas = crearPreguntasRapidas({ cliente, alElegir: enviarSugerencia });
+  const autocompletado = conectarAutocompletado({
+    entrada,
+    cliente,
+    alElegir: enviarSugerencia,
+    esperaMs: esperaAutocompletar,
+  });
+
   const formulario = h('form', {
     clase: 'chatbot-ventana__formulario',
     atributos: { novalidate: true },
     hijos: [
-      adjunto.elemento,
-      h('div', { clase: 'chatbot-ventana__fila', hijos: [entrada, botonEnviar] }),
-      h('div', { clase: 'chatbot-ventana__herramientas', hijos: [botonAdjuntar] }),
+      rapidas.elemento,
+      h('div', {
+        clase: 'chatbot-ventana__fila chatbot-ventana__fila--entrada',
+        hijos: [autocompletado.elemento, entrada, botonEnviar],
+      }),
     ],
   });
 
@@ -255,6 +315,23 @@ export function crearVentanaChatbot({
     datos: { chatbotVentana: '' },
     hijos: [asa, cabecera, registro, zonaAviso, formulario],
   });
+  // «Soporte» ocupa el sitio de la conversación mientras está abierto; la
+  // conversación no se pierde, solo se oculta.
+  const panelSoporte = crearPanelSoporte({
+    cliente,
+    sesion,
+    login,
+    chatGeneral,
+    alVolver: () => mostrarSoporte(false),
+  });
+  ventana.append(panelSoporte.elemento);
+  // «Preferencias» ocupa el mismo sitio; solo uno de los dos a la vez.
+  const panelPreferencias = crearPanelPreferencias({
+    cliente,
+    sesion,
+    alVolver: () => mostrarPreferencias(false),
+  });
+  ventana.append(panelPreferencias.elemento);
   ventana.id = `chatbot-ventana-${contador}`;
   registro.id = `chatbot-ventana-registro-${contador}`;
   botonMinimizar.setAttribute('aria-controls', registro.id);
@@ -281,12 +358,37 @@ export function crearVentanaChatbot({
    *          adjuntoUrl?: string|null, fechaEnvio?: string|null}} mensaje
    */
   function pintarMensaje(mensaje) {
+    registro.append(crearBurbuja(mensaje));
+    registro.scrollTop = registro.scrollHeight;
+  }
+
+  /**
+   * @param {{id?: string|null, remitente: string, contenido: string,
+   *          adjuntoUrl?: string|null, fechaEnvio?: string|null}} mensaje
+   * @returns {HTMLElement} la burbuja, sin colgar de la lista
+   */
+  function crearBurbuja(mensaje) {
+    if (mensaje.id) {
+      idsPintados.add(mensaje.id);
+    }
     const esBot = mensaje.remitente === 'BOT';
+    const enriquecido = esBot ? (mensaje.enriquecido ?? null) : null;
+    // Con pasos, el texto se queda con la introducción: los pasos se pintan
+    // aparte, numerados, y no se repiten.
+    const tienePasos = (enriquecido?.pasos?.length ?? 0) > 0;
+    const texto = tienePasos ? introAntesDePasos(mensaje.contenido) : mensaje.contenido;
     const burbuja = h('li', {
       clase: `chatbot-ventana__mensaje chatbot-ventana__mensaje--${esBot ? 'bot' : 'usuario'}`,
       datos: mensaje.id ? { mensajeId: mensaje.id } : {},
-      hijos: [h('p', { clase: 'chatbot-ventana__texto', texto: mensaje.contenido })],
+      hijos: [texto ? h('p', { clase: 'chatbot-ventana__texto', texto }) : null],
     });
+    const parteEnriquecida = pintarEnriquecido(enriquecido, {
+      alPreguntar: enviarSugerencia,
+      alPedirSoporte: () => mostrarSoporte(true),
+    });
+    if (parteEnriquecida) {
+      burbuja.append(parteEnriquecida);
+    }
 
     const enlace = urlPermitida(mensaje.adjuntoUrl);
     if (enlace) {
@@ -306,8 +408,7 @@ export function crearVentanaChatbot({
     if (esBot && mensaje.id) {
       burbuja.append(controlDeCalificacion(mensaje.id));
     }
-    registro.append(burbuja);
-    registro.scrollTop = registro.scrollHeight;
+    return burbuja;
   }
 
   // --------------------------------------------------------- calificación
@@ -479,21 +580,22 @@ export function crearVentanaChatbot({
   function habilitarFormulario(activo) {
     entrada.disabled = !activo;
     botonEnviar.disabled = !activo;
-    botonAdjuntar.disabled = !activo;
     botonBorrar.disabled = !activo;
+    rapidas.habilitar(activo);
   }
 
   // ------------------------------------------------------------- historial
 
   async function cargarHistorial() {
     limpiarAviso();
+    reiniciarPaginas();
     vaciar(registro);
     const cargando = estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' });
     registro.append(h('li', { clase: 'chatbot-ventana__cargando', hijos: [cargando] }));
     habilitarFormulario(false);
 
     try {
-      const historial = await cliente.obtenerHistorial();
+      const historial = await cliente.obtenerHistorial({ limite: PAGINA_DEL_HISTORIAL });
       vaciar(registro);
       if (historial.length === 0) {
         pintarBienvenida();
@@ -501,8 +603,10 @@ export function crearVentanaChatbot({
       for (const mensaje of historial) {
         pintarMensaje(mensaje);
       }
+      recordarPagina(historial, historial.length >= PAGINA_DEL_HISTORIAL);
       cargada = true;
       habilitarFormulario(true);
+      rapidas.cargar();
     } catch (error) {
       vaciar(registro);
       mostrarAviso(error, { alReintentar: cargarHistorial });
@@ -510,7 +614,95 @@ export function crearVentanaChatbot({
     }
   }
 
+  function reiniciarPaginas() {
+    masAntiguoId = null;
+    hayAnteriores = false;
+    idsPintados.clear();
+    mostrarAnteriores(false);
+  }
+
+  /**
+   * @param {Array<{id?: string|null}>} mensajes los recién pintados, en orden
+   * @param {boolean} llena si la página vino completa (puede haber más)
+   */
+  function recordarPagina(mensajes, llena) {
+    masAntiguoId = mensajes[0]?.id ?? masAntiguoId;
+    hayAnteriores = llena && Boolean(masAntiguoId);
+    mostrarAnteriores(hayAnteriores);
+  }
+
+  function mostrarAnteriores(si) {
+    if (si) {
+      if (registro.firstElementChild !== filaAnteriores) {
+        registro.prepend(filaAnteriores);
+      }
+      return;
+    }
+    const teniaElFoco = filaAnteriores.contains(document.activeElement);
+    filaAnteriores.remove();
+    if (teniaElFoco) {
+      enfocarDentro();
+    }
+  }
+
+  async function cargarAnteriores() {
+    if (cargandoAnteriores || !hayAnteriores || !masAntiguoId) {
+      return;
+    }
+    cargandoAnteriores = true;
+    limpiarAviso();
+    conCarga(botonAnteriores, true, TEXTOS.cargandoAnteriores);
+    registro.setAttribute('aria-busy', 'true');
+    try {
+      const pagina = await cliente.obtenerHistorial({
+        antesDe: masAntiguoId,
+        limite: PAGINA_DEL_HISTORIAL,
+      });
+      agregarAnteriores(pagina);
+    } catch (error) {
+      mostrarAviso(error, { alReintentar: cargarAnteriores });
+    } finally {
+      terminarAnteriores();
+    }
+  }
+
+  // Los mensajes de antes entran arriba, en orden, y lo que el jugador estaba
+  // leyendo no se mueve: se compensa el scroll con lo que creció la lista.
+  function agregarAnteriores(pagina) {
+    const nuevos = pagina.filter((mensaje) => !(mensaje.id && idsPintados.has(mensaje.id)));
+    if (nuevos.length === 0) {
+      hayAnteriores = false;
+      mostrarAnteriores(false);
+      return;
+    }
+    const alturaAntes = registro.scrollHeight;
+    const desdeArriba = registro.scrollTop;
+    const fragmento = document.createDocumentFragment();
+    for (const mensaje of nuevos) {
+      fragmento.append(crearBurbuja(mensaje));
+    }
+    const ancla = filaAnteriores.isConnected ? filaAnteriores.nextSibling : registro.firstChild;
+    registro.insertBefore(fragmento, ancla);
+    recordarPagina(nuevos, pagina.length >= PAGINA_DEL_HISTORIAL);
+    registro.scrollTop = registro.scrollHeight - alturaAntes + desdeArriba;
+  }
+
+  function terminarAnteriores() {
+    cargandoAnteriores = false;
+    conCarga(botonAnteriores, false);
+    registro.removeAttribute('aria-busy');
+  }
+
   // ----------------------------------------------------------------- envío
+
+  // Una pregunta rápida o una sugerencia se envía como si se hubiera escrito.
+  function enviarSugerencia(pregunta) {
+    if (entrada.disabled || enviando) {
+      return;
+    }
+    entrada.value = pregunta;
+    enviarMensaje();
+  }
 
   async function enviarMensaje() {
     if (enviando) {
@@ -522,18 +714,8 @@ export function crearVentanaChatbot({
       return;
     }
 
-    let adjuntoUrl = null;
-    if (!adjunto.elemento.hidden && adjunto.control.value.trim()) {
-      adjuntoUrl = urlPermitida(adjunto.control.value.trim());
-      if (!adjuntoUrl) {
-        adjunto.marcarError(TEXTOS.adjuntoInvalido);
-        adjunto.control.focus();
-        return;
-      }
-    }
-    adjunto.marcarError(null);
-
     enviando = true;
+    autocompletado.cerrar();
     limpiarAviso();
     conCarga(botonEnviar, true, TEXTOS.enviando);
     const escribiendo = h('li', {
@@ -544,13 +726,15 @@ export function crearVentanaChatbot({
     registro.scrollTop = registro.scrollHeight;
 
     try {
-      const respuesta = await cliente.enviarMensaje(contenido, adjuntoUrl);
+      const donde = vista();
+      const respuesta = await (donde
+        ? cliente.enviarMensaje(contenido, { vista: donde })
+        : cliente.enviarMensaje(contenido));
       escribiendo.remove();
       quitarBienvenida();
       pintarMensaje({
         remitente: 'USUARIO',
         contenido,
-        adjuntoUrl,
         fechaEnvio: new Date().toISOString(),
       });
       pintarMensaje(respuesta);
@@ -567,23 +751,13 @@ export function crearVentanaChatbot({
   // vive en funciones aparte (regla require-atomic-updates de ESLint).
   function vaciarFormulario() {
     entrada.value = '';
-    mostrarAdjunto(false);
+    autocompletado.cerrar();
   }
 
   function terminarEnvio() {
     enviando = false;
     conCarga(botonEnviar, false);
     entrada.focus();
-  }
-
-  function mostrarAdjunto(visible) {
-    adjunto.elemento.hidden = !visible;
-    botonAdjuntar.setAttribute('aria-expanded', String(visible));
-    botonAdjuntar.textContent = visible ? TEXTOS.quitarAdjunto : TEXTOS.adjuntar;
-    if (!visible) {
-      adjunto.control.value = '';
-      adjunto.marcarError(null);
-    }
   }
 
   async function borrarConversacion() {
@@ -597,6 +771,7 @@ export function crearVentanaChatbot({
     }
     try {
       await cliente.limpiarHistorial();
+      reiniciarPaginas();
       vaciar(registro);
       limpiarAviso();
       pintarBienvenida();
@@ -618,14 +793,74 @@ export function crearVentanaChatbot({
       enviarMensaje();
     }
   });
-  botonAdjuntar.addEventListener('click', () => {
-    mostrarAdjunto(adjunto.elemento.hidden);
-    if (!adjunto.elemento.hidden) {
-      adjunto.control.focus();
+  botonBorrar.addEventListener('click', borrarConversacion);
+  botonAnteriores.addEventListener('click', cargarAnteriores);
+  // Scroll infinito: al llegar arriba se piden los anteriores.
+  registro.addEventListener('scroll', () => {
+    if (registro.scrollTop <= UMBRAL_DE_ANTERIORES && hayAnteriores && !cargandoAnteriores) {
+      cargarAnteriores();
     }
   });
-  botonBorrar.addEventListener('click', borrarConversacion);
   botonCerrar.addEventListener('click', () => cerrar());
+
+  // -------------------------------------------------------------- soporte
+
+  function soporteAbierto() {
+    return !panelSoporte.elemento.hidden;
+  }
+
+  function mostrarSoporte(si) {
+    if (si) {
+      ocultarPreferencias();
+    }
+    registro.hidden = si;
+    formulario.hidden = si;
+    if (si) {
+      limpiarAviso();
+      panelSoporte.abrir();
+    } else {
+      panelSoporte.elemento.hidden = true;
+    }
+    botonSoporte.setAttribute('aria-expanded', String(si));
+    if (si) {
+      panelSoporte.enfocar();
+    } else {
+      enfocarDentro();
+    }
+  }
+
+  botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+
+  // ---------------------------------------------------------- preferencias
+
+  function preferenciasAbiertas() {
+    return !panelPreferencias.elemento.hidden;
+  }
+
+  function ocultarPreferencias() {
+    panelPreferencias.elemento.hidden = true;
+    botonPreferencias.setAttribute('aria-expanded', 'false');
+  }
+
+  function mostrarPreferencias(si) {
+    if (si && soporteAbierto()) {
+      panelSoporte.elemento.hidden = true;
+      botonSoporte.setAttribute('aria-expanded', 'false');
+    }
+    registro.hidden = si;
+    formulario.hidden = si;
+    if (si) {
+      limpiarAviso();
+      panelPreferencias.abrir();
+      botonPreferencias.setAttribute('aria-expanded', 'true');
+      panelPreferencias.enfocar();
+    } else {
+      ocultarPreferencias();
+      enfocarDentro();
+    }
+  }
+
+  botonPreferencias.addEventListener('click', () => mostrarPreferencias(!preferenciasAbiertas()));
 
   // ------------------------------------------------- minimizar y tamaño
 
@@ -782,6 +1017,14 @@ export function crearVentanaChatbot({
     }
     if (minimizada()) {
       botonMinimizar.focus();
+      return;
+    }
+    if (soporteAbierto()) {
+      panelSoporte.enfocar();
+      return;
+    }
+    if (preferenciasAbiertas()) {
+      panelPreferencias.enfocar();
       return;
     }
     const destino = !entrada.disabled

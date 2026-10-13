@@ -3,6 +3,7 @@ package com.nexusbattles.ms_chatbot.chat.repository;
 import com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema;
 import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDePregunta;
 import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta;
+import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeTexto;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
 import org.springframework.data.domain.Pageable;
@@ -16,6 +17,26 @@ import java.util.Optional;
 import java.util.UUID;
 
 public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
+
+
+    // ms-chatbot.yaml 1.3.5: historial por paginas, del mas reciente hacia
+    // atras. Los empates de hora se deciden por id, para que ningun mensaje se
+    // repita ni se pierda entre una pagina y la siguiente.
+    List<Mensaje> findByConversacionIdOrderByFechaEnvioDescIdDesc(UUID conversacionId, Pageable limite);
+
+    // 1.3.5: el cursor 'antesDe' solo vale si es de la propia conversacion.
+    Optional<Mensaje> findByIdAndConversacionId(UUID id, UUID conversacionId);
+
+    @Query("""
+        select m from Mensaje m
+        where m.conversacion.id = :conversacionId
+          and (m.fechaEnvio < :fecha or (m.fechaEnvio = :fecha and m.id < :id))
+        order by m.fechaEnvio desc, m.id desc
+        """)
+    List<Mensaje> buscarAnteriores(@Param("conversacionId") UUID conversacionId,
+                                   @Param("fecha") Instant fecha,
+                                   @Param("id") UUID id,
+                                   Pageable limite);
 
     List<Mensaje> findByConversacionIdOrderByFechaEnvioAsc(UUID conversacionId);
 
@@ -64,6 +85,20 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     List<RegistroDeRespuesta> buscarRespuestasMedidasEntre(@Param("remitente") Remitente remitente,
                                                            @Param("desde") Instant desde,
                                                            @Param("hasta") Instant hasta);
+
+    // 1.3.7: el texto de las preguntas mas recientes del periodo, solo para
+    // contar palabras clave (PalabrasClaveFrecuentes).
+    @Query("""
+        select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeTexto(m.conversacion.id, m.contenido)
+        from Mensaje m
+        where m.remitente = :remitente
+          and m.fechaEnvio >= :desde and m.fechaEnvio < :hasta
+        order by m.fechaEnvio desc
+        """)
+    List<RegistroDeTexto> buscarTextosDePreguntasEntre(@Param("remitente") Remitente remitente,
+                                                       @Param("desde") Instant desde,
+                                                       @Param("hasta") Instant hasta,
+                                                       Pageable limite);
 
     @Query("""
         select new com.nexusbattles.ms_chatbot.chat.analitica.ConteoDeTema(m.temaClave, count(m))

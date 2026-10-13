@@ -176,7 +176,7 @@ echo "== 1) Productos: un heroe y un arma, directos en Mongo =="
 # un numero suelto escrito desde mongosh llega como Int32 y la conversion
 # falla. De ahi `NumberDecimal`.
 $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
-  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e", "dddddddd-0000-0000-0000-00000000000a"] } });
+  db.productos.deleteMany({ _id: { $in: ["p-heroe-e2e", "p-arma-e2e", "dddddddd-0000-0000-0000-00000000000a", "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d"] } });
   const base = {
     _class: "nexus.dominio.Producto",
     imagen: null, descripcion: "Producto de prueba del E2E",
@@ -225,6 +225,20 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
       nombre: "Hacha subastable de prueba", tipo: "ARMA",
       prototipo: null,
       poderDeAtaque: 9, tasaDeCaida: NumberDecimal("50")
+    }),
+    // HU-SIM-005/006 — la epica de la Tabla 20 del Guerrero Tanque, con el
+    // MISMO id del catalogo oficial. El banco apaga la semilla oficial
+    // (CATALOGO_SEMILLA=false en compose.yml), asi que este producto es el unico
+    // EPICA que hay: la mision del banco (semilla-misiones-banco.json) lo entrega
+    // al derrotar a su Master, e inventario exige que exista, que no este
+    // suspendido y que su tipo sea conocido (EntregarProductos).
+    Object.assign({}, base, {
+      _id: "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d",
+      nombre: "Golpe de defensa", tipo: "EPICA",
+      prototipo: null, heroe: "Guerrero Tanque",
+      efectoGeneral: "+1 al ataque",
+      efectoPotenciado: "+4 al da\u00f1o, +2% de cr\u00edtico",
+      poderDeAtaque: null, tasaDeCaida: NumberDecimal("0")
     })
   ]);
   print("  productos sembrados: " + db.productos.countDocuments({ _id: /e2e/ }));
@@ -233,7 +247,7 @@ $COMPOSE exec -T e2e-contenido-mongo mongosh --quiet productos --eval '
 # Comprobar YA que productos los sirve. Si esto falla, el 500 de
 # /estadisticas viene de aqui y no de inventario, y conviene saberlo antes de
 # perseguirlo en el servicio equivocado.
-for p in p-heroe-e2e p-arma-e2e dddddddd-0000-0000-0000-00000000000a; do
+for p in p-heroe-e2e p-arma-e2e dddddddd-0000-0000-0000-00000000000a 81af272d-74fb-3dc1-b6ff-01fdc99a1c1d; do
   codigo=$(curl -sS -o /tmp/prod-$p.json -w '%{http_code}' "$BORDE/api/v1/productos/$p")
   echo "  GET /api/v1/productos/$p -> $codigo"
   if [ "$codigo" != "200" ]; then

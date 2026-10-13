@@ -71,7 +71,9 @@ public class SubastaListadoController {
             q, tipoProducto, rareza, precioMin, precioMax,
             tiempoRestante, tipoVenta, metodoPago, vendedor, ordenarPor
         );
-        return subastaListadoService.listar(filtros, page, size);
+        // G5: con la sesion (si la hay) se marca lo propio; el uid del
+        // vendedor no sale en el listado.
+        return subastaListadoService.listar(filtros, page, size, jugadorSiHaySesion());
     }
 
     @GetMapping("/sugerencias")

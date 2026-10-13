@@ -27,6 +27,7 @@ import nexus.aplicacion.AdquirirProductoServicio;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.OrigenProducto;
 import nexus.dominio.Producto;
+import nexus.dominio.TipoProducto;
 import nexus.persistencia.AdquisicionRegistradaRepository;
 import nexus.persistencia.ProductoRepository;
 import nexus.productos.dominio.EstadoAdquisicion;
@@ -140,6 +141,20 @@ class CatalogoContraMongoIT {
                 }
 
                 @Test
+                @DisplayName("RG-085: las 8 epicas existen y no tienen precio de venta, para que la tienda no las ofrezca")
+                void lasEpicasNoSeVenden() {
+                        List<Producto> epicas = productos.findAll().stream()
+                                .filter(p -> p.tipo() == TipoProducto.EPICA)
+                                .toList();
+
+                        assertEquals(8, epicas.size());
+                        assertTrue(epicas.stream().allMatch(p -> p.precioCreditos() != null && p.precioCreditos() == 0),
+                                "precios en creditos: " + epicas.stream().map(Producto::precioCreditos).toList());
+                        assertTrue(epicas.stream().allMatch(p -> p.precioMonedaReal() != null && p.precioMonedaReal().signum() == 0),
+                                "precios en pesos: " + epicas.stream().map(Producto::precioMonedaReal).toList());
+                }
+
+                @Test
                 @DisplayName("una segunda ejecucion no inserta ni actualiza nada")
                 void segundaEjecucionNoCambiaNada() {
                         ResultadoSemilla otra = semilla.sembrar();
@@ -160,21 +175,22 @@ class CatalogoContraMongoIT {
                                 .andExpect(status().isOk())
                                 .andExpect(jsonPath("$.modificadoPor").value(UID_ADMIN.toString()));
 
-                        ResultadoSemilla v2 = semillaConOtraVersion(2).sembrar();
+                        // El arranque ya aplico la version del archivo (2); la 3 pone al dia lo no tocado.
+                        ResultadoSemilla v2 = semillaConOtraVersion(3).sembrar();
 
                         assertTrue(v2.respetados().contains(editado), v2.respetados().toString());
                         assertTrue(v2.actualizados().size() >= 50, "actualizados: " + v2.actualizados().size());
                         Producto respetado = productos.findById(editado).orElseThrow();
                         assertEquals("Descripcion reescrita por el administrador", respetado.descripcion());
-                        assertEquals(1, respetado.semillaVersion());
-                        assertEquals(2, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
+                        assertEquals(2, respetado.semillaVersion());
+                        assertEquals(3, productoDeLaSemilla("item-mago-fuego-anillo-para-piro-explosion").semillaVersion());
                 }
 
                 private SemillaDelCatalogo semillaConOtraVersion(int version) throws IOException {
                         String json;
                         try (InputStream real = new ClassPathResource("semilla/catalogo-inicial.json").getInputStream()) {
                                 json = new String(real.readAllBytes(), StandardCharsets.UTF_8)
-                                        .replaceFirst("\"version\": 1,", "\"version\": " + version + ",");
+                                        .replaceFirst("\"version\": \\d+,", "\"version\": " + version + ",");
                         }
                         Resource archivo = new ByteArrayResource(json.getBytes(StandardCharsets.UTF_8));
                         return new SemillaDelCatalogo(productos, mapeador, validador, true, archivo);

@@ -20,8 +20,8 @@ public class AccionNoPermitida extends ErrorDeNegocio {
     private final String motivo;
 
     public AccionNoPermitida(String motivo, String detalle) {
-        super(TIPO, "La accion no se puede jugar ahora", 409,
-                detalle == null || detalle.isBlank() ? "El motor de combate rechazo la accion." : detalle);
+        super(TIPO, "La acción no se puede jugar ahora", 409,
+                detalle == null || detalle.isBlank() ? "El motor de combate rechazó la acción." : detalle);
         this.motivo = Objects.requireNonNullElse(motivo, "ACCION_DESCONOCIDA");
     }
 

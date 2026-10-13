@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Nexus Battles VI - Tienda</title>
+    <title>Tienda · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/fondos.css" />
     <link rel="stylesheet" href="./tema-cuentas.css" />
     <!-- UXC-4 — «Ver producto» abre la ficha del catalogo (la misma del
          inventario) con la compra y las opiniones: sus estilos van aqui. -->
@@ -14,7 +15,7 @@
     <link rel="stylesheet" href="./tienda-producto.css" />
     <link rel="stylesheet" href="tienda.css" />
   </head>
-  <body>
+  <body data-fondo="mercado">
     <!-- Barra de navegación compartida. Reemplaza el <header class="navbar"> del
      mockup Figma con enlaces hardcoded (href="#") por el mismo patrón que
      usan auditoria, perfil, gestion-usuarios y crear-cuenta-admin: un solo
@@ -33,7 +34,8 @@
       // Cabecera unica de la aplicacion (HU-UX-001): navegacion, sesion y estado activo.
       montarCabecera(document.getElementById('navbar-container'), {
         vista: 'tienda',
-        seccionActiva: 'cuenta',
+        // Revisión del 6-oct, punto 7: la tienda tiene su atajo en la barra.
+        seccionActiva: 'tienda',
         // UXC-9 — RF-INV-008: aquí la búsqueda de la barra filtra la tienda en
         // el sitio, con el mismo campo que la vitrina, en vez de recargarla.
         buscador: {
@@ -192,6 +194,18 @@
                   name="soloPromocion"
                 />
                 <span class="casilla__etiqueta">Solo en promoción</span>
+              </label>
+              <!-- Auditoría de DEV del 30-sep: el corazón guardaba y se
+                   anunciaba, pero no había dónde ver la lista. Solo con sesión
+                   (la vitrina marca `enListaDeseos`); tienda.js lo destapa. -->
+              <label class="casilla filtros-tienda__deseos" data-zona="filtro-deseos" hidden>
+                <input
+                  class="casilla__entrada"
+                  type="checkbox"
+                  id="solo-deseos"
+                  name="soloDeseos"
+                />
+                <span class="casilla__etiqueta">Solo mi lista de deseos</span>
               </label>
               <button
                 type="reset"

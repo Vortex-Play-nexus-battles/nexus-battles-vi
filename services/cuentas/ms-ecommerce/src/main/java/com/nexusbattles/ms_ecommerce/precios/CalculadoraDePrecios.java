@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * El precio que se paga, calculado siempre en el servidor (B5, 7.5).
@@ -88,6 +89,57 @@ public final class CalculadoraDePrecios {
         }
         BigDecimal convertido = importeCop.divide(tarifa.copPorUnidad(), moneda.escala(), RoundingMode.HALF_UP);
         return importeCop.signum() > 0 ? alMinimo(convertido, moneda) : convertido;
+    }
+
+    // ------------------------------------------------- D-44: precio en creditos
+
+    /**
+     * El precio en creditos de una unidad (D-44): el {@code precioCreditos} del
+     * catalogo, sin convertir nada desde COP. Con una promocion vigente,
+     * {@code base * (100 - %) / 100} a creditos enteros (mitad hacia arriba),
+     * nunca por debajo de 1: el mismo porcentaje que en dinero real.
+     *
+     * @param precioCreditos    el del catalogo, mayor que cero
+     * @param porcentajeVigente el de la promocion vigente (1 a 99), o null
+     * @throws IllegalArgumentException si el precio no es positivo o el
+     *         porcentaje no esta entre 1 y 99
+     */
+    public static long calcularEnCreditos(int precioCreditos, Integer porcentajeVigente) {
+        if (precioCreditos < 1) {
+            throw new IllegalArgumentException("Un precio en creditos tiene que ser mayor que cero");
+        }
+        if (porcentajeVigente == null) {
+            return precioCreditos;
+        }
+        if (porcentajeVigente < 1 || porcentajeVigente > 99) {
+            throw new IllegalArgumentException("Un descuento va de 1 a 99 %: " + porcentajeVigente);
+        }
+        long rebajado = BigDecimal.valueOf(precioCreditos)
+                .multiply(CIEN.subtract(BigDecimal.valueOf(porcentajeVigente)))
+                .divide(CIEN, 0, RoundingMode.HALF_UP)
+                .longValueExact();
+        return Math.max(1, rebajado);
+    }
+
+    /**
+     * El precio en creditos de un producto del catalogo, con la promocion que
+     * este vigente en ese instante; vacio si el producto no se puede pagar con
+     * creditos (premium, o sin {@code precioCreditos} positivo).
+     */
+    public static Optional<PrecioEnCreditos> enCreditos(ProductoDelCatalogo producto, Instant ahora) {
+        Objects.requireNonNull(producto, "producto");
+        if (!producto.tienePrecioEnCreditos()) {
+            return Optional.empty();
+        }
+        Integer porcentaje = producto.porcentajeVigenteEn(ahora);
+        try {
+            return Optional.of(new PrecioEnCreditos(producto.precioCreditos(),
+                    calcularEnCreditos(producto.precioCreditos(), porcentaje), porcentaje));
+        } catch (IllegalArgumentException datoRaro) {
+            // Un porcentaje fuera de 1..99 ya lo descarta la promocion; esto es
+            // el seguro de que un dato raro del catalogo no se cobre a ciegas.
+            return Optional.empty();
+        }
     }
 
     private static BigDecimal alMinimo(BigDecimal importe, Moneda moneda) {

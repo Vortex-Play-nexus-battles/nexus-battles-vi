@@ -26,6 +26,36 @@ beforeEach(() => {
 });
 
 describe('montarPestanas()', () => {
+  test('auditoría 30-sep: si el #hash cambia con la vista abierta, cambia la pestaña', () => {
+    const raiz = document.getElementById('raiz');
+    const pestanas = tresPestanas();
+    const vista = montarPestanas(raiz, pestanas);
+    expect(vista.activa()).toBe('resumen');
+
+    window.location.hash = '#historial';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    expect(vista.activa()).toBe('historial');
+    expect(pestanas[2].panel.hidden).toBe(false);
+    expect(pestanas[0].panel.hidden).toBe(true);
+    expect(raiz.querySelector('#pestana-historial').getAttribute('aria-selected')).toBe('true');
+
+    // Un hash que no es de ninguna pestaña no cambia nada.
+    window.location.hash = '#nada';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+    expect(vista.activa()).toBe('historial');
+  });
+
+  test('sin hash (hash: false) no escucha la dirección', () => {
+    const raiz = document.getElementById('raiz');
+    const vista = montarPestanas(raiz, tresPestanas(), { hash: false });
+
+    window.location.hash = '#perfil';
+    window.dispatchEvent(new HashChangeEvent('hashchange'));
+
+    expect(vista.activa()).toBe('resumen');
+  });
+
   test('monta el tablist, los tabs y los paneles enlazados entre si', () => {
     const raiz = document.getElementById('raiz');
 

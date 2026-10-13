@@ -105,7 +105,91 @@ export async function consultar(recurso, { senal, buscar = fetchWithHttpErrorInt
     };
   }
 
-  return { ...clasificarFallo(respuesta.status), datos: null, estado: respuesta.status, recurso };
+  return { ...(await falloDe(respuesta)), datos: null, estado: respuesta.status, recurso };
+}
+
+/**
+ * Un archivo de la API (HU-USR-008: la exportación del directorio en CSV).
+ *
+ * Como {@link consultar}, **nunca lanza**: devuelve el contenido y el nombre
+ * que da el servidor (`Content-Disposition`), o el desenlace y el motivo por
+ * el que no hay archivo. Un 422 de «demasiado grande» trae su explicación en
+ * el `detail`, y es lo que se enseña.
+ *
+ * @param {string} recurso por ejemplo `/admin/jugadores/exportacion?rol=JUGADOR`
+ * @param {{senal?: AbortSignal, buscar?: typeof fetchWithHttpErrorInterceptor}} [opciones]
+ * @returns {Promise<{resultado: string, contenido: Blob|null, nombreArchivo: string|null,
+ *   estado: number|null, motivo: string, recurso: string}>}
+ */
+export async function descargar(recurso, { senal, buscar = fetchWithHttpErrorInterceptor } = {}) {
+  let respuesta;
+  try {
+    respuesta = await buscar(rutaDeApi(recurso), {
+      method: 'GET',
+      headers: { Accept: 'text/csv, application/problem+json' },
+      signal: senal,
+    });
+  } catch {
+    return {
+      resultado: RESULTADO.SERVICIO_DEGRADADO,
+      contenido: null,
+      nombreArchivo: null,
+      estado: null,
+      motivo: 'No hubo respuesta del servicio.',
+      recurso,
+    };
+  }
+
+  if (respuesta.ok) {
+    return {
+      resultado: RESULTADO.DATOS,
+      contenido: await respuesta.blob(),
+      nombreArchivo: nombreDeArchivo(respuesta.headers?.get?.('Content-Disposition')),
+      estado: respuesta.status,
+      motivo: '',
+      recurso,
+    };
+  }
+
+  const { resultado, motivo } = await falloDe(respuesta);
+  return {
+    resultado,
+    contenido: null,
+    nombreArchivo: null,
+    estado: respuesta.status,
+    motivo,
+    recurso,
+  };
+}
+
+/**
+ * El nombre de `attachment; filename="x.csv"`, o null si no lo hay: no se
+ * inventa uno.
+ *
+ * @param {string|null|undefined} cabecera
+ * @returns {string|null}
+ */
+function nombreDeArchivo(cabecera) {
+  const encontrado = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(String(cabecera ?? ''));
+  return encontrado ? decodeURIComponent(encontrado[1].trim()) : null;
+}
+
+/**
+ * El desenlace de una respuesta que no fue bien. Un 400 o un 422 con problem
+ * details se explican solos (un filtro que no se puede aplicar, una
+ * exportación demasiado grande): su `detail` es el motivo que se enseña.
+ *
+ * @param {{status: number, text?: () => Promise<string>}} respuesta
+ */
+async function falloDe(respuesta) {
+  const fallo = clasificarFallo(respuesta.status);
+  if (respuesta.status === 400 || respuesta.status === 422) {
+    const problema = await leerJson(respuesta);
+    if (problema && typeof problema.detail === 'string' && problema.detail.trim()) {
+      return { ...fallo, motivo: problema.detail.trim() };
+    }
+  }
+  return fallo;
 }
 
 /**

@@ -22,6 +22,9 @@ import java.util.UUID;
 // Ciclo de vida:
 //   BORRADOR  --ponerEnProduccion-->  PRODUCCION  --retirar-->  RETIRADA
 //   RETIRADA  --ponerEnProduccion-->  PRODUCCION   (revertir)
+//
+// ms-chatbot.yaml 1.3.8: una candidata se puede programar para publicarse
+// sola (DespliegueProgramadoTarea).
 @Entity
 @Table(name = "versiones_base_conocimiento")
 @Getter
@@ -51,6 +54,15 @@ public class VersionBaseConocimiento {
     @Column(name = "fecha_despliegue")
     private Instant fechaDespliegue;
 
+    // 1.3.8 (V9): cuando publicarla sola; null si no esta programada.
+    @Column(name = "despliegue_programado_en")
+    private Instant despliegueProgramadoEn;
+
+    // 1.3.8 (V9): cuando se intento publicarla programada y no paso la
+    // evaluacion; null si no ocurrio (o si se volvio a programar).
+    @Column(name = "programacion_rechazada_en")
+    private Instant programacionRechazadaEn;
+
     // Toda version nace como candidata (BORRADOR): nunca se crea una
     // directamente en produccion, siempre pasa por la evaluacion.
     public static VersionBaseConocimiento nuevaCandidata(int numero, String descripcion) {
@@ -69,6 +81,34 @@ public class VersionBaseConocimiento {
         }
         estado = EstadoVersion.PRODUCCION;
         fechaDespliegue = ahora;
+        despliegueProgramadoEn = null;
+    }
+
+    // 1.3.8: solo la candidata se programa. Programar de nuevo reemplaza la
+    // fecha anterior y olvida un rechazo previo.
+    public void programarDespliegue(Instant cuando) {
+        if (estado != EstadoVersion.BORRADOR) {
+            throw new IllegalStateException(
+                "Solo se programa la version candidata; la " + numero + " esta en " + estado + ".");
+        }
+        despliegueProgramadoEn = cuando;
+        programacionRechazadaEn = null;
+    }
+
+    public void cancelarProgramacion() {
+        despliegueProgramadoEn = null;
+    }
+
+    // La publicacion programada no paso la evaluacion: queda sin programar y
+    // el panel lo muestra.
+    public void rechazarProgramacion(Instant cuando) {
+        despliegueProgramadoEn = null;
+        programacionRechazadaEn = cuando;
+    }
+
+    public boolean despliegueVencido(Instant ahora) {
+        return estado == EstadoVersion.BORRADOR && despliegueProgramadoEn != null
+            && !despliegueProgramadoEn.isAfter(ahora);
     }
 
     // Sacar de produccion la version vigente. Sus temas se conservan para

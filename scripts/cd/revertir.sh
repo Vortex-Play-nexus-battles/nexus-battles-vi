@@ -95,6 +95,14 @@ while IFS=: read -r servicio tag_fallido tag_anterior; do
     JWT_CLAVE_PRIVADA=$(grep '^JWT_CLAVE_PRIVADA=' "$DIRECTORIO/secretos-firma.env" | head -n1 | cut -d= -f2- || true)
     export JWT_CLAVE_PRIVADA
   fi
+  # HU-AUT-007: lo mismo con la clave del segundo factor
+  # (asegurar_clave_de_segundo_factor). Sin ella, el ms-identidad revertido no
+  # descifraria los secretos TOTP y nadie con segundo factor podria entrar.
+  if [ "$extra" = "docker-compose.cuentas.yml" ] && [ -z "${IDENTIDAD_2FA_CLAVE:-}" ] \
+     && [ -s "$DIRECTORIO/secretos-segundo-factor.env" ]; then
+    IDENTIDAD_2FA_CLAVE=$(grep '^IDENTIDAD_2FA_CLAVE=' "$DIRECTORIO/secretos-segundo-factor.env" | head -n1 | cut -d= -f2- || true)
+    export IDENTIDAD_2FA_CLAVE
+  fi
   # R16.5b: igual que en desplegar.sh. Sin esto el contenedor revertido
   # quedaria sin hora de creacion y no esperaria su turno en el proximo
   # arranque del host (el valor por omision no escalona).

@@ -19,6 +19,10 @@ import {
   textoDePaginacion,
   invitacionDeLaUrl,
   rutaDeVerificacion,
+  estadoParaLaApi,
+  textoDelCreador,
+  ESTADOS_DISPONIBLES,
+  CODIGO_NO_VALIDO,
 } from './batallas.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -104,6 +108,12 @@ describe('textos de la pantalla', () => {
     expect(subtituloDeSalas(1)).toBe('1 sala abierta ahora mismo');
   });
 
+  test('auditoría 30-sep: con filtros cuenta las que coinciden y lo dice, no «0 salas abiertas»', () => {
+    expect(subtituloDeSalas(0, { filtrada: true })).toBe('Ninguna sala con estos filtros');
+    expect(subtituloDeSalas(1, { filtrada: true })).toBe('1 sala con estos filtros');
+    expect(subtituloDeSalas(7, { filtrada: true })).toBe('7 salas con estos filtros');
+  });
+
   test('la paginacion dice cuantos de cuantos, como exige el componente', () => {
     expect(textoDePaginacion({ contenido: new Array(16), totalElementos: 38 })).toBe(
       'Mostrando 16 de 38 salas',
@@ -177,6 +187,45 @@ describe('montarBatallas', () => {
     expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(true);
     expect(raiz.querySelector('[data-zona="estado"]').textContent).toContain(
       'No hay batallas abiertas',
+    );
+  });
+
+  test('auditoría 30-sep: vacío por un filtro no dice que nadie juega, y «Quitar filtros» vuelve a todas', async () => {
+    const raiz = preparar();
+    const listar = jest
+      .fn()
+      .mockResolvedValueOnce(pagina([sala()]))
+      .mockResolvedValueOnce(pagina([]))
+      .mockResolvedValueOnce(pagina([sala()], { totalElementos: 25 }));
+    montarBatallas(raiz, { listar });
+    await asentar();
+
+    const modalidad = raiz.querySelector('[name="modalidad"]');
+    modalidad.value = 'CONTRA_IA';
+    modalidad.dispatchEvent(new Event('change'));
+    await asentar();
+
+    const estado = raiz.querySelector('[data-zona="estado"]');
+    expect(estado.textContent).toContain('Ninguna sala coincide con los filtros');
+    expect(estado.textContent).not.toContain('Nadie tiene una sala esperando');
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      'Ninguna sala con estos filtros',
+    );
+
+    const quitar = [...estado.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Quitar filtros',
+    );
+    quitar.click();
+    await asentar();
+
+    expect(modalidad.value).toBe('');
+    // Revision del 6-oct (punto 8): sin filtros se piden las salas a las que
+    // se puede entrar, no todas.
+    expect(listar).toHaveBeenLastCalledWith(
+      expect.objectContaining({ pagina: 0, modalidad: '', estado: 'ABIERTA,PRIVADA' }),
+    );
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      '25 salas abiertas ahora mismo',
     );
   });
 
@@ -396,6 +445,9 @@ describe('canal en tiempo real en el listado', () => {
       `/tema/salas/${OTRA}`,
     ]);
     expect(raiz.querySelector('[data-zona="canal"]').dataset.estado).toBe('conectado');
+    // Revision del 6-oct (punto 9): conectado no se dice; es lo normal.
+    expect(raiz.querySelector('[data-zona="canal"]').hidden).toBe(true);
+    expect(raiz.querySelector('[data-zona="canal"]').textContent).toBe('');
 
     canal.entregar(`/tema/salas/${OTRA}`, {
       tipo: 'sala.participante.ingreso',
@@ -463,6 +515,8 @@ describe('canal en tiempo real en el listado', () => {
     });
     montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue(pagina([privada])),
+      // RFINAL-04: una privada se comprueba antes de entrar (sin efectos).
+      comprobar: jest.fn().mockResolvedValue(privada),
       ingresar: jest.fn().mockResolvedValue({ ...privada, ocupacion: 2, participantes: [JUGADOR] }),
       conectarCanal: () => Promise.resolve(canal),
     });
@@ -530,8 +584,11 @@ describe('canal en tiempo real en el listado', () => {
 describe('mostrarAvisoDeSala', () => {
   const ZONA = `
     <div class="aviso" data-zona="aviso-sala" hidden>
-      <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
-      <p class="t-cuerpo" data-zona="aviso-sala-detalle"></p>
+      <div class="aviso__cuerpo">
+        <p class="aviso__titulo" data-zona="aviso-sala-titulo"></p>
+        <p class="aviso__detalle" data-zona="aviso-sala-detalle"></p>
+      </div>
+      <button type="button" data-accion="cerrar-aviso-sala">Entendido</button>
     </div>
   `;
 
@@ -566,6 +623,18 @@ describe('mostrarAvisoDeSala', () => {
     const zona = document.querySelector('[data-zona="aviso-sala"]');
     expect(zona.className).toBe('aviso aviso--info');
     expect(zona.querySelector('[data-zona="aviso-sala-detalle"]').hidden).toBe(true);
+  });
+
+  test('auditoría 30-sep: «Cancelaste la sala.» no se queda para siempre; «Entendido» lo cierra', () => {
+    document.body.innerHTML = ZONA;
+    mostrarAvisoDeSala(document, { tono: 'info', titulo: 'Cancelaste la sala.' });
+    // Mostrarlo dos veces no engancha dos escuchas.
+    mostrarAvisoDeSala(document, { tono: 'info', titulo: 'Cancelaste la sala.' });
+
+    const zona = document.querySelector('[data-zona="aviso-sala"]');
+    expect(zona.hidden).toBe(false);
+    zona.querySelector('[data-accion="cerrar-aviso-sala"]').click();
+    expect(zona.hidden).toBe(true);
   });
 });
 
@@ -632,23 +701,36 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
   const formulario = () => raiz.querySelector('[data-zona="pedir-codigo"]');
   const campo = () => raiz.querySelector('[name="codigoInvitacion"]');
 
-  function montar(ingresar) {
+  /**
+   * RFINAL-04: en una privada, el codigo se comprueba (sin efectos) antes de
+   * entrar. Por omision la comprobacion acepta solo `WXYZ-2345`.
+   */
+  const CODIGO_BUENO = 'WXYZ-2345';
+  const comprobarConCodigo = () =>
+    jest.fn((id, { codigoInvitacion } = {}) =>
+      codigoInvitacion === CODIGO_BUENO
+        ? Promise.resolve(privada())
+        : Promise.reject(rechazoPrivada()),
+    );
+
+  function montar(ingresar, comprobar = comprobarConCodigo(), contenido = [privada()]) {
     document.body.innerHTML = HTML_CON_CODIGO;
     raiz = document.getElementById('vista');
     const listar = jest.fn().mockResolvedValue({
-      contenido: [privada()],
+      contenido,
       pagina: 0,
       tamano: 12,
-      totalElementos: 1,
+      totalElementos: contenido.length,
       totalPaginas: 1,
     });
     const alEntrar = jest.fn();
-    const vista = montarBatallas(raiz, { listar, ingresar, alEntrar });
-    return { vista, alEntrar, listar };
+    const irAVerificacion = jest.fn();
+    const vista = montarBatallas(raiz, { listar, ingresar, comprobar, alEntrar, irAVerificacion });
+    return { vista, alEntrar, listar, comprobar, irAVerificacion };
   }
 
   test('el 403 de sala privada pide el codigo en vez de cerrar la puerta', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    const ingresar = jest.fn();
     montar(ingresar);
     await vaciarCola();
 
@@ -659,38 +741,36 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(formulario().dataset.salaInvitada).toBe(ID);
     // Y la rejilla sigue ahi: quien se equivoco de sala elige otra sin recargar.
     expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    // RFINAL-04: sin codigo no se intenta entrar; se pregunta antes.
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
-  test('el codigo escrito se manda al servicio', async () => {
-    const ingresar = jest
-      .fn()
-      .mockRejectedValueOnce(rechazoPrivada())
-      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
-    const { alEntrar } = montar(ingresar);
+  test('el codigo escrito se comprueba y despues se manda al ingreso', async () => {
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
+    const { alEntrar, comprobar } = montar(ingresar);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
-    expect(ingresar).toHaveBeenNthCalledWith(2, ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(comprobar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
+    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
     expect(alEntrar).toHaveBeenCalledTimes(1);
   });
 
   test('un codigo aceptado cierra el formulario', async () => {
-    const ingresar = jest
-      .fn()
-      .mockRejectedValueOnce(rechazoPrivada())
-      .mockResolvedValueOnce({ ...privada(), ocupacion: 2 });
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
     montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
@@ -698,8 +778,8 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(campo().value).toBe('');
   });
 
-  test('un codigo que no vale lo dice y deja volver a intentarlo', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+  test('un codigo que no vale lo dice, deja volver a intentarlo y no intenta entrar', async () => {
+    const ingresar = jest.fn();
     montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -713,64 +793,66 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     // El aviso cambia: la primera vez dice que pidas el codigo, la segunda que
     // el que escribiste no vale. Repetir el mismo texto haria dudar de si se
     // envio.
-    expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no vale/i);
+    expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no válido/i);
     expect(campo().value).toBe('MALO-0000');
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
   test('un codigo vacio no molesta al servicio', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    const ingresar = jest.fn();
+    const { comprobar } = montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
-    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(comprobar).toHaveBeenCalledTimes(1);
 
     campo().value = '   ';
     formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     await vaciarCola();
 
-    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(comprobar).toHaveBeenCalledTimes(1);
+    expect(ingresar).not.toHaveBeenCalled();
   });
 
-  test('enviar el codigo manda UN ingreso, no dos', async () => {
+  test('enviar el codigo manda UNA comprobacion y UN ingreso, no dos', async () => {
     // El defecto que encontro CI contra el backend real: el formulario llevaba
     // `data-sala`, y la escucha de las tarjetas esta delegada en toda la vista
     // con `closest('[data-sala]')`. Pulsar «Entrar con el codigo» disparaba dos
     // ingresos —el del formulario con codigo, y el de la delegacion sin el— y
     // el 403 del segundo llegaba despues, reescribiendo el aviso con el mensaje
     // de la primera vez. En una sala con apuesta habrian sido dos reservas.
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    const ingresar = jest.fn().mockResolvedValue({ ...privada(), ocupacion: 2 });
+    const { comprobar } = montar(ingresar);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
-    const trasAbrir = ingresar.mock.calls.length;
+    const trasAbrir = comprobar.mock.calls.length;
 
-    campo().value = 'WXYZ-2345';
+    campo().value = CODIGO_BUENO;
     formulario().querySelector('button[type="submit"]').click();
     await vaciarCola();
 
-    expect(ingresar.mock.calls.length - trasAbrir).toBe(1);
-    expect(ingresar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(comprobar.mock.calls.length - trasAbrir).toBe(1);
+    expect(ingresar).toHaveBeenCalledTimes(1);
+    expect(ingresar).toHaveBeenLastCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
   });
 
   test('un codigo rechazado no borra lo que la persona escribio', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
-    montar(ingresar);
+    montar(jest.fn());
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
-    campo().value = 'WXYZ-2345';
+    campo().value = 'MALO-2345';
     formulario().querySelector('button[type="submit"]').click();
     await vaciarCola();
 
-    expect(campo().value).toBe('WXYZ-2345');
+    expect(campo().value).toBe('MALO-2345');
   });
 
   test('Cancelar cierra el formulario sin entrar a ninguna parte', async () => {
-    const ingresar = jest.fn().mockRejectedValue(rechazoPrivada());
+    const ingresar = jest.fn();
     const { alEntrar } = montar(ingresar);
     await vaciarCola();
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -782,21 +864,23 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     expect(alEntrar).not.toHaveBeenCalled();
   });
 
-  test('una sala publica entra sin pedir nada', async () => {
-    const ingresar = jest.fn().mockResolvedValue({ ...privada(), privada: false, ocupacion: 2 });
-    const { alEntrar } = montar(ingresar);
+  test('una sala publica entra sin pedir nada (ni comprobar)', async () => {
+    const publica = { ...privada(), privada: false, estado: 'ABIERTA' };
+    const ingresar = jest.fn().mockResolvedValue({ ...publica, ocupacion: 2 });
+    const { alEntrar, comprobar } = montar(ingresar, comprobarConCodigo(), [publica]);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
     await vaciarCola();
 
+    expect(comprobar).not.toHaveBeenCalled();
     expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: null });
     expect(formulario().hidden).toBe(true);
     expect(alEntrar).toHaveBeenCalledTimes(1);
   });
 
   test('un 409 no pide codigo: escribirlo no arreglaria una sala llena', async () => {
-    const ingresar = jest
+    const llena = jest
       .fn()
       .mockRejectedValue(
         new ErrorDeApi(
@@ -804,7 +888,7 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
           409,
         ),
       );
-    montar(ingresar);
+    montar(jest.fn(), llena);
     await vaciarCola();
 
     raiz.querySelector(`[data-sala="${ID}"]`).click();
@@ -819,10 +903,80 @@ describe('FI-R4 - entrar a una sala privada con codigo', () => {
     const { vista, alEntrar } = montar(ingresar);
     await vaciarCola();
 
-    await vista.entrarA(ID, 'WXYZ-2345');
+    await vista.entrarA(ID, CODIGO_BUENO);
 
-    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: 'WXYZ-2345' });
+    expect(ingresar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
     expect(alEntrar).toHaveBeenCalledTimes(1);
+  });
+
+  // ---- RFINAL-04 · revisión de AWS DEV del 4-oct: el código va antes que el héroe ----
+
+  describe('RFINAL-04 · privada con apuesta', () => {
+    const conApuesta = () => ({ ...privada(), recompensaCreditos: 500 });
+    const comprobarConApuesta = () =>
+      jest.fn((id, { codigoInvitacion } = {}) =>
+        codigoInvitacion === CODIGO_BUENO
+          ? Promise.resolve(conApuesta())
+          : Promise.reject(rechazoPrivada()),
+      );
+
+    test('al pulsarla se pide el código; NO se va a la verificación del héroe', async () => {
+      const { irAVerificacion } = montar(jest.fn(), comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      expect(formulario().hidden).toBe(false);
+      expect(irAVerificacion).not.toHaveBeenCalled();
+    });
+
+    test('«ZZZZ-9999» se rechaza en el listado; tampoco se va a la verificación', async () => {
+      const ingresar = jest.fn();
+      const { irAVerificacion } = montar(ingresar, comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      campo().value = 'ZZZZ-9999';
+      formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await vaciarCola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toMatch(/no válido/i);
+      expect(irAVerificacion).not.toHaveBeenCalled();
+      expect(ingresar).not.toHaveBeenCalled();
+    });
+
+    test('con el código bueno, entonces sí: a la verificación con el código', async () => {
+      const ingresar = jest.fn();
+      const { irAVerificacion } = montar(ingresar, comprobarConApuesta(), [conApuesta()]);
+      await vaciarCola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await vaciarCola();
+
+      campo().value = CODIGO_BUENO;
+      formulario().dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      await vaciarCola();
+
+      expect(irAVerificacion).toHaveBeenCalledWith(
+        `./validacion-heroe.html?sala=${ID}&codigo=${CODIGO_BUENO}`,
+      );
+      expect(ingresar).not.toHaveBeenCalled();
+    });
+
+    test('un enlace a una sala que no está en esta página también se comprueba primero', async () => {
+      const comprobar = comprobarConApuesta();
+      const { vista, irAVerificacion } = montar(jest.fn(), comprobar, []);
+      await vaciarCola();
+
+      await vista.entrarA(ID, CODIGO_BUENO);
+
+      expect(comprobar).toHaveBeenCalledWith(ID, { codigoInvitacion: CODIGO_BUENO });
+      // La apuesta la dice la comprobación, no la página: se confirma antes.
+      expect(irAVerificacion).toHaveBeenCalledWith(
+        `./validacion-heroe.html?sala=${ID}&codigo=${CODIGO_BUENO}`,
+      );
+    });
   });
 });
 
@@ -916,6 +1070,8 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
     raiz = document.getElementById('vista');
     const irAVerificacion = jest.fn();
     const alEntrar = jest.fn();
+    // RFINAL-04: las privadas se comprueban antes; aqui la comprobacion acepta.
+    const comprobar = jest.fn().mockResolvedValue(salaDelCaso);
     const vista = montarBatallas(raiz, {
       listar: jest.fn().mockResolvedValue({
         contenido: [salaDelCaso],
@@ -925,10 +1081,11 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
         totalPaginas: 1,
       }),
       ingresar,
+      comprobar,
       alEntrar,
       irAVerificacion,
     });
-    return { vista, irAVerificacion, alEntrar };
+    return { vista, irAVerificacion, alEntrar, comprobar };
   }
 
   test('rutaDeVerificacion apunta a la pantalla que explica el veredicto', () => {
@@ -1049,5 +1206,215 @@ describe('FI-R6 - la verificacion de heroe esta en el camino', () => {
 
     expect(irAVerificacion).not.toHaveBeenCalled();
     expect(raiz.querySelector('[data-zona="estado"]').textContent).toMatch(/rechazado/i);
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct — puntos 8, 9 y 10.
+ */
+describe('revisión del modo jugador · listado y sala privada', () => {
+  test('punto 8: el filtro por omisión son las salas disponibles; «Todos» no filtra', () => {
+    expect(ESTADOS_DISPONIBLES).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi('')).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi(undefined)).toBe('ABIERTA,PRIVADA');
+    expect(estadoParaLaApi('TODOS')).toBe('');
+    expect(estadoParaLaApi('LLENA')).toBe('LLENA');
+    expect(estadoParaLaApi('PRIVADA')).toBe('PRIVADA');
+  });
+
+  test('punto 8: al entrar se piden las disponibles y el subtítulo las cuenta como abiertas', async () => {
+    const raiz = preparar();
+    const listar = jest.fn().mockResolvedValue(pagina([sala()], { totalElementos: 3 }));
+
+    montarBatallas(raiz, { listar });
+    await asentar();
+
+    expect(listar).toHaveBeenCalledWith(
+      expect.objectContaining({ pagina: 0, estado: 'ABIERTA,PRIVADA' }),
+    );
+    expect(raiz.querySelector('[data-zona="subtitulo"]').textContent).toBe(
+      '3 salas abiertas ahora mismo',
+    );
+  });
+
+  test('punto 10: «Creada por …» solo si la sala trae el apodo; sin apodo no se inventa', () => {
+    expect(textoDelCreador({ apodoAnfitrion: 'Perez_Bro15' })).toBe('Creada por Perez_Bro15');
+    expect(textoDelCreador({ apodoAnfitrion: '  ' })).toBeNull();
+    expect(textoDelCreador({})).toBeNull();
+    expect(textoDelCreador(null)).toBeNull();
+  });
+
+  describe('punto 10 · el formulario de la sala privada', () => {
+    const ID = '77777777-7777-7777-7777-777777777777';
+    const HTML_PRIVADA = `
+      <main id="vista">
+        <p data-zona="subtitulo"></p>
+        <select name="modalidad"><option value="">Todas</option></select>
+        <select name="estado"><option value="">Disponibles</option><option value="TODOS">Todos</option></select>
+        <div class="estado-vista" data-zona="estado"></div>
+        <div data-zona="degradacion" hidden></div>
+        <form data-zona="pedir-codigo" hidden>
+          <h2>Sala privada</h2>
+          <p data-zona="creador-sala" hidden></p>
+          <div class="campo">
+            <input name="codigoInvitacion" />
+            <p class="campo__error" data-zona="aviso-codigo" role="alert" hidden></p>
+          </div>
+          <button type="submit">Entrar con el código</button>
+          <button type="button" data-accion="cerrar-codigo">Cancelar</button>
+        </form>
+        <p data-zona="canal" hidden></p>
+        <div class="rejilla-salas" data-zona="salas" hidden></div>
+        <nav class="paginacion" data-zona="paginacion" hidden></nav>
+      </main>
+    `;
+    const privada = (cambios = {}) => ({
+      ...sala({ id: ID, estado: 'PRIVADA', privada: true, recompensaCreditos: 0 }),
+      apodoAnfitrion: 'Perez_Bro15',
+      ...cambios,
+    });
+    const rechazo = () =>
+      new ErrorDeApi(
+        {
+          type: 'https://nexusbattles.local/errores/sala-privada',
+          title: 'Esta sala es privada',
+          detail: 'A una sala privada se entra por invitación, no desde el listado.',
+          status: 403,
+        },
+        403,
+      );
+    const llena = () =>
+      new ErrorDeApi(
+        {
+          type: 'urn:llena',
+          title: 'Sala llena',
+          detail: 'La sala ya está completa.',
+          status: 409,
+        },
+        409,
+      );
+    const cola = async () => {
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
+    };
+
+    function montarPrivada({
+      contenido = [privada()],
+      comprobar,
+      ingresar = jest.fn(),
+      obtener,
+    } = {}) {
+      document.body.innerHTML = HTML_PRIVADA;
+      const raiz = document.getElementById('vista');
+      const vista = montarBatallas(raiz, {
+        listar: jest.fn().mockResolvedValue(pagina(contenido)),
+        comprobar: comprobar ?? jest.fn().mockRejectedValue(rechazo()),
+        ingresar,
+        obtener: obtener ?? jest.fn().mockResolvedValue(privada()),
+        alEntrar: jest.fn(),
+        irAVerificacion: jest.fn(),
+      });
+      return { raiz, vista };
+    }
+
+    test('al abrirla: título, «Creada por» y NINGUNA frase genérica ni rojo', async () => {
+      const { raiz } = montarPrivada();
+      await cola();
+
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      const formulario = raiz.querySelector('[data-zona="pedir-codigo"]');
+      const aviso = raiz.querySelector('[data-zona="aviso-codigo"]');
+      expect(formulario.hidden).toBe(false);
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe(
+        'Creada por Perez_Bro15',
+      );
+      expect(raiz.querySelector('[data-zona="creador-sala"]').hidden).toBe(false);
+      expect(aviso.hidden).toBe(true);
+      expect(formulario.textContent).not.toContain('se entra por invitación');
+      expect(raiz.querySelector('[name="codigoInvitacion"]').hasAttribute('aria-invalid')).toBe(
+        false,
+      );
+    });
+
+    test('un código que no vale: «Código de invitación no válido», en rojo y el campo marcado', async () => {
+      const { raiz } = montarPrivada();
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'ZZZZ-9999';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+
+      const aviso = raiz.querySelector('[data-zona="aviso-codigo"]');
+      expect(aviso.hidden).toBe(false);
+      expect(aviso.textContent).toBe(CODIGO_NO_VALIDO);
+      expect(aviso.className).toContain('campo__error');
+      expect(raiz.querySelector('[name="codigoInvitacion"]').getAttribute('aria-invalid')).toBe(
+        'true',
+      );
+      expect(raiz.querySelector('.campo').classList.contains('campo--invalido')).toBe(true);
+
+      // Al volver a escribir, el error de antes se va.
+      const campo = raiz.querySelector('[name="codigoInvitacion"]');
+      campo.value = 'ZZZZ-999';
+      campo.dispatchEvent(new Event('input'));
+      expect(aviso.hidden).toBe(true);
+    });
+
+    test('si con el formulario abierto la sala se llena, se dice ahí y el listado se queda', async () => {
+      const comprobar = jest.fn().mockRejectedValueOnce(rechazo()).mockRejectedValueOnce(llena());
+      const { raiz } = montarPrivada({ comprobar });
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'WXYZ-2345';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toContain('completa');
+      expect(raiz.querySelector('[data-zona="pedir-codigo"]').hidden).toBe(false);
+      expect(raiz.querySelector('[data-zona="salas"]').hidden).toBe(false);
+    });
+
+    test('un enlace de invitación con un código que no vale: el error y «Creada por» preguntando por la sala', async () => {
+      const obtener = jest.fn().mockResolvedValue(privada({ apodoAnfitrion: 'Ana_Nexo' }));
+      const { raiz, vista } = montarPrivada({ contenido: [], obtener });
+      await cola();
+
+      await vista.entrarA(ID, 'MALO-0000');
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').textContent).toBe(CODIGO_NO_VALIDO);
+      expect(obtener).toHaveBeenCalledWith(ID);
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe(
+        'Creada por Ana_Nexo',
+      );
+    });
+
+    test('cambiar de sala privada con el formulario abierto no arrastra el error ni lo escrito', async () => {
+      const OTRA_PRIVADA = '88888888-8888-8888-8888-888888888888';
+      const { raiz } = montarPrivada({
+        contenido: [privada(), privada({ id: OTRA_PRIVADA, apodoAnfitrion: 'Otro' })],
+      });
+      await cola();
+      raiz.querySelector(`[data-sala="${ID}"]`).click();
+      await cola();
+      raiz.querySelector('[name="codigoInvitacion"]').value = 'MALO-0000';
+      raiz.querySelector('button[type="submit"]').click();
+      await cola();
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').hidden).toBe(false);
+
+      raiz.querySelector(`[data-sala="${OTRA_PRIVADA}"]`).click();
+      await cola();
+
+      expect(raiz.querySelector('[data-zona="aviso-codigo"]').hidden).toBe(true);
+      expect(raiz.querySelector('[name="codigoInvitacion"]').value).toBe('');
+      expect(raiz.querySelector('[data-zona="creador-sala"]').textContent).toBe('Creada por Otro');
+    });
   });
 });

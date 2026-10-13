@@ -50,6 +50,9 @@ import java.util.UUID;
  *
  * <p>La penalizacion es idempotente por subasta en ms-finanzas
  * ({@code refId sub-cancelacion-{id}}): repetir la cancelacion no cobra dos veces.
+ * Y una penalizacion devuelta (cancelacion fallida) no se reutiliza: la
+ * siguiente se cobra con otra generacion del refId (G7, ver
+ * {@code FinanzasPublicacionClientHttp#debitarPenalizacionCancelacion}).
  */
 @Service
 public class CancelacionService {

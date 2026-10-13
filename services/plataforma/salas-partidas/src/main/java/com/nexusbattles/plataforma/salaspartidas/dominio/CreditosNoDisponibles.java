@@ -23,9 +23,9 @@ public class CreditosNoDisponibles extends ErrorDeNegocio {
 
     public CreditosNoDisponibles(String detalleTecnico) {
         super(TIPO,
-              "El libro de creditos no esta disponible ahora mismo",
+              "El libro de créditos no está disponible ahora mismo",
               503,
-              "No se pudieron comprometer los creditos de la apuesta: " + detalleTecnico
-                      + ". Nada quedo reservado; vuelve a intentarlo en unos segundos.");
+              "No se pudieron comprometer los créditos de la apuesta: " + detalleTecnico
+                      + ". Nada quedó reservado; vuelve a intentarlo en unos segundos.");
     }
 }

@@ -25,7 +25,13 @@ public class CompraRechazadaException extends RuntimeException {
         /** 503 {@code pasarela-no-disponible}: no se cobro; la orden sigue PENDIENTE y se reintenta con la misma clave. */
         PASARELA_NO_DISPONIBLE,
         /** 409 {@code compra-reembolsada}: se cobro, no se pudo entregar y se devolvio el dinero. */
-        COMPRA_REEMBOLSADA
+        COMPRA_REEMBOLSADA,
+        /** D-44 · 409 {@code producto-sin-precio-en-creditos}: algo del carrito no se vende en creditos; sin orden. */
+        SIN_PRECIO_EN_CREDITOS,
+        /** D-44 · 402 {@code saldo-insuficiente}: ms-finanzas no desconto; orden RECHAZADA, carrito intacto. */
+        SALDO_INSUFICIENTE,
+        /** D-44 · 503 {@code creditos-no-disponibles}: ms-finanzas no respondio; la orden sigue PENDIENTE. */
+        CREDITOS_NO_DISPONIBLES
     }
 
     private final Motivo motivo;

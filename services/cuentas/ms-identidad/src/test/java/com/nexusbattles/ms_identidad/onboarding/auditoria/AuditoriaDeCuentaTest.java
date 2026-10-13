@@ -90,6 +90,40 @@ class AuditoriaDeCuentaTest {
     }
 
     @Test
+    @DisplayName("RFINAL-05: cierre de cuenta solicitado, cancelado y ejecutado; solo el uid, nada personal")
+    void eventosDelCierreDeCuenta() {
+        auditoria.cierreDeCuentaSolicitado(UID, java.time.LocalDateTime.of(2026, 11, 4, 14, 30), "10.0.0.3");
+        assertThat(ultimoCuerpo()).contains("\"tipoAccion\":\"OTRO\"").contains("CIERRE_CUENTA_SOLICITADO")
+                .contains("\"valorNuevo\":\"programado=2026-11-04T14:30\"")
+                .contains("\"afectado\":\"" + UID + "\"").contains("\"ipOrigen\":\"10.0.0.3\"");
+
+        auditoria.cierreDeCuentaCancelado(UID, "10.0.0.4");
+        assertThat(ultimoCuerpo()).contains("CIERRE_CUENTA_CANCELADO")
+                .contains("\"valorAnterior\":\"PROGRAMADO\"").contains("\"valorNuevo\":\"CANCELADO\"");
+
+        auditoria.cuentaAnonimizada(UID);
+        assertThat(ultimoCuerpo()).contains("\"tipoAccion\":\"ELIMINACION_LOGICA\"")
+                .contains("DERECHO_AL_OLVIDO")
+                .contains("\"administradorId\":\"ms-identidad\"")
+                .contains("\"afectado\":\"" + UID + "\"")
+                .doesNotContain("@");
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: los cambios del segundo factor, sin secreto ni codigos")
+    void eventosDelSegundoFactor() {
+        auditoria.segundoFactor(UID.toString(), "SEGUNDO_FACTOR_ACTIVADO", "totp", "10.0.0.4");
+        assertThat(ultimoCuerpo()).contains("\"tipoAccion\":\"ACTUALIZACION\"")
+                .contains("\"administradorId\":\"" + UID + "\"").contains("\"afectado\":\"" + UID + "\"")
+                .contains("\"motivo\":\"SEGUNDO_FACTOR_ACTIVADO\"").contains("\"valorNuevo\":\"totp\"")
+                .contains("\"ipOrigen\":\"10.0.0.4\"");
+
+        auditoria.segundoFactor("usuario-9", "CODIGO_RECUPERACION_USADO", "codigos-restantes=9", null);
+        assertThat(ultimoCuerpo()).contains("CODIGO_RECUPERACION_USADO").contains("codigos-restantes=9")
+                .contains("\"ipOrigen\":\"DESCONOCIDA\"");
+    }
+
+    @Test
     @DisplayName("la traza del alta viaja con el evento aunque se envie desde otro hilo")
     void trazaEnOtroHilo() throws Exception {
         CountDownLatch enviado = new CountDownLatch(1);

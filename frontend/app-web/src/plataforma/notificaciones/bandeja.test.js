@@ -61,6 +61,7 @@ function preparar({
   const cliente = {
     consultarBandeja: jest.fn(async () => bandejaInicial),
     marcarLeida: jest.fn(async () => ({ usuarioId: 'u-1', noLeidas: 0 })),
+    marcarTodasLeidas: jest.fn(async () => ({ usuarioId: 'u-1', marcadas: 0, noLeidas: 0 })),
     entregarPendientes: jest.fn(async () => []),
   };
   const esperas = [];
@@ -227,6 +228,67 @@ describe('CA-01: sincronizacion entre sesiones', () => {
 
     expect(alError).toHaveBeenCalledTimes(1);
     expect(alError.mock.calls[0][0].message).toBe('falta sesionId');
+  });
+});
+
+describe('HU-NOT-001 CA-02: marcar todas como leidas', () => {
+  test('llama una vez al servicio, deja leida toda la lista y toma la cuenta del servidor', async () => {
+    const { bandeja, cliente, canales, alCambiar } = preparar();
+    await bandeja.iniciar();
+    canales[0].servidorEnvia(aviso('n-1'));
+    canales[0].servidorEnvia(aviso('n-2'));
+    canales[0].servidorEnvia(aviso('n-3', { leida: true }));
+    alCambiar.mockClear();
+    cliente.marcarTodasLeidas.mockResolvedValueOnce({ usuarioId: 'u-1', marcadas: 2, noLeidas: 0 });
+
+    await expect(bandeja.marcarTodasLeidas()).resolves.toBe(0);
+
+    expect(cliente.marcarTodasLeidas).toHaveBeenCalledTimes(1);
+    expect(cliente.marcarTodasLeidas).toHaveBeenCalledWith('u-1');
+    expect(bandeja.estado.avisos.every((a) => a.leida)).toBe(true);
+    expect(bandeja.estado.noLeidas).toBe(0);
+    expect(alCambiar).toHaveBeenCalled();
+
+    // El mismo ContadorActualizado que reciben las demas sesiones llega aqui
+    // tambien; ya cuadra con la lista, asi que no hace falta pedir la bandeja.
+    canales[0].servidorEnvia({ noLeidas: 0 });
+    await asentar();
+    expect(bandeja.estado.noLeidas).toBe(0);
+    expect(cliente.consultarBandeja).toHaveBeenCalledTimes(1);
+  });
+
+  test('si llego un aviso mientras tanto y quedo sin leer, la cuenta no cuadra y se reconcilia la bandeja', async () => {
+    const { bandeja, cliente, canales } = preparar();
+    await bandeja.iniciar();
+    canales[0].servidorEnvia(aviso('n-1'));
+    // n-2 llego mientras el servidor marcaba: no alcanzo a marcarse.
+    canales[0].servidorEnvia(aviso('n-2'));
+    cliente.marcarTodasLeidas.mockResolvedValueOnce({ usuarioId: 'u-1', marcadas: 1, noLeidas: 1 });
+    cliente.consultarBandeja.mockResolvedValueOnce({
+      usuarioId: 'u-1',
+      noLeidas: 1,
+      avisos: [aviso('n-1', { leida: true }), aviso('n-2')],
+    });
+
+    await expect(bandeja.marcarTodasLeidas()).resolves.toBe(1);
+    await asentar();
+
+    expect(cliente.consultarBandeja).toHaveBeenCalledTimes(2);
+    expect(bandeja.estado.noLeidas).toBe(1);
+    expect(bandeja.estado.avisos.find((a) => a.id === 'n-1').leida).toBe(true);
+    expect(bandeja.estado.avisos.find((a) => a.id === 'n-2').leida).toBe(false);
+  });
+
+  test('si el servicio falla, la lista no cambia y el error llega a quien llamo', async () => {
+    const { bandeja, cliente, canales } = preparar();
+    await bandeja.iniciar();
+    canales[0].servidorEnvia(aviso('n-1'));
+    cliente.marcarTodasLeidas.mockRejectedValueOnce(new Error('sin red'));
+
+    await expect(bandeja.marcarTodasLeidas()).rejects.toThrow('sin red');
+
+    expect(bandeja.estado.avisos[0].leida).toBe(false);
+    expect(bandeja.estado.noLeidas).toBe(1);
   });
 });
 

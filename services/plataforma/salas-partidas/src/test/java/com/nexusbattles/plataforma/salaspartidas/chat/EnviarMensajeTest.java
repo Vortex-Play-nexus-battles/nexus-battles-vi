@@ -119,6 +119,55 @@ class EnviarMensajeTest {
         assertTrue(publicados.isEmpty());
     }
 
+    // --- Auditoria de DEV del 30-sep: ASCII art en el chat general y sin limite de frecuencia ---
+
+    @Test
+    @DisplayName("un dibujo de simbolos no se publica ni se consulta a la lista negra: 400 con su explicacion")
+    void unDibujoNoSePublica() {
+        String dibujo = String.join("\n", " /\\_/\\ ", "( o.o )", " > ^ < ", "/|   |\\", "(_| |_)", " || || ",
+                " '' '' ");
+
+        MensajeInvalido error = assertThrows(MensajeInvalido.class,
+                () -> casoDeUso().enviar(Canal.general(), ANA, dibujo, null));
+
+        assertTrue(error.detalle().contains("líneas"), error.detalle());
+        assertTrue(publicados.isEmpty());
+        assertTrue(verificados.isEmpty(), "rechazar lo evidente no cuesta una llamada a la lista negra");
+    }
+
+    @Test
+    @DisplayName("lo que se publica es el texto depurado: sin invisibles y en NFKC")
+    void sePublicaDepurado() {
+        MensajeDeChat m = casoDeUso().enviar(Canal.general(), ANA, "ｈｏｌａ​ equipo‮", null);
+
+        assertEquals("hola equipo", m.texto());
+        assertEquals(List.of("hola equipo"), verificados, "la lista negra ve lo mismo que se publica");
+    }
+
+    @Test
+    @DisplayName("quien escribe mas deprisa de lo admitido recibe 429 y su mensaje no sale")
+    void limiteDeFrecuencia() {
+        List<UUID> contados = new ArrayList<>();
+        EnviarMensaje conLimite = new EnviarMensaje(historial, (texto, canal) -> Veredicto.LIMPIO,
+                silenciados::contains, publicados::add, Clock.fixed(AHORA, ZoneOffset.UTC),
+                PoliticaDeTexto.Limites.POR_OMISION,
+                autor -> {
+                    contados.add(autor);
+                    return contados.size() > 2 ? java.util.Optional.of(java.time.Duration.ofMillis(4200))
+                            : java.util.Optional.empty();
+                });
+
+        conLimite.enviar(Canal.general(), ANA, "uno", null);
+        conLimite.enviar(Canal.general(), ANA, "dos", null);
+        DemasiadosMensajes error = assertThrows(DemasiadosMensajes.class,
+                () -> conLimite.enviar(Canal.general(), ANA, "tres", null));
+
+        assertEquals(429, error.estado());
+        assertEquals("Espera 5 segundos antes de enviar otro mensaje.", error.detalle());
+        assertEquals(2, publicados.size());
+        assertEquals(List.of(ANA.id(), ANA.id(), ANA.id()), contados, "el limite es por autor");
+    }
+
     // --- HU-COM-007 (RF-COM-007): el logro tambien se publica, asi que tambien se filtra ---
 
     @Test

@@ -18,13 +18,46 @@
  *   4. la observabilidad es de administracion (#527): sin token 401, con
  *      token de moderadora 403, con token de administradora 200
  *   5. la vista pinta la tabla con la brecha marcada
+ *   6. HU-MET-001 CA-03 con fallos de verdad: si ms-identidad rechaza el rango
+ *      o no contesta (contenedor PAUSADO, no reiniciado: conserva su clave de
+ *      firma), /moderacion sigue saliendo con las sanciones, las cuentas van
+ *      en null con el motivo en «pendientes» —ningun 0 inventado— y al volver
+ *      identidad vuelven solas
  */
+
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
+// Mismo criterio que degradacion.e2e.spec.js: estos specs se transpilan a
+// CommonJS, asi que `__dirname` existe; si no, se cae a frontend/app-web.
+const AQUI =
+  typeof __dirname === 'undefined' ? path.resolve(process.cwd(), '../../tests/e2e') : __dirname;
+const COMPOSE = path.join(AQUI, 'compose.yml');
+
+function compose(...args) {
+  return execFileSync('docker', ['compose', '-f', COMPOSE, ...args], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim();
+}
+
+/** Pausar un contenedor solo tiene sentido contra el compose local del banco. */
+function hayComposeLocal() {
+  if (!/localhost|127\.0\.0\.1/.test(BORDE)) {
+    return false;
+  }
+  try {
+    compose('ps', '--services');
+    return true;
+  } catch {
+    return false;
+  }
+}
 const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
 const ADMIN = process.env.E2E_ADMIN ?? 'admin_e2e';
 const OBJETIVO = process.env.E2E_SANCIONABLE ?? 'medida_e2e';
@@ -119,7 +152,15 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     const previo = await antes.json();
     expect(previo.alertasConfiguradas).toBe(false);
     expect(previo.alertas).toEqual([]);
-    expect(previo.pendientes).toHaveLength(2);
+    // HU-MET-001 1.10.0: el banco tiene ms-identidad y el tablero le reenvia el
+    // token del administrador, asi que las cuentas SI llegan y «nuevos
+    // usuarios» deja de ser pendiente. Lo unico que sigue pendiente es la
+    // frecuencia de reportes (HU-COM-006 sin lectura agregada).
+    expect(previo.pendientes).toEqual(['frecuencia de reportes: HU-COM-006 #523 sin implementar']);
+    expect(previo.registroDeUsuarios, 'identidad no dio las cuentas').not.toBeNull();
+    expect(previo.registroDeUsuarios.total).toBeGreaterThanOrEqual(1);
+    expect(typeof previo.registroDeUsuarios.porEstado.ACTIVO).toBe('number');
+    expect(Array.isArray(previo.registroDeUsuarios.registros.porDia)).toBe(true);
 
     const emitida = await api.post('/api/v1/sanciones', {
       headers: { Authorization: `Bearer ${moderadora.token}`, 'Content-Type': 'application/json' },
@@ -211,5 +252,57 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText(
       /no se evalua|no se evalúa/i,
     );
+  });
+
+  test('CA-03 con fallos de verdad: identidad rechaza el rango o no contesta y /moderacion sale igual, sin cuentas inventadas', async () => {
+    test.skip(!hayComposeLocal(), 'pausar ms-identidad necesita el compose local de tests/e2e');
+    test.setTimeout(120_000);
+    const DIA = 24 * 60 * 60 * 1000;
+
+    // Identidad sana: las cuentas llegan (y metricas tiene fresca la clave publica del emisor).
+    const sana = await api.get('/api/v1/moderacion', comoAdmin());
+    expect(sana.status(), await sana.text()).toBe(200);
+    expect((await sana.json()).registroDeUsuarios, 'con identidad sana').not.toBeNull();
+
+    // 1) Identidad rechaza el rango: su tope tecnico es de 366 dias y aqui se piden 400.
+    const desde = new Date(Date.now() - 400 * DIA).toISOString();
+    const largo = await api.get(
+      `/api/v1/moderacion?desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(new Date().toISOString())}`,
+      comoAdmin(),
+    );
+    expect(largo.status(), await largo.text()).toBe(200);
+    const conRangoRechazado = await largo.json();
+    expect(conRangoRechazado.sanciones.total).toBeGreaterThanOrEqual(1);
+    expect(conRangoRechazado.registroDeUsuarios).toBeNull();
+    expect(conRangoRechazado.pendientes[0]).toMatch(
+      /^registro de nuevos usuarios: ms-identidad no acepto el rango/,
+    );
+
+    // 2) Identidad acepta la conexion y no contesta: su contenedor se PAUSA.
+    compose('pause', 'srv-ms-identidad');
+    try {
+      const inicio = Date.now();
+      const sinIdentidad = await api.get('/api/v1/moderacion', comoAdmin());
+      const espera = Date.now() - inicio;
+      expect(sinIdentidad.status(), await sinIdentidad.text()).toBe(200);
+      const tablero = await sinIdentidad.json();
+      expect(tablero.sanciones.total, 'las sanciones siguen').toBeGreaterThanOrEqual(1);
+      expect(tablero.registroDeUsuarios, 'sin cuentas, nunca ceros').toBeNull();
+      expect(tablero.pendientes[0]).toMatch(
+        /^registro de nuevos usuarios: ms-identidad no responde/,
+      );
+      expect(espera, 'el plazo de 3 s del cliente corta la espera').toBeLessThan(15_000);
+    } finally {
+      compose('unpause', 'srv-ms-identidad');
+    }
+
+    // 3) Al volver identidad, las cuentas vuelven sin reiniciar nada.
+    await expect
+      .poll(
+        async () =>
+          (await (await api.get('/api/v1/moderacion', comoAdmin())).json()).registroDeUsuarios,
+        { timeout: 30_000, intervals: [1_000], message: 'las cuentas no volvieron con identidad' },
+      )
+      .not.toBeNull();
   });
 });

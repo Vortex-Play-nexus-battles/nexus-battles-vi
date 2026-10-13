@@ -67,6 +67,15 @@ class CanalDePartidaEspia implements CanalDePartida {
     }
 
     /** Los tipos de anuncio en orden: «accion», «turno», «fin»... */
+    /** 1.10.0 — quien se rindio, en orden. */
+    final List<java.util.UUID> rendidos = new ArrayList<>();
+
+    @Override
+    public void anunciarRendicion(Partida partida, java.util.UUID idJugador) {
+        anuncios.add(new Anuncio("rendido", partida));
+        rendidos.add(idJugador);
+    }
+
     List<String> tipos() {
         return anuncios.stream().map(Anuncio::tipo).toList();
     }

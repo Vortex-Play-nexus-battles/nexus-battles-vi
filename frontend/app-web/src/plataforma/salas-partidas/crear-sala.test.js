@@ -21,6 +21,7 @@ import {
   ajustarPorModalidad,
   rutaDeLaSala,
   textoDeSalaCreada,
+  avisoDeMaquinas,
 } from './crear-sala.js';
 import { ErrorDeApi } from './cliente-salas.js';
 
@@ -228,9 +229,10 @@ describe('limites por modalidad (RF-JUE-004)', () => {
     expect(participantes.value).toBe('2');
     expect(participantes.max).toBe('2');
     expect(participantes.readOnly).toBe(true);
-    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toBe(
-      'Exactamente 2 jugadores.',
-    );
+    // Revision del modo jugador del 6-oct (punto 11): sin «Exactamente 2
+    // jugadores.»; con el aforo fijo no hay nada que elegir y el campo no se ve.
+    expect(formulario.querySelector('[data-zona="pista-participantes"]').textContent).toBe('');
+    expect(participantes.closest('.campo').hidden).toBe(true);
     expect(formulario.querySelector('[data-zona="opciones-hasta-seis"]').hidden).toBe(true);
     expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
   });
@@ -274,6 +276,84 @@ describe('limites por modalidad (RF-JUE-004)', () => {
     expect(participantes.readOnly).toBe(false);
     expect(participantes.max).toBe('6');
     expect(participantes.value).toBe('2');
+    expect(participantes.closest('.campo').hidden).toBe(false);
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct, punto 12: «me deja escribir 7 y mas».
+ * Los heroes de la IA no pasan del aforo menos tu puesto (6 en total como
+ * mucho); si se escribe de mas, se recorta y se dice por que.
+ */
+describe('punto 12 · héroes de la IA', () => {
+  function conAviso() {
+    const formulario = preparar();
+    const maquinas = formulario.querySelector('[name="heroesIA"]');
+    const aviso = document.createElement('p');
+    aviso.dataset.zona = 'aviso-maquinas';
+    aviso.hidden = true;
+    maquinas.after(aviso);
+    return { formulario, maquinas, aviso };
+  }
+
+  function escribir(control, valor) {
+    control.value = valor;
+    control.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  test('escribir 7 se recorta a 5 y dice que la batalla admite como máximo 6 participantes', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+    formulario.querySelector('[name="maximoParticipantes"]').value = '6';
+    formulario
+      .querySelector('[name="maximoParticipantes"]')
+      .dispatchEvent(new Event('change', { bubbles: true }));
+
+    escribir(maquinas, '7');
+
+    expect(maquinas.value).toBe('5');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toBe('Esta batalla admite como máximo 6 participantes.');
+  });
+
+  test('con 4 participantes caben 3: escribir 4 se recorta y dice que tú ocupas un puesto', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '4');
+
+    expect(maquinas.value).toBe('3');
+    expect(aviso.textContent).toBe(
+      'Con 4 participantes caben como máximo 3 héroes de la IA: tú ocupas un puesto.',
+    );
+  });
+
+  test('un número que cabe no avisa; y el aviso se va al corregirlo', () => {
+    const { formulario, maquinas, aviso } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '9');
+    expect(aviso.hidden).toBe(false);
+
+    escribir(maquinas, '2');
+    expect(maquinas.value).toBe('2');
+    expect(aviso.hidden).toBe(true);
+  });
+
+  test('lo que viaja al servicio nunca pasa del tope', () => {
+    const { formulario, maquinas } = conAviso();
+    montarCrearSala(formulario, { crearSalaImpl: jest.fn() });
+
+    escribir(maquinas, '12');
+
+    expect(leerFormulario(formulario).heroesIA).toBe(3);
+  });
+
+  test('el aviso habla en singular cuando cabe uno', () => {
+    expect(avisoDeMaquinas(3, 2, 1)).toBe(
+      'Con 2 participantes caben como máximo 1 héroe de la IA: tú ocupas un puesto.',
+    );
+    expect(avisoDeMaquinas(6, 6, 5)).toBe('Esta batalla admite como máximo 6 participantes.');
   });
 });
 
@@ -344,20 +424,22 @@ describe('montarCrearSala', () => {
     expect(aviso.textContent).not.toContain('esperando jugadores');
   });
 
-  test('R18 · tras crear, el formulario vuelve entero a su modalidad por omision', async () => {
+  test('R18 · tras crear, el formulario vuelve a sus valores y lo que depende de la modalidad la acompaña', async () => {
     const formulario = preparar();
     const crearSalaImpl = jest
       .fn()
-      .mockResolvedValue({ id: 'x', maximoParticipantes: 2, recompensaCreditos: 0 });
+      .mockResolvedValue({ id: 'x', maximoParticipantes: 6, recompensaCreditos: 0 });
     montarCrearSala(formulario, { crearSalaImpl, irALaSala: jest.fn() });
-    elegir(formulario, 'CONTRA_IA');
-    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+    elegir(formulario, 'UNO_CONTRA_UNO');
+    elegir(formulario, 'HASTA_SEIS');
+    formulario.querySelector('[name="maximoParticipantes"]').value = '6';
 
     formulario.dispatchEvent(new Event('submit'));
     await asentar();
 
-    // El HTML de la prueba trae «hasta seis» y 4 como valores iniciales: el
-    // reset vuelve a ellos, y la nota y la pista tienen que acompanarlos.
+    // El HTML de la prueba trae 4 participantes: el reset vuelve a ese valor,
+    // la modalidad elegida se conserva (auditoría del 30-sep) y la nota y la
+    // pista tienen que acompañarla.
     expect(formulario.querySelector('[value="HASTA_SEIS"]').checked).toBe(true);
     expect(formulario.querySelector('[name="maximoParticipantes"]').value).toBe('4');
     expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(true);
@@ -600,6 +682,31 @@ describe('montarCrearSala · sección degradada (HU-DIS-003)', () => {
 
     expect(formulario.querySelector('.seccion-degradada')).toBeNull();
     expect(document.querySelector('.aviso--error')).not.toBeNull();
+  });
+});
+
+describe('auditoría de DEV del 30-sep: la modalidad elegida no se pierde al crear', () => {
+  test('tras crear contra la IA, el formulario sigue en «Contra la IA» y el resto vuelve a su valor', async () => {
+    const formulario = preparar();
+    const crearSalaImpl = jest.fn().mockResolvedValue({
+      id: 's-ia',
+      modalidad: 'CONTRA_IA',
+      maximoParticipantes: 2,
+      ocupacion: 2,
+      recompensaCreditos: 0,
+    });
+    montarCrearSala(formulario, { crearSalaImpl });
+    elegir(formulario, 'CONTRA_IA');
+    formulario.querySelector('[name="recompensaCreditos"]').value = '5';
+
+    formulario.dispatchEvent(new Event('submit'));
+    await asentar();
+
+    expect(crearSalaImpl).toHaveBeenCalledWith(expect.objectContaining({ modalidad: 'CONTRA_IA' }));
+    expect(formulario.querySelector('[value="CONTRA_IA"]').checked).toBe(true);
+    expect(formulario.querySelector('[value="HASTA_SEIS"]').checked).toBe(false);
+    expect(formulario.querySelector('[data-zona="nota-contra-ia"]').hidden).toBe(false);
+    expect(formulario.querySelector('[name="recompensaCreditos"]').value).toBe('0');
   });
 });
 

@@ -28,4 +28,10 @@ interface PartidasSpringData extends JpaRepository<PartidaEntidad, UUID> {
     @Query("select p from PartidaEntidad p where p.estado = :estado "
             + "and p.turnoVenceEn is not null and p.turnoVenceEn <= :ahora")
     List<PartidaEntidad> conTurnoVencido(@Param("estado") EstadoPartida estado, @Param("ahora") Instant ahora);
+
+    /** Partidas en ese estado que empezaron antes del limite (abandono). */
+    @Query("select p from PartidaEntidad p where p.estado = :estado and p.iniciadaEn <= :limite "
+            + "order by p.iniciadaEn")
+    List<PartidaEntidad> iniciadasAntesDe(@Param("estado") EstadoPartida estado, @Param("limite") Instant limite,
+                                          org.springframework.data.domain.Pageable lote);
 }

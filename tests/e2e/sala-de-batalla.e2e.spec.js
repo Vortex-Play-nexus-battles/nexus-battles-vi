@@ -240,8 +240,8 @@ test.describe('Sala de batalla de punta a punta', () => {
     const problema = await r.json();
     // El texto nombra el caso concreto: «no puedes entrar» a secas obligaria a
     // adivinar si falta equipar un heroe o si el suyo esta en otra batalla.
-    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un heroe equipado/i);
-    expect(problema.detail).toMatch(/equipa un heroe en tu inventario/i);
+    expect(problema.title, JSON.stringify(problema)).toMatch(/no tienes un héroe equipado/i);
+    expect(problema.detail).toMatch(/equipa un héroe en tu inventario/i);
     expect(problema.type).toMatch(/heroe/i);
   });
 
@@ -395,9 +395,29 @@ test.describe('Sala de batalla de punta a punta', () => {
     return page.evaluate(() => globalThis.__frames ?? []);
   }
 
-  /** @returns {Promise<number[]>} readyState de cada socket abierto (1 = OPEN) */
+  /**
+   * @returns {Promise<{ruta: string, estado: number}[]>} cada socket que abrió
+   *   la página, con su ruta y su readyState (1 = OPEN)
+   */
   function estadoDeSockets(page) {
-    return page.evaluate(() => (globalThis.__sockets ?? []).map((s) => s.readyState));
+    return page.evaluate(() =>
+      (globalThis.__sockets ?? []).map((s) => ({
+        ruta: new URL(s.url).pathname,
+        estado: s.readyState,
+      })),
+    );
+  }
+
+  /**
+   * readyState del canal de la batalla (`/ws` de salas-partidas). No es el
+   * único socket de la página: desde la auditoría de DEV del 30-sep la
+   * cabecera escucha los avisos de la campana por `/ws/notificaciones`, que es
+   * de otro servicio y no cuenta aquí.
+   *
+   * @returns {Promise<number[]>}
+   */
+  async function estadoDelCanalDeBatalla(page) {
+    return (await estadoDeSockets(page)).filter((s) => s.ruta === '/ws').map((s) => s.estado);
   }
 
   /** Deja la sesion puesta antes de que cargue cualquier script de la vista. */
@@ -471,11 +491,29 @@ test.describe('Sala de batalla de punta a punta', () => {
     await expect(page.locator('[data-zona="arranque"]')).toBeHidden();
     await expect(page.locator('[data-zona="sin-partida"]')).toBeHidden();
 
-    // HU-JUE-015: desde la sala se llega a SU chat (#441 lo tenia como hueco:
-    // la vista del chat existia sin que ninguna pantalla enlazara a ella).
-    const enlaceChat = page.locator('[data-zona="enlace-chat-sala"]');
-    await expect(enlaceChat).toBeVisible();
-    await expect(enlaceChat).toHaveAttribute('href', `./chat.html?sala=${sala.id}`);
+    // HU-JUE-015 · revisión del modo jugador del 6-oct, punto 15: el chat de
+    // ESTA sala se abre en la misma página («Chat grupal»), nunca en otra
+    // pestaña, y habla por el mismo canal STOMP que la vista del chat.
+    const abrirChat = page.locator('[data-accion="abrir-chat-grupal"]');
+    await expect(abrirChat).toBeVisible();
+    await expect(abrirChat).toHaveText(/Chat grupal/);
+    await expect(abrirChat).not.toHaveAttribute('target', /.*/);
+    const paginas = page.context().pages().length;
+    await abrirChat.click();
+    const panelChat = page.locator('[data-zona="chat-grupal"]');
+    await expect(panelChat).toBeVisible();
+    expect(page.context().pages()).toHaveLength(paginas);
+    await expect(page).toHaveURL(new RegExp(`[?&]sala=${sala.id}`));
+    const texto = `Chat grupal — e2e ${new Date().toISOString().slice(11, 19)}`;
+    await panelChat.locator('#texto-chat-grupal').fill(texto);
+    await panelChat.locator('#formulario-chat-grupal button[type="submit"]').click();
+    await expect(panelChat.locator('[data-zona="mensajes"]')).toContainText(texto, {
+      timeout: 20000,
+    });
+    // Escape lo cierra y el foco vuelve al botón: se sigue jugando.
+    await page.keyboard.press('Escape');
+    await expect(panelChat).toBeHidden();
+    await expect(abrirChat).toBeFocused();
   });
 
   test('atacar desde la vista baja la vida del rival, y el aviso llega por STOMP', async ({
@@ -499,8 +537,10 @@ test.describe('Sala de batalla de punta a punta', () => {
     // sin esta comprobacion, un envio a un socket cerrado se ve exactamente
     // igual que una accion que el servidor ignora.
     expect(
-      await estadoDeSockets(page),
-      `sockets al atacar (1 = OPEN). Consola:\n${dicho.join('\n')}`,
+      await estadoDelCanalDeBatalla(page),
+      `canal de la batalla al atacar (1 = OPEN); todos: ${JSON.stringify(
+        await estadoDeSockets(page),
+      )}. Consola:\n${dicho.join('\n')}`,
     ).toEqual([1]);
 
     // El defecto que esto cierra: los botones nacian deshabilitados y solo los
@@ -827,8 +867,10 @@ test.describe('Sala de batalla de punta a punta', () => {
       JSON.stringify(ingresos),
     ).toBe(true);
 
+    // Revisión del modo jugador del 6-oct, punto 20: la apuesta en su fila
+    // del desglose, con su signo («Apuesta +30 créditos» / «−30 créditos»).
     await expect(page.locator('[data-zona="resultado"]')).toHaveText(
-      new RegExp(`(llevas|pierdes los) ${APUESTA} créditos`, 'i'),
+      new RegExp(`Apuesta\\s*[+−]${APUESTA} créditos`, 'i'),
       { timeout: 20000 },
     );
   });

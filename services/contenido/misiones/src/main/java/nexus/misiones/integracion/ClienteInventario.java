@@ -2,6 +2,8 @@ package nexus.misiones.integracion;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -9,6 +11,7 @@ import java.util.UUID;
 import nexus.misiones.aplicacion.HeroeNoEncontrado;
 import nexus.misiones.aplicacion.HeroeOcupado;
 import nexus.misiones.aplicacion.InventarioDeHeroes;
+import nexus.misiones.dominio.simulacion.Formula;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
@@ -79,16 +82,7 @@ public class ClienteInventario implements InventarioDeHeroes {
      */
     private HeroeDelInventario buscarEnLaVitrina(String jugadorUid, String heroeId) {
         for (int pagina = 0; pagina < PAGINAS_DE_VITRINA; pagina++) {
-            int numero = pagina;
-            Contestacion<PaginaDeVitrina> c = Contestacion.protegida(corta, () -> http.get()
-                    .uri(base + "/api/v1/inventario/elementos?pagina={pagina}", numero)
-                    .header(CABECERA_JUGADOR, jugadorUid)
-                    .retrieve()
-                    .body(PaginaDeVitrina.class));
-            if (c.rechazada()) {
-                throw noEncontradoOAjeno(c);
-            }
-            PaginaDeVitrina vitrina = c.cuerpo();
+            PaginaDeVitrina vitrina = paginaDeVitrina(jugadorUid, pagina);
             List<ElementoDeVitrina> elementos = vitrina.elementos() == null ? List.of() : vitrina.elementos();
             for (ElementoDeVitrina e : elementos) {
                 if (heroeId.equals(e.id())) {
@@ -97,14 +91,31 @@ public class ClienteInventario implements InventarioDeHeroes {
                             e.experiencia());
                 }
             }
-            boolean ultima = Boolean.TRUE.equals(vitrina.ultima())
-                    || elementos.isEmpty()
-                    || (vitrina.totalPaginas() != null && numero + 1 >= vitrina.totalPaginas());
-            if (ultima) {
+            if (esLaUltima(vitrina, pagina)) {
                 break;
             }
         }
         throw new HeroeNoEncontrado();
+    }
+
+    /** Una pagina de la vitrina del jugador, leida con la credencial de misiones y el jugador en {@code X-User-Name}. */
+    private PaginaDeVitrina paginaDeVitrina(String jugadorUid, int numero) {
+        Contestacion<PaginaDeVitrina> c = Contestacion.protegida(corta, () -> http.get()
+                .uri(base + "/api/v1/inventario/elementos?pagina={pagina}", numero)
+                .header(CABECERA_JUGADOR, jugadorUid)
+                .retrieve()
+                .body(PaginaDeVitrina.class));
+        if (c.rechazada()) {
+            throw noEncontradoOAjeno(c);
+        }
+        return c.cuerpo();
+    }
+
+    private static boolean esLaUltima(PaginaDeVitrina vitrina, int numero) {
+        List<ElementoDeVitrina> elementos = vitrina.elementos() == null ? List.of() : vitrina.elementos();
+        return Boolean.TRUE.equals(vitrina.ultima())
+                || elementos.isEmpty()
+                || (vitrina.totalPaginas() != null && numero + 1 >= vitrina.totalPaginas());
     }
 
     @Override
@@ -131,7 +142,63 @@ public class ClienteInventario implements InventarioDeHeroes {
         if (c.rechazada()) {
             throw noEncontradoOAjeno(c);
         }
-        return new EstadisticasDelHeroe(c.cuerpo().poder(), c.cuerpo().vida(), c.cuerpo().defensa());
+        Estadisticas e = c.cuerpo();
+        return new EstadisticasDelHeroe(e.poder(), e.vida(), e.defensa(), e.ataque() == null ? null : e.ataque().aDominio(),
+                e.dano() == null ? null : e.dano().aDominio(), e.sanar() == null ? null : e.sanar().aDominio());
+    }
+
+    /**
+     * Lo que lleva puesto el heroe ({@code GET .../heroes/{id}/equipamiento}: ids
+     * de elementos) y las epicas del jugador, ambos como ids de PRODUCTO: el
+     * inventario guarda el elemento, el nombre que entiende el motor es el del
+     * producto. Se resuelve con la vitrina del jugador, entera (hasta
+     * {@link #PAGINAS_DE_VITRINA} paginas), como hace salas-partidas para sus
+     * batallas. Una epica retenida por una subasta no se puede usar y no cuenta;
+     * un elemento equipado que ya no esta en la vitrina no se manda.
+     */
+    @Override
+    public EquipoDelHeroe equipo(String jugadorUid, String heroeId) {
+        Contestacion<Equipamiento> c = Contestacion.protegida(corta, () -> http.get()
+                .uri(base + "/api/v1/inventario/heroes/{id}/equipamiento", heroeId)
+                .header(CABECERA_JUGADOR, jugadorUid)
+                .retrieve()
+                .body(Equipamiento.class));
+        if (c.rechazada()) {
+            throw noEncontradoOAjeno(c);
+        }
+        Equipamiento puesto = c.cuerpo();
+        List<String> idsEquipados = new ArrayList<>();
+        if (puesto.armas() != null) {
+            idsEquipados.addAll(puesto.armas());
+        }
+        if (puesto.armaduras() != null) {
+            idsEquipados.addAll(puesto.armaduras().values());
+        }
+        if (puesto.items() != null) {
+            idsEquipados.addAll(puesto.items());
+        }
+
+        Map<String, String> productoPorElemento = new java.util.HashMap<>();
+        LinkedHashSet<String> epicas = new LinkedHashSet<>();
+        for (int pagina = 0; pagina < PAGINAS_DE_VITRINA; pagina++) {
+            PaginaDeVitrina vitrina = paginaDeVitrina(jugadorUid, pagina);
+            for (ElementoDeVitrina e : vitrina.elementos() == null ? List.<ElementoDeVitrina>of() : vitrina.elementos()) {
+                if (e.id() != null && e.productoId() != null) {
+                    productoPorElemento.put(e.id(), e.productoId());
+                }
+                if ("EPICA".equals(e.tipo()) && Boolean.TRUE.equals(e.disponible()) && e.productoId() != null) {
+                    epicas.add(e.productoId());
+                }
+            }
+            if (esLaUltima(vitrina, pagina)) {
+                break;
+            }
+        }
+        List<String> productosEquipados = idsEquipados.stream()
+                .map(productoPorElemento::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
+        return new EquipoDelHeroe(productosEquipados, List.copyOf(epicas));
     }
 
     @Override
@@ -235,7 +302,17 @@ public class ClienteInventario implements InventarioDeHeroes {
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    record Estadisticas(String heroeId, int poder, int vida, int defensa) {
+    record Estadisticas(String heroeId, int poder, int vida, int defensa, FormulaDetalle ataque, FormulaDetalle dano,
+                        FormulaDetalle sanar) {
+    }
+
+    /** {@code FormulaDetalle} del contrato: base + cantidadDados dados de N caras (el texto {@code formula} no se lee). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    record FormulaDetalle(int base, int cantidadDados, int caras) {
+
+        Formula aDominio() {
+            return new Formula(base, cantidadDados, caras);
+        }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)

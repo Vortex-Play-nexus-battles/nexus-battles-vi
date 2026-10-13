@@ -36,4 +36,13 @@ public interface RepositorioDePartidas {
     default List<Partida> conTurnoVencido(Instant ahora) {
         return List.of();
     }
+
+    /**
+     * Las partidas que siguen EN_CURSO y empezaron antes de {@code limite},
+     * como mucho {@code lote}: una partida abandonada retenia para siempre la
+     * apuesta de su sala (auditoria de DEV del 30-sep).
+     */
+    default List<Partida> enCursoDesde(Instant limite, int lote) {
+        return List.of();
+    }
 }

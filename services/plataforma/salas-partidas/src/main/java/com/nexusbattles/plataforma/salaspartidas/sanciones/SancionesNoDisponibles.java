@@ -24,7 +24,7 @@ public class SancionesNoDisponibles extends ErrorDeNegocio {
 
     public SancionesNoDisponibles() {
         this("No se pudo comprobar tu estado de sanciones",
-                "El servicio de sanciones no respondio y la accion no se completo."
+                "El servicio de sanciones no respondió y la acción no se completó."
                         + " Intenta de nuevo en un momento.");
     }
 

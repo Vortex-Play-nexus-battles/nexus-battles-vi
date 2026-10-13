@@ -724,6 +724,44 @@ class ComunidadDeProductoIT {
                     "{\"accion\":\"EDITAR\",\"motivo\":\"sin texto\"}").statusCode());
         }
 
+        /**
+         * Contrato 1.8.0 contra PostgreSQL real: las consultas de reportes
+         * pendientes (reporte frente a asiento) son JPQL escrito a mano, y los
+         * dobles en memoria de FlujoDeModeracionTest no las ejecutan.
+         */
+        @Test
+        @DisplayName("1.8.0: el reportado sigue en el hilo y en la cola; APROBAR lo saca de la cola; otro reporte lo devuelve")
+        void encolarNoEsOcultar() throws Exception {
+            String producto = productoNuevo();
+            String id = leer(comentar(producto, jugador(UUID.randomUUID()), "opinion discutible", null), "$.id");
+            String reportes = "/api/v1/products/" + producto + "/comments/" + id + "/reportes";
+            String cola = "/api/v1/comentarios/moderacion?productoId=" + producto;
+            String decision = "/api/v1/comentarios/moderacion/" + id + "/decision";
+
+            HttpResponse<String> reporte = pedir("POST", reportes, jugador(UUID.randomUUID()), "{\"categoria\":\"SPAM\"}");
+            assertEquals(201, reporte.statusCode(), reporte.body());
+            assertEquals("PUBLICADO", leer(reporte, "$.estadoDelComentario"), "un reporte no oculta");
+
+            HttpResponse<String> hilo = pedir("GET", "/api/v1/products/" + producto + "/comments", null, null);
+            assertEquals(List.of(id), leer(hilo, "$.comentarios[*].id"), "sigue a la vista de todos");
+            assertEquals(1, (Integer) leer(hilo, "$.total"), "y cuenta en las opiniones");
+            assertEquals(List.of(id), leer(pedir("GET", cola, moderadora(), null), "$.entradas[*].comentario.id"),
+                    "pero espera en la cola");
+
+            assertEquals(200, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"APROBAR\",\"motivo\":\"opinion legitima\"}").statusCode());
+            assertEquals(0, (Integer) leer(pedir("GET", cola, moderadora(), null), "$.total"),
+                    "aprobado: ya no tiene reportes pendientes");
+            assertEquals(409, pedir("POST", decision, moderadora(),
+                    "{\"accion\":\"APROBAR\",\"motivo\":\"otra vez\"}").statusCode(), "sin pendientes es 409");
+
+            Thread.sleep(5); // el reporte nuevo tiene que ser posterior al asiento
+            assertEquals(201, pedir("POST", reportes, jugador(UUID.randomUUID()),
+                    "{\"categoria\":\"ACOSO\"}").statusCode());
+            assertEquals(List.of(id), leer(pedir("GET", cola, moderadora(), null), "$.entradas[*].comentario.id"),
+                    "un reporte posterior a la decision lo vuelve a poner en la cola");
+        }
+
         @Test
         @DisplayName("MARCAR lo pone en la lista de seguimiento aunque este publicado; DESMARCAR lo saca")
         void marcar() throws Exception {

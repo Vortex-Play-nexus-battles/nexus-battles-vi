@@ -11,6 +11,7 @@ import {
   leerSesion,
   consultarBandeja,
   marcarLeida,
+  marcarTodasLeidas,
   entregarPendientes,
   ErrorDeApi,
   CANAL,
@@ -131,6 +132,28 @@ describe('HTTP', () => {
     expect(fetchImpl).toHaveBeenCalledWith('/api/v1/users/u-1/notifications/n%2F1/read', {
       method: 'POST',
     });
+  });
+
+  test('HU-NOT-001 CA-02: marcarTodasLeidas hace POST .../notifications/read y devuelve LecturaResponse', async () => {
+    const lectura = { usuarioId: 'u-1', marcadas: 3, noLeidas: 0 };
+    const fetchImpl = jest.fn(async () => respuesta(200, lectura));
+    await expect(marcarTodasLeidas('u-1', { fetchImpl })).resolves.toEqual(lectura);
+    expect(fetchImpl).toHaveBeenCalledWith('/api/v1/users/u-1/notifications/read', {
+      method: 'POST',
+    });
+  });
+
+  test('marcarTodasLeidas: un 403 sin cuerpo (lo corta la seguridad) llega como ErrorDeApi con su estado', async () => {
+    const fetchImpl = jest.fn(async () => ({
+      ok: false,
+      status: 403,
+      json: async () => {
+        throw new SyntaxError('sin cuerpo');
+      },
+    }));
+    const error = await marcarTodasLeidas('u-1', { fetchImpl }).catch((e) => e);
+    expect(error).toBeInstanceOf(ErrorDeApi);
+    expect(error.estado).toBe(403);
   });
 
   test('entregarPendientes hace POST .../sessions/{sesionId}/pending', async () => {

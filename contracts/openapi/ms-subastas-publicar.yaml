@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Nexus Battles VI - Publicación de subastas
-  version: 1.0.0
+  version: 1.0.1
   description: |
     Contrato de HU-SUB-001 (7.7.5 del documento del curso). La publicación
     requiere identidad (el vendedor sale del `uid` del token, nunca del
@@ -20,8 +20,9 @@ info:
       - el incremento mínimo sale del parámetro `subastas.incremento-minimo`
         de admin-parametros y no de una variable de entorno. Sin valor, 503
         con `type` `.../errors/parametro-no-configurado` y
-        `motivo: INCREMENTO_MINIMO_NO_CONFIGURADO` (decisión del Product
-        Owner pendiente);
+        `motivo: INCREMENTO_MINIMO_NO_CONFIGURADO`. Desde 1.0.1 (D-43) el
+        parámetro vale 5 créditos en todos los entornos (migración V5 de
+        admin-parametros); el 503 queda para un entorno que lo tuviera vacío;
       - la idempotencia de `Idempotency-Key` se guarda en la base de datos
         del servicio: sobrevive a un reinicio y vale entre réplicas;
       - los errores de negocio llevan `motivo`, un código estable para que la

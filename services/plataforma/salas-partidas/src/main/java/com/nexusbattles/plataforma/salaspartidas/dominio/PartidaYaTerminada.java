@@ -13,8 +13,8 @@ public class PartidaYaTerminada extends ErrorDeNegocio {
 
     public PartidaYaTerminada(UUID idPartida) {
         super(TIPO,
-              "La partida ya termino",
+              "La partida ya terminó",
               409,
-              "El combate " + idPartida + " ya finalizo: su turno no avanza mas.");
+              "El combate " + idPartida + " ya finalizó: su turno no avanza más.");
     }
 }

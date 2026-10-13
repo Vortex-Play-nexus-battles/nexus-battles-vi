@@ -50,7 +50,7 @@ public class FichaDeSubastaService {
             vistas.sumarVista(subastaId);
             vistasTotales++;
         }
-        return SubastaDetalleResponse.desde(subasta, reputacionDe(subasta.getVendedorId()), vistasTotales);
+        return SubastaDetalleResponse.desde(subasta, reputacionDe(subasta.getVendedorId()), vistasTotales, quienMira);
     }
 
     private SubastaDetalleResponse.Reputacion reputacionDe(UUID vendedorId) {

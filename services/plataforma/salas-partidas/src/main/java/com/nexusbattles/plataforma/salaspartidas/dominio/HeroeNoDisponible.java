@@ -55,8 +55,8 @@ public class HeroeNoDisponible extends ErrorDeNegocio {
 
     private static String tituloDe(EstadoDelHeroe estado) {
         return exigirRechazo(estado) == ResultadoVerificacion.SIN_HEROE_EQUIPADO
-                ? "No tienes un heroe equipado"
-                : "Tu heroe esta en otra partida";
+                ? "No tienes un héroe equipado"
+                : "Tu héroe está en otra partida";
     }
 
     /**
@@ -69,12 +69,12 @@ public class HeroeNoDisponible extends ErrorDeNegocio {
      */
     private static String detalleDe(EstadoDelHeroe estado) {
         if (exigirRechazo(estado) == ResultadoVerificacion.SIN_HEROE_EQUIPADO) {
-            return "Equipa un heroe en tu inventario antes de entrar a una batalla.";
+            return "Equipa un héroe en tu inventario antes de entrar a una batalla.";
         }
-        String heroe = estado.heroe() == null ? "Tu heroe" : estado.heroe().nombre();
+        String heroe = estado.heroe() == null ? "Tu héroe" : estado.heroe().nombre();
         return estado.ocupadoPor() == null
-                ? heroe + " ya esta combatiendo en otra partida. Elige otro heroe."
-                : heroe + " esta combatiendo en " + estado.ocupadoPor() + ". Elige otro heroe.";
+                ? heroe + " ya está combatiendo en otra partida. Elige otro héroe."
+                : heroe + " está combatiendo en " + estado.ocupadoPor() + ". Elige otro héroe.";
     }
 
     /**

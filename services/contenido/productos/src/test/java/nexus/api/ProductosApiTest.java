@@ -117,7 +117,7 @@ class ProductosApiTest {
                   "descripcion": "Habilidad epica creada para verificar el contrato",
                   "tipo": "EPICA",
                   "tiraje": 25,
-                  "precioCreditos": 5000,
+                  "precioCreditos": 0,
                   "premium": false,
                   "heroe": "550e8400-e29b-41d4-a716-446655440000",
                   "turnosRecarga": 4,
@@ -543,6 +543,50 @@ class ProductosApiTest {
         void permiteCrearEpicaValida() throws Exception {
                 publicarComo("ROLE_ADMINISTRADOR", PRODUCTO_EPICA_VALIDO)
                         .andExpect(status().isCreated());
+        }
+
+        // RG-085 / RF-MOT-36: la unica fuente de epicas es derrotar al Master. La
+        // semilla ya las deja en 0 creditos y 0 pesos; aqui se comprueba que la
+        // administracion tampoco puede ponerles precio al crearlas.
+        @Test
+        @DisplayName("RG-085: una epica sin precio (0 creditos, 0 pesos) se puede crear, como la deja la semilla")
+        void permiteCrearEpicaConPreciosEnCero() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", agregarCampo(PRODUCTO_EPICA_VALIDO, "\"precioMonedaReal\": 0"))
+                        .andExpect(status().isCreated());
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica con precio en creditos se rechaza con 400 y un mensaje que lo explica")
+        void rechazaEpicaConPrecioEnCreditos() throws Exception {
+                String solicitud = PRODUCTO_EPICA_VALIDO.replace(
+                        "\"precioCreditos\": 0",
+                        "\"precioCreditos\": 5000");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.title").value("Solicitud inválida"))
+                        .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("derrotando al Máster")));
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica con precio en moneda real se rechaza con 400")
+        void rechazaEpicaConPrecioEnMonedaReal() throws Exception {
+                publicarComo("ROLE_ADMINISTRADOR", agregarCampo(PRODUCTO_EPICA_VALIDO, "\"precioMonedaReal\": 10000"))
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("derrotando al Máster")));
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica premium se rechaza con 400 aunque su precio sea cero")
+        void rechazaEpicaPremium() throws Exception {
+                String solicitud = agregarCampo(
+                        sinCampo(PRODUCTO_EPICA_VALIDO, "precioCreditos").replace("\"premium\": false", "\"premium\": true"),
+                        "\"precioMonedaReal\": 0");
+
+                publicarComo("ROLE_ADMINISTRADOR", solicitud)
+                        .andExpect(status().isBadRequest())
+                        .andExpect(jsonPath("$.detail").value(org.hamcrest.Matchers.containsString("derrotando al Máster")));
         }
 
         @ParameterizedTest(name = "una epica exige el campo {0}")

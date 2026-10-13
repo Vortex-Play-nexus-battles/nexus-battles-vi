@@ -293,10 +293,11 @@ export function cerrarSesion({
  * Las pantallas de entrada. Volver a una de ellas tras entrar sería un bucle:
  * del login al login, o a la preparación de una cuenta que ya está lista.
  * B1 suma la verificación del correo y el canje del código, con sus
- * direcciones limpias (`/verificar`, `/restablecer`).
+ * direcciones limpias (`/verificar`, `/restablecer`); el 6-oct, la de pedir el
+ * código (`/recuperar`).
  */
 const PUERTAS_DE_ENTRADA =
-  /\/(?:login|registro|preparando|restablecer-solicitar|restablecer-confirmar|restablecer|verificar-cuenta|verificar)(?:\.html)?$/;
+  /\/(?:login|registro|preparando|recuperar|restablecer-solicitar|restablecer-confirmar|restablecer|verificar-cuenta|verificar)(?:\.html)?$/;
 
 /**
  * ¿Es esta ruta un destino seguro al que volver? Devuelve la ruta normalizada

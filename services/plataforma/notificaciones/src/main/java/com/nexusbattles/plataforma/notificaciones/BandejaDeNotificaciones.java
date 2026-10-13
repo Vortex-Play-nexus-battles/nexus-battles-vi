@@ -183,6 +183,21 @@ public final class BandejaDeNotificaciones {
         leidas.add(notificacionId);
     }
 
+    /**
+     * Marca como leidos todos los avisos del jugador de una vez. HU-NOT-001 CA-02.
+     *
+     * <p>Igual que {@link #marcarLeida(String)}, no recibe la sesion: quedan
+     * leidos en todas. Es idempotente, repetirlo no cambia nada.
+     *
+     * @return cuantos avisos estaban sin leer y pasaron a leidos; 0 si ya
+     *     estaba todo leido o la bandeja esta vacia
+     */
+    public int marcarTodasLeidas() {
+        int sinLeer = noLeidas();
+        leidas.addAll(avisos.keySet());
+        return sinLeer;
+    }
+
     public boolean estaLeida(String notificacionId) {
         return leidas.contains(notificacionId);
     }

@@ -93,6 +93,15 @@ export function resumenDeModeracion(tablero) {
   return `${s.total} sanciones (${tipos.ADVERTENCIA ?? 0} advertencias, ${tipos.SUSPENSION ?? 0} suspensiones, ${tipos.BANEO ?? 0} baneos) · ${s.moderadoresActivos} moderadores activos · ${s.revertidas} revertidas`;
 }
 
+/**
+ * Resumen de una linea de las cuentas que publica ms-identidad (HU-MET-001, via /moderacion):
+ * el estado de las cuentas AHORA y las altas del periodo. Identidad cuenta; aqui solo se dice.
+ */
+export function resumenDeCuentas(cuentas) {
+  const e = cuentas.porEstado ?? {};
+  return `${cuentas.total} cuentas (${e.ACTIVO ?? 0} activas, ${e.SUSPENDIDO ?? 0} suspendidas, ${e.BANEADO ?? 0} baneadas, ${e.PENDIENTE_VERIFICACION ?? 0} sin verificar, ${e.INACTIVO ?? 0} inactivas) · ${cuentas.registros?.total ?? 0} altas en el periodo`;
+}
+
 /* ---- DOM ---- */
 
 function celda(texto, enAlerta = false) {
@@ -278,12 +287,36 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
           `Apelaciones: ${ap.PENDIENTE ?? 0} pendientes, ${ap.MANTENIDA ?? 0} mantenidas, ${ap.REDUCIDA ?? 0} reducidas, ${ap.REVERTIDA ?? 0} revertidas`,
         ),
       );
+      // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las dio, no se pinta
+      // ningun numero (ni un 0 que nadie dio): se dice que no estan, el motivo real viene en
+      // `pendientes` (CA-03) y lo de moderacion sigue completo.
+      const cuentas = ultimaModeracion.registroDeUsuarios;
+      zonaModeracion.appendChild(nodo('h3', undefined, 'Usuarios'));
+      if (!cuentas) {
+        const sinCuentas = nodo(
+          'p',
+          't-meta',
+          'Cuentas por estado y altas por día: no disponibles. El motivo está abajo, en «Pendiente».',
+        );
+        sinCuentas.dataset.zona = 'usuarios-no-disponibles';
+        zonaModeracion.appendChild(sinCuentas);
+      } else {
+        const resumenCuentas = nodo('p', 't-cuerpo', resumenDeCuentas(cuentas));
+        resumenCuentas.dataset.zona = 'resumen-usuarios';
+        zonaModeracion.appendChild(resumenCuentas);
+        const altas = nodo('ul', 'pila pila--ajustada');
+        altas.dataset.zona = 'altas-por-dia';
+        (cuentas.registros?.porDia ?? []).forEach((d) =>
+          altas.appendChild(nodo('li', undefined, `${d.fecha}: ${d.cuentas}`)),
+        );
+        zonaModeracion.appendChild(altas);
+      }
       zonaModeracion.appendChild(nodo('h3', undefined, 'Alertas'));
       zonaModeracion.appendChild(
         listaDeAlertas(
           ultimaModeracion.alertas,
           ultimaModeracion.alertasConfiguradas
-            ? 'Sin alertas: ningún día supera el umbral.'
+            ? 'Sin alertas: ningún día llega al umbral.'
             : 'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta.',
         ),
       );

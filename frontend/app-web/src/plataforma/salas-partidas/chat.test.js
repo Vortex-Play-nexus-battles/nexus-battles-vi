@@ -21,6 +21,7 @@ import {
   tonoPara,
   pintarMensaje,
   reaccionAlError,
+  TEXTO_NO_VALIDO,
 } from './chat.js';
 import { FUENTE_SIN_SERVICIO } from './fuente-mensajes.js';
 
@@ -125,6 +126,23 @@ test('CA-01: el historial se pinta al suscribirse y los mensajes en vivo se agre
   expect(contenedor.querySelector('[data-zona="conexion"]').className).toContain('estable');
   // Un separador de día encabeza la conversación.
   expect(contenedor.querySelector('.conversacion__dia')).not.toBeNull();
+});
+
+test('el estado del canal se puede pintar en otro indicador (el chat grupal, punto 15)', async () => {
+  const cliente = clienteFalso();
+  const contenedor = raiz();
+  const propio = document.createElement('span');
+
+  await montarChat(contenedor, {
+    canal: { idSala: ID_SALA },
+    token: 't',
+    conectar: async () => cliente,
+    indicador: propio,
+  });
+
+  expect(propio.dataset.estadoCanal).toBe('conectado');
+  // El de la raíz no se toca: es de otro canal.
+  expect(contenedor.querySelector('[data-zona="conexion"]').dataset.estadoCanal).toBeUndefined();
 });
 
 test('CA-01: enviar manda el texto al destino del canal y limpia el formulario', async () => {
@@ -246,6 +264,36 @@ test('CA-03: un error que la vista no conoce se dice con el tono del mapeo', asy
   expect(reaccionAlError({ type: 'x', status: 503, title: 't' }).aviso.tono).toBe('error');
 });
 
+test('auditoría 30-sep: un dibujo que el chat rechaza dice qué regla falló y vuelve al campo', async () => {
+  const cliente = clienteFalso();
+  const contenedor = raiz();
+  await montarChat(contenedor, { canal: {}, token: 't', conectar: async () => cliente });
+  const formulario = contenedor.querySelector('form');
+  formulario.elements.texto.value = '(\\_/)\n(o.o)\n(> <)';
+  formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+  await esperar();
+
+  cliente.suscripciones['/usuario/cola/salas']({
+    type: 'https://nexusbattles.local/errores/mensaje-invalido',
+    title: 'Mensaje no válido',
+    status: 400,
+    detail: 'El mensaje parece un dibujo hecho con símbolos: escríbelo con palabras.',
+  });
+
+  const aviso = contenedor.querySelector('[data-zona="aviso"] .aviso');
+  expect(aviso.textContent).toContain('Revisa el mensaje');
+  expect(aviso.textContent).toContain('parece un dibujo hecho con símbolos');
+  expect(aviso.textContent).not.toContain('Un mensaje lleva entre 1 y 500 caracteres.');
+  expect(formulario.elements.texto.value).toBe('(\\_/)\n(o.o)\n(> <)');
+  // Sin `detail`, la explicación general, que ya no habla solo del largo.
+  expect(
+    reaccionAlError({
+      type: 'https://nexusbattles.local/errores/mensaje-invalido',
+      status: 400,
+    }).aviso.detalle,
+  ).toBe(TEXTO_NO_VALIDO);
+});
+
 test('sin token no se conecta y se pide iniciar sesion', async () => {
   const conectar = jest.fn();
   const contenedor = raiz();
@@ -345,7 +393,7 @@ describe('la página', () => {
     });
     await chat;
 
-    expect(document.querySelector('[data-zona="titulo"]').textContent).toBe('Chat de la sala');
+    expect(document.querySelector('[data-zona="titulo"]').textContent).toBe('Chat grupal');
     const vuelta = document.querySelector('[data-zona="volver-a-la-sala"]');
     expect(vuelta.hidden).toBe(false);
     expect(vuelta.getAttribute('href')).toBe(`./sala-batalla.html?sala=${ID_SALA}`);

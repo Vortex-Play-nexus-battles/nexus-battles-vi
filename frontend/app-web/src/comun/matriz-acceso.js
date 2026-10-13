@@ -111,6 +111,15 @@ const ROLES_POR_NIVEL = Object.freeze({
  */
 export const MATRIZ = Object.freeze({
   // --- Portal de entrada ---------------------------------------------------
+  // F6 (auditoría del 4-oct, cambio autorizado n.º 3) — la portada pública en
+  // `/`: qué es el juego, cómo empezar y la tienda con productos reales, antes
+  // de tener cuenta. Hasta aquí `/` redirigía a `/login`.
+  portada: {
+    ruta: 'cuentas/portada.html',
+    limpia: '/',
+    acceso: ACCESO.PUBLICA,
+    armazon: 'publico',
+  },
   login: {
     ruta: 'cuentas/login.html',
     limpia: '/login',
@@ -123,8 +132,12 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
+  // 6-oct — pedir el código de recuperación («¿Olvidaste tu contraseña?») tiene
+  // su dirección: es de las que una persona escribe o le dicen. La del canje
+  // sigue siendo `/restablecer`.
   'restablecer-solicitar': {
     ruta: 'cuentas/restablecer-solicitar.html',
+    limpia: '/recuperar',
     acceso: ACCESO.PUBLICA,
     armazon: 'publico',
   },
@@ -180,6 +193,15 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },
+  // HU-PRD-013 (#854) — programar, editar y retirar los anuncios que la home
+  // del jugador rota (RF-NOT-002). Mismo nivel que el resto del catálogo: el
+  // servidor exige ADMINISTRADOR o SUPER_ADMINISTRADOR para gestionarlos
+  // (`SeguridadConfig` de productos); solo `GET /banners/vigentes` es público.
+  banners: {
+    ruta: 'contenido/productos/banners.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
   subastas: {
     ruta: 'cuentas/subastas.html',
     limpia: '/subastas',
@@ -221,9 +243,11 @@ export const MATRIZ = Object.freeze({
   },
   // UXC-5 — el módulo de misiones (§7.8). Pide sesión: el tablón muestra «las
   // misiones aplicables al jugador» (RF-MIS-001) y la estrategia se prepara
-  // para uno de SUS héroes. Sin dirección limpia: el borde no la sirve.
+  // para uno de SUS héroes. 6-oct — con dirección limpia, como los otros
+  // destinos del jugador: `/misiones`.
   misiones: {
     ruta: 'contenido/misiones/misiones.html',
+    limpia: '/misiones',
     acceso: ACCESO.SESION,
     armazon: 'jugador',
   },
@@ -313,6 +337,15 @@ export const MATRIZ = Object.freeze({
   },
   'gestion-usuarios': {
     ruta: 'cuentas/gestion-usuarios.html',
+    acceso: ACCESO.ADMINISTRACION,
+    armazon: 'admin',
+  },
+  // HU-USR-010 — la ficha administrativa del usuario. Mismo nivel que la
+  // gestión de cuentas: su fuente principal (`GET /admin/usuarios/{usuario}/
+  // ficha`, ms-identidad-admin.yaml 1.4.0) pide `GESTIONAR_CUENTAS`, que la
+  // Tabla 24 da al Administrador y al Super Administrador, no al Moderador.
+  'ficha-usuario': {
+    ruta: 'plataforma/moderacion-sanciones/ficha-usuario.html',
     acceso: ACCESO.ADMINISTRACION,
     armazon: 'admin',
   },

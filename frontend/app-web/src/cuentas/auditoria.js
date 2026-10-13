@@ -111,6 +111,11 @@
     const params = parametrosFiltro();
     params.set('page', String(estado.pagina));
     params.set('size', String(TAMANO_PAGINA));
+    // RFINAL-06: lo más reciente primero. Sin `sort` el orden lo decidía la
+    // base de datos y la página 1 era la más antigua. El `id` desempata dos
+    // eventos del mismo instante para que no salten de una página a otra.
+    params.append('sort', 'fechaHora,desc');
+    params.append('sort', 'id,desc');
     return `${API_BASE}?${params.toString()}`;
   }
 

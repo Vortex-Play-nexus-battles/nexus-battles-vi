@@ -113,7 +113,65 @@ info:
     `jugador-sancionado`, `destinatario-inexistente`, `contenido-bloqueado`,
     `demasiados-mensajes` con `Retry-After`, `moderacion-no-disponible`),
     los mismos motivos que `EnvioRechazado` del AsyncAPI.
-  version: 1.7.0
+
+    Cambios 1.8.0 (auditoria de DEV del 30-sep, aditivo — D-40 provisional):
+    bloquear a un jugador en los mensajes privados. La interfaz ofrecia
+    «Bloquear» y el servicio no lo tenia.
+    - `PUT` / `DELETE` / `GET /mensajes-directos/conversaciones/{uidOtro}/bloqueo`:
+      bloquear, desbloquear (ambas idempotentes) y consultar, siempre en
+      nombre del dueno del token. Devuelven `EstadoDeConversacion`.
+    - `ResumenDeConversacion` gana `estado`: `ACTIVA`, `BLOQUEADA` (quien
+      mira bloqueo al otro) o `NO_ADMITE` (el otro bloqueo a quien mira; no
+      se le dice que fue un bloqueo).
+    - Con un bloqueo en cualquier sentido nadie escribe por privado: el `POST`
+      de `.../mensajes` responde `409` `conversacion-bloqueada` a quien
+      bloqueo y `403` `destinatario-no-admite` a quien fue bloqueado (los
+      mismos motivos `CONVERSACION_BLOQUEADA` y `NO_ADMITE` del AsyncAPI
+      1.1.0). El historial se conserva para los dos y el chat general, el de
+      sala y las partidas no cambian.
+
+    Cambios 1.8.1 (auditoria de DEV del 30-sep, sin cambio de forma): los
+    `title` y `detail` de los problem details llevan tildes y plurales
+    correctos («Créditos insuficientes», «No tienes un héroe equipado»,
+    «1 crédito»). El de `creditos-insuficientes` vale para crear y para
+    entrar: «Tienes 80 créditos y la apuesta de esta sala es de 150.» (antes
+    decía «para crear esta sala» tambien a quien entraba). La interfaz decide
+    por `type`, nunca por el texto.
+
+    Cambios 1.9.0 (RFINAL-04, revision de AWS DEV del 4-oct), aditivos:
+
+    - Nueva `POST /salas/{idSala}/comprobacion-de-ingreso`
+      (`comprobarIngreso`): «¿me dejaria entrar esta sala con este codigo?»,
+      sin efectos. El listado la usa ANTES de mandar a verificar el heroe:
+      un codigo de invitacion equivocado («ZZZZ-9999») llevaba a la
+      verificacion y la persona lo descubria despues de elegir heroe.
+    - `ingresarASala` comprueba en este orden: sancion (403) → sala (404) →
+      la sala admite al jugador con ese codigo (403 `sala-privada`, 409) →
+      heroe (422) → creditos (422). Antes el heroe iba antes que la sala, y
+      con apuesta el libro anotaba una reserva y su devolucion por un ingreso
+      que nunca podia prosperar. Mismos codigos y tipos que en 1.8.x.
+
+    Cambios 1.10.0 (revision del modo jugador del 6-oct), aditivos:
+
+    - `listarSalas`: `estado` admite varios valores (`?estado=ABIERTA&estado=PRIVADA`
+      o `?estado=ABIERTA,PRIVADA`). «Jugar online» pide por omision las salas a
+      las que se puede entrar. Un solo valor se comporta como en 1.9.0. El
+      orden es fijo: la sala mas reciente primero.
+    - `Sala` gana `apodoAnfitrion` («Sala privada · Creada por …») y, solo para
+      quien esta dentro, `jugadores` (las plazas de la sala de espera con su
+      apodo). Los apodos son la foto que la sala guarda de cada ficha al
+      entrar (sacada del token); no se leen de la base de cuentas.
+    - Nueva `POST /salas/{idSala}/invitaciones` (`invitarASala`): el anfitrion
+      invita a un jugador que eligio buscandolo por su apodo
+      (`GET /perfiles/publicos` de ms-identidad). Al invitado le llega un aviso
+      de tipo `INVITACION_SALA` en su bandeja. Sin sistema de amigos: la
+      invitacion es el aviso.
+    - Nueva `POST /partidas/{idPartida}/rendicion` (`rendirse`): «Salir» en
+      pleno combate cuenta como derrota. El heroe de quien se rinde queda
+      fuera de combate; si su bando se queda sin nadie en pie, gana el otro
+      con la regla de siempre y la apuesta se liquida igual que con el ultimo
+      golpe. Idempotente. El ganador nunca lo manda el cliente.
+  version: 1.10.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -198,15 +256,15 @@ paths:
                     type: 'https://nexusbattles.local/errores/creditos-insuficientes'
                     title: 'Creditos insuficientes'
                     status: 422
-                    detail: 'Tienes 240 creditos y necesitas 400 para crear esta sala.'
+                    detail: 'Tienes 240 créditos y la apuesta de esta sala es de 400.'
                     instance: '/api/v1/salas'
                 heroeNoEquipado:
                   summary: RF-JUE-003 — sin personaje equipado
                   value:
                     type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
+                    title: 'No tienes un héroe equipado'
                     status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
                     instance: '/api/v1/salas'
         '503':
           $ref: '#/components/responses/DependenciaNoDisponible'
@@ -248,9 +306,19 @@ paths:
             $ref: '#/components/schemas/Modalidad'
         - name: estado
           in: query
-          description: Filtro por estado de la sala
+          description: |
+            Filtro por estado de la sala. Desde 1.10.0 se puede repetir o separar
+            con comas: `ABIERTA,PRIVADA` son las salas a las que se puede entrar,
+            lo que «Jugar online» pide por omision. Un estado que no aparece en
+            el listado (`EN_JUEGO`, `CANCELADA`, `FINALIZADA`) no devuelve nada
+            aunque se pida. Sin el parametro no se filtra. Las salas salen
+            siempre de la mas reciente a la mas antigua.
+          style: form
+          explode: true
           schema:
-            $ref: '#/components/schemas/EstadoSala'
+            type: array
+            items:
+              $ref: '#/components/schemas/EstadoSala'
         # RETIRADO: buscaba por nombre de sala, y las salas no tienen nombre.
         # Ningun requisito pide buscar en el listado; RF-JUE-002 solo habla de
         # seleccionar una sala de la lista.
@@ -331,6 +399,11 @@ paths:
       description: |
         Ingresa al jugador autenticado en la sala seleccionada (RF-JUE-002).
 
+        1.9.0 — orden de las comprobaciones: sancion → la sala existe → la
+        sala admite al jugador con su codigo (`comprobarIngreso`) → heroe →
+        creditos. Un codigo equivocado o una sala llena se dicen sin preguntar
+        al inventario ni reservar nada.
+
         Antes de admitirlo, el sistema exige que tenga su personaje equipado
         (RF-JUE-003) y que ese heroe no este comprometido en otra partida. Los
         dos rechazos posibles se distinguen por `type`, porque la interfaz
@@ -360,8 +433,10 @@ paths:
           description: |
             No puede entrar. Distinguir por `type`:
 
-            - `codigo-invitacion-invalido`: la sala es privada y el codigo
-              falta o no corresponde.
+            - `sala-privada`: la sala es privada y el codigo falta o no
+              corresponde. (1.9.0: el ejemplo decia `codigo-invitacion-invalido`,
+              un tipo que el servicio nunca emitio; el real es este, el que
+              la interfaz siempre ha leido.)
             - `jugador-sancionado` (HU-USR-005/006, R10.2): tiene una sancion
               activa. Se comprueba ANTES que el heroe y antes de reservar
               creditos, asi que un rechazo por esta via no deja nada a medias.
@@ -373,7 +448,7 @@ paths:
                 codigoInvalido:
                   summary: sala privada sin codigo valido
                   value:
-                    type: 'https://nexusbattles.local/errores/codigo-invitacion-invalido'
+                    type: 'https://nexusbattles.local/errores/sala-privada'
                     title: 'Codigo de invitacion invalido'
                     status: 403
                     detail: 'Esta sala es privada y el codigo no corresponde.'
@@ -381,9 +456,9 @@ paths:
                   summary: HU-USR-005/006 — sancion activa
                   value:
                     type: 'https://nexusbattles.local/errores/jugador-sancionado'
-                    title: 'Tienes una sancion activa'
+                    title: 'Tienes una sanción activa'
                     status: 403
-                    detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
+                    detail: 'Mientras la sanción siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
         '409':
@@ -412,13 +487,13 @@ paths:
                     type: 'https://nexusbattles.local/errores/creditos-insuficientes'
                     title: 'Creditos insuficientes'
                     status: 422
-                    detail: 'Tienes 80 creditos y necesitas 150 para crear esta sala.'
+                    detail: 'Tienes 80 créditos y la apuesta de esta sala es de 150.'
                 heroeNoEquipado:
                   value:
                     type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                    title: 'No tienes un heroe equipado'
+                    title: 'No tienes un héroe equipado'
                     status: 422
-                    detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                    detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
         '503':
           $ref: '#/components/responses/DependenciaNoDisponible'
 
@@ -428,7 +503,9 @@ paths:
       description: |
         Saca al jugador autenticado de la sala antes de que comience la
         partida y le devuelve los creditos comprometidos. Una vez iniciado el
-        combate, abandonar cuenta como derrota y no hay devolucion.
+        combate esta ruta ya no sirve (`409`): salir de un combate es
+        rendirse, `POST /partidas/{idPartida}/rendicion` (1.10.0), que cuenta
+        como derrota y liquida la apuesta con las reglas de la partida.
       operationId: abandonarSala
       responses:
         '204':
@@ -437,6 +514,153 @@ paths:
           $ref: '#/components/responses/NoAutenticado'
         '404':
           $ref: '#/components/responses/SalaNoEncontrada'
+
+  # ---------------------------------------------------------------------------
+  # 1.10.0 · Revision del modo jugador (6-oct, punto 13) — Invitar por apodo
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/invitaciones:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Salas]
+      summary: Invitar a un jugador a la sala
+      description: |
+        1.10.0. Solo el anfitrion. La vista busca al jugador por su apodo con
+        `GET /api/v1/perfiles/publicos?apodo=` de ms-identidad (minimo 3
+        caracteres) y manda aqui su identificador, que el jugador nunca ve.
+
+        Al invitado le llega un aviso en su bandeja de notificaciones
+        (`POST /internal/notifications` de `notificaciones.yaml`, sin cambios
+        en ese contrato):
+
+        - `tipo`: `INVITACION_SALA`
+        - `id`: `sala:{idSala}:invitacion:{idInvitado}` y, si la sala es
+          privada, `:codigo:{codigoInvitacion}`. Es estable por sala e
+          invitado: invitar otra vez a la misma persona no le manda un
+          segundo aviso (`enviada: false`). La bandeja lo lee para ofrecer
+          «Unirme» sin que notificaciones sepa nada de salas.
+        - `titulo`: «{apodoAnfitrion} te invita a una batalla»; `cuerpo` con
+          la modalidad, la apuesta y, en una privada, el codigo.
+
+        No es un sistema de amigos: no se guarda nada aparte del aviso.
+      operationId: invitarASala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitacionRequest'
+      responses:
+        '200':
+          description: Invitacion enviada, o ya enviada antes (`enviada` lo dice).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitacionResponse'
+        '400':
+          $ref: '#/components/responses/ParametrosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: '`invitacion-no-permitida` — solo quien creo la sala puede invitar.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: |
+            Distinguir por `type`: `sala-no-encontrada`, o
+            `invitacion-no-permitida` si no hay una cuenta activa con ese
+            identificador (no se dice cual de las dos cosas).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            `invitacion-no-permitida`: el jugador ya esta dentro, la sala esta
+            completa o ya no espera jugadores (cancelada, en juego, terminada).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+              examples:
+                completa:
+                  value:
+                    type: 'https://nexusbattles.local/errores/invitacion-no-permitida'
+                    title: 'No se pudo invitar'
+                    status: 409
+                    detail: 'La sala está completa.'
+        '422':
+          description: '`invitacion-no-permitida` — el anfitrion se invito a si mismo.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          description: |
+            `invitacion-no-permitida` — ms-identidad o notificaciones no
+            contestaron: la invitacion NO salio, y se dice.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
+  # RFINAL-04 · HU-SAL-002 — El codigo primero (1.9.0), sin efectos
+  # ---------------------------------------------------------------------------
+  /salas/{idSala}/comprobacion-de-ingreso:
+    parameters:
+      - $ref: '#/components/parameters/IdSala'
+    post:
+      tags: [Salas]
+      summary: Comprobar, sin entrar, que la sala admite al jugador con su codigo
+      description: |
+        1.9.0. Responde lo mismo que respondería `ingresarASala` en todo lo que
+        no es el heroe ni los creditos: sancion, que la sala exista, el codigo
+        de invitacion de una sala privada, y que la sala admita gente (no
+        llena, no empezada, no estar ya dentro).
+
+        **No tiene efectos**: no ingresa, no reserva creditos y no pregunta al
+        inventario. Un 200 no reserva el cupo: el ingreso vuelve a comprobar, y
+        si otro ocupa el ultimo hueco en medio, ese 409 es el honesto.
+
+        El codigo viaja en el cuerpo y no en la URL, que acaba en las bitacoras
+        del borde.
+      operationId: comprobarIngreso
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IngresoRequest'
+      responses:
+        '200':
+          description: |
+            La sala admitiria al jugador con ese codigo. Devuelve la sala como
+            la ve quien pregunta (sin `codigoInvitacion` salvo al anfitrion),
+            para que la interfaz sepa si hay apuesta que confirmar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sala'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            Distinguir por `type`, los mismos del ingreso:
+
+            - `.../errores/sala-privada`: la sala es privada y el codigo
+              falta o no corresponde.
+            - `.../errores/jugador-sancionado`: sancion activa.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          $ref: '#/components/responses/SalaNoEncontrada'
+        '409':
+          description: La sala esta llena, ya empezo o ya se esta dentro
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '503':
+          # La sancion se pregunta a moderacion: fail-closed, como al entrar.
+          $ref: '#/components/responses/DependenciaNoDisponible'
 
   # ---------------------------------------------------------------------------
   # HU-SAL-003 — Verificacion previa, sin efectos secundarios
@@ -583,6 +807,67 @@ paths:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
 
   # ---------------------------------------------------------------------------
+  # 1.10.0 · Revision del modo jugador (6-oct, punto 19) — Salir = rendirse
+  # ---------------------------------------------------------------------------
+  /partidas/{idPartida}/rendicion:
+    parameters:
+      - name: idPartida
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Partidas]
+      summary: Rendirse (salir del combate cuenta como derrota)
+      description: |
+        1.10.0. Quien se rinde sale del token, nunca del cuerpo; solo un
+        participante humano de la partida puede hacerlo (rol JUGADOR).
+
+        El heroe de quien se rinde queda fuera de combate, como si hubiera
+        caido; no se inventa un golpe ni un ejecutor. A partir de ahi manda
+        la regla de siempre:
+
+        - Si su bando se queda sin nadie en pie, la partida termina: gana
+          quien sigue en pie, la apuesta se liquida con las reglas de la
+          partida (las mismas que con el ultimo golpe) y se acredita lo de
+          jugar. Llega `partida.finalizada` por el canal.
+        - Si no termina y era su turno, el turno pasa (y juega la maquina si
+          le toca), con motivo `RENDICION` en `partida.turno.cambiado`.
+        - Si no era su turno, el combate sigue sin el.
+
+        Antes que todo eso, a todos les llega `partida.participante.rendido`
+        (AsyncAPI). Idempotente: con la partida terminada o el heroe ya
+        fuera de combate devuelve la partida tal cual y no anuncia nada.
+      operationId: rendirse
+      responses:
+        '200':
+          description: La partida despues de la rendicion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Partida'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: |
+            `partida-ajena`: quien llama no combate en esta partida. Un rol
+            de operacion no se rinde por nadie.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '404':
+          description: Partida no encontrada
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            `accion-no-permitida` con motivo `RENDICION_NO_PERMITIDA`: no se
+            conoce el heroe del participante (partidas anteriores a las fichas).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  # ---------------------------------------------------------------------------
   # 1.7.0 (B7) — Historial de partidas del jugador
   # ---------------------------------------------------------------------------
   /partidas/mias:
@@ -701,12 +986,22 @@ paths:
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
-          description: Remitente sancionado.
+          description: |
+            Remitente sancionado (`jugador-sancionado`), o el destinatario lo
+            tiene bloqueado (`destinatario-no-admite`, 1.8.0).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
         '404':
           description: El destinatario no existe o no esta activo.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '409':
+          description: |
+            Quien escribe tiene bloqueado al destinatario
+            (`conversacion-bloqueada`, 1.8.0): para escribirle, primero lo
+            desbloquea.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/ProblemDetail' }
@@ -750,6 +1045,81 @@ paths:
         '401':
           $ref: '#/components/responses/NoAutenticado'
 
+  # 1.8.0 — Bloquear a un jugador en los mensajes privados (D-40 provisional)
+  /mensajes-directos/conversaciones/{uidOtro}/bloqueo:
+    parameters:
+      - $ref: '#/components/parameters/UidOtro'
+    get:
+      tags: [Mensajes]
+      operationId: estadoDeConversacionDirecta
+      summary: Si el jugador puede escribirle a otro por privado (1.8.0)
+      description: |
+        No hace falta que haya mensajes entre los dos: la interfaz lo pregunta
+        al abrir una conversacion nueva desde la busqueda.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Estado de la conversacion para el dueno del token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+    put:
+      tags: [Mensajes]
+      operationId: bloquearJugadorEnMensajes
+      summary: Bloquea a un jugador en los mensajes privados (1.8.0)
+      description: |
+        Idempotente. Mientras dure, ninguno de los dos se escribe por privado.
+        No borra el historial ni afecta al chat general, al de sala ni a las
+        partidas.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Bloqueado; `estado` es `BLOQUEADA`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+    delete:
+      tags: [Mensajes]
+      operationId: desbloquearJugadorEnMensajes
+      summary: Desbloquea a un jugador en los mensajes privados (1.8.0)
+      description: |
+        Idempotente. Si el otro tambien lo tiene bloqueado, el estado queda en
+        `NO_ADMITE`.
+      security:
+        - keycloak: []
+      responses:
+        '200':
+          description: Desbloqueado; `estado` es `ACTIVA` o `NO_ADMITE`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadoDeConversacion'
+        '400':
+          description: '`uidOtro` es el propio jugador (`destinatario-propio`) o no es un UUID.'
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
 components:
 
   parameters:
@@ -783,16 +1153,16 @@ components:
               summary: RF-JUE-003 — sin personaje equipado
               value:
                 type: 'https://nexusbattles.local/errores/heroe-no-equipado'
-                title: 'No tienes un heroe equipado'
+                title: 'No tienes un héroe equipado'
                 status: 422
-                detail: 'Equipa un heroe en tu inventario antes de entrar a una batalla.'
+                detail: 'Equipa un héroe en tu inventario antes de entrar a una batalla.'
             heroeOcupado:
               summary: RF-JUE-003 — heroe comprometido en otra partida
               value:
                 type: 'https://nexusbattles.local/errores/heroe-ocupado'
-                title: 'Tu heroe esta en otra partida'
+                title: 'Tu héroe está en otra partida'
                 status: 422
-                detail: 'Sombra de Vael esta combatiendo en Caceria nocturna. Elige otro heroe.'
+                detail: 'Sombra de Vael está combatiendo en Caceria nocturna. Elige otro héroe.'
 
     NoAutenticado:
       description: Falta el token o esta caducado
@@ -809,7 +1179,7 @@ components:
         - `seccion-no-disponible` (HU-DIS-003): la dependencia **no responde**
           —conexion, tiempo agotado, 5xx— o su corta circuitos esta abierto.
           Trae `seccion` (que funcion queda limitada: «Inventario», «Motor de
-          combate», «Apuesta de creditos»), `reintentarEnSegundos` y la cabecera
+          combate», «Apuesta de créditos»), `reintentarEnSegundos` y la cabecera
           `Retry-After`; `dependencia` es el nombre interno, para la bitacora, y
           no se muestra al jugador. La interfaz pinta `Seccion degradada` en el
           hueco de esa seccion (MAPEO-ERRORES §5.5) y el resto de la vista sigue.
@@ -848,9 +1218,9 @@ components:
               summary: HU-JUE-014 CA-06 — el libro contesto algo que no sirve
               value:
                 type: 'https://nexusbattles.local/errores/creditos-no-disponibles'
-                title: 'El libro de creditos no esta disponible ahora mismo'
+                title: 'El libro de créditos no está disponible ahora mismo'
                 status: 503
-                detail: 'No se pudieron comprometer los creditos de la apuesta: el libro rechazo la reserva con 400. Nada quedo reservado; vuelve a intentarlo en unos segundos.'
+                detail: 'No se pudieron comprometer los créditos de la apuesta: el libro rechazo la reserva con 400. Nada quedó reservado; vuelve a intentarlo en unos segundos.'
                 instance: '/api/v1/salas'
     # HU-USR-005/006 (R10.2) — la sancion dejo de ser solo un silencio en el chat.
     JugadorSancionado:
@@ -873,9 +1243,9 @@ components:
           schema: { $ref: '#/components/schemas/ProblemDetail' }
           example:
             type: 'https://nexusbattles.local/errores/jugador-sancionado'
-            title: 'Tienes una sancion activa'
+            title: 'Tienes una sanción activa'
             status: 403
-            detail: 'Mientras la sancion siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
+            detail: 'Mientras la sanción siga vigente no puedes crear salas ni entrar a batallas. Puedes consultarla, y apelarla si crees que es injusta, en «Mis sanciones».'
             instance: '/api/v1/salas'
     SalaNoEncontrada:
       description: La sala no existe o ya fue cerrada
@@ -913,6 +1283,25 @@ components:
         apodoOtro: { type: [string, 'null'] }
         ultimoMensaje: { $ref: '#/components/schemas/MensajeDirecto' }
         noLeidos: { type: integer, minimum: 0 }
+        estado:
+          $ref: '#/components/schemas/EstadoDeConversacionValor'
+
+    EstadoDeConversacionValor:
+      type: string
+      enum: [ACTIVA, BLOQUEADA, NO_ADMITE]
+      description: |
+        (1.8.0, D-40) Si quien mira puede escribir en la conversacion.
+        `BLOQUEADA`: el bloqueo al otro (puede deshacerlo). `NO_ADMITE`: el
+        otro lo bloqueo a el; no se le dice por que.
+
+    EstadoDeConversacion:
+      type: object
+      description: (1.8.0, D-40) Respuesta de `/mensajes-directos/conversaciones/{uidOtro}/bloqueo`.
+      required: [uidOtro, estado]
+      properties:
+        uidOtro: { type: string, format: uuid }
+        estado:
+          $ref: '#/components/schemas/EstadoDeConversacionValor'
 
 
     # -- Formato de error comun a los 20 modulos (regla 4) --------------------
@@ -1089,11 +1478,14 @@ components:
         ejemplos de la Pantalla 2 resuelven como
         «4 de 6 jugadores · 320 creditos · Con heroe de la IA».
 
-        Por eso aqui NO viajan ni el apodo del anfitrion, ni el heroe de cada
-        participante, ni un indicador de preparacion: ninguna pantalla los
-        muestra y ningun requisito los pide. Un participante se identifica por
-        su UUID, que es lo unico que este servicio conoce — el apodo pertenece
-        al modulo de cuentas y no se replica aqui (regla 7 de plataforma).
+        Hasta 1.9.0 aqui NO viajaban apodos: ninguna pantalla los mostraba.
+        1.10.0 (revision del modo jugador del 6-oct): dos pantallas los piden
+        —la entrada a una sala privada («Sala privada · Creada por …») y las
+        plazas de la sala de espera— y viajan `apodoAnfitrion` y, solo para
+        quien esta dentro, `jugadores`. No se replica el modulo de cuentas
+        (regla 7): es la foto que la sala ya guarda de cada participante al
+        entrar, sacada de su token. El identificador sigue sin mostrarse a
+        nadie; la interfaz pinta el apodo.
       required: [id, estado, modalidad, maximoParticipantes, ocupacion, recompensaCreditos, incluirHeroeIA, heroesIA]
       properties:
         id: { type: string, format: uuid }
@@ -1157,6 +1549,60 @@ components:
             nuevo, compatible hacia atras: ningun consumidor que lo ignore se
             rompe.
           example: 'H7KM-3PQX'
+        apodoAnfitrion:
+          type: [string, 'null']
+          description: |
+            1.10.0. Apodo del anfitrion al abrir la sala (foto de su token). Nulo
+            en salas anteriores a las fichas de participante: no se inventa.
+          example: 'Perez_Bro15'
+        jugadores:
+          type: array
+          description: |
+            1.10.0. Quien esta dentro, en el orden en que entro, con su apodo.
+            **Solo viaja a quien esta dentro de la sala**; a los demas el campo
+            ni aparece. Los cupos de la IA no son personas y no estan aqui: los
+            cuenta `heroesIA`.
+          items:
+            $ref: '#/components/schemas/JugadorEnSala'
+
+    JugadorEnSala:
+      type: object
+      description: 1.10.0. Una persona dentro de la sala, para las plazas de la sala de espera.
+      required: [id, anfitrion]
+      properties:
+        id: { type: string, format: uuid }
+        apodo:
+          type: [string, 'null']
+          description: Nombre visible al entrar (foto del token). Nulo si la sala no guardo su ficha.
+        anfitrion: { type: boolean }
+        heroe:
+          type: [string, 'null']
+          description: Nombre del heroe con el que entro, o nulo si no se conoce.
+
+    InvitacionRequest:
+      type: object
+      description: 1.10.0. A quien se invita. El anfitrion sale del token.
+      required: [idJugador]
+      properties:
+        idJugador:
+          type: string
+          format: uuid
+          description: El `uid` del perfil publico que el anfitrion eligio por su apodo.
+
+    InvitacionResponse:
+      type: object
+      description: 1.10.0. Resultado de la invitacion.
+      required: [idJugador, apodo, enviada]
+      properties:
+        idJugador: { type: string, format: uuid }
+        apodo:
+          type: string
+          description: Apodo del invitado, para el mensaje «Invitación enviada a …».
+        enviada:
+          type: boolean
+          description: |
+            `true` si el aviso salio ahora; `false` si ese jugador ya tenia la
+            invitacion a esta sala (no se manda otra).
 
     PaginaDeSalas:
       type: object

@@ -26,8 +26,8 @@ public class NoEsTuTurno extends ErrorDeNegocio {
 
     public NoEsTuTurno() {
         super(TIPO,
-              "Todavia no es tu turno",
+              "Todavía no es tu turno",
               409,
-              "Espera a que te toque para jugar tu accion.");
+              "Espera a que te toque para jugar tu acción.");
     }
 }

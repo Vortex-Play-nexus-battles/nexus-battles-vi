@@ -95,7 +95,10 @@ jobs:
       - name: Smoke
         working-directory: frontend/app-web
         env:
-          E2E_AWS: http://${{ secrets.DEPLOY_HOST_DEV }}
+          # 6-oct — la direccion PUBLICA del entorno (PUBLIC_BASE_URL): hoy
+          # http://<IP>; con el dominio encendido, https://<dominio>, y entonces
+          # https-del-borde.smoke.spec.js deja de saltarse. Sin la variable, la IP.
+          E2E_AWS: ${{ vars.PUBLIC_BASE_URL || format('http://{0}', secrets.DEPLOY_HOST_DEV) }}
           MAILPIT_URL: http://localhost:18025/mailpit
         run: npx playwright test --config=playwright.smoke.config.js
 

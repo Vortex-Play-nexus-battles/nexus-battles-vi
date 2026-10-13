@@ -203,6 +203,56 @@ class ModificarProductoApiTest {
                         .andExpect(jsonPath("$.promocion.vigente").value(true));
         }
 
+        // RG-085 / RF-MOT-36: la unica fuente de epicas es derrotar al Master, asi
+        // que la administracion tampoco puede ponerles precio al modificarlas.
+        @Test
+        @DisplayName("RG-085: ponerle precio en creditos a una epica se rechaza con 400 y no se guarda nada")
+        void rechazaPrecioEnCreditosSobreEpica() throws Exception {
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(productoRepository.findById(epica.id())).thenReturn(Optional.of(epica));
+
+                modificarComo("ROLE_ADMINISTRADOR", epica.id(), "{\"precioCreditos\": 500}")
+                        .andExpect(status().isBadRequest())
+                        .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                        .andExpect(jsonPath("$.type").value("urn:nexus:problema:solicitud-invalida"))
+                        .andExpect(jsonPath("$.detail")
+                                .value(org.hamcrest.Matchers.containsString("derrotando al M\u00e1ster")));
+
+                org.mockito.Mockito.verify(productoRepository, org.mockito.Mockito.never()).save(any(Producto.class));
+                org.mockito.Mockito.verifyNoInteractions(respaldoProductoRepository);
+        }
+
+        @Test
+        @DisplayName("RG-085: ponerle precio en moneda real a una epica se rechaza con 400")
+        void rechazaPrecioEnMonedaRealSobreEpica() throws Exception {
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(productoRepository.findById(epica.id())).thenReturn(Optional.of(epica));
+
+                modificarComo("ROLE_ADMINISTRADOR", epica.id(), "{\"precioMonedaReal\": 10000}")
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("RG-085: hacer premium a una epica se rechaza con 400")
+        void rechazaPremiumSobreEpica() throws Exception {
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(productoRepository.findById(epica.id())).thenReturn(Optional.of(epica));
+
+                modificarComo("ROLE_ADMINISTRADOR", epica.id(), "{\"premium\": true}")
+                        .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("RG-085: una epica sin precio se sigue pudiendo editar (nombre) sin que la regla estorbe")
+        void editarEpicaSinPrecioSigueFuncionando() throws Exception {
+                Producto epica = productoEpica(0, BigDecimal.ZERO);
+                when(productoRepository.findById(epica.id())).thenReturn(Optional.of(epica));
+
+                modificarComo("ROLE_ADMINISTRADOR", epica.id(), "{\"nombre\": \"Epica renombrada\"}")
+                        .andExpect(status().isOk())
+                        .andExpect(jsonPath("$.nombre").value("Epica renombrada"));
+        }
+
         private ResultActions modificarComo(String autoridad, String id, String cuerpo) throws Exception {
                 return mvc.perform(patch("/api/v1/productos/" + id)
                         .with(jwt().authorities(new SimpleGrantedAuthority(autoridad)))
@@ -271,6 +321,37 @@ class ModificarProductoApiTest {
                         null,                                    // turnosRecarga
                         null,                                    // efectoGeneral
                         null,                                    // efectoPotenciado
+                        null,                                    // defensa
+                        null,                                    // parte
+                        null,                                    // efecto
+                        null,                                    // poderDeAtaque
+                        null,                                    // tasaDeCaida
+                        EstadoProducto.ACTIVO,                   // estado
+                        1,                                       // version
+                        ahora,                                   // creadoEn
+                        ahora);                                  // modificadoEn
+        }
+
+        private static Producto productoEpica(int precioCreditos, BigDecimal precioMonedaReal) {
+                Instant ahora = Instant.parse("2026-08-27T18:00:00Z");
+                return new Producto(
+                        UUID.randomUUID().toString(),            // id
+                        "Epica de prueba",                       // nombre
+                        "productos/epica-prueba.webp",           // imagen
+                        "Epica de prueba",                       // descripcion
+                        TipoProducto.EPICA,                      // tipo
+                        -1,                                      // tiraje
+                        precioCreditos,                          // precioCreditos
+                        precioMonedaReal,                        // precioMonedaReal
+                        false,                                   // premium
+                        null,                                    // prototipo
+                        "550e8400-e29b-41d4-a716-446655440000",  // heroe
+                        null,                                    // costoPoder
+                        null,                                    // multiplicadorNivel
+                        null,                                    // turnosCarga
+                        2,                                       // turnosRecarga
+                        "Aumenta el poder de todo el equipo",    // efectoGeneral
+                        "Duplica el poder durante dos turnos",   // efectoPotenciado
                         null,                                    // defensa
                         null,                                    // parte
                         null,                                    // efecto

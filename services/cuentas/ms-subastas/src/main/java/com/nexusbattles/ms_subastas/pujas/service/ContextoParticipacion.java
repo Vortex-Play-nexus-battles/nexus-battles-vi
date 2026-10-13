@@ -22,4 +22,12 @@ public record ContextoParticipacion(Instant ultimaPujaDelJugador, int pujasActiv
     public static ContextoParticipacion sinHistorial() {
         return new ContextoParticipacion(null, 0);
     }
+
+    /**
+     * G5: el mismo contexto con una puja activa menos — la que se va a
+     * reemplazar cuando el jugador sube su propia puja vigente.
+     */
+    public ContextoParticipacion sinContarUnaActiva() {
+        return new ContextoParticipacion(ultimaPujaDelJugador, Math.max(0, pujasActivasDelJugador - 1));
+    }
 }

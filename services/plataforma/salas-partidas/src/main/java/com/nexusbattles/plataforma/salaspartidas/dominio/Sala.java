@@ -354,13 +354,13 @@ public final class Sala {
         int pedidos = parametros.heroesIA();
         Modalidad modalidad = parametros.modalidad();
         if (pedidos < 0) {
-            errores.add(new ErrorDeCampo("heroesIA", "Los heroes de la IA no pueden ser negativos."));
+            errores.add(new ErrorDeCampo("heroesIA", "Los héroes de la IA no pueden ser negativos."));
             return;
         }
         if (modalidad == Modalidad.UNO_CONTRA_UNO && pedidos > 0) {
             errores.add(new ErrorDeCampo("heroesIA",
-                    "Uno contra uno es entre dos jugadores, sin heroes de la IA: "
-                            + "para jugar contra la maquina elige la modalidad contra la IA."));
+                    "Uno contra uno es entre dos jugadores, sin héroes de la IA: "
+                            + "para jugar contra la máquina elige la modalidad contra la IA."));
             return;
         }
         if (!aforoValido) {
@@ -369,9 +369,9 @@ public final class Sala {
         int caben = modalidad.maximoHeroesIA(parametros.maximoParticipantes());
         if (pedidos > caben) {
             String limite = modalidad == Modalidad.CONTRA_IA
-                    ? "Contra la IA se enfrenta a un solo heroe de la maquina: como maximo 1."
-                    : "Con " + parametros.maximoParticipantes() + " participantes caben como maximo "
-                            + caben + " heroes de la IA: el anfitrion siempre juega.";
+                    ? "Contra la IA se enfrenta a un solo héroe de la máquina: como máximo 1."
+                    : "Con " + parametros.maximoParticipantes() + " participantes caben como máximo "
+                            + caben + " héroes de la IA: el anfitrión siempre juega.";
             errores.add(new ErrorDeCampo("heroesIA", limite));
         }
     }
@@ -444,6 +444,34 @@ public final class Sala {
      * @param ficha heroe y apodo con los que entra; puede ser {@code null}
      */
     public void unirse(UUID idJugador, FichaDeParticipante ficha, String codigo) {
+        comprobarIngreso(idJugador, codigo);
+
+        participantes.put(idJugador, ficha);
+
+        if (ocupacion() == maximoParticipantes) {
+            estado = EstadoSala.LLENA;
+        }
+    }
+
+    /**
+     * Lo que {@link #unirse(UUID, FichaDeParticipante, String)} exige, sin
+     * cambiar nada — RFINAL-04, salas-partidas.yaml 1.9.0.
+     *
+     * <p>Las reglas son las de siempre y viven aqui, en un solo sitio; lo nuevo
+     * es poder preguntarlas <b>antes</b> de las puertas con efectos. La
+     * revision de AWS DEV del 4-oct encontro que un codigo de invitacion
+     * equivocado llevaba igual a la verificacion del heroe: el ingreso miraba
+     * el heroe (y reservaba la apuesta) antes de que la sala dijera que el
+     * codigo no valia. Ahora el caso de uso y la comprobacion previa llaman a
+     * esto primero, y un codigo malo, una sala llena o una partida ya empezada
+     * se dicen sin tocar el inventario ni el libro de creditos.
+     *
+     * @param idJugador jugador que quiere entrar
+     * @param codigo    codigo de invitacion; se ignora si la sala es publica
+     * @throws SalaPrivadaSinInvitacion si es privada y el codigo falta o no vale (403)
+     * @throws IngresoNoPermitido       si la sala no lo admite (409)
+     */
+    public void comprobarIngreso(UUID idJugador, String codigo) {
         Objects.requireNonNull(idJugador, "Para entrar a una sala hace falta un jugador.");
 
         // La sala privada tiene su propio rechazo, con 403: el contrato lo separa
@@ -455,18 +483,12 @@ public final class Sala {
             throw new IngresoNoPermitido(motivoDelEstado());
         }
         if (participantes.containsKey(idJugador)) {
-            throw new IngresoNoPermitido("Ya estas en esta sala.");
+            throw new IngresoNoPermitido("Ya estás en esta sala.");
         }
         // Los cupos de la maquina cuentan (HU-SAL-004): no se admite a alguien
         // en un puesto que ya es de la IA.
         if (ocupacion() >= maximoParticipantes) {
-            throw new IngresoNoPermitido("La sala ya alcanzo su maximo de participantes.");
-        }
-
-        participantes.put(idJugador, ficha);
-
-        if (ocupacion() == maximoParticipantes) {
-            estado = EstadoSala.LLENA;
+            throw new IngresoNoPermitido("La sala ya alcanzó su máximo de participantes.");
         }
     }
 
@@ -501,16 +523,16 @@ public final class Sala {
 
         if (idJugador.equals(idAnfitrion)) {
             throw new SalidaNoPermitida(
-                    "El anfitrion no abandona su sala: la cancela.");
+                    "El anfitrión no abandona su sala: la cancela.");
         }
         if (!participantes.containsKey(idJugador)) {
-            throw new SalidaNoPermitida("No estas en esta sala.");
+            throw new SalidaNoPermitida("No estás en esta sala.");
         }
         if (estado == EstadoSala.EN_JUEGO) {
-            throw new SalidaNoPermitida("La partida ya comenzo: no puedes abandonar la sala.");
+            throw new SalidaNoPermitida("La partida ya comenzó: no puedes abandonar la sala.");
         }
         if (estado == EstadoSala.FINALIZADA || estado == EstadoSala.CANCELADA) {
-            throw new SalidaNoPermitida("Esta sala ya no esta activa.");
+            throw new SalidaNoPermitida("Esta sala ya no está activa.");
         }
 
         participantes.remove(idJugador);
@@ -549,16 +571,36 @@ public final class Sala {
             throw new NoEsElAnfitrion();
         }
         if (estado == EstadoSala.EN_JUEGO) {
-            throw new SalidaNoPermitida("La partida ya comenzo: la sala no se puede cancelar.");
+            throw new SalidaNoPermitida("La partida ya comenzó: la sala no se puede cancelar.");
         }
         if (estado == EstadoSala.CANCELADA) {
             throw new SalidaNoPermitida("Esta sala ya estaba cancelada.");
         }
         if (estado == EstadoSala.FINALIZADA) {
-            throw new SalidaNoPermitida("Esta partida ya termino.");
+            throw new SalidaNoPermitida("Esta partida ya terminó.");
         }
 
         estado = EstadoSala.CANCELADA;
+    }
+
+    /**
+     * La cierra el sistema porque nadie la llego a jugar —
+     * {@link MotivoDeCancelacion#INACTIVIDAD}, auditoria de DEV del 30-sep.
+     *
+     * <p>Sin anfitrion que lo pida: una sala abierta (o llena, o privada) que
+     * pasa el plazo de abandono sin empezar retenia para siempre la apuesta de
+     * quienes estaban dentro. Solo desde un estado sin partida: una sala EN
+     * JUEGO se cierra terminando su partida, y una ya cancelada o finalizada
+     * no cambia.
+     *
+     * @return true si la sala paso a CANCELADA
+     */
+    public boolean cerrarPorAbandono() {
+        if (estado != EstadoSala.ABIERTA && estado != EstadoSala.LLENA && estado != EstadoSala.PRIVADA) {
+            return false;
+        }
+        estado = EstadoSala.CANCELADA;
+        return true;
     }
 
     /**
@@ -584,14 +626,14 @@ public final class Sala {
             throw new NoEsElAnfitrion();
         }
         if (estado == EstadoSala.EN_JUEGO) {
-            throw new IngresoNoPermitido("Esta partida ya empezo.");
+            throw new IngresoNoPermitido("Esta partida ya empezó.");
         }
         if (estado == EstadoSala.CANCELADA || estado == EstadoSala.FINALIZADA) {
-            throw new IngresoNoPermitido("Esta sala ya no esta activa.");
+            throw new IngresoNoPermitido("Esta sala ya no está activa.");
         }
         if (ocupacion() < 2) {
             throw new IngresoNoPermitido(
-                    "Hace falta al menos un rival para empezar: invita a alguien o crea la sala con heroe de la IA.");
+                    "Hace falta al menos un rival para empezar: invita a alguien o crea la sala con héroe de la IA.");
         }
 
         estado = EstadoSala.EN_JUEGO;
@@ -662,11 +704,11 @@ public final class Sala {
     /** El motivo se dice en claro: rechazar sin explicar obliga a adivinar. */
     private String motivoDelEstado() {
         return switch (estado) {
-            case LLENA -> "La sala ya alcanzo su maximo de participantes.";
-            case EN_JUEGO -> "La partida ya comenzo.";
-            case CANCELADA -> "El anfitrion cancelo esta sala.";
-            case FINALIZADA -> "Esta partida ya termino.";
-            case PRIVADA -> "Esta sala es privada: hace falta una invitacion.";
+            case LLENA -> "La sala ya alcanzó su máximo de participantes.";
+            case EN_JUEGO -> "La partida ya comenzó.";
+            case CANCELADA -> "El anfitrión canceló esta sala.";
+            case FINALIZADA -> "Esta partida ya terminó.";
+            case PRIVADA -> "Esta sala es privada: hace falta una invitación.";
             default -> "Esta sala no admite ingresos.";
         };
     }

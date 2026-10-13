@@ -101,10 +101,13 @@ DB_PASSWORD=subastas_password PARAMETROS_URL=http://localhost:8088/api/v1 \
 ```
 
 Desde B8 `SUBASTAS_INCREMENTO_MINIMO` no se lee: el incremento minimo es el
-parametro `subastas.incremento-minimo` de admin-parametros, que nace sin valor
-(decision del PO). Sin admin-parametros, o sin valor en el, **publicar responde
-503 `INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar
-en subastas ya publicadas sigue funcionando (cada una guarda su incremento).
+parametro `subastas.incremento-minimo` de admin-parametros. **Desde D-43 vale 5
+creditos** (migracion V5 de admin-parametros, en todos los entornos): con 100
+vigente, 104 se rechaza (409 `OFERTA_INSUFICIENTE`) y 105 entra; de dos pujas
+iguales a la vez entra una sola (lock pesimista, `IncrementoMinimoDeCincoTest` y
+el E2E). Sin admin-parametros, o sin valor en el, **publicar responde 503
+`INCREMENTO_MINIMO_NO_CONFIGURADO`** y la pantalla de publicar lo dice; pujar en
+subastas ya publicadas sigue funcionando (cada una guarda su incremento).
 
 Y el frontend, en otra terminal:
 
@@ -283,8 +286,11 @@ pendiente salen **tambien por correo** (`POST /correos/subasta`) cuando
 `CORREO_URL` esta configurada: el correo y el apodo se piden a ms-identidad en el
 momento (`GET /internal/usuarios/{uid}/contacto`) y no se guardan; la
 `Idempotency-Key` es el id del aviso. Reintentos con espera exponencial hasta
-FALLIDO. **Esa ruta de ms-identidad figura como pendiente (B2)**: sin ella el
-correo no sale y termina FALLIDO (no se descarta en silencio).
+FALLIDO. Esa ruta de ms-identidad ya esta implementada (ms-identidad-admin.yaml
+1.1.0), y desde RFINAL-01 (5-oct) el correo va **encendido por omision** en
+`docker-compose.ms-subastas.yml` (`http://35.168.124.119:8082`, sin `/api/v1`).
+Lo prueba `subastas.e2e.spec.js` («la venta le llega por correo a la
+vendedora»), con el servicio de correo real del banco y Mailpit.
 
 Al vender (cierre con ganador o compra inmediata), el vendedor recibe ademas
 `CREDITOS_RECIBIDOS` (7.7.8, «Confirmacion de transferencia de creditos
@@ -319,7 +325,7 @@ Cada una tiene su mecanismo configurable; los valores son **provisionales**.
 
 | Decision | Mecanismo | Valor provisional |
 |---|---|---|
-| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **ninguno**: sin valor no se publica (503 con motivo) |
+| Incremento minimo entre pujas (RF-SUB-002) | `subastas.incremento-minimo` en admin-parametros | **decidido (D-43): 5 creditos**, migracion V5 de admin-parametros |
 | Que pasa con un producto no recogido en 7 dias (7.7.9 fija el plazo, no la consecuencia) | `subastas.pendientes.al-vencer` (respaldo `SUBASTAS_PENDIENTES_AL_VENCER`) | `ENTREGAR`: queda disponible para el ganador, que ya pago |
 | «Calificacion del vendedor» (7.7.9) en estrellas o en otra escala | la ficha publica la tasa de exito de 7.7.12 y los recuentos | sin estrellas: no se inventa la escala |
 | Maestro de Juego (7.7.4) | `IdentidadClient.Identidad.esMaestroDeJuego` | `false`: ms-identidad no tiene ese rol (HU-SUB-010) |
@@ -410,13 +416,13 @@ salas-partidas → inventario):
 | notificaciones | `http://35.168.124.119:8085/api/v1` | publicado por `docker-compose.yml`; 8081-8088 abiertos a `cidr_servicios` | `NOTIFICACIONES_BASE_URL` |
 | moderacion-sanciones | `http://35.168.124.119:8086` | idem | `SANCIONES_BASE_URL` |
 | admin-parametros | `http://35.168.124.119:8088/api/v1` | idem (`GET /parametros/{clave}/valor` es publica) | `PARAMETROS_URL` |
-| correo | `http://35.168.124.119:8082` | idem; **se deja vacio** hasta que ms-identidad sirva el contacto (B2) | `SUBASTAS_CORREO_URL` |
+| correo | `http://35.168.124.119:8082` | idem; encendido por omision desde RFINAL-01 (el 8082 esta en el bloque 8081-8088 que el grupo de seguridad de plataforma admite desde 34.193.90.11/32, comprobado el 5-oct). `SUBASTAS_CORREO_URL=` vacia lo apaga | `SUBASTAS_CORREO_URL` |
 | el borde → ms-subastas | `34.193.90.11:8092` (REST y `/api/v1/ws-subastas`) | el grupo de seguridad de contenido solo abre 8101-8104 al 35.168.124.119/32 | regla nueva |
 
-`cidr_servicios` de plataforma vale `0.0.0.0/0` por omision en
-`infrastructure/entornos/plataforma/variables.tf`; el valor aplicado de verdad
-no esta en el repo y B9 dejo escrito que correo no se alcanza. Por eso el paso
-2 lo comprueba antes de nada.
+`cidr_servicios` de plataforma vale `["34.193.90.11/32"]` desde B12
+(`infrastructure/entornos/plataforma/variables.tf`), y es lo aplicado: la accion
+`inventario` de infra-dev (corrida 37264710414, 5-oct) lista 8081-8088 y 8089
+abiertos solo a esa IP. El paso 2 lo vuelve a comprobar desde el host.
 
 ### Pasos, en orden, con su comprobacion
 

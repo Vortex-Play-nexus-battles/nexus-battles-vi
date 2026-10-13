@@ -1,6 +1,7 @@
 package com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.api;
 
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.BandejaDeMensajesDirectos;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.BloqueosDeMensajes;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.ConsultaInvalida;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.EnviarMensajeDirecto;
 import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.MensajeDirecto;
@@ -12,10 +13,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -28,7 +31,7 @@ import java.util.UUID;
 
 /**
  * Mensajes privados por REST — B6, {@code /mensajes-directos/**} de
- * {@code contracts/openapi/salas-partidas.yaml} 1.6.x.
+ * {@code contracts/openapi/salas-partidas.yaml} 1.6.x; el bloqueo, 1.8.0 (D-40).
  *
  * <p>FEEDBACK DEL PROFESOR, no requisito del documento (el 7.6 pide chat en las
  * salas y en la vista general).
@@ -51,10 +54,13 @@ public class MensajesDirectosController {
 
     private final EnviarMensajeDirecto enviarMensajeDirecto;
     private final BandejaDeMensajesDirectos bandeja;
+    private final BloqueosDeMensajes bloqueos;
 
-    public MensajesDirectosController(EnviarMensajeDirecto enviarMensajeDirecto, BandejaDeMensajesDirectos bandeja) {
+    public MensajesDirectosController(EnviarMensajeDirecto enviarMensajeDirecto, BandejaDeMensajesDirectos bandeja,
+                                      BloqueosDeMensajes bloqueos) {
         this.enviarMensajeDirecto = enviarMensajeDirecto;
         this.bandeja = bandeja;
+        this.bloqueos = bloqueos;
     }
 
     @GetMapping("/conversaciones")
@@ -101,6 +107,38 @@ public class MensajesDirectosController {
                                                         Authentication autenticacion) {
         bandeja.marcarLeida(RemitenteDelToken.de(autenticacion).id(), uidDeConsulta(uidOtro));
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * Si quien pregunta puede escribirle a {@code uidOtro} (D-40), sin que haga
+     * falta que haya mensajes entre los dos: lo usa la interfaz al abrir una
+     * conversacion desde la busqueda.
+     */
+    @GetMapping("/conversaciones/{uidOtro}/bloqueo")
+    public EstadoDeConversacionResponse estadoDeConversacion(@PathVariable String uidOtro,
+                                                             Authentication autenticacion) {
+        UUID otro = uidDeConsulta(uidOtro);
+        UUID yo = RemitenteDelToken.de(autenticacion).id();
+        if (yo.equals(otro)) {
+            throw new MensajeDirectoRechazado(MotivoDeRechazo.DESTINATARIO_PROPIO, null);
+        }
+        return EstadoDeConversacionResponse.de(otro, bloqueos.estado(yo, otro));
+    }
+
+    /** Bloquear (auditoria de DEV del 30-sep, D-40). Idempotente. */
+    @PutMapping("/conversaciones/{uidOtro}/bloqueo")
+    public EstadoDeConversacionResponse bloquear(@PathVariable String uidOtro, Authentication autenticacion) {
+        UUID otro = uidDeConsulta(uidOtro);
+        return EstadoDeConversacionResponse.de(otro,
+                bloqueos.bloquear(RemitenteDelToken.de(autenticacion).id(), otro));
+    }
+
+    /** Desbloquear. Idempotente; si el otro tambien bloqueo, queda {@code NO_ADMITE}. */
+    @DeleteMapping("/conversaciones/{uidOtro}/bloqueo")
+    public EstadoDeConversacionResponse desbloquear(@PathVariable String uidOtro, Authentication autenticacion) {
+        UUID otro = uidDeConsulta(uidOtro);
+        return EstadoDeConversacionResponse.de(otro,
+                bloqueos.desbloquear(RemitenteDelToken.de(autenticacion).id(), otro));
     }
 
     /**

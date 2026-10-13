@@ -186,6 +186,33 @@ test.describe('Comentarios y calificaciones: única, promedio, eliminar e imáge
     expect(h.totalCalificaciones).toBe(2);
   });
 
+  test('G4 (1.9.0): el hilo público no publica el uid de nadie; `propio` lo dice el servidor', async () => {
+    // Sin token: apodos sí, uid no, en ningún campo.
+    const anonimo = await api.get(ruta());
+    expect(anonimo.status()).toBe(200);
+    const texto = await anonimo.text();
+    expect(texto).not.toContain(anfitriona.claims.uid);
+    expect(texto).not.toContain(invitado.claims.uid);
+    const h = JSON.parse(texto);
+    expect(h.comentarios.length).toBeGreaterThan(0);
+    for (const c of h.comentarios) {
+      expect(c).not.toHaveProperty('autorId');
+      expect(typeof c.apodoAutor).toBe('string');
+      expect(c.propio).toBe(false);
+    }
+
+    // Con su token, cada una ve propios solo los suyos, y tampoco recibe uids.
+    const deLaAnfitriona = await api.get(ruta(), { headers: conToken(anfitriona.token) });
+    const suyo = await deLaAnfitriona.text();
+    expect(suyo).not.toContain(anfitriona.claims.uid);
+    expect(suyo).not.toContain(invitado.claims.uid);
+    const propios = JSON.parse(suyo).comentarios.filter((c) => c.propio);
+    expect(propios.map((c) => c.apodoAutor)).toEqual(
+      propios.map(() => comentarioDeAnfitriona.apodoAutor),
+    );
+    expect(propios.length).toBe(2);
+  });
+
   test('se califica sin comentar, una sola vez: 201, luego 409, y la propia se puede leer', async () => {
     const r = await api.post(rutaCalificacion(), {
       headers: conToken(moderadora.token),

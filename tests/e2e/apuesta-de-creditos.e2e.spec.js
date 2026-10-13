@@ -162,7 +162,7 @@ test.describe('Apuesta de creditos (HU-JUE-014)', () => {
       expect(r.status(), `ingreso sin saldo: ${await r.text()}`).toBe(422);
       const problema = await r.json();
       expect(problema.type).toBe('https://nexusbattles.local/errores/creditos-insuficientes');
-      expect(problema.detail).toMatch(new RegExp(`Tienes 0 creditos y necesitas ${APUESTA}`));
+      expect(problema.detail).toBe(`Tienes 0 créditos y la apuesta de esta sala es de ${APUESTA}.`);
       expect((await salaActual(api, anfitriona, sala.id)).ocupacion).toBe(1);
       expect((await saldoDe(api, pobre)).reservado).toBe(0);
     });

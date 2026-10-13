@@ -2,6 +2,7 @@ package nexus.misiones.aplicacion;
 
 import java.util.List;
 import nexus.misiones.dominio.simulacion.DecisorDeTurno;
+import nexus.misiones.dominio.simulacion.Formula;
 import nexus.misiones.dominio.simulacion.TablaDeExperiencia;
 
 /**
@@ -32,6 +33,15 @@ public interface ServicioDeHeroes extends DecisorDeTurno, TablaDeExperiencia {
     record VeredictoDeComposicion(boolean valida, String motivo) {
     }
 
-    record EstadisticasDeNivel(int poder, int vida, int defensa) {
+    /**
+     * @param ataque sus formulas como datos, o nulas si heroes no las publica
+     *               (con ellas el motor puede pelear con una vida o una defensa
+     *               que no son las del catalogo: las de la semilla y el escalon)
+     */
+    record EstadisticasDeNivel(int poder, int vida, int defensa, Formula ataque, Formula dano, Formula sanar) {
+
+        public EstadisticasDeNivel(int poder, int vida, int defensa) {
+            this(poder, vida, defensa, null, null, null);
+        }
     }
 }

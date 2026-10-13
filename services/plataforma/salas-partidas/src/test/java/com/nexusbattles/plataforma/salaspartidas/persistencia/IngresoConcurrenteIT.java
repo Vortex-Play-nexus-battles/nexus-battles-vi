@@ -114,7 +114,7 @@ class IngresoConcurrenteIT {
             Sala enBase = repositorio.buscarPorId(sala.id()).orElseThrow();
             assertAll("la base conserva al ganador y solo al ganador",
                     () -> assertEquals(409, rechazo.estado()),
-                    () -> assertTrue(rechazo.detalle().contains("maximo de participantes"),
+                    () -> assertTrue(rechazo.detalle().contains("máximo de participantes"),
                             "el motivo es el de sala llena, no un error tecnico: " + rechazo.detalle()),
                     () -> assertEquals(2, enBase.ocupacion(), "sin perdida de escritura"),
                     () -> assertEquals(EstadoSala.LLENA, enBase.estado()),

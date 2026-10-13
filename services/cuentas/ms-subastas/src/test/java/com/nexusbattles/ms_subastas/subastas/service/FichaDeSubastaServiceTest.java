@@ -93,6 +93,21 @@ class FichaDeSubastaServiceTest {
     }
 
     @Test
+    @DisplayName("G5: la ficha dice si es propia sin publicar el uid del vendedor (apodo si)")
+    void esPropiaSinUid() throws Exception {
+        SubastaDetalleResponse suya = servicio.ficha(subasta.getId(), VENDEDOR);
+        SubastaDetalleResponse visitante = servicio.ficha(subasta.getId(), null);
+
+        assertTrue(suya.esPropia());
+        assertFalse(visitante.esPropia());
+        assertEquals("forjador", visitante.vendedorApodo());
+        String json = new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules()
+                .writeValueAsString(visitante);
+        assertFalse(json.contains(VENDEDOR.toString()), json);
+        assertNull(visitante.vendedorId(), "el campo sigue en la forma, vacio");
+    }
+
+    @Test
     @DisplayName("un jugador cuenta una vez: la primera suma, las siguientes no")
     void jugadorCuentaUnaVez() {
         UUID jugador = UUID.randomUUID();

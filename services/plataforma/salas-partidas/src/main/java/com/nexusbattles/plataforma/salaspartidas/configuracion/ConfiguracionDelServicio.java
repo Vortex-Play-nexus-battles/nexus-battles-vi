@@ -4,13 +4,16 @@ import com.nexusbattles.plataforma.observabilidad.InterceptorDeTraza;
 import com.nexusbattles.plataforma.resiliencia.CortaCircuitos;
 import com.nexusbattles.plataforma.resiliencia.parametros.LectorDeParametros;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.AbandonarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.AvisoDeInvitacion;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CancelarSala;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.ComprobarIngreso;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CreditosDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.CrearSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IngresarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ListarSalas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.HeroeDelJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.IniciarPartida;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.InvitarASala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerSala;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.VerificarHeroe;
@@ -18,7 +21,10 @@ import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDePartida;
 import com.nexusbattles.plataforma.salaspartidas.dominio.CanalDeSala;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDePartidas;
 import com.nexusbattles.plataforma.salaspartidas.dominio.RepositorioDeSalas;
+import com.nexusbattles.plataforma.salaspartidas.integracion.ClienteNotificacionesDeInvitaciones;
+import com.nexusbattles.plataforma.salaspartidas.mensajesdirectos.DirectorioDeJugadores;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.ClientHttpRequestFactory;
@@ -56,6 +62,13 @@ public class ConfiguracionDelServicio {
         return new IngresarASala(repositorio, canal, heroes, creditos, sanciones);
     }
 
+    /** RFINAL-04 (1.9.0): la sala dice si admite al jugador con su codigo, sin efectos. */
+    @Bean
+    public ComprobarIngreso comprobarIngreso(RepositorioDeSalas repositorio,
+                                             com.nexusbattles.plataforma.salaspartidas.sanciones.SancionesDelJugador sanciones) {
+        return new ComprobarIngreso(repositorio, sanciones);
+    }
+
     @Bean
     public ObtenerSala obtenerSala(RepositorioDeSalas repositorio, RepositorioDePartidas partidas) {
         return new ObtenerSala(repositorio, partidas);
@@ -71,6 +84,24 @@ public class ConfiguracionDelServicio {
     public CancelarSala cancelarSala(RepositorioDeSalas repositorio, CreditosDelJugador creditos,
                                      CanalDeSala canal) {
         return new CancelarSala(repositorio, creditos, canal);
+    }
+
+    /**
+     * 1.10.0 — la invitacion a una sala es un aviso en la bandeja del invitado
+     * (notificaciones), con la misma URL que los avisos de mensajes privados.
+     */
+    @Bean
+    public AvisoDeInvitacion avisoDeInvitacion(
+            @Qualifier("restClientServicios") RestClient http,
+            @Value("${mensajes-directos.notificaciones.url:}") String urlDeNotificaciones) {
+        return new ClienteNotificacionesDeInvitaciones(http, urlDeNotificaciones);
+    }
+
+    /** 1.10.0 — el anfitrion invita por apodo (revision del modo jugador, punto 13). */
+    @Bean
+    public InvitarASala invitarASala(RepositorioDeSalas repositorio, DirectorioDeJugadores directorio,
+                                     AvisoDeInvitacion aviso) {
+        return new InvitarASala(repositorio, directorio, aviso, Clock.systemUTC());
     }
 
     /** HU-SAL-003: verificacion previa de heroe, sin efectos. */
@@ -224,6 +255,21 @@ public class ConfiguracionDelServicio {
             CanalDePartida canal) {
         return new com.nexusbattles.plataforma.salaspartidas.aplicacion.ReintentarLiquidaciones(
                 liquidaciones, recompensas, partidas, liquidar, acreditar, canal);
+    }
+
+    /**
+     * Cierra las salas y partidas abandonadas y devuelve su apuesta (auditoria
+     * de DEV del 30-sep). El plazo es el vencimiento de la reserva en
+     * ms-finanzas, 72 h: una sala no vive mas que la reserva que la respalda
+     * (D-39). La cadencia la pone {@code CierreDeAbandonadasProgramado}.
+     */
+    @Bean
+    public com.nexusbattles.plataforma.salaspartidas.aplicacion.CerrarAbandonadas cerrarAbandonadas(
+            RepositorioDeSalas salas, RepositorioDePartidas partidas, CancelarSala cancelar,
+            com.nexusbattles.plataforma.salaspartidas.aplicacion.LiquidarApuesta apuesta, CanalDePartida canal,
+            @org.springframework.beans.factory.annotation.Value("${salas.abandono.horas:72}") long horas) {
+        return new com.nexusbattles.plataforma.salaspartidas.aplicacion.CerrarAbandonadas(
+                salas, partidas, cancelar, apuesta, canal, Clock.systemUTC(), Duration.ofHours(horas));
     }
 
     /**

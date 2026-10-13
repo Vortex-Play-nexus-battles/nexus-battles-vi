@@ -19,8 +19,81 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Administracion de cuentas (ms-identidad)
-  version: 1.1.0
+  version: 1.5.0
   description: |
+    ### Cambios en 1.5.0 (HU-USR-009 #562 — implementado, aditivo)
+
+    - `buscar` (directorio y exportacion) encuentra ademas la cuenta por su
+      **identificador exacto**, el mismo que acepta la ficha: su `uid`
+      (UUID completo, sin distinguir mayusculas) o su clave `id` (solo
+      cifras, hasta 18). Es un O con la busqueda de siempre: lo que antes
+      aparecia sigue apareciendo. Un texto que no es un identificador (un
+      `uid` a medias, con letras de mas) se busca como texto, sin error.
+    - **La exportacion queda auditada** (decision del PO del 5-oct, datos
+      personales §7.3.6): cada archivo entregado registra en ms-cumplimiento
+      quien exporto, con que filtros y cuantas filas, **nunca el contenido**.
+      Si la bitacora no responde, el archivo se entrega igual y el hecho
+      queda en la bitacora del servicio con su `traceId`. Sin cambios en la
+      forma de la respuesta.
+
+    ### Cambios en 1.4.0 (HU-USR-010, RF-USR-010 — implementado, aditivo)
+
+    - Nueva `GET /admin/usuarios/{usuario}/ficha`: la ficha administrativa de
+      una cuenta (datos de la cuenta y de contacto, rol, estado, registro y
+      ultima entrada) para la vista que consolida al usuario. Acepta la clave
+      interna (`id` del directorio) o el `uid`, porque la cola de moderacion
+      de comentarios solo conoce al autor por su `uid` (CA-02).
+    - **La consulta queda en la auditoria** (observacion de la ficha oficial:
+      son datos personales): cada lectura registra en ms-cumplimiento un
+      evento `OTRO` con quien consulto, la cuenta consultada y la IP. Si la
+      bitacora no responde, la ficha se entrega igual con
+      `accesoAuditado: false` y el evento queda en la bitacora JSON del
+      servicio (regla 6): la vista lo dice, nunca en silencio.
+    - Usuario inexistente: 404 en problem details
+      (`.../errors/cuenta-no-encontrada`), no el texto plano heredado.
+
+    ### Cambios en 1.3.0 (HU-USR-008 #561, 7.3.4 — implementado, todo aditivo)
+
+    - `GET /admin/jugadores` admite cuatro filtros OPCIONALES: `rol`,
+      `estado`, `registradoDesde` y `registradoHasta` (fecha de registro, las
+      dos inclusive). Sin ellos responde igual que en 1.2.0. `buscar` encuentra
+      ademas por los nombres y apellidos del perfil: se suman a apodo y correo,
+      asi que lo que antes aparecia sigue apareciendo. Un valor que no existe
+      (rol o estado fuera de la lista, fecha mal escrita, `registradoDesde`
+      posterior a `registradoHasta`) responde 400 `datos-invalidos` en vez de
+      una lista vacia que pareceria un resultado.
+    - `GET /admin/jugadores/exportacion` (nueva): el listado completo con los
+      mismos filtros, en CSV y con las columnas del directorio. Mismo permiso
+      que el directorio. Si pasa del tope configurado responde 422
+      `exportacion-demasiado-grande` y no entrega un archivo a medias.
+    - `GET /admin/jugadores/indicadores` (nueva): cuantas cuentas hay en total
+      y en cada estado (la foto de ahora) y cuantas se registraron cada dia de
+      un rango (serie continua: los dias sin registros van con 0). Con
+      `ocultarPruebas`, el mismo criterio de cuentas de pruebas que el
+      directorio.
+    - El «historial de sanciones» NO es filtro: este servicio solo guarda la
+      sancion vigente (el `estado` SUSPENDIDO o BANEADO, que si se filtra) y la
+      ultima que proyecto moderacion-sanciones, no el historial (sin
+      advertencias ni las anteriores a B2). El historial es de
+      moderacion-sanciones (`/sanciones/usuarios/{id}`).
+
+    ### Cambios en 1.2.0 (RFINAL-06 — implementado, todo aditivo)
+
+    - `EntradaDeDirectorio` gana `id`: la clave interna de la cuenta, la que
+      esperan `/admin/usuarios/{usuarioId}` y `/rbac/usuarios/{usuarioId}/rol`.
+      El parametro `UsuarioId` ya decia «la del directorio», pero el
+      directorio solo publicaba el `uid`: no habia forma de abrir la ficha de
+      una fila sin conocer un numero que ninguna pantalla mostraba.
+    - `GET /admin/jugadores` admite `ocultarPruebas` (opcional, `false` por
+      omision: sin el, el directorio responde igual que en 1.1.0). Con `true`
+      excluye EN LA CONSULTA, antes de paginar, las cuentas que crean las
+      pruebas automaticas; `total` y `totalPaginas` cuentan solo las que
+      quedan.
+    - `UsuarioAdministrado.id` es la clave de la CUENTA. Se construia con la
+      clave del perfil; coincide con la de la cuenta porque el perfil la
+      comparte (`perfiles_usuario.usuario_id` es su clave primaria), pero era
+      la de otro registro y nada lo garantizaba en el contrato.
+
     ### Cambios en 1.1.0 (B2, BACKEND-02 — implementado)
 
     - 1.1.0 (B2): implementadas `PUT /internal/usuarios/{uid}/estado-sancion`
@@ -89,15 +162,47 @@ paths:
       tags: [administracion]
       operationId: listarDirectorioDeJugadores
       summary: Directorio paginado de cuentas con busqueda
+      description: |
+        Las cuentas mas nuevas primero (`id` descendente). La busqueda, los
+        filtros, el de pruebas automaticas y la paginacion los hace el
+        servidor. Los filtros se combinan entre si (todos a la vez).
       security:
         - tokenDeUsuario: []
       parameters:
         - name: buscar
           in: query
           required: false
-          description: Texto a buscar en apodo o correo (sin distinguir mayusculas).
+          description: |
+            Texto a buscar en apodo o correo (sin distinguir mayusculas). 1.3.0:
+            tambien en los nombres y apellidos del perfil («Ana Perez» encuentra
+            a quien se llama Ana de nombre y Perez de apellido). Una cuenta sin
+            perfil (las administrativas) se sigue encontrando por apodo o correo.
+            1.5.0: si el texto es un identificador, tambien la cuenta que lo
+            tiene, por coincidencia exacta: un `uid` completo (sin distinguir
+            mayusculas) o una clave `id` (solo cifras, hasta 18).
           schema:
             type: string
+        - $ref: '#/components/parameters/FiltroRol'
+        - $ref: '#/components/parameters/FiltroEstado'
+        - $ref: '#/components/parameters/RegistradoDesde'
+        - $ref: '#/components/parameters/RegistradoHasta'
+        - name: ocultarPruebas
+          in: query
+          required: false
+          description: |
+            1.2.0 — `true` excluye las cuentas creadas por las pruebas
+            automaticas (E2E, smoke, canarios, prueba del profesor y
+            laboratorio visual). Una cuenta lo es si su correo esta en un
+            dominio reservado para pruebas o si su apodo empieza por un prefijo
+            de pruebas. Las dos listas son configuracion del servicio, no de
+            este contrato: `IDENTIDAD_DIRECTORIO_PRUEBAS_DOMINIOS` (por
+            omision `nexus.test`) e `IDENTIDAD_DIRECTORIO_PRUEBAS_PREFIJOS` (por
+            omision `qa_,smoke_,canario_`), sin distinguir mayusculas. Se
+            excluyen en la consulta, antes de paginar: `total` y
+            `totalPaginas` cuentan solo las que quedan. No borra ni marca nada.
+          schema:
+            type: boolean
+            default: false
         - name: page
           in: query
           required: false
@@ -120,6 +225,128 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginaDeDirectorio'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+
+  /api/v1/admin/jugadores/exportacion:
+    get:
+      tags: [administracion]
+      operationId: exportarDirectorioDeJugadores
+      summary: El directorio con los filtros vigentes, en CSV (1.3.0); cada exportacion queda auditada (1.5.0)
+      description: |
+        Todas las cuentas que cumplen los filtros (no solo una pagina), en el
+        orden del directorio (las mas nuevas primero), leidas en una sola
+        consulta: el archivo es una foto coherente aunque alguien se registre
+        mientras se descarga.
+
+        Columnas, las que el directorio muestra y ninguna mas: `Apodo`,
+        `Correo`, `Rol`, `Estado` (`BLOQUEADA` si la cuenta tiene ahora un
+        bloqueo temporal por intentos fallidos, como en la tabla), `Registro`
+        y `Última entrada` (fecha y hora `aaaa-mm-dd hh:mm` del reloj del
+        servicio; vacia = sin dato o, en la ultima entrada, nunca ha entrado).
+        Sin identificadores internos ni credenciales.
+
+        Formato: UTF-8 con marca de orden de bytes (para que una hoja de
+        calculo lea bien las tildes), separado por comas, fin de linea CRLF,
+        cada celda de texto entre comillas con las comillas dobladas. Una
+        celda que empiece por `=`, `+`, `-`, `@`, tabulador o retorno se
+        prefija con un apostrofo: una hoja de calculo no la ejecutara como
+        formula (inyeccion CSV).
+
+        Tope tecnico de filas: `IDENTIDAD_DIRECTORIO_EXPORTACION_MAXIMO_FILAS`
+        (por omision 10000). Por encima, 422 y ningun archivo.
+
+        **Auditoria (1.5.0, HU-USR-009).** Cada archivo entregado registra en
+        ms-cumplimiento (`POST /api/v1/admin/auditoria/eventos`, credencial de
+        servicio) un evento `tipoAccion: OTRO` con `administradorId` = quien
+        exporta, `afectado` = `DIRECTORIO_DE_CUENTAS`, `motivo` que empieza
+        por `EXPORTACION_JUGADORES`, la IP de origen y en `valorNuevo` los
+        metadatos: filas, filtros usados, `uid` de quien exporta y `traceId`.
+        Nunca el contenido del archivo. Si la bitacora no responde, el
+        archivo se entrega igual y el hecho queda en la bitacora JSON del
+        servicio (`EXPORTACION_DIRECTORIO_SIN_AUDITAR`), como la ficha. Una
+        exportacion rechazada (400, 422) no entrega archivo y no se audita.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - $ref: '#/components/parameters/BuscarEnDirectorio'
+        - $ref: '#/components/parameters/OcultarPruebas'
+        - $ref: '#/components/parameters/FiltroRol'
+        - $ref: '#/components/parameters/FiltroEstado'
+        - $ref: '#/components/parameters/RegistradoDesde'
+        - $ref: '#/components/parameters/RegistradoHasta'
+      responses:
+        '200':
+          description: El listado en CSV.
+          headers:
+            Content-Disposition:
+              description: '`attachment; filename="directorio-de-cuentas-aaaammdd-hhmm.csv"`'
+              schema:
+                type: string
+          content:
+            text/csv:
+              schema:
+                type: string
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '422':
+          $ref: '#/components/responses/ExportacionDemasiadoGrande'
+
+  /api/v1/admin/jugadores/indicadores:
+    get:
+      tags: [administracion]
+      operationId: indicadoresDeCuentas
+      summary: Cuentas por estado y registros por dia (HU-USR-008, 1.3.0)
+      description: |
+        Dos cosas distintas en una respuesta:
+
+        - `total` y `porEstado`: cuantas cuentas hay AHORA, en total y en cada
+          estado. No dependen del rango (una cuenta suspendida lo esta hoy,
+          se registrara cuando se registrara).
+        - `registros`: cuantas cuentas se registraron cada dia del rango, por
+          la fecha de alta de la cuenta. La serie es continua: un dia sin
+          registros va con 0, no falta. Las cuentas anteriores al campo de
+          fecha de alta no tienen dia y no entran en la serie (si en el total).
+
+        El dia es el del reloj del servicio. Sin rango, los ultimos
+        `IDENTIDAD_INDICADORES_DIAS_POR_OMISION` dias (por omision 30) hasta
+        hoy; con solo `desde`, hasta hoy; con solo `hasta`, esos mismos dias
+        hacia atras. Un rango de mas de `IDENTIDAD_INDICADORES_DIAS_MAXIMOS`
+        dias (por omision 366) responde 400: es un tope tecnico del tamano de
+        la serie, no una regla de negocio.
+
+        Mismo permiso que el directorio. Solo lee: no cambia nada.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Primer dia de la serie (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - name: hasta
+          in: query
+          required: false
+          description: Ultimo dia de la serie (inclusive), `aaaa-mm-dd`.
+          schema:
+            type: string
+            format: date
+        - $ref: '#/components/parameters/OcultarPruebas'
+      responses:
+        '200':
+          description: Los indicadores.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IndicadoresDeCuentas'
+        '400':
+          $ref: '#/components/responses/ConsultaInvalida'
         '403':
           $ref: '#/components/responses/Prohibido'
 
@@ -143,6 +370,73 @@ paths:
           $ref: '#/components/responses/Prohibido'
         '404':
           $ref: '#/components/responses/NoEncontradoTexto'
+
+  /api/v1/admin/usuarios/{usuario}/ficha:
+    get:
+      tags: [administracion]
+      operationId: consultarFichaAdministrativa
+      summary: Ficha administrativa de una cuenta; la consulta queda auditada (HU-USR-010)
+      description: |
+        1.4.0 — RF-USR-010 «Vista administrativa del perfil de usuario». Lo que
+        ms-identidad sabe de la cuenta: identidad y contacto, rol, estado
+        (con la proyeccion de la sancion vigente y el bloqueo por intentos),
+        fecha de registro y ultima entrada. Las sanciones, los comentarios y
+        el resto de la ficha los publica cada servicio dueno del dato; la
+        vista los pide con el `uid` que devuelve esta operacion.
+
+        Mismo permiso que el directorio y la gestion de cuentas
+        (`GESTIONAR_CUENTAS`: Administrador y Super Administrador).
+
+        **Auditoria del acceso.** Cada lectura registra en ms-cumplimiento
+        (`POST /api/v1/admin/auditoria/eventos`, credencial de servicio) un
+        evento `tipoAccion: OTRO` con `administradorId` = quien consulta,
+        `afectado` = la clave interna de la cuenta (como el resto de
+        acciones de este panel), `motivo` «Consulta de la ficha
+        administrativa (datos personales)» y la IP de origen. Si la bitacora
+        no responde, la ficha se entrega con `accesoAuditado: false` y el
+        evento queda en la bitacora JSON del servicio: la interfaz avisa de
+        que esa consulta no quedo en la auditoria.
+
+        La respuesta lleva `Cache-Control: no-store`: son datos personales.
+      security:
+        - tokenDeUsuario: []
+      parameters:
+        - name: usuario
+          in: path
+          required: true
+          description: |
+            La clave interna de la cuenta (el `id` del directorio) o su
+            identificador publico (`uid`). Cualquier otro valor responde 404,
+            igual que una cuenta que no existe.
+          schema:
+            oneOf:
+              - type: string
+                pattern: '^[0-9]{1,18}$'
+              - type: string
+                format: uuid
+      responses:
+        '200':
+          description: La ficha de la cuenta.
+          headers:
+            Cache-Control:
+              description: Siempre `no-store`.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaAdministrativa'
+        '403':
+          $ref: '#/components/responses/Prohibido'
+        '404':
+          description: |
+            No existe una cuenta con ese identificador (o no es ni una clave
+            ni un uid). `type` `.../errors/cuenta-no-encontrada`. No se
+            registra ningun evento de auditoria: no se consulto a nadie.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
 
   /api/v1/admin/usuarios/{usuarioId}/perfil:
     put:
@@ -515,6 +809,64 @@ components:
       schema:
         type: integer
         format: int64
+    BuscarEnDirectorio:
+      name: buscar
+      in: query
+      required: false
+      description: |
+        1.3.0 — el mismo texto que el directorio: apodo, correo o nombres y
+        apellidos del perfil, sin distinguir mayusculas. 1.5.0: tambien el
+        identificador exacto de la cuenta (`uid` completo o clave `id`).
+      schema:
+        type: string
+    OcultarPruebas:
+      name: ocultarPruebas
+      in: query
+      required: false
+      description: |
+        1.3.0 — el mismo criterio que `ocultarPruebas` del directorio: `true`
+        deja fuera las cuentas de las pruebas automaticas (dominio de correo
+        o prefijo de apodo configurados en el servicio).
+      schema:
+        type: boolean
+        default: false
+    FiltroRol:
+      name: rol
+      in: query
+      required: false
+      description: 1.3.0 — solo las cuentas de este rol. Otro valor, 400.
+      schema:
+        type: string
+        enum: [JUGADOR, MODERADOR, ADMINISTRADOR, SUPER_ADMINISTRADOR]
+    FiltroEstado:
+      name: estado
+      in: query
+      required: false
+      description: |
+        1.3.0 — solo las cuentas en este estado. SUSPENDIDO y BANEADO incluyen
+        las filas que el panel anterior a B2 guardo en femenino. Otro valor, 400.
+      schema:
+        type: string
+        enum: [ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO, BANEADO]
+    RegistradoDesde:
+      name: registradoDesde
+      in: query
+      required: false
+      description: |
+        1.3.0 — solo las cuentas registradas ese dia o despues (`aaaa-mm-dd`,
+        dia del reloj del servicio). Con un filtro de fecha, las cuentas sin
+        fecha de alta (anteriores al campo) quedan fuera.
+      schema:
+        type: string
+        format: date
+    RegistradoHasta:
+      name: registradoHasta
+      in: query
+      required: false
+      description: 1.3.0 — solo las cuentas registradas ese dia o antes (inclusive).
+      schema:
+        type: string
+        format: date
 
   responses:
     Prohibido:
@@ -539,6 +891,26 @@ components:
       description: |
         Datos invalidos. `type` `.../errors/datos-invalidos` (sin `sancionId`,
         estado desconocido, SUSPENDIDO sin `hasta`, JSON ilegible).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ConsultaInvalida:
+      description: |
+        1.3.0 — un filtro que no se puede aplicar: rol o estado fuera de la
+        lista, una fecha que no es `aaaa-mm-dd`, un desde posterior al hasta o
+        un rango de indicadores mas largo que el tope. `type`
+        `.../errors/datos-invalidos`; `detail` dice cual, en palabras.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    ExportacionDemasiadoGrande:
+      description: |
+        1.3.0 — los filtros dejan mas cuentas que el tope de una exportacion.
+        `type` `.../errors/exportacion-demasiado-grande`; `detail` dice
+        cuantas son y cual es el tope, para acotar los filtros. No se entrega
+        ningun archivo.
       content:
         application/problem+json:
           schema:
@@ -589,8 +961,15 @@ components:
 
     EntradaDeDirectorio:
       type: object
-      required: [apodo, email, estado, bloqueada]
+      required: [id, apodo, email, estado, bloqueada]
       properties:
+        id:
+          type: integer
+          format: int64
+          description: |
+            1.2.0 — clave interna de la cuenta: la que esperan
+            `/admin/usuarios/{usuarioId}` y `/rbac/usuarios/{usuarioId}/rol`.
+            Sirve para abrir la ficha desde la fila; no es un dato para leer.
         uid:
           type: [string, 'null']
           format: uuid
@@ -616,12 +995,94 @@ components:
           type: boolean
           description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
 
+    IndicadoresDeCuentas:
+      type: object
+      description: 1.3.0 — `GET /admin/jugadores/indicadores`.
+      required: [total, porEstado, registros, ocultarPruebas, calculadoEn]
+      properties:
+        total:
+          type: integer
+          format: int64
+          description: |
+            Cuentas que hay ahora (sin las de pruebas automaticas si
+            `ocultarPruebas`). Es la suma de `porEstado`.
+        porEstado:
+          type: object
+          description: |
+            Cuantas cuentas hay ahora en cada estado. Trae SIEMPRE las cinco
+            claves del contrato, con 0 si no hay ninguna: un estado ausente no
+            es lo mismo que un estado sin cuentas. SUSPENDIDO y BANEADO suman
+            las filas anteriores a B2 (SUSPENDIDA, BANEADA). Un valor guardado
+            que no es ninguno de los cinco no deberia existir; si existe se
+            publica con su nombre en vez de esconderlo.
+          required: [ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO, BANEADO]
+          properties:
+            ACTIVO:
+              type: integer
+              format: int64
+            PENDIENTE_VERIFICACION:
+              type: integer
+              format: int64
+            INACTIVO:
+              type: integer
+              format: int64
+            SUSPENDIDO:
+              type: integer
+              format: int64
+            BANEADO:
+              type: integer
+              format: int64
+          additionalProperties:
+            type: integer
+            format: int64
+        registros:
+          $ref: '#/components/schemas/RegistrosPorDia'
+        ocultarPruebas:
+          type: boolean
+          description: Si se dejaron fuera las cuentas de pruebas automaticas.
+        calculadoEn:
+          type: string
+          format: date-time
+          description: Cuando se contaron.
+
+    RegistrosPorDia:
+      type: object
+      description: 1.3.0 — altas de cuentas por dia, en un rango cerrado.
+      required: [desde, hasta, total, porDia]
+      properties:
+        desde:
+          type: string
+          format: date
+        hasta:
+          type: string
+          format: date
+        total:
+          type: integer
+          format: int64
+          description: Cuentas registradas en el rango (la suma de `porDia`).
+        porDia:
+          type: array
+          description: Un elemento por dia, de `desde` a `hasta`, en orden; los dias sin altas con 0.
+          items:
+            type: object
+            required: [fecha, cuentas]
+            properties:
+              fecha:
+                type: string
+                format: date
+              cuentas:
+                type: integer
+                format: int64
+
     UsuarioAdministrado:
       type: object
       properties:
         id:
           type: integer
           format: int64
+          description: |
+            Clave interna de la CUENTA, la misma de la ruta y del directorio
+            (1.2.0: se construia con la del perfil, ver el cambio).
         apodo:
           type: string
         email:
@@ -638,6 +1099,65 @@ components:
           type: [string, 'null']
         preferencias:
           type: [string, 'null']
+
+    FichaAdministrativa:
+      type: object
+      description: |
+        1.4.0 — lo que ms-identidad publica de una cuenta para su ficha
+        administrativa (HU-USR-010). Nunca la contrasena, su hash ni la
+        version de token.
+      required: [id, apodo, email, estado, bloqueada, accesoAuditado]
+      properties:
+        id:
+          type: integer
+          format: int64
+          description: Clave interna de la cuenta (la de `/admin/usuarios/{usuarioId}`).
+        uid:
+          type: [string, 'null']
+          format: uuid
+          description: |
+            Identificador publico: con el se piden las sanciones y los
+            comentarios de la cuenta a sus servicios. Nulo en cuentas
+            anteriores al identificador publico.
+        apodo:
+          type: string
+        email:
+          type: string
+          description: Correo de contacto de la cuenta.
+        nombres:
+          type: [string, 'null']
+          description: Del perfil; nulo si la cuenta no tiene perfil (las administrativas).
+        apellidos:
+          type: [string, 'null']
+        avatar:
+          type: [string, 'null']
+        rol:
+          type: [string, 'null']
+          description: JUGADOR, MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR.
+        estado:
+          type: string
+          description: ACTIVO, PENDIENTE_VERIFICACION, INACTIVO, SUSPENDIDO o BANEADO.
+        suspendidoHasta:
+          type: [string, 'null']
+          format: date-time
+          description: Fin de la suspension vigente, si la hay.
+        bloqueada:
+          type: boolean
+          description: Bloqueo temporal por intentos fallidos de login (no es una sancion).
+        creadoEn:
+          type: [string, 'null']
+          format: date-time
+          description: Registro de la cuenta; nulo en cuentas anteriores al campo.
+        ultimoAcceso:
+          type: [string, 'null']
+          format: date-time
+          description: Ultima entrada correcta; nulo si nunca ha entrado.
+        accesoAuditado:
+          type: boolean
+          description: |
+            `true` si esta consulta quedo registrada en la auditoria de
+            ms-cumplimiento; `false` si la bitacora no respondio (el evento
+            quedo solo en la bitacora JSON del servicio).
 
     ProyeccionDeSancion:
       type: object

@@ -20,7 +20,8 @@
  */
 
 import { h, clases } from '../dom.js';
-import { icono } from '../icono.js';
+import { ICONOS, icono } from '../icono.js';
+import { animar, permitido } from '../motion.js';
 
 /**
  * Construye el marcado de una barra de vida, listo para `actualizar()` del kit.
@@ -34,10 +35,17 @@ import { icono } from '../icono.js';
  * @param {string} [participante.idJugador]
  * @param {boolean} [participante.esIA]
  * @param {number} [participante.equipo]
+ * @param {boolean} [participante.esPropia]
+ *   la barra de quien mira. Revisión del modo jugador (6-oct): la de la IA
+ *   decía «IA» y la propia nada, así que cuando el contragolpe bajaba tu barra
+ *   parecía que tu golpe te había dañado. Ahora la tuya dice «Tú».
  * @returns {HTMLElement}
  */
-export function barraDeVida({ nombre, idJugador, esIA = false, equipo }) {
+export function barraDeVida({ nombre, idJugador, esIA = false, equipo, esPropia = false }) {
   const etiquetas = [];
+  if (esPropia) {
+    etiquetas.push('Tú');
+  }
   if (esIA) {
     etiquetas.push('IA');
   }
@@ -50,6 +58,7 @@ export function barraDeVida({ nombre, idJugador, esIA = false, equipo }) {
     datos: {
       barraVida: '',
       ...(idJugador ? { jugador: idJugador } : {}),
+      ...(esPropia ? { propia: 'true' } : {}),
       ...(esIA ? { ia: 'true' } : {}),
       ...(Number.isInteger(equipo) && equipo > 0 ? { equipo: String(equipo) } : {}),
     },
@@ -268,14 +277,21 @@ export function actualizarTurno(indicador, { texto, propio = false, ronda }) {
  * el medidor dice la capacidad y que no hay seguimiento, en vez de enseñar un
  * «10/10» que nadie ha calculado.
  *
- * @param {{maximo: number|null, actual?: number|null}} poder
+ * Revisión del modo jugador (6-oct): «Poder 10/10 no suma ni resta». El
+ * servidor sí lo descontaba, pero el +2 del turno siguiente llegaba casi a la
+ * vez y el medidor volvía a 10/10 sin que nadie lo viera bajar. Con `cambio`
+ * el medidor enseña el movimiento («−2», «+2») junto a la cifra, la que mandó
+ * el servidor: aquí no se resta ni se suma nada.
+ *
+ * @param {{maximo: number|null, actual?: number|null, cambio?: number|null}} poder
  * @returns {HTMLElement|null} `null` si no se conoce ni el máximo
  */
-export function medidorDePoder({ maximo, actual = null }) {
+export function medidorDePoder({ maximo, actual = null, cambio = null }) {
   if (!Number.isFinite(maximo) || maximo <= 0) {
     return null;
   }
   const conActual = Number.isFinite(actual);
+  const conCambio = conActual && Number.isFinite(cambio) && cambio !== 0;
   const segmentos = Math.min(Math.round(maximo), 12);
   return h('div', {
     clase: clases('medidor-poder', !conActual && 'medidor-poder--sin-seguimiento'),
@@ -298,6 +314,16 @@ export function medidorDePoder({ maximo, actual = null }) {
             clase: 'medidor-poder__valor',
             texto: conActual ? `${actual}/${maximo}` : `máx. ${maximo}`,
           }),
+          // El movimiento, solo para la vista: el registro ya lo dice con
+          // palabras («Gastas 2 de poder (8/10)») para el lector de pantalla.
+          conCambio
+            ? h('span', {
+                clase: 'medidor-poder__cambio',
+                texto: cambio > 0 ? `+${cambio}` : `−${Math.abs(cambio)}`,
+                datos: { signo: cambio > 0 ? 'positivo' : 'negativo' },
+                atributos: { 'aria-hidden': 'true' },
+              })
+            : null,
         ],
       }),
       h('span', {
@@ -496,13 +522,76 @@ export function registroDeCombate({ maximo = 40 } = {}) {
  * @param {{cifra: string, etiqueta?: string|null, tono?: string}} impacto
  * @returns {HTMLElement}
  */
-export function impactoEnCampo({ cifra, etiqueta = null, tono = 'dano' }) {
+export function impactoEnCampo({
+  cifra,
+  etiqueta = null,
+  tono = 'dano',
+  unidad = null,
+  icono: nombreDelIcono = null,
+}) {
   return h('span', {
     clase: `impacto impacto--${tono}`,
     atributos: { 'aria-hidden': 'true' },
     hijos: [
-      h('span', { clase: 'impacto__cifra', texto: cifra }),
+      h('span', {
+        clase: 'impacto__cifra',
+        hijos: [
+          // MOTION-2: el icono del golpe (espada, fuego, copo, gota, cruz,
+          // rayo, escudo) delante de la cifra: nunca solo color (RNF-USA-002).
+          nombreDelIcono && ICONOS.includes(nombreDelIcono)
+            ? icono(nombreDelIcono, { clase: 'icono impacto__icono', etiqueta: null })
+            : null,
+          h('span', { texto: cifra }),
+          // Revisión del 6-oct, punto 19: «−4 VIDA», «−2 PODER», «+3 VIDA».
+          unidad ? h('span', { clase: 'impacto__unidad', texto: ` ${unidad}` }) : null,
+        ],
+      }),
       etiqueta ? h('span', { clase: 'impacto__etiqueta', texto: etiqueta }) : null,
     ],
   });
+}
+
+/**
+ * La estela del golpe en una barra de vida — MOTION-2.
+ *
+ * Lo que la barra acaba de perder se queda un instante en claro y se encoge
+ * hacia la vida que queda: el ojo ve CUÁNTO se perdió, no solo que bajó. Es
+ * adorno (la cifra del acuse y el valor numérico ya lo dicen): con movimiento
+ * reducido no se crea, y solo anima transform y opacity.
+ *
+ * @param {HTMLElement} barra `.barra-vida`
+ * @param {number} antes vida antes del golpe
+ * @param {number} despues vida después
+ * @param {number} maxima vida máxima
+ * @returns {HTMLElement|null} la estela, si la hubo
+ */
+export function estelaDeVida(barra, antes, despues, maxima) {
+  const pista = barra?.querySelector?.('.barra-vida__pista');
+  if (
+    !pista ||
+    typeof pista.animate !== 'function' ||
+    !permitido() ||
+    !(maxima > 0) ||
+    !(antes > despues)
+  ) {
+    return null;
+  }
+  pista.querySelector('.barra-vida__estela')?.remove();
+  const desde = (Math.max(0, despues) / maxima) * 100;
+  const ancho = ((Math.min(antes, maxima) - Math.max(0, despues)) / maxima) * 100;
+  const estela = h('span', { clase: 'barra-vida__estela', atributos: { 'aria-hidden': 'true' } });
+  estela.style.setProperty('--estela-desde', desde.toFixed(2));
+  estela.style.setProperty('--estela-ancho', ancho.toFixed(2));
+  pista.append(estela);
+  const animacion = animar(
+    estela,
+    [
+      { transform: 'scaleX(1)', opacity: 1 },
+      { transform: 'scaleX(1)', opacity: 1, offset: 0.35 },
+      { transform: 'scaleX(0)', opacity: 0.4 },
+    ],
+    { duracion: 'turn', curva: 'exit', relleno: 'forwards' },
+  );
+  animacion.finished.then(() => estela.remove()).catch(() => estela.remove());
+  return estela;
 }

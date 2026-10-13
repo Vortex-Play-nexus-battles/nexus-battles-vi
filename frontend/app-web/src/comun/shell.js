@@ -49,6 +49,7 @@ import {
   destinoVisible,
   esRolDeTrastienda,
   puedeVer,
+  rutaDeVista,
   urlDeVista,
   VEREDICTO,
 } from './acceso.js';
@@ -57,6 +58,7 @@ import { montarAsistente } from './ui/asistente.js';
 import { h } from './ui/dom.js';
 import { vigilarSesion } from './vigilante-sesion.js';
 import { vigilarRed } from './ui/aviso-de-red.js';
+import { montarAvisosDeCabecera } from './avisos-de-cabecera.js';
 
 const BASE_RUTAS = import.meta.url;
 
@@ -89,15 +91,45 @@ export const SECCIONES = Object.freeze([
 ]);
 
 /**
+ * Revisión del modo jugador del 6-oct, punto 7: «quitar la duplicidad de
+ * botones en entrada… implementar los que no están [arriba] y ponerlos
+ * arriba». El inicio repetía, en «A dónde ir», los seis destinos de la barra
+ * y dos que no estaban en ella: la tienda y el chat. Esos dos suben a la
+ * barra como atajos del HUD, junto a la campana, con su icono. No son
+ * destinos de RF-INV-008 —los seis siguen siendo los seis, con sus etiquetas
+ * literales— ni la convierten en una barra de quince enlaces.
+ */
+export const ATAJOS_DEL_HUD = Object.freeze([
+  { id: 'tienda', etiqueta: 'Tienda', vista: 'tienda', icono: 'carrito' },
+  { id: 'chat', etiqueta: 'Chat', vista: 'chat', icono: 'chat' },
+]);
+
+/**
  * La consola. Solo herramientas que existen de verdad (§10): cada entrada
  * apunta a una vista de `MATRIZ`, y `MATRIZ` se comprueba contra el disco.
  * Un moderador no ve «Parámetros» porque `puedeVer` dice que no, no porque
  * aquí haya una lista aparte.
+ *
+ * `barra: false` deja la herramienta en el aterrizaje de la consola
+ * (`consola.js`) y fuera de la barra de navegación.
  */
 export const SECCIONES_CONSOLA = Object.freeze([
   { id: 'resumen', etiqueta: 'Resumen', vista: 'consola', icono: 'panel' },
   { id: 'control', etiqueta: 'Control integral', vista: 'control-integral', icono: 'pulso' },
   { id: 'usuarios', etiqueta: 'Usuarios', vista: 'gestion-usuarios', icono: 'usuarios' },
+  // RFINAL-06 — la vista existía (RF-RBAC-003) y ninguna herramienta llevaba a
+  // ella: solo se llegaba escribiendo su dirección. La matriz la deja abrir
+  // solo al super administrador. Va en el aterrizaje y no en la barra: su
+  // vista ya marca «Usuarios» como sección activa, y la barra del super
+  // administrador está medida para caber en una fila (componentes.css,
+  // UX-GAME-6 y B3); un destino más, y tan largo, la partiría en dos.
+  {
+    id: 'crear-cuenta-admin',
+    etiqueta: 'Crear cuenta administrativa',
+    vista: 'crear-cuenta-admin',
+    icono: 'usuarios',
+    barra: false,
+  },
   { id: 'productos', etiqueta: 'Productos', vista: 'productos', icono: 'mochila' },
   // B3 — la cola de comentarios reportados (RF-COM-005/008, 7.3.3). Existía y
   // ninguna entrada de la consola llevaba a ella: solo se llegaba escribiendo
@@ -331,6 +363,9 @@ function menuDeCuenta({ sesion, base, almacen, navegar, opcionesExtra = [] }) {
     ['Historial de transacciones', RUTAS.historial, 'historial-transacciones'],
     ['Mis cofres', RUTAS.cofres, 'mis-cofres'],
     ['Tienda', RUTAS.tienda, 'tienda'],
+    // Punto 7 — en el teléfono los atajos del HUD no caben en la barra: el
+    // chat queda aquí, junto a la tienda.
+    ['Chat', rutaDeVista('chat'), 'chat'],
     ['Mis sanciones', RUTAS.misSanciones, 'mis-sanciones'],
     ...opcionesExtra,
   ];
@@ -593,6 +628,7 @@ export function montarArmazonJugador(
     }
     acciones.append(
       indicadorDeCreditos(base),
+      ...atajosDelHud({ sesion, base, seccionActiva }),
       campana(base),
       menuDeCuenta({
         sesion,
@@ -609,6 +645,31 @@ export function montarArmazonJugador(
   cabecera.append(acciones);
   raiz.replaceChildren(cabecera);
   return { elemento: cabecera, sesion };
+}
+
+/**
+ * Punto 7 — la tienda y el chat como atajos del HUD: un icono con su nombre
+ * accesible (y el mismo de ayuda al pasar el puntero). Solo los que la matriz
+ * deja ver a quien mira; el de la vista en curso queda marcado.
+ *
+ * @param {{sesion: object, base: string, seccionActiva: string|null}} opciones
+ * @returns {HTMLAnchorElement[]}
+ */
+function atajosDelHud({ sesion, base, seccionActiva }) {
+  return ATAJOS_DEL_HUD.filter((atajo) => destinoVisible(atajo.vista, sesion)).map((atajo) => {
+    const enlaceAtajo = h('a', {
+      clase: 'cabecera__atajo',
+      atributos: { 'aria-label': atajo.etiqueta, title: atajo.etiqueta },
+      datos: { atajo: atajo.id },
+    });
+    enlaceAtajo.href = urlDeVista(atajo.vista, base);
+    enlaceAtajo.append(icono(atajo.icono, base));
+    if (atajo.id === seccionActiva) {
+      enlaceAtajo.classList.add('activo');
+      enlaceAtajo.setAttribute('aria-current', 'page');
+    }
+    return enlaceAtajo;
+  });
 }
 
 /** Créditos: oculto hasta que la vista sepa la cifra. Nunca se inventa. */
@@ -769,6 +830,9 @@ export function montarArmazonAdmin(
     atributos: { id: 'cabecera-nav', 'aria-label': 'Herramientas de operación' },
   });
   for (const seccion of SECCIONES_CONSOLA) {
+    if (seccion.barra === false) {
+      continue;
+    }
     if (seccion.vista !== 'consola' && !destinoVisible(seccion.vista, sesion)) {
       continue;
     }
@@ -832,6 +896,8 @@ export function montarArmazonAdmin(
  * @param {string|null} [opciones.vista] clave de `MATRIZ` — de dónde sale todo
  * @param {'publico'|'jugador'|'admin'} [opciones.armazon] fuerza uno
  * @param {(opciones: object) => unknown} [opciones.vigilar] inyectable en pruebas
+ * @param {(opciones: {raiz: HTMLElement}) => unknown} [opciones.avisos]
+ *   el contador de la campana (`avisos-de-cabecera.js`); inyectable en pruebas
  * @returns {{elemento: HTMLElement, sesion: object|null}}
  */
 export function montarArmazon(
@@ -849,6 +915,7 @@ export function montarArmazon(
     },
     documento = globalThis.document,
     vigilar = vigilarSesion,
+    avisos = montarAvisosDeCabecera,
   } = {},
 ) {
   // Página interrumpida por una guarda (§17): no se monta nada encima.
@@ -883,7 +950,7 @@ export function montarArmazon(
   if (elegido === 'admin') {
     return montarArmazonAdmin(raiz, { seccionActiva, sesion, base, almacen, navegar });
   }
-  return montarArmazonJugador(raiz, {
+  const montado = montarArmazonJugador(raiz, {
     seccionActiva,
     buscador,
     sesion,
@@ -891,6 +958,12 @@ export function montarArmazon(
     almacen,
     navegar,
   });
+  // Auditoría de DEV del 30-sep: el contador de la campana solo se encendía
+  // en la vista de notificaciones, que monta su propia bandeja completa.
+  if (sesion.autenticado && vista !== 'notificaciones') {
+    avisos({ raiz: montado.elemento });
+  }
+  return montado;
 }
 
 export { ACCESO };

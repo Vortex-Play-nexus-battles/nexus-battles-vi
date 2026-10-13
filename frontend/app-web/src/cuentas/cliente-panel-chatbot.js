@@ -56,6 +56,22 @@ export function consultaDePeriodo({ desde = null, hasta = null } = {}) {
 }
 
 /**
+ * Parámetros de la bandeja de solicitudes de soporte.
+ *
+ * @param {{estado?: string|null, pagina?: number, tamano?: number}} filtro
+ * @returns {string} con `?` delante
+ */
+export function consultaDeTickets({ estado = null, pagina = 0, tamano = 20 } = {}) {
+  const parametros = new URLSearchParams();
+  if (estado) {
+    parametros.set('estado', estado);
+  }
+  parametros.set('pagina', String(pagina));
+  parametros.set('tamano', String(tamano));
+  return `?${parametros.toString()}`;
+}
+
+/**
  * @param {{fetch?: typeof fetch, almacenLocal?: Storage|null,
  *          sesion?: () => {token: string|null}}} [opciones]
  */
@@ -138,6 +154,10 @@ export function crearClientePanelChatbot({
     // --- Reentrenamiento (RF-CHA-014)
     evaluarCandidata: () => json('POST', `${BASE_CONOCIMIENTO}/borrador/evaluacion`),
     desplegarCandidata: () => json('POST', `${BASE_CONOCIMIENTO}/borrador/despliegue`),
+    // ms-chatbot.yaml 1.3.8: publicación programada de la candidata.
+    programarDespliegue: (desplegarEn) =>
+      json('PUT', `${BASE_CONOCIMIENTO}/borrador/programacion`, { desplegarEn }),
+    cancelarProgramacion: () => json('DELETE', `${BASE_CONOCIMIENTO}/borrador/programacion`),
     revertir: () => json('POST', `${BASE_CONOCIMIENTO}/produccion/reversion`),
     listarCasos: () => json('GET', `${BASE_CONOCIMIENTO}/casos-evaluacion`),
     crearCaso: (datos) => json('POST', `${BASE_CONOCIMIENTO}/casos-evaluacion`, datos),
@@ -145,6 +165,13 @@ export function crearClientePanelChatbot({
       json('PUT', `${BASE_CONOCIMIENTO}/casos-evaluacion/${encodeURIComponent(casoId)}`, datos),
     eliminarCaso: (casoId) =>
       json('DELETE', `${BASE_CONOCIMIENTO}/casos-evaluacion/${encodeURIComponent(casoId)}`),
+
+    // --- Soporte: solicitudes de los jugadores (ms-chatbot.yaml 1.3.0)
+    listarTickets: ({ estado = null, pagina = 0, tamano = 20 } = {}) =>
+      json('GET', `${PANEL}/tickets${consultaDeTickets({ estado, pagina, tamano })}`),
+    obtenerTicket: (ticketId) => json('GET', `${PANEL}/tickets/${encodeURIComponent(ticketId)}`),
+    atenderTicket: (ticketId, datos) =>
+      json('PATCH', `${PANEL}/tickets/${encodeURIComponent(ticketId)}`, datos),
   };
 }
 

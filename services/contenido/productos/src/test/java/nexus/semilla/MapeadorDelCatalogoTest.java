@@ -221,10 +221,18 @@ class MapeadorDelCatalogoTest {
         assertEquals("+4 al daño, +2% de crítico", s.efectoPotenciado());
         assertEquals(2, s.turnosRecarga());
         assertEquals(MapeadorDelCatalogo.identificador("heroe-guerrero-tanque"), s.heroe());
-        assertEquals(500, s.precioCreditos());
-        assertPesos("10000", s.precioMonedaReal());
-        assertFalse(s.premium(), "con precio en pesos sigue sin ser premium");
         assertTrue(s.descripcion().contains("0.04%"), s.descripcion());
+    }
+
+    @Test
+    @DisplayName("EPICA: no se vende (RG-085); aunque el JSON traiga precio para el tipo, sale en 0 creditos y 0 pesos")
+    void epicaSinPrecioDeVenta() {
+        SolicitudCrearProducto s = mapearValido(EPICA);
+
+        assertEquals(0, s.precioCreditos());
+        assertPesos("0", s.precioMonedaReal());
+        assertFalse(s.premium(), "sin precio en pesos tampoco es premium");
+        assertTrue(validador.validate(s).isEmpty(), "una epica sin precio sigue siendo un alta valida");
     }
 
     @Test
@@ -300,10 +308,11 @@ class MapeadorDelCatalogoTest {
                 .peek(s -> {
                     var violaciones = validador.validate(s);
                     assertTrue(violaciones.isEmpty(), () -> s.nombre() + ": " + violaciones);
-                    assertTrue(s.precioCreditos() != null && s.precioCreditos() > 0, s.nombre());
+                    boolean seVende = s.tipo() != TipoProducto.EPICA; // RG-085: las epicas no
+                    assertTrue(s.precioCreditos() != null && (s.precioCreditos() > 0) == seVende, s.nombre());
                     assertTrue(s.precioMonedaReal() != null
-                            && s.precioMonedaReal().signum() > 0,
-                            () -> s.nombre() + " sin precio en pesos: la tienda no lo mostraria");
+                            && (s.precioMonedaReal().signum() > 0) == seVende,
+                            () -> s.nombre() + ": precio en pesos incoherente con si se vende o no");
                     assertFalse(s.premium(), s.nombre());
                 })
                 .collect(Collectors.groupingBy(SolicitudCrearProducto::tipo, Collectors.counting()));

@@ -12,6 +12,8 @@ import { jest } from '@jest/globals';
 
 import {
   montarSalaDeEspera,
+  motivoParaNoEmpezar,
+  MOTIVO_SIN_RIVAL,
   textoDeConfirmacion,
   textoDeOcupacion,
   dejarAvisoParaElListado,
@@ -19,7 +21,15 @@ import {
   salidaAlListado,
   invitacionDe,
   montarInvitacion,
+  salaEnEspera,
+  salaCerrada,
+  pintarSalaCerrada,
   CLAVE_AVISO_DEL_LISTADO,
+  tituloDeLaSala,
+  datosDeLaSala,
+  plazasDeLaSala,
+  contadorDePlazas,
+  estadoDeLaEspera,
 } from './sala-de-espera.js';
 
 const ANFITRION = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -163,6 +173,67 @@ describe('montarSalaDeEspera · quien ve que', () => {
     expect(document.querySelector('[data-zona="ocupacion"]').textContent).toBe(
       '3 de 4 jugadores en la sala',
     );
+  });
+});
+
+describe('montarSalaDeEspera · «Iniciar combate» sin rival (auditoría de DEV del 30-sep)', () => {
+  const CON_ARRANQUE = `
+    <div data-zona="arranque">
+      <button type="button" data-accion="iniciar-partida">Iniciar combate</button>
+      <span data-zona="aviso-arranque" role="status"></span>
+    </div>
+    ${VISTA}
+  `;
+
+  test('la regla es la del servidor: hacen falta dos, contando a la IA', () => {
+    expect(motivoParaNoEmpezar({ actual: 1 })).toBe(MOTIVO_SIN_RIVAL);
+    expect(motivoParaNoEmpezar({ actual: 2 })).toBeNull();
+  });
+
+  test('con 1 de 2 el anfitrión ve el botón cerrado y por qué; al entrar alguien se abre', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    const espera = montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 1, maximoParticipantes: 2 }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    const boton = document.querySelector('[data-accion="iniciar-partida"]');
+    const aviso = document.querySelector('[data-zona="aviso-arranque"]');
+
+    expect(boton.disabled).toBe(true);
+    expect(boton.title).toBe(MOTIVO_SIN_RIVAL);
+    expect(aviso.textContent).toBe(MOTIVO_SIN_RIVAL);
+    expect(boton.getAttribute('aria-describedby')).toBe(aviso.id);
+
+    espera.actualizar({ ocupacion: { actual: 2, maximo: 2 } });
+
+    expect(boton.disabled).toBe(false);
+    expect(aviso.textContent).toBe('');
+    expect(boton.hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  test('con rival desde el principio (la IA cuenta) el botón nace abierto', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 2, maximoParticipantes: 2 }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+  });
+
+  test('a quien no es anfitrión no se le toca nada: el botón ni siquiera es suyo', () => {
+    document.body.innerHTML = CON_ARRANQUE;
+    montarSalaDeEspera(document, {
+      sala: sala({ ocupacion: 1 }),
+      yo: VISITANTE,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+    expect(document.querySelector('[data-zona="aviso-arranque"]').textContent).toBe('');
   });
 });
 
@@ -475,5 +546,279 @@ describe('FI-R4 - la invitacion de una sala privada', () => {
 
     expect(acuse()).not.toMatch(/copiado/i);
     expect(acuse()).toMatch(/no se pudo copiar/i);
+  });
+
+  test('RFINAL-04: en una sala que ya terminó no se ofrece el código ni el enlace', () => {
+    const pintada = montarInvitacion(raiz, {
+      sala: { id: ID, codigoInvitacion: 'WXYZ-2345', estado: 'FINALIZADA' },
+      origen: ORIGEN,
+    });
+
+    expect(pintada).toBe(false);
+    expect(zona().hidden).toBe(true);
+  });
+});
+
+/**
+ * RFINAL-04 — revisión de AWS DEV del 4-oct: tras el combate seguían a la
+ * vista «Iniciar combate», «Copiar código/enlace» y «Cancelar sala».
+ */
+describe('RFINAL-04 · una sala que ya no espera solo ofrece lo pertinente', () => {
+  const RUTAS = { batallas: '/batallas', cuenta: '/perfil' };
+
+  test.each([
+    ['ABIERTA', true],
+    ['PRIVADA', true],
+    ['LLENA', true],
+    ['EN_JUEGO', false],
+    ['FINALIZADA', false],
+    ['CANCELADA', false],
+  ])('salaEnEspera(%s) es %s', (estado, espera) => {
+    expect(salaEnEspera({ estado })).toBe(espera);
+  });
+
+  test('sin estado (una ficha vieja) se supone que espera, como hasta ahora', () => {
+    expect(salaEnEspera({})).toBe(true);
+    expect(salaCerrada({}, RUTAS)).toBeNull();
+  });
+
+  test('una sala terminada ofrece volver a Jugar online y ver la cuenta; nada más', () => {
+    const cerrada = salaCerrada({ estado: 'FINALIZADA' }, RUTAS);
+
+    expect(cerrada.titulo).toMatch(/terminó/);
+    expect(cerrada.acciones.map((a) => a.texto)).toEqual([
+      'Volver a Jugar online',
+      'Ver mi cuenta',
+    ]);
+    expect(cerrada.acciones.map((a) => a.href)).toEqual(['/batallas', '/perfil']);
+  });
+
+  test('una sala cancelada solo ofrece volver', () => {
+    const cerrada = salaCerrada({ estado: 'CANCELADA' }, RUTAS);
+
+    expect(cerrada.acciones.map((a) => a.texto)).toEqual(['Volver a Jugar online']);
+  });
+
+  test('pintarSalaCerrada cambia «Ver salas abiertas / Crear sala» por las acciones pertinentes', () => {
+    document.body.innerHTML = `
+      <div data-zona="sin-partida">
+        <p class="estado-vista__titulo">La batalla todavía no empieza</p>
+        <p class="estado-vista__detalle">Estás en la sala, esperando.</p>
+        <div class="fila">
+          <a href="./batallas.html">Ver salas abiertas</a>
+          <a href="./crear-sala.html">Crear sala</a>
+        </div>
+      </div>`;
+
+    pintarSalaCerrada(document, salaCerrada({ estado: 'FINALIZADA' }, RUTAS));
+
+    const zona = document.querySelector('[data-zona="sin-partida"]');
+    expect(zona.querySelector('.estado-vista__titulo').textContent).toMatch(/terminó/);
+    expect([...zona.querySelectorAll('.fila a')].map((a) => a.textContent)).toEqual([
+      'Volver a Jugar online',
+      'Ver mi cuenta',
+    ]);
+    expect(zona.textContent).not.toMatch(/Iniciar combate|Cancelar sala|Copiar/);
+  });
+
+  test('montarSalaDeEspera en una sala terminada no ofrece «Cancelar sala» ni «Salir»', () => {
+    const espera = montarSalaDeEspera(document, {
+      sala: sala({ estado: 'FINALIZADA' }),
+      yo: ANFITRION,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+    });
+
+    expect(document.querySelector('[data-accion="cancelar-sala"]').hidden).toBe(true);
+    expect(document.querySelector('[data-accion="salir-de-sala"]').hidden).toBe(true);
+    expect(document.querySelector('[data-zona="espera"]').hidden).toBe(true);
+    expect(espera.esAnfitrion).toBe(true);
+  });
+});
+
+/**
+ * Revision del modo jugador del 6-oct (puntos 13, 14 y 16) — la sala de
+ * espera en tres zonas: estado, plazas y acciones.
+ */
+describe('sala de espera en tres zonas (revisión del 6-oct)', () => {
+  const YO = ANFITRION;
+  const OTRO = VISITANTE;
+
+  const TARJETA = `
+    <section data-zona="sala-espera" hidden>
+      <h2 data-zona="titulo-sala"></h2>
+      <ul data-zona="datos-sala"></ul>
+      <span data-zona="contador-plazas"></span>
+      <span data-zona="ocupacion"></span>
+      <ol data-zona="plazas"></ol>
+      <p data-zona="estado-espera"></p>
+      <div data-zona="arranque">
+        <button type="button" data-accion="iniciar-partida">Iniciar combate</button>
+        <span data-zona="aviso-arranque"></span>
+      </div>
+      <div data-zona="espera" hidden>
+        <button type="button" data-accion="salir-de-sala" hidden>Salir de la sala</button>
+        <button type="button" data-accion="cancelar-sala" hidden>Cancelar sala</button>
+        <span data-zona="aviso-espera"></span>
+      </div>
+    </section>
+  `;
+
+  const unoContraUno = (cambios = {}) => ({
+    id: 's1',
+    estado: 'ABIERTA',
+    modalidad: 'UNO_CONTRA_UNO',
+    idAnfitrion: YO,
+    apodoAnfitrion: 'Perez_Bro15',
+    ocupacion: 1,
+    maximoParticipantes: 2,
+    heroesIA: 0,
+    privada: false,
+    recompensaCreditos: 500,
+    participantes: [YO],
+    jugadores: [{ id: YO, apodo: 'Perez_Bro15', anfitrion: true, heroe: 'Sombra de Vael' }],
+    ...cambios,
+  });
+
+  const montarConTarjeta = (opciones) => {
+    document.body.innerHTML = TARJETA;
+    return montarSalaDeEspera(document, {
+      yo: YO,
+      abandonar: jest.fn(),
+      cancelar: jest.fn(),
+      ...opciones,
+    });
+  };
+
+  test('A · título y datos: modalidad, pública o privada, la apuesta y el anfitrión', () => {
+    expect(tituloDeLaSala({ modalidad: 'CONTRA_IA' })).toBe('Solo contra la IA');
+    expect(tituloDeLaSala({ modalidad: 'HASTA_SEIS', tamanoEquipo: 2 })).toBe(
+      'Hasta seis · Equipos de 2',
+    );
+    expect(datosDeLaSala(unoContraUno()).map((d) => d.texto)).toEqual([
+      'Pública',
+      'Apuesta: 500 créditos',
+      'Anfitrión: Perez_Bro15',
+    ]);
+    expect(datosDeLaSala({ privada: true, recompensaCreditos: 0 }).map((d) => d.texto)).toEqual([
+      'Privada',
+      'Sin apuesta',
+    ]);
+  });
+
+  test('B · una plaza por puesto: la tuya con tu apodo, la libre esperando', () => {
+    expect(plazasDeLaSala(unoContraUno(), { yo: YO })).toEqual([
+      {
+        tipo: 'jugador',
+        id: YO,
+        apodo: 'Perez_Bro15',
+        anfitrion: true,
+        heroe: 'Sombra de Vael',
+        tu: true,
+      },
+      { tipo: 'libre' },
+    ]);
+  });
+
+  test('B · contra la IA: tú y la IA, sin plazas libres', () => {
+    const solo = unoContraUno({ modalidad: 'CONTRA_IA', heroesIA: 1, ocupacion: 2 });
+    expect(plazasDeLaSala(solo, { yo: YO }).map((p) => p.tipo)).toEqual(['jugador', 'ia']);
+  });
+
+  test('B · sin apodos (quien mira desde fuera) la plaza no inventa: dice «Jugador»', () => {
+    const plazas = plazasDeLaSala(
+      { participantes: [OTRO], maximoParticipantes: 2, idAnfitrion: OTRO },
+      { yo: YO },
+    );
+    expect(plazas[0]).toEqual(
+      expect.objectContaining({ tipo: 'jugador', apodo: null, anfitrion: true, tu: false }),
+    );
+  });
+
+  test('el contador es «1 / 2»; el estado espera rival o está listo', () => {
+    expect(contadorDePlazas({ actual: 1, maximo: 2 })).toBe('1 / 2');
+    expect(estadoDeLaEspera({ ocupacion: { actual: 1, maximo: 2 }, esAnfitrion: true })).toEqual({
+      texto: 'Esperando rival…',
+      listo: false,
+    });
+    expect(estadoDeLaEspera({ ocupacion: { actual: 2, maximo: 2 }, esAnfitrion: true }).texto).toBe(
+      'Listo para combatir',
+    );
+    expect(estadoDeLaEspera({ ocupacion: { actual: 2, maximo: 4 }, esAnfitrion: true }).texto).toBe(
+      'Listo para combatir · 2 plazas libres',
+    );
+    expect(
+      estadoDeLaEspera({
+        ocupacion: { actual: 2, maximo: 2 },
+        esAnfitrion: false,
+        apodoAnfitrion: 'Perez_Bro15',
+      }).texto,
+    ).toBe('Listo para combatir · esperando a que Perez_Bro15 lo inicie');
+  });
+
+  test('punto 16: contra la IA el anfitrión ve «Listo para combatir», no que faltan jugadores', () => {
+    montarConTarjeta({
+      sala: unoContraUno({ modalidad: 'CONTRA_IA', heroesIA: 1, ocupacion: 2 }),
+    });
+
+    expect(document.querySelector('[data-zona="estado-espera"]').textContent).toBe(
+      'Listo para combatir',
+    );
+    expect(document.querySelector('[data-zona="estado-espera"]').dataset.listo).toBe('si');
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+    expect(document.body.textContent).not.toMatch(/faltan|hace falta al menos/i);
+    expect(document.querySelectorAll('[data-plaza]')).toHaveLength(2);
+    expect(document.querySelector('[data-plaza="ia"]').textContent).toContain('Rival de la IA');
+  });
+
+  test('punto 13: la tarjeta se ve, con el contador, las plazas y sin «« »»', () => {
+    montarConTarjeta({ sala: unoContraUno() });
+
+    expect(document.querySelector('[data-zona="sala-espera"]').hidden).toBe(false);
+    expect(document.querySelector('[data-zona="titulo-sala"]').textContent).toBe('1 contra 1');
+    expect(document.querySelector('[data-zona="contador-plazas"]').textContent).toBe('1 / 2');
+    expect(document.querySelector('[data-zona="ocupacion"]').textContent).toBe(
+      '1 de 2 jugadores en la sala',
+    );
+    expect(document.querySelector('[data-plaza="jugador"]').textContent).toContain('Perez_Bro15');
+    expect(document.querySelector('[data-plaza="jugador"]').dataset.tu).toBe('si');
+    expect(document.querySelector('[data-plaza="libre"]').textContent).toContain(
+      'Esperando jugador',
+    );
+    expect(document.body.textContent).not.toMatch(/[«»]/);
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(true);
+  });
+
+  test('cuando entra alguien, el canal cuenta y la relectura pone su apodo en la plaza', async () => {
+    const releer = jest.fn().mockResolvedValue(
+      unoContraUno({
+        ocupacion: 2,
+        participantes: [YO, OTRO],
+        jugadores: [
+          { id: YO, apodo: 'Perez_Bro15', anfitrion: true, heroe: 'Sombra de Vael' },
+          { id: OTRO, apodo: 'Ana_Nexo', anfitrion: false, heroe: 'Arquero' },
+        ],
+      }),
+    );
+    const espera = montarConTarjeta({ sala: unoContraUno(), releer });
+
+    espera.actualizar({ ocupacion: { actual: 2, maximo: 2 }, participantes: [YO, OTRO] });
+    // Antes de la relectura ya se cuenta: la plaza dice «Jugador».
+    expect(document.querySelector('[data-zona="contador-plazas"]').textContent).toBe('2 / 2');
+    await tick();
+
+    expect(releer).toHaveBeenCalledWith('s1');
+    const nombres = [...document.querySelectorAll('.plaza__nombre')].map((n) => n.textContent);
+    expect(nombres).toEqual(['Perez_Bro15', 'Ana_Nexo']);
+    expect(document.querySelector('[data-zona="estado-espera"]').textContent).toBe(
+      'Listo para combatir',
+    );
+    expect(document.querySelector('[data-accion="iniciar-partida"]').disabled).toBe(false);
+  });
+
+  test('ocultar() retira también la tarjeta', () => {
+    const espera = montarConTarjeta({ sala: unoContraUno() });
+    espera.ocultar();
+    expect(document.querySelector('[data-zona="sala-espera"]').hidden).toBe(true);
   });
 });

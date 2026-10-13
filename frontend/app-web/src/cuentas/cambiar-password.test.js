@@ -7,6 +7,8 @@
  * que cancelar no llame a nada y vacíe el formulario (CA-05).
  */
 
+import { readFileSync } from 'node:fs';
+
 import { jest } from '@jest/globals';
 
 import {
@@ -240,5 +242,17 @@ describe('montarCambioDePassword', () => {
     expect(document.querySelector('[name="passwordActual"]').value).toBe('');
     expect(document.querySelector('[name="confirmacion"]').value).toBe('');
     expect(document.querySelector('[data-zona="mensaje-password"]').hidden).toBe(true);
+  });
+
+  test('G1 — con el marcado real de «Mi cuenta», el botón nace apagado y montar lo enciende', () => {
+    const marcado = readFileSync(new URL('./perfil.html', import.meta.url), 'utf8');
+    document.body.innerHTML = new DOMParser().parseFromString(marcado, 'text/html').body.innerHTML;
+    const boton = document.querySelector('[data-accion="guardar-password"]');
+    expect(boton.disabled).toBe(true);
+    expect(boton.closest('form').getAttribute('method')).toBe('post');
+
+    montarCambioDePassword(document, { cambiar: jest.fn(), storage: almacen() });
+
+    expect(boton.disabled).toBe(false);
   });
 });

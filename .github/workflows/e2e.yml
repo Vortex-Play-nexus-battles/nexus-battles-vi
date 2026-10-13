@@ -149,13 +149,43 @@ jobs:
       # hace contra AWS despues de cada despliegue (prueba-del-profesor.yml),
       # aqui con todos los servicios, subastas incluidas. Registro por la
       # interfaz, alta real, partida contra la IA, cierre y vuelta. Si el
-      # banco no lo pasa, AWS tampoco lo va a pasar.
+      # banco no lo pasa, AWS tampoco lo va a pasar. Desde PR-F incluye la
+      # regresion del feedback del 4-oct (regresion-feedback.profesor.spec.js):
+      # portada, compra con creditos, subasta +5, IA sin auto-dano y mision
+      # de nivel 1, con cuentas nuevas, igual que en DEV.
       - name: La prueba del profesor en el banco
         working-directory: frontend/app-web
         env:
           PROFESOR_URL: http://localhost:8099
           MAILPIT_URL: http://localhost:8099/mailpit
         run: npx playwright test --config=playwright.profesor.config.js
+
+      # G1 (4-oct) — la contraseña nunca en una dirección, tampoco en la
+      # bitácora del borde. Después de todas las pruebas (cientos de entradas
+      # y registros por la interfaz), ninguna línea del borde puede tener un
+      # parámetro `*password*=` ni la marca G1-NoDebeQuedar, que
+      # login-sin-envio-nativo.e2e.spec.js pide a propósito en la dirección
+      # (lo que haría una página vieja en caché). Esas peticiones SÍ tienen que
+      # constar, con la consulta retirada: si no, el paso no miraría nada. Lo
+      # que se imprime de una fuga sale con el valor tapado.
+      - name: El borde no registró ninguna contraseña
+        run: |
+          set -uo pipefail
+          bitacora="$(docker compose -f tests/e2e/compose.yml logs --no-color srv-borde 2>&1)"
+          patron='G1-NoDebeQuedar|[?&][^=& ]*password[^=& ]*='
+          fugas="$(printf '%s\n' "$bitacora" | grep -Eci "$patron" || true)"
+          retiradas="$(printf '%s\n' "$bitacora" | grep -c 'consulta retirada\]' || true)"
+          echo "Lineas del borde con una credencial: $fugas"
+          echo "Lineas del borde con la consulta retirada: $retiradas"
+          if [ "$fugas" != "0" ]; then
+            printf '%s\n' "$bitacora" | grep -Ei "$patron" \
+              | sed -E 's/(password[^=& ]*=)[^& "]*/\1<tapado>/Ig; s/G1-NoDebeQuedar[^& "]*/<marca>/g' | head -20
+            exit 1
+          fi
+          if [ "$retiradas" -lt 1 ]; then
+            echo "La prueba G1 pide direcciones con la marca: el borde debia registrarlas sin la consulta." >&2
+            exit 1
+          fi
 
       # Cuando esto falla, lo que hace falta es el log del servicio que fallo,
       # no el de Playwright. Sin este paso habria que reproducirlo a mano.

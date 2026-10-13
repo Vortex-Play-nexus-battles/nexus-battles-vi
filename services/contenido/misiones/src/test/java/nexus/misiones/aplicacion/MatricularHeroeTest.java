@@ -88,7 +88,7 @@ class MatricularHeroeTest {
     @DisplayName("una hora de mision dura lo que diga el parametro (banco E2E: segundos)")
     void relojAcelerado() {
         ParametrosDeMisiones rapidos = new ParametrosDeMisiones(Duration.ofSeconds(1), Duration.ofSeconds(1), 5,
-                false, null, null, ParametrosDeRecompensa.provisionales());
+                false, false, null, null, ParametrosDeRecompensa.provisionales());
 
         Ejecucion ejecucion = conParametros(rapidos).matricular(JUGADOR, solicitud("templo-olvidado", "h-1"))
                 .ejecucion();

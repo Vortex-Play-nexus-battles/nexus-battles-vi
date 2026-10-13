@@ -154,8 +154,8 @@ export const MOTIVOS_DE_REGISTRO = Object.freeze({
   'correo-en-uso': 'Ya hay una cuenta con ese correo. Si es tuya, entra o recupera tu contraseña.',
   'apodo-en-uso':
     'Ese apodo ya lo usa otro jugador. Prueba con otro: es el nombre con el que te verán en las partidas.',
-  'apodo-no-permitido':
-    'Ese apodo no está permitido: lleva palabras que el juego no admite en nombres públicos. Elige otro.',
+  // RFINAL-03: la misma frase que «Mi cuenta» (MOTIVOS_DEL_PERFIL).
+  'apodo-no-permitido': 'Ese apodo no está permitido. Elige otro.',
   'avatar-invalido': 'Esa imagen no sirve como avatar. Usa una foto JPG, PNG o WebP.',
 });
 

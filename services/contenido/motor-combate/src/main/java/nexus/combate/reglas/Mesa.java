@@ -35,6 +35,17 @@ final class Mesa {
         vidaInicial.put(contendiente.id(), contendiente.vida());
     }
 
+    /**
+     * Otra mesa con el mismo estado y sin historia: para que la maquina ensaye
+     * una jugada sin tocar la de la partida (D-41). Los combatientes y las
+     * fichas son inmutables, asi que basta con sentarlos otra vez.
+     */
+    Mesa copia() {
+        Mesa copia = new Mesa();
+        porId.forEach((id, c) -> copia.sentar(c, fichas.get(id)));
+        return copia;
+    }
+
     Optional<Contendiente> buscar(String id) {
         return Optional.ofNullable(porId.get(id));
     }

@@ -872,3 +872,111 @@
 .inventario__banner-misiones {
   margin-bottom: var(--e-5);
 }
+
+/*
+ * HU-INV-001, criterio 1 — los dieciseis caben a 1360 x 768.
+ *
+ * El criterio exige que la vitrina "se vea completa" en la resolucion de
+ * referencia, que es tambien el minimo del RNF-USA-001. Tras el shell de R3 y
+ * UX-GAME-3 la pagina media 1093 px de alto contra 768 disponibles: se iba 325
+ * px por debajo del pliegue y la prueba de aceptacion estaba en rojo.
+ *
+ * De donde salian esos 325: el relleno inferior que el kit reserva para el
+ * chatbot (96), el parrafo de introduccion con su separacion (64), las
+ * separaciones de la rejilla y del panel (78), los margenes de bloques ocultos
+ * —el editor y el banner de misiones— que seguian ocupando (40), y la tarjeta,
+ * que paso de 124 a 136 px (48 en las cuatro filas).
+ *
+ * Esto **no encoge ninguna fuente**: la legibilidad la fija el criterio 2 y
+ * tiene su propia prueba. Tampoco oculta contenido: el distintivo, el retrato,
+ * el nombre, el tipo y las dos acciones siguen ahi. Lo que se recorta es aire.
+ *
+ * Se aplica por alto de ventana y no por ancho: lo que falta es alto. A
+ * 1360 x 900 la vitrina sigue respirando como la diseno UX-GAME-3.
+ */
+@media (max-height: 820px) {
+  .vitrina-pagina {
+    --vitrina-separacion: 4px;
+  }
+
+  /* El kit reserva 96 px para que el chatbot no tape el final de la pagina.
+     El boton mide 56 y se ancla abajo a la derecha: 64 lo libra igual. */
+  .vitrina-pagina > main {
+    padding-top: 8px;
+    padding-bottom: 58px;
+  }
+
+  /* Un bloque oculto no debe seguir separando: el editor y el banner de
+     misiones aportaban 20 px cada uno sin pintar nada. */
+  .vitrina-pagina .inventario-editor[hidden],
+  .vitrina-pagina .inventario__banner-misiones:empty {
+    margin-bottom: 0;
+  }
+
+  .inventario-cabecera {
+    margin-bottom: 4px;
+  }
+
+  /* La introduccion repite lo que el titulo y la barra ya dicen; es lo
+     primero que sobra cuando falta alto. */
+  .inventario__panel--objetos .inventario__intro {
+    display: none;
+  }
+
+  .inventario__panel {
+    gap: 6px;
+  }
+
+  .vitrina__producto {
+    min-height: 0;
+    padding: 4px 10px 4px 8px;
+    row-gap: 0;
+  }
+
+  /*
+   * Se probo poner el tipo y el distintivo en la misma fila para ahorrar una
+   * fila por tarjeta. No sirve a este ancho: la tarjeta pasa a exigir mas
+   * ancho minimo, la columna del texto se estrecha y las dos acciones se
+   * parten en dos lineas, con lo que la tarjeta crece en vez de encoger.
+   * Queda apilado y el aire se recorta donde no tiene efectos laterales.
+   */
+
+  /* Interlineado, no tamano de letra: el criterio 2 fija la legibilidad y
+     tiene su propia prueba. Da la holgura para que un nombre algo mas largo
+     no vuelva a empujar la rejilla por debajo del pliegue. */
+  .vitrina__nombre {
+    line-height: 1.2;
+  }
+
+  .vitrina__tipo {
+    line-height: 1.1;
+  }
+
+  .vitrina__producto > .distintivo {
+    margin-top: 0;
+    padding-block: 2px;
+  }
+
+  .vitrina__acciones {
+    padding-top: 0;
+  }
+
+  .vitrina__acciones button {
+    min-height: 26px;
+    padding-block: 2px;
+  }
+
+  .vitrina__marco .marco-heroe__retrato {
+    width: 60px;
+    height: 60px;
+  }
+
+  .vitrina__marco .marco-heroe__imagen {
+    width: 48px;
+    height: 48px;
+  }
+
+  .inventario__paginacion {
+    margin-top: 0;
+  }
+}

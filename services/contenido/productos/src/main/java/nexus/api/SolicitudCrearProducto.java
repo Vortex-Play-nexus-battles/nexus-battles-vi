@@ -148,6 +148,29 @@ public record SolicitudCrearProducto(
                 return precioCreditos != null;
         }
 
+        /**
+         * RG-085 / RF-MOT-36: la unica fuente de epicas es derrotar al Master que
+         * la tiene, asi que una epica no se vende: 0 creditos, 0 en moneda real y
+         * sin premium. La regla esta aqui, y no en el controlador, porque esta
+         * solicitud es la que validan el alta (POST), la fusion de una
+         * modificacion (PUT/PATCH) y la semilla; asi no queda una puerta sin
+         * guardia. Dejar el precio en cero de una epica que quedo con uno (editada
+         * antes de la regla) es valido.
+         */
+        @AssertTrue(message = "Las épicas no se venden: solo se obtienen derrotando al Máster. "
+                + "Deja su precio en créditos y en moneda real en 0 y sin premium")
+        public boolean isEpicaSinPrecio() {
+                if (tipo != TipoProducto.EPICA) {
+                        return true;
+                }
+
+                boolean conPrecioEnCreditos = precioCreditos != null && precioCreditos > 0;
+                boolean conPrecioEnMonedaReal = precioMonedaReal != null && precioMonedaReal.signum() > 0;
+                boolean esPremium = Boolean.TRUE.equals(premium);
+
+                return !conPrecioEnCreditos && !conPrecioEnMonedaReal && !esPremium;
+        }
+
         @AssertTrue(message = "Faltan atributos obligatorios para el tipo de producto")
         public boolean isAtributosDelTipoValidos() {
                 if (tipo == null) {

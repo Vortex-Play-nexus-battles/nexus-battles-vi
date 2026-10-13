@@ -26,6 +26,7 @@ import {
   montarTienda,
   leerCriterios,
   cambiarCantidad,
+  alternarDeseo,
 } from './tienda.js';
 
 const UID = '44444444-4444-4444-4444-444444444444';
@@ -243,6 +244,25 @@ describe('carrito', () => {
     expect(url).toBe('/api/v1/carrito/items');
     expect(JSON.parse(opciones.body)).toEqual({ productoId: 'p1', cantidad: 1 });
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
+
+  test('MOTION-3 · al añadir, la insignia del carrito pulsa una vez (y sin WAAPI no rompe)', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({ total: 0, items: [] }));
+    const insignia = document.createElement('span');
+    insignia.className = 'insignia-carrito__cuenta';
+    document.body.append(insignia);
+    const animacion = { finished: Promise.resolve(), cancel() {}, playState: 'finished' };
+    Element.prototype.animate = jest.fn(() => animacion);
+    try {
+      await agregarAlCarrito('p1', document);
+      expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+      expect(Element.prototype.animate.mock.instances[0]).toBe(insignia);
+      expect(Element.prototype.animate.mock.calls[0][0][1].transform).toBe('scale(1.15)');
+    } finally {
+      delete Element.prototype.animate;
+    }
+    // Sin Web Animations API (jsdom), lo mismo pero quieto.
+    await expect(agregarAlCarrito('p1', document)).resolves.toEqual({ ok: true });
   });
 });
 
@@ -536,6 +556,33 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(document.getElementById('aviso-pago').textContent).toMatch(/Añade productos/);
   });
 
+  test('la miniatura de una línea que no carga se quita: ninguna imagen rota en el carrito', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 400,
+        items: [
+          {
+            id: 1,
+            cantidad: 1,
+            subtotal: 400,
+            disponible: true,
+            producto: { nombre: 'Escudo', imagen: 'casco.png' },
+          },
+        ],
+      },
+      document,
+    );
+    const linea = document.querySelector('[data-item-id="1"]');
+    const imagen = linea.querySelector('img.item-imagen');
+    expect(imagen).not.toBeNull();
+
+    imagen.dispatchEvent(new Event('error'));
+
+    expect(linea.querySelector('img')).toBeNull();
+    expect(linea.querySelector('.item-price').textContent).toBe('400 COP');
+  });
+
   test('un item sin subtotal no escribe «undefined» en el carrito', () => {
     actualizarUI(
       { total: null, items: [{ cantidad: 1, producto: { nombre: 'Escudo' } }] },
@@ -546,6 +593,63 @@ describe('FI-R2 - el precio que se ensena es el que cobra el servicio', () => {
     expect(texto).not.toContain('undefined');
     expect(texto).not.toContain('null');
     expect(document.getElementById('cart-total').textContent).not.toContain('undefined');
+  });
+
+  /** G3 (ecommerce-carrito 1.7.0): una línea que solo se vende en créditos. */
+  const AMULETO = {
+    id: 9,
+    cantidad: 2,
+    precioUnitario: null,
+    subtotal: null,
+    precioCreditos: 120,
+    subtotalCreditos: 240,
+    soloEnCreditos: true,
+    disponible: true,
+    producto: { nombre: 'Amuleto', moneda: null },
+  };
+
+  test('G3: solo en créditos, la línea dice sus créditos y «Pagar» se enciende aunque el total sea 0', () => {
+    actualizarUI({ moneda: 'COP', total: 0, items: [AMULETO] }, document);
+
+    const linea = document.querySelector('[data-item-id="9"]');
+    expect(linea.dataset.soloEnCreditos).toBe('si');
+    expect(linea.querySelector('.item-price').textContent).toBe('240 créditos');
+    expect(linea.querySelector('.item-unitario').textContent).toBe(' · 120 créditos c/u');
+    expect(linea.textContent).not.toMatch(/Sin precio|0 COP/);
+    expect(document.getElementById('cart-total').textContent).toBe('Con créditos del juego');
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
+    expect(document.getElementById('aviso-pago').hidden).toBe(true);
+  });
+
+  test('G3: carrito mixto, el total en dinero real dice que además hay créditos', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 400,
+        items: [
+          { id: 1, cantidad: 1, subtotal: 400, disponible: true, producto: { nombre: 'Escudo' } },
+          AMULETO,
+        ],
+      },
+      document,
+    );
+
+    expect(document.getElementById('cart-total').textContent).toBe('400 COP + créditos del juego');
+    expect(document.getElementById('btn-pagar').disabled).toBe(false);
+  });
+
+  test('G3: una línea solo en créditos agotada apaga «Pagar» como cualquier otra', () => {
+    actualizarUI(
+      {
+        moneda: 'COP',
+        total: 0,
+        items: [{ ...AMULETO, disponible: false, motivo: 'AGOTADO', maximo: 0 }],
+      },
+      document,
+    );
+
+    expect(document.getElementById('btn-pagar').disabled).toBe(true);
+    expect(document.getElementById('aviso-pago').textContent).toMatch(/ya no se puede comprar/);
   });
 });
 
@@ -648,6 +752,8 @@ describe('R16 - un «Añadir» rechazado se le dice al jugador', () => {
     [409, 'urn:nexus:problema:producto-no-disponible', /no está a la venta/i],
     [422, 'urn:nexus:problema:producto-inexistente', /ya no está en el catálogo/i],
     [422, 'urn:nexus:problema:producto-sin-precio-en-moneda-real', /no se vende con dinero real/i],
+    // ecommerce-carrito 1.5.0 — RF-CAR-004, auditoría del 30-sep.
+    [409, 'urn:nexus:problema:producto-ya-adquirido', /ya tienes este producto/i],
   ])(
     '%i %s: aviso de advertencia que lleva a actualizar la tienda',
     async (estado, tipo, texto) => {
@@ -826,6 +932,9 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
             <input type="number" name="precioMinimo" />
             <input type="number" name="precioMaximo" />
             <input type="checkbox" name="soloPromocion" />
+            <label data-zona="filtro-deseos" hidden>
+              <input type="checkbox" name="soloDeseos" />
+            </label>
             <select name="orden">
               <option value="catalogo">Orden del catálogo</option>
               <option value="precio-asc">Precio: de menor a mayor</option>
@@ -1096,10 +1205,69 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     const vacio = document.querySelector('#productos-grid [data-estado="vacio"]');
     expect(vacio.textContent).toMatch(/Ningún producto coincide/);
     expect(vacio.textContent).not.toMatch(/no tiene productos/);
+    // Auditoría de DEV del 30-sep: «Ningún producto coincide de 2 a la venta.»
+    expect(document.getElementById('resultado-tienda').textContent).toBe(
+      'Ningún producto coincide; hay 2 productos a la venta.',
+    );
 
     vacio.querySelector('[data-accion="limpiar-filtros"]').click();
     expect(nombres()).toHaveLength(2);
     expect(filtros().elements.namedItem('busqueda').value).toBe('');
+  });
+
+  test('auditoría 30-sep: la lista de deseos se puede ver, y lo que sale de ella deja de verse', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [
+        producto(1, { enListaDeseos: true }),
+        producto(2),
+        producto(3, { enListaDeseos: true }),
+      ],
+    });
+    await montarTienda(document);
+
+    const casilla = document.querySelector('[data-zona="filtro-deseos"]');
+    expect(casilla.hidden).toBe(false);
+
+    cambiar('soloDeseos', true);
+    expect(nombres()).toEqual(['Producto 1', 'Producto 3']);
+    expect(document.getElementById('resultado-tienda').textContent).toBe(
+      '2 productos en tu lista de deseos.',
+    );
+    expect(document.querySelector('[data-zona="resumen-filtros"]').textContent).toBe(
+      'Filtros y orden · 1 activo',
+    );
+
+    // Quitar el corazón con el filtro puesto lo saca de la vista.
+    globalThis.fetch.mockImplementationOnce(async () => ({
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+      headers: { get: () => null },
+    }));
+    await alternarDeseo('p-1', document);
+    expect(nombres()).toEqual(['Producto 3']);
+  });
+
+  test('una lista de deseos vacía lo dice y ofrece volver a toda la tienda', async () => {
+    globalThis.fetch = servicios({ vitrina: [producto(1), producto(2)] });
+    await montarTienda(document);
+
+    cambiar('soloDeseos', true);
+    const vacio = document.querySelector('#productos-grid [data-estado="vacio"]');
+    expect(vacio.textContent).toMatch(/Tu lista de deseos está vacía/);
+    expect(vacio.textContent).not.toMatch(/Ningún producto coincide/);
+
+    vacio.querySelector('[data-accion="limpiar-filtros"]').click();
+    expect(nombres()).toHaveLength(2);
+    expect(filtros().elements.namedItem('soloDeseos').checked).toBe(false);
+  });
+
+  test('sin sesión no se ofrece la lista de deseos: la vitrina no la marca', async () => {
+    sessionStorage.clear();
+    globalThis.fetch = servicios({ vitrina: [producto(1)] });
+    await montarTienda(document);
+
+    expect(document.querySelector('[data-zona="filtro-deseos"]').hidden).toBe(true);
   });
 
   test('un rango de precio al revés se explica', async () => {
@@ -1138,11 +1306,74 @@ describe('UXC-4 - la tienda que pide §7.5', () => {
     expect(tarjeta.dataset.propio).toBe('si');
     expect(tarjeta.querySelector('.producto-propio').textContent).toBe('Tienes 2');
     expect(document.querySelector('[data-id-producto="p-1"] .producto-propio')).toBeNull();
+    // RF-CAR-004 (auditoría del 30-sep): lo que ya tienes no se ofrece para añadir.
+    expect(tarjeta.querySelector('.btn-add').disabled).toBe(true);
+    expect(tarjeta.querySelector('.btn-add').dataset.producto).toBeUndefined();
+    expect(document.querySelector('[data-id-producto="p-1"] .btn-add').disabled).toBe(false);
     // El inventario viaja con la identidad en su cabecera, no en la ruta.
     const [, opciones] = globalThis.fetch.mock.calls.find(([url]) =>
       String(url).includes('/inventario/elementos'),
     );
     expect(opciones.headers['X-User-Name']).toBe(UID);
+  });
+
+  test('RFINAL-04: lo que ya tienes dice «Ya lo tienes» en el botón, no «Añadir»', async () => {
+    globalThis.fetch = servicios({
+      vitrina: [producto(1), producto(2)],
+      inventario: [{ id: 'e1', productoId: 'p-2' }],
+    });
+
+    await montarTienda(document);
+
+    const propio = document.querySelector('[data-id-producto="p-2"] .btn-add');
+    expect(propio.textContent).toBe('Ya lo tienes');
+    expect(propio.getAttribute('aria-label')).toBe('Ya tienes Producto 2');
+    const nuevo = document.querySelector('[data-id-producto="p-1"] .btn-add');
+    expect(nuevo.textContent).toBe('Añadir');
+    expect(nuevo.getAttribute('aria-label')).toBe('Añadir Producto 1 al carrito');
+  });
+
+  test('RFINAL-04: si el servicio dice que ya lo tienes (409), la tarjeta lo aprende y se apaga', async () => {
+    const base = servicios({ vitrina: [producto(1)] });
+    globalThis.fetch = jest.fn(async (url, opciones = {}) => {
+      if (String(url).endsWith('/api/v1/carrito/items') && opciones.method === 'POST') {
+        return problema(409, 'urn:nexus:problema:producto-ya-adquirido');
+      }
+      return base(url, opciones);
+    });
+    await montarTienda(document);
+    const anadir = document.querySelector('[data-id-producto="p-1"] .btn-add');
+    expect(anadir.disabled).toBe(false);
+
+    const salida = await agregarAlCarrito('p-1', document);
+
+    // El servidor es la autoridad: la vista no lo supo por el inventario, lo supo por él.
+    expect(salida).toEqual(expect.objectContaining({ ok: false, propio: true }));
+    const tarjeta = document.querySelector('[data-id-producto="p-1"]');
+    expect(tarjeta.dataset.propio).toBe('si');
+    expect(anadir.disabled).toBe(true);
+    expect(anadir.textContent).toBe('Ya lo tienes');
+    expect(tarjeta.querySelector('.producto-propio')).not.toBeNull();
+  });
+
+  test('RFINAL-04: otro rechazo (agotado) no marca el producto como tuyo', async () => {
+    // Otro producto: el estado de la vista vive por documento y la prueba
+    // anterior ya dejó «p-1» como propio.
+    const base = servicios({ vitrina: [producto(3)] });
+    globalThis.fetch = jest.fn(async (url, opciones = {}) => {
+      if (String(url).endsWith('/api/v1/carrito/items') && opciones.method === 'POST') {
+        return problema(409, 'urn:nexus:problema:producto-agotado');
+      }
+      return base(url, opciones);
+    });
+    await montarTienda(document);
+
+    const salida = await agregarAlCarrito('p-3', document);
+
+    expect(salida.propio).toBeUndefined();
+    const tarjeta = document.querySelector('[data-id-producto="p-3"]');
+    expect(tarjeta.dataset.propio).toBeUndefined();
+    expect(tarjeta.querySelector('.btn-add').disabled).toBe(false);
   });
 
   test('la insignia cuenta las unidades; cada línea cambia su cantidad o se quita', async () => {

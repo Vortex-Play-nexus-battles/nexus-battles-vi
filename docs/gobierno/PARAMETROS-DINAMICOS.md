@@ -130,7 +130,7 @@ nuestro** (CLAUDE.md: no modificar servicios de otro grupo sin coordinarlo).
 
 | Clave | Valor en catálogo | Origen |
 |---|---|---|
-| `subastas.incremento-minimo` | `NULL` (pendiente del PO) | RF-SUB-002 |
+| `subastas.incremento-minimo` | `5` (D-43, migración V5; antes `NULL`) | RF-SUB-002 |
 | `subastas.max-subastas-activas-por-jugador` | 10 | RF-SUB-004 |
 | `subastas.max-pujas-activas-por-jugador` | 50 | RF-SUB-004 |
 | `subastas.intervalo-minimo-segundos` | 5 | RF-SUB-004 |

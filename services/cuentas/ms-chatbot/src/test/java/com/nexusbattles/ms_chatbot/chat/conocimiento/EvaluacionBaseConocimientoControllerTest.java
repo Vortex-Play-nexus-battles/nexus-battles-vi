@@ -73,6 +73,53 @@ class EvaluacionBaseConocimientoControllerTest {
             .andExpect(jsonPath("$.estado").value("PRODUCCION"));
     }
 
+    // 1.3.8: programar y cancelar la publicacion de la candidata.
+    @Test
+    void programar_devuelveLaCandidataConSuFecha() throws Exception {
+        Instant cuando = Instant.parse("2026-10-01T15:00:00Z");
+        VersionBaseConocimiento candidata = VersionBaseConocimiento.nuevaCandidata(3, null);
+        candidata.programarDespliegue(cuando);
+        when(evaluacionService.programarDespliegue(cuando)).thenReturn(candidata);
+
+        mockMvc.perform(put(RUTA + "/borrador/programacion").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"desplegarEn\":\"2026-10-01T15:00:00Z\"}"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.estado").value("BORRADOR"))
+            .andExpect(jsonPath("$.despliegueProgramadoEn").value("2026-10-01T15:00:00Z"));
+    }
+
+    @Test
+    void programar_sinFecha_responde400() throws Exception {
+        mockMvc.perform(put(RUTA + "/borrador/programacion").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{}"))
+            .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(evaluacionService);
+    }
+
+    @Test
+    void cancelarProgramacion_devuelveLaCandidataSinFecha() throws Exception {
+        when(evaluacionService.cancelarProgramacion()).thenReturn(VersionBaseConocimiento.nuevaCandidata(3, null));
+
+        mockMvc.perform(delete(RUTA + "/borrador/programacion").with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.numero").value(3))
+            .andExpect(jsonPath("$.despliegueProgramadoEn").doesNotExist());
+    }
+
+    @Test
+    void programar_comoJugador_devuelve403() throws Exception {
+        mockMvc.perform(put(RUTA + "/borrador/programacion")
+                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_JUGADOR")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"desplegarEn\":\"2026-10-01T15:00:00Z\"}"))
+            .andExpect(status().isForbidden());
+
+        verifyNoInteractions(evaluacionService);
+    }
+
     // Paso 9 visto desde la API: el rechazo sale como 409 problem details con
     // los dos resultados, para que el panel muestre que casos fallaron.
     @Test

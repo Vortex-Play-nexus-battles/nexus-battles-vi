@@ -18,7 +18,9 @@ import java.util.Optional;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESCUDO;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.ESPADA;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.POCION;
+import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conCreditos;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conEstado;
+import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conPrecio;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.conTiraje;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.enVenta;
 import static com.nexusbattles.ms_ecommerce.catalogo.ProductosDePrueba.soloEnCreditos;
@@ -63,17 +65,19 @@ class CotizadorDelCarritoTest {
     }
 
     @Test
-    @DisplayName("agotado, suspendido, retirado o sin precio: sigue en el carrito, no suma y dice por que")
+    @DisplayName("agotado, suspendido, retirado o sin ningun precio: sigue en el carrito, no suma y dice por que")
     void noDisponibles() {
         CarritoDto dto = cotizador.cotizar(carrito(
                         linea(1, ESPADA, 1, "6000"),
                         linea(2, ESCUDO, 1, "4000"),
                         linea(3, POCION, 1, "3000"),
                         linea(4, "retirado", 1, "1000"),
-                        linea(5, "creditos", 1, "2000")),
+                        linea(5, "sin-precio", 1, "2000")),
                 Tarifa.enPesos(),
                 catalogo(conTiraje(enVenta(ESPADA), 0), conEstado(enVenta(ESCUDO), "SUSPENDIDO"),
-                        enVenta(POCION, "ITEM", "3000"), soloEnCreditos(enVenta("creditos"), 50)),
+                        enVenta(POCION, "ITEM", "3000"),
+                        // Premium sin precio en dinero real: no se convierte a creditos.
+                        conPrecio(enVenta("sin-precio"), null)),
                 AHORA);
 
         assertThat(dto.items()).extracting(ItemCarritoDto::motivo).containsExactly(MotivoDeLinea.AGOTADO,
@@ -81,6 +85,49 @@ class CotizadorDelCarritoTest {
         assertThat(dto.items()).extracting(ItemCarritoDto::disponible).containsExactly(false, false, true, false, false);
         assertThat(dto.items().get(0).maximo()).isZero();
         assertThat(dto.total()).isEqualByComparingTo("3000");
+    }
+
+    @Test
+    @DisplayName("G3: una linea solo en creditos se puede comprar, sin precio en dinero real y sin sumar al total")
+    void soloEnCreditosSeCompraConCreditos() {
+        CarritoDto dto = cotizador.cotizar(carrito(
+                        linea(1, POCION, 2, "3000"),
+                        linea(2, "creditos", 2, null),
+                        linea(3, "ambos", 1, "6000")),
+                Tarifa.enPesos(),
+                catalogo(enVenta(POCION, "ITEM", "3000"), soloEnCreditos(enVenta("creditos"), 50),
+                        conCreditos(enVenta("ambos"), 300)),
+                AHORA);
+
+        ItemCarritoDto creditos = dto.items().get(1);
+        assertThat(creditos.disponible()).isTrue();
+        assertThat(creditos.motivo()).isNull();
+        assertThat(creditos.soloEnCreditos()).isTrue();
+        assertThat(creditos.precioCreditos()).isEqualTo(50L);
+        assertThat(creditos.subtotalCreditos()).as("2 x 50, del servidor").isEqualTo(100L);
+        assertThat(creditos.precioUnitario()).as("nunca «0 COP»").isNull();
+        assertThat(creditos.subtotal()).isNull();
+        assertThat(dto.items().get(0).soloEnCreditos()).isFalse();
+        assertThat(dto.items().get(0).precioCreditos()).as("premium: no se paga con creditos").isNull();
+        assertThat(dto.items().get(0).subtotalCreditos()).isNull();
+        assertThat(dto.items().get(2).precioCreditos()).isEqualTo(300L);
+        assertThat(dto.items().get(2).subtotalCreditos()).isEqualTo(300L);
+        assertThat(dto.items().get(2).soloEnCreditos()).isFalse();
+        assertThat(dto.total()).as("solo lo que tiene precio en dinero real").isEqualByComparingTo("12000");
+    }
+
+    @Test
+    @DisplayName("G3: solo en creditos y agotado o con tiraje corto: el mismo motivo que cualquier otra linea")
+    void soloEnCreditosAgotado() {
+        CarritoDto dto = cotizador.cotizar(carrito(linea(1, "agotado", 1, null), linea(2, "corto", 3, null)),
+                Tarifa.enPesos(),
+                catalogo(conTiraje(soloEnCreditos(enVenta("agotado"), 50), 0),
+                        conTiraje(soloEnCreditos(enVenta("corto"), 50), 2)),
+                AHORA);
+
+        assertThat(dto.items()).extracting(ItemCarritoDto::motivo)
+                .containsExactly(MotivoDeLinea.AGOTADO, MotivoDeLinea.TIRAJE_INSUFICIENTE);
+        assertThat(dto.items()).extracting(ItemCarritoDto::disponible).containsExactly(false, false);
     }
 
     @Test

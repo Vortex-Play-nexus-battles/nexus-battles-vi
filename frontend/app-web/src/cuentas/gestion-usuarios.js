@@ -47,6 +47,46 @@ async function iniciar() {
   configurarEventos();
 
   await cargarMatrizYVerificarAcceso();
+
+  // RFINAL-06 — desde el directorio de Control integral cada cuenta llega con
+  // su clave en la dirección: la ficha se abre sola. Solo si la pantalla quedó
+  // abierta (con la matriz cargada y el permiso de gestionar cuentas).
+  if (document.getElementById('gestion-contenedor')?.hidden === false) {
+    await abrirFichaDesdeLaDireccion();
+  }
+}
+
+/**
+ * RFINAL-06 — la clave de cuenta que trae la dirección (`?usuario=15`). La
+ * pone cada fila del directorio de Control integral, que la publica desde
+ * ms-identidad-admin.yaml 1.2.0. Solo un entero positivo: es la clave que
+ * esperan las rutas de gestión (`UsuarioId`); cualquier otra cosa —un uid, un
+ * texto— se ignora sin consultar a nadie.
+ *
+ * @param {string} [busqueda] `location.search`
+ * @returns {string|null}
+ */
+export function usuarioDeLaDireccion(busqueda = globalThis.location?.search ?? '') {
+  const valor = (new URLSearchParams(busqueda).get('usuario') ?? '').trim();
+  return /^[1-9]\d{0,17}$/.test(valor) ? valor : null;
+}
+
+/**
+ * Abre la ficha de la cuenta que trae la dirección, igual que si se hubiera
+ * buscado a mano: mismo endpoint, mismos mensajes si no existe o no hay permiso.
+ *
+ * @param {string} [busqueda] `location.search`
+ * @returns {Promise<boolean>} si había una clave válida que abrir
+ */
+export async function abrirFichaDesdeLaDireccion(busqueda = globalThis.location?.search ?? '') {
+  const usuarioId = usuarioDeLaDireccion(busqueda);
+  const input = document.getElementById('usuario-id');
+  if (!usuarioId || !input) {
+    return false;
+  }
+  input.value = usuarioId;
+  await buscarUsuario({ preventDefault() {} });
+  return true;
 }
 
 export async function cargarMatrizYVerificarAcceso({
@@ -298,13 +338,18 @@ async function buscarUsuario(evento) {
     const datos = await respuesta.json();
 
     usuarioSeleccionado = {
-      id: Number(datos.id ?? usuarioId),
+      // RFINAL-06 — defecto «id de perfil usado como id de usuario»: aquí iba
+      // `datos.id`, que el servicio llenaba con la clave del PERFIL, y con él
+      // se suspendía, baneaba, reactivaba, restablecía y cambiaba el rol. La
+      // clave de la cuenta es la que se acaba de consultar: el servidor la
+      // resolvió como cuenta al devolver esta ficha.
+      id: Number(usuarioId),
       apodo: typeof datos.apodo === 'string' && datos.apodo.trim() ? datos.apodo.trim() : null,
     };
     sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioSeleccionado.id));
 
     mostrarPanelUsuario();
-    pintarUsuario(datos);
+    pintarUsuario(datos, usuarioSeleccionado.id);
   } catch (error) {
     // Aqui solo llega un fallo de red: el interceptor devuelve la respuesta
     // para cualquier codigo HTTP y solo relanza si `fetch` no llego a
@@ -353,9 +398,10 @@ async function motivoDeBusquedaFallida(respuesta, usuarioId) {
  * dato» en esta pantalla.
  *
  * @param {object} datos
+ * @param {number} clave la de la cuenta (RFINAL-06), no la que traiga `datos.id`
  */
-function pintarUsuario(datos) {
-  establecerTexto('usuario-id-mostrado', datos.id ?? '-');
+function pintarUsuario(datos, clave) {
+  establecerTexto('usuario-id-mostrado', clave ?? '-');
   establecerTexto('usuario-apodo-mostrado', datos.apodo ?? '-');
   establecerTexto('usuario-email-mostrado', datos.email ?? '-');
   establecerTexto('usuario-rol-mostrado', datos.rolNombre ?? '-');

@@ -53,9 +53,18 @@ public class Orden {
     @Column(nullable = false, length = 30)
     private EstadoOrden estado;
 
+    /**
+     * La moneda del cobro con tarjeta. Null en una orden pagada con creditos
+     * (V5, D-44): sus importes son creditos enteros, no una moneda.
+     */
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 3)
+    @Column(length = 3)
     private Moneda moneda;
+
+    /** Como se pago (V5, D-44). Las ordenes anteriores son TARJETA. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "forma_de_pago", nullable = false, length = 10)
+    private FormaDePago formaDePago = FormaDePago.TARJETA;
 
     @Column(nullable = false)
     private BigDecimal total;
@@ -132,6 +141,20 @@ public class Orden {
     public void agregarLinea(LineaDeOrden linea) {
         linea.setOrden(this);
         lineas.add(linea);
+    }
+
+    /** D-44: la orden se paga con los creditos del juego. */
+    public boolean pagadaConCreditos() {
+        return formaDePago == FormaDePago.CREDITOS;
+    }
+
+    /**
+     * D-44: la referencia del cobro en el libro de creditos de ms-finanzas
+     * ({@code refId}). Una por orden: ms-finanzas no descuenta dos veces el
+     * mismo refId, y es la que se usa para devolver y para conciliar.
+     */
+    public String referenciaDeCreditos() {
+        return "tienda-orden-" + id;
     }
 
     /** Las unidades de cada producto, como las pide la entrega y como salen del carrito. */

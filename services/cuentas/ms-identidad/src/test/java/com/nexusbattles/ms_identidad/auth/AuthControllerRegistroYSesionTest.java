@@ -85,6 +85,8 @@ class AuthControllerRegistroYSesionTest {
         Usuario profe = new Usuario();
         profe.setApodo("profe");
         when(usuarioRepository.findByApodo("profe")).thenReturn(Optional.of(profe));
+        // RFINAL-03: el interceptor busca al titular por el uid del token.
+        when(usuarioRepository.findByPublicId(uid)).thenReturn(Optional.of(profe));
         SecurityInterceptor interceptor = new SecurityInterceptor(
                 new RbacAuthorizationService(new RbacMatrixRepository()),
                 new AuditoriaEventClient("http://localhost:8091/api/v1/admin/auditoria/eventos", null),
@@ -243,6 +245,62 @@ class AuthControllerRegistroYSesionTest {
                         .content("{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}"))
                 .andExpect(status().isForbidden())
                 .andExpect(content().string("Cuenta suspendida. Tiempo restante: 60 minutos."));
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: falta el segundo factor -> 403 con el desafio (solo en problem details), nunca un token")
+    void segundoFactorRequerido() throws Exception {
+        doThrow(new com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException(
+                new com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido("valor-opaco-del-desafio",
+                        java.time.Instant.parse("2026-10-05T15:05:00Z"),
+                        com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso.Proposito.VERIFICAR)))
+                .when(loginService).iniciarSesion(any(), any(), any());
+        String cuerpo = "{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}";
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(cuerpo)
+                        .accept(PROBLEMA))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(PROBLEMA))
+                .andExpect(jsonPath("$.type").value(TIPOS + "segundo-factor-requerido"))
+                .andExpect(jsonPath("$.desafio").value("valor-opaco-del-desafio"))
+                .andExpect(jsonPath("$.expiraEn").value("2026-10-05T15:05:00Z"))
+                .andExpect(jsonPath("$.token").doesNotExist());
+        // Un cliente anterior, en texto plano: un rechazo que se lee, sin desafio.
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+                .andExpect(status().isForbidden())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("verificación en dos pasos")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("valor-opaco-del-desafio"))));
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: el rol lo exige y la cuenta no lo tiene -> 403 segundo-factor-enrolamiento-requerido")
+    void enrolamientoRequerido() throws Exception {
+        doThrow(new com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException(
+                new com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido("otro-valor",
+                        java.time.Instant.parse("2026-10-05T15:05:00Z"),
+                        com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso.Proposito.ENROLAR)))
+                .when(loginService).iniciarSesion(any(), any(), any());
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}").accept(PROBLEMA))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value(TIPOS + "segundo-factor-enrolamiento-requerido"))
+                .andExpect(jsonPath("$.desafio").value("otro-valor"));
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: obligatorio y sin clave de cifrado -> 503 segundo-factor-no-disponible")
+    void segundoFactorNoDisponible() throws Exception {
+        doThrow(new com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRechazadoException(
+                com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRechazadoException.Motivo.NO_DISPONIBLE,
+                "No disponible."))
+                .when(loginService).iniciarSesion(any(), any(), any());
+
+        mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"ada@upb.edu.co\",\"password\":\"x\"}").accept(PROBLEMA))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.type").value(TIPOS + "segundo-factor-no-disponible"));
     }
 
     @Test

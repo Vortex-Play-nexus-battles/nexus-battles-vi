@@ -590,13 +590,17 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
       'aria-current',
       'page',
     );
-    await expect(page.locator(`[data-zona="listado"] [data-torneo-id="${torneo.id}"]`)).toBeVisible(
-      {
-        timeout: 20000,
-      },
-    );
+    // Punto 24 (revisión del 6-oct) — el torneo es su propia ruta: ya no se
+    // despliega debajo del tablón, que queda oculto hasta volver a él.
     const detalleVista = page.locator('[data-zona="detalle"]');
-    await expect(detalleVista).toHaveAttribute('data-estado', 'FINALIZADO');
+    await expect(detalleVista).toHaveAttribute('data-estado', 'FINALIZADO', { timeout: 20000 });
+    await expect(page.locator('[data-zona="tablon"]')).toBeHidden();
+    await expect(detalleVista.locator('h1')).toHaveText(torneo.nombre);
+    // Terminado: el hito de ahora es el resultado, con el campeón.
+    await expect(detalleVista.locator('[aria-current="step"]')).toHaveAttribute(
+      'data-hito',
+      'resultado',
+    );
     await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText(
       'Campeón: Los Valientes',
     );
@@ -628,6 +632,19 @@ test.describe('Torneos (HU-TOR-001..005, HU-ADM-005, HU-TOR-008)', () => {
     );
     await expect(detalleVista.locator(`[data-equipo-id="${equipo.id}"]`)).toContainText(
       '(tu equipo)',
+    );
+
+    // Y de vuelta al tablón sin recargar: la tarjeta del torneo, y otra vez a
+    // su ruta desde ella, con la dirección siguiendo a cada paso.
+    await detalleVista.locator('[data-accion="volver-a-torneos"]').click();
+    const tarjeta = page.locator(`[data-zona="listado"] [data-torneo-id="${torneo.id}"]`);
+    await expect(tarjeta).toBeVisible({ timeout: 20000 });
+    await expect(detalleVista).toBeHidden();
+    await expect(page).not.toHaveURL(/[?&]torneo=/);
+    await tarjeta.locator('[data-accion="abrir"]').click();
+    await expect(page).toHaveURL(new RegExp(`[?&]torneo=${torneo.id}`));
+    await expect(detalleVista.locator('[data-zona="campeon"]')).toHaveText(
+      'Campeón: Los Valientes',
     );
   });
 });

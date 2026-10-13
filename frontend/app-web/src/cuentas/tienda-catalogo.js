@@ -174,6 +174,8 @@ export function coincideBusqueda(producto, busqueda) {
       producto.habilidades,
       NOMBRE_DEL_TIPO[producto.tipo] ?? producto.tipo,
       producto.precioTexto,
+      // G3: el precio de uno que solo se vende en créditos es el de créditos.
+      producto.soloEnCreditos ? producto.precioCreditosTexto : null,
     ].join(' '),
   );
   if (texto.includes(termino)) {
@@ -182,17 +184,20 @@ export function coincideBusqueda(producto, busqueda) {
   // Una búsqueda hecha solo de cifras («45000», «45 000», «$45.000») se
   // compara con el precio sin separadores. Una con letras no: «espada 2» no
   // debe traer todo lo que cuesta algo con un 2.
-  if (/^[\d\s.,$]+$/.test(String(busqueda).trim()) && producto.precio !== null) {
-    return soloCifras(String(Math.round(producto.precio))).includes(soloCifras(busqueda));
+  const precio = producto.soloEnCreditos ? producto.precioCreditos : producto.precio;
+  if (/^[\d\s.,$]+$/.test(String(busqueda).trim()) && precio !== null && precio !== undefined) {
+    return soloCifras(String(Math.round(precio))).includes(soloCifras(busqueda));
   }
   return false;
 }
 
 /**
- * Criterios de la vista, con sus valores neutros.
+ * Criterios de la vista, con sus valores neutros. `soloDeseos` es la lista de
+ * deseos (RF-CAR-004/005): lo que el servicio marca con `enListaDeseos`.
  *
  * @typedef {{busqueda?: string, tipo?: string, precioMinimo?: number|null,
- *   precioMaximo?: number|null, soloPromocion?: boolean, orden?: string}} Criterios
+ *   precioMaximo?: number|null, soloPromocion?: boolean, soloDeseos?: boolean,
+ *   orden?: string}} Criterios
  */
 
 /**
@@ -209,6 +214,7 @@ export function filtrarProductos(productos, criterios = {}) {
     precioMinimo = null,
     precioMaximo = null,
     soloPromocion = false,
+    soloDeseos = false,
     orden = ORDENES.CATALOGO,
   } = criterios;
 
@@ -234,6 +240,9 @@ export function filtrarProductos(productos, criterios = {}) {
     // pinta el distintivo (`tienda-adaptador.js`): un `enPromocion` sin rebaja
     // no cuenta.
     if (soloPromocion && producto.precioAnterior === null) {
+      return false;
+    }
+    if (soloDeseos && !producto.enListaDeseos) {
       return false;
     }
     return coincideBusqueda(producto, busqueda);
@@ -286,7 +295,8 @@ export function hayCriterios(criterios = {}) {
     criterios.tipo ||
     Number.isFinite(criterios.precioMinimo) ||
     Number.isFinite(criterios.precioMaximo) ||
-    criterios.soloPromocion,
+    criterios.soloPromocion ||
+    criterios.soloDeseos,
   );
 }
 

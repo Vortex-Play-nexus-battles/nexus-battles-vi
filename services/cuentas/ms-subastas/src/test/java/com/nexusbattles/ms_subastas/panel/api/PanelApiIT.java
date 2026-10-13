@@ -320,6 +320,38 @@ class PanelApiIT {
     }
 
     @Test
+    @DisplayName("G7: una cancelacion que falla devuelve la penalizacion; al repetirla se cobra de verdad, con otro refId")
+    void cancelacionFallidaYRepetidaCobraUnaVez() throws Exception {
+        UUID vendedor = jugadorConSaldo();
+        Subasta subasta = publicada(vendedor);
+        String base = "sub-cancelacion-" + subasta.getId();
+
+        // Inventario caido: se cobra la penalizacion, falla la liberacion y se devuelve.
+        ((InventarioClientFake) inventario).simularFallo(true);
+        HttpResponse<String> fallida;
+        try {
+            fallida = pedir("POST", "/subastas/" + subasta.getId() + "/cancelacion", null, token(vendedor));
+        } finally {
+            ((InventarioClientFake) inventario).simularFallo(false);
+        }
+        assertNotEquals(200, fallida.statusCode(), fallida.body());
+        assertEquals(EstadoSubasta.ACTIVA, subastas.findById(subasta.getId()).orElseThrow().getEstado());
+        assertEquals(List.of(base), FINANZAS.recibidas("reversar").stream().map(FinanzasFalsa.Operacion::refId).toList());
+        assertEquals(0, BigDecimal.ZERO.compareTo(FINANZAS.cobradoNeto(vendedor)), "la penalizacion se devolvio");
+
+        // Repetirla: el refId devuelto no se reutiliza (el libro respondia 200 sin cobrar).
+        HttpResponse<String> repetida = pedir("POST", "/subastas/" + subasta.getId() + "/cancelacion", null,
+                token(vendedor));
+
+        assertEquals(200, repetida.statusCode(), repetida.body());
+        assertEquals("CANCELADA", json(repetida).path("estado").asText());
+        assertEquals(List.of(base, base + "-2"),
+                FINANZAS.recibidas("debitar").stream().map(FinanzasFalsa.Operacion::refId).toList());
+        assertEquals(0, new BigDecimal("1.50").compareTo(FINANZAS.cobradoNeto(vendedor)),
+                "la cancelacion queda pagada una vez, no gratis ni dos veces");
+    }
+
+    @Test
     @DisplayName("sin sesion es 401; una subasta que no existe, 404")
     void cancelarSinSesionOInexistente() throws Exception {
         Subasta subasta = publicada(jugadorConSaldo());

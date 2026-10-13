@@ -141,7 +141,7 @@ public class AutorizacionDeDestinos implements ChannelInterceptor {
     private void autorizarEnvio(String destino, Principal usuario) {
         if (!destino.startsWith(PREFIJO_APLICACION)) {
             throw new AccessDeniedException(
-                    "Solo se puede enviar a destinos de la aplicacion: el resto los publica el servidor.");
+                    "Solo se puede enviar a destinos de la aplicación: el resto los publica el servidor.");
         }
         Matcher chat = CHAT_DE_SALA.matcher(destino);
         if (chat.matches()) {

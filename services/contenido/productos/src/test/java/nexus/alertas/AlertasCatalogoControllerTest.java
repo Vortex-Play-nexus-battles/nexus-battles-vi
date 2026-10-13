@@ -42,4 +42,51 @@ class AlertasCatalogoControllerTest {
                 .andExpect(jsonPath("$[0].implementadaEn")
                         .value("2026-09-11T15:30:00Z"));
     }
+
+    @Test
+    @DisplayName("HU-NOT-001: los cambios para otro servicio pasan desde y limite al servicio y responden el lote")
+    void consultaCambiosParaOtroServicio() throws Exception {
+        AlertasCatalogoServicio servicio = mock(AlertasCatalogoServicio.class);
+        Instant desde = Instant.parse("2026-09-10T12:00:00Z");
+        Instant fecha = Instant.parse("2026-09-11T15:30:00Z");
+        when(servicio.consultarCambios(desde, 10))
+                .thenReturn(new LoteDeAlertasCatalogo(fecha, false, List.of(new AlertaCatalogo(
+                        "alerta-1",
+                        "producto-1",
+                        "Espada solar",
+                        TipoCambioCatalogo.PRODUCTO_MODIFICADO,
+                        "El producto Espada solar fue modificado.",
+                        fecha))));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new AlertasCatalogoController(servicio)).build();
+
+        mvc.perform(get("/api/v1/productos/alertas/cambios")
+                        .param("desde", "2026-09-10T12:00:00Z")
+                        .param("limite", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasta").value("2026-09-11T15:30:00Z"))
+                .andExpect(jsonPath("$.completo").value(false))
+                .andExpect(jsonPath("$.alertas[0].id").value("alerta-1"))
+                .andExpect(jsonPath("$.alertas[0].tipo").value("PRODUCTO_MODIFICADO"))
+                .andExpect(jsonPath("$.alertas[0].descripcion")
+                        .value("El producto Espada solar fue modificado."))
+                .andExpect(jsonPath("$.alertas[0].implementadaEn").value("2026-09-11T15:30:00Z"));
+    }
+
+    @Test
+    @DisplayName("HU-NOT-001: sin parametros pide la linea base con el limite por omision (50)")
+    void sinParametrosPideLaLineaBase() throws Exception {
+        AlertasCatalogoServicio servicio = mock(AlertasCatalogoServicio.class);
+        Instant ahora = Instant.parse("2026-09-11T15:30:00Z");
+        when(servicio.consultarCambios(null, 50))
+                .thenReturn(new LoteDeAlertasCatalogo(ahora, true, List.of()));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(
+                new AlertasCatalogoController(servicio)).build();
+
+        mvc.perform(get("/api/v1/productos/alertas/cambios"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.hasta").value("2026-09-11T15:30:00Z"))
+                .andExpect(jsonPath("$.completo").value(true))
+                .andExpect(jsonPath("$.alertas.length()").value(0));
+    }
 }

@@ -12,6 +12,7 @@ import {
   RESULTADO,
   consultar,
   consultarVarios,
+  descargar,
   estaVacio,
   filasDe,
   totalDe,
@@ -91,6 +92,84 @@ describe('consultar: cada codigo tiene su desenlace', () => {
     const d = await consultar('/parametros', { buscar });
 
     expect(d.resultado).toBe(RESULTADO.VACIO);
+  });
+});
+
+/**
+ * HU-USR-008 — un 400 o un 422 con problem details explican por qué: el panel
+ * enseña ese motivo («La fecha «desde» no es válida…») en vez de «el servicio
+ * respondió algo que la consola no sabe interpretar».
+ */
+describe('consultar: un rechazo que se explica', () => {
+  test.each([400, 422])('%i con problem details usa su detail como motivo', async (estado) => {
+    const d = await consultar('/admin/jugadores/indicadores?desde=x', {
+      buscar: buscarQueDevuelve(estado, {
+        type: 'https://nexusbattles.upb.edu.co/errors/datos-invalidos',
+        status: estado,
+        detail: 'La fecha «desde» no es válida: escríbela como aaaa-mm-dd.',
+      }),
+    });
+
+    expect(d.resultado).toBe(RESULTADO.NO_DISPONIBLE);
+    expect(d.motivo).toBe('La fecha «desde» no es válida: escríbela como aaaa-mm-dd.');
+    expect(d.estado).toBe(estado);
+  });
+
+  test('un 400 sin cuerpo legible conserva el motivo genérico', async () => {
+    const d = await consultar('/algo', { buscar: buscarQueDevuelve(400) });
+
+    expect(d.resultado).toBe(RESULTADO.NO_DISPONIBLE);
+    expect(d.motivo).toMatch(/no sabe interpretar/);
+  });
+});
+
+describe('descargar: un archivo, o el motivo por el que no lo hay', () => {
+  const conArchivo = (cabecera) =>
+    jest.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: (nombre) => (nombre === 'Content-Disposition' ? cabecera : null) },
+      blob: async () => 'contenido-del-csv',
+    }));
+
+  test('200: el contenido y el nombre que da el servidor', async () => {
+    const buscar = conArchivo('attachment; filename="directorio-de-cuentas-20261005-1500.csv"');
+
+    const d = await descargar('/admin/jugadores/exportacion?rol=JUGADOR', { buscar });
+
+    expect(d.resultado).toBe(RESULTADO.DATOS);
+    expect(d.contenido).toBe('contenido-del-csv');
+    expect(d.nombreArchivo).toBe('directorio-de-cuentas-20261005-1500.csv');
+    expect(buscar.mock.calls[0][0]).toBe('/api/v1/admin/jugadores/exportacion?rol=JUGADOR');
+    expect(buscar.mock.calls[0][1].headers.Accept).toContain('text/csv');
+  });
+
+  test('sin Content-Disposition no se inventa un nombre', async () => {
+    const d = await descargar('/x', { buscar: conArchivo(null) });
+
+    expect(d.nombreArchivo).toBeNull();
+  });
+
+  test('422: el motivo del servidor, sin contenido', async () => {
+    const d = await descargar('/admin/jugadores/exportacion', {
+      buscar: buscarQueDevuelve(422, { status: 422, detail: 'Los filtros dejan 12000 cuentas.' }),
+    });
+
+    expect(d.resultado).toBe(RESULTADO.NO_DISPONIBLE);
+    expect(d.motivo).toBe('Los filtros dejan 12000 cuentas.');
+    expect(d.contenido).toBeNull();
+  });
+
+  test('403 es falta de permiso; la red caída es servicio degradado; nunca lanza', async () => {
+    expect((await descargar('/x', { buscar: buscarQueDevuelve(403) })).resultado).toBe(
+      RESULTADO.SIN_PERMISO,
+    );
+    const caida = await descargar('/x', {
+      buscar: jest.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      }),
+    });
+    expect(caida.resultado).toBe(RESULTADO.SERVICIO_DEGRADADO);
   });
 });
 

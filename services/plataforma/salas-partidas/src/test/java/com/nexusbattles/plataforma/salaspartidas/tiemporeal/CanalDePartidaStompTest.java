@@ -241,7 +241,7 @@ class CanalDePartidaStompTest {
     }
 
     @Test
-    @DisplayName("la IA viaja con el heroe del anfitrion, no con uno inventado (HU-SAL-004)")
+    @DisplayName("sin catalogo, la IA viaja como rival de la maquina con su propio nombre, no como copia del anfitrion")
     void laIaViajaConElHeroeDelAnfitrion() {
         Sala conIa = Sala.crear(
                 new ParametrosDeSala(2, Modalidad.CONTRA_IA, 0, true, false, null), ANA,
@@ -252,12 +252,15 @@ class CanalDePartidaStompTest {
 
         List<AvisoDeInicioDePartida.Participante> roster =
                 ((AvisoDeInicioDePartida) capturarDos().cuerpos().get(0)).participantes();
+        // Auditoria del 4-oct: con el nombre del anfitrion, el registro decia
+        // «Arquero del Norte golpea a Arquero del Norte (tu)». Sin prototipo
+        // conocido, la maquina se llama «Rival de la maquina».
         assertAll(
                 () -> assertEquals(2, roster.size()),
                 () -> assertTrue(roster.get(1).esIA()),
-                () -> assertEquals("Arquero del Norte", roster.get(1).heroe().nombre(),
-                        "la IA usa el heroe del anfitrion: el unico que la partida conoce"),
-                () -> assertEquals(120, roster.get(1).heroe().vidaActual()),
+                () -> assertEquals(HeroeDeCombate.NOMBRE_DE_LA_MAQUINA, roster.get(1).heroe().nombre(),
+                        "la IA no lleva el nombre del heroe del anfitrion"),
+                () -> assertEquals(120, roster.get(1).heroe().vidaActual(), "a vida completa, en su nivel"),
                 () -> assertEquals("Heroe de la IA", roster.get(1).jugador().apodo()));
     }
 

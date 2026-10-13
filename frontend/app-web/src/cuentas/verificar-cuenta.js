@@ -47,6 +47,7 @@ import { MOTIVOS, MOTIVOS_DE_VERIFICACION, urlDeLogin } from '../comun/sesion.js
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { marcarErrorDe } from '../comun/ui/campo.js';
+import { formularioListo, sinCredencialesEnLaDireccion } from '../comun/ui/formulario-seguro.js';
 import {
   MENSAJE_DE_REENVIO,
   anotarEnvio,
@@ -367,6 +368,10 @@ export function montarVerificacion(
     campoCodigo.value = normalizarCodigo(valor);
   });
 
+  // G1 — la vista ya escucha `submit`: el botón se puede encender. Antes del
+  // foco de abajo, que no llega a un botón desactivado.
+  formularioListo(formulario);
+
   // ------------------------------------------------------------- arranque
   pintarEspera();
   if (delEnlace?.codigo && correoConocido) {
@@ -395,6 +400,10 @@ export function montarVerificacion(
 // ---------------------------------------------------------------- arranque
 
 function arrancar() {
+  // G1 — lo que un envío nativo de una versión vieja pudo dejar en la barra
+  // (`?email=…&codigo=…`). El fragmento del enlace del correo no se toca: lo
+  // lee y lo borra la propia vista.
+  sinCredencialesEnLaDireccion();
   montarCabecera(document.querySelector('[data-cabecera-app]'), {
     vista: 'verificar-cuenta',
     seccionActiva: null,

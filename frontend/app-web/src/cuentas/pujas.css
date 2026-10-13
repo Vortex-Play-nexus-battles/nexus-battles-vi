@@ -300,7 +300,9 @@ body {
 .tiempo-urgente {
   color: var(--error) !important;
   font-weight: 700;
-  animation: pulso-urgente 1s infinite alternate;
+  /* MOTION-3: tres pulsos al volverse urgente, no para siempre; el rojo y
+     el peso siguen diciendo la urgencia. */
+  animation: pulso-urgente 1s 3 alternate;
 }
 
 @keyframes pulso-urgente {
@@ -557,6 +559,24 @@ body {
   background: var(--superficie-2);
   font-weight: 600;
   color: var(--texto-2);
+}
+
+/* G5 (7.7.9): precio mínimo, método de pago y fecha de fin, bajo el reloj. */
+.datos-subasta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 8px 0 0;
+}
+
+.datos-subasta dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.historial-ganadora {
+  margin-left: 4px;
+  font-size: 11px;
 }
 
 /* Historial */
@@ -1352,7 +1372,8 @@ body {
    segundos de cerrar, y el laboratorio fotografia el estado degradado, donde
    no hay ninguna subasta. */
 .animacion-latido {
-  animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  /* MOTION-3: tres latidos, no infinitos. */
+  animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) 3;
 }
 
 /* El boton urgente se distingue por su halo, no por perder el color del

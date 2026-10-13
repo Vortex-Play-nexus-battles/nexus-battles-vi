@@ -35,12 +35,15 @@ import java.util.Objects;
  * <p>El nombre de la cache es nuevo a proposito ({@value #CACHE}): la anterior
  * ({@code terminosProhibidos}) guardaba una lista de cadenas sin caducidad, y
  * reutilizar el nombre haria que esta clase leyera un valor de otro tipo que
- * nunca expira.
+ * nunca expira. Por la misma razon lleva {@code .v2} desde RFINAL-02:
+ * {@link TerminoActivo} gano el {@code id} y su forma serializada cambio; con
+ * el nombre de antes, el primer despliegue leeria la lista vieja de Redis y
+ * fallaria al deserializarla.
  */
 @Component
 public class CatalogoDeTerminosActivos {
 
-    public static final String CACHE = "listaNegraTerminosActivos";
+    public static final String CACHE = "listaNegraTerminosActivos.v2";
 
     /** La unica entrada de la cache: toda la lista activa. */
     static final String CLAVE = "activos";

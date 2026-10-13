@@ -21,9 +21,9 @@ public class MotorNoDisponible extends ErrorDeNegocio {
 
     public MotorNoDisponible(String detalleTecnico) {
         super(TIPO,
-              "El combate no esta disponible ahora mismo",
+              "El combate no está disponible ahora mismo",
               503,
-              "No se pudo resolver la accion: " + detalleTecnico
+              "No se pudo resolver la acción: " + detalleTecnico
                       + ". Vuelve a intentarlo en unos segundos.");
     }
 }

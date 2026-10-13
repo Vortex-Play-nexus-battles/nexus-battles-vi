@@ -71,6 +71,56 @@ class VerificacionListaNegraServiceTest {
 
         assertThat(resultado.categoria()).isEqualTo(CategoriaDeTermino.MARCA);
         assertThat(resultado.coincidencias()).containsExactly("puta", "spider", "spiderman");
+        assertThat(resultado.reglas()).as("terminos sin fila: no hay ids que dar").isNull();
+    }
+
+    @Test
+    @DisplayName("2.1.0: con detalle, los ids de las reglas en el orden de las coincidencias; sin detalle, ninguno")
+    void reglas() {
+        lenient().when(catalogo.activos()).thenReturn(List.of(
+                new TerminoActivo("spiderman", "spiderman", CategoriaDeTermino.MARCA, ModoDeCoincidencia.SUBCADENA, 7L),
+                new TerminoActivo("puta", "puta", CategoriaDeTermino.OFENSIVO, ModoDeCoincidencia.PALABRA, 3L)));
+
+        var conDetalle = servicio.verificar("xXspidermanXx puta", ContextoDeTexto.CHAT_GENERAL, true);
+        var sinDetalle = servicio.verificar("xXspidermanXx puta", ContextoDeTexto.CHAT_GENERAL, false);
+
+        assertThat(conDetalle.coincidencias()).containsExactly("puta", "spiderman");
+        assertThat(conDetalle.reglas()).containsExactly(3L, 7L);
+        assertThat(sinDetalle.reglas()).isNull();
+    }
+
+    @Test
+    @DisplayName("HU-COM-007 CA-01: cada deteccion queda en la bitacora con reglas, categorias, contexto y accion, sin el texto")
+    void registraLaDeteccion() {
+        lenient().when(catalogo.activos()).thenReturn(List.of(
+                new TerminoActivo("gilipollas", "gilipollas", CategoriaDeTermino.OFENSIVO,
+                        ModoDeCoincidencia.SUBCADENA, 42L)));
+        ch.qos.logback.classic.Logger bitacora = (ch.qos.logback.classic.Logger)
+                org.slf4j.LoggerFactory.getLogger(VerificacionListaNegraService.class);
+        var lineas = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        lineas.start();
+        bitacora.addAppender(lineas);
+        try {
+            servicio.verificar("eres un gilipolla secreto", ContextoDeTexto.MENSAJE_PRIVADO, false);
+            servicio.verificar("hola a todos", ContextoDeTexto.CHAT_GENERAL, false);
+        } finally {
+            bitacora.detachAppender(lineas);
+        }
+
+        assertThat(lineas.list).as("solo la deteccion deja linea; el texto limpio no").hasSize(1);
+        var linea = lineas.list.get(0);
+        Map<String, Object> campos = new java.util.HashMap<>();
+        linea.getKeyValuePairs().forEach(par -> campos.put(par.key, par.value));
+        assertThat(campos).containsEntry("evento", "lista-negra.deteccion")
+                .containsEntry("reglas", List.of("42"))
+                .containsEntry("categorias", List.of("OFENSIVO"))
+                .containsEntry("modos", List.of("SUBCADENA"))
+                .containsEntry("contexto", "MENSAJE_PRIVADO")
+                .containsEntry("accion", "BLOQUEAR")
+                .containsEntry("largoDelTexto", 25);
+        assertThat(linea.getFormattedMessage()).contains("reglas=[42]")
+                .doesNotContain("secreto").doesNotContain("gilipolla");
+        assertThat(campos.values()).noneMatch(v -> String.valueOf(v).contains("secreto"));
     }
 
     @ParameterizedTest(name = "{0} -> {1}")

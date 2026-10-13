@@ -16,6 +16,8 @@ import nexus.misiones.dominio.ParametrosDeRecompensa;
  * @param reintentoBase      espera del primer reintento de una entrega fallida
  * @param loteDelTrabajo     ejecuciones que el trabajo atiende por vuelta
  * @param correoActivo       si se escribe al jugador al terminar
+ * @param avisosActivos      si se deja un aviso en su bandeja al terminar
+ *                           (RF-NOT-004)
  * @param semillaDePruebas   solo pruebas: fija el azar de todas las
  *                           ejecuciones y la semilla del motor; nula en juego real
  * @param multiplicadorMitico decision del PO; nulo = Mitico no se ofrece
@@ -25,6 +27,7 @@ public record ParametrosDeMisiones(
         Duration reintentoBase,
         int loteDelTrabajo,
         boolean correoActivo,
+        boolean avisosActivos,
         Long semillaDePruebas,
         Double multiplicadorMitico,
         ParametrosDeRecompensa recompensas) {
@@ -48,7 +51,7 @@ public record ParametrosDeMisiones(
 
     /** Los de produccion: una hora es una hora. */
     public static ParametrosDeMisiones porOmision() {
-        return new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, null, null,
+        return new ParametrosDeMisiones(Duration.ofHours(1), Duration.ofSeconds(30), 20, true, true, null, null,
                 ParametrosDeRecompensa.provisionales());
     }
 }

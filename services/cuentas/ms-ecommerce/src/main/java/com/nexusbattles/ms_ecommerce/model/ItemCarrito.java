@@ -57,8 +57,14 @@ public class ItemCarrito {
     private BigDecimal precioUnitario;
     private BigDecimal subtotal;
 
+    /**
+     * Precio por cantidad. Sin precio en dinero real (un producto que solo se
+     * vende en creditos, G3) la linea no tiene subtotal en dinero real.
+     */
     public void calcularSubtotal() {
-        if (precioUnitario != null && cantidad != null) {
+        if (precioUnitario == null) {
+            this.subtotal = null;
+        } else if (cantidad != null) {
             this.subtotal = precioUnitario.multiply(BigDecimal.valueOf(cantidad));
         }
     }

@@ -58,3 +58,7 @@ motor:
   indice:
     media: ${MOTOR_INDICE_MEDIA:4000.5}
     desviacion: ${MOTOR_INDICE_DESVIACION:1333.3333333333333}
+  # D-41: como decide la maquina con DECISION_DE_LA_MAQUINA (IA tactica por
+  # reglas, no entrenada). FACIL, NORMAL o DIFICIL; una mal escrita no arranca.
+  ia:
+    dificultad: ${MOTOR_IA_DIFICULTAD:NORMAL}

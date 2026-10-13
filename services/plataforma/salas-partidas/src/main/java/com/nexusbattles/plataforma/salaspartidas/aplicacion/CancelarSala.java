@@ -88,6 +88,37 @@ public class CancelarSala {
     }
 
     /**
+     * La cierra el sistema porque nadie la llego a jugar —
+     * {@link MotivoDeCancelacion#INACTIVIDAD}, lo usa {@link CerrarAbandonadas}.
+     *
+     * <p>Los mismos tres pasos que la cancelacion del anfitrion: guardar,
+     * devolver los creditos de cada participante y avisar. Si otra escritura se
+     * adelanta y la sala ya no esta abierta (empezo, se cancelo), no se hace
+     * nada: la decision la tomo quien llego primero.
+     *
+     * @return true si la sala se cerro ahora
+     */
+    public boolean porAbandono(UUID idSala) {
+        Objects.requireNonNull(idSala, "Hace falta la sala que se cierra.");
+        for (int intento = 1; ; intento++) {
+            java.util.Optional<Sala> leida = repositorio.buscarPorId(idSala);
+            if (leida.isEmpty() || !leida.get().cerrarPorAbandono()) {
+                return false;
+            }
+            try {
+                Sala guardada = repositorio.guardar(leida.get());
+                int devueltos = devolverCreditos(guardada);
+                canal.anunciarCancelacion(guardada, MotivoDeCancelacion.INACTIVIDAD, devueltos);
+                return true;
+            } catch (SalaModificadaConcurrentemente otroSeAdelanto) {
+                if (intento >= INTENTOS) {
+                    return false;
+                }
+            }
+        }
+    }
+
+    /**
      * Devuelve la reserva de <b>cada</b> participante — HU-JUE-014, CA-03.
      *
      * <p>Una a una y sin parar en la primera que falle: que el libro no

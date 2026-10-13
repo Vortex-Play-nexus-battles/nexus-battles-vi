@@ -39,8 +39,12 @@
  * exactamente el contenido del que hay que desconfiar.
  */
 
+import { destinoVisible, urlDeVista } from '../../comun/acceso.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
+import { conCarga } from '../../comun/ui/boton.js';
+import { confirmarCritico } from '../../comun/ui/dialogo.js';
+import { urlDeLogin } from '../../comun/sesion.js';
 import {
   pintarEstado,
   estadoVacio,
@@ -53,13 +57,19 @@ import { esIdDeImagen, textoAlternativo } from '../../comun/ui/comunidad/comenta
 import {
   accionesDesde,
   consultarCola,
+  hayReportesPendientes,
   consultarDetalle,
   historialDelAutor,
   imagenParaModeracion,
   resolverComentario,
+  resolverEnLote,
+  ACCIONES_EN_LOTE,
   ACCIONES_INTERNAS,
   ACCIONES_SIN_CAMBIO_DE_ESTADO,
+  CATEGORIAS,
+  CONFIRMACION_DE_ELIMINAR,
   FILTROS_DE_COLA,
+  FILTROS_DE_PRIORIDAD,
   MOTIVO_MAXIMO,
   MOTIVO_MINIMO,
   MOTIVO_MODERACION,
@@ -152,14 +162,81 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
 }
 
 /**
+ * HU-USR-010 (CA-02) — la dirección de la ficha administrativa del autor, por
+ * su `uid` (lo único que la cola sabe de él), o `null` si este rol no puede
+ * abrirla: la ficha es de administración (la matriz de acceso lo decide) y a
+ * un moderador no se le ofrece una puerta cerrada.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string) => string)|null}
+ */
+export function enlazadorDeFicha(rol) {
+  if (!destinoVisible('ficha-usuario', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId) => {
+    const destino = new URL(urlDeVista('ficha-usuario'));
+    destino.searchParams.set('usuario', autorId);
+    return destino.href;
+  };
+}
+
+/**
  * Una entrada de la cola, como tarjeta pulsable.
  *
  * @param {object} entrada `EntradaDeCola` del contrato
  * @param {(id: string) => void} alAbrir
+ * @param {{hrefDeFicha?: ((autorId: string) => string)|null, seleccionable?: boolean,
+ *          seleccionada?: boolean, alCambiarSeleccion?: ((marcada: boolean) => void)|null}} [opciones]
+ *   HU-USR-010: con `hrefDeFicha`, «Ver ficha» junto al autor. HU-COM-005 (decisión en
+ *   lote): con `seleccionable`, una casilla para elegir el comentario; sin ella, la
+ *   tarjeta es la de siempre.
  * @returns {HTMLElement}
  */
-export function tarjetaDeEntrada(entrada, alAbrir) {
+export function tarjetaDeEntrada(
+  entrada,
+  alAbrir,
+  {
+    hrefDeFicha = null,
+    seleccionable = false,
+    seleccionada = false,
+    alCambiarSeleccion = null,
+  } = {},
+) {
   const comentario = entrada.comentario ?? {};
+  let casillaDeSeleccion = null;
+  if (seleccionable) {
+    const entradaDeCasilla = h('input', {
+      clase: 'casilla__entrada',
+      datos: { accion: 'seleccionar' },
+      atributos: {
+        type: 'checkbox',
+        'aria-label': `Seleccionar el comentario de ${comentario.apodoAutor || 'su autor'}`,
+      },
+    });
+    entradaDeCasilla.checked = seleccionada;
+    // `click` y no `change`: cubre el ratón, la barra espaciadora y la etiqueta, y
+    // además salta en una tarjeta que aún no está en el documento, donde un
+    // checkbox cambia de valor pero no emite `change`.
+    entradaDeCasilla.addEventListener('click', () =>
+      alCambiarSeleccion?.(entradaDeCasilla.checked),
+    );
+    casillaDeSeleccion = h('label', {
+      clase: 'casilla',
+      hijos: [entradaDeCasilla, h('span', { clase: 'casilla__etiqueta', texto: 'Seleccionar' })],
+    });
+  }
+  const fichaDelAutor =
+    hrefDeFicha && typeof comentario.autorId === 'string' && comentario.autorId
+      ? h('a', {
+          texto: 'Ver ficha',
+          datos: { accion: 'ver-ficha' },
+          atributos: {
+            href: hrefDeFicha(comentario.autorId),
+            'aria-label': `Ver la ficha de ${comentario.apodoAutor || 'su autor'}`,
+          },
+        })
+      : null;
   const categorias = Object.entries(entrada.porCategoria ?? {})
     .sort((a, b) => b[1] - a[1])
     .map(([nombre, cuantos]) =>
@@ -179,11 +256,13 @@ export function tarjetaDeEntrada(entrada, alAbrir) {
     h('div', {
       clase: 'fila fila--envuelta',
       hijos: [
+        casillaDeSeleccion,
         h('span', {
           clase: 'tarjeta__titulo',
           datos: { campo: 'apodo' },
           texto: comentario.apodoAutor ?? '',
         }),
+        fichaDelAutor,
         h('span', {
           clase: 'distintivo distintivo--reportado',
           datos: { campo: 'reportes' },
@@ -537,7 +616,11 @@ export function panelDeDetalle(
   }
 
   // --------------------------------------------------------------- decision
-  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true);
+  // 1.8.0: uno PUBLICADO con reportes pendientes sigue a la vista y se puede
+  // aprobar (cierra sus reportes) ademas de ocultar, eliminar o editar.
+  const posibles = accionesDesde(comentario.estado ?? '', comentario.marcado === true, {
+    reportesPendientes: hayReportesPendientes(detalle),
+  });
   if (posibles.length === 0) {
     panel.append(
       h('p', {
@@ -658,6 +741,290 @@ export function panelDeDetalle(
   return panel;
 }
 
+// ----------------------------------------------------- decision en lote
+// HU-COM-005 (#519), comentarios.yaml 1.10.1. El servicio es atomico: o se
+// resuelven todos los comentarios del lote o no cambia ninguno.
+
+/** El titulo del aviso de exito de un lote, por accion. */
+export const RESULTADO_DE_LOTE = Object.freeze({
+  APROBAR: 'Comentarios aprobados',
+  OCULTAR: 'Comentarios ocultados',
+  ELIMINAR: 'Comentarios eliminados',
+  RESTAURAR: 'Comentarios restaurados',
+  MARCAR: 'Comentarios marcados para seguimiento',
+  DESMARCAR: 'Marca de seguimiento retirada de los comentarios',
+});
+
+/** Como se nombra, en una lista, un comentario que la cola ya no tiene delante. */
+const SIN_NOMBRE = 'un comentario que ya no está en la cola';
+
+/** Cuanto del texto de un comentario se enseña para distinguirlo de otro del mismo autor. */
+const LARGO_DEL_EXTRACTO = 40;
+
+/** Autor y comienzo del texto: lo que la persona reconoce, nunca un identificador. */
+function nombreDeEntrada(entrada) {
+  const comentario = entrada?.comentario ?? {};
+  const texto = String(comentario.texto ?? '').trim();
+  const extracto =
+    texto.length > LARGO_DEL_EXTRACTO ? `${texto.slice(0, LARGO_DEL_EXTRACTO).trimEnd()}…` : texto;
+  const autor = comentario.apodoAutor || 'Un jugador';
+  return extracto ? `${autor} · «${extracto}»` : autor;
+}
+
+/**
+ * Que decir ante el rechazo de un lote. Se decide por `estado` y `motivo`, nunca
+ * por el texto del servidor: el `detail` de este contrato lleva identificadores y
+ * nombres de enum, y puede traer una cifra. Es una funcion pura: devuelve QUE
+ * mostrar y la vista decide COMO (el aviso, la lista, la recarga, el foco).
+ *
+ * @param {{estado?: number, motivo?: string|null, comentarioIds?: string[]}|unknown} error
+ * @param {(id: string) => string|null} [nombrePorId] nombre legible de un comentario de
+ *   la cola, o `null` si ya no esta
+ * @returns {{tono: 'error'|'advertencia'|'info', titulo: string, detalle: string,
+ *   afectados: string[], quitar: string[], recargar: boolean, apagarBarra: boolean,
+ *   accion: {texto: string, nombre: 'iniciar-sesion'|'actualizar-cola'}|null}}
+ */
+export function mensajeDelLote(error, nombrePorId = () => null) {
+  const estado = error?.estado;
+  const ids = Array.isArray(error?.comentarioIds) ? error.comentarioIds : [];
+  const base = {
+    afectados: [],
+    quitar: [],
+    recargar: false,
+    apagarBarra: false,
+    accion: null,
+  };
+
+  if (estado === 400 && error?.motivo === MOTIVO_MODERACION.CONFIRMACION_REQUERIDA) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Falta la confirmación',
+      detalle: `Escribe ${CONFIRMACION_DE_ELIMINAR} tal cual para eliminar varios comentarios. No se cambió nada.`,
+    };
+  }
+  if (estado === 400) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Revisa la selección y el motivo',
+      detalle: 'No se cambió nada.',
+    };
+  }
+  if (estado === 401) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Tu sesión ya no es válida',
+      detalle: 'Vuelve a entrar para aplicar la decisión. Tu selección y tu motivo siguen aquí.',
+      accion: { texto: 'Iniciar sesión', nombre: 'iniciar-sesion' },
+    };
+  }
+  if (estado === 403) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Tu cuenta no puede resolver comentarios',
+      detalle: 'La decisión no se aplicó.',
+      apagarBarra: true,
+    };
+  }
+  if (estado === 404) {
+    return {
+      ...base,
+      tono: 'info',
+      titulo: 'Algunos comentarios ya no están',
+      detalle: 'No se cambió ningún comentario del lote.',
+      afectados: ids.map((id) => nombrePorId(id) ?? SIN_NOMBRE),
+      quitar: ids,
+      recargar: true,
+    };
+  }
+  if (estado === 409) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Otro moderador se adelantó',
+      detalle:
+        'Estos comentarios ya no admiten esa decisión y no se cambió ninguno del lote. Se actualiza la cola.',
+      afectados: ids.map((id) => nombrePorId(id) ?? SIN_NOMBRE),
+      quitar: ids,
+      recargar: true,
+    };
+  }
+  // Red caida o fallo del servidor: no se sabe si la decision llego a aplicarse,
+  // asi que no se promete que no cambio nada.
+  return {
+    ...base,
+    tono: 'error',
+    titulo: 'No se pudo aplicar la decisión',
+    detalle: 'Actualiza la cola para ver cómo quedó antes de volver a intentarlo.',
+    accion: { texto: 'Actualizar la cola', nombre: 'actualizar-cola' },
+  };
+}
+
+/**
+ * Lo que se dice del aviso a los autores tras un lote. El aviso es fail-open
+ * (HU-DIS-003): la decision vale aunque el aviso no salga, y callarlo dejaria al
+ * moderador creyendo que los autores se enteraron.
+ *
+ * @param {string} accion
+ * @param {Array<{autorNotificado?: boolean}>} resultados
+ * @returns {string}
+ */
+function detalleDelAviso(accion, resultados) {
+  if (ACCIONES_INTERNAS.includes(accion)) {
+    return 'Es una nota interna: los autores no reciben aviso. Queda en el historial.';
+  }
+  const sinAviso = resultados.filter((r) => r?.autorNotificado !== true).length;
+  if (sinAviso === 0) {
+    return 'Se avisó a los autores con el motivo.';
+  }
+  if (sinAviso === resultados.length) {
+    return 'La decisión quedó registrada, pero el aviso a los autores no salió.';
+  }
+  return 'La decisión quedó registrada, pero el aviso no salió para algunos autores.';
+}
+
+/**
+ * La barra del lote: seleccion de la pagina, contador, decision y motivo. Se
+ * construye una vez; `montarModeracion` la mantiene al dia.
+ *
+ * @returns {{elemento: HTMLElement, maestra: HTMLInputElement, limpiar: HTMLButtonElement,
+ *   contador: HTMLElement, nota: HTMLElement, formulario: HTMLFormElement,
+ *   accion: HTMLSelectElement, motivo: HTMLTextAreaElement, pista: HTMLElement,
+ *   ayuda: HTMLElement, aplicar: HTMLButtonElement}}
+ */
+function construirBarraDeLote() {
+  const maestra = h('input', {
+    clase: 'casilla__entrada',
+    datos: { accion: 'seleccionar-pagina' },
+    atributos: { type: 'checkbox' },
+  });
+  const limpiar = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Limpiar selección',
+    datos: { accion: 'limpiar-seleccion' },
+    atributos: { type: 'button', disabled: true },
+  });
+  const contador = h('p', {
+    clase: 't-meta',
+    datos: { zona: 'contador-lote' },
+    atributos: { role: 'status', 'aria-live': 'polite' },
+  });
+  const nota = h('p', {
+    clase: 't-meta',
+    texto:
+      'La cola tiene más comentarios de los que ves; la decisión solo alcanza a los que seleccionaste.',
+    datos: { zona: 'nota-lote' },
+    atributos: { hidden: true },
+  });
+
+  const accion = h('select', {
+    clase: 'desplegable__control',
+    atributos: { id: 'accion-lote', name: 'accion' },
+    hijos: ACCIONES_EN_LOTE.map((a) =>
+      h('option', { texto: a.etiqueta, atributos: { value: a.valor } }),
+    ),
+  });
+  const motivo = h('textarea', {
+    clase: 'campo__control',
+    atributos: {
+      id: 'motivo-lote',
+      name: 'motivo',
+      rows: 2,
+      maxlength: MOTIVO_MAXIMO,
+      'aria-describedby': 'motivo-lote-pista',
+    },
+  });
+  const pista = h('p', { clase: 'campo__pista', atributos: { id: 'motivo-lote-pista' } });
+  const ayuda = h('p', {
+    clase: 'campo__pista',
+    texto: 'Elige al menos un comentario y escribe un motivo para aplicar la decisión.',
+    atributos: { id: 'aplicar-lote-ayuda' },
+  });
+  const aplicar = h('button', {
+    clase: 'boton boton--primario',
+    texto: 'Aplicar a los seleccionados',
+    datos: { accion: 'aplicar-lote' },
+    atributos: { type: 'submit', disabled: true, 'aria-describedby': 'aplicar-lote-ayuda' },
+  });
+
+  const formulario = h('form', {
+    clase: 'pila pila--compacta',
+    datos: { zona: 'decision-lote' },
+    atributos: { novalidate: true },
+    hijos: [
+      h('div', {
+        clase: 'campo',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: 'Decisión para los seleccionados',
+            atributos: { for: 'accion-lote' },
+          }),
+          accion,
+        ],
+      }),
+      h('div', {
+        clase: 'campo campo--area',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: 'Motivo',
+            atributos: { for: 'motivo-lote' },
+          }),
+          motivo,
+          pista,
+        ],
+      }),
+      ayuda,
+      h('div', { clase: 'fila', hijos: [aplicar] }),
+    ],
+  });
+
+  const elemento = h('section', {
+    clase: 'pila pila--compacta',
+    atributos: { 'aria-labelledby': 'titulo-lote' },
+    hijos: [
+      h('h3', { texto: 'Decisión en lote', atributos: { id: 'titulo-lote' } }),
+      h('div', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('label', {
+            // `casilla--caja`: esta etiqueta queda suelta sobre la atmósfera oscura
+            // y con el color de texto del kit no tiene contraste suficiente; la caja
+            // le da superficie y borde. La de cada tarjeta no lo necesita: va dentro de ella.
+            clase: 'casilla casilla--caja',
+            hijos: [
+              maestra,
+              h('span', { clase: 'casilla__etiqueta', texto: 'Seleccionar los de esta página' }),
+            ],
+          }),
+          limpiar,
+          contador,
+        ],
+      }),
+      nota,
+      formulario,
+    ],
+  });
+
+  return {
+    elemento,
+    maestra,
+    limpiar,
+    contador,
+    nota,
+    formulario,
+    accion,
+    motivo,
+    pista,
+    ayuda,
+    aplicar,
+  };
+}
+
 /**
  * El filtro de la cola que esta elegido.
  *
@@ -669,30 +1036,345 @@ function filtroElegido(filtro) {
 }
 
 /**
+ * El filtro de prioridad que esta elegido (1.10.0); sin el control, «Todas».
+ *
+ * @param {HTMLSelectElement|null} filtro
+ * @returns {{valor: string, etiqueta: string, prioridadElevada: boolean|null}}
+ */
+function prioridadElegida(filtro) {
+  return FILTROS_DE_PRIORIDAD.find((f) => f.valor === filtro?.value) ?? FILTROS_DE_PRIORIDAD[0];
+}
+
+/**
+ * Anade las opciones de un select que el HTML trae solo con «Todas». Si ya trae
+ * mas, no las duplica: montar dos veces la vista no debe repetir la lista.
+ *
+ * @param {HTMLSelectElement|null} select
+ * @param {Array<{valor: string, etiqueta: string}>} opciones
+ */
+function llenarOpciones(select, opciones) {
+  if (!select || select.options.length > 1) {
+    return;
+  }
+  select.append(
+    ...opciones.map(({ valor, etiqueta }) =>
+      h('option', { texto: etiqueta, atributos: { value: valor } }),
+    ),
+  );
+}
+
+/**
+ * La cola vacia porque los filtros no coinciden con nada. NO es una cola sin
+ * trabajo ni un error: no dice que no haya nada pendiente, ni da ninguna
+ * explicacion de por que, y ofrece quitar los filtros.
+ *
+ * @param {{categoria: string|null, prioridadElevada: boolean|null}} filtros
+ * @param {() => void} alQuitar
+ * @returns {HTMLElement}
+ */
+function vacioPorFiltros({ categoria, prioridadElevada }, alQuitar) {
+  const soloPrioridad = prioridadElevada === true && !categoria;
+  return estadoVacio({
+    titulo: 'Ningún comentario coincide con los filtros',
+    detalle: soloPrioridad
+      ? 'En este momento ningún comentario de la cola tiene prioridad elevada.'
+      : 'Prueba con otros filtros o quítalos para ver todo lo pendiente.',
+    accion: { texto: 'Quitar filtros', nombre: 'quitar-filtros', alPulsar: alQuitar },
+  });
+}
+
+/**
+ * El estado vacio de la cola, segun por que esta vacia. «Marcado» elige que cola
+ * se mira y tiene sus propios vacios; solo categoria y prioridad son filtros que
+ * pueden dejarla sin nada, y con ellos manda el mensaje de los filtros.
+ *
+ * @param {{marcado: boolean|null, categoria: string|null, prioridadElevada: boolean|null}} elegido
+ * @param {() => void} alQuitarFiltros
+ * @returns {HTMLElement}
+ */
+function vacioDeLaCola({ marcado, categoria, prioridadElevada }, alQuitarFiltros) {
+  if (categoria !== null || prioridadElevada !== null) {
+    return vacioPorFiltros({ categoria, prioridadElevada }, alQuitarFiltros);
+  }
+  if (marcado === true) {
+    return estadoVacio({
+      titulo: 'No hay comentarios marcados para seguimiento',
+      detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
+    });
+  }
+  return estadoVacio({
+    titulo: 'No hay comentarios esperando revisión',
+    detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
+  });
+}
+
+/**
  * Monta la vista completa.
  *
  * @param {HTMLElement} raiz elemento con las zonas `cola`, `detalle` y `aviso`
- *   (y, si lo trae, el filtro `[data-zona="filtro"]`)
- * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string}} [opciones]
- *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real.
+ *   (y, si los trae, los filtros `[data-zona="filtro"]`, `"filtro-categoria"` y
+ *   `"filtro-prioridad"`; los dos ultimos traen solo «Todas» y la vista anade el resto)
+ * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string,
+ *          rol?: string|null}} [opciones]
+ *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real. `rol`
+ *   (HU-USR-010) decide si cada autor lleva «Ver ficha».
  * @returns {{recargar: () => Promise<void>}}
  */
-export function montarModeracion(raiz, { api = null, productoId = null, crearUrl } = {}) {
+export function montarModeracion(
+  raiz,
+  { api = null, productoId = null, crearUrl, rol = null } = {},
+) {
+  const hrefDeFicha = enlazadorDeFicha(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
     resolverComentario,
     imagenParaModeracion,
     historialDelAutor,
+    resolverEnLote,
     ...(api ?? {}),
   };
   const zonaCola = raiz.querySelector('[data-zona="cola"]');
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const filtro = raiz.querySelector('[data-zona="filtro"]');
+  // 1.10.0: categoria de reporte y prioridad. Se combinan con `filtro` (marcado).
+  const filtroCategoria = raiz.querySelector('[data-zona="filtro-categoria"]');
+  const filtroPrioridad = raiz.querySelector('[data-zona="filtro-prioridad"]');
+  llenarOpciones(filtroCategoria, CATEGORIAS);
+  llenarOpciones(filtroPrioridad, FILTROS_DE_PRIORIDAD.slice(1));
+  // Cada recarga lleva un numero: la respuesta de una anterior que llega tarde no
+  // pinta la cola (con tres filtros y el teclado, los cambios seguidos son normales).
+  let generacion = 0;
   // El detalle no trae `prioridadElevada`: se recuerda de la entrada de la
   // cola desde la que se abrio. `recargar` lo rehace antes de reabrir.
   const prioridadPorComentario = new Map();
+
+  // ------------------------------------------------------- decision en lote
+  // Sin la zona `lote` en el HTML la vista funciona como siempre: sin casillas.
+  const lote = raiz.querySelector('[data-zona="lote"]');
+  const barra = lote ? construirBarraDeLote() : null;
+  /** Los comentarios elegidos. Siempre un subconjunto de los que hay en pantalla. */
+  const seleccion = new Set();
+  /** Las entradas de la cola que se ven, por id y en el orden de la cola. */
+  let entradasPorId = new Map();
+  /**
+   * `enVuelo`: mientras hay un envio (o su confirmacion) en curso no se acepta otro.
+   * `apagada`: un 403, la cuenta no puede decidir; la barra se apaga hasta recargar
+   * la pagina. Es un objeto y no dos variables porque se escribe despues de un
+   * `await` (la regla `require-atomic-updates` lo exige asi).
+   */
+  const bloqueo = { enVuelo: false, apagada: false };
+  if (lote && barra) {
+    lote.hidden = true;
+    lote.append(barra.elemento);
+  }
+
+  /** Se escribe desde aqui y no despues de un `await`: `require-atomic-updates`. */
+  function marcarEnvio(enCurso) {
+    bloqueo.enVuelo = enCurso;
+  }
+
+  /** Pone al dia todo lo que depende de la seleccion: contador, casillas y botones. */
+  function actualizarBarra() {
+    if (!barra) {
+      return;
+    }
+    const elegidos = seleccion.size;
+    const visibles = entradasPorId.size;
+    const bloqueada = bloqueo.enVuelo || bloqueo.apagada;
+    const completa = elegidos > 0 && barra.motivo.value.trim().length >= MOTIVO_MINIMO;
+
+    if (elegidos === 0) {
+      barra.contador.textContent = 'Ninguno seleccionado';
+    } else if (elegidos === 1) {
+      barra.contador.textContent = '1 seleccionado';
+    } else {
+      barra.contador.textContent = `${elegidos} seleccionados`;
+    }
+    barra.maestra.checked = visibles > 0 && elegidos === visibles;
+    barra.maestra.indeterminate = elegidos > 0 && elegidos < visibles;
+    barra.maestra.disabled = bloqueada;
+    barra.limpiar.disabled = bloqueada || elegidos === 0;
+    barra.accion.disabled = bloqueada;
+    barra.motivo.disabled = bloqueada;
+    barra.pista.textContent = pistaDelMotivo(barra.accion.value);
+    barra.aplicar.disabled = bloqueada || !completa;
+    barra.ayuda.hidden = bloqueada || completa;
+    for (const caja of zonaCola.querySelectorAll('input[data-accion="seleccionar"]')) {
+      caja.checked = seleccion.has(caja.closest('article')?.dataset.comentarioId);
+      caja.disabled = bloqueada;
+    }
+  }
+
+  function cambiarSeleccion(comentarioId, marcada) {
+    if (marcada) {
+      seleccion.add(comentarioId);
+    } else {
+      seleccion.delete(comentarioId);
+    }
+    actualizarBarra();
+  }
+
+  function limpiarSeleccion() {
+    seleccion.clear();
+    actualizarBarra();
+  }
+
+  /** Muestra la barra (hay cola) con la nota de «hay mas de lo que ves», si toca. */
+  function mostrarLote(cola) {
+    if (!lote || !barra) {
+      return;
+    }
+    const total = typeof cola.total === 'number' ? cola.total : entradasPorId.size;
+    barra.nota.hidden = total <= entradasPorId.size;
+    lote.hidden = false;
+    actualizarBarra();
+  }
+
+  /** Tras un lote el trabajo sigue en la casilla maestra; sin cola, en el aviso. */
+  function enfocarTrasElLote() {
+    if (lote && barra && !lote.hidden && !barra.maestra.disabled) {
+      barra.maestra.focus();
+      return;
+    }
+    zonaAviso.setAttribute('tabindex', '-1');
+    zonaAviso.focus();
+  }
+
+  const AL_PULSAR_DEL_AVISO = {
+    'iniciar-sesion': () =>
+      globalThis.location.assign(
+        urlDeLogin({ volver: `${globalThis.location.pathname}${globalThis.location.search}` }),
+      ),
+    'actualizar-cola': () => {
+      // `recargar` pinta sus propios fallos: no rechaza.
+      recargar();
+    },
+  };
+
+  /** Pinta el rechazo de un lote y deja la pantalla lista para corregir o reintentar. */
+  async function rechazarLote(error, nombrePorId) {
+    const mensaje = mensajeDelLote(error, nombrePorId);
+    pintarAviso(zonaAviso, {
+      tono: mensaje.tono,
+      titulo: mensaje.titulo,
+      detalle: mensaje.detalle,
+      accion: mensaje.accion
+        ? { ...mensaje.accion, alPulsar: AL_PULSAR_DEL_AVISO[mensaje.accion.nombre] }
+        : null,
+    });
+    if (mensaje.afectados.length > 0) {
+      zonaAviso.append(
+        h('ul', {
+          clase: 'pila pila--compacta',
+          datos: { zona: 'afectados' },
+          hijos: mensaje.afectados.map((texto) => h('li', { clase: 't-meta', texto })),
+        }),
+      );
+    }
+    if (mensaje.apagarBarra) {
+      bloqueo.apagada = true;
+    }
+    for (const id of mensaje.quitar) {
+      seleccion.delete(id);
+    }
+    if (mensaje.recargar) {
+      // La lista de afectados ya esta en el aviso: sobrevive a la recarga.
+      await recargar({ conservarAviso: true });
+    } else {
+      actualizarBarra();
+    }
+  }
+
+  /** «Aplicar»: confirma si es ELIMINAR, manda el lote y cuenta que paso. */
+  async function aplicarLote() {
+    if (!barra || bloqueo.enVuelo || bloqueo.apagada) {
+      return;
+    }
+    const ids = [...entradasPorId.keys()].filter((id) => seleccion.has(id));
+    const motivo = barra.motivo.value.trim();
+    const accion = barra.accion.value;
+    if (ids.length === 0 || motivo.length < MOTIVO_MINIMO) {
+      return;
+    }
+
+    marcarEnvio(true);
+    limpiarAviso(zonaAviso);
+    if (accion === 'ELIMINAR') {
+      // §7.3.9: eliminar en masa pide escribir la palabra, no solo pulsar.
+      const confirmado = await confirmarCritico({
+        titulo: 'Eliminar los comentarios seleccionados',
+        mensaje: `Vas a eliminar ${ids.length === 1 ? '1 comentario' : `${ids.length} comentarios`}.`,
+        consecuencias: [
+          'Eliminar es definitivo: no se puede deshacer.',
+          'Los autores reciben aviso con el motivo.',
+          'Si alguno ya no admite la decisión, no se elimina ninguno.',
+        ],
+        palabra: CONFIRMACION_DE_ELIMINAR,
+        textoConfirmar: 'Eliminar',
+      });
+      if (!confirmado) {
+        marcarEnvio(false);
+        return;
+      }
+    }
+
+    // Los nombres se toman ANTES de recargar: tras un 409 la cola ya no trae
+    // a los afectados y la lista tiene que decir de quien eran.
+    const antes = new Map(entradasPorId);
+    const nombrePorId = (id) => (antes.has(id) ? nombreDeEntrada(antes.get(id)) : null);
+
+    conCarga(barra.aplicar, true, 'Aplicando…');
+    actualizarBarra();
+    let resultado;
+    try {
+      resultado = await cliente.resolverEnLote({
+        comentarioIds: ids,
+        accion,
+        motivo,
+        // A ELIMINAR se le manda la constante del contrato, no lo tecleado.
+        ...(accion === 'ELIMINAR' ? { confirmacion: CONFIRMACION_DE_ELIMINAR } : {}),
+      });
+    } catch (error) {
+      marcarEnvio(false);
+      conCarga(barra.aplicar, false);
+      await rechazarLote(error, nombrePorId);
+      return;
+    }
+
+    marcarEnvio(false);
+    conCarga(barra.aplicar, false);
+    pintarAviso(zonaAviso, {
+      tono: 'exito',
+      titulo: RESULTADO_DE_LOTE[accion] ?? 'Decisión aplicada',
+      detalle: detalleDelAviso(accion, resultado?.resultados ?? []),
+    });
+    seleccion.clear();
+    barra.motivo.value = '';
+    await recargar({ conservarAviso: true });
+    enfocarTrasElLote();
+  }
+
+  if (barra) {
+    barra.maestra.addEventListener('change', () => {
+      seleccion.clear();
+      if (barra.maestra.checked) {
+        for (const id of entradasPorId.keys()) {
+          seleccion.add(id);
+        }
+      }
+      actualizarBarra();
+    });
+    barra.limpiar.addEventListener('click', limpiarSeleccion);
+    barra.motivo.addEventListener('input', actualizarBarra);
+    barra.accion.addEventListener('change', actualizarBarra);
+    barra.formulario.addEventListener('submit', (evento) => {
+      evento.preventDefault();
+      void aplicarLote();
+    });
+    actualizarBarra();
+  }
 
   function problema(error) {
     const explicacion = EXPLICACION[error?.motivo];
@@ -720,40 +1402,76 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
       limpiarAviso(zonaAviso);
     }
     vaciar(zonaDetalle);
+    // La barra del lote se esconde mientras se recarga: decidir sobre una cola
+    // que se esta cambiando es decidir a ciegas. Vuelve si hay cola que mostrar.
+    if (lote) {
+      lote.hidden = true;
+    }
     pintarEstado(zonaCola, estadoDeCarga({ filas: 3, etiqueta: 'Cargando la cola…' }));
     const elegido = filtroElegido(filtro);
+    const categoria = filtroCategoria?.value || null;
+    const soloPrioridad = prioridadElegida(filtroPrioridad).prioridadElevada;
+    const miRecarga = ++generacion;
     try {
       const cola = await cliente.consultarCola({
         productoId,
         marcado: elegido.marcado,
+        categoria,
+        prioridadElevada: soloPrioridad,
         tamano: TAMANO,
       });
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       prioridadPorComentario.clear();
-      for (const { comentario, prioridadElevada } of cola.entradas ?? []) {
+      entradasPorId = new Map();
+      for (const entrada of cola.entradas ?? []) {
+        const { comentario, prioridadElevada } = entrada;
         prioridadPorComentario.set(comentario?.id, prioridadElevada === true);
+        if (comentario?.id) {
+          entradasPorId.set(comentario.id, entrada);
+        }
+      }
+      // Solo se decide sobre lo que se ve: lo que ya no esta en la cola sale de la seleccion.
+      for (const id of [...seleccion]) {
+        if (!entradasPorId.has(id)) {
+          seleccion.delete(id);
+        }
       }
       if ((cola.entradas ?? []).length === 0) {
         // Cola vacia NO es un error: es la respuesta correcta cuando no hay
         // nada pendiente. Por eso estado vacio y no estado de error.
         pintarEstado(
           zonaCola,
-          elegido.marcado === true
-            ? estadoVacio({
-                titulo: 'No hay comentarios marcados para seguimiento',
-                detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
-              })
-            : estadoVacio({
-                titulo: 'No hay comentarios esperando revisión',
-                detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
-              }),
+          vacioDeLaCola(
+            { marcado: elegido.marcado, categoria, prioridadElevada: soloPrioridad },
+            quitarFiltros,
+          ),
         );
+        actualizarBarra();
         return;
       }
       for (const entrada of cola.entradas) {
-        zonaCola.append(tarjetaDeEntrada(entrada, (id) => abrir(id)));
+        const id = entrada.comentario?.id;
+        zonaCola.append(
+          tarjetaDeEntrada(entrada, (abierto) => abrir(abierto), {
+            hrefDeFicha,
+            ...(barra
+              ? {
+                  seleccionable: true,
+                  seleccionada: seleccion.has(id),
+                  alCambiarSeleccion: (marcada) => cambiarSeleccion(id, marcada),
+                }
+              : {}),
+          }),
+        );
       }
+      mostrarLote(cola);
     } catch (error) {
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       // UX-R4.3 — el reintento solo cuando reintentar puede servir de algo.
       // Un 403 no se arregla pulsando otra vez: el permiso no va a cambiar
@@ -837,7 +1555,32 @@ export function montarModeracion(raiz, { api = null, productoId = null, crearUrl
     }
   }
 
-  filtro?.addEventListener('change', () => recargar());
+  /**
+   * «Quitar filtros»: categoria y prioridad vuelven a «Todas». «Mostrar» no se
+   * toca. El foco pasa al primer filtro antes de recargar, porque el boton que
+   * se acaba de pulsar desaparece con la recarga.
+   */
+  function quitarFiltros() {
+    limpiarSeleccion();
+    if (filtroCategoria) {
+      filtroCategoria.value = '';
+    }
+    if (filtroPrioridad) {
+      filtroPrioridad.value = FILTROS_DE_PRIORIDAD[0].valor;
+    }
+    (filtroCategoria ?? filtroPrioridad)?.focus();
+    void recargar();
+  }
+
+  // Cambiar de filtro cambia lo que se ve: la seleccion no puede sobrevivirle, o
+  // la decision alcanzaria comentarios que el moderador ya no tiene delante.
+  const alCambiarFiltro = () => {
+    limpiarSeleccion();
+    return recargar();
+  };
+  filtro?.addEventListener('change', alCambiarFiltro);
+  filtroCategoria?.addEventListener('change', alCambiarFiltro);
+  filtroPrioridad?.addEventListener('change', alCambiarFiltro);
   recargar();
   return { recargar };
 }

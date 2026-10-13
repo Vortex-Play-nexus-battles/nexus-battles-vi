@@ -2,6 +2,7 @@ package com.nexusbattles.ms_identidad.perfiles.controller;
 
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.perfiles.dto.ActualizarPerfilRequest;
+import com.nexusbattles.ms_identidad.perfiles.dto.PerfilUsuarioResponse;
 import com.nexusbattles.ms_identidad.perfiles.model.PerfilUsuario;
 import com.nexusbattles.ms_identidad.perfiles.service.PerfilUsuarioService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -250,6 +251,80 @@ class PerfilControllerTest {
         assertEquals("El apodo ya está en uso.", response.getBody());
     }
 
+    // ---------- RFINAL-03: el 400 dice por qué a quien pide problem details ----------
+
+    private ResponseEntity<?> rechazoConProblemDetails(IllegalArgumentException causa) {
+        PerfilController controller = new PerfilController(perfilUsuarioService);
+        when(perfilUsuarioService.obtenerPorIdentificadorPublico(UID_SANTI))
+                .thenReturn(perfilDe("Santi", UID_SANTI));
+        when(request.getAttribute("uidActual")).thenReturn(UID_SANTI.toString());
+        when(request.getHeader("Accept")).thenReturn("application/problem+json, application/json");
+        when(request.getRequestURI()).thenReturn("/api/v1/perfiles/" + UID_SANTI);
+        when(perfilUsuarioService.actualizarPerfilPropio(anyLong(), any(), any(), any(), any(), any()))
+                .thenThrow(causa);
+        ActualizarPerfilRequest datos = new ActualizarPerfilRequest();
+        datos.setApodo("spider-man");
+        return controller.actualizarMiPerfil(UID_SANTI.toString(), datos, request);
+    }
+
+    /** El informe del jugador del 4-oct: «batman» daba «Revisa los datos». */
+    @Test
+    void actualizarMiPerfil_apodoProhibidoEsUnProblemDetailsDiscriminable() {
+        ResponseEntity<?> response = rechazoConProblemDetails(
+                new com.nexusbattles.ms_identidad.auth.validation.ApodoNoPermitidoException(
+                        "El apodo contiene términos prohibidos por la política de la comunidad."));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals(org.springframework.http.MediaType.APPLICATION_PROBLEM_JSON,
+                response.getHeaders().getContentType());
+        org.springframework.http.ProblemDetail problema =
+                assertInstanceOf(org.springframework.http.ProblemDetail.class, response.getBody());
+        assertEquals("https://nexusbattles.upb.edu.co/errors/apodo-no-permitido", problema.getType().toString());
+        assertEquals("apodo", problema.getProperties().get("campo"));
+        assertEquals(400, problema.getStatus());
+        assertFalse(problema.getDetail().toLowerCase().contains("spider"),
+                "el detalle no repite el apodo ni el término que saltó");
+    }
+
+    @Test
+    void actualizarMiPerfil_apodoEnUsoTieneSuPropioType() {
+        ResponseEntity<?> response = rechazoConProblemDetails(
+                new com.nexusbattles.ms_identidad.perfiles.service.ApodoEnUsoException());
+
+        org.springframework.http.ProblemDetail problema =
+                assertInstanceOf(org.springframework.http.ProblemDetail.class, response.getBody());
+        assertEquals("https://nexusbattles.upb.edu.co/errors/apodo-en-uso", problema.getType().toString());
+        assertEquals("apodo", problema.getProperties().get("campo"));
+    }
+
+    @Test
+    void actualizarMiPerfil_otroDatoInvalidoEsPerfilInvalidoSinCampo() {
+        ResponseEntity<?> response = rechazoConProblemDetails(new IllegalArgumentException("Avatar inválido."));
+
+        org.springframework.http.ProblemDetail problema =
+                assertInstanceOf(org.springframework.http.ProblemDetail.class, response.getBody());
+        assertEquals("https://nexusbattles.upb.edu.co/errors/perfil-invalido", problema.getType().toString());
+        assertTrue(problema.getProperties() == null || !problema.getProperties().containsKey("campo"));
+    }
+
+    /** Quien no pide problem details recibe el texto de siempre (compatibilidad). */
+    @Test
+    void actualizarMiPerfil_sinAcceptDeProblemDetailsSigueSiendoTexto() {
+        PerfilController controller = new PerfilController(perfilUsuarioService);
+        when(perfilUsuarioService.obtenerPorIdentificadorPublico(UID_SANTI))
+                .thenReturn(perfilDe("Santi", UID_SANTI));
+        when(request.getAttribute("uidActual")).thenReturn(UID_SANTI.toString());
+        when(request.getHeader("Accept")).thenReturn("application/json");
+        when(perfilUsuarioService.actualizarPerfilPropio(anyLong(), any(), any(), any(), any(), any()))
+                .thenThrow(new com.nexusbattles.ms_identidad.auth.validation.ApodoNoPermitidoException("Apodo prohibido"));
+
+        ResponseEntity<?> response = controller.actualizarMiPerfil(UID_SANTI.toString(),
+                new ActualizarPerfilRequest(), request);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("Apodo prohibido", response.getBody());
+    }
+
     @Test
     void actualizarMiPerfil_lanza403CuandoNoEsElDueno() {
         PerfilController controller = new PerfilController(perfilUsuarioService);
@@ -275,5 +350,24 @@ class PerfilControllerTest {
         ResponseStatusException ex = assertThrows(ResponseStatusException.class,
                 () -> controller.actualizarMiPerfil("1", datos, request));
         assertEquals(HttpStatus.NOT_FOUND, ex.getStatusCode());
+    }
+
+    /**
+     * RFINAL-05 (perfiles 1.4.0) — el portal de privacidad muestra el correo
+     * con el que la persona entra; solo lo recibe ella (las demás, 403 arriba).
+     */
+    @Test
+    void obtenerMiPerfil_incluyeElCorreoDeLaCuenta() {
+        PerfilController controller = new PerfilController(perfilUsuarioService);
+        PerfilUsuario perfil = perfilDe("Santi", UID_SANTI);
+        perfil.getUsuario().setEmail("santi@upb.edu.co");
+        when(perfilUsuarioService.obtenerPorIdentificadorPublico(UID_SANTI)).thenReturn(perfil);
+        when(request.getAttribute("uidActual")).thenReturn(UID_SANTI.toString());
+
+        ResponseEntity<?> response = controller.obtenerMiPerfil(UID_SANTI.toString(), request);
+
+        PerfilUsuarioResponse cuerpo = (PerfilUsuarioResponse) response.getBody();
+        assertEquals("santi@upb.edu.co", cuerpo.getEmail());
+        assertEquals("Santi", cuerpo.getApodo());
     }
 }

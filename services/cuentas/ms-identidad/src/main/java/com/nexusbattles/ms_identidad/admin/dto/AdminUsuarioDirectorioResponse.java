@@ -17,6 +17,10 @@ import java.util.UUID;
  * para pedir ayuda, y sin el la tabla no sirve para atender un reporte. Solo
  * lo ve quien tiene permiso de gestion de cuentas.
  *
+ * @param id            clave interna de la cuenta (RFINAL-06): la que esperan
+ *                      la ficha de gestion ({@code /admin/usuarios/{usuarioId}})
+ *                      y el cambio de rol; con ella el panel abre la ficha de
+ *                      una fila sin que nadie copie identificadores
  * @param uid           identificador publico, el que usan los demas servicios
  * @param apodo         nombre visible en el juego
  * @param email         correo de contacto de la cuenta
@@ -28,6 +32,7 @@ import java.util.UUID;
  * @param bloqueada     bloqueo temporal por intentos fallidos, ahora mismo
  */
 public record AdminUsuarioDirectorioResponse(
+        Long id,
         UUID uid,
         String apodo,
         String email,
@@ -42,6 +47,7 @@ public record AdminUsuarioDirectorioResponse(
         boolean bloqueada = usuario.getBloqueadoHasta() != null
                 && LocalDateTime.now().isBefore(usuario.getBloqueadoHasta());
         return new AdminUsuarioDirectorioResponse(
+                usuario.getId(),
                 usuario.getPublicId(),
                 usuario.getApodo(),
                 usuario.getEmail(),

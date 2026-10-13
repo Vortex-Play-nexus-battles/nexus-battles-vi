@@ -51,7 +51,8 @@ test('muestra un campo de busqueda con minimo de cuatro caracteres', async () =>
   const campo = formulario.querySelector('[name="criterio"]');
   expect(campo.type).toBe('search');
   expect(campo.minLength).toBe(4);
-  expect(formulario.querySelector('label').textContent).toMatch(/buscar productos/i);
+  // PLAYER-07a — la búsqueda es general (héroes y objetos) y lo dice.
+  expect(formulario.querySelector('label').textContent).toMatch(/buscar en tu inventario/i);
 });
 
 test('no consulta cuando el jugador escribe menos de cuatro caracteres', async () => {

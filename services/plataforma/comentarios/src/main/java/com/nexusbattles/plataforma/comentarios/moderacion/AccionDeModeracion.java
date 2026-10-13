@@ -45,8 +45,14 @@ import com.nexusbattles.plataforma.comentarios.Comentario;
  */
 public enum AccionDeModeracion {
 
-    /** Lo deja visible: el reporte no prospero. */
-    APROBAR(Comentario.Estado.PUBLICADO, EnumSet.of(Comentario.Estado.EN_REVISION)),
+    /**
+     * Lo deja visible: el reporte no prospero. Desde EN_REVISION lo devuelve
+     * al hilo; desde PUBLICADO (contrato 1.8.0: un reporte encola el
+     * comentario sin ocultarlo) cierra sus reportes pendientes y no cambia
+     * nada de lo que ve el jugador.
+     */
+    APROBAR(Comentario.Estado.PUBLICADO,
+            EnumSet.of(Comentario.Estado.EN_REVISION, Comentario.Estado.PUBLICADO)),
 
     /** Lo retira de la vista conservando el registro. Reversible. */
     OCULTAR(Comentario.Estado.OCULTO,
@@ -142,6 +148,15 @@ public enum AccionDeModeracion {
     public boolean seAvisaAlAutor() {
         return this != MARCAR && this != DESMARCAR;
     }
+
+    /**
+     * Las decisiones que atienden los reportes recibidos hasta ese momento
+     * (contrato 1.8.0): despues de una de ellas, un reporte anterior ya no
+     * esta pendiente. MARCAR y DESMARCAR no: son una nota interna, no una
+     * decision sobre lo que se reporto.
+     */
+    public static final Set<AccionDeModeracion> RESUELVEN_REPORTES =
+            Set.copyOf(EnumSet.of(APROBAR, OCULTAR, ELIMINAR, RESTAURAR, EDITAR));
 
     /** Que se puede hacer con un comentario que esta en ese estado (sin mirar la marca). */
     public static Set<AccionDeModeracion> desde(Comentario.Estado actual) {

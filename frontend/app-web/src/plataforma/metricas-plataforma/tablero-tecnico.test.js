@@ -7,6 +7,7 @@ import {
   montarTableroTecnico,
   ms,
   porcentaje,
+  resumenDeCuentas,
   resumenDeModeracion,
 } from './tablero-tecnico.js';
 
@@ -76,6 +77,23 @@ const moderacion = (extra = {}) => ({
   ...extra,
 });
 
+/** Lo que ms-identidad publica en /admin/jugadores/indicadores, reenviado por /moderacion (1.10.0). */
+const cuentas = () => ({
+  total: 12,
+  porEstado: { ACTIVO: 8, PENDIENTE_VERIFICACION: 1, INACTIVO: 0, SUSPENDIDO: 2, BANEADO: 1 },
+  registros: {
+    desde: '2026-09-30',
+    hasta: '2026-10-01',
+    total: 3,
+    porDia: [
+      { fecha: '2026-09-30', cuentas: 1 },
+      { fecha: '2026-10-01', cuentas: 2 },
+    ],
+  },
+  ocultarPruebas: false,
+  calculadoEn: '2026-10-01T10:00:00Z',
+});
+
 function servicio(rutas) {
   return jest.fn(async (url, opciones = {}) => {
     const clave = new URL(url, 'http://x').pathname;
@@ -116,6 +134,12 @@ describe('presentacion', () => {
     const brecha = filaDe(t.servicios[1], t.umbrales);
     expect(brecha.brecha).toBe('Connection refused');
     expect(brecha.cpuEnAlerta).toBe(false);
+  });
+
+  test('resumenDeCuentas en una linea: estados ahora y altas del periodo', () => {
+    expect(resumenDeCuentas(cuentas())).toBe(
+      '12 cuentas (8 activas, 2 suspendidas, 1 baneadas, 1 sin verificar, 0 inactivas) · 3 altas en el periodo',
+    );
   });
 
   test('resumenDeModeracion en una linea', () => {
@@ -195,6 +219,60 @@ describe('vista', () => {
     expect(document.querySelectorAll('[data-zona="pendientes"] li')).toHaveLength(2);
   });
 
+  test('con los indicadores de identidad pinta cuentas por estado y altas por dia, y deja de listar "nuevos usuarios" como pendiente', async () => {
+    const fetchImpl = servicio({
+      '/api/v1/tecnicas': { cuerpo: tecnico() },
+      '/api/v1/moderacion': {
+        cuerpo: moderacion({
+          registroDeUsuarios: cuentas(),
+          pendientes: ['frecuencia de reportes: HU-COM-006'],
+        }),
+      },
+    });
+    montarTableroTecnico(document, { fetchImpl });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="resumen-usuarios"]').textContent).toMatch(
+      /12 cuentas \(8 activas, 2 suspendidas, 1 baneadas/,
+    );
+    const dias = document.querySelectorAll('[data-zona="altas-por-dia"] li');
+    expect(dias).toHaveLength(2);
+    expect(dias[1].textContent).toBe('2026-10-01: 2');
+    expect(document.querySelector('[data-zona="usuarios-no-disponibles"]')).toBeNull();
+    const pendientes = document.querySelectorAll('[data-zona="pendientes"] li');
+    expect(pendientes).toHaveLength(1);
+    expect(pendientes[0].textContent).toMatch(/frecuencia de reportes/);
+  });
+
+  test('si identidad no dio las cuentas no se pinta ningun numero: dice «no disponibles» y el motivo real queda en pendientes (CA-03)', async () => {
+    const fetchImpl = servicio({
+      '/api/v1/tecnicas': { cuerpo: tecnico() },
+      '/api/v1/moderacion': {
+        cuerpo: moderacion({
+          registroDeUsuarios: null,
+          pendientes: [
+            'registro de nuevos usuarios: ms-identidad nego el permiso (se necesita un administrador con GESTIONAR_CUENTAS)',
+            'frecuencia de reportes: HU-COM-006',
+          ],
+        }),
+      },
+    });
+    montarTableroTecnico(document, { fetchImpl });
+    await asentar();
+    await asentar();
+
+    expect(document.querySelector('[data-zona="resumen-moderacion"]')).not.toBeNull();
+    expect(document.querySelector('[data-zona="resumen-usuarios"]')).toBeNull();
+    expect(document.querySelector('[data-zona="altas-por-dia"]')).toBeNull();
+    const sinCuentas = document.querySelector('[data-zona="usuarios-no-disponibles"]');
+    expect(sinCuentas.textContent).toMatch(/no disponibles/);
+    expect(sinCuentas.textContent).not.toMatch(/\d/);
+    expect(document.querySelector('[data-zona="pendientes"]').textContent).toMatch(
+      /GESTIONAR_CUENTAS/,
+    );
+  });
+
   test('con umbral configurado se listan las alertas; el periodo del formulario viaja en la consulta; exportar descarga', async () => {
     const descargas = [];
     const fetchImpl = servicio({
@@ -205,7 +283,7 @@ describe('vista', () => {
           alertasConfiguradas: true,
           umbralSancionesPorDia: 3,
           alertas: url.includes('desde=')
-            ? ['alta frecuencia de sanciones el 2026-09-28: 5 por encima de 3']
+            ? ['alta frecuencia de sanciones el 2026-09-28: 5 (umbral: 3 o mas por dia)']
             : [],
         }),
       }),
@@ -218,7 +296,7 @@ describe('vista', () => {
     await asentar();
     expect(
       document.querySelector('[data-zona="moderacion"] [data-zona="alertas"]').textContent,
-    ).toMatch(/ningún día supera/);
+    ).toMatch(/ningún día llega al umbral/);
 
     const form = document.querySelector('[data-zona="periodo"]');
     form.querySelector('[name="desde"]').value = '2026-09-01T00:00';

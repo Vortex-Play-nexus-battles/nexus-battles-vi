@@ -1,8 +1,8 @@
 /**
  * HU-NOT-006 — Acceso HTTP y direcciones del canal de notificaciones.
  *
- * Habla con `contracts/openapi/notificaciones.yaml` (bandeja, marcar leido,
- * entregar pendientes a una sesion) y conoce las direcciones de
+ * Habla con `contracts/openapi/notificaciones.yaml` (bandeja, marcar leido uno
+ * o todos, entregar pendientes a una sesion) y conoce las direcciones de
  * `contracts/websocket/notificaciones.yaml` (handshake, cola privada, alta de
  * sesion). No decide nada que los contratos no digan.
  *
@@ -193,6 +193,24 @@ export async function marcarLeida(
       rutaDeUsuario(usuarioId, `/notifications/${encodeURIComponent(notificacionId)}/read`),
       { method: 'POST' },
     ),
+  );
+}
+
+/**
+ * HU-NOT-001 CA-02 — marca como leidos, de una sola vez, todos los avisos del
+ * jugador (contrato 1.3.0). O quedan leidos todos o no cambia ninguno; repetirlo
+ * no falla y devuelve `marcadas` en 0.
+ *
+ * @param {string} usuarioId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{usuarioId: string, marcadas: number, noLeidas: number}>} `LecturaResponse`
+ */
+export async function marcarTodasLeidas(
+  usuarioId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return leerJson(
+    await fetchImpl(rutaDeUsuario(usuarioId, '/notifications/read'), { method: 'POST' }),
   );
 }
 

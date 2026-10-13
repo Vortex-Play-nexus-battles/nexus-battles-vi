@@ -248,6 +248,9 @@ describe('rutaDeVuelta', () => {
       '/restablecer',
       '/frontend/app-web/src/cuentas/verificar-cuenta.html',
       '/frontend/app-web/src/cuentas/restablecer-confirmar.html?x=1',
+      // 6-oct — pedir el código de recuperación, en su dirección limpia.
+      '/recuperar',
+      '/frontend/app-web/src/cuentas/restablecer-solicitar.html',
     ]) {
       expect(rutaSegura(puerta, 'http://localhost:8099')).toBeNull();
     }

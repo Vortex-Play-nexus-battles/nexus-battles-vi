@@ -11,6 +11,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -133,14 +134,21 @@ class PartidaTest {
 
             Partida partida = Partida.iniciar(conIa, AHORA);
 
-            // No se le inventa un heroe: se le da el unico que la partida
-            // conoce, y de paso la pelea queda pareja.
+            // Auditoría del 4-oct: la maquina ya no es una COPIA del heroe del
+            // anfitrion (mismo nombre, mismo id, su equipo): es un rival propio
+            // del mismo nivel y la misma vida, para que la pelea quede pareja
+            // sin que «Arquero del Norte golpea a Arquero del Norte (tu)».
+            HeroeDeCombate delAnfitrion = partida.participantes().get(0).heroe();
+            HeroeDeCombate deLaMaquina = partida.participantes().get(1).heroe();
             assertAll(
-                    () -> assertNotNull(partida.participantes().get(0).heroe()),
-                    () -> assertNotNull(partida.participantes().get(1).heroe()),
-                    () -> assertEquals("Arquero del Norte",
-                            partida.participantes().get(1).heroe().nombre()),
-                    () -> assertEquals(120, partida.participantes().get(1).heroe().vidaActual()));
+                    () -> assertNotNull(delAnfitrion),
+                    () -> assertNotNull(deLaMaquina),
+                    () -> assertTrue(partida.participantes().get(1).esIA()),
+                    () -> assertNotEquals(delAnfitrion.id(), deLaMaquina.id()),
+                    () -> assertNotEquals("Arquero del Norte", deLaMaquina.nombre()),
+                    () -> assertEquals(HeroeDeCombate.NOMBRE_DE_LA_MAQUINA, deLaMaquina.nombre()),
+                    () -> assertEquals(5, deLaMaquina.nivelDeCombate()),
+                    () -> assertEquals(120, deLaMaquina.vidaActual()));
         }
     }
 

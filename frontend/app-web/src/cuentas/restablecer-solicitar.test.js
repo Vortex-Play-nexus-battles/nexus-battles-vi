@@ -101,6 +101,16 @@ describe('rechazoDeLaSolicitud', () => {
 });
 
 describe('la vista', () => {
+  test('G1 — el formulario va por POST y su botón nace apagado hasta montar', () => {
+    const boton = document.getElementById('botonEnviar');
+    expect(document.getElementById('formSolicitud').getAttribute('method')).toBe('post');
+    expect(boton.disabled).toBe(true);
+
+    montarSolicitud(document, { solicitar: jest.fn(), almacen: sessionStorage });
+
+    expect(boton.disabled).toBe(false);
+  });
+
   test('tras pedirlo dice el mensaje neutro, recuerda el correo y ofrece escribir el código', async () => {
     const solicitar = jest.fn(() => Promise.resolve(MENSAJE_DE_SOLICITUD));
     montarSolicitud(document, { solicitar, almacen: sessionStorage });

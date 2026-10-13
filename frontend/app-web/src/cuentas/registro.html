@@ -3,19 +3,38 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Crear cuenta — NEXUS BATTLES VI</title>
+    <title>Crear cuenta · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/fondos.css" />
     <!-- Solo el recortador de avatar: lo demas sale del kit. -->
     <link rel="stylesheet" href="./registro.css" />
   </head>
-  <body class="portal">
+  <body class="portal" data-fondo="registro">
     <div data-cabecera-app></div>
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="entrada__sobretitulo">Return of the Warriors</p>
-        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <!-- Revisión del modo jugador del 6-oct, punto 5: el mismo logotipo
+             oficial que la entrada, en vez del nombre escrito. El lema «Return
+             of the Warriors» viene dentro del logotipo. -->
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
         <p class="entrada__lema">
           Crea tu cuenta y empieza con créditos para tu primera apuesta. El apodo es el nombre con
           el que te verán en las salas, el chat y los torneos.
@@ -50,7 +69,18 @@
 
         <p class="estado" id="estadoRegistro" hidden role="status"></p>
 
-        <form id="formRegistro" class="pila" novalidate>
+        <!-- G1 — sin guion no se crea la cuenta, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para crear la cuenta hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — la contraseña nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que registro.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formRegistro" class="pila" method="post" novalidate>
           <div class="fila">
             <div class="campo">
               <label class="campo__etiqueta" for="nombres">Nombres</label>
@@ -163,7 +193,13 @@
             <p class="campo__pista">Opcional. Formatos JPG, PNG o WEBP.</p>
           </fieldset>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Crear cuenta
           </button>
         </form>

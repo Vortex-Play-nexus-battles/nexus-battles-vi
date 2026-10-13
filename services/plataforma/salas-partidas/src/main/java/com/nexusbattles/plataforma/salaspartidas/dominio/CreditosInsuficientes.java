@@ -12,7 +12,9 @@ import java.net.URI;
  * porque el requisito obliga a comunicar el motivo del rechazo.
  *
  * <p>El texto reproduce el ejemplo del contrato OpenAPI para que interfaz y
- * servidor no se desincronicen.
+ * servidor no se desincronicen. Vale para crear la sala y para entrar en ella
+ * (el libro rechaza la reserva igual en los dos casos): hasta la 1.8.1 decía
+ * «para crear esta sala» también a quien intentaba entrar.
  */
 public class CreditosInsuficientes extends ErrorDeNegocio {
 
@@ -24,12 +26,19 @@ public class CreditosInsuficientes extends ErrorDeNegocio {
 
     public CreditosInsuficientes(int disponibles, int requeridos) {
         super(TIPO,
-              "Creditos insuficientes",
+              "Créditos insuficientes",
               422,
-              "Tienes " + disponibles + " creditos y necesitas " + requeridos
-                      + " para crear esta sala.");
+              "Tienes " + creditos(disponibles) + " y la apuesta de esta sala es de " + requeridos + ".");
         this.disponibles = disponibles;
         this.requeridos = requeridos;
+    }
+
+    /**
+     * «1 crédito», «240 créditos»: la auditoría de DEV del 30-sep encontró
+     * «1 creditos».
+     */
+    static String creditos(int cantidad) {
+        return cantidad == 1 ? "1 crédito" : cantidad + " créditos";
     }
 
     public int disponibles() {

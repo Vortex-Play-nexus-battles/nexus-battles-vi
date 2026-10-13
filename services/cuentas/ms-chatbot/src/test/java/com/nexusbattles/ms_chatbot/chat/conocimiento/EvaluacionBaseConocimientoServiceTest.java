@@ -23,6 +23,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -178,6 +179,115 @@ class EvaluacionBaseConocimientoServiceTest {
         verify(versionRepository, never()).saveAndFlush(any());
         // ...pero las dos evaluaciones quedan registradas.
         verify(evaluacionRepository, times(2)).save(any());
+    }
+
+    // ---------------------------------------------- programar (1.3.8)
+
+    @Test
+    void programar_enElFuturo_laGuardaEnLaCandidata() {
+        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.save(candidata)).thenReturn(candidata);
+        Instant cuando = Instant.now().plus(Duration.ofHours(2));
+
+        VersionBaseConocimiento programada = servicio.programarDespliegue(cuando);
+
+        assertThat(programada.getDespliegueProgramadoEn()).isEqualTo(cuando);
+    }
+
+    @Test
+    void programar_sinFechaMuyProntoOMuyLejos_lanza400SinTocarNada() {
+        for (Instant cuando : new Instant[] {null, Instant.now(), Instant.now().plus(Duration.ofDays(91))}) {
+            assertThatThrownBy(() -> servicio.programarDespliegue(cuando))
+                .isInstanceOfSatisfying(ResponseStatusException.class,
+                    e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST));
+        }
+        verify(versionRepository, never()).save(any());
+    }
+
+    @Test
+    void cancelar_quitaLaProgramacion() {
+        candidata.programarDespliegue(Instant.now().plus(Duration.ofHours(1)));
+        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.save(candidata)).thenReturn(candidata);
+
+        assertThat(servicio.cancelarProgramacion().getDespliegueProgramadoEn()).isNull();
+    }
+
+    @Test
+    void desplegarSiCorresponde_sinProgramacionVencida_noHaceNada() {
+        candidata.programarDespliegue(ANTES.plus(Duration.ofHours(1)));
+        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+
+        assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
+
+        verify(versionRepository, never()).reclamarDespliegueProgramado(any(), any());
+    }
+
+    // Con varias instancias, la que no la reclama no hace nada.
+    @Test
+    void desplegarSiCorresponde_siOtraInstanciaLaReclamo_noDespliega() {
+        candidata.programarDespliegue(ANTES);
+        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(0);
+
+        assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
+
+        assertThat(candidata.getEstado()).isEqualTo(EstadoVersion.BORRADOR);
+        verify(versionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void desplegarSiCorresponde_vencidaYApta_laDespliega() {
+        prepararEvaluacion(copiasEnCandidata(temasDeProduccion));
+        candidata.programarDespliegue(ANTES);
+        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+
+        Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
+
+        assertThat(resultado).hasValueSatisfying(r -> {
+            assertThat(r.desplegada()).isTrue();
+            assertThat(r.numero()).isEqualTo(2);
+        });
+        assertThat(candidata.getEstado()).isEqualTo(EstadoVersion.PRODUCCION);
+        assertThat(candidata.getDespliegueProgramadoEn()).isNull();
+        assertThat(produccion.getEstado()).isEqualTo(EstadoVersion.RETIRADA);
+    }
+
+    // La misma regla que el boton: una candidata que rinde peor no se publica.
+    @Test
+    void desplegarSiCorresponde_vencidaPeroRindePeor_quedaRechazadaYSinProgramar() {
+        prepararEvaluacion(copiasEnCandidata(List.of(temasDeProduccion.get(0))));
+        candidata.programarDespliegue(ANTES);
+        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+
+        Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
+
+        assertThat(resultado).hasValueSatisfying(r -> {
+            assertThat(r.desplegada()).isFalse();
+            assertThat(r.motivo()).contains("acierta 2 de 3");
+        });
+        assertThat(candidata.getEstado()).isEqualTo(EstadoVersion.BORRADOR);
+        assertThat(candidata.getDespliegueProgramadoEn()).isNull();
+        assertThat(candidata.getProgramacionRechazadaEn()).isEqualTo(ANTES);
+        verify(versionRepository).save(candidata);
+        verify(evaluacionRepository, times(2)).save(any());
+    }
+
+    @Test
+    void desplegarSiCorresponde_sinCasosActivos_quedaRechazada() {
+        candidata.programarDespliegue(ANTES);
+        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+        when(casoRepository.findByActivoTrue()).thenReturn(List.of());
+
+        Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
+
+        assertThat(resultado).hasValueSatisfying(r -> {
+            assertThat(r.desplegada()).isFalse();
+            assertThat(r.motivo()).contains("No hay casos de evaluacion activos");
+        });
+        assertThat(candidata.getProgramacionRechazadaEn()).isEqualTo(ANTES);
     }
 
     // ------------------------------------------------------------ revertir

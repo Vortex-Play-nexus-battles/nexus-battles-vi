@@ -21,6 +21,8 @@ import java.util.UUID;
 //   POST /borrador/evaluacion    compara candidata vs produccion, sin desplegar
 //   POST /borrador/despliegue    despliega solo si no rinde peor (si no, 409)
 //   POST /produccion/reversion   vuelve a la version anterior
+//   PUT/DELETE /borrador/programacion  (1.3.8) programa o cancela la
+//                                publicacion automatica de la candidata
 //   /casos-evaluacion            CRUD de los casos con los que se evalua
 @RestController
 @RequestMapping("/chatbot/admin/base-conocimiento")
@@ -43,6 +45,16 @@ public class EvaluacionBaseConocimientoController {
     @PostMapping("/borrador/despliegue")
     public VersionResponse desplegarCandidata() {
         return VersionResponse.desde(evaluacionService.desplegarCandidata());
+    }
+
+    @PutMapping("/borrador/programacion")
+    public VersionResponse programarDespliegue(@Valid @RequestBody ProgramarDespliegueRequest datos) {
+        return VersionResponse.desde(evaluacionService.programarDespliegue(datos.desplegarEn()));
+    }
+
+    @DeleteMapping("/borrador/programacion")
+    public VersionResponse cancelarProgramacion() {
+        return VersionResponse.desde(evaluacionService.cancelarProgramacion());
     }
 
     @PostMapping("/produccion/reversion")

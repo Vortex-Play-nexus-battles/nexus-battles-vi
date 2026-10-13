@@ -4,32 +4,115 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
+import java.util.Objects;
 import nexus.misiones.dominio.Categoria;
 import nexus.misiones.dominio.Dificultad;
 import nexus.misiones.dominio.EpicaDeTabla20;
+import nexus.misiones.dominio.MasterDeMision;
 import nexus.misiones.dominio.Mision;
 import nexus.misiones.dominio.Misiones;
 import nexus.misiones.dominio.Origen;
+import nexus.misiones.dominio.simulacion.AzarConSemilla;
+import nexus.misiones.dominio.simulacion.TiradaDeMasters;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CatalogoDeMisionesDesdeSemillaTest {
+
+    /** D-42: las misiones de historia de nivel 1 a 7, en orden. */
+    private static final List<String> PROGRESION = List.of("sendero-de-los-aprendices", "mina-abandonada",
+            "pantano-de-los-susurros", "fortaleza-quebrada", "cumbres-heladas", "volcan-dormido",
+            "ciudadela-de-las-sombras");
+
+    @Test
+    @DisplayName("D-42: la progresión publica siete misiones de historia, de nivel 1 a 7, cada una tras la anterior")
+    void progresion() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
+        List<Mision> progresion = catalogo.todas().stream().filter(m -> m.origen() == Origen.PROGRESION).toList();
+
+        assertThat(progresion).extracting(Mision::id).containsExactlyElementsOf(PROGRESION);
+        for (int i = 0; i < progresion.size(); i++) {
+            Mision m = progresion.get(i);
+            assertThat(m.nivelRecomendado()).as(m.id()).isEqualTo(i + 1);
+            assertThat(m.categoria()).as(m.id()).isEqualTo(Categoria.HISTORIA);
+            assertThat(m.requisitosPrevios()).as(m.id())
+                    .isEqualTo(i == 0 ? List.of() : List.of(progresion.get(i - 1).id()));
+            assertThat(m.jefe()).as(m.id()).isNotNull();
+            assertThat(m.encuentros()).as(m.id()).isGreaterThan(1);
+            if (i > 0) {
+                assertThat(m.duracionHoras()).as(m.id()).isGreaterThan(progresion.get(i - 1).duracionHoras());
+            }
+        }
+        // Un heroe nuevo tiene donde empezar: nivel 1 y sin requisitos.
+        assertThat(progresion.get(0).requisitosPrevios()).isEmpty();
+        // Ninguna mision del catalogo recomienda un nivel que no existe (§6.1.1).
+        assertThat(catalogo.todas()).allSatisfy(m -> assertThat(m.nivelRecomendado())
+                .isBetween(Mision.NIVEL_MINIMO, Mision.NIVEL_MAXIMO));
+    }
+
+    @Test
+    @DisplayName("D-42: una misión que recomienda un nivel fuera de 1..8 no se publica (el Templo decía 15)")
+    void nivelFueraDeRango() throws java.io.IOException {
+        String templo15 = new String(Objects.requireNonNull(getClass().getClassLoader()
+                .getResourceAsStream(CatalogoDeMisionesDesdeSemilla.DEL_DOCUMENTO)).readAllBytes(),
+                StandardCharsets.UTF_8).replace("\"nivelRecomendado\": 8,", "\"nivelRecomendado\": 15,");
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.leer(
+                new ByteArrayInputStream(templo15.getBytes(StandardCharsets.UTF_8)), "templo-15"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("15");
+        assertThatThrownBy(() -> new Mision("cero", Origen.PROGRESION, "Cero", Categoria.HISTORIA, "d", null,
+                Dificultad.FACIL, 1, 0, List.of(), "n", null, Misiones.templo().objetivos(),
+                Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(), Misiones.templo().recompensas(),
+                false, null, null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("6.1.1");
+    }
+
+    @Test
+    @DisplayName("D-42: la semilla de progresión solo publica misiones de progresión, con su nivel y sin Tabla 20")
+    void progresionSoloDeProgresion() {
+        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        Mision ajena = Misiones.historia("ajena", List.of());
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(ajena)), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ajena");
+
+        Mision sinNivel = new Mision("sin-nivel", Origen.PROGRESION, "Sin nivel", Categoria.HISTORIA, "d", null,
+                Dificultad.FACIL, 1, null, List.of(), "n", null, Misiones.templo().objetivos(),
+                Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(), Misiones.templo().recompensas(),
+                false, null, null);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(sinNivel)), null))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("nivel recomendado");
+
+        EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento,
+                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of()), null))
+                .hasMessageContaining("Tabla 20");
+    }
 
     @Test
     @DisplayName("la semilla del documento publica «El Templo Olvidado» con los datos de 7.8.14")
     void templo() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(false);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado");
+        assertThat(catalogo.todas()).extracting(Mision::id).startsWith("templo-olvidado");
         Mision templo = catalogo.buscar("templo-olvidado").orElseThrow();
         assertThat(templo.origen()).isEqualTo(Origen.DOCUMENTO);
         assertThat(templo.nombre()).isEqualTo("El Templo Olvidado");
         assertThat(templo.categoria()).isEqualTo(Categoria.HISTORIA);
         assertThat(templo.dificultad()).isEqualTo(Dificultad.NORMAL);
         assertThat(templo.duracionHoras()).isEqualTo(12);
-        assertThat(templo.nivelRecomendado()).isEqualTo(15);
+        // D-42: el documento dice 15, que ningun heroe alcanza (§6.1.1: hasta 8).
+        assertThat(templo.nivelRecomendado()).isEqualTo(Mision.NIVEL_MAXIMO);
         assertThat(templo.narrativa()).startsWith("En las profundidades del Bosque Sombrío")
                 .endsWith("un guardián milenario que protege sus secretos.");
         assertThat(templo.objetivos()).hasSize(5);
@@ -73,7 +156,8 @@ class CatalogoDeMisionesDesdeSemillaTest {
     void provisional() {
         CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true);
 
-        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "dev-prueba-de-humo");
+        assertThat(catalogo.todas()).extracting(Mision::id).startsWith("templo-olvidado")
+                .endsWith("dev-prueba-de-humo").contains(PROGRESION.toArray(String[]::new));
         Mision humo = catalogo.buscar("dev-prueba-de-humo").orElseThrow();
         assertThat(humo.origen()).isEqualTo(Origen.PROVISIONAL_DEV);
         assertThat(humo.nombre()).startsWith(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
@@ -148,5 +232,125 @@ class CatalogoDeMisionesDesdeSemillaTest {
         assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.leer("semilla/no-existe.json"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("no-existe");
+    }
+
+    // ------------------------------------------------ semilla extra del banco E2E
+
+    /** La semilla del banco, tal como la monta tests/e2e/compose.yml (la ruta es desde la carpeta del modulo). */
+    private static final Path SEMILLA_DEL_BANCO = Path.of("..", "..", "..", "tests", "e2e",
+            "semilla-misiones-banco.json");
+
+    /** El productoId de la epica de la Tabla 20 del Guerrero Tanque en el catalogo oficial. */
+    private static final String EPICA_DEL_TANQUE = "81af272d-74fb-3dc1-b6ff-01fdc99a1c1d";
+
+    private static Mision conMarca(String id) {
+        return new Mision(id, Origen.PROVISIONAL_DEV, CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL + " " + id,
+                Categoria.HISTORIA, "d", null, Dificultad.FACIL, 1, null, List.of(), "n", null,
+                Misiones.templo().objetivos(), Misiones.templo().enemigos(), Misiones.templo().jefe(), List.of(),
+                Misiones.templo().recompensas(), false, null, null);
+    }
+
+    @Test
+    @DisplayName("sin semilla extra el catalogo es el de siempre: la mision del banco no esta en el servicio")
+    void sinSemillaExtraNadaCambia() {
+        assertThat(CatalogoDeMisionesDesdeSemilla.cargar(true, null).todas())
+                .extracting(Mision::id)
+                .isEqualTo(CatalogoDeMisionesDesdeSemilla.cargar(true).todas().stream().map(Mision::id).toList())
+                .doesNotContain("dev-master-seguro");
+        assertThat(CatalogoDeMisionesDesdeSemilla.cargar(false, null).todas())
+                .extracting(Mision::id).doesNotContain("dev-master-seguro", "dev-prueba-de-humo");
+    }
+
+    @Test
+    @DisplayName("la semilla extra suma sus misiones al final, marcadas como provisionales de DEV")
+    void semillaExtraSeSuma() {
+        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+        SemillaDeMisiones extra = new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("solo-banco")));
+
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.desde(documento, null, null, extra);
+
+        assertThat(catalogo.todas()).extracting(Mision::id).containsExactly("templo-olvidado", "solo-banco");
+        assertThat(catalogo.buscar("solo-banco").orElseThrow().origen()).isEqualTo(Origen.PROVISIONAL_DEV);
+    }
+
+    @Test
+    @DisplayName("la semilla extra tiene las reglas de la provisional: marca, sin Tabla 20 y ids que no chocan")
+    void semillaExtraConLasMismasReglas() {
+        SemillaDeMisiones documento = new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.templo()));
+
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(Misiones.historia("sin-marca", List.of())))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("sin-marca")
+                .hasMessageContaining(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
+
+        EpicaDeTabla20 fila = CatalogoDeMisionesDesdeSemilla.cargar(false).tabla20().get(0);
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null, null,
+                new SemillaDeMisiones("1", List.of(), List.of(fila), List.of(conMarca("solo-banco")))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Tabla 20");
+
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.desde(documento, null,
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("repetida"))),
+                new SemillaDeMisiones("1", List.of(), List.of(), List.of(conMarca("repetida")))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("mismo identificador");
+    }
+
+    @Test
+    @DisplayName("una ruta de semilla extra que no existe tumba el arranque: nunca se publica a medias")
+    void semillaExtraQueNoExiste(@TempDir Path carpeta) {
+        Path inexistente = carpeta.resolve("no-esta.json");
+
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.cargar(false, inexistente))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("no-esta.json");
+    }
+
+    @Test
+    @DisplayName("la semilla extra se lee de un archivo del disco, estricta como las demas")
+    void semillaExtraDeArchivo(@TempDir Path carpeta) throws IOException {
+        Path archivo = carpeta.resolve("extra.json");
+        Files.writeString(archivo, "{\"version\":\"1\",\"misionez\":[]}", StandardCharsets.UTF_8);
+
+        assertThatThrownBy(() -> CatalogoDeMisionesDesdeSemilla.cargar(false, archivo))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("extra.json");
+    }
+
+    @Test
+    @DisplayName("HU-SIM-005/006: la mision del banco trae un Master al 100 % con una epica de la Tabla 20 con su productoId")
+    void misionDelBanco() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true, SEMILLA_DEL_BANCO);
+
+        Mision seguro = catalogo.buscar("dev-master-seguro").orElseThrow();
+        assertThat(seguro.origen()).isEqualTo(Origen.PROVISIONAL_DEV);
+        assertThat(seguro.nombre()).startsWith(CatalogoDeMisionesDesdeSemilla.PREFIJO_PROVISIONAL);
+        assertThat(seguro.duracionHoras()).as("una hora: dos segundos en el banco").isEqualTo(1);
+        assertThat(seguro.masters()).singleElement().satisfies(master -> {
+            assertThat(master.probabilidad()).isEqualTo(1.0);
+            assertThat(master.vida()).as("vida baja solo en el banco").isEqualTo(1);
+            assertThat(master.defensa()).isZero();
+            assertThat(master.epica().entregable()).isTrue();
+            assertThat(master.epica().productoId()).isEqualTo(EPICA_DEL_TANQUE);
+        });
+        // La epica de la mision es la de la Tabla 20 del documento, no una inventada.
+        EpicaDeTabla20 fila = catalogo.tabla20().stream()
+                .filter(f -> f.prototipo().equals("Guerrero Tanque")).findFirst().orElseThrow();
+        assertThat(seguro.masters().getFirst().epica()).isEqualTo(fila.epica());
+        // Y el catalogo del servicio, sin la semilla extra, no la tiene.
+        assertThat(CatalogoDeMisionesDesdeSemilla.cargar(true).buscar("dev-master-seguro")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("HU-SIM-005 C1: con la semilla fija del banco (7) y el heroe del kit sale el Master de prueba, y solo ese")
+    void conLaSemillaDelBancoApareceSoloElMasterDePrueba() {
+        CatalogoDeMisionesDesdeSemilla catalogo = CatalogoDeMisionesDesdeSemilla.cargar(true, SEMILLA_DEL_BANCO);
+        Mision seguro = catalogo.buscar("dev-master-seguro").orElseThrow();
+
+        List<MasterDeMision> aparecen = TiradaDeMasters.quienesAparecen(seguro, "Guerrero Tanque",
+                catalogo.tabla20(), new AzarConSemilla(7));
+
+        assertThat(aparecen).extracting(MasterDeMision::nombre).containsExactly("Máster de prueba");
     }
 }

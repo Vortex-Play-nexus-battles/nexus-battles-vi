@@ -7,7 +7,10 @@
 .ficha-capa {
   position: fixed;
   inset: 0;
-  z-index: 10;
+  /* La misma capa que los diálogos (tokens.css): una confirmación abierta
+     desde la ficha se cuelga después en el DOM y queda encima. Con z-index 10
+     propio y el velo sin ninguno, quedaba debajo (auditoría del 30-sep). */
+  z-index: var(--capa-modal, 50);
   display: flex;
   align-items: center;
   justify-content: center;

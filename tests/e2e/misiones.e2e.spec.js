@@ -37,7 +37,9 @@
 import { test, expect, request as apiRequest } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 
+import { correosPara } from './ayudantes/correo.js';
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
@@ -78,8 +80,12 @@ async function conSesion(page, jugadora) {
   );
 }
 
-/** axe sobre lo que se ve ahora mismo: sin hallazgos graves. */
+/** axe sobre lo que se ve, con la página quieta: sin hallazgos graves. */
 async function sinBarrerasGraves(page, donde) {
+  // Las tarjetas del tablón entran con un fundido escalonado (MOTION-3); axe
+  // mide el contraste con la opacidad del instante, así que se espera a que
+  // termine antes de medir.
+  await conLaPaginaQuieta(page);
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
   expect(
@@ -225,17 +231,33 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(tarjeta).toBeVisible({ timeout: 20_000 });
     await tarjeta.locator('[data-accion="iniciar"]').click();
 
-    // El configurador: el héroe del alta ya elegido y sus habilidades, que
-    // dice el servicio de héroes para su prototipo y su nivel.
+    // Revisión del modo jugador del 6-oct, puntos 22 y 23: «Iniciar misión»
+    // abre la preparación, en cinco pasos y uno a la vista.
     await expect(page.locator('.mision-detalle__nombre')).toHaveText(PRUEBA.nombre, {
       timeout: 20_000,
     });
+    await expect(page.locator('.mision-detalle')).toHaveAttribute('data-modo', 'preparar');
+    const asistente = page.locator('.mision-asistente');
+    const siguiente = asistente.locator('[data-accion="paso-siguiente"]');
+    // 1 · Héroe: el del alta, ya elegido.
+    await expect(asistente).toHaveAttribute('data-paso', 'heroe');
+    await expect(siguiente).toHaveAttribute('aria-disabled', 'false', { timeout: 30_000 });
+    await siguiente.click();
+    // 2 · Estadísticas, en su nivel de hoy.
+    await expect(asistente).toHaveAttribute('data-paso', 'estadisticas');
+    await expect(page.locator('select[name="nivel"]')).toHaveValue('1');
+    await siguiente.click();
+    // 3 · Rotaciones: las habilidades que dice el servicio de héroes para su
+    // prototipo y su nivel.
+    await expect(asistente).toHaveAttribute('data-paso', 'rotaciones');
     const paso = page.locator('.estrategia__paso select').first();
     await expect(paso).toBeVisible({ timeout: 30_000 });
-    await expect(page.locator('select[name="nivel"]')).toHaveValue('1');
     habilidad = await paso.locator('option:not([value=""])').first().getAttribute('value');
     expect(habilidad).toBeTruthy();
     await paso.selectOption(habilidad);
+    await siguiente.click();
+    // 4 · Comprobación.
+    await expect(asistente).toHaveAttribute('data-paso', 'comprobar');
     await page.locator('[data-accion="comprobar-estrategia"]').click();
     await expect(page.locator('.estrategia__veredicto .aviso--exito')).toBeVisible({
       timeout: 30_000,
@@ -243,13 +265,17 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await expect(page.locator('.estrategia__veredicto')).toContainText(
       'quedará guardada para la próxima',
     );
+    await siguiente.click();
+    // 5 · Confirmación: el resumen y lo que queda bloqueado; «Iniciar misión»
+    // es la confirmación (RF-MIS-004), sin un segundo diálogo.
+    await expect(asistente).toHaveAttribute('data-paso', 'confirmar');
+    const confirmacion = asistente.locator('[data-zona="confirmar"]');
+    await expect(confirmacion).toContainText(PRUEBA.nombre);
+    await expect(confirmacion).toContainText('queda bloqueado');
+    await sinBarrerasGraves(page, 'preparar la misión: confirmación');
 
     const iniciar = page.locator('[data-accion="iniciar-mision"]');
     await expect(iniciar).toHaveAttribute('aria-disabled', 'false');
-    await iniciar.click();
-    const dialogo = page.locator('[role="dialog"]');
-    await expect(dialogo).toContainText(`«${PRUEBA.nombre}»`);
-    await expect(dialogo).toContainText('queda bloqueado');
 
     // La vista navega en cuanto la matrícula contesta, y con la navegación el
     // navegador suelta el cuerpo de la respuesta: se lee al pasar por la ruta.
@@ -263,7 +289,7 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
       };
       await ruta.fulfill({ response: respuesta });
     });
-    await dialogo.locator('[data-accion="confirmar"]').click();
+    await iniciar.click();
     await expect.poll(() => matricula?.status, { timeout: 20_000 }).toBeTruthy();
     expect(matricula.status, JSON.stringify(matricula.cuerpo)).toBe(201);
     expect(matricula.peticion.method()).toBe('POST');
@@ -281,7 +307,9 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     ejecucionId = activa.ejecucionId;
 
     // Vuelve al tablón, en «En curso», con el aviso de que salió.
-    await expect(page).toHaveURL(/misiones\.html\?iniciada=dev-prueba-de-humo#en-curso$/);
+    // 6-oct — el tablón tiene dirección limpia: el borde lleva misiones.html a
+    // /misiones conservando la consulta (y el navegador, el fragmento).
+    await expect(page).toHaveURL(/\/misiones(?:\.html)?\?iniciada=dev-prueba-de-humo#en-curso$/);
     await expect(page.locator('.misiones__aviso')).toContainText('Tu héroe salió a la misión');
   });
 
@@ -382,6 +410,66 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     });
     const prueba = (await tablon.json()).misiones.find((m) => m.id === PRUEBA.id);
     expect(prueba).toMatchObject({ estado: 'COMPLETADA', ultimaEjecucionId: ejecucionId });
+  });
+
+  test('4b · RF-NOT-004: la bandeja de la jugadora recibe el aviso de la misión con sus recompensas', async () => {
+    // misiones lo deja en notificaciones al liquidar (misiones.yaml 1.2.0,
+    // «Avisos»): tipo MISION, id estable por ejecución, título y detalle.
+    let aviso;
+    await expect
+      .poll(
+        async () => {
+          const r = await api.get(`/api/v1/users/${jugadora.claims.uid}/notifications`, {
+            headers: conToken(jugadora.token),
+          });
+          if (r.status() !== 200) {
+            return `HTTP ${r.status()}`;
+          }
+          aviso = ((await r.json()).avisos ?? []).find(
+            (a) => a.id === `mision-${ejecucionId}-aviso`,
+          );
+          return aviso ? 'en la bandeja' : 'todavía no';
+        },
+        { timeout: 30_000, message: 'el aviso de la misión no llegó a la bandeja' },
+      )
+      .toBe('en la bandeja');
+
+    expect(aviso).toMatchObject({ tipo: 'MISION', leida: false });
+    expect(aviso.titulo).toBe(`Tu misión «${PRUEBA.nombre}» terminó con éxito`);
+    expect(aviso.cuerpo).toContain(`Ganó ${CREDITOS_DE_PRUEBA} créditos`);
+    expect(aviso.cuerpo).toContain('puntos de experiencia');
+    // Un solo aviso por ejecución, aunque el trabajo haya dado varias vueltas.
+    const r = await api.get(`/api/v1/users/${jugadora.claims.uid}/notifications`, {
+      headers: conToken(jugadora.token),
+    });
+    const deEstaMision = ((await r.json()).avisos ?? []).filter((a) =>
+      a.id.startsWith(`mision-${ejecucionId}-aviso`),
+    );
+    expect(deEstaMision.map((a) => a.id)).toEqual([`mision-${ejecucionId}-aviso`]);
+  });
+
+  test('4c · RF-COR-005: el correo de fin de misión llega al buzón de la jugadora, una vez', async () => {
+    // RFINAL-01: misiones liquida el paso CORREO contra el servicio de correo
+    // real del banco (POST /correos/mision, credencial de servicio y contacto
+    // de ms-identidad). Su cuenta es @nexus.test, así que la cola la entrega
+    // en Mailpit. Con el correo apagado, la entrega del reporte habría
+    // terminado igual (test 3) y aquí no llegaría nada.
+    let deLaMision = [];
+    await expect
+      .poll(
+        async () => {
+          deLaMision = (await correosPara(jugadora.email, { base: BORDE })).filter((m) =>
+            String(m.Subject ?? '').includes(PRUEBA.nombre),
+          );
+          return deLaMision.length;
+        },
+        { timeout: 60_000, message: 'el correo de fin de misión no llegó al buzón de pruebas' },
+      )
+      .toBeGreaterThan(0);
+    expect(deLaMision[0].Subject).toContain(`«${PRUEBA.nombre}» terminó con éxito`);
+    // Idempotency-Key `mision-{id}-correo`: aunque el trabajo dé varias
+    // vueltas, el servicio de correo encola uno solo.
+    expect(deLaMision).toHaveLength(1);
   });
 
   test('5 · la pestaña Estrategia carga la guardada del héroe y la vuelve a guardar', async ({

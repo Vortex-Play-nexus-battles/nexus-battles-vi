@@ -32,16 +32,21 @@ public class ListaNegraVerificacionController {
         var resultado = service.verificar(request.texto(), request.contexto(),
                 JerarquiaDeRoles.puedeVerDetalleDeListaNegra(autenticacion));
         return new VerificacionListaNegraResponse(resultado.aprobado(), resultado.accion(), resultado.motivo(),
-                resultado.categoria(), resultado.coincidencias());
+                resultado.categoria(), resultado.coincidencias(), resultado.reglas());
     }
 
     /** {@code VerificacionListaNegraRequest}; sin {@code contexto} es {@code GENERICO}. */
     public record VerificacionListaNegraRequest(String texto, ContextoDeTexto contexto) {
     }
 
-    /** {@code VerificacionListaNegraResponse}: lo que no aplica no viaja. */
+    /**
+     * {@code VerificacionListaNegraResponse}: lo que no aplica no viaja.
+     * {@code reglas} (2.1.0): los ids de los terminos que coincidieron, en el
+     * orden de {@code coincidencias}; con el mismo permiso que el detalle.
+     */
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record VerificacionListaNegraResponse(boolean aprobado, AccionDeModeracion accion, String motivo,
-                                                 CategoriaDeTermino categoria, List<String> coincidencias) {
+                                                 CategoriaDeTermino categoria, List<String> coincidencias,
+                                                 List<Long> reglas) {
     }
 }

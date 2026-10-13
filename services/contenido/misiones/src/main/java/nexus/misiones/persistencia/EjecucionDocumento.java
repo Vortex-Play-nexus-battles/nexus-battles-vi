@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import nexus.misiones.dominio.Ejecucion;
@@ -107,13 +108,13 @@ record EjecucionDocumento(
         s.recompensas = recompensas;
         Map<PasoDeLiquidacion, EstadoDePaso> pasosDelDominio = new EnumMap<>(PasoDeLiquidacion.class);
         if (pasos != null) {
-            pasos.forEach((paso, estado) -> pasosDelDominio.put(PasoDeLiquidacion.valueOf(paso),
-                    EstadoDePaso.valueOf(estado)));
+            pasos.forEach((paso, estado) -> conocido(paso).ifPresent(p ->
+                    pasosDelDominio.put(p, EstadoDePaso.valueOf(estado))));
         }
         s.pasos = pasosDelDominio;
         Map<PasoDeLiquidacion, String> motivosDelDominio = new EnumMap<>(PasoDeLiquidacion.class);
         if (motivos != null) {
-            motivos.forEach((paso, motivo) -> motivosDelDominio.put(PasoDeLiquidacion.valueOf(paso), motivo));
+            motivos.forEach((paso, motivo) -> conocido(paso).ifPresent(p -> motivosDelDominio.put(p, motivo)));
         }
         s.motivos = motivosDelDominio;
         s.intentosDeLiquidacion = intentosDeLiquidacion;
@@ -123,5 +124,20 @@ record EjecucionDocumento(
         s.experienciaAcumulada = experienciaAcumulada;
         s.version = version;
         return Ejecucion.reconstruir(s);
+    }
+
+    /**
+     * Un paso que esta version no conoce —lo escribio una version mas nueva
+     * del servicio y despues se volvio a esta (reversion del despliegue)— se
+     * ignora en vez de tumbar la lectura: la ejecucion se sigue viendo y
+     * liquidando con los pasos que si conoce. Antes, un nombre desconocido
+     * hacia fallar {@code valueOf} y con el el reporte y el trabajo.
+     */
+    static Optional<PasoDeLiquidacion> conocido(String paso) {
+        try {
+            return Optional.of(PasoDeLiquidacion.valueOf(paso));
+        } catch (IllegalArgumentException | NullPointerException desconocido) {
+            return Optional.empty();
+        }
     }
 }

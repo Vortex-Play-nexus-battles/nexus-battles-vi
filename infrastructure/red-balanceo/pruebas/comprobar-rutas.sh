@@ -76,7 +76,9 @@ enConfiguracion() {
 # hubo y por que se quito.
 fueraDeConfiguracion() {
     local descripcion="$1" patron="$2"
-    if grep -v '^[[:space:]]*#' "$CONF" | grep -Eq "$patron"; then
+    # Sin tuberia hacia grep -q (ver sirve): con pipefail, un emisor que sigue
+    # escribiendo cuando grep ya encontro muere con "Broken pipe".
+    if grep -Eq "$patron" <<< "$(grep -v '^[[:space:]]*#' "$CONF")"; then
         printf '  FALLA %s\n        aparece en %s: %s\n' "$descripcion" "$CONF" "$patron"
         fallos=$((fallos + 1))
     else
@@ -97,9 +99,19 @@ comprobar POST /api/v1/auth/restablecer/preguntas \
                                            "identidad POST /api/v1/auth/restablecer/preguntas"
 comprobar PUT  /api/v1/auth/preguntas-seguridad \
                                            "identidad PUT /api/v1/auth/preguntas-seguridad"
+# HU-AUT-007 (identidad 2.2.0) — verificacion en dos pasos: la seccion de «Mi
+# cuenta» y el segundo paso del login, tambien de ms-identidad por /auth.
+comprobar GET  /api/v1/auth/segundo-factor \
+                                           "identidad GET /api/v1/auth/segundo-factor"
+comprobar POST /api/v1/auth/login/segundo-factor \
+                                           "identidad POST /api/v1/auth/login/segundo-factor"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
+# Auditoria de DEV del 30-sep: la foto de perfil la sirve ms-identidad fuera
+# de /api (devuelve `/avatares-subidos/<archivo>`) y por el borde solo se lee.
+comprobar GET  /avatares-subidos/a.png     "identidad GET /avatares-subidos/a.png"
+codigo    POST /avatares-subidos/a.png     403
 # R8.4 — la que llevaba dos semanas cayendo en IDENTIDAD por la regex de
 # /admin. Si alguien quita el `^~` de borde-dev.conf, esta linea se pone roja.
 comprobar GET  /api/v1/admin/auditoria     "cumplimiento GET /api/v1/admin/auditoria"
@@ -170,6 +182,14 @@ comprobar POST /api/v1/productos           "productos POST /api/v1/productos"
 comprobar GET  /api/v1/productos/p-1       "productos GET /api/v1/productos/p-1"
 comprobar GET  "/api/v1/productos?page=0&size=20" \
                                            "productos GET /api/v1/productos?page=0&size=20"
+# HU-PRD-013 / RF-NOT-002 — los banners son del mismo servicio. No tenian
+# location y la consulta publica de la home caia en el 404 generico; con el
+# mismo destino que el catalogo, el banco los devuelve al eco `srv-productos`.
+comprobar GET    /api/v1/banners/vigentes  "productos GET /api/v1/banners/vigentes"
+comprobar GET    /api/v1/banners           "productos GET /api/v1/banners"
+comprobar POST   /api/v1/banners           "productos POST /api/v1/banners"
+comprobar PUT    /api/v1/banners/b-1       "productos PUT /api/v1/banners/b-1"
+comprobar DELETE /api/v1/banners/b-1       "productos DELETE /api/v1/banners/b-1"
 
 echo
 echo "Misiones — un prefijo, un dueno; la consulta y los sufijos llegan enteros (B9)"
@@ -311,7 +331,12 @@ sirve() {
     local cuerpo estado
     estado="$(curl -s -o /dev/null -w '%{http_code}' "$BORDE$ruta")"
     cuerpo="$(curl -s "$BORDE$ruta")"
-    if [ "$estado" = "200" ] && printf '%s' "$cuerpo" | grep -Eq "$patron"; then
+    # El cuerpo va a grep sin tuberia. Con `set -o pipefail`, `printf | grep -q`
+    # fallaba con "printf: write error: Broken pipe" en las paginas grandes:
+    # grep encuentra en el <head>, cierra la entrada y printf aun escribe
+    # (5-oct, /cuenta con la pestana de Privacidad: 34 KB). La pagina estaba
+    # bien; la comprobacion la daba por mala.
+    if [ "$estado" = "200" ] && grep -Eq "$patron" <<< "$cuerpo"; then
         printf '  ok    GET    %-40s -> 200, %s\n' "$ruta" "$descripcion"
     else
         printf '  FALLA GET    %-40s -> %s, sin %s\n' "$ruta" "$estado" "$descripcion"
@@ -331,7 +356,7 @@ cabecera() {
             printf '  FALLA %-44s no deberia llevar %s: %s\n' "$ruta" "$nombre" "$valor"
             fallos=$((fallos + 1))
         fi
-    elif printf '%s' "$valor" | grep -Eq "$patron"; then
+    elif grep -Eq "$patron" <<< "$valor"; then
         printf '  ok    %-44s %s: %s\n' "$ruta" "$nombre" "$(printf '%s' "$valor" | cut -c1-60)"
     else
         printf '  FALLA %-44s %s\n        esperado: %s\n        obtenido: %s\n' \
@@ -340,7 +365,13 @@ cabecera() {
     fi
 }
 
-redirige /                                            "/login"
+# F6 (auditoria del 4-oct, cambio autorizado n.º 3) — la raiz ya no redirige
+# al login: es la portada publica con la tienda, servida como las direcciones
+# limpias (su <base> y la marca). La ruta del fichero lleva a la raiz.
+sirve /  "la portada publica, con base y marca de rutas limpias" \
+    '<head><base href="/frontend/app-web/src/cuentas/"><meta name="nexus-rutas" content="limpias">'
+sirve /  "la tienda publica en la portada" 'data-zona="productos-publicos"'
+redirige /frontend/app-web/src/cuentas/portada.html   "/"
 for par in \
     login:cuentas/login.html registro:cuentas/registro.html \
     preparando:cuentas/preparando.html inicio:cuentas/index.html \
@@ -349,7 +380,9 @@ for par in \
     jugar:plataforma/salas-partidas/batallas.html \
     torneos:plataforma/torneos/torneos.html \
     verificar:cuentas/verificar-cuenta.html \
-    restablecer:cuentas/restablecer-confirmar.html; do
+    restablecer:cuentas/restablecer-confirmar.html \
+    recuperar:cuentas/restablecer-solicitar.html \
+    misiones:contenido/misiones/misiones.html; do
     limpia="/${par%%:*}"
     fichero="${par#*:}"
     carpeta="/frontend/app-web/src/${fichero%/*}/"
@@ -369,10 +402,10 @@ redirige /restablecer/                                "/restablecer"
 # Una vista SIN direccion limpia se sigue sirviendo donde estaba, con la marca.
 sirve /frontend/app-web/src/plataforma/salas-partidas/crear-sala.html \
     "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
-# Pedir el codigo de recuperacion no tiene direccion limpia: /restablecer es
-# la del canje, y la regex de /restablecer no se la puede llevar.
-sirve /frontend/app-web/src/cuentas/restablecer-solicitar.html \
-    "marca de rutas limpias" '<meta name="nexus-rutas" content="limpias">'
+# 6-oct — pedir el codigo de recuperacion tiene la suya, /recuperar; la del
+# canje sigue siendo /restablecer y ninguna de las dos se lleva a la otra.
+redirige /recuperar/                                  "/recuperar"
+redirige /misiones/                                   "/misiones"
 
 echo
 echo "Cabeceras de seguridad y cache (R17)"
@@ -576,6 +609,10 @@ limitada  POST /api/v1/auth/login                             30 20 2
 limitada  POST /api/v1/auth/registro                          25  0 2
 limitada  POST /api/v1/auth/verificacion/confirmacion         25  0 2
 limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
+# HU-AUT-007 — el segundo paso del login entra en la misma clase (la regex de
+# login no lleva `$`): probar codigos de 6 cifras desde internet tiene el
+# mismo cupo que probar contrasenas, ademas del bloqueo de la cuenta.
+limitada  POST /api/v1/auth/login/segundo-factor              25  0 2
 # escritura: zona propia, asi que el login agotado no la toca.
 limitada  POST /api/v1/products/p-1/comments                  80 60 1
 limitada  POST /api/v1/products/p-1/rating                    25  0 1
@@ -628,6 +665,10 @@ enConfiguracion "heroes va al host de contenido"     'heroes.*\n?.*34\.193\.90\.
 enConfiguracion "inventario va al host de contenido" '34\.193\.90\.11:8102'
 enConfiguracion "productos va al host de contenido"  '34\.193\.90\.11:8103'
 enConfiguracion "misiones va al host de contenido"   '34\.193\.90\.11:8105'
+# Topologia 28-sep: ms-subastas vive en contenido; su API y su canal STOMP
+# van a su IP y puerto (el banco los devuelve al eco srv-ms-subastas).
+enConfiguracion "subastas va al host de contenido"   'set \$destino 34\.193\.90\.11:8092'
+enConfiguracion "el canal de subastas va al host de contenido" 'set \$destino_ws 34\.193\.90\.11:8092'
 
 echo
 echo "Quien atiende una ruta lo dice su contrato, no el metodo (#421)"
@@ -770,6 +811,68 @@ if [ -n "$internosGeo" ] && [ "$internosGeo" = "$internosMailpit" ]; then
     printf '  ok    los mismos origenes internos en la geo del limite y en /mailpit/: %s\n' "$internosGeo"
 else
     printf '  FALLA origenes internos distintos\n        geo:     %s\n        mailpit: %s\n' "$internosGeo" "$internosMailpit"
+    fallos=$((fallos + 1))
+fi
+
+echo
+echo "Credenciales fuera de la direccion (G1) — redirige sin consulta y no las registra"
+# El 4-oct el formulario de entrada, sin `method`, se envio por GET en DEV antes
+# de que cargara su guion (#844): /login?email=...&password=... El arreglo esta
+# en las vistas; esto fija la ultima linea, la del borde (ver borde-dev.conf).
+# La marca es unica por corrida para buscarla despues en la bitacora.
+marcaG1="G1-NoDebeQuedar-$$-$RANDOM"
+
+# redirigeSinConsulta <ruta> <location esperada>: 303 a la ruta sin consulta.
+# Lo que se imprime NO lleva la consulta: es justo lo que no debe quedar escrito.
+redirigeSinConsulta() {
+    local ruta="$1" esperado="$2"
+    local cabeceras codigoHttp destino
+    cabeceras="$(curl -s -o /dev/null -D - "$BORDE$ruta" | tr -d '\r')"
+    codigoHttp="$(printf '%s\n' "$cabeceras" | head -1 | awk '{print $2}')"
+    destino="$(printf '%s\n' "$cabeceras" | grep -i '^location:' | sed 's/^[Ll]ocation: *//')"
+    if [ "$codigoHttp" = "303" ] && [ "$destino" = "$esperado" ]; then
+        printf '  ok    GET    %-40s -> 303 %s\n' "${ruta%%\?*}?(credencial)" "$destino"
+    else
+        printf '  FALLA GET    %-40s\n        esperado: 303 %s\n        obtenido: %s %s\n' \
+            "${ruta%%\?*}?(credencial)" "$esperado" "$codigoHttp" "$destino"
+        fallos=$((fallos + 1))
+    fi
+}
+redirigeSinConsulta "/login?email=ana%40nexus.test&password=$marcaG1"            "/login"
+redirigeSinConsulta "/login?volver=%2Fjugar&nuevaPassword=$marcaG1&confirmarPassword=$marcaG1" \
+                                                                                "/login"
+redirigeSinConsulta "/frontend/app-web/src/cuentas/login.html?password=$marcaG1" \
+                                                     "/frontend/app-web/src/cuentas/login.html"
+redirigeSinConsulta "/cuenta?passwordActual=$marcaG1&nuevaPassword=x&confirmacion=x" "/cuenta"
+redirigeSinConsulta "/registro?email=ana%40nexus.test&password=$marcaG1"         "/registro"
+# El codigo del correo solo en sus dos vistas: llega en el fragmento, nunca en
+# la consulta.
+redirigeSinConsulta "/verificar?email=ana%40nexus.test&codigo=$marcaG1"          "/verificar"
+redirigeSinConsulta "/restablecer?email=ana%40nexus.test&codigo=$marcaG1"        "/restablecer"
+redirigeSinConsulta "/api/v1/salas?password=$marcaG1"                            "/api/v1/salas"
+# La ruta sale tal como llego, sin decodificar: un %0d%0a no parte la cabecera
+# Location en dos (de $request_uri, no de $uri).
+redirigeSinConsulta "/login%0d%0aSet-Cookie:%20x=1?password=$marcaG1"            "/login%0d%0aSet-Cookie:%20x=1"
+# Lo legitimo pasa sin tocar: la vuelta del login y la invitacion a una sala
+# privada (en /jugar, `?codigo=` es el codigo de la sala, FI-R4).
+sirve "/login?volver=%2Fjugar&motivo=caducada" "la vuelta del login, con su consulta" 'id="formLogin"'
+sirve "/jugar?sala=s-1&codigo=WXYZ-2345"       "la invitacion a una sala privada" '<base href='
+# Un Referer con la contrasena se sirve, pero no se escribe en la bitacora.
+curl -s -o /dev/null -H "Referer: http://borde/login?email=a%40b.co&password=$marcaG1" "$BORDE/login"
+
+# La bitacora del borde, despues de todo lo anterior: ni la marca ni ningun
+# parametro `*password*=`; y las peticiones con credencial SI constan, con la
+# consulta retirada (si no constara ninguna, esta comprobacion no miraria nada).
+sleep 1
+bitacoraG1="$(cd "$PRUEBAS" && MSYS_NO_PATHCONV=1 docker compose logs --no-color borde 2>&1)"
+fugasG1="$(printf '%s\n' "$bitacoraG1" | grep -Eci "$marcaG1|[?&][^=& ]*password[^=& ]*=" || true)"
+retiradasG1="$(printf '%s\n' "$bitacoraG1" | grep -c 'consulta retirada\]' || true)"
+if [ "$fugasG1" = "0" ] && [ "$retiradasG1" -ge 10 ]; then
+    printf '  ok    la bitacora no tiene ninguna credencial; %s peticiones constan con la consulta retirada\n' \
+        "$retiradasG1"
+else
+    printf '  FALLA bitacora del borde: %s linea(s) con una credencial, %s con la consulta retirada (minimo 10)\n' \
+        "$fugasG1" "$retiradasG1"
     fallos=$((fallos + 1))
 fi
 

@@ -151,6 +151,9 @@ services:
       # sanciones en moderacion-sanciones.
       LISTA_NEGRA_URL: http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # RFINAL-05 — el cierre de cuenta pregunta a ms-subastas (con el token de
+      # la persona) si tiene subastas o pujas abiertas; sin respuesta, 503.
+      IDENTIDAD_SUBASTAS_URL: http://srv-ms-subastas:8092/api/v1
       SERVER_PORT: "8089"
       # Emisor transitorio de credenciales de servicio (ADR-005): la que usa
       # salas-partidas para hablarle a inventario. Secreto de banco de
@@ -161,7 +164,17 @@ services:
       # ms-ecommerce: la compra (B5) reserva tiraje, entrega, asienta y pide contacto.
       # B9: misiones bloquea y libera al heroe en inventario, pide la IA de cada
       # turno a heroes, los golpes al motor y los creditos a ms-finanzas.
-      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas
+      # HU-NOT-001: notificaciones lee los cambios del catalogo en productos.
+      AUTH_CLIENTES_SERVICIO: salas-partidas=e2e-secreto-de-salas-partidas;e2e-banco=e2e-secreto-del-banco-de-pruebas;ms-subastas=e2e-secreto-de-subastas;moderacion-sanciones=e2e-secreto-de-moderacion;torneos=e2e-secreto-de-torneos;comentarios=e2e-secreto-de-comentarios;ms-ecommerce=e2e-secreto-de-ecommerce;misiones=e2e-secreto-de-misiones;ms-finanzas=e2e-secreto-de-finanzas;notificaciones=e2e-secreto-de-notificaciones
+      # HU-AUT-007 — clave AES-256 con la que se cifra el secreto TOTP de cada
+      # cuenta. Es la del BANCO DE PRUEBAS, no la de ningun entorno: base64 de
+      # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
+      # responderia 503 y segundo-factor.e2e.spec.js no tendria que probar.
+      IDENTIDAD_2FA_CLAVE: ZTJlLWNsYXZlLTJmYS1iYW5jby1kZS1wcnVlYmFzISE=
+      # Obligatoriedad por rol APAGADA, igual que en DEV: los specs de la
+      # consola entran con cuentas administrativas sin segundo factor.
+      # Encenderla es decision humana (ver .env.example).
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ""
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
@@ -347,7 +360,10 @@ services:
   # experiencia (inventario) y creditos (ms-finanzas). En AWS va con
   # desplegableDev: false; aqui corre entero, con la semilla PROVISIONAL DE DEV
   # (una mision tecnica de dos combates) y el reloj acelerado: una hora de
-  # mision dura dos segundos. Sin correo en este banco: va apagado.
+  # mision dura dos segundos. Los avisos (RF-NOT-004) van a la bandeja real de
+  # notificaciones y, desde RFINAL-01, el correo de fin de mision (RF-COR-005)
+  # va al servicio de correo real del banco, que lo entrega en Mailpit: las
+  # cuentas son @nexus.test (misiones.e2e.spec.js, 4c).
   srv-misiones:
     build:
       context: ../..
@@ -366,12 +382,22 @@ services:
       MOTOR_COMBATE_URL: http://srv-motor-combate:8080
       CREDITOS_URL: http://srv-ms-finanzas:8093/api/v1
       IDENTIDAD_URL: http://srv-ms-identidad:8089
-      MISIONES_CORREO_ACTIVO: "false"
+      NOTIFICACIONES_URL: http://srv-notificaciones:8085/api/v1
+      # Con su /api/v1: el cliente solo anade /correos/mision.
+      CORREO_URL: http://srv-correo:8082/api/v1
+      MISIONES_CORREO_ACTIVO: "true"
+      MISIONES_AVISOS_ACTIVO: "true"
       MISIONES_SEMILLA_PROVISIONAL: "true"
       MISIONES_SEMILLA_DE_PRUEBAS: "7"
+      # HU-SIM-005/006 — la mision del banco con un Master que aparece al 100 %: el archivo
+      # vive aqui y se monta solo aqui (volumes, abajo); ni esta variable ni el archivo
+      # existen en docker-compose.contenido.yml, asi que AWS DEV no la publica.
+      MISIONES_SEMILLA_EXTRA: /semilla-extra/misiones-banco.json
       MISIONES_SEGUNDOS_POR_HORA: "2"
       MISIONES_INTERVALO_MS: "1000"
       MISIONES_REINTENTO_SEGUNDOS: "1"
+    volumes:
+      - ./semilla-misiones-banco.json:/semilla-extra/misiones-banco.json:ro
     depends_on:
       e2e-contenido-mongo: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -380,6 +406,8 @@ services:
       srv-productos: { condition: service_healthy }
       srv-motor-combate: { condition: service_healthy }
       srv-ms-finanzas: { condition: service_healthy }
+      srv-notificaciones: { condition: service_healthy }
+      srv-correo: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health || exit 1"]
       interval: 5s
@@ -462,19 +490,25 @@ services:
       # se usaba. FINANZAS_MODO ya venia declarado; este faltaba.
       INVENTARIO_MODO: http
       # B8 — las reglas de 7.7 salen de admin-parametros (RF-ADM-001), no de
-      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`,
-      # que nace SIN valor (decision del PO pendiente): mientras nadie lo fije,
-      # publicar responde 503 INCREMENTO_MINIMO_NO_CONFIGURADO. Hasta B8 aqui
-      # habia SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie.
-      # Ahora lo fija subastas.e2e.spec.js como ADMINISTRADOR por
-      # PUT /api/v1/parametros/subastas.incremento-minimo, que es exactamente lo
-      # que hara el PO. El valor de la prueba es una FIJACION DE PRUEBA, no una
-      # decision de producto. Cache de 1 s para que el spec vea el cambio.
+      # variables de entorno. El incremento minimo es `subastas.incremento-minimo`:
+      # desde D-43 vale 5 creditos por la migracion V5 de admin-parametros, en
+      # todos los entornos, y el banco ya no lo fija a mano (subastas.e2e.spec.js
+      # solo espera a que /subastas/reglas lo diga). Hasta B8 aqui habia
+      # SUBASTAS_INCREMENTO_MINIMO: "1"; esa variable ya no la lee nadie. Cache
+      # de 1 s para que el spec vea el valor enseguida.
       PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
       SUBASTAS_PARAMETROS_CACHE_SEGUNDOS: "1"
       CATALOGO_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_BASE_URL: http://srv-notificaciones:8085/api/v1
       SANCIONES_BASE_URL: http://srv-moderacion-sanciones:8086
+      # RFINAL-01 (RF-COR-005 / RF-NOT-003): los avisos de 7.7.8 que van por
+      # correo salen al servicio de correo real del banco (Mailpit), con el
+      # contacto que da ms-identidad por su ruta interna. Las dos bases SIN
+      # /api/v1: el cliente ya lo anade. Drenaje cada segundo para que la
+      # prueba no espere los 10 s del valor por omision.
+      CORREO_URL: http://srv-correo:8082
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
+      CORREO_DRENAJE_MS: "1000"
       CORS_ORIGENES: http://localhost:8099
       SPRING_JPA_SHOW_SQL: "false"
     depends_on:
@@ -488,6 +522,8 @@ services:
       srv-inventario: { condition: service_healthy }
       # B8 — las reglas (incremento minimo, limites) se leen de aqui.
       srv-admin-parametros: { condition: service_healthy }
+      # RFINAL-01 — los avisos por correo de 7.7.8.
+      srv-correo: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8092/api/v1/actuator/health || exit 1"]
       interval: 5s
@@ -624,6 +660,16 @@ services:
       DB_PASS: plataforma
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
       NOTIFICACIONES_WS_ORIGENES: http://localhost:8099
+      # HU-NOT-001: los cambios del catalogo del productos de ESTE banco llegan
+      # a la bandeja (GET /api/v1/productos/alertas/cambios, solo servicios),
+      # con la credencial registrada arriba en AUTH_CLIENTES_SERVICIO. Base sin
+      # /api/v1. Intervalo minimo de 1 s (en DEV, 60): el spec consulta dos
+      # veces seguidas y no espera un minuto.
+      DIRECTORIO_ACTIVO_URL: http://srv-ms-identidad:8089/api/v1/auth/token
+      DIRECTORIO_ACTIVO_CLIENT_ID: notificaciones
+      DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-notificaciones
+      PRODUCTOS_BASE_URL: http://srv-productos:8080
+      NOTIFICACIONES_CATALOGO_INTERVALO_MINIMO_S: "1"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -768,8 +814,30 @@ services:
       SALUD_MODERACION: http://srv-moderacion-sanciones:8086/actuator/health
       SALUD_ADMIN_PARAMETROS: http://srv-admin-parametros:8088/actuator/health
       SANCIONES_URL: http://srv-moderacion-sanciones:8086/api/v1
+      # HU-MET-001: cuentas por estado y altas por dia, de ms-identidad.
+      IDENTIDAD_URL: http://srv-ms-identidad:8089
       # HU-MET-001 (#527): la observabilidad es de administracion.
       IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      # RFINAL-08 — pantalla «Sistema»: en el banco todos comparten esta red,
+      # tambien los que en DEV viven en el host de contenido (alli los fija
+      # docker-compose.deploy.yml por la IP de ese host). Los de plataforma ya
+      # salen bien con los valores de application.yml (srv-<nombre>).
+      # ms-chatbot y ms-cumplimiento no estan en el banco: se dicen
+      # NO_DESPLEGADO en vez de salir CAIDO por un nombre que aqui no existe.
+      SISTEMA_SALUD_HEROES: http://srv-heroes:8080/actuator/health
+      SISTEMA_SALUD_INVENTARIO: http://srv-inventario:8080/actuator/health
+      SISTEMA_SALUD_PRODUCTOS: http://srv-productos:8080/actuator/health
+      SISTEMA_SALUD_MOTOR_COMBATE: http://srv-motor-combate:8080/actuator/health
+      SISTEMA_SALUD_MISIONES: http://srv-misiones:8080/actuator/health
+      SISTEMA_SALUD_MS_SUBASTAS: http://srv-ms-subastas:8092/api/v1/actuator/health
+      SISTEMA_SALUD_MS_CHATBOT: NO_DESPLEGADO
+      SISTEMA_SALUD_MS_CUMPLIMIENTO: NO_DESPLEGADO
+      # Plazos del sondeo del panel tan holgados como los que tenia el
+      # recolector del tablero antes de RFINAL-08 (2 s / 3 s): el banco corre
+      # unas veinte JVM en un runner compartido y la lentitud del runner no es
+      # lo que estas pruebas miden. Los de DEV son los de application.yml.
+      SONDEO_CONEXION_MS: "2000"
+      SONDEO_RESPUESTA_MS: "3000"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }
@@ -898,6 +966,7 @@ services:
             -e 's|34\.193\.90\.11:8102|srv-inventario:8080|g' \
             -e 's|34\.193\.90\.11:8103|srv-productos:8080|g' \
             -e 's|34\.193\.90\.11:8105|srv-misiones:8080|g' \
+            -e 's|34\.193\.90\.11:8092|srv-ms-subastas:8092|g' \
             /origen/borde-dev.conf > /salida/default.conf
         # Solo lineas efectivas: `borde-dev.conf` menciona la IP en sus
         # comentarios a proposito, para explicar de donde sale, y un guardian
@@ -912,11 +981,11 @@ services:
         # vea, y la dejaba vacia ("The esperado variable is not set"). Un
         # `grep -q ""` casa con cualquier linea, asi que este bucle aprobaba
         # siempre sin mirar nada.
-        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080; do
+        for esperado in srv-heroes:8080 srv-inventario:8080 srv-productos:8080 srv-misiones:8080 srv-ms-subastas:8092; do
           grep -q "$$esperado" /salida/default.conf || {
             echo "ADAPTACION INCOMPLETA: no aparece $$esperado." >&2; exit 1; }
         done
-        echo "Borde adaptado al banco: heroes, inventario, productos y misiones son locales."
+        echo "Borde adaptado al banco: heroes, inventario, productos, misiones y subastas son locales."
 
   srv-borde:
     image: nginx:1.27-alpine

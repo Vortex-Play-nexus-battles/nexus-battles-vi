@@ -76,7 +76,8 @@ public class Partida {
 
     /**
      * Arranca la partida de una sala en el orden de entrada, con la maquina
-     * combatiendo con una copia del heroe del anfitrion.
+     * combatiendo con un rival del mismo prototipo y nivel que el heroe del
+     * anfitrion ({@link HeroeDeCombate#comoRivalDeLaMaquina()}).
      *
      * <p>Ninguna partida real se inicia asi: {@code IniciarPartida} sortea el
      * orden (§6.1.3) y le da a la maquina un heroe aleatorio del catalogo
@@ -106,8 +107,9 @@ public class Partida {
      * @param ahora             reloj inyectado, para que las pruebas no dependan del sistema
      * @param orden             como se ordenan los turnos (sorteo con semilla, §6.1.3)
      * @param heroesDeLaMaquina un heroe por cupo de la IA (D-B7-11); los que
-     *                          falten combaten con una copia del heroe del
-     *                          anfitrion a vida completa
+     *                          falten combaten con un rival del prototipo y el
+     *                          nivel del heroe del anfitrion, sin su nombre ni
+     *                          su equipo
      */
     public static Partida iniciar(Sala sala, Instant ahora, OrdenDeTurnos orden,
                                   List<HeroeDeCombate> heroesDeLaMaquina) {
@@ -132,7 +134,9 @@ public class Partida {
             if (i < heroesIA.size() && heroesIA.get(i) != null) {
                 heroeDeLaMaquina = heroesIA.get(i);
             } else {
-                heroeDeLaMaquina = delAnfitrion == null ? null : delAnfitrion.heroe().aPlenaVida();
+                // Sin catalogo: un rival del mismo prototipo y nivel, NO una
+                // copia del heroe del anfitrion con su nombre y su equipo.
+                heroeDeLaMaquina = delAnfitrion == null ? null : delAnfitrion.heroe().comoRivalDeLaMaquina();
             }
             enCombate.add(ParticipanteDePartida.inteligenciaArtificial(
                     UUID.randomUUID(), heroeDeLaMaquina));
@@ -301,6 +305,45 @@ public class Partida {
                 : actual.conHeroe(actual.heroe().conVida(vidaActual, vidaMaxima)).conCombate(combate);
         participantes.set(posicion, nuevo);
         return nuevo;
+    }
+
+    /**
+     * Se rinde — revision del modo jugador del 6-oct (salas-partidas.yaml 1.10.0,
+     * {@code POST /partidas/{id}/rendicion}).
+     *
+     * <p>Rendirse es dejar el combate: el heroe de quien se rinde queda fuera de
+     * combate, igual que si hubiera caido, y a partir de ahi manda la regla de
+     * siempre ({@link #terminarSiSoloQuedaUno}): si su bando se queda sin nadie
+     * en pie, gana el otro. El ganador lo decide la partida, nunca quien llama.
+     * No se inventa un golpe: no hay dano ni ejecutor, solo la retirada.
+     *
+     * <p>Idempotente: rendirse dos veces, o con el heroe ya caido, no cambia
+     * nada.
+     *
+     * @return quien se rindio, ya fuera de combate
+     * @throws PartidaYaTerminada  si el combate ya acabo
+     * @throws SinObjetivoPosible  si no juega esta partida
+     * @throws AccionNoPermitida   si es la maquina, o si no se conoce su heroe
+     */
+    public ParticipanteDePartida rendir(UUID idJugador) {
+        if (estado == EstadoPartida.FINALIZADA) {
+            throw new PartidaYaTerminada(id);
+        }
+        int posicion = indiceDe(idJugador, "Ese jugador no esta en esta partida.");
+        ParticipanteDePartida quien = participantes.get(posicion);
+        if (quien.esIA()) {
+            throw new AccionNoPermitida("RENDICION_NO_PERMITIDA", "La IA no se rinde.");
+        }
+        if (quien.heroe() == null) {
+            throw new AccionNoPermitida("RENDICION_NO_PERMITIDA",
+                    "Sin héroe conocido no se le puede dar por fuera de combate.");
+        }
+        if (!quien.enPie()) {
+            return quien;
+        }
+        ParticipanteDePartida rendido = quien.conHeroe(quien.heroe().conVida(0));
+        participantes.set(posicion, rendido);
+        return rendido;
     }
 
     /**

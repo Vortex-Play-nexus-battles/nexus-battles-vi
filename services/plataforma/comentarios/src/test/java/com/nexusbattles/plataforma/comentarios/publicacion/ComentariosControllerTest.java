@@ -433,4 +433,93 @@ class ComentariosControllerTest {
                 .andExpect(status().isBadRequest());
         verifyNoInteractions(servicio);
     }
+
+    /**
+     * G4 (contrato 1.9.0): el hilo lo lee cualquiera, tambien sin cuenta, asi
+     * que no publica el {@code uid} de nadie; lo que el cliente hacia con el
+     * —reconocer los suyos— lo dice el servidor en {@code propio}.
+     */
+    @Nested
+    @DisplayName("G4 — el hilo publico no publica el uid de nadie")
+    class SinUidEnElHilo {
+
+        private void unComentarioDeLyra() {
+            when(servicio.consultarHilo("espada-del-alba", 0, 16)).thenReturn(hiloCon(
+                    List.of(comentario(Comentario.Estado.PUBLICADO)), Map.of(UID_LYRA.toString(), 4),
+                    0, 16, 1, 1, ResumenDeCalificaciones.vacio("espada-del-alba")));
+        }
+
+        @Test
+        @DisplayName("sin token: el apodo si, el uid no, y nada es propio")
+        void anonimo() throws Exception {
+            unComentarioDeLyra();
+
+            mvc.perform(get(RUTA))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.comentarios[0].apodoAutor").value("LyraRoja"))
+                    .andExpect(jsonPath("$.comentarios[0].autorId").doesNotExist())
+                    .andExpect(jsonPath("$.comentarios[0].propio").value(false));
+        }
+
+        @Test
+        @DisplayName("su autora lo ve propio, sin que el uid viaje")
+        void suAutora() throws Exception {
+            unComentarioDeLyra();
+
+            mvc.perform(get(RUTA)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeJugador("LyraRoja", UID_LYRA)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.comentarios[0].autorId").doesNotExist())
+                    .andExpect(jsonPath("$.comentarios[0].propio").value(true));
+        }
+
+        @Test
+        @DisplayName("otra jugadora no lo ve propio, ni recibe el uid de la autora")
+        void otraJugadora() throws Exception {
+            unComentarioDeLyra();
+
+            String cuerpo = mvc.perform(get(RUTA)
+                            .header(HttpHeaders.AUTHORIZATION,
+                                    "Bearer " + emisor.tokenDeJugador("Bruma", UUID.randomUUID())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.comentarios[0].autorId").doesNotExist())
+                    .andExpect(jsonPath("$.comentarios[0].propio").value(false))
+                    .andReturn().getResponse().getContentAsString();
+            org.assertj.core.api.Assertions.assertThat(cuerpo).doesNotContain(UID_LYRA.toString());
+        }
+
+        @Test
+        @DisplayName("un token de servicio lee el hilo (no es error) y no tiene comentarios propios")
+        void tokenDeServicio() throws Exception {
+            unComentarioDeLyra();
+
+            mvc.perform(get(RUTA)
+                            .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeServicio("ms-chatbot")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.comentarios[0].autorId").doesNotExist())
+                    .andExpect(jsonPath("$.comentarios[0].propio").value(false));
+        }
+
+        @Test
+        @DisplayName("la respuesta de publicar si lleva el uid: es el de quien publica, y es suyo")
+        void publicarConservaElUidPropio() throws Exception {
+            when(servicio.publicar(eq("espada-del-alba"), eq(UID_LYRA.toString()), eq("LyraRoja"),
+                    anyString(), any(), any()))
+                    .thenReturn(publicado(Comentario.Estado.PUBLICADO, 4));
+
+            mvc.perform(publicarComoLyra())
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.autorId").value(UID_LYRA.toString()))
+                    .andExpect(jsonPath("$.propio").value(true));
+        }
+
+        @Test
+        @DisplayName("uidDeQuienMira: null sin token y con un token que no identifica a un jugador")
+        void uidDeQuienMira() {
+            org.assertj.core.api.Assertions.assertThat(ComentariosController.uidDeQuienMira(null)).isNull();
+            org.springframework.security.oauth2.jwt.Jwt sinUid = org.springframework.security.oauth2.jwt.Jwt
+                    .withTokenValue("t").header("alg", "none").subject("ms-chatbot").build();
+            org.assertj.core.api.Assertions.assertThat(ComentariosController.uidDeQuienMira(sinUid)).isNull();
+        }
+    }
 }

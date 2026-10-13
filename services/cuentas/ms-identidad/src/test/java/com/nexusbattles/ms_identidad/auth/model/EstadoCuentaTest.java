@@ -23,4 +23,20 @@ class EstadoCuentaTest {
         assertThat(EstadoCuenta.normalizado("PENDIENTE_VERIFICACION")).isEqualTo("PENDIENTE_VERIFICACION");
         assertThat(EstadoCuenta.normalizado(null)).isNull();
     }
+
+    @Test
+    @DisplayName("HU-USR-008: los cinco estados que publica el contrato, en el orden del panel")
+    void publicados() {
+        assertThat(EstadoCuenta.PUBLICADOS).containsExactly(
+                "ACTIVO", "PENDIENTE_VERIFICACION", "INACTIVO", "SUSPENDIDO", "BANEADO");
+    }
+
+    @Test
+    @DisplayName("HU-USR-008: filtrar por SUSPENDIDO o BANEADO incluye las filas anteriores a B2")
+    void formasGuardadas() {
+        assertThat(EstadoCuenta.formasGuardadas("SUSPENDIDO")).containsExactlyInAnyOrder("SUSPENDIDO", "SUSPENDIDA");
+        assertThat(EstadoCuenta.formasGuardadas("BANEADO")).containsExactlyInAnyOrder("BANEADO", "BANEADA");
+        assertThat(EstadoCuenta.formasGuardadas("ACTIVO")).containsExactly("ACTIVO");
+        assertThat(EstadoCuenta.formasGuardadas("PENDIENTE_VERIFICACION")).containsExactly("PENDIENTE_VERIFICACION");
+    }
 }

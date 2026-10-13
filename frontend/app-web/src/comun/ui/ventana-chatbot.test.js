@@ -6,6 +6,7 @@ import { jest } from '@jest/globals';
 
 import { ErrorDelChatbot } from '../cliente-chatbot.js';
 import {
+  PAGINA_DEL_HISTORIAL,
   TAMANO,
   TEXTOS,
   acotarTamano,
@@ -39,11 +40,23 @@ function clienteFalso(sobrescribir = {}) {
     enviarMensaje: jest.fn(async () => ({ ...BOT, id: 'm-bot-nuevo' })),
     limpiarHistorial: jest.fn(async () => null),
     calificar: jest.fn(async () => ({ id: 'c-1' })),
+    abrirTicket: jest.fn(async () => ({ ticketId: 't-1', estado: 'ABIERTO' })),
+    misTickets: jest.fn(async () => []),
+    preferencias: jest.fn(async () => ({ idioma: 'AUTOMATICO', nivelDetalle: 'NORMAL' })),
+    guardarPreferencias: jest.fn(async (datos) => datos),
+    sugerencias: jest.fn(async () => [
+      {
+        clave: 'k-1',
+        titulo: 'Cómo funciona el Torneo',
+        categoria: 'MODALIDAD_JUEGO',
+        pregunta: 'Cómo funciona el Torneo',
+      },
+    ]),
     ...sobrescribir,
   };
 }
 
-async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado } = {}) {
+async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado, vista } = {}) {
   const lanzador = document.createElement('button');
   document.body.append(lanzador);
   const ventana = crearVentanaChatbot({
@@ -51,6 +64,8 @@ async function montar({ cliente = clienteFalso(), sesion, confirmarBorrado } = {
     sesion: sesion ?? (() => ({ autenticado: false, apodo: '' })),
     chatGeneral: 'http://localhost/chat.html',
     confirmarBorrado: confirmarBorrado ?? (async () => true),
+    esperaAutocompletar: 0,
+    vista: vista ?? (() => null),
   });
   ventana.abrir(lanzador);
   await esperar();
@@ -186,12 +201,150 @@ describe('historial', () => {
   });
 });
 
+// 7.4.6: el historial llega por páginas; los anteriores se piden al subir.
+describe('historial por páginas', () => {
+  /** `cuantos` mensajes del usuario con ids m-<desde>…, del más antiguo al más reciente. */
+  function mensajes(desde, cuantos) {
+    return Array.from({ length: cuantos }, (_, i) => ({
+      ...USUARIO,
+      id: `m-${desde + i}`,
+      contenido: `mensaje ${desde + i}`,
+    }));
+  }
+  const textos = (vista) =>
+    vista.mensajes().map((m) => m.querySelector('.chatbot-ventana__texto').textContent);
+  const botonAnteriores = (vista) => vista.el.querySelector('[data-accion="ver-anteriores"]');
+
+  test('al abrir pide solo la última página', async () => {
+    const vista = await montar();
+    expect(vista.cliente.obtenerHistorial).toHaveBeenCalledWith({ limite: PAGINA_DEL_HISTORIAL });
+  });
+
+  test('con una página incompleta no ofrece mensajes anteriores', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, BOT]) }),
+    });
+    expect(botonAnteriores(vista)).toBeNull();
+  });
+
+  test('con una página llena ofrece los anteriores y los pone arriba, en orden', async () => {
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockResolvedValueOnce(mensajes(98, 2));
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    const boton = botonAnteriores(vista);
+    expect(boton).not.toBeNull();
+    expect(vista.el.querySelector('.chatbot-ventana__registro').firstElementChild).toBe(
+      boton.closest('li'),
+    );
+
+    boton.click();
+    await esperar();
+
+    expect(obtenerHistorial).toHaveBeenLastCalledWith({
+      antesDe: 'm-100',
+      limite: PAGINA_DEL_HISTORIAL,
+    });
+    expect(textos(vista).slice(0, 3)).toEqual(['mensaje 98', 'mensaje 99', 'mensaje 100']);
+    expect(vista.mensajes()).toHaveLength(PAGINA_DEL_HISTORIAL + 2);
+    // Página incompleta: ya no hay más hacia atrás, y el foco no se pierde.
+    expect(botonAnteriores(vista)).toBeNull();
+    expect(vista.el.contains(document.activeElement)).toBe(true);
+  });
+
+  test('llegar arriba con el scroll pide los anteriores, una sola vez a la vez', async () => {
+    let resolver;
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockImplementationOnce(
+        () =>
+          new Promise((r) => {
+            resolver = r;
+          }),
+      );
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+
+    registro.scrollTop = 0;
+    registro.dispatchEvent(new Event('scroll'));
+    registro.dispatchEvent(new Event('scroll'));
+    expect(obtenerHistorial).toHaveBeenCalledTimes(2);
+    expect(registro.getAttribute('aria-busy')).toBe('true');
+
+    resolver(mensajes(70, PAGINA_DEL_HISTORIAL));
+    await esperar();
+
+    expect(registro.hasAttribute('aria-busy')).toBe(false);
+    expect(textos(vista)[0]).toBe('mensaje 70');
+    // La página vino llena: puede haber más.
+    expect(botonAnteriores(vista)).not.toBeNull();
+  });
+
+  test('si el servidor repite mensajes que ya se ven, no los pinta dos veces', async () => {
+    const primera = mensajes(1, PAGINA_DEL_HISTORIAL);
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(primera)
+      .mockResolvedValueOnce(primera);
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    botonAnteriores(vista).click();
+    await esperar();
+
+    expect(vista.mensajes()).toHaveLength(PAGINA_DEL_HISTORIAL);
+    expect(botonAnteriores(vista)).toBeNull();
+  });
+
+  test('si falla, lo dice y Reintentar vuelve a pedir la misma página', async () => {
+    const obtenerHistorial = jest
+      .fn()
+      .mockResolvedValueOnce(mensajes(100, PAGINA_DEL_HISTORIAL))
+      .mockRejectedValueOnce(new ErrorDelChatbot(null, 500))
+      .mockResolvedValueOnce(mensajes(99, 1));
+    const vista = await montar({ cliente: clienteFalso({ obtenerHistorial }) });
+
+    botonAnteriores(vista).click();
+    await esperar();
+    const aviso = vista.el.querySelector('.chatbot-ventana__aviso');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain(TEXTOS.errorAlCargar);
+
+    aviso.querySelector('[data-accion="reintentar"]').click();
+    await esperar();
+
+    expect(obtenerHistorial).toHaveBeenLastCalledWith({
+      antesDe: 'm-100',
+      limite: PAGINA_DEL_HISTORIAL,
+    });
+    expect(textos(vista)[0]).toBe('mensaje 99');
+    expect(aviso.hidden).toBe(true);
+  });
+
+  test('borrar la conversación quita «Ver mensajes anteriores»', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({
+        obtenerHistorial: jest.fn(async () => mensajes(1, PAGINA_DEL_HISTORIAL)),
+      }),
+    });
+    expect(botonAnteriores(vista)).not.toBeNull();
+
+    vista.el.querySelector('[data-accion="borrar-conversacion"]').click();
+    await esperar();
+
+    expect(botonAnteriores(vista)).toBeNull();
+    expect(textos(vista)).toEqual([TEXTOS.bienvenida]);
+  });
+});
+
 describe('enviar', () => {
   test('pinta la pregunta y la respuesta, y limpia la caja de texto', async () => {
     const vista = await montar();
     await enviar(vista, '  como pujo  ');
 
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo', null);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo');
     const mensajes = vista.mensajes();
     expect(mensajes).toHaveLength(2);
     expect(mensajes[0].textContent).toContain('como pujo');
@@ -217,30 +370,23 @@ describe('enviar', () => {
 
     vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     await esperar();
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('hola', null);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('hola');
   });
 
-  test('la URL de captura se valida y se envía con el mensaje', async () => {
-    const vista = await montar();
-    vista.el.querySelector('[data-accion="adjuntar-captura"]').click();
-    const url = vista.el.querySelector('input[name="adjuntoUrl"]');
+  test('no pide capturas, pero el historial sigue enlazando las que ya había', async () => {
+    const conCaptura = { ...USUARIO, adjuntoUrl: 'https://img.example/captura.png' };
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [conCaptura, BOT]) }),
+    });
 
-    url.value = URL_JAVASCRIPT;
-    await enviar(vista, 'mira');
-    expect(vista.cliente.enviarMensaje).not.toHaveBeenCalled();
-    expect(vista.el.querySelector('.chatbot-ventana__captura').textContent).toContain(
-      TEXTOS.adjuntoInvalido,
-    );
-
-    url.value = 'https://img.example/captura.png';
-    await enviar(vista, 'mira');
-    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith(
-      'mira',
-      'https://img.example/captura.png',
-    );
+    expect(vista.el.querySelector('input[name="adjuntoUrl"]')).toBeNull();
+    expect(vista.el.querySelector('[data-accion="adjuntar-captura"]')).toBeNull();
     expect(vista.el.querySelector('.chatbot-ventana__adjunto').getAttribute('href')).toBe(
       'https://img.example/captura.png',
     );
+
+    await enviar(vista, 'mira');
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('mira');
   });
 
   test('si falla, avisa y conserva lo que escribió', async () => {
@@ -340,6 +486,218 @@ describe('calificar (HU-CHA-011)', () => {
     expect(vista.el.querySelector('.chatbot-calificacion__nota').textContent).toBe(
       TEXTOS.errorAlCalificar,
     );
+  });
+});
+
+describe('respuestas enriquecidas y vista', () => {
+  const ENRIQUECIDA = {
+    ...BOT,
+    id: 'm-bot-rica',
+    contenido: 'Para publicar: 1) Elige el ítem. 2) Confirma.',
+    enriquecido: {
+      pasos: ['Elige el ítem.', 'Confirma.'],
+      enlaces: [],
+      tarjetas: [],
+      respuestasRapidas: ['Cómo pujar'],
+      ofrecerSoporteHumano: true,
+    },
+  };
+
+  test('manda la vista donde está el jugador', async () => {
+    const vista = await montar({ vista: () => 'SUBASTAS' });
+
+    await enviar(vista, 'como pujo');
+
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('como pujo', { vista: 'SUBASTAS' });
+  });
+
+  test('pinta los pasos sin repetirlos en el texto, y los botones funcionan', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ enviarMensaje: jest.fn(async () => ENRIQUECIDA) }),
+    });
+
+    await enviar(vista, 'como publico');
+    const burbuja = vista.el.querySelector('[data-mensaje-id="m-bot-rica"]');
+
+    expect(burbuja.querySelector('.chatbot-ventana__texto').textContent).toBe('Para publicar:');
+    expect(burbuja.querySelectorAll('.chatbot-enriquecido__pasos li')).toHaveLength(2);
+
+    burbuja.querySelector('[data-accion="ofrecer-soporte"]').click();
+    expect(vista.el.querySelector('[data-chatbot-soporte]').hidden).toBe(false);
+
+    vista.el.querySelector('[data-accion="volver-al-chat"]').click();
+    burbuja.querySelector('[data-accion="respuesta-rapida"]').click();
+    await esperar();
+    expect(vista.cliente.enviarMensaje).toHaveBeenLastCalledWith('Cómo pujar');
+  });
+
+  test('el historial también pinta lo enriquecido', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, ENRIQUECIDA]) }),
+    });
+
+    expect(vista.el.querySelector('.chatbot-enriquecido')).not.toBeNull();
+  });
+});
+
+describe('preguntas rápidas y autocompletado', () => {
+  test('al cargar muestra las preguntas rápidas y al pulsar una la envía', async () => {
+    const vista = await montar();
+    await esperar();
+    const boton = vista.el.querySelector('[data-accion="pregunta-rapida"]');
+
+    expect(boton.textContent).toBe('Cómo funciona el Torneo');
+    boton.click();
+    await esperar();
+
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('Cómo funciona el Torneo');
+    expect(vista.mensajes().some((m) => m.textContent.includes('Cómo funciona el Torneo'))).toBe(
+      true,
+    );
+  });
+
+  test('escribir sugiere y Enter con una marcada la envía en lugar del texto', async () => {
+    const vista = await montar();
+    vista.entrada.value = 'tor';
+    vista.entrada.dispatchEvent(new Event('input'));
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    await esperar();
+
+    vista.entrada.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    vista.entrada.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+    await esperar();
+
+    expect(vista.cliente.sugerencias).toHaveBeenCalledWith({ q: 'tor', limite: 5 });
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledTimes(1);
+    expect(vista.cliente.enviarMensaje).toHaveBeenCalledWith('Cómo funciona el Torneo');
+  });
+});
+
+describe('soporte', () => {
+  test('«Soporte» cambia la conversación por el panel y «Volver al chat» la devuelve', async () => {
+    const vista = await montar({ sesion: () => ({ autenticado: true, apodo: 'Kai' }) });
+    const boton = vista.el.querySelector('[data-accion="hablar-con-soporte"]');
+    const panel = vista.el.querySelector('[data-chatbot-soporte]');
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+
+    expect(panel.hidden).toBe(true);
+    boton.click();
+    await esperar();
+
+    expect(panel.hidden).toBe(false);
+    expect(registro.hidden).toBe(true);
+    expect(vista.formulario.hidden).toBe(true);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(vista.cliente.misTickets).toHaveBeenCalled();
+    expect(panel.contains(document.activeElement)).toBe(true);
+
+    vista.el.querySelector('[data-accion="volver-al-chat"]').click();
+
+    expect(panel.hidden).toBe(true);
+    expect(registro.hidden).toBe(false);
+    expect(vista.formulario.hidden).toBe(false);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(vista.entrada);
+  });
+
+  test('el mismo botón cierra el panel si ya estaba abierto', async () => {
+    const vista = await montar();
+    const boton = vista.el.querySelector('[data-accion="hablar-con-soporte"]');
+
+    boton.click();
+    boton.click();
+
+    expect(vista.el.querySelector('[data-chatbot-soporte]').hidden).toBe(true);
+  });
+
+  test('a un visitante el panel le ofrece iniciar sesión', async () => {
+    const vista = await montar();
+
+    vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+
+    expect(vista.el.querySelector('[data-chatbot-soporte]').textContent).toContain(
+      'necesitas iniciar sesión',
+    );
+    expect(vista.cliente.misTickets).not.toHaveBeenCalled();
+  });
+});
+
+// 7.4.5: «Preferencias» ocupa el sitio de la conversación, como «Soporte».
+describe('preferencias', () => {
+  const botonPreferencias = (vista) =>
+    vista.el.querySelector('[data-accion="preferencias-asistente"]');
+  const panelPreferencias = (vista) => vista.el.querySelector('[data-chatbot-preferencias]');
+  const panelSoporte = (vista) => vista.el.querySelector('[data-chatbot-soporte]');
+
+  test('el botón abre el panel en lugar de la conversación y lo carga', async () => {
+    const vista = await montar();
+    const boton = botonPreferencias(vista);
+    expect(boton.getAttribute('aria-expanded')).toBe('false');
+    expect(panelPreferencias(vista).hidden).toBe(true);
+
+    boton.click();
+    await esperar();
+
+    expect(panelPreferencias(vista).hidden).toBe(false);
+    expect(vista.el.querySelector('.chatbot-ventana__registro').hidden).toBe(true);
+    expect(vista.formulario.hidden).toBe(true);
+    expect(boton.getAttribute('aria-expanded')).toBe('true');
+    expect(vista.cliente.preferencias).toHaveBeenCalledTimes(1);
+  });
+
+  test('«Volver al chat» y el mismo botón devuelven la conversación con el foco dentro', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    panelPreferencias(vista).querySelector('[data-accion="volver-al-chat"]').click();
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(vista.el.querySelector('.chatbot-ventana__registro').hidden).toBe(false);
+    expect(document.activeElement).toBe(vista.entrada);
+
+    botonPreferencias(vista).click();
+    await esperar();
+    botonPreferencias(vista).click();
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(botonPreferencias(vista).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  test('abrir «Soporte» cierra «Preferencias» y al revés: nunca los dos', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    vista.el.querySelector('[data-accion="hablar-con-soporte"]').click();
+    await esperar();
+    expect(panelSoporte(vista).hidden).toBe(false);
+    expect(panelPreferencias(vista).hidden).toBe(true);
+    expect(botonPreferencias(vista).getAttribute('aria-expanded')).toBe('false');
+
+    botonPreferencias(vista).click();
+    await esperar();
+    expect(panelPreferencias(vista).hidden).toBe(false);
+    expect(panelSoporte(vista).hidden).toBe(true);
+    expect(
+      vista.el.querySelector('[data-accion="hablar-con-soporte"]').getAttribute('aria-expanded'),
+    ).toBe('false');
+  });
+
+  test('guardar desde la ventana manda lo elegido', async () => {
+    const vista = await montar();
+    botonPreferencias(vista).click();
+    await esperar();
+
+    const panel = panelPreferencias(vista);
+    panel.querySelector('select[name="nivelDetalle"]').value = 'BREVE';
+    panel.querySelector('form').dispatchEvent(new Event('submit', { cancelable: true }));
+    await esperar();
+
+    expect(vista.cliente.guardarPreferencias).toHaveBeenCalledWith({
+      idioma: 'AUTOMATICO',
+      nivelDetalle: 'BREVE',
+    });
   });
 });
 

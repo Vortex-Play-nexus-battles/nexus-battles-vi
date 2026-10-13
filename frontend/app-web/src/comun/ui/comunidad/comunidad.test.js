@@ -21,6 +21,7 @@ import { conCuenta, hayPromedio, resumenDeCalificacion, textoDelResumen } from '
 import {
   adjuntosDeComentario,
   esIdDeImagen,
+  esPropio,
   ESTADO_LOCAL,
   inicialDe,
   LADO_DE_MINIATURA,
@@ -271,6 +272,55 @@ describe('tarjeta de un comentario', () => {
     });
 
     expect(tarjeta.querySelector('button')).toBeNull();
+  });
+
+  describe('G4 — el hilo público ya no trae el uid del autor (comentarios.yaml 1.9.0)', () => {
+    const sinUid = (cambios) => {
+      const delHilo = { ...comentario(cambios) };
+      delete delHilo.autorId;
+      return delHilo;
+    };
+
+    test('`propio: true` del servidor basta: «Tú» y «Eliminar», sin autorId', () => {
+      const tarjeta = tarjetaDeComentario(sinUid({ propio: true }), {
+        yo: YO,
+        alEliminar: jest.fn(),
+        alReportar: jest.fn(),
+      });
+
+      expect(tarjeta.querySelector('.comentario__propio').textContent).toBe('Tú');
+      expect(tarjeta.querySelector('[data-accion="eliminar-comentario"]')).not.toBeNull();
+      expect(tarjeta.querySelector('[data-accion="reportar-comentario"]')).toBeNull();
+    });
+
+    test('`propio: false` manda aunque un autorId coincidiera: «Reportar»', () => {
+      const tarjeta = tarjetaDeComentario(comentario({ autorId: YO, propio: false }), {
+        yo: YO,
+        alEliminar: jest.fn(),
+        alReportar: jest.fn(),
+      });
+
+      expect(tarjeta.querySelector('.comentario__propio')).toBeNull();
+      expect(tarjeta.querySelector('[data-accion="reportar-comentario"]')).not.toBeNull();
+    });
+
+    test('sin sesión, ni con `propio: true` se ofrece una acción', () => {
+      const tarjeta = tarjetaDeComentario(sinUid({ propio: true }), {
+        alEliminar: jest.fn(),
+        alReportar: jest.fn(),
+      });
+
+      expect(tarjeta.querySelector('button')).toBeNull();
+    });
+
+    test('esPropio: `propio` del servidor; sin él, la comparación de siempre', () => {
+      expect(esPropio({ propio: true }, YO)).toBe(true);
+      expect(esPropio({ propio: false, autorId: YO }, YO)).toBe(false);
+      expect(esPropio({ autorId: YO }, YO)).toBe(true);
+      expect(esPropio({ autorId: 'uid-otro' }, YO)).toBe(false);
+      expect(esPropio({}, YO)).toBe(false);
+      expect(esPropio({ autorId: null }, null)).toBe(false);
+    });
   });
 
   test('reportado por quien mira: se queda en su sitio, marcado y sin botón', () => {

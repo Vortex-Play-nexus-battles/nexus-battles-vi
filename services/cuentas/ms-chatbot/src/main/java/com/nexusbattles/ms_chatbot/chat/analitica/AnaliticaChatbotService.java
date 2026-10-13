@@ -7,6 +7,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.repository.TemaConocimientoRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.CalificacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteRepository;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,6 +38,11 @@ import java.util.stream.Collectors;
 //   satisfaccion     proporcion de calificaciones "util".
 //   tiempo           promedio de ms entre que llega la pregunta y sale la
 //                    respuesta.
+//   tickets          (1.3.7) los abiertos en el periodo, por estado y
+//                    categoria (AnaliticaDeTickets).
+//   palabras clave   (1.3.7) las mas usadas en las preguntas del periodo,
+//                    de las ultimas MAXIMO_PREGUNTAS_PARA_PALABRAS
+//                    (PalabrasClaveFrecuentes).
 // Solo cuentan las respuestas generadas desde V4: las anteriores no guardaban
 // si se escalaron ni cuanto tardaron.
 @Service
@@ -45,6 +51,11 @@ public class AnaliticaChatbotService {
     public static final ZoneId ZONA_POR_DEFECTO = ZoneId.of("America/Bogota");
 
     static final int TOP_TEMAS = 10;
+    static final int TOP_PALABRAS = 15;
+
+    // Las palabras clave se cuentan en memoria: con las ultimas 5000 preguntas
+    // del periodo basta para ver de que se habla, sin cargar un ano entero.
+    static final int MAXIMO_PREGUNTAS_PARA_PALABRAS = 5000;
 
     // Un periodo mas largo haria cargar demasiados registros en memoria para
     // armar la tendencia diaria; un ano cubre el uso real de un tablero.
@@ -53,12 +64,15 @@ public class AnaliticaChatbotService {
     private final MensajeRepository mensajeRepository;
     private final CalificacionRepository calificacionRepository;
     private final TemaConocimientoRepository temaConocimientoRepository;
+    private final TicketSoporteRepository ticketSoporteRepository;
 
     public AnaliticaChatbotService(MensajeRepository mensajeRepository, CalificacionRepository calificacionRepository,
-                                   TemaConocimientoRepository temaConocimientoRepository) {
+                                   TemaConocimientoRepository temaConocimientoRepository,
+                                   TicketSoporteRepository ticketSoporteRepository) {
         this.mensajeRepository = mensajeRepository;
         this.calificacionRepository = calificacionRepository;
         this.temaConocimientoRepository = temaConocimientoRepository;
+        this.ticketSoporteRepository = ticketSoporteRepository;
     }
 
     // 'desde' y 'hasta' son dias completos e inclusivos en 'zona'.
@@ -90,7 +104,12 @@ public class AnaliticaChatbotService {
             calificacionesUtiles,
             proporcion(calificacionesUtiles, calificaciones.size()),
             temasFrecuentes(inicio, fin),
-            tendencia(desde, hasta, zona, preguntas, respuestas)
+            tendencia(desde, hasta, zona, preguntas, respuestas),
+            AnaliticaDeTickets.resumir(ticketSoporteRepository.buscarCreadosEntre(inicio, fin)),
+            PalabrasClaveFrecuentes.contar(
+                mensajeRepository.buscarTextosDePreguntasEntre(Remitente.USUARIO, inicio, fin,
+                    PageRequest.of(0, MAXIMO_PREGUNTAS_PARA_PALABRAS)),
+                TOP_PALABRAS)
         );
     }
 

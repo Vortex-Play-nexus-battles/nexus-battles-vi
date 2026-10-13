@@ -16,6 +16,10 @@
  *          estado del canal se publica para que la vista lo pinte
  *          (`Estado de conexion`, no un `Aviso`, segun MAPEO-ERRORES.md §5.4).
  *
+ * Y HU-NOT-001 (#532) CA-02: marcar todas como leidas de una vez
+ * (`marcarTodasLeidas`). El contador en 0 llega a las demas sesiones por el
+ * mismo `ContadorActualizado` de siempre.
+ *
  * Los mensajes de la cola privada se distinguen por su forma, que es lo que
  * fija `contracts/websocket/notificaciones.yaml`: un `Aviso` trae `id` y
  * `titulo`; `ContadorActualizado` trae solo `noLeidas`; `ErrorDeCanal` es un
@@ -26,6 +30,7 @@ import {
   CANAL,
   consultarBandeja as consultarBandejaHttp,
   marcarLeida as marcarLeidaHttp,
+  marcarTodasLeidas as marcarTodasLeidasHttp,
   entregarPendientes as entregarPendientesHttp,
   tokenDeSesion,
   urlDelCanal,
@@ -76,7 +81,7 @@ const ESPERAS_POR_OMISION = [1000, 2000, 5000, 10000, 30000];
  *   real con el JWT en la cabecera `Authorization` del CONNECT
  * @param {Function} [opciones.token] `() => string|null`; el JWT de la sesion, por omision
  *   el de `sessionStorage`
- * @param {{consultarBandeja?: Function, marcarLeida?: Function, entregarPendientes?: Function}} [opciones.cliente]
+ * @param {{consultarBandeja?: Function, marcarLeida?: Function, marcarTodasLeidas?: Function, entregarPendientes?: Function}} [opciones.cliente]
  * @param {Function} [opciones.esperar] `(ms) => Promise`; inyeccion para las pruebas
  * @param {number[]} [opciones.esperas] espera creciente entre reintentos de conexion, en ms
  * @param {number} [opciones.intervaloSondeo] cada cuanto se consulta por HTTP mientras no hay canal
@@ -101,6 +106,7 @@ export function crearBandeja({
   const http = {
     consultarBandeja: consultarBandejaHttp,
     marcarLeida: marcarLeidaHttp,
+    marcarTodasLeidas: marcarTodasLeidasHttp,
     entregarPendientes: entregarPendientesHttp,
     ...cliente,
   };
@@ -298,6 +304,27 @@ export function crearBandeja({
       }
       noLeidas = respuesta?.noLeidas ?? noLeidasLocales();
       publicar();
+      return noLeidas;
+    },
+
+    /**
+     * HU-NOT-001 CA-02. Marca como leidos todos los avisos del jugador de una
+     * vez. Si el servidor falla, la lista no cambia. Si responde, la cuenta que
+     * devuelve manda; si no cuadra con la lista, es que llego algo mientras
+     * tanto y quedo sin leer, y se reconcilia la bandeja.
+     *
+     * @returns {Promise<number>} no leidos al terminar
+     */
+    async marcarTodasLeidas() {
+      const respuesta = await http.marcarTodasLeidas(usuarioId);
+      avisos.forEach((aviso) => {
+        aviso.leida = true;
+      });
+      noLeidas = respuesta?.noLeidas ?? noLeidasLocales();
+      publicar();
+      if (noLeidas !== noLeidasLocales()) {
+        reconciliar().catch(alError);
+      }
       return noLeidas;
     },
 

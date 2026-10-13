@@ -1,7 +1,10 @@
 package com.nexusbattles.ms_chatbot.chat.model;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecidaConverter;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -65,6 +68,12 @@ public class Mensaje {
     @Column(name = "tiempo_respuesta_ms")
     private Integer tiempoRespuestaMs;
 
+    // ms-chatbot.yaml 1.3.4 (V7): pasos, enlaces, tarjetas, respuestas rapidas
+    // y oferta de soporte humano de una respuesta del bot. null si no hay.
+    @Convert(converter = RespuestaEnriquecidaConverter.class)
+    @Column(columnDefinition = "TEXT")
+    private RespuestaEnriquecida enriquecido;
+
     public Mensaje(Conversacion conversacion, Remitente remitente, String contenido, String adjuntoUrl) {
         this(conversacion, remitente, contenido, adjuntoUrl, Instant.now());
     }
@@ -90,5 +99,10 @@ public class Mensaje {
         this.categoria = categoria;
         this.escalado = escalado;
         this.tiempoRespuestaMs = tiempoRespuestaMs;
+    }
+
+    // 1.3.4: la respuesta enriquecida del bot; una vacia no se guarda.
+    public void registrarEnriquecido(RespuestaEnriquecida nuevo) {
+        this.enriquecido = nuevo == null || nuevo.estaVacia() ? null : nuevo;
     }
 }

@@ -36,6 +36,11 @@ public final class MotorDeCombateSimulado implements MotorDeCombate {
 
     /** Vida que quita cada golpe. */
     public int dano = 10;
+    /**
+     * Vida que el objetivo le devuelve a quien lo golpea (Pinchos de escudo,
+     * Toma y lleva): el motor lo anota como {@code REFLEJO} sobre el atacante.
+     */
+    public int reflejo = 0;
     /** Poder que cuesta la accion (0 = basica). */
     public int costo = 0;
     /** Si no es nulo, cualquier accion lo lanza. */
@@ -63,10 +68,14 @@ public final class MotorDeCombateSimulado implements MotorDeCombate {
         ParticipanteDePartida blanco = blanco(partida, ejecutor, objetivo, decideLaMaquina);
         int antes = blanco.heroe().vidaActual();
         int despues = Math.max(0, antes - dano);
+        int vidaDelEjecutor = partida.participante(ejecutor).map(p -> p.heroe().vidaActual()).orElse(0);
+        int vidaDelEjecutorDespues = Math.max(0, vidaDelEjecutor - reflejo);
+        String ejecutada = decideLaMaquina ? ATAQUE_BASICO : accion;
 
         List<CombatienteResuelto> combatientes = new ArrayList<>();
         for (ParticipanteDePartida p : conReglas(partida)) {
-            int vida = p.idJugador().equals(blanco.idJugador()) ? despues : p.heroe().vidaActual();
+            int vida = p.idJugador().equals(blanco.idJugador()) ? despues
+                    : p.idJugador().equals(ejecutor) ? vidaDelEjecutorDespues : p.heroe().vidaActual();
             EstadoDeCombate estado = estadoDe(p);
             if (p.idJugador().equals(ejecutor)) {
                 estado = new EstadoDeCombate(Math.max(0, estado.poderActual() - costo), PODER_MAXIMO,
@@ -75,12 +84,21 @@ public final class MotorDeCombateSimulado implements MotorDeCombate {
             }
             combatientes.add(new CombatienteResuelto(p.idJugador(), vida, p.heroe().vidaMaxima(), estado));
         }
-        String ejecutada = decideLaMaquina ? ATAQUE_BASICO : accion;
+        List<ResolucionDeAccion.Afectado> afectados = new ArrayList<>();
+        List<EventoDeCombate> eventos = new ArrayList<>();
+        if (antes != despues) {
+            afectados.add(new ResolucionDeAccion.Afectado(blanco.idJugador(), antes, despues, despues - antes));
+            eventos.add(new EventoDeCombate("DANO", blanco.idJugador(), ejecutor, ejecutada, antes - despues));
+        }
+        if (vidaDelEjecutor != vidaDelEjecutorDespues) {
+            afectados.add(new ResolucionDeAccion.Afectado(ejecutor, vidaDelEjecutor, vidaDelEjecutorDespues,
+                    vidaDelEjecutorDespues - vidaDelEjecutor));
+            eventos.add(new EventoDeCombate("REFLEJO", ejecutor, blanco.idJugador(), "Pinchos de escudo",
+                    vidaDelEjecutor - vidaDelEjecutorDespues));
+        }
         return new ResolucionDeAccion(ejecutada, ejecutada, false, ejecutor, blanco.idJugador(), "ATAQUE", false,
                 false, new ResolucionDeAccion.Golpe(14, 11, true, "CAUSAR_DANO", 3120, 100, dano, antes - despues),
-                antes == despues ? List.of()
-                        : List.of(new ResolucionDeAccion.Afectado(blanco.idJugador(), antes, despues, despues - antes)),
-                List.of(), combatientes);
+                afectados, eventos, combatientes);
     }
 
     @Override

@@ -131,6 +131,13 @@ services:
       PARAMETROS_URL: ${PARAMETROS_URL:-http://srv-admin-parametros:8088/api/v1}
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
       PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
+      # RFINAL-05 (HU-PRV-005) — antes de programar el cierre de una cuenta,
+      # ms-identidad pregunta a ms-subastas, con el token de la persona, si
+      # tiene subastas activas o pujas vigentes. ms-subastas vive en el host de
+      # contenido como inventario y productos: su IP elastica y su puerto, el
+      # mismo destino que usa el borde. Sin respuesta, el cierre no se programa
+      # (503, fail-closed).
+      IDENTIDAD_SUBASTAS_URL: ${IDENTIDAD_SUBASTAS_URL:-http://34.193.90.11:8092/api/v1}
       # RESPALDO PROVISIONAL DE DEV — no es decision de producto (D-28, D-29).
       # Solo se aplica mientras `jugador.creditos-iniciales` y
       # `jugador.kit-inicial` sigan SIN VALOR en admin-parametros; en cuanto un
@@ -156,6 +163,18 @@ services:
       AUTH_CLIENTES_SERVICIO: ${AUTH_CLIENTES_SERVICIO:-}
       # Clave de firma estable (ADR-002); sin valor se genera una efimera.
       JWT_CLAVE_PRIVADA: ${JWT_CLAVE_PRIVADA:-}
+      # HU-AUT-007 — clave AES (base64 de 16, 24 o 32 bytes) que cifra el
+      # secreto TOTP de cada cuenta. Sin valor el servicio arranca igual:
+      # activar la verificacion en dos pasos responde 503 y el login de quien
+      # no la tiene no cambia. Tiene que ser ESTABLE: con otra clave los
+      # secretos guardados no se pueden leer (solo quedarian los codigos de
+      # recuperacion). Ver .env.example.
+      IDENTIDAD_2FA_CLAVE: ${IDENTIDAD_2FA_CLAVE:-}
+      # Roles que no entran sin segundo factor (RF-AUT-007:
+      # SUPER_ADMINISTRADOR,ADMINISTRADOR,MODERADOR). VACIO por omision: las
+      # pruebas automaticas entran con cuentas administrativas sin el, y
+      # encenderlo es decision humana (ver .env.example).
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ${IDENTIDAD_2FA_OBLIGATORIO_ROLES:-}
       # R9.5 — origenes CORS. Antes eran comodin escrito en WebSecurityConfig;
       # ahora son configuracion (regla 10). Vacio = la lista de desarrollo que
       # trae el servicio, que es restrictiva pero utilizable: en AWS el
@@ -167,6 +186,16 @@ services:
       # aqui reabre la escalada sin token: solo para una demo local y a
       # sabiendas. Nunca en un host compartido.
       RBAC_PERMITIR_HEADER_ROL: ${RBAC_PERMITIR_HEADER_ROL:-false}
+      # Auditoria de DEV del 30-sep: las fotos de perfil se guardaban en el
+      # disco efimero del contenedor (`./avatares-subidos` bajo /app) y cada
+      # despliegue las borraba; la cuenta seguia apuntando a un archivo que ya
+      # no existia. Ahora van a un volumen con nombre, como la base.
+      AVATARES_RUTA: /app/avatares-subidos
+    volumes:
+      - identidad-avatares:/app/avatares-subidos
 
 volumes:
   identidad-db-datos:
+  # Fotos de perfil (ver AVATARES_RUTA): sobreviven al redespliegue y al
+  # apagado nocturno del host.
+  identidad-avatares:

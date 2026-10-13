@@ -47,7 +47,7 @@ public class ConfiguracionDeResiliencia {
     /** Lo que lee el jugador: la funcion que queda limitada (HU-DIS-003, CA-02). */
     public static final String SECCION_INVENTARIO = "Inventario";
     public static final String SECCION_COMBATE = "Motor de combate";
-    public static final String SECCION_APUESTAS = "Apuesta de creditos";
+    public static final String SECCION_APUESTAS = "Apuesta de créditos";
 
     @Bean
     public CortaCircuitos cortaInventario(Umbrales umbrales, RegistroDeDegradacion registro) {

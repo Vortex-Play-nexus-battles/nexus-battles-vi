@@ -26,7 +26,7 @@ public class InventarioNoDisponible extends ErrorDeNegocio {
 
     public InventarioNoDisponible(Throwable causa) {
         super(TIPO,
-              "No se pudo comprobar tu heroe",
+              "No se pudo comprobar tu héroe",
               503,
               "El servicio de inventario no respondio. Vuelve a intentarlo en unos segundos.");
         initCause(causa);
@@ -34,7 +34,7 @@ public class InventarioNoDisponible extends ErrorDeNegocio {
 
     public InventarioNoDisponible(String motivo) {
         super(TIPO,
-              "No se pudo comprobar tu heroe",
+              "No se pudo comprobar tu héroe",
               503,
               "El servicio de inventario no respondio (" + motivo + "). "
                       + "Vuelve a intentarlo en unos segundos.");

@@ -17,7 +17,13 @@ public class ProductoNoAgregableException extends RuntimeException {
         /** No quedan unidades (RF-CAR-007, RF-PRD-003). */
         AGOTADO,
         /** No tiene precio en moneda real, y la tienda solo cobra en moneda real (RF-CAR-002, RN-PAG-001). */
-        SIN_PRECIO_EN_MONEDA_REAL
+        SIN_PRECIO_EN_MONEDA_REAL,
+        /**
+         * El jugador ya lo tiene en su inventario: RF-CAR-004 lo lista entre
+         * las excepciones de «añadir a la cesta» («producto ya adquirido por
+         * el cliente»). Auditoría de DEV del 30-sep (contrato 1.5.0).
+         */
+        YA_ADQUIRIDO
     }
 
     private final Motivo motivo;

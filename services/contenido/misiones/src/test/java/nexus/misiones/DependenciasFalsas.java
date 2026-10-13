@@ -19,18 +19,18 @@ import java.util.regex.Pattern;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Las siete dependencias de misiones en un solo servidor HTTP de verdad
+ * Las ocho dependencias de misiones en un solo servidor HTTP de verdad
  * (JDK HttpServer), para que los clientes REST se prueben de punta a punta:
  * serializacion, cabeceras (credencial, traza, Idempotency-Key), codigos de
  * estado y tiempos de espera. Cada una responde con la forma de su contrato:
- * inventario.yaml 1.6.0, productos.yaml, heroes.yaml 1.1.0,
- * motor-combate.yaml 1.1.0, creditos.yaml 1.4.0, correo.yaml 1.4.0 y
- * ms-identidad-admin.yaml.
+ * inventario.yaml 1.6.0, productos.yaml, heroes.yaml 1.2.0,
+ * motor-combate.yaml 1.2.0, creditos.yaml 1.4.0, correo.yaml 1.4.0,
+ * notificaciones.yaml 1.2.0 y ms-identidad-admin.yaml.
  *
  * <p>Rutas: inventario, productos, heroes y motor cuelgan de la raiz; el libro
  * de creditos de {@code /finanzas/api/v1}, correo de {@code /correo/api/v1},
- * identidad de {@code /identidad} y el emisor de credenciales de
- * {@code /auth/token}.
+ * la bandeja de {@code /notificaciones/api/v1}, identidad de
+ * {@code /identidad} y el emisor de credenciales de {@code /auth/token}.
  */
 public final class DependenciasFalsas implements AutoCloseable {
 
@@ -38,7 +38,8 @@ public final class DependenciasFalsas implements AutoCloseable {
 
     private static final JsonMapper JSON = JsonMapper.builder().build();
 
-    public record Peticion(String metodo, String ruta, Map<String, String> cabeceras, String cuerpo) {
+    public record Peticion(String metodo, String ruta, String consulta, Map<String, String> cabeceras,
+                           String cuerpo) {
 
         public Map<String, Object> json() {
             return cuerpo == null || cuerpo.isBlank() ? Map.of() : JSON.readValue(cuerpo, Map.class);
@@ -59,6 +60,9 @@ public final class DependenciasFalsas implements AutoCloseable {
         public String bloqueadoPor;
         public String subastaId;
         public boolean equipado = true;
+        /** Ids de los elementos que lleva puestos. */
+        public List<String> armas = List.of("arma-1");
+        public Map<String, String> armaduras = Map.of();
 
         Heroe(String id, String propietario, String productoId) {
             this.id = id;
@@ -71,10 +75,22 @@ public final class DependenciasFalsas implements AutoCloseable {
     public final List<Peticion> recibidas = Collections.synchronizedList(new ArrayList<>());
     public final Map<String, Heroe> heroes = new ConcurrentHashMap<>();
     public final Map<String, String> prototipos = new ConcurrentHashMap<>();
+    /** Los elementos de la vitrina del jugador: id, productoId, tipo, disponible. */
+    public final List<Map<String, Object>> vitrina = Collections.synchronizedList(new ArrayList<>());
+    /** Nombre de los productos que no son heroes (armas, armaduras, items, epicas). */
+    public final Map<String, String> nombresDeProducto = new ConcurrentHashMap<>();
+    /** Si es verdadero, el inventario no publica las formulas de las estadisticas. */
+    public volatile boolean estadisticasSinFormulas;
+    /** Cuantos elementos devuelve cada pagina de la vitrina. */
+    public static final int ELEMENTOS_POR_PAGINA = 2;
     /** Dependencias que responden 500 («caidas»). */
     public final Set<String> caidas = Collections.synchronizedSet(new HashSet<>());
     /** Contacto que da identidad; nulo = 404. */
     public volatile String correoDelJugador = "jugador@ejemplo.com";
+    /** Rutas que contestan un estado fijo (la clave es el final de la ruta), p. ej. «/liberacion» → 401. */
+    public final Map<String, Integer> forzados = new ConcurrentHashMap<>();
+    /** La bandeja falsa de notificaciones: los avisos recibidos, por id. */
+    public final Map<String, Map<String, Object>> avisos = new ConcurrentHashMap<>();
 
     public DependenciasFalsas() throws IOException {
         servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -90,7 +106,18 @@ public final class DependenciasFalsas implements AutoCloseable {
         Heroe heroe = new Heroe(id, propietario, productoId);
         heroes.put(id, heroe);
         prototipos.put(productoId, prototipo);
+        conElemento(id, productoId, "HEROE", true);
         return heroe;
+    }
+
+    /** Anade un elemento a la vitrina del jugador; el nombre del producto es el del catalogo. */
+    public void conElemento(String id, String productoId, String tipo, boolean disponible) {
+        Map<String, Object> elemento = new LinkedHashMap<>();
+        elemento.put("id", id);
+        elemento.put("productoId", productoId);
+        elemento.put("tipo", tipo);
+        elemento.put("disponible", disponible);
+        vitrina.add(elemento);
     }
 
     public List<Peticion> a(String metodo, String prefijo) {
@@ -128,8 +155,13 @@ public final class DependenciasFalsas implements AutoCloseable {
         recibidas.clear();
         heroes.clear();
         prototipos.clear();
+        vitrina.clear();
+        nombresDeProducto.clear();
+        estadisticasSinFormulas = false;
         caidas.clear();
         correoDelJugador = "jugador@ejemplo.com";
+        forzados.clear();
+        avisos.clear();
     }
 
     @Override
@@ -157,7 +189,7 @@ public final class DependenciasFalsas implements AutoCloseable {
         intercambio.getRequestHeaders().forEach((nombre, valores) ->
                 cabeceras.put(nombre.toLowerCase(), String.join(",", valores)));
         String cuerpo = new String(intercambio.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
-        Peticion peticion = new Peticion(metodo, ruta, cabeceras, cuerpo);
+        Peticion peticion = new Peticion(metodo, ruta, intercambio.getRequestURI().getQuery(), cabeceras, cuerpo);
         recibidas.add(peticion);
         try {
             Respuesta respuesta = responder(peticion);
@@ -196,17 +228,37 @@ public final class DependenciasFalsas implements AutoCloseable {
 
     private Respuesta responder(Peticion p) {
         String ruta = p.ruta();
+        for (Map.Entry<String, Integer> forzado : forzados.entrySet()) {
+            if (ruta.endsWith(forzado.getKey())) {
+                return problema(forzado.getValue(), "Estado forzado por la prueba");
+            }
+        }
+        if (ruta.equals("/notificaciones/api/v1/internal/notifications") && p.metodo().equals("POST")) {
+            return caida("notificaciones") ? problema(500, "caido") : notificaciones(p);
+        }
         if (ruta.equals("/auth/token")) {
             return json(200, Map.of("access_token", TOKEN_DE_SERVICIO, "token_type", "Bearer", "expires_in", 3600));
         }
         if (ruta.startsWith("/api/v1/inventario")) {
-            return caida("inventario") && !ruta.endsWith("/entregas") ? problema(500, "caido") : inventario(p);
+            // «liberacion» tumba solo la liberacion del heroe: la simulacion ya necesita al inventario
+            // (estadisticas, equipo y epicas del heroe), asi que «inventario» tumba tambien la simulacion.
+            boolean caeLaLiberacion = caida("liberacion") && ruta.endsWith("/liberacion");
+            return (caida("inventario") && !ruta.endsWith("/entregas")) || caeLaLiberacion
+                    ? problema(500, "caido") : inventario(p);
         }
         if (ruta.startsWith("/api/v1/productos")) {
             if (caida("productos")) {
                 return problema(500, "caido");
             }
             Matcher m = PRODUCTO.matcher(ruta);
+            if (m.matches() && nombresDeProducto.containsKey(m.group(1))) {
+                Map<String, Object> producto = new LinkedHashMap<>();
+                producto.put("id", m.group(1));
+                producto.put("tipo", "ARMA");
+                producto.put("nombre", nombresDeProducto.get(m.group(1)));
+                producto.put("estado", "ACTIVO");
+                return json(200, producto);
+            }
             if (m.matches() && prototipos.containsKey(m.group(1))) {
                 Map<String, Object> producto = new LinkedHashMap<>();
                 producto.put("id", m.group(1));
@@ -222,7 +274,7 @@ public final class DependenciasFalsas implements AutoCloseable {
                 || ruta.startsWith("/api/v1/equipos") || ruta.startsWith("/api/v1/progresion")) {
             return caida("heroes") ? problema(500, "caido") : heroes(p);
         }
-        if (ruta.equals("/api/v1/combate/ataques")) {
+        if (ruta.equals("/api/v1/combate/turnos") || ruta.equals("/api/v1/combate/acciones")) {
             return caida("motor") ? problema(500, "caido") : motor(p);
         }
         if (ruta.equals("/finanzas/api/v1/creditos/acreditar")) {
@@ -248,6 +300,26 @@ public final class DependenciasFalsas implements AutoCloseable {
                     "estado", "ACTIVO"));
         }
         return problema(404, "Ruta desconocida en el servidor falso: " + ruta);
+    }
+
+    /**
+     * {@code POST /internal/notifications} (notificaciones.yaml 1.2.0): 201 con
+     * la entrega; el mismo id otra vez, 409 y nada cambia.
+     */
+    private Respuesta notificaciones(Peticion p) {
+        Map<String, Object> cuerpo = p.json();
+        String id = String.valueOf(cuerpo.get("id"));
+        if (avisos.putIfAbsent(id, cuerpo) != null) {
+            return problema(409, "Ya existe un aviso con ese identificador");
+        }
+        Map<String, Object> aviso = new LinkedHashMap<>();
+        aviso.put("id", id);
+        aviso.put("tipo", cuerpo.get("tipo"));
+        aviso.put("titulo", cuerpo.get("titulo"));
+        aviso.put("cuerpo", cuerpo.get("cuerpo"));
+        aviso.put("creadaEn", cuerpo.get("creadaEn"));
+        aviso.put("leida", false);
+        return json(201, Map.of("aviso", aviso, "sesionesNotificadas", List.of()));
     }
 
     private Respuesta inventario(Peticion p) {
@@ -309,20 +381,50 @@ public final class DependenciasFalsas implements AutoCloseable {
             detalle.put("ejecucionMisionId", heroe.bloqueadoPor);
             return json(200, detalle);
         }
+        if (ruta.equals("/api/v1/inventario/elementos") && p.metodo().equals("GET")) {
+            int pagina = 0;
+            if (p.consulta() != null && p.consulta().contains("pagina=")) {
+                pagina = Integer.parseInt(p.consulta().replaceAll(".*pagina=(\\d+).*", "$1"));
+            }
+            List<Map<String, Object>> todos;
+            synchronized (vitrina) {
+                todos = new ArrayList<>(vitrina);
+            }
+            int desde = Math.min(todos.size(), pagina * ELEMENTOS_POR_PAGINA);
+            int hasta = Math.min(todos.size(), desde + ELEMENTOS_POR_PAGINA);
+            int paginas = Math.max(1, (todos.size() + ELEMENTOS_POR_PAGINA - 1) / ELEMENTOS_POR_PAGINA);
+            Map<String, Object> cuerpo = new LinkedHashMap<>();
+            cuerpo.put("elementos", todos.subList(desde, hasta));
+            cuerpo.put("pagina", pagina);
+            cuerpo.put("totalPaginas", paginas);
+            cuerpo.put("ultima", pagina + 1 >= paginas);
+            return json(200, cuerpo);
+        }
         if ((m = EQUIPAMIENTO.matcher(ruta)).matches()) {
             Heroe heroe = heroes.get(m.group(1));
             if (heroe == null || !heroe.propietario.equals(p.cabecera("X-User-Name"))) {
                 return problema(heroe == null ? 404 : 403, "No es tuyo");
             }
-            return json(200, Map.of("heroeId", heroe.id, "armas", heroe.equipado ? List.of("arma-1") : List.of(),
-                    "armaduras", Map.of(), "items", List.of()));
+            return json(200, Map.of("heroeId", heroe.id, "armas", heroe.equipado ? heroe.armas : List.of(),
+                    "armaduras", heroe.armaduras, "items", List.of()));
         }
         if ((m = ESTADISTICAS.matcher(ruta)).matches()) {
             Heroe heroe = heroes.get(m.group(1));
             if (heroe == null || !heroe.propietario.equals(p.cabecera("X-User-Name"))) {
                 return problema(heroe == null ? 404 : 403, "No es tuyo");
             }
-            return json(200, Map.of("heroeId", heroe.id, "poder", 10, "vida", 44, "defensa", 11));
+            Map<String, Object> estadisticas = new LinkedHashMap<>();
+            estadisticas.put("heroeId", heroe.id);
+            estadisticas.put("nivel", heroe.nivel);
+            estadisticas.put("poder", 10);
+            estadisticas.put("vida", 44);
+            estadisticas.put("defensa", 11);
+            if (!estadisticasSinFormulas) {
+                estadisticas.put("ataque", Map.of("base", 11, "cantidadDados", 1, "caras", 6, "formula", "11 + 1d6"));
+                estadisticas.put("dano", Map.of("base", 3, "cantidadDados", 1, "caras", 4, "formula", "3 + 1d4"));
+                estadisticas.put("sanar", null);
+            }
+            return json(200, estadisticas);
         }
         if (ruta.equals("/api/v1/inventario/entregas") && p.metodo().equals("POST")) {
             if (caida("entregas")) {
@@ -399,7 +501,9 @@ public final class DependenciasFalsas implements AutoCloseable {
         if ((m = VISTA.matcher(ruta)).matches()) {
             return json(200, Map.of("nombre", m.group(1), "tipo", "Guerrero", "esSanador", false,
                     "nivel", Integer.parseInt(m.group(2)),
-                    "estadisticas", Map.of("poder", 10, "vida", 20, "defensa", 5),
+                    "estadisticas", Map.of("poder", 10, "vida", 20, "defensa", 5,
+                            "ataqueDetalle", Map.of("base", 9, "cantidadDados", 1, "caras", 6),
+                            "danoDetalle", Map.of("base", 1, "cantidadDados", 1, "caras", 4)),
                     "accionesDisponibles", List.of(), "multiplicadorDeEfecto", 1,
                     "epica", Map.of("nombre", "Golpe de defensa")));
         }
@@ -411,14 +515,85 @@ public final class DependenciasFalsas implements AutoCloseable {
     }
 
     /**
-     * El motor falso: el heroe (defensa 11) recibe 1 de dano por golpe y los
-     * rivales 60, para que la mision se gane en pocas rondas.
+     * El motor falso (motor-combate.yaml 1.2.0): el heroe pega 60 y los rivales
+     * 1, para que la mision se gane en pocas rondas. Devuelve el estado de todos
+     * como el motor de verdad: con las estadisticas resueltas, el poder
+     * explicito y las acciones que tiene cada uno.
      */
+    @SuppressWarnings("unchecked")
     private Respuesta motor(Peticion p) {
         Map<String, Object> cuerpo = p.json();
-        int defensa = ((Number) cuerpo.get("defensaObjetivo")).intValue();
-        int dano = defensa == 11 ? 1 : 60;
-        return json(200, Map.of("categoria", "CAUSAR_DANO", "danoAplicado", dano, "ataqueResuelto", 15,
-                "defensaObjetivo", defensa));
+        List<Map<String, Object>> mesa = resueltos((List<Map<String, Object>>) cuerpo.get("combatientes"));
+        if (p.ruta().endsWith("/turnos")) {
+            String quien = (String) cuerpo.get("combatiente");
+            for (Map<String, Object> c : mesa) {
+                if (quien.equals(c.get("id"))) {
+                    int maximo = ((Number) ((Map<String, Object>) c.get("estadisticas")).get("poder")).intValue();
+                    c.put("poderActual", Math.min(maximo, ((Number) c.get("poderActual")).intValue() + 2));
+                }
+            }
+            Map<String, Object> respuesta = new LinkedHashMap<>();
+            respuesta.put("combatiente", quien);
+            respuesta.put("afectados", List.of());
+            respuesta.put("eventos", List.of());
+            respuesta.put("combatientes", mesa);
+            return json(200, respuesta);
+        }
+        String accion = (String) cuerpo.get("accion");
+        String ejecutor = (String) cuerpo.get("ejecutor");
+        Map<String, Object> blanco = mesa.stream().filter(c -> !ejecutor.equals(c.get("id"))).findFirst().orElseThrow();
+        int vidaAntes = ((Number) blanco.get("vidaActual")).intValue();
+        int dano = "heroe".equals(ejecutor) ? 60 : 1;
+        int vidaDespues = Math.max(0, vidaAntes - dano);
+        blanco.put("vidaActual", vidaDespues);
+        Map<String, Object> golpe = new LinkedHashMap<>();
+        golpe.put("ataqueResuelto", 15);
+        golpe.put("defensaObjetivo", ((Number) ((Map<String, Object>) blanco.get("estadisticas")).get("defensa")).intValue());
+        golpe.put("acierta", true);
+        golpe.put("categoria", "CAUSAR_DANO");
+        golpe.put("indiceTabla", 4000);
+        golpe.put("porcentajeDano", 100);
+        golpe.put("danoBase", dano);
+        golpe.put("danoAplicado", dano);
+        Map<String, Object> respuesta = new LinkedHashMap<>();
+        respuesta.put("accion", accion);
+        respuesta.put("accionEjecutada", accion);
+        respuesta.put("enValorBase", false);
+        respuesta.put("ejecutor", ejecutor);
+        respuesta.put("objetivo", blanco.get("id"));
+        respuesta.put("tipo", "ATAQUE");
+        respuesta.put("ataque", golpe);
+        respuesta.put("afectados", List.of(Map.of("id", blanco.get("id"), "vidaAntes", vidaAntes,
+                "vidaDespues", vidaDespues, "diferencia", vidaDespues - vidaAntes)));
+        respuesta.put("eventos", List.of(Map.of("tipo", "DANO", "combatiente", blanco.get("id"), "origen", ejecutor,
+                "efecto", accion, "cantidad", dano)));
+        respuesta.put("combatientes", mesa);
+        return json(200, respuesta);
+    }
+
+    /** Los combatientes como los devuelve el motor: estadisticas, poder y acciones resueltos. */
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> resueltos(List<Map<String, Object>> entrada) {
+        List<Map<String, Object>> mesa = new ArrayList<>();
+        for (Map<String, Object> original : entrada) {
+            Map<String, Object> c = new LinkedHashMap<>(original);
+            if (c.get("estadisticas") == null) {
+                Map<String, Object> estadisticas = new LinkedHashMap<>();
+                estadisticas.put("poder", 10);
+                estadisticas.put("vida", Math.max(1, ((Number) c.get("vidaActual")).intValue()));
+                estadisticas.put("defensa", "heroe".equals(c.get("id")) ? 11 : 5);
+                estadisticas.put("ataque", Map.of("base", 10, "cantidadDados", 1, "caras", 6));
+                estadisticas.put("dano", Map.of("base", 1, "cantidadDados", 1, "caras", 4));
+                estadisticas.put("sanar", null);
+                c.put("estadisticas", estadisticas);
+            }
+            if (c.get("poderActual") == null) {
+                c.put("poderActual", ((Map<String, Object>) c.get("estadisticas")).get("poder"));
+            }
+            c.put("acciones", List.of(Map.of("codigo", "ATAQUE_BASICO", "nombre", "Ataque básico", "tipo", "ATAQUE",
+                    "disponible", true)));
+            mesa.add(c);
+        }
+        return mesa;
     }
 }

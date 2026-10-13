@@ -77,12 +77,17 @@ public class PerfilUsuarioService {
 
         if (nuevoApodo != null && !nuevoApodo.isBlank()) {
             Usuario usuario = perfil.getUsuario();
-            if (!nuevoApodo.equals(usuario.getApodo())) {
-                apodoBlacklistValidator.validar(nuevoApodo);
-                if (usuarioRepository.findByApodo(nuevoApodo).isPresent()) {
-                    throw new IllegalArgumentException("El apodo ya está en uso.");
+            String apodo = nuevoApodo.strip();
+            if (!apodo.equals(usuario.getApodo())) {
+                apodoBlacklistValidator.validar(apodo);
+                // RFINAL-03: la unicidad sin distinguir mayusculas, como el
+                // registro (existsByApodoIgnoreCase). Antes «Ada» podia quedarse
+                // con el apodo de «ada». Cambiar solo las mayusculas del propio
+                // apodo sigue permitido.
+                if (!apodo.equalsIgnoreCase(usuario.getApodo()) && usuarioRepository.existsByApodoIgnoreCase(apodo)) {
+                    throw new ApodoEnUsoException();
                 }
-                usuario.setApodo(nuevoApodo);
+                usuario.setApodo(apodo);
                 usuarioRepository.save(usuario);
             }
         }

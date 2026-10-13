@@ -107,4 +107,27 @@ describe('aviso de acceso denegado', () => {
     expect(hueco.textContent).toBe('No tienes permiso.');
     expect(document.getElementById('nexus-rbac-toast')).toBeNull();
   });
+
+  /*
+   * Revisión del modo jugador del 6-oct, punto 10: el código de una sala
+   * privada se pide en su propio formulario, y el 403 que dice «ese código no
+   * vale» es una respuesta de negocio, no un permiso denegado. Salía además
+   * un aviso rojo flotante con «A una sala privada se entra por invitación…».
+   */
+  test('con rechazoEsperado, un 403 de negocio no saca el aviso rojo ni viaja a fetch', async () => {
+    globalThis.fetch = jest.fn(() => prohibido('Esta sala es privada.'));
+
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      '/api/v1/salas/s1/comprobacion-de-ingreso',
+      {
+        method: 'POST',
+        rechazoEsperado: true,
+      },
+    );
+
+    expect(respuesta.status).toBe(403);
+    expect(document.getElementById('nexus-rbac-toast')).toBeNull();
+    expect(globalThis.fetch.mock.calls[0][1]).not.toHaveProperty('rechazoEsperado');
+    expect(globalThis.fetch.mock.calls[0][1].method).toBe('POST');
+  });
 });

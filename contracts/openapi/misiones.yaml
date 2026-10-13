@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Servicio de misiones
-  version: 1.0.0
+  version: 1.2.0
   description: >
     Módulo de misiones (sección 7.8 del documento del curso, M11, RF-MIS-001 a
     RF-MIS-017): tablón, detalle, matrícula de un héroe con su estrategia,
@@ -20,8 +20,11 @@ info:
 
     **Qué hace el servidor y qué no.** Las misiones se leen de una semilla
     versionada en el repositorio (`services/contenido/misiones/src/main/resources/semilla/`):
-    «El Templo Olvidado» es el ejemplo del documento (§7.8.14), tal cual. El
-    combate lo resuelve el motor de combate (`POST /api/v1/combate/ataques`) y
+    «El Templo Olvidado» es el ejemplo del documento (§7.8.14) y la semilla
+    de progresión (1.1.0, D-42) publica siete misiones de historia de nivel 1
+    a 7 que llevan hasta él. Los enemigos pelean en el nivel recomendado de la
+    misión (§7.8.13). El combate lo resuelve el motor de combate de las
+    batallas en línea (`POST /api/v1/combate/turnos` y `/acciones`) y
     la IA de cada turno la decide el servicio de héroes
     (`POST /api/v1/estrategias/decision`): aquí no hay un segundo motor. La
     experiencia por enemigo derrotado es 10 × 1,2^(1d8) (§6.1.1): el dado lo
@@ -37,10 +40,48 @@ info:
     y el resultado se liquida entonces: créditos (ms-finanzas, idempotente por
     `refId`), objetos y épicas (`POST /api/v1/inventario/entregas`, origen
     MISION, con `Idempotency-Key` por ejecución), liberación del héroe con su
-    experiencia (inventario, idempotente por estado) y correo (`POST
-    /correos/mision`). En desarrollo y en el banco E2E una hora de misión
-    puede durar menos (`MISIONES_SEGUNDOS_POR_HORA`, 3600 por omisión): los
-    instantes que devuelve este contrato son siempre los reales.
+    experiencia (inventario, idempotente por estado), correo (`POST
+    /correos/mision`) y avisos en la bandeja del jugador (ver «Avisos»). En
+    desarrollo y en el banco E2E una hora de misión puede durar menos
+    (`MISIONES_SEGUNDOS_POR_HORA`, 3600 por omisión): los instantes que
+    devuelve este contrato son siempre los reales.
+
+    Una simulación que no se puede hacer (un servicio no responde o la
+    rechaza) se aplaza con espera creciente de hasta cinco minutos: la
+    ejecución sigue En progreso, el héroe sigue en misión y el jugador la puede
+    cancelar; las demás ejecuciones vencidas no esperan por ella (1.2.0). En
+    la entrega, un 401, 408 o 429 de otro servicio se reintenta como una falta
+    de respuesta; solo el resto de 4xx es un rechazo definitivo.
+
+
+    **Avisos (1.2.0, RF-NOT-004 / HU-NOT-004, §7.8.9, §7.8.10, §7.8.12).** Al
+    liquidarse una ejecución terminada, misiones deja en la bandeja del jugador
+    (`POST /internal/notifications` de notificaciones.yaml 1.2.0, credencial
+    de servicio, `tipo` = `MISION`, el origen del evento según
+    websocket/notificaciones.yaml) y la bandeja lo entrega en tiempo real a sus
+    sesiones abiertas:
+
+    - la finalización, Completada o Fallida, con el detalle de cada
+      recompensa (créditos, experiencia, nivel alcanzado, cada objeto con su
+      cantidad, la épica); `id` = `mision-{ejecucionId}-aviso`;
+
+    - la épica de Máster obtenida, si la hubo;
+      `id` = `mision-{ejecucionId}-aviso-epica`;
+
+    - cada misión de historia que esta ejecución desbloqueó, solo la primera
+      vez que el jugador la completa (§7.8.2: la historia se desbloquea en
+      orden) y si no la había empezado ya;
+      `id` = `mision-{ejecucionId}-aviso-desbloqueo-{misionId}`.
+
+    Los `id` son estables: un reintento no duplica el aviso (la bandeja
+    responde 409 y cuenta como entregado). `creadaEn` es la hora en que
+    terminó la ejecución. Una cancelación no avisa (la decide el jugador).
+    `MISIONES_AVISOS_ACTIVO` los apaga en un entorno. Fuera de este contrato,
+    porque piden una decisión: avisos de misiones de tiempo limitado próximas
+    a expirar (el catálogo no tiene ninguna y «próximas» no tiene umbral),
+    logros e hitos (no hay sistema de logros definido), preferencias de aviso
+    por categoría y agrupación de avisos de la ausencia (la bandeja ya
+    conserva los pendientes; agruparlos es de notificaciones).
 
 
     **Decisiones del PO pendientes**, con su valor provisional (ver el README
@@ -524,7 +565,9 @@ components:
         DOCUMENTO: la misión es del documento del curso (§7.8.14).
         PROVISIONAL_DEV: semilla de desarrollo para demostrar el flujo, solo
         con `MISIONES_SEMILLA_PROVISIONAL=true`; no es contenido del juego.
-      enum: [DOCUMENTO, PROVISIONAL_DEV]
+        PROGRESION (1.1.0, D-42): misión de historia del catálogo de progresión
+        de nivel 1 a 7, diseñada por el equipo 6; contenido del juego.
+      enum: [DOCUMENTO, PROVISIONAL_DEV, PROGRESION]
     PaginaDeMisiones:
       type: object
       required: [misiones, total, pagina, totalPaginas, tamanio]
@@ -569,9 +612,12 @@ components:
           exclusiveMinimum: 0
         nivelRecomendado:
           type: [integer, "null"]
+          minimum: 1
+          maximum: 8
           description: >
-            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
-            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+            Sugerencia (§7.8.3), no requisito: los enemigos pelean en este nivel
+            (§7.8.13). Va de 1 a 8, los niveles que existen (§6.1.1). El ejemplo
+            del documento dice 15 y desde 1.1.0 se publica con 8 (D-42).
         recompensasDestacadas:
           type: array
           items:
@@ -631,9 +677,12 @@ components:
           exclusiveMinimum: 0
         nivelRecomendado:
           type: [integer, "null"]
+          minimum: 1
+          maximum: 8
           description: >
-            Sugerencia (§7.8.3), no requisito. El ejemplo del documento dice 15
-            aunque los héroes llegan al 8 (§6.1.1): se publica tal cual.
+            Sugerencia (§7.8.3), no requisito: los enemigos pelean en este nivel
+            (§7.8.13). Va de 1 a 8, los niveles que existen (§6.1.1). El ejemplo
+            del documento dice 15 y desde 1.1.0 se publica con 8 (D-42).
         recompensasDestacadas:
           type: array
           items:

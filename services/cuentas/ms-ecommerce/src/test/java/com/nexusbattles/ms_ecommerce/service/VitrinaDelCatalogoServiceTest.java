@@ -91,7 +91,7 @@ class VitrinaDelCatalogoServiceTest {
         }
 
         @Test
-        @DisplayName("sin precio en moneda real no aparece; nunca se ensena a 0")
+        @DisplayName("sin ningun precio no aparece; nunca se ensena a 0 (G3: solo en creditos si aparece)")
         void sinPrecioEnMonedaReal() {
             catalogoCon(
                     enVenta("con-precio"),
@@ -100,8 +100,9 @@ class VitrinaDelCatalogoServiceTest {
 
             PaginaDeVitrina pagina = vitrina.pagina(0, 16, null);
 
-            assertThat(idsDe(pagina)).containsExactly("con-precio");
-            assertThat(pagina.content()).allSatisfy(p -> assertThat(p.precioFinal()).isNotNull());
+            assertThat(idsDe(pagina)).containsExactly("con-precio", "solo-creditos");
+            assertThat(pagina.content()).allSatisfy(p -> assertThat(p.precioFinal() != null
+                    || p.precioCreditos() != null).isTrue());
         }
 
         @Test
@@ -288,6 +289,30 @@ class VitrinaDelCatalogoServiceTest {
             assertThat(tarjeta.porcentajeDescuento()).isNull();
             assertThat(tarjeta.esPropio()).isFalse();
             assertThat(tarjeta.enListaDeseos()).isFalse();
+        }
+
+        @Test
+        @DisplayName("D-44: el precio en creditos del catalogo, con la promocion vigente; premium o sin precio: nulo")
+        void precioEnCreditos() {
+            ProductoDelCatalogo hacha = new ProductoDelCatalogo("hacha", "Hacha", null, null, "ARMA", -1, 300,
+                    new BigDecimal("6000"), false, "ACTIVO", null);
+            ProductoDelCatalogo escudo = new ProductoDelCatalogo("escudo", "Escudo", null, null, "ARMADURA", -1, 250,
+                    new BigDecimal("5000"), false, "ACTIVO", null,
+                    new PromocionDelCatalogo(20, Instant.parse("2026-09-01T00:00:00Z"),
+                            Instant.parse("2026-10-01T00:00:00Z"), true));
+            ProductoDelCatalogo heroe = new ProductoDelCatalogo("heroe", "Heroe", null, null, "HEROE", -1, null,
+                    new BigDecimal("20000"), true, "ACTIVO", null);
+            ProductoDelCatalogo sinPrecio = new ProductoDelCatalogo("sin", "Anillo", null, null, "ITEM", -1, null,
+                    new BigDecimal("3000"), false, "ACTIVO", null);
+            catalogoCon(hacha, escudo, heroe, sinPrecio);
+
+            Map<String, Long> precios = new java.util.HashMap<>();
+            vitrina.pagina(0, 16, null).content().forEach(p -> precios.put(p.id(), p.precioCreditos()));
+
+            assertThat(precios).containsEntry("hacha", 300L)
+                    .as("250 - 20 % = 200").containsEntry("escudo", 200L)
+                    .as("premium: solo moneda real").containsEntry("heroe", null)
+                    .containsEntry("sin", null);
         }
 
         @Test
@@ -539,6 +564,116 @@ class VitrinaDelCatalogoServiceTest {
 
             assertThat(tarjeta.precioFinal()).isEqualByComparingTo("10000");
             assertThat(tarjeta.enPromocion()).isFalse();
+        }
+    }
+
+    /**
+     * G3 (4-oct): «producto vendible si: precioMonedaReal valido O precioCreditos
+     * valido», respetando premium, suspendido, tiraje y disponibilidad. Un premium
+     * no se convierte a creditos.
+     */
+    @Nested
+    @DisplayName("G3: se vende con algun precio, en dinero real o en creditos")
+    class SeVendeConAlgunPrecio {
+
+        private ProductoDelCatalogo producto(String id, Integer creditos, String cop, boolean premium, String estado,
+                                             Integer tiraje) {
+            return new ProductoDelCatalogo(id, "Producto " + id, null, "Descripcion de " + id, "ARMA", tiraje,
+                    creditos, cop == null ? null : new BigDecimal(cop), premium, estado, null);
+        }
+
+        private ProductoEnVentaDto tarjeta(String id) {
+            return vitrina.pagina(0, 16, null).content().stream().filter(p -> p.id().equals(id)).findFirst()
+                    .orElseThrow();
+        }
+
+        @Test
+        @DisplayName("solo COP: se vende, sin precio en creditos")
+        void soloCop() {
+            catalogoCon(producto("cop", null, "6000", false, "ACTIVO", -1));
+
+            ProductoEnVentaDto t = tarjeta("cop");
+            assertThat(t.precioFinal()).isEqualByComparingTo("6000");
+            assertThat(t.moneda()).isEqualTo("COP");
+            assertThat(t.precioCreditos()).isNull();
+        }
+
+        @Test
+        @DisplayName("solo creditos: se vende con su precio en creditos y sin precio en dinero real (nunca «0 COP»)")
+        void soloCreditos() {
+            catalogoCon(producto("creditos", 300, null, false, "ACTIVO", -1),
+                    producto("creditos-cop-cero", 150, "0", false, "UNICO", 1));
+
+            ProductoEnVentaDto t = tarjeta("creditos");
+            assertThat(t.precioCreditos()).isEqualTo(300L);
+            assertThat(t.precioFinal()).isNull();
+            assertThat(t.precioOriginal()).isNull();
+            assertThat(t.moneda()).isNull();
+            assertThat(t.enPromocion()).isFalse();
+            assertThat(tarjeta("creditos-cop-cero").precioFinal()).as("0 COP no es un precio").isNull();
+            assertThat(tarjeta("creditos-cop-cero").precioCreditos()).isEqualTo(150L);
+        }
+
+        @Test
+        @DisplayName("los dos precios: se vende con los dos")
+        void ambos() {
+            catalogoCon(producto("ambos", 300, "6000", false, "ACTIVO", -1));
+
+            ProductoEnVentaDto t = tarjeta("ambos");
+            assertThat(t.precioFinal()).isEqualByComparingTo("6000");
+            assertThat(t.precioCreditos()).isEqualTo(300L);
+        }
+
+        @Test
+        @DisplayName("sin precio, premium sin COP (no se convierte a creditos), suspendido o agotado: no se vende")
+        void noSeVende() {
+            catalogoCon(
+                    producto("sin-precio", null, null, false, "ACTIVO", -1),
+                    producto("creditos-cero", 0, "0", false, "ACTIVO", -1),
+                    producto("premium-con-creditos", 300, null, true, "ACTIVO", -1),
+                    producto("premium-cop-cero", null, "0", true, "ACTIVO", -1),
+                    producto("suspendido", 300, null, false, "SUSPENDIDO", -1),
+                    producto("agotado", 300, null, false, "ACTIVO", 0),
+                    producto("se-vende", 300, null, false, "ACTIVO", 2));
+
+            assertThat(idsDe(vitrina.pagina(0, 16, null))).containsExactly("se-vende");
+        }
+
+        @Test
+        @DisplayName("premium con COP: se vende solo en dinero real, aunque el catalogo traiga creditos")
+        void premiumSoloEnDineroReal() {
+            catalogoCon(producto("premium", 300, "20000", true, "ACTIVO", -1));
+
+            ProductoEnVentaDto t = tarjeta("premium");
+            assertThat(t.precioFinal()).isEqualByComparingTo("20000");
+            assertThat(t.precioCreditos()).isNull();
+        }
+
+        @Test
+        @DisplayName("la promocion de un producto solo en creditos se ve en su precio en creditos")
+        void promocionEnCreditos() {
+            catalogoCon(new ProductoDelCatalogo("rebajado", "Rebajado", null, null, "ARMA", -1, 300, null, false,
+                    "ACTIVO", null, new PromocionDelCatalogo(20, Instant.parse("2026-09-01T00:00:00Z"),
+                    Instant.parse("2026-10-01T00:00:00Z"), true)));
+
+            ProductoEnVentaDto t = tarjeta("rebajado");
+            assertThat(t.precioCreditos()).as("300 - 20 %").isEqualTo(240L);
+            assertThat(t.enPromocion()).isTrue();
+            assertThat(t.porcentajeDescuento()).isEqualTo(20);
+            assertThat(idsDe(vitrina.pagina(new ConsultaDeVitrina(0, 16, null, Moneda.COP, null, null, true, null),
+                    null))).as("filtro «en promocion»").containsExactly("rebajado");
+        }
+
+        @Test
+        @DisplayName("un rango de precio es de dinero real: con rango no entra; la busqueda por texto si lo encuentra")
+        void rangoYBusqueda() {
+            catalogoCon(producto("cop", null, "6000", false, "ACTIVO", -1),
+                    producto("creditos", 300, null, false, "ACTIVO", -1));
+
+            assertThat(idsDe(vitrina.pagina(new ConsultaDeVitrina(0, 16, null, Moneda.COP, BigDecimal.ONE,
+                    new BigDecimal("10000"), false, null), null))).containsExactly("cop");
+            assertThat(idsDe(vitrina.pagina(new ConsultaDeVitrina(0, 16, null, Moneda.COP, null, null, false,
+                    "producto creditos"), null))).containsExactly("creditos");
         }
     }
 

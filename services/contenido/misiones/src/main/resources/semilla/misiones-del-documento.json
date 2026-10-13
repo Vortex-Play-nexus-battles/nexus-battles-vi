@@ -1,5 +1,5 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "notas": [
     "Contenido del documento del curso, copiado sin reescribir: la mision de ejemplo de la seccion 7.8.14 («El Templo Olvidado») y la Tabla 20 (epicas y probabilidad de Master por tipo de heroe).",
     "PROVISIONAL (decision del PO, seccion 7.8.13 «las estadisticas de enemigos deben escalar segun nivel de mision»): el documento describe a los enemigos regulares solo con palabras. Para que el motor de combate los resuelva se les asigna un prototipo del catalogo de heroes y las estadisticas de ese prototipo en el nivel del heroe: Sombras Corrompidas = Guerrero Armas («ataque moderado»), Guardianes de Piedra = Guerrero Tanque («alta defensa»), Espectros Ancestrales = Mago Fuego («ataques magicos»).",
@@ -7,7 +7,8 @@
     "PROVISIONAL: «Explorar las 5 camaras del templo» se cumple al superar todos los encuentros regulares (el documento no reparte los 18 enemigos entre las 5 camaras).",
     "PROVISIONAL: la probabilidad del Master se escribe «0.15% (15% de probabilidad)»; se toma la aclaracion entre parentesis, 15 %. La de la Tabla 20 se toma literal (0,04 % = 0,0004).",
     "PROVISIONAL: «El Templo Olvidado» va destacada en el banner porque es la unica mision del documento.",
-    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md)."
+    "Sin producto en el catalogo oficial (se informan en el reporte, no se inventan): Cofre de Bronce, Fragmento del Sello Antiguo, Armadura «Piel del Guardian», Arma «Espada del Templo», la epica «Velo de Sombras» y el titulo «Explorador del Templo». Las epicas de la Tabla 20 si estan en el catalogo y se entregan con su producto EPICA (services/contenido/productos/docs/catalogo-inicial-identificadores.md).",
+    "1.1.0 (auditoría del 4-oct, D-42): el documento recomienda el nivel 15, que ningún héroe alcanza (§6.1.1: «puede incrementarse hasta el nivel 8»); se publica con nivel 8, el último de la progresión. Los enemigos pelean en el nivel recomendado de la misión (7.8.13) y no en el del héroe. Con la vida completa de su prototipo en nivel 8 (352 puntos un Guerrero) los 18 encuentros sin recuperar vida no los superaba nadie: se fijan vida y defensa PROVISIONALES (Sombras 18/70, Guardianes 30/84, Espectros 12/70) para que el Templo sea la misión más difícil sin ser imposible (BalanceDeMisionesTest en motor-combate). El jefe conserva los 100 puntos de vida del documento."
   ],
   "tabla20": [
     {
@@ -101,7 +102,7 @@
       "imagen": null,
       "dificultad": "NORMAL",
       "duracionHoras": 12,
-      "nivelRecomendado": 15,
+      "nivelRecomendado": 8,
       "requisitosPrevios": [],
       "narrativa": "En las profundidades del Bosque Sombrío yace un antiguo templo dedicado a los Dioses Olvidados. Según las leyendas, el templo alberga poderosos artefactos y conocimientos ancestrales. Sin embargo, está custodiado por criaturas corrompidas y un guardián milenario que protege sus secretos.",
       "escenario": null,
@@ -113,9 +114,9 @@
         { "texto": "Encontrar los 3 fragmentos del Sello Antiguo.", "principal": false, "tipo": "OBTENER_BOTIN", "valor": 3, "botin": "Fragmento del Sello Antiguo" }
       ],
       "enemigos": [
-        { "nombre": "Sombras Corrompidas", "cantidad": 10, "descripcion": "Enemigos básicos con ataque moderado.", "prototipo": "Guerrero Armas", "vida": null, "defensa": null, "rotaciones": [] },
-        { "nombre": "Guardianes de Piedra", "cantidad": 5, "descripcion": "Enemigos con alta defensa.", "prototipo": "Guerrero Tanque", "vida": null, "defensa": null, "rotaciones": [] },
-        { "nombre": "Espectros Ancestrales", "cantidad": 3, "descripcion": "Enemigos con ataques mágicos.", "prototipo": "Mago Fuego", "vida": null, "defensa": null, "rotaciones": [] }
+        { "nombre": "Sombras Corrompidas", "cantidad": 10, "descripcion": "Enemigos básicos con ataque moderado.", "prototipo": "Guerrero Armas", "vida": 18, "defensa": 70, "rotaciones": [] },
+        { "nombre": "Guardianes de Piedra", "cantidad": 5, "descripcion": "Enemigos con alta defensa.", "prototipo": "Guerrero Tanque", "vida": 30, "defensa": 84, "rotaciones": [] },
+        { "nombre": "Espectros Ancestrales", "cantidad": 3, "descripcion": "Enemigos con ataques mágicos.", "prototipo": "Mago Fuego", "vida": 12, "defensa": 70, "rotaciones": [] }
       ],
       "jefe": {
         "nombre": "El Guardián Eterno",

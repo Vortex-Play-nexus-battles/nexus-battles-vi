@@ -78,6 +78,8 @@ public class EjecutarAccion {
     static final String POR_ACCION = "ACCION";
     static final String POR_TIEMPO_AGOTADO = "TIEMPO_AGOTADO";
     static final String POR_TURNO_PERDIDO = "TURNO_PERDIDO";
+    /** Quien tenia el turno se rindio (canal 1.10.0). */
+    static final String POR_RENDICION = "RENDICION";
 
     /** Codigo por defecto cuando el cliente no manda uno. */
     static final String ACCION_BASICA = MotorDeCombate.ATAQUE_BASICO;
@@ -168,14 +170,40 @@ public class EjecutarAccion {
             return jugarTurnosDeLaMaquina(pasarTurnoSinAccion(partida, POR_TURNO_PERDIDO));
         }
         if (idObjetivo != null && partida.participante(idObjetivo).isEmpty()) {
-            throw new SinObjetivoPosible("Ese objetivo no esta en la partida.");
+            throw new SinObjetivoPosible("Ese objetivo no está en la partida.");
         }
 
         String pedida = codigo == null || codigo.isBlank() ? null : codigo.trim();
-        ResolucionDeAccion resolucion = motor.resolverAccion(
-                pedida == null ? basicaDe(ejecutor) : pedida, idJugador, idObjetivo, partida);
+        String aJugar = pedida == null ? basicaDe(ejecutor) : pedida;
+        exigirQueElAtaqueVayaContraUnRival(partida, idJugador, idObjetivo, aJugar);
+        ResolucionDeAccion resolucion = motor.resolverAccion(aJugar, idJugador, idObjetivo, partida);
 
         return jugarTurnosDeLaMaquina(aplicarYAnunciar(partida, resolucion));
+    }
+
+    /**
+     * Un ataque nunca va contra quien lo lanza ni contra un companero de equipo
+     * (§6.1.3: en el modo cooperativo no se hace dano entre heroes del mismo
+     * equipo). El motor ya lo rechaza; aqui se comprueba ANTES de llamarlo,
+     * con lo que el servicio sabe sin preguntar: el objetivo lo manda el
+     * cliente y no puede ser el que decida a quien se golpea.
+     *
+     * <p>Solo el ataque basico es ofensivo con seguridad: una sanacion o una
+     * defensa si pueden ir dirigidas a uno mismo, y de las demas acciones el
+     * tipo lo sabe el motor, que las valida con su tabla.
+     */
+    private static void exigirQueElAtaqueVayaContraUnRival(Partida partida, UUID idJugador, UUID idObjetivo,
+                                                          String accion) {
+        if (idObjetivo == null || !ACCION_BASICA.equals(accion)) {
+            return;
+        }
+        if (idObjetivo.equals(idJugador)) {
+            throw new AccionNoPermitida("OBJETIVO_INVALIDO", "Un ataque no puede ir contra quien lo lanza.");
+        }
+        if (partida.sonDelMismoEquipo(idJugador, idObjetivo)) {
+            throw new AccionNoPermitida("OBJETIVO_INVALIDO",
+                    "Es de tu equipo: en el modo cooperativo no se ataca a un compañero.");
+        }
     }
 
     /**
@@ -193,6 +221,71 @@ public class EjecutarAccion {
             return java.util.Optional.empty();
         }
         return java.util.Optional.of(jugarTurnosDeLaMaquina(pasarTurnoSinAccion(partida, POR_TIEMPO_AGOTADO)));
+    }
+
+    /**
+     * Rendirse — revision del modo jugador del 6-oct: «Salir» en pleno combate
+     * (salas-partidas.yaml 1.10.0, {@code POST /partidas/{id}/rendicion}).
+     *
+     * <p>Lo que pasa, en este orden y con las mismas piezas que una accion:
+     * <ol>
+     *   <li>Solo un participante humano de la partida puede rendirse; quien es
+     *       sale del token, nunca del cuerpo. La maquina no se rinde.</li>
+     *   <li>Su heroe queda fuera de combate ({@link Partida#rendir}). No hay
+     *       golpe ni ejecutor que inventar.</li>
+     *   <li>Si su bando se queda sin nadie en pie, la partida termina con la
+     *       regla de siempre: gana quien sigue en pie, se liquida la apuesta
+     *       ({@link LiquidarApuesta}, con la politica de la modalidad) y se
+     *       acredita lo de jugar. El ganador no lo decide el cliente.</li>
+     *   <li>Si no termina y era su turno, el turno pasa (y juega la maquina si
+     *       le toca); si no era su turno, el combate sigue sin el.</li>
+     *   <li>Guardar y despues anunciar: primero quien se rindio, luego el
+     *       turno o el fin.</li>
+     * </ol>
+     *
+     * <p>Idempotente: con la partida terminada o el heroe ya fuera de combate
+     * devuelve la partida tal cual, sin anunciar nada otra vez.
+     *
+     * @return la partida despues de la rendicion
+     * @throws PartidaNoEncontrada si no existe
+     * @throws com.nexusbattles.plataforma.salaspartidas.dominio.PartidaAjena si quien llama no la juega
+     * @throws AccionNoPermitida   si no se puede dar por fuera de combate (sin heroe conocido)
+     */
+    public Partida rendirse(UUID idPartida, UUID idJugador) {
+        Objects.requireNonNull(idPartida, "Hace falta la partida de la que se sale.");
+        Objects.requireNonNull(idJugador, "Hace falta quien se rinde.");
+
+        Partida partida = partidas.buscarPorId(idPartida)
+                .orElseThrow(() -> new PartidaNoEncontrada(idPartida));
+        ParticipanteDePartida quien = partida.participante(idJugador)
+                .filter(p -> !p.esIA())
+                .orElseThrow(com.nexusbattles.plataforma.salaspartidas.dominio.PartidaAjena::new);
+        if (partida.estado() == EstadoPartida.FINALIZADA || !quien.enPie()) {
+            return partida;
+        }
+
+        Instant ahora = reloj.instant();
+        boolean eraSuTurno = partida.turnoActual().idJugador().equals(idJugador);
+        partida.rendir(idJugador);
+
+        List<AccionResuelta> anuncios = new ArrayList<>();
+        boolean termino = partida.terminarSiSoloQuedaUno(ahora);
+        if (!termino && eraSuTurno) {
+            termino = pasarTurno(partida, anuncios, ahora);
+        }
+        Partida guardada = partidas.guardar(partida);
+
+        canal.anunciarRendicion(guardada, idJugador);
+        anuncios.forEach(canal::anunciarAccionResuelta);
+        if (termino) {
+            terminar(guardada);
+            return guardada;
+        }
+        if (eraSuTurno) {
+            canal.anunciarTurno(guardada, POR_RENDICION);
+            return jugarTurnosDeLaMaquina(guardada);
+        }
+        return guardada;
     }
 
     /**
@@ -332,14 +425,33 @@ public class EjecutarAccion {
         }
         ResolucionDeAccion resolucion;
         try {
-            resolucion = motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null,
-                    partida);
+            resolucion = decisionDeLaMaquina(partida, maquina);
         } catch (AccionNoPermitida | MotorNoDisponible | DependenciaDegradada noSePudo) {
             BITACORA.warn("La maquina {} de la partida {} pasa el turno: {}", maquina.idJugador(), partida.id(),
                     noSePudo.getMessage());
             return pasarTurnoSinAccion(partida, POR_TURNO_PERDIDO);
         }
         return aplicarYAnunciar(partida, resolucion);
+    }
+
+    /**
+     * La decision de la maquina, con UNA segunda oportunidad si el motor no
+     * contesta (revision del modo jugador, 6-oct: en DEV la maquina perdio un
+     * turno por un corte de un instante entre los dos hosts, y quien jugaba vio
+     * a «la IA» quedarse quieta). Sin esperas: el motor no guarda estado y la
+     * peticion lleva la partida entera, asi que repetirla es seguro y no aplica
+     * nada dos veces — lo que se aplica es lo que devuelva. Un corta circuitos
+     * abierto ({@link DependenciaDegradada}) o un rechazo del reglamento no se
+     * reintentan: no cambiarian.
+     */
+    private ResolucionDeAccion decisionDeLaMaquina(Partida partida, ParticipanteDePartida maquina) {
+        try {
+            return motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null, partida);
+        } catch (MotorNoDisponible primerCorte) {
+            BITACORA.info("La maquina {} de la partida {} reintenta su decision: {}", maquina.idJugador(),
+                    partida.id(), primerCorte.getMessage());
+            return motor.resolverAccion(MotorDeCombate.DECISION_DE_LA_MAQUINA, maquina.idJugador(), null, partida);
+        }
     }
 
     /**
@@ -411,9 +523,31 @@ public class EjecutarAccion {
         for (UUID id : tocados) {
             int diferencia = r.afectados().stream().filter(a -> a.id().equals(id))
                     .mapToInt(ResolucionDeAccion.Afectado::diferencia).sum();
-            partida.participante(id).map(p -> afectadoDe(p, diferencia)).ifPresent(afectados::add);
+            List<AccionResuelta.Causa> causas = causasDe(id, r.eventos());
+            partida.participante(id).map(p -> afectadoDe(p, diferencia, causas)).ifPresent(afectados::add);
+            if (id.equals(r.ejecutor()) && diferencia < 0 && "ATAQUE".equals(r.tipo())
+                    && causas.stream().noneMatch(c -> REFLEJO.equals(c.tipo()))) {
+                // El motor no deberia devolver nunca esto: un ataque que le
+                // quita vida a quien lo lanza sin que nada se la devuelva. Se
+                // anuncia igual (el motor es la autoridad), pero queda a la vista.
+                BITACORA.error("Partida {}: el ataque {} de {} le quito {} de vida a el mismo sin reflejo",
+                        partida.id(), r.accionEjecutada(), r.ejecutor(), -diferencia);
+            }
         }
-        return new AccionResuelta(partida.id(), r.ejecutor(), accion, afectados);
+        return new AccionResuelta(partida.id(), r.ejecutor(), accion, afectados, r.objetivo());
+    }
+
+    /** Eventos del motor que mueven la vida: los que explican una diferencia (1.7.0). */
+    private static final Set<String> CAMBIAN_LA_VIDA = Set.of("DANO", "REFLEJO", "SANACION", "DANO_POR_TURNO",
+            "SANACION_POR_TURNO", "REANIMACION");
+    private static final String REFLEJO = "REFLEJO";
+
+    /** Por que cambio la vida de {@code id}, en el orden en que lo anoto el motor. */
+    static List<AccionResuelta.Causa> causasDe(UUID id, List<EventoDeCombate> eventos) {
+        return eventos.stream()
+                .filter(e -> id.equals(e.combatiente()) && CAMBIAN_LA_VIDA.contains(e.tipo()))
+                .map(e -> new AccionResuelta.Causa(e.tipo(), e.origen(), e.efecto(), e.cantidad()))
+                .toList();
     }
 
     /**
@@ -432,16 +566,22 @@ public class EjecutarAccion {
             UUID causante = evento.origen() != null && partida.participante(evento.origen()).isPresent()
                     ? evento.origen() : evento.combatiente();
             String nombre = evento.efecto() == null || evento.efecto().isBlank() ? "Efecto" : evento.efecto();
+            // 1.7.0: el efecto viaja tambien como causa, con quien lo causo. Un
+            // sangrado propio (Empunadura de Furia, §6.1.2, Tabla 16) lleva
+            // origen = el mismo heroe y la vista lo cuenta como lo que es.
+            List<AccionResuelta.Causa> causas = List.of(new AccionResuelta.Causa(evento.tipo(), evento.origen(),
+                    evento.efecto(), evento.cantidad()));
             partida.participante(evento.combatiente()).filter(p -> p.heroe() != null).ifPresent(p ->
                     anuncios.add(new AccionResuelta(partida.id(), causante,
                             new AccionResuelta.Accion(AccionResuelta.EFECTO_POR_TURNO, nombre, null, null, false,
                                     "EFECTO", false, false, null),
-                            List.of(afectadoDe(p, diferencia)))));
+                            List.of(afectadoDe(p, diferencia, causas)))));
         }
         return anuncios;
     }
 
-    private static AccionResuelta.Afectado afectadoDe(ParticipanteDePartida p, int diferencia) {
+    private static AccionResuelta.Afectado afectadoDe(ParticipanteDePartida p, int diferencia,
+                                                      List<AccionResuelta.Causa> causas) {
         EstadoDeCombate combate = p.combate();
         int vida = p.heroe() == null ? 0 : p.heroe().vidaActual();
         int maxima = p.heroe() == null ? 1 : p.heroe().vidaMaxima();
@@ -449,7 +589,8 @@ public class EjecutarAccion {
                 combate == null ? null : combate.poderActual(),
                 combate == null ? null : combate.poderMaximo(),
                 combate == null ? null : combate.recargas(),
-                combate == null ? null : combate.efectos());
+                combate == null ? null : combate.efectos(),
+                causas);
     }
 
     // -------------------------------------------------------------------- apoyo
@@ -484,6 +625,6 @@ public class EjecutarAccion {
 
     private static ParticipanteDePartida participante(Partida partida, UUID id) {
         return partida.participante(id)
-                .orElseThrow(() -> new SinObjetivoPosible("Ese jugador no esta en la partida."));
+                .orElseThrow(() -> new SinObjetivoPosible("Ese jugador no está en la partida."));
     }
 }

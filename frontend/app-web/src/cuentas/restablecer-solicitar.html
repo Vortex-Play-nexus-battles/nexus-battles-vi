@@ -3,18 +3,37 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Recuperar contraseña — NEXUS BATTLES VI</title>
+    <title>Recuperar contraseña · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../shared/ui-kit/css/componentes.css" />
+    <link rel="stylesheet" href="../../../../shared/ui-kit/css/fondos.css" />
   </head>
-  <body class="portal" data-vista="restablecer-solicitar">
+  <body class="portal" data-vista="restablecer-solicitar" data-fondo="recuperar">
     <div data-cabecera-app></div>
 
     <main class="entrada">
       <section class="entrada__identidad">
-        <p class="entrada__sobretitulo">Recuperar el acceso</p>
-        <h1 class="entrada__marca">NEXUS <em>BATTLES</em> VI</h1>
+        <!-- Revisión del modo jugador del 6-oct, punto 5: el mismo logotipo
+             oficial que la entrada, en vez del nombre escrito. Qué se hace
+             aquí lo dice el título de la tarjeta. -->
+        <h1 class="entrada__marca">
+          <picture>
+            <source
+              srcset="../../../../shared/ui-kit/marca/nexus-battles-vi.webp"
+              type="image/webp"
+            />
+            <img
+              class="entrada__logo"
+              src="../../../../shared/ui-kit/marca/nexus-battles-vi.png"
+              alt="Nexus Battles VI — Return of the Warriors"
+              width="1200"
+              height="600"
+              decoding="async"
+              fetchpriority="high"
+            />
+          </picture>
+        </h1>
         <p class="entrada__lema">
           Recuperar el acceso al Nexo son tres pasos: pides el código, lo recibes en el correo de tu
           cuenta y eliges una contraseña nueva.
@@ -56,7 +75,18 @@
           </a>
         </div>
 
-        <form id="formSolicitud" class="pila" novalidate>
+        <!-- G1 — sin guion no se pide el código, y se dice. -->
+        <noscript>
+          <p class="aviso aviso--advertencia">
+            Para pedir el código hace falta JavaScript. Actívalo en tu navegador y recarga la
+            página.
+          </p>
+        </noscript>
+
+        <!-- G1 — el correo nunca en la dirección: `method="post"` y el botón
+             desactivado hasta que restablecer-solicitar.js escucha `submit`
+             (comun/ui/formulario-seguro.js). -->
+        <form id="formSolicitud" class="pila" method="post" novalidate>
           <div class="campo">
             <label class="campo__etiqueta" for="email">Correo electrónico</label>
             <input
@@ -73,7 +103,13 @@
             </p>
           </div>
 
-          <button type="submit" class="boton boton--primario boton--grande" id="botonEnviar">
+          <button
+            type="submit"
+            class="boton boton--primario boton--grande"
+            id="botonEnviar"
+            disabled
+            data-espera-guion
+          >
             Enviar código
           </button>
         </form>

@@ -87,7 +87,59 @@ info:
     1.7.1 (HU-COM-005, #519): solo se quita la marca `x-implementacion` de
     `historialDelAutor`, porque el servicio ya la implementa. No cambia la API.
     Es un parche.
-  version: 1.7.1
+
+    1.8.0 (HU-COM-006 CA-01/CA-04, auditoria de DEV del 30-sep): encolar no es
+    ocultar. Hasta la 1.7.1 el PRIMER reporte pasaba el comentario a
+    EN_REVISION y lo sacaba del hilo para todos (en DEV, un solo reporte bajo
+    el contador de un producto de 28 a 27 opiniones). Ahora el reporte se
+    registra, se agrupa y pone el comentario en la cola SIN cambiar su estado:
+    sigue PUBLICADO y a la vista hasta que un moderador decida. La cola trae,
+    ademas de los EN_REVISION, los PUBLICADOS con reportes pendientes
+    (posteriores a la ultima decision que los atiende: APROBAR, OCULTAR,
+    ELIMINAR, RESTAURAR o EDITAR), y APROBAR vale tambien desde PUBLICADO
+    para cerrar esos reportes (409 `TRANSICION_INVALIDA` si ya no le queda
+    ninguno pendiente; no se avisa al autor, porque para el no cambio nada).
+    Solo si el Product Owner fija un umbral de ocultamiento
+    (`comentarios.reportes.umbral-ocultamiento`, D-36; 0 = nunca, el valor por
+    omision) el comentario sale del hilo al alcanzarlo, como antes. Ningun
+    esquema cambia: `estadoDelComentario` del reporte sigue siendo el estado
+    real del comentario. Es menor.
+
+    1.9.0 (G4, continuacion tecnica del 4-oct, privacidad): el hilo publico
+    (GET /products/{productId}/comments) ya no publica el `uid` de nadie. Lo
+    lee cualquiera, tambien sin cuenta, y el `autorId` de cada comentario
+    permitia seguir a un jugador por todos los productos en los que opino. De
+    su autor solo sale `apodoAutor`, que RN-CMT-001 manda ensenar. Lo que el
+    cliente hacia con el `uid` —reconocer sus propios comentarios para
+    ofrecer «Eliminar» en vez de «Reportar»— lo dice ahora el servidor en
+    `propio`, comparando con el token de quien mira si lo trae (sin token, o
+    con uno que no es de usuario, nada es propio). `autorId` sigue en la
+    respuesta de publicar (es el `uid` de quien publica) y en las de
+    moderacion, que lo necesitan para el historial del autor. Nunca hubo
+    correo en estas respuestas. Campo nuevo opcional y un campo que deja de
+    viajar en una respuesta publica cuyo unico consumidor (la tienda, la
+    ficha, la portada) se actualiza en el mismo cambio: menor.
+
+    1.10.0 (HU-COM-005, #519): la cola gana dos filtros opcionales,
+    `categoria` y `prioridadElevada`, que se combinan con los que ya tenia, y
+    se anade `POST /comentarios/moderacion/decisiones-en-lote`, la decision
+    de moderacion aplicada a varios comentarios a la vez, atomica (todo o
+    nada). Admite APROBAR, OCULTAR, ELIMINAR, RESTAURAR, MARCAR y DESMARCAR;
+    EDITAR no, porque necesita un texto distinto por comentario. ELIMINAR en
+    lote exige una confirmacion adicional validada por el servidor (7.3.9,
+    acciones criticas). Un lote en el que algun comentario no admite la
+    accion es 409 `TRANSICION_INVALIDA` con los ids afectados y no cambia
+    nada. `ProblemDetail` gana el valor `CONFIRMACION_REQUERIDA` en `motivo`
+    y la propiedad opcional `comentarioIds`. La operacion nueva esta
+    pendiente de implementar (`x-implementacion: pendiente`). El perfil
+    rapido del autor NO forma parte de esta version: no anade ninguna
+    operacion ni campo para mostrar la sancion activa de un autor. Es menor:
+    solo anade parametros opcionales, una operacion, esquemas y un valor.
+
+    1.10.1 (HU-COM-005, #519): solo se quitan las marcas `x-implementacion` y `x-fase` de
+    `resolverEnLote`, porque el servicio ya la implementa. No cambia ninguna
+    ruta, campo, respuesta ni error. Es un parche.
+  version: 1.10.1
 servers:
   - url: http://localhost:8081/api/v1
     description: Entorno local de desarrollo
@@ -113,6 +165,14 @@ paths:
         estado normal de un producto, no un error, y la ficha lo pinta como
         estado vacio. Leer el hilo no pregunta al catalogo: sigue funcionando
         aunque el servicio de productos no responda.
+
+        1.9.0 (G4): cada comentario del hilo trae el apodo de su autor pero no
+        su `autorId`, y trae `propio`: true si quien lee (por el token que
+        manda, si manda uno de usuario) es su autor. El token es opcional;
+        uno caducado o mal firmado responde 401 como en el resto de rutas.
+      security:
+        - {}
+        - bearerAuth: []
       parameters:
         - name: productId
           in: path
@@ -309,9 +369,14 @@ paths:
         quien manda la peticion.
 
 
-        El primer reporte pasa el comentario a EN_REVISION y lo pone en la cola
-        del moderador. Los reportes siguientes sobre el mismo comentario se
-        agrupan: suben su prioridad en la cola, no crean otra entrada.
+        1.8.0 — el reporte pone el comentario en la cola del moderador SIN
+        ocultarlo: sigue PUBLICADO y a la vista hasta que un moderador decida
+        (RF-COM-006, CA-01 y CA-04: «incorpora el comentario a la cola» y queda
+        «sujeto a revision»). Los reportes siguientes sobre el mismo comentario
+        se agrupan: suben su prioridad en la cola, no crean otra entrada. Solo
+        con un umbral de ocultamiento configurado (D-36; 0 = nunca) el reporte
+        que lo alcanza pasa el comentario a EN_REVISION y lo saca del hilo
+        mientras se revisa. `estadoDelComentario` dice el estado en que quedo.
 
 
         1.6.0 — cuando los reportes del comentario alcanzan el umbral de
@@ -404,9 +469,20 @@ paths:
         1.5.0 — con `marcado=true` es la lista de seguimiento especial (7.3.3,
         «Marcar: senalar comentarios para seguimiento especial»): los marcados
         en cualquier estado salvo ELIMINADO, tambien los ya publicados, con la
-        misma prioridad. Con `marcado=false`, los EN_REVISION sin marcar. Sin el
+        misma prioridad. Con `marcado=false`, lo pendiente sin marcar. Sin el
         parametro, la cola de siempre. En estas respuestas cada comentario trae
         `marcado`.
+
+
+        1.8.0 — lo pendiente son los EN_REVISION y los PUBLICADOS con reportes
+        pendientes (posteriores a la ultima decision que los atiende). Un
+        comentario reportado sigue a la vista mientras espera aqui.
+
+
+        1.10.0 — `categoria` y `prioridadElevada` filtran ademas. Todos los
+        filtros se combinan (un comentario debe cumplirlos todos) y `total`
+        cuenta la cola ya filtrada, no la completa. Un valor de `categoria`
+        fuera de la lista es 400.
       security:
         - bearerAuth: []
       parameters:
@@ -422,6 +498,25 @@ paths:
           schema:
             type: boolean
           description: 1.5.0 — `true` lista de seguimiento; `false` solo los en revision sin marcar.
+        - name: categoria
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/CategoriaDeReporte"
+          description: >
+            1.10.0 — solo los comentarios con al menos un reporte de esa
+            categoria (la misma cuenta que `porCategoria` de cada entrada). Un
+            comentario en revision que no tiene reportes, como el que retuvo el
+            filtro automatico, no sale con este filtro.
+        - name: prioridadElevada
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: >
+            1.10.0 — `true` solo los de prioridad elevada; `false` solo los
+            demas. Mientras no haya umbral configurado ninguno la tiene, asi
+            que `true` devuelve la cola vacia.
         - name: pagina
           in: query
           required: false
@@ -444,6 +539,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ColaDeModeracionResponse"
+        "400":
+          description: 1.10.0 — `categoria` no es una de las categorias de reporte.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
         "401":
           description: Sin token.
           content:
@@ -452,6 +553,95 @@ paths:
                 $ref: "#/components/schemas/ProblemDetail"
         "403":
           description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+
+  /comentarios/moderacion/decisiones-en-lote:
+    post:
+      summary: Resolver varios comentarios a la vez (RF-COM-008, 1.10.0)
+      operationId: resolverEnLote
+      description: >
+        1.10.0 — Solo MODERADOR, ADMINISTRADOR y SUPER_ADMINISTRADOR. Aplica
+        la misma accion, con el mismo motivo, a todos los comentarios de
+        `comentarioIds`. El moderador sale del token, nunca del cuerpo.
+
+
+        Es atomica: todo o nada. Si algun comentario no admite la accion, no
+        cambia ninguno ni se escribe ningun asiento. Si todos la admiten, cada
+        uno recibe su propio asiento, igual que en la decision individual.
+        `comentarioIds` admite el mismo tope que `tamano` de la cola.
+
+
+        Admite APROBAR, OCULTAR, ELIMINAR, RESTAURAR, MARCAR y DESMARCAR, con
+        las mismas reglas de transicion que `POST
+        /comentarios/moderacion/{commentId}/decision`. EDITAR no: necesita un
+        texto distinto por comentario, y eso es una decision por comentario.
+
+
+        ELIMINAR en lote es una accion critica (7.3.9, «confirmacion adicional
+        para acciones criticas ... eliminacion masiva»): el cuerpo debe traer
+        `confirmacion` con el valor `ELIMINAR`. Lo comprueba el servidor, no
+        solo la interfaz; sin ella es 400 `CONFIRMACION_REQUERIDA` y no cambia
+        nada. En las demas acciones `confirmacion` se ignora.
+
+
+        El aviso al autor es fail-open por comentario (HU-DIS-003), como en la
+        decision individual: `autorNotificado: false` en un item no invalida
+        el lote.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DecisionEnLoteRequest"
+      responses:
+        "200":
+          description: Lote resuelto, con el asiento de cada comentario.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DecisionEnLoteResponse"
+        "400":
+          description: >
+            Lista de ids vacia, con repetidos o por encima del tope; falta la
+            accion o no es una de las admitidas en lote; motivo que no tiene de
+            3 a 500 caracteres; o ELIMINAR sin `confirmacion` correcta
+            (`motivo: CONFIRMACION_REQUERIDA`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "401":
+          description: Sin token.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "403":
+          description: El rol no modera.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: >
+            Algun id no existe. `comentarioIds` trae los que faltan y no cambia
+            ningun comentario.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: >
+            Algun comentario no admite la accion desde su estado actual
+            (`motivo: TRANSICION_INVALIDA`). `comentarioIds` trae todos los
+            afectados, no solo el primero, y no cambia ninguno. Incluye MARCAR
+            sobre uno ya marcado, DESMARCAR sobre uno sin marca y APROBAR sobre
+            uno publicado sin reportes pendientes.
           content:
             application/problem+json:
               schema:
@@ -566,6 +756,12 @@ paths:
         El motivo es obligatorio en todas las acciones, incluida APROBAR: "por
         que se dejo pasar" es tan parte de la trazabilidad como "por que se
         retiro".
+
+
+        1.8.0 — APROBAR vale tambien desde PUBLICADO, para cerrar los reportes
+        pendientes de un comentario que siguio a la vista: el estado no cambia,
+        queda el asiento y no se avisa al autor. Sin reportes pendientes es 409
+        `TRANSICION_INVALIDA` (otro moderador ya lo atendio).
 
 
         1.4.0/1.5.0 — EDITAR, MARCAR y DESMARCAR no cambian el estado del
@@ -976,7 +1172,6 @@ components:
       required:
         - id
         - productoId
-        - autorId
         - apodoAutor
         - texto
         - fechaPublicacion
@@ -988,8 +1183,22 @@ components:
           type: string
         autorId:
           type: string
+          description: >
+            El `uid` (ADR-002) de su autor. Viaja en la respuesta de publicar
+            (es el de quien publica) y en las de moderacion (historial del
+            autor). Desde 1.9.0 (G4) NO viaja en el hilo publico: lo lee
+            cualquiera y permitia seguir a un jugador por sus comentarios.
         apodoAutor:
           type: string
+          description: El apodo visible de su autor (RN-CMT-001); es lo unico de su identidad que es publico.
+        propio:
+          type: boolean
+          description: >
+            1.9.0 (G4) — true si quien lee es su autor: en el hilo, comparando
+            con el token de quien lo pide (sin token, o con uno que no es de
+            usuario, siempre false); en la respuesta de publicar, siempre true.
+            No viaja en las respuestas de moderacion. Es lo que el cliente usa
+            para ofrecer «Eliminar» en los suyos y «Reportar» en los ajenos.
         texto:
           type: string
         imagenes:
@@ -1195,6 +1404,87 @@ components:
           description: >
             1.4.0 — obligatorio con EDITAR; el texto que queda visible. En las
             demas acciones se ignora.
+
+    AccionDeLote:
+      type: string
+      description: >
+        1.10.0 — las acciones de `AccionDeModeracion` que valen en lote. EDITAR
+        queda fuera: necesita `textoNuevo` y ese texto es distinto por
+        comentario.
+      enum:
+        - APROBAR
+        - OCULTAR
+        - ELIMINAR
+        - RESTAURAR
+        - MARCAR
+        - DESMARCAR
+
+    DecisionEnLoteRequest:
+      type: object
+      required:
+        - comentarioIds
+        - accion
+        - motivo
+      properties:
+        comentarioIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            type: string
+          description: >
+            Los comentarios a resolver. Mismo tope que `tamano` de la cola; sin
+            repetidos.
+        accion:
+          $ref: "#/components/schemas/AccionDeLote"
+        motivo:
+          type: string
+          minLength: 3
+          maxLength: 500
+          description: >
+            Obligatorio, como en la decision individual. Es uno solo para el
+            lote y queda en el asiento de cada comentario.
+        confirmacion:
+          type: string
+          description: >
+            Obligatorio solo con `accion: ELIMINAR`, y debe valer exactamente
+            `ELIMINAR` (7.3.9). En las demas acciones se ignora.
+
+    ItemDeDecisionEnLote:
+      type: object
+      required:
+        - comentarioId
+        - asiento
+      properties:
+        comentarioId:
+          type: string
+        asiento:
+          $ref: "#/components/schemas/AsientoDeModeracion"
+        autorNotificado:
+          type: boolean
+          description: >
+            Igual que en `DecisionResponse`: `false` no invalida la decision.
+
+    DecisionEnLoteResponse:
+      type: object
+      description: >
+        1.10.0 — no repite el comentario completo de cada decision: trae el
+        asiento de cada uno, que ya dice el estado anterior y el nuevo.
+      required:
+        - accion
+        - total
+        - resultados
+      properties:
+        accion:
+          $ref: "#/components/schemas/AccionDeLote"
+        total:
+          type: integer
+          description: Cuantos comentarios se resolvieron.
+        resultados:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemDeDecisionEnLote"
 
     AsientoDeModeracion:
       type: object
@@ -1464,6 +1754,14 @@ components:
           type: string
         instance:
           type: string
+        comentarioIds:
+          type: array
+          items:
+            type: string
+          description: >
+            1.10.0 — solo en los rechazos de la decision en lote: en el 409
+            los comentarios que no admiten la accion, en el 404 los que no
+            existen.
         motivo:
           type: string
           enum:
@@ -1473,6 +1771,7 @@ components:
             - REPORTE_DUPLICADO
             - LIMITE_DE_REPORTES
             - TRANSICION_INVALIDA
+            - CONFIRMACION_REQUERIDA
           description: >
             Presente en los rechazos que el cliente tiene que distinguir sin
             interpretar el texto del detalle. `AUTOR_SILENCIADO` en el 403 de

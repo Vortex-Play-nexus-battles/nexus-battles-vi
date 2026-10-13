@@ -136,6 +136,29 @@ class CambioDePasswordServiceTest {
     }
 
     @Test
+    @DisplayName("HU-AUT-007: una sesion de doble factor sigue siendo de doble factor tras cambiar la contraseña")
+    void conservaElSegundoFactor() {
+        when(usuarioRepository.findByApodo("ana")).thenReturn(Optional.of(ana));
+
+        CambioDePasswordResponse respuesta = servicio.cambiar("ana", peticion(ACTUAL, NUEVA, NUEVA), "10.0.0.1",
+                JwtService.AMR_CON_SEGUNDO_FACTOR);
+
+        assertEquals(java.util.List.of("pwd", "otp"),
+                jwtService.validarYObtenerClaims(respuesta.token()).get("amr", java.util.List.class));
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: sin segundo factor en la sesion, el token nuevo lleva amr pwd, como el login")
+    void sinSegundoFactorAmrPwd() {
+        when(usuarioRepository.findByApodo("ana")).thenReturn(Optional.of(ana));
+
+        CambioDePasswordResponse respuesta = servicio.cambiar("ana", peticion(ACTUAL, NUEVA, NUEVA), "10.0.0.1");
+
+        assertEquals(java.util.List.of("pwd"),
+                jwtService.validarYObtenerClaims(respuesta.token()).get("amr", java.util.List.class));
+    }
+
+    @Test
     @DisplayName("CA-04: sube la version de token (caducan las demas sesiones) y esta sesion recibe un token de la version nueva")
     void invalidaLasDemasSesionesYRenuevaEsta() {
         when(usuarioRepository.findByApodo("ana")).thenReturn(Optional.of(ana));

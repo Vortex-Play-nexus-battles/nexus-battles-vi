@@ -58,6 +58,13 @@ public interface ComentarioRepository extends JpaRepository<RegistroDeComentario
             Collection<Comentario.Estado> estados, String productoId);
 
     /**
+     * Los reportados que siguen a la vista (contrato 1.8.0): la cola los pide
+     * por id —los que tienen reportes pendientes— y en un estado concreto.
+     */
+    List<RegistroDeComentario> findByIdInAndEstadoOrderByFechaPublicacionAsc(
+            Collection<String> ids, Comentario.Estado estado);
+
+    /**
      * Una pagina del historial de un autor — HU-COM-005, contrato 1.7.0.
      *
      * <p>En cualquier estado, tambien OCULTO y ELIMINADO: moderacion los conserva

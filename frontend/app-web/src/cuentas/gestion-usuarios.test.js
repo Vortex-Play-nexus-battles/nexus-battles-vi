@@ -1,6 +1,11 @@
 import { jest } from '@jest/globals';
 import { setCurrentRole, setPermissionMatrix } from './directives/has-permission.directive.js';
-import { cargarMatrizYVerificarAcceso, configurarEventos } from './gestion-usuarios.js';
+import {
+  abrirFichaDesdeLaDireccion,
+  cargarMatrizYVerificarAcceso,
+  configurarEventos,
+  usuarioDeLaDireccion,
+} from './gestion-usuarios.js';
 
 const MATRIZ_BACKEND = {
   ADMINISTRADOR: {
@@ -339,6 +344,53 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
     expect(panelVisible()).toBe(false);
   });
 
+  test('RFINAL-06 — el ID que se muestra es el de la cuenta buscada', async () => {
+    globalThis.fetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...USUARIO, id: 99 }),
+    });
+
+    await buscar(15);
+
+    expect(document.getElementById('usuario-id-mostrado').textContent).toBe('15');
+  });
+
+  /**
+   * RFINAL-06 — «hoy solo se edita tras buscar por ID». Desde el directorio de
+   * Control integral cada fila trae `?usuario=<clave>`: la ficha se abre sola,
+   * sin copiar ni pegar nada.
+   */
+  test('RFINAL-06 — con ?usuario= en la dirección abre la ficha de esa cuenta', async () => {
+    globalThis.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => USUARIO });
+
+    const abierta = await abrirFichaDesdeLaDireccion('?usuario=15');
+    for (let i = 0; i < 6; i++) {
+      await Promise.resolve();
+    }
+
+    expect(abierta).toBe(true);
+    expect(globalThis.fetch.mock.calls[0][0]).toBe('/api/v1/admin/usuarios/15');
+    expect(document.getElementById('usuario-id').value).toBe('15');
+    expect(panelVisible()).toBe(true);
+    expect(document.getElementById('usuario-apodo-mostrado').textContent).toBe('nyx_valiente');
+  });
+
+  test('RFINAL-06 — un ?usuario= que no es una clave de cuenta no consulta nada', async () => {
+    for (const busqueda of [
+      '',
+      '?usuario=',
+      '?usuario=abc',
+      '?usuario=0',
+      '?usuario=-3',
+      '?usuario=1e3',
+    ]) {
+      expect(await abrirFichaDesdeLaDireccion(busqueda)).toBe(false);
+    }
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(panelVisible()).toBe(false);
+  });
+
   test('ya no queda en pantalla la promesa de conectar el backend algun dia', async () => {
     globalThis.fetch.mockResolvedValue({ ok: true, status: 200, json: async () => USUARIO });
 
@@ -346,6 +398,26 @@ describe('FI-R3 - la busqueda de usuario consulta al servicio', () => {
 
     expect(document.body.textContent).not.toMatch(/quedar[aá] conectada/i);
     expect(document.body.textContent).not.toMatch(/cuando el backend exponga/i);
+  });
+});
+
+describe('RFINAL-06 — la clave de cuenta que trae la dirección', () => {
+  test('solo un entero positivo es una clave de cuenta', () => {
+    expect(usuarioDeLaDireccion('?usuario=15')).toBe('15');
+    expect(usuarioDeLaDireccion('?usuario= 42 ')).toBe('42');
+    expect(usuarioDeLaDireccion('?otra=1&usuario=7')).toBe('7');
+    for (const busqueda of [
+      '',
+      '?usuario=',
+      '?usuario=abc',
+      '?usuario=0',
+      '?usuario=-3',
+      '?usuario=1.5',
+    ]) {
+      expect(usuarioDeLaDireccion(busqueda)).toBeNull();
+    }
+    // Un uid (UUID) no es la clave que espera la gestión.
+    expect(usuarioDeLaDireccion('?usuario=11111111-2222-3333-4444-555555555555')).toBeNull();
   });
 });
 
@@ -483,6 +555,36 @@ describe('UXC-7 — acciones sobre la cuenta con los diálogos del kit, no con w
       suspendidoHasta: '2026-10-01T10:00',
       motivo: 'Lenguaje ofensivo en el chat',
     });
+  });
+
+  /**
+   * RFINAL-06 — defecto conocido «id de perfil usado como id de usuario»: la
+   * ficha (`GET /admin/usuarios/{usuarioId}`) devolvía en `id` la clave del
+   * PERFIL, y el panel la usaba para suspender, banear, reactivar,
+   * restablecer y cambiar el rol, rutas que esperan la de la CUENTA. Las
+   * acciones van ahora con la clave por la que se abrió la ficha, la que el
+   * servidor acaba de resolver como cuenta.
+   */
+  test('RFINAL-06 — las acciones van a la cuenta abierta, no al id que trae la ficha', async () => {
+    globalThis.fetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...USUARIO, id: 99 }),
+    });
+    document.getElementById('usuario-id').value = '15';
+    document
+      .getElementById('form-buscar-usuario')
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await esperar();
+
+    document.getElementById('suspendido-hasta').value = '2026-10-01T10:00';
+    document.getElementById('btn-suspender').click();
+    await esperar();
+    globalThis.fetch.mockResolvedValueOnce({ ok: true, status: 204 });
+    dialogo().querySelector('[data-accion="confirmar"]').click();
+    await esperar();
+
+    expect(globalThis.fetch.mock.calls.at(-1)[0]).toBe('/api/v1/admin/usuarios/15/suspender');
   });
 
   test('UXC-9 — la causal viaja con el baneo y queda en sus consecuencias', async () => {

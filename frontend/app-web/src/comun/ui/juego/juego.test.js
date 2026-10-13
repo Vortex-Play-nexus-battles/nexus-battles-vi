@@ -196,6 +196,16 @@ describe('barraDeVida', () => {
     expect(nodo.querySelector('[data-etiqueta]').textContent).toBe('IA · Equipo 2');
   });
 
+  test('revisión 6-oct: la barra de quien mira dice «Tú», para no confundir su vida con la del rival', () => {
+    const propia = barraDeVida({ nombre: 'Guerrero Tanque', idJugador: 'u-1', esPropia: true });
+    expect(propia.dataset.propia).toBe('true');
+    expect(propia.querySelector('[data-etiqueta]').textContent).toBe('Tú');
+
+    const contraLaIA = barraDeVida({ nombre: 'Mago Fuego', esIA: true });
+    expect(contraLaIA.dataset.propia).toBeUndefined();
+    expect(contraLaIA.querySelector('[data-etiqueta]').textContent).toBe('IA');
+  });
+
   test('no pinta el valor: eso lo hace quien conoce los umbrales', () => {
     const nodo = barraDeVida({ nombre: 'Golem' });
     expect(nodo.querySelector('.barra-vida__valor').textContent).toBe('');
@@ -322,6 +332,26 @@ describe('panelDeResultado', () => {
     const boton = document.createElement('button');
     const nodo = panelDeResultado({ victoria: true, acciones: [boton] });
     expect(nodo.querySelector('.panel-resultado__acciones').children).toHaveLength(1);
+  });
+
+  test('revisión del 6-oct, punto 20: el desglose es una lista de definiciones en orden', () => {
+    const nodo = panelDeResultado({
+      victoria: true,
+      desglose: [
+        { etiqueta: 'Apuesta', valor: '+50 créditos', signo: 'positivo' },
+        { etiqueta: 'Cambio neto', valor: '+70 créditos', signo: 'positivo', total: true },
+      ],
+    });
+    const lista = nodo.querySelector('dl.panel-resultado__desglose');
+    expect(lista).not.toBeNull();
+    // Solo dt y dd alternos, hijos directos (axe: definition-list / dlitem).
+    expect([...lista.children].map((hijo) => hijo.tagName)).toEqual(['DT', 'DD', 'DT', 'DD']);
+    expect(lista.querySelector('.panel-resultado__concepto--total').textContent).toBe(
+      'Cambio neto',
+    );
+    expect(lista.querySelector('.panel-resultado__valor--total').dataset.signo).toBe('positivo');
+    // Sin filas no hay lista vacía.
+    expect(panelDeResultado({ victoria: true }).querySelector('dl')).toBeNull();
   });
 
   /*

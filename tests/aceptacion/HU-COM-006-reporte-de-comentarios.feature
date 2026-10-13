@@ -19,11 +19,29 @@ Caracteristica: Reporte de comentarios inapropiados por los jugadores
     Entonces la cola de moderacion sigue mostrando una sola entrada para ese comentario
     Y la entrada acumula los dos reportes, agrupados por categoria
 
-  Escenario: El comentario reportado queda encolado para revision
+  # CA-01 y CA-04: «incorpora el comentario a la cola de moderacion» y queda
+  # «sujeto a revision». Encolar no es ocultar: en la auditoria de DEV del
+  # 30-sep un solo reporte lo sacaba del hilo para todos (comentarios 1.8.0).
+  Escenario: El comentario reportado queda encolado para revision sin dejar de verse
     Dado un comentario publicado que nadie ha reportado
     Cuando un jugador lo reporta
-    Entonces el comentario queda en revision a la espera de un moderador
-    Y aparece en la cola de moderacion
+    Entonces el comentario aparece en la cola de moderacion a la espera de un moderador
+    Y sigue publicado en el hilo del producto hasta que un moderador decida
+
+  # El ocultamiento automatico por numero de reportes es una decision abierta
+  # con el Product Owner (D-36): aqui no se escribe ninguna cifra. Sin umbral
+  # configurado (valor 0) el escenario no se activa.
+  Escenario: Un comentario que alcanza el umbral de ocultamiento sale del hilo mientras se revisa
+    Dado un umbral de ocultamiento configurado y un comentario al que le falta un reporte para alcanzarlo
+    Cuando un jugador envia el reporte que lo alcanza
+    Entonces el comentario deja de mostrarse en el hilo hasta que un moderador decida
+    Y sigue en la cola de moderacion
+
+  Escenario: Aprobar un comentario reportado que sigue publicado cierra sus reportes
+    Dado un comentario publicado con reportes pendientes en la cola
+    Cuando un moderador lo aprueba con su motivo
+    Entonces el comentario sigue publicado y sale de la cola
+    Y un segundo moderador que intente aprobarlo recibe un error estandar que explica que ya se resolvio
 
   # CA-02 depende del umbral de denuncias, cuyo valor es una decision abierta
   # con el Product Owner: aqui no se escribe ninguna cifra. Sin umbral

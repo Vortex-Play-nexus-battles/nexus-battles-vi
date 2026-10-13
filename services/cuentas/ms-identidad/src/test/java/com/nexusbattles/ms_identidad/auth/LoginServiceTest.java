@@ -14,6 +14,10 @@ import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.DispositivoConocidoRepository;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioDeAcceso.Proposito;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafiosDeAcceso;
+import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException;
 import com.nexusbattles.ms_identidad.auth.service.AuditoriaLoginClient;
 import com.nexusbattles.ms_identidad.auth.service.IntentosFallidosService;
 import com.nexusbattles.ms_identidad.auth.service.JwtService;
@@ -70,6 +74,11 @@ class LoginServiceTest {
 
     @Mock
     private ProyeccionDeSancionService proyecciones;
+
+    // HU-AUT-007: sin stub devuelve Optional.empty() —ninguna cuenta de estas
+    // pruebas tiene segundo factor—, asi que el login de siempre no cambia.
+    @Mock
+    private DesafiosDeAcceso desafios;
 
     @InjectMocks
     private LoginService loginService;
@@ -365,5 +374,79 @@ class LoginServiceTest {
 
         assertNull(respuesta.getUid());
         assertTrue(respuesta.isOnboardingListo());
+    }
+
+    // ------------------------------------------------- HU-AUT-007: segundo factor
+
+    @Test
+    @DisplayName("HU-AUT-007: con segundo factor la contraseña correcta no da sesión: desafío y nada más cambia")
+    void conSegundoFactorEmiteDesafioYNoSesion() {
+        Usuario usuario = usuarioActivo();
+        usuario.setIntentosFallidos(2);
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        DesafioEmitido desafio = new DesafioEmitido("valor-opaco", java.time.Instant.parse("2026-10-05T15:05:00Z"),
+            Proposito.VERIFICAR);
+        when(desafios.exigirSegundoPaso(usuario)).thenReturn(Optional.of(desafio));
+
+        SegundoFactorRequeridoException requerido = assertThrows(SegundoFactorRequeridoException.class,
+            () -> loginService.iniciarSesion(datosValidos(), "127.0.0.1", "agente"));
+
+        assertSame(desafio, requerido.getDesafio());
+        assertEquals("segundo-factor-requerido", requerido.tipo());
+        // Los intentos NO se ponen a cero: cada contraseña correcta regalaría
+        // otra tanda de códigos por adivinar.
+        assertEquals(2, usuario.getIntentosFallidos());
+        assertNull(usuario.getUltimoAcceso());
+        verify(usuarioRepository, never()).save(any());
+        verify(jwtService, never()).generarToken(anyString(), anyString(), anyInt(), any());
+        verify(jwtService, never()).generarToken(anyString(), anyString(), anyInt(), any(), any());
+        verifyNoInteractions(dispositivoConocidoRepository, correoClient, auditoriaDeCuenta, onboardingService);
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: con la contraseña INCORRECTA no se llega a mirar el segundo factor")
+    void conContrasenaIncorrectaNiSeMiraElSegundoFactor() {
+        Usuario usuario = usuarioActivo();
+        when(usuarioRepository.buscarPorCorreo(anyString())).thenReturn(Optional.of(usuario));
+        LoginRequest datos = datosValidos();
+        datos.setPassword("otra");
+
+        assertThrows(CredencialesInvalidasException.class,
+            () -> loginService.iniciarSesion(datos, "127.0.0.1", "agente"));
+        verifyNoInteractions(desafios);
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: superado el segundo paso, la sesión es la de siempre con amr pwd+otp")
+    void completarConSegundoFactor() {
+        Usuario usuario = usuarioActivo();
+        usuario.setIntentosFallidos(2);
+        when(dispositivoConocidoRepository.findByUsuarioAndHuella(eq(usuario), anyString()))
+            .thenReturn(Optional.of(new DispositivoConocido()));
+        when(jwtService.generarToken(anyString(), anyString(), anyInt(), any(), any())).thenReturn("token-2fa");
+        when(onboardingService.listo(UID)).thenReturn(true);
+
+        LoginResponse respuesta = loginService.completarAccesoConSegundoFactor(usuario, "127.0.0.1", "agente");
+
+        assertEquals("token-2fa", respuesta.getToken());
+        assertEquals(UID.toString(), respuesta.getUid());
+        assertEquals(0, usuario.getIntentosFallidos());
+        assertNotNull(usuario.getUltimoAcceso());
+        verify(jwtService).generarToken("cristianc", "JUGADOR", 0, UID, JwtService.AMR_CON_SEGUNDO_FACTOR);
+        verify(jwtService, never()).generarToken(anyString(), anyString(), anyInt(), any());
+        verify(usuarioRepository).save(usuario);
+        verify(auditoriaDeCuenta).primerAcceso(UID, "127.0.0.1");
+    }
+
+    @Test
+    @DisplayName("HU-AUT-007: una sanción que llegó entre los dos pasos también deja fuera")
+    void completarConSegundoFactorReviseElEstado() {
+        Usuario usuario = usuarioActivo();
+        usuario.setEstado("BANEADO");
+
+        assertThrows(CuentaBaneadaException.class,
+            () -> loginService.completarAccesoConSegundoFactor(usuario, "127.0.0.1", "agente"));
+        verifyNoInteractions(jwtService);
+        verify(usuarioRepository, never()).save(any());
     }
 }
