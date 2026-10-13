@@ -69,6 +69,22 @@ function hayDesplazamientoHorizontal(page) {
 }
 
 test.describe('Vitrina del inventario', () => {
+  /*
+   * Tarea #802 — decision del PO tras la revision del producto del 24-sep: la
+   * seccion se llama "Mi inventario" en los tres sitios donde el jugador la
+   * ve. La barra ya lo decia; la pestana del navegador seguia diciendo
+   * "Vitrina del inventario", que es como se llamaba el modulo por dentro, no
+   * como lo llama el jugador.
+   */
+  test('La pestana del navegador dice Mi inventario', async ({ page }) => {
+    await conInventarioDe(page, 16);
+    await abrirVitrina(page);
+
+    // La convencion del repo es "<Nombre> · The Nexus Battles VI"; lo que
+    // fija esta tarea es el nombre: antes decia "Vitrina del inventario".
+    await expect(page).toHaveTitle('Mi inventario · The Nexus Battles VI');
+  });
+
   test('La vitrina muestra dieciseis productos en la resolucion de referencia', async ({
     page,
   }) => {
@@ -160,9 +176,10 @@ test.describe('Vitrina del inventario', () => {
     await expect(vacio).toBeVisible();
     await expect(vacio).toContainText(/todav[ií]a no tienes objetos/i);
 
-    // "no se muestra ningun mensaje de error". La vista conserva un
-    // contenedor oculto para errores posteriores; lo importante es que no se
-    // presente como estado actual del inventario vacio.
+    // "no se muestra ningun mensaje de error"
+    // `:visible` y no a secas: la pestana de heroes deja un `.estado-error`
+    // **oculto** cuando su catalogo no esta simulado, y aqui no lo esta. Lo
+    // que el criterio pide es que al jugador no se le **muestre** un error.
     await expect(page.locator('.estado-error:visible')).toHaveCount(0);
     const texto = await page.locator('body').innerText();
     expect(texto).not.toMatch(/error/i);

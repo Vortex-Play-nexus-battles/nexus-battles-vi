@@ -59,6 +59,7 @@ test('el producto bloqueado se muestra no disponible y no permite operarlo', asy
   await page.getByRole('button', { name: /Arma 1/ }).click();
 
   const opcion = page.getByRole('button', { name: /Espada de Bruma . en subasta/ });
+  await expect(opcion).toBeVisible();
   await expect(opcion).toBeDisabled();
   // «No se esconde: el jugador tiene que poder entender por que no puede».
   await expect(opcion).toHaveAttribute('title', 'Está publicado en una subasta');
