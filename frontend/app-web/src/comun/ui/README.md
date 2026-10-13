@@ -14,19 +14,21 @@ esto:
 
 ## Qué hay
 
-| Módulo                 | Para qué                                                                                                                                               |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `dom.js`               | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML`                                                                      |
-| `formato.js`           | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`)                                  |
-| `aviso.js`             | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4)                                                               |
-| `estado-vista.js`      | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()`                                                                                |
-| `esqueleto.js`         | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()`                                                                                    |
-| `boton.js`             | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto                                                                               |
-| `formulario-seguro.js` | `formularioListo()`, `sinCredencialesEnLaDireccion()` — G1: un formulario con credenciales nunca se envía de forma nativa (`sin-envio-nativo.test.js`) |
-| `distintivo.js`        | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()`                                                                                               |
-| `tarjeta.js`           | `tarjeta()`, `tarjetaDeCifra()`                                                                                                                        |
-| `dialogo.js`           | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto                                                                                 |
-| `pagina.js`            | `encabezadoDePagina()`, `encabezadoDeSeccion()`                                                                                                        |
+| Módulo                 | Para qué                                                                                                                                                                                         |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `dom.js`               | `h()`, `nodo()`, `vaciar()`, `clases()`. Siempre `textContent`, nunca `innerHTML`                                                                                                                |
+| `formato.js`           | `creditos()`, `fecha()`, `fechaHora()`, `cuantoFalta()`, `numero()`, `porcentaje()` — una sola localización (`es-CO`)                                                                            |
+| `aviso.js`             | `aviso()`, `pintarAviso()`, `limpiarAviso()`, `tonoPorEstado()` (MAPEO-ERRORES, tabla 4)                                                                                                         |
+| `estado-vista.js`      | `estadoVacio()`, `estadoDeError()`, `estadoDeCarga()`, `pintarEstado()`                                                                                                                          |
+| `esqueleto.js`         | `esqueletoDeLista()`, `esqueletoDeTarjetas()`, `esqueletoDeFilas()`                                                                                                                              |
+| `boton.js`             | `boton()`, `conCarga()` — bloquea, lo anuncia y devuelve el texto exacto                                                                                                                         |
+| `formulario-seguro.js` | `formularioListo()`, `sinCredencialesEnLaDireccion()` — G1: un formulario con credenciales nunca se envía de forma nativa (`sin-envio-nativo.test.js`)                                           |
+| `distintivo.js`        | `distintivo()`, `distintivoDeRareza()`, `claseDeMarco()`                                                                                                                                         |
+| `tarjeta.js`           | `tarjeta()`, `tarjetaDeCifra()`                                                                                                                                                                  |
+| `dialogo.js`           | `abrirDialogo()`, `confirmar()` — foco atrapado, Escape, foco devuelto                                                                                                                           |
+| `pagina.js`            | `encabezadoDePagina()`, `encabezadoDeSeccion()`                                                                                                                                                  |
+| `acuse.js`             | `acusar()`, `acusarCambioDeVida()` — UX-R2.10: un cambio de estado se acusa con su texto; la animación es el adorno                                                                              |
+| `motion.js`            | Nexus Motion System (MOTION-1): `motion.*`, `secuencia()`, `animar()`, `permitido()`, `transicionDePagina()` — único punto de entrada del movimiento en JS; `docs/motion/NEXUS-MOTION-SYSTEM.md` |
 
 ## Reglas
 
@@ -38,3 +40,6 @@ esto:
    (`tonoPorEstado`), el texto lo escribe quien conoce el dominio.
 5. **Si un componente sólo lo usa una vista, no es un componente.** Vive en
    la vista hasta que lo pida una segunda.
+6. **El movimiento pasa por `motion.js`.** Ninguna vista llama a
+   `element.animate` ni inventa un `@keyframes` para una secuencia: si falta
+   un verbo, se añade al sistema con su prueba (MOTION-1).

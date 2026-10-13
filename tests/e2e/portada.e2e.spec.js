@@ -19,6 +19,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -120,6 +121,7 @@ test.describe('F6 — la portada pública con la tienda', () => {
       await expect(page.locator('[data-zona="acciones-sin-sesion"]')).toBeVisible();
       await expect(page.locator('[data-zona="acciones-con-sesion"]')).toBeHidden();
 
+      await conLaPaginaQuieta(page);
       const axe = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
       const graves = axe.violations.filter((v) => GRAVES.has(v.impact ?? ''));
       expect(graves.map((v) => `${v.id}: ${v.help}`)).toEqual([]);

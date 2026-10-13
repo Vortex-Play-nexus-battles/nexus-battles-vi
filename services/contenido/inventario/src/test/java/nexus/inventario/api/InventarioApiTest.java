@@ -444,7 +444,7 @@ class InventarioApiTest {
     }
 
     @Test
-    @DisplayName("GET busqueda localiza elementos propios por la informacion registrada")
+    @DisplayName("GET busqueda localiza elementos propios por un fragmento de cuatro caracteres")
     void buscarElementosPropios() throws Exception {
         gestion.crear("jugador-A", "producto-bruma", TipoElementoInventario.ITEM,
                 "Amuleto de Bruma");
@@ -455,7 +455,7 @@ class InventarioApiTest {
 
         mvc.perform(get("/api/v1/inventario/elementos/busqueda")
                         .with(ComoLlamador.servicio()).header("X-User-Name", "jugador-A")
-                        .param("criterio", "bruma")
+                        .param("criterio", "brum")
                         .param("pagina", "0"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.elementos.length()").value(1))

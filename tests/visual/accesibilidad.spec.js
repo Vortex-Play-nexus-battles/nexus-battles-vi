@@ -30,6 +30,7 @@ import { test, expect } from '@playwright/test';
 import { PREFIJO_WEB, VISTAS } from './vistas.js';
 import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
 import { inyectarSesion } from './identidad.js';
+import { sinMovimiento } from './movimiento.js';
 import { conseguirPersonas, personasDe } from './personas.js';
 
 /** Escritorio y móvil: las dos donde cambia lo que axe puede medir. */
@@ -66,6 +67,7 @@ for (const vista of VISTAS) {
       try {
         const { para } = personasDe(vista);
         await inyectarSesion(contexto, vista.acceso === 'publica' ? null : (sesiones[para] ?? null));
+        await sinMovimiento(contexto);
 
         const pagina = await contexto.newPage();
         await pagina.goto(`/${PREFIJO_WEB}/${vista.ruta}`, { waitUntil: 'domcontentloaded' });

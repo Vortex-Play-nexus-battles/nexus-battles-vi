@@ -2309,6 +2309,10 @@ export class ControladorSubastas {
     // participación después de releer (el mensaje del canal no lo dice).
     const ibaGanando = this.participaciones.get(actualizada.id)?.ganando;
     this.recargar().then(() => {
+      // MOTION-3 — el precio que acaba de cambiar se resalta una vez (el
+      // acuse de UX-R2.10, como una puja propia): entre veinte cifras, el ojo
+      // va a la que se movio. Nada mueve la tabla entera.
+      this.resaltarPrecioDe(actualizada.id);
       if (ibaGanando && !esLaQueMiro) {
         return this.intentar(() => this.api?.miParticipacion(actualizada.id)).then((p) => {
           if (p) {
@@ -2320,6 +2324,28 @@ export class ControladorSubastas {
       return undefined;
     });
     return true;
+  }
+
+  /**
+   * El importe de una subasta recien actualizada, acusado (MOTION-3). En la
+   * lista, la cifra de su tarjeta; en el detalle, el precio actual.
+   *
+   * @param {string} idSubasta
+   * @returns {HTMLElement|null} lo acusado
+   */
+  resaltarPrecioDe(idSubasta) {
+    const raiz = this.contenedor ?? document;
+    const enDetalle =
+      this.vista === 'detalle' && idSubasta === this.subastaActivaId
+        ? raiz.querySelector('.precio-actual')
+        : null;
+    const reloj = raiz.querySelector(`[data-tiempo-subasta="${idSubasta}"]`);
+    const enLista = reloj?.closest('.tarjeta-finanzas')?.querySelector('.monto-destacado') ?? null;
+    const objetivo = enDetalle ?? enLista;
+    if (objetivo instanceof HTMLElement) {
+      acusar(objetivo, { tipo: 'puja' });
+    }
+    return objetivo;
   }
 
   cerrarCanalEnVivo() {

@@ -707,13 +707,37 @@
   overflow: hidden;
 }
 
+/* MOTION-2: el relleno mide siempre el 100 % y se ESCALA a la vida
+   (`transform`, que se compone fuera del hilo principal y no empuja nada;
+   antes animaba `width`). La cifra de al lado cambia al instante: es la
+   verdad del servidor (RF-JUE-009); el relleno la alcanza en 200 ms. */
+.barra-vida__pista {
+  position: relative;
+}
+
 .barra-vida__relleno {
   height: 100%;
-  width: calc(var(--vida, 100) * 1%);
+  width: 100%;
   border-radius: inherit;
+  transform: scaleX(calc(var(--vida, 100) / 100));
+  transform-origin: left center;
   transition:
-    width var(--transicion),
+    transform var(--duracion-normal) var(--curva-salida),
     background var(--transicion);
+}
+
+/* La estela del golpe: lo que la barra acaba de perder se queda un instante
+   en claro y se encoge hacia la vida que queda (`estelaDeVida`, panel de
+   vidas). Es adorno: la cifra y el acuse ya lo dijeron. */
+.barra-vida__estela {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--estela-desde, 0) * 1%);
+  width: calc(var(--estela-ancho, 0) * 1%);
+  background: color-mix(in srgb, var(--texto-sobre-color) 85%, var(--error));
+  transform-origin: left center;
+  pointer-events: none;
 }
 
 .barra-vida[data-estado='alto'] .barra-vida__relleno {
@@ -2798,7 +2822,6 @@ button.tarjeta--partida:disabled {
   color: var(--texto-2);
 }
 
-
 /* 7.4.6 — historial por páginas: «Ver mensajes anteriores» encabeza la lista
    mientras puede haber más hacia atrás. */
 .chatbot-ventana__anteriores {
@@ -3061,7 +3084,6 @@ button.tarjeta--partida:disabled {
 .chatbot-soporte__respuesta {
   margin-top: var(--e-2);
 }
-
 
 /* 7.4.5 — «Preferencias» del asistente: ocupa el sitio de la conversación,
    como «Soporte», y se oculta con la ventana minimizada. */
@@ -3726,7 +3748,9 @@ button.tarjeta--partida:disabled {
     transform var(--transicion);
 }
 
-.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(.accion-combate--sin-poder) {
+.accion-combate:not(:disabled):not(.accion-combate--fuera-de-turno):not(
+    .accion-combate--sin-poder
+  ) {
   border-color: color-mix(in srgb, var(--primaria) 55%, var(--borde-int));
   box-shadow: var(--sombra-1);
 }
@@ -3954,11 +3978,7 @@ button.tarjeta--partida:disabled {
   border: 0;
   border-radius: 50%;
   isolation: isolate;
-  background: radial-gradient(
-    circle at 50% 38%,
-    var(--cromo-elevado),
-    var(--cromo) 72%
-  );
+  background: radial-gradient(circle at 50% 38%, var(--cromo-elevado), var(--cromo) 72%);
   color: var(--texto-sobre-color);
   font-family: var(--t-etiqueta-familia);
   font-weight: var(--t-etiqueta-peso);
@@ -4455,7 +4475,9 @@ button.tarjeta--partida:disabled {
     gap: 0;
     padding: var(--e-2);
     /* UX-GAME-2: el panel remata con el filo de energia, como la consola. */
-    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+    background:
+      var(--energia) bottom / 100% 2px no-repeat,
+      var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -4764,8 +4786,10 @@ button.tarjeta--partida:disabled {
    pantalla. Eso hace dos cosas a la vez: el portal se lee como juego, y el
    sitio donde hay que escribir es el punto más luminoso de la composición.
 
-   Sin fondo animado (§22) ni ilustración inventada: la profundidad sale de
-   dos degradados de cromo y de la sombra de la tarjeta.
+   Sin fondo animado (§22). Desde HU-UX-002 cada pantalla del portal lleva
+   detrás una escena fija de la Ciudadela del Nexo con su velo (fondos.css,
+   `data-fondo` en el body); sin ese atributo la profundidad sigue saliendo
+   de los degradados de cromo de base.css y de la sombra de la tarjeta.
    ======================================================================= */
 
 .portal {
@@ -5407,9 +5431,13 @@ button.tarjeta--partida:disabled {
   padding-left: var(--e-2);
 }
 
+/* MOTION-1: el punto late DOS veces al llegar el turno y se queda quieto. Un
+   latido infinito compite con el campo durante todo el turno y, para quien
+   lo mira de reojo, deja de significar «ahora»: el estado lo dice el color
+   del indicador, que no se mueve. */
 @media (prefers-reduced-motion: no-preference) {
   .turno-actual[data-mio='true']::before {
-    animation: latido-turno var(--duracion-turno, 1.2s) ease-in-out infinite;
+    animation: latido-turno var(--duracion-turno, 1.2s) ease-in-out 2;
   }
 }
 
@@ -5573,6 +5601,48 @@ button.tarjeta-heroe {
   font: inherit;
   color: inherit;
   cursor: pointer;
+}
+
+/* MOTION-3 — la carta se acerca al pasar el cursor (dos pixeles y sombra,
+   nada de 3D) y las estadisticas de la carta propia entran escalonadas una
+   vez. Con movimiento reducido: sombra sin desplazamiento, sin entrada. */
+@media (prefers-reduced-motion: no-preference) {
+  button.tarjeta-heroe {
+    transition:
+      transform var(--motion-fast) var(--ease-enter),
+      box-shadow var(--motion-fast) var(--ease-enter);
+  }
+
+  button.tarjeta-heroe:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--sombra-2);
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra {
+    animation: entrar-dialogo var(--motion-normal) var(--ease-enter) both;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(2) {
+    animation-delay: 40ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(3) {
+    animation-delay: 80ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(4) {
+    animation-delay: 120ms;
+  }
+
+  .stat-block:not(.stat-block--compacto) > .stat-block__cifra:nth-child(n + 5) {
+    animation-delay: 160ms;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button.tarjeta-heroe:hover:not(:disabled) {
+    box-shadow: var(--sombra-2);
+  }
 }
 
 .tarjeta-heroe__identidad {
@@ -5828,24 +5898,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
   }
 }
 
-/* La entrada del panel solo para quien no ha pedido lo contrario. El panel se
-   ve igual de bien sin ella; la animacion es adorno, no informacion. */
-@media (prefers-reduced-motion: no-preference) {
-  .panel-resultado {
-    animation: aparecer-resultado var(--duracion-pausado) var(--curva-estandar);
-  }
-}
-
-@keyframes aparecer-resultado {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
+/* La entrada del panel (`entrar-desenlace`, mas arriba) solo para quien no ha
+   pedido lo contrario. MOTION-1: aqui habia una segunda animacion de entrada
+   (`aparecer-resultado`) que pisaba a la primera; queda una sola. */
 
 /* =======================================================================
    Pantalla de combate — HU-JUE-017 · RF-JUE-017 (UX-R2.3)
@@ -5885,7 +5940,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
      cromo que sobre blanco. */
   background:
     var(--energia) top left / 100% 2px no-repeat,
-    linear-gradient(180deg, var(--cromo-elevado), color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo)));
+    linear-gradient(
+      180deg,
+      var(--cromo-elevado),
+      color-mix(in srgb, var(--cromo-elevado) 70%, var(--cromo))
+    );
   border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   border-radius: var(--radio);
   box-shadow: var(--sombra-atmosfera);
@@ -5925,9 +5984,11 @@ button.tarjeta-heroe[aria-pressed='true'] {
   border: 1px solid color-mix(in srgb, var(--primaria) 35%, transparent);
   /* UX-GAME-4 — la arena es OSCURA: el lado propio con halo azul, el rival
      con halo violeta, y una linea de energia en el centro que separa los dos
-     bandos. Solo degradados: nada de imagenes ni de canvas. Antes era un
-     gris claro que, entre el HUD y los controles blancos, se leia como una
-     pantalla vacia. */
+     bandos. Antes era un gris claro que, entre el HUD y los controles
+     blancos, se leia como una pantalla vacia. HU-UX-002: en una vista con
+     fondo ilustrado, fondos.css sustituye estos degradados por la escena de
+     la arena (los mismos dos bandos y la linea, pintados); sin fondo, o con
+     «aumentar contraste», quedan estos. Sin canvas. */
   background:
     radial-gradient(
       55% 70% at 18% 62%,
@@ -6732,7 +6793,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
     align-items: stretch;
     gap: 0;
     padding: var(--e-2) var(--e-4) var(--e-4);
-    background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+    background:
+      var(--energia) bottom / 100% 2px no-repeat,
+      var(--cromo);
     box-shadow: var(--sombra-3);
   }
 
@@ -6843,7 +6906,9 @@ button.tarjeta-heroe[aria-pressed='true'] {
 .cabecera--consola {
   /* UX-GAME-2: el filo es el gradiente de energia, el mismo de las tarjetas
      y del destino activo; antes era el acento plano. */
-  background: var(--energia) bottom / 100% 2px no-repeat, var(--cromo);
+  background:
+    var(--energia) bottom / 100% 2px no-repeat,
+    var(--cromo);
 }
 
 /* La salida al juego es secundaria, pero tiene que existir: un administrador
@@ -8095,9 +8160,20 @@ body:not([data-modo='combate']) .registro-combate {
   padding: 1px 3px;
 }
 
+/* MOTION-4 — los chips cuelgan DEBAJO del puesto sin entrar en su caja: el
+   puesto se centra con `translate(-50%, -50%)`, asi que un chip que llega
+   (un veneno, un escudo) le cambiaba el alto y movia al heroe hacia arriba
+   medio chip (CLS 0,013 medido en motion-rendimiento.spec.js). Colgados, el
+   heroe no se mueve de su sitio nunca. */
 .campo__puesto .efectos {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
   justify-content: center;
+  width: max-content;
   max-width: 140px;
+  margin-top: var(--e-1);
 }
 
 /* --- La cifra del golpe (DamageCallout) --------------------------------- */
@@ -8156,28 +8232,189 @@ body:not([data-modo='combate']) .registro-combate {
   background: var(--info);
 }
 
+/* MOTION-2: la cifra la mueve y la retira `motion.float` (Web Animations
+   API, `coreografia-de-combate.js`): nace en el instante del impacto, no al
+   llegar el aviso. Aqui solo se coloca; sin movimiento se queda quieta el
+   tiempo de leerla. */
+.impacto__icono {
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.1em;
+  vertical-align: -0.08em;
+  color: currentColor;
+}
+
+.impacto--curacion .impacto__cifra {
+  color: var(--exito-insignia);
+}
+
+.impacto--critico .impacto__cifra {
+  text-shadow:
+    0 0 14px color-mix(in srgb, var(--error) 80%, transparent),
+    0 2px 6px color-mix(in srgb, var(--cromo) 90%, transparent);
+}
+
+/* =======================================================================
+   Game feel del combate — HU-UX-003, MOTION-2
+   -----------------------------------------------------------------------
+   La coreografia (coreografia-de-combate.js) mueve la figura del heroe con
+   la Web Animations API y deja ESTADOS en el DOM. Aqui se pinta lo que esos
+   estados significan sin moverse (vale tambien con movimiento reducido) y
+   lo unico que respira solo: el idle del heroe.
+   ======================================================================= */
+
+/* Idle: el heroe respira, dos pixeles, despacio, cada uno a su ritmo
+   (`--idle-retardo` lo pone campo.js desde el id). Lo unico permanente del
+   campo; con movimiento reducido, quieto. */
 @media (prefers-reduced-motion: no-preference) {
-  .impacto {
-    animation: impacto-sube 1.6s var(--curva-salida) both;
+  .campo__puesto:not(.campo__puesto--caido) .marco-heroe__retrato {
+    animation: motion-idle 3.4s ease-in-out var(--idle-retardo, 0s) infinite;
   }
 }
 
-@keyframes impacto-sube {
-  0% {
-    opacity: 0;
-    transform: translate(-50%, 8px) scale(0.9);
-  }
-  12% {
-    opacity: 1;
-    transform: translate(-50%, -4px) scale(1.08);
-  }
-  80% {
-    opacity: 1;
-    transform: translate(-50%, -18px) scale(1);
-  }
+@keyframes motion-idle {
+  0%,
   100% {
-    opacity: 0;
-    transform: translate(-50%, -26px) scale(1);
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Quien actua y quien recibe: el anillo lo dice aunque nada se mueva. */
+.campo__puesto[data-accion] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--enlace-sobre-cromo),
+    0 0 24px color-mix(in srgb, var(--enlace-sobre-cromo) 70%, transparent);
+}
+
+.campo__puesto[data-accion='cura'] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--exito-insignia),
+    0 0 24px color-mix(in srgb, var(--exito) 70%, transparent);
+}
+
+.campo__puesto[data-epica='si'] .marco-heroe__retrato {
+  box-shadow:
+    0 0 0 3px var(--credito-oro-sobre-cromo),
+    0 0 32px color-mix(in srgb, var(--credito-oro-sobre-cromo) 75%, transparent);
+}
+
+.campo__puesto[data-golpe] .marco-heroe__retrato {
+  outline: 3px solid var(--error);
+  outline-offset: 2px;
+}
+
+.campo__puesto[data-golpe='critico'] .marco-heroe__retrato {
+  outline-width: 4px;
+  outline-color: var(--credito-oro-sobre-cromo);
+}
+
+.campo__puesto[data-golpe='curacion'] .marco-heroe__retrato {
+  outline-color: var(--exito-insignia);
+}
+
+.campo__puesto[data-golpe='esquiva'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='resistencia'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='escape'] .marco-heroe__retrato {
+  outline-color: var(--info-insignia);
+}
+
+.campo__puesto[data-golpe='fallo'] .marco-heroe__retrato,
+.campo__puesto[data-golpe='sinCambio'] .marco-heroe__retrato {
+  outline-color: var(--pista);
+}
+
+/* La IA piensa: tres puntos junto al nombre mientras dura su pausa (2,2 s,
+   ritmo-de-combate.js). Es un indicador de espera acotado, como el giro de
+   un boton: late mientras el estado esta, y el estado se va con su accion. */
+.campo__puesto[data-pensando='si'] .campo__nombre::after {
+  content: '\00a0···';
+  display: inline-block;
+  letter-spacing: 0.08em;
+  color: var(--enlace-sobre-cromo);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .campo__puesto[data-pensando='si'] .campo__nombre::after {
+    animation: motion-pensando 1.2s ease-in-out infinite;
+  }
+}
+
+@keyframes motion-pensando {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* El desenlace sobre el campo: la derrota pierde color (sobria), el empate
+   no cambia nada, la victoria se celebra con la capa de abajo. */
+.combate__campo[data-desenlace='derrota'] {
+  filter: saturate(0.55) brightness(0.9);
+  transition: filter var(--duracion-turno) var(--curva-estandar);
+}
+
+/* Celebracion contenida (solo VICTORIA): 60 particulas que nacen en el
+   centro del campo, suben, caen y se van. Las mueve WAAPI
+   (coreografia-de-combate.js); con movimiento reducido no se crean. */
+.celebracion {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.celebracion__particula {
+  position: absolute;
+  left: 50%;
+  top: 42%;
+  width: 8px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--credito-oro-sobre-cromo);
+  will-change: transform, opacity;
+}
+
+.celebracion__particula--1 {
+  background: var(--enlace-sobre-cromo);
+}
+
+.celebracion__particula--2 {
+  background: var(--exito-insignia);
+}
+
+.celebracion__particula--3 {
+  background: var(--texto-sobre-color);
+}
+
+.celebracion__particula--4 {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--acento-relleno);
+}
+
+@media (forced-colors: active) {
+  .campo__puesto[data-accion] .marco-heroe__retrato,
+  .campo__puesto[data-epica='si'] .marco-heroe__retrato {
+    box-shadow: none;
+    outline: 3px solid Highlight;
+  }
+
+  .combate__campo[data-desenlace='derrota'] {
+    filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .combate__campo[data-desenlace='derrota'] {
+    filter: none;
   }
 }
 
@@ -8385,33 +8622,70 @@ body:not([data-modo='combate']) .chat-grupal {
   }
 }
 
+/* MOTION-2: cada numero llega grande y desenfocado y se clava nitido en el
+   centro; «¡COMBATE!» entra con un destello. Sin tocar los tiempos del
+   servidor ni la retencion del canal (presentacion.js, ritmo-de-combate.js). */
 @keyframes cuenta-atras-a {
   0% {
     opacity: 0;
-    transform: scale(1.5);
+    transform: scale(1.6);
+    filter: blur(6px);
   }
   22% {
     opacity: 1;
     transform: scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0.9;
     transform: scale(0.94);
+    filter: blur(0);
   }
 }
 
 @keyframes cuenta-atras-b {
   0% {
     opacity: 0;
-    transform: scale(1.5);
+    transform: scale(1.6);
+    filter: blur(6px);
   }
   22% {
     opacity: 1;
     transform: scale(1);
+    filter: blur(0);
   }
   100% {
     opacity: 0.9;
     transform: scale(0.94);
+    filter: blur(0);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .presentacion__cuenta[data-final='si'] {
+    animation: cuenta-atras-combate 800ms var(--curva-salida) both;
+  }
+}
+
+@keyframes cuenta-atras-combate {
+  0% {
+    opacity: 0;
+    transform: scale(1.8);
+    filter: blur(8px) brightness(2);
+  }
+  18% {
+    opacity: 1;
+    transform: scale(0.98);
+    filter: blur(0) brightness(1.6);
+  }
+  30% {
+    transform: scale(1.02);
+    filter: blur(0) brightness(1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0) brightness(1);
   }
 }
 
@@ -10456,7 +10730,9 @@ body:not([data-modo='combate']) .chat-grupal {
 
 .encuentro--mio {
   border-color: var(--acento-relleno);
-  box-shadow: var(--sombra-1), inset 0 0 0 1px var(--acento-relleno);
+  box-shadow:
+    var(--sombra-1),
+    inset 0 0 0 1px var(--acento-relleno);
 }
 
 .encuentro__tuyo {

@@ -1890,3 +1890,71 @@
     flex-direction: column;
   }
 }
+
+/* =======================================================================
+   Movimiento — HU-UX-003, MOTION-3 (Nexus Motion System)
+   -----------------------------------------------------------------------
+   Las tarjetas del tablón entran escalonadas una vez (40 ms entre una y
+   otra, las de la segunda fila en adelante con la última), la que está EN
+   PROGRESO lleva un halo quieto, y al pasar el cursor la tarjeta se acerca
+   dos píxeles. Con movimiento reducido: sin entrada, sin desplazamiento, el
+   halo y el sello siguen diciendo el estado.
+   ======================================================================= */
+
+@media (prefers-reduced-motion: no-preference) {
+  .misiones-rejilla > li {
+    animation: entrar-dialogo var(--motion-normal) var(--ease-enter) both;
+  }
+
+  .misiones-rejilla > li:nth-child(2) {
+    animation-delay: 40ms;
+  }
+
+  .misiones-rejilla > li:nth-child(3) {
+    animation-delay: 80ms;
+  }
+
+  .misiones-rejilla > li:nth-child(4) {
+    animation-delay: 120ms;
+  }
+
+  .misiones-rejilla > li:nth-child(5) {
+    animation-delay: 160ms;
+  }
+
+  .misiones-rejilla > li:nth-child(6) {
+    animation-delay: 200ms;
+  }
+
+  .misiones-rejilla > li:nth-child(7) {
+    animation-delay: 240ms;
+  }
+
+  .misiones-rejilla > li:nth-child(n + 8) {
+    animation-delay: 280ms;
+  }
+
+  .mision-card {
+    transition:
+      transform var(--motion-fast) var(--ease-enter),
+      box-shadow var(--motion-fast) var(--ease-enter);
+  }
+
+  .mision-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--sombra-2);
+  }
+}
+
+.mision-card[data-estado='en_progreso'] {
+  box-shadow:
+    0 0 0 2px var(--primaria),
+    0 0 18px color-mix(in srgb, var(--primaria) 35%, transparent);
+}
+
+@media (forced-colors: active) {
+  .mision-card[data-estado='en_progreso'] {
+    box-shadow: none;
+    outline: 2px solid Highlight;
+  }
+}
