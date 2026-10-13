@@ -1,0 +1,4 @@
+# Contexto de la imagen: solo el jar ya compilado. Todo lo demas (codigo,
+# pruebas, caches de compilacion, informes) se queda fuera del contexto.
+*
+!build.nosync/libs/*.jar
