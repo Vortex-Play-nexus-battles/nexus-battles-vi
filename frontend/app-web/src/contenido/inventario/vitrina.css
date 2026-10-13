@@ -899,11 +899,23 @@
     --vitrina-separacion: 4px;
   }
 
-  /* El kit reserva 96 px para que el chatbot no tape el final de la pagina.
-     El boton mide 56 y se ancla abajo a la derecha: 64 lo libra igual. */
+  /*
+   * El kit reserva 96 px para que el chatbot no tape el final de la pagina
+   * (`body:has(.chatbot-flotante) main:not(.combate)`). El boton mide 56 y se
+   * ancla abajo a la derecha, asi que 64 lo libra igual y devuelve 32 px.
+   *
+   * Hay que igualar la especificidad del kit (0,2,2) o su regla gana y este
+   * recorte no se aplica: por eso el selector lleva `body` y `:has`, y no
+   * basta con `.vitrina-pagina > main`. Esta hoja se carga despues que
+   * `componentes.css`, asi que con la misma especificidad manda esta.
+   */
+  body.vitrina-pagina:has(.chatbot-flotante) > main {
+    padding-top: 8px;
+    padding-bottom: 64px;
+  }
+
   .vitrina-pagina > main {
     padding-top: 8px;
-    padding-bottom: 58px;
   }
 
   /* Un bloque oculto no debe seguir separando: el editor y el banner de
