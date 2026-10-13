@@ -37,7 +37,10 @@ de productos.
 
 `SCRUM-323` expone la consulta indexada del inventario propio. Exige un criterio
 de al menos cuatro caracteres, busca por referencia de producto, tipo, nombre
-propio o parte de armadura y conserva la paginacion de dieciseis elementos.
+propio o parte de armadura y conserva la paginacion de dieciseis elementos. La
+consulta usa primero el indice de texto y, para fragmentos que MongoDB no trata
+como una palabra completa, recupera por el indice unico del propietario antes
+de aplicar la coincidencia por subcadena dentro de su unico inventario.
 
 El agregado es inmutable y se guarda como un documento por propietario. Esta
 decision permite que los cambios de una instancia se persistan atomicamente y

@@ -102,6 +102,25 @@ class RepositorioInventariosMongoTest {
     }
 
     @Test
+    @DisplayName("buscar por fragmento usa el inventario indexado del propietario si el indice de texto no coincide")
+    void buscarElementosPorFragmento() {
+        when(mongo.findOne(any(Query.class), eq(InventarioDocumento.class))).thenReturn(null);
+        when(documentos.findByPropietarioId("jugador-A")).thenReturn(Optional.of(
+                new InventarioDocumento("inventario-1", "jugador-A", List.of(
+                        new ElementoDocumento(
+                                "elemento-1", "producto-bruma", TipoElementoInventario.ITEM,
+                                "Amuleto de Bruma", null),
+                        new ElementoDocumento(
+                                "elemento-2", "producto-solar", TipoElementoInventario.ARMA,
+                                "Espada Solar", null)))));
+
+        var encontrados = repositorio.buscarElementos("jugador-A", "brum");
+
+        assertEquals(List.of("elemento-1"), encontrados.stream().map(e -> e.id()).toList());
+        verify(documentos).findByPropietarioId("jugador-A");
+    }
+
+    @Test
     @DisplayName("B4: otra escritura que llego antes (version) es un conflicto, no un fallo generico")
     void versionDesactualizadaEsConflicto() {
         when(documentos.save(any())).thenThrow(new OptimisticLockingFailureException("version 3 != 4"));
