@@ -194,6 +194,67 @@ test('eliminar se confirma antes: si el jugador dice que no, no se toca nada', a
   expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(1);
 });
 
+/*
+ * Revision de integracion del 13-oct: el `confirmar` del kit devuelve una
+ * PROMESA y recibe `{titulo, mensaje, textoConfirmar}`. Las dos pruebas de
+ * arriba usan dobles sincronos y no veian que, sin `await`, `!promesa` es
+ * siempre falso: el elemento se borraba antes de que el jugador contestara.
+ */
+test('eliminar espera la respuesta del dialogo: un «no» que llega despues no borra', async () => {
+  const eliminar = jest.fn();
+  let responder;
+  const confirmar = jest.fn(
+    () =>
+      new Promise((resolver) => {
+        responder = resolver;
+      }),
+  );
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina([elemento('Amuleto de Niebla')]),
+    eliminar,
+    confirmar,
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+  await esperarHasta(() => confirmar.mock.calls.length === 1);
+
+  // Mientras el dialogo esta abierto no se ha borrado nada.
+  expect(eliminar).not.toHaveBeenCalled();
+  const [opciones] = confirmar.mock.calls[0];
+  expect(opciones).toEqual(
+    expect.objectContaining({
+      titulo: expect.stringContaining('Amuleto de Niebla'),
+      mensaje: expect.stringMatching(/no se puede deshacer/i),
+      textoConfirmar: 'Eliminar',
+    }),
+  );
+
+  responder(false);
+  await Promise.resolve();
+  await Promise.resolve();
+  expect(eliminar).not.toHaveBeenCalled();
+  expect(raiz.querySelectorAll('.vitrina__producto')).toHaveLength(1);
+});
+
+test('eliminar espera la respuesta del dialogo: un «si» que llega despues borra', async () => {
+  let elementos = [elemento('Amuleto de Niebla')];
+  const eliminar = jest.fn(async (_identidad, elementoId) => {
+    elementos = elementos.filter((e) => e.id !== elementoId);
+  });
+
+  await montarInventario(raiz, 'jugador-A', 0, {
+    consultar: async () => pagina(elementos),
+    eliminar,
+    confirmar: () => Promise.resolve(true),
+  });
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 1);
+  raiz.querySelector('.vitrina__eliminar').click();
+
+  await esperarHasta(() => raiz.querySelectorAll('.vitrina__producto').length === 0);
+  expect(eliminar).toHaveBeenCalledTimes(1);
+});
+
 test('criterio 2: un elemento comprometido se rechaza diciendo el motivo del bloqueo', async () => {
   const eliminar = async () => {
     const fallo = new Error('409');

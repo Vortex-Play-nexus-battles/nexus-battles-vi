@@ -740,14 +740,23 @@ export async function montarInventario(
    * Se confirma antes porque no se puede deshacer. Quien decide si se puede es
    * el servicio: rechaza el que esta en una mision, el publicado en una
    * subasta, el que el heroe lleva puesto y el que no es de quien pide. Por
-   * eso el fallo se traduce con `motivoDelRechazo`, que da la razon en el
-   * idioma del jugador: el criterio pide explicar el bloqueo, y el cliente
+   * eso el fallo se traduce con `motivoDeNoPoderEliminar`, que da la razon en
+   * el idioma del jugador: el criterio pide explicar el bloqueo, y el cliente
    * tiene dicho que un codigo HTTP no se le ensena a nadie.
+   *
+   * `confirmar` es el dialogo del kit (`comun/ui/dialogo.js`): recibe
+   * `{titulo, mensaje, textoConfirmar}` y devuelve una **promesa**. Hay que
+   * esperarla: sin `await`, `!promesa` es siempre falso y el elemento se
+   * borraba antes de que el jugador contestara (revision de integracion del
+   * 13-oct).
    */
   async function eliminarDelInventario(elemento) {
-    if (
-      !confirmar(`¿Eliminar "${elemento.nombrePropio}" de tu inventario? No se puede deshacer.`)
-    ) {
+    const seguro = await confirmar({
+      titulo: `¿Eliminar «${elemento.nombrePropio}»?`,
+      mensaje: 'Se retira de tu inventario y no se puede deshacer.',
+      textoConfirmar: 'Eliminar',
+    });
+    if (!seguro) {
       return;
     }
     mostrarMensaje('Eliminando...');
