@@ -11,6 +11,7 @@ import {
   textoDeContador,
   fechaLegible,
   enlaceDeInvitacion,
+  categoriaDelAviso,
 } from './campana.js';
 import { ESTADO_CANAL } from './bandeja.js';
 
@@ -155,6 +156,53 @@ describe('montarCampana', () => {
     const emergente = document.querySelector('[data-zona="emergentes"] .aviso--info');
     expect(emergente.querySelector('.aviso__titulo').textContent).toBe('Producto modificado');
     expect(emergente.textContent).toContain('Fecha de implementación: 5 de octubre de 2026');
+  });
+
+  test('SA-11 (§7.3.7): un cambio en las políticas de uso se pinta con su categoría en palabras, nunca con el código', () => {
+    const { callbacks } = preparar();
+    const dePoliticas = aviso('politica:9d0c6a52-7a59-4d4b-8f3e-2d64c1b2a001', {
+      tipo: 'CAMBIO_POLITICA',
+      titulo: 'Actualizamos la política de privacidad',
+      cuerpo:
+        'Datos del chat. Los mensajes del chat se guardan noventa días. Rige desde el 20 de octubre de 2026, 00:00.',
+      creadaEn: '2026-10-14T15:00:00Z',
+    });
+
+    callbacks().alCambiar({ canal: ESTADO_CANAL.ESTABLE, noLeidas: 1, avisos: [dePoliticas] });
+
+    const item = document.querySelector('[data-zona="lista"] li');
+    const distintivo = item.querySelector('.distintivo');
+    expect(distintivo.textContent).toBe('Políticas de uso');
+    expect(distintivo.dataset.tipo).toBe('CAMBIO_POLITICA');
+    expect(item.textContent).not.toContain('CAMBIO_POLITICA');
+    expect(item.querySelector('.t-cuerpo').textContent).toContain(
+      'Rige desde el 20 de octubre de 2026',
+    );
+  });
+
+  test.each([
+    ['CAMBIO_POLITICA', 'Políticas de uso'],
+    ['CAMBIO_CATALOGO', 'Catálogo'],
+    ['CUENTA', 'Cuenta'],
+    ['TORNEO', 'Torneo'],
+    ['MISION', 'Misión'],
+    ['MENSAJE_PRIVADO', 'Mensaje'],
+    ['INVITACION_SALA', 'Invitación'],
+    ['MODERACION_COMENTARIO', 'Comentarios'],
+    ['SANCION_SUSPENSION', 'Sanción'],
+    ['SANCION_LEVANTADA', 'Sanción'],
+    ['APELACION_RECIBIDA', 'Apelación'],
+    ['SUBASTA_GANADA', 'Subasta'],
+    ['PUJA_SUPERADA', 'Subasta'],
+    ['NUEVA_PUJA', 'Subasta'],
+    ['COMPRA_INMEDIATA_EJECUTADA', 'Subasta'],
+    ['CREDITOS_RECIBIDOS', 'Créditos'],
+    ['mision', 'Aviso'],
+    ['ALGO_NUEVO', 'Aviso'],
+    ['', 'Aviso'],
+    [undefined, 'Aviso'],
+  ])('el distintivo de %s dice «%s»', (tipo, categoria) => {
+    expect(categoriaDelAviso(tipo)).toBe(categoria);
   });
 
   test('alAviso pinta una emergente no bloqueante con cierre propio y automático', () => {

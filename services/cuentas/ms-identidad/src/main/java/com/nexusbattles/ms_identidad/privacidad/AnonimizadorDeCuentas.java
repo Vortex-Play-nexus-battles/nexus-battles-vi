@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.privacidad;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCierreCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.recuperacion.PreguntaSeguridadRepository;
@@ -20,6 +22,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 import java.util.Objects;
@@ -54,8 +57,15 @@ import java.util.UUID;
  * {@code PROGRAMADA} y vencida: dos ejecuciones a la vez, o una repetida tras
  * un reinicio, no anonimizan dos veces ni cambian el alias.
  *
- * <p><b>Lo que todavia no hace</b> (queda en el informe de RFINAL-05): enviar
- * el correo de confirmacion (correo no tiene plantilla de cierre de cuenta) y
+ * <p><b>La confirmacion</b> (§7.3.6 «notificacion de confirmacion al
+ * completar la eliminacion», SA-14): ya confirmada la transaccion, sale un
+ * correo a la direccion y con el apodo que la cuenta tenia (se toman antes
+ * de sustituirlos y no se guardan en ningun lado). Fail-open: si correo no
+ * responde, la cuenta sigue anonimizada y la bitacora lo dice, sin la
+ * direccion completa. La clave de idempotencia es la solicitud: un reintento
+ * no manda dos confirmaciones.
+ *
+ * <p><b>Lo que todavia no hace</b> (queda en el informe de RFINAL-05):
  * anonimizar las copias del apodo que guardan otros servicios.
  */
 @Component
@@ -75,12 +85,17 @@ public class AnonimizadorDeCuentas {
     private final PreguntaSeguridadRepository preguntas;
     private final AvatarStorageService avatares;
     private final AuditoriaDeCuenta auditoria;
+    private final CorreoClient correo;
     private final TransactionTemplate transaccion;
     private final PasswordEncoder cifrador;
     private final Clock reloj;
 
-    /** Lo que hay que hacer cuando la transaccion ya se confirmo. */
-    private record Hecho(UUID uid, String avatar) {
+    /**
+     * Lo que hay que hacer cuando la transaccion ya se confirmo. El correo y
+     * el apodo son los que la cuenta tenia: solo viven en memoria hasta que
+     * sale la confirmacion.
+     */
+    private record Hecho(UUID uid, String avatar, String email, String apodo) {
     }
 
     @Autowired
@@ -90,8 +105,9 @@ public class AnonimizadorDeCuentas {
                                  PreguntaSeguridadRepository preguntas,
                                  AvatarStorageService avatares,
                                  AuditoriaDeCuenta auditoria,
+                                 CorreoClient correo,
                                  PlatformTransactionManager transacciones) {
-        this(solicitudes, usuarios, perfiles, preguntas, avatares, auditoria, transacciones,
+        this(solicitudes, usuarios, perfiles, preguntas, avatares, auditoria, correo, transacciones,
                 new BCryptPasswordEncoder(), Clock.systemDefaultZone());
     }
 
@@ -102,6 +118,7 @@ public class AnonimizadorDeCuentas {
                           PreguntaSeguridadRepository preguntas,
                           AvatarStorageService avatares,
                           AuditoriaDeCuenta auditoria,
+                          CorreoClient correo,
                           PlatformTransactionManager transacciones,
                           PasswordEncoder cifrador,
                           Clock reloj) {
@@ -111,6 +128,7 @@ public class AnonimizadorDeCuentas {
         this.preguntas = preguntas;
         this.avatares = avatares;
         this.auditoria = auditoria;
+        this.correo = correo;
         this.transaccion = new TransactionTemplate(transacciones);
         this.cifrador = cifrador;
         this.reloj = reloj;
@@ -146,11 +164,27 @@ public class AnonimizadorDeCuentas {
         } catch (RuntimeException fallo) {
             log.warn("Cuenta {} anonimizada sin asiento en la auditoria: {}", hecho.uid(), fallo.getMessage());
         }
-        // Sin plantilla de cierre en el servicio de correo, la confirmacion
-        // queda aqui (bitacora JSON) y en la auditoria: ver el informe.
-        log.info("CUENTA_ANONIMIZADA uid={} solicitud={} correoDeConfirmacion=NO_ENVIADO_SIN_PLANTILLA",
-                hecho.uid(), solicitudId);
+        String confirmacion = confirmarPorCorreo(hecho, solicitudId);
+        log.info("CUENTA_ANONIMIZADA uid={} solicitud={} correoDeConfirmacion={}",
+                hecho.uid(), solicitudId, confirmacion);
         return true;
+    }
+
+    /**
+     * §7.3.6: la confirmacion a la direccion que la cuenta tenia. Fail-open
+     * (el cliente ya reintenta y deja constancia si correo no responde).
+     *
+     * @return lo que se anota en la bitacora: {@code SOLICITADO} o {@code FALLIDO}
+     */
+    private String confirmarPorCorreo(Hecho hecho, UUID solicitudId) {
+        try {
+            correo.enviarCierreCuenta(new CorreoCierreCuentaRequest(hecho.email(), hecho.apodo(),
+                    OffsetDateTime.now(reloj).toString()), "cierre-cuenta-" + solicitudId);
+            return "SOLICITADO";
+        } catch (RuntimeException fallo) {
+            log.warn("Cuenta {} anonimizada sin correo de confirmacion: {}", hecho.uid(), fallo.getMessage());
+            return "FALLIDO";
+        }
     }
 
     private Optional<Hecho> anonimizarDentro(UUID solicitudId, LocalDateTime ahora) {
@@ -173,6 +207,10 @@ public class AnonimizadorDeCuentas {
         String avatar = perfiles.findByIdentificadorPublicoConUsuario(uid)
                 .map(PerfilUsuario::getAvatar)
                 .orElse(null);
+
+        // Lo que la confirmacion necesita, antes de sustituirlo (§7.3.6).
+        String email = cuenta.getEmail();
+        String apodo = cuenta.getApodo();
 
         Long id = cuenta.getId();
         solicitudes.borrarPerfilDe(id);
@@ -199,7 +237,7 @@ public class AnonimizadorDeCuentas {
 
         solicitud.marcarEjecutada(ahora);
         solicitudes.save(solicitud);
-        return Optional.of(new Hecho(uid, avatar));
+        return Optional.of(new Hecho(uid, avatar, email, apodo));
     }
 
     private static byte[] bytesAleatorios(int cuantos) {

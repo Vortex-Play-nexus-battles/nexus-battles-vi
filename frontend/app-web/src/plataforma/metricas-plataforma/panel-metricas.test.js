@@ -1,299 +1,376 @@
 /**
- * HU-REN-002 CA-03 y HU-REN-003 CP-01 — el panel de observabilidad.
+ * Métricas de plataforma — SA-8 (puntos 23 y 24 del informe de revisión):
+ * cifras, tablas de la consola por fuente y actualización en vivo, sobre
+ * metricas-plataforma.yaml.
  */
 
+import { jest } from '@jest/globals';
+
 import {
-  informeComoTexto,
-  iniciarPanel,
-  pintarCargando,
-  pintarError,
-  pintarInforme,
+  cifrasDeConsultas,
+  cifrasDeMetricas,
+  detalleDeLatencia,
+  duracion,
+  listaDeDegradacion,
+  montarPanelMetricas,
+  operacionLegible,
+  tablaDeDisponibilidad,
+  tablaDeTiempos,
 } from './panel-metricas.js';
-import { ErrorDeMetricas, TIPO_PERCENTIL_NO_ACORDADO } from './cliente-metricas.js';
 
-function contenedor() {
-  const div = document.createElement('div');
-  document.body.append(div);
-  return div;
+const asentar = async () => {
+  for (let i = 0; i < 8; i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+};
+
+const INFORME_DE_DISPONIBILIDAD = {
+  desde: '2026-09-14T00:00:00Z',
+  hasta: '2026-10-14T00:00:00Z',
+  periodoMinutos: 43200,
+  umbral: 99.95,
+  porcentajeDelBloque: 99.81,
+  cumpleElUmbral: false,
+  servicios: [
+    {
+      servicio: 'torneos',
+      disponibleMinutos: 43200,
+      indisponibleMinutos: 0,
+      porcentaje: 100,
+      cumple: true,
+      interrupciones: [],
+    },
+    {
+      servicio: 'ms-subastas',
+      disponibleMinutos: 43118,
+      indisponibleMinutos: 82,
+      porcentaje: 99.81,
+      cumple: false,
+      interrupciones: [
+        {
+          inicio: '2026-10-02T10:00:00Z',
+          fin: '2026-10-02T11:00:00Z',
+          detalle: 'connection refused',
+        },
+        { inicio: '2026-10-13T09:00:00Z', fin: null, detalle: 'connection refused' },
+      ],
+    },
+    {
+      servicio: 'salas-partidas',
+      disponibleMinutos: 43170,
+      indisponibleMinutos: 30,
+      porcentaje: 99.93,
+      cumple: false,
+      interrupciones: [
+        { inicio: '2026-10-05T03:00:00Z', fin: '2026-10-05T03:30:00Z', detalle: 'timeout' },
+      ],
+    },
+  ],
+};
+
+const ESTADO = {
+  servicios: [
+    { servicio: 'torneos', estado: 'DISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+    { servicio: 'ms-subastas', estado: 'INDISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+  ],
+};
+
+const TECNICAS = {
+  generadoEn: '2026-10-14T10:00:00Z',
+  desdeCache: false,
+  servicios: [
+    {
+      servicio: 'salas-partidas',
+      cpu: 0.12,
+      memoriaMb: 182,
+      peticiones: 5240,
+      promedioMs: 38,
+      maximoMs: 812,
+      errores5xx: 3,
+      tasaDeError: 0.0006,
+    },
+    {
+      servicio: 'comentarios',
+      cpu: 0.05,
+      memoriaMb: 150,
+      peticiones: 900,
+      promedioMs: 22,
+      maximoMs: 140,
+      errores5xx: 0,
+      tasaDeError: 0,
+    },
+    { servicio: 'correo', peticiones: 0, errores5xx: 0, brecha: 'no expone metricas' },
+  ],
+  alertas: [],
+  brechas: ['correo: no expone metricas'],
+  umbrales: { cpu: 0.75, latenciaMs: 500, disponibilidadPorcentaje: 99.95 },
+};
+
+const LATENCIA = {
+  servicio: 'metricas-plataforma',
+  muestras: 1284,
+  percentil: 'p95',
+  objetivoMs: 500,
+  percentilMs: 312,
+  maximoMs: 1904,
+  cumple: true,
+  sinDatos: false,
+  porTipo: [
+    { tipo: 'lectura', muestras: 1200, percentilMs: 120, maximoMs: 900 },
+    { tipo: 'escritura', muestras: 84, percentilMs: 340, maximoMs: 1904 },
+  ],
+  operacionesMasLentas: [
+    { metodo: 'GET', ruta: '/api/v1/tecnicas', muestras: 30, percentilMs: 640 },
+    { metodo: 'POST', ruta: '/api/v1/subastas/{subastaId}/pujas', muestras: 2, percentilMs: 410 },
+  ],
+};
+
+const CONSULTAS = {
+  servicio: 'metricas-plataforma',
+  muestras: 8421,
+  percentil: 'p95',
+  objetivoMs: 500,
+  percentilMs: 7,
+  maximoMs: 812,
+  umbralLentaMs: 500,
+  cuantasLentas: 3,
+  cumple: true,
+  sinDatos: false,
+  sentenciasMasLentas: [
+    {
+      sentencia: 'select * from muestras where servicio = ?',
+      muestras: 4,
+      percentilMs: 700,
+      maximoMs: 812,
+    },
+  ],
+};
+
+const DEGRADACION = {
+  operativoPorCompleto: false,
+  seccionesLimitadas: [
+    { dependencia: 'inventario', seccion: 'Inventario', desde: '2026-10-14T09:58:00Z' },
+  ],
+};
+
+function servicio(respuestas) {
+  return jest.fn(async (url, opciones = {}) => {
+    const ruta = new URL(url, 'http://x').pathname.replace(/^\/api\/v1/, '');
+    const respuesta = respuestas[ruta];
+    if (!respuesta) {
+      throw new Error(`sin ruta simulada para ${ruta}`);
+    }
+    const { estado = 200, cuerpo = null } = respuesta;
+    return {
+      ok: estado >= 200 && estado < 300,
+      status: estado,
+      json: async () => cuerpo,
+      text: async () => String(cuerpo),
+      headers: opciones.headers,
+    };
+  });
 }
 
-/** Informe tal como lo publica contracts/openapi/metricas-plataforma.yaml. */
-function informeCompleto(extra = {}) {
-  return {
-    servicio: 'ms-subastas',
-    muestras: 100,
-    percentil: 'p95',
-    objetivoMs: 500,
-    percentilMs: 312,
-    maximoMs: 1904,
-    cumple: true,
-    sinDatos: false,
-    porTipo: [
-      { tipo: 'lectura', muestras: 99, percentilMs: 10, maximoMs: 40 },
-      { tipo: 'escritura', muestras: 1, percentilMs: 900, maximoMs: 900 },
-    ],
-    operacionesMasLentas: [
-      { metodo: 'POST', ruta: '/api/v1/subastas/{subastaId}/pujas', muestras: 1, percentilMs: 900 },
-      { metodo: 'GET', ruta: '/api/v1/subastas', muestras: 99, percentilMs: 10 },
-    ],
-    ...extra,
-  };
+const TODAS = {
+  '/disponibilidad': { cuerpo: ESTADO },
+  '/disponibilidad/informe': { cuerpo: INFORME_DE_DISPONIBILIDAD },
+  '/tecnicas': { cuerpo: TECNICAS },
+  '/latencia/informe': { cuerpo: LATENCIA },
+  '/consultas/informe': { cuerpo: CONSULTAS },
+  '/degradacion': { cuerpo: DEGRADACION },
+  '/latencia/informe/texto': { cuerpo: 'Informe de latencia — metricas-plataforma' },
+};
+
+function montar(respuestas = TODAS, opciones = {}) {
+  document.body.innerHTML = `
+    <main>
+      <div data-zona="encabezado"></div>
+      <div data-zona="indicadores"></div>
+      <div data-zona="paneles"></div>
+    </main>`;
+  const fetchImpl = servicio(respuestas);
+  const descargar = jest.fn();
+  const vista = montarPanelMetricas(document, {
+    fetchImpl,
+    descargar,
+    actualizarSola: false,
+    ...opciones,
+  });
+  return { fetchImpl, descargar, vista };
 }
 
-beforeEach(() => {
-  document.body.replaceChildren();
-});
+const panelDe = (id) => document.querySelector(`[data-panel="${id}"]`);
+const cifra = (etiqueta) => document.querySelector(`[data-indicador="${etiqueta}"]`);
 
-describe('estados de la vista', () => {
-  it('muestra que esta cargando sin dejar la pantalla en blanco', () => {
-    const caja = contenedor();
-
-    pintarCargando(caja);
-
-    expect(caja.querySelector('[data-estado="cargando"]')).not.toBeNull();
-    expect(caja.querySelectorAll('.esqueleto').length).toBeGreaterThan(0);
-    expect(caja.textContent).toContain('Cargando');
+describe('presentación', () => {
+  test('los minutos sin servicio se dicen como se leen', () => {
+    expect(duracion(8)).toBe('8 min');
+    expect(duracion(60)).toBe('1 h');
+    expect(duracion(125)).toBe('2 h 5 min');
+    expect(duracion(1620)).toBe('1 d 3 h');
+    expect(duracion(null)).toBe('0 min');
   });
 
-  it('un fallo del servicio ofrece reintentar', async () => {
-    // MAPEO-ERRORES §5.1: fallo de la vista entera -> Estado de vista + reintentar.
-    const caja = contenedor();
-    const reintentos = [];
-
-    pintarError(caja, new Error('el servicio no respondio'), () => reintentos.push(1));
-    caja.querySelector('[data-accion="reintentar"]').click();
-
-    expect(caja.querySelector('[data-estado="error"]')).not.toBeNull();
-    expect(reintentos).toHaveLength(1);
-  });
-
-  it('sin muestras no se pinta un verde con ceros', () => {
-    // No medir no es lo mismo que cumplir: un servicio que nunca se
-    // instrumento no puede parecer el mas rapido del tablero.
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto({ sinDatos: true, muestras: 0 }));
-
-    expect(caja.querySelector('[data-estado="sin-datos"]')).not.toBeNull();
-    expect(caja.textContent).toContain('No se puede afirmar que cumpla');
-    expect(caja.querySelector('[data-tabla="por-tipo"]')).toBeNull();
-  });
-});
-
-describe('falta la decision del Product Owner', () => {
-  it('no se pinta como un fallo ni ofrece reintentar', () => {
-    // Reintentar no arregla una decision de negocio pendiente. Mandar a
-    // alguien a pulsar un boton inutil es peor que explicarle que falta.
-    const caja = contenedor();
-    const error = new ErrorDeMetricas(
-      {
-        type: TIPO_PERCENTIL_NO_ACORDADO,
-        title: 'Percentil de evaluacion no acordado',
-        criterio: 'HU-REN-001 CA-03',
-        muestrasAcumuladas: 1284,
-      },
-      409,
+  test('una operación se dice con su verbo y su nombre, nunca con el método ni la ruta', () => {
+    expect(operacionLegible({ metodo: 'GET', ruta: '/api/v1/tecnicas' })).toBe(
+      'Consulta · Tablero técnico',
     );
-
-    pintarError(caja, error, () => {});
-
-    expect(caja.querySelector('[data-estado="sin-percentil"]')).not.toBeNull();
-    expect(caja.querySelector('[data-accion="reintentar"]')).toBeNull();
-    expect(caja.textContent).toContain('1284 muestras acumuladas');
-    expect(caja.textContent).toContain('HU-REN-001 CA-03');
-  });
-
-  it('se reconoce por el type y no por el texto', () => {
-    const otro = new ErrorDeMetricas(
-      {
-        type: 'https://nexusbattles.local/errores/otra-cosa',
-        title: 'Percentil de evaluacion no acordado',
-      },
-      409,
+    expect(operacionLegible({ metodo: 'GET', ruta: '/api/v1/admin/sistema/servicios' })).toBe(
+      'Consulta · Estado de los servicios',
     );
-
-    expect(otro.esPercentilNoAcordado()).toBe(false);
-  });
-});
-
-describe('la observabilidad es de administracion (#527)', () => {
-  test('un 403 no se pinta como fallo del servicio ni ofrece reintentar', () => {
-    const caja = contenedor();
-
-    pintarError(caja, new ErrorDeMetricas(null, 403), () => {});
-
-    const estado = caja.querySelector('.estado-vista');
-    expect(estado.dataset.estado).toBe('sin-permiso');
-    expect(estado.textContent).toMatch(/administración/i);
-    expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
-  });
-
-  test('un 401 invita a volver a entrar, no a reintentar', () => {
-    const caja = contenedor();
-
-    pintarError(caja, new ErrorDeMetricas(null, 401), () => {});
-
-    const estado = caja.querySelector('.estado-vista');
-    expect(estado.dataset.estado).toBe('sin-permiso');
-    expect(estado.textContent).toMatch(/sesi[oó]n/i);
-    expect(estado.querySelector('[data-accion="reintentar"]')).toBeNull();
-  });
-});
-
-describe('lecturas y escrituras separadas', () => {
-  it('pinta una fila por tipo con su percentil y su maximo', () => {
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto());
-
-    const filas = caja.querySelectorAll('[data-tabla="por-tipo"] tbody tr');
-    expect(filas).toHaveLength(2);
-    expect(filas[0].dataset.tipo).toBe('lectura');
-    expect(filas[0].textContent).toContain('10 ms');
-    expect(filas[1].dataset.tipo).toBe('escritura');
-    expect(filas[1].textContent).toContain('900 ms');
-  });
-
-  it('la escritura lenta se ve aunque el percentil global salga bien', () => {
-    // Este es el punto de HU-REN-002: sin separar, la puja de 900 ms queda
-    // enterrada bajo 99 listados de 10 ms y nadie la ve.
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto());
-
-    expect(caja.querySelector('[data-campo="resumen"]').textContent).toContain('312 ms');
-    expect(caja.querySelector('[data-tipo="escritura"]').textContent).toContain('900 ms');
-  });
-
-  it('con solo lecturas no se inventa una fila de escrituras', () => {
-    const caja = contenedor();
-
-    pintarInforme(
-      caja,
-      informeCompleto({
-        porTipo: [{ tipo: 'lectura', muestras: 40, percentilMs: 12, maximoMs: 30 }],
-      }),
+    // Una ruta que la consola no conoce se dice con sus palabras, sin
+    // prefijo de versión ni parámetros.
+    expect(operacionLegible({ metodo: 'POST', ruta: '/api/v1/subastas/{id}/pujas' })).toBe(
+      'Alta · Subastas › pujas',
     );
-
-    expect(caja.querySelectorAll('[data-tabla="por-tipo"] tbody tr')).toHaveLength(1);
-    expect(caja.querySelector('[data-tipo="escritura"]')).toBeNull();
+    expect(operacionLegible({ metodo: 'OPTIONS', ruta: '/api/v1/salas' })).toBe('Salas');
+    for (const ruta of ['/api/v1/tecnicas', '/api/v1/subastas/{id}/pujas', '/api/v1/x-y/{z}']) {
+      expect(operacionLegible({ metodo: 'GET', ruta })).not.toMatch(/\/|\{|GET/);
+    }
   });
 
-  it('con solo escrituras tampoco', () => {
-    const caja = contenedor();
-
-    pintarInforme(
-      caja,
-      informeCompleto({
-        porTipo: [{ tipo: 'escritura', muestras: 3, percentilMs: 90, maximoMs: 120 }],
-      }),
-    );
-
-    expect(caja.querySelectorAll('[data-tabla="por-tipo"] tbody tr')).toHaveLength(1);
-    expect(caja.querySelector('[data-tipo="lectura"]')).toBeNull();
+  test('una función limitada dice su causa con el nombre del servicio', () => {
+    const tabla = listaDeDegradacion(DEGRADACION);
+    const fila = tabla.querySelector('[data-fila]');
+    expect(fila.textContent).toContain('Inventario');
+    expect(fila.textContent).toContain('Inventario no responde');
+    expect(tabla.textContent).not.toContain('inventario no responde');
   });
 
-  it('sin desglose no se pinta la tabla vacia', () => {
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto({ porTipo: [] }));
-
-    expect(caja.querySelector('[data-tabla="por-tipo"]')).toBeNull();
-  });
-});
-
-describe('el objetivo se presenta como referencia, no como umbral de esta pantalla', () => {
-  it('dice de donde sale el número, en el idioma de quien opera', () => {
-    // HU-REN-002 no define ningun umbral propio. Presentar los 500 ms como
-    // "su" limite seria inventarle un requisito, asi que se dice de donde
-    // viene el numero.
-    //
-    // UX-R3.1 — antes lo decia nombrando dos identificadores de requisito en
-    // pantalla. Quien opera el Nexo no sabe que es RNF-REN-001; lo que se
-    // pregunta es si puede cambiar ese numero y donde. La respuesta es la
-    // misma y ahora esta dicha: la configuracion del servicio.
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto());
-
-    const referencia = caja.querySelector('[data-campo="referencia-objetivo"]').textContent;
-    expect(referencia).toContain('Objetivo de referencia: 500 ms');
-    expect(referencia).toContain('configuración del servicio');
-    expect(referencia).not.toMatch(/RNF-|HU-/);
-  });
-
-  it('el veredicto habla del objetivo configurado', () => {
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto({ cumple: false }));
-
-    const veredicto = caja.querySelector('[data-campo="veredicto"]');
-    expect(veredicto.className).toContain('aviso--error');
-    expect(veredicto.textContent).toContain('objetivo configurado');
-  });
-});
-
-describe('operaciones mas lentas', () => {
-  it('lista metodo y ruta de cada una', () => {
-    const caja = contenedor();
-
-    pintarInforme(caja, informeCompleto());
-
-    const filas = caja.querySelectorAll('[data-tabla="operaciones"] tbody tr');
-    expect(filas).toHaveLength(2);
-    expect(filas[0].textContent).toContain('POST /api/v1/subastas/{subastaId}/pujas');
-  });
-});
-
-describe('exportacion para el acta', () => {
-  it('exporta exactamente lo que se esta viendo', () => {
-    const texto = informeComoTexto(informeCompleto());
-
-    expect(texto).toContain('ms-subastas');
-    expect(texto).toContain('p95: 312 ms');
-    expect(texto).toContain('Resultado: CUMPLE');
-    expect(texto).toContain('lectura: 10 ms');
-    expect(texto).toContain('escritura: 900 ms');
-    // «Exactamente lo que se esta viendo» incluye NO traer lo que la pantalla
-    // ya no dice: el identificador del requisito salio del panel en UX-R3.1 y
-    // el texto exportado lo sigue al pie de la letra, que es su contrato.
-    expect(texto).toContain('Objetivo de referencia: 500 ms');
-    expect(texto).not.toMatch(/RNF-|HU-/);
-  });
-
-  it('sin datos, el texto tampoco se lee como un verde', () => {
-    const texto = informeComoTexto(informeCompleto({ sinDatos: true, muestras: 0 }));
-
-    expect(texto).toContain('SIN DATOS');
-    expect(texto).not.toContain('Resultado: CUMPLE');
-  });
-});
-
-describe('arranque del panel', () => {
-  it('pide el informe y lo pinta', async () => {
-    const caja = contenedor();
-
-    await iniciarPanel(caja, { obtener: async () => informeCompleto() });
-
-    expect(caja.querySelector('[data-estado="con-datos"]')).not.toBeNull();
-    expect(caja.dataset.ultimoInforme).toContain('escritura: 900 ms');
-  });
-
-  it('si el servicio falla, deja la pantalla con salida', async () => {
-    const caja = contenedor();
-
-    await iniciarPanel(caja, {
-      obtener: async () => {
-        throw new Error('conexion rechazada');
-      },
+  test('las cifras de arriba salen de lo que respondió, sin inventar lo que falta', () => {
+    const [mes, objetivo, interrupciones, limitadas] = cifrasDeMetricas({
+      disponibilidad: INFORME_DE_DISPONIBILIDAD,
+      degradacion: DEGRADACION,
     });
+    expect(mes).toMatchObject({ valor: '99,81 %', tono: 'error', detalle: 'Objetivo: 99,95 %' });
+    expect(objetivo).toMatchObject({
+      valor: '1 de 3',
+      tono: 'advertencia',
+      detalle: 'Por debajo: Subastas, Salas y partidas',
+    });
+    expect(interrupciones.valor).toBe(3);
+    expect(interrupciones.detalle).toMatch(/^La última: Subastas, /);
+    expect(limitadas).toMatchObject({ valor: 1, tono: 'error', detalle: 'Inventario' });
 
-    expect(caja.querySelector('[data-accion="reintentar"]')).not.toBeNull();
+    const sinFuentes = cifrasDeMetricas({ disponibilidad: null, degradacion: null });
+    expect(sinFuentes.map((c) => c.valor)).toEqual([null, null, null, null]);
+    expect(
+      cifrasDeMetricas({ disponibilidad: null, degradacion: { seccionesLimitadas: [] } })[3],
+    ).toMatchObject({ valor: 0, tono: 'exito', detalle: 'Todo funciona con normalidad' });
   });
 
-  it('sin contenedor falla con un mensaje claro', async () => {
-    await expect(iniciarPanel(null, { obtener: async () => informeCompleto() })).rejects.toThrow(
-      /contenedor/,
+  test('la disponibilidad por servicio: el más bajo primero, con su estado de ahora', () => {
+    document.body.replaceChildren(tablaDeDisponibilidad(INFORME_DE_DISPONIBILIDAD, ESTADO));
+    const filas = [...document.querySelectorAll('tbody tr')];
+    expect(filas.map((f) => f.dataset.fila)).toEqual(['ms-subastas', 'salas-partidas', 'torneos']);
+    expect(filas[0].textContent).toContain('Subastas');
+    expect(filas[0].textContent).toContain('Sin respuesta');
+    expect(filas[0].textContent).toContain('99,81 %');
+    expect(filas[0].textContent).toContain('1 h 22 min');
+    expect(filas[0].textContent).toMatch(/En curso desde /);
+    expect(filas[2].textContent).toContain('En línea');
+    expect(document.body.textContent).not.toContain('ms-subastas');
+  });
+
+  test('los tiempos por servicio: nombres de producto, el máximo sobre el objetivo marcado', () => {
+    document.body.replaceChildren(tablaDeTiempos(TECNICAS));
+    const salas = document.querySelector('[data-fila="salas-partidas"]');
+    expect(salas.textContent).toContain('Salas y partidas');
+    expect(salas.textContent).toContain('38 ms');
+    expect(salas.querySelector('.estado-admin[data-tono="advertencia"]').textContent).toContain(
+      '812 ms',
+    );
+    expect(salas.textContent).toContain('5.240');
+    expect(salas.textContent).toMatch(/0,06 % de las peticiones/);
+    expect(document.querySelector('[data-fila="correo"]').textContent).toContain(
+      'No se pudo medir en esta ronda',
+    );
+    expect(document.body.textContent).not.toMatch(/5xx|Maxima|n\/d/);
+  });
+
+  test('el detalle del percentil: cifras, por tipo y las operaciones más lentas', () => {
+    document.body.replaceChildren(...detalleDeLatencia(LATENCIA));
+    expect(cifra('Tiempo de respuesta (p95)').textContent).toContain('312 ms');
+    expect(cifra('Tiempo de respuesta (p95)').dataset.tono).toBe('exito');
+    expect(document.body.textContent).toContain('Lecturas');
+    expect(document.body.textContent).toContain('Escrituras');
+    expect(document.body.textContent).toContain('Consulta · Tablero técnico');
+    expect(document.body.textContent).not.toContain('/api/');
+    expect(detalleDeLatencia({ ...LATENCIA, sinDatos: true })[0].textContent).toContain(
+      'Todavía no hay mediciones',
+    );
+  });
+
+  test('las consultas a la base de datos en cifras, sin enseñar las sentencias', () => {
+    document.body.replaceChildren(cifrasDeConsultas(CONSULTAS));
+    expect(cifra('Consultas lentas').textContent).toContain('3');
+    expect(cifra('Consultas lentas').textContent).toContain('Más de 500 ms');
+    expect(document.body.textContent).not.toMatch(/select|from muestras/i);
+  });
+
+  test('las funciones limitadas, o que todo funciona', () => {
+    document.body.replaceChildren(listaDeDegradacion(DEGRADACION));
+    expect(document.body.textContent).toContain('Inventario');
+    document.body.replaceChildren(listaDeDegradacion({ seccionesLimitadas: [] }));
+    expect(document.body.textContent).toContain('Todo funciona con normalidad');
+  });
+});
+
+describe('la página', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  test('encabezado, cifras y cada sección con su fuente, sin textos de trabajo', async () => {
+    montar();
+    await asentar();
+
+    expect(document.querySelector('h1').textContent).toBe('Métricas de plataforma');
+    expect(cifra('Disponibilidad del mes').textContent).toContain('99,81 %');
+    expect(panelDe('disponibilidad').querySelectorAll('tbody tr')).toHaveLength(3);
+    expect(panelDe('tiempos').textContent).toContain('Objetivo de tiempo de respuesta: 500 ms');
+    expect(panelDe('latencia').textContent).toContain('312 ms');
+    expect(panelDe('consultas').textContent).toContain('Consultas medidas');
+    expect(panelDe('degradacion').textContent).toContain('Inventario');
+    expect(document.querySelector('[data-zona="actualizacion"]').textContent).toContain(
+      'Actualizado a las',
+    );
+    expect(document.body.textContent).not.toMatch(
+      /shared\/libs|recalcula|para el acta|Product Owner|HU-|RNF|observabilidad/,
+    );
+  });
+
+  test('si una fuente no responde, lo dice su sección y el resto sigue', async () => {
+    montar({
+      ...TODAS,
+      '/consultas/informe': { estado: 503, cuerpo: { title: 'Caído', status: 503 } },
+    });
+    await asentar();
+
+    expect(panelDe('consultas').textContent).toContain('No pudimos cargar las consultas');
+    expect(panelDe('consultas').querySelector('[data-indicador]')).toBeNull();
+    expect(panelDe('disponibilidad').querySelectorAll('tbody tr')).toHaveLength(3);
+  });
+
+  test('sin rol de administración, cada sección lo dice sin códigos', async () => {
+    const prohibido = { estado: 403, cuerpo: { title: 'Prohibido', status: 403 } };
+    montar(Object.fromEntries(Object.keys(TODAS).map((ruta) => [ruta, prohibido])));
+    await asentar();
+
+    expect(panelDe('disponibilidad').textContent).toContain('Esta sección es de administración');
+    expect(document.body.textContent).not.toContain('403');
+    expect(cifra('Disponibilidad del mes').dataset.sinDato).toBe('si');
+  });
+
+  test('«Descargar informe» guarda el informe redactado que publica el servicio', async () => {
+    const { descargar } = montar();
+    await asentar();
+    document.querySelector('[data-accion="descargar-informe"]').click();
+    await asentar();
+    expect(descargar).toHaveBeenCalledWith(
+      'informe-de-tiempos.txt',
+      'Informe de latencia — metricas-plataforma',
+      'text/plain',
     );
   });
 });

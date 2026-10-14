@@ -138,11 +138,11 @@ function servicio(rutas) {
 }
 
 describe('presentacion', () => {
-  test('porcentaje y ms formatean o dicen n/d', () => {
+  test('porcentaje y ms formatean o dicen «Sin dato»', () => {
     expect(porcentaje(0.914)).toBe('91 %');
-    expect(porcentaje(null)).toBe('n/d');
+    expect(porcentaje(null)).toBe('Sin dato');
     expect(ms(40.2)).toBe('40 ms');
-    expect(ms(undefined)).toBe('n/d');
+    expect(ms(undefined)).toBe('Sin dato');
   });
 
   test('filaDe marca en alerta lo que supera los umbrales del servicio', () => {
@@ -153,7 +153,7 @@ describe('presentacion', () => {
       cpuEnAlerta: true,
       maximo: '820 ms',
       maximoEnAlerta: true,
-      tasaDeError: '0.25 %',
+      tasaDeError: '0,25 %',
       memoria: '180 MB',
     });
     const brecha = filaDe(t.servicios[1], t.umbrales);
@@ -186,7 +186,8 @@ describe('presentacion', () => {
 });
 
 const VISTA = `
-  <button data-accion="recargar-tecnicas"></button>
+  <div data-zona="encabezado"></div>
+  <div data-zona="control-tecnicas"></div>
   <button data-accion="exportar-tecnicas"></button>
   <div data-zona="tecnicas"></div>
   <form data-zona="periodo"><input name="desde" /><input name="hasta" /><button type="submit"></button><button type="button" data-accion="exportar-moderacion"></button></form>
@@ -230,20 +231,35 @@ describe('vista', () => {
     montarTableroTecnico(document, { fetchImpl });
     await asentar();
     await asentar();
+    // SA-8 (punto 24): la tabla de la consola, con nombres de producto y lo
+    // que supera un umbral marcado; sin «Brecha de observabilidad» ni el
+    // motivo técnico de la conexión.
+    expect(document.querySelector('h1').textContent).toBe('Tablero técnico');
     const tabla = document.querySelector('[data-zona="tabla-tecnica"]');
     expect(tabla.querySelectorAll('tbody tr')).toHaveLength(2);
-    expect(
-      tabla.querySelector('[data-servicio="salas-partidas"] [data-alerta="true"]'),
-    ).not.toBeNull();
-    expect(tabla.querySelector('[data-servicio="correo"][data-brecha="true"]').textContent).toMatch(
-      /Brecha de observabilidad/,
+    const salas = tabla.querySelector('[data-fila="salas-partidas"]');
+    expect(salas.textContent).toContain('Salas y partidas');
+    expect(salas.querySelectorAll('[data-alerta="true"]')).toHaveLength(2);
+    expect(salas.textContent).toContain('0,25 %');
+    expect(tabla.querySelector('[data-fila="correo"] [data-brecha="true"]').textContent).toContain(
+      'No se pudo medir en esta ronda',
     );
-    expect(document.querySelector('[data-zona="brechas"]').textContent).toMatch(
-      /correo: Connection refused/,
+    expect(document.querySelector('[data-zona="brechas"]').textContent).toBe(
+      'No se pudo medir un servicio en esta ronda: Correo.',
     );
-    expect(
-      document.querySelectorAll('[data-zona="tecnicas"] [data-zona="alertas"] li.aviso'),
-    ).toHaveLength(2);
+    const alertasTecnicas = document.querySelectorAll(
+      '[data-zona="tecnicas"] [data-zona="alertas"] li.aviso',
+    );
+    expect(alertasTecnicas).toHaveLength(2);
+    expect(alertasTecnicas[0].textContent).toBe(
+      'Salas y partidas · Procesador: uso de procesador 91 % por encima del 75 %',
+    );
+    expect(document.querySelector('[data-zona="tecnicas"]').textContent).not.toMatch(
+      /Connection refused|Brecha|5xx|n\/d|\[cpu\]|Generado/,
+    );
+    expect(document.querySelector('[data-zona="actualizacion"]').textContent).toContain(
+      'Actualizado a las',
+    );
 
     expect(document.querySelector('[data-zona="resumen-moderacion"]').textContent).toMatch(
       /6 sanciones/,

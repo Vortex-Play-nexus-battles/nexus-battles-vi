@@ -175,6 +175,7 @@ services:
       CORREO_RECUPERACION_CLAVE_URL: http://srv-correo:8082/api/v1/correos/recuperacion-clave
       CORREO_CONFIRMACION_CUENTA_URL: http://srv-correo:8082/api/v1/correos/confirmacion-cuenta
       CORREO_CAMBIO_CLAVE_URL: http://srv-correo:8082/api/v1/correos/cambio-clave
+      CORREO_CIERRE_CUENTA_URL: http://srv-correo:8082/api/v1/correos/cierre-cuenta
       # B2 (BACKEND-02): la lista negra es fail-closed. Sin esta URL el
       # servicio caia a localhost:8086 (su defecto de desarrollo), no llegaba a
       # nadie y, desde B2, el registro responderia 503. Y el panel delega las
@@ -805,6 +806,11 @@ services:
       DIRECTORIO_ACTIVO_CLIENT_SECRET: e2e-secreto-de-notificaciones
       PRODUCTOS_BASE_URL: http://srv-productos:8080
       NOTIFICACIONES_CATALOGO_INTERVALO_MINIMO_S: "1"
+      # SA-11 (§7.3.7): los cambios en las politicas de uso que publica la
+      # administracion en srv-admin-parametros (lectura publica). Intervalo de
+      # 1 s por la misma razon que el catalogo.
+      PARAMETROS_URL: http://srv-admin-parametros:8088/api/v1
+      NOTIFICACIONES_POLITICAS_INTERVALO_MINIMO_S: "1"
     depends_on:
       e2e-plataforma-db: { condition: service_healthy }
       srv-ms-identidad: { condition: service_healthy }

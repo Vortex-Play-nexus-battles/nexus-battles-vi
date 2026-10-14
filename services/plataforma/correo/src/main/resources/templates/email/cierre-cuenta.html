@@ -1,0 +1,48 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org" xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{email/layout-corporativo}">
+<!--/*
+  Confirmacion de la eliminacion de la cuenta (§7.3.6 «Notificacion de
+  confirmacion al completar la eliminacion»). Lo envia ms-identidad justo
+  despues de anonimizar la cuenta, a la direccion que tenia: es lo ultimo que
+  el sistema hace con ella. Dice que se elimino, cuando, y que se conserva y
+  por que (registros financieros y de auditoria, sin datos que la
+  identifiquen). Comentario de Thymeleaf: no llega al correo.
+*/-->
+<body>
+  <table>
+    <tbody>
+      <tr layout:fragment="contenido">
+        <td align="left" style="font-size:0px;padding:10px 25px;word-break:break-word;">
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:20px;font-weight:700;line-height:28px;color:#111726;padding-bottom:12px;">
+            Tu cuenta fue eliminada
+          </div>
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-bottom:16px;">
+            Hola, <span th:text="${apodo}">Jugador</span>. Completamos la solicitud de
+            eliminación de tu cuenta de The Nexus Battles VI: tu perfil, tus datos de
+            contacto, tus preguntas de seguridad y tu segundo factor ya no existen, y ya
+            no puedes entrar con esta cuenta.
+          </div>
+
+          <table border="0" cellpadding="0" cellspacing="0" role="presentation"
+                 style="background:#E4F5E9;border-radius:6px;width:100%;">
+            <tbody>
+              <tr>
+                <td style="font-family:Arial, Helvetica, sans-serif;font-size:14px;line-height:22px;color:#086B31;padding:12px 16px;">
+                  Eliminación completada: <strong th:text="${fechaHora}">—</strong>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:24px;color:#111726;padding-top:16px;">
+            Por ley se conservan los registros financieros y de auditoría de tu actividad,
+            sin ningún dato que permita identificarte. Este es el último correo que te
+            enviamos a esta dirección.
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

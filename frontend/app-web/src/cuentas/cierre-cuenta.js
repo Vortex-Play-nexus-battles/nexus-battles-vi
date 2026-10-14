@@ -434,7 +434,9 @@ export function montarCierreDeCuenta(
     pintarAviso(zonaAviso, {
       tono: 'exito',
       titulo: 'Programaste el cierre de tu cuenta',
-      detalle: `Se eliminará el ${fecha(situacion.programadoPara)}. Hasta entonces puedes cancelarlo desde aquí.`,
+      detalle:
+        `Se eliminará el ${fecha(situacion.programadoPara)}. Hasta entonces puedes cancelarlo desde aquí. ` +
+        'Cuando se complete, te llegará una confirmación a tu correo.',
     });
     zonaAviso.focus();
   });

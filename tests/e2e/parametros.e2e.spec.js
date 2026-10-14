@@ -12,7 +12,9 @@
  *      suspension de 72 h ahora se rechaza (400) y una de 24 h entra
  *   5. un cambio con vigencia futura queda programado y el valor vigente no
  *      cambia (CA-03)
- *   6. la vista muestra el catalogo con el inalterable bloqueado
+ *   6. la vista (SA-8, punto 22): nombres de producto, el fijo dicho sin
+ *      referencias internas, y un cambio hecho desde su panel con motivo que
+ *      queda en el historial con el apodo de quien lo hizo
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -192,9 +194,20 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
     expect((await ligero.json()).valor).toBe('50');
   });
 
-  test('la vista muestra el catalogo con el inalterable bloqueado y el formulario del administrador', async ({
+  test('la vista: nombres de producto, el fijo sin referencias internas y el cambio desde su panel (SA-8)', async ({
     page,
   }) => {
+    // Punto de partida fijo: 2 días. También si Playwright reintenta la prueba
+    // después de que el primer intento ya hizo el cambio.
+    const vigente = await api.get(`/api/v1/parametros/${PARAMETRO}/valor`);
+    if ((await vigente.json()).valor !== '2') {
+      const reponer = await api.put(`/api/v1/parametros/${PARAMETRO}`, {
+        headers: conToken(admin.token),
+        data: { valor: '2', motivo: 'Punto de partida de la vista (E2E)' },
+      });
+      expect(reponer.status(), await reponer.text()).toBe(200);
+    }
+
     await page.addInitScript(
       ([token, nombre, uid]) => {
         sessionStorage.setItem('nexus.token', token);
@@ -204,24 +217,40 @@ test.describe('Parametros del sistema (HU-ADM-001)', () => {
       [admin.token, ADMIN, admin.claims.uid],
     );
     await page.goto(`${BORDE}${VISTA}`);
-    await expect(page.locator(`[data-clave="${PARAMETRO}"]`)).toBeVisible({ timeout: 20000 });
-    // R8.2 — `p[...]` y no `[...]` a secas: desde PR-UX-7 (#596) el formulario
-    // se construye con `campo()` del kit, que estampa `data-campo="valor"` en su
-    // caja. Dentro de la misma fila hay ahora DOS nodos con ese marcador —el
-    // parrafo del valor vigente y el campo del formulario— y Playwright, en modo
-    // estricto, se niega a elegir. El texto esperado NO cambio: el fallo era del
-    // localizador. (La ambiguedad de fondo queda anotada: `data-campo` significa
-    // dos cosas distintas desde #596.)
-    await expect(page.locator(`[data-clave="${PARAMETRO}"] p[data-campo="valor"]`)).toContainText(
-      'Vigente: 2 dias',
+    const fila = (clave) => page.locator(`[data-fila="${clave}"]`);
+    await expect(fila(PARAMETRO)).toContainText('Suspensión máxima', { timeout: 20000 });
+    await expect(fila(PARAMETRO).locator('[data-campo="valor"]')).toContainText('2 días');
+    // Punto 22 del informe: el fijo dice «Fijo», sin Charter ni RNF, y no se edita.
+    await expect(fila('torneos.cupos').locator('[data-campo="fijo"]')).toHaveText('Fijo');
+    await expect(fila('torneos.cupos').locator('[data-accion="cambiar"]')).toHaveCount(0);
+    await expect(fila('chat.historial.tamano').locator('[data-campo="programado"]')).toContainText(
+      'Pasará a 100 mensajes',
     );
-    await expect(page.locator(`[data-clave="${PARAMETRO}"] [data-zona="cambio"]`)).toBeVisible();
-    await expect(
-      page.locator('[data-clave="torneos.cupos"] [data-campo="bloqueado"]'),
-    ).toContainText('Charter');
-    await expect(page.locator('[data-clave="torneos.cupos"] [data-zona="cambio"]')).toHaveCount(0);
-    await expect(
-      page.locator('[data-clave="chat.historial.tamano"] [data-campo="programado"]'),
-    ).toContainText('Programado: 100');
+    await expect(page.locator('main')).not.toContainText(
+      /Charter|RNF-|RF-[A-Z]|HU-[A-Z]|pendiente del PO|origen:/,
+    );
+
+    // Cambiar desde su panel: lo que admite, la frase de lo que pasará y el motivo.
+    await fila(PARAMETRO).locator('[data-accion="cambiar"]').click();
+    const panel = page.locator('[role="dialog"]');
+    await expect(panel).toContainText('Entre 1 y 365 días');
+    await panel.locator('[name="valor"]').fill('3');
+    await expect(panel.locator('[data-zona="resumen-del-cambio"]')).toHaveText(
+      'Pasará de 2 días a 3 días, de inmediato.',
+    );
+    await panel.locator('[name="motivo"]').fill('Ajuste desde la consola (E2E)');
+    await panel.locator('[data-accion="guardar-cambio"]').click();
+    await expect(page.locator('[data-zona="aviso"]')).toContainText(
+      'Suspensión máxima: ahora 3 días.',
+      { timeout: 20000 },
+    );
+    await expect(fila(PARAMETRO).locator('[data-campo="valor"]')).toContainText('3 días');
+
+    // Y queda en el historial, con el apodo de quien lo hizo.
+    await fila(PARAMETRO).locator('[data-accion="historial"]').click();
+    const historial = page.locator('[role="dialog"] [data-zona="historial"]');
+    await expect(historial).toContainText('2 días → 3 días', { timeout: 20000 });
+    await expect(historial).toContainText('Ajuste desde la consola (E2E)');
+    await expect(historial).toContainText(`Por ${ADMIN}`);
   });
 });

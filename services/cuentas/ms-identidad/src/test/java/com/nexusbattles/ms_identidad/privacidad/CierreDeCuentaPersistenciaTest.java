@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.privacidad;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
 import com.nexusbattles.ms_identidad.auth.model.DispositivoConocido;
 import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.TokenCredencial;
@@ -109,7 +110,7 @@ class CierreDeCuentaPersistenciaTest {
     private AnonimizadorDeCuentas anonimizadorA(LocalDateTime cuando) {
         Clock reloj = Clock.fixed(cuando.atZone(ZoneId.systemDefault()).toInstant(), ZoneId.systemDefault());
         return new AnonimizadorDeCuentas(solicitudes, usuarios, perfiles, preguntas,
-                mock(AvatarStorageService.class), mock(AuditoriaDeCuenta.class), transacciones,
+                mock(AvatarStorageService.class), mock(AuditoriaDeCuenta.class), mock(CorreoClient.class), transacciones,
                 new BCryptPasswordEncoder(4), reloj);
     }
 

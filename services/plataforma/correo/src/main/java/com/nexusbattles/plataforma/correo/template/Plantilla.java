@@ -33,7 +33,9 @@ public enum Plantilla {
     CONFIRMACION_COMPRA("confirmacion-compra"),
     SANCION("sancion"),
     /** Hitos de torneo (1.5.0, B10): asunto y mensaje los decide torneos. */
-    TORNEO("torneo");
+    TORNEO("torneo"),
+    /** La cuenta se elimino (1.7.0, SA-14, §7.3.6). */
+    CIERRE_CUENTA("cierre-cuenta");
 
     private final String nombre;
     private final Set<String> datosSensibles;

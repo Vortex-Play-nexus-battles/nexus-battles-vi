@@ -13,9 +13,13 @@
  */
 
 import { baseDeApi, ErrorDeMetricas } from './cliente-metricas.js';
+import { actualizacionPeriodica } from '../../comun/ui/admin/actualizacion.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { nombreDelServicio } from '../../comun/ui/admin/servicios.js';
+import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { h, nodo } from '../../comun/ui/dom.js';
-import { fecha as fechaLocal, numero } from '../../comun/ui/formato.js';
+import { fecha as fechaLocal, fechaHora, numero } from '../../comun/ui/formato.js';
 import { graficoDeBarras } from '../../comun/ui/admin/grafico.js';
 import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
 import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
@@ -65,14 +69,17 @@ export const api = {
 
 /* ---- Presentación (puro, probado) ---- */
 
-/** @returns {string} porcentaje legible o «n/d» */
+/** Lo que se lee donde el servicio no dio la cifra. */
+const SIN_DATO = 'Sin dato';
+
+/** @returns {string} porcentaje legible o «Sin dato» */
 export function porcentaje(fraccion) {
-  return typeof fraccion === 'number' ? `${Math.round(fraccion * 100)} %` : 'n/d';
+  return typeof fraccion === 'number' ? `${Math.round(fraccion * 100)} %` : SIN_DATO;
 }
 
-/** @returns {string} milisegundos redondeados o «n/d» */
+/** @returns {string} milisegundos redondeados o «Sin dato» */
 export function ms(valor) {
-  return typeof valor === 'number' ? `${Math.round(valor)} ms` : 'n/d';
+  return typeof valor === 'number' ? `${numero(Math.round(valor))} ms` : SIN_DATO;
 }
 
 /**
@@ -86,7 +93,9 @@ export function filaDe(metricas, umbrales) {
     cpu: porcentaje(metricas.cpu),
     cpuEnAlerta: typeof metricas.cpu === 'number' && metricas.cpu > umbrales.cpu,
     memoria:
-      typeof metricas.memoriaMb === 'number' ? `${Math.round(metricas.memoriaMb)} MB` : 'n/d',
+      typeof metricas.memoriaMb === 'number'
+        ? `${numero(Math.round(metricas.memoriaMb))} MB`
+        : SIN_DATO,
     peticiones: String(metricas.peticiones ?? 0),
     promedio: ms(metricas.promedioMs),
     maximo: ms(metricas.maximoMs),
@@ -95,8 +104,8 @@ export function filaDe(metricas, umbrales) {
     errores: String(metricas.errores5xx ?? 0),
     tasaDeError:
       typeof metricas.tasaDeError === 'number'
-        ? `${(metricas.tasaDeError * 100).toFixed(2)} %`
-        : 'n/d',
+        ? `${numero(metricas.tasaDeError * 100, 2)} %`
+        : SIN_DATO,
   };
 }
 
@@ -336,62 +345,117 @@ export function pintarModeracion(zona, tablero) {
 
 /* ---- DOM ---- */
 
-function celda(texto, enAlerta = false) {
-  const td = nodo('td', enAlerta ? 'celda--alerta' : undefined, texto);
-  if (enAlerta) {
-    td.dataset.alerta = 'true';
+/** Una cifra en alerta, marcada para quien no distingue el color. */
+function enAlerta(texto, alerta) {
+  if (!alerta) {
+    return texto;
   }
-  return td;
+  const marca = distintivoDeEstado({ texto, tono: 'advertencia' });
+  marca.dataset.alerta = 'true';
+  return marca;
 }
 
+/**
+ * SA-8 (punto 24) — la tabla técnica con el componente de la consola: cada
+ * servicio por su nombre, las cifras alineadas a la derecha y lo que supera
+ * un umbral marcado. Un servicio que no se pudo medir lo dice en su fila, sin
+ * el motivo técnico de la conexión.
+ */
 export function tablaTecnica(tablero) {
-  const tabla = nodo('table', 'tabla');
-  tabla.dataset.zona = 'tabla-tecnica';
-  const cabecera = nodo('thead');
-  const fila = nodo('tr');
-  ['Servicio', 'CPU', 'Memoria', 'Peticiones', 'Media', 'Maxima', 'Errores 5xx', 'Tasa'].forEach(
-    (t) => fila.appendChild(nodo('th', undefined, t)),
-  );
-  cabecera.appendChild(fila);
-  tabla.appendChild(cabecera);
-  const cuerpo = nodo('tbody');
-  tablero.servicios.forEach((m) => {
-    const f = filaDe(m, tablero.umbrales);
-    const tr = nodo('tr');
-    tr.dataset.servicio = f.servicio;
-    if (f.brecha) {
-      tr.dataset.brecha = 'true';
-      tr.appendChild(celda(f.servicio));
-      const td = celda(`Brecha de observabilidad: ${f.brecha}`, true);
-      td.colSpan = 7;
-      tr.appendChild(td);
-    } else {
-      tr.append(
-        celda(f.servicio),
-        celda(f.cpu, f.cpuEnAlerta),
-        celda(f.memoria),
-        celda(f.peticiones),
-        celda(f.promedio),
-        celda(f.maximo, f.maximoEnAlerta),
-        celda(f.errores),
-        celda(f.tasaDeError),
-      );
-    }
-    cuerpo.appendChild(tr);
+  const filas = tablero.servicios.map((m) => ({ ...filaDe(m, tablero.umbrales), origen: m }));
+  const sinMedir = (f, valor) => (f.brecha ? null : valor);
+  const tabla = tablaDeDatos({
+    titulo: 'Consumo y errores por servicio',
+    resumen: `${numero(filas.length)} ${filas.length === 1 ? 'servicio' : 'servicios'}`,
+    claveDeFila: (f) => f.servicio,
+    columnas: [
+      {
+        clave: 'servicio',
+        titulo: 'Servicio',
+        principal: true,
+        valor: (f) =>
+          f.brecha
+            ? h('span', {
+                clase: 'celda-doble',
+                datos: { brecha: 'true' },
+                hijos: [
+                  h('span', { texto: nombreDelServicio(f.servicio) }),
+                  h('span', { clase: 't-meta', texto: 'No se pudo medir en esta ronda' }),
+                ],
+              })
+            : nombreDelServicio(f.servicio),
+      },
+      {
+        clave: 'cpu',
+        titulo: 'Procesador',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, enAlerta(f.cpu, f.cpuEnAlerta)),
+      },
+      { clave: 'memoria', titulo: 'Memoria', tipo: 'numero', valor: (f) => sinMedir(f, f.memoria) },
+      {
+        clave: 'peticiones',
+        titulo: 'Peticiones',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, numero(Number(f.origen.peticiones) || 0)),
+      },
+      {
+        clave: 'promedio',
+        titulo: 'Tiempo medio',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, f.promedio),
+      },
+      {
+        clave: 'maximo',
+        titulo: 'Tiempo máximo',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, enAlerta(f.maximo, f.maximoEnAlerta)),
+      },
+      {
+        clave: 'errores',
+        titulo: 'Errores del servidor',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, numero(Number(f.origen.errores5xx) || 0)),
+      },
+      {
+        clave: 'tasa',
+        titulo: 'Tasa de error',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, f.tasaDeError),
+      },
+    ],
+    filas,
   });
-  tabla.appendChild(cuerpo);
+  tabla.dataset.zona = 'tabla-tecnica';
   return tabla;
 }
 
+/** Qué mide cada alerta, en palabras. */
+const NOMBRE_DE_METRICA = Object.freeze({
+  cpu: 'Procesador',
+  latencia: 'Tiempo de respuesta',
+  disponibilidad: 'Disponibilidad',
+});
+
+/** «Salas y partidas · Procesador: uso de procesador 91 % por encima del 75 %». */
+export function textoDeAlerta(alerta) {
+  if (typeof alerta === 'string') {
+    return alerta;
+  }
+  const detalle = String(alerta?.detalle ?? '');
+  return `${nombreDelServicio(alerta?.servicio)} · ${NOMBRE_DE_METRICA[alerta?.metrica] ?? 'Alerta'}: ${detalle}`;
+}
+
 function listaDeAlertas(alertas, vacio) {
+  if (alertas.length === 0) {
+    // Sin alertas no hay lista: se dice que todo está dentro de sus umbrales.
+    const bien = nodo('p', 'aviso aviso--exito', vacio);
+    bien.dataset.zona = 'alertas';
+    return bien;
+  }
   const ul = nodo('ul', 'pila pila--ajustada');
   ul.dataset.zona = 'alertas';
-  if (alertas.length === 0) {
-    ul.appendChild(nodo('li', 't-meta', vacio));
-  }
   alertas.forEach((a) => {
-    const texto = typeof a === 'string' ? a : `${a.servicio} [${a.metrica}]: ${a.detalle}`;
-    ul.appendChild(nodo('li', 'aviso aviso--advertencia', texto));
+    ul.appendChild(nodo('li', 'aviso aviso--advertencia', textoDeAlerta(a)));
   });
   return ul;
 }
@@ -436,7 +500,9 @@ function pintarError(zona, error, { informe, alReintentar = null } = { informe: 
  * Monta la vista: zonas `[data-zona="tecnicas"]`, `[data-zona="moderacion"]`,
  * formulario `[data-zona="periodo"]` y botones `[data-accion]`.
  */
-export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
+export function montarTableroTecnico(raiz, { fetchImpl, descargar, actualizarSola = true } = {}) {
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
+  const zonaControl = raiz.querySelector('[data-zona="control-tecnicas"]');
   const zonaTecnicas = raiz.querySelector('[data-zona="tecnicas"]');
   const zonaModeracion = raiz.querySelector('[data-zona="moderacion"]');
   const formPeriodo = raiz.querySelector('[data-zona="periodo"]');
@@ -453,38 +519,61 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
   let ultimaModeracion = null;
 
   async function cargarTecnicas() {
-    zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Recolectando métricas de los servicios…'));
+    // La primera vez se dice que se está midiendo; después, lo último bueno
+    // se queda a la vista mientras llega lo nuevo.
+    if (!zonaTecnicas.querySelector('[data-zona="tabla-tecnica"]')) {
+      zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Midiendo los servicios…'));
+    }
     try {
-      ultimoTecnico = await api.tecnicas(fetchImpl);
+      const tablero = await api.tecnicas(fetchImpl);
+      ultimoTecnico = tablero;
       zonaTecnicas.replaceChildren();
+      const umbrales = tablero.umbrales ?? {};
       zonaTecnicas.appendChild(
         nodo(
           'p',
           't-meta',
-          `Generado ${new Date(ultimoTecnico.generadoEn).toLocaleString('es-CO')} · umbrales: CPU ${porcentaje(ultimoTecnico.umbrales.cpu)}, latencia ${ultimoTecnico.umbrales.latenciaMs} ms, disponibilidad ${ultimoTecnico.umbrales.disponibilidadPorcentaje} %`,
+          `Medido el ${fechaHora(ultimoTecnico.generadoEn)} · Umbrales: procesador ${porcentaje(umbrales.cpu)}, tiempo de respuesta ${numero(umbrales.latenciaMs)} ms, disponibilidad ${numero(umbrales.disponibilidadPorcentaje, 2)} %`,
         ),
       );
       zonaTecnicas.appendChild(tablaTecnica(ultimoTecnico));
-      if (ultimoTecnico.brechas.length > 0) {
+      const sinMedir = ultimoTecnico.servicios.filter((m) => m.brecha);
+      if (sinMedir.length > 0) {
         const brechas = nodo(
           'p',
           'aviso aviso--advertencia',
-          `Brechas de observabilidad (${ultimoTecnico.brechas.length}): ${ultimoTecnico.brechas.join('; ')}`,
+          `No se pudo medir ${sinMedir.length === 1 ? 'un servicio' : `${sinMedir.length} servicios`} en esta ronda: ${sinMedir.map((m) => nombreDelServicio(m.servicio)).join(', ')}.`,
         );
         brechas.dataset.zona = 'brechas';
         zonaTecnicas.appendChild(brechas);
       }
       zonaTecnicas.appendChild(nodo('h3', undefined, 'Alertas'));
       zonaTecnicas.appendChild(
-        listaDeAlertas(ultimoTecnico.alertas, 'Sin alertas sobre los umbrales.'),
+        listaDeAlertas(ultimoTecnico.alertas, 'Ningún servicio supera sus umbrales.'),
       );
+      return true;
     } catch (error) {
       pintarError(zonaTecnicas, error, {
         informe: 'las métricas técnicas',
         alReintentar: () => cargarTecnicas(),
       });
+      return false;
     }
   }
+
+  const actualizacion = actualizacionPeriodica({
+    nombre: 'las métricas técnicas',
+    cadaMs: 60_000,
+    automatica: actualizarSola,
+    cargar: cargarTecnicas,
+  });
+  zonaControl?.replaceChildren(actualizacion.elemento);
+  zonaEncabezado?.replaceChildren(
+    encabezadoDePagina({
+      titulo: 'Tablero técnico',
+      descripcion: 'Consumo, tráfico y errores de cada servicio, y la actividad de moderación.',
+    }),
+  );
 
   async function cargarModeracion(desde, hasta) {
     zonaModeracion.replaceChildren(nodo('p', 't-meta', 'Consultando moderación…'));
@@ -499,9 +588,6 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
     }
   }
 
-  raiz
-    .querySelector('[data-accion="recargar-tecnicas"]')
-    ?.addEventListener('click', () => cargarTecnicas());
   raiz.querySelector('[data-accion="exportar-tecnicas"]')?.addEventListener('click', async () => {
     try {
       const texto = await api.tecnicasTexto(fetchImpl);
@@ -530,7 +616,11 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
     );
   });
 
-  cargarTecnicas();
+  if (zonaControl) {
+    actualizacion.actualizar();
+  } else {
+    cargarTecnicas();
+  }
   cargarModeracion(null, null);
-  return { cargarTecnicas, cargarModeracion };
+  return { cargarTecnicas, cargarModeracion, actualizacion };
 }
