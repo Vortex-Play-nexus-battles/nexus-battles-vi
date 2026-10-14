@@ -5855,6 +5855,29 @@ const CATALOGO_DE_PLATAFORMA = [
   }),
 ];
 
+/** SA-11 (§7.3.7): lo publicado en las políticas de uso, lo más reciente primero. */
+const CAMBIOS_DE_POLITICA = [
+  {
+    id: '9d0c6a52-7a59-4d4b-8f3e-2d64c1b2a002',
+    politica: 'TERMINOS_Y_CONDICIONES',
+    nombreDeLaPolitica: 'Términos y condiciones del servicio',
+    titulo: 'Reglas del chat',
+    descripcion:
+      'Los enlaces externos en el chat de las salas se ocultan hasta que un moderador los revise.',
+    vigenteDesde: '2026-10-20T05:00:00Z',
+    publicadoEn: '2026-10-13T16:10:00Z',
+  },
+  {
+    id: '9d0c6a52-7a59-4d4b-8f3e-2d64c1b2a001',
+    politica: 'POLITICA_DE_PRIVACIDAD',
+    nombreDeLaPolitica: 'Política de privacidad',
+    titulo: 'Datos del chat',
+    descripcion: 'Los mensajes del chat se guardan noventa días y después se borran.',
+    vigenteDesde: '2026-10-08T05:00:00Z',
+    publicadoEn: '2026-10-07T14:00:00Z',
+  },
+];
+
 export const ESCENARIOS_SA8 = [
   {
     id: 'parametros-poblado',
@@ -5863,6 +5886,7 @@ export const ESCENARIOS_SA8 = [
     sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
     rutas: [
       ['**/api/v1/parametros', json(CATALOGO_DE_PLATAFORMA)],
+      ['**/api/v1/parametros/politicas/cambios', json(CAMBIOS_DE_POLITICA)],
       [
         '**/api/v1/admin/titulares*',
         json([{ uid: UID_ADMIN_PARAMETROS, apodo: 'admin_operaciones', estado: 'ACTIVO' }]),
@@ -5873,6 +5897,7 @@ export const ESCENARIOS_SA8 = [
       '[data-area="Sanciones y moderación"] tbody tr',
       '[data-fila="torneos.cupos"] [data-campo="fijo"]',
       '[data-fila="chat.historial.tamano"] [data-campo="programado"]',
+      '[data-panel="politicas-de-uso"] tbody tr',
     ],
   },
 ];
@@ -5933,6 +5958,29 @@ ESCENARIOS_SA8.push(
     exige: ['[role="dialog"] [data-zona="historial"] .linea-tiempo__hecho'],
   },
 );
+
+ESCENARIOS_SA8.push({
+  id: 'parametros-politicas-publicar',
+  titulo:
+    'parámetros: publicar un cambio en las políticas de uso, con la vista previa del aviso (SA-11)',
+  ruta: 'plataforma/admin-parametros/parametros-admin.html',
+  sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+  rutas: ESCENARIOS_SA8[0].rutas,
+  interaccion: async (pagina) => {
+    await pagina.locator('[data-accion="publicar-cambio-de-politica"]').click();
+    const formulario = pagina.locator('[data-zona="publicacion"]');
+    await formulario.locator('[name="politica"]').selectOption('POLITICA_DE_PRIVACIDAD');
+    await formulario.locator('[name="titulo"]').fill('Datos de las partidas');
+    await formulario
+      .locator('[name="descripcion"]')
+      .fill('El historial de partidas se guarda un año y después se resume en tus estadísticas.');
+    await formulario.locator('[name="motivo"]').fill('Revisión anual de la política de datos');
+  },
+  exige: [
+    '[role="dialog"] [data-zona="vista-previa-del-aviso"]',
+    '[role="dialog"] [data-zona="consecuencia"]',
+  ],
+});
 
 ESCENARIOS_SA8.push({
   id: 'metricas-poblado',
