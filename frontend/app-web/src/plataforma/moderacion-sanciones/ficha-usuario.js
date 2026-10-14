@@ -15,10 +15,9 @@
  * | Comentarios publicados   | `GET /comentarios/moderacion/autores/{uid}/comentarios` (comentarios 1.7.0) |
  *
  * Lo demás que pide la ficha oficial —reportes, transacciones, subastas,
- * misiones, estadísticas y la auditoría sobre la cuenta— no lo publica hoy
- * ningún servicio para administración (cada uno lo explica en `SIN_FUENTE`).
- * La pantalla lo dice: «Sin fuente publicada». Un hueco con su razón es
- * información; una tabla inventada sería una mentira operativa.
+ * misiones, estadísticas, inventario y la auditoría sobre la cuenta— llega
+ * con las consultas administrativas por usuario de cada servicio (SA-3). La
+ * ficha no fabrica secciones vacías para aparentar: enseña lo que hay.
  *
  * ## Las reglas de la historia
  *
@@ -37,13 +36,14 @@
  */
 
 import { consultar, RESULTADO } from '../consola/cliente-consola.js';
-import { moduloNoImplementado, panel, pintarDesenlace, tabla } from '../consola/panel.js';
+import { panel, pintarDesenlace, tabla } from '../consola/panel.js';
 import { ESTADO_LEGIBLE } from '../comentarios/moderar-comentarios.js';
 import { urlDeVista } from '../../comun/acceso.js';
 import { rutaDeApi } from '../../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { aviso } from '../../comun/ui/aviso.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import {
@@ -90,57 +90,6 @@ export const DESENLACE_DE_FICHA = Object.freeze({
   NO_PUBLICADA: 'NO_PUBLICADA',
   NO_DISPONIBLE: 'NO_DISPONIBLE',
 });
-
-/**
- * Lo que la ficha oficial pide y ningún servicio publica hoy para
- * administración, con la razón dicha para quien opera. Revisado contra
- * `contracts/openapi/` (HU-USR-010): si un servicio publica la consulta, la
- * sección sale de esta lista y pasa a tener panel con datos.
- */
-export const SIN_FUENTE = Object.freeze([
-  {
-    id: 'reportes',
-    titulo: 'Reportes hechos y recibidos',
-    razon:
-      'El servicio de comentarios no publica los reportes por persona: ni los que hizo ni los ' +
-      'que recibieron sus comentarios. Se ven, comentario a comentario, en la cola de moderación.',
-  },
-  {
-    id: 'transacciones',
-    titulo: 'Transacciones',
-    razon:
-      'El servicio de finanzas solo deja consultar los movimientos de un jugador a ese mismo ' +
-      'jugador o a otro servicio; no hay una consulta para administración.',
-  },
-  {
-    id: 'subastas',
-    titulo: 'Subastas',
-    razon:
-      'El servicio de subastas publica el mercado y lo de quien tiene la sesión, pero no las ' +
-      'subastas o pujas de otra persona.',
-  },
-  {
-    id: 'misiones',
-    titulo: 'Misiones',
-    razon:
-      'El servicio de misiones publica el tablón, las misiones en curso y el historial de quien ' +
-      'tiene la sesión, no los de otra persona.',
-  },
-  {
-    id: 'estadisticas',
-    titulo: 'Estadísticas de juego',
-    razon:
-      'Las partidas y su resultado solo se publican para quien las jugó; no hay una consulta ' +
-      'por jugador para administración.',
-  },
-  {
-    id: 'auditoria',
-    titulo: 'Auditoría sobre esta cuenta',
-    razon:
-      'La auditoría se consulta por administrador, tipo de acción y fechas, pero no por la ' +
-      'persona afectada: no hay forma de traer solo lo que toca a esta cuenta.',
-  },
-]);
 
 /* -------------------------------------------------------------------------
    Qué cuenta, y dónde está la ficha
@@ -345,9 +294,7 @@ function pintarEncabezado(zona, ficha) {
   zona?.replaceChildren(
     encabezadoDePagina({
       titulo: ficha?.apodo ? `Ficha de ${ficha.apodo}` : 'Ficha del usuario',
-      descripcion:
-        'Lo que cada servicio publica de esta cuenta, en un solo sitio y con una línea de ' +
-        'tiempo de su actividad. Cada sección dice de dónde sale su dato.',
+      descripcion: 'Datos de la cuenta, sanciones, comentarios y actividad.',
     }),
   );
 }
@@ -496,7 +443,6 @@ async function pintarSecciones(zona, ficha, { consultarApi, ahora }) {
     seccion('cuenta', 'Cuenta', [panelDeLaCuenta(ficha), panelDeAcciones(ficha)]),
     seccion('historial', 'Sanciones y comentarios', [sanciones.elemento, comentarios.elemento]),
     seccion('actividad', 'Línea de tiempo', [linea.elemento]),
-    seccion('sin-fuente', 'Sin fuente publicada', SIN_FUENTE.map(panelSinFuente)),
   );
 
   await Promise.all([sanciones.cargar(), comentarios.cargar()]);
@@ -532,7 +478,6 @@ function panelDeLaCuenta(ficha) {
     id: 'cuenta',
     titulo: 'Datos de la cuenta',
     descripcion: 'Identidad, contacto, rol y estado.',
-    fuente: 'GET /api/v1/admin/usuarios/{usuario}/ficha',
   });
   pintarDesenlace(partes, yaCargado(ficha), datosDeLaCuenta);
   return partes.elemento;
@@ -629,12 +574,6 @@ function panelDeAcciones(ficha) {
         }),
       );
     }
-    lista.append(
-      h('p', {
-        clase: 't-meta',
-        texto: 'Ver o modificar su inventario: ningún servicio lo publica para administración.',
-      }),
-    );
     return lista;
   };
   pintarDesenlace(partes, yaCargado(ficha), pintar);
@@ -681,21 +620,21 @@ function panelPorUid({
   ficha,
   consultarApi,
 }) {
-  const partes = panel({ id, titulo, descripcion, fuente: `GET /api/v1${plantilla}` });
+  const partes = panel({ id, titulo, descripcion });
   const controlador = { elemento: partes.elemento, alReintentar: null, cargar: null };
 
   controlador.cargar = async () => {
     if (!ficha.uid) {
       vaciar(partes.zona).append(
-        moduloNoImplementado({
+        aviso({
+          tono: 'info',
           titulo: 'Sin identificador público',
-          razon:
-            `La cuenta no tiene identificador público (es anterior a él) y el servicio de ` +
-            `${servicio} solo conoce a las personas por ese identificador.`,
+          detalle:
+            `La cuenta es anterior al identificador público y el servicio de ${servicio} solo ` +
+            'conoce a las personas por él.',
         }),
       );
-      partes.sello.dataset.estado = 'neutro';
-      partes.sello.textContent = 'SIN DATO';
+      partes.sello.replaceChildren(distintivoDeEstado({ texto: 'Sin dato', tono: 'neutro' }));
       alCargar({ datos: vacio, falta: null });
       return;
     }
@@ -823,15 +762,6 @@ function pintarComentarios(historial) {
   });
 }
 
-/** @param {{id: string, titulo: string, razon: string}} seccionSinFuente */
-function panelSinFuente({ id, titulo, razon }) {
-  const partes = panel({ id, titulo });
-  vaciar(partes.zona).append(moduloNoImplementado({ titulo: 'Sin fuente publicada', razon }));
-  partes.sello.dataset.estado = 'neutro';
-  partes.sello.textContent = 'SIN FUENTE';
-  return partes.elemento;
-}
-
 /* -------------------------------------------------------------------------
    Línea de tiempo
    ------------------------------------------------------------------------- */
@@ -872,8 +802,11 @@ function panelDeLaLinea() {
   /** @param {{hechos: object[], faltan: string[]}} linea */
   const pintar = ({ hechos, faltan }) => {
     vaciar(partes.zona);
-    partes.sello.dataset.estado = faltan.length > 0 ? 'aviso' : 'ok';
-    partes.sello.textContent = faltan.length > 0 ? 'PARCIAL' : 'EN LINEA';
+    partes.sello.replaceChildren(
+      ...(faltan.length > 0
+        ? [distintivoDeEstado({ texto: 'Incompleta', tono: 'advertencia' })]
+        : []),
+    );
     partes.zona.append(
       hechos.length > 0
         ? lineaDeTiempo(hechos, {
@@ -890,14 +823,6 @@ function panelDeLaLinea() {
         }),
       );
     }
-    partes.zona.append(
-      h('p', {
-        clase: 't-meta',
-        texto:
-          'Entran la cuenta, las sanciones y los comentarios: el resto de secciones no tiene ' +
-          'fuente publicada.',
-      }),
-    );
   };
   return { elemento: partes.elemento, pintar };
 }

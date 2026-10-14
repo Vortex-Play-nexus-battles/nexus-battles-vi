@@ -107,32 +107,49 @@ describe('consultas que arman los filtros', () => {
 });
 
 describe('gráfico de registros por día', () => {
-  test('una barra por día, proporcional al máximo, con su valor al pasar el cursor', () => {
-    const svg = graficoDeRegistros(INDICADORES.registros);
+  test('una columna por día, proporcional al máximo, con su valor al pasar el cursor', () => {
+    const grafico = graficoDeRegistros(INDICADORES.registros);
 
-    const barras = [...svg.querySelectorAll('rect.grafico-registros__barra')];
-    expect(barras).toHaveLength(3);
-    expect(barras.map((b) => b.dataset.cuentas)).toEqual(['4', '0', '1']);
-    const altos = barras.map((b) => Number(b.getAttribute('height')));
+    const columnas = [...grafico.querySelectorAll('.grafico-admin__columna')];
+    expect(columnas).toHaveLength(3);
+    expect(columnas.map((c) => c.dataset.valor)).toEqual(['4', '0', '1']);
+    const altos = columnas.map((c) =>
+      parseFloat(c.querySelector('.grafico-admin__barra').style.getPropertyValue('--grafico-alto')),
+    );
     expect(altos[0]).toBeGreaterThan(altos[2]);
     expect(altos[1]).toBe(0);
     expect(altos[2] * 4).toBeCloseTo(altos[0]);
-    expect(barras[0].querySelector('title').textContent).toMatch(/4 cuentas nuevas$/);
-    expect(barras[2].querySelector('title').textContent).toMatch(/1 cuenta nueva$/);
+    expect(columnas[0].querySelector('.grafico-admin__globo').textContent).toMatch(
+      /: 4 cuentas nuevas$/,
+    );
   });
 
-  test('es una imagen accesible: dice el periodo, el total y el día con más altas', () => {
-    const svg = graficoDeRegistros(INDICADORES.registros);
+  test('lleva eje con marcas redondas, título con el periodo y resumen legible', () => {
+    const grafico = graficoDeRegistros(INDICADORES.registros);
 
-    expect(svg.getAttribute('role')).toBe('img');
-    const etiqueta = svg.getAttribute('aria-label');
-    expect(etiqueta).toContain('5 cuentas nuevas');
-    expect(etiqueta).toContain('3 días');
-    expect(etiqueta).toMatch(/más altas.*con 4/);
+    expect(grafico.querySelector('figcaption').textContent).toMatch(/^Registros por día · del /);
+    expect(
+      [...grafico.querySelectorAll('.grafico-admin__eje-y span')].map((s) => s.textContent),
+    ).toEqual(['4', '3', '2', '1', '0']);
+    expect(grafico.querySelector('.grafico-admin__resumen').textContent).toMatch(
+      /^5 cuentas nuevas en total · máximo 4/,
+    );
   });
 
-  test('sin altas en el periodo lo dice en la etiqueta, sin dividir por cero', () => {
-    const svg = graficoDeRegistros({
+  test('las barras repiten la tabla: el lector de pantalla lee la tabla, un día por fila', () => {
+    const grafico = graficoDeRegistros(INDICADORES.registros);
+
+    expect(grafico.querySelector('.grafico-admin__area').getAttribute('aria-hidden')).toBe('true');
+    const tabla = grafico.querySelector('details table');
+    expect(tabla.querySelectorAll('tbody tr')).toHaveLength(3);
+    expect([...tabla.querySelectorAll('thead th')].map((th) => th.textContent)).toEqual([
+      'Día',
+      'Cuentas nuevas',
+    ]);
+  });
+
+  test('sin altas en el periodo no divide por cero ni pinta barras altas', () => {
+    const grafico = graficoDeRegistros({
       desde: '2026-10-01',
       hasta: '2026-10-02',
       total: 0,
@@ -142,76 +159,70 @@ describe('gráfico de registros por día', () => {
       ],
     });
 
-    expect(svg.getAttribute('aria-label')).toContain('ninguna cuenta nueva');
-    for (const barra of svg.querySelectorAll('rect.grafico-registros__barra')) {
-      expect(Number(barra.getAttribute('height'))).toBe(0);
+    for (const barra of grafico.querySelectorAll('.grafico-admin__barra')) {
+      expect(parseFloat(barra.style.getPropertyValue('--grafico-alto'))).toBe(0);
     }
+    expect(grafico.querySelector('.grafico-admin__resumen').textContent).toMatch(
+      /^0 cuentas nuevas/,
+    );
   });
 });
 
 describe('indicadores pintados', () => {
+  const valor = (caja, etiqueta) =>
+    caja.querySelector(`[data-indicador="${etiqueta}"] .indicador-admin__valor`)?.textContent;
+
   test('el total y los cinco estados, con sus nombres en castellano', () => {
     const caja = contenedor(pintarIndicadores(INDICADORES));
 
-    const valor = (etiqueta) =>
-      caja.querySelector(`[data-indicador="${etiqueta}"] .indicador__valor`)?.textContent;
-    expect(valor('cuentas en total')).toBe('16');
-    expect(ESTADOS_DE_CUENTA.map(({ etiqueta }) => valor(etiqueta))).toEqual([
+    expect(valor(caja, 'Cuentas en total')).toBe('16');
+    expect(ESTADOS_DE_CUENTA.map(({ etiqueta }) => valor(caja, etiqueta))).toEqual([
       '10',
       '2',
       '0',
       '1',
       '3',
     ]);
-    expect(caja.textContent).toContain('suspendidas');
-    expect(caja.textContent).toContain('baneadas');
-    expect(caja.textContent).toContain('Sin contar las cuentas de pruebas automáticas');
+    expect(caja.textContent).not.toMatch(/pruebas automáticas|Contado a las/);
   });
 
-  test('un estado que no llegó es un guion, no un cero inventado', () => {
-    const caja = contenedor(pintarIndicadores({ ...INDICADORES, porEstado: { ACTIVO: 10 } }));
-
-    expect(caja.querySelector('[data-indicador="baneadas"] .indicador__valor').textContent).toBe(
-      '--',
-    );
-  });
-
-  test('un estado que el panel no conoce se enseña con su nombre, no se esconde', () => {
-    const caja = contenedor(
-      pintarIndicadores({ ...INDICADORES, porEstado: { ...INDICADORES.porEstado, CONGELADO: 2 } }),
-    );
-
-    expect(caja.textContent).toContain('CONGELADO');
-  });
-
-  test('el gráfico va con su tabla alternativa, un día por fila', () => {
+  test('suspendidas y baneadas llevan su tono con franja e icono, no solo color', () => {
     const caja = contenedor(pintarIndicadores(INDICADORES));
 
-    expect(caja.querySelector('svg.grafico-registros')).not.toBeNull();
-    const eje = [...caja.querySelectorAll('[data-zona="eje"] span')].map((s) => s.textContent);
-    expect(eje).toHaveLength(2);
-    expect(eje[0]).toMatch(/2026/);
-    const tabla = caja.querySelector('details table');
-    expect(tabla).not.toBeNull();
-    expect(tabla.querySelectorAll('tbody tr')).toHaveLength(3);
-    expect(tabla.querySelector('caption').textContent).toContain('5 cuentas nuevas');
+    expect(caja.querySelector('[data-indicador="Suspendidas"]').dataset.tono).toBe('advertencia');
+    expect(
+      caja.querySelector('[data-indicador="Baneadas"] .indicador-admin__icono'),
+    ).not.toBeNull();
   });
 
-  test('sin altas en el periodo, lo dice con palabras', () => {
+  test('un estado que no llegó es «sin dato», no un cero inventado', () => {
+    const caja = contenedor(pintarIndicadores({ ...INDICADORES, porEstado: { ACTIVO: 10 } }));
+
+    const baneadas = caja.querySelector('[data-indicador="Baneadas"]');
+    expect(baneadas.dataset.sinDato).toBe('si');
+    expect(baneadas.querySelector('.indicador-admin__valor').textContent).toBe('—Sin dato');
+  });
+
+  test('un estado que el panel no conoce se enseña con su nombre legible, no se esconde', () => {
     const caja = contenedor(
       pintarIndicadores({
         ...INDICADORES,
-        registros: {
-          ...INDICADORES.registros,
-          total: 0,
-          porDia: [{ fecha: '2026-10-01', cuentas: 0 }],
-        },
+        porEstado: { ...INDICADORES.porEstado, EN_REVISION: 2 },
       }),
     );
 
-    expect(caja.querySelector('[data-zona="sin-registros"]').textContent).toMatch(
-      /Nadie se registró/,
-    );
+    const desconocido = caja.querySelector('[data-indicador="En revision"]');
+    expect(desconocido.querySelector('.indicador-admin__cifra').textContent).toBe('2');
+    // Sin la constante en mayúsculas: el panel habla como el producto.
+    expect(caja.textContent).not.toContain('EN_REVISION');
+    // La rejilla cuenta la tarjeta de más.
+    expect(caja.querySelector('[data-zona="estados"]').dataset.cantidad).toBe('7');
+  });
+
+  test('el gráfico de registros va debajo de las cifras', () => {
+    const caja = contenedor(pintarIndicadores(INDICADORES));
+
+    expect(caja.querySelector('.rejilla-indicadores-admin + .grafico-admin')).not.toBeNull();
   });
 });
 
@@ -225,11 +236,11 @@ describe('exportar indicadores (CSV en el navegador)', () => {
       'Indicador,Valor',
       'Cuentas en total,16',
       'Activas,10',
-      'Pendientes de verificar el correo,2',
-      'Inactivas (administrativas sin activar),0',
+      'Sin verificar el correo,2',
+      'Pendientes de activar,0',
       'Suspendidas,1',
       'Baneadas,3',
-      'Sin cuentas de pruebas automáticas,Sí',
+      'Cuentas de prueba excluidas,Sí',
       'Contado,2026-10-05T15:00:00-05:00',
       '',
       'Día,Cuentas nuevas',
@@ -248,18 +259,34 @@ describe('panel de usuarios', () => {
     return { p, guardar };
   }
 
-  test('pide los indicadores ocultando las cuentas de pruebas y los pinta', async () => {
+  test('pide los indicadores sin las cuentas de prueba, con el filtro a la vista, y los pinta', async () => {
     const consultarApi = jest.fn(async () => conDatos(INDICADORES));
     const { p } = montar(consultarApi);
 
     await p.cargar();
 
     expect(consultarApi).toHaveBeenCalledWith('/admin/jugadores/indicadores?ocultarPruebas=true');
-    expect(p.elemento.querySelector('.sello-estado').textContent).toBe('EN LINEA');
+    expect(p.elemento.querySelector('.panel-admin__estado').textContent).toBe('');
     expect(
-      p.elemento.querySelector('[data-indicador="activas"] .indicador__valor').textContent,
+      p.elemento.querySelector('[data-indicador="Activas"] .indicador-admin__valor').textContent,
     ).toBe('10');
-    expect(p.elemento.textContent).toContain('Fuente: GET /api/v1/admin/jugadores/indicadores');
+    expect(p.elemento.querySelector('[data-quitar="cuentas"]').textContent).toContain(
+      'Cuentas de prueba: Excluidas',
+    );
+    expect(p.elemento.textContent).not.toMatch(/Fuente:|\/api\/v1|pruebas automáticas/);
+  });
+
+  test('quitar el filtro de cuentas de prueba vuelve a pedir con todas', async () => {
+    const consultarApi = jest.fn(async () => conDatos(INDICADORES));
+    const { p } = montar(consultarApi);
+    await p.cargar();
+
+    p.elemento.querySelector('[data-quitar="cuentas"]').dispatchEvent(new window.Event('click'));
+    await asentar();
+
+    expect(consultarApi.mock.calls.at(-1)[0]).toBe(
+      '/admin/jugadores/indicadores?desde=2026-10-01&hasta=2026-10-03',
+    );
   });
 
   test('el rango que aplicó el servidor queda escrito en el selector', async () => {
@@ -276,11 +303,10 @@ describe('panel de usuarios', () => {
     const { p } = montar(consultarApi);
     await p.cargar();
 
-    p.elemento.querySelector('input[name="desde"]').value = '2026-09-01';
+    const desde = p.elemento.querySelector('input[name="desde"]');
+    desde.value = '2026-09-01';
     p.elemento.querySelector('input[name="hasta"]').value = '2026-09-30';
-    p.elemento
-      .querySelector('form')
-      .dispatchEvent(new window.Event('submit', { cancelable: true }));
+    desde.dispatchEvent(new window.Event('change'));
     await asentar();
 
     expect(consultarApi.mock.calls.at(-1)[0]).toBe(
@@ -297,14 +323,13 @@ describe('panel de usuarios', () => {
     const desde = p.elemento.querySelector('input[name="desde"]');
     desde.value = '2026-10-05';
     p.elemento.querySelector('input[name="hasta"]').value = '2026-10-01';
-    p.elemento
-      .querySelector('form')
-      .dispatchEvent(new window.Event('submit', { cancelable: true }));
+    desde.dispatchEvent(new window.Event('change'));
     await asentar();
 
     expect(consultarApi.mock.calls.length).toBe(llamadas);
-    expect(desde.getAttribute('aria-invalid')).toBe('true');
-    expect(p.elemento.querySelector('[data-zona="aviso-rango"]').textContent).toMatch(/posterior/);
+    expect(p.elemento.querySelector('[data-zona="error-filtros"]').textContent).toMatch(
+      /posterior/,
+    );
   });
 
   test('exportar está apagado hasta que hay datos y descarga lo que se ve', async () => {
@@ -333,13 +358,13 @@ describe('panel de usuarios', () => {
       resultado: RESULTADO.SERVICIO_DEGRADADO,
       datos: null,
       estado: 503,
-      motivo: 'El servicio que responde esta consulta no está atendiendo.',
+      motivo: 'No pudimos cargar esta información. Inténtalo de nuevo en unos segundos.',
       recurso: '/admin/jugadores/indicadores',
       detalle: null,
     };
     await p.cargar();
 
-    expect(p.elemento.querySelector('.sello-estado').textContent).toBe('SERVICIO DEGRADADO');
+    expect(p.elemento.querySelector('.panel-admin__estado').textContent).toBe('Sin conexión');
     const boton = p.elemento.querySelector('[data-accion="exportar-indicadores"]');
     expect(boton.disabled).toBe(true);
     boton.dispatchEvent(new window.Event('click'));

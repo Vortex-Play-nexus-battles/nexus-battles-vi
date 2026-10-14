@@ -4387,3 +4387,253 @@ export const ESCENARIOS_PLAYER07B = [
 ];
 
 ESCENARIOS.push(...ESCENARIOS_PLAYER07B);
+
+/* =========================================================================
+   SA-2 — la consola de control integral con datos (informe de revisión del
+   módulo Super Administrador, puntos 2 a 15). Cada cuerpo con la forma de su
+   contrato: ms-identidad-admin (directorio e indicadores), metricas-plataforma
+   (servicios y alertas), torneos, ms-subastas-listado, ms-cumplimiento
+   (auditoría), moderacion-sanciones (métricas), comentarios (cola), salas,
+   productos y admin-parametros. Las rutas generales van ANTES que las
+   particulares: en Playwright gana la última que se registra.
+   ========================================================================= */
+
+function cuentaDelDirectorio(n, cambios = {}) {
+  return {
+    id: 100 + n,
+    uid: `5a000000-0000-4000-8000-${String(n).padStart(12, '0')}`,
+    apodo: ['nyx_valiente', 'thar_vex', 'lyra_sol', 'kael_umbra', 'mira_alba', 'oren_gris'][n % 6],
+    email: `cuenta${n}@nexus.test`,
+    estado: 'ACTIVO',
+    rol: 'JUGADOR',
+    creadoEn: `2026-09-${String(10 + n).padStart(2, '0')}T10:00:00`,
+    ultimoAcceso: n % 3 === 0 ? null : `2026-10-${String(1 + n).padStart(2, '0')}T18:30:00`,
+    suspendidoHasta: null,
+    bloqueada: false,
+    ...cambios,
+  };
+}
+
+const ESTADO_DEL_SISTEMA = {
+  total: 19,
+  operativos: 12,
+  caidos: 1,
+  lentos: 1,
+  noDesplegados: 0,
+  noObservables: 5,
+  instante: '2026-10-13T14:32:05Z',
+  desdeCache: false,
+  servicios: [
+    'ms-identidad',
+    'ms-cumplimiento',
+    'ms-ecommerce',
+    'ms-finanzas',
+    'ms-chatbot',
+    'salas-partidas',
+    'metricas-plataforma',
+    'admin-parametros',
+    'comentarios',
+    'correo',
+    'torneos',
+    'notificaciones',
+  ]
+    .map((servicio) => ({
+      servicio,
+      estado: 'OPERATIVO',
+      detalle: '',
+      instante: '2026-10-13T14:32:05Z',
+    }))
+    .concat([
+      {
+        servicio: 'moderacion-sanciones',
+        estado: 'LENTO',
+        detalle: 'No respondió en 1500 ms',
+        instante: '2026-10-13T14:32:05Z',
+      },
+      {
+        servicio: 'ms-subastas',
+        estado: 'CAIDO',
+        detalle: 'la sonda falló',
+        instante: '2026-10-13T14:32:05Z',
+      },
+      ...['heroes', 'inventario', 'productos', 'motor-combate', 'misiones'].map((servicio) => ({
+        servicio,
+        estado: 'NO_OBSERVABLE',
+        detalle: '',
+        instante: '2026-10-13T14:32:05Z',
+      })),
+    ]),
+};
+
+function registrosDeTreintaDias() {
+  const dias = [];
+  for (let i = 0; i < 30; i += 1) {
+    const fecha = new Date(Date.UTC(2026, 8, 14 + i)).toISOString().slice(0, 10);
+    dias.push({ fecha, cuentas: [0, 2, 1, 4, 3, 0, 5, 2, 1, 0][i % 10] });
+  }
+  return dias;
+}
+
+export const ESCENARIOS_SA2 = [
+  {
+    id: 'control-integral-poblado',
+    titulo: 'consola: control integral con datos en todas las secciones (SA-2)',
+    ruta: 'plataforma/consola/control-integral.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/admin/jugadores*',
+        json({
+          contenido: [0, 1, 2, 3, 4, 5].map((n) =>
+            cuentaDelDirectorio(
+              n,
+              n === 4 ? { estado: 'SUSPENDIDO' } : n === 5 ? { bloqueada: true } : {},
+            ),
+          ),
+          pagina: 0,
+          tamano: 16,
+          total: 1894,
+          totalPaginas: 119,
+        }),
+      ],
+      [
+        '**/api/v1/admin/jugadores/indicadores*',
+        json({
+          total: 1894,
+          porEstado: {
+            ACTIVO: 1700,
+            PENDIENTE_VERIFICACION: 150,
+            INACTIVO: 4,
+            SUSPENDIDO: 30,
+            BANEADO: 10,
+          },
+          registros: {
+            desde: '2026-09-14',
+            hasta: '2026-10-13',
+            total: 54,
+            porDia: registrosDeTreintaDias(),
+          },
+          ocultarPruebas: true,
+          calculadoEn: '2026-10-13T14:32:05Z',
+        }),
+      ],
+      ['**/api/v1/admin/sistema/servicios', json(ESTADO_DEL_SISTEMA)],
+      [
+        '**/api/v1/torneos*',
+        json([
+          {
+            id: 'c0000000-0000-4000-8000-000000000001',
+            nombre: 'Copa del Nexo',
+            estado: 'INSCRIPCIONES_ABIERTAS',
+            creadoEn: '2026-10-01T12:00:00Z',
+            inscripcionesCierranEn: '2026-10-31T23:00:00Z',
+            costoInscripcion: 0,
+            equiposInscritos: 3,
+            cupos: 8,
+            campeonEquipoId: null,
+          },
+        ]),
+      ],
+      [
+        '**/api/v1/sanciones/metricas',
+        json({
+          total: 7,
+          porTipo: { ADVERTENCIA: 4, SUSPENSION: 2, BANEO: 1 },
+          apelaciones: { PENDIENTE: 1, ACEPTADA: 1, RECHAZADA: 0 },
+          moderadoresActivos: 2,
+        }),
+      ],
+      [
+        '**/api/v1/subastas*',
+        json({
+          contenido: [
+            {
+              ...subastaTranquila(),
+              estado: 'ACTIVA',
+              precioInicial: 500,
+              ofertaVigente: 880,
+              cantidadPujas: 4,
+            },
+            {
+              ...subastaSinRareza(),
+              estado: 'ACTIVA',
+              precioInicial: 50,
+              ofertaVigente: 65,
+              cantidadPujas: 2,
+            },
+          ],
+          pagina: 0,
+          tamanoPagina: 16,
+          totalElementos: 2,
+          totalPaginas: 1,
+        }),
+      ],
+      [
+        '**/api/v1/admin/auditoria*',
+        json({
+          content: [
+            registroDeAuditoria(1, { tipoAccion: 'CAMBIO_ROL' }),
+            registroDeAuditoria(2, {
+              tipoAccion: 'SANCION',
+              afectado: 'thar_vex',
+              valorNuevo: 'SUSPENSION',
+            }),
+          ],
+          totalElements: 2,
+          totalPages: 1,
+          number: 0,
+          size: 15,
+        }),
+      ],
+      [
+        '**/api/v1/comentarios/moderacion*',
+        json({ entradas: [{ id: 1 }, { id: 2 }, { id: 3 }], total: 3, pagina: 0, tamano: 20 }),
+      ],
+      [
+        '**/api/v1/moderacion',
+        json({
+          sanciones: {},
+          alertasConfiguradas: true,
+          umbralSancionesPorDia: 3,
+          alertas: [],
+          pendientes: [],
+        }),
+      ],
+      [
+        '**/api/v1/salas*',
+        json({ contenido: [sala()], pagina: 0, tamano: 16, totalElementos: 1, totalPaginas: 1 }),
+      ],
+      ['**/api/v1/productos*', json({ content: [{ id: 'p1' }, { id: 'p2' }], totalElements: 42 })],
+      [
+        '**/api/v1/parametros*',
+        json([
+          {
+            clave: 'sanciones.apelacion.plazo-dias',
+            descripcion: 'Dias desde la sancion para poder apelarla',
+            valor: '30',
+            unidad: 'dias',
+            version: 2,
+            actualizadoEn: '2026-10-01T10:00:00Z',
+          },
+          {
+            clave: 'metricas.umbral-sanciones-por-dia',
+            descripcion: 'Umbral',
+            valor: '3',
+            unidad: 'sanciones/dia',
+            version: 3,
+            actualizadoEn: '2026-10-05T10:00:00Z',
+          },
+        ]),
+      ],
+    ],
+    exige: [
+      '[data-panel="directorio"] .tabla-admin__tabla tbody tr',
+      '[data-panel="sistema"] .estado-admin',
+      '[data-panel="resumen-usuarios"] .grafico-admin__columna',
+      '[data-panel="subastas"] .tabla-admin__tabla',
+      '[data-zona="marca"]',
+    ],
+  },
+];
+
+ESCENARIOS.push(...ESCENARIOS_SA2);

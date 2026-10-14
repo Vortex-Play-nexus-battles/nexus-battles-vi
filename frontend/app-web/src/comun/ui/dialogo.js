@@ -69,9 +69,10 @@ export function esElModalDeArriba(capa) {
 /**
  * @param {{titulo: string, cuerpo: Node|string, acciones?: Array<Node>,
  *          peligro?: boolean, cerrableFuera?: boolean, raiz?: HTMLElement,
- *          alCerrar?: (() => void)|null}} opciones
+ *          alCerrar?: (() => void)|null, variante?: 'lateral'|null}} opciones
  *   `alCerrar` se llama una sola vez, cierre quien cierre: un botón, Escape,
- *   la equis o el velo.
+ *   la equis o el velo. `variante: 'lateral'` lo abre como panel pegado al
+ *   borde derecho (la ficha rápida de la consola), con las mismas garantías.
  * @returns {{elemento: HTMLElement, cerrar: () => void}}
  */
 export function abrirDialogo({
@@ -82,14 +83,19 @@ export function abrirDialogo({
   cerrableFuera = true,
   raiz = document.body,
   alCerrar = null,
+  variante = null,
 }) {
   contador += 1;
   const idTitulo = `dialogo-titulo-${contador}`;
   const devolverFocoA = document.activeElement;
 
-  const velo = h('div', { clase: 'velo', datos: { zona: 'velo' } });
+  const lateral = variante === 'lateral';
+  const velo = h('div', {
+    clase: lateral ? 'velo velo--lateral' : 'velo',
+    datos: { zona: 'velo' },
+  });
   const caja = h('div', {
-    clase: `dialogo${peligro ? ' dialogo--peligro' : ''}`,
+    clase: `dialogo${peligro ? ' dialogo--peligro' : ''}${lateral ? ' dialogo--lateral' : ''}`,
     atributos: { role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': idTitulo },
   });
 
