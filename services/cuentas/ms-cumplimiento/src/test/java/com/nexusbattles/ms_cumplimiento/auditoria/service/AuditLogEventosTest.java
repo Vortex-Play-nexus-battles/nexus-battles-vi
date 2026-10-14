@@ -246,4 +246,26 @@ class AuditLogEventosTest {
                 .hasMessageContaining("pdf, csv");
         }
     }
+    @Nested
+    @DisplayName("una exportacion")
+    class ExportacionComoValor {
+
+        @Test
+        @DisplayName("se compara por su contenido y su formato, y su texto no vuelca los bytes")
+        void comparaPorContenido() {
+            byte[] bytes = "a,b".getBytes(StandardCharsets.UTF_8);
+            AuditLogService.Exportacion una = new AuditLogService.Exportacion(bytes, AuditLogService.Formato.CSV);
+            AuditLogService.Exportacion igual = new AuditLogService.Exportacion(
+                    "a,b".getBytes(StandardCharsets.UTF_8), AuditLogService.Formato.CSV);
+            AuditLogService.Exportacion otroFormato = new AuditLogService.Exportacion(bytes, AuditLogService.Formato.PDF);
+            AuditLogService.Exportacion otroContenido = new AuditLogService.Exportacion(
+                    "a,c".getBytes(StandardCharsets.UTF_8), AuditLogService.Formato.CSV);
+
+            assertThat(una).isEqualTo(igual).hasSameHashCodeAs(igual);
+            assertThat(una).isNotEqualTo(otroFormato).isNotEqualTo(otroContenido).isNotEqualTo("a,b");
+            assertThat(una.toString()).isEqualTo("Exportacion[formato=CSV, bytes=3]");
+            assertThat(new AuditLogService.Exportacion(null, null).toString())
+                    .isEqualTo("Exportacion[formato=null, bytes=0]");
+        }
+    }
 }

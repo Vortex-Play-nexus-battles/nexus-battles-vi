@@ -34,9 +34,11 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 
 import static com.nexusbattles.ms_cumplimiento.auditoria.repository.AuditLogSpecifications.*;
@@ -116,8 +118,31 @@ public class AuditLogService {
         }
     }
 
-    /** Una exportacion lista para entregar. */
-    public record Exportacion(byte[] contenido, Formato formato) { }
+    /**
+     * Una exportacion lista para entregar. Lleva un arreglo: igualdad, hash y
+     * texto miran su contenido (y el texto no lo vuelca, solo dice cuanto
+     * mide), no la referencia del arreglo.
+     */
+    public record Exportacion(byte[] contenido, Formato formato) {
+
+        @Override
+        public boolean equals(Object otro) {
+            return otro instanceof Exportacion e
+                    && Arrays.equals(contenido, e.contenido)
+                    && formato == e.formato;
+        }
+
+        @Override
+        public int hashCode() {
+            return 31 * Arrays.hashCode(contenido) + Objects.hashCode(formato);
+        }
+
+        @Override
+        public String toString() {
+            return "Exportacion[formato=" + formato + ", bytes="
+                    + (contenido == null ? 0 : contenido.length) + "]";
+        }
+    }
 
     /** Lo que deja un evento: la entrada y si es nueva o la que ya traia su referencia. */
     public record ResultadoDeRegistro(AuditLog entrada, boolean nueva) { }

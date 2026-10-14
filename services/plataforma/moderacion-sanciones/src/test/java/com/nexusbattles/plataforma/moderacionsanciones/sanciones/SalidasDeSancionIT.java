@@ -293,7 +293,7 @@ class SalidasDeSancionIT {
         sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador, Sancion.Tipo.SUSPENSION,
                 "Lenguaje ofensivo", null, null, 48L, false));
 
-        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ? "
+        assertThat(jdbc.queryForObject("select count(*) from moderacion_sanciones.auditoria_pendiente where afectado = ? "
                 + "and entregado_en is null", Integer.class, jugador.toString())).isEqualTo(1);
 
         assertThat(entregaDeAuditoria.ejecutar()).isGreaterThanOrEqualTo(1);
@@ -312,7 +312,7 @@ class SalidasDeSancionIT {
         assertThat(evento.path("ocurridoEn").asString()).isNotBlank();
         assertThat(evento.path("referencia").asString()).startsWith("moderacion-sanciones:");
 
-        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ? "
+        assertThat(jdbc.queryForObject("select count(*) from moderacion_sanciones.auditoria_pendiente where afectado = ? "
                 + "and entregado_en is null", Integer.class, jugador.toString())).isZero();
         entregaDeAuditoria.ejecutar();
         assertThat(recibidas("POST", "/api/v1/admin/auditoria/eventos").stream()
@@ -328,7 +328,7 @@ class SalidasDeSancionIT {
         sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador, Sancion.Tipo.ADVERTENCIA,
                 "Spam", null, null, null, false));
 
-        assertThat(jdbc.queryForObject("select count(*) from auditoria_pendiente where afectado = ?",
+        assertThat(jdbc.queryForObject("select count(*) from moderacion_sanciones.auditoria_pendiente where afectado = ?",
                 Integer.class, jugador.toString())).isZero();
     }
 
