@@ -3,6 +3,8 @@ package nexus.api;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -84,7 +86,7 @@ class ReversionProductoApiTest {
         @Test
         @DisplayName("un administrador revierte y recibe el producto restaurado")
         void revierteProducto() throws Exception {
-                when(reversion.revertir(eq(PRODUCTO_ID), eq(RESPALDO_ID), anyString()))
+                when(reversion.revertir(eq(PRODUCTO_ID), eq(RESPALDO_ID), anyString(), isNull()))
                                 .thenReturn(producto("Espada solar", 3));
 
                 mvc.perform(post("/api/v1/productos/" + PRODUCTO_ID + "/reversiones")
@@ -96,6 +98,28 @@ class ReversionProductoApiTest {
                                 .andExpect(jsonPath("$.id").value(PRODUCTO_ID))
                                 .andExpect(jsonPath("$.nombre").value("Espada solar"))
                                 .andExpect(jsonPath("$.version").value(3));
+        }
+
+        @Test
+        @DisplayName("SA-6: el motivo de la reversión llega al servicio; uno de más de 500 caracteres es 400")
+        void revierteConMotivo() throws Exception {
+                when(reversion.revertir(eq(PRODUCTO_ID), eq(RESPALDO_ID), anyString(), eq("Precio mal puesto")))
+                                .thenReturn(producto("Espada solar", 4));
+
+                mvc.perform(post("/api/v1/productos/" + PRODUCTO_ID + "/reversiones")
+                                .with(jwt().jwt(token -> token.claim("uid", "admin-uid"))
+                                                .authorities(new SimpleGrantedAuthority("ROLE_SUPER_ADMINISTRADOR")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"respaldoId\":\"" + RESPALDO_ID + "\",\"motivo\":\"Precio mal puesto\"}"))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.version").value(4));
+                verify(reversion).revertir(eq(PRODUCTO_ID), eq(RESPALDO_ID), anyString(), eq("Precio mal puesto"));
+
+                mvc.perform(post("/api/v1/productos/" + PRODUCTO_ID + "/reversiones")
+                                .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ADMINISTRADOR")))
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"respaldoId\":\"" + RESPALDO_ID + "\",\"motivo\":\"" + "x".repeat(501) + "\"}"))
+                                .andExpect(status().isBadRequest());
         }
 
         @Test

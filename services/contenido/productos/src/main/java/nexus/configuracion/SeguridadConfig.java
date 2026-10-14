@@ -51,6 +51,19 @@ public class SeguridadConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/productos")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                // HU-PRD-009 (contrato 1.10.0): la biblioteca de recursos
+                                // graficos es de la administracion del catalogo; los bytes
+                                // de un recurso son publicos, porque son la imagen que ve la
+                                // tienda. Van antes de GET /{id}, que es publico y casaria
+                                // con /recursos si esta regla no mandara primero.
+                                .requestMatchers(HttpMethod.POST, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.DELETE, "/api/v1/productos/recursos/{id}")
+                                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
+                                .requestMatchers(HttpMethod.GET, "/api/v1/productos/recursos/{id}")
+                                .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/v1/banners")
                                 .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                                 .requestMatchers(HttpMethod.PUT, "/api/v1/banners/{id}")

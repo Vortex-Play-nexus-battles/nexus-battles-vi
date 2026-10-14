@@ -3,6 +3,7 @@ package nexus.dominio;
 import java.time.Instant;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.PersistenceCreator;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 /**
@@ -19,6 +20,10 @@ import org.springframework.data.mongodb.core.mapping.Document;
  * del token; ahora la pasa el controlador desde la autenticacion (principal de
  * {@code ConversorRolesJwt}: el {@code uid}, o el {@code sub} si el token no lo
  * trae). Los respaldos anteriores a B4 no tienen autor.
+ *
+ * <p>{@code motivo} (SA-6, contrato 1.10.0): por qué se suspendió, reactivó o
+ * revirtió, como lo escribió quien lo hizo (§7.2.5, confirmación de acciones
+ * críticas). Las entradas anteriores, y las modificaciones, no lo tienen.
  */
 @Document(collection = "productos_historico")
 public record RespaldoProducto(
@@ -38,7 +43,27 @@ public record RespaldoProducto(
 
         TipoCambioProducto tipoCambio,
 
-        String reversionDe) {
+        String reversionDe,
+
+        String motivo) {
+
+        @PersistenceCreator
+        public RespaldoProducto {
+        }
+
+        /** Sin motivo: las modificaciones y las entradas anteriores a SA-6. */
+        public RespaldoProducto(
+                        String id,
+                        String productoId,
+                        Producto estadoAnterior,
+                        Producto estadoAplicado,
+                        Instant modificadoEn,
+                        String autor,
+                        TipoCambioProducto tipoCambio,
+                        String reversionDe) {
+                this(id, productoId, estadoAnterior, estadoAplicado, modificadoEn, autor, tipoCambio,
+                                reversionDe, null);
+        }
 
         /** Compatibilidad con los respaldos creados antes de HU-PRD-007. */
         public RespaldoProducto(
@@ -55,6 +80,7 @@ public record RespaldoProducto(
                                 modificadoEn,
                                 autor,
                                 TipoCambioProducto.MODIFICACION,
+                                null,
                                 null);
         }
 

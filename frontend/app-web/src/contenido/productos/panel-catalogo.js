@@ -1,6 +1,18 @@
-/** HU-PRD-008 - Panel de estado del catálogo. */
+/**
+ * El catálogo en la consola: cifras (HU-PRD-008), productos con su ficha de
+ * gestión (UXC-7, HU-PRD-003/004/007/010/011) y la biblioteca de recursos
+ * gráficos (HU-PRD-009).
+ *
+ * SA-6 (informe de revisión, puntos 18 y 19): sin frases de desarrollo («Las
+ * cifras se obtienen directamente del servicio de Productos») y sin el bloque
+ * «Lo que el catálogo todavía no ofrece», que ya no era verdad: el diseñador
+ * (imagen, vista previa, versiones, plantillas), los avisos de cambios al
+ * iniciar sesión (HU-PRD-014) y el banner rotativo (HU-PRD-013) existen.
+ */
+import { urlDeVista } from '../../comun/acceso.js';
 import { consultarEstadisticasCatalogo } from './cliente-productos.js';
 import { montarCatalogoAdmin } from './catalogo-admin.js';
+import { montarBibliotecaDeRecursos } from './recursos-graficos.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { textoDeError } from '../../comun/ui/texto-de-fallo.js';
 
@@ -64,16 +76,26 @@ function crearVista() {
             clase: 'productos-cabecera__marca',
             texto: 'NEXUS BATTLES VI',
           }),
-          h('h1', { texto: 'Estado del catálogo' }),
+          h('h1', { texto: 'Catálogo' }),
           h('p', {
-            texto: 'Consulta las cantidades actuales de productos por tipo y estado.',
+            texto: 'Productos, imágenes y anuncios del juego.',
           }),
         ],
       }),
-      h('a', {
-        clase: 'panel-enlace-crear',
-        texto: 'Crear producto',
-        atributos: { href: './productos.html' },
+      h('div', {
+        clase: 'productos-cabecera__acciones',
+        hijos: [
+          h('a', {
+            clase: 'panel-enlace-crear',
+            texto: 'Nuevo producto',
+            atributos: { href: urlDeVista('productos') ?? './productos.html' },
+          }),
+          h('a', {
+            clase: 'productos-cabecera__enlace',
+            texto: 'Banners y anuncios',
+            atributos: { href: urlDeVista('banners') ?? './banners.html' },
+          }),
+        ],
       }),
     ],
   });
@@ -81,16 +103,9 @@ function crearVista() {
   const encabezado = h('div', {
     clase: 'panel-catalogo__encabezado',
     hijos: [
-      h('div', {
-        hijos: [
-          h('h2', {
-            texto: 'Resumen del catálogo',
-            atributos: { id: 'panel-resumen-titulo' },
-          }),
-          h('p', {
-            texto: 'Las cifras se obtienen directamente del servicio de Productos.',
-          }),
-        ],
+      h('h2', {
+        texto: 'Resumen',
+        atributos: { id: 'panel-resumen-titulo' },
       }),
       h('button', {
         clase: 'boton-secundario',
@@ -156,34 +171,27 @@ function crearVista() {
     datos: { zona: 'catalogo-admin' },
   });
 
-  // UXC-9 — lo que §7.2.3 y §7.2.4 piden y ningún contrato publica todavía.
-  // Se dice aquí, donde lo buscaría quien administra el catálogo, en vez de
-  // callarlo.
-  const pendiente = h('section', {
-    clase: 'panel-catalogo panel-catalogo--pendiente',
-    datos: { zona: 'catalogo-pendiente' },
-    atributos: { 'aria-labelledby': 'panel-pendiente-titulo' },
+  // HU-PRD-009 — la biblioteca de imágenes, iconos y animaciones.
+  const recursos = h('section', {
+    clase: 'panel-catalogo biblioteca-recursos',
+    atributos: { 'aria-labelledby': 'panel-recursos-titulo' },
     hijos: [
-      h('h2', {
-        texto: 'Lo que el catálogo todavía no ofrece',
-        atributos: { id: 'panel-pendiente-titulo' },
-      }),
-      h('ul', {
+      h('div', {
+        clase: 'panel-catalogo__encabezado',
         hijos: [
-          h('li', {
-            texto:
-              'Diseñador visual con vista previa, importar y exportar: el servicio de productos todavía no los publica.',
-          }),
-          h('li', {
-            texto:
-              'Avisos de cambios del catálogo al iniciar sesión y banner rotativo de anuncios: todavía no hay un servicio que los publique.',
+          h('div', {
+            hijos: [
+              h('h2', { texto: 'Recursos gráficos', atributos: { id: 'panel-recursos-titulo' } }),
+              h('p', { texto: 'Imágenes, iconos y animaciones para los productos.' }),
+            ],
           }),
         ],
       }),
+      h('div', { datos: { zona: 'biblioteca-recursos' } }),
     ],
   });
 
-  return [cabecera, panel, catalogo, pendiente];
+  return [cabecera, panel, catalogo, recursos];
 }
 
 function mostrarMensaje(raiz, texto, tipo) {
@@ -229,7 +237,13 @@ function mensajeDeError(fallo) {
  */
 export function montarPanelCatalogo(
   raiz,
-  { consultar = consultarEstadisticasCatalogo, fetchImpl, conCatalogo = true } = {},
+  {
+    consultar = consultarEstadisticasCatalogo,
+    fetchImpl,
+    conCatalogo = true,
+    conRecursos = true,
+    dependenciasDeRecursos = {},
+  } = {},
 ) {
   vaciar(raiz).append(...crearVista());
   const botonActualizar = raiz.querySelector('[data-actualizar-panel]');
@@ -268,5 +282,11 @@ export function montarPanelCatalogo(
         })
       : null;
 
-  return { actualizar, cargaInicial, catalogo };
+  const zonaRecursos = raiz.querySelector('[data-zona="biblioteca-recursos"]');
+  const biblioteca =
+    conRecursos && zonaRecursos
+      ? montarBibliotecaDeRecursos(zonaRecursos, { fetchImpl, ...dependenciasDeRecursos })
+      : null;
+
+  return { actualizar, cargaInicial, catalogo, biblioteca };
 }
