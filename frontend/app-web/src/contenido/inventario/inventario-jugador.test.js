@@ -231,6 +231,21 @@ describe('Mi inventario por dentro', () => {
     expect(raiz.querySelector('.inventario__misiones').hidden).toBe(true);
   });
 
+  /*
+   * HU-INV-012, criterio 3. El documento del cliente (§7.1) pide «un banner de
+   * presentacion para las misiones disponibles» y nada mas: sin misiones que
+   * presentar, no hay banner. Decision del Product Owner del 13 de octubre.
+   */
+  test('sin misiones disponibles, el banner no se muestra', async () => {
+    const fuente = { disponible: true, destacadas: async () => [] };
+
+    await montarInventario(raiz, 'jugador-A', 0, dependencias({ fuenteMisiones: fuente }));
+    await asentar();
+    await asentar();
+
+    expect(raiz.querySelector('.inventario__misiones').hidden).toBe(true);
+  });
+
   test('con misiones, el banner va al final, con su título, y no arriba', async () => {
     const fuente = {
       disponible: true,
