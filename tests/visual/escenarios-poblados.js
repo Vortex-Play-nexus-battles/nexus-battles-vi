@@ -5541,3 +5541,438 @@ export const ESCENARIOS_SA7 = [
 ];
 
 ESCENARIOS.push(...ESCENARIOS_SA7);
+
+/* =========================================================================
+   SA-8 (informe de revisión, punto 22) — los parámetros de plataforma con
+   nombres de producto, una tabla por área, el valor fijo dicho sin
+   referencias internas y el cambio programado a la vista.
+   ========================================================================= */
+
+const UID_ADMIN_PARAMETROS = 'b2b2b2b2-0000-4000-8000-000000000002';
+
+function parametroDePlataforma(clave, cambios = {}) {
+  return {
+    clave,
+    descripcion: clave,
+    tipo: 'ENTERO',
+    valor: '1',
+    unidad: null,
+    minimo: null,
+    maximo: null,
+    opciones: null,
+    inalterable: false,
+    origen: 'Catálogo',
+    version: 1,
+    actualizadoPor: null,
+    actualizadoEn: null,
+    valorProgramado: null,
+    vigenteDesde: null,
+    ...cambios,
+  };
+}
+
+const CATALOGO_DE_PLATAFORMA = [
+  parametroDePlataforma('sanciones.suspension.minima-horas', {
+    valor: '1',
+    unidad: 'horas',
+    minimo: 1,
+    maximo: 720,
+  }),
+  parametroDePlataforma('sanciones.suspension.maxima-dias', {
+    valor: '30',
+    unidad: 'dias',
+    minimo: 1,
+    maximo: 365,
+    version: 3,
+    actualizadoPor: UID_ADMIN_PARAMETROS,
+    actualizadoEn: '2026-10-09T15:20:00Z',
+  }),
+  parametroDePlataforma('sanciones.apelacion.plazo-dias', {
+    valor: '30',
+    unidad: 'dias',
+    minimo: 1,
+    maximo: 365,
+  }),
+  parametroDePlataforma('metricas.umbral-sanciones-por-dia', {
+    valor: '3',
+    unidad: 'sanciones/dia',
+    minimo: 1,
+    maximo: 10000,
+    version: 2,
+    actualizadoPor: '00000000-0000-0000-0000-000000000000',
+    actualizadoEn: '2026-10-05T17:00:00Z',
+  }),
+  parametroDePlataforma('metricas.umbral-reportes-por-dia', {
+    valor: null,
+    unidad: 'reportes/dia',
+    minimo: 1,
+    maximo: 10000,
+  }),
+  parametroDePlataforma('salas.apuestas.si-gana-la-maquina', {
+    tipo: 'TEXTO',
+    valor: 'LIBERAR',
+    opciones: ['LIBERAR', 'CONSUMIR'],
+  }),
+  parametroDePlataforma('salas.participantes-maximo', {
+    valor: '6',
+    unidad: 'jugadores',
+    inalterable: true,
+  }),
+  parametroDePlataforma('torneos.cupos', { valor: '8', unidad: 'equipos', inalterable: true }),
+  parametroDePlataforma('torneos.costo-inscripcion-por-defecto', {
+    valor: '0',
+    unidad: 'creditos',
+    minimo: 0,
+    maximo: 100000,
+  }),
+  parametroDePlataforma('chat.historial.tamano', {
+    valor: '50',
+    unidad: 'mensajes',
+    minimo: 1,
+    maximo: 500,
+    version: 2,
+    actualizadoPor: UID_ADMIN_PARAMETROS,
+    actualizadoEn: '2026-10-12T21:05:00Z',
+    valorProgramado: '100',
+    vigenteDesde: '2026-10-20T17:00:00Z',
+  }),
+  parametroDePlataforma('subastas.incremento-minimo', {
+    tipo: 'DECIMAL',
+    valor: '5',
+    unidad: 'creditos',
+    minimo: 0.01,
+    maximo: 1000000,
+  }),
+  parametroDePlataforma('plataforma.disponibilidad-objetivo-porcentaje', {
+    tipo: 'DECIMAL',
+    valor: '99.95',
+    unidad: '%',
+    inalterable: true,
+  }),
+];
+
+export const ESCENARIOS_SA8 = [
+  {
+    id: 'parametros-poblado',
+    titulo: 'parámetros de plataforma: cifras, filtros y una tabla por área (SA-8)',
+    ruta: 'plataforma/admin-parametros/parametros-admin.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      ['**/api/v1/parametros', json(CATALOGO_DE_PLATAFORMA)],
+      [
+        '**/api/v1/admin/titulares*',
+        json([{ uid: UID_ADMIN_PARAMETROS, apodo: 'admin_operaciones', estado: 'ACTIVO' }]),
+      ],
+    ],
+    exige: [
+      '[data-indicador="Parámetros"]',
+      '[data-area="Sanciones y moderación"] tbody tr',
+      '[data-fila="torneos.cupos"] [data-campo="fijo"]',
+      '[data-fila="chat.historial.tamano"] [data-campo="programado"]',
+    ],
+  },
+];
+
+ESCENARIOS_SA8.push(
+  {
+    id: 'parametros-cambio',
+    titulo: 'parámetros: el panel de cambio con lo que admite y la frase de lo que pasará (SA-8)',
+    ruta: 'plataforma/admin-parametros/parametros-admin.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: ESCENARIOS_SA8[0].rutas,
+    interaccion: async (pagina) => {
+      await pagina
+        .locator('[data-fila="sanciones.suspension.maxima-dias"] [data-accion="cambiar"]')
+        .click();
+      const formulario = pagina.locator('[data-zona="cambio"]');
+      await formulario.locator('[name="valor"]').fill('45');
+      await formulario.locator('[name="motivo"]').fill('Acuerdo del comité de moderación');
+    },
+    exige: ['[role="dialog"] [data-zona="resumen-del-cambio"]'],
+  },
+  {
+    id: 'parametros-historial',
+    titulo: 'parámetros: el historial de un parámetro con nombres y el cambio en palabras (SA-8)',
+    ruta: 'plataforma/admin-parametros/parametros-admin.html',
+    sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+    rutas: [
+      [
+        '**/api/v1/parametros/sanciones.suspension.maxima-dias/historial',
+        json([
+          {
+            version: 3,
+            valorAnterior: '15',
+            valorNuevo: '30',
+            motivo: 'Se vuelve al plazo anterior tras la revisión del torneo.',
+            cambiadoPor: UID_ADMIN_PARAMETROS,
+            cambiadoEn: '2026-10-09T15:20:00Z',
+            vigenteDesde: '2026-10-09T15:20:00Z',
+          },
+          {
+            version: 2,
+            valorAnterior: '30',
+            valorNuevo: '15',
+            motivo: 'Prueba de suspensiones más cortas durante el torneo.',
+            cambiadoPor: UID_ADMIN_PARAMETROS,
+            cambiadoEn: '2026-10-01T12:00:00Z',
+            vigenteDesde: '2026-10-02T05:00:00Z',
+          },
+        ]),
+      ],
+      ...ESCENARIOS_SA8[0].rutas,
+    ],
+    interaccion: async (pagina) => {
+      await pagina
+        .locator('[data-fila="sanciones.suspension.maxima-dias"] [data-accion="historial"]')
+        .click();
+    },
+    exige: ['[role="dialog"] [data-zona="historial"] .linea-tiempo__hecho'],
+  },
+);
+
+ESCENARIOS_SA8.push({
+  id: 'metricas-poblado',
+  titulo: 'métricas: disponibilidad, tiempos por servicio, detalle y funciones limitadas (SA-8)',
+  ruta: 'plataforma/metricas-plataforma/panel-metricas.html',
+  sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+  rutas: [
+    [
+      '**/api/v1/disponibilidad/informe*',
+      json({
+        desde: '2026-09-14T00:00:00Z',
+        hasta: '2026-10-14T00:00:00Z',
+        periodoMinutos: 43200,
+        umbral: 99.95,
+        porcentajeDelBloque: 99.81,
+        cumpleElUmbral: false,
+        servicios: [
+          ['salas-partidas', 30, [['2026-10-05T03:00:00Z', '2026-10-05T03:30:00Z']]],
+          ['torneos', 0, []],
+          [
+            'ms-subastas',
+            82,
+            [
+              ['2026-10-02T10:00:00Z', '2026-10-02T11:00:00Z'],
+              ['2026-10-13T09:00:00Z', null],
+            ],
+          ],
+          ['comentarios', 4, [['2026-10-09T18:00:00Z', '2026-10-09T18:04:00Z']]],
+          ['ms-identidad', 0, []],
+        ].map(([servicio, minutos, interrupciones]) => ({
+          servicio,
+          disponibleMinutos: 43200 - minutos,
+          indisponibleMinutos: minutos,
+          porcentaje: Math.round(((43200 - minutos) / 43200) * 10000) / 100,
+          cumple: minutos <= 21,
+          interrupciones: interrupciones.map(([inicio, fin]) => ({
+            inicio,
+            fin,
+            detalle: 'connection refused',
+          })),
+        })),
+      }),
+    ],
+    [
+      '**/api/v1/disponibilidad',
+      json({
+        servicios: [
+          {
+            servicio: 'salas-partidas',
+            estado: 'DISPONIBLE',
+            comprobadoEn: '2026-10-14T10:00:00Z',
+          },
+          { servicio: 'torneos', estado: 'DISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+          { servicio: 'ms-subastas', estado: 'INDISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+          { servicio: 'comentarios', estado: 'DISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+          { servicio: 'ms-identidad', estado: 'DISPONIBLE', comprobadoEn: '2026-10-14T10:00:00Z' },
+        ],
+      }),
+    ],
+    [
+      '**/api/v1/tecnicas',
+      json({
+        generadoEn: '2026-10-14T10:00:00Z',
+        desdeCache: false,
+        servicios: [
+          {
+            servicio: 'salas-partidas',
+            cpu: 0.12,
+            memoriaMb: 182,
+            peticiones: 5240,
+            promedioMs: 38,
+            maximoMs: 812,
+            errores5xx: 3,
+            tasaDeError: 0.0006,
+          },
+          {
+            servicio: 'comentarios',
+            cpu: 0.05,
+            memoriaMb: 150,
+            peticiones: 900,
+            promedioMs: 22,
+            maximoMs: 140,
+            errores5xx: 0,
+            tasaDeError: 0,
+          },
+          {
+            servicio: 'torneos',
+            cpu: 0.03,
+            memoriaMb: 120,
+            peticiones: 410,
+            promedioMs: 18,
+            maximoMs: 96,
+            errores5xx: 0,
+            tasaDeError: 0,
+          },
+          { servicio: 'correo', peticiones: 0, errores5xx: 0, brecha: 'no expone metricas' },
+        ],
+        alertas: [],
+        brechas: ['correo: no expone metricas'],
+        umbrales: { cpu: 0.75, latenciaMs: 500, disponibilidadPorcentaje: 99.95 },
+      }),
+    ],
+    [
+      '**/api/v1/latencia/informe',
+      json({
+        servicio: 'metricas-plataforma',
+        muestras: 1284,
+        percentil: 'p95',
+        objetivoMs: 500,
+        percentilMs: 312,
+        maximoMs: 1904,
+        cumple: true,
+        sinDatos: false,
+        porTipo: [
+          { tipo: 'lectura', muestras: 1200, percentilMs: 120, maximoMs: 900 },
+          { tipo: 'escritura', muestras: 84, percentilMs: 340, maximoMs: 1904 },
+        ],
+        operacionesMasLentas: [
+          { metodo: 'GET', ruta: '/api/v1/tecnicas', muestras: 30, percentilMs: 640 },
+          {
+            metodo: 'GET',
+            ruta: '/api/v1/admin/sistema/servicios',
+            muestras: 44,
+            percentilMs: 410,
+          },
+        ],
+      }),
+    ],
+    [
+      '**/api/v1/consultas/informe',
+      json({
+        servicio: 'metricas-plataforma',
+        muestras: 8421,
+        percentil: 'p95',
+        objetivoMs: 500,
+        percentilMs: 7,
+        maximoMs: 812,
+        umbralLentaMs: 500,
+        cuantasLentas: 3,
+        cumple: true,
+        sinDatos: false,
+        sentenciasMasLentas: [],
+      }),
+    ],
+    [
+      '**/api/v1/degradacion',
+      json({
+        operativoPorCompleto: false,
+        seccionesLimitadas: [
+          { dependencia: 'ms-subastas', seccion: 'Subastas', desde: '2026-10-13T09:00:00Z' },
+        ],
+      }),
+    ],
+  ],
+  exige: [
+    '[data-indicador="Disponibilidad del mes"]',
+    '[data-panel="disponibilidad"] tbody tr',
+    '[data-panel="tiempos"] tbody tr',
+    '[data-panel="latencia"] [data-indicador]',
+    '[data-panel="degradacion"] tbody tr',
+  ],
+});
+
+/* Punto 25 del informe: el tablero del asistente con un período de verdad
+   (dos semanas de conversaciones, temas, solicitudes y palabras). */
+const TENDENCIA_DEL_ASISTENTE = [
+  [9, 31, 2],
+  [12, 44, 3],
+  [15, 52, 4],
+  [11, 38, 2],
+  [8, 27, 1],
+  [14, 49, 5],
+  [17, 61, 4],
+  [13, 45, 3],
+  [10, 33, 2],
+  [16, 58, 6],
+  [18, 63, 5],
+  [12, 41, 3],
+  [15, 50, 4],
+  [16, 50, 3],
+].map(([conversaciones, preguntas, escalamientos], i) => ({
+  dia: `2026-10-${String(i + 1).padStart(2, '0')}`,
+  conversaciones,
+  preguntas,
+  respuestas: preguntas,
+  escalamientos,
+}));
+
+ESCENARIOS_SA8.push({
+  id: 'asistente-analiticas-poblado',
+  titulo: 'asistente: analíticas del período con cifras, tendencia, temas, soporte y palabras',
+  ruta: 'cuentas/panel-chatbot.html',
+  sesion: () => sesionDe('qa_superadministrador', 'SUPER_ADMINISTRADOR'),
+  rutas: [
+    [
+      '**/api/v1/chatbot/admin/analiticas*',
+      json({
+        desde: '2026-10-01T05:00:00Z',
+        hasta: '2026-10-15T05:00:00Z',
+        zonaHoraria: 'America/Bogota',
+        conversaciones: 186,
+        preguntas: 642,
+        respuestasMedidas: 642,
+        escalamientos: 47,
+        tasaResolucion: 0.9268,
+        tiempoRespuestaPromedioMs: 840,
+        calificaciones: 120,
+        calificacionesUtiles: 98,
+        satisfaccion: 0.8167,
+        temasFrecuentes: [
+          { clave: 'subastas-pujar', titulo: 'Cómo pujar en una subasta', respuestas: 96 },
+          { clave: 'salas-crear', titulo: 'Crear una sala de batalla', respuestas: 81 },
+          { clave: 'heroes-equipar', titulo: 'Equipar un héroe', respuestas: 64 },
+          { clave: 'creditos-comprar', titulo: 'Comprar créditos', respuestas: 52 },
+          { clave: 'torneos-inscribir', titulo: 'Inscribirse en un torneo', respuestas: 37 },
+          { clave: 'cuenta-recuperar', titulo: 'Recuperar la contraseña', respuestas: 22 },
+        ],
+        tendencia: TENDENCIA_DEL_ASISTENTE,
+        tickets: {
+          total: 23,
+          abiertos: 5,
+          enProceso: 4,
+          resueltos: 11,
+          cerrados: 3,
+          horasPromedioDeAtencion: 6.4,
+          porCategoria: [
+            { categoria: 'SUBASTA_Y_COMERCIO', tickets: 8 },
+            { categoria: 'SOPORTE_TECNICO', tickets: 6 },
+            { categoria: 'CUENTA_Y_REGISTRO', tickets: 5 },
+            { categoria: 'MECANICA_JUEGO', tickets: 4 },
+          ],
+        },
+        palabrasClave: [
+          { palabra: 'subasta', preguntas: 88, conversaciones: 41 },
+          { palabra: 'heroe', preguntas: 73, conversaciones: 39 },
+          { palabra: 'creditos', preguntas: 61, conversaciones: 33 },
+          { palabra: 'sala', preguntas: 54, conversaciones: 30 },
+          { palabra: 'torneo', preguntas: 35, conversaciones: 19 },
+          { palabra: 'contrasena', preguntas: 21, conversaciones: 14 },
+        ],
+      }),
+    ],
+  ],
+  exige: ['.panel-chatbot__cifras', '[data-zona="temas"]', '[data-zona="palabras"]'],
+});
+
+ESCENARIOS.push(...ESCENARIOS_SA8);

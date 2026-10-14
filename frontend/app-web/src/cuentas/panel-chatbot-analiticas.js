@@ -19,6 +19,7 @@
 import { campo } from '../comun/ui/campo.js';
 import { conCarga } from '../comun/ui/boton.js';
 import { h, vaciar } from '../comun/ui/dom.js';
+import { vigilarDesborde } from '../comun/ui/admin/tabla-de-datos.js';
 import {
   estadoDeCarga,
   estadoDeError,
@@ -126,6 +127,47 @@ function diaCorto(dia) {
   });
 }
 
+/** Zonas horarias que se dicen por su país y no por su identificador. */
+const ZONAS_LEGIBLES = Object.freeze({ 'America/Bogota': 'Colombia' });
+
+/**
+ * La zona horaria del tablero como la lee una persona: «Colombia» y no
+ * «America/Bogota»; una que no está en la lista, por su ciudad.
+ *
+ * @param {string|null|undefined} zona
+ * @returns {string|null}
+ */
+export function zonaLegible(zona) {
+  if (!zona) {
+    return null;
+  }
+  return ZONAS_LEGIBLES[zona] ?? String(zona).split('/').pop().replace(/_/g, ' ');
+}
+
+/**
+ * La serie en una línea: el total del período y el día con más preguntas.
+ *
+ * @param {Array<{dia: string, preguntas: number}>} tendencia
+ * @returns {string}
+ */
+export function resumenDeTendencia(tendencia) {
+  const total = tendencia.reduce((suma, punto) => suma + (punto.preguntas ?? 0), 0);
+  const pico = tendencia.reduce(
+    (mayor, punto) => ((punto.preguntas ?? 0) > (mayor.preguntas ?? 0) ? punto : mayor),
+    tendencia[0],
+  );
+  const dias = tendencia.length;
+  return `${numero(total)} ${total === 1 ? 'pregunta' : 'preguntas'} en ${numero(dias)} ${
+    dias === 1 ? 'día' : 'días'
+  } · el día con más: ${diaCorto(pico.dia)}, con ${numero(pico.preguntas)}`;
+}
+
+/** Los días que se rotulan bajo la gráfica: el primero, el del medio y el último. */
+function diasDelEje(tendencia) {
+  const indices = [0, Math.floor((tendencia.length - 1) / 2), tendencia.length - 1];
+  return [...new Set(indices)].map((indice) => tendencia[indice].dia);
+}
+
 /**
  * Barras de preguntas por día. Una sola serie: el título de la sección la
  * nombra, así que no lleva leyenda. Cada barra dice su valor al pasar el
@@ -211,48 +253,128 @@ function tablaDeTemas(temas) {
       detalle: 'Aparecen aquí cuando el asistente responde con la base de conocimiento.',
     });
   }
-  return h('table', {
-    clase: 'tabla-panel',
-    datos: { zona: 'temas' },
+  return tabla(
+    'temas',
+    ['Tema', 'Respuestas'],
+    temas.map((tema) => [tema.titulo, numero(tema.respuestas)]),
+  );
+}
+
+/*
+ * Las tablas del tablero (punto 25 del informe de revisión): la tabla de la
+ * consola (`.tabla-admin__marco` + `.tabla-admin__tabla`) con lo que la hace
+ * legible — las cifras a la derecha con números tabulares, una barra que dice
+ * cuánto pesa cada fila frente a la mayor y, en el teléfono, cada fila como
+ * ficha con la etiqueta de cada dato. Las celdas siguen siendo `<td>` con el
+ * mismo texto: quien las lea (pruebas, lector de pantalla) lee lo mismo.
+ */
+
+/** Una celda que es una cifra: «96», «1.200», «93 %», «840 ms», «6,4 h» o «—». */
+const CIFRA = /^(?:—|-?\d[\d.,]*(?:\s?(?:%|ms|s|min|h))?)$/;
+
+/** El nombre de cada tabla para el lector de pantalla (su `<caption>`). */
+const NOMBRE_DE_TABLA = Object.freeze({
+  temas: 'Temas más consultados',
+  'soporte-por-categoria': 'Solicitudes de soporte por tema',
+  'palabras-clave': 'Palabras más usadas',
+});
+
+let tablasMontadas = 0;
+
+/** El valor de una cifra ya formateada en es-CO («1.200» → 1200, «6,4 h» → 6,4). */
+function valorDeCifra(texto) {
+  const valor = Number.parseFloat(
+    String(texto ?? '')
+      .replace(/\./g, '')
+      .replace(',', '.'),
+  );
+  return Number.isFinite(valor) ? valor : 0;
+}
+
+/** La barra de una fila: su proporción frente a la mayor de la columna. */
+function barraDeProporcion(proporcion) {
+  const relleno = h('span', { clase: 'tabla-panel__relleno' });
+  relleno.style.setProperty('--proporcion', String(Math.round(proporcion * 1000) / 1000));
+  return h('span', {
+    clase: 'tabla-panel__barra',
+    atributos: { 'aria-hidden': 'true' },
+    hijos: [relleno],
+  });
+}
+
+function tabla(zona, columnas, filas) {
+  tablasMontadas += 1;
+  const id = `tabla-analiticas-${tablasMontadas}`;
+  // Una columna es de cifras si todas sus celdas lo son.
+  const deCifras = columnas.map(
+    (_, i) =>
+      filas.length > 0 && filas.every((celdas) => CIFRA.test(String(celdas[i] ?? '').trim())),
+  );
+  // La primera columna de cifras (nunca la que nombra la fila) lleva la barra.
+  const medida = deCifras.findIndex((esCifra, i) => esCifra && i > 0);
+  const valores = filas.map((celdas) => (medida > 0 ? valorDeCifra(celdas[medida]) : 0));
+  const tope = Math.max(0, ...valores);
+
+  const tablaDelPanel = h('table', {
+    clase: 'tabla-panel tabla-admin__tabla',
+    datos: { zona },
+    atributos: { role: 'table' },
     hijos: [
+      h('caption', {
+        clase: 'solo-lectores',
+        texto: NOMBRE_DE_TABLA[zona] ?? columnas.join(' · '),
+        atributos: { id: `${id}-nombre` },
+      }),
       h('thead', {
+        atributos: { role: 'rowgroup' },
         hijos: [
           h('tr', {
-            hijos: [
-              h('th', { texto: 'Tema', atributos: { scope: 'col' } }),
-              h('th', { texto: 'Respuestas', atributos: { scope: 'col' } }),
-            ],
+            atributos: { role: 'row' },
+            hijos: columnas.map((texto, i) =>
+              h('th', {
+                texto,
+                atributos: { scope: 'col', role: 'columnheader' },
+                datos: { tipo: deCifras[i] ? 'numero' : 'texto' },
+              }),
+            ),
           }),
         ],
       }),
       h('tbody', {
-        hijos: temas.map((tema) =>
+        atributos: { role: 'rowgroup' },
+        hijos: filas.map((celdas, fila) =>
           h('tr', {
-            hijos: [h('td', { texto: tema.titulo }), h('td', { texto: numero(tema.respuestas) })],
+            atributos: { role: 'row' },
+            hijos: celdas.map((texto, i) => {
+              const celda = h('td', {
+                texto,
+                clase: i === 0 ? 'tabla-admin__principal' : null,
+                atributos: { role: 'cell' },
+                datos: {
+                  tipo: deCifras[i] ? 'numero' : 'texto',
+                  ...(i === 0 ? {} : { etiqueta: columnas[i] }),
+                },
+              });
+              if (i === medida && tope > 0) {
+                celda.dataset.medida = '';
+                celda.prepend(barraDeProporcion(valores[fila] / tope));
+              }
+              return celda;
+            }),
           }),
         ),
       }),
     ],
   });
-}
 
-function tabla(zona, columnas, filas) {
-  return h('table', {
-    clase: 'tabla-panel',
-    datos: { zona },
-    hijos: [
-      h('thead', {
-        hijos: [
-          h('tr', {
-            hijos: columnas.map((texto) => h('th', { texto, atributos: { scope: 'col' } })),
-          }),
-        ],
-      }),
-      h('tbody', {
-        hijos: filas.map((celdas) => h('tr', { hijos: celdas.map((texto) => h('td', { texto })) })),
-      }),
-    ],
+  const marco = h('div', {
+    clase: 'tabla-admin__marco',
+    // Si no cabe, se desplaza aquí dentro (y con el teclado), no la página.
+    atributos: { tabindex: '0', role: 'region', 'aria-labelledby': `${id}-nombre` },
+    hijos: [tablaDelPanel],
   });
+  vigilarDesborde(marco);
+  return marco;
 }
 
 /**
@@ -388,7 +510,11 @@ export function pintarAnaliticas(zona, analitica) {
     hijos: [
       encabezadoDeSeccion({
         titulo: 'Preguntas por día',
-        detalle: `Días en hora de ${analitica.zonaHoraria}.`,
+        detalle: zonaLegible(analitica.zonaHoraria)
+          ? `Cuántas preguntas recibió el asistente cada día, en hora de ${zonaLegible(
+              analitica.zonaHoraria,
+            )}.`
+          : 'Cuántas preguntas recibió el asistente cada día.',
       }),
       hayActividad
         ? h('div', {
@@ -397,10 +523,12 @@ export function pintarAnaliticas(zona, analitica) {
               graficaDeTendencia(tendencia),
               h('div', {
                 clase: 'panel-chatbot__eje t-meta',
-                hijos: [
-                  h('span', { texto: diaCorto(tendencia[0].dia) }),
-                  h('span', { texto: diaCorto(tendencia[tendencia.length - 1].dia) }),
-                ],
+                hijos: diasDelEje(tendencia).map((dia) => h('span', { texto: diaCorto(dia) })),
+              }),
+              h('p', {
+                clase: 'panel-chatbot__resumen t-meta',
+                datos: { zona: 'resumen-tendencia' },
+                texto: resumenDeTendencia(tendencia),
               }),
             ],
           })
