@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.6.0 (compatible con 1.1.0)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V12) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.7.0 (compatible con 1.1.0)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V13) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -84,6 +84,84 @@ una versión en producción y la que pierde recibe 409 (o no hace nada).
 `GestionDeLaBaseDeConocimientoIT` recorre el ciclo de las intenciones (candidata,
 exportación e importación, despliegue y copia siguiente), los 409 de título duplicado, los
 413 de la importación y el esquema de V12.
+
+## Preguntas sin respuesta y analíticas (1.7.0)
+
+§7.4.5 «aprendizaje continuo» y §7.4.7 «analíticas». Migración **V13**.
+
+**Preguntas sin respuesta** (`/chatbot/admin/brechas`; pestaña «Preguntas sin respuesta» del
+panel). Las brechas de HU-CHA-011 —lo que el motor no entendió y escaló, y las respuestas
+calificadas «no útil»— se guardaban y nadie las veía.
+
+- `GET` las ordena por total (escalamientos + «no útil») y, a igual total, la más reciente
+  primero; filtra por estado y por período, y pagina (16 en el panel; el servicio admite
+  hasta 100). Una brecha entra en un período si tuvo actividad en él: última vez ≥ inicio y
+  primera vez < fin. Los contadores son los de toda su vida: no hay registro por ocurrencia.
+- `PATCH /{brechaId}` la marca `ATENDIDA` (un tema ya la cubre) o `DESCARTADA` (ruido), o la
+  devuelve a `PENDIENTE`, y guarda quién (el claim `uid` del token del administrador; si no lo
+  trae, el `sub`) y cuándo. Pedir el estado que ya tiene no cambia nada.
+- Una `ATENDIDA` que se vuelve a preguntar regresa sola a `PENDIENTE` (sin quién, con la
+  fecha del regreso) y suma `reaperturas`: el tema no bastaba. Una `DESCARTADA` sigue
+  descartada y solo suma sus contadores. `BrechaConocimiento` es `@DynamicUpdate`: el
+  contador que suma un jugador y el estado que cambia un administrador escriben columnas
+  distintas.
+- «Crear tema con esta pregunta» abre el formulario de tema de la versión candidata con la
+  pregunta como primera variante en español (sin comas, hasta 200 caracteres). Sin
+  candidata, lo explica y ofrece ir a «Base de conocimiento».
+
+**Resultado de cada respuesta** (`mensajes.resultado`, V13). Lo decide el motor que respondió
+(`ResultadoMotor.resultado`), no se adivina después (D-CHA-07):
+
+| Resultado | Cuándo | Cuenta como |
+|---|---|---|
+| `TEMA` | respondió un tema de la base | resuelta |
+| `CONSULTA_EN_VIVO` | una consulta en vivo trajo datos, aunque sea «no tienes subastas»; el informe de actividad, si llegó al menos una parte | resuelta |
+| `NAVEGACION` | llevó a la sección que pidió | resuelta |
+| `NO_DISPONIBLE` | el servicio consultado no respondió (en el informe: ninguna parte) | no resuelta |
+| `ESCALADO` | no la entendió y ofreció soporte | no resuelta |
+| `NO_SIRVIO` | «no me sirvió»: relacionadas y soporte | no resuelta |
+| `PIDE_REFORMULAR` | búsqueda en el inventario demasiado corta, o «más detalle», «en inglés»… sobre una respuesta que no salió de un tema | no resuelta |
+
+Las respuestas guardadas antes de V13 quedan sin resultado y no cuentan en la tasa.
+
+**Fórmulas del tablero** (`GET /chatbot/admin/analiticas`; días en `America/Bogota`, período
+`[desde 00:00, hasta+1 00:00)`, como mucho 366 días):
+
+- **Conversaciones iniciadas**: `conversaciones.fecha_inicio` dentro del período. Borrar un
+  historial ya no cambia el pasado. Las que tuvieron preguntas (lo que contaba antes) siguen
+  en `conversacionesConActividad`; la tendencia diaria también cuenta las iniciadas.
+- **Tasa de resolución**: resueltas / respuestas con resultado (tabla de arriba). `null` si
+  ninguna guardó resultado. `resultados` trae el recuento de cada uno.
+- **Escalamientos** son las veces que el asistente ofreció soporte (respuestas con
+  `escalado`); las **solicitudes** que de verdad se abrieron son `tickets.total`. El panel las
+  muestra separadas: «Ofreció soporte» y «Solicitudes de soporte».
+- **Preguntas frecuentes** (`preguntasFrecuentes`): las 10 más repetidas de las últimas 5000
+  preguntas del período, normalizadas con `NormalizadorTexto` (sin tildes, mayúsculas ni
+  signos), ya redactadas y hasta 200 caracteres; **solo las que hicieron al menos 3
+  conversaciones distintas** (D-CHA-06, provisional), para no mostrar lo que escribió una
+  persona.
+- **Palabras clave**: como en 1.3.7, más cuántas preguntas las usaron en el período anterior
+  de los mismos días y la tendencia (`SUBE`, `BAJA`, `IGUAL`, `NUEVA`).
+- **Tiempo de respuesta promedio**: lo que tarda el servidor desde que la pregunta, ya
+  revisada y aprobada por la lista negra, empieza a procesarse hasta que la respuesta está
+  lista para guardarse (motor, consultas en vivo y, si no la entendió, anotar la brecha). No
+  incluye la lista negra, el guardado de la conversación ni la red.
+
+**CSV sin fórmulas** (`/analiticas/exportacion`): una celda que empieza por `=`, `+`, `-`,
+`@`, tabulador o retorno de carro lleva delante una comilla simple (inyección de fórmulas,
+OWASP), y se sigue entrecomillando lo que trae `;`, comillas o saltos de línea. Bloques
+nuevos: resultado de las respuestas y preguntas frecuentes.
+
+**Errores del panel**: cada pestaña dice qué falló («No se pudo crear la candidata», «No se
+pudieron cargar las solicitudes de soporte»…) y el detalle dice por qué; antes todas decían
+«No se pudieron cargar las analíticas». En la ventana del chat, un 503
+`MODERACION_NO_DISPONIBLE` al abrir una solicitud dice que no se pudo revisar el mensaje, no
+que soporte no está.
+
+`AprendizajeYAnaliticasIT` siembra un conjunto calculado a mano (3 conversaciones, 9
+preguntas, 7 respuestas con resultado, 3 resueltas) y comprueba cada cifra, el CSV, el esquema
+de V13, la lista y el cambio de estado de las brechas (con la reapertura) y que un jugador
+recibe 403.
 
 ## Diálogo (1.5.0)
 
@@ -255,4 +333,5 @@ adivinar; pedir la sesión con `POST /chat/sesiones` la haría de 256 bits. CORS
 bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`: V10 → V11
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
 139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
-`TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0). JaCoCo ≥ 80 %.
+`TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `AprendizajeYAnaliticasIT`:
+V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0). JaCoCo ≥ 80 %.

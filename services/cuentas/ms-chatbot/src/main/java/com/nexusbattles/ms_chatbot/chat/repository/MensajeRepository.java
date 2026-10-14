@@ -79,10 +79,12 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
                                                   @Param("hasta") Instant hasta);
 
     // Solo respuestas medidas (escalado no nulo): las anteriores a V4 no
-    // tienen estos datos y distorsionarian la tasa de resolucion.
+    // tienen estos datos y distorsionarian el tiempo y los escalamientos.
+    // 1.7.0: con su resultado (null antes de V13), del que sale la tasa de
+    // resolucion.
     @Query("""
         select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta(
-            m.fechaEnvio, m.escalado, m.tiempoRespuestaMs)
+            m.fechaEnvio, m.escalado, m.tiempoRespuestaMs, m.resultado)
         from Mensaje m
         where m.remitente = :remitente
           and m.escalado is not null

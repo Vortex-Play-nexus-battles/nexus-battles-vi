@@ -216,11 +216,20 @@ describe('avisoDeError', () => {
     [new ErrorDelChatbot(null, 403), TEXTOS_SOPORTE.sinSesion, 'advertencia'],
     [con('CONTENIDO_BLOQUEADO', 422), TEXTOS_SOPORTE.bloqueado, 'advertencia'],
     [con('LIMITE_DE_FRECUENCIA', 429), TEXTOS_SOPORTE.muchas, 'advertencia'],
-    [con('MODERACION_NO_DISPONIBLE', 503), TEXTOS_SOPORTE.noDisponible, 'error'],
+    // 1.7.0: si lo que no responde es la revisión del texto, se dice eso, no
+    // que soporte no está.
+    [con('MODERACION_NO_DISPONIBLE', 503), TEXTOS_SOPORTE.sinRevision, 'error'],
+    [new ErrorDelChatbot(null, 503), TEXTOS_SOPORTE.noDisponible, 'error'],
     [new ErrorDelChatbot(null, 0), TEXTOS_SOPORTE.noDisponible, 'error'],
     [new ErrorDelChatbot({ title: 'Bad Request' }, 400), TEXTOS_SOPORTE.invalido, 'advertencia'],
     [new ErrorDelChatbot({ title: 'x' }, 500), TEXTOS_SOPORTE.error, 'error'],
   ])('%#: se elige el aviso por motivo y estado', (error, titulo, tono) => {
     expect(avisoDeError(error)).toMatchObject({ titulo, tono });
+  });
+
+  test('sin revisión del texto, explica que no se envió nada', () => {
+    expect(avisoDeError(con('MODERACION_NO_DISPONIBLE', 503)).detalle).toContain(
+      'no enviamos nada',
+    );
   });
 });

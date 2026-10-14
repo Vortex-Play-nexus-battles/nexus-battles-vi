@@ -32,7 +32,7 @@ import {
 } from '../comun/ui/estado-vista.js';
 import { fechaHora, numero } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
-import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
+import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-errores.js';
 
 /** Categorías del contrato (`Categoria`), con su nombre para leer. */
 export const CATEGORIAS = Object.freeze({
@@ -78,14 +78,24 @@ export function esCambioConcurrente(error) {
 
 /**
  * Texto de un fallo de esta pestaña: por el `motivo` (ms-chatbot.yaml
- * 1.6.0), luego por el estado.
+ * 1.6.0), luego por el estado. 1.7.0: lo que no es propio de la base dice
+ * qué falló (`queFallo`), no «No se pudieron cargar las analíticas»; y un 409
+ * sin motivo puede traer su propia explicación (`siConflicto`), como «ya hay
+ * una candidata» al crearla.
  *
  * @param {{estado?: number, detalle?: string|null,
  *          problema?: {motivo?: string}|null}} error
- * @param {string} [siRechazado] texto de un 400 que no trae detalle
+ * @param {{siRechazado?: string, queFallo?: string, siConflicto?: string|null}|string} [opciones]
+ *   `siRechazado`: texto de un 400 que no trae detalle (antes de 1.7.0 era el
+ *   segundo argumento, y una cadena se sigue leyendo así)
  * @returns {string}
  */
-export function textoDeErrorDeLaBase(error, siRechazado = 'El servicio rechazó los datos.') {
+export function textoDeErrorDeLaBase(error, opciones = {}) {
+  const {
+    siRechazado = 'El servicio rechazó los datos.',
+    queFallo = 'No se pudo completar la acción',
+    siConflicto = null,
+  } = typeof opciones === 'string' ? { siRechazado: opciones } : opciones;
   const motivo = error?.problema?.motivo;
   if (motivo === 'TEMA_DUPLICADO') {
     return error.detalle ?? 'Ya hay un tema con ese título en la candidata.';
@@ -102,7 +112,10 @@ export function textoDeErrorDeLaBase(error, siRechazado = 'El servicio rechazó 
   if (error?.estado === 400) {
     return error.detalle ?? siRechazado;
   }
-  return textoDeErrorDelPanel(error).titulo;
+  if (error?.estado === 409 && siConflicto) {
+    return siConflicto;
+  }
+  return fraseDeErrorDelPanel(error, queFallo);
 }
 
 /**
@@ -452,7 +465,12 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
         conCarga(aceptar, false);
         // 400 (con su motivo), 409 TEMA_DUPLICADO (dice con qué tema
         // choca) o 409 CAMBIO_CONCURRENTE: el diálogo sigue abierto.
-        mostrarAviso(textoDeErrorDeLaBase(error, 'El servicio rechazó los datos del tema.'));
+        mostrarAviso(
+          textoDeErrorDeLaBase(error, {
+            siRechazado: 'El servicio rechazó los datos del tema.',
+            queFallo: 'No se pudo guardar el tema',
+          }),
+        );
       }
     }
 
@@ -517,7 +535,10 @@ export function montarBaseConocimiento(
     } catch (error) {
       pintarEstado(
         zonaCandidata,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({
+          ...textoDeErrorDelPanel(error, 'No se pudo cargar la base de conocimiento'),
+          alReintentar: () => cargar(),
+        }),
       );
     }
   }
@@ -541,7 +562,7 @@ export function montarBaseConocimiento(
         try {
           descargarArchivo(await cliente.exportarVersion(version.id));
         } catch (error) {
-          avisar(textoDeErrorDelPanel(error).titulo);
+          avisar(fraseDeErrorDelPanel(error, `No se pudo exportar la versión ${version.numero}`));
         } finally {
           conCarga(exportar, false);
         }
@@ -606,7 +627,11 @@ export function montarBaseConocimiento(
       try {
         await cliente.crearCandidata(descripcion.control.value.trim());
       } catch (error) {
-        problema = textoDeErrorDeLaBase(error);
+        problema = textoDeErrorDeLaBase(error, {
+          queFallo: 'No se pudo crear la candidata',
+          siConflicto:
+            'No se pudo crear la candidata: ya hay una, o no hay una versión en producción de la cual partir. Se muestra el estado actual.',
+        });
       }
       // Tanto si se creó como si otro administrador se adelantó (409), lo
       // que hay que mostrar es el estado real.
@@ -684,7 +709,11 @@ export function montarBaseConocimiento(
       try {
         await cliente.descartarCandidata();
       } catch (error) {
-        problema = textoDeErrorDeLaBase(error);
+        problema = textoDeErrorDeLaBase(error, {
+          queFallo: 'No se pudo descartar la candidata',
+          siConflicto:
+            'No se pudo descartar la candidata: ya no hay una. Se muestra el estado actual.',
+        });
       }
       await recargarYAvisar(problema);
     });
@@ -744,7 +773,9 @@ export function montarBaseConocimiento(
         try {
           await cliente.eliminarTema(tema.id);
         } catch (error) {
-          problema = textoDeErrorDeLaBase(error);
+          problema = textoDeErrorDeLaBase(error, {
+            queFallo: `No se pudo eliminar «${tema.titulo}»`,
+          });
         }
         await recargarYAvisar(problema);
       });
@@ -825,7 +856,10 @@ export function montarBaseConocimiento(
     } catch (error) {
       // 1.6.0: también 409 TEMA_DUPLICADO (dos temas del archivo con el
       // mismo título) y 413 (más de 500 temas o de 8 MB). No se escribió nada.
-      resultado = textoDeErrorDeLaBase(error, 'El archivo tiene temas que el servicio no acepta.');
+      resultado = textoDeErrorDeLaBase(error, {
+        siRechazado: 'El archivo tiene temas que el servicio no acepta.',
+        queFallo: 'No se pudo importar el archivo',
+      });
     }
     await recargarYAvisar(resultado);
   }

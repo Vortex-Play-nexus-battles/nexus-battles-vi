@@ -12,6 +12,7 @@ import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.model.Conversacion;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
@@ -100,7 +101,7 @@ class ChatServiceTest {
                 ResultadoMotor resultado = inv.getArgument(5);
                 Mensaje bot = new Mensaje(mock(Conversacion.class), Remitente.BOT, inv.getArgument(4), null);
                 bot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
-                    resultado.requiereEscalamiento(), inv.getArgument(6));
+                    resultado.requiereEscalamiento(), inv.getArgument(6), resultado.resultado());
                 return bot;
             });
     }
@@ -522,6 +523,8 @@ class ChatServiceTest {
 
         assertEquals("Todo el detalle.", respuesta.getContenido());
         assertEquals("crear-cuenta", respuesta.getTemaClave());
+        // 1.7.0: el tema anterior, otra vez: resuelve.
+        assertEquals(ResultadoDeRespuesta.TEMA, respuesta.getResultado());
         verify(motorRespuestas, never()).generarRespuesta(anyString());
         verifyNoInteractions(brechaConocimientoService);
     }
@@ -573,6 +576,8 @@ class ChatServiceTest {
 
         assertEquals(ChatService.NO_SIRVIO, respuesta.getContenido());
         assertTrue(respuesta.getEscalado());
+        // 1.7.0: se guarda que no le sirvio, aunque el motor no lo dijera.
+        assertEquals(ResultadoDeRespuesta.NO_SIRVIO, respuesta.getResultado());
         verifyNoInteractions(brechaConocimientoService);
     }
 
@@ -585,6 +590,7 @@ class ChatServiceTest {
 
         assertEquals(ChatService.NO_SIRVIO_EN, respuesta.getContenido());
         assertTrue(respuesta.getEscalado());
+        assertEquals(ResultadoDeRespuesta.NO_SIRVIO, respuesta.getResultado());
         verify(registro).guardarIntercambio(any(), anyString(), any(), any(), anyString(),
             org.mockito.ArgumentMatchers.argThat(r -> r.enriquecido().ofrecerSoporteHumano()), anyInt());
         verifyNoInteractions(motorRespuestas, brechaConocimientoService);
@@ -601,6 +607,8 @@ class ChatServiceTest {
 
         assertEquals(ChatService.SIN_TEMA_ANTERIOR, respuesta.getContenido());
         assertFalse(respuesta.getEscalado());
+        // 1.7.0: pedir la pregunta completa no resuelve nada.
+        assertEquals(ResultadoDeRespuesta.PIDE_REFORMULAR, respuesta.getResultado());
         verifyNoInteractions(motorRespuestas, motorConsultasAsistidas, brechaConocimientoService);
     }
 
