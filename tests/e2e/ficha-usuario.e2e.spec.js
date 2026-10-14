@@ -9,11 +9,14 @@
  *      cache; la jugadora no puede (403); una cuenta que no existe es un
  *      problem details 404 `cuenta-no-encontrada` (CA-03).
  *   2. la vista: datos de la cuenta, sanciones y comentarios de sus servicios,
- *      lo que no tiene fuente dicho como tal, y el aviso de auditoría. Desde
- *      SA-1 el banco tiene ms-cumplimiento y la consulta queda auditada; si la
+ *      sin secciones de relleno (desde SA-2 la ficha no pinta «Sin fuente
+ *      publicada»: enseña lo que hay), y el aviso de auditoría. Desde SA-1 el
+ *      banco tiene ms-cumplimiento y la consulta queda auditada; si la
  *      bitácora no respondiera, la vista tendría que decirlo (nunca en
  *      silencio).
- *   3. el directorio de Control integral abre la ficha de cada cuenta.
+ *   3. el directorio de Control integral abre la ficha de cada cuenta. Desde
+ *      SA-2 las cuentas de prueba se incluyen con el filtro «Cuentas de
+ *      prueba» de la barra común, que viene en «Excluidas».
  */
 
 import { test, expect, request as apiRequest } from '@playwright/test';
@@ -99,7 +102,7 @@ test.describe('Ficha administrativa del usuario (HU-USR-010)', () => {
     );
   });
 
-  test('la vista consolida la cuenta y dice qué no tiene fuente y si la consulta quedó auditada', async ({
+  test('la vista consolida la cuenta, sin secciones de relleno, y dice si la consulta quedó auditada', async ({
     page,
   }) => {
     await conSesion(page, admin);
@@ -117,16 +120,9 @@ test.describe('Ficha administrativa del usuario (HU-USR-010)', () => {
     await expect(page.locator('[data-panel="comentarios"]')).toContainText(
       'No ha publicado comentarios.',
     );
-    for (const id of [
-      'reportes',
-      'transacciones',
-      'subastas',
-      'misiones',
-      'estadisticas',
-      'auditoria',
-    ]) {
-      await expect(page.locator(`[data-panel="${id}"]`)).toContainText('Sin fuente publicada');
-    }
+    // SA-2: ninguna sección vacía para aparentar ni copy de andamio.
+    await expect(page.locator('[data-seccion="sin-fuente"]')).toHaveCount(0);
+    await expect(page.locator('main')).not.toContainText(/Sin fuente publicada|Fuente:|GET \/api/);
     await expect(page.locator('[data-panel="linea-de-tiempo"] .linea-tiempo')).toContainText(
       'Se registró',
     );
@@ -140,10 +136,11 @@ test.describe('Ficha administrativa del usuario (HU-USR-010)', () => {
     await page.goto(`${BORDE}${VISTAS}/plataforma/consola/control-integral.html`);
     const directorio = page.locator('[data-panel="directorio"]');
     // Las cuentas del banco son @nexus.test, un dominio de pruebas: el
-    // directorio las oculta por omisión (RFINAL-06). Se muestran para buscarla.
-    await directorio.locator('input[name="ocultarPruebas"]').uncheck();
+    // directorio las excluye por omisión con un filtro visible (RFINAL-06,
+    // SA-2). Se incluyen para buscarla.
+    await directorio.locator('select[name="cuentas"]').selectOption({ label: 'Incluidas' });
     await directorio.locator('input[name="buscar"]').fill(JUGADORA);
-    await directorio.locator('button[type="submit"]').click();
+    await directorio.locator('button[data-accion="buscar"]').click();
 
     const enlace = directorio.locator('tbody a[data-accion="ver-ficha"]').first();
     await expect(enlace).toHaveAttribute(
