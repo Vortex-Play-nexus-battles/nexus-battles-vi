@@ -110,6 +110,13 @@ public class SecurityConfig {
             // en nombre del jugador, nunca el navegador del jugador directo.
             .requestMatchers("/pagos/**").hasRole(ROL_SERVICIO)
                 .requestMatchers(HttpMethod.POST, "/transacciones").hasRole(ROL_SERVICIO)
+                // transacciones.yaml 1.1.0 (§7.3.4, SA-15): el historial de pagos en
+                // moneda real de una cuenta, para su ficha administrativa. Solo
+                // Administrador y Super Administrador: ni el jugador (tiene
+                // /mi-historial), ni un moderador, ni un servicio. Va antes del
+                // matcher general de /transacciones/** por ser mas especifico.
+                .requestMatchers(HttpMethod.GET, "/transacciones/usuarios/{uid}")
+                .hasAnyRole("ADMINISTRADOR", "SUPER_ADMINISTRADOR")
                 // HU-PAG-002 / HU-JUE-013: historial y cofres del propio usuario. El
                 // controller lee el uid del principal, así que un servicio (sin uid)
                 // no tiene nada que consultar aquí.

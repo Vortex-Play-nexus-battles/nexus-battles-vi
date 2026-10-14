@@ -22,6 +22,10 @@
  *          para conciliacion manual; y reenviar la misma referencia se rechaza
  *          con problem details (regla 4) sin dejar estado a medias.
  *   CA-04  el asiento sigue ahi y es consultable despues, con los mismos datos.
+ *   SA-15  (transacciones.yaml 1.1.0, §7.3.4) la ficha administrativa de la
+ *          cuenta ve sus pagos, por el borde; la duena, una moderadora o nadie
+ *          sin token, no por esa ruta; y la vista los pinta con el resultado en
+ *          palabras.
  *
  * Quien puede que. `POST /transacciones` es ROLE_SERVICIO (lo llama la
  * pasarela, no el navegador) y `/transacciones/mi-historial` es del usuario
@@ -31,7 +35,11 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
-import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import {
+  CLAVE_DEL_BANCO,
+  cuentaAdministrativaDeRol,
+  sesionDe as sesionDelBanco,
+} from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const FINANZAS = process.env.E2E_FINANZAS ?? 'http://localhost:8093/api/v1';
@@ -71,6 +79,14 @@ async function historialDe(api, quien, tamano = 100) {
   });
   expect(r.status(), `historial de ${quien.claims.uid}: ${await r.text()}`).toBe(200);
   return (await r.json()).content;
+}
+
+/** Una cuenta administrativa del banco, con su clave y su segundo factor. */
+function sesionAdministrativa(api, rol) {
+  return sesionDelBanco(api, cuentaAdministrativaDeRol(rol).apodo, {
+    clave: CLAVE_DEL_BANCO,
+    base: BORDE,
+  });
 }
 
 async function registrarTransaccion(api, servicio, datos) {
@@ -216,5 +232,48 @@ test.describe('Registro de transacciones en moneda real (HU-PAG-002)', () => {
       headers: conToken(servicio),
     });
     expect([401, 403]).toContain(conServicio.status());
+  });
+
+  test('SA-15 · la ficha administrativa ve los pagos de la cuenta; la dueña y la moderación, no por esa ruta', async ({
+    page,
+  }) => {
+    const ruta = `/api/v1/transacciones/usuarios/${pagadora.claims.uid}?page=0&size=100`;
+    const admin = await sesionAdministrativa(api, 'ADMINISTRADOR');
+    const moderadora = await sesionAdministrativa(api, 'MODERADOR');
+
+    // Por el borde, como la consola.
+    const deLaCuenta = await api.get(ruta, { headers: conToken(admin.token) });
+    expect(deLaCuenta.status(), await deLaCuenta.text()).toBe(200);
+    const pagos = (await deLaCuenta.json()).content;
+    expect(pagos.map((t) => t.refId)).toEqual(expect.arrayContaining([refCompra, refDudosa]));
+    expect(pagos.every((t) => !('pasarelaRefExterna' in t))).toBe(true);
+
+    expect((await api.get(ruta)).status()).toBe(401);
+    for (const quien of [pagadora, ajena, moderadora]) {
+      const negada = await api.get(ruta, { headers: conToken(quien.token) });
+      expect(negada.status(), `${quien.apodo}: ${await negada.text()}`).toBe(403);
+    }
+
+    // La vista: «Créditos y pagos», con el resultado en palabras.
+    await page.addInitScript(
+      ([token, apodo, uid]) => {
+        sessionStorage.setItem('nexus.token', token);
+        sessionStorage.setItem('nexus.apodoActual', apodo);
+        sessionStorage.setItem('nexus.rolActual', 'ADMINISTRADOR');
+        sessionStorage.setItem('nexus.usuarioId', uid);
+      },
+      [admin.token, admin.apodo, admin.claims.uid],
+    );
+    await page.goto(`${BORDE}/consola/usuarios/ficha?usuario=${pagadora.claims.uid}`);
+    await page.locator('#pestana-creditos').click({ timeout: 30_000 });
+    const panel = page.locator('[data-panel="pagos"]');
+    await expect(panel.locator('[data-estado="APROBADO"]').first()).toHaveText('Aprobado', {
+      timeout: 20_000,
+    });
+    await expect(panel.locator('[data-estado="INDETERMINADO"]').first()).toHaveText(
+      'Sin confirmar',
+    );
+    await expect(panel).toContainText('49.900 COP');
+    await expect(panel).not.toContainText(/APROBADO|INDETERMINADO|pasarela/);
   });
 });

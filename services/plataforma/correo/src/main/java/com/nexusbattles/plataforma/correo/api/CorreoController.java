@@ -60,6 +60,16 @@ public class CorreoController {
         cola.encolar(solicitud.aCorreo(), clave, traza);
     }
 
+    /** SA-14 (1.7.0, §7.3.6): la confirmacion de que la cuenta se elimino. */
+    @PostMapping("/cierre-cuenta")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void enviarCierreCuenta(
+            @Valid @RequestBody CorreoCierreCuentaRequest solicitud,
+            @RequestHeader(name = IDEMPOTENCY_KEY, required = false) @Size(max = ColaDeCorreos.LARGO_MAXIMO_CLAVE) String clave,
+            @RequestHeader(name = TRACE_ID, required = false) String traza) {
+        cola.encolar(solicitud.aCorreo(), clave, traza);
+    }
+
     @PostMapping("/cambio-clave")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public void enviarCambioClave(
