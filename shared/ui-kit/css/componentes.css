@@ -3172,6 +3172,27 @@ button.tarjeta--partida:disabled {
   cursor: not-allowed;
 }
 
+/* 1.15.0 (§7.4.3) — «Quizá te interese»: lo que el asistente propone al
+   abrir, agrupado por el motivo que lo explica. */
+
+.chatbot-para-ti {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-2);
+}
+
+.chatbot-para-ti__grupo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+.chatbot-para-ti__motivo {
+  margin: 0;
+  color: var(--texto-2);
+  font-size: var(--t-meta-tam);
+}
+
 .chatbot-ventana__fila--entrada {
   position: relative;
 }
@@ -3448,6 +3469,20 @@ button.tarjeta--partida:disabled {
   display: flex;
   flex-direction: column;
   gap: var(--e-2);
+}
+
+/* RF-CHA-010 — «Guardar preferencias» y «Restablecer», juntos. */
+.chatbot-preferencias__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--e-2);
+}
+
+/* 1.15.0 (7.4.5) — con «Automático», cómo se le responde hoy. */
+.chatbot-preferencias__efectivo {
+  margin: var(--e-1) 0 0;
+  color: var(--info);
+  font-size: var(--t-meta-tam);
 }
 
 .chatbot-ventana--minimizada .chatbot-preferencias {

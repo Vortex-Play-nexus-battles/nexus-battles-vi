@@ -378,9 +378,11 @@ public class ChatService {
 
     // Si no se pueden leer las preferencias, se responde con las de por
     // defecto: contestar importa mas que el formato de la respuesta.
+    // 1.15.0: las efectivas, con el nivel automatico ya traducido al de su
+    // experiencia (D-CHA-13): el motor nunca recibe AUTOMATICO.
     private PreferenciasDeRespuesta preferenciasDe(IdentidadDelChat identidad) {
         try {
-            PreferenciasDeRespuesta guardadas = preferenciasService.de(identidad);
+            PreferenciasDeRespuesta guardadas = preferenciasService.efectivasDe(identidad);
             return guardadas == null ? PreferenciasDeRespuesta.POR_DEFECTO : guardadas;
         } catch (RuntimeException excepcion) {
             log.warn("No se pudieron leer las preferencias del chat; se responde con las de por defecto", excepcion);

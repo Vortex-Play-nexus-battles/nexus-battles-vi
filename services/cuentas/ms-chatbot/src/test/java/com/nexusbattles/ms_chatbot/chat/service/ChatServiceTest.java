@@ -662,7 +662,7 @@ class ChatServiceTest {
     void enviarMensaje_conPreferenciasPropias_laBaseRespondeConEllas() {
         registroDevuelveLaRespuesta();
         PreferenciasDeRespuesta breveEnIngles = new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.BREVE);
-        when(preferenciasService.de(visitante)).thenReturn(breveEnIngles);
+        when(preferenciasService.efectivasDe(visitante)).thenReturn(breveEnIngles);
         when(motorRespuestas.generarRespuesta("torneo", null, breveEnIngles))
             .thenReturn(ResultadoMotor.deTema("Short.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
 
@@ -677,7 +677,7 @@ class ChatServiceTest {
     @Test
     void usuarioConPreferenciaEnIngles_laConsultaEnVivoLaRecibeYSeLeeUnaVez() {
         registroDevuelveLaRespuesta();
-        when(preferenciasService.de(usuario))
+        when(preferenciasService.efectivasDe(usuario))
             .thenReturn(new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL));
         when(motorConsultasAsistidas.generarRespuesta("que tengo en mi inventario", "token-de-prueba", UID.toString(),
             IdiomaPreferido.EN))
@@ -687,7 +687,7 @@ class ChatServiceTest {
 
         chatService.enviarMensaje(usuario, "que tengo en mi inventario", null);
 
-        verify(preferenciasService, times(1)).de(usuario);
+        verify(preferenciasService, times(1)).efectivasDe(usuario);
     }
 
     // 1.5.0 (7.4.8 + 7.4.2): el aviso de un dato tapado va en el idioma de la respuesta.
@@ -897,7 +897,7 @@ class ChatServiceTest {
     @Test
     void enviarMensaje_siNoSePuedenLeerLasPreferencias_respondeConLasDePorDefecto() {
         registroDevuelveLaRespuesta();
-        when(preferenciasService.de(visitante)).thenThrow(new IllegalStateException("base caida"));
+        when(preferenciasService.efectivasDe(visitante)).thenThrow(new IllegalStateException("base caida"));
         when(motorRespuestas.generarRespuesta("torneo"))
             .thenReturn(ResultadoMotor.deTema("Normal.", Categoria.MODALIDAD_JUEGO, TipoRespuesta.DIRECTA));
 

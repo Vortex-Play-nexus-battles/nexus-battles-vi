@@ -45,6 +45,15 @@ class AjusteDeDetalleTest {
             List.of("Otro tema"), false)).isEqualTo(texto);
     }
 
+    // 1.15.0 (D-CHA-13): AUTOMATICO se traduce antes segun la experiencia; si
+    // llegara aqui, es la respuesta entera, como NORMAL.
+    @Test
+    void automatico_devuelveElTextoTalCual() {
+        String texto = "Primera. Segunda.";
+        assertThat(AjusteDeDetalle.aplicar(texto, TipoRespuesta.DIRECTA, NivelDeDetalle.AUTOMATICO,
+            List.of("Otro tema"), false)).isEqualTo(texto);
+    }
+
     @Test
     void detallado_agregaLosTemasRelacionadosEnElIdiomaDeLaRespuesta() {
         assertThat(AjusteDeDetalle.aplicar("Texto.", TipoRespuesta.DIRECTA, NivelDeDetalle.DETALLADO,

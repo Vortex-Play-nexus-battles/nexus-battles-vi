@@ -47,6 +47,25 @@ class EnriquecedorTest {
         assertThat(enriquecida.ofrecerSoporteHumano()).isFalse();
     }
 
+    // 1.15.0 (D-CHA-13): «Más detalle» delante; detras, las que quepan, sin repetirlo.
+    @Test
+    void conMasDetalleLoPoneDelanteYConservaLoDemas() {
+        TarjetaInformativa tarjeta = new TarjetaInformativa("Torneo", "Se juega en equipos.", null);
+        RespuestaEnriquecida original = new RespuestaEnriquecida(List.of("Paso."),
+            List.of(new EnlaceInterno("Ir a Torneo", "torneos")), List.of(tarjeta),
+            List.of("Uno", "Más detalle", "Dos", "Tres"), true);
+
+        RespuestaEnriquecida conBoton = Enriquecedor.conMasDetalle(original, false);
+
+        assertThat(conBoton.respuestasRapidas()).containsExactly("Más detalle", "Uno", "Dos");
+        assertThat(conBoton.pasos()).isEqualTo(original.pasos());
+        assertThat(conBoton.enlaces()).isEqualTo(original.enlaces());
+        assertThat(conBoton.tarjetas()).containsExactly(tarjeta);
+        assertThat(conBoton.ofrecerSoporteHumano()).isTrue();
+        assertThat(Enriquecedor.conMasDetalle(new RespuestaEnriquecida(List.of(), List.of(), List.of(), List.of(),
+            false), true).respuestasRapidas()).containsExactly(Enriquecedor.MAS_DETALLE_EN);
+    }
+
     @Test
     void unTemaDirectoNoTraePasos() {
         RespuestaEnriquecida enriquecida = Enriquecedor.paraTema(creditos, "1) uno 2) dos", temas);

@@ -1012,6 +1012,180 @@ describe('preguntas rápidas y autocompletado', () => {
   });
 });
 
+// 1.15.0 (§7.4.3 «sugerencias proactivas», D-CHA-14).
+describe('Quizá te interese (1.15.0)', () => {
+  const PARA_TI = [
+    {
+      clave: 'comision',
+      titulo: 'Comisión de la subasta',
+      categoria: 'SUBASTA_Y_COMERCIO',
+      pregunta: 'Comisión de la subasta',
+      motivo: 'POR_LO_QUE_PREGUNTASTE',
+      relacionadoCon: 'Cómo funciona la Subasta',
+    },
+    {
+      clave: 'mision',
+      titulo: 'Qué es una misión',
+      categoria: 'MODALIDAD_JUEGO',
+      pregunta: 'Qué es una misión',
+      motivo: 'POR_DONDE_ESTAS',
+      relacionadoCon: null,
+    },
+  ];
+  const propuesta = (el) => el.querySelector('[data-proactiva]');
+
+  test('al cargar la conversación propone al final, diciendo por qué, con la sección donde está', async () => {
+    const cliente = clienteFalso({
+      obtenerHistorial: jest.fn(async () => [USUARIO, BOT]),
+      sugerenciasParaTi: jest.fn(async () => PARA_TI),
+    });
+    const vista = await montar({ cliente, vista: () => 'MISIONES' });
+    await esperar();
+
+    expect(cliente.sugerenciasParaTi).toHaveBeenCalledWith({ vista: 'MISIONES', limite: 3 });
+    const burbuja = propuesta(vista.el);
+    expect(vista.mensajes().at(-1)).toBe(burbuja);
+    expect(burbuja.classList.contains('chatbot-ventana__mensaje--bot')).toBe(true);
+    // Habla el asistente, también para el lector de pantalla.
+    expect(burbuja.querySelector('.solo-lectores').textContent.trim()).toBe(
+      TEXTOS.prefijoAsistente,
+    );
+    expect(burbuja.textContent).toContain('Porque preguntaste por «Cómo funciona la Subasta»');
+    expect(burbuja.textContent).toContain('Por la sección donde estás');
+    expect(burbuja.querySelectorAll('[data-accion="sugerencia-para-ti"]')).toHaveLength(2);
+  });
+
+  test('sin sección no la manda; si falla o no hay nada, no sale y queda la bienvenida', async () => {
+    const cliente = clienteFalso({
+      sugerenciasParaTi: jest.fn(async () => {
+        throw new ErrorDelChatbot(null, 503);
+      }),
+    });
+    const vista = await montar({ cliente });
+    await esperar();
+
+    expect(cliente.sugerenciasParaTi).toHaveBeenCalledWith({ limite: 3 });
+    expect(propuesta(vista.el)).toBeNull();
+    expect(vista.mensajes()).toHaveLength(1);
+    expect(textoDe(vista.mensajes()[0])).toBe(TEXTOS.bienvenida);
+    expect(vista.aviso()?.hidden ?? true).toBe(true);
+
+    document.body.replaceChildren();
+    const vacia = await montar({
+      cliente: clienteFalso({ sugerenciasParaTi: jest.fn(async () => []) }),
+    });
+    await esperar();
+    expect(propuesta(vacia.el)).toBeNull();
+  });
+
+  test('pulsar una la pregunta, y lo propuesto se va con la pregunta', async () => {
+    const cliente = clienteFalso({ sugerenciasParaTi: jest.fn(async () => PARA_TI) });
+    const vista = await montar({ cliente, vista: () => 'MISIONES' });
+    await esperar();
+
+    propuesta(vista.el).querySelector('[data-clave="mision"]').click();
+    await esperar();
+
+    expect(cliente.enviarMensaje).toHaveBeenCalledWith('Qué es una misión', { vista: 'MISIONES' });
+    expect(propuesta(vista.el)).toBeNull();
+    expect(vista.el.querySelector('[data-bienvenida]')).toBeNull();
+  });
+
+  test('una propuesta que llega después de una pregunta ya no se pinta', async () => {
+    const pendiente = diferida();
+    const cliente = clienteFalso({ sugerenciasParaTi: jest.fn(() => pendiente.promesa) });
+    const vista = await montar({ cliente });
+
+    await enviar(vista, 'hola');
+    pendiente.resolver(PARA_TI);
+    await esperar();
+
+    expect(propuesta(vista.el)).toBeNull();
+  });
+
+  test('al borrar la conversación propone otra vez, como a quien empieza, sin repetir la burbuja', async () => {
+    const sugerenciasParaTi = jest
+      .fn()
+      .mockResolvedValueOnce(PARA_TI)
+      .mockResolvedValueOnce([
+        {
+          clave: 'torneo',
+          titulo: 'Cómo funciona el Torneo',
+          pregunta: 'Cómo funciona el Torneo',
+          motivo: 'PARA_EMPEZAR',
+        },
+      ]);
+    const vista = await montar({
+      cliente: clienteFalso({
+        obtenerHistorial: jest.fn(async () => [USUARIO, BOT]),
+        sugerenciasParaTi,
+      }),
+    });
+    await esperar();
+    expect(propuesta(vista.el).textContent).toContain('Cómo funciona la Subasta');
+
+    vista.el.querySelector('[data-accion="borrar-conversacion"]').click();
+    await esperar();
+    await esperar();
+
+    expect(sugerenciasParaTi).toHaveBeenCalledTimes(2);
+    expect(vista.el.querySelectorAll('[data-proactiva]')).toHaveLength(1);
+    expect(propuesta(vista.el).textContent).toContain('Lo más consultado');
+    expect(textoDe(vista.mensajes()[0])).toBe(TEXTOS.bienvenida);
+  });
+});
+
+// 1.15.0 — la píldora del canal, un aviso o el tamaño de la ventana cambian
+// el alto de la conversación: lo último que se leía no queda cortado.
+describe('la conversación sigue al final si cambia de alto', () => {
+  const original = globalThis.ResizeObserver;
+  let alCambiar = null;
+
+  beforeEach(() => {
+    globalThis.ResizeObserver = class {
+      constructor(funcion) {
+        alCambiar = funcion;
+      }
+
+      observe() {}
+    };
+  });
+
+  afterEach(() => {
+    globalThis.ResizeObserver = original;
+  });
+
+  test('quien leía lo último lo sigue viendo; quien leía lo anterior no salta', async () => {
+    const vista = await montar({
+      cliente: clienteFalso({ obtenerHistorial: jest.fn(async () => [USUARIO, BOT]) }),
+    });
+    const registro = vista.el.querySelector('.chatbot-ventana__registro');
+    let alto = 300;
+    let arriba = 0;
+    Object.defineProperty(registro, 'scrollHeight', { configurable: true, get: () => 1000 });
+    Object.defineProperty(registro, 'clientHeight', { configurable: true, get: () => alto });
+    Object.defineProperty(registro, 'scrollTop', {
+      configurable: true,
+      get: () => arriba,
+      set: (valor) => {
+        arriba = Math.min(valor, 1000 - alto);
+      },
+    });
+
+    registro.scrollTop = 700;
+    registro.dispatchEvent(new Event('scroll'));
+    alto = 240;
+    alCambiar();
+    expect(registro.scrollTop).toBe(760);
+
+    registro.scrollTop = 200;
+    registro.dispatchEvent(new Event('scroll'));
+    alto = 300;
+    alCambiar();
+    expect(registro.scrollTop).toBe(200);
+  });
+});
+
 describe('soporte', () => {
   test('«Soporte» cambia la conversación por el panel y «Volver al chat» la devuelve', async () => {
     const vista = await montar({ sesion: () => ({ autenticado: true, apodo: 'Kai' }) });

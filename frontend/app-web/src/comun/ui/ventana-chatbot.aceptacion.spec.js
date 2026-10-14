@@ -83,7 +83,7 @@ function json(ruta, cuerpo, status = 200, cabeceras = {}) {
  */
 async function simularApi(
   page,
-  { historial = [], alEnviar = null, alListarTickets = null, alCaptura = null } = {},
+  { historial = [], alEnviar = null, alListarTickets = null, alCaptura = null, paraTi = [] } = {},
 ) {
   await page.route('**/api/v1/**', async (ruta) => {
     const peticion = ruta.request();
@@ -99,6 +99,10 @@ async function simularApi(
     }
     if (pathname.endsWith('/chat/tickets') && metodo === 'GET') {
       return alListarTickets ? alListarTickets(ruta) : json(ruta, []);
+    }
+    // ms-chatbot.yaml 1.15.0 (§7.4.3): «Quizá te interese».
+    if (pathname.endsWith('/chat/sugerencias/para-ti')) {
+      return json(ruta, paraTi);
     }
     if (pathname.endsWith('/chat/sugerencias')) {
       return json(ruta, []);
@@ -641,6 +645,88 @@ test.describe('Ventana del asistente (#506)', () => {
     });
     expect(await encima(lanzador)).toBe(false);
     expect(await encima(ventana.locator('.chatbot-ventana__formulario'))).toBe(false);
+  });
+
+  // ms-chatbot.yaml 1.15.0 (§7.4.3 «sugerencias proactivas», §7.4.5 «Más detalle»).
+  test('propone «Quizá te interese» diciendo por qué; se elige con el teclado y se va con la pregunta', async ({
+    page,
+  }) => {
+    const enviados = [];
+    const { ventana } = await abrirAsistente(page, {
+      historial: [USUARIO, BOT],
+      paraTi: [
+        {
+          clave: 'cancelar-subasta',
+          titulo: 'Cómo cancelar una subasta',
+          categoria: 'SUBASTA_Y_COMERCIO',
+          pregunta: 'Cómo cancelar una subasta',
+          motivo: 'POR_LO_QUE_PREGUNTASTE',
+          relacionadoCon: 'Cómo pujar o comprar en una subasta',
+        },
+        {
+          clave: 'torneo',
+          titulo: 'Cómo funciona el Torneo',
+          categoria: 'MODALIDAD_JUEGO',
+          pregunta: 'Cómo funciona el Torneo',
+          motivo: 'PARA_EMPEZAR',
+          relacionadoCon: null,
+        },
+      ],
+      alEnviar: async (ruta) => {
+        enviados.push(ruta.request().postDataJSON());
+        await json(ruta, {
+          ...BOT,
+          id: '6a3f7e1c-0000-4000-8000-000000000009',
+          contenido: 'Puedes cancelar una subasta tuya sin pujas.',
+          enriquecido: {
+            pasos: [],
+            enlaces: [],
+            tarjetas: [],
+            respuestasRapidas: ['Más detalle', 'Límites de subastas y pujas'],
+            ofrecerSoporteHumano: false,
+          },
+        });
+      },
+    });
+
+    const propuesta = ventana.locator('[data-proactiva]');
+    await expect(propuesta).toBeVisible();
+    await expect(propuesta).toContainText('Quizá te interese:');
+    const grupo = propuesta.getByRole('group', {
+      name: 'Porque preguntaste por «Cómo pujar o comprar en una subasta»',
+    });
+    await expect(grupo).toBeVisible();
+    await expect(propuesta.getByRole('group', { name: 'Lo más consultado' })).toBeVisible();
+    // Es lo último de la conversación, a la vista.
+    await expect(ventana.locator('.chatbot-ventana__mensaje').last()).toHaveAttribute(
+      'data-proactiva',
+      '',
+    );
+    await expect(propuesta).toBeInViewport();
+    await expect(propuesta.getByRole('button', { name: 'Cómo funciona el Torneo' })).toBeInViewport(
+      {
+        ratio: 1,
+      },
+    );
+
+    const { violations } = await new AxeBuilder({ page }).include('[data-proactiva]').analyze();
+    expect(violations.filter((v) => v.impact === 'serious' || v.impact === 'critical')).toEqual([]);
+
+    await grupo.getByRole('button', { name: 'Cómo cancelar una subasta' }).focus();
+    await page.keyboard.press('Enter');
+
+    await expect(ventana.locator('.chatbot-ventana__mensaje--usuario').last()).toContainText(
+      'Cómo cancelar una subasta',
+    );
+    await expect(propuesta).toHaveCount(0);
+    expect(enviados).toEqual([{ contenido: 'Cómo cancelar una subasta', vista: 'INICIO' }]);
+    // La respuesta breve trae «Más detalle» a un clic.
+    await expect(
+      ventana
+        .locator('.chatbot-ventana__mensaje--bot')
+        .last()
+        .getByRole('button', { name: 'Más detalle' }),
+    ).toBeVisible();
   });
 
   test('axe no encuentra nada grave ni crítico en la ventana abierta', async ({ page }) => {

@@ -410,10 +410,36 @@ export function crearClienteChatbot({
     },
 
     /**
-     * Preferencias de respuesta de esta sesión (idioma y nivel de detalle).
-     * Sin identidad, el servidor responde las de por defecto.
+     * 1.15.0 (§7.4.3 «sugerencias proactivas») — lo que el asistente le
+     * propone a quien abre la ventana: por lo que ya le preguntó (solo su
+     * propia conversación), por la sección donde está o, si aún no preguntó
+     * nada, de las más consultadas. Cada una dice por qué sale (`motivo` y,
+     * por lo que preguntó, `relacionadoCon`). Pedirlas no guarda nada.
      *
-     * @returns {Promise<{idioma: string, nivelDetalle: string}>}
+     * @param {{vista?: string|null, limite?: number}} [filtro]
+     * @returns {Promise<Array<{clave: string, titulo: string, categoria: string, pregunta: string,
+     *          motivo: string, relacionadoCon?: string|null}>>}
+     */
+    async sugerenciasParaTi({ vista = null, limite = 3 } = {}) {
+      const parametros = new URLSearchParams();
+      if (vista) {
+        parametros.set('vista', vista);
+      }
+      parametros.set('limite', String(limite));
+      return (
+        (await llamar('GET', `/chat/sugerencias/para-ti?${parametros.toString()}`, undefined, {
+          rutaFija: true,
+        })) ?? []
+      );
+    },
+
+    /**
+     * Preferencias de respuesta de esta sesión (idioma y nivel de detalle).
+     * Sin identidad, el servidor responde las de quien nunca eligió. Desde
+     * 1.15.0 traen también `nivelDetalleEfectivo`: con el nivel AUTOMATICO,
+     * el que corresponde hoy a su experiencia con el asistente.
+     *
+     * @returns {Promise<{idioma: string, nivelDetalle: string, nivelDetalleEfectivo?: string}>}
      */
     preferencias() {
       return llamar('GET', '/chat/preferencias', undefined, { rutaFija: true });
@@ -423,7 +449,8 @@ export function crearClienteChatbot({
      * Guarda las preferencias (el par completo).
      *
      * @param {{idioma: string, nivelDetalle: string}} preferencias
-     * @returns {Promise<{idioma: string, nivelDetalle: string}>} las guardadas
+     * @returns {Promise<{idioma: string, nivelDetalle: string, nivelDetalleEfectivo?: string}>}
+     *   las guardadas
      */
     guardarPreferencias({ idioma, nivelDetalle }) {
       return llamar('PUT', '/chat/preferencias', { idioma, nivelDetalle }, { rutaFija: true });

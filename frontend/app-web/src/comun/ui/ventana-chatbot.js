@@ -22,6 +22,11 @@
  *   viene abierta y su aviso lleva a «Tus solicitudes» («Ver solicitud»);
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
+ * - 1.15.0 (§7.4.3 «sugerencias proactivas») — al cargar la conversación, el
+ *   asistente propone «Quizá te interese» por lo que esa persona ya le
+ *   preguntó, por la sección donde está o, si aún no preguntó nada, de lo más
+ *   consultado, y dice por qué. Es del navegador: no entra en el historial y
+ *   se va con la siguiente pregunta, como la bienvenida;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
  *   (`soporte-chatbot.js`). Desde 1.12.0 también el visitante: las ve
  *   mientras dure su sesión, y se le ofrece entrar (volviendo a esta página)
@@ -74,7 +79,12 @@ import { icono } from './icono.js';
 import { crearPanelPreferencias } from './preferencias-chatbot.js';
 import { pintarEstadoDelCanal } from './reconexion.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
-import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
+import {
+  CUANTAS,
+  conectarAutocompletado,
+  contenidoParaTi,
+  crearPreguntasRapidas,
+} from './sugerencias-chatbot.js';
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
@@ -281,6 +291,8 @@ export function crearVentanaChatbot({
   let cargada = false;
   let enviando = false;
   let devolverFocoA = null;
+  // 1.15.0 — cada «Quizá te interese» pedido; una respuesta vieja se ignora.
+  let turnoParaTi = 0;
 
   // #506 — tras un 429, «Enviar» espera lo que dijo el servidor.
   let enEspera = false;
@@ -516,6 +528,52 @@ export function crearVentanaChatbot({
 
   function quitarBienvenida() {
     registro.querySelector('[data-bienvenida]')?.remove();
+  }
+
+  // 1.15.0 (§7.4.3) — «Quizá te interese», al final de la conversación. Si
+  // el servicio no responde, simplemente no sale: el chat sigue igual.
+  async function proponer() {
+    olvidarParaTi();
+    const este = turnoParaTi;
+    const donde = vista();
+    let sugerencias = [];
+    try {
+      sugerencias =
+        (await cliente.sugerenciasParaTi(
+          donde ? { vista: donde, limite: CUANTAS.paraTi } : { limite: CUANTAS.paraTi },
+        )) ?? [];
+    } catch {
+      sugerencias = [];
+    }
+    pintarParaTi(este, sugerencias);
+  }
+
+  // Fuera de `proponer`: lo que se toca después de un `await` vive aparte
+  // (regla require-atomic-updates de ESLint). Si mientras tanto se preguntó
+  // algo, se recargó o se borró la conversación, ya no corresponde.
+  function pintarParaTi(este, sugerencias) {
+    if (este !== turnoParaTi || enviando || !cargada) {
+      return;
+    }
+    const contenido = contenidoParaTi(sugerencias, { alElegir: enviarSugerencia });
+    if (!contenido) {
+      return;
+    }
+    registro.append(
+      h('li', {
+        clase: 'chatbot-ventana__mensaje chatbot-ventana__mensaje--bot',
+        datos: { proactiva: '' },
+        hijos: [quienHabla(true), contenido],
+      }),
+    );
+    // Como cualquier mensaje nuevo del asistente: a la vista.
+    registro.scrollTop = registro.scrollHeight;
+  }
+
+  // Lo propuesto se va (y lo que esté por llegar ya no se pinta).
+  function olvidarParaTi() {
+    turnoParaTi += 1;
+    registro.querySelector('[data-proactiva]')?.remove();
   }
 
   /**
@@ -806,6 +864,7 @@ export function crearVentanaChatbot({
   async function cargarHistorial() {
     limpiarAviso();
     reiniciarPaginas();
+    olvidarParaTi();
     vaciar(registro);
     const cargando = estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' });
     registro.append(h('li', { clase: 'chatbot-ventana__cargando', hijos: [cargando] }));
@@ -830,6 +889,7 @@ export function crearVentanaChatbot({
       cargada = true;
       habilitarFormulario(true);
       rapidas.cargar();
+      proponer();
       recuperarFoco();
       // 7.4.9 — el canal se abre cuando el asistente ya respondió por HTTP.
       canal?.abrir();
@@ -970,6 +1030,7 @@ export function crearVentanaChatbot({
     // #506 — la pregunta se pinta ya, antes de que llegue la respuesta, con
     // «escribiendo…» debajo; la caja queda libre para la siguiente.
     quitarBienvenida();
+    olvidarParaTi();
     const pregunta = crearBurbuja({
       remitente: 'USUARIO',
       contenido,
@@ -1062,6 +1123,8 @@ export function crearVentanaChatbot({
       vaciar(registro);
       limpiarAviso();
       pintarBienvenida();
+      // Sin historial, lo que se propone vuelve a ser lo de quien empieza.
+      proponer();
     } catch (error) {
       mostrarAviso(error?.noDisponible ? error : TEXTOS.errorAlBorrar);
     }
@@ -1083,11 +1146,24 @@ export function crearVentanaChatbot({
   botonBorrar.addEventListener('click', borrarConversacion);
   botonAnteriores.addEventListener('click', cargarAnteriores);
   // Scroll infinito: al llegar arriba se piden los anteriores.
+  // Si la conversación cambia de alto (la píldora del canal, un aviso, el
+  // tamaño de la ventana) mientras se leía lo último, lo último sigue a la
+  // vista. Quien subió a leer mensajes anteriores no salta.
+  let alFinalDeLaConversacion = true;
   registro.addEventListener('scroll', () => {
+    alFinalDeLaConversacion =
+      registro.scrollHeight - registro.scrollTop - registro.clientHeight <= UMBRAL_DE_ANTERIORES;
     if (registro.scrollTop <= UMBRAL_DE_ANTERIORES && hayAnteriores && !cargandoAnteriores) {
       cargarAnteriores();
     }
   });
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => {
+      if (alFinalDeLaConversacion) {
+        registro.scrollTop = registro.scrollHeight;
+      }
+    }).observe(registro);
+  }
   botonCerrar.addEventListener('click', () => cerrar());
 
   // -------------------------------------------------------------- soporte

@@ -8,6 +8,7 @@ import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TemaConocimiento;
 import com.nexusbattles.ms_chatbot.chat.motor.model.TipoRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
+import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.texto.DistanciaDeEdicion;
 import com.nexusbattles.ms_chatbot.chat.texto.IdiomaDelTexto;
@@ -284,6 +285,10 @@ public class MotorRespuestas {
         RespuestaEnriquecida enriquecida = Enriquecedor.paraTema(tema, texto, temas, ingles);
         String mostrado = AjusteDeDetalle.aplicar(texto, tema.getTipoRespuesta(), preferencias.nivelDetalle(),
             enriquecida.respuestasRapidas(), ingles);
+        // 1.15.0 (D-CHA-13): recortada, «Más detalle» la da entera en un clic.
+        if (preferencias.nivelDetalle() == NivelDeDetalle.BREVE && !mostrado.equals(texto.strip())) {
+            enriquecida = Enriquecedor.conMasDetalle(enriquecida, ingles);
+        }
         return ResultadoMotor.deTema(mostrado, tema.getCategoria(), tema.getTipoRespuesta(), tema.getClave())
             .conEnriquecido(enriquecida)
             .enIngles(ingles);

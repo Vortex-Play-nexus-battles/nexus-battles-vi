@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.motor;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
@@ -323,10 +324,45 @@ class MotorRespuestasTest {
             .thenReturn(List.of(temaTorneoSoloEnEspanol(), temaRegistro(0)));
         PreferenciasDeRespuesta breve = new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.BREVE);
 
-        assertThat(motorRespuestas.generarRespuesta("torneo", null, breve).texto())
-            .isEqualTo("El torneo se juega en equipos.");
-        assertThat(motorRespuestas.generarRespuesta("como me registro", null, breve).texto())
+        ResultadoMotor torneo = motorRespuestas.generarRespuesta("torneo", null, breve);
+        ResultadoMotor registro = motorRespuestas.generarRespuesta("como me registro", null, breve);
+
+        assertThat(torneo.texto()).isEqualTo("El torneo se juega en equipos.");
+        assertThat(registro.texto())
             .isEqualTo("Para crear tu cuenta necesitas nombres, correo, contraseña, apodo y avatar.");
+        // 1.15.0 (D-CHA-13): la recortada lleva delante «Más detalle»; la que va entera, no.
+        assertThat(torneo.enriquecido().respuestasRapidas()).first().isEqualTo(Enriquecedor.MAS_DETALLE_ES);
+        assertThat(registro.enriquecido().respuestasRapidas()).doesNotContain(Enriquecedor.MAS_DETALLE_ES);
+    }
+
+    @Test
+    void generarRespuesta_breveEnIngles_ofreceElBotonEnIngles() {
+        TemaConocimiento torneo = new TemaConocimiento(null, "clave-torneo", Categoria.MODALIDAD_JUEGO,
+            TipoRespuesta.DIRECTA, "Cómo funciona el Torneo", "torneo", "tournament",
+            "El torneo se juega en equipos. Tiene 8 encuentros.", "The tournament is played in teams. It has 8 matches.",
+            0, true);
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(torneo, temaRegistro(0)));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("how does the tournament work", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.BREVE));
+
+        assertThat(resultado.texto()).isEqualTo("The tournament is played in teams.");
+        assertThat(resultado.enriquecido().respuestasRapidas()).containsExactly(Enriquecedor.MAS_DETALLE_EN);
+    }
+
+    // 1.15.0: AUTOMATICO llega al motor ya traducido (ExperienciaDelChat); si
+    // llegara tal cual, responde como NORMAL: la respuesta entera, sin boton.
+    @Test
+    void generarRespuesta_automatico_respondeComoNormal() {
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(temaTorneoSoloEnEspanol()));
+
+        ResultadoMotor resultado = motorRespuestas.generarRespuesta("torneo", null,
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.AUTOMATICO));
+
+        assertThat(resultado.texto()).isEqualTo("El torneo se juega en equipos. Tiene 8 encuentros.");
+        assertThat(resultado.enriquecido().respuestasRapidas()).doesNotContain(Enriquecedor.MAS_DETALLE_ES);
     }
 
     @Test

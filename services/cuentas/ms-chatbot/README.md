@@ -1,7 +1,7 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.14.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
-**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V19) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.15.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
+**Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V20) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
 ## Qué hace
@@ -340,6 +340,27 @@ administrador las ve y las lee, y por la ruta de otra solicitud no; GIF, SVG, po
 2 MB se rechazan; tres sí y la cuarta no; respondida ya no admite; el visitante adjunta a la
 suya; y se borran con su solicitud.
 
+## Sugerencias para ti y detalle según la experiencia (7.4.3 y 7.4.5, 1.15.0)
+
+- **«Quizá te interese»** (§7.4.3 «sugerencias proactivas: recomendaciones basadas en el
+  comportamiento del usuario», D-CHA-14): `GET /chat/sugerencias/para-ti?vista=&limite=`
+  (`SugerenciasParaTiService`) propone, con la identidad del chat (token o sesión de
+  visitante registrada; nunca un parámetro), primero otras preguntas de la misma categoría que
+  los temas que ya le respondieron (`POR_LO_QUE_PREGUNTASTE`, con `relacionadoCon`: el tema que
+  las trajo; dos por tema, de las 50 respuestas más recientes), luego las de la sección donde
+  está (`POR_DONDE_ESTAS`) y, solo a quien aún no preguntó nada, las más consultadas
+  (`PARA_EMPEZAR`). Nunca un tema de cortesía ni uno ya respondido; todo de la versión en
+  producción. Se calcula al pedirlo: no guarda nada, no abre conversación ni registra una
+  sesión, y no mira otro servicio. Borrar la conversación lo devuelve a lo de quien empieza.
+- **Nivel de detalle automático** (§7.4.5 «adaptar el nivel de detalle según la experiencia del
+  usuario», RF-CHA-010, D-CHA-13): `nivelDetalle` admite `AUTOMATICO` (V20), el de quien nunca
+  eligió. `ExperienciaDelChat` lo traduce antes de responder con las preguntas suyas que el
+  asistente ya resolvió (`TEMA`, `CONSULTA_EN_VIVO`, `NAVEGACION`): menos de 5, `DETALLADO`;
+  hasta 29, `NORMAL`; desde 30, `BREVE`, y la respuesta recortada lleva delante el botón «Más
+  detalle» (un seguimiento: la da entera). El motor y la caché solo ven el nivel ya traducido;
+  `GET`/`PUT /chat/preferencias` devuelven también `nivelDetalleEfectivo`. Un nivel elegido a
+  mano manda; las filas guardadas antes de V20 no cambian.
+
 ## Diálogo (1.5.0)
 
 - **Idioma:** las respuestas en vivo, la navegación, los avisos y el escalamiento van en el
@@ -668,6 +689,13 @@ de elegir. En «Hablar con soporte» (`soporte-chatbot.js`) cada solicitud abier
 ofrece y el formulario admite una captura opcional, que se sube en cuanto la solicitud queda
 abierta; en el panel (`panel-chatbot-soporte.js`) el detalle de la solicitud las enseña.
 
+1.15.0 (§7.4.3 y §7.4.5): al cargar la conversación, `ventana-chatbot.js` pinta al final la
+burbuja «Quizá te interese» (`contenidoParaTi` en `sugerencias-chatbot.js`), agrupada por el
+motivo que la explica; es del navegador (no entra en el historial) y se va con la siguiente
+pregunta. Si la conversación cambia de alto mientras se leía lo último, lo último sigue a la
+vista. En «Preferencias», el nivel «Automático» dice con qué nivel se le responde hoy, y
+«Restablecer» vuelve a las de quien nunca eligió (RF-CHA-010).
+
 ## Pruebas
 
 `./gradlew :services:cuentas:ms-chatbot:check` — unitarias (`ChatServiceTest`,
@@ -684,4 +712,6 @@ de 1.8.0; `CanalDelChatbotIT` y `RespuestasFrecuentesIT`: el canal en tiempo rea
 de 7.4.9; `CatalogoEnVivoIT`: el catálogo de 1.10.0; `RedactarLaPuntuacionDeLosSecretosIT` y
 `ReglasDelJuegoIT` y `BaseDeConocimientoAlDiaIT`: V14, V15 y V16 de 1.11.0;
 `RedactarLasClavesAnunciadasIT` y `SolicitudesAutomaticasIT`: V17 y la solicitud automática de
-1.12.0; `CapturasDeSoporteIT`: V19 y las capturas de 1.14.0). JaCoCo ≥ 80 %.
+1.12.0; `CapturasDeSoporteIT`: V19 y las capturas de 1.14.0; `NivelDeDetalleAutomaticoIT` y
+`SugerenciasYExperienciaIT`: V20, el nivel por experiencia y las sugerencias para ti de
+1.15.0). JaCoCo ≥ 80 %.

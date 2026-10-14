@@ -273,6 +273,26 @@ describe('operaciones', () => {
     expect(fetch.mock.calls[0][1].method).toBe('GET');
   });
 
+  // 1.15.0 (§7.4.3): con la identidad de siempre (token o sesión de
+  // visitante); el servidor decide de quién son, nunca un parámetro.
+  test('sugerenciasParaTi pide las de esta persona, con la sección si la hay', async () => {
+    const fetch = jest
+      .fn()
+      .mockResolvedValueOnce(respuestaJson([{ clave: 'k-1', motivo: 'PARA_EMPEZAR' }]))
+      .mockResolvedValueOnce(respuestaJson(null));
+    const chat = cliente({ fetch, sesion: JUGADOR });
+
+    expect(await chat.sugerenciasParaTi()).toEqual([{ clave: 'k-1', motivo: 'PARA_EMPEZAR' }]);
+    expect(await chat.sugerenciasParaTi({ vista: 'SUBASTAS', limite: 2 })).toEqual([]);
+
+    expect(fetch.mock.calls[0][0]).toBe('/api/v1/chat/sugerencias/para-ti?limite=3');
+    expect(fetch.mock.calls[1][0]).toBe('/api/v1/chat/sugerencias/para-ti?vista=SUBASTAS&limite=2');
+    const [, opciones] = fetch.mock.calls[0];
+    expect(opciones.method).toBe('GET');
+    expect(opciones.headers.Authorization).toBe('Bearer token-del-jugador');
+    expect(opciones.headers['X-Id-Sesion-Anonima']).toBe('visitante-fijo');
+  });
+
   test('un 409 al abrir un ticket conserva el motivo del servidor', async () => {
     const fetch = jest.fn(async () =>
       respuestaJson({ title: 'Ya tienes un ticket abierto', motivo: 'TICKET_ABIERTO' }, 409),
