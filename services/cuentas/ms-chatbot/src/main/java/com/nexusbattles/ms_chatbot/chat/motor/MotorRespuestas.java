@@ -50,9 +50,15 @@ public class MotorRespuestas {
     private static final int PUNTAJE_PALABRA_CORTA = 1;
     private static final int PUNTAJE_PALABRA_LARGA = 2;
 
-    private static final int DISTANCIA_MAXIMA_PALABRA_LARGA = 1;
-    private static final int DISTANCIA_MAXIMA_PALABRA_CORTA = 1;
     private static final int LONGITUD_PALABRA_LARGA = 5;
+
+    /**
+     * En una frase, una palabra con un error de tecleo solo cuenta si tiene al
+     * menos estas letras: «registor» es «registro» mal escrito, pero «duela»
+     * no es «duelo» (son palabras distintas y la frase entera vale 3 puntos,
+     * lo que basta para responder).
+     */
+    private static final int LONGITUD_TOLERADA_EN_FRASE = 6;
 
     /**
      * Palabras gramaticales (stopwords) en español e inglés que no aportan
@@ -185,9 +191,28 @@ public class MotorRespuestas {
         return copia;
     }
 
+    // El vocabulario de la ultima lista de temas: la de produccion es la misma
+    // instancia mientras no cambie la version (TemasEnProduccion), asi que no
+    // se recalcula en cada mensaje.
+    private record Vocabulario(List<TemaConocimiento> de, Set<String> palabras) {
+    }
+
+    private volatile Vocabulario ultimoVocabulario;
+
+    private Set<String> vocabularioCacheado(List<TemaConocimiento> temas) {
+        Vocabulario actual = ultimoVocabulario;
+        if (actual != null && actual.de() == temas) {
+            return actual.palabras();
+        }
+        Set<String> palabras = Set.copyOf(vocabularioDe(temas));
+        ultimoVocabulario = new Vocabulario(temas, palabras);
+        return palabras;
+    }
+
     private ResultadoMotor responderCon(String mensajeUsuario, List<TemaConocimiento> temasRecibidos,
                                         VistaDelChat vista, PreferenciasDeRespuesta preferencias) {
         List<TemaConocimiento> temas = ordenados(temasRecibidos);
+        Set<String> vocabulario = vocabularioCacheado(temasRecibidos);
         Categoria preferida = vista == null ? null : vista.categoria();
         String mensajeNormalizado = NormalizadorTexto.normalizar(mensajeUsuario);
         Optional<TemaConocimiento> porTitulo = temaConElTitulo(mensajeNormalizado, temas);
@@ -203,8 +228,8 @@ public class MotorRespuestas {
             if (!tema.isActivo()) {
                 continue;
             }
-            int puntajeEs = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEs());
-            int puntajeEn = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEn());
+            int puntajeEs = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEs(), vocabulario);
+            int puntajeEn = puntuar(palabrasMensaje, mensajeNormalizado, tema.getPalabrasClaveEn(), vocabulario);
 
             boolean esIngles = puntajeEn > puntajeEs;
             int puntaje = esIngles ? puntajeEn : puntajeEs;
@@ -311,7 +336,13 @@ public class MotorRespuestas {
         return candidata.tema().getPrioridad() > actual.tema().getPrioridad();
     }
 
-    private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas) {
+    // Segunda auditoria del 7.4 (7.4.2 «errores ortograficos comunes»): una
+    // variante cuenta como frase tambien con un error de tecleo en sus
+    // palabras largas («como me registor», «como funsionan las subatsas»).
+    // Antes solo la frase exacta sumaba 3 y una palabra aproximada sola sumaba
+    // 2, por debajo del umbral: la pregunta mal escrita escalaba.
+    private int puntuar(List<String> palabrasMensaje, String mensajeNormalizado, String palabrasClaveCrudas,
+                        Set<String> vocabulario) {
         if (palabrasClaveCrudas == null || palabrasClaveCrudas.isBlank()) {
             return 0;
         }
@@ -325,7 +356,7 @@ public class MotorRespuestas {
                 continue;
             }
 
-            if (mensajeNormalizado.contains(fraseNormalizada)) {
+            if (contieneFrase(palabrasMensaje, mensajeNormalizado, fraseNormalizada, vocabulario)) {
                 puntaje += PUNTAJE_FRASE_EXACTA;
             }
 
@@ -338,7 +369,7 @@ public class MotorRespuestas {
 
         for (String palabraClave : palabrasClaveUnicas) {
             for (String palabraMensaje : palabrasMensaje) {
-                if (coincidenAproximadamente(palabraClave, palabraMensaje)) {
+                if (coincidenAproximadamente(palabraClave, palabraMensaje, vocabulario)) {
                     puntaje += esPalabraLarga(palabraClave) ? PUNTAJE_PALABRA_LARGA : PUNTAJE_PALABRA_CORTA;
                     break;
                 }
@@ -348,20 +379,78 @@ public class MotorRespuestas {
         return puntaje;
     }
 
-    private boolean coincidenAproximadamente(String palabraClave, String palabraMensaje) {
+    // La frase tal cual, o como palabras seguidas del mensaje que coinciden
+    // una a una (aproximadamente, con la misma regla que las palabras sueltas).
+    private static boolean contieneFrase(List<String> palabrasMensaje, String mensajeNormalizado, String frase,
+                                         Set<String> vocabulario) {
+        if (mensajeNormalizado.contains(frase)) {
+            return true;
+        }
+        String[] palabrasFrase = frase.split(" ");
+        for (int inicio = 0; inicio + palabrasFrase.length <= palabrasMensaje.size(); inicio++) {
+            boolean todas = true;
+            for (int k = 0; k < palabrasFrase.length && todas; k++) {
+                String deLaFrase = palabrasFrase[k];
+                String delMensaje = palabrasMensaje.get(inicio + k);
+                todas = deLaFrase.equals(delMensaje)
+                    || (deLaFrase.length() >= LONGITUD_TOLERADA_EN_FRASE
+                        && coincidenAproximadamente(deLaFrase, delMensaje, vocabulario));
+            }
+            if (todas) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Iguales, o un error de tecleo en una palabra larga (DistanciaDeEdicion:
+    // las cortas solo coinciden exactas). Una palabra del mensaje que ya es
+    // otra palabra de la base no es un error de tecleo: «formas» no es
+    // «normas» mal escrito (segunda auditoria del 7.4: «¿de qué formas puedo
+    // jugar?» caia en las normas de conducta).
+    private static boolean coincidenAproximadamente(String palabraClave, String palabraMensaje,
+                                                    Set<String> vocabulario) {
         if (palabraClave.isBlank() || palabraMensaje.isBlank()) {
             return false;
         }
         if (palabraClave.equals(palabraMensaje)) {
             return true;
         }
-        int distanciaMaxima = esPalabraLarga(palabraClave)
-            ? DISTANCIA_MAXIMA_PALABRA_LARGA
-            : DISTANCIA_MAXIMA_PALABRA_CORTA;
-        return DistanciaDeEdicion.entre(palabraClave, palabraMensaje) <= distanciaMaxima;
+        if (vocabulario.contains(palabraMensaje) && !esSuPlural(palabraClave, palabraMensaje)) {
+            return false;
+        }
+        return DistanciaDeEdicion.coinciden(palabraClave, palabraMensaje);
     }
 
-    private boolean esPalabraLarga(String palabra) {
+    // «recompensa» y «recompensas» son la misma palabra aunque las dos esten
+    // en la base.
+    private static boolean esSuPlural(String una, String otra) {
+        return una.equals(otra + "s") || otra.equals(una + "s");
+    }
+
+    // Las palabras de todas las variantes de los temas activos, en los dos
+    // idiomas: lo que la base ya reconoce como palabra.
+    static Set<String> vocabularioDe(List<TemaConocimiento> temas) {
+        Set<String> vocabulario = new java.util.HashSet<>();
+        for (TemaConocimiento tema : temas) {
+            if (!tema.isActivo()) {
+                continue;
+            }
+            for (String crudas : new String[] {tema.getPalabrasClaveEs(), tema.getPalabrasClaveEn()}) {
+                if (crudas == null || crudas.isBlank()) {
+                    continue;
+                }
+                for (String palabra : NormalizadorTexto.normalizar(crudas.replace(',', ' ')).split(" ")) {
+                    if (!palabra.isBlank()) {
+                        vocabulario.add(palabra);
+                    }
+                }
+            }
+        }
+        return vocabulario;
+    }
+
+    private static boolean esPalabraLarga(String palabra) {
         return palabra.length() >= LONGITUD_PALABRA_LARGA;
     }
 
