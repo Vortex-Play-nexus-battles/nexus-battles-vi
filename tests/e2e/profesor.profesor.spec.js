@@ -487,7 +487,7 @@ test.describe('R17 · la prueba del profesor', () => {
         const heroe = page.locator('.inventario-heroes [data-heroe]');
         await expect(heroe).toHaveCount(1, { timeout: 30_000 });
         nombreDelHeroe = ((await heroe.locator('.hero-card__nombre').textContent()) ?? '').trim();
-        await heroe.getByRole('button', { name: /^Ver la ficha de / }).click();
+        await heroe.getByRole('button', { name: /^Ver ficha de / }).click();
         const ficha = page.locator('[role="dialog"].ficha');
         await expect(ficha).toBeVisible();
         await expect(ficha.locator('.ficha__nombre')).not.toBeEmpty();
@@ -533,7 +533,7 @@ test.describe('R17 · la prueba del profesor', () => {
         // y se equipa en «Mi inventario → Equipo». El alta lo deja listo.
         await irA(page, 'inventario');
         const heroe = page.locator('.inventario-heroes [data-heroe]');
-        await heroe.getByRole('button', { name: /^Gestionar el equipamiento de / }).click();
+        await heroe.getByRole('button', { name: /^(Equipamiento de|Equiparlo:) / }).click();
         await expect(page.locator('.inventario-equipo__estadisticas')).toBeVisible({
           timeout: 30_000,
         });

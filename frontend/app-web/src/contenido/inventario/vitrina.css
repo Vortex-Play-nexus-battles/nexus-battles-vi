@@ -624,6 +624,12 @@
   font-size: 0.75rem;
 }
 
+/* §7.1 — toda la tarjeta abre el detalle con el raton (el boton «Ver detalle»
+   sigue siendo el camino del teclado). */
+.vitrina__producto--pulsable {
+  cursor: pointer;
+}
+
 .vitrina__nombre {
   grid-column: 2;
   margin: 0;

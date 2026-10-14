@@ -15,12 +15,17 @@ import {
   equiparElemento,
   desequiparElemento,
   eliminarElemento,
+  CATEGORIAS,
 } from './cliente-inventario.js';
 import { retratoDeHeroe } from '../../comun/ui/juego/heroe.js';
 import { bloqueDeEstadisticas } from '../../comun/ui/juego/estadisticas.js';
 import { construirVitrina, PRODUCTOS_POR_PAGINA } from './vitrina.js';
 import { pintarRetratos } from './retratos.js';
-import { motivoDelRechazo, pintarEquipamiento } from './equipamiento.js';
+import {
+  idsEquipados as idsDeEquipo,
+  motivoDelRechazo,
+  pintarEquipamiento,
+} from './equipamiento.js';
 import { construirCarga, construirVacio, construirError } from './estados-vista.js';
 import { abrirFicha } from './ficha-producto.js';
 import { construirPaginacion } from '../../comun/paginacion.js';
@@ -28,7 +33,12 @@ import { acusar } from '../../comun/ui/acuse.js';
 import { confirmar as confirmarEnDialogo } from '../../comun/ui/dialogo.js';
 import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { consultarProducto as consultarProductoDelCatalogo } from './cliente-productos.js';
-import { estadoDeHeroe, estadoDeObjeto, selloDeEstado } from '../../comun/ui/juego/estado-heroe.js';
+import {
+  ESTADOS,
+  estadoDeHeroe,
+  estadoDeObjeto,
+  selloDeEstado,
+} from '../../comun/ui/juego/estado-heroe.js';
 import { reunirInventario, esHeroe, paginaLocal, mapaDeEquipados } from './coleccion-inventario.js';
 import { pintarHeroes } from './heroes-inventario.js';
 import { pintarHeroesDelNexo } from './heroes-del-nexo.js';
@@ -55,6 +65,28 @@ export const ROLES_QUE_DAN_DE_ALTA = Object.freeze(['ADMINISTRADOR', 'SUPER_ADMI
  * final, después de lo que dice el catálogo.
  */
 const COMPLEMENTOS_DE_LA_FICHA = [complementoDeOpiniones()];
+
+/**
+ * §7.1 al pie de la letra (revisión final, 13-oct): con una página aparece la
+ * casilla «1», y las flechas solo están si hay páginas ocultas a su lado y al
+ * pulsarlas las muestran (ver `comun/paginacion.js`).
+ */
+const PAGINACION_DE_7_1 = Object.freeze({ unaPagina: 'visible', flechas: 'revelan-ocultas' });
+
+/** inventario.yaml 1.7.0 — largo máximo del nombre propio (crear y renombrar). */
+const MAXIMO_NOMBRE_PROPIO = 60;
+
+/**
+ * Tras repintar un control de paginación, el foco vuelve a donde estaba: a la
+ * misma flecha si sigue existiendo, o a la casilla de la página actual
+ * (RNF-ACC-002: repintar no puede dejar el foco en el body).
+ */
+function enfocarControl(contenedor, direccion) {
+  const flecha = direccion
+    ? contenedor.querySelector(`[data-direccion="${direccion}"]:not([disabled])`)
+    : null;
+  (flecha ?? contenedor.querySelector('[aria-current="page"]'))?.focus();
+}
 
 const TIPOS = [
   ['HEROE', 'Héroe'],
@@ -170,15 +202,22 @@ export async function montarVitrina(
       alEliminar,
       estadoDe,
       // HU-INV-007: la ficha lee el catalogo por su cuenta; el inventario
-      // solo guarda la referencia (RF-ADM-10).
-      alAbrirDetalle: (elemento) =>
+      // solo guarda la referencia (RF-ADM-10). Revisión final (13-oct): §7.1
+      // pide en el detalle «la información del inventario»: el nombre que le
+      // puso el jugador y su estado van en «En tu inventario».
+      alAbrirDetalle: (elemento, { origen } = {}) =>
         abrirFicha(elemento.productoId, {
-          origen: document.activeElement,
+          origen: origen ?? document.activeElement,
           complementos: COMPLEMENTOS_DE_LA_FICHA,
           // R5: para un heroe, la ficha completa con lo que el jugador tiene de
           // verdad. Para lo demas sobran y se ignoran.
           elementoId: elemento.id,
           identidad,
+          nombrePropio: elemento.tipo === 'HEROE' ? elemento.nombrePropio : null,
+          enTuInventario: {
+            nombrePropio: elemento.nombrePropio,
+            sello: typeof estadoDe === 'function' ? estadoDe(elemento) : null,
+          },
         }),
     }),
   );
@@ -233,6 +272,9 @@ function construirGestion() {
   // a esa pestaña. La etiqueta ya no está oculta: quien mira sabe qué busca.
   const busqueda = elementoHtml('form', 'inventario-busqueda inventario-busqueda--general');
   busqueda.setAttribute('role', 'search');
+  // La validación del mínimo la hace el envío con la frase del juego: el globo
+  // nativo saldría en el idioma del navegador (revisión final, 13-oct).
+  busqueda.noValidate = true;
   const busquedaCampo = elementoHtml('label', 'inventario-busqueda__campo');
   const busquedaEtiqueta = elementoHtml(
     'span',
@@ -245,13 +287,14 @@ function construirGestion() {
   busquedaControl.name = 'criterio';
   busquedaControl.minLength = 4;
   busquedaControl.autocomplete = 'off';
-  // Lo que de verdad indexa el servicio (inventario.yaml, búsqueda): el nombre,
-  // el tipo y la parte de armadura de cada elemento. No se promete más.
-  busquedaControl.placeholder = 'Nombre, tipo o parte de armadura';
+  busquedaControl.maxLength = 100;
+  // Lo que de verdad indexa el servicio (inventario.yaml 1.7.0, búsqueda): lo
+  // que guarda el inventario y la información del producto en el catálogo.
+  busquedaControl.placeholder = 'Nombre, efecto, habilidad o tipo';
   const busquedaPista = elementoHtml(
     'p',
     'inventario-busqueda__pista',
-    'Desde 4 letras, en tus héroes y tus objetos.',
+    'Desde 4 letras: busca en el nombre, la descripción, los efectos y las habilidades de tus héroes y objetos.',
   );
   busquedaPista.id = 'inventario-busqueda-pista';
   busquedaControl.setAttribute('aria-describedby', busquedaPista.id);
@@ -277,6 +320,8 @@ function construirGestion() {
     tipo.control.appendChild(opcion);
   }
   const nombre = campoFormulario('Nombre', 'nombrePropio');
+  // inventario.yaml 1.7.0: el nombre propio tiene como mucho 60 caracteres.
+  nombre.control.maxLength = MAXIMO_NOMBRE_PROPIO;
   const parte = campoFormulario('Parte de armadura', 'parteArmadura', 'select');
   for (const [valor, etiqueta] of PARTES_ARMADURA) {
     const opcion = document.createElement('option');
@@ -345,7 +390,13 @@ function construirGestion() {
   tituloMisHeroes.id = 'inventario-mis-heroes';
   const misHeroes = elementoHtml('section', 'inventario__seccion inventario__seccion--mis-heroes');
   misHeroes.setAttribute('aria-labelledby', tituloMisHeroes.id);
-  misHeroes.append(tituloMisHeroes, introHeroes, heroes);
+  // Revisión final (13-oct): «Mis héroes» también pagina de dieciséis en
+  // dieciséis, con el mismo control de §7.1, y cada página la da el servidor.
+  const paginacionHeroes = elementoHtml(
+    'div',
+    'inventario__paginacion inventario__paginacion--heroes',
+  );
+  misHeroes.append(tituloMisHeroes, introHeroes, heroes, paginacionHeroes);
   const tituloNexo = elementoHtml('h2', 'inventario__seccion-titulo', 'Héroes del Nexo');
   tituloNexo.id = 'inventario-heroes-del-nexo';
   const introNexo = elementoHtml(
@@ -411,6 +462,7 @@ function construirGestion() {
     zonaPestanas,
     panelHeroes,
     heroes,
+    paginacionHeroes,
     heroesDelNexo,
     introObjetos,
     panelObjetos,
@@ -473,6 +525,9 @@ export async function montarInventario(
     pestanaInicial = 'heroes',
     maxPaginas,
     rol = leerSesion().rol,
+    // Revisión final (13-oct): `inventario.html?busqueda=…` abre la vista con
+    // esa búsqueda hecha (enlace directo).
+    busquedaInicial = '',
   } = {},
 ) {
   const vista = construirGestion();
@@ -510,17 +565,33 @@ export async function montarInventario(
   };
 
   /**
-   * UXC-1 — la coleccion entera, partida en heroes y objetos (ver
-   * `coleccion-inventario.js`). `completa` es falso si se alcanzo el tope de
-   * paginas: entonces se dice, y el selector de equipo vuelve a recorrer el
-   * servidor por tandas.
+   * Revisión final del módulo (13-oct) — §7.1: «distribución responsive para
+   * dieciséis productos por página … navegables a través de un control de
+   * paginación». Desde inventario.yaml 1.7.0 el servidor pagina cada pestaña
+   * por separado (`categoria=HEROES|OBJETOS`): cada vitrina pide SOLO la página
+   * que enseña. Antes (UXC-1) se reunía el inventario entero y se cortaba aquí.
+   *
+   * Si el servidor ignora la categoría —uno anterior a 1.7.0 durante un
+   * despliegue, o un doble de prueba que no la distingue— se nota en la primera
+   * respuesta (trae elementos de la otra pestaña) y se vuelve al camino de
+   * antes: reunir la colección y paginarla aquí. `porCategoria` lo recuerda.
    */
-  let coleccion = { elementos: [], completo: true };
+  let porCategoria = null;
+  /** Solo en el camino de compatibilidad: la colección reunida entera. */
+  let coleccion = null;
+  /** Todos los héroes del jugador (selector de equipo, «Ya es tuyo» del Nexo). */
   let heroes = [];
+  /** Todos los objetos, solo cuando el equipamiento los necesita como candidatos. */
   let objetos = [];
+  let objetosCompletos = false;
+  let promesaHeroes = null;
+  let promesaObjetos = null;
+  /** La página de héroes que enseña «Mis héroes». */
+  let paginaHeroesMostrada = null;
+  let turnoHeroes = 0;
   /** heroeId → EquipamientoHeroe (o undefined si no se pudo leer). */
   let equipos = new Map();
-  /** elementoId → nombre del heroe que lo lleva. */
+  /** elementoId → nombre del heroe que lo lleva (respaldo de `equipadoEn`). */
   let equipados = new Map();
   /** heroeId → prototipo del catalogo (para su simbolo). */
   let prototipos = new Map();
@@ -536,75 +607,239 @@ export async function montarInventario(
   );
   // `montarPestanas` deja la lista donde se le pide; el contenedor es suyo.
   vista.zonaPestanas.classList.add('inventario__pestanas--montadas');
+  vista.zonaPestanas
+    .querySelector('[role="tablist"]')
+    ?.setAttribute('aria-label', 'Secciones de Mi inventario');
+
+  /** Quién lleva un objeto: el servidor (1.7.0) o, de respaldo, el equipo leído. */
+  function portadorDe(elemento) {
+    if (elemento?.equipadoEn?.heroeId) {
+      return elemento.equipadoEn;
+    }
+    for (const [heroeId, equipo] of equipos) {
+      if (equipo && idsDeEquipo(equipo).has(elemento?.id)) {
+        const heroe =
+          heroes.find((h) => h.id === heroeId) ??
+          paginaHeroesMostrada?.elementos?.find((h) => h.id === heroeId);
+        return { heroeId, nombreHeroe: heroe?.nombrePropio ?? equipados.get(elemento.id) ?? null };
+      }
+    }
+    return null;
+  }
 
   /** Sello de estado de cada tarjeta de la vitrina de objetos. */
   function estadoDeTarjeta(elemento) {
+    if (esHeroe(elemento) && !equipos.has(elemento.id)) {
+      // Revisión final (13-oct): un héroe de otra página de «Mis héroes» (en
+      // una búsqueda, o en su ficha) no tiene su equipo leído. Sin él no se
+      // sabe si puede combatir, así que solo se dice lo que trae el propio
+      // elemento (en misión, en subasta); «Disponible» sería afirmar de más.
+      const propio = estadoDeHeroe({ elemento, equipamiento: undefined });
+      return propio.estado === ESTADOS.DISPONIBLE
+        ? null
+        : selloDeEstado(propio.estado, { detalle: propio.detalle });
+    }
     const estado = esHeroe(elemento)
       ? estadoDeHeroe({ elemento, equipamiento: equipos.get(elemento.id) })
-      : estadoDeObjeto({ elemento, equipadoEn: equipados.get(elemento.id) ?? null });
+      : estadoDeObjeto({
+          elemento,
+          equipadoEn: portadorDe(elemento)?.nombreHeroe ?? equipados.get(elemento.id) ?? null,
+        });
     return selloDeEstado(estado.estado, { detalle: estado.detalle });
   }
 
-  /** Una pagina de objetos, cortada sobre la coleccion ya reunida. */
-  async function consultarObjetos(_identidad, pagina) {
-    return paginaLocal(objetos, pagina);
+  /**
+   * Camino de compatibilidad: el inventario entero, una vez por recarga. La
+   * `semilla` es la página 0 que ya trajo la consulta que delató al servidor
+   * (ignoró la categoría, así que es la página 0 del inventario entero): no se
+   * vuelve a pedir.
+   */
+  let promesaColeccion = null;
+  function reunirColeccion(semilla = null) {
+    const consultarConSemilla = (jugador, pagina) =>
+      pagina === 0 && semilla ? Promise.resolve(semilla) : consultar(jugador, pagina);
+    promesaColeccion ??= reunirInventario(
+      consultarConSemilla,
+      identidad,
+      maxPaginas ? { maxPaginas } : undefined,
+    ).then(
+      (reunida) => {
+        coleccion = reunida;
+        return reunida;
+      },
+      (fallo) => {
+        promesaColeccion = null;
+        throw fallo;
+      },
+    );
+    return promesaColeccion;
+  }
+
+  /** Recuerda si el servidor pagina por categoría (ver `porCategoria`). */
+  function recordarSiFiltra(filtra) {
+    porCategoria = filtra;
   }
 
   /**
-   * Pide el inventario entero y repinta las tres pestanas. Se llama al montar
-   * y despues de cada escritura (crear, renombrar, equipar).
+   * Una página de una pestaña. Con un servidor 1.7.0, su página; sin él, la
+   * colección reunida cortada aquí (mismo formato `PaginaInventario`).
    */
-  async function cargarColeccion() {
-    vista.heroes.replaceChildren(construirCarga('Cargando tus héroes...'));
-    try {
-      coleccion = await reunirInventario(
-        consultar,
-        identidad,
-        maxPaginas ? { maxPaginas } : undefined,
-      );
-    } catch (fallo) {
-      console.error('No se pudo reunir el inventario', fallo);
-      const reintentar = {
-        texto: 'Reintentar',
-        alPulsar: async () => {
-          await cargarColeccion();
-          await actualizar(paginaEnCurso());
-        },
-      };
-      vista.heroes.replaceChildren(construirError(undefined, undefined, reintentar));
-      coleccion = null;
-      return false;
+  async function paginaDeCategoria(categoria, numero) {
+    const quiereHeroes = categoria === CATEGORIAS.HEROES;
+    let semilla = null;
+    if (porCategoria !== false) {
+      const respuesta = await consultar(identidad, numero, { categoria });
+      const lote = Array.isArray(respuesta?.elementos) ? respuesta.elementos : [];
+      if (!lote.some((elemento) => esHeroe(elemento) !== quiereHeroes)) {
+        if (lote.length > 0) {
+          recordarSiFiltra(true);
+        }
+        return respuesta;
+      }
+      recordarSiFiltra(false);
+      semilla = numero === 0 ? respuesta : null;
     }
-    heroes = coleccion.elementos.filter(esHeroe);
-    objetos = coleccion.elementos.filter((elemento) => !esHeroe(elemento));
-    const leido = await pintarHeroes(vista.heroes, {
-      heroes,
+    const reunida = await reunirColeccion(semilla);
+    // Tan grande que se alcanzó el tope: «Objetos» vuelve a la página del
+    // servidor, como antes de 1.7.0 (trae también héroes, pero cuenta bien las
+    // páginas y no deja nada fuera; el aviso de «Mis héroes» lo dice).
+    if (!reunida.completo && !quiereHeroes) {
+      return semilla ?? consultar(identidad, numero);
+    }
+    return paginaLocal(
+      reunida.elementos.filter((elemento) => esHeroe(elemento) === quiereHeroes),
+      numero,
+    );
+  }
+
+  /** Todos los de una pestaña (para el selector o los candidatos), página a página. */
+  async function todosDeCategoria(categoria) {
+    if (porCategoria === false) {
+      const reunida = await reunirColeccion();
+      const quiereHeroes = categoria === CATEGORIAS.HEROES;
+      return {
+        elementos: reunida.elementos.filter((elemento) => esHeroe(elemento) === quiereHeroes),
+        completo: reunida.completo,
+      };
+    }
+    return reunirInventario(
+      (_identidad, pagina) => paginaDeCategoria(categoria, pagina),
       identidad,
-      consultarEquipo,
-      consultarEstadisticas,
-      consultarProducto,
-      alVerFicha: (heroe) =>
-        abrirFicha(heroe.productoId, {
-          origen: document.activeElement,
-          complementos: COMPLEMENTOS_DE_LA_FICHA,
-          elementoId: heroe.id,
-          identidad,
-          nombrePropio: heroe.nombrePropio,
-          nivel: Number.isInteger(heroe.nivel) ? heroe.nivel : null,
-        }),
-      alEquipar: (heroe) => abrirEquipamiento(heroe),
-      consultarNiveles: () => consultarTablaDeNiveles(),
+      maxPaginas ? { maxPaginas } : undefined,
+    );
+  }
+
+  /** Todos los héroes: si la página que se ve ya es la única, sin pedir nada más. */
+  function asegurarHeroes() {
+    promesaHeroes ??= (async () => {
+      const pagina = paginaHeroesMostrada;
+      const unaSola = pagina && pagina.numero === 0 && (pagina.ultima || pagina.totalPaginas <= 1);
+      return unaSola && porCategoria !== false
+        ? { elementos: pagina.elementos, completo: true }
+        : todosDeCategoria(CATEGORIAS.HEROES);
+    })().then(
+      (reunidos) => {
+        heroes = reunidos.elementos;
+        return heroes;
+      },
+      (fallo) => {
+        promesaHeroes = null;
+        throw fallo;
+      },
+    );
+    return promesaHeroes;
+  }
+
+  /** Todos los objetos, cuando el equipamiento necesita sus candidatos. */
+  function asegurarObjetos() {
+    promesaObjetos ??= todosDeCategoria(CATEGORIAS.OBJETOS).then(
+      (reunidos) => {
+        objetos = reunidos.elementos;
+        objetosCompletos = reunidos.completo;
+        return objetos;
+      },
+      (fallo) => {
+        promesaObjetos = null;
+        throw fallo;
+      },
+    );
+    return promesaObjetos;
+  }
+
+  function alVerFichaDeHeroe(heroe, { origen } = {}) {
+    return abrirFicha(heroe.productoId, {
+      origen: origen ?? document.activeElement,
+      complementos: COMPLEMENTOS_DE_LA_FICHA,
+      elementoId: heroe.id,
+      identidad,
+      nombrePropio: heroe.nombrePropio,
+      nivel: Number.isInteger(heroe.nivel) ? heroe.nivel : null,
+      enTuInventario: {
+        nombrePropio: heroe.nombrePropio,
+        sello: estadoDeTarjeta(heroe),
+      },
     });
-    equipos = leido.equipos;
-    prototipos = leido.prototipos;
-    equipados = mapaDeEquipados(heroes, equipos);
-    // PLAYER-07a — «Héroes del Nexo»: no se espera. Si el catálogo tarda o
-    // falla, «Mis héroes» y el resto del inventario ya están en pantalla.
+  }
+
+  /** «Héroes del Nexo» con lo que ya es tuyo marcado. No se espera. */
+  function pintarNexo() {
     pintarHeroesDelNexo(vista.heroesDelNexo, {
       listar: leerCatalogoDeHeroes,
       propios: new Set(heroes.map((heroe) => heroe.productoId).filter(Boolean)),
     }).catch((fallo) => console.warn('No se pudieron pintar los héroes del Nexo', fallo));
-    if (!coleccion.completo) {
+  }
+
+  /**
+   * «Mis héroes»: una página de dieciséis del servidor, sus cartas y su control.
+   * Después, sin bloquear la carta, lo que necesita a todos los héroes: el
+   * selector de equipo y las marcas del Nexo.
+   */
+  async function actualizarHeroes(numero = 0) {
+    const miTurno = ++turnoHeroes;
+    vista.heroes.replaceChildren(construirCarga('Cargando tus héroes...'));
+    let pagina;
+    try {
+      pagina = await paginaDeCategoria(CATEGORIAS.HEROES, numero);
+    } catch (fallo) {
+      console.error('No se pudieron leer tus héroes', fallo);
+      if (miTurno === turnoHeroes) {
+        vista.heroes.replaceChildren(
+          construirError(undefined, undefined, {
+            texto: 'Reintentar',
+            alPulsar: () => recargarTodo(),
+          }),
+        );
+        vista.paginacionHeroes.replaceChildren();
+      }
+      return false;
+    }
+    if (miTurno !== turnoHeroes) {
+      return true;
+    }
+    // Pedida una página que ya no existe (se retiró el último de la última):
+    // se enseña la última que sí.
+    if (pagina.elementos.length === 0 && pagina.totalPaginas > 0 && numero >= pagina.totalPaginas) {
+      return actualizarHeroes(pagina.totalPaginas - 1);
+    }
+    paginaHeroesMostrada = pagina;
+    const leido = await pintarHeroes(vista.heroes, {
+      heroes: pagina.elementos,
+      identidad,
+      consultarEquipo,
+      consultarEstadisticas,
+      consultarProducto,
+      alVerFicha: (heroe, contexto) => alVerFichaDeHeroe(heroe, contexto),
+      alEquipar: (heroe) => abrirEquipamiento(heroe),
+      consultarNiveles: () => consultarTablaDeNiveles(),
+      sigueVigente: () => miTurno === turnoHeroes,
+    });
+    if (miTurno !== turnoHeroes) {
+      return true;
+    }
+    equipos = leido.equipos;
+    prototipos = leido.prototipos;
+    equipados = mapaDeEquipados(pagina.elementos, equipos);
+    if (porCategoria === false && coleccion && !coleccion.completo) {
       vista.heroes.prepend(
         elementoHtml(
           'p',
@@ -614,8 +849,51 @@ export async function montarInventario(
         ),
       );
     }
+    pintarPaginacionHeroes();
+    try {
+      await asegurarHeroes();
+    } catch (fallo) {
+      console.warn('No se pudo reunir la lista de tus héroes', fallo);
+    }
+    if (miTurno !== turnoHeroes) {
+      return true;
+    }
+    pintarNexo();
     pintarSelectorDeHeroe();
     return true;
+  }
+
+  function pintarPaginacionHeroes() {
+    const pagina = paginaHeroesMostrada;
+    const veniaEnfocado = vista.paginacionHeroes.contains(document.activeElement);
+    const direccion = document.activeElement?.dataset?.direccion ?? null;
+    try {
+      vista.paginacionHeroes.replaceChildren(
+        construirPaginacion(
+          { paginaActual: pagina?.numero ?? 0, totalPaginas: pagina?.totalPaginas ?? 0 },
+          (pedida) => actualizarHeroes(pedida),
+          { etiqueta: 'Páginas de tus héroes', ...PAGINACION_DE_7_1 },
+        ),
+      );
+      if (veniaEnfocado) {
+        enfocarControl(vista.paginacionHeroes, direccion);
+      }
+    } catch (fallo) {
+      console.error('Paginacion incoherente en los héroes del inventario', fallo);
+      vista.paginacionHeroes.replaceChildren();
+    }
+  }
+
+  /** Vuelve a pedir todo después de una escritura (crear, renombrar, retirar). */
+  async function recargarTodo() {
+    coleccion = null;
+    promesaColeccion = null;
+    promesaHeroes = null;
+    promesaObjetos = null;
+    objetos = [];
+    objetosCompletos = false;
+    await actualizarHeroes(paginaHeroesMostrada?.numero ?? 0);
+    await actualizar(paginaEnCurso());
   }
 
   /** Los heroes como botones para la pestana de equipamiento. */
@@ -763,8 +1041,7 @@ export async function montarInventario(
     mostrarMensaje('Eliminando...');
     try {
       await eliminar(identidad, elemento.id);
-      await cargarColeccion();
-      await actualizar(paginaEnCurso());
+      await recargarTodo();
       mostrarMensaje('Elemento eliminado.');
     } catch (fallo) {
       mostrarMensaje(motivoDeNoPoderEliminar(fallo), true);
@@ -799,15 +1076,15 @@ export async function montarInventario(
   function pintarEquipo() {
     pintarEquipamiento(vista.equipoLista, {
       equipo: equipoActual,
-      // UXC-1 — con la coleccion reunida, todos los objetos son candidatos y
-      // cada ranura ocupada encuentra su objeto aunque este en otra pagina.
-      elementos: coleccion?.completo ? objetos : (paginaMostrada?.elementos ?? []),
-      // FI-R7 — el selector ya no se queda con los dieciseis elementos de la
-      // pagina que se esta viendo. Antes, un objeto de la pagina 3 no se podia
-      // equipar: no aparecia entre los candidatos y nada decia por que. Con
-      // este puerto el dialogo recorre el inventario en tandas hasta juntar
-      // candidatos, y para cuando los tiene.
-      pedirPagina: coleccion?.completo ? null : (pagina) => consultar(identidad, pagina),
+      // Revisión final (13-oct): los candidatos son TODOS los objetos del
+      // jugador, reunidos al abrir el equipamiento (no la página de la
+      // vitrina), así que cada ranura ocupada encuentra su objeto.
+      elementos: objetos,
+      // FI-R7 — si el inventario es tan grande que se alcanzó el tope, el
+      // dialogo recorre el servidor en tandas desde la primera página.
+      pedirPagina: objetosCompletos ? null : pedirPaginaDeCandidatos,
+      // Lo que lleva OTRO héroe se ofrece apagado y diciendo quién lo lleva.
+      portadorDe,
       alEquipar: (ranura, elemento) => cambiarEquipo(true, elemento),
       alDesequipar: (ranura) => cambiarEquipo(false, ranura.elemento),
       alPintarRetratos: (panel) =>
@@ -817,6 +1094,19 @@ export async function montarInventario(
     });
     // El resumen vive ahora dentro del panel, junto a las ranuras.
     vista.equipoResumen.hidden = true;
+  }
+
+  /**
+   * FI-R7 — una página del servidor para el selector de una ranura. Con
+   * inventario 1.7.0, las de «Objetos»; con uno anterior, las del inventario
+   * entero (el selector ya descarta lo que no entra en la ranura, héroes
+   * incluidos). Nunca la colección reunida: si se recorre es porque no está
+   * entera.
+   */
+  function pedirPaginaDeCandidatos(pagina) {
+    return porCategoria === false
+      ? consultar(identidad, pagina)
+      : paginaDeCategoria(CATEGORIAS.OBJETOS, pagina);
   }
 
   /**
@@ -869,6 +1159,26 @@ export async function montarInventario(
       // de cada objeto: se guarda lo que devolvio el servidor y se repinta.
       equipos.set(heroeSeleccionado.id, equipoActual);
       equipados = mapaDeEquipados(heroes, equipos);
+      // Los candidatos guardan quién los lleva (`equipadoEn`): se pone al día
+      // con lo que devolvió el servidor para este héroe.
+      const puestos = idsDeEquipo(equipoActual);
+      objetos = objetos.map((objeto) => {
+        if (puestos.has(objeto.id)) {
+          return {
+            ...objeto,
+            equipadoEn: {
+              heroeId: heroeSeleccionado.id,
+              nombreHeroe: heroeSeleccionado.nombrePropio,
+            },
+          };
+        }
+        if (objeto.equipadoEn?.heroeId === heroeSeleccionado.id) {
+          const { equipadoEn: _quitado, ...resto } = objeto;
+          return resto;
+        }
+        return objeto;
+      });
+      pintarEquipo();
 
       // UX-R2.10 — la ranura acusa lo que acaba de recibir.
       //
@@ -934,15 +1244,26 @@ export async function montarInventario(
     vista.equipoTitulo.textContent = `Equipamiento de ${heroe.nombrePropio}`;
     mostrarMensaje('Cargando equipamiento...');
     const panelDelEquipo = vista.equipo;
+    // Revisión final (13-oct): si mientras esto llega se elige otro héroe, la
+    // respuesta de este se descarta (el panel ya dice «Equipamiento de» otro).
+    const sigueElegido = () => heroeSeleccionado === heroe;
     try {
-      equipoActual = await consultarEquipo(identidad, heroe.id);
+      // Los candidatos: todos los objetos del jugador (una vez por recarga).
+      await asegurarObjetos();
+      const equipo = await consultarEquipo(identidad, heroe.id);
+      if (!sigueElegido()) {
+        return;
+      }
+      equipoActual = equipo;
       panelDelEquipo.hidden = false;
       pintarEquipo();
       pintarHeroeDelEquipo(heroe);
       mostrarMensaje('');
     } catch (fallo) {
       console.error('No se pudo consultar el equipamiento', fallo);
-      mostrarMensaje('No pudimos cargar el equipamiento. Inténtalo de nuevo.', true);
+      if (sigueElegido()) {
+        mostrarMensaje('No pudimos cargar el equipamiento. Inténtalo de nuevo.', true);
+      }
     }
   }
 
@@ -960,6 +1281,7 @@ export async function montarInventario(
     // sitio y tendria que tabular otra vez desde arriba. Si el foco estaba
     // dentro, se devuelve a la casilla de la pagina que ahora se muestra.
     const veniaEnfocado = vista.paginacion.contains(document.activeElement);
+    const direccion = document.activeElement?.dataset?.direccion ?? null;
 
     try {
       vista.paginacion.replaceChildren(
@@ -968,11 +1290,11 @@ export async function montarInventario(
           (pedida) => {
             actualizar(pedida);
           },
-          { etiqueta: 'Páginas del inventario' },
+          { etiqueta: 'Páginas del inventario', ...PAGINACION_DE_7_1 },
         ),
       );
       if (veniaEnfocado) {
-        vista.paginacion.querySelector('[aria-current="page"]')?.focus();
+        enfocarControl(vista.paginacion, direccion);
       }
     } catch (fallo) {
       // El servicio devolvio una pagina incoherente con su propio total. No
@@ -980,6 +1302,23 @@ export async function montarInventario(
       console.error('Paginacion incoherente en la respuesta del inventario', fallo);
       vista.paginacion.replaceChildren();
     }
+  }
+
+  /**
+   * RF-INV-002, excepción: «solicitud de una página inexistente, que debe
+   * redirigir a la última página válida». Con el servidor paginando (1.7.0),
+   * `?pagina=99` o la página de la que se acaba de retirar lo último llegaban
+   * vacías y la vitrina decía «Todavía no tienes objetos». Se pide la última
+   * que existe antes de pintar nada.
+   */
+  async function conUltimaPaginaValida(consulta, jugador, pagina) {
+    const respuesta = await consulta(jugador, pagina);
+    const total = Number.isInteger(respuesta?.totalPaginas) ? respuesta.totalPaginas : 0;
+    const vacia = Array.isArray(respuesta?.elementos) && respuesta.elementos.length === 0;
+    if (vacia && total > 0 && pagina >= total) {
+      return consulta(jugador, total - 1);
+    }
+    return respuesta;
   }
 
   /** La pagina que el jugador esta viendo ahora mismo. */
@@ -999,15 +1338,14 @@ export async function montarInventario(
     // de paginacion lo conserva sin necesidad de conocerlo.
     const busquedaActiva = criterioBusqueda !== '';
 
-    // UXC-1 — sin busqueda, la vitrina de «Objetos» pagina la coleccion ya
-    // reunida (sin heroes). Si no se pudo reunir, o es tan grande que se
-    // alcanzo el tope, se vuelve a la pagina del servidor: incluye tambien a
-    // los heroes, pero cuenta bien las paginas y no deja nada fuera.
-    const consultaSinBusqueda = coleccion?.completo ? consultarObjetos : consultar;
+    // Revisión final (13-oct) — sin busqueda, la vitrina de «Objetos» pide al
+    // servidor su página de dieciséis (`categoria=OBJETOS`, inventario 1.7.0).
+    const consultaSinBusqueda = (_jugador, pagina) => paginaDeCategoria(CATEGORIAS.OBJETOS, pagina);
+    const consulta = busquedaActiva
+      ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
+      : consultaSinBusqueda;
     const consultada = await montarVitrina(vista.contenido, identidad, numero, {
-      consultar: busquedaActiva
-        ? (jugador, pagina) => buscar(jugador, criterioBusqueda, pagina)
-        : consultaSinBusqueda,
+      consultar: (jugador, pagina) => conUltimaPaginaValida(consulta, jugador, pagina),
       alEditar: abrirEdicion,
       alEquipar: abrirEquipamiento,
       alEliminar: eliminarDelInventario,
@@ -1017,7 +1355,7 @@ export async function montarInventario(
         ? 'No encontramos productos con ese criterio.'
         : 'Todavía no tienes objetos.',
       detalleVacio: busquedaActiva
-        ? 'Prueba con otro nombre, tipo o identificador de producto.'
+        ? 'Prueba con otra palabra: un nombre, un efecto, una habilidad o un tipo.'
         : 'Las armas, armaduras e ítems que consigas aparecen aquí. Se consiguen en la tienda y en las subastas.',
       accionVacio: busquedaActiva
         ? null
@@ -1107,8 +1445,7 @@ export async function montarInventario(
           nombrePropio: vista.nombre.control.value,
         });
         cerrarEditor();
-        await cargarColeccion();
-        await actualizar(paginaEnCurso());
+        await recargarTodo();
         mostrarMensaje('Elemento actualizado.');
       } else {
         const totalAntes = paginaMostrada?.totalElementos ?? 0;
@@ -1120,7 +1457,11 @@ export async function montarInventario(
             vista.tipo.control.value === 'ARMADURA' ? vista.parte.control.value : undefined,
         });
         cerrarEditor();
-        await cargarColeccion();
+        coleccion = null;
+        promesaColeccion = null;
+        promesaHeroes = null;
+        promesaObjetos = null;
+        await actualizarHeroes(paginaHeroesMostrada?.numero ?? 0);
         await actualizar(
           criterioBusqueda === '' ? Math.floor(totalAntes / PRODUCTOS_POR_PAGINA) : 0,
         );
@@ -1142,39 +1483,29 @@ export async function montarInventario(
   });
 
   /**
-   * Repinta las cartas de heroe sin volver a reunir el inventario: el equipo
-   * cambio, los elementos no.
+   * Repinta las cartas de heroe y la vitrina: el equipo cambio (quién lleva
+   * qué), los elementos no.
    */
   async function refrescarHeroes() {
-    if (!coleccion) {
-      return;
-    }
-    const leido = await pintarHeroes(vista.heroes, {
-      heroes,
-      identidad,
-      consultarEquipo,
-      consultarEstadisticas,
-      consultarProducto,
-      alVerFicha: (heroe) =>
-        abrirFicha(heroe.productoId, {
-          origen: document.activeElement,
-          complementos: COMPLEMENTOS_DE_LA_FICHA,
-          elementoId: heroe.id,
-          identidad,
-          nombrePropio: heroe.nombrePropio,
-          nivel: Number.isInteger(heroe.nivel) ? heroe.nivel : null,
-        }),
-      alEquipar: (heroe) => abrirEquipamiento(heroe),
-      consultarNiveles: () => consultarTablaDeNiveles(),
-    });
-    equipos = leido.equipos;
-    prototipos = leido.prototipos;
-    equipados = mapaDeEquipados(heroes, equipos);
+    await actualizarHeroes(paginaHeroesMostrada?.numero ?? 0);
     await actualizar(paginaEnCurso());
   }
 
-  await cargarColeccion();
+  await actualizarHeroes(0);
   await actualizar(paginaEnCurso());
+
+  // Revisión final (13-oct): enlace directo a una búsqueda
+  // (`inventario.html?busqueda=…`), con el mismo mínimo de cuatro letras.
+  buscarAlEntrar(busquedaInicial);
+
+  function buscarAlEntrar(texto) {
+    const inicial = typeof texto === 'string' ? texto.trim() : '';
+    if (inicial.length < 4) {
+      return;
+    }
+    vista.busquedaControl.value = inicial;
+    vista.busqueda.dispatchEvent(new Event('submit', { cancelable: true }));
+  }
 }
 
 function cambiarDisponibilidad(boton, disponible) {

@@ -164,8 +164,9 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
   test('el boton de detalle nombra el producto al que pertenece', () => {
     const vitrina = construirVitrina(paginaCon(1), { alAbrirDetalle: () => {} });
 
+    // WCAG 2.5.3: el nombre accesible empieza por el texto visible («Ver detalle»).
     expect(vitrina.querySelector('.vitrina__detalle').getAttribute('aria-label')).toBe(
-      'Ver el detalle de Espada 0',
+      'Ver detalle de Espada 0',
     );
   });
 
@@ -178,6 +179,38 @@ describe('Cuadricula de la vitrina a 1360 x 768', () => {
     vitrina.querySelectorAll('.vitrina__detalle')[2].click();
 
     expect(vistos).toEqual(['Espada 2']);
+  });
+
+  // Revisión final del módulo (13-oct) — §7.1: «si el jugador hace clic sobre
+  // un producto se debe dirigir a una vista de detalle».
+  test('un clic en la tarjeta (fuera de sus botones) abre el detalle', () => {
+    const abiertos = [];
+    const vitrina = construirVitrina(paginaCon(2), {
+      alAbrirDetalle: (abierto, contexto) => abiertos.push([abierto.nombrePropio, contexto]),
+    });
+
+    const tarjeta = tarjetas(vitrina)[1];
+    expect(tarjeta.classList.contains('vitrina__producto--pulsable')).toBe(true);
+    tarjeta.querySelector('.vitrina__nombre').click();
+
+    expect(abiertos).toHaveLength(1);
+    expect(abiertos[0][0]).toBe('Espada 1');
+    // El foco volverá a «Ver detalle» de esa tarjeta al cerrar la ficha.
+    expect(abiertos[0][1].origen).toBe(tarjeta.querySelector('.vitrina__detalle'));
+  });
+
+  test('los botones de la tarjeta siguen siendo suyos: no abren el detalle además', () => {
+    const abiertos = [];
+    const editados = [];
+    const vitrina = construirVitrina(paginaCon(1), {
+      alAbrirDetalle: (abierto) => abiertos.push(abierto.id),
+      alEditar: (editado) => editados.push(editado.id),
+    });
+
+    vitrina.querySelector('.vitrina__editar').click();
+
+    expect(editados).toEqual(['elemento-0']);
+    expect(abiertos).toEqual([]);
   });
 
   test('sin manejador de detalle la vitrina queda como estaba', () => {

@@ -347,7 +347,7 @@ test.describe('Equipamiento del héroe con limites', () => {
   /** Abre el equipamiento de Ayla desde la pestana de heroes. */
   async function abrirEquipoDeAyla(page) {
     await page.locator('#pestana-heroes').click();
-    await page.getByRole('button', { name: 'Gestionar el equipamiento de Ayla' }).click();
+    await page.getByRole('button', { name: /^(Equipamiento de|Equiparlo:) Ayla$/ }).click();
   }
 
   test('El equipamiento usa la paleta oficial del sistema de diseno', async ({ page }) => {
