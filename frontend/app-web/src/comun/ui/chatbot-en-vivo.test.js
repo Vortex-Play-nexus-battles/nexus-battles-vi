@@ -258,14 +258,21 @@ describe('panel de soporte: actualizarTicket y recargarLista', () => {
     expect(cliente.misTickets).toHaveBeenCalledTimes(2);
   });
 
-  test('un visitante no tiene lista: ni se actualiza ni se relee', async () => {
+  // ms-chatbot.yaml 1.12.0 / chatbot.yaml 1.1.0: el visitante también tiene
+  // «Tus solicitudes», y el servidor le avisa de las suyas por el canal.
+  test('un visitante también ve su lista en vivo: se actualiza y se relee', async () => {
     const { soporte, cliente } = await panel({ autenticado: false });
     soporte.abrir();
     await esperar();
+    expect(cliente.misTickets).toHaveBeenCalledTimes(1);
+
     soporte.actualizarTicket(RESUELTO);
+    expect(
+      soporte.elemento.querySelector(`[data-ticket-id="${RESUELTO.ticketId}"]`).textContent,
+    ).toContain(RESUELTO.respuesta);
     soporte.recargarLista();
     await esperar();
-    expect(cliente.misTickets).not.toHaveBeenCalled();
+    expect(cliente.misTickets).toHaveBeenCalledTimes(2);
   });
 
   test('el texto que llega por el canal nunca se interpreta como HTML', async () => {

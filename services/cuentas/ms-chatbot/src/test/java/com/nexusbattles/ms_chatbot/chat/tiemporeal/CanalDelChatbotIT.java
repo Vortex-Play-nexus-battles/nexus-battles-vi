@@ -568,6 +568,36 @@ class CanalDelChatbotIT {
         assertThat(beto.cola("/user/queue/soporte/tickets").poll(1, TimeUnit.SECONDS)).isNull();
     }
 
+    // chatbot.yaml 1.1.0 (ms-chatbot.yaml 1.12.0, RF-CHA-007): el visitante
+    // tambien tiene solicitudes; el aviso va a las conexiones de SU sesion
+    // (nombre anonimo:<huella>, resuelto por el servidor), no a otra.
+    @Test
+    @DisplayName("1.1.0: un visitante tambien recibe en vivo el cambio de su solicitud, y otro visitante no")
+    void elVisitanteRecibeElCambioDeSuSolicitud() throws Exception {
+        Map<String, String> visita = visitante(sesionDeclarada());
+        HttpResponse<String> abierto = llamar("POST", "/chat/tickets", visita,
+            "{\"categoria\":\"CUENTA_Y_REGISTRO\",\"asunto\":\"No me llega\",\"mensaje\":\"El codigo no llega.\"}");
+        assertThat(abierto.statusCode()).isEqualTo(201);
+        String ticketId = json.readTree(abierto.body()).get("ticketId").stringValue();
+
+        Cliente suya = conectar(visita).suscritoATodo();
+        Cliente otraVisita = conectar(visitante(sesionDeclarada())).suscritoATodo();
+
+        String administrador = emisor.tokenDeUsuario("admin", UUID.randomUUID(), "ADMINISTRADOR");
+        HttpResponse<String> atendido = llamar("PATCH", "/chatbot/admin/tickets/" + ticketId,
+            Map.of("Authorization", "Bearer " + administrador),
+            "{\"estado\":\"RESUELTO\",\"respuesta\":\"Revisa la carpeta de spam.\"}");
+        assertThat(atendido.statusCode()).isEqualTo(200);
+        assertThat(json.readTree(atendido.body()).get("deVisitante").booleanValue()).isTrue();
+
+        JsonNode aviso = suya.siguiente("/user/queue/soporte/tickets").cuerpo();
+        assertThat(aviso.get("ticketId").stringValue()).isEqualTo(ticketId);
+        assertThat(aviso.get("respuesta").stringValue()).isEqualTo("Revisa la carpeta de spam.");
+        assertThat(aviso.has("uid") || aviso.has("contexto")).as("solo lo que ve quien la abrio").isFalse();
+        mismoObjeto(aviso, json.readTree(llamar("GET", "/chat/tickets", visita, null).body()).get(0));
+        assertThat(otraVisita.cola("/user/queue/soporte/tickets").poll(1, TimeUnit.SECONDS)).isNull();
+    }
+
     @Test
     @DisplayName("el handshake solo admite los origenes de la API, y el servidor ofrece latidos de 10 s")
     void origenesYLatidos() throws Exception {

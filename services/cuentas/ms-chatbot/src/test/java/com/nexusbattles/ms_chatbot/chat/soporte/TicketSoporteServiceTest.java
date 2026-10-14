@@ -26,6 +26,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -74,8 +76,17 @@ class TicketSoporteServiceTest {
         // guarda paso por ella.
         RedaccionDeDatosSensibles redaccion = texto -> texto.replace("clave123", "[REDACTADO]");
         servicio = new TicketSoporteService(tickets, conversaciones, mensajes, limitador, moderacion, redaccion,
-            new RevisionDeEntrada(redaccion, new SimpleMeterRegistry()), Clock.fixed(AHORA, ZoneOffset.UTC));
+            new RevisionDeEntrada(redaccion, new SimpleMeterRegistry()), Clock.fixed(AHORA, ZoneOffset.UTC),
+            SIN_TRANSACCION);
     }
+
+    // Ejecuta el bloque tal cual: aqui no hay base.
+    private static final TransactionTemplate SIN_TRANSACCION = new TransactionTemplate() {
+        @Override
+        public <T> T execute(TransactionCallback<T> accion) {
+            return accion.doInTransaction(null);
+        }
+    };
 
     @Test
     void abreElTicketRedactadoYConElContextoDeLaConversacion() {
@@ -113,13 +124,33 @@ class TicketSoporteServiceTest {
         assertThat(ticket.getContexto()).isEmpty();
     }
 
+    // 1.12.0 (RF-CHA-007, actores Visitante y Jugador): un visitante tambien
+    // abre solicitudes. Son de la clave de su conversacion ('anonimo:<sesion>'),
+    // que ningun uid puede ocupar (V5).
     @Test
-    void unVisitanteNoPuedeAbrirTickets() {
+    void unVisitanteAbreSuSolicitudConLaClaveDeSuConversacion() {
         IdentidadDelChat visitante = IdentidadDelChat.visitante(
             new SesionAnonima("huella", AHORA, Duration.ofHours(24)));
+        when(conversaciones.findByIdentificadorSesion(visitante.claveDeConversacion())).thenReturn(Optional.empty());
+        when(tickets.saveAndFlush(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
 
-        assertThatThrownBy(() -> servicio.abrir(visitante, Categoria.FAQ_GENERAL, "a", "b"))
+        TicketSoporte ticket = servicio.abrir(visitante, Categoria.FAQ_GENERAL, "Duda", "Una duda");
+
+        assertThat(ticket.getUid()).isEqualTo(visitante.claveDeConversacion()).startsWith("anonimo:");
+        verify(tickets).existsByUidAndEstadoIn(eq(visitante.claveDeConversacion()), anyCollection());
+        verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES, visitante.claveDeLimite());
+    }
+
+    @Test
+    void unJugadorSinUidNoEsDuenoDeNada() {
+        IdentidadDelChat sinUid = new IdentidadDelChat(true, "clave", null, "token", null);
+
+        assertThatThrownBy(() -> TicketSoporteService.propietario(sinUid))
             .isInstanceOf(SesionRequeridaException.class);
+    }
+
+    @Test
+    void sinIdentidadNoSeAbreNada() {
         assertThatThrownBy(() -> servicio.abrir(null, Categoria.FAQ_GENERAL, "a", "b"))
             .isInstanceOf(SesionRequeridaException.class);
         verifyNoInteractions(limitador, moderacion, tickets);
@@ -181,9 +212,14 @@ class TicketSoporteServiceTest {
     }
 
     @Test
-    void unVisitanteNoTieneTickets() {
+    void sinIdentidadNoHaySolicitudesYLasDelVisitanteSonLasDeSuSesion() {
         assertThatThrownBy(() -> servicio.misTickets(null)).isInstanceOf(SesionRequeridaException.class);
-        verifyNoInteractions(tickets);
+        IdentidadDelChat visitante = IdentidadDelChat.visitante(
+            new SesionAnonima("huella", AHORA, Duration.ofHours(24)));
+        when(tickets.findByUidOrderByCreadoEnDesc(visitante.claveDeConversacion())).thenReturn(List.of());
+
+        assertThat(servicio.misTickets(visitante)).isEmpty();
+        verify(tickets).findByUidOrderByCreadoEnDesc(visitante.claveDeConversacion());
     }
 
     @Test
@@ -286,15 +322,99 @@ class TicketSoporteServiceTest {
     }
 
     @Test
-    void desdeLaConversacionUnVisitanteNoAbreNiLeeNada() {
-        IdentidadDelChat visitante = IdentidadDelChat.visitante(
-            new SesionAnonima("huella", AHORA, Duration.ofHours(24)));
-
-        assertThatThrownBy(() -> servicio.abrirDesdeConversacion(visitante, null, null))
-            .isInstanceOf(SesionRequeridaException.class);
+    void desdeLaConversacionSinIdentidadNoAbreNiLeeNada() {
         assertThatThrownBy(() -> servicio.abrirDesdeConversacion(null, null, null))
             .isInstanceOf(SesionRequeridaException.class);
         verifyNoInteractions(limitador, conversaciones, mensajes, moderacion, tickets);
+    }
+
+    // --- 1.12.0 (RF-CHA-007): la solicitud se abre sola ----------------------
+
+    @Test
+    void alNoResolverAbreLaSolicitudConLaPreguntaSinElLimiteDeFrecuencia() {
+        conLaConversacion(
+            delJugador("mi clave123 no sirve para el gremio", 1),
+            delBot("No estoy seguro de haber entendido tu consulta.", 2, ResultadoDeRespuesta.ESCALADO, null));
+        when(tickets.findFirstByUidAndEstadoInOrderByCreadoEnDesc(eq(UID.toString()), anyCollection()))
+            .thenReturn(Optional.empty());
+        when(tickets.saveAndFlush(any())).thenAnswer(invocacion -> invocacion.getArgument(0));
+
+        TicketSoporteService.SolicitudAutomatica solicitud =
+            servicio.alNoResolver(jugador, VistaDelChat.INVENTARIO).orElseThrow();
+
+        assertThat(solicitud.nueva()).isTrue();
+        assertThat(solicitud.ticket().getAsunto())
+            .isEqualTo("Sin respuesta del asistente: mi [REDACTADO] no sirve para el gremio");
+        assertThat(solicitud.ticket().getUid()).isEqualTo(UID.toString());
+        assertThat(solicitud.ticket().getContexto()).hasSize(2);
+        // El mensaje que la provoco ya paso el limite: no se cobra dos veces.
+        verifyNoInteractions(limitador);
+        verify(moderacion).verificar(anyString());
+    }
+
+    @Test
+    void alNoResolverConUnaAbiertaSumaLaPreguntaASuContextoYNoAbreOtra() {
+        conLaConversacion(
+            delJugador("como pujo", 1),
+            delBot("Para pujar...", 2, ResultadoDeRespuesta.TEMA, Categoria.SUBASTA_Y_COMERCIO),
+            delJugador("y si mi clave123 falla", 3),
+            delBot("No estoy seguro de haber entendido tu consulta.", 4, ResultadoDeRespuesta.ESCALADO, null));
+        TicketSoporte abierta = TicketSoporte.abrir(UID.toString(), Categoria.FAQ_GENERAL, "Antes", "Antes",
+            List.of(new MensajeDeContexto("USUARIO", "algo de antes", AHORA.minusSeconds(500))), AHORA.minusSeconds(500));
+        when(tickets.findFirstByUidAndEstadoInOrderByCreadoEnDesc(eq(UID.toString()), anyCollection()))
+            .thenReturn(Optional.of(abierta));
+        when(tickets.save(abierta)).thenReturn(abierta);
+
+        TicketSoporteService.SolicitudAutomatica solicitud = servicio.alNoResolver(jugador, null).orElseThrow();
+
+        assertThat(solicitud.nueva()).isFalse();
+        assertThat(solicitud.ticket()).isSameAs(abierta);
+        assertThat(abierta.getContexto()).extracting(MensajeDeContexto::getContenido).containsExactly(
+            "algo de antes", "y si mi [REDACTADO] falla", "No estoy seguro de haber entendido tu consulta.");
+        assertThat(abierta.getActualizadoEn()).isEqualTo(AHORA);
+        verify(tickets, never()).saveAndFlush(any());
+        verifyNoInteractions(moderacion, limitador);
+    }
+
+    @Test
+    void alNoResolverSiOtraLaAbreALaVezSeSumaAElla() {
+        conLaConversacion(
+            delJugador("una pregunta rara", 1),
+            delBot("No estoy seguro de haber entendido tu consulta.", 2, ResultadoDeRespuesta.ESCALADO, null));
+        TicketSoporte laOtra = TicketSoporte.abrir(UID.toString(), Categoria.FAQ_GENERAL, "Otra", "Otra", List.of(),
+            AHORA);
+        when(tickets.findFirstByUidAndEstadoInOrderByCreadoEnDesc(eq(UID.toString()), anyCollection()))
+            .thenReturn(Optional.empty(), Optional.of(laOtra));
+        when(tickets.existsByUidAndEstadoIn(eq(UID.toString()), anyCollection())).thenReturn(true);
+        when(tickets.save(laOtra)).thenReturn(laOtra);
+
+        TicketSoporteService.SolicitudAutomatica solicitud = servicio.alNoResolver(jugador, null).orElseThrow();
+
+        assertThat(solicitud.nueva()).isFalse();
+        assertThat(solicitud.ticket()).isSameAs(laOtra);
+    }
+
+    @Test
+    void alNoResolverSinPreguntasNoAbreNada() {
+        conLaConversacion();
+        when(tickets.findFirstByUidAndEstadoInOrderByCreadoEnDesc(eq(UID.toString()), anyCollection()))
+            .thenReturn(Optional.empty());
+
+        assertThat(servicio.alNoResolver(jugador, null)).isEmpty();
+        verify(tickets, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void alNoResolverSiLaListaNegraNoRespondeLoDiceAQuienLlama() {
+        conLaConversacion(
+            delJugador("una pregunta rara", 1),
+            delBot("No estoy seguro de haber entendido tu consulta.", 2, ResultadoDeRespuesta.ESCALADO, null));
+        when(tickets.findFirstByUidAndEstadoInOrderByCreadoEnDesc(eq(UID.toString()), anyCollection()))
+            .thenReturn(Optional.empty());
+        doThrow(new IllegalStateException("lista negra caida")).when(moderacion).verificar(anyString());
+
+        assertThatThrownBy(() -> servicio.alNoResolver(jugador, null)).isInstanceOf(IllegalStateException.class);
+        verify(tickets, never()).saveAndFlush(any());
     }
 
     @Test

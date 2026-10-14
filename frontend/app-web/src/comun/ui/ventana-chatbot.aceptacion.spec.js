@@ -80,7 +80,7 @@ function json(ruta, cuerpo, status = 200, cabeceras = {}) {
  * @param {import('@playwright/test').Page} page
  * @param {{historial?: object[], alEnviar?: (ruta: import('@playwright/test').Route) => Promise<void>}} [opciones]
  */
-async function simularApi(page, { historial = [], alEnviar = null } = {}) {
+async function simularApi(page, { historial = [], alEnviar = null, alListarTickets = null } = {}) {
   await page.route('**/api/v1/**', async (ruta) => {
     const peticion = ruta.request();
     const { pathname } = new URL(peticion.url());
@@ -88,6 +88,9 @@ async function simularApi(page, { historial = [], alEnviar = null } = {}) {
 
     if (pathname.endsWith('/chat/historial') && metodo === 'GET') {
       return json(ruta, historial);
+    }
+    if (pathname.endsWith('/chat/tickets') && metodo === 'GET') {
+      return alListarTickets ? alListarTickets(ruta) : json(ruta, []);
     }
     if (pathname.endsWith('/chat/sugerencias')) {
       return json(ruta, []);
@@ -367,41 +370,84 @@ test.describe('Ventana del asistente (#506)', () => {
     });
   }
 
-  test('un visitante que pide hablar con soporte sabe cómo conseguirlo', async ({ page }) => {
+  // ms-chatbot.yaml 1.12.0 (RF-CHA-007, actor Visitante): lo que no resolvió
+  // ya es una solicitud de soporte, también para un visitante. La encuentra
+  // en «Tus solicitudes» (con su sesión) y, si quiere, entra o crea cuenta.
+  test('un visitante sin respuesta ve su solicitud abierta y la encuentra en «Tus solicitudes»', async ({
+    page,
+  }) => {
+    const SOLICITUD = {
+      id: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f',
+      asunto: 'Sin respuesta del asistente: quiero hablar con una persona',
+      estado: 'ABIERTO',
+      nueva: true,
+    };
+    let sesionAlListar = null;
     const { ventana, entrada } = await abrirAsistente(page, {
       alEnviar: (ruta) =>
         json(ruta, {
           ...BOT,
-          contenido: 'No encontré una respuesta para eso.',
+          contenido:
+            'No estoy seguro de haber entendido tu consulta. Abrí una solicitud de soporte con esta conversación.',
           enriquecido: {
             pasos: [],
             enlaces: [],
             tarjetas: [],
             respuestasRapidas: [],
             ofrecerSoporteHumano: true,
+            solicitud: SOLICITUD,
           },
         }),
+      alListarTickets: (ruta) => {
+        sesionAlListar = ruta.request().headers()['x-id-sesion-anonima'] ?? null;
+        return json(ruta, [
+          {
+            ticketId: SOLICITUD.id,
+            categoria: 'FAQ_GENERAL',
+            asunto: SOLICITUD.asunto,
+            mensaje: 'Le pregunté al asistente: «quiero hablar con una persona» y no la entendió.',
+            estado: 'ABIERTO',
+            respuesta: null,
+            creadoEn: '2026-10-14T15:00:00Z',
+            actualizadoEn: '2026-10-14T15:00:00Z',
+          },
+        ]);
+      },
     });
 
     await entrada.fill('quiero hablar con una persona');
     await entrada.press('Enter');
-    await ventana.getByRole('button', { name: 'Hablar con soporte' }).click();
+
+    const aviso = ventana.locator('.chatbot-enriquecido__solicitud');
+    await expect(aviso).toContainText('Abrí una solicitud de soporte');
+    await expect(aviso).toContainText(SOLICITUD.asunto);
+    // Ya no hay nada que pedir: no se ofrece «Hablar con soporte».
+    await expect(ventana.getByRole('button', { name: 'Hablar con soporte' })).toHaveCount(0);
+
+    await aviso.getByRole('button', { name: 'Ver solicitud' }).click();
 
     const panel = ventana.locator('[data-chatbot-soporte]');
     await expect(panel).toBeVisible();
-    await expect(panel).toContainText(
-      'Para hablar con una persona del equipo necesitas una cuenta: inicia sesión o crea una.',
-    );
+    await expect(panel.locator(`[data-ticket-id="${SOLICITUD.id}"]`)).toContainText('Abierta');
+    expect(sesionAlListar).toMatch(/^visitante-[A-Za-z0-9-]{10,64}$/);
+    await expect(panel).toContainText('Estás como visitante');
+    await expect(panel.locator('form')).toHaveCount(1);
+    await expect(panel.locator('select')).toBeFocused();
 
     const entrar = panel.getByRole('link', { name: 'Iniciar sesión' });
-    await expect(entrar).toBeFocused();
     const login = new URL(await entrar.getAttribute('href'));
     expect(login.pathname).toBe('/cuentas/login.html');
     expect(login.searchParams.get('volver')).toBe(PAGINA);
-
     const crear = panel.getByRole('link', { name: 'Crear cuenta' });
     expect(new URL(await crear.getAttribute('href')).pathname).toBe('/cuentas/registro.html');
-    await expect(panel.locator('form')).toHaveCount(0);
+
+    // La nota del visitante y la lista, sin nada grave ni crítico para axe.
+    const { violations } = await new AxeBuilder({ page }).include('.chatbot-ventana').analyze();
+    expect(
+      violations
+        .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+        .map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`),
+    ).toEqual([]);
   });
 
   test('el asistente queda sobre un aviso de la vista y bajo un modal', async ({ page }) => {

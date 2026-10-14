@@ -24,6 +24,31 @@ class RespuestaEnriquecidaConverterTest {
         assertThat(conversor.convertToEntityAttribute(json)).isEqualTo(original);
     }
 
+    // 1.12.0 (RF-CHA-007): la solicitud que se abrio sola va y vuelve con la
+    // respuesta (el historial la enseña igual), aunque sea lo unico que trae.
+    @Test
+    void laSolicitudVaYVuelveYBastaParaGuardarla() {
+        SolicitudAbierta solicitud = new SolicitudAbierta(
+            java.util.UUID.fromString("6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f"), "Sin respuesta del asistente: x",
+            "ABIERTO", true);
+        RespuestaEnriquecida soloLaSolicitud = new RespuestaEnriquecida(null, null, null, null, false)
+            .conSolicitud(solicitud);
+
+        assertThat(soloLaSolicitud.estaVacia()).isFalse();
+        String json = conversor.convertToDatabaseColumn(soloLaSolicitud);
+        assertThat(json).contains("\"solicitud\":{").contains("\"nueva\":true");
+        assertThat(conversor.convertToEntityAttribute(json)).isEqualTo(soloLaSolicitud);
+    }
+
+    @Test
+    void unaRespuestaGuardadaAntesDe112SeLeeSinSolicitud() {
+        RespuestaEnriquecida leida = conversor.convertToEntityAttribute(
+            "{\"pasos\":[],\"enlaces\":[],\"tarjetas\":[],\"respuestasRapidas\":[],\"ofrecerSoporteHumano\":true}");
+
+        assertThat(leida.solicitud()).isNull();
+        assertThat(leida.ofrecerSoporteHumano()).isTrue();
+    }
+
     @Test
     void nullOVaciaSeGuardanComoNull() {
         assertThat(conversor.convertToDatabaseColumn(null)).isNull();

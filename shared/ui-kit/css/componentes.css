@@ -2955,6 +2955,34 @@ button.tarjeta--partida:disabled {
   border-color: var(--primaria);
 }
 
+/* ms-chatbot.yaml 1.12.0 (RF-CHA-007) — la solicitud de soporte que el
+   asistente abrió al no resolver la pregunta, con un botón a «Tus
+   solicitudes». Tono de información: no es un error ni algo por hacer. */
+.chatbot-enriquecido__solicitud {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
+  padding: var(--e-2) var(--e-3);
+  border: 1px solid var(--borde-tenue);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
+}
+
+.chatbot-enriquecido__solicitud-titulo {
+  margin: 0;
+  font-weight: var(--t-etiqueta-peso);
+  color: var(--info);
+}
+
+.chatbot-enriquecido__solicitud-asunto {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  color: var(--texto-2);
+  overflow-wrap: anywhere;
+}
+
 /* Preguntas rápidas y autocompletado. Los botones son de texto, como las
    acciones secundarias, para no competir con «Enviar». La lista del
    autocompletado sale ENCIMA de la caja: la ventana está pegada abajo. */
@@ -3085,6 +3113,19 @@ button.tarjeta--partida:disabled {
   display: flex;
   flex-wrap: wrap;
   gap: var(--e-2);
+}
+
+/* ms-chatbot.yaml 1.12.0 — el visitante también pide ayuda; esta nota le
+   dice hasta cuándo verá la respuesta y le ofrece una cuenta. */
+.chatbot-soporte__visitante {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+  margin: var(--e-2) 0;
+  padding: var(--e-2) var(--e-3);
+  border-left: 3px solid var(--info);
+  border-radius: var(--radio);
+  background: var(--info-insignia);
 }
 
 /* ms-chatbot.yaml 1.8.0 — «Crear solicitud con esta conversación», encima

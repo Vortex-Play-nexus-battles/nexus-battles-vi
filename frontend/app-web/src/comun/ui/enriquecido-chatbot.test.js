@@ -7,6 +7,7 @@ import { jest } from '@jest/globals';
 import { MATRIZ } from '../matriz-acceso.js';
 import { CLAVES } from '../sesion.js';
 import {
+  TEXTOS_ENRIQUECIDO,
   VISTA_DEL_CHAT,
   introAntesDePasos,
   pintarEnriquecido,
@@ -82,6 +83,64 @@ test('los botones preguntan y «Hablar con soporte» abre el soporte', () => {
 
   expect(alPreguntar).toHaveBeenCalledWith('Cómo funciona el Torneo');
   expect(alPedirSoporte).toHaveBeenCalled();
+});
+
+// ms-chatbot.yaml 1.12.0 (RF-CHA-007): la solicitud que se abrió sola.
+describe('la solicitud de soporte que abrió el asistente', () => {
+  const SOLICITUD = {
+    id: '6f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f',
+    asunto: 'Sin respuesta del asistente: zxqwv plorf',
+    estado: 'ABIERTO',
+    nueva: true,
+  };
+
+  test('se avisa con su asunto y «Ver solicitud», en lugar de «Hablar con soporte»', () => {
+    const alVerSolicitud = jest.fn();
+    const el = pintarEnriquecido(
+      { respuestasRapidas: [], ofrecerSoporteHumano: true, solicitud: SOLICITUD },
+      { alPreguntar: jest.fn(), alPedirSoporte: jest.fn(), alVerSolicitud, url },
+    );
+
+    const aviso = el.querySelector('.chatbot-enriquecido__solicitud');
+    expect(aviso.dataset.solicitudId).toBe(SOLICITUD.id);
+    expect(aviso.textContent).toContain(TEXTOS_ENRIQUECIDO.solicitudAbierta);
+    expect(aviso.textContent).toContain('Sin respuesta del asistente: zxqwv plorf');
+    expect(el.querySelector('[data-accion="ofrecer-soporte"]')).toBeNull();
+
+    el.querySelector('[data-accion="ver-solicitud"]').click();
+    expect(alVerSolicitud).toHaveBeenCalledWith(SOLICITUD);
+  });
+
+  test('si la pregunta se sumó a la que ya estaba abierta, lo dice', () => {
+    const { el } = pintar({ solicitud: { ...SOLICITUD, nueva: false } });
+
+    expect(el.querySelector('.chatbot-enriquecido__solicitud-titulo').textContent).toBe(
+      TEXTOS_ENRIQUECIDO.solicitudSumada,
+    );
+  });
+
+  test('sin `alVerSolicitud`, «Ver solicitud» abre el soporte', () => {
+    const { el, alPedirSoporte } = pintar({ solicitud: SOLICITUD });
+
+    el.querySelector('[data-accion="ver-solicitud"]').click();
+    expect(alPedirSoporte).toHaveBeenCalled();
+  });
+
+  test('el asunto entra como texto, nunca como HTML', () => {
+    const { el } = pintar({ solicitud: { ...SOLICITUD, asunto: '<img src=x onerror=alert(1)>' } });
+
+    expect(el.querySelector('img')).toBeNull();
+    expect(el.querySelector('.chatbot-enriquecido__solicitud-asunto').textContent).toBe(
+      '<img src=x onerror=alert(1)>',
+    );
+  });
+
+  test('una solicitud sin id no se pinta y vuelve «Hablar con soporte»', () => {
+    const { el } = pintar({ ofrecerSoporteHumano: true, solicitud: { asunto: 'x' } });
+
+    expect(el.querySelector('.chatbot-enriquecido__solicitud')).toBeNull();
+    expect(el.querySelector('[data-accion="ofrecer-soporte"]')).not.toBeNull();
+  });
 });
 
 test('sin nada que pintar devuelve null', () => {

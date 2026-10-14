@@ -91,12 +91,12 @@ public class MotorRespuestas {
             .thenComparing(TemaConocimiento::getClave, Comparator.nullsLast(Comparator.naturalOrder()));
 
     // 7.4.3 «cuando el chatbot no pueda proporcionar una respuesta satisfactoria».
+    // 1.12.0: el contacto con soporte humano ya no se ofrece aqui: la
+    // solicitud se abre sola y ChatService lo dice al final (RF-CHA-007).
     static final String ESCALAMIENTO_ES = "No estoy seguro de haber entendido tu consulta. "
-        + "Puedo ponerte en contacto con soporte humano para resolverla; "
-        + "mientras tanto, esta pregunta quedó registrada para mejorar mis respuestas.";
+        + "Esta pregunta quedó registrada para mejorar mis respuestas.";
     static final String ESCALAMIENTO_EN = "I'm not sure I understood your question. "
-        + "I can put you in touch with human support to solve it; "
-        + "meanwhile, your question was recorded to improve my answers.";
+        + "Your question was recorded to improve my answers.";
 
     private final FuenteDeLaBase fuente;
     private final CacheDeRespuestas cache;

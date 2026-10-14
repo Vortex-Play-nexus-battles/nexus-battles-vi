@@ -120,4 +120,11 @@ public class Mensaje {
     public void registrarEnriquecido(RespuestaEnriquecida nuevo) {
         this.enriquecido = nuevo == null || nuevo.estaVacia() ? null : nuevo;
     }
+
+    // 1.12.0 (RF-CHA-007): lo que se le dice al final de una respuesta que no
+    // resolvio nada, sobre la solicitud de soporte que se abrio por ella.
+    public void completarRespuesta(String contenidoCompleto, RespuestaEnriquecida conSolicitud) {
+        this.contenido = contenidoCompleto;
+        registrarEnriquecido(conSolicitud);
+    }
 }
