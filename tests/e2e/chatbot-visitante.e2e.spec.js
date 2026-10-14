@@ -53,9 +53,13 @@ test.describe('Asistente · visitante (§7.4)', () => {
     );
     await expect(enlaceA(registro, 'registro')).toBeVisible();
 
-    // 2. Una regla del juego.
-    const reglas = await preguntar(page, '¿Cómo funciona el combate?');
-    await expect(reglas).toContainText('turno');
+    // 2. Las reglas del juego (V15): el resumen paso a paso y el centro de ayuda.
+    const reglas = await preguntar(page, '¿Cuáles son las reglas del juego?');
+    await expect(reglas).toContainText('Las reglas básicas de THE NEXUS BATTLES VI');
+    expect(await reglas.locator('.chatbot-enriquecido__pasos li').count()).toBeGreaterThanOrEqual(
+      5,
+    );
+    await expect(enlaceA(reglas, 'ayuda')).toBeVisible();
 
     // axe sobre la ventana abierta, con la conversación de verdad.
     await conLaPaginaQuieta(page);
@@ -87,7 +91,15 @@ test.describe('Asistente · visitante (§7.4)', () => {
     const otraVista = await abrirAsistente(page);
     await expect(otraVista.preguntas.first()).toContainText('¿Cómo me registro?');
     await expect(otraVista.respuestas).toHaveCount(2);
-    await expect(otraVista.respuestas.nth(1)).toContainText('turno');
+    await expect(otraVista.respuestas.nth(1)).toContainText('Las reglas básicas');
+
+    // Navegación asistida: una sección pública, con su enlace.
+    const subasta = await preguntar(page, 'llévame a la subasta');
+    await expect(enlaceA(subasta, 'subastas')).toBeVisible();
+    // Y una que pide sesión: entrar o crear cuenta, sin enlace a la tienda.
+    const tienda = await preguntar(page, 'llévame a la tienda');
+    await expect(tienda).toContainText('necesitas iniciar sesión');
+    expect(await destinosDe(tienda)).toEqual(['login', 'registro']);
 
     // 6. Algo de su cuenta: hace falta una sesión, y no se consultó nada.
     const privado = await preguntar(page, '¿Qué tengo en mi inventario?');
