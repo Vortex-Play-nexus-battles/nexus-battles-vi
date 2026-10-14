@@ -104,7 +104,9 @@ class RoleAssignmentControllerTest {
             anyLong(),
             any(),
             anyString(),
-            anyString()
+            anyString(),
+            any(),
+            any()
         );
     }
 
@@ -167,7 +169,9 @@ class RoleAssignmentControllerTest {
             2L,
             Role.MODERADOR,
             "super_admin",
-            "10.0.0.50"
+            "10.0.0.50",
+            null,
+            null
         );
     }
 }

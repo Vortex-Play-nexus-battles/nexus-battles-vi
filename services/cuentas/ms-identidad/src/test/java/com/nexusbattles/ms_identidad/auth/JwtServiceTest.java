@@ -1,5 +1,8 @@
 package com.nexusbattles.ms_identidad.auth;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import com.nexusbattles.ms_identidad.auth.service.ClavesDeFirma;
@@ -174,5 +177,75 @@ class JwtServiceTest {
         assertEquals(java.util.List.of(), JwtService.metodosDe(null));
         assertFalse(JwtService.conSegundoFactor(null));
         assertFalse(JwtService.conSegundoFactor(java.util.List.of("pwd")));
+    }
+
+    // ------------------------------------------- 7.3.9: sesiones administrativas
+
+    @Test
+    void unTokenAdministrativoCaducaALosQuinceMinutos() {
+        ReflectionTestUtils.setField(jwtService, "minutosSesionAdministrativa", 15);
+
+        for (String rol : List.of("MODERADOR", "ADMINISTRADOR", "SUPER_ADMINISTRADOR")) {
+            Claims claims = jwtService.validarYObtenerClaims(
+                jwtService.generarToken("ana", rol, 0, UUID.randomUUID(), List.of("pwd", "otp")));
+            long segundos = claims.getExpiration().toInstant().getEpochSecond()
+                - claims.getIssuedAt().toInstant().getEpochSecond();
+            assertEquals(15 * 60, segundos, rol);
+        }
+    }
+
+    @Test
+    void unTokenDeJugadorSigueDurandoVeinticuatroHoras() {
+        Claims claims = jwtService.validarYObtenerClaims(
+            jwtService.generarToken("ana", "JUGADOR", 0, UUID.randomUUID()));
+        long segundos = claims.getExpiration().toInstant().getEpochSecond()
+            - claims.getIssuedAt().toInstant().getEpochSecond();
+        assertEquals(24 * 3600, segundos);
+    }
+
+    @Test
+    void elTokenLlevaElInstanteDeLaAutenticacionYLaRenovacionLoConserva() {
+        Instant hace = Instant.now().minus(Duration.ofHours(2)).truncatedTo(java.time.temporal.ChronoUnit.SECONDS);
+
+        String token = jwtService.generarToken("ana", "ADMINISTRADOR", 3, UUID.randomUUID(), List.of("pwd", "otp"),
+            hace);
+        Claims claims = jwtService.validarYObtenerClaims(token);
+
+        assertEquals(hace, JwtService.autenticadoEn(claims));
+        assertEquals(List.of("pwd", "otp"), JwtService.metodosDe(claims));
+    }
+
+    @Test
+    void ningunaSesionAdministrativaPasaDeSuMaximo() {
+        ReflectionTestUtils.setField(jwtService, "minutosSesionAdministrativa", 15);
+        ReflectionTestUtils.setField(jwtService, "horasMaximasSesionAdministrativa", 12);
+        Instant autenticado = Instant.parse("2026-10-13T00:00:00Z");
+
+        // A 5 minutos del maximo, el token dura 5 minutos y no 15.
+        Instant ahora = autenticado.plus(Duration.ofHours(12)).minus(Duration.ofMinutes(5));
+        assertEquals(autenticado.plus(Duration.ofHours(12)),
+            jwtService.expiracionPara("SUPER_ADMINISTRADOR", ahora, autenticado));
+        // Lejos del maximo, los 15 minutos de inactividad.
+        assertEquals(autenticado.plus(Duration.ofMinutes(75)),
+            jwtService.expiracionPara("MODERADOR", autenticado.plus(Duration.ofHours(1)), autenticado));
+        assertEquals(Duration.ofHours(12), jwtService.duracionMaximaDeSesion("ADMINISTRADOR"));
+    }
+
+    @Test
+    void renovarNoAlargaLaSesionDeUnJugador() {
+        Instant autenticado = Instant.parse("2026-10-13T00:00:00Z");
+        Instant ahora = autenticado.plus(Duration.ofHours(20));
+
+        assertEquals(autenticado.plus(Duration.ofHours(24)),
+            jwtService.expiracionPara("JUGADOR", ahora, autenticado));
+    }
+
+    @Test
+    void unTokenAnteriorSinAuthTimeSeTomaPorSuEmision() {
+        Instant emitido = Instant.parse("2026-10-01T08:00:00Z");
+        Claims anterior = org.mockito.Mockito.mock(Claims.class);
+        org.mockito.Mockito.when(anterior.getIssuedAt()).thenReturn(java.util.Date.from(emitido));
+
+        assertEquals(emitido, JwtService.autenticadoEn(anterior));
     }
 }

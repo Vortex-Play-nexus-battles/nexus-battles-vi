@@ -36,8 +36,37 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Autenticacion e identidad (ms-identidad)
-  version: 2.2.0
+  version: 2.3.0
   description: |
+    ### Cambios en 2.3.0 (7.3.9 — sesiones administrativas; implementado)
+
+    - **Segundo factor obligatorio por omision para Moderador, Administrador y
+      Super Administrador** (RF-AUT-007, CA-04): la lista
+      `IDENTIDAD_2FA_OBLIGATORIO_ROLES` trae esos tres roles cuando no se
+      configura otra. Una cuenta administrativa sin segundo factor recibe en
+      su login el 403 `segundo-factor-enrolamiento-requerido` de 2.2.0 y se
+      enrola antes de entrar; una que ya lo tiene, el 403
+      `segundo-factor-requerido`. La forma de las respuestas no cambia.
+    - `POST /auth/segundo-factor/desactivacion` responde **409**
+      `.../errors/segundo-factor-obligatorio` a una cuenta cuyo rol lo exige:
+      quitarselo a uno mismo dejaria la cuenta entrando solo con la contrasena.
+      Si se perdio la aplicacion y los codigos, lo restablece un Super
+      Administrador (`ms-identidad-admin.yaml` 1.6.0).
+    - **Timeout por inactividad**: el token de un rol administrativo caduca a
+      los **15 minutos** (`IDENTIDAD_MINUTOS_SESION_ADMINISTRATIVA`) y la
+      consola lo renueva mientras se usa con la nueva
+      `POST /auth/sesion/renovacion`. Sin actividad, el servidor deja de
+      aceptarlo: el cierre no depende de que la pestana siga abierta. Ninguna
+      sesion administrativa pasa de **12 horas** desde que se autentico
+      (`IDENTIDAD_HORAS_MAXIMAS_SESION_ADMINISTRATIVA`) sin volver a escribir
+      contrasena y segundo factor. Los jugadores siguen con 24 h.
+    - Claim nuevo **`auth_time`** (OIDC Core §2): segundos desde la epoca en
+      que la persona se autentico. Una renovacion lo conserva, igual que `amr`.
+    - El bloqueo temporal por intentos fallidos (RF-AUT-009) queda en la
+      auditoria de ms-cumplimiento (`BLOQUEADA_TEMPORALMENTE`, motivo
+      `BLOQUEO_POR_INTENTOS_FALLIDOS`, con la IP), una vez por bloqueo. El
+      umbral sale de `IDENTIDAD_INTENTOS_FALLIDOS` (3 por omision).
+
     ### Cambios en 2.2.0 (RFINAL-05, HU-AUT-007 #502 — segundo factor TOTP), todos aditivos
 
     RF-AUT-007 pide segundo factor obligatorio para Moderador, Administrador y
@@ -232,8 +261,12 @@ info:
       tambien `mfa` y `hwk`). Los tokens emitidos antes de 2.2.0 no lo traen:
       ausente equivale a «sin segundo factor».
     - `iss` — emisor, `ms-identidad` por omision (`app.jwt.emisor`).
-    - `iat` / `exp` — emision y expiracion; **24 horas** por omision
-      (`app.jwt.horas-expiracion`).
+    - `iat` / `exp` — emision y expiracion; **24 horas** por omision para un
+      jugador (`app.jwt.horas-expiracion`) y, desde 2.3.0, **15 minutos**
+      renovables para Moderador, Administrador y Super Administrador.
+    - `auth_time` — 2.3.0, cuando se autentico la sesion (segundos desde la
+      epoca). Lo conserva la renovacion; ausente en tokens anteriores (se toma
+      `iat`).
 
     ### Los errores de este servicio NO son uniformes
 
@@ -779,6 +812,48 @@ paths:
           description: Cierre registrado.
         '403':
           description: Sin token, o con un token invalido, caducado o revocado (interceptor fail-closed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetail'
+
+  /api/v1/auth/sesion/renovacion:
+    post:
+      tags: [cuenta]
+      operationId: renovarSesion
+      summary: Renueva la sesion en uso con la misma autenticacion (2.3.0, 7.3.9)
+      description: |
+        La consola la llama mientras la persona trabaja para que su token de
+        15 minutos no caduque. Devuelve un token nuevo con la misma `sub`,
+        `rol`, `ver`, `uid`, `amr` y **`auth_time`**: renovar no es volver a
+        autenticarse.
+
+        No renueva (401 `sesion-no-renovable`) un token caducado o mal
+        firmado, uno cuya version ya no vale (cambio de rol, sancion,
+        contrasena o segundo factor restablecido), el de una cuenta que ya no
+        esta `ACTIVO`, ni una sesion que ya cumplio su duracion maxima desde
+        `auth_time` (12 h para los roles administrativos, 24 h para un
+        jugador, que no gana tiempo renovando). La respuesta no se guarda en
+        ninguna cache (`Cache-Control: no-store`).
+      security:
+        - tokenDeUsuario: []
+      responses:
+        '200':
+          description: Sesion renovada.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, expiraEn]
+                properties:
+                  token:
+                    type: string
+                    description: El JWT nuevo; sustituye al anterior.
+                  expiraEn:
+                    type: string
+                    format: date-time
+        '401':
+          description: '`.../errors/sesion-no-renovable`: hay que volver a iniciar sesion.'
           content:
             application/problem+json:
               schema:

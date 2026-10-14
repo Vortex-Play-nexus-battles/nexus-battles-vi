@@ -148,10 +148,12 @@ class SalidasDeSancionIT {
     @Test
     @DisplayName("con identidad caida la sancion queda registrada y sus salidas esperan; al volver se entregan")
     void identidadCaida() throws Exception {
-        estadoDeIdentidad = 503;
         UUID jugador = UUID.randomUUID();
         Sancion baneo = sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador, Sancion.Tipo.BANEO,
                 "Fraude comprobado", null, null, null, true));
+        // Identidad cae DESPUES de emitir (emitir pregunta el rol, 7.3.1): lo
+        // que se prueba aqui es que las salidas esperan y se reintentan.
+        estadoDeIdentidad = 503;
 
         entregador.ejecutar();
 
@@ -181,6 +183,21 @@ class SalidasDeSancionIT {
         assertThat(proyeccion.path("estado").asString()).isEqualTo("BANEADO");
         assertThat(recibidas("POST", "/api/v1/correos/sancion").get(0).idempotencia())
                 .isEqualTo("sancion-" + baneo.id() + "-emision");
+    }
+
+    @Test
+    @DisplayName("7.3.1: con identidad caida al emitir no se registra nada ni se encola ninguna salida")
+    void sinRolNoHaySancion() {
+        estadoDeIdentidad = 503;
+        UUID jugador = UUID.randomUUID();
+
+        assertThatThrownBy(() -> sanciones.emitir(admin, new SancionesService.SolicitudDeSancion(jugador,
+                Sancion.Tipo.SUSPENSION, "Lenguaje ofensivo", null, null, 24L, false)))
+                .isInstanceOf(SancionRechazada.class)
+                .extracting("motivo").isEqualTo(SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE);
+        assertThat(sanciones.activaDe(jugador)).isEmpty();
+        assertThat(recibidas("GET", "/api/v1/internal/usuarios/" + jugador + "/rol")).hasSize(1);
+        assertThat(recibidas("GET", "/rol").get(0).autorizacion()).isEqualTo("Bearer token-de-moderacion");
     }
 
     @Test
@@ -247,6 +264,10 @@ class SalidasDeSancionIT {
                 String ruta = intercambio.getRequestURI().getPath();
                 if (estadoDeIdentidad != 200) {
                     responder(intercambio, estadoDeIdentidad, "{\"title\":\"no disponible\"}");
+                } else if (ruta.endsWith("/rol")) {
+                    // 7.3.1: el rol de la cuenta antes de emitir, levantar o resolver.
+                    String uid = ruta.split("/")[5];
+                    responder(intercambio, 200, "{\"uid\":\"" + uid + "\",\"rol\":\"JUGADOR\",\"estado\":\"ACTIVO\"}");
                 } else if (ruta.endsWith("/contacto")) {
                     String uid = ruta.split("/")[5];
                     responder(intercambio, 200, "{\"uid\":\"" + uid + "\",\"email\":\"jugador@nexus.test\","

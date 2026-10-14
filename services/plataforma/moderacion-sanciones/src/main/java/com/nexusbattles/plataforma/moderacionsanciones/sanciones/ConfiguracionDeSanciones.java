@@ -123,6 +123,12 @@ public class ConfiguracionDeSanciones {
         return new ClienteIdentidad(restClientDeSalidas, url);
     }
 
+    /** El rol de la cuenta afectada, para la jerarquia de 7.3.1 (fail-closed). */
+    @Bean
+    public RolesDeCuentas rolesDeCuentas(ClienteIdentidad identidad) {
+        return new RolesDesdeIdentidad(identidad);
+    }
+
     @Bean
     public ClienteCorreo clienteCorreo(RestClient restClientDeSalidas,
                                        @Value("${sanciones.correo.url}") String url) {

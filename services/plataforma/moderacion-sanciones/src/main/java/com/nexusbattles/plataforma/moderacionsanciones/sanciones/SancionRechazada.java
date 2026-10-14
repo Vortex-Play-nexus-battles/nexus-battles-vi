@@ -18,7 +18,11 @@ public class SancionRechazada extends RuntimeException {
         /** La apelacion ya esta resuelta. */
         APELACION_RESUELTA,
         /** Levantar una sancion que ya no esta vigente (revertida o suspension vencida). */
-        SANCION_NO_VIGENTE
+        SANCION_NO_VIGENTE,
+        /** La cuenta afectada tiene un rol igual o superior al de quien actua (7.3.1). */
+        JERARQUIA_INSUFICIENTE,
+        /** ms-identidad no dijo el rol de la cuenta: sin saberlo no se sanciona (fail-closed). */
+        IDENTIDAD_NO_DISPONIBLE
     }
 
     private final Motivo motivo;

@@ -1,7 +1,9 @@
 package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -13,11 +15,15 @@ public class ManejadorErroresSanciones {
 
     static final String BASE = "https://nexusbattles.local/errores/";
 
+    /** Cuanto esperar antes de reintentar cuando ms-identidad no respondio. */
+    static final String REINTENTAR_EN_SEGUNDOS = "30";
+
     @ExceptionHandler(SancionRechazada.class)
-    public ProblemDetail manejar(SancionRechazada ex) {
+    public ResponseEntity<ProblemDetail> manejar(SancionRechazada ex) {
         HttpStatus estado = switch (ex.motivo()) {
-            case PERMISO_INSUFICIENTE -> HttpStatus.FORBIDDEN;
+            case PERMISO_INSUFICIENTE, JERARQUIA_INSUFICIENTE -> HttpStatus.FORBIDDEN;
             case NO_ENCONTRADA -> HttpStatus.NOT_FOUND;
+            case IDENTIDAD_NO_DISPONIBLE -> HttpStatus.SERVICE_UNAVAILABLE;
             case USUARIO_BANEADO, APELACION_RESUELTA, SANCION_NO_VIGENTE -> HttpStatus.CONFLICT;
             case APELACION_NO_PROCEDE -> HttpStatus.UNPROCESSABLE_ENTITY;
             case SOLICITUD_INVALIDA -> HttpStatus.BAD_REQUEST;
@@ -32,8 +38,14 @@ public class ManejadorErroresSanciones {
             case APELACION_NO_PROCEDE -> "La apelacion no procede";
             case SOLICITUD_INVALIDA -> "Solicitud invalida";
             case SANCION_NO_VIGENTE -> "La sancion ya no esta vigente";
+            case JERARQUIA_INSUFICIENTE -> "Rol insuficiente sobre esta cuenta";
+            case IDENTIDAD_NO_DISPONIBLE -> "No se pudo comprobar la cuenta";
         });
         problema.setProperty("motivo", ex.motivo().name());
-        return problema;
+        ResponseEntity.BodyBuilder respuesta = ResponseEntity.status(estado);
+        if (ex.motivo() == SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE) {
+            respuesta.header(HttpHeaders.RETRY_AFTER, REINTENTAR_EN_SEGUNDOS);
+        }
+        return respuesta.body(problema);
     }
 }

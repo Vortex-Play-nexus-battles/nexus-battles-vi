@@ -145,7 +145,7 @@ class AdminCuentaServiceTest {
         );
 
         assertEquals(
-            "Solo se pueden crear cuentas con rol MODERADOR o ADMINISTRADOR desde este endpoint.",
+            "Solo se pueden crear cuentas de Moderador o Administrador.",
             exception.getMessage()
         );
 

@@ -127,6 +127,39 @@ class SancionesControllerTest {
     }
 
     @Test
+    @DisplayName("7.3.1: sancionar un rol igual o superior es 403 jerarquia-insuficiente")
+    void jerarquia() throws Exception {
+        when(servicio.emitir(any(), any())).thenThrow(new SancionRechazada(
+                SancionRechazada.Motivo.JERARQUIA_INSUFICIENTE,
+                "no puedes sancionar a una cuenta con un rol igual o superior al tuyo"));
+
+        mvc.perform(post("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"usuarioId\":\"" + JUGADOR + "\",\"tipo\":\"SUSPENSION\",\"motivo\":\"x\","
+                                + "\"duracionHoras\":24}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/jerarquia-insuficiente"))
+                .andExpect(jsonPath("$.motivo").value("JERARQUIA_INSUFICIENTE"));
+    }
+
+    @Test
+    @DisplayName("sin el rol de la cuenta (identidad caida): 503 con Retry-After, nada registrado")
+    void identidadNoDisponible() throws Exception {
+        when(servicio.emitir(any(), any())).thenThrow(new SancionRechazada(
+                SancionRechazada.Motivo.IDENTIDAD_NO_DISPONIBLE, RolesDesdeIdentidad.NO_DISPONIBLE));
+
+        mvc.perform(post("/api/v1/sanciones")
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer " + emisor.tokenDeUsuario("mod_ana", MODERADORA, "MODERADOR"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"usuarioId\":\"" + JUGADOR + "\",\"tipo\":\"ADVERTENCIA\",\"motivo\":\"x\"}"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string(HttpHeaders.RETRY_AFTER, "30"))
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/identidad-no-disponible"));
+    }
+
+    @Test
     @DisplayName("un jugador que intenta sancionar recibe 403 con su tipo de problema (CA-04 de HU-USR-004)")
     void jugadorNoSanciona() throws Exception {
         when(servicio.emitir(any(), any())).thenThrow(new SancionRechazada(

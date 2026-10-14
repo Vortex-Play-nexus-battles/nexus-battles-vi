@@ -190,6 +190,9 @@ export const MOTIVOS = Object.freeze({
   // B1 — se acaba de fijar la contraseña con un código de recuperación o de
   // activación.
   RESTABLECIDA: 'restablecida',
+  // 7.3.9 — una sesión administrativa sin actividad se cerró sola
+  // (`inactividad-administrativa.js`).
+  INACTIVIDAD: 'inactividad',
 });
 
 /**

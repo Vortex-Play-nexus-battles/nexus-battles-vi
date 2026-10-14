@@ -449,3 +449,162 @@ export function pedirTexto({
     aceptar.addEventListener('click', aceptarTexto);
   });
 }
+
+/**
+ * Confirmación de una acción administrativa con su motivo — 7.3.5 y 7.3.9.
+ *
+ * Una acción que cambia la cuenta de otra persona (suspenderla, banearla,
+ * cambiarle el rol, quitarle el segundo factor) queda en la auditoría con
+ * quién, cuándo y **por qué**. Un «¿Está seguro?» no deja nada de eso: aquí
+ * el motivo es un campo obligatorio del propio diálogo, con su mínimo de
+ * caracteres, y el botón no se activa hasta que lo cumple. Para las más
+ * graves se puede pedir además que se escriba una palabra (el apodo de la
+ * cuenta), como en {@link confirmarCritico}.
+ *
+ * Lo que va a pasar se lista antes (`consecuencias`), en frases: nadie
+ * confirma a ciegas.
+ *
+ * @param {{titulo: string, mensaje?: string, consecuencias?: string[],
+ *   etiquetaMotivo?: string, pistaMotivo?: string, motivoInicial?: string,
+ *   minimo?: number, maximo?: number, palabra?: string|null,
+ *   textoConfirmar?: string, textoCancelar?: string, peligro?: boolean}} opciones
+ * @returns {Promise<string|null>} el motivo (sin espacios de los bordes) o null si se canceló
+ */
+export function confirmarConMotivo({
+  titulo,
+  mensaje = '',
+  consecuencias = [],
+  etiquetaMotivo = 'Motivo',
+  pistaMotivo = 'Queda en el registro de auditoría con tu nombre y la fecha.',
+  motivoInicial = '',
+  minimo = 5,
+  maximo = 500,
+  palabra = null,
+  textoConfirmar = 'Confirmar',
+  textoCancelar = 'Cancelar',
+  peligro = true,
+}) {
+  contador += 1;
+  const idMotivo = `motivo-${contador}`;
+  const idPalabra = `palabra-${contador}`;
+  const esperada = palabra === null ? null : String(palabra).trim();
+
+  const motivo = h('textarea', {
+    clase: 'campo__control',
+    atributos: {
+      id: idMotivo,
+      rows: 3,
+      maxlength: maximo,
+      required: true,
+      'aria-describedby': `${idMotivo}-pista`,
+    },
+  });
+  motivo.value = String(motivoInicial ?? '').slice(0, maximo);
+  const pista = h('p', {
+    clase: 'campo__pista',
+    texto: `${pistaMotivo} Mínimo ${minimo} caracteres.`,
+    atributos: { id: `${idMotivo}-pista` },
+  });
+  const campoPalabra =
+    esperada === null
+      ? null
+      : h('input', {
+          clase: 'campo__control',
+          atributos: {
+            id: idPalabra,
+            type: 'text',
+            autocomplete: 'off',
+            spellcheck: 'false',
+          },
+        });
+
+  const cuerpo = h('div', {
+    clase: 'dialogo__cuerpo confirmacion-critica',
+    hijos: [
+      mensaje ? h('p', { texto: mensaje }) : null,
+      consecuencias.length
+        ? h('ul', {
+            clase: 'confirmacion-critica__consecuencias',
+            hijos: consecuencias.map((texto) => h('li', { texto })),
+          })
+        : null,
+      h('div', {
+        clase: 'campo',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: etiquetaMotivo,
+            atributos: { for: idMotivo },
+          }),
+          motivo,
+          pista,
+        ],
+      }),
+      campoPalabra
+        ? h('div', {
+            clase: 'campo',
+            hijos: [
+              h('label', {
+                clase: 'campo__etiqueta',
+                texto: `Escribe «${esperada}» para confirmar`,
+                atributos: { for: idPalabra },
+              }),
+              campoPalabra,
+            ],
+          })
+        : null,
+    ],
+  });
+
+  return new Promise((resolverPromesa) => {
+    let decidido = false;
+    const resolver = (valor) => {
+      if (!decidido) {
+        decidido = true;
+        resolverPromesa(valor);
+      }
+    };
+    const cancelar = h('button', {
+      clase: 'boton boton--secundario',
+      texto: textoCancelar,
+      atributos: { type: 'button' },
+      datos: { accion: 'cancelar' },
+    });
+    const aceptar = h('button', {
+      clase: `boton ${peligro ? 'boton--peligro' : 'boton--primario'}`,
+      texto: textoConfirmar,
+      atributos: { type: 'button', disabled: true },
+      datos: { accion: 'confirmar' },
+    });
+    const listo = () =>
+      motivo.value.trim().length >= minimo &&
+      (esperada === null || (campoPalabra.value.trim() === esperada && esperada !== ''));
+    const actualizar = () => {
+      aceptar.disabled = !listo();
+    };
+    motivo.addEventListener('input', actualizar);
+    campoPalabra?.addEventListener('input', actualizar);
+    actualizar();
+
+    const { cerrar } = abrirDialogo({
+      titulo,
+      cuerpo,
+      acciones: [cancelar, aceptar],
+      peligro,
+      alCerrar: () => resolver(null),
+    });
+    motivo.focus();
+
+    cancelar.addEventListener('click', () => {
+      resolver(null);
+      cerrar();
+    });
+    aceptar.addEventListener('click', () => {
+      if (!listo()) {
+        return;
+      }
+      resolver(motivo.value.trim());
+      cerrar();
+    });
+  });
+}

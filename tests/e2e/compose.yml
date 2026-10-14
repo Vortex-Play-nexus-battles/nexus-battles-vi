@@ -91,6 +91,22 @@ services:
       timeout: 3s
       retries: 20
 
+  # 7.3.5 — la base de la auditoria (ms-cumplimiento), propia como en DEV
+  # (regla 7). Hasta SA-1 la auditoria no estaba en el banco y toda accion
+  # administrativa auditada fail-closed (cambio de rol, alta de cuentas
+  # administrativas, restablecer el segundo factor) solo podia probarse en DEV.
+  e2e-cumplimiento-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: cumplimientodb
+      POSTGRES_USER: cumplimiento
+      POSTGRES_PASSWORD: cumplimiento
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cumplimiento -d cumplimientodb"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
   # Una sola Mongo para los tres servicios de contenido, con una base por
   # servicio: es como esta en docker-compose.contenido.yml.
   e2e-contenido-mongo:
@@ -171,14 +187,59 @@ services:
       # "e2e-clave-2fa-banco-de-pruebas!!" (32 bytes). Sin clave, enrolar
       # responderia 503 y segundo-factor.e2e.spec.js no tendria que probar.
       IDENTIDAD_2FA_CLAVE: ZTJlLWNsYXZlLTJmYS1iYW5jby1kZS1wcnVlYmFzISE=
-      # Obligatoriedad por rol APAGADA, igual que en DEV: los specs de la
-      # consola entran con cuentas administrativas sin segundo factor.
-      # Encenderla es decision humana (ver .env.example).
-      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ""
+      # 7.3.9 — segundo factor OBLIGATORIO para los tres roles
+      # administrativos, como en DEV y en produccion. Las cuentas
+      # administrativas del banco son las de ADMINS_QA (abajo).
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR
+      # 7.3.9 — las cuentas administrativas del BANCO DE PRUEBAS, con el
+      # secreto TOTP ya enrolado (CuentaAdministrativaDePruebas): una por rol.
+      # Valores de prueba, no de ningun entorno; tests/e2e/ayudantes/cuentas.js
+      # tiene los mismos para calcular el codigo. Sustituyen al cambio de rol
+      # por SQL que hacia sembrar.sh.
+      ADMINS_QA: "moderadora_e2e|moderadora_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLNN5SGK4TBMRXXEYJNORXXI4BNMJQW4Y3P|MODERADOR;admin_e2e|admin_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLBMRWWS3TJON2HEYLEN5ZC25DPORYC2YTDN4|ADMINISTRADOR;super_e2e|super_e2e@nexus.test|Contrasena-E2E-2026|MUZGKLLTOVYGK4TBMRWWS3RNORXXI4BNMJQW4Y3PEE|SUPER_ADMINISTRADOR"
+      # 7.3.9 — el token administrativo dura 15 min en DEV y produccion; en el
+      # banco, 30, para que una suite larga que guarda el token de su
+      # beforeAll no caduque a mitad de camino. Lo que se prueba es la
+      # renovacion y el cierre, no la cifra: la de 15 la comprueba el smoke
+      # contra DEV (seguridad-administrativa.smoke.spec.js).
+      IDENTIDAD_MINUTOS_SESION_ADMINISTRATIVA: "30"
+      # 7.3.5 — la auditoria del banco (srv-ms-cumplimiento, arriba). Las
+      # acciones fail-closed del panel quedan registradas de verdad.
+      AUDITORIA_URL: http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos
     depends_on:
       e2e-identidad-db: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  # ---------------------------------------------------------- auditoria
+  # ms-cumplimiento (7.3.5): la bitacora inmutable de las acciones
+  # administrativas. ms-identidad le escribe con su credencial de servicio
+  # (CredencialPropia, ADR-005) y la consulta el Super Administrador por el
+  # borde (/api/v1/admin/auditoria). Con AUDITORIA_EXIGIR_2FA encendido, como
+  # pide 7.3.9 con el segundo factor ya obligatorio: la consulta exige un token
+  # con `amr` otp.
+  srv-ms-cumplimiento:
+    build:
+      context: ../..
+      dockerfile: tests/e2e/Dockerfile.servicio
+      args:
+        JAR: services/cuentas/ms-cumplimiento/target/*.jar
+        PUERTO: "8091"
+    environment:
+      DB_HOST: e2e-cumplimiento-db
+      DB_PORT: "5432"
+      DB_NAME: cumplimientodb
+      DB_USER: cumplimiento
+      DB_PASSWORD: cumplimiento
+      IDENTIDAD_JWKS_URL: http://srv-ms-identidad:8089/api/v1/auth/jwks
+      AUDITORIA_EXIGIR_2FA: "true"
+    depends_on:
+      e2e-cumplimiento-db: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8091/actuator/health || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 40
@@ -822,8 +883,8 @@ services:
       # tambien los que en DEV viven en el host de contenido (alli los fija
       # docker-compose.deploy.yml por la IP de ese host). Los de plataforma ya
       # salen bien con los valores de application.yml (srv-<nombre>).
-      # ms-chatbot y ms-cumplimiento no estan en el banco: se dicen
-      # NO_DESPLEGADO en vez de salir CAIDO por un nombre que aqui no existe.
+      # ms-chatbot no esta en el banco: se dice NO_DESPLEGADO en vez de salir
+      # CAIDO por un nombre que aqui no existe. ms-cumplimiento si (SA-1).
       SISTEMA_SALUD_HEROES: http://srv-heroes:8080/actuator/health
       SISTEMA_SALUD_INVENTARIO: http://srv-inventario:8080/actuator/health
       SISTEMA_SALUD_PRODUCTOS: http://srv-productos:8080/actuator/health
@@ -831,7 +892,7 @@ services:
       SISTEMA_SALUD_MISIONES: http://srv-misiones:8080/actuator/health
       SISTEMA_SALUD_MS_SUBASTAS: http://srv-ms-subastas:8092/api/v1/actuator/health
       SISTEMA_SALUD_MS_CHATBOT: NO_DESPLEGADO
-      SISTEMA_SALUD_MS_CUMPLIMIENTO: NO_DESPLEGADO
+      SISTEMA_SALUD_MS_CUMPLIMIENTO: http://srv-ms-cumplimiento:8091/actuator/health
       # Plazos del sondeo del panel tan holgados como los que tenia el
       # recolector del tablero antes de RFINAL-08 (2 s / 3 s): el banco corre
       # unas veinte JVM en un runner compartido y la lentitud del runner no es
@@ -1014,6 +1075,8 @@ services:
       # B1: /mailpit/ (el buzon que leen las pruebas) y el correo que lo llena.
       mailpit: { condition: service_started }
       srv-correo: { condition: service_healthy }
+      # 7.3.5: /api/v1/admin/auditoria (seguridad-administrativa.e2e.spec.js).
+      srv-ms-cumplimiento: { condition: service_healthy }
     healthcheck:
       # 127.0.0.1 y no `localhost` a proposito. El entrypoint de la imagen
       # intenta anadir un `listen [::]:80` y no puede, porque la

@@ -1,10 +1,12 @@
 package com.nexusbattles.plataforma.moderacionsanciones.sanciones;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -45,6 +47,15 @@ class SancionesPersistenciaIT {
 
     @Autowired
     private ApelacionRepository apelaciones;
+
+    /** Aqui no hay ms-identidad: todas las cuentas de la prueba son jugadores (7.3.1). */
+    @MockitoBean
+    private RolesDeCuentas roles;
+
+    @BeforeEach
+    void todasSonJugadores() {
+        org.mockito.Mockito.when(roles.rolDe(org.mockito.ArgumentMatchers.any())).thenReturn("JUGADOR");
+    }
 
     @Test
     @DisplayName("advertencia no restringe; suspension si; revertida por apelacion deja de restringir; todo queda guardado")

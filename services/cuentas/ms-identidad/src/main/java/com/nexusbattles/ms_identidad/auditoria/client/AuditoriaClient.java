@@ -43,7 +43,7 @@ public class AuditoriaClient {
                                       String ipOrigen, Throwable ex) {
         log.error("Fallo registrando auditoría ({}, usuario={}): {}. Se cancela la operación.",
             tipoAccion, afectado, ex.getMessage());
-        throw new IllegalStateException(
-            "No se pudo completar la operación: el servicio de auditoría no respondió.");
+        throw new AuditoriaNoDisponibleException(
+            "No se pudo completar la operación: el registro de auditoría no respondió. Inténtalo de nuevo en unos segundos.");
     }
 }

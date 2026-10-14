@@ -60,6 +60,21 @@ public class InternoUsuariosController {
                 EstadoCuenta.normalizado(usuario.getEstado())));
     }
 
+    /**
+     * El rol vigente de la cuenta (ms-identidad-admin.yaml 1.6.0): lo mira
+     * moderacion-sanciones antes de emitir, levantar o resolver, para que nadie
+     * sancione un rol igual o superior al suyo (jerarquia de 7.3.1). Ruta
+     * propia y no el contacto: para decidir no hace falta el correo de nadie.
+     */
+    @GetMapping("/{uid}/rol")
+    @SoloServicio(azp = MODERACION)
+    public ResponseEntity<RolDeCuentaResponse> rol(@PathVariable String uid) {
+        Usuario usuario = usuarios.findByPublicId(uidDe(uid)).orElseThrow(CuentaNoEncontradaException::new);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new RolDeCuentaResponse(
+                usuario.getPublicId(), usuario.getRol() == null ? null : usuario.getRol().getNombre(),
+                EstadoCuenta.normalizado(usuario.getEstado())));
+    }
+
     @ExceptionHandler(CuentaNoEncontradaException.class)
     public ResponseEntity<ProblemDetail> noEncontrada(CuentaNoEncontradaException error, HttpServletRequest peticion) {
         return Problemas.de(HttpStatus.NOT_FOUND, "cuenta-no-encontrada", "Cuenta no encontrada",

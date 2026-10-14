@@ -139,6 +139,38 @@ class InternoUsuariosControllerTest {
     }
 
     @Test
+    @DisplayName("rol: solo moderacion-sanciones, sin datos de contacto (jerarquia de 7.3.1)")
+    void rol() throws Exception {
+        Usuario ada = new Usuario();
+        ada.setPublicId(UID);
+        ada.setEmail("ada@upb.edu.co");
+        ada.setApodo("ada");
+        ada.setEstado("ACTIVO");
+        ada.setRol(new com.nexusbattles.ms_identidad.rbac.model.RolEntity("ADMINISTRADOR", "Administrador"));
+        when(usuarios.findByPublicId(UID)).thenReturn(Optional.of(ada));
+
+        mvc.perform(get("/api/v1/internal/usuarios/" + UID + "/rol")
+                        .header("Authorization", servicio("moderacion-sanciones")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.uid").value(UID.toString()))
+                .andExpect(jsonPath("$.rol").value("ADMINISTRADOR"))
+                .andExpect(jsonPath("$.estado").value("ACTIVO"))
+                .andExpect(jsonPath("$.email").doesNotExist());
+
+        for (String credencial : new String[] {servicio("comentarios"),
+                "Bearer " + jwt.generarToken("root", "SUPER_ADMINISTRADOR", 0, UUID.randomUUID())}) {
+            mvc.perform(get("/api/v1/internal/usuarios/" + UID + "/rol").header("Authorization", credencial))
+                    .andExpect(status().isForbidden());
+        }
+
+        when(usuarios.findByPublicId(UID)).thenReturn(Optional.empty());
+        mvc.perform(get("/api/v1/internal/usuarios/" + UID + "/rol")
+                        .header("Authorization", servicio("moderacion-sanciones")))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value(TIPOS + "cuenta-no-encontrada"));
+    }
+
+    @Test
     @DisplayName("404 cuenta-no-encontrada: uid inexistente o mal formado; 400: proyeccion invalida o ilegible")
     void errores() throws Exception {
         when(usuarios.findByPublicId(any())).thenReturn(Optional.empty());

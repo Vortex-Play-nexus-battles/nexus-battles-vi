@@ -11,7 +11,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -73,6 +76,48 @@ class IntentosFallidosServiceTest {
         assertTrue(!usuario.getBloqueadoHasta().isBefore(antes.plusMinutes(MINUTOS_BLOQUEO)));
         assertTrue(!usuario.getBloqueadoHasta().isAfter(despues.plusMinutes(MINUTOS_BLOQUEO)));
         verify(usuarioRepository).save(usuario);
+    }
+
+    @Test
+    void elFalloQueAlcanzaElUmbralDiceQueAcabaDeBloquearUnaSolaVez() {
+        Usuario usuario = usuarioConIntentos(UMBRAL - 1);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        assertTrue(intentosFallidosService.registrarIntentoFallido(1L), "el que bloquea lo dice");
+        // Otro fallo con la cuenta aun bloqueada no "vuelve a bloquear".
+        assertFalse(intentosFallidosService.registrarIntentoFallido(1L));
+    }
+
+    @Test
+    void unBloqueoVencidoEmpiezaLaCuentaDeCeroEnVezDeBloquearConUnSoloFallo() {
+        // 7.3.9 — antes, tras vencer el bloqueo, el contador seguia en el
+        // umbral y un unico fallo bloqueaba la cuenta otros quince minutos.
+        Clock reloj = Clock.fixed(Instant.parse("2026-10-13T20:00:00Z"), ZoneId.of("UTC"));
+        intentosFallidosService.configurar(usuarioRepository, UMBRAL, MINUTOS_BLOQUEO, reloj);
+        Usuario usuario = usuarioConIntentos(UMBRAL);
+        usuario.setBloqueadoHasta(LocalDateTime.now(reloj).minusMinutes(1));
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        boolean bloqueo = intentosFallidosService.registrarIntentoFallido(1L);
+
+        assertFalse(bloqueo);
+        assertEquals(1, usuario.getIntentosFallidos());
+        assertNull(usuario.getBloqueadoHasta());
+    }
+
+    @Test
+    void conElBloqueoVigenteElFalloSigueContandoSinAlargarlo() {
+        Clock reloj = Clock.fixed(Instant.parse("2026-10-13T20:00:00Z"), ZoneId.of("UTC"));
+        intentosFallidosService.configurar(usuarioRepository, UMBRAL, MINUTOS_BLOQUEO, reloj);
+        Usuario usuario = usuarioConIntentos(UMBRAL);
+        LocalDateTime fin = LocalDateTime.now(reloj).plusMinutes(10);
+        usuario.setBloqueadoHasta(fin);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario));
+
+        intentosFallidosService.registrarIntentoFallido(1L);
+
+        assertEquals(fin, usuario.getBloqueadoHasta(), "el fin del bloqueo no se mueve");
+        assertEquals(UMBRAL + 1, usuario.getIntentosFallidos());
     }
 
     @Test

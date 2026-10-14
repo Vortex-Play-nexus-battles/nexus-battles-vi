@@ -7,7 +7,7 @@ import {
 
 import { fetchWithHttpErrorInterceptor } from '../comun/interceptors/http-error.interceptor.js';
 import { montarCabecera } from '../comun/cabecera-app.js';
-import { confirmar, confirmarCritico } from '../comun/ui/dialogo.js';
+import { confirmar, confirmarConMotivo } from '../comun/ui/dialogo.js';
 import { cambiarRol, ROLES_DISPONIBLES } from './cambio-rol.js';
 import { respaldoPorEstado, textoDeError, textoDelServidor } from '../comun/ui/texto-de-fallo.js';
 
@@ -22,6 +22,7 @@ const PERMISO_GESTIONAR = 'GESTIONAR_CUENTAS';
 const PERMISO_SUSPENDER = 'SUSPENDER_USUARIOS';
 const PERMISO_BANEAR = 'BANEAR_DEFINITIVAMENTE';
 const PERMISO_ASIGNAR_ROL = 'ASIGNAR_ROL';
+const PERMISO_RESTABLECER_SEGUNDO_FACTOR = 'RESTABLECER_SEGUNDO_FACTOR';
 
 let usuarioSeleccionado = null;
 
@@ -145,6 +146,8 @@ export function configurarEventos() {
 
   const btnCambiarRol = document.getElementById('btn-cambiar-rol');
 
+  const btnRestablecerSegundoFactor = document.getElementById('btn-restablecer-segundo-factor');
+
   if (formularioBusqueda) {
     formularioBusqueda.addEventListener('submit', buscarUsuario);
   }
@@ -188,6 +191,10 @@ export function configurarEventos() {
 
   if (btnCambiarRol) {
     btnCambiarRol.addEventListener('click', cambiarRolUsuarioSeleccionado);
+  }
+
+  if (btnRestablecerSegundoFactor) {
+    btnRestablecerSegundoFactor.addEventListener('click', restablecerSegundoFactor);
   }
 }
 
@@ -345,6 +352,7 @@ async function buscarUsuario(evento) {
       // resolvió como cuenta al devolver esta ficha.
       id: Number(usuarioId),
       apodo: typeof datos.apodo === 'string' && datos.apodo.trim() ? datos.apodo.trim() : null,
+      rolNombre: typeof datos.rolNombre === 'string' ? datos.rolNombre : null,
     };
     sessionStorage.setItem(CLAVE_USUARIO_ID, String(usuarioSeleccionado.id));
 
@@ -460,16 +468,45 @@ async function cambiarRolUsuarioSeleccionado() {
   }
 
   const nuevoRol = obtenerValor('nuevo-rol');
+  const rolActual = usuarioSeleccionado.rolNombre ?? usuarioSeleccionado.rol ?? null;
+  if (rolActual && nuevoRol === rolActual) {
+    mostrarMensajeCambioRol(`${nombreDelSeleccionado()} ya tiene ese rol.`);
+
+    return;
+  }
+
+  // 7.3.5 — el cambio de rol queda en la auditoría con su motivo.
+  const motivo = await confirmarConMotivo({
+    titulo: `¿Cambiar el rol de ${nombreDelSeleccionado()}?`,
+    mensaje: `Pasará a ${nombreDeRol(nuevoRol)}.`,
+    consecuencias: [
+      'Sus sesiones abiertas se cierran: entrará de nuevo con los permisos del rol nuevo.',
+      ROLES_CON_SEGUNDO_FACTOR.includes(nuevoRol)
+        ? 'Al entrar tendrá que activar la verificación en dos pasos, obligatoria para su rol.'
+        : 'Recibe un aviso en su bandeja con el cambio.',
+    ],
+    etiquetaMotivo: 'Motivo del cambio de rol',
+    textoConfirmar: 'Cambiar rol',
+    peligro: false,
+  });
+
+  if (motivo === null) {
+    return;
+  }
+
   const boton = document.getElementById('btn-cambiar-rol');
 
   cambiarEstadoBoton(boton, true, 'Cambiando rol...');
 
+  const cuenta = usuarioSeleccionado;
+
   try {
-    await cambiarRol(usuarioSeleccionado.id, nuevoRol);
+    await cambiarRol(cuenta.id, nuevoRol, { motivo });
+    recordarRol(cuenta.id, nuevoRol);
 
     establecerTexto('usuario-rol-mostrado', nuevoRol);
 
-    mostrarMensajeCambioRol(`Rol actualizado correctamente a ${nuevoRol}.`);
+    mostrarMensajeCambioRol(`Rol actualizado a ${nombreDeRol(nuevoRol)}.`);
   } catch (error) {
     console.error('Error cambiando rol:', error);
 
@@ -593,28 +630,30 @@ async function suspenderUsuario() {
     return;
   }
 
-  const motivo = obtenerValor('motivo-sancion');
-  const confirmado = await confirmar({
+  // 7.3.9 — acción crítica: el motivo es obligatorio y se confirma en el
+  // propio diálogo (llega escrito si ya estaba en el formulario).
+  const motivo = await confirmarConMotivo({
     titulo: `¿Suspender a ${nombreDelSeleccionado()}?`,
-    mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.${
-      motivo ? ` Motivo: «${motivo}».` : ''
-    }`,
+    mensaje: `No podrá entrar al juego hasta el ${fechaLegible(suspendidoHasta)}.`,
+    consecuencias: [
+      'Sus sesiones abiertas se cierran.',
+      'Recibe un aviso y un correo con el motivo y con cómo apelar.',
+    ],
+    etiquetaMotivo: 'Motivo de la suspensión',
+    motivoInicial: obtenerValor('motivo-sancion'),
     textoConfirmar: 'Suspender',
   });
 
-  if (!confirmado) {
+  if (motivo === null) {
     return;
   }
 
   // El servicio exige la fecha fin en el cuerpo (`SuspenderCuentaRequest`):
   // antes la petición salía vacía y el servidor la rechazaba siempre.
-  // UXC-9 — y la causal, si se escribió (§7.3.2; opcional en el contrato).
-  await ejecutarAccionEstado(
-    `/suspender`,
-    'SUSPENDIDO',
-    'Cuenta suspendida correctamente.',
-    motivo ? { suspendidoHasta, motivo } : { suspendidoHasta },
-  );
+  await ejecutarAccionEstado(`/suspender`, 'SUSPENDIDO', 'Cuenta suspendida correctamente.', {
+    suspendidoHasta,
+    motivo,
+  });
 }
 
 async function reactivarUsuario() {
@@ -653,33 +692,28 @@ async function banearUsuario() {
     return;
   }
 
-  // §7.3.9 — el baneo es una acción crítica: además de confirmar hay que
+  // §7.3.9 — el baneo es la acción más grave: motivo obligatorio y, además,
   // escribir el apodo (o el ID) de la cuenta.
-  const motivo = obtenerValor('motivo-sancion');
-  const confirmado = await confirmarCritico({
+  const motivo = await confirmarConMotivo({
     titulo: `Banear definitivamente a ${nombreDelSeleccionado()}`,
     mensaje: 'Esta acción es permanente.',
     consecuencias: [
       'No podrá volver a entrar con esta cuenta.',
-      motivo
-        ? `Motivo que queda registrado: «${motivo}».`
-        : 'Sin motivo escrito: se registrará que el baneo vino de este panel.',
+      'Solo una apelación aceptada puede revertirlo.',
+      'El motivo queda en su historial de sanciones y en la auditoría.',
     ],
+    etiquetaMotivo: 'Motivo del baneo',
+    motivoInicial: obtenerValor('motivo-sancion'),
+    minimo: 10,
     palabra: usuarioSeleccionado.apodo ?? String(usuarioSeleccionado.id),
     textoConfirmar: 'Banear',
   });
 
-  if (!confirmado) {
+  if (motivo === null) {
     return;
   }
 
-  // UXC-9 — el cuerpo es opcional en el contrato: solo viaja con causal.
-  await ejecutarAccionEstado(
-    `/banear`,
-    'BANEADO',
-    'Cuenta baneada definitivamente.',
-    motivo ? { motivo } : null,
-  );
+  await ejecutarAccionEstado(`/banear`, 'BANEADO', 'Cuenta baneada definitivamente.', { motivo });
 }
 
 async function ejecutarAccionEstado(ruta, estado, mensajeExito, cuerpo = null) {
@@ -751,6 +785,86 @@ async function restablecerPassword() {
 
     mostrarMensajePerfil(textoDeError(error, 'No fue posible restablecer la contraseña.'));
   }
+}
+
+/**
+ * Quita el segundo factor de la cuenta elegida — 7.3.9, solo Super
+ * Administrador. Para quien perdió su aplicación y sus códigos de
+ * recuperación; nunca sobre la propia cuenta (lo rechaza el servidor).
+ */
+async function restablecerSegundoFactor() {
+  if (!validarUsuarioSeleccionado()) {
+    return;
+  }
+
+  if (!checkPermission(getCurrentRole(), PERMISO_RESTABLECER_SEGUNDO_FACTOR)) {
+    mostrarMensajePerfil('Restablecer la verificación en dos pasos es del Super Administrador.');
+
+    return;
+  }
+
+  const motivo = await confirmarConMotivo({
+    titulo: `¿Restablecer la verificación en dos pasos de ${nombreDelSeleccionado()}?`,
+    mensaje: 'Úsalo solo si la persona perdió su aplicación y sus códigos de recuperación.',
+    consecuencias: [
+      'Se borran su clave y sus códigos de recuperación.',
+      'Sus sesiones abiertas se cierran.',
+      'Si su rol la exige, al entrar tendrá que configurarla de nuevo.',
+    ],
+    etiquetaMotivo: 'Motivo del restablecimiento',
+    textoConfirmar: 'Restablecer',
+  });
+
+  if (motivo === null) {
+    return;
+  }
+
+  try {
+    const respuesta = await fetchWithHttpErrorInterceptor(
+      `${BASE_API}/${usuarioSeleccionado.id}/segundo-factor/restablecimiento`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motivo }),
+      },
+    );
+
+    if (!respuesta.ok) {
+      throw new Error(await obtenerMensajeError(respuesta));
+    }
+
+    mostrarMensajePerfil(
+      'Verificación en dos pasos restablecida. La persona recibió un aviso en su bandeja.',
+    );
+  } catch (error) {
+    console.error('Error restableciendo el segundo factor:', error);
+
+    mostrarMensajePerfil(
+      textoDeError(error, 'No fue posible restablecer la verificación en dos pasos.'),
+    );
+  }
+}
+
+/** El rol nuevo de la cuenta abierta, si sigue siendo la misma. */
+function recordarRol(id, rol) {
+  if (usuarioSeleccionado?.id === id) {
+    usuarioSeleccionado.rolNombre = rol;
+  }
+}
+
+/** Roles que no entran sin segundo factor (ms-identidad-auth 2.3.0). */
+const ROLES_CON_SEGUNDO_FACTOR = ['MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR'];
+
+/** El nombre de un rol para leerlo, no la constante del servidor. */
+function nombreDeRol(rol) {
+  return (
+    {
+      JUGADOR: 'Jugador',
+      MODERADOR: 'Moderador',
+      ADMINISTRADOR: 'Administrador',
+      SUPER_ADMINISTRADOR: 'Super Administrador',
+    }[rol] ?? rol
+  );
 }
 
 /** El apodo de la cuenta elegida, o su ID si no lo trae. */

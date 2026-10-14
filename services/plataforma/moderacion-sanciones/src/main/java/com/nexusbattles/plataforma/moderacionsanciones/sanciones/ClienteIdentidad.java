@@ -22,6 +22,9 @@ import java.util.UUID;
  *   <li>{@code GET /api/v1/internal/usuarios/{uid}/contacto}: el correo y el
  *       apodo para enviar el correo de la sancion. Se pide en el momento de
  *       enviar y no se guarda (regla 7, minimizacion de datos personales).</li>
+ *   <li>{@code GET /api/v1/internal/usuarios/{uid}/rol} (1.6.0): el rol
+ *       vigente de la cuenta, para la jerarquia de 7.3.1 ({@link RolesDeCuentas}).
+ *       Sin datos de contacto.</li>
  * </ul>
  *
  * <p>No traduce errores: un 4xx sale como {@code HttpClientErrorException} y
@@ -32,6 +35,7 @@ public class ClienteIdentidad {
 
     static final String RUTA_ESTADO = "/api/v1/internal/usuarios/{uid}/estado-sancion";
     static final String RUTA_CONTACTO = "/api/v1/internal/usuarios/{uid}/contacto";
+    static final String RUTA_ROL = "/api/v1/internal/usuarios/{uid}/rol";
 
     private final RestClient http;
     private final String base;
@@ -60,6 +64,17 @@ public class ClienteIdentidad {
         return contacto;
     }
 
+    public RolDeCuenta rol(UUID uid) {
+        RolDeCuenta rol = http.get()
+                .uri(base + RUTA_ROL, uid)
+                .retrieve()
+                .body(RolDeCuenta.class);
+        if (rol == null) {
+            throw new IllegalStateException("ms-identidad respondio el rol vacio");
+        }
+        return rol;
+    }
+
     /**
      * {@code ProyeccionDeSancion} del contrato de ms-identidad.
      *
@@ -69,6 +84,11 @@ public class ClienteIdentidad {
      * @param motivo    causal, o motivo del levantamiento
      */
     public record ProyeccionDeSancion(String estado, OffsetDateTime hasta, UUID sancionId, String motivo) {
+    }
+
+    /** Respuesta de {@code rol}: el rol vigente y el estado de la cuenta. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record RolDeCuenta(UUID uid, String rol, String estado) {
     }
 
     /** Respuesta de {@code contacto}; lo que no se usa se ignora. */

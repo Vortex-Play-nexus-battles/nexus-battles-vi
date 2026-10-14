@@ -100,6 +100,10 @@ jobs:
           # https-del-borde.smoke.spec.js deja de saltarse. Sin la variable, la IP.
           E2E_AWS: ${{ vars.PUBLIC_BASE_URL || format('http://{0}', secrets.DEPLOY_HOST_DEV) }}
           MAILPIT_URL: http://localhost:18025/mailpit
+          # 7.3.9 (SA-1) — las cuentas administrativas de pruebas de DEV (el
+          # mismo secreto que ADMINS_QA de ms-identidad), para entrar en dos
+          # pasos. Nunca se imprime.
+          E2E_ADMINS_QA: ${{ secrets.ADMINS_QA_DEV }}
         run: npx playwright test --config=playwright.smoke.config.js
 
       - name: Guardar el informe
