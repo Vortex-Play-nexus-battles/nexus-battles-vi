@@ -138,6 +138,11 @@ enConfiguracion "ws-subastas tiene su location de prefijo (^~), con Upgrade como
 comprobar GET  /api/v1/chat/historial      "chatbot GET /api/v1/chat/historial"
 comprobar POST /api/v1/chat/mensajes       "chatbot POST /api/v1/chat/mensajes"
 comprobar GET  /api/v1/chatbot/admin/analiticas "chatbot GET /api/v1/chatbot/admin/analiticas"
+# 7.4.9 — el canal STOMP del asistente (chatbot.yaml 1.0.0). Sin location caia
+# en el 404 generico de /api/: la regex del chatbot exige /chat o /chatbot.
+comprobar GET  /api/v1/ws-chatbot          "chatbot GET /api/v1/ws-chatbot"
+enConfiguracion "ws-chatbot tiene su location de prefijo (^~), con Upgrade como /ws" \
+    'location \^~ /api/v1/ws-chatbot'
 
 echo
 echo "Carrito — ms-ecommerce vive bajo /ecommerce, el navegador no se entera"
@@ -511,6 +516,16 @@ if printf '%s' "$origenPublico" | grep -Eq '^203\.0\.113\.'; then
     printf '  ok    el cliente de internet llega como origen publico (%s)\n' "$origenPublico"
 else
     printf '  FALLA el cliente de internet deberia llegar desde 203.0.113.0/24 y llega como "%s"\n' "$origenPublico"
+    fallos=$((fallos + 1))
+fi
+# 7.4.9 — el canal del asistente declara sus propios proxy_set_header y tiene
+# que seguir mandando la direccion del cliente: con ella el servicio limita
+# por origen cada mensaje del canal (los frames no pasan por limit_req).
+origenDelCanal="$(origenVisto "$(desdeFuera -o /dev/null -D - "$BORDE_PUBLICO/api/v1/ws-chatbot")")"
+if printf '%s' "$origenDelCanal" | grep -Eq '^203\.0\.113\.'; then
+    printf '  ok    el canal del asistente recibe la direccion del cliente (%s)\n' "$origenDelCanal"
+else
+    printf '  FALLA el canal del asistente deberia recibir 203.0.113.x y recibe "%s"\n' "$origenDelCanal"
     fallos=$((fallos + 1))
 fi
 # El reparto es el mismo para todo el mundo.
