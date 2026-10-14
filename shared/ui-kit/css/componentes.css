@@ -2912,23 +2912,70 @@ button.tarjeta--partida:disabled {
    acciones secundarias, para no competir con «Enviar». La lista del
    autocompletado sale ENCIMA de la caja: la ventana está pegada abajo. */
 
-.chatbot-rapidas {
+/* Las preguntas frecuentes van en un <details> cerrado por omisión: solo su
+   título ocupa espacio y la conversación conserva el resto. Abierto, la lista
+   tiene un alto máximo con desplazamiento para no tapar la conversación. */
+.chatbot-rapidas__contenido {
   display: flex;
   flex-direction: column;
   gap: var(--e-1);
+  margin-top: var(--e-1);
+}
+
+/* Solo la del desplegable: las respuestas enriquecidas reusan la clase. */
+.chatbot-rapidas .chatbot-rapidas__lista {
+  max-height: 9.5rem;
+  overflow-y: auto;
 }
 
 .chatbot-rapidas__cabecera {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: var(--e-2);
 }
 
 .chatbot-rapidas__titulo {
-  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--e-1);
+  min-height: var(--objetivo-tactil);
   font-size: var(--t-meta-tam);
-  color: var(--texto-2);
+  font-weight: 600;
+  color: var(--primaria);
+  cursor: pointer;
+  list-style: none;
+}
+
+/* Sin el triángulo del navegador; en su lugar, un chevrón que gira al abrir. */
+.chatbot-rapidas__titulo::-webkit-details-marker {
+  display: none;
+}
+
+.chatbot-rapidas__titulo::after {
+  content: '';
+  width: 0.45em;
+  height: 0.45em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform var(--duracion-normal) var(--curva-estandar);
+}
+
+.chatbot-rapidas[open] .chatbot-rapidas__titulo::after {
+  transform: rotate(225deg);
+}
+
+.chatbot-rapidas__titulo:focus-visible {
+  outline: 2px solid var(--primaria);
+  outline-offset: 2px;
+  border-radius: var(--radio-chico);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chatbot-rapidas__titulo::after {
+    transition: none;
+  }
 }
 
 .chatbot-rapidas__tema {
