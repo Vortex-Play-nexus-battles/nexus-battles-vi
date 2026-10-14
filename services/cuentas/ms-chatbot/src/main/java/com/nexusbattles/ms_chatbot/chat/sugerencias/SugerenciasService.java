@@ -41,6 +41,9 @@ import java.util.stream.Stream;
 //
 // Los temas de cortesia (saludo, despedida) no se sugieren: nadie necesita un
 // boton para decir "hola".
+//
+// 1.6.0 (7.4.10): con `categoria`, tambien salen los temas que la atienden
+// como intencion adicional.
 @Service
 public class SugerenciasService {
 
@@ -66,7 +69,7 @@ public class SugerenciasService {
         List<TemaConocimiento> candidatos = temas.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION)
             .stream()
             .filter(tema -> !TITULOS_DE_CORTESIA.contains(NormalizadorTexto.normalizar(tema.getTitulo())))
-            .filter(tema -> categoria == null || categoria == tema.getCategoria())
+            .filter(tema -> categoria == null || tema.atiende(categoria))
             .toList();
 
         String buscado = NormalizadorTexto.normalizar(texto);

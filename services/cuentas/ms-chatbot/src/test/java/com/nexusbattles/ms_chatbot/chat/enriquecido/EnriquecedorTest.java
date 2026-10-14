@@ -184,6 +184,49 @@ class EnriquecedorTest {
             .noneMatch(id -> id.startsWith("panel") || id.startsWith("admin") || id.startsWith("consola"));
     }
 
+    // 1.6.0 (7.4.10): un tema aparece entre los relacionados de cada una de
+    // sus intenciones, no solo de su categoria principal.
+    @Test
+    void unTemaConIntencionAdicionalApareceEntreLosRelacionadosDeEsaIntencion() {
+        TemaConocimiento recargar = tema("k-recargar", Categoria.CUENTA_Y_REGISTRO, TipoRespuesta.DIRECTA,
+            "Cómo conseguir más créditos", 9);
+        recargar.asignarIntencionesAdicionales(List.of(Categoria.SUBASTA_Y_COMERCIO));
+        List<TemaConocimiento> conRecargar = List.of(publicar, pujar, creditos, saludo, recargar);
+
+        assertThat(Enriquecedor.paraTema(publicar, "x", conRecargar).respuestasRapidas())
+            .containsExactly("Cómo conseguir más créditos", "Cómo pujar o comprar en una subasta",
+                "Créditos y moneda del juego");
+        assertThat(Enriquecedor.paraEscalamiento(List.of(), conRecargar, VistaDelChat.SUBASTAS).respuestasRapidas())
+            .contains("Cómo conseguir más créditos");
+        assertThat(Enriquecedor.paraEscalamiento(List.of(), conRecargar, VistaDelChat.INVENTARIO).respuestasRapidas())
+            .isEmpty();
+    }
+
+    // 1.6.0: los relacionados de un tema salen de todas sus intenciones:
+    // primero los de su categoria y, si quedan huecos, los de las adicionales.
+    @Test
+    void losRelacionadosDeUnTemaSalenDeTodasSusIntencionesPrimeroSuCategoria() {
+        TemaConocimiento verificar = tema("k-verificar", Categoria.CUENTA_Y_REGISTRO, TipoRespuesta.DIRECTA,
+            "Confirmar el correo", 0);
+        verificar.asignarIntencionesAdicionales(List.of(Categoria.SUBASTA_Y_COMERCIO, Categoria.SOPORTE_TECNICO));
+        TemaConocimiento recuperar = tema("k-recuperar", Categoria.CUENTA_Y_REGISTRO, TipoRespuesta.DIRECTA,
+            "Recuperar la contraseña", 0);
+        TemaConocimiento requisitos = tema("k-requisitos", Categoria.SOPORTE_TECNICO, TipoRespuesta.DIRECTA,
+            "Requisitos del sistema", 0);
+        List<TemaConocimiento> todos = List.of(verificar, recuperar, publicar, pujar, requisitos, saludo);
+
+        assertThat(Enriquecedor.relacionadosCon(verificar, todos)).containsExactly("Recuperar la contraseña",
+            "Cómo pujar o comprar en una subasta", "Cómo publicar un producto en subasta");
+        assertThat(Enriquecedor.paraNoSirvio(verificar, todos, false).respuestasRapidas())
+            .containsExactly("Recuperar la contraseña", "Cómo pujar o comprar en una subasta",
+                "Cómo publicar un producto en subasta");
+        // Sin intenciones adicionales, exactamente lo de antes de 1.6.0.
+        assertThat(Enriquecedor.relacionadosCon(recuperar, todos)).containsExactly("Confirmar el correo");
+        // Con huecos, llega hasta la ultima intencion adicional.
+        assertThat(Enriquecedor.relacionadosCon(verificar, List.of(verificar, requisitos)))
+            .containsExactly("Requisitos del sistema");
+    }
+
     @Test
     void cadaVistaApuntaASuCategoria() {
         assertThat(VistaDelChat.INICIO.categoria()).isNull();

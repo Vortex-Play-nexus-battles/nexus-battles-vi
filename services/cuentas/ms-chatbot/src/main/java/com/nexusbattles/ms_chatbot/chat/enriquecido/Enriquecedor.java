@@ -24,7 +24,10 @@ import java.util.regex.Pattern;
 //     la que abre una consulta asistida. Nunca una vista de administracion:
 //     el tema de un jugador no puede mandarlo a una pantalla de «sin acceso»;
 //   * respuestas rapidas: otros temas de la misma categoria, o, al escalar,
-//     los temas relacionados y los de la vista donde esta el jugador;
+//     los temas relacionados y los de la vista donde esta el jugador. Desde
+//     1.6.0 (7.4.10) un tema cuenta en cada una de sus intenciones (su
+//     categoria y las adicionales), y los relacionados de un tema salen de
+//     todas las suyas, primero los de su categoria;
 //   * soporte humano: se ofrece siempre que la consulta se escala.
 //
 // Sin estado: lo usan MotorRespuestas y MotorConsultasAsistidas.
@@ -164,8 +167,7 @@ public final class Enriquecedor {
                                                 boolean ingles) {
         List<String> pasos = tema.getTipoRespuesta() == TipoRespuesta.PASO_A_PASO ? pasosDe(texto) : List.of();
         List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
-        List<String> rapidas = titulosDe(temas, tema.getCategoria(), Set.of(tema.getClave()), MAXIMO_DE_RAPIDAS);
-        return new RespuestaEnriquecida(pasos, enlaces, List.of(), rapidas, false);
+        return new RespuestaEnriquecida(pasos, enlaces, List.of(), relacionadosCon(tema, temas), false);
     }
 
     /**
@@ -208,9 +210,26 @@ public final class Enriquecedor {
      */
     public static RespuestaEnriquecida paraNoSirvio(TemaConocimiento tema, List<TemaConocimiento> temas,
                                                     boolean ingles) {
-        List<String> rapidas = titulosDe(temas, tema.getCategoria(), Set.of(tema.getClave()), MAXIMO_DE_RAPIDAS);
         List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
-        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), rapidas, true);
+        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), relacionadosCon(tema, temas), true);
+    }
+
+    /**
+     * 1.6.0 (7.4.10): las preguntas relacionadas con un tema son los otros
+     * temas que atienden alguna de sus intenciones: primero los de su
+     * categoría y, si quedan huecos, los de cada intención adicional, en el
+     * orden del enum.
+     */
+    static List<String> relacionadosCon(TemaConocimiento tema, List<TemaConocimiento> temas) {
+        Set<String> excluidas = Set.of(tema.getClave());
+        Set<String> titulos = new LinkedHashSet<>(titulosDe(temas, tema.getCategoria(), excluidas, MAXIMO_DE_RAPIDAS));
+        for (Categoria intencion : tema.getIntencionesAdicionales()) {
+            if (titulos.size() >= MAXIMO_DE_RAPIDAS) {
+                break;
+            }
+            titulos.addAll(titulosDe(temas, intencion, excluidas, MAXIMO_DE_RAPIDAS));
+        }
+        return titulos.stream().limit(MAXIMO_DE_RAPIDAS).toList();
     }
 
     /** Solo la oferta de soporte humano (1.5.0, «no me sirvió» sin tema anterior). */
@@ -286,6 +305,8 @@ public final class Enriquecedor {
 
     // Titulos de los temas activos de una categoria (sin los de cortesia ni
     // los excluidos), el de mayor prioridad primero.
+    // 1.6.0: un tema es de la categoria si es la suya o una de sus
+    // intenciones adicionales.
     private static List<String> titulosDe(List<TemaConocimiento> temas, Categoria categoria, Set<String> excluidas,
                                           int cuantos) {
         if (temas == null || categoria == null) {
@@ -293,7 +314,7 @@ public final class Enriquecedor {
         }
         List<TemaConocimiento> candidatos = new ArrayList<>();
         for (TemaConocimiento tema : temas) {
-            if (tema.isActivo() && tema.getCategoria() == categoria && !excluidas.contains(tema.getClave())
+            if (tema.isActivo() && tema.atiende(categoria) && !excluidas.contains(tema.getClave())
                 && !esDeCortesia(tema)) {
                 candidatos.add(tema);
             }

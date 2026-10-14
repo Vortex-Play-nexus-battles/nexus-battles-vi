@@ -91,6 +91,29 @@
   padding-right: var(--e-2);
 }
 
+/* ms-chatbot.yaml 1.6.0 — «También responde a»: las ocho intenciones en
+   columnas, para que el formulario del tema no crezca ocho filas. La de la
+   intención principal queda desactivada y se nota (el kit dibuja la casilla
+   con `appearance: none`, así que sin esto se vería igual que las demás). */
+.panel-chatbot__casillas {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0 var(--e-3);
+}
+
+.panel-chatbot__intenciones .casilla:has(.casilla__entrada:disabled) {
+  cursor: not-allowed;
+}
+
+.panel-chatbot__intenciones .casilla__entrada:disabled {
+  background: var(--superficie-2);
+  cursor: not-allowed;
+}
+
+.panel-chatbot__intenciones .casilla:has(.casilla__entrada:disabled) .casilla__etiqueta {
+  color: var(--texto-3);
+}
+
 /* Pestaña «Soporte»: el detalle de una solicitud dentro del diálogo. Se
    desplaza por dentro para que Guardar/Cerrar queden a la vista. */
 .panel-chatbot__ticket {

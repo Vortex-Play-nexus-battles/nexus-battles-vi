@@ -119,6 +119,31 @@ class MotorRespuestasTest {
             .isEqualTo("clave-tienda");
     }
 
+    // 1.6.0 (7.4.10): un tema es de la vista tambien por una intencion
+    // adicional. En «Subastas», el tema de creditos que atiende ademas
+    // SUBASTA_Y_COMERCIO gana el empate al de la tienda, aunque su categoria
+    // principal sea otra y su prioridad, menor.
+    @Test
+    void generarRespuesta_conEmpate_cuentaLaIntencionAdicionalComoDeLaVista() {
+        TemaConocimiento tienda = new TemaConocimiento(null, "clave-tienda", Categoria.PRODUCTO,
+            TipoRespuesta.DIRECTA, "Comprar en la tienda", "comprar", null, "En la tienda.", null, 9, true);
+        TemaConocimiento creditos = new TemaConocimiento(null, "clave-creditos", Categoria.CUENTA_Y_REGISTRO,
+            TipoRespuesta.DIRECTA, "Créditos para comprar", "comprar", null, "Con tus créditos.", null, 0, true);
+        creditos.asignarIntencionesAdicionales(List.of(Categoria.SUBASTA_Y_COMERCIO));
+        when(temaConocimientoRepository.findByVersionEstadoAndActivoTrue(EstadoVersion.PRODUCCION))
+            .thenReturn(List.of(tienda, creditos));
+
+        ResultadoMotor enSubastas = motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.SUBASTAS);
+
+        assertThat(enSubastas.temaClave()).isEqualTo("clave-creditos");
+        // Lo que se guarda para las analiticas sigue siendo su categoria principal.
+        assertThat(enSubastas.categoria()).isEqualTo(Categoria.CUENTA_Y_REGISTRO);
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo", VistaDelChat.INVENTARIO).temaClave())
+            .as("PRODUCTO es la categoria principal de la tienda").isEqualTo("clave-tienda");
+        assertThat(motorRespuestas.generarRespuesta("quiero comprar algo").temaClave())
+            .as("sin vista decide la prioridad").isEqualTo("clave-tienda");
+    }
+
     // 1.3.3: pulsar una sugerencia manda el titulo del tema tal cual.
     @Test
     void generarRespuesta_conElTituloDeUnTema_respondeConEseTema() {
