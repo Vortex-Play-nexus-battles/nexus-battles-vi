@@ -399,24 +399,68 @@ class CanalDelChatbotIT {
             .as("un uid no es una sesion de visitante").isInstanceOf(Exception.class);
     }
 
+    /**
+     * Un rechazo del interceptor: la conexion se cierra SIEMPRE, y lo primero
+     * que ve el cliente es el frame ERROR con el motivo (lo que devuelve) o,
+     * por una carrera conocida de Spring, solo el cierre (devuelve null).
+     *
+     * <p>La carrera: tras el ERROR, {@code StompSubProtocolHandler} cierra la
+     * sesion en el acto. Si otro hilo todavia tiene el cerrojo de envio de esa
+     * sesion ({@code ConcurrentWebSocketSessionDecorator}; aqui, el que acaba de
+     * mandar CONNECTED y espera a que el contenedor confirme la escritura), el
+     * ERROR se queda en el bufer y el cierre gana. Con la maquina cargada paso
+     * en esta prueba. Por eso cada intruso espera un momento tras conectar (lo
+     * normal es que el motivo llegue), y lo que se exige siempre es lo que
+     * importa: el frame no pasa y la conexion se cierra.
+     */
+    private static String rechazo(Cliente cliente, String que) throws InterruptedException {
+        String primero = cliente.fallos.poll(ESPERA_S, TimeUnit.SECONDS);
+        assertThat(primero).as("%s: ni ERROR ni cierre", que).isNotNull();
+        assertThat(primero.startsWith("ERROR: ") || primero.equals("TRANSPORTE: Connection closed"))
+            .as("%s: %s", que, primero).isTrue();
+        long limite = System.nanoTime() + TimeUnit.SECONDS.toNanos(ESPERA_S);
+        while (cliente.sesion.isConnected() && System.nanoTime() < limite) {
+            Thread.sleep(20);
+        }
+        assertThat(cliente.sesion.isConnected()).as("%s: la conexion se cierra", que).isFalse();
+        return primero.startsWith("ERROR: ") ? primero.substring("ERROR: ".length()) : null;
+    }
+
+    /** Un intruso conectado, con CONNECTED ya enviado del todo (ver {@link #rechazo}). */
+    private Cliente intruso() throws Exception {
+        Cliente cliente = conectar(visitante(sesionDeclarada()));
+        Thread.sleep(150);
+        return cliente;
+    }
+
     @Test
     @DisplayName("nadie se suscribe a la cola de otro ni a un destino que el contrato no declara")
     void elInterceptorSoloAdmiteLosDestinosDelContrato() throws Exception {
         UUID uid = UUID.randomUUID();
+        List<String> motivos = new ArrayList<>();
         for (String destino : List.of("/user/" + uid + "/queue/chat/respuestas", "/queue/chat/respuestas",
             "/topic/chat", "/user/queue/chat/**", "/user/queue/otra")) {
-            Cliente intruso = conectar(visitante(sesionDeclarada()));
+            Cliente intruso = intruso();
             intruso.suscribir(destino, new LinkedBlockingQueue<>());
-            assertThat(intruso.fallos.poll(ESPERA_S, TimeUnit.SECONDS)).as("SUBSCRIBE a %s", destino)
-                .isEqualTo("ERROR: Ese destino no existe en el canal del chatbot.");
+            String motivo = rechazo(intruso, "SUBSCRIBE a " + destino);
+            if (motivo != null) {
+                assertThat(motivo).as("SUBSCRIBE a %s", destino)
+                    .isEqualTo("Ese destino no existe en el canal del chatbot.");
+                motivos.add(motivo);
+            }
         }
 
-        Cliente otro = conectar(visitante(sesionDeclarada()));
+        Cliente otro = intruso();
         StompHeaders cabeceras = new StompHeaders();
         cabeceras.setDestination("/app/chat/otra-cosa");
         otro.sesion.send(cabeceras, "{}".getBytes(StandardCharsets.UTF_8));
-        assertThat(otro.fallos.poll(ESPERA_S, TimeUnit.SECONDS)).as("SEND a otro destino")
-            .startsWith("ERROR: El canal del chatbot solo acepta preguntas en /app/chat/mensajes");
+        String motivo = rechazo(otro, "SEND a otro destino");
+        if (motivo != null) {
+            assertThat(motivo).startsWith("El canal del chatbot solo acepta preguntas en /app/chat/mensajes");
+            motivos.add(motivo);
+        }
+        assertThat(motivos).as("el motivo de la politica llega al cliente (salvo la carrera de arriba)")
+            .isNotEmpty();
     }
 
     @Test
