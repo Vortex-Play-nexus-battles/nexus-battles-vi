@@ -229,7 +229,7 @@ public class ChatService {
             // 1.7.0: se ofrece soporte humano y no cuenta como resuelta.
             return Optional.of(temaAnterior.flatMap(clave -> motorRespuestas.relacionadosCon(clave, texto, ingles))
                 .orElseGet(() -> new ResultadoMotor(texto, null, TipoRespuesta.DIRECTA, true, List.of(), null,
-                    Enriquecedor.soloSoporte(), ingles))
+                    Enriquecedor.soloSoporte(ingles), ingles))
                 .conResultado(ResultadoDeRespuesta.NO_SIRVIO));
         }
         PreferenciasDeRespuesta pedidas = switch (tipo) {

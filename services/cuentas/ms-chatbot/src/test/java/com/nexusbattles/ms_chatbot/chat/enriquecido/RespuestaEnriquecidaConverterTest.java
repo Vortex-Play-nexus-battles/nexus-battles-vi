@@ -38,6 +38,24 @@ class RespuestaEnriquecidaConverterTest {
         assertThat(conversor.convertToEntityAttribute("{no es json")).isNull();
     }
 
+    // 1.8.0: el ancla solo se escribe si la hay, y lo guardado antes (sin
+    // ancla) se sigue leyendo igual.
+    @Test
+    void elAnclaSoloSeGuardaSiLaHayYLoDeAntesSeLeeSinElla() {
+        RespuestaEnriquecida conAncla = new RespuestaEnriquecida(null,
+            List.of(new EnlaceInterno("Ir a Subastas", "subastas"),
+                new EnlaceInterno("Ver el centro de ayuda", "ayuda", "categoria-faq-general")), null, null, true);
+
+        String json = conversor.convertToDatabaseColumn(conAncla);
+
+        assertThat(json).contains("{\"texto\":\"Ir a Subastas\",\"destino\":\"subastas\"}")
+            .contains("\"ancla\":\"categoria-faq-general\"");
+        assertThat(conversor.convertToEntityAttribute(json)).isEqualTo(conAncla);
+        assertThat(conversor.convertToEntityAttribute(
+            "{\"enlaces\":[{\"texto\":\"Ir a Torneo\",\"destino\":\"torneos\"}],\"ofrecerSoporteHumano\":false}")
+            .enlaces()).containsExactly(new EnlaceInterno("Ir a Torneo", "torneos"));
+    }
+
     @Test
     void unCampoQueFaltaQuedaComoListaVacia() {
         RespuestaEnriquecida leida = conversor.convertToEntityAttribute("{\"pasos\":[\"a\"]}");

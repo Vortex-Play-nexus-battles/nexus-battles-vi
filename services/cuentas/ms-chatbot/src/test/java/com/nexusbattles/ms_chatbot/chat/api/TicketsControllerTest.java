@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_chatbot.chat.api;
 
+import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.ResolutorDeIdentidad;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionesAnonimas;
@@ -8,6 +9,7 @@ import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionNoDisponible;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.soporte.SesionRequeridaException;
+import com.nexusbattles.ms_chatbot.chat.soporte.SinConversacionException;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketAbiertoException;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService;
@@ -158,5 +160,80 @@ class TicketsControllerTest {
         mockMvc.perform(get("/chat/tickets"))
             .andExpect(status().isUnauthorized())
             .andExpect(jsonPath("$.motivo").value("SESION_REQUERIDA"));
+    }
+
+    // --- ms-chatbot.yaml 1.8.0: POST /chat/tickets/desde-conversacion ------
+
+    @Test
+    void desdeLaConversacionConTokenDevuelve201YLaIdentidadEsLaDelToken() throws Exception {
+        when(servicio.abrirDesdeConversacion(any(), eq(VistaDelChat.SUBASTAS), eq("Urgente"))).thenReturn(ticket());
+
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
+                .contentType("application/json")
+                .content("{\"vista\":\"SUBASTAS\",\"comentario\":\"Urgente\"}"))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.estado").value("ABIERTO"))
+            .andExpect(jsonPath("$.uid").doesNotExist())
+            .andExpect(jsonPath("$.contexto").doesNotExist());
+
+        ArgumentCaptor<IdentidadDelChat> identidad = ArgumentCaptor.forClass(IdentidadDelChat.class);
+        verify(servicio).abrirDesdeConversacion(identidad.capture(), any(), any());
+        assertThat(identidad.getValue().uid()).isEqualTo(UID.toString());
+    }
+
+    @Test
+    void desdeLaConversacionSinCuerpoOConUnoVacioVale() throws Exception {
+        when(servicio.abrirDesdeConversacion(any(), isNull(), isNull())).thenReturn(ticket());
+
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
+            .andExpect(status().isCreated());
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
+                .contentType("application/json")
+                .content("{}"))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void desdeLaConversacionSinTokenEs401YUnVisitanteNoEligeConversacion() throws Exception {
+        when(servicio.abrirDesdeConversacion(isNull(), any(), any())).thenThrow(new SesionRequeridaException());
+
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .header("X-Id-Sesion-Anonima", "anon_" + "A".repeat(43))
+                .contentType("application/json")
+                .content("{}"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(jsonPath("$.motivo").value("SESION_REQUERIDA"));
+    }
+
+    @Test
+    void desdeLaConversacionUnComentarioLargoOUnaVistaInexistenteSon400() throws Exception {
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
+                .contentType("application/json")
+                .content("{\"comentario\":\"" + "x".repeat(2001) + "\"}"))
+            .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/chat/tickets/desde-conversacion")
+                .with(jwt().jwt(j -> j.claim("uid", UID.toString())))
+                .contentType("application/json")
+                .content("{\"vista\":\"PANEL\"}"))
+            .andExpect(status().isBadRequest());
+        verifyNoInteractions(servicio);
+    }
+
+    @Test
+    void desdeLaConversacionSinPreguntasOConUnaAbiertaEs409ConSuMotivo() throws Exception {
+        when(servicio.abrirDesdeConversacion(any(), any(), any()))
+            .thenThrow(new SinConversacionException())
+            .thenThrow(new TicketAbiertoException());
+
+        mockMvc.perform(post("/chat/tickets/desde-conversacion").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("SIN_CONVERSACION"));
+        mockMvc.perform(post("/chat/tickets/desde-conversacion").with(jwt().jwt(j -> j.claim("uid", UID.toString()))))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("TICKET_ABIERTO"));
     }
 }

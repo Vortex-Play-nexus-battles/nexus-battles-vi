@@ -150,7 +150,20 @@ function enlaceInterno(enlace, url) {
   return h('a', {
     clase: 'chatbot-enriquecido__enlace',
     texto: enlace.texto || enlace.destino,
-    atributos: { href: destino },
+    atributos: { href: conAncla(destino, enlace.ancla) },
     datos: { destino: enlace.destino },
   });
+}
+
+/**
+ * ms-chatbot.yaml 1.8.0 — el destino con su ancla (`#categoria-cuenta-y-registro`
+ * en el centro de ayuda), si la trae con la forma del contrato. Si no, el
+ * destino tal cual: un ancla rara no cambia a dónde lleva el enlace.
+ *
+ * @param {string} url
+ * @param {string|null|undefined} ancla
+ * @returns {string}
+ */
+export function conAncla(url, ancla) {
+  return typeof ancla === 'string' && /^[a-z0-9-]{1,60}$/.test(ancla) ? `${url}#${ancla}` : url;
 }

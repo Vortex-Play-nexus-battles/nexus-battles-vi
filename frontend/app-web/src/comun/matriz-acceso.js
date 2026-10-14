@@ -215,6 +215,11 @@ export const MATRIZ = Object.freeze({
     acceso: ACCESO.PUBLICA,
     armazon: 'jugador',
   },
+  // ms-chatbot.yaml 1.8.0 (7.4.3) — el centro de ayuda: lo que el asistente
+  // sabe responder, para leerlo sin chatear. Público como las vitrinas, con
+  // la barra de la aplicación (un visitante ve ahí «Iniciar sesión» y
+  // «Registrarse»). Sin dirección limpia: así el borde no cambia.
+  ayuda: { ruta: 'cuentas/ayuda.html', acceso: ACCESO.PUBLICA, armazon: 'jugador' },
 
   // --- Jugador -------------------------------------------------------------
   home: {
