@@ -17,9 +17,12 @@ import { fileURLToPath } from 'node:url';
 import { jest } from '@jest/globals';
 
 import {
+  ALREDEDOR,
+  enlaceDelProducto,
   enlazadorDeFicha,
   enlazadorDeSancion,
   montarModeracion,
+  nombresDeProductos,
   panelDeDetalle,
   tarjetaDeEntrada,
 } from './moderar-comentarios.js';
@@ -675,8 +678,11 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
     return { autorId: 'aut-1', apodoAutor: 'LyraRoja', comentarios, total, pagina, tamano: 20 };
   }
 
-  function abrirPanel(cargar, d = conAutor()) {
-    const panel = panelDeDetalle(d, () => {}, { cargarHistorialDelAutor: cargar });
+  function abrirPanel(cargar, d = conAutor(), nombreDeProducto = async () => 'Espada de Vorn') {
+    const panel = panelDeDetalle(d, () => {}, {
+      cargarHistorialDelAutor: cargar,
+      nombreDeProducto,
+    });
     document.body.replaceChildren(panel);
     return panel;
   }
@@ -733,7 +739,11 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
     expect(filas).toHaveLength(4);
     expect(filas[0].querySelector('[data-campo="texto"]').textContent).toBe('Texto 1');
     expect(filas[0].querySelector('[data-campo="fecha"]').textContent).toBe(fechaHora(AHORA));
-    expect(filas[0].querySelector('[data-campo="producto"]').textContent).toBe('Producto: prod-7');
+    // SA-16: el nombre del producto, nunca su identificador.
+    expect(filas[0].querySelector('[data-campo="producto"]').textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
+    expect(panel.querySelector(ZONA).textContent).not.toContain('prod-7');
     // Con texto, no solo con color: los cuatro estados, incluido EN_REVISION.
     const estados = [...filas].map((f) => f.querySelector('[data-campo="estado"]').textContent);
     expect(estados).toEqual(['Oculto', 'Eliminado', 'En revisión', 'Publicado']);
@@ -2078,5 +2088,196 @@ describe('SA-4 — del comentario a la sanción de su autor', () => {
     expect(lineas[0]).toMatch(/^Violación de derechos de autor · /);
     expect(lineas[1]).toMatch(/^Categoria nueva · /);
     expect(panel.textContent).not.toContain('VIOLACION_DE_DERECHOS');
+  });
+});
+
+describe('SA-16 — el comentario en su contexto (§7.3.8, comentarios.yaml 1.17.0)', () => {
+  const ZONA = '[data-zona="contexto"]';
+
+  const abierto = () =>
+    detalle({
+      comentario: {
+        ...detalle().comentario,
+        id: 'com-1',
+        productoId: 'prod-7',
+        fechaPublicacion: '2026-09-23T09:00:00Z',
+      },
+    });
+
+  const item = (id, apodoAutor, estado, fechaPublicacion) => ({
+    id,
+    apodoAutor,
+    texto: `Dice ${apodoAutor}`,
+    fechaPublicacion,
+    estado,
+    editado: false,
+  });
+
+  const CONTEXTO = {
+    comentarioId: 'com-1',
+    productoId: 'prod-7',
+    anteriores: [
+      item('c-a', 'Ana', 'PUBLICADO', '2026-09-23T08:00:00Z'),
+      item('c-b', 'Bruno', 'OCULTO', '2026-09-23T08:30:00Z'),
+    ],
+    posteriores: [item('c-c', 'Carla', 'ELIMINADO', '2026-09-23T09:30:00Z')],
+    totalEnElHilo: 9,
+  };
+
+  function abrir({
+    cargarContexto = jest.fn().mockResolvedValue(CONTEXTO),
+    nombre = 'Espada de Vorn',
+  } = {}) {
+    const panel = panelDeDetalle(abierto(), () => {}, {
+      cargarContexto,
+      nombreDeProducto: async () => nombre,
+      hrefDelProducto: (id) => `https://nexus.test/comentar?producto=${id}`,
+    });
+    document.body.replaceChildren(panel);
+    return { panel, cargarContexto };
+  }
+
+  test('el producto por su nombre, con su página, y la conversación en orden con este comentario en su sitio', async () => {
+    const { panel, cargarContexto } = abrir();
+    await asentar();
+
+    expect(cargarContexto).toHaveBeenCalledWith('com-1');
+    const zona = panel.querySelector(ZONA);
+    expect(zona.querySelector('h3').textContent).toBe('En su contexto');
+    expect(zona.querySelector('[data-campo="producto"]').textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
+    expect(zona.querySelector('[data-accion="ver-producto"]').getAttribute('href')).toBe(
+      'https://nexus.test/comentar?producto=prod-7',
+    );
+
+    const filas = [...zona.querySelectorAll('[data-zona="contexto-hilo"] > li')];
+    expect(filas.map((f) => f.dataset.comentarioId)).toEqual(['c-a', 'c-b', 'com-1', 'c-c']);
+    const este = filas[2];
+    expect(este.getAttribute('aria-current')).toBe('true');
+    expect(este.querySelector('[data-dato="este"]').textContent).toBe(
+      'El comentario que estás revisando',
+    );
+    expect(filas.filter((f) => f.hasAttribute('aria-current'))).toHaveLength(1);
+    // Los estados con palabras: lo que el lector no veía se distingue.
+    expect(filas[1].querySelector('[data-dato="estado"]').textContent).toBe('Oculto');
+    expect(filas[3].querySelector('[data-dato="estado"]').textContent).toBe('Eliminado');
+    expect(filas[0].textContent).toContain('Ana');
+    expect(filas[0].querySelector('[data-dato="texto"]').textContent).toBe('Dice Ana');
+    expect(zona.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'El hilo del producto tiene 9 comentarios; estos son los 4 más cercanos a este.',
+    );
+    // Ni identificadores de producto ni de comentario en el texto.
+    expect(zona.textContent).not.toMatch(/prod-7|com-1|c-a/);
+  });
+
+  test('un hilo que se ve entero lo dice, y un comentario solo también', async () => {
+    const { panel } = abrir({
+      cargarContexto: jest.fn().mockResolvedValue({ ...CONTEXTO, totalEnElHilo: 4 }),
+    });
+    await asentar();
+    expect(panel.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'El hilo completo del producto: 4 comentarios.',
+    );
+
+    const solo = abrir({
+      cargarContexto: jest
+        .fn()
+        .mockResolvedValue({ ...CONTEXTO, anteriores: [], posteriores: [], totalEnElHilo: 1 }),
+    });
+    await asentar();
+    expect(solo.panel.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'Es el único comentario del producto.',
+    );
+  });
+
+  test('un producto que el catálogo no da se dice, sin su identificador', async () => {
+    const { panel } = abrir({ nombre: null });
+    await asentar();
+    expect(panel.querySelector(`${ZONA} [data-campo="producto"]`).textContent).toBe(
+      'Producto: no disponible en el catálogo',
+    );
+  });
+
+  test('si la conversación no carga, lo dice con reintento y el resto del detalle sigue', async () => {
+    const cargarContexto = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValueOnce(CONTEXTO);
+    const { panel } = abrir({ cargarContexto });
+    await asentar();
+
+    const aviso = panel.querySelector('[data-zona="contexto-aviso"]');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain('No se pudo cargar la conversación');
+    expect(panel.querySelector('[data-zona="decision"]')).not.toBeNull();
+    expect(panel.querySelector('[data-zona="reportes"]')).not.toBeNull();
+
+    aviso.querySelector('[data-accion="reintentar"]').click();
+    await asentar();
+    expect(cargarContexto).toHaveBeenCalledTimes(2);
+    expect(panel.querySelectorAll('[data-zona="contexto-hilo"] > li')).toHaveLength(4);
+  });
+
+  test('un 404 no ofrece reintentar: no va a cambiar pulsando otra vez', async () => {
+    const { panel } = abrir({
+      cargarContexto: jest.fn().mockRejectedValue(new ErrorDeApi(null, 404)),
+    });
+    await asentar();
+    expect(
+      panel.querySelector('[data-zona="contexto-aviso"] [data-accion="reintentar"]'),
+    ).toBeNull();
+  });
+
+  test('sin fuentes no se pinta la sección', () => {
+    expect(panelDeDetalle(abierto(), () => {}).querySelector(ZONA)).toBeNull();
+  });
+
+  test('el enlace al producto lleva a su página pública con el producto en la dirección', () => {
+    const url = new URL(enlaceDelProducto('prod-7'));
+    expect(url.searchParams.get('producto')).toBe('prod-7');
+    expect(url.pathname).toMatch(/publicar-comentario\.html$|\/comentar$/);
+    expect(enlaceDelProducto('')).toBeNull();
+  });
+
+  test('cada producto se pregunta una vez; si el catálogo falla, se vuelve a preguntar después', async () => {
+    const consultar = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValue({ id: 'prod-7', nombre: ' Espada de Vorn ' });
+    const nombre = nombresDeProductos(consultar);
+
+    expect(await nombre('prod-7')).toBeNull();
+    expect(await nombre('prod-7')).toBe('Espada de Vorn');
+    expect(await nombre('prod-7')).toBe('Espada de Vorn');
+    expect(consultar).toHaveBeenCalledTimes(2);
+    expect(await nombre('')).toBeNull();
+  });
+
+  test('montarModeracion pide la conversación con su tamaño y el producto una sola vez', async () => {
+    const contextoDelComentario = jest.fn().mockResolvedValue(CONTEXTO);
+    const productoDelCatalogo = jest
+      .fn()
+      .mockResolvedValue({ id: 'prod-7', nombre: 'Espada de Vorn' });
+    const api = {
+      consultarCola: jest.fn().mockResolvedValue({ entradas: [entrada()], total: 1 }),
+      consultarDetalle: jest.fn().mockResolvedValue(abierto()),
+      contextoDelComentario,
+      productoDelCatalogo,
+    };
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    expect(contextoDelComentario).toHaveBeenCalledWith('com-1', { alrededor: ALREDEDOR });
+    expect(ALREDEDOR).toBe(3);
+    expect(productoDelCatalogo).toHaveBeenCalledTimes(1);
+    expect(raiz.querySelector(`${ZONA} [data-campo="producto"]`).textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
   });
 });
