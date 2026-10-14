@@ -49,6 +49,37 @@ class TicketSoporteTest {
         assertThat(ticket.getContexto().get(19).getContenido()).isEqualTo("m25");
     }
 
+    // 1.12.0 (RF-CHA-007): la siguiente pregunta sin resolver se suma a la
+    // solicitud abierta, y siguen quedando solo los 20 mas recientes.
+    @Test
+    void sumarAlContextoAnadeAlFinalYRecortaLosMasAntiguos() {
+        List<MensajeDeContexto> conversacion = IntStream.rangeClosed(1, 19)
+            .mapToObj(i -> new MensajeDeContexto("USUARIO", "m" + i, AL_ABRIR.plusSeconds(i)))
+            .toList();
+        TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.FAQ_GENERAL, "a", "b", conversacion, AL_ABRIR);
+        Instant despues = AL_ABRIR.plusSeconds(3600);
+
+        ticket.sumarAlContexto(List.of(new MensajeDeContexto("USUARIO", "otra", despues),
+            new MensajeDeContexto("BOT", "no la entendi", despues.plusSeconds(1))), despues);
+
+        assertThat(ticket.getContexto()).hasSize(TicketSoporte.MAXIMO_DE_CONTEXTO);
+        assertThat(ticket.getContexto().get(0).getContenido()).isEqualTo("m2");
+        assertThat(ticket.getContexto().get(19).getContenido()).isEqualTo("no la entendi");
+        assertThat(ticket.getActualizadoEn()).isEqualTo(despues);
+    }
+
+    @Test
+    void sumarNadaNoCambiaElContextoNiLaFecha() {
+        TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.FAQ_GENERAL, "a", "b",
+            List.of(new MensajeDeContexto("USUARIO", "hola", AL_ABRIR)), AL_ABRIR);
+
+        ticket.sumarAlContexto(null, AL_ABRIR.plusSeconds(60));
+        ticket.sumarAlContexto(List.of(), AL_ABRIR.plusSeconds(60));
+
+        assertThat(ticket.getContexto()).hasSize(1);
+        assertThat(ticket.getActualizadoEn()).isEqualTo(AL_ABRIR);
+    }
+
     @Test
     void sinContextoQuedaVacio() {
         TicketSoporte ticket = TicketSoporte.abrir("uid-1", Categoria.FAQ_GENERAL, "a", "b", null, AL_ABRIR);

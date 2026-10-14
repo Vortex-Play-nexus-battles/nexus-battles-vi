@@ -8,10 +8,12 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import nexus.api.SolicitudCrearProducto;
 import nexus.api.SolicitudModificarProducto;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.ModificacionProductoInvalidaException;
 import nexus.dominio.Producto;
 import nexus.dominio.ProductoNoEncontradoException;
 import nexus.dominio.RespaldoProducto;
+import nexus.dominio.TipoCambioProducto;
 import nexus.persistencia.ProductoRepository;
 import nexus.persistencia.RespaldoProductoRepository;
 import org.springframework.stereotype.Service;
@@ -23,16 +25,19 @@ public class ModificarProductoServicio {
         private final RespaldoProductoRepository respaldoRepositorio;
         private final ProductoMapper mapper;
         private final Validator validator;
+        private final RegistroDeOperaciones operaciones;
 
         public ModificarProductoServicio(
                         ProductoRepository repositorio,
                         RespaldoProductoRepository respaldoRepositorio,
                         ProductoMapper mapper,
-                        Validator validator) {
+                        Validator validator,
+                        RegistroDeOperaciones operaciones) {
                 this.repositorio = repositorio;
                 this.respaldoRepositorio = respaldoRepositorio;
                 this.mapper = mapper;
                 this.validator = validator;
+                this.operaciones = operaciones;
         }
 
         /**
@@ -44,6 +49,14 @@ public class ModificarProductoServicio {
          *         API lo responde con 409 y el respaldo ya se revirtio
          */
         public Producto modificar(String id, SolicitudModificarProducto cambios, String autor) {
+                return modificar(id, cambios, autor, TipoCambioProducto.MODIFICACION);
+        }
+
+        public Producto modificar(
+                        String id,
+                        SolicitudModificarProducto cambios,
+                        String autor,
+                        TipoCambioProducto tipoCambio) {
                 Producto existente = repositorio.findById(id)
                         .orElseThrow(ProductoNoEncontradoException::new);
                 if (existente.version() == 0) {
@@ -66,18 +79,22 @@ public class ModificarProductoServicio {
 
                 Instant ahora = Instant.now();
 
+                Producto actualizado = mapper.actualizar(fusionada, existente, ahora, autor);
+                Producto resultadoEsperado = conVersion(actualizado, existente.version() + 1);
+
                 RespaldoProducto respaldo = new RespaldoProducto(
                         UUID.randomUUID().toString(),
                         existente.id(),
                         existente,
+                        resultadoEsperado,
                         ahora,
-                        autor);
+                        autor,
+                        tipoCambio,
+                        null);
 
                 // El respaldo se guarda ANTES de tocar el producto: si esto falla,
                 // el producto original queda intacto y no hay nada que revertir.
                 respaldoRepositorio.save(respaldo);
-
-                Producto actualizado = mapper.actualizar(fusionada, existente, ahora, autor);
 
                 // CONCURRENCIA (B4): Producto declara @Version. El guardado solo
                 // reemplaza el documento si su version sigue siendo la que se leyo
@@ -92,11 +109,30 @@ public class ModificarProductoServicio {
                 // despues de haber guardado el respaldo —tambien por conflicto—,
                 // se borra ese respaldo de forma compensatoria para no dejar un
                 // historico huerfano que referencia un cambio que nunca se aplico.
+                Producto guardado;
                 try {
-                        return repositorio.save(actualizado);
+                        guardado = repositorio.save(actualizado);
                 } catch (RuntimeException fallo) {
                         respaldoRepositorio.deleteById(respaldo.id());
                         throw fallo;
                 }
+                // SA-18: la modificacion (o la importacion de diseno) ya
+                // aplicada, a la bitacora de operaciones.
+                operaciones.deProducto(respaldo);
+                return guardado;
+        }
+
+        private static Producto conVersion(Producto producto, int version) {
+                return new Producto(
+                                producto.id(), producto.nombre(), producto.imagen(), producto.descripcion(),
+                                producto.tipo(), producto.tiraje(), producto.precioCreditos(),
+                                producto.precioMonedaReal(), producto.premium(), producto.prototipo(),
+                                producto.heroe(), producto.costoPoder(), producto.multiplicadorNivel(),
+                                producto.turnosCarga(), producto.turnosRecarga(), producto.efectoGeneral(),
+                                producto.efectoPotenciado(), producto.defensa(), producto.parte(), producto.efecto(),
+                                producto.poderDeAtaque(), producto.tasaDeCaida(), producto.estado(), version,
+                                producto.creadoEn(), producto.modificadoEn(), producto.promocion(), producto.origen(),
+                                producto.semillaVersion(), producto.modificadoPor(),
+                                producto.estadoAnteriorSuspension(), producto.reservasRecientes());
         }
 }

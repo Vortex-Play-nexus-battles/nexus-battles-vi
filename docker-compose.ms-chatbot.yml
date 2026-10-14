@@ -94,11 +94,25 @@ services:
       DB_PASSWORD: ${MS_CHATBOT_DB_PASSWORD}
       # Clave publica de los tokens de usuario (ADR-002), dentro de la red.
       IDENTIDAD_JWKS_URL: ${IDENTIDAD_JWKS_URL:-http://srv-ms-identidad:8089/api/v1/auth/jwks}
+      # 6-oct — origenes del navegador (app.cors.origenes-permitidos). Hasta
+      # hoy no se fijaba y el servicio se quedaba con su lista de desarrollo
+      # (localhost:8080/5500): funcionaba solo porque la pagina era
+      # http://<IP> y Spring trataba su POST como del mismo origen. Desde
+      # https://<dominio> no lo es, y sin esto el chat respondia 403. Mismo
+      # patron y mismo valor por omision que ECOMMERCE_CORS_ORIGENES;
+      # desplegar.sh le suma https://<DOMINIO_PUBLICO> (abrir_origenes_al_dominio).
+      CORS_ORIGENES: ${CHATBOT_CORS_ORIGENES:-http://35.168.124.119}
       # Consultas asistidas (HU-CHA-008). No usa credencial de servicio
       # (ADR-005): reenvia el token del propio jugador. Inventario vive en el
       # host de contenido, igual que en docker-compose.deploy.yml.
       INVENTARIO_BASE_URL: ${INVENTARIO_BASE_URL:-http://34.193.90.11:8102}
-      SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://srv-ms-subastas:8092/api/v1}
+      # ms-subastas tambien vive en el host de contenido desde el 28-sep
+      # (servicios.json, claseHost contenido; el borde lo alcanza en
+      # 34.193.90.11:8092). Con srv-ms-subastas, un nombre que en el host de
+      # plataforma no existe, «¿como van mis subastas?» y «¿que hay en la
+      # subasta?» respondian «no pude consultar» en DEV (lo vio el canario del
+      # asistente el 14-oct).
+      SUBASTAS_BASE_URL: ${SUBASTAS_BASE_URL:-http://34.193.90.11:8092/api/v1}
       NOTIFICACIONES_BASE_URL: ${NOTIFICACIONES_BASE_URL:-http://srv-notificaciones:8085/api/v1}
       # B11 (ms-chatbot.yaml 1.2.0): movimientos de creditos del propio jugador
       # (con su token), torneos como dato publico y la lista negra para filtrar
@@ -108,6 +122,9 @@ services:
       # ms-chatbot.yaml 1.3.0: misiones en curso del propio jugador (con su
       # token). Vive en el host de contenido, igual que inventario (8105).
       MISIONES_BASE_URL: ${MISIONES_BASE_URL:-http://34.193.90.11:8105}
+      # ms-chatbot.yaml 1.10.0: catalogo publico de productos (sin token), en
+      # el host de contenido (8103), igual que lo lee ms-identidad.
+      PRODUCTOS_BASE_URL: ${PRODUCTOS_BASE_URL:-http://34.193.90.11:8103}
       LISTA_NEGRA_VERIFICAR_URL: ${LISTA_NEGRA_VERIFICAR_URL:-http://srv-moderacion-sanciones:8086/api/v1/lista-negra/verificar}
 
 volumes:

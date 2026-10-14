@@ -3,6 +3,7 @@ package nexus.inventario.api;
 import jakarta.validation.Valid;
 import java.net.URI;
 import nexus.inventario.aplicacion.BuscarElementosInventario;
+import nexus.inventario.aplicacion.CategoriaInventario;
 import nexus.inventario.aplicacion.ConsultarElementoInventario;
 import nexus.inventario.aplicacion.ConsultarInventarioPaginado;
 import nexus.inventario.aplicacion.GestionarInventario;
@@ -57,14 +58,19 @@ public class InventarioController {
      *
      * <p>Sin inventario todavia devuelve una pagina vacia con estado 200: que
      * el jugador no tenga nada no es un error.</p>
+     *
+     * <p>1.7.0: {@code categoria} (HEROES u OBJETOS) pagina solo esa parte del
+     * inventario, para que cada pestaña de la vista pida al servidor la página que
+     * enseña. Sin ella, el inventario entero, como antes.</p>
      */
     @GetMapping
     public PaginaInventarioResponse consultarPagina(
             Authentication autenticacion,
             @RequestHeader(name = CABECERA_IDENTIDAD, required = false) String cabecera,
-            @RequestParam(name = "pagina", defaultValue = "0") int pagina) {
+            @RequestParam(name = "pagina", defaultValue = "0") int pagina,
+            @RequestParam(name = "categoria", required = false) CategoriaInventario categoria) {
         return PaginaInventarioResponse.de(
-                consulta.consultar(identidad.propietario(autenticacion, cabecera), pagina));
+                consulta.consultar(identidad.propietario(autenticacion, cabecera), pagina, categoria));
     }
 
     @GetMapping("/busqueda")

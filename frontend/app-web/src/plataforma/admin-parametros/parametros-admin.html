@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Parámetros del sistema · The Nexus Battles VI</title>
+    <title>Parámetros de plataforma · The Nexus Battles VI</title>
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/tokens.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/base.css" />
     <link rel="stylesheet" href="../../../../../shared/ui-kit/css/componentes.css" />
@@ -11,20 +11,17 @@
   <body>
     <div data-cabecera-app></div>
 
-    <main class="pagina consola pila" data-vista="parametros-admin">
-      <h1>Parámetros del sistema</h1>
-      <!-- RF-ADM-001: configuración operativa con validación, versionado y
-           auditoría. La trazabilidad va aquí, no en pantalla. -->
-      <p class="t-meta">
-        Los valores que gobiernan el juego, en caliente. Cada cambio lleva motivo, queda registrado
-        y puede programarse con fecha de vigencia. Los parámetros bloqueados no se pueden tocar
-        desde aquí. Un parámetro «sin definir» todavía no se ha decidido: mientras tanto, el
-        servicio que lo consume aplica su comportamiento por omisión.
-      </p>
-
-      <div data-zona="aviso" hidden></div>
-
-      <section class="pila pila--compacta" data-zona="catalogo"></section>
+    <!--
+      HU-ADM-001 (admin-parametros.yaml) con el kit de la consola (SA-8, punto
+      22 del informe): cifras, búsqueda y filtros, una tabla por área y los
+      paneles de cambio e historial. La monta `montarParametros` sobre las
+      zonas `[data-zona=...]`.
+    -->
+    <main class="pagina consola-integral" data-vista="parametros-admin">
+      <div data-zona="encabezado"></div>
+      <div data-zona="aviso" aria-live="polite" hidden></div>
+      <div data-zona="indicadores"></div>
+      <div class="consola-integral__rejilla" data-zona="catalogo"></div>
     </main>
 
     <script type="module">

@@ -1,5 +1,7 @@
 package com.nexusbattles.ms_identidad.privacidad;
 
+import com.nexusbattles.ms_identidad.auth.correo.CorreoClient;
+import com.nexusbattles.ms_identidad.auth.correo.dto.CorreoCierreCuentaRequest;
 import com.nexusbattles.ms_identidad.auth.model.EstadoCuenta;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.recuperacion.PreguntaSeguridadRepository;
@@ -12,6 +14,7 @@ import com.nexusbattles.ms_identidad.rbac.model.RolEntity;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +30,8 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -61,6 +66,7 @@ class AnonimizadorDeCuentasTest {
     private PreguntaSeguridadRepository preguntas;
     private AvatarStorageService avatares;
     private AuditoriaDeCuenta auditoria;
+    private CorreoClient correo;
     private AnonimizadorDeCuentas anonimizador;
     private SolicitudDeCierre solicitud;
     private Usuario ada;
@@ -74,8 +80,9 @@ class AnonimizadorDeCuentasTest {
         preguntas = mock(PreguntaSeguridadRepository.class);
         avatares = mock(AvatarStorageService.class);
         auditoria = mock(AuditoriaDeCuenta.class);
+        correo = mock(CorreoClient.class);
         anonimizador = new AnonimizadorDeCuentas(solicitudes, usuarios, perfiles, preguntas, avatares, auditoria,
-                mock(PlatformTransactionManager.class), cifrador, RELOJ);
+                correo, mock(PlatformTransactionManager.class), cifrador, RELOJ);
 
         solicitud = SolicitudDeCierre.programar(UID, SOLICITADA);
         when(solicitudes.bloquear(solicitud.getId())).thenReturn(Optional.of(solicitud));
@@ -191,7 +198,7 @@ class AnonimizadorDeCuentasTest {
         assertThat(anonimizador.ejecutar(reciente.getId())).isFalse();
 
         assertThat(reciente.getEstado()).isEqualTo(SolicitudDeCierre.PROGRAMADA);
-        verifyNoInteractions(usuarios, perfiles, preguntas, avatares, auditoria);
+        verifyNoInteractions(usuarios, perfiles, preguntas, avatares, auditoria, correo);
         verify(solicitudes, never()).borrarPerfilDe(anyLong());
     }
 
@@ -218,7 +225,7 @@ class AnonimizadorDeCuentasTest {
         when(solicitudes.bloquear(desconocida)).thenReturn(Optional.empty());
 
         assertThat(anonimizador.ejecutar(desconocida)).isFalse();
-        verifyNoInteractions(usuarios, avatares, auditoria);
+        verifyNoInteractions(usuarios, avatares, auditoria, correo);
     }
 
     @Test
@@ -230,7 +237,7 @@ class AnonimizadorDeCuentasTest {
 
         assertThat(solicitud.getEstado()).isEqualTo(SolicitudDeCierre.EJECUTADA);
         verify(solicitudes, never()).borrarPerfilDe(anyLong());
-        verifyNoInteractions(avatares, auditoria);
+        verifyNoInteractions(avatares, auditoria, correo);
     }
 
     @Test
@@ -248,9 +255,39 @@ class AnonimizadorDeCuentasTest {
     void avisosFailOpen() {
         doThrow(new IllegalStateException("disco")).when(avatares).borrarAvatar(AVATAR);
         doThrow(new IllegalStateException("auditoria")).when(auditoria).cuentaAnonimizada(UID);
+        doThrow(new IllegalStateException("correo")).when(correo).enviarCierreCuenta(any(), anyString());
 
         assertThat(anonimizador.ejecutar(solicitud.getId())).isTrue();
         assertThat(ada.getEstado()).isEqualTo(EstadoCuenta.ELIMINADO);
         assertThat(solicitud.getEstado()).isEqualTo(SolicitudDeCierre.EJECUTADA);
+    }
+
+    @Test
+    @DisplayName("SA-14 (§7.3.6): ya confirmado, la confirmacion sale a la direccion y con el apodo que tenia")
+    void confirmaPorCorreoConLosDatosQueTenia() {
+        anonimizador.ejecutar(solicitud.getId());
+
+        ArgumentCaptor<CorreoCierreCuentaRequest> enviado = ArgumentCaptor.forClass(CorreoCierreCuentaRequest.class);
+        verify(correo).enviarCierreCuenta(enviado.capture(), eq("cierre-cuenta-" + solicitud.getId()));
+        assertThat(enviado.getValue().getEmail()).isEqualTo("ada@upb.edu.co");
+        assertThat(enviado.getValue().getApodo()).isEqualTo("ada_lovelace");
+        assertThat(enviado.getValue().getFechaHora()).startsWith("2026-10-02T10:00");
+        // Y la cuenta ya no guarda ninguno de los dos.
+        assertThat(ada.getEmail()).doesNotContain("ada@upb.edu.co");
+        assertThat(ada.getApodo()).isNotEqualTo("ada_lovelace");
+
+        InOrder orden = inOrder(usuarios, solicitudes, correo);
+        orden.verify(usuarios).save(ada);
+        orden.verify(solicitudes).save(solicitud);
+        orden.verify(correo).enviarCierreCuenta(any(), anyString());
+    }
+
+    @Test
+    @DisplayName("SA-14: una ejecucion repetida no manda una segunda confirmacion")
+    void unaSolaConfirmacion() {
+        anonimizador.ejecutar(solicitud.getId());
+        anonimizador.ejecutar(solicitud.getId());
+
+        verify(correo).enviarCierreCuenta(any(), anyString());
     }
 }

@@ -1,13 +1,14 @@
 openapi: 3.1.0
 info:
   title: Servicio de productos
-  version: 1.7.1
+  version: 1.12.0
   description: >
     Creación de productos del catálogo de THE NEXUS BATTLES VI
     (HU-PRD-001), reserva de tiraje (HU-PRD-002), modificación con
     respaldo (HU-PRD-003) y suspensión lógica con reactivación
     (HU-PRD-004), además de alertas de cambios al iniciar sesión
-    (HU-PRD-014). Contrato publicado antes de la
+    (HU-PRD-014), además de historial y reversión auditada
+    (HU-PRD-007) y versiones portables del diseño (HU-PRD-011). Contrato publicado antes de la
     implementación, conforme a la regla de plataforma "contrato primero".
 
     1.2.0 (R16): se añade GET /api/v1/productos, el listado público y
@@ -92,6 +93,52 @@ info:
     esquemas no cambian (el 400 por validacion ya existia en `crearProducto`
     y `modificarProducto`); se documenta el motivo nuevo. Dejar en cero el
     precio de una epica que ya lo tenia sigue siendo valido.
+
+    1.8.0 (HU-PRD-007): añade el historial administrativo inmutable y la
+    reversión al último estado respaldado. La reversión restaura el contenido
+    del producto, queda registrada como un nuevo cambio y rechaza con 409 un
+    respaldo obsoleto para no borrar escrituras posteriores.
+
+    1.9.0 (HU-PRD-011): añade el historial específico del diseño y la
+    exportación/importación de una plantilla JSON versionada. En la versión 1
+    del formato el diseño portable contiene imagen y descripción; no altera
+    identidad, tipo, precios, tiraje ni reglas de combate. Una plantilla
+    inválida responde 400 antes de escribir el producto.
+
+    1.10.0 (HU-PRD-009, SA-6): recursos gráficos del catálogo. Una imagen, un
+    icono o una animación se sube por `POST /api/v1/productos/recursos`
+    (multipart), se comprueba por su firma de bytes, su estructura, su peso
+    y sus dimensiones, y se sirve por `GET /api/v1/productos/recursos/{id}`
+    (público: es la imagen que ve la tienda). Su `url` es lo que se guarda en
+    `imagen` con la modificación de siempre, que deja respaldo, historial y
+    versión de diseño. La biblioteca se lista de 16 en 16 y un recurso se
+    retira sin borrarse (las versiones anteriores pueden apuntar a él); no se
+    retira la imagen actual de un producto (409). Además, §7.2.5: `motivo`
+    opcional al suspender, reactivar y revertir, que queda en la entrada del
+    historial (`CambioProducto.motivo`). Todo es aditivo.
+
+    1.11.0 (SA-13, §7.2.1 «estado de disponibilidad (activo/único/
+    suspendido)»): el alta admite `estado` opcional, ACTIVO o UNICO; sin el,
+    el producto nace ACTIVO como hasta ahora. SUSPENDIDO no es un estado
+    inicial (400): suspender tiene su propia operación. Un producto UNICO se
+    vende igual que uno ACTIVO; la tienda y el inventario lo identifican.
+    Campo opcional nuevo en una petición: versión menor.
+
+    1.12.0 (SA-18, §7.2.5 «registro de auditoría de todas las operaciones
+    realizadas» y §7.3.5): cada operación de un administrador sobre el
+    catálogo —alta, modificación, cambio de balance, importación de diseño,
+    suspensión, reactivación y reversión de un producto; alta y retiro de un
+    recurso gráfico; publicación, edición y retiro de un banner— queda con su
+    momento, quién la hizo, el tipo, lo afectado y su nombre, los valores
+    antes y después, el motivo y la IP. (1) `GET
+    /api/v1/productos/auditoria/operaciones` las entrega por lotes a la
+    bitácora central (ms-cumplimiento), que las guarda inmutables y es donde
+    las consulta el Super Administrador: solo con token de servicio y solo
+    para los servicios autorizados (403 a cualquier otro y a cualquier
+    usuario). (2) `Banner` gana `creadoPor` y `modificadoPor` (opcionales:
+    los anteriores no los tienen). (3) `retirarBanner` admite `motivo`
+    opcional. (4) `GET /api/v1/banners/{id}/historial`, el historial de un
+    banner para la administración, sin la IP. Todo aditivo: versión menor.
 servers:
   - url: /
     description: Servicio publicado en el mismo origen configurado por la plataforma.
@@ -203,17 +250,144 @@ paths:
     delete:
       summary: Retira un banner sin eliminar su registro
       operationId: retirarBanner
+      description: >
+        Retiro lógico: deja de mostrarse y su registro se conserva. Retirar
+        uno ya retirado no cambia nada. Desde 1.12.0 (SA-18) queda en el
+        historial del banner y en la bitácora central con quien lo retiró,
+        desde qué IP y el `motivo` si se escribió.
       security:
         - BearerAuth: []
+      parameters:
+        - name: motivo
+          in: query
+          required: false
+          description: Por qué se retira (1.12.0). Queda en el historial del banner.
+          schema:
+            type: string
+            maxLength: 500
       responses:
         "204":
           description: Banner retirado
+        "400":
+          description: El motivo pasa de 500 caracteres
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           description: Token Bearer ausente, invalido o expirado
         "403":
           description: Se requiere rol de administracion
         "404":
           description: Banner inexistente
+
+  /api/v1/banners/{id}/historial:
+    get:
+      summary: Historial de un banner (1.12.0)
+      operationId: consultarHistorialBanner
+      description: >
+        Lo que se hizo con el banner —publicación, ediciones y retiro—, de lo
+        más reciente a lo más antiguo, con quién lo hizo (`uid`), sus valores
+        antes y después y el motivo. Para la administración del catálogo
+        (ADMINISTRADOR y SUPER_ADMINISTRADOR). No lleva la IP de quien actuó:
+        esa solo la ve el Super Administrador en la bitácora central (§7.3.5).
+        Los banners anteriores a 1.12.0 empiezan su historial con el primer
+        cambio que se les hizo después.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: El historial del banner, posiblemente vacío
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperacionDelCatalogo"
+        "401":
+          description: Token Bearer ausente, invalido o expirado
+        "403":
+          description: Se requiere rol de administracion
+        "404":
+          description: Banner inexistente
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/auditoria/operaciones:
+    get:
+      summary: Operaciones administrativas del catálogo para la bitácora central (1.12.0)
+      operationId: consultarOperacionesAdministrativas
+      description: >
+        Las operaciones de los administradores sobre el catálogo, para que la
+        bitácora central (ms-cumplimiento) las guarde en su registro
+        inmutable (§7.3.5). Solo con token de servicio (rol SERVICIO, ADR-005)
+        y, de los servicios, solo los autorizados por configuración
+        (`productos.auditoria.lectores`, por omisión `ms-cumplimiento`): cada
+        operación lleva quién actuó y desde qué IP. Otro servicio o cualquier
+        usuario —también un Super Administrador, que las lee en la bitácora—
+        recibe 403.
+
+        Sin `desde`, desde la primera operación (la bitácora las necesita
+        todas, no una línea base). Con `desde`, las de `ocurridaEn` en
+        (desde, ahora], de la más antigua a la más reciente. El resto de las
+        reglas son las de `consultarCambiosDelCatalogo`: `hasta` es la marca
+        de la última entregada (o el propio `desde`), el lote nunca parte un
+        grupo con la misma marca de tiempo y `completo` es false si quedaron
+        operaciones por entregar.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: desde
+          in: query
+          required: false
+          description: Punto de lectura exclusivo; sin él, desde la primera operación.
+          schema:
+            type: string
+            format: date-time
+        - name: limite
+          in: query
+          required: false
+          description: Cuántas operaciones como máximo por lote (sin partir una marca de tiempo).
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 100
+      responses:
+        "200":
+          description: Lote de operaciones administrativas
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoteDeOperacionesAdministrativas"
+        "400":
+          description: "`desde` no es una fecha y hora válida o `limite` no está entre 1 y 200"
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: >
+            El token no es de un servicio, o es de un servicio que no está
+            autorizado a leer las operaciones
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
 
   /api/v1/productos/alertas/inicio-sesion:
     get:
@@ -424,8 +598,9 @@ paths:
       operationId: crearProducto
       description: >
         Operación permitida únicamente a los roles ADMINISTRADOR y
-        SUPER_ADMINISTRADOR. El identificador, el estado inicial ACTIVO,
-        la versión y las fechas son generados por el sistema.
+        SUPER_ADMINISTRADOR. El identificador, la versión y las fechas los
+        genera el sistema. El estado inicial es ACTIVO salvo que el alta pida
+        UNICO (1.11.0); SUSPENDIDO no es un estado inicial (400).
       security:
         - BearerAuth: []
       requestBody:
@@ -607,6 +782,505 @@ paths:
               schema:
                 $ref: "#/components/schemas/DetalleDeProblema"
 
+  /api/v1/productos/recursos:
+    get:
+      summary: Lista la biblioteca de recursos gráficos
+      operationId: listarRecursosGraficos
+      description: >
+        HU-PRD-009 (1.10.0). De lo más reciente a lo más antiguo, 16 por
+        página por omisión, sin los bytes (se piden por `url`). Por omisión
+        solo los que siguen en la biblioteca; `incluirRetirados` trae también
+        los retirados. Cada recurso dice qué productos lo usan hoy como
+        imagen. Solo ADMINISTRADOR y SUPER_ADMINISTRADOR.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: clase
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ClaseDeRecurso"
+        - name: productoId
+          in: query
+          required: false
+          description: Solo los asociados a este producto al subirlos.
+          schema:
+            type: string
+        - name: incluirRetirados
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 16
+      responses:
+        "200":
+          description: Una página de la biblioteca
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginaDeRecursos"
+        "400":
+          description: Clase, página o tamaño inválidos
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+    post:
+      summary: Sube un recurso gráfico
+      operationId: subirRecursoGrafico
+      description: >
+        HU-PRD-009 (1.10.0). El formato se decide por la firma de bytes, nunca
+        por el nombre ni por el Content-Type declarado. Cada clase admite sus
+        formatos (IMAGEN: PNG, JPEG o WebP fijos; ICONO: PNG o WebP fijos;
+        ANIMACION: GIF, PNG animado o WebP animado) y tiene un peso y un lado
+        máximos configurables (por omisión 2 MB y 4096 px, 256 KB y 512 px, 4
+        MB y 1024 px). El archivo tiene que estar completo: ni cortado ni con
+        nada pegado detrás. El mismo archivo, de la misma clase y para el
+        mismo producto, no se guarda dos veces (200 con el que había). Solo
+        ADMINISTRADOR y SUPER_ADMINISTRADOR.
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo, clase]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+                clase:
+                  $ref: "#/components/schemas/ClaseDeRecurso"
+                productoId:
+                  type: string
+                  description: El producto al que se asocia (opcional).
+      responses:
+        "201":
+          description: Recurso guardado
+          headers:
+            Location:
+              description: La url del recurso
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecursoGrafico"
+        "200":
+          description: El mismo archivo ya estaba; se devuelve ese recurso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecursoGrafico"
+        "400":
+          description: >
+            Sin archivo (`motivo` ARCHIVO_AUSENTE) o con una clase que no es
+            una de las tres (CLASE_INVALIDA)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: El producto al que se quiere asociar no existe
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "413":
+          description: >
+            Pesa o mide más de lo admitido para su clase (`motivo`
+            DEMASIADO_GRANDE o DIMENSIONES_EXCEDIDAS)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "415":
+          description: >
+            No es un formato admitido para su clase, está dañado o, siendo una
+            animación, es una imagen fija (`motivo` FORMATO_NO_ADMITIDO,
+            ARCHIVO_DANADO o SIN_ANIMACION)
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/recursos/{recursoId}:
+    get:
+      summary: Sirve los bytes de un recurso gráfico
+      operationId: obtenerRecursoGrafico
+      description: >
+        HU-PRD-009 (1.10.0). Público: es la imagen que enseña la tienda. Con
+        el tipo detectado al subirlo, `X-Content-Type-Options: nosniff`,
+        `Content-Security-Policy: default-src 'none'`, `ETag` y caché larga e
+        inmutable (el identificador no cambia nunca). Un recurso retirado se
+        sigue sirviendo: una versión anterior del diseño puede apuntar a él.
+      parameters:
+        - $ref: "#/components/parameters/RecursoId"
+        - name: If-None-Match
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Los bytes del recurso
+          content:
+            image/png:
+              schema:
+                type: string
+                format: binary
+            image/jpeg:
+              schema:
+                type: string
+                format: binary
+            image/webp:
+              schema:
+                type: string
+                format: binary
+            image/gif:
+              schema:
+                type: string
+                format: binary
+        "304":
+          description: El cliente ya tiene esta versión (misma ETag)
+        "404":
+          description: No existe ese recurso
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+    delete:
+      summary: Retira un recurso de la biblioteca
+      operationId: retirarRecursoGrafico
+      description: >
+        HU-PRD-009 (1.10.0). Lo saca de la biblioteca con quién, cuándo y por
+        qué; nunca borra sus bytes. Retirar uno ya retirado no cambia nada. No
+        se retira la imagen actual de un producto (409). Solo ADMINISTRADOR y
+        SUPER_ADMINISTRADOR.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/RecursoId"
+        - name: motivo
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+      responses:
+        "200":
+          description: Recurso retirado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecursoGrafico"
+        "400":
+          description: El motivo pasa de 500 caracteres
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe ese recurso
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: Es la imagen actual de un producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/historial:
+    get:
+      summary: Consulta el historial inmutable de cambios de un producto
+      operationId: consultarHistorialProducto
+      description: >
+        HU-PRD-007. Devuelve los cambios del más reciente al más antiguo con
+        autor, fecha, versiones y referencia de reversión. El historial es de
+        solo lectura: no se publican operaciones para modificarlo o eliminarlo.
+        `revertible` solo es verdadero cuando el cambio produjo la versión
+        actual; así una reversión no pisa adquisiciones ni otros cambios
+        posteriores.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Historial del producto, posiblemente vacío
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CambioProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/reversiones:
+    post:
+      summary: Revierte un producto al estado respaldado
+      operationId: revertirProducto
+      description: >
+        HU-PRD-007. Restaura el contenido exacto del respaldo y registra la
+        reversión como una nueva entrada de auditoría, conservando la versión
+        técnica y el autor de esta nueva escritura. Las unidades de inventario
+        guardan el productoId, por lo que vuelven a proyectar el estado
+        restaurado sin una escritura distribuida. Solo se admite el respaldo
+        que corresponde a la versión actual.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudRevertirProducto"
+      responses:
+        "200":
+          description: Producto restaurado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: La solicitud no incluye respaldoId
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto o el respaldo no le pertenece
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: El producto cambió después de crear el respaldo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/versiones:
+    get:
+      summary: Consulta las versiones del diseño de un producto
+      operationId: consultarVersionesDiseno
+      description: >
+        HU-PRD-011. Lista la versión actual y los diseños anteriores que
+        cambiaron la imagen o la descripción, con fecha y autor. Solo está
+        disponible para administradores del catálogo.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Versiones del diseño, de la más reciente a la más antigua
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/VersionDisenoProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/plantilla:
+    get:
+      summary: Exporta el diseño actual como una plantilla JSON
+      operationId: exportarPlantillaDiseno
+      description: >
+        HU-PRD-011. Devuelve un documento portable y versionado. No contiene
+        identidad, tipo, precios, tiraje ni reglas de combate del producto.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      responses:
+        "200":
+          description: Plantilla del diseño actual
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlantillaDisenoProducto"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
+  /api/v1/productos/{id}/diseno/importaciones:
+    post:
+      summary: Importa una plantilla sobre otro producto
+      operationId: importarPlantillaDiseno
+      description: >
+        HU-PRD-011. Aplica únicamente la imagen y la descripción de la
+        plantilla. La modificación queda en el historial; una plantilla con
+        formato, versión o campos inválidos se rechaza antes de escribir.
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ProductoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlantillaDisenoProducto"
+      responses:
+        "200":
+          description: Producto destino con el diseño importado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductoCreado"
+        "400":
+          description: La plantilla es inválida o usa una versión no compatible
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "401":
+          description: Token Bearer ausente, inválido o expirado
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "403":
+          description: El usuario no administra el catálogo
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "404":
+          description: No existe el producto destino
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+        "409":
+          description: El producto cambió mientras se importaba el diseño
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
+
   /api/v1/productos/{id}/adquisiciones:
     post:
       summary: Reserva una unidad disponible del producto
@@ -689,6 +1363,15 @@ paths:
         - BearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ProductoId"
+        - name: motivo
+          in: query
+          required: false
+          description: >
+            1.10.0 — por qué se hace (§7.2.5). Queda en la entrada del
+            historial; la consola lo exige.
+          schema:
+            type: string
+            maxLength: 500
       responses:
         "200":
           description: Producto suspendido
@@ -696,6 +1379,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EstadoDisponibilidadProducto"
+        "400":
+          description: El motivo pasa de 500 caracteres
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           description: Token Bearer ausente, inválido o expirado
           content:
@@ -728,6 +1417,15 @@ paths:
         - BearerAuth: []
       parameters:
         - $ref: "#/components/parameters/ProductoId"
+        - name: motivo
+          in: query
+          required: false
+          description: >
+            1.10.0 — por qué se hace (§7.2.5). Queda en la entrada del
+            historial; la consola lo exige.
+          schema:
+            type: string
+            maxLength: 500
       responses:
         "200":
           description: Producto reactivado
@@ -735,6 +1433,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EstadoDisponibilidadProducto"
+        "400":
+          description: El motivo pasa de 500 caracteres
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/DetalleDeProblema"
         "401":
           description: Token Bearer ausente, inválido o expirado
           content:
@@ -776,6 +1480,13 @@ components:
         type: string
         minLength: 1
         maxLength: 100
+    RecursoId:
+      name: recursoId
+      in: path
+      required: true
+      description: Identificador del recurso gráfico (1.10.0).
+      schema:
+        type: string
   securitySchemes:
     BearerAuth:
       type: http
@@ -837,6 +1548,16 @@ components:
         modificadoEn:
           type: string
           format: date-time
+        creadoPor:
+          type: string
+          description: >
+            `uid` de quien lo publicó (1.12.0). Ausente en los banners
+            publicados antes de esa versión.
+        modificadoPor:
+          type: string
+          description: >
+            `uid` de quien lo editó o retiró por última vez (1.12.0); al
+            publicarlo, el mismo que `creadoPor`.
 
     SolicitudCrearProducto:
       oneOf:
@@ -906,6 +1627,14 @@ components:
             y no es subastable.
         promocion:
           $ref: "#/components/schemas/Promocion"
+        estado:
+          type: string
+          enum: [ACTIVO, UNICO]
+          default: ACTIVO
+          description: >
+            (1.11.0, §7.2.1) La disponibilidad con la que nace: ACTIVO o
+            UNICO. Sin el campo, ACTIVO. SUSPENDIDO no es un estado inicial
+            (400).
       allOf:
         - if:
              type: object
@@ -1298,6 +2027,131 @@ components:
             format: int64
           description: Cantidad de productos para cada estado, incluidos los estados con cero.
 
+    SolicitudRevertirProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - respaldoId
+      properties:
+        respaldoId:
+          type: string
+          minLength: 1
+          description: Identificador de la entrada del historial que se quiere restaurar.
+        motivo:
+          type: string
+          maxLength: 500
+          description: >
+            1.10.0 — por qué se revierte (§7.2.5). Queda en la entrada de la
+            reversión; la consola lo exige.
+
+    CambioProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - productoId
+        - tipo
+        - autor
+        - fecha
+        - versionAnterior
+        - versionAplicada
+        - revertible
+      properties:
+        id:
+          type: string
+        productoId:
+          type: string
+          format: uuid
+        tipo:
+          type: string
+          enum: [CREACION, MODIFICACION, SUSPENSION, REACTIVACION, REVERSION, IMPORTACION_DISENO]
+        campos:
+          type: array
+          description: Campos de negocio que cambiaron entre los dos estados auditados.
+          items:
+            type: string
+        autor:
+          type: string
+          description: uid estable del administrador que ejecutó el cambio.
+        fecha:
+          type: string
+          format: date-time
+        versionAnterior:
+          type: integer
+          minimum: 0
+          description: Cero en la creación, cuando todavía no existía una versión anterior.
+        versionAplicada:
+          type: integer
+          minimum: 1
+        reversionDe:
+          type: string
+          description: Entrada restaurada cuando el tipo es REVERSION.
+        revertible:
+          type: boolean
+          description: Indica si esta entrada produjo la versión actual y puede revertirse sin pisar otro cambio.
+        motivo:
+          type: string
+          description: >
+            1.10.0 — por qué se suspendió, reactivó o revirtió, como lo
+            escribió quien lo hizo. Las modificaciones y las entradas
+            anteriores no lo traen.
+
+    VersionDisenoProducto:
+      type: object
+      additionalProperties: false
+      required: [version, fecha, autor, imagen, descripcion, actual]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        fecha:
+          type: string
+          format: date-time
+        autor:
+          type: string
+        imagen:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+          minLength: 1
+        actual:
+          type: boolean
+
+    PlantillaDisenoProducto:
+      type: object
+      additionalProperties: false
+      required:
+        - formato
+        - versionFormato
+        - productoOrigenId
+        - versionProducto
+        - imagen
+        - descripcion
+        - exportadaEn
+      properties:
+        formato:
+          type: string
+          const: nexus-producto-diseno
+        versionFormato:
+          type: integer
+          const: 1
+        productoOrigenId:
+          type: string
+          minLength: 1
+        versionProducto:
+          type: integer
+          minimum: 1
+        imagen:
+          type: string
+          minLength: 1
+        descripcion:
+          type: string
+          minLength: 1
+        exportadaEn:
+          type: string
+          format: date-time
+
     ProductoCreado:
       description: >
         Un producto del catalogo. Desde 1.4.0 hay dos proyecciones: la
@@ -1452,6 +2306,222 @@ components:
           items:
             $ref: "#/components/schemas/AlertaCambioCatalogo"
 
+    TipoOperacionAdministrativa:
+      type: string
+      description: >
+        Lo que se hizo sobre el catálogo (1.12.0). La bitácora central lo
+        traduce a sus propios tipos de acción.
+      enum:
+        - ALTA_PRODUCTO
+        - MODIFICACION_PRODUCTO
+        - CAMBIO_DE_BALANCE
+        - IMPORTACION_DE_DISENO
+        - SUSPENSION_PRODUCTO
+        - REACTIVACION_PRODUCTO
+        - REVERSION_PRODUCTO
+        - ALTA_RECURSO
+        - RETIRO_RECURSO
+        - ALTA_BANNER
+        - MODIFICACION_BANNER
+        - RETIRO_BANNER
+
+    ObjetoAuditado:
+      type: string
+      description: Sobre qué se hizo la operación (1.12.0).
+      enum: [PRODUCTO, BANNER, RECURSO_GRAFICO]
+
+    OperacionAdministrativa:
+      type: object
+      description: >
+        Una operación de un administrador sobre el catálogo (1.12.0), con lo
+        que §7.3.5 pide de cada acción administrativa.
+      required: [id, ocurridaEn, autor, tipo, objeto, objetoId, descripcion]
+      properties:
+        id:
+          type: string
+          description: Identificador estable; la bitácora lo usa como referencia para no registrarla dos veces.
+        ocurridaEn:
+          type: string
+          format: date-time
+          description: Cuándo ocurrió, con milisegundos.
+        autor:
+          type: string
+          description: "`uid` de la cuenta que la hizo."
+        tipo:
+          $ref: "#/components/schemas/TipoOperacionAdministrativa"
+        objeto:
+          $ref: "#/components/schemas/ObjetoAuditado"
+        objetoId:
+          type: string
+        nombre:
+          type: string
+          maxLength: 120
+          description: El nombre de lo afectado en ese momento (el producto, el texto del banner, el archivo).
+        valorAnterior:
+          type: string
+          description: Los campos que cambiaron, con su valor antes; ausente en un alta.
+        valorNuevo:
+          type: string
+          description: Los campos que cambiaron, con su valor después; en un alta, lo que define al objeto.
+        motivo:
+          type: string
+          maxLength: 500
+          description: El que escribió quien actuó, si lo pidió la operación (suspender, reactivar, revertir, retirar).
+        descripcion:
+          type: string
+          description: Qué se hizo, en palabras.
+        ipOrigen:
+          type: string
+          maxLength: 45
+          description: Dirección IP desde donde se hizo; ausente si no se pudo saber.
+
+    LoteDeOperacionesAdministrativas:
+      type: object
+      additionalProperties: false
+      description: Respuesta de GET /api/v1/productos/auditoria/operaciones (1.12.0).
+      required: [hasta, completo, operaciones]
+      properties:
+        hasta:
+          type: string
+          format: date-time
+          description: Hasta dónde llega el lote; se envía como `desde` la vez siguiente.
+        completo:
+          type: boolean
+          description: false si quedaron operaciones posteriores a `hasta` sin entregar.
+        operaciones:
+          type: array
+          description: De la más antigua a la más reciente.
+          items:
+            $ref: "#/components/schemas/OperacionAdministrativa"
+
+    OperacionDelCatalogo:
+      type: object
+      description: >
+        Una entrada del historial de un banner (1.12.0): la operación sin la
+        IP de quien actuó.
+      required: [id, fecha, autor, tipo, descripcion]
+      properties:
+        id:
+          type: string
+        fecha:
+          type: string
+          format: date-time
+        autor:
+          type: string
+          description: "`uid` de la cuenta que la hizo."
+        tipo:
+          $ref: "#/components/schemas/TipoOperacionAdministrativa"
+        valorAnterior:
+          type: string
+        valorNuevo:
+          type: string
+        motivo:
+          type: string
+        descripcion:
+          type: string
+
+    ClaseDeRecurso:
+      type: string
+      description: >
+        1.10.0 — las tres clases de §7.2.3: IMAGEN (PNG, JPEG o WebP fijos),
+        ICONO (PNG o WebP fijos) y ANIMACION (GIF, PNG animado o WebP animado).
+      enum: [IMAGEN, ICONO, ANIMACION]
+
+    RecursoGrafico:
+      type: object
+      additionalProperties: false
+      description: Un recurso gráfico de la biblioteca, sin sus bytes (1.10.0).
+      required:
+        - id
+        - clase
+        - formato
+        - tipoContenido
+        - bytes
+        - ancho
+        - alto
+        - nombre
+        - url
+        - subidoPor
+        - subidoEn
+        - usadoEn
+      properties:
+        id:
+          type: string
+        clase:
+          $ref: "#/components/schemas/ClaseDeRecurso"
+        formato:
+          type: string
+          enum: [PNG, JPEG, WEBP, GIF]
+        tipoContenido:
+          type: string
+          enum: [image/png, image/jpeg, image/webp, image/gif]
+        bytes:
+          type: integer
+          minimum: 1
+        ancho:
+          type: integer
+          minimum: 1
+        alto:
+          type: integer
+          minimum: 1
+        nombre:
+          type: string
+          description: El nombre del archivo, saneado; solo para reconocerlo.
+        productoId:
+          type: string
+          description: El producto al que se asoció al subirlo.
+        url:
+          type: string
+          description: Ruta pública de sus bytes; es lo que se guarda en `imagen`.
+        subidoPor:
+          type: string
+          description: uid de quien lo subió.
+        subidoEn:
+          type: string
+          format: date-time
+        retiradoEn:
+          type: string
+          format: date-time
+        retiradoPor:
+          type: string
+        motivoRetiro:
+          type: string
+        usadoEn:
+          type: array
+          description: Los productos que hoy lo tienen como imagen.
+          items:
+            type: object
+            additionalProperties: false
+            required: [productoId, nombre]
+            properties:
+              productoId:
+                type: string
+              nombre:
+                type: string
+
+    PaginaDeRecursos:
+      type: object
+      additionalProperties: false
+      required: [content, page, size, totalElements, totalPages]
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecursoGrafico"
+        page:
+          type: integer
+          minimum: 0
+        size:
+          type: integer
+          minimum: 1
+        totalElements:
+          type: integer
+          format: int64
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+
     DetalleDeProblema:
       type: object
       description: Formato estándar de detalles de problema (RFC 9457).
@@ -1473,3 +2543,10 @@ components:
           type: string
         instance:
           type: string
+        motivo:
+          type: string
+          description: >
+            1.10.0 — en los recursos gráficos, el requisito incumplido como
+            código (ARCHIVO_AUSENTE, CLASE_INVALIDA, DEMASIADO_GRANDE,
+            DIMENSIONES_EXCEDIDAS, FORMATO_NO_ADMITIDO, ARCHIVO_DANADO,
+            SIN_ANIMACION).

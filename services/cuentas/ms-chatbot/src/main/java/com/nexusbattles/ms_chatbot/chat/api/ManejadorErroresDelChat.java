@@ -1,9 +1,11 @@
 package com.nexusbattles.ms_chatbot.chat.api;
 
+import com.nexusbattles.ms_chatbot.chat.entrada.InyeccionDetectada;
 import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionNoDisponible;
 import com.nexusbattles.ms_chatbot.chat.soporte.SesionRequeridaException;
+import com.nexusbattles.ms_chatbot.chat.soporte.SinConversacionException;
 import com.nexusbattles.ms_chatbot.chat.soporte.TicketAbiertoException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -34,6 +36,15 @@ public class ManejadorErroresDelChat {
                 "CONTENIDO_BLOQUEADO"));
     }
 
+    // 1.4.0 (7.4.8): un intento de inyeccion de codigo no se procesa ni se
+    // guarda. El detalle no repite lo que escribio ni dice que regla salto.
+    @ExceptionHandler(InyeccionDetectada.class)
+    public ResponseEntity<ProblemDetail> inyeccion(InyeccionDetectada ex) {
+        return ResponseEntity.status(HttpStatus.UNPROCESSABLE_CONTENT)
+            .body(problema(HttpStatus.UNPROCESSABLE_CONTENT, "Mensaje no permitido", ex.getMessage(),
+                "INYECCION_DETECTADA"));
+    }
+
     @ExceptionHandler(ModeracionNoDisponible.class)
     public ResponseEntity<ProblemDetail> sinModeracion(ModeracionNoDisponible ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
@@ -52,6 +63,13 @@ public class ManejadorErroresDelChat {
     public ResponseEntity<ProblemDetail> ticketAbierto(TicketAbiertoException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
             .body(problema(HttpStatus.CONFLICT, "Ya tienes un ticket abierto", ex.getMessage(), "TICKET_ABIERTO"));
+    }
+
+    // ms-chatbot.yaml 1.8.0: solicitud desde una conversacion sin preguntas.
+    @ExceptionHandler(SinConversacionException.class)
+    public ResponseEntity<ProblemDetail> sinConversacion(SinConversacionException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+            .body(problema(HttpStatus.CONFLICT, "No hay conversacion", ex.getMessage(), "SIN_CONVERSACION"));
     }
 
     private static ProblemDetail problema(HttpStatus estado, String titulo, String detalle, String motivo) {

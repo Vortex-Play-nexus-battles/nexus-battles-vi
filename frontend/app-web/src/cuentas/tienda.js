@@ -80,6 +80,7 @@ import { olvidarSesion } from '../comun/sesion.js';
 import { limpiarAviso, pintarAviso, tonoPorEstado } from '../comun/ui/aviso.js';
 import { estadoDeCarga, estadoDeError, estadoVacio } from '../comun/ui/estado-vista.js';
 import { h } from '../comun/ui/dom.js';
+import { motion } from '../comun/ui/motion.js';
 import { construirPaginacion } from '../comun/paginacion.js';
 import { abrirFicha } from '../contenido/inventario/ficha-producto.js';
 import { complementoDeOpiniones } from '../plataforma/comentarios/hilo-comentarios.js';
@@ -902,6 +903,13 @@ export async function agregarAlCarrito(productoId, doc = document) {
   olvidarIntentoDePago(doc);
   await cargarCarrito(doc);
   anunciarEnLaInsignia(doc, 'Añadido al carrito.');
+  // MOTION-3 — la insignia del carrito pulsa una vez: el ojo va a donde
+  // acaba de cambiar el numero. El texto de arriba ya lo dijo.
+  const insignia =
+    doc.querySelector('.insignia-carrito__cuenta') ?? doc.getElementById('insignia-carrito');
+  if (insignia) {
+    motion.pulse(insignia, { escala: 1.15 });
+  }
   return { ok: true };
 }
 

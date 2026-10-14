@@ -16,7 +16,14 @@ public class CrearCuentaAdminRequest {
     @NotBlank
     private String email;
 
-    @NotBlank
+    /**
+     * Obsoleto y sin efecto (ms-identidad-admin.yaml 1.6.0). La cuenta nace
+     * INACTIVA con una contrasena aleatoria y la persona fija la suya con el
+     * codigo de activacion que le llega al correo: nadie, ni el Super
+     * Administrador que la crea, conoce su contrasena. Se acepta para no
+     * romper a quien lo siga mandando, y se ignora.
+     */
+    @Deprecated
     private String password;
 
     @NotBlank

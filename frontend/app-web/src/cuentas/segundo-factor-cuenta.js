@@ -80,21 +80,34 @@ export function describirEstado(estado) {
       );
     }
     let nota = null;
-    if (typeof restantes === 'number' && restantes < POCOS_CODIGOS) {
+    // 7.3.9 — obligatoria para los roles administrativos: no se puede quitar
+    // (ms-identidad responde 409 segundo-factor-obligatorio). Si se pierde la
+    // aplicación y los códigos, la restablece un Super Administrador.
+    if (estado.obligatorio) {
+      nota = {
+        tono: typeof restantes === 'number' && restantes < POCOS_CODIGOS ? 'advertencia' : 'info',
+        titulo:
+          typeof restantes === 'number' && restantes < POCOS_CODIGOS
+            ? 'Te quedan pocos códigos de recuperación'
+            : 'Tu rol la exige',
+        detalle:
+          'Es obligatoria para tu rol y no se puede desactivar. Si pierdes tu aplicación y tus ' +
+          'códigos, pide a un Super Administrador que la restablezca.',
+      };
+    } else if (typeof restantes === 'number' && restantes < POCOS_CODIGOS) {
       nota = {
         tono: 'advertencia',
         titulo: 'Te quedan pocos códigos de recuperación',
         detalle:
           'Para tener otros nuevos, desactiva la verificación en dos pasos y vuelve a activarla.',
       };
-    } else if (estado.obligatorio) {
-      nota = {
-        tono: 'info',
-        titulo: 'Tu rol la exige',
-        detalle: 'Si la desactivas, te pediremos activarla de nuevo la próxima vez que entres.',
-      };
     }
-    return { texto: partes.join(' '), nota, puedeActivar: false, puedeDesactivar: true };
+    return {
+      texto: partes.join(' '),
+      nota,
+      puedeActivar: false,
+      puedeDesactivar: !estado.obligatorio,
+    };
   }
   if (estado.disponible === false) {
     return {

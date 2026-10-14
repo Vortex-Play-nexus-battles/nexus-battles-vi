@@ -245,6 +245,25 @@ describe('carrito', () => {
     expect(JSON.parse(opciones.body)).toEqual({ productoId: 'p1', cantidad: 1 });
     expect(globalThis.fetch).toHaveBeenCalledTimes(2);
   });
+
+  test('MOTION-3 · al añadir, la insignia del carrito pulsa una vez (y sin WAAPI no rompe)', async () => {
+    globalThis.fetch.mockResolvedValue(respuesta({ total: 0, items: [] }));
+    const insignia = document.createElement('span');
+    insignia.className = 'insignia-carrito__cuenta';
+    document.body.append(insignia);
+    const animacion = { finished: Promise.resolve(), cancel() {}, playState: 'finished' };
+    Element.prototype.animate = jest.fn(() => animacion);
+    try {
+      await agregarAlCarrito('p1', document);
+      expect(Element.prototype.animate).toHaveBeenCalledTimes(1);
+      expect(Element.prototype.animate.mock.instances[0]).toBe(insignia);
+      expect(Element.prototype.animate.mock.calls[0][0][1].transform).toBe('scale(1.15)');
+    } finally {
+      delete Element.prototype.animate;
+    }
+    // Sin Web Animations API (jsdom), lo mismo pero quieto.
+    await expect(agregarAlCarrito('p1', document)).resolves.toEqual({ ok: true });
+  });
 });
 
 describe('montarTienda', () => {

@@ -120,6 +120,8 @@ services:
       CORREO_RECUPERACION_CLAVE_URL: ${CORREO_RECUPERACION_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/recuperacion-clave}
       CORREO_CONFIRMACION_CUENTA_URL: ${CORREO_CONFIRMACION_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/confirmacion-cuenta}
       CORREO_CAMBIO_CLAVE_URL: ${CORREO_CAMBIO_CLAVE_URL:-http://srv-correo:8082/api/v1/correos/cambio-clave}
+      # SA-14 (§7.3.6): confirmacion al completar la eliminacion de la cuenta.
+      CORREO_CIERRE_CUENTA_URL: ${CORREO_CIERRE_CUENTA_URL:-http://srv-correo:8082/api/v1/correos/cierre-cuenta}
       NOTIFICACIONES_URL: ${NOTIFICACIONES_URL:-http://srv-notificaciones:8085/api/v1/internal/notifications}
       AUDITORIA_URL: ${AUDITORIA_URL:-http://srv-ms-cumplimiento:8091/api/v1/admin/auditoria/eventos}
       # R17 — alta del jugador: ms-identidad la orquesta y cada dueno hace lo
@@ -170,11 +172,18 @@ services:
       # secretos guardados no se pueden leer (solo quedarian los codigos de
       # recuperacion). Ver .env.example.
       IDENTIDAD_2FA_CLAVE: ${IDENTIDAD_2FA_CLAVE:-}
-      # Roles que no entran sin segundo factor (RF-AUT-007:
-      # SUPER_ADMINISTRADOR,ADMINISTRADOR,MODERADOR). VACIO por omision: las
-      # pruebas automaticas entran con cuentas administrativas sin el, y
-      # encenderlo es decision humana (ver .env.example).
-      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ${IDENTIDAD_2FA_OBLIGATORIO_ROLES:-}
+      # Roles que no entran sin segundo factor (RF-AUT-007, 7.3.9). Desde
+      # SA-1 los tres roles administrativos por omision: una cuenta
+      # administrativa sin el se enrola en su siguiente inicio de sesion. Las
+      # pruebas automaticas entran con las cuentas de ADMINS_QA (abajo), que
+      # ya lo tienen enrolado. Ver .env.example.
+      IDENTIDAD_2FA_OBLIGATORIO_ROLES: ${IDENTIDAD_2FA_OBLIGATORIO_ROLES:-MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR}
+      # 7.3.9 — cuentas administrativas de PRUEBAS (Moderador, Administrador
+      # y Super Administrador) con el secreto TOTP ya enrolado, para el smoke
+      # de AWS DEV. Solo fuera de produccion: con el perfil prod se ignoran.
+      # Formato apodo|correo|clave|secretoTotpBase32|ROL separadas por ";".
+      # Llega del secreto de Actions ADMINS_QA_DEV; vacio = ninguna.
+      ADMINS_QA: ${ADMINS_QA:-}
       # R9.5 — origenes CORS. Antes eran comodin escrito en WebSecurityConfig;
       # ahora son configuracion (regla 10). Vacio = la lista de desarrollo que
       # trae el servicio, que es restrictiva pero utilizable: en AWS el

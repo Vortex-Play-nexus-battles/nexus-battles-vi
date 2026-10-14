@@ -12,6 +12,7 @@
 import { crearBandeja } from './bandeja.js';
 import { identificadorDeSesion, leerSesion } from './cliente-notificaciones.js';
 import { textoDeContador } from './campana.js';
+import { motion } from '../../comun/ui/motion.js';
 
 /** Más de esto no cabe en el círculo de la campana. */
 export const TOPE_VISIBLE = 99;
@@ -50,11 +51,18 @@ export function montarContadorDeCabecera(
   const campana = contador.closest('a, button');
   const crear = fabrica ?? ((callbacks) => crearBandeja({ usuarioId, sesionId, ...callbacks }));
 
+  let cuentaAnterior = 0;
   const bandeja = crear({
     alCambiar({ noLeidas }) {
       const cuenta = Number.isFinite(noLeidas) && noLeidas > 0 ? noLeidas : 0;
       contador.textContent = textoDelNumero(cuenta);
       contador.hidden = cuenta === 0;
+      // MOTION-3 — un pulso (uno) cuando llega algo nuevo; nunca al bajar ni
+      // al poner al dia la misma cuenta. El numero y el aria-label ya lo dicen.
+      if (cuenta > cuentaAnterior) {
+        motion.pulse(contador, { escala: 1.2 });
+      }
+      cuentaAnterior = cuenta;
       campana?.setAttribute(
         'aria-label',
         `Notificaciones: ${textoDeContador(cuenta).toLowerCase()}`,

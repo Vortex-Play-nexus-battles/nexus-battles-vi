@@ -18,12 +18,10 @@ import java.time.LocalDate;
 //
 // El periodo son dias completos en hora de Colombia, 'desde' y 'hasta'
 // inclusive (formato ISO, 2026-09-30). Sin fechas: los ultimos 30 dias,
-// terminando hoy.
+// terminando hoy (PeriodoDelPanel, el mismo de las preguntas sin respuesta).
 @RestController
 @RequestMapping("/chatbot/admin/analiticas")
 public class AnaliticaChatbotController {
-
-    static final int DIAS_POR_DEFECTO = 30;
 
     private static final MediaType TEXTO_CSV = MediaType.parseMediaType("text/csv;charset=UTF-8");
 
@@ -38,7 +36,7 @@ public class AnaliticaChatbotController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
 
-        Periodo periodo = Periodo.resolver(desde, hasta);
+        PeriodoDelPanel periodo = PeriodoDelPanel.resolver(desde, hasta);
         return analiticaChatbotService.calcular(periodo.desde(), periodo.hasta(),
             AnaliticaChatbotService.ZONA_POR_DEFECTO);
     }
@@ -48,7 +46,7 @@ public class AnaliticaChatbotController {
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate desde,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate hasta) {
 
-        Periodo periodo = Periodo.resolver(desde, hasta);
+        PeriodoDelPanel periodo = PeriodoDelPanel.resolver(desde, hasta);
         AnaliticaChatbot analitica = analiticaChatbotService.calcular(periodo.desde(), periodo.hasta(),
             AnaliticaChatbotService.ZONA_POR_DEFECTO);
 
@@ -58,14 +56,5 @@ public class AnaliticaChatbotController {
             .header(HttpHeaders.CONTENT_DISPOSITION,
                 ContentDisposition.attachment().filename(nombreArchivo).build().toString())
             .body(ExportadorCsvAnaliticas.aCsv(analitica, periodo.desde(), periodo.hasta()));
-    }
-
-    private record Periodo(LocalDate desde, LocalDate hasta) {
-
-        static Periodo resolver(LocalDate desde, LocalDate hasta) {
-            LocalDate fin = hasta != null ? hasta : LocalDate.now(AnaliticaChatbotService.ZONA_POR_DEFECTO);
-            LocalDate inicio = desde != null ? desde : fin.minusDays(DIAS_POR_DEFECTO - 1L);
-            return new Periodo(inicio, fin);
-        }
     }
 }

@@ -37,7 +37,9 @@ async function escribir(ruta, metodo, identidad, cuerpo, fetchImpl) {
       'Content-Type': 'application/json',
       'X-User-Name': identidadNormalizada(identidad),
     },
-    body: JSON.stringify(cuerpo),
+    // Un DELETE no lleva cuerpo: enviar "null" haria que el servicio
+    // intentara leerlo como JSON.
+    body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
   });
   if (!respuesta.ok) {
     const fallo = new Error(`El servicio de inventario respondio ${respuesta.status} al guardar`);
@@ -65,28 +67,39 @@ async function detalleDelProblema(respuesta) {
   }
 }
 
+/** Las dos vitrinas de «Mi inventario» que el servicio pagina por separado (1.7.0). */
+export const CATEGORIAS = Object.freeze({ HEROES: 'HEROES', OBJETOS: 'OBJETOS' });
+
 /**
  * Consulta una pagina del inventario propio.
  *
  * @param {string} identidad jugador autenticado, que viaja en la cabecera.
  * @param {number} numeroPagina pagina pedida, desde cero.
- * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ * @param {{fetchImpl?: Function, categoria?: 'HEROES'|'OBJETOS'}} opciones
+ *   `categoria` (inventario.yaml 1.7.0) pide solo los heroes o solo los
+ *   objetos, en paginas de dieciseis; sin ella, el inventario entero.
+ *   `fetchImpl`, inyeccion para las pruebas.
  * @returns {Promise<object>} la pagina tal como la entrega el servicio.
  */
 export async function consultarPagina(
   identidad,
   numeroPagina = 0,
-  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor, categoria } = {},
 ) {
   const propietario = identidadNormalizada(identidad);
   const pagina = numeroPagina ?? 0;
   if (!Number.isInteger(pagina) || pagina < 0) {
     throw new RangeError('El número de página no puede ser negativo');
   }
+  if (categoria !== undefined && !Object.values(CATEGORIAS).includes(categoria)) {
+    throw new RangeError(`Categoría de inventario desconocida: ${categoria}`);
+  }
 
   // La identidad viaja en la cabecera y nunca en la ruta: asi un jugador no
   // puede pedir el inventario de otro cambiando la URL.
-  const url = `${RUTA}?pagina=${pagina}`;
+  const url = categoria
+    ? `${RUTA}?pagina=${pagina}&categoria=${categoria}`
+    : `${RUTA}?pagina=${pagina}`;
   const respuesta = await fetchImpl(url, {
     headers: { 'X-User-Name': propietario },
   });
@@ -249,6 +262,35 @@ export async function modificarElemento(
     'PATCH',
     identidad,
     { nombrePropio: nombrePropio.trim() },
+    fetchImpl,
+  );
+}
+
+/**
+ * Retira un elemento del inventario del jugador autenticado (HU-INV-008).
+ *
+ * Quien decide si se puede es el servicio: rechaza el elemento que esta en una
+ * mision, el publicado en una subasta, el que el heroe lleva puesto y el que
+ * no es de quien pide. Aqui solo se manda la peticion y se deja subir el fallo
+ * con su detalle, para que la vista explique el motivo en lugar del codigo.
+ *
+ * @param {string} identidad jugador autenticado, que viaja en la cabecera.
+ * @param {string} elementoId elemento a retirar.
+ * @param {{fetchImpl?: Function}} opciones inyeccion para las pruebas.
+ */
+export async function eliminarElemento(
+  identidad,
+  elementoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  if (!textoObligatorio(elementoId)) {
+    throw new TypeError('El elemento es obligatorio');
+  }
+  return escribir(
+    `${RUTA}/${encodeURIComponent(elementoId.trim())}`,
+    'DELETE',
+    identidad,
+    undefined,
     fetchImpl,
   );
 }

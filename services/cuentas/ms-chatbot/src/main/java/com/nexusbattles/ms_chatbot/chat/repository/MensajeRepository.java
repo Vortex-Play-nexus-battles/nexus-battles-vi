@@ -58,6 +58,12 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     Optional<Mensaje> findFirstByConversacionIdAndRemitenteAndFechaEnvioLessThanEqualOrderByFechaEnvioDesc(
         UUID conversacionId, Remitente remitente, Instant fechaEnvio);
 
+    // 1.5.0 (seguimiento del dialogo): la ultima respuesta del bot en esta
+    // conversacion; «mas detalle» o «en ingles» se refieren a ella. Solo la
+    // conversacion de quien pregunta: la clave sale de su identidad verificada.
+    Optional<Mensaje> findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(
+        String identificadorSesion, Remitente remitente);
+
     // HU-CHA-012 (analiticas). Todas filtran por [desde, hasta) sobre
     // fecha_envio, que tiene indice desde V4. Devuelven proyecciones livianas,
     // no entidades completas, porque solo se cuentan y se agrupan.
@@ -73,10 +79,12 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
                                                   @Param("hasta") Instant hasta);
 
     // Solo respuestas medidas (escalado no nulo): las anteriores a V4 no
-    // tienen estos datos y distorsionarian la tasa de resolucion.
+    // tienen estos datos y distorsionarian el tiempo y los escalamientos.
+    // 1.7.0: con su resultado (null antes de V13), del que sale la tasa de
+    // resolucion.
     @Query("""
         select new com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta(
-            m.fechaEnvio, m.escalado, m.tiempoRespuestaMs)
+            m.fechaEnvio, m.escalado, m.tiempoRespuestaMs, m.resultado)
         from Mensaje m
         where m.remitente = :remitente
           and m.escalado is not null

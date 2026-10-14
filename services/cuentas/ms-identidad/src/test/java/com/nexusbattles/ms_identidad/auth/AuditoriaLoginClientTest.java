@@ -97,6 +97,43 @@ class AuditoriaLoginClientTest {
     }
 
     @Test
+    @DisplayName("7.3.9: el bloqueo por intentos fallidos llega con la cuenta (uid), el estado nuevo y la ip")
+    void bloqueoLlegaConLaCuentaYLaIp() {
+        AuditoriaLoginClient cliente = new AuditoriaLoginClient(url(), credencialQuePone("token-de-servicio"));
+
+        cliente.registrarBloqueo("2f0c5a5e-uid", "10.0.0.9");
+
+        assertEquals("Bearer token-de-servicio", autorizacionRecibida.get());
+        String cuerpo = cuerpoRecibido.get();
+        assertTrue(cuerpo.contains("\"afectado\":\"2f0c5a5e-uid\""), cuerpo);
+        assertTrue(cuerpo.contains("\"valorNuevo\":\"BLOQUEADA_TEMPORALMENTE\""), cuerpo);
+        assertTrue(cuerpo.contains("\"motivo\":\"BLOQUEO_POR_INTENTOS_FALLIDOS\""), cuerpo);
+        assertTrue(cuerpo.contains("\"ipOrigen\":\"10.0.0.9\""), cuerpo);
+        assertTrue(cuerpo.contains("\"administradorId\":\"ms-identidad\""), cuerpo);
+    }
+
+    @Test
+    @DisplayName("7.3.9: sin ip conocida el bloqueo dice DESCONOCIDA, nunca un campo vacio")
+    void bloqueoSinIp() {
+        AuditoriaLoginClient cliente = new AuditoriaLoginClient(url(), credencialQuePone("token-de-servicio"));
+
+        cliente.registrarBloqueo("uid-x", " ");
+
+        assertTrue(cuerpoRecibido.get().contains("\"ipOrigen\":\"DESCONOCIDA\""), cuerpoRecibido.get());
+    }
+
+    @Test
+    @DisplayName("7.3.9: si cumplimiento no registra el bloqueo, la cuenta sigue bloqueada: no se lanza nada")
+    void bloqueoSinCumplimientoNoLanza() {
+        respuesta = 503;
+        AuditoriaLoginClient cliente = new AuditoriaLoginClient(url(), credencialQuePone("token-de-servicio"));
+        assertDoesNotThrow(() -> cliente.registrarBloqueo("uid-x", "10.0.0.9"));
+
+        cumplimiento.stop(0);
+        assertDoesNotThrow(() -> cliente.registrarBloqueo("uid-x", null));
+    }
+
+    @Test
     @DisplayName("sin cumplimiento escuchando, tampoco se lanza nada (fail-safe)")
     void sinCumplimiento() {
         cumplimiento.stop(0);

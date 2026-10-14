@@ -26,10 +26,12 @@
  * iría al título del paso en el informe).
  *
  * El banco arranca ms-identidad con una clave de cifrado de PRUEBAS
- * (tests/e2e/compose.yml) y la obligatoriedad por rol apagada, igual que DEV.
+ * (tests/e2e/compose.yml). Desde 7.3.9 el segundo factor es obligatorio para
+ * los roles administrativos; para una jugadora sigue siendo opcional, que es
+ * lo que se recorre aquí (lo obligatorio, en seguridad-administrativa.e2e.spec.js).
  */
 
-import { createHmac, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 
 import { expect, test, request as apiRequest } from '@playwright/test';
 
@@ -40,53 +42,11 @@ import {
   sesionDe,
   tipoDe,
 } from './ayudantes/cuentas.js';
+import { pasoDe, totp } from './ayudantes/totp.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const MI_CUENTA = '/frontend/app-web/src/cuentas/perfil.html';
 const ACEPTA = 'application/problem+json, application/json';
-
-// ------------------------------------------------------------------ TOTP
-
-const BASE32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-
-/** RFC 4648 sin relleno, como la da el servidor. */
-function bytesDeBase32(texto) {
-  const bytes = [];
-  let acumulado = 0;
-  let bits = 0;
-  for (const letra of texto.replace(/[\s=]/g, '').toUpperCase()) {
-    const valor = BASE32.indexOf(letra);
-    if (valor < 0) {
-      throw new Error(`la clave no es base32: «${letra}»`);
-    }
-    acumulado = ((acumulado << 5) | valor) & 0xffff;
-    bits += 5;
-    if (bits >= 8) {
-      bytes.push((acumulado >>> (bits - 8)) & 0xff);
-      bits -= 8;
-    }
-  }
-  return Buffer.from(bytes);
-}
-
-/** El paso de 30 s de un instante (T0 = 0). */
-function pasoDe(instanteMs = Date.now()) {
-  return Math.floor(instanteMs / 1000 / 30);
-}
-
-/** El código de 6 dígitos de un paso (RFC 6238 sobre RFC 4226). */
-function totp(secretoBase32, paso) {
-  const contador = Buffer.alloc(8);
-  contador.writeBigUInt64BE(BigInt(paso));
-  const resumen = createHmac('sha1', bytesDeBase32(secretoBase32)).update(contador).digest();
-  const desplazamiento = resumen[resumen.length - 1] & 0x0f;
-  const binario =
-    ((resumen[desplazamiento] & 0x7f) << 24) |
-    (resumen[desplazamiento + 1] << 16) |
-    (resumen[desplazamiento + 2] << 8) |
-    resumen[desplazamiento + 3];
-  return String(binario % 1_000_000).padStart(6, '0');
-}
 
 // --------------------------------------------------------------- ayudantes
 

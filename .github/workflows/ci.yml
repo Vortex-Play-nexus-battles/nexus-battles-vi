@@ -342,6 +342,17 @@ jobs:
           python3 tests/contratos/catalogo-oficial.py
           python3 tests/contratos/catalogo-oficial.py --autoprueba
 
+      # §7.3.6 (RF-PRV-002, ADR-010): las estadisticas que analizan la
+      # plataforma salen solo agregadas. Falla si la respuesta de una de ellas
+      # declara un dato que identifica a una persona (uid, correo, apodo,
+      # nombres, IP, el id de un jugador...) o si una de la lista desaparece
+      # sin actualizarla. La autoprueba mete uno a proposito y exige verlo.
+      - name: Las estadisticas no identifican a nadie
+        shell: bash
+        run: |
+          python3 tests/contratos/estadisticas-sin-datos-personales.py
+          python3 tests/contratos/estadisticas-sin-datos-personales.py --autoprueba
+
       # Regla 2: un cambio incompatible abre version nueva. Compara cada
       # contrato tocado contra su propia version en la base de la rama, con
       # `git show`: no consulta ningun broker ni registro externo, asi que no
@@ -405,6 +416,22 @@ jobs:
       - name: Comprobar certificado.sh (HTTPS del borde, sin romper nunca el HTTP)
         shell: bash
         run: bash scripts/cd/pruebas/certificado.sh
+
+      # 6-oct: con la pagina en https://<dominio> el Origin ya no es el de la
+      # IP y los servicios lo tratan como CORS. desplegar.sh suma el dominio a
+      # las ocho listas de origenes sin quitar nada; sin dominio no toca nada.
+      # Sin red ni Docker; segundos.
+      - name: Comprobar las listas de origenes del dominio (CORS y WebSocket)
+        shell: bash
+        run: bash scripts/cd/pruebas/origenes-del-dominio.sh
+
+      # 7-oct: el paso "DNS publico del dominio" de certificado-dev.yml. Con
+      # www como CNAME del dominio murio a mitad (el destino del CNAME se
+      # tomaba por servidor de nombres) y la renovacion de despues ni empezo.
+      # Con un dig falso, sin red; segundos.
+      - name: Comprobar el DNS publico del dominio (dominio y www como CNAME)
+        shell: bash
+        run: bash scripts/cd/pruebas/dns-del-dominio.sh
 
       # R18.5: la clave de firma de ms-identidad se genera una vez en el host
       # y se reutiliza; sin ella cada despliegue suyo cerraba todas las
@@ -685,22 +712,20 @@ jobs:
         run: npm run format:check
 
       # Pruebas de aceptacion en navegador (Playwright sobre http-server con
-      # rutas simuladas, sin backend): hoy son las 46 de inventario (Grupo 2)
-      # y 45 fallan porque abren la vista sin sesion (#581). Informativo,
-      # no bloqueante, por la misma razon que ESLint/Prettier de todo el
-      # arbol: la deuda es de otro equipo y bloquear aqui pararia a los tres.
-      # Cuando #581 se cierre en verde, se vuelve bloqueante quitando
-      # `continue-on-error`.
-      - name: Aceptacion en navegador (Playwright) — informativo (#581)
+      # rutas simuladas, sin backend): las de «Mi inventario». Fueron
+      # informativas mientras 45 de 46 fallaban por abrir la vista sin sesion
+      # (#581). Desde la revision final del modulo (13-oct) pasan todas
+      # (58/58, con axe en revision-71.aceptacion.spec.js) y BLOQUEAN: una
+      # regresion de la vitrina, la paginacion de §7.1 o la ficha ya no entra
+      # en develop en silencio.
+      - name: Aceptacion en navegador (Playwright) — inventario
         if: steps.detectar.outputs.hay == 'true'
-        continue-on-error: true
         working-directory: frontend/app-web
         run: |
           npx playwright install --with-deps chromium
-          # Tiempo por prueba acotado: mientras #581 siga abierto, 45 de 46
-          # esperan a un locator que nunca llega y con 30 s cada una este
-          # paso informativo tardaba 8 minutos. 8 s bastan para las que pasan.
-          npx playwright test --config=playwright.config.js --reporter=list --timeout=8000
+          # 15 s por prueba: todas pasan en menos de 5 s; el margen es para un
+          # runner lento, no para esperar a un locator que no llega.
+          npx playwright test --config=playwright.config.js --reporter=list --timeout=15000
 
       - name: Guardar el informe de aceptacion
         if: always() && steps.detectar.outputs.hay == 'true'

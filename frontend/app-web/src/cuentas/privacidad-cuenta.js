@@ -131,6 +131,17 @@ export async function leerPaginas({ ruta, fetchImpl, parametros, extraer }) {
   return { elementos, completo: pagina >= paginas };
 }
 
+/** Comentarios por página al exportar (el servicio admite hasta 100). */
+const TAMANO_PAGINA_COMENTARIOS = 100;
+
+/** El estado de un comentario propio, en palabras (comentarios.yaml). */
+const ESTADO_DE_COMENTARIO = Object.freeze({
+  PUBLICADO: 'Publicado',
+  EN_REVISION: 'En revisión',
+  OCULTO: 'Oculto por moderación',
+  ELIMINADO: 'Eliminado',
+});
+
 /** `Page` de Spring Data: `content` y `totalPages`. */
 const pageDeSpring = (cuerpo) => ({
   lista: Array.isArray(cuerpo?.content) ? cuerpo.content : [],
@@ -610,12 +621,45 @@ export const FUENTES = Object.freeze([
     ],
   },
   {
+    // SA-14 (comentarios.yaml 1.16.0, §7.3.6): los comentarios propios, en
+    // todos sus estados, también los ocultos por moderación y los retirados.
     id: 'comentarios',
     titulo: 'Tus comentarios',
     modulo: 'Comentarios',
     finalidad: 'Publicar tus opiniones y calificaciones de los productos.',
-    sinConsulta:
-      'El servicio de comentarios todavía no ofrece una consulta de los comentarios de una persona, así que no podemos reunirlos aquí. Los que publicaste se ven en la página de cada producto.',
+    leer: ({ fetchImpl }) =>
+      leerPaginas({
+        ruta: '/api/v1/comentarios/mios',
+        fetchImpl,
+        parametros: (pagina) => ({
+          pagina: String(pagina),
+          tamano: String(TAMANO_PAGINA_COMENTARIOS),
+        }),
+        extraer: (cuerpo) => ({
+          lista: lista(cuerpo?.comentarios),
+          paginas: Math.ceil((Number(cuerpo?.total) || 0) / TAMANO_PAGINA_COMENTARIOS),
+        }),
+      }),
+    completo: (datos) => datos.completo,
+    resumen: (datos) => [
+      { etiqueta: 'Comentarios', valor: numero(datos.elementos.length) },
+      {
+        etiqueta: 'Publicados',
+        valor: numero(datos.elementos.filter((c) => c?.estado === 'PUBLICADO').length),
+      },
+    ],
+    detalle: (datos) => [
+      {
+        titulo: 'Comentarios',
+        columnas: ['Comentario', 'Producto', 'Estado', 'Publicado'],
+        filas: datos.elementos.map((comentario) => [
+          textoOGuion(comentario?.texto),
+          textoOGuion(comentario?.productoId),
+          ESTADO_DE_COMENTARIO[comentario?.estado] ?? textoOGuion(comentario?.estado),
+          fechaHora(comentario?.fechaPublicacion),
+        ]),
+      },
+    ],
   },
 ]);
 

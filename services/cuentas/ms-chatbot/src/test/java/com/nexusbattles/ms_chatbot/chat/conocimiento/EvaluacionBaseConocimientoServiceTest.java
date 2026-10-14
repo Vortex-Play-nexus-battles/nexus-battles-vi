@@ -1,7 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.conocimiento;
 
 import com.nexusbattles.ms_chatbot.chat.conocimiento.ResultadoEvaluacion.FalloDeCaso;
-import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
+import com.nexusbattles.ms_chatbot.chat.motor.MotoresDePrueba;
 import com.nexusbattles.ms_chatbot.chat.motor.model.CasoEvaluacion;
 import com.nexusbattles.ms_chatbot.chat.motor.model.Categoria;
 import com.nexusbattles.ms_chatbot.chat.motor.model.EstadoVersion;
@@ -35,6 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,7 +69,7 @@ class EvaluacionBaseConocimientoServiceTest {
     @BeforeEach
     void configurar() {
         servicio = new EvaluacionBaseConocimientoService(versionRepository, temaRepository, casoRepository,
-            evaluacionRepository, new MotorRespuestas(temaRepository));
+            evaluacionRepository, MotoresDePrueba.sobre(temaRepository));
 
         produccion = versionConId(1);
         produccion.ponerEnProduccion(ANTES);
@@ -116,7 +117,7 @@ class EvaluacionBaseConocimientoServiceTest {
 
     @Test
     void evaluarCandidata_sinCasosActivos_lanza409() {
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
         when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
         when(casoRepository.findByActivoTrue()).thenReturn(List.of());
 
@@ -128,7 +129,8 @@ class EvaluacionBaseConocimientoServiceTest {
 
     @Test
     void evaluarCandidata_sinCandidata_lanza409() {
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.empty());
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.BORRADOR)).thenReturn(false);
 
         assertThatThrownBy(() -> servicio.evaluarCandidata())
             .isInstanceOfSatisfying(ResponseStatusException.class,
@@ -148,10 +150,53 @@ class EvaluacionBaseConocimientoServiceTest {
         assertThat(candidata.getFechaDespliegue()).isNotNull();
         assertThat(produccion.getEstado()).isEqualTo(EstadoVersion.RETIRADA);
 
-        // La retirada se escribe ANTES que la nueva produccion (indice parcial de V4).
+        // 1.6.0: primero se bloquea produccion y despues la candidata (orden
+        // fijo, sin abrazos mortales), y la retirada se escribe ANTES que la
+        // nueva produccion (indice parcial de V4).
         InOrder orden = inOrder(versionRepository);
+        orden.verify(versionRepository).bloquearLaDeEstado(EstadoVersion.PRODUCCION);
+        orden.verify(versionRepository).bloquearLaDeEstado(EstadoVersion.BORRADOR);
         orden.verify(versionRepository).saveAndFlush(produccion);
         orden.verify(versionRepository).saveAndFlush(candidata);
+    }
+
+    // 1.6.0: otro despliegue o una reversion cambiaron produccion mientras
+    // este esperaba el bloqueo: 409 CAMBIO_CONCURRENTE, sin evaluar ni tocar nada.
+    @Test
+    void desplegar_siProduccionCambioMientrasEsperaba_lanzaCambioConcurrente() {
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.PRODUCCION)).thenReturn(true);
+
+        assertThatThrownBy(() -> servicio.desplegarCandidata()).isInstanceOf(CambioConcurrenteException.class);
+
+        verify(versionRepository, never()).bloquearLaDeEstado(EstadoVersion.BORRADOR);
+        verify(evaluacionRepository, never()).save(any());
+        verify(versionRepository, never()).saveAndFlush(any());
+    }
+
+    // Si la candidata ya no esta (la desplego otro y no hay otra), 409 de siempre.
+    @Test
+    void desplegar_sinCandidata_lanza409() {
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.BORRADOR)).thenReturn(false);
+
+        assertThatThrownBy(() -> servicio.desplegarCandidata())
+            .isInstanceOfSatisfying(ResponseStatusException.class,
+                e -> assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT));
+        verify(versionRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    void desplegar_sinProduccion_lanza409() {
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.PRODUCCION)).thenReturn(false);
+
+        assertThatThrownBy(() -> servicio.desplegarCandidata())
+            .isInstanceOfSatisfying(ResponseStatusException.class, e -> {
+                assertThat(e.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+                assertThat(e.getReason()).isEqualTo("No hay una version en produccion.");
+            });
     }
 
     // Tarea tecnica de HU-CHA-012 (paso 9): una candidata que rinde peor no
@@ -185,7 +230,7 @@ class EvaluacionBaseConocimientoServiceTest {
 
     @Test
     void programar_enElFuturo_laGuardaEnLaCandidata() {
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
         when(versionRepository.save(candidata)).thenReturn(candidata);
         Instant cuando = Instant.now().plus(Duration.ofHours(2));
 
@@ -207,28 +252,61 @@ class EvaluacionBaseConocimientoServiceTest {
     @Test
     void cancelar_quitaLaProgramacion() {
         candidata.programarDespliegue(Instant.now().plus(Duration.ofHours(1)));
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
         when(versionRepository.save(candidata)).thenReturn(candidata);
 
         assertThat(servicio.cancelarProgramacion().getDespliegueProgramadoEn()).isNull();
     }
 
     @Test
-    void desplegarSiCorresponde_sinProgramacionVencida_noHaceNada() {
-        candidata.programarDespliegue(ANTES.plus(Duration.ofHours(1)));
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+    void desplegarSiCorresponde_sinProgramacionVencida_noBloqueaNiHaceNada() {
+        when(versionRepository.existsByEstadoAndDespliegueProgramadoEnLessThanEqual(EstadoVersion.BORRADOR, ANTES))
+            .thenReturn(false);
 
         assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
 
-        verify(versionRepository, never()).reclamarDespliegueProgramado(any(), any());
+        verify(versionRepository, never()).bloquearLaDeEstado(any());
     }
 
-    // Con varias instancias, la que no la reclama no hace nada.
+    // 1.6.0: con varias instancias (o si el administrador la desplego en ese
+    // mismo momento), la que espera el bloqueo encuentra la candidata ya
+    // publicada y no hace nada.
     @Test
-    void desplegarSiCorresponde_siOtraInstanciaLaReclamo_noDespliega() {
-        candidata.programarDespliegue(ANTES);
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
-        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(0);
+    void desplegarSiCorresponde_siOtraInstanciaYaLaPublico_noHaceNada() {
+        programadaYVencida();
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.BORRADOR)).thenReturn(false);
+
+        assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
+
+        verify(versionRepository, never()).saveAndFlush(any());
+        verify(evaluacionRepository, never()).save(any());
+    }
+
+    // 1.6.0: una reversion cambio produccion mientras se esperaba: esta vuelta
+    // no hace nada; la siguiente (un minuto despues) la publica.
+    @Test
+    void desplegarSiCorresponde_siProduccionCambioMientrasEsperaba_noHaceNada() {
+        programadaYVencida();
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.PRODUCCION)).thenReturn(true);
+
+        assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
+
+        assertThat(candidata.getDespliegueProgramadoEn()).isEqualTo(ANTES);
+        verify(versionRepository, never()).saveAndFlush(any());
+        verify(versionRepository, never()).save(any());
+    }
+
+    // El administrador la reprogramo (o cancelo) mientras se esperaba.
+    @Test
+    void desplegarSiCorresponde_siYaNoEstaVencidaAlBloquearla_noHaceNada() {
+        candidata.programarDespliegue(ANTES.plus(Duration.ofHours(1)));
+        when(versionRepository.existsByEstadoAndDespliegueProgramadoEnLessThanEqual(EstadoVersion.BORRADOR, ANTES))
+            .thenReturn(true);
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
 
         assertThat(servicio.desplegarSiCorresponde(ANTES)).isEmpty();
 
@@ -239,8 +317,7 @@ class EvaluacionBaseConocimientoServiceTest {
     @Test
     void desplegarSiCorresponde_vencidaYApta_laDespliega() {
         prepararEvaluacion(copiasEnCandidata(temasDeProduccion));
-        candidata.programarDespliegue(ANTES);
-        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+        programadaYVencida();
 
         Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
 
@@ -251,14 +328,16 @@ class EvaluacionBaseConocimientoServiceTest {
         assertThat(candidata.getEstado()).isEqualTo(EstadoVersion.PRODUCCION);
         assertThat(candidata.getDespliegueProgramadoEn()).isNull();
         assertThat(produccion.getEstado()).isEqualTo(EstadoVersion.RETIRADA);
+        InOrder orden = inOrder(versionRepository);
+        orden.verify(versionRepository).bloquearLaDeEstado(EstadoVersion.PRODUCCION);
+        orden.verify(versionRepository).bloquearLaDeEstado(EstadoVersion.BORRADOR);
     }
 
     // La misma regla que el boton: una candidata que rinde peor no se publica.
     @Test
     void desplegarSiCorresponde_vencidaPeroRindePeor_quedaRechazadaYSinProgramar() {
         prepararEvaluacion(copiasEnCandidata(List.of(temasDeProduccion.get(0))));
-        candidata.programarDespliegue(ANTES);
-        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+        programadaYVencida();
 
         Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
 
@@ -275,10 +354,9 @@ class EvaluacionBaseConocimientoServiceTest {
 
     @Test
     void desplegarSiCorresponde_sinCasosActivos_quedaRechazada() {
-        candidata.programarDespliegue(ANTES);
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
-        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
-        when(versionRepository.reclamarDespliegueProgramado(candidata.getId(), ANTES)).thenReturn(1);
+        programadaYVencida();
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
         when(casoRepository.findByActivoTrue()).thenReturn(List.of());
 
         Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
@@ -290,6 +368,23 @@ class EvaluacionBaseConocimientoServiceTest {
         assertThat(candidata.getProgramacionRechazadaEn()).isEqualTo(ANTES);
     }
 
+    @Test
+    void desplegarSiCorresponde_sinProduccion_quedaRechazada() {
+        programadaYVencida();
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.PRODUCCION)).thenReturn(false);
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+
+        Optional<DespliegueProgramado> resultado = servicio.desplegarSiCorresponde(ANTES);
+
+        assertThat(resultado).hasValueSatisfying(r -> {
+            assertThat(r.desplegada()).isFalse();
+            assertThat(r.motivo()).isEqualTo("No hay una version en produccion.");
+        });
+        assertThat(candidata.getProgramacionRechazadaEn()).isEqualTo(ANTES);
+        verify(versionRepository).save(candidata);
+    }
+
     // ------------------------------------------------------------ revertir
 
     @Test
@@ -299,7 +394,7 @@ class EvaluacionBaseConocimientoServiceTest {
         anterior.retirar();
         VersionBaseConocimiento actual = versionConId(2);
         actual.ponerEnProduccion(ANTES.plusSeconds(3600));
-        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(actual));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(actual));
         when(versionRepository.findFirstByEstadoOrderByFechaDespliegueDesc(EstadoVersion.RETIRADA))
             .thenReturn(Optional.of(anterior));
 
@@ -311,13 +406,27 @@ class EvaluacionBaseConocimientoServiceTest {
         assertThat(actual.getEstado()).isEqualTo(EstadoVersion.RETIRADA);
 
         InOrder orden = inOrder(versionRepository);
+        orden.verify(versionRepository).bloquearLaDeEstado(EstadoVersion.PRODUCCION);
         orden.verify(versionRepository).saveAndFlush(actual);
         orden.verify(versionRepository).saveAndFlush(anterior);
     }
 
+    // 1.6.0: un despliegue cambio produccion mientras la reversion esperaba:
+    // no se revierte una version que el administrador no estaba viendo.
+    @Test
+    void revertir_siProduccionCambioMientrasEsperaba_lanzaCambioConcurrente() {
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.empty());
+        when(versionRepository.existsByEstado(EstadoVersion.PRODUCCION)).thenReturn(true);
+
+        assertThatThrownBy(() -> servicio.revertir()).isInstanceOf(CambioConcurrenteException.class);
+
+        verify(versionRepository, never()).findFirstByEstadoOrderByFechaDespliegueDesc(any());
+        verify(versionRepository, never()).saveAndFlush(any());
+    }
+
     @Test
     void revertir_sinVersionAnterior_lanza409() {
-        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
         when(versionRepository.findFirstByEstadoOrderByFechaDespliegueDesc(EstadoVersion.RETIRADA))
             .thenReturn(Optional.empty());
 
@@ -378,15 +487,26 @@ class EvaluacionBaseConocimientoServiceTest {
     // -------------------------------------------------------------- ayudas
 
     // Casos: dos preguntas que la base sabe responder y una que debe escalar.
+    // La candidata se bloquea siempre; produccion se bloquea al desplegar y
+    // se lee sin bloquear en la vista previa (lenient: cada prueba usa una).
     private void prepararEvaluacion(List<TemaConocimiento> temasDeCandidata) {
-        when(versionRepository.findByEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
-        when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
+        when(versionRepository.bloquearLaDeEstado(EstadoVersion.BORRADOR)).thenReturn(Optional.of(candidata));
+        lenient().when(versionRepository.bloquearLaDeEstado(EstadoVersion.PRODUCCION))
+            .thenReturn(Optional.of(produccion));
+        lenient().when(versionRepository.findByEstado(EstadoVersion.PRODUCCION)).thenReturn(Optional.of(produccion));
         when(casoRepository.findByActivoTrue()).thenReturn(List.of(
             conId(CasoEvaluacion.nuevo(PREGUNTA_PUJAS, "clave-pujas")),
             conId(CasoEvaluacion.nuevo(PREGUNTA_CONTRASENA, "clave-contrasena")),
             conId(CasoEvaluacion.nuevo(PREGUNTA_FUERA_DE_ALCANCE, null))));
         when(temaRepository.findByVersionIdOrderByTituloAsc(produccion.getId())).thenReturn(temasDeProduccion);
         when(temaRepository.findByVersionIdOrderByTituloAsc(candidata.getId())).thenReturn(temasDeCandidata);
+    }
+
+    // La tarea de cada minuto ve una publicacion vencida.
+    private void programadaYVencida() {
+        candidata.programarDespliegue(ANTES);
+        when(versionRepository.existsByEstadoAndDespliegueProgramadoEnLessThanEqual(EstadoVersion.BORRADOR, ANTES))
+            .thenReturn(true);
     }
 
     private static List<CasoEvaluacion> casosDePrueba() {

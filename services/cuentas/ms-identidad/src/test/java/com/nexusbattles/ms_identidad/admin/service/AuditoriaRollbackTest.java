@@ -53,7 +53,8 @@ class AuditoriaRollbackTest {
         UsuarioRepository usuarios = mock(UsuarioRepository.class);
         service = new AdminGestionUsuarioService(authAdminService, perfilUsuarioService, auditoriaClient,
             mock(NotificacionClient.class), usuarios, mock(ModeracionSancionesClient.class),
-            mock(ProyeccionDeSancionService.class));
+            mock(ProyeccionDeSancionService.class),
+            mock(com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorService.class));
         cuentaSinUid = new Usuario();
         cuentaSinUid.setId(USUARIO_ID);
         cuentaSinUid.setEstado("ACTIVO");
@@ -68,26 +69,26 @@ class AuditoriaRollbackTest {
     @Test
     void suspender_siAuditoriaFalla_propagaExcepcion() {
         assertThrows(IllegalStateException.class, () ->
-            service.suspenderCuenta(USUARIO_ID, LocalDateTime.now().plusDays(1), null, null, ADMIN, IP));
+            service.suspenderCuenta(USUARIO_ID, LocalDateTime.now().plusDays(1), null, null, ADMIN, "ADMINISTRADOR", IP));
     }
 
     @Test
     void banear_siAuditoriaFalla_propagaExcepcion() {
         assertThrows(IllegalStateException.class, () ->
-            service.banearCuenta(USUARIO_ID, null, null, ADMIN, IP));
+            service.banearCuenta(USUARIO_ID, null, null, ADMIN, "ADMINISTRADOR", IP));
     }
 
     @Test
     void reactivar_siAuditoriaFalla_propagaExcepcion() {
         cuentaSinUid.setEstado("SUSPENDIDO");
         assertThrows(IllegalStateException.class, () ->
-            service.reactivarCuenta(USUARIO_ID, null, ADMIN, IP));
+            service.reactivarCuenta(USUARIO_ID, null, ADMIN, "ADMINISTRADOR", IP));
     }
 
     @Test
     void restablecerPassword_siAuditoriaFalla_propagaExcepcion() {
         assertThrows(IllegalStateException.class, () ->
-            service.restablecerPassword(USUARIO_ID, ADMIN, IP));
+            service.restablecerPassword(USUARIO_ID, ADMIN, "ADMINISTRADOR", IP));
     }
 
     @Test
@@ -98,6 +99,6 @@ class AuditoriaRollbackTest {
 
         assertThrows(IllegalStateException.class, () ->
             service.editarPerfilDeUsuario(
-                USUARIO_ID, "Nombre", "Apellido", null, "prefs", null, ADMIN, IP));
+                USUARIO_ID, "Nombre", "Apellido", null, "prefs", null, ADMIN, "ADMINISTRADOR", IP));
     }
 }

@@ -9,6 +9,7 @@ import {
   ErrorDeTorneos,
   MOTIVOS,
   accionesDe,
+  arbolDelTorneo,
   miPremio,
   necesitaRevision,
   textoDelPago,
@@ -699,6 +700,21 @@ describe('UXC-8 — el torneo del jugador', () => {
     expect(nombreDeRonda('FINAL', 4, { cantidad: 1, ultima: true })).toBe('Gran final');
     expect(nombreDeLlave('SECUNDARIOS')).toBe('Llave de segunda oportunidad');
     expect(nombreDeLlave('GANADORES')).not.toMatch(/\d/);
+  });
+
+  test('cada llave del árbol es una región con nombre a la que se llega con el teclado', () => {
+    // Barrido final (1024 y 768): dentro de la ruta el cuadro se desplaza de
+    // lado; sin foco, quien usa el teclado no podía desplazarlo.
+    const arbol = arbolDelTorneo(enCurso(), UID);
+    const cuadros = [...arbol.querySelectorAll('.arbol-torneo')];
+    expect(cuadros.map((c) => c.dataset.llave)).toEqual(['GANADORES', 'SECUNDARIOS']);
+    for (const cuadro of cuadros) {
+      expect(cuadro.getAttribute('tabindex')).toBe('0');
+      expect(cuadro.getAttribute('role')).toBe('region');
+      const titulo = arbol.querySelector(`#${cuadro.getAttribute('aria-labelledby')}`);
+      expect(titulo.tagName).toBe('H3');
+      expect(titulo.textContent).toBe(nombreDeLlave(cuadro.dataset.llave));
+    }
   });
 
   test('la tarjeta dice lo que toca a cada fase, con su distintivo', () => {

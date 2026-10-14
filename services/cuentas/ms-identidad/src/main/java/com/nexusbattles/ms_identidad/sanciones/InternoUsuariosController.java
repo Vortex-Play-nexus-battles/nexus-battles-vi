@@ -35,10 +35,13 @@ public class InternoUsuariosController {
     static final String MODERACION = "moderacion-sanciones";
 
     private final ProyeccionDeSancionService proyecciones;
+    private final HistorialDeSancionesService historiales;
     private final UsuarioRepository usuarios;
 
-    public InternoUsuariosController(ProyeccionDeSancionService proyecciones, UsuarioRepository usuarios) {
+    public InternoUsuariosController(ProyeccionDeSancionService proyecciones,
+                                     HistorialDeSancionesService historiales, UsuarioRepository usuarios) {
         this.proyecciones = proyecciones;
+        this.historiales = historiales;
         this.usuarios = usuarios;
     }
 
@@ -50,6 +53,19 @@ public class InternoUsuariosController {
         return proyecciones.proyectar(uidDe(uid), proyeccion);
     }
 
+    /**
+     * moderacion-sanciones fija el resumen del historial de sanciones de la
+     * cuenta (1.7.0): el total y la fecha de la ultima, valores absolutos.
+     * Idempotente. Es lo que deja filtrar el directorio por historial de
+     * sanciones (§7.3.4) sin consultar otro servicio por cada fila.
+     */
+    @PutMapping("/{uid}/historial-sanciones")
+    @SoloServicio(azp = MODERACION)
+    public HistorialDeSancionesService.HistorialDeSancionesResponse historial(
+            @PathVariable String uid, @RequestBody HistorialDeSancionesRequest historial) {
+        return historiales.fijar(uidDe(uid), historial);
+    }
+
     /** Correo y apodo para escribirle a una cuenta, sin guardar copias en otros servicios. */
     @GetMapping("/{uid}/contacto")
     @SoloServicio
@@ -57,6 +73,21 @@ public class InternoUsuariosController {
         Usuario usuario = usuarios.findByPublicId(uidDe(uid)).orElseThrow(CuentaNoEncontradaException::new);
         return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new ContactoResponse(
                 usuario.getPublicId(), usuario.getEmail(), usuario.getApodo(),
+                EstadoCuenta.normalizado(usuario.getEstado())));
+    }
+
+    /**
+     * El rol vigente de la cuenta (ms-identidad-admin.yaml 1.6.0): lo mira
+     * moderacion-sanciones antes de emitir, levantar o resolver, para que nadie
+     * sancione un rol igual o superior al suyo (jerarquia de 7.3.1). Ruta
+     * propia y no el contacto: para decidir no hace falta el correo de nadie.
+     */
+    @GetMapping("/{uid}/rol")
+    @SoloServicio(azp = MODERACION)
+    public ResponseEntity<RolDeCuentaResponse> rol(@PathVariable String uid) {
+        Usuario usuario = usuarios.findByPublicId(uidDe(uid)).orElseThrow(CuentaNoEncontradaException::new);
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(new RolDeCuentaResponse(
+                usuario.getPublicId(), usuario.getRol() == null ? null : usuario.getRol().getNombre(),
                 EstadoCuenta.normalizado(usuario.getEstado())));
     }
 

@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.auth.segundofactor;
 
+import com.nexusbattles.ms_identidad.auth.controller.AuthController;
 import com.nexusbattles.ms_identidad.auth.codigos.Problemas;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaBaneadaException;
 import com.nexusbattles.ms_identidad.auth.exception.CuentaInactivaException;
@@ -100,6 +101,14 @@ public class SegundoPasoController {
         if (rechazo instanceof CuentaSuspendidaException suspendida && suspendida.getHasta() != null
                 && respuesta.getBody() != null) {
             respuesta.getBody().setProperty("suspendidoHasta", suspendida.getHasta().toInstant().toString());
+        }
+        // SA-4: el codigo para apelar sin sesion, igual que en el primer paso.
+        DesafioEmitido apelacion = rechazo instanceof CuentaSuspendidaException suspendida
+                ? suspendida.getApelacion()
+                : rechazo instanceof CuentaBaneadaException baneada ? baneada.getApelacion() : null;
+        if (respuesta.getBody() != null) {
+            AuthController.conApelacion(new java.util.LinkedHashMap<>(), apelacion)
+                    .forEach(respuesta.getBody()::setProperty);
         }
         return respuesta;
     }
