@@ -32,7 +32,10 @@ export const MINIMO_PARA_AUTOCOMPLETAR = 2;
 let contador = 0;
 
 /**
- * Botones de preguntas rápidas con un selector de temas.
+ * Botones de preguntas rápidas con un selector de temas, dentro de un
+ * desplegable («Preguntas frecuentes») que empieza cerrado: así la
+ * conversación conserva el espacio y las preguntas siguen a un clic. Es un
+ * `<details>` nativo, operable por teclado sin código propio (RNF-ACC-002).
  *
  * @param {{cliente: {sugerencias: Function}, alElegir: (pregunta: string) => void}} opciones
  * @returns {{elemento: HTMLElement, cargar: () => Promise<void>, habilitar: (activo: boolean) => void}}
@@ -61,14 +64,24 @@ export function crearPreguntasRapidas({ cliente, alElegir }) {
     clase: 'chatbot-rapidas__lista',
     atributos: { role: 'group', 'aria-labelledby': idTitulo },
   });
-  const titulo = h('p', { clase: 'chatbot-rapidas__titulo', texto: TEXTOS_SUGERENCIAS.titulo });
+  const titulo = h('summary', {
+    clase: 'chatbot-rapidas__titulo',
+    texto: TEXTOS_SUGERENCIAS.titulo,
+  });
   titulo.id = idTitulo;
 
-  const elemento = h('div', {
+  // Cerrado por omisión: `<details>` sin el atributo `open`.
+  const elemento = h('details', {
     clase: 'chatbot-rapidas',
     atributos: { hidden: true },
     datos: { chatbotRapidas: '' },
-    hijos: [h('div', { clase: 'chatbot-rapidas__cabecera', hijos: [titulo, selector] }), lista],
+    hijos: [
+      titulo,
+      h('div', {
+        clase: 'chatbot-rapidas__contenido',
+        hijos: [h('div', { clase: 'chatbot-rapidas__cabecera', hijos: [selector] }), lista],
+      }),
+    ],
   });
 
   async function cargar() {
@@ -101,7 +114,11 @@ export function crearPreguntasRapidas({ cliente, alElegir }) {
         atributos: { type: 'button', disabled: !activo },
         datos: { accion: 'pregunta-rapida', clave: sugerencia.clave ?? '' },
       });
-      boton.addEventListener('click', () => alElegir(sugerencia.pregunta ?? sugerencia.titulo));
+      boton.addEventListener('click', () => {
+        // Se pliega al elegir: la respuesta llega a una conversación con espacio.
+        elemento.open = false;
+        alElegir(sugerencia.pregunta ?? sugerencia.titulo);
+      });
       lista.append(boton);
     }
     // Con un tema elegido el bloque se queda aunque no haya nada, para poder
