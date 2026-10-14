@@ -77,6 +77,10 @@ export const TEXTOS_SOPORTE = Object.freeze({
   muchasDetalle: 'Espera un momento y vuelve a intentarlo.',
   noDisponible: 'Soporte no está disponible en este momento.',
   noDisponibleDetalle: 'Inténtalo de nuevo en unos minutos.',
+  // 503 MODERACION_NO_DISPONIBLE: lo que falló es la revisión del texto, no soporte.
+  sinRevision: 'No pudimos revisar tu mensaje en este momento.',
+  sinRevisionDetalle:
+    'El filtro de contenido no respondió y por seguridad no enviamos nada. Inténtalo de nuevo en unos minutos.',
   invalido: 'Revisa los datos de la solicitud.',
   invalidoDetalle: 'El asunto admite hasta 150 caracteres y el mensaje hasta 2000.',
   error: 'No se pudo enviar tu solicitud.',
@@ -104,7 +108,10 @@ export function avisoDeError(error) {
   if (motivo === 'LIMITE_DE_FRECUENCIA') {
     return { tono: 'advertencia', titulo: t.muchas, detalle: t.muchasDetalle };
   }
-  if (motivo === 'MODERACION_NO_DISPONIBLE' || error?.noDisponible) {
+  if (motivo === 'MODERACION_NO_DISPONIBLE') {
+    return { tono: 'error', titulo: t.sinRevision, detalle: t.sinRevisionDetalle };
+  }
+  if (error?.noDisponible) {
     return { tono: 'error', titulo: t.noDisponible, detalle: t.noDisponibleDetalle };
   }
   if (error?.estado === 400) {

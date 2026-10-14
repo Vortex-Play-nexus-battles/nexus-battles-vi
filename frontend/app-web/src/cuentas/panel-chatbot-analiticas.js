@@ -13,6 +13,13 @@
  * soporte del período y las palabras más usadas en las preguntas. Si el
  * servicio todavía no las manda, esas secciones no se pintan.
  *
+ * Desde 1.7.0 cada cifra dice lo que cuenta: las conversaciones son las
+ * INICIADAS en el período; la tasa de resolución sale del resultado que
+ * guardó cada respuesta (y se ve cómo terminaron todas); las veces que el
+ * asistente ofreció soporte y las solicitudes que de verdad se abrieron son
+ * dos cifras distintas; y se suman las preguntas más frecuentes y la
+ * tendencia de cada palabra.
+ *
  * @module cuentas/panel-chatbot-analiticas
  */
 
@@ -30,6 +37,10 @@ import { numero, porcentaje } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
 import { CATEGORIAS } from '../comun/ui/soporte-chatbot.js';
 import { tarjetaDeCifra } from '../comun/ui/tarjeta.js';
+import { textoDeErrorDelPanel } from './panel-chatbot-errores.js';
+
+// Las otras pestañas lo importaban de aquí; ahora vive en su propio módulo.
+export { textoDeErrorDelPanel };
 
 const SVG = 'http://www.w3.org/2000/svg';
 
@@ -38,35 +49,41 @@ const ALTO = 120;
 const PASO = 12;
 const SEPARACION = 2;
 
+/** 1.7.0: cómo terminó una respuesta del asistente (`ResultadoDeRespuesta`). */
+export const RESULTADOS = Object.freeze({
+  TEMA: { texto: 'Respondió con un tema de la base', resuelve: true },
+  CONSULTA_EN_VIVO: { texto: 'Consultó datos de la cuenta', resuelve: true },
+  NAVEGACION: { texto: 'Llevó a la sección pedida', resuelve: true },
+  NO_DISPONIBLE: { texto: 'El servicio consultado no respondió', resuelve: false },
+  ESCALADO: { texto: 'No entendió y ofreció soporte', resuelve: false },
+  NO_SIRVIO: { texto: 'No le sirvió y ofreció soporte', resuelve: false },
+  PIDE_REFORMULAR: { texto: 'Pidió la pregunta completa', resuelve: false },
+});
+
+/** 1.7.0: la tendencia de una palabra contra el período anterior. */
+export const TENDENCIAS = Object.freeze({
+  SUBE: 'Sube',
+  BAJA: 'Baja',
+  IGUAL: 'Igual',
+  NUEVA: 'Nueva',
+});
+
 /**
- * Texto de un error del panel, decidido por el estado (MAPEO-ERRORES §2).
+ * Texto de un error de esta pestaña: un 400 es el período; lo demás, lo
+ * común del panel con lo que falló aquí.
  *
- * @param {{noDisponible?: boolean, sinPermiso?: boolean, estado?: number}|null} error
+ * @param {object|null} error
+ * @param {string} [queFallo]
  * @returns {{titulo: string, detalle: string}}
  */
-export function textoDeErrorDelPanel(error) {
-  if (error?.noDisponible) {
-    return {
-      titulo: 'El servicio del asistente no responde',
-      detalle: 'Vuelve a intentarlo en unos minutos.',
-    };
-  }
-  if (error?.sinPermiso) {
-    return {
-      titulo: 'Tu sesión no tiene permiso para ver esto',
-      detalle: 'Vuelve a iniciar sesión con una cuenta de administración.',
-    };
-  }
+export function textoDeErrorDeAnaliticas(error, queFallo = 'No se pudieron cargar las analíticas') {
   if (error?.estado === 400) {
     return {
       titulo: 'El período no es válido',
       detalle: 'Revisa las fechas: «hasta» no puede ser anterior a «desde» y el máximo es un año.',
     };
   }
-  return {
-    titulo: 'No se pudieron cargar las analíticas',
-    detalle: 'Revisa tu conexión e inténtalo de nuevo.',
-  };
+  return textoDeErrorDelPanel(error, queFallo);
 }
 
 /**
@@ -209,9 +226,9 @@ export function graficaDeTendencia(tendencia) {
     barra.setAttribute('rx', '1.5');
     barra.dataset.dia = punto.dia;
     const titulo = document.createElementNS(SVG, 'title');
-    titulo.textContent = `${diaCorto(punto.dia)}: ${numero(punto.preguntas)} preguntas, ${numero(
+    titulo.textContent = `${diaCorto(punto.dia)}: ${numero(punto.preguntas)} preguntas; ofreció soporte ${numero(
       punto.escalamientos,
-    )} escaladas`;
+    )} veces`;
     barra.append(titulo);
     svg.append(barra);
   });
@@ -235,8 +252,8 @@ function tablaDeTendencia(tendencia) {
       h('thead', {
         hijos: [
           h('tr', {
-            hijos: ['Día', 'Conversaciones', 'Preguntas', 'Escaladas'].map((texto) =>
-              h('th', { texto, atributos: { scope: 'col' } }),
+            hijos: ['Día', 'Conversaciones iniciadas', 'Preguntas', 'Ofreció soporte'].map(
+              (texto) => h('th', { texto, atributos: { scope: 'col' } }),
             ),
           }),
         ],
@@ -431,20 +448,25 @@ function seccionDeSoporte(tickets) {
 }
 
 /**
- * 1.3.7: las palabras que más usan los jugadores en sus preguntas.
+ * 1.3.7: las palabras que más usan los jugadores en sus preguntas. 1.7.0: con
+ * su tendencia contra el período anterior de los mismos días, si el servicio
+ * la manda.
  *
- * @param {Array<{palabra: string, preguntas: number, conversaciones: number}>} palabras
+ * @param {Array<{palabra: string, preguntas: number, conversaciones: number,
+ *          preguntasPeriodoAnterior?: number, tendencia?: string}>} palabras
  * @returns {HTMLElement}
  */
 function seccionDePalabras(palabras) {
+  const conTendencia = palabras.some((fila) => fila.tendencia);
   return h('section', {
     clase: 'pila',
     datos: { zona: 'palabras' },
     hijos: [
       encabezadoDeSeccion({
         titulo: 'Palabras más usadas',
-        detalle:
-          'En las preguntas del período, sin tildes ni mayúsculas. Solo aparecen las que usaron al menos dos conversaciones.',
+        detalle: conTendencia
+          ? 'En las preguntas del período, sin tildes ni mayúsculas, comparadas con los mismos días justo antes. Solo aparecen las que usaron al menos dos conversaciones.'
+          : 'En las preguntas del período, sin tildes ni mayúsculas. Solo aparecen las que usaron al menos dos conversaciones.',
       }),
       palabras.length === 0
         ? estadoVacio({
@@ -453,15 +475,114 @@ function seccionDePalabras(palabras) {
           })
         : tabla(
             'palabras-clave',
-            ['Palabra', 'Preguntas', 'Conversaciones'],
-            palabras.map((fila) => [
-              fila.palabra,
+            conTendencia
+              ? ['Palabra', 'Preguntas', 'Conversaciones', 'Período anterior', 'Tendencia']
+              : ['Palabra', 'Preguntas', 'Conversaciones'],
+            palabras.map((fila) =>
+              conTendencia
+                ? [
+                    fila.palabra,
+                    numero(fila.preguntas),
+                    numero(fila.conversaciones),
+                    numero(fila.preguntasPeriodoAnterior ?? 0),
+                    TENDENCIAS[fila.tendencia] ?? '—',
+                  ]
+                : [fila.palabra, numero(fila.preguntas), numero(fila.conversaciones)],
+            ),
+          ),
+    ],
+  });
+}
+
+/**
+ * 1.7.0 (7.4.7 «preguntas más frecuentes»): lo que preguntan los jugadores,
+ * como lo lee el asistente. Solo las que hicieron al menos tres
+ * conversaciones distintas, para no mostrar lo que escribió una persona.
+ *
+ * @param {Array<{texto: string, preguntas: number, conversaciones: number}>} preguntas
+ * @returns {HTMLElement}
+ */
+function seccionDePreguntasFrecuentes(preguntas) {
+  return h('section', {
+    clase: 'pila',
+    datos: { zona: 'preguntas-frecuentes' },
+    hijos: [
+      encabezadoDeSeccion({
+        titulo: 'Preguntas más frecuentes',
+        detalle:
+          'Las que más se repitieron, sin tildes, mayúsculas ni signos, como las lee el asistente. Solo aparecen las que hicieron al menos tres conversaciones distintas.',
+      }),
+      preguntas.length === 0
+        ? estadoVacio({
+            titulo: 'Ninguna pregunta se repitió lo suficiente',
+            detalle: 'Aparecen cuando al menos tres conversaciones preguntan lo mismo.',
+          })
+        : tabla(
+            'tabla-preguntas-frecuentes',
+            ['Pregunta', 'Veces', 'Conversaciones'],
+            preguntas.map((fila) => [
+              fila.texto,
               numero(fila.preguntas),
               numero(fila.conversaciones),
             ]),
           ),
     ],
   });
+}
+
+/**
+ * 1.7.0: cómo terminaron las respuestas con resultado guardado, y cuáles
+ * cuentan como resueltas en la tasa.
+ *
+ * @param {Array<{resultado: string, respuestas: number}>} resultados
+ * @returns {HTMLElement}
+ */
+function seccionDeResultados(resultados) {
+  const total = resultados.reduce((suma, fila) => suma + fila.respuestas, 0);
+  return h('section', {
+    clase: 'pila',
+    datos: { zona: 'resultados' },
+    hijos: [
+      encabezadoDeSeccion({
+        titulo: 'Cómo terminaron las respuestas',
+        detalle:
+          'Solo las que guardaron su resultado. Cuentan como resueltas las que respondió un tema, las consultas que trajeron datos y la navegación a una sección.',
+      }),
+      total === 0
+        ? estadoVacio({ titulo: 'Ninguna respuesta del período guardó su resultado' })
+        : tabla(
+            'tabla-resultados',
+            ['Resultado', 'Respuestas', 'Cuenta como'],
+            resultados.map((fila) => {
+              const conocido = RESULTADOS[fila.resultado];
+              return [
+                conocido?.texto ?? fila.resultado,
+                numero(fila.respuestas),
+                conocido?.resuelve ? 'Resuelta' : 'No resuelta',
+              ];
+            }),
+          ),
+    ],
+  });
+}
+
+/**
+ * Detalle de la tasa de resolución: de cuántas respuestas sale (1.7.0), o lo
+ * que había antes si el servicio todavía no lo manda.
+ *
+ * @param {object} analitica
+ * @returns {string}
+ */
+function detalleDeResolucion(analitica) {
+  if (analitica.tasaResolucion === null || analitica.tasaResolucion === undefined) {
+    return 'Ninguna respuesta del período guardó su resultado';
+  }
+  if (analitica.respuestasClasificadas === undefined) {
+    return `De ${numero(analitica.respuestasMedidas)} respuestas medidas`;
+  }
+  return `${numero(analitica.respuestasResueltas)} de ${numero(
+    analitica.respuestasClasificadas,
+  )} resueltas sin una persona del equipo`;
 }
 
 /**
@@ -473,19 +594,37 @@ function seccionDePalabras(palabras) {
 export function pintarAnaliticas(zona, analitica) {
   vaciar(zona);
 
+  // 1.7.0: lo que hizo el asistente (ofrecer soporte) y lo que hicieron los
+  // jugadores (abrir una solicitud) son dos cifras, una al lado de la otra.
   const cifras = h('div', {
     clase: 'panel-chatbot__cifras',
     hijos: [
-      tarjetaDeCifra({ etiqueta: 'Conversaciones', valor: numero(analitica.conversaciones) }),
+      tarjetaDeCifra({
+        etiqueta: 'Conversaciones iniciadas',
+        valor: numero(analitica.conversaciones),
+        detalle:
+          analitica.conversacionesConActividad === undefined
+            ? null
+            : `${numero(analitica.conversacionesConActividad)} con preguntas en el período`,
+      }),
       tarjetaDeCifra({ etiqueta: 'Preguntas', valor: numero(analitica.preguntas) }),
       tarjetaDeCifra({
         etiqueta: 'Tasa de resolución',
         valor: porcentaje(analitica.tasaResolucion),
-        detalle:
-          analitica.tasaResolucion === null
-            ? 'Sin respuestas medidas en el período'
-            : `${numero(analitica.escalamientos)} escaladas a soporte humano`,
+        detalle: detalleDeResolucion(analitica),
       }),
+      tarjetaDeCifra({
+        etiqueta: 'Ofreció soporte',
+        valor: numero(analitica.escalamientos),
+        detalle: 'Veces que el asistente no resolvió y ofreció hablar con una persona',
+      }),
+      analitica.tickets
+        ? tarjetaDeCifra({
+            etiqueta: 'Solicitudes de soporte',
+            valor: numero(analitica.tickets.total),
+            detalle: 'Las que los jugadores abrieron de verdad',
+          })
+        : null,
       tarjetaDeCifra({
         etiqueta: 'Satisfacción',
         valor: porcentaje(analitica.satisfaccion),
@@ -499,6 +638,7 @@ export function pintarAnaliticas(zona, analitica) {
       tarjetaDeCifra({
         etiqueta: 'Tiempo de respuesta promedio',
         valor: duracion(analitica.tiempoRespuestaPromedioMs),
+        detalle: 'Lo que tarda el servidor en preparar la respuesta',
       }),
     ],
   });
@@ -552,7 +692,14 @@ export function pintarAnaliticas(zona, analitica) {
     ],
   });
 
-  zona.append(cifras, seccionTendencia, seccionTemas);
+  zona.append(cifras, seccionTendencia);
+  if (Array.isArray(analitica.resultados)) {
+    zona.append(seccionDeResultados(analitica.resultados));
+  }
+  zona.append(seccionTemas);
+  if (Array.isArray(analitica.preguntasFrecuentes)) {
+    zona.append(seccionDePreguntasFrecuentes(analitica.preguntasFrecuentes));
+  }
   if (analitica.tickets) {
     zona.append(seccionDeSoporte(analitica.tickets));
   }
@@ -623,7 +770,7 @@ export function montarAnaliticas(raiz, { cliente, descargarArchivo }) {
     } catch (error) {
       pintarEstado(
         resultados,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({ ...textoDeErrorDeAnaliticas(error), alReintentar: () => cargar() }),
       );
     }
   }
@@ -642,7 +789,8 @@ export function montarAnaliticas(raiz, { cliente, descargarArchivo }) {
     try {
       descargarArchivo(await cliente.exportarAnaliticas(periodo()));
     } catch (error) {
-      aviso.textContent = textoDeErrorDelPanel(error).titulo;
+      const { titulo, detalle } = textoDeErrorDeAnaliticas(error, 'No se pudo descargar el CSV');
+      aviso.textContent = `${titulo}. ${detalle}`;
     } finally {
       conCarga(exportar, false);
     }
