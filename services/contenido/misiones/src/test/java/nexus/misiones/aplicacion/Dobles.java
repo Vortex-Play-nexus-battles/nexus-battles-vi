@@ -171,6 +171,10 @@ public final class Dobles {
             s.experienciaAcumulada = e.experienciaAcumulada();
             s.intentosDeSimulacion = e.intentosDeSimulacion();
             s.sinPenalizacion = e.canceladaSinPenalizacion() ? Boolean.TRUE : null;
+            s.encuentrosCompletados = e.encuentrosCompletados();
+            s.encuentrosTotales = e.encuentrosTotales();
+            s.siguienteEncuentroEn = e.siguienteEncuentroEn();
+            s.recompensasAcumuladas = e.recompensasAcumuladas();
             s.version = e.version();
             return s;
         }

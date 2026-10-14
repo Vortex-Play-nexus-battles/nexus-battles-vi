@@ -157,11 +157,18 @@ class VistasDeMisiones {
     // --------------------------------------------------------- ejecuciones
 
     Respuestas.MisionActiva activa(Ejecucion e, Mision mision, String penalizacion) {
+        RecompensasDeEjecucion acumuladas = e.recompensasAcumuladas();
+        List<Respuestas.ObjetoAcumulado> objetos = acumuladas.productos().stream()
+                .map(p -> new Respuestas.ObjetoAcumulado(p.nombre(), p.cantidad()))
+                .toList();
+        int total = e.encuentrosTotales() > 0 ? e.encuentrosTotales() : mision.encuentros();
         return new Respuestas.MisionActiva(e.id(), e.misionId(), mision.nombre(), mision.categoria(),
                 new Respuestas.HeroeVista(e.heroe().id(), e.heroe().nombre(), e.heroe().prototipo(),
                         e.heroe().nivel()),
                 e.iniciadaEn(), e.terminaEn(), e.progreso(reloj.instant()), penalizacion, e.escalon(),
-                EstadoEjecucion.EN_PROGRESO.name());
+                EstadoEjecucion.EN_PROGRESO.name(), e.encuentrosCompletados(), total,
+                e.tiempoRestanteSegundos(reloj.instant()),
+                new Respuestas.RecompensasAcumuladas(acumuladas.creditos(), acumuladas.experiencia(), objetos));
     }
 
     Respuestas.Cancelacion cancelacion(Cancelacion c) {

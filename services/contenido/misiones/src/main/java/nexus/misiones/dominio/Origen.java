@@ -18,5 +18,6 @@ package nexus.misiones.dominio;
 public enum Origen {
     DOCUMENTO,
     PROVISIONAL_DEV,
-    PROGRESION
+    PROGRESION,
+    EQUIPO
 }

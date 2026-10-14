@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "notas": [
+    "HU-MIS-005: catálogo oficial de exploraciones prolongadas. Sus encuentros se procesan por intervalos iguales durante 24 a 72 horas y las recompensas se liquidan juntas al terminar.",
+    "La Frontera Umbría dura 24 horas y distribuye tres encuentros cada ocho horas. Las cifras de equilibrio pueden ajustarse por el Product Owner sin cambiar la regla temporal."
+  ],
+  "tabla20": [],
+  "misiones": [
+    {
+      "id": "expedicion-frontera-umbria",
+      "origen": "EQUIPO",
+      "nombre": "Expedición a la Frontera Umbría",
+      "categoria": "EXPLORACION",
+      "descripcionBreve": "Una expedición prolongada para asegurar tres puestos perdidos en el límite del Nexo.",
+      "imagen": null,
+      "dificultad": "NORMAL",
+      "duracionHoras": 24,
+      "nivelRecomendado": 4,
+      "requisitosPrevios": [],
+      "narrativa": "Las balizas de la Frontera Umbría dejaron de responder. El héroe debe recorrer el paso, recuperar los puestos de vigilancia y derrotar a la criatura que controla la última baliza.",
+      "escenario": "Frontera Umbría",
+      "objetivos": [
+        {
+          "texto": "Asegurar los tres puestos de la Frontera Umbría.",
+          "principal": true,
+          "tipo": "COMPLETAR_ENCUENTROS",
+          "valor": null,
+          "botin": null
+        },
+        {
+          "texto": "Derrotar al Guardián de la Última Baliza.",
+          "principal": true,
+          "tipo": "DERROTAR_JEFE",
+          "valor": null,
+          "botin": null
+        }
+      ],
+      "enemigos": [
+        {
+          "nombre": "Acechadores de la bruma",
+          "cantidad": 2,
+          "descripcion": "Exploradores hostiles que protegen los primeros puestos.",
+          "prototipo": "Pícaro Machete",
+          "vida": 24,
+          "defensa": 28,
+          "rotaciones": []
+        }
+      ],
+      "jefe": {
+        "nombre": "Guardián de la Última Baliza",
+        "prototipo": "Guerrero Tanque",
+        "vida": 70,
+        "defensa": 42,
+        "descripcion": "Una criatura acorazada vinculada a la última baliza.",
+        "rotaciones": []
+      },
+      "masters": [],
+      "recompensas": {
+        "creditos": 30,
+        "garantizadas": [],
+        "potenciales": [],
+        "porObjetivos": [],
+        "primeraVez": {
+          "creditos": 5,
+          "otras": []
+        }
+      },
+      "destacada": false,
+      "disponibleHasta": null,
+      "intentos": null
+    }
+  ]
+}
