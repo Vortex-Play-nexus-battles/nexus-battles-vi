@@ -1,58 +1,66 @@
 /**
- * El panel: la unidad de la consola de control integral.
+ * El panel: la unidad de la consola de operación.
  *
- * ## Por que cada panel es independiente
+ * ## Por qué cada panel es independiente
  *
  * La consola pregunta a doce servicios. Si un solo fallo pudiera dejarla en
- * blanco, seria inservible justo el dia que hace falta -- el dia que algo
- * esta caido. Cada panel consulta lo suyo, se pinta con lo que consiguio y,
- * si no consiguio nada, lo dice con todas las letras y ofrece reintentar solo
- * esa parte.
+ * blanco, sería inservible justo el día que hace falta: el día que algo está
+ * caído. Cada panel consulta lo suyo, se pinta con lo que consiguió y, si no
+ * consiguió nada, lo dice y ofrece reintentar solo esa parte.
  *
  * ## Lo que un panel nunca hace
  *
- * No rellena. No hay un cero donde no se pudo preguntar, ni un "0 registros"
- * cuando lo cierto es "el servicio no contesto". Las cuatro etiquetas de
- * estado son literales y visibles: SIN DATOS, NO IMPLEMENTADO, SERVICIO
- * DEGRADADO y SIN PERMISO. Quien mire la pantalla sabe, sin preguntar a
- * nadie, si el numero que ve es real.
+ * No rellena. No hay un cero donde no se pudo preguntar, ni un «0 registros»
+ * cuando lo cierto es que el servicio no contestó. Y no habla como el código:
+ * desde SA-2 (informe de revisión, puntos 2 a 15) no hay «Fuente: GET …», ni
+ * códigos HTTP, ni etiquetas en mayúsculas de estado interno. Cuando todo va
+ * bien el panel no lleva distintivo; cuando no, uno con palabras e icono
+ * («Sin conexión», «Sin acceso») y el motivo en lenguaje de persona.
  *
  * @module plataforma/consola/panel
  */
 
 import { RESULTADO } from './cliente-consola.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
-import { estadoDeCarga } from '../../comun/ui/estado-vista.js';
+import { estadoDeCarga, estadoVacio } from '../../comun/ui/estado-vista.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+import { numero } from '../../comun/ui/formato.js';
 
-/** Etiqueta visible de cada desenlace que no son datos. */
-const ETIQUETA = Object.freeze({
-  [RESULTADO.VACIO]: 'SIN REGISTROS',
-  [RESULTADO.SIN_PERMISO]: 'SIN PERMISO',
-  [RESULTADO.NO_IMPLEMENTADO]: 'NO IMPLEMENTADO',
-  [RESULTADO.SERVICIO_DEGRADADO]: 'SERVICIO DEGRADADO',
-  [RESULTADO.NO_DISPONIBLE]: 'NO DISPONIBLE',
+/**
+ * El distintivo de cada desenlace que no son datos. Con datos, o sin
+ * registros, no hay distintivo: el contenido ya lo dice.
+ */
+export const ESTADO_DEL_PANEL = Object.freeze({
+  [RESULTADO.SIN_PERMISO]: { texto: 'Sin acceso', tono: 'bloqueado' },
+  [RESULTADO.NO_IMPLEMENTADO]: { texto: 'No disponible', tono: 'neutro' },
+  [RESULTADO.SERVICIO_DEGRADADO]: { texto: 'Sin conexión', tono: 'error' },
+  [RESULTADO.NO_DISPONIBLE]: { texto: 'No disponible', tono: 'error' },
 });
 
-/** Clase de color del distintivo, por desenlace. */
-const TONO = Object.freeze({
-  [RESULTADO.DATOS]: 'ok',
-  [RESULTADO.VACIO]: 'neutro',
-  [RESULTADO.SIN_PERMISO]: 'aviso',
-  [RESULTADO.NO_IMPLEMENTADO]: 'neutro',
-  [RESULTADO.SERVICIO_DEGRADADO]: 'malo',
-  [RESULTADO.NO_DISPONIBLE]: 'malo',
+/** El título del aviso que sustituye a los datos. */
+const TITULO_DEL_AVISO = Object.freeze({
+  [RESULTADO.SIN_PERMISO]: 'Sin acceso',
+  [RESULTADO.NO_IMPLEMENTADO]: 'Información no disponible',
+  [RESULTADO.SERVICIO_DEGRADADO]: 'No pudimos cargar esta información',
+  [RESULTADO.NO_DISPONIBLE]: 'No pudimos cargar esta información',
 });
 
 /**
- * Arma un panel vacio, con su encabezado y la zona donde ira el contenido.
+ * Arma un panel vacío, con su encabezado y la zona donde irá el contenido.
  *
- * @param {{id: string, titulo: string, descripcion?: string, fuente?: string}} opciones
+ * El ancho se declara al armarlo y no se deduce de lo que se pinte: un panel
+ * con tabla ocupa la fila entera también mientras carga o si sale vacío, así
+ * la página no salta cuando llegan los datos.
+ *
+ * @param {{id: string, titulo: string, descripcion?: string, acciones?: Node[],
+ *          ancho?: 'completo'|null}} opciones
  * @returns {{elemento: HTMLElement, zona: HTMLElement, sello: HTMLElement}}
  */
-export function panel({ id, titulo, descripcion = '', fuente = '' }) {
+export function panel({ id, titulo, descripcion = '', acciones = [], ancho = null }) {
   const elemento = h('section', {
     clase: 'tarjeta panel-admin',
-    datos: { panel: id },
+    datos: { panel: id, ...(ancho ? { ancho } : {}) },
     atributos: { 'aria-labelledby': `panel-${id}-titulo` },
   });
 
@@ -66,20 +74,19 @@ export function panel({ id, titulo, descripcion = '', fuente = '' }) {
     }),
   );
   if (descripcion) {
-    textos.append(h('p', { clase: 't-meta', texto: descripcion }));
+    textos.append(h('p', { clase: 'panel-admin__descripcion', texto: descripcion }));
   }
-  const sello = h('span', { clase: 'sello-estado', datos: { estado: 'cargando' }, texto: '...' });
+  // El distintivo de estado: vacío mientras carga y mientras todo va bien.
+  const sello = h('span', { clase: 'panel-admin__estado', datos: { estado: 'cargando' } });
   encabezado.append(textos, sello);
+  if (acciones.length > 0) {
+    encabezado.append(h('div', { clase: 'panel-admin__acciones', hijos: acciones }));
+  }
 
   const zona = h('div', { clase: 'panel-admin__cuerpo', datos: { zona: 'cuerpo' } });
   zona.append(estadoDeCarga({ filas: 2, etiqueta: `Cargando ${titulo}` }));
 
   elemento.append(encabezado, zona);
-  if (fuente) {
-    // De donde sale el dato. Es lo que permite que alguien lo verifique por su
-    // cuenta en vez de creerse la pantalla.
-    elemento.append(h('p', { clase: 'panel-admin__fuente t-meta', texto: `Fuente: ${fuente}` }));
-  }
   return { elemento, zona, sello };
 }
 
@@ -89,9 +96,14 @@ export function panel({ id, titulo, descripcion = '', fuente = '' }) {
  * @param {{zona: HTMLElement, sello: HTMLElement}} partes
  * @param {import('./cliente-consola.js').Desenlace} desenlace
  * @param {(datos: *) => HTMLElement|HTMLElement[]} pintarDatos
- * @param {{alReintentar?: (() => void)|null}} [opciones]
+ * @param {{alReintentar?: (() => void)|null, vacio?: {titulo: string, detalle?: string|null}}} [opciones]
  */
-export function pintarDesenlace({ zona, sello }, desenlace, pintarDatos, { alReintentar } = {}) {
+export function pintarDesenlace(
+  { zona, sello },
+  desenlace,
+  pintarDatos,
+  { alReintentar, vacio } = {},
+) {
   marcarSello(sello, desenlace.resultado);
   vaciar(zona);
 
@@ -100,55 +112,53 @@ export function pintarDesenlace({ zona, sello }, desenlace, pintarDatos, { alRei
     zona.append(...(Array.isArray(pintado) ? pintado : [pintado]));
     return zona;
   }
+  if (desenlace.resultado === RESULTADO.VACIO) {
+    zona.append(
+      estadoVacio({
+        titulo: vacio?.titulo ?? 'Sin registros por ahora',
+        detalle: vacio?.detalle ?? null,
+      }),
+    );
+    return zona;
+  }
 
   zona.append(avisoDeEstado(desenlace, alReintentar));
   return zona;
 }
 
 /**
- * El bloque que sustituye a los datos cuando no los hay.
- *
- * Dice tres cosas, en este orden: que paso (etiqueta), por que (motivo) y
- * de donde salia el dato (recurso). La tercera es la que convierte "no se ve"
- * en algo que alguien puede ir a arreglar.
+ * El bloque que sustituye a los datos cuando no se pudieron leer: qué pasó y
+ * por qué, en lenguaje de persona, y «Reintentar» si reintentar sirve de algo.
  *
  * @param {import('./cliente-consola.js').Desenlace} desenlace
  * @param {(() => void)|null} alReintentar
  */
 export function avisoDeEstado(desenlace, alReintentar = null) {
+  const leve =
+    desenlace.resultado === RESULTADO.SIN_PERMISO ||
+    desenlace.resultado === RESULTADO.NO_IMPLEMENTADO ||
+    desenlace.resultado === RESULTADO.VACIO;
   const caja = h('div', {
-    clase: `aviso aviso--${desenlace.resultado === RESULTADO.VACIO ? 'info' : 'advertencia'}`,
+    clase: `aviso aviso--${leve ? 'info' : 'advertencia'}`,
     datos: { estado: desenlace.resultado },
     atributos: { role: 'status' },
   });
-  // `.aviso` es una fila: [cuerpo][accion]. El titulo, el motivo y el detalle
-  // van DENTRO de `.aviso__cuerpo`, que es el que se estira. Colgarlos como
-  // hermanos sueltos los convierte en cuatro columnas estrujadas -- que es
-  // exactamente como se vio en dev la primera vez.
+  // `.aviso` es una fila: [cuerpo][accion]. El título y el motivo van DENTRO
+  // de `.aviso__cuerpo`, que es el que se estira.
   const cuerpo = h('div', { clase: 'aviso__cuerpo' });
   cuerpo.append(
     h('p', {
       clase: 'aviso__titulo',
-      texto: ETIQUETA[desenlace.resultado] ?? 'NO DISPONIBLE',
+      texto: TITULO_DEL_AVISO[desenlace.resultado] ?? 'No pudimos cargar esta información',
     }),
   );
   if (desenlace.motivo) {
     cuerpo.append(h('p', { texto: desenlace.motivo }));
   }
-  if (desenlace.recurso) {
-    cuerpo.append(
-      h('p', {
-        clase: 'aviso__detalle',
-        texto: `Consulta: GET /api/v1${desenlace.recurso}${
-          desenlace.estado ? ` (HTTP ${desenlace.estado})` : ''
-        }`,
-      }),
-    );
-  }
   caja.append(cuerpo);
 
   if (alReintentar && desenlace.resultado !== RESULTADO.SIN_PERMISO) {
-    // Un 401 o un 403 no se arregla reintentando: no se ofrece el boton.
+    // Un 401 o un 403 no se arregla reintentando: no se ofrece el botón.
     const boton = h('button', {
       clase: 'boton boton--secundario',
       texto: 'Reintentar',
@@ -162,96 +172,86 @@ export function avisoDeEstado(desenlace, alReintentar = null) {
 }
 
 /**
- * Bloque para un modulo que el backend todavia no tiene.
- *
- * No es lo mismo que un servicio caido y no se pinta igual. Se nombra la
- * historia de usuario pendiente para que la pantalla no parezca un fallo.
- *
- * @param {{titulo?: string, razon: string}} opciones
- */
-export function moduloNoImplementado({ titulo = 'Módulo no implementado', razon }) {
-  const caja = h('div', {
-    clase: 'aviso aviso--info',
-    datos: { estado: RESULTADO.NO_IMPLEMENTADO },
-    atributos: { role: 'status' },
-  });
-  const cuerpo = h('div', { clase: 'aviso__cuerpo' });
-  cuerpo.append(h('p', { clase: 'aviso__titulo', texto: titulo }), h('p', { texto: razon }));
-  caja.append(cuerpo);
-  return caja;
-}
-
-/**
  * Cifra grande de un indicador.
  *
- * `null` se pinta como un guion, nunca como cero: no saber cuantos hay y
+ * `null` se pinta como un guion largo, nunca como cero: no saber cuántos hay y
  * saber que hay cero son dos respuestas distintas.
  *
  * @param {{etiqueta: string, valor: number|string|null, nota?: string}} opciones
  */
 export function indicador({ etiqueta, valor, nota = '' }) {
-  const caja = h('div', { clase: 'indicador', datos: { indicador: etiqueta } });
-  caja.append(
-    h('p', {
-      clase: 'indicador__valor',
-      texto: valor === null || valor === undefined ? '--' : String(valor),
-    }),
-    h('p', { clase: 'indicador__etiqueta', texto: etiqueta }),
-  );
+  const sinDato = valor === null || valor === undefined || valor === '';
+  const caja = h('div', {
+    clase: 'indicador',
+    datos: { indicador: etiqueta, ...(sinDato ? { sinDato: 'si' } : {}) },
+  });
+  const cifra = h('p', { clase: 'indicador__valor' });
+  if (sinDato) {
+    cifra.append(
+      h('span', { texto: '—', atributos: { 'aria-hidden': 'true' } }),
+      h('span', { clase: 'solo-lectores', texto: 'Sin dato' }),
+    );
+  } else {
+    cifra.textContent = typeof valor === 'number' ? numero(valor) : String(valor);
+  }
+  caja.append(cifra, h('p', { clase: 'indicador__etiqueta', texto: etiqueta }));
   if (nota) {
-    caja.append(h('p', { clase: 'indicador__nota t-meta', texto: nota }));
+    caja.append(h('p', { clase: 'indicador__nota', texto: nota }));
   }
   return caja;
 }
 
 /**
- * Tabla simple de solo lectura.
+ * Tabla de solo lectura de un panel, sobre la tabla del kit de la consola
+ * (`comun/ui/admin/tabla-de-datos.js`).
  *
- * @param {{columnas: string[], filas: Array<Array<string|HTMLElement>>, resumen?: string}} opciones
+ * Cada columna se da como texto (su título) o como objeto (`{titulo, tipo,
+ * ordenable}`); cada fila, como lista de celdas en el orden de las columnas.
+ * La primera columna identifica la fila.
+ *
+ * @param {{titulo?: string, columnas: Array<string|{titulo: string, tipo?: string, ordenable?: boolean}>,
+ *          filas: Array<Array<string|number|Node|null>>, resumen?: string,
+ *          vacio?: {titulo: string, detalle?: string|null}}} opciones
  */
-export function tabla({ columnas, filas, resumen = '' }) {
-  const envoltorio = h('div', { clase: 'tabla-envoltorio' });
-  const tablaHtml = h('table', { clase: 'tabla' });
-  if (resumen) {
-    tablaHtml.append(h('caption', { clase: 't-meta', texto: resumen }));
-  }
-  const cabeza = h('thead');
-  const filaCabeza = h('tr', { clase: 'tabla__fila tabla__fila--encabezado' });
-  for (const columna of columnas) {
-    filaCabeza.append(
-      h('th', { clase: 'tabla__celda', texto: columna, atributos: { scope: 'col' } }),
-    );
-  }
-  cabeza.append(filaCabeza);
-
-  const cuerpo = h('tbody');
-  filas.forEach((fila, indice) => {
-    const tr = h('tr', {
-      clase: `tabla__fila${indice % 2 === 1 ? ' tabla__fila--alterna' : ''}`,
-    });
-    for (const celda of fila) {
-      const td = h('td', { clase: 'tabla__celda' });
-      if (celda instanceof globalThis.HTMLElement) {
-        td.append(celda);
-      } else {
-        // `texto` y no `innerHTML`: estas filas llevan apodos y correos que
-        // escribio gente de fuera.
-        td.textContent = celda === null || celda === undefined ? '--' : String(celda);
-      }
-      tr.append(td);
-    }
-    cuerpo.append(tr);
+export function tabla({ titulo = '', columnas, filas, resumen = '', vacio = null }) {
+  const definidas = columnas.map((columna, indice) => {
+    const base = typeof columna === 'string' ? { titulo: columna } : columna;
+    return {
+      ...base,
+      clave: `c${indice}`,
+      principal: indice === 0,
+      // El orden local compara lo que se ve; una celda con un nodo, por su texto.
+      ordenarPor: base.ordenable ? (fila) => textoDeOrden(fila[`c${indice}`]) : undefined,
+    };
   });
+  return tablaDeDatos({
+    titulo: titulo || resumen || 'Tabla',
+    columnas: definidas,
+    filas: filas.map((celdas) =>
+      Object.fromEntries(celdas.map((valor, indice) => [`c${indice}`, valor])),
+    ),
+    resumen: resumen || null,
+    vacio,
+  });
+}
 
-  tablaHtml.append(cabeza, cuerpo);
-  envoltorio.append(tablaHtml);
-  return envoltorio;
+/** Con qué se ordena una celda: el número si lo es, el texto si es un nodo. */
+function textoDeOrden(valor) {
+  if (valor === null || valor === undefined) {
+    return null;
+  }
+  if (typeof valor === 'number') {
+    return valor;
+  }
+  if (valor instanceof globalThis.Node) {
+    return valor.dataset?.orden ?? valor.textContent ?? null;
+  }
+  return String(valor);
 }
 
 /** @param {HTMLElement} sello @param {string} resultado */
 function marcarSello(sello, resultado) {
-  sello.dataset.estado = TONO[resultado] ?? 'neutro';
-  sello.textContent = resultado === RESULTADO.DATOS ? 'EN LINEA' : (ETIQUETA[resultado] ?? '--');
+  sello.dataset.estado = resultado;
+  const estado = ESTADO_DEL_PANEL[resultado];
+  sello.replaceChildren(...(estado ? [distintivoDeEstado(estado)] : []));
 }
-
-export { ETIQUETA as ETIQUETA_DE_ESTADO };

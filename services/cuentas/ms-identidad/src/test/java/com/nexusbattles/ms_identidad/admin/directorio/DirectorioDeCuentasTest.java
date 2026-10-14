@@ -55,9 +55,10 @@ class DirectorioDeCuentasTest {
                 usuario(jugador, "Ana" + marca, "ana." + marca + "@ejemplo.org"),
                 // «qa» sin guion bajo: el _ del prefijo no es un comodin.
                 usuario(jugador, "qa" + marca + "x", "qax." + marca + "@ejemplo.org"),
-                // Pruebas: por el dominio reservado (con mayusculas)...
+                // Pruebas: por el dominio reservado (con mayusculas).
                 usuario(jugador, "r18_" + marca, "r18." + marca + "@NEXUS.test"),
-                // ...y por el prefijo del apodo.
+                // Apodos con prefijo de pruebas pero correo normal: desde SA-3
+                // son personas mientras no se configuren prefijos.
                 usuario(jugador, "QA_prof_" + marca, "prof." + marca + "@ejemplo.org"),
                 usuario(jugador, "smoke_" + marca, "smoke." + marca + "@ejemplo.org"),
                 usuario(jugador, "canario_" + marca, "canario." + marca + "@ejemplo.org")));
@@ -91,8 +92,12 @@ class DirectorioDeCuentasTest {
         Page<Usuario> pagina = directorio.findAll(
                 BusquedaDelDirectorio.buscando(marca).and(cuentasDePrueba.excluidas()), PEDIDO);
 
-        assertEquals(List.of("qa" + marca + "x", "Ana" + marca), apodos(pagina));
-        assertEquals(2, pagina.getTotalElements(), "el total es el de las que quedan, no el de la tabla");
+        // SA-3: por omision solo cuenta el dominio reservado. Un apodo que
+        // empieza por qa_, smoke_ o canario_ lo pudo elegir una persona, y no
+        // se esconde a nadie por su nombre.
+        assertEquals(List.of("canario_" + marca, "smoke_" + marca, "QA_prof_" + marca, "qa" + marca + "x",
+                "Ana" + marca), apodos(pagina));
+        assertEquals(5, pagina.getTotalElements(), "el total es el de las que quedan, no el de la tabla");
     }
 
     @Test

@@ -35,6 +35,9 @@ import java.util.Locale;
  * @param estado          estado del contrato ({@link EstadoCuenta#PUBLICADOS}), o null = todos
  * @param registradoDesde primer dia de registro (inclusive), o null
  * @param registradoHasta ultimo dia de registro (inclusive), o null
+ * @param historialSanciones SA-3 (1.7.0): {@code CON} solo las cuentas a las que
+ *                        se les ha emitido alguna sancion, {@code SIN} solo las
+ *                        que nunca; null = todas
  */
 public record FiltroDelDirectorio(
         String texto,
@@ -42,33 +45,47 @@ public record FiltroDelDirectorio(
         String rol,
         String estado,
         LocalDate registradoDesde,
-        LocalDate registradoHasta) {
+        LocalDate registradoHasta,
+        String historialSanciones) {
 
     /** Los roles del contrato, en el orden de la Tabla 24. */
     static final List<String> ROLES = Arrays.stream(Role.values()).map(Enum::name).toList();
 
+    /** Los valores del filtro de historial de sanciones (1.7.0). */
+    public static final String CON_SANCIONES = "CON";
+    public static final String SIN_SANCIONES = "SIN";
+    static final List<String> HISTORIALES = List.of(CON_SANCIONES, SIN_SANCIONES);
+
     public static FiltroDelDirectorio de(String buscar, boolean ocultarPruebas, String rol, String estado,
                                          String registradoDesde, String registradoHasta) {
+        return de(buscar, ocultarPruebas, rol, estado, registradoDesde, registradoHasta, null);
+    }
+
+    public static FiltroDelDirectorio de(String buscar, boolean ocultarPruebas, String rol, String estado,
+                                         String registradoDesde, String registradoHasta,
+                                         String historialSanciones) {
         String texto = buscar == null ? "" : buscar.trim();
         String rolDelContrato = deLaLista(rol, ROLES, "Ese rol no existe");
         String estadoDelContrato = deLaLista(estado, EstadoCuenta.PUBLICADOS, "Ese estado no existe");
+        String historial = deLaLista(historialSanciones, HISTORIALES, "Ese historial de sanciones no existe");
         LocalDate desde = dia(registradoDesde, "registradoDesde");
         LocalDate hasta = dia(registradoHasta, "registradoHasta");
         if (desde != null && hasta != null && desde.isAfter(hasta)) {
             throw new ConsultaInvalidaException(
                     "«registradoDesde» es posterior a «registradoHasta»: ninguna cuenta puede cumplir las dos.");
         }
-        return new FiltroDelDirectorio(texto, ocultarPruebas, rolDelContrato, estadoDelContrato, desde, hasta);
+        return new FiltroDelDirectorio(texto, ocultarPruebas, rolDelContrato, estadoDelContrato, desde, hasta,
+                historial);
     }
 
     /**
      * Ningun filtro: ni texto, ni pruebas ocultas, ni rol, ni estado, ni
-     * fechas. El directorio responde entonces con la consulta de siempre
-     * ({@code UsuarioRepository#buscarParaDirectorio}).
+     * fechas, ni historial de sanciones. El directorio responde entonces con la
+     * consulta de siempre ({@code UsuarioRepository#buscarParaDirectorio}).
      */
     public boolean sinFiltros() {
         return texto.isEmpty() && !ocultarPruebas && rol == null && estado == null
-                && registradoDesde == null && registradoHasta == null;
+                && registradoDesde == null && registradoHasta == null && historialSanciones == null;
     }
 
     /** La consulta del directorio con todos los filtros activos a la vez. */
@@ -89,7 +106,20 @@ public record FiltroDelDirectorio(
         if (registradoHasta != null) {
             consulta = consulta.and(registradaHasta(registradoHasta));
         }
+        if (historialSanciones != null) {
+            consulta = consulta.and(conHistorialDeSanciones(CON_SANCIONES.equals(historialSanciones)));
+        }
         return consulta;
+    }
+
+    /**
+     * Con o sin sanciones emitidas, segun el resumen que mantiene
+     * moderacion-sanciones (1.7.0).
+     */
+    static Specification<Usuario> conHistorialDeSanciones(boolean conSanciones) {
+        return (raiz, consulta, cb) -> conSanciones
+                ? cb.greaterThan(raiz.<Integer>get("sancionesRegistradas"), 0)
+                : cb.equal(raiz.<Integer>get("sancionesRegistradas"), 0);
     }
 
     /** Solo las cuentas de ese rol (por su nombre, el del contrato). */

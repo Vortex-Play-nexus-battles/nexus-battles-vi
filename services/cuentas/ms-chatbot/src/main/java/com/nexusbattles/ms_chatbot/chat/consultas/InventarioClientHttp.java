@@ -23,4 +23,13 @@ public class InventarioClientHttp implements InventarioClient {
             .retrieve()
             .body(PaginaInventarioDto.class);
     }
+
+    @Override
+    public PaginaInventarioDto buscar(String tokenBearer, String criterio) {
+        return inventarioRestClient.get()
+            .uri("/api/v1/inventario/elementos/busqueda?criterio={criterio}&pagina=0", criterio)
+            .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenBearer)
+            .retrieve()
+            .body(PaginaInventarioDto.class);
+    }
 }

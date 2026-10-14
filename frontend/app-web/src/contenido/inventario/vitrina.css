@@ -181,6 +181,7 @@
 .inventario-editor__guardar,
 .inventario-editor__cancelar,
 .vitrina__editar,
+.vitrina__eliminar,
 .vitrina__equipo,
 .inventario-equipo__cerrar,
 .inventario-equipo__equipar,
@@ -204,6 +205,7 @@
 .inventario-editor__guardar:hover,
 .inventario-editor__cancelar:hover,
 .vitrina__editar:hover,
+.vitrina__eliminar:hover,
 .vitrina__equipo:hover,
 .inventario-equipo__cerrar:hover,
 .inventario-equipo__equipar:hover,
@@ -615,10 +617,17 @@
 }
 
 .vitrina__editar,
+.vitrina__eliminar,
 .vitrina__equipo {
   min-height: 30px;
   padding: 4px 8px;
   font-size: 0.75rem;
+}
+
+/* §7.1 — toda la tarjeta abre el detalle con el raton (el boton «Ver detalle»
+   sigue siendo el camino del teclado). */
+.vitrina__producto--pulsable {
+  cursor: pointer;
 }
 
 .vitrina__nombre {
@@ -899,11 +908,23 @@
     --vitrina-separacion: 4px;
   }
 
-  /* El kit reserva 96 px para que el chatbot no tape el final de la pagina.
-     El boton mide 56 y se ancla abajo a la derecha: 64 lo libra igual. */
+  /*
+   * El kit reserva 96 px para que el chatbot no tape el final de la pagina
+   * (`body:has(.chatbot-flotante) main:not(.combate)`). El boton mide 56 y se
+   * ancla abajo a la derecha, asi que 64 lo libra igual y devuelve 32 px.
+   *
+   * Hay que igualar la especificidad del kit (0,2,2) o su regla gana y este
+   * recorte no se aplica: por eso el selector lleva `body` y `:has`, y no
+   * basta con `.vitrina-pagina > main`. Esta hoja se carga despues que
+   * `componentes.css`, asi que con la misma especificidad manda esta.
+   */
+  body.vitrina-pagina:has(.chatbot-flotante) > main {
+    padding-top: 8px;
+    padding-bottom: 64px;
+  }
+
   .vitrina-pagina > main {
     padding-top: 8px;
-    padding-bottom: 58px;
   }
 
   /* Un bloque oculto no debe seguir separando: el editor y el banner de

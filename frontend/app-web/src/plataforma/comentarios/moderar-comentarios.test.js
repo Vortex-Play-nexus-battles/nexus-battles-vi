@@ -17,8 +17,12 @@ import { fileURLToPath } from 'node:url';
 import { jest } from '@jest/globals';
 
 import {
+  ALREDEDOR,
+  enlaceDelProducto,
   enlazadorDeFicha,
+  enlazadorDeSancion,
   montarModeracion,
+  nombresDeProductos,
   panelDeDetalle,
   tarjetaDeEntrada,
 } from './moderar-comentarios.js';
@@ -674,8 +678,11 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
     return { autorId: 'aut-1', apodoAutor: 'LyraRoja', comentarios, total, pagina, tamano: 20 };
   }
 
-  function abrirPanel(cargar, d = conAutor()) {
-    const panel = panelDeDetalle(d, () => {}, { cargarHistorialDelAutor: cargar });
+  function abrirPanel(cargar, d = conAutor(), nombreDeProducto = async () => 'Espada de Vorn') {
+    const panel = panelDeDetalle(d, () => {}, {
+      cargarHistorialDelAutor: cargar,
+      nombreDeProducto,
+    });
     document.body.replaceChildren(panel);
     return panel;
   }
@@ -732,7 +739,11 @@ describe('HU-COM-005: el historial de comentarios del autor en el detalle', () =
     expect(filas).toHaveLength(4);
     expect(filas[0].querySelector('[data-campo="texto"]').textContent).toBe('Texto 1');
     expect(filas[0].querySelector('[data-campo="fecha"]').textContent).toBe(fechaHora(AHORA));
-    expect(filas[0].querySelector('[data-campo="producto"]').textContent).toBe('Producto: prod-7');
+    // SA-16: el nombre del producto, nunca su identificador.
+    expect(filas[0].querySelector('[data-campo="producto"]').textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
+    expect(panel.querySelector(ZONA).textContent).not.toContain('prod-7');
     // Con texto, no solo con color: los cuatro estados, incluido EN_REVISION.
     const estados = [...filas].map((f) => f.querySelector('[data-campo="estado"]').textContent);
     expect(estados).toEqual(['Oculto', 'Eliminado', 'En revisión', 'Publicado']);
@@ -1950,5 +1961,323 @@ describe('HU-COM-005 (#519): decisión en lote', () => {
         expect(lote.compareDocumentPosition(cola) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       });
     });
+  });
+});
+
+describe('HU-COM-007 CA-01: la detección automática en la cola y el detalle', () => {
+  const porLaListaNegra = {
+    fecha: AHORA,
+    reglas: [7, 9],
+    categoria: 'OFENSIVO',
+    motivo: 'El texto contiene un termino no permitido',
+    servicioNoDisponible: false,
+  };
+  const sinServicio = {
+    fecha: AHORA,
+    reglas: [],
+    motivo: 'I/O error on POST request for "http://lista-negra"',
+    servicioNoDisponible: true,
+  };
+
+  /** La tarjeta de la cola y el panel de detalle, con la misma detección. */
+  const conDeteccion = (deteccion) => [
+    tarjetaDeEntrada(entrada({ reportes: 0, porCategoria: {}, deteccion }), () => {}),
+    panelDeDetalle(detalle({ reportes: [], deteccion }), () => {}),
+  ];
+
+  test('la tarjeta y el detalle dicen cuántos términos lo retuvieron, con su categoría y su motivo', () => {
+    for (const nodo of conDeteccion(porLaListaNegra)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque).not.toBeNull();
+      expect(nodo.textContent).toContain('Detección automática');
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+        'Coincidió con 2 términos de la lista negra',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]').textContent).toBe(
+        'Ofensivo',
+      );
+      // SA-4 — sin identificadores ni constantes a la vista.
+      expect(bloque.textContent).not.toMatch(/\b7\b|\b9\b|OFENSIVO/);
+      expect(bloque.querySelector('[data-campo="deteccion-motivo"]').textContent).toBe(
+        'El texto contiene un termino no permitido',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]')).toBeNull();
+    }
+  });
+
+  test('un solo término se dice en singular, y si no vino ninguno se dice', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, reglas: [7] });
+    expect(tarjeta.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+      'Coincidió con un término de la lista negra',
+    );
+
+    const [, panel] = conDeteccion({ ...porLaListaNegra, reglas: [] });
+    expect(panel.querySelector('[data-campo="deteccion-reglas"]').textContent).toBe(
+      'La lista negra no indicó qué término coincidió',
+    );
+  });
+
+  test('si la lista negra no respondió lo dice, sin inventar reglas ni enseñar el error técnico', () => {
+    for (const nodo of conDeteccion(sinServicio)) {
+      const bloque = nodo.querySelector('[data-zona="deteccion"]');
+      expect(bloque.querySelector('[data-campo="deteccion-sin-servicio"]').textContent).toBe(
+        'La lista negra no respondió; retenido por precaución',
+      );
+      expect(bloque.querySelector('[data-campo="deteccion-reglas"]')).toBeNull();
+      expect(bloque.querySelector('[data-campo="deteccion-categoria"]')).toBeNull();
+      expect(bloque.textContent).not.toContain('I/O error');
+    }
+  });
+
+  test('sin detección (llegó por reportes) no hay bloque', () => {
+    expect(
+      tarjetaDeEntrada(entrada(), () => {}).querySelector('[data-zona="deteccion"]'),
+    ).toBeNull();
+    const panel = panelDeDetalle(detalle(), () => {});
+    expect(panel.querySelector('[data-zona="deteccion"]')).toBeNull();
+    expect(panel.textContent).not.toContain('Detección automática');
+  });
+
+  test('el motivo llega de otro servicio: se pinta como texto, nunca como marcado', () => {
+    const [tarjeta] = conDeteccion({ ...porLaListaNegra, motivo: '<img src=x onerror="robar()">' });
+    const motivo = tarjeta.querySelector('[data-campo="deteccion-motivo"]');
+    expect(motivo.textContent).toBe('<img src=x onerror="robar()">');
+    expect(motivo.querySelector('img')).toBeNull();
+  });
+});
+
+describe('SA-4 — del comentario a la sanción de su autor', () => {
+  test('los tres roles de moderación tienen el enlace; un jugador, no', () => {
+    for (const rol of ['MODERADOR', 'ADMINISTRADOR', 'SUPER_ADMINISTRADOR']) {
+      const enlazar = enlazadorDeSancion(rol);
+      expect(typeof enlazar).toBe('function');
+      const url = new URL(enlazar('aut-1', 'com-1'));
+      expect(url.pathname).toMatch(/moderacion-sanciones\/sanciones-admin\.html$/);
+      expect(url.searchParams.get('usuario')).toBe('aut-1');
+      expect(url.searchParams.get('comentario')).toBe('com-1');
+    }
+    expect(enlazadorDeSancion('JUGADOR')).toBeNull();
+    expect(enlazadorDeSancion(null)).toBeNull();
+  });
+
+  test('el detalle ofrece «Sancionar al autor» solo si se le pasa el enlace', () => {
+    const conEnlace = panelDeDetalle(detalle(), () => {}, {
+      hrefDeSancion: 'https://x/sanciones-admin.html?usuario=aut-1&comentario=com-1',
+    });
+    const enlace = conEnlace.querySelector('[data-accion="sancionar-autor"]');
+    expect(enlace.textContent).toBe('Sancionar al autor');
+    expect(enlace.getAttribute('href')).toContain('usuario=aut-1');
+    expect(
+      panelDeDetalle(detalle(), () => {}).querySelector('[data-accion="sancionar-autor"]'),
+    ).toBeNull();
+  });
+
+  test('los reportes del detalle dicen su categoría con el nombre de §7.3.3, no la constante', () => {
+    const panel = panelDeDetalle(
+      detalle({
+        reportes: [
+          { id: 'r-1', categoria: 'VIOLACION_DE_DERECHOS', descripcion: null, fecha: AHORA },
+          { id: 'r-2', categoria: 'CATEGORIA_NUEVA', descripcion: 'otra', fecha: AHORA },
+        ],
+      }),
+      () => {},
+    );
+    const lineas = [...panel.querySelectorAll('[data-zona="reportes"] li')].map(
+      (l) => l.textContent,
+    );
+    expect(lineas[0]).toMatch(/^Violación de derechos de autor · /);
+    expect(lineas[1]).toMatch(/^Categoria nueva · /);
+    expect(panel.textContent).not.toContain('VIOLACION_DE_DERECHOS');
+  });
+});
+
+describe('SA-16 — el comentario en su contexto (§7.3.8, comentarios.yaml 1.17.0)', () => {
+  const ZONA = '[data-zona="contexto"]';
+
+  const abierto = () =>
+    detalle({
+      comentario: {
+        ...detalle().comentario,
+        id: 'com-1',
+        productoId: 'prod-7',
+        fechaPublicacion: '2026-09-23T09:00:00Z',
+      },
+    });
+
+  const item = (id, apodoAutor, estado, fechaPublicacion) => ({
+    id,
+    apodoAutor,
+    texto: `Dice ${apodoAutor}`,
+    fechaPublicacion,
+    estado,
+    editado: false,
+  });
+
+  const CONTEXTO = {
+    comentarioId: 'com-1',
+    productoId: 'prod-7',
+    anteriores: [
+      item('c-a', 'Ana', 'PUBLICADO', '2026-09-23T08:00:00Z'),
+      item('c-b', 'Bruno', 'OCULTO', '2026-09-23T08:30:00Z'),
+    ],
+    posteriores: [item('c-c', 'Carla', 'ELIMINADO', '2026-09-23T09:30:00Z')],
+    totalEnElHilo: 9,
+  };
+
+  function abrir({
+    cargarContexto = jest.fn().mockResolvedValue(CONTEXTO),
+    nombre = 'Espada de Vorn',
+  } = {}) {
+    const panel = panelDeDetalle(abierto(), () => {}, {
+      cargarContexto,
+      nombreDeProducto: async () => nombre,
+      hrefDelProducto: (id) => `https://nexus.test/comentar?producto=${id}`,
+    });
+    document.body.replaceChildren(panel);
+    return { panel, cargarContexto };
+  }
+
+  test('el producto por su nombre, con su página, y la conversación en orden con este comentario en su sitio', async () => {
+    const { panel, cargarContexto } = abrir();
+    await asentar();
+
+    expect(cargarContexto).toHaveBeenCalledWith('com-1');
+    const zona = panel.querySelector(ZONA);
+    expect(zona.querySelector('h3').textContent).toBe('En su contexto');
+    expect(zona.querySelector('[data-campo="producto"]').textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
+    expect(zona.querySelector('[data-accion="ver-producto"]').getAttribute('href')).toBe(
+      'https://nexus.test/comentar?producto=prod-7',
+    );
+
+    const filas = [...zona.querySelectorAll('[data-zona="contexto-hilo"] > li')];
+    expect(filas.map((f) => f.dataset.comentarioId)).toEqual(['c-a', 'c-b', 'com-1', 'c-c']);
+    const este = filas[2];
+    expect(este.getAttribute('aria-current')).toBe('true');
+    expect(este.querySelector('[data-dato="este"]').textContent).toBe(
+      'El comentario que estás revisando',
+    );
+    expect(filas.filter((f) => f.hasAttribute('aria-current'))).toHaveLength(1);
+    // Los estados con palabras: lo que el lector no veía se distingue.
+    expect(filas[1].querySelector('[data-dato="estado"]').textContent).toBe('Oculto');
+    expect(filas[3].querySelector('[data-dato="estado"]').textContent).toBe('Eliminado');
+    expect(filas[0].textContent).toContain('Ana');
+    expect(filas[0].querySelector('[data-dato="texto"]').textContent).toBe('Dice Ana');
+    expect(zona.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'El hilo del producto tiene 9 comentarios; estos son los 4 más cercanos a este.',
+    );
+    // Ni identificadores de producto ni de comentario en el texto.
+    expect(zona.textContent).not.toMatch(/prod-7|com-1|c-a/);
+  });
+
+  test('un hilo que se ve entero lo dice, y un comentario solo también', async () => {
+    const { panel } = abrir({
+      cargarContexto: jest.fn().mockResolvedValue({ ...CONTEXTO, totalEnElHilo: 4 }),
+    });
+    await asentar();
+    expect(panel.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'El hilo completo del producto: 4 comentarios.',
+    );
+
+    const solo = abrir({
+      cargarContexto: jest
+        .fn()
+        .mockResolvedValue({ ...CONTEXTO, anteriores: [], posteriores: [], totalEnElHilo: 1 }),
+    });
+    await asentar();
+    expect(solo.panel.querySelector('[data-campo="resumen-del-hilo"]').textContent).toBe(
+      'Es el único comentario del producto.',
+    );
+  });
+
+  test('un producto que el catálogo no da se dice, sin su identificador', async () => {
+    const { panel } = abrir({ nombre: null });
+    await asentar();
+    expect(panel.querySelector(`${ZONA} [data-campo="producto"]`).textContent).toBe(
+      'Producto: no disponible en el catálogo',
+    );
+  });
+
+  test('si la conversación no carga, lo dice con reintento y el resto del detalle sigue', async () => {
+    const cargarContexto = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValueOnce(CONTEXTO);
+    const { panel } = abrir({ cargarContexto });
+    await asentar();
+
+    const aviso = panel.querySelector('[data-zona="contexto-aviso"]');
+    expect(aviso.hidden).toBe(false);
+    expect(aviso.textContent).toContain('No se pudo cargar la conversación');
+    expect(panel.querySelector('[data-zona="decision"]')).not.toBeNull();
+    expect(panel.querySelector('[data-zona="reportes"]')).not.toBeNull();
+
+    aviso.querySelector('[data-accion="reintentar"]').click();
+    await asentar();
+    expect(cargarContexto).toHaveBeenCalledTimes(2);
+    expect(panel.querySelectorAll('[data-zona="contexto-hilo"] > li')).toHaveLength(4);
+  });
+
+  test('un 404 no ofrece reintentar: no va a cambiar pulsando otra vez', async () => {
+    const { panel } = abrir({
+      cargarContexto: jest.fn().mockRejectedValue(new ErrorDeApi(null, 404)),
+    });
+    await asentar();
+    expect(
+      panel.querySelector('[data-zona="contexto-aviso"] [data-accion="reintentar"]'),
+    ).toBeNull();
+  });
+
+  test('sin fuentes no se pinta la sección', () => {
+    expect(panelDeDetalle(abierto(), () => {}).querySelector(ZONA)).toBeNull();
+  });
+
+  test('el enlace al producto lleva a su página pública con el producto en la dirección', () => {
+    const url = new URL(enlaceDelProducto('prod-7'));
+    expect(url.searchParams.get('producto')).toBe('prod-7');
+    expect(url.pathname).toMatch(/publicar-comentario\.html$|\/comentar$/);
+    expect(enlaceDelProducto('')).toBeNull();
+  });
+
+  test('cada producto se pregunta una vez; si el catálogo falla, se vuelve a preguntar después', async () => {
+    const consultar = jest
+      .fn()
+      .mockRejectedValueOnce(new ErrorDeApi(null, 503))
+      .mockResolvedValue({ id: 'prod-7', nombre: ' Espada de Vorn ' });
+    const nombre = nombresDeProductos(consultar);
+
+    expect(await nombre('prod-7')).toBeNull();
+    expect(await nombre('prod-7')).toBe('Espada de Vorn');
+    expect(await nombre('prod-7')).toBe('Espada de Vorn');
+    expect(consultar).toHaveBeenCalledTimes(2);
+    expect(await nombre('')).toBeNull();
+  });
+
+  test('montarModeracion pide la conversación con su tamaño y el producto una sola vez', async () => {
+    const contextoDelComentario = jest.fn().mockResolvedValue(CONTEXTO);
+    const productoDelCatalogo = jest
+      .fn()
+      .mockResolvedValue({ id: 'prod-7', nombre: 'Espada de Vorn' });
+    const api = {
+      consultarCola: jest.fn().mockResolvedValue({ entradas: [entrada()], total: 1 }),
+      consultarDetalle: jest.fn().mockResolvedValue(abierto()),
+      contextoDelComentario,
+      productoDelCatalogo,
+    };
+    const raiz = vista();
+    montarModeracion(raiz, { api });
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+    raiz.querySelector('[data-accion="revisar"]').click();
+    await asentar();
+
+    expect(contextoDelComentario).toHaveBeenCalledWith('com-1', { alrededor: ALREDEDOR });
+    expect(ALREDEDOR).toBe(3);
+    expect(productoDelCatalogo).toHaveBeenCalledTimes(1);
+    expect(raiz.querySelector(`${ZONA} [data-campo="producto"]`).textContent).toBe(
+      'Producto: Espada de Vorn',
+    );
   });
 });

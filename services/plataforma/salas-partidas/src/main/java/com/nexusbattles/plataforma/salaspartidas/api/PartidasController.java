@@ -2,6 +2,7 @@ package com.nexusbattles.plataforma.salaspartidas.api;
 
 import com.nexusbattles.comun.seguridad.IdentidadDelToken;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.EjecutarAccion;
+import com.nexusbattles.plataforma.salaspartidas.aplicacion.EstadisticasDeJugador;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.MisPartidas;
 import com.nexusbattles.plataforma.salaspartidas.aplicacion.ObtenerPartida;
 import org.springframework.security.core.Authentication;
@@ -29,6 +30,12 @@ import java.util.UUID;
  * <p>Desde 1.7.0 (B7) una partida solo la ven quienes la juegan y los roles de
  * operacion, y {@code /partidas/mias} da el historial de quien pregunta. En los
  * dos casos el jugador sale del token, nunca de la ruta.
+ *
+ * <p>Desde 1.11.0 (§7.3.4, ficha administrativa del usuario) la administracion
+ * lee el historial y las estadisticas de una cuenta por su {@code uid} en
+ * {@code /partidas/jugadores/{idJugador}}: es la unica ruta donde el jugador
+ * sale de la ruta, y solo la abren Administrador y Super Administrador
+ * (SecurityConfig).
  */
 @RestController
 @RequestMapping("/api/v1/partidas")
@@ -40,12 +47,15 @@ public class PartidasController {
 
     private final ObtenerPartida obtenerPartida;
     private final MisPartidas misPartidas;
+    private final EstadisticasDeJugador estadisticasDeJugador;
     private final EjecutarAccion ejecutarAccion;
     private final Clock reloj;
 
-    PartidasController(ObtenerPartida obtenerPartida, MisPartidas misPartidas, EjecutarAccion ejecutarAccion) {
+    PartidasController(ObtenerPartida obtenerPartida, MisPartidas misPartidas,
+                       EstadisticasDeJugador estadisticasDeJugador, EjecutarAccion ejecutarAccion) {
         this.obtenerPartida = obtenerPartida;
         this.misPartidas = misPartidas;
+        this.estadisticasDeJugador = estadisticasDeJugador;
         this.ejecutarAccion = ejecutarAccion;
         this.reloj = Clock.systemUTC();
     }
@@ -83,6 +93,23 @@ public class PartidasController {
                                    @RequestParam(defaultValue = "16") int tamano,
                                    @AuthenticationPrincipal Jwt token) {
         return misPartidas.ejecutar(IdentidadDelToken.idDe(token), pagina, tamano);
+    }
+
+    /**
+     * Historial de partidas de una cuenta, para su ficha administrativa (1.11.0).
+     * El resultado va desde el punto de vista de esa cuenta.
+     */
+    @GetMapping("/jugadores/{idJugador}")
+    public MisPartidas.Pagina deJugador(@PathVariable UUID idJugador,
+                                        @RequestParam(defaultValue = "0") int pagina,
+                                        @RequestParam(defaultValue = "16") int tamano) {
+        return misPartidas.ejecutar(idJugador, pagina, tamano);
+    }
+
+    /** Estadisticas de juego de una cuenta, para su ficha administrativa (1.11.0). */
+    @GetMapping("/jugadores/{idJugador}/estadisticas")
+    public EstadisticasDeJugador.Estadisticas estadisticas(@PathVariable UUID idJugador) {
+        return estadisticasDeJugador.ejecutar(idJugador);
     }
 
     private static boolean deOperacion(Authentication autenticacion) {

@@ -1,24 +1,32 @@
 /**
  * Ficha administrativa del usuario — HU-USR-010 (RF-USR-010, §7.3.4
- * «perfil administrativo completo del usuario»).
+ * «Perfil de usuario (vista administrativa)»).
  *
  * ## Qué junta y de dónde
  *
  * Una cuenta, vista por cada servicio que es dueño de algo suyo, sin que el
  * navegador hable con ninguna base de datos ni ningún servicio lea las tablas
- * de otro:
+ * de otro. Cada sección pide lo suyo por el `uid` de la cuenta (SA-3):
  *
- * | Sección                  | Fuente                                                        |
- * |--------------------------|---------------------------------------------------------------|
- * | Datos de la cuenta       | `GET /admin/usuarios/{usuario}/ficha` (ms-identidad-admin 1.4.0) |
- * | Sanciones y advertencias | `GET /sanciones/usuarios/{uid}` (moderacion-sanciones-admin)  |
- * | Comentarios publicados   | `GET /comentarios/moderacion/autores/{uid}/comentarios` (comentarios 1.7.0) |
+ * | Pestaña    | Sección                       | Fuente                                                     |
+ * |------------|-------------------------------|------------------------------------------------------------|
+ * | Resumen    | Datos de la cuenta            | `GET /admin/usuarios/{usuario}/ficha` (ms-identidad-admin 1.4.0) |
+ * |            | Rol y permisos                | `GET /rbac/matrix` (rbac 2.0.0)                            |
+ * | Juego      | Estadísticas de juego         | `GET /partidas/jugadores/{uid}/estadisticas` (salas-partidas 1.11.0) |
+ * |            | Últimas partidas              | `GET /partidas/jugadores/{uid}`                            |
+ * | Créditos y pagos | Saldo y movimientos     | `GET /creditos/{uid}/saldo` y `/movimientos` (creditos 1.5.0) |
+ * |            | Pagos en moneda real          | `GET /transacciones/usuarios/{uid}` (transacciones 1.1.0, SA-15) |
+ * | Sanciones  | Sanciones y advertencias      | `GET /sanciones/usuarios/{uid}` (moderacion-sanciones-admin) |
+ * | Comunidad  | Comentarios publicados        | `GET /comentarios/moderacion/autores/{uid}/comentarios`    |
+ * |            | Reportes realizados/recibidos | `GET /comentarios/moderacion/usuarios/{uid}/reportes` (comentarios 1.12.0) |
+ * | Inventario | Inventario                    | `GET /inventario/usuarios/{uid}/elementos` (inventario 1.8.0) |
+ * | Actividad  | Línea de tiempo               | los hechos con fecha de todo lo anterior                   |
+ * |            | Acciones administrativas      | `GET /admin/auditoria?afectado=…` (ms-cumplimiento-auditoria 1.2.0), solo Super Administrador |
  *
- * Lo demás que pide la ficha oficial —reportes, transacciones, subastas,
- * misiones, estadísticas y la auditoría sobre la cuenta— no lo publica hoy
- * ningún servicio para administración (cada uno lo explica en `SIN_FUENTE`).
- * La pantalla lo dice: «Sin fuente publicada». Un hueco con su razón es
- * información; una tabla inventada sería una mentira operativa.
+ * El inventario se ve aquí y, para un Administrador o Super Administrador
+ * sobre una cuenta de rol inferior (7.3.1), se modifica con «Entregar
+ * productos» (SA-10, §7.3.4): la entrega administrativa auditada de
+ * ms-identidad-admin.yaml 1.10.0 (`entrega-administrativa.js`).
  *
  * ## Las reglas de la historia
  *
@@ -26,24 +34,31 @@
  *   su `uid` (lo único que la cola de comentarios conoce del autor, CA-02) y
  *   consolida lo que hay, con una línea de tiempo de la actividad.
  * - CA-03: si la cuenta no existe, el problem details de identidad lo dice y
- *   no se consulta nada más; si un servicio no responde, su sección dice
- *   «no disponible» y el resto sigue (cada panel carga por su cuenta, como en
+ *   no se consulta nada más; si un servicio no responde, su sección dice que
+ *   no pudo cargar y el resto sigue (cada panel carga por su cuenta, como en
  *   Control integral).
- * - Observación de la ficha: abrirla queda en la auditoría porque son datos
- *   personales. Lo registra ms-identidad al servir la ficha; si no pudo, la
- *   pantalla lo advierte.
+ * - Abrir la ficha queda en la auditoría porque son datos personales. Lo
+ *   registra ms-identidad al servir la ficha; si no pudo, la pantalla lo
+ *   advierte.
  *
  * @module plataforma/moderacion-sanciones/ficha-usuario
  */
 
-import { consultar, RESULTADO } from '../consola/cliente-consola.js';
-import { moduloNoImplementado, panel, pintarDesenlace, tabla } from '../consola/panel.js';
+import { consultar, filasDe, RESULTADO } from '../consola/cliente-consola.js';
+import { panel, pintarDesenlace, tabla } from '../consola/panel.js';
+import { CATEGORIAS } from '../comentarios/cliente-moderacion.js';
+import { abrirEntregaAdministrativa, puedeEntregarA } from './entrega-administrativa.js';
 import { ESTADO_LEGIBLE } from '../comentarios/moderar-comentarios.js';
-import { urlDeVista } from '../../comun/acceso.js';
+import { puedeVer, urlDeVista, VEREDICTO } from '../../comun/acceso.js';
 import { rutaDeApi } from '../../comun/base-api.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
+import { leerSesion } from '../../comun/sesion.js';
 import { NOMBRE_DE_ROL } from '../../comun/shell.js';
 import { aviso } from '../../comun/ui/aviso.js';
+import { distintivoDeEstado, ESTADOS_DE_PAGO, estadoSegun } from '../../comun/ui/admin/estado.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { nombreDeAccion } from '../../comun/ui/admin/nombres.js';
+import { permisosDelRol } from '../../comun/ui/admin/permisos.js';
 import { distintivo } from '../../comun/ui/distintivo.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import {
@@ -52,9 +67,21 @@ import {
   estadoVacio,
   pintarEstado,
 } from '../../comun/ui/estado-vista.js';
-import { fechaHora } from '../../comun/ui/formato.js';
+import { dinero, fechaHora, nombreDelTipo } from '../../comun/ui/formato.js';
+import { icono } from '../../comun/ui/icono.js';
+import {
+  distintivoDeResultado,
+  nombreDeModalidad,
+  resultadoDePartida,
+} from '../../comun/ui/juego/partida.js';
 import { lineaDeTiempo } from '../../comun/ui/linea-de-tiempo.js';
+import {
+  comoImporte,
+  importeConUnidad,
+  nombreDelConcepto,
+} from '../../comun/ui/movimiento-de-creditos.js';
 import { encabezadoDePagina } from '../../comun/ui/pagina.js';
+import { montarPestanas } from '../../comun/ui/pestanas.js';
 import { estadoDeCuenta, hechosDeSanciones, NOMBRE_DE_SANCION } from '../../comun/ui/sancion.js';
 import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 
@@ -62,11 +89,20 @@ import { textoDelServidor } from '../../comun/ui/texto-de-fallo.js';
 const CLAVE = /^[1-9]\d{0,17}$/;
 const UID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** Lo que se pinta cuando la fuente no trae el dato. */
-export const SIN_DATO = 'sin dato';
+/**
+ * Lo que se pinta cuando la fuente no trae el dato: el mismo texto que pinta
+ * la tabla del kit de la consola cuando una celda llega vacía.
+ */
+export const SIN_DATO = 'Sin dato';
 
 /** Comentarios que se piden: la primera página del historial del autor. */
 export const COMENTARIOS_POR_PAGINA = 20;
+
+/** Partidas, movimientos y reportes de cada lado que se piden: los más recientes. */
+export const RECIENTES_POR_SECCION = 10;
+
+/** Acciones administrativas sobre la cuenta que se piden a la auditoría. */
+export const ACCIONES_DE_AUDITORIA = 20;
 
 /** Largo del extracto de un comentario en la tabla y en la línea de tiempo. */
 const LARGO_DEL_EXTRACTO = 160;
@@ -91,55 +127,25 @@ export const DESENLACE_DE_FICHA = Object.freeze({
   NO_DISPONIBLE: 'NO_DISPONIBLE',
 });
 
-/**
- * Lo que la ficha oficial pide y ningún servicio publica hoy para
- * administración, con la razón dicha para quien opera. Revisado contra
- * `contracts/openapi/` (HU-USR-010): si un servicio publica la consulta, la
- * sección sale de esta lista y pasa a tener panel con datos.
- */
-export const SIN_FUENTE = Object.freeze([
-  {
-    id: 'reportes',
-    titulo: 'Reportes hechos y recibidos',
-    razon:
-      'El servicio de comentarios no publica los reportes por persona: ni los que hizo ni los ' +
-      'que recibieron sus comentarios. Se ven, comentario a comentario, en la cola de moderación.',
-  },
-  {
-    id: 'transacciones',
-    titulo: 'Transacciones',
-    razon:
-      'El servicio de finanzas solo deja consultar los movimientos de un jugador a ese mismo ' +
-      'jugador o a otro servicio; no hay una consulta para administración.',
-  },
-  {
-    id: 'subastas',
-    titulo: 'Subastas',
-    razon:
-      'El servicio de subastas publica el mercado y lo de quien tiene la sesión, pero no las ' +
-      'subastas o pujas de otra persona.',
-  },
-  {
-    id: 'misiones',
-    titulo: 'Misiones',
-    razon:
-      'El servicio de misiones publica el tablón, las misiones en curso y el historial de quien ' +
-      'tiene la sesión, no los de otra persona.',
-  },
-  {
-    id: 'estadisticas',
-    titulo: 'Estadísticas de juego',
-    razon:
-      'Las partidas y su resultado solo se publican para quien las jugó; no hay una consulta ' +
-      'por jugador para administración.',
-  },
-  {
-    id: 'auditoria',
-    titulo: 'Auditoría sobre esta cuenta',
-    razon:
-      'La auditoría se consulta por administrador, tipo de acción y fechas, pero no por la ' +
-      'persona afectada: no hay forma de traer solo lo que toca a esta cuenta.',
-  },
+/** Las pestañas de la ficha, en el orden de §7.3.4. */
+export const PESTANAS_DE_LA_FICHA = Object.freeze([
+  { id: 'resumen', etiqueta: 'Resumen' },
+  { id: 'juego', etiqueta: 'Juego' },
+  { id: 'creditos', etiqueta: 'Créditos y pagos' },
+  { id: 'sanciones', etiqueta: 'Sanciones' },
+  { id: 'comunidad', etiqueta: 'Comunidad' },
+  { id: 'inventario', etiqueta: 'Inventario' },
+  { id: 'actividad', etiqueta: 'Actividad' },
+]);
+
+/** Las familias de hechos de la línea de tiempo, para filtrarla. */
+export const CATEGORIAS_DE_LA_LINEA = Object.freeze([
+  { valor: 'cuenta', etiqueta: 'Cuenta' },
+  { valor: 'juego', etiqueta: 'Partidas' },
+  { valor: 'creditos', etiqueta: 'Créditos y pagos' },
+  { valor: 'sanciones', etiqueta: 'Sanciones' },
+  { valor: 'comunidad', etiqueta: 'Comentarios y reportes' },
+  { valor: 'administracion', etiqueta: 'Acciones administrativas' },
 ]);
 
 /* -------------------------------------------------------------------------
@@ -269,12 +275,139 @@ export function hechosDeComentarios(historial) {
     });
 }
 
+/**
+ * Un hecho por partida de la página que se cargó: cuándo terminó (o empezó,
+ * si sigue en curso), la modalidad y el resultado para esta cuenta.
+ *
+ * @param {{contenido?: object[]}|null} pagina `PaginaDePartidas` (salas-partidas 1.11.0)
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDePartidas(pagina) {
+  return filasDe(pagina)
+    .filter((partida) => partida?.iniciadaEn)
+    .map((partida) => {
+      const enCurso = partida.estado === 'EN_CURSO';
+      const resultado = resultadoDePartida(partida).texto;
+      return {
+        cuando: enCurso ? partida.iniciadaEn : (partida.finalizadaEn ?? partida.iniciadaEn),
+        titulo: enCurso ? 'Empezó una partida' : 'Jugó una partida',
+        detalle: `${nombreDeModalidad(partida.modalidad)} · ${resultado}`,
+        tono: partida.resultado === 'VICTORIA' ? 'exito' : 'neutro',
+      };
+    });
+}
+
+/**
+ * Un hecho por movimiento de créditos: el concepto y cómo afectó al saldo,
+ * con las palabras que decide el libro de créditos (`signo`).
+ *
+ * @param {{content?: object[]}|null} pagina página de `MovimientoDeCredito` (creditos 1.5.0)
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDeMovimientos(pagina) {
+  return filasDe(pagina)
+    .filter((movimiento) => movimiento?.creado)
+    .map((movimiento) => ({
+      cuando: movimiento.creado,
+      titulo: nombreDelConcepto(movimiento.concepto),
+      detalle: importeConUnidad(movimiento),
+      tono: 'neutro',
+    }));
+}
+
+/** Cómo se cuenta en la línea de tiempo lo que pasó con un pago. */
+const HECHO_DE_PAGO = Object.freeze({
+  APROBADO: { titulo: 'Pagó con dinero', tono: 'exito' },
+  RECHAZADO: { titulo: 'Un pago con dinero fue rechazado', tono: 'advertencia' },
+  INDETERMINADO: { titulo: 'Un pago con dinero quedó sin confirmar', tono: 'advertencia' },
+});
+
+/**
+ * Un hecho por cobro en moneda real (SA-15): qué se pagó, cuánto y qué pasó.
+ *
+ * @param {{content?: object[]}|null} pagina página de `ResumenTransaccion` (transacciones 1.1.0)
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDePagos(pagina) {
+  return filasDe(pagina)
+    .filter((pago) => pago?.creado)
+    .map((pago) => {
+      const forma = HECHO_DE_PAGO[pago.resultado] ?? {
+        titulo: 'Un pago con dinero',
+        tono: 'neutro',
+      };
+      return {
+        cuando: pago.creado,
+        titulo: forma.titulo,
+        detalle: [pago.concepto, dinero(pago.monto, pago.moneda)].filter(Boolean).join(' · '),
+        tono: forma.tono,
+      };
+    });
+}
+
+/**
+ * Un hecho por reporte: los que hizo la cuenta y los que recibieron sus
+ * comentarios. De un reporte recibido no se sabe quién lo hizo: el servicio
+ * no lo publica.
+ *
+ * @param {{reportes?: object[]}|null} respuesta `ReportesDelUsuarioResponse` (comentarios 1.12.0)
+ * @param {'REALIZADOS'|'RECIBIDOS'} direccion
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDeReportes(respuesta, direccion) {
+  const lista = Array.isArray(respuesta?.reportes) ? respuesta.reportes : [];
+  const recibidos = direccion === 'RECIBIDOS';
+  return lista
+    .filter((reporte) => reporte?.fecha)
+    .map((reporte) => ({
+      cuando: reporte.fecha,
+      titulo: recibidos ? 'Un comentario suyo fue reportado' : 'Reportó un comentario',
+      detalle: [
+        nombreDeCategoria(reporte.categoria),
+        reporte.comentario?.extracto ? `«${extracto(reporte.comentario.extracto)}»` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      tono: recibidos ? 'advertencia' : 'neutro',
+    }));
+}
+
+/**
+ * Las acciones administrativas sobre la cuenta, de la auditoría. Las
+ * sanciones no se repiten: ya las cuenta su dueño (moderación) con su motivo
+ * y su vigencia, y la auditoría solo las anota.
+ *
+ * @param {{content?: object[]}|null} pagina `PaginaDeAuditoria`
+ * @returns {import('../../comun/ui/linea-de-tiempo.js').HechoDeLaLinea[]}
+ */
+export function hechosDeAuditoria(pagina) {
+  return filasDe(pagina)
+    .filter(
+      (registro) =>
+        registro?.fechaHora &&
+        registro.tipoAccion !== 'SANCION' &&
+        registro.tipoAccion !== 'SUSPENSION',
+    )
+    .map((registro) => ({
+      cuando: registro.fechaHora,
+      titulo: nombreDeAccion(registro.tipoAccion),
+      detalle: registro.motivo || null,
+      actor: registro.administrador ? `Por ${registro.administrador}` : null,
+      tono: registro.tipoAccion === 'SECURITY_BYPASS_ATTEMPT' ? 'error' : 'info',
+    }));
+}
+
 /** @param {string|null|undefined} texto */
 function extracto(texto) {
   const limpio = String(texto ?? '').trim();
   return limpio.length > LARGO_DEL_EXTRACTO
     ? `${limpio.slice(0, LARGO_DEL_EXTRACTO - 1).trimEnd()}…`
     : limpio;
+}
+
+/** @param {string|null|undefined} categoria `CategoriaDeReporte` */
+function nombreDeCategoria(categoria) {
+  return CATEGORIAS.find((c) => c.valor === categoria)?.etiqueta ?? categoria ?? SIN_DATO;
 }
 
 /* -------------------------------------------------------------------------
@@ -286,7 +419,8 @@ function extracto(texto) {
  *
  * @param {Document|HTMLElement} raiz con las zonas `encabezado`, `aviso` y `ficha`
  * @param {{clave?: string|null, buscar?: Function, consultarApi?: typeof consultar,
- *          ahora?: () => number}} [opciones] inyectables en pruebas
+ *          ahora?: () => number, sesion?: {autenticado?: boolean, rol?: string|null}|null}} [opciones]
+ *   inyectables en pruebas; `sesion` decide qué secciones de solo Super Administrador se piden
  * @returns {Promise<object|null>} el desenlace de la ficha de identidad
  */
 export function montarFichaDeUsuario(
@@ -296,6 +430,7 @@ export function montarFichaDeUsuario(
     buscar = fetchWithHttpErrorInterceptor,
     consultarApi = consultar,
     ahora = () => Date.now(),
+    sesion = leerSesion(),
   } = {},
 ) {
   const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
@@ -312,8 +447,8 @@ export function montarFichaDeUsuario(
       estadoVacio({
         titulo: 'Falta la cuenta',
         detalle:
-          'La ficha se abre desde una fila del directorio de Control integral o desde el autor ' +
-          'de un comentario reportado.',
+          'La ficha se abre desde una fila del directorio de Control integral, desde la gestión ' +
+          'de usuarios o desde el autor de un comentario reportado.',
         accion: {
           texto: 'Ir al directorio',
           href: urlDeVista('control-integral'),
@@ -323,6 +458,10 @@ export function montarFichaDeUsuario(
     );
     return Promise.resolve(null);
   }
+
+  // La auditoría es solo del Super Administrador (§7.3.5, `ms-cumplimiento`):
+  // a otro rol no se le pide ni se le pinta un panel que siempre negaría.
+  const veAuditoria = puedeVer('auditoria', sesion).veredicto === VEREDICTO.VISIBLE;
 
   const cargar = async () => {
     vaciarAviso(zonaAviso);
@@ -334,7 +473,12 @@ export function montarFichaDeUsuario(
     }
     pintarEncabezado(zonaEncabezado, desenlace.ficha);
     pintarAuditoria(zonaAviso, desenlace.ficha);
-    await pintarSecciones(zonaFicha, desenlace.ficha, { consultarApi, ahora });
+    await pintarSecciones(zonaFicha, desenlace.ficha, {
+      consultarApi,
+      ahora,
+      veAuditoria,
+      rolDeQuienMira: sesion?.rol ?? null,
+    });
     return desenlace;
   };
   return cargar();
@@ -346,8 +490,7 @@ function pintarEncabezado(zona, ficha) {
     encabezadoDePagina({
       titulo: ficha?.apodo ? `Ficha de ${ficha.apodo}` : 'Ficha del usuario',
       descripcion:
-        'Lo que cada servicio publica de esta cuenta, en un solo sitio y con una línea de ' +
-        'tiempo de su actividad. Cada sección dice de dónde sale su dato.',
+        'Cuenta, juego, créditos, sanciones, comunidad, inventario y actividad, en una sola ficha.',
     }),
   );
 }
@@ -468,38 +611,70 @@ function pintarFallo(zona, desenlace, reintentar) {
    ------------------------------------------------------------------------- */
 
 /**
- * Pinta las cuatro secciones y espera a las dos que consultan otros servicios
- * para armar la línea de tiempo. Cada panel carga por su cuenta: que
- * moderación tarde no retrasa a comentarios.
+ * Pinta las pestañas y espera a las secciones que consultan otros servicios
+ * para armar la línea de tiempo. Cada panel carga por su cuenta y a la vez:
+ * que un servicio tarde no retrasa a los demás, y uno caído no tumba la
+ * ficha.
  *
  * @param {HTMLElement} zona
  * @param {object} ficha
- * @param {{consultarApi: typeof consultar, ahora: () => number}} opciones
+ * @param {{consultarApi: typeof consultar, ahora: () => number, veAuditoria: boolean,
+ *          rolDeQuienMira?: string|null}} opciones
  */
-async function pintarSecciones(zona, ficha, { consultarApi, ahora }) {
+async function pintarSecciones(
+  zona,
+  ficha,
+  { consultarApi, ahora, veAuditoria, rolDeQuienMira = null },
+) {
   const linea = panelDeLaLinea();
-  const cargados = { sanciones: null, comentarios: null };
-  const repintarLinea = () => linea.pintar(armarLinea(ficha, cargados, ahora()));
+  /** @type {Map<string, {datos: *, falta: string|null}>} */
+  const cargados = new Map();
+  const fuentes = fuentesDeLaFicha(ficha, { veAuditoria });
+  const inventario = fuentes.find((fuente) => fuente.id === 'inventario-de-la-cuenta');
+  if (inventario && ficha.uid && puedeEntregarA(rolDeQuienMira, ficha.rol)) {
+    inventario.panel.acciones = [botonDeEntrega(ficha, () => inventario.controlador)];
+  }
+  const repintarLinea = () => linea.pintar(armarLinea(ficha, fuentes, cargados, ahora()));
+  for (const fuente of fuentes) {
+    fuente.controlador = panelPorUid({
+      ...fuente.panel,
+      ficha,
+      consultarApi,
+      alCargar: (resultado) => cargados.set(fuente.id, resultado),
+    });
+    // Un reintento que trae los datos también los suma a la línea.
+    fuente.controlador.alReintentar = repintarLinea;
+  }
+  const elementoDe = (id) => fuentes.find((f) => f.id === id)?.controlador.elemento ?? null;
+  const permisos = panelDePermisos(ficha, consultarApi);
 
-  const sanciones = panelDeSanciones(ficha, consultarApi, (resultado) => {
-    cargados.sanciones = resultado;
-  });
-  const comentarios = panelDeComentarios(ficha, consultarApi, (resultado) => {
-    cargados.comentarios = resultado;
-  });
-  // Un reintento que trae los datos tambien los suma a la linea.
-  sanciones.alReintentar = repintarLinea;
-  comentarios.alReintentar = repintarLinea;
+  const paneles = {
+    resumen: [panelDeLaCuenta(ficha), permisos.elemento, panelDeAcciones(ficha)],
+    juego: [elementoDe('estadisticas'), elementoDe('partidas')],
+    creditos: [elementoDe('saldo'), elementoDe('movimientos'), elementoDe('pagos')],
+    sanciones: [elementoDe('sanciones')],
+    comunidad: [
+      elementoDe('comentarios'),
+      elementoDe('reportes-realizados'),
+      elementoDe('reportes-recibidos'),
+    ],
+    inventario: [elementoDe('inventario-de-la-cuenta')],
+    actividad: [linea.elemento, elementoDe('auditoria')],
+  };
 
   vaciar(zona);
-  zona.append(
-    seccion('cuenta', 'Cuenta', [panelDeLaCuenta(ficha), panelDeAcciones(ficha)]),
-    seccion('historial', 'Sanciones y comentarios', [sanciones.elemento, comentarios.elemento]),
-    seccion('actividad', 'Línea de tiempo', [linea.elemento]),
-    seccion('sin-fuente', 'Sin fuente publicada', SIN_FUENTE.map(panelSinFuente)),
+  const contenedor = h('div', { clase: 'ficha-usuario', datos: { zona: 'pestanas' } });
+  zona.append(contenedor);
+  montarPestanas(
+    contenedor,
+    PESTANAS_DE_LA_FICHA.map(({ id, etiqueta }) => ({
+      id,
+      etiqueta,
+      panel: seccion(id, etiqueta, paneles[id].filter(Boolean)),
+    })),
   );
 
-  await Promise.all([sanciones.cargar(), comentarios.cargar()]);
+  await Promise.all([permisos.cargar(), ...fuentes.map((fuente) => fuente.controlador.cargar())]);
   repintarLinea();
 }
 
@@ -508,12 +683,225 @@ function seccion(id, etiqueta, paneles) {
   return h('section', {
     clase: 'consola-integral__seccion',
     datos: { seccion: id },
-    atributos: { 'aria-label': etiqueta },
     hijos: [
-      h('h2', { clase: 't-subtitulo', texto: etiqueta }),
+      // La pestaña ya dice dónde se está; el título queda para quien
+      // recorre la página por encabezados.
+      h('h2', { clase: 'solo-lectores', texto: etiqueta }),
       h('div', { clase: 'consola-integral__rejilla', hijos: paneles }),
     ],
   });
+}
+
+/**
+ * Las secciones que se piden por el `uid` de la cuenta, con lo que cada una
+ * aporta a la línea de tiempo y el nombre con que se dice si faltó.
+ *
+ * @param {object} ficha
+ * @param {{veAuditoria: boolean}} opciones
+ */
+function fuentesDeLaFicha(ficha, { veAuditoria }) {
+  const fuentes = [
+    {
+      id: 'estadisticas',
+      enLaLinea: null,
+      panel: {
+        id: 'estadisticas',
+        titulo: 'Estadísticas de juego',
+        descripcion: 'Partidas terminadas, resultados y modalidades.',
+        ancho: 'completo',
+        servicio: 'partidas',
+        recurso: (uid) => `/partidas/jugadores/${uid}/estadisticas`,
+        pintar: pintarEstadisticas,
+        vacio: null,
+      },
+    },
+    {
+      id: 'partidas',
+      enLaLinea: { nombre: 'partidas', categoria: 'juego', hechos: hechosDePartidas },
+      panel: {
+        id: 'partidas',
+        titulo: 'Últimas partidas',
+        descripcion: 'Con el resultado para esta cuenta.',
+        ancho: 'completo',
+        servicio: 'partidas',
+        recurso: (uid) => `/partidas/jugadores/${uid}?pagina=0&tamano=${RECIENTES_POR_SECCION}`,
+        pintar: pintarPartidas,
+        vacio: { contenido: [], totalElementos: 0 },
+      },
+    },
+    {
+      id: 'saldo',
+      enLaLinea: null,
+      panel: {
+        id: 'saldo',
+        titulo: 'Saldo de créditos',
+        descripcion: 'Lo que tiene, lo apartado en apuestas y pujas, y lo que puede gastar.',
+        ancho: 'completo',
+        servicio: 'créditos',
+        recurso: (uid) => `/creditos/${uid}/saldo`,
+        pintar: pintarSaldo,
+        vacio: null,
+      },
+    },
+    {
+      id: 'movimientos',
+      enLaLinea: { nombre: 'créditos', categoria: 'creditos', hechos: hechosDeMovimientos },
+      panel: {
+        id: 'movimientos',
+        titulo: 'Movimientos de créditos',
+        descripcion:
+          'Apuestas, recompensas, inscripciones y compras, del más reciente al más antiguo.',
+        ancho: 'completo',
+        servicio: 'créditos',
+        recurso: (uid) => `/creditos/${uid}/movimientos?page=0&size=${RECIENTES_POR_SECCION}`,
+        pintar: pintarMovimientos,
+        vacio: { content: [], totalElements: 0 },
+      },
+    },
+    {
+      // SA-15 (§7.3.4 «Historial de transacciones»): lo pagado con dinero,
+      // que vive en otro libro que los créditos (ms-finanzas, transacciones 1.1.0).
+      id: 'pagos',
+      enLaLinea: { nombre: 'pagos', categoria: 'creditos', hechos: hechosDePagos },
+      panel: {
+        id: 'pagos',
+        titulo: 'Pagos en moneda real',
+        descripcion: 'Cada cobro con dinero, aprobado o no, con lo que se compró.',
+        ancho: 'completo',
+        servicio: 'pagos',
+        recurso: (uid) => `/transacciones/usuarios/${uid}?page=0&size=${RECIENTES_POR_SECCION}`,
+        pintar: pintarPagos,
+        vacio: { content: [], totalElements: 0 },
+      },
+    },
+    {
+      id: 'sanciones',
+      enLaLinea: {
+        nombre: 'sanciones',
+        categoria: 'sanciones',
+        hechos: (datos, ahora) => (Array.isArray(datos) ? hechosDeSanciones(datos, { ahora }) : []),
+      },
+      panel: {
+        id: 'sanciones',
+        titulo: 'Sanciones y advertencias',
+        descripcion: 'El historial disciplinario de la cuenta, con el motivo de cada sanción.',
+        ancho: 'completo',
+        servicio: 'moderación',
+        recurso: (uid) => `/sanciones/usuarios/${uid}`,
+        pintar: pintarSanciones,
+        vacio: [],
+      },
+    },
+    {
+      id: 'comentarios',
+      enLaLinea: { nombre: 'comentarios', categoria: 'comunidad', hechos: hechosDeComentarios },
+      panel: {
+        id: 'comentarios',
+        titulo: 'Comentarios publicados',
+        descripcion:
+          'Los más recientes, en cualquier estado: también los que moderación ocultó o eliminó.',
+        ancho: 'completo',
+        servicio: 'comentarios',
+        recurso: (uid) =>
+          `/comentarios/moderacion/autores/${uid}/comentarios?pagina=0&tamano=${COMENTARIOS_POR_PAGINA}`,
+        pintar: pintarComentarios,
+        vacio: { comentarios: [], total: 0 },
+      },
+    },
+    {
+      id: 'reportes-realizados',
+      enLaLinea: {
+        nombre: 'reportes realizados',
+        categoria: 'comunidad',
+        hechos: (datos) => hechosDeReportes(datos, 'REALIZADOS'),
+      },
+      panel: {
+        id: 'reportes-realizados',
+        titulo: 'Reportes realizados',
+        descripcion: 'Los comentarios de otras personas que esta cuenta reportó.',
+        ancho: 'completo',
+        servicio: 'comentarios',
+        recurso: (uid) =>
+          `/comentarios/moderacion/usuarios/${uid}/reportes?direccion=REALIZADOS&pagina=0&tamano=${RECIENTES_POR_SECCION}`,
+        pintar: (datos) => pintarReportes(datos, 'REALIZADOS'),
+        vacio: { reportes: [], total: 0 },
+      },
+    },
+    {
+      id: 'reportes-recibidos',
+      enLaLinea: {
+        nombre: 'reportes recibidos',
+        categoria: 'comunidad',
+        hechos: (datos) => hechosDeReportes(datos, 'RECIBIDOS'),
+      },
+      panel: {
+        id: 'reportes-recibidos',
+        titulo: 'Reportes recibidos',
+        descripcion: 'Los reportes que otras personas hicieron sobre sus comentarios.',
+        ancho: 'completo',
+        servicio: 'comentarios',
+        recurso: (uid) =>
+          `/comentarios/moderacion/usuarios/${uid}/reportes?direccion=RECIBIDOS&pagina=0&tamano=${RECIENTES_POR_SECCION}`,
+        pintar: (datos) => pintarReportes(datos, 'RECIBIDOS'),
+        vacio: { reportes: [], total: 0 },
+      },
+    },
+    {
+      id: 'inventario-de-la-cuenta',
+      enLaLinea: null,
+      panel: {
+        id: 'inventario-de-la-cuenta',
+        titulo: 'Inventario',
+        descripcion: 'Héroes y objetos de la cuenta, con dónde está cada uno ahora.',
+        ancho: 'completo',
+        servicio: 'inventario',
+        recurso: (uid) => `/inventario/usuarios/${uid}/elementos?pagina=0`,
+        pintar: pintarInventario,
+        vacio: { elementos: [], totalElementos: 0 },
+      },
+    },
+  ];
+  if (veAuditoria) {
+    fuentes.push({
+      id: 'auditoria',
+      enLaLinea: {
+        nombre: 'acciones administrativas',
+        categoria: 'administracion',
+        hechos: hechosDeAuditoria,
+      },
+      panel: {
+        id: 'auditoria',
+        titulo: 'Acciones administrativas sobre la cuenta',
+        descripcion:
+          'Lo que la administración hizo con esta cuenta, según la auditoría: también cada ' +
+          'consulta de esta ficha.',
+        ancho: 'completo',
+        servicio: 'auditoría',
+        recurso: (uid) => recursoDeAuditoria(uid, ficha),
+        pintar: pintarAuditoriaDeLaCuenta,
+        vacio: { content: [], totalElements: 0 },
+      },
+    });
+  }
+  return fuentes;
+}
+
+/**
+ * La auditoría guarda la cuenta afectada por su `uid` y, en registros
+ * anteriores, por su clave: se piden las dos formas (filtro repetible,
+ * ms-cumplimiento-auditoria 1.2.0), lo más reciente primero.
+ *
+ * @param {string} uid ya escapado
+ * @param {{id?: number|string}} ficha
+ */
+function recursoDeAuditoria(uid, ficha) {
+  const pares = [`afectado=${uid}`];
+  const clave = Number(ficha?.id);
+  if (Number.isInteger(clave) && clave > 0) {
+    pares.push(`afectado=${clave}`, `afectado=${encodeURIComponent(`usuario-${clave}`)}`);
+  }
+  pares.push('sort=fechaHora,desc', 'page=0', `size=${ACCIONES_DE_AUDITORIA}`);
+  return `/admin/auditoria?${pares.join('&')}`;
 }
 
 /** Un desenlace con datos que ya se tienen (no hace falta pedirlos). */
@@ -532,7 +920,6 @@ function panelDeLaCuenta(ficha) {
     id: 'cuenta',
     titulo: 'Datos de la cuenta',
     descripcion: 'Identidad, contacto, rol y estado.',
-    fuente: 'GET /api/v1/admin/usuarios/{usuario}/ficha',
   });
   pintarDesenlace(partes, yaCargado(ficha), datosDeLaCuenta);
   return partes.elemento;
@@ -584,6 +971,61 @@ function estadoLegible(ficha) {
 }
 
 /**
+ * §7.3.4 «rol y permisos asignados»: lo que la matriz que publica el
+ * servidor le da al rol de la cuenta, en palabras.
+ *
+ * @param {object} ficha
+ * @param {typeof consultar} consultarApi
+ */
+function panelDePermisos(ficha, consultarApi) {
+  const partes = panel({
+    id: 'permisos',
+    titulo: 'Rol y permisos',
+    descripcion: 'Lo que el rol de la cuenta le permite hacer en la plataforma.',
+  });
+  const rol = ficha.rol ?? null;
+  const pintar = (respuesta) => {
+    const nombreDelRol = NOMBRE_DE_ROL[rol] ?? (rol || 'Sin rol asignado');
+    const cabeza = h('p', {
+      clase: 'fila fila--envuelta',
+      hijos: [distintivo(nombreDelRol, rol ? String(rol).toLowerCase() : null)],
+    });
+    const permisos = permisosDelRol(respuesta?.matrix, rol);
+    if (permisos.length === 0) {
+      return [
+        cabeza,
+        h('p', {
+          clase: 't-meta',
+          texto: rol
+            ? 'La matriz de permisos no le da ninguna acción a este rol.'
+            : 'Sin rol, la cuenta no tiene permisos.',
+        }),
+      ];
+    }
+    return [
+      cabeza,
+      h('ul', {
+        clase: 'ficha-usuario__permisos',
+        atributos: { 'aria-label': `Permisos del rol ${nombreDelRol}` },
+        hijos: permisos.map((permiso) =>
+          h('li', {
+            hijos: [
+              icono('check', { etiqueta: null, clase: 'icono ficha-usuario__permiso-icono' }),
+              h('span', { texto: permiso }),
+            ],
+          }),
+        ),
+      }),
+    ];
+  };
+  const cargar = async () => {
+    const desenlace = await consultarApi('/rbac/matrix');
+    pintarDesenlace(partes, desenlace, pintar, { alReintentar: cargar });
+  };
+  return { elemento: partes.elemento, cargar };
+}
+
+/**
  * Las acciones que ya existen sobre esta cuenta, en sus pantallas. Aquí no
  * se ejecuta ninguna: cada pantalla aplica su propio permiso y pide su motivo.
  *
@@ -629,12 +1071,6 @@ function panelDeAcciones(ficha) {
         }),
       );
     }
-    lista.append(
-      h('p', {
-        clase: 't-meta',
-        texto: 'Ver o modificar su inventario: ningún servicio lo publica para administración.',
-      }),
-    );
     return lista;
   };
   pintarDesenlace(partes, yaCargado(ficha), pintar);
@@ -662,8 +1098,8 @@ function accion({ nombre, texto, href, detalle }) {
  * identificador no se pinta ni en el detalle técnico de un fallo: la
  * consulta se enseña con su plantilla.
  *
- * @param {{id: string, titulo: string, descripcion: string, plantilla: string,
- *          servicio: string, recurso: (uid: string) => string,
+ * @param {{id: string, titulo: string, descripcion: string, servicio: string,
+ *          recurso: (uid: string) => string, ancho?: 'completo'|null,
  *          pintar: (datos: *) => HTMLElement|HTMLElement[], vacio: *,
  *          alCargar: (resultado: {datos: *, falta: string|null}) => void,
  *          ficha: object, consultarApi: typeof consultar}} opciones
@@ -672,30 +1108,36 @@ function panelPorUid({
   id,
   titulo,
   descripcion,
-  plantilla,
   servicio,
   recurso,
+  ancho = null,
+  acciones = [],
   pintar,
   vacio,
   alCargar,
   ficha,
   consultarApi,
 }) {
-  const partes = panel({ id, titulo, descripcion, fuente: `GET /api/v1${plantilla}` });
-  const controlador = { elemento: partes.elemento, alReintentar: null, cargar: null };
+  const partes = panel({ id, titulo, descripcion, ancho, acciones });
+  const controlador = {
+    elemento: partes.elemento,
+    zona: partes.zona,
+    alReintentar: null,
+    cargar: null,
+  };
 
   controlador.cargar = async () => {
     if (!ficha.uid) {
       vaciar(partes.zona).append(
-        moduloNoImplementado({
+        aviso({
+          tono: 'info',
           titulo: 'Sin identificador público',
-          razon:
-            `La cuenta no tiene identificador público (es anterior a él) y el servicio de ` +
-            `${servicio} solo conoce a las personas por ese identificador.`,
+          detalle:
+            `La cuenta es anterior al identificador público y el servicio de ${servicio} solo ` +
+            'conoce a las personas por él.',
         }),
       );
-      partes.sello.dataset.estado = 'neutro';
-      partes.sello.textContent = 'SIN DATO';
+      partes.sello.replaceChildren(distintivoDeEstado({ texto: 'Sin dato', tono: 'neutro' }));
       alCargar({ datos: vacio, falta: null });
       return;
     }
@@ -704,7 +1146,7 @@ function panelPorUid({
       // Para esta sección, nada que enseñar es una respuesta: «no tiene».
       desenlace = { ...desenlace, resultado: RESULTADO.DATOS, datos: desenlace.datos ?? vacio };
     }
-    pintarDesenlace(partes, { ...desenlace, recurso: plantilla }, pintar, {
+    pintarDesenlace(partes, desenlace, pintar, {
       alReintentar: async () => {
         await controlador.cargar();
         controlador.alReintentar?.();
@@ -716,20 +1158,230 @@ function panelPorUid({
   return controlador;
 }
 
-/** @param {object} ficha @param {typeof consultar} consultarApi @param {Function} alCargar */
-function panelDeSanciones(ficha, consultarApi, alCargar) {
-  return panelPorUid({
-    id: 'sanciones',
-    titulo: 'Sanciones y advertencias',
-    descripcion: 'El historial disciplinario que publica el servicio de moderación.',
-    plantilla: '/sanciones/usuarios/{uid}',
-    servicio: 'moderación',
-    recurso: (uid) => `/sanciones/usuarios/${uid}`,
-    pintar: pintarSanciones,
-    vacio: [],
-    alCargar,
-    ficha,
-    consultarApi,
+/** Un número que llegó, o null (el indicador pinta un guion), nunca un cero inventado. */
+function cifra(valor) {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : null;
+}
+
+/**
+ * «13 de oct»: una fecha que cabe en la cifra grande de un indicador; la fecha
+ * entera va en su línea de detalle.
+ *
+ * @param {string} valor ISO-8601
+ */
+function diaYMes(valor) {
+  const momento = new Date(valor);
+  if (Number.isNaN(momento.getTime())) {
+    return null;
+  }
+  return momento.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }).replace('.', '');
+}
+
+/**
+ * @param {string} singular
+ * @param {string} plural
+ * @param {number} cuantos
+ */
+function contados(cuantos, singular, plural) {
+  return `${cuantos} ${cuantos === 1 ? singular : plural}`;
+}
+
+/**
+ * El resumen de una tabla con los más recientes de un total.
+ *
+ * @param {number} vistos
+ * @param {number|null} total
+ * @param {[string, string]} nombres singular y plural
+ * @param {string} orden «del más reciente al más antiguo» o en femenino
+ */
+function resumenDeRecientes(vistos, total, [singular, plural], orden) {
+  if (Number.isFinite(total) && total > vistos) {
+    return `Los ${vistos} más recientes de ${total} ${plural}`;
+  }
+  return `${contados(Number.isFinite(total) ? total : vistos, singular, plural)}, ${orden}`;
+}
+
+/** @param {object|null} estadisticas `EstadisticasDeJugador` (salas-partidas 1.11.0) */
+function pintarEstadisticas(estadisticas) {
+  const ultima = estadisticas?.ultimaPartidaEn ?? null;
+  const partes = [
+    rejillaDeIndicadores(
+      [
+        tarjetaDeIndicador({
+          etiqueta: 'Partidas terminadas',
+          valor: cifra(estadisticas?.jugadas),
+        }),
+        tarjetaDeIndicador({ etiqueta: 'Victorias', valor: cifra(estadisticas?.victorias) }),
+        tarjetaDeIndicador({ etiqueta: 'Derrotas', valor: cifra(estadisticas?.derrotas) }),
+        tarjetaDeIndicador({ etiqueta: 'Empates', valor: cifra(estadisticas?.empates) }),
+        tarjetaDeIndicador({ etiqueta: 'En curso', valor: cifra(estadisticas?.enCurso) }),
+        // Sin línea de detalle, como las demás: así las seis cifras quedan a
+        // la misma altura. El servicio dice «nulo si nunca jugó».
+        tarjetaDeIndicador({
+          etiqueta: 'Última partida',
+          valor: ultima ? diaYMes(ultima) : 'Nunca',
+        }),
+      ],
+      { zona: 'estadisticas' },
+    ),
+  ];
+  if (estadisticas?.parcial) {
+    partes.push(
+      aviso({
+        tono: 'info',
+        titulo: 'Cuenta con más de mil partidas',
+        detalle: 'Estas cifras salen de sus mil partidas más recientes.',
+      }),
+    );
+  }
+  const porModalidad = Object.entries(estadisticas?.porModalidad ?? {});
+  if (porModalidad.length === 0) {
+    partes.push(h('p', { clase: 't-meta', texto: 'Todavía no ha terminado ninguna partida.' }));
+    return partes;
+  }
+  partes.push(
+    tabla({
+      columnas: [
+        'Modalidad',
+        { titulo: 'Terminadas', tipo: 'numero' },
+        { titulo: 'Victorias', tipo: 'numero' },
+        { titulo: 'Derrotas', tipo: 'numero' },
+        { titulo: 'Empates', tipo: 'numero' },
+      ],
+      filas: porModalidad.map(([modalidad, cuenta]) => [
+        nombreDeModalidad(modalidad, modalidad),
+        cifra(cuenta?.jugadas),
+        cifra(cuenta?.victorias),
+        cifra(cuenta?.derrotas),
+        cifra(cuenta?.empates),
+      ]),
+      resumen: 'Partidas terminadas por modalidad',
+    }),
+  );
+  return partes;
+}
+
+/** @param {object|null} pagina `PaginaDePartidas` */
+function pintarPartidas(pagina) {
+  const lista = filasDe(pagina);
+  if (lista.length === 0) {
+    return h('p', { clase: 't-meta', texto: 'No ha jugado ninguna partida.' });
+  }
+  return tabla({
+    columnas: [
+      { titulo: 'Empezó', tipo: 'fecha' },
+      'Modalidad',
+      'Héroe',
+      { titulo: 'Jugadores', tipo: 'numero' },
+      { titulo: 'Resultado', tipo: 'estado' },
+    ],
+    filas: lista.map((partida) => [
+      partida.iniciadaEn ? fechaHora(partida.iniciadaEn) : null,
+      nombreDeModalidad(partida.modalidad, null),
+      partida.heroe || null,
+      cifra(partida.participantes),
+      distintivoDeResultado(partida),
+    ]),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(pagina?.totalElementos),
+      ['partida', 'partidas'],
+      'de la más reciente a la más antigua',
+    ),
+  });
+}
+
+/** @param {object|null} saldo `Saldo` (creditos 1.5.0) */
+function pintarSaldo(saldo) {
+  return rejillaDeIndicadores(
+    [
+      tarjetaDeIndicador({
+        etiqueta: 'Disponible',
+        valor: cifra(saldo?.saldoDisponible),
+        unidad: 'créditos',
+        detalle: 'Lo que puede gastar o apostar.',
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Apartado',
+        valor: cifra(saldo?.saldoReservado),
+        unidad: 'créditos',
+        detalle: 'Reservado en apuestas y pujas abiertas.',
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Total',
+        valor: cifra(saldo?.saldoBruto),
+        unidad: 'créditos',
+        detalle: 'Lo disponible más lo apartado.',
+      }),
+    ],
+    { zona: 'saldo' },
+  );
+}
+
+/** @param {object|null} pagina página de `MovimientoDeCredito` */
+function pintarMovimientos(pagina) {
+  const lista = filasDe(pagina);
+  if (lista.length === 0) {
+    return h('p', { clase: 't-meta', texto: 'Su saldo no se ha movido todavía.' });
+  }
+  return tabla({
+    columnas: [
+      { titulo: 'Fecha', tipo: 'fecha' },
+      'Concepto',
+      { titulo: 'Importe', tipo: 'numero' },
+    ],
+    filas: lista.map((movimiento) => {
+      const importe = comoImporte(movimiento);
+      return [
+        movimiento.creado ? fechaHora(movimiento.creado) : null,
+        nombreDelConcepto(movimiento.concepto),
+        h('span', {
+          clase: 'movimiento__importe',
+          texto: importe.texto,
+          datos: { tono: importe.tono },
+        }),
+      ];
+    }),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(pagina?.totalElements),
+      ['movimiento', 'movimientos'],
+      'del más reciente al más antiguo',
+    ),
+  });
+}
+
+/**
+ * SA-15 — los cobros en moneda real: cuándo, qué, cuánto y qué pasó, con el
+ * resultado en palabras. La referencia de la pasarela no llega: el servicio
+ * no la publica.
+ *
+ * @param {object|null} pagina página de `ResumenTransaccion` (transacciones 1.1.0)
+ */
+function pintarPagos(pagina) {
+  const lista = filasDe(pagina);
+  if (lista.length === 0) {
+    return h('p', { clase: 't-meta', texto: 'No ha pagado nada con dinero.' });
+  }
+  return tabla({
+    columnas: [
+      { titulo: 'Fecha', tipo: 'fecha' },
+      'Concepto',
+      { titulo: 'Importe', tipo: 'numero' },
+      'Resultado',
+    ],
+    filas: lista.map((pago) => [
+      pago.creado ? fechaHora(pago.creado) : null,
+      pago.concepto ?? null,
+      dinero(pago.monto, pago.moneda),
+      estadoSegun(pago.resultado, ESTADOS_DE_PAGO),
+    ]),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(pagina?.totalElements),
+      ['pago', 'pagos'],
+      'del más reciente al más antiguo',
+    ),
   });
 }
 
@@ -748,10 +1400,10 @@ function pintarSanciones(sanciones) {
     tabla({
       columnas: ['Tipo', 'Emitida', 'Situación', 'Motivo'],
       filas: lista.map((s) => [
-        NOMBRE_DE_SANCION[s.tipo] ?? s.tipo ?? SIN_DATO,
-        s.emitidaEn ? fechaHora(s.emitidaEn) : SIN_DATO,
+        NOMBRE_DE_SANCION[s.tipo] ?? s.tipo ?? null,
+        s.emitidaEn ? fechaHora(s.emitidaEn) : null,
         situacionDe(s),
-        s.motivo || SIN_DATO,
+        s.motivo || null,
       ]),
       resumen: `${lista.length} ${lista.length === 1 ? 'registro' : 'registros'}, del más reciente al más antiguo`,
     }),
@@ -783,25 +1435,6 @@ function situacionDe(s) {
   return s.vigente ? 'Vigente' : 'Sin efecto';
 }
 
-/** @param {object} ficha @param {typeof consultar} consultarApi @param {Function} alCargar */
-function panelDeComentarios(ficha, consultarApi, alCargar) {
-  return panelPorUid({
-    id: 'comentarios',
-    titulo: 'Comentarios publicados',
-    descripcion:
-      'Los más recientes, en cualquier estado: también los que moderación ocultó o eliminó.',
-    plantilla: '/comentarios/moderacion/autores/{uid}/comentarios',
-    servicio: 'comentarios',
-    recurso: (uid) =>
-      `/comentarios/moderacion/autores/${uid}/comentarios?pagina=0&tamano=${COMENTARIOS_POR_PAGINA}`,
-    pintar: pintarComentarios,
-    vacio: { comentarios: [], total: 0 },
-    alCargar,
-    ficha,
-    consultarApi,
-  });
-}
-
 /** @param {{comentarios?: object[], total?: number}} historial `HistorialDelAutorResponse` */
 function pintarComentarios(historial) {
   const lista = Array.isArray(historial?.comentarios) ? historial.comentarios : [];
@@ -812,9 +1445,9 @@ function pintarComentarios(historial) {
   return tabla({
     columnas: ['Publicado', 'Estado', 'Comentario'],
     filas: lista.map((c) => [
-      c.fechaPublicacion ? fechaHora(c.fechaPublicacion) : SIN_DATO,
+      c.fechaPublicacion ? fechaHora(c.fechaPublicacion) : null,
       `${ESTADO_LEGIBLE[c.estado] ?? (c.estado || SIN_DATO)}${c.editado ? ' · editado por moderación' : ''}`,
-      extracto(c.texto) || SIN_DATO,
+      extracto(c.texto) || null,
     ]),
     resumen:
       total > lista.length
@@ -823,63 +1456,274 @@ function pintarComentarios(historial) {
   });
 }
 
-/** @param {{id: string, titulo: string, razon: string}} seccionSinFuente */
-function panelSinFuente({ id, titulo, razon }) {
-  const partes = panel({ id, titulo });
-  vaciar(partes.zona).append(moduloNoImplementado({ titulo: 'Sin fuente publicada', razon }));
-  partes.sello.dataset.estado = 'neutro';
-  partes.sello.textContent = 'SIN FUENTE';
-  return partes.elemento;
+/**
+ * Los reportes de una dirección. De uno recibido no se pinta quién lo hizo:
+ * el servicio no lo publica, y la ficha no lo deduce.
+ *
+ * @param {object|null} respuesta `ReportesDelUsuarioResponse` (comentarios 1.12.0)
+ * @param {'REALIZADOS'|'RECIBIDOS'} direccion
+ */
+function pintarReportes(respuesta, direccion) {
+  const lista = Array.isArray(respuesta?.reportes) ? respuesta.reportes : [];
+  const recibidos = direccion === 'RECIBIDOS';
+  if (lista.length === 0) {
+    return h('p', {
+      clase: 't-meta',
+      texto: recibidos
+        ? 'Nadie ha reportado sus comentarios.'
+        : 'No ha reportado ningún comentario.',
+    });
+  }
+  const columnas = [
+    { titulo: 'Fecha', tipo: 'fecha' },
+    'Categoría',
+    ...(recibidos ? [] : ['Autor del comentario']),
+    'Comentario',
+    'Estado del comentario',
+    'Descripción del reporte',
+  ];
+  return tabla({
+    columnas,
+    filas: lista.map((reporte) => {
+      const comentario = reporte.comentario ?? null;
+      return [
+        reporte.fecha ? fechaHora(reporte.fecha) : null,
+        nombreDeCategoria(reporte.categoria),
+        ...(recibidos ? [] : [comentario?.apodoAutor || null]),
+        comentario ? extracto(comentario.extracto) || null : 'El comentario ya no existe',
+        comentario ? (ESTADO_LEGIBLE[comentario.estado] ?? (comentario.estado || SIN_DATO)) : null,
+        reporte.descripcion?.trim() || 'Sin descripción',
+      ];
+    }),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(respuesta?.total),
+      ['reporte', 'reportes'],
+      'del más reciente al más antiguo',
+    ),
+  });
+}
+
+/**
+ * Dónde está hoy cada producto: en una subasta, en una misión, puesto en un
+ * héroe o libre. Lo dice el inventario, aquí solo se lee.
+ *
+ * @param {object} elemento `ElementoInventario` (inventario 1.8.0)
+ */
+function situacionDelElemento(elemento) {
+  if (elemento?.subastaId) {
+    return { texto: 'En subasta', tono: 'advertencia' };
+  }
+  if (elemento?.ejecucionMisionId) {
+    return { texto: 'En una misión', tono: 'info' };
+  }
+  if (elemento?.equipadoEn?.heroeId) {
+    const heroe = elemento.equipadoEn.nombreHeroe;
+    return { texto: heroe ? `Equipado en ${heroe}` : 'Equipado', tono: 'neutro' };
+  }
+  return elemento?.disponible === false
+    ? { texto: 'No disponible', tono: 'neutro' }
+    : { texto: 'Disponible', tono: 'exito' };
+}
+
+/**
+ * «Entregar productos» (SA-10, §7.3.4): abre el panel de la entrega y, hecha,
+ * vuelve a pedir el inventario y dice qué se entregó.
+ *
+ * @param {object} ficha
+ * @param {() => {cargar: () => Promise<void>, zona: HTMLElement}|undefined} controladorDelPanel
+ */
+function botonDeEntrega(ficha, controladorDelPanel) {
+  const boton = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Entregar productos',
+    atributos: { type: 'button' },
+    datos: { accion: 'entregar-productos' },
+  });
+  boton.addEventListener('click', () => {
+    abrirEntregaAdministrativa({
+      ficha,
+      alEntregar: async (entrega) => {
+        const controlador = controladorDelPanel();
+        if (!controlador) {
+          return;
+        }
+        await controlador.cargar();
+        const unidades = Number(entrega?.cantidad) || 0;
+        controlador.zona.prepend(
+          aviso({
+            tono: 'exito',
+            titulo: entrega?.nueva === false ? 'Esa entrega ya estaba hecha' : 'Entrega hecha',
+            detalle:
+              entrega?.nueva === false
+                ? 'No se repitió: sus productos siguen como estaban.'
+                : `${unidades} × ${entrega?.nombre ?? 'producto'} ya ${unidades === 1 ? 'está' : 'están'} en su inventario. Queda en la auditoría.`,
+          }),
+        );
+        boton.focus();
+      },
+    });
+  });
+  return boton;
+}
+
+/** @param {object|null} pagina `PaginaInventario` (inventario 1.8.0) */
+function pintarInventario(pagina) {
+  const lista = Array.isArray(pagina?.elementos) ? pagina.elementos : [];
+  if (lista.length === 0) {
+    return h('p', { clase: 't-meta', texto: 'No tiene héroes ni objetos.' });
+  }
+  const total = cifra(pagina?.totalElementos);
+  return tabla({
+    columnas: [
+      'Nombre',
+      'Tipo',
+      { titulo: 'Nivel', tipo: 'numero' },
+      { titulo: 'Situación', tipo: 'estado' },
+    ],
+    filas: lista.map((elemento) => [
+      elemento.nombrePropio || null,
+      nombreDelTipo(elemento.tipo),
+      // El nivel es solo de los héroes (§6.1.1): en un objeto no falta, no aplica.
+      elemento.tipo === 'HEROE' ? cifra(elemento.nivel) : 'No aplica',
+      distintivoDeEstado(situacionDelElemento(elemento)),
+    ]),
+    resumen:
+      Number.isFinite(total) && total > lista.length
+        ? `Los primeros ${lista.length} de ${total} productos`
+        : contados(Number.isFinite(total) ? total : lista.length, 'producto', 'productos'),
+  });
+}
+
+/** @param {object|null} pagina `PaginaDeAuditoria` */
+function pintarAuditoriaDeLaCuenta(pagina) {
+  const lista = filasDe(pagina);
+  if (lista.length === 0) {
+    return h('p', {
+      clase: 't-meta',
+      texto: 'La auditoría no tiene acciones administrativas sobre esta cuenta.',
+    });
+  }
+  return tabla({
+    columnas: [{ titulo: 'Fecha', tipo: 'fecha' }, 'Acción', 'Quién', 'Cambio', 'Motivo'],
+    filas: lista.map((registro) => [
+      registro.fechaHora ? fechaHora(registro.fechaHora) : null,
+      nombreDeAccion(registro.tipoAccion),
+      registro.administrador || null,
+      cambioDe(registro),
+      registro.motivo || null,
+    ]),
+    resumen: resumenDeRecientes(
+      lista.length,
+      cifra(pagina?.totalElements),
+      ['acción', 'acciones'],
+      'de la más reciente a la más antigua',
+    ),
+  });
+}
+
+/** «antes → después», lo que haya de los dos, o null (la tabla dice «Sin dato»). */
+function cambioDe(registro) {
+  const antes = registro?.valorAnterior ? String(registro.valorAnterior) : '';
+  const despues = registro?.valorNuevo ? String(registro.valorNuevo) : '';
+  if (antes && despues) {
+    return `${antes} → ${despues}`;
+  }
+  return despues || antes || null;
 }
 
 /* -------------------------------------------------------------------------
    Línea de tiempo
    ------------------------------------------------------------------------- */
 
-/** Nombre de cada sección en la nota de lo que falta. */
-const NOMBRE_EN_LA_LINEA = Object.freeze({ sanciones: 'sanciones', comentarios: 'comentarios' });
-
 /**
- * Los hechos de lo que se cargó y la lista de lo que no respondió.
+ * Los hechos de lo que se cargó, con su familia, y la lista de lo que no
+ * respondió.
  *
  * @param {object} ficha
- * @param {{sanciones: {datos: *, falta: string|null}|null, comentarios: {datos: *, falta: string|null}|null}} cargados
+ * @param {Array<{id: string, enLaLinea: {nombre: string, categoria: string,
+ *          hechos: (datos: *, ahora: number) => object[]}|null}>} fuentes
+ * @param {Map<string, {datos: *, falta: string|null}>} cargados
  * @param {number} ahora
  */
-function armarLinea(ficha, cargados, ahora) {
-  const hechos = [...hechosDeLaCuenta(ficha)];
+function armarLinea(ficha, fuentes, cargados, ahora) {
+  const hechos = hechosDeLaCuenta(ficha).map((hecho) => conCategoria(hecho, 'cuenta'));
   const faltan = [];
-  const { sanciones, comentarios } = cargados;
-  if (sanciones?.falta) {
-    faltan.push(NOMBRE_EN_LA_LINEA.sanciones);
-  } else if (Array.isArray(sanciones?.datos)) {
-    hechos.push(...hechosDeSanciones(sanciones.datos, { ahora }));
-  }
-  if (comentarios?.falta) {
-    faltan.push(NOMBRE_EN_LA_LINEA.comentarios);
-  } else if (comentarios?.datos) {
-    hechos.push(...hechosDeComentarios(comentarios.datos));
+  for (const fuente of fuentes) {
+    if (!fuente.enLaLinea) {
+      continue;
+    }
+    const cargado = cargados.get(fuente.id);
+    if (cargado?.falta) {
+      faltan.push(fuente.enLaLinea.nombre);
+    } else if (cargado?.datos) {
+      hechos.push(
+        ...fuente.enLaLinea
+          .hechos(cargado.datos, ahora)
+          .map((hecho) => conCategoria(hecho, fuente.enLaLinea.categoria)),
+      );
+    }
   }
   return { hechos, faltan };
 }
 
+/** @param {object} hecho @param {string} categoria */
+function conCategoria(hecho, categoria) {
+  return { ...hecho, datos: { ...(hecho.datos ?? {}), categoria } };
+}
+
 function panelDeLaLinea() {
+  const filtro = h('select', {
+    clase: 'campo__control',
+    atributos: { id: 'ficha-linea-filtro', name: 'familia' },
+    datos: { zona: 'filtro-linea' },
+    hijos: [
+      h('option', { texto: 'Todo', atributos: { value: '' } }),
+      ...CATEGORIAS_DE_LA_LINEA.map(({ valor, etiqueta }) =>
+        h('option', { texto: etiqueta, atributos: { value: valor } }),
+      ),
+    ],
+  });
   const partes = panel({
     id: 'linea-de-tiempo',
     titulo: 'Actividad de la cuenta',
-    descripcion: 'Los hechos con fecha de las secciones de arriba, el más reciente primero.',
+    descripcion: 'Los hechos con fecha de todas las secciones, el más reciente primero.',
+    ancho: 'completo',
+    acciones: [
+      h('label', {
+        clase: 'desplegable',
+        atributos: { for: 'ficha-linea-filtro' },
+        hijos: [h('span', { clase: 'campo__etiqueta', texto: 'Mostrar' }), filtro],
+      }),
+    ],
   });
-  /** @param {{hechos: object[], faltan: string[]}} linea */
-  const pintar = ({ hechos, faltan }) => {
+  /** @type {{hechos: object[], faltan: string[]}} */
+  let vigente = { hechos: [], faltan: [] };
+
+  const pintar = (linea = vigente) => {
+    vigente = linea;
+    const { hechos, faltan } = linea;
+    const familia = filtro.value;
+    const visibles = familia
+      ? hechos.filter((hecho) => hecho.datos?.categoria === familia)
+      : hechos;
     vaciar(partes.zona);
-    partes.sello.dataset.estado = faltan.length > 0 ? 'aviso' : 'ok';
-    partes.sello.textContent = faltan.length > 0 ? 'PARCIAL' : 'EN LINEA';
+    partes.sello.replaceChildren(
+      ...(faltan.length > 0
+        ? [distintivoDeEstado({ texto: 'Incompleta', tono: 'advertencia' })]
+        : []),
+    );
     partes.zona.append(
-      hechos.length > 0
-        ? lineaDeTiempo(hechos, {
+      visibles.length > 0
+        ? lineaDeTiempo(visibles, {
             etiqueta: 'Actividad de la cuenta, de lo más reciente a lo más antiguo',
           })
-        : h('p', { clase: 't-meta', texto: 'No hay hechos con fecha que mostrar.' }),
+        : h('p', {
+            clase: 't-meta',
+            texto: familia
+              ? 'No hay hechos de este tipo con fecha.'
+              : 'No hay hechos con fecha que mostrar.',
+          }),
     );
     if (faltan.length > 0) {
       partes.zona.append(
@@ -890,14 +1734,7 @@ function panelDeLaLinea() {
         }),
       );
     }
-    partes.zona.append(
-      h('p', {
-        clase: 't-meta',
-        texto:
-          'Entran la cuenta, las sanciones y los comentarios: el resto de secciones no tiene ' +
-          'fuente publicada.',
-      }),
-    );
   };
+  filtro.addEventListener('change', () => pintar());
   return { elemento: partes.elemento, pintar };
 }

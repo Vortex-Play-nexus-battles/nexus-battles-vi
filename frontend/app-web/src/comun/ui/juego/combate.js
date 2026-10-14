@@ -20,7 +20,8 @@
  */
 
 import { h, clases } from '../dom.js';
-import { icono } from '../icono.js';
+import { ICONOS, icono } from '../icono.js';
+import { animar, permitido } from '../motion.js';
 
 /**
  * Construye el marcado de una barra de vida, listo para `actualizar()` del kit.
@@ -521,15 +522,26 @@ export function registroDeCombate({ maximo = 40 } = {}) {
  * @param {{cifra: string, etiqueta?: string|null, tono?: string}} impacto
  * @returns {HTMLElement}
  */
-export function impactoEnCampo({ cifra, etiqueta = null, tono = 'dano', unidad = null }) {
+export function impactoEnCampo({
+  cifra,
+  etiqueta = null,
+  tono = 'dano',
+  unidad = null,
+  icono: nombreDelIcono = null,
+}) {
   return h('span', {
     clase: `impacto impacto--${tono}`,
     atributos: { 'aria-hidden': 'true' },
     hijos: [
       h('span', {
         clase: 'impacto__cifra',
-        texto: cifra,
         hijos: [
+          // MOTION-2: el icono del golpe (espada, fuego, copo, gota, cruz,
+          // rayo, escudo) delante de la cifra: nunca solo color (RNF-USA-002).
+          nombreDelIcono && ICONOS.includes(nombreDelIcono)
+            ? icono(nombreDelIcono, { clase: 'icono impacto__icono', etiqueta: null })
+            : null,
+          h('span', { texto: cifra }),
           // Revisión del 6-oct, punto 19: «−4 VIDA», «−2 PODER», «+3 VIDA».
           unidad ? h('span', { clase: 'impacto__unidad', texto: ` ${unidad}` }) : null,
         ],
@@ -537,4 +549,49 @@ export function impactoEnCampo({ cifra, etiqueta = null, tono = 'dano', unidad =
       etiqueta ? h('span', { clase: 'impacto__etiqueta', texto: etiqueta }) : null,
     ],
   });
+}
+
+/**
+ * La estela del golpe en una barra de vida — MOTION-2.
+ *
+ * Lo que la barra acaba de perder se queda un instante en claro y se encoge
+ * hacia la vida que queda: el ojo ve CUÁNTO se perdió, no solo que bajó. Es
+ * adorno (la cifra del acuse y el valor numérico ya lo dicen): con movimiento
+ * reducido no se crea, y solo anima transform y opacity.
+ *
+ * @param {HTMLElement} barra `.barra-vida`
+ * @param {number} antes vida antes del golpe
+ * @param {number} despues vida después
+ * @param {number} maxima vida máxima
+ * @returns {HTMLElement|null} la estela, si la hubo
+ */
+export function estelaDeVida(barra, antes, despues, maxima) {
+  const pista = barra?.querySelector?.('.barra-vida__pista');
+  if (
+    !pista ||
+    typeof pista.animate !== 'function' ||
+    !permitido() ||
+    !(maxima > 0) ||
+    !(antes > despues)
+  ) {
+    return null;
+  }
+  pista.querySelector('.barra-vida__estela')?.remove();
+  const desde = (Math.max(0, despues) / maxima) * 100;
+  const ancho = ((Math.min(antes, maxima) - Math.max(0, despues)) / maxima) * 100;
+  const estela = h('span', { clase: 'barra-vida__estela', atributos: { 'aria-hidden': 'true' } });
+  estela.style.setProperty('--estela-desde', desde.toFixed(2));
+  estela.style.setProperty('--estela-ancho', ancho.toFixed(2));
+  pista.append(estela);
+  const animacion = animar(
+    estela,
+    [
+      { transform: 'scaleX(1)', opacity: 1 },
+      { transform: 'scaleX(1)', opacity: 1, offset: 0.35 },
+      { transform: 'scaleX(0)', opacity: 0.4 },
+    ],
+    { duracion: 'turn', curva: 'exit', relleno: 'forwards' },
+  );
+  animacion.finished.then(() => estela.remove()).catch(() => estela.remove());
+  return estela;
 }

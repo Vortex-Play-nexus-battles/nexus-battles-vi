@@ -146,17 +146,43 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     expect(texto).toMatch(/- torneos: cpu \d+ %/);
   });
 
-  test('/moderacion agrega las sanciones reales; una advertencia nueva sube el total del dia; sin umbral no hay alertas', async () => {
+  test('/moderacion agrega las sanciones reales y la frecuencia de reportes; los umbrales salen del catalogo (D-25)', async () => {
     const antes = await api.get('/api/v1/moderacion', comoAdmin());
     expect(antes.status(), await antes.text()).toBe(200);
     const previo = await antes.json();
-    expect(previo.alertasConfiguradas).toBe(false);
-    expect(previo.alertas).toEqual([]);
-    // HU-MET-001 1.10.0: el banco tiene ms-identidad y el tablero le reenvia el
-    // token del administrador, asi que las cuentas SI llegan y «nuevos
-    // usuarios» deja de ser pendiente. Lo unico que sigue pendiente es la
-    // frecuencia de reportes (HU-COM-006 sin lectura agregada).
-    expect(previo.pendientes).toEqual(['frecuencia de reportes: HU-COM-006 #523 sin implementar']);
+    // SA-4 (metricas 1.11.0): los umbrales se leen del catalogo de
+    // admin-parametros. El de sanciones lo dejo en 3 la V6 (decision del PO,
+    // D-25); el de reportes sigue sin cifra. Y una alerta por cada dia que
+    // llego a su umbral, nunca uno que no llego.
+    expect(previo.alertasConfiguradas).toBe(true);
+    expect(previo.umbralSancionesPorDia).toBe(3);
+    expect(previo.umbralReportesPorDia ?? null).toBeNull();
+    const diasConAlerta = previo.sanciones.porDia
+      .filter((d) => d.emitidas >= 3)
+      .map((d) => d.fecha)
+      .sort();
+    expect(
+      previo.avisos
+        .filter((a) => a.tipo === 'SANCIONES')
+        .map((a) => a.fecha)
+        .sort(),
+    ).toEqual(diasConAlerta);
+    expect(previo.avisos.filter((a) => a.tipo === 'REPORTES')).toEqual([]);
+    // HU-MET-001 1.10.0 y SA-4: el banco tiene ms-identidad y comentarios, y el
+    // tablero les reenvia el token del administrador: las cuentas y la
+    // frecuencia de reportes llegan y no queda nada pendiente.
+    expect(previo.pendientes).toEqual([]);
+    expect(previo.noDisponibles).toEqual([]);
+    expect(previo.reportes, 'comentarios no dio la frecuencia').not.toBeNull();
+    expect(previo.reportes.total).toBeGreaterThanOrEqual(0);
+    expect(Object.keys(previo.reportes.porCategoria).sort()).toEqual([
+      'ACOSO',
+      'CONTENIDO_INAPROPIADO',
+      'CONTENIDO_OFENSIVO',
+      'INFORMACION_FALSA',
+      'SPAM',
+      'VIOLACION_DE_DERECHOS',
+    ]);
     expect(previo.registroDeUsuarios, 'identidad no dio las cuentas').not.toBeNull();
     expect(previo.registroDeUsuarios.total).toBeGreaterThanOrEqual(1);
     expect(typeof previo.registroDeUsuarios.porEstado.ACTIVO).toBe('number');
@@ -228,15 +254,14 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await page.goto(`${BORDE}${VISTA}`);
     const tabla = page.locator('[data-zona="tabla-tecnica"]');
     await expect(tabla).toBeVisible({ timeout: 30000 });
-    await expect(tabla.locator('tr[data-servicio="torneos"]')).not.toHaveAttribute(
-      'data-brecha',
-      'true',
+    // SA-8 (punto 24): cada servicio por su nombre; el que no se pudo medir
+    // lo dice en su fila, sin el motivo técnico de la conexión.
+    await expect(tabla.locator('tr[data-fila="torneos"]')).toContainText('Torneos');
+    await expect(tabla.locator('tr[data-fila="torneos"] [data-brecha="true"]')).toHaveCount(0);
+    await expect(tabla.locator('tr[data-fila="correo"] [data-brecha="true"]')).toContainText(
+      'No se pudo medir en esta ronda',
     );
-    await expect(tabla.locator('tr[data-servicio="correo"]')).toHaveAttribute(
-      'data-brecha',
-      'true',
-    );
-    await expect(page.locator('[data-zona="brechas"]')).toContainText('correo');
+    await expect(page.locator('[data-zona="brechas"]')).toContainText('Correo');
     await expect(page.locator('[data-zona="resumen-moderacion"]')).toContainText(/sanciones/, {
       timeout: 20000,
     });
@@ -252,6 +277,18 @@ test.describe('Metricas tecnicas y de moderacion (HU-MET-004 / HU-MET-001)', () 
     await expect(page.locator('[data-zona="moderacion"] [data-zona="alertas"]')).toContainText(
       /no se evalua|no se evalúa/i,
     );
+    // SA-4: la serie de sanciones evalua con el umbral del catalogo (3, D-25)
+    // y la de reportes, sin cifra del PO, dice que no se evalua.
+    await expect(page.locator('[data-zona="moderacion"] [data-serie="SANCIONES"]')).toContainText(
+      /a partir de 3 sanciones/,
+    );
+    await expect(page.locator('[data-zona="moderacion"] [data-serie="REPORTES"]')).toContainText(
+      /Sin umbral de reportes/,
+    );
+    await expect(page.locator('[data-zona="indicadores-moderacion"]')).toContainText(
+      /Reportes de comentarios/,
+    );
+    await expect(page.locator('[data-zona="moderacion"]')).not.toContainText(/Pendiente:/);
   });
 
   test('CA-03 con fallos de verdad: identidad rechaza el rango o no contesta y /moderacion sale igual, sin cuentas inventadas', async () => {

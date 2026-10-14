@@ -1,0 +1,263 @@
+/* =======================================================================
+   Fondos ilustrados — HU-UX-002 (#925)
+   -----------------------------------------------------------------------
+   Once escenas de un mismo mundo, «La Ciudadela del Nexo», detrás de las
+   vistas del jugador. Cada vista elige la suya con `data-fondo` en el
+   <body> y enlaza esta hoja; la consola de administración no lleva fondo
+   (decisión del PO, oct 2026) y, sin el atributo, una vista sigue sobre la
+   atmósfera de base.css como hasta ahora.
+
+   Catálogo, vistas que usa cada escena y origen de las imágenes:
+   shared/ui-kit/fondos/README.md.
+
+   ## Cómo se pinta
+
+   La escena va en un ::before fijo del body, detrás de todo, y no en el
+   propio body con `background-attachment: fixed`: base.css lo descarta
+   porque en móvil repinta la página entera en cada desplazamiento. Fija,
+   además, la imagen mide siempre lo que la ventana, así que el registro
+   (que es largo) no la estira.
+
+   ## El velo no es decoración
+
+   Encima de la imagen va SIEMPRE un velo de `--velo-fondo`. Es lo que
+   garantiza el contraste del texto que cae directamente sobre la escena
+   (títulos de página, pistas, el lema del portal). Los valores salen de
+   medir cada vista píxel a píxel con tests/visual/contraste-fondos.spec.js
+   y no se aclaran sin volver a medir.
+
+   - Portal: oscuro a la izquierda (logotipo y lema), más claro a la
+     derecha (detrás de la tarjeta) y una franja oscura arriba para la
+     invitación de la cabecera, que cae sobre la luna del login.
+   - Juego: parejo donde está el contenido (los 1320 px centrales) y más
+     claro solo en los márgenes que quedan libres en pantallas anchas. Por
+     debajo de 1320 px las paradas se juntan y el velo es uniforme.
+   - Ancha: la vitrina del inventario y las subastas ocupan todo el ancho,
+     así que no tienen márgenes libres: velo uniforme.
+   - Móvil: velo vertical más denso; el contenido se desplaza sobre la
+     escena y el texto puede caer en cualquier altura.
+
+   Con «aumentar contraste» del sistema, con colores forzados y al
+   imprimir, la imagen no se pinta.
+   ======================================================================= */
+
+body[data-fondo] {
+  --fondo-velo:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--velo-fondo) 38%, transparent) 0,
+      color-mix(in srgb, var(--velo-fondo) 70%, transparent) calc((100% - 1320px) / 2),
+      color-mix(in srgb, var(--velo-fondo) 70%, transparent) calc(100% - (100% - 1320px) / 2),
+      color-mix(in srgb, var(--velo-fondo) 38%, transparent) 100%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velo-fondo) 30%, transparent) 0%,
+      transparent 25%,
+      transparent 78%,
+      color-mix(in srgb, var(--velo-fondo) 45%, transparent) 100%
+    );
+}
+
+body.portal[data-fondo] {
+  --fondo-velo:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--velo-fondo) 80%, transparent) 0%,
+      color-mix(in srgb, var(--velo-fondo) 60%, transparent) 38%,
+      color-mix(in srgb, var(--velo-fondo) 20%, transparent) 62%,
+      color-mix(in srgb, var(--velo-fondo) 30%, transparent) 100%
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velo-fondo) 78%, transparent) 0%,
+      color-mix(in srgb, var(--velo-fondo) 30%, transparent) 9%,
+      transparent 18%,
+      transparent 75%,
+      color-mix(in srgb, var(--velo-fondo) 60%, transparent) 100%
+    );
+}
+
+body.vitrina-pagina[data-fondo],
+body.subastas-pagina[data-fondo] {
+  --fondo-velo:
+    linear-gradient(
+      color-mix(in srgb, var(--velo-fondo) 70%, transparent),
+      color-mix(in srgb, var(--velo-fondo) 70%, transparent)
+    ),
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velo-fondo) 30%, transparent) 0%,
+      transparent 25%,
+      transparent 78%,
+      color-mix(in srgb, var(--velo-fondo) 45%, transparent) 100%
+    );
+}
+
+body[data-fondo]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-color: var(--cromo);
+  background-image: var(--fondo-velo), var(--fondo-imagen, none);
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+@media (max-width: 899px) {
+  body[data-fondo],
+  body.vitrina-pagina[data-fondo],
+  body.subastas-pagina[data-fondo] {
+    --fondo-velo: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velo-fondo) 70%, transparent) 0%,
+      color-mix(in srgb, var(--velo-fondo) 80%, transparent) 100%
+    );
+  }
+
+  body.portal[data-fondo] {
+    --fondo-velo: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--velo-fondo) 62%, transparent) 0%,
+      color-mix(in srgb, var(--velo-fondo) 72%, transparent) 40%,
+      color-mix(in srgb, var(--velo-fondo) 84%, transparent) 100%
+    );
+  }
+
+  /* Lo interesante de cada escena está en el centro-derecha (el portón,
+     la ciudadela): en vertical se recorta hacia ahí. */
+  body[data-fondo]::before {
+    background-position: 60% center;
+  }
+}
+
+/* --- Catálogo -----------------------------------------------------------
+   Una escena por grupo de vistas. La versión «-movil» (960 px) es la que
+   se descarga por debajo de 900 px: con el velo móvil no hace falta más.
+   Fuera de «aumentar contraste»: ahí la vista se queda con el velo sobre
+   el cromo, sin imagen. */
+
+@media not all and (prefers-contrast: more) {
+  body[data-fondo='entrada'] {
+    --fondo-imagen: url('../fondos/entrada.webp');
+  }
+  body[data-fondo='recuperar'] {
+    --fondo-imagen: url('../fondos/recuperar.webp');
+  }
+  body[data-fondo='registro'] {
+    --fondo-imagen: url('../fondos/registro.webp');
+  }
+  body[data-fondo='inicio'] {
+    --fondo-imagen: url('../fondos/inicio.webp');
+  }
+  body[data-fondo='jugar'] {
+    --fondo-imagen: url('../fondos/jugar.webp');
+  }
+  body[data-fondo='torneo'] {
+    --fondo-imagen: url('../fondos/torneo.webp');
+  }
+  body[data-fondo='misiones'] {
+    --fondo-imagen: url('../fondos/misiones.webp');
+  }
+  body[data-fondo='inventario'] {
+    --fondo-imagen: url('../fondos/inventario.webp');
+  }
+  body[data-fondo='mercado'] {
+    --fondo-imagen: url('../fondos/mercado.webp');
+  }
+  body[data-fondo='cuenta'] {
+    --fondo-imagen: url('../fondos/cuenta.webp');
+  }
+
+  /* La arena no va detrás de la página: va DENTRO del campo de combate,
+     que tiene fondo propio y tapa todo lo de atrás (componentes.css,
+     `.combate__campo`). Sustituye a sus degradados: el lado propio azul a
+     la izquierda, el rival violeta a la derecha y la línea de runas
+     exactamente al centro ya están en la imagen. Velo parejo y suave: los
+     nombres de los héroes llevan sombra y quedan por encima de 6:1. */
+  [data-fondo] .combate__campo {
+    background:
+      linear-gradient(
+        color-mix(in srgb, var(--velo-fondo) 30%, transparent),
+        color-mix(in srgb, var(--velo-fondo) 30%, transparent)
+      ),
+      url('../fondos/arena.webp') center / cover no-repeat,
+      var(--cromo);
+  }
+
+  @media (max-width: 899px) {
+    body[data-fondo='entrada'] {
+      --fondo-imagen: url('../fondos/entrada-movil.webp');
+    }
+    body[data-fondo='recuperar'] {
+      --fondo-imagen: url('../fondos/recuperar-movil.webp');
+    }
+    body[data-fondo='registro'] {
+      --fondo-imagen: url('../fondos/registro-movil.webp');
+    }
+    body[data-fondo='inicio'] {
+      --fondo-imagen: url('../fondos/inicio-movil.webp');
+    }
+    body[data-fondo='jugar'] {
+      --fondo-imagen: url('../fondos/jugar-movil.webp');
+    }
+    body[data-fondo='torneo'] {
+      --fondo-imagen: url('../fondos/torneo-movil.webp');
+    }
+    body[data-fondo='misiones'] {
+      --fondo-imagen: url('../fondos/misiones-movil.webp');
+    }
+    body[data-fondo='inventario'] {
+      --fondo-imagen: url('../fondos/inventario-movil.webp');
+    }
+    body[data-fondo='mercado'] {
+      --fondo-imagen: url('../fondos/mercado-movil.webp');
+    }
+    body[data-fondo='cuenta'] {
+      --fondo-imagen: url('../fondos/cuenta-movil.webp');
+    }
+
+    [data-fondo] .combate__campo {
+      background-image:
+        linear-gradient(
+          color-mix(in srgb, var(--velo-fondo) 30%, transparent),
+          color-mix(in srgb, var(--velo-fondo) 30%, transparent)
+        ),
+        url('../fondos/arena-movil.webp');
+    }
+  }
+}
+
+/* --- Tarjeta no disponible sobre una escena ------------------------------
+   `.tarjeta--bloqueada` (hoy, la sala llena del listado de batallas) se atenúa con
+   opacidad, y sobre una imagen eso deja ver la escena a través de la
+   tarjeta: se leía como un cristal sucio, no como «no disponible». Sobre
+   un fondo ilustrado la tarjeta se queda opaca y lo dice con su color: la
+   superficie pasa al riel `--pista` y los iconos pierden saturación. El
+   texto sigue oscuro sobre claro (≥ 11:1), así que además se lee mejor. */
+[data-fondo] .tarjeta--bloqueada {
+  opacity: 1;
+  background: var(--pista);
+  filter: saturate(0.4);
+}
+
+/* --- Sin imagen ---------------------------------------------------------- */
+
+@media (forced-colors: active) {
+  body[data-fondo]::before {
+    display: none;
+  }
+
+  [data-fondo] .combate__campo {
+    background-image: none;
+  }
+}
+
+@media print {
+  body[data-fondo]::before {
+    display: none;
+  }
+}

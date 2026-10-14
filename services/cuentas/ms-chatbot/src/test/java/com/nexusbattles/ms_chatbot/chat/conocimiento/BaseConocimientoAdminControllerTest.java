@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -383,6 +384,167 @@ class BaseConocimientoAdminControllerTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"temas\": [" + TEMA_JSON.replace("como pujo", "como pujo, rapido") + "]}"))
             .andExpect(status().isBadRequest());
+    }
+
+    // ------------------------------------- 1.6.0: intenciones adicionales
+
+    @Test
+    void agregarTema_conIntencionesAdicionales_lasPasaAlServicioYLasDevuelve() throws Exception {
+        TemaConocimiento conIntencion = temaDePrueba();
+        conIntencion.asignarIntencionesAdicionales(List.of(Categoria.CUENTA_Y_REGISTRO));
+        when(baseConocimientoAdminService.agregarTema(any())).thenReturn(conIntencion);
+
+        mockMvc.perform(post(RUTA + "/borrador/temas").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(TEMA_JSON.replace("\"tipoRespuesta\"",
+                    "\"intencionesAdicionales\": [\"CUENTA_Y_REGISTRO\"],\n  \"tipoRespuesta\"")))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.intencionesAdicionales[0]").value("CUENTA_Y_REGISTRO"));
+
+        ArgumentCaptor<TemaConocimientoRequest> captor = ArgumentCaptor.forClass(TemaConocimientoRequest.class);
+        verify(baseConocimientoAdminService).agregarTema(captor.capture());
+        assertEquals(List.of(Categoria.CUENTA_Y_REGISTRO), captor.getValue().intencionesAdicionales());
+    }
+
+    // Sin intenciones, la lista sale vacia (nunca falta el campo).
+    @Test
+    void listarTemas_sinIntenciones_devuelveLaListaVacia() throws Exception {
+        when(baseConocimientoAdminService.listarTemasDeCandidata()).thenReturn(List.of(temaDePrueba()));
+
+        mockMvc.perform(get(RUTA + "/borrador/temas").with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].intencionesAdicionales").isArray())
+            .andExpect(jsonPath("$[0].intencionesAdicionales").isEmpty());
+    }
+
+    @Test
+    void agregarTema_conIntencionesInvalidas_devuelve400ConElMotivoEnEspanol() throws Exception {
+        when(baseConocimientoAdminService.agregarTema(any())).thenThrow(new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "La intencion PRODUCTO esta repetida en las intenciones adicionales."));
+
+        mockMvc.perform(post(RUTA + "/borrador/temas").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(TEMA_JSON))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.detail").value("La intencion PRODUCTO esta repetida en las intenciones adicionales."));
+    }
+
+    @Test
+    void exportar_incluyeLasIntencionesAdicionales() throws Exception {
+        UUID versionId = UUID.randomUUID();
+        TemaConocimiento conIntencion = temaDePrueba();
+        conIntencion.asignarIntencionesAdicionales(List.of(Categoria.FAQ_GENERAL, Categoria.PRODUCTO));
+        when(baseConocimientoAdminService.exportar(versionId)).thenReturn(new ExportacionBaseConocimiento(
+            3, EstadoVersion.PRODUCCION, Instant.parse("2026-10-14T12:00:00Z"),
+            List.of(TemaIntercambio.desde(conIntencion))));
+
+        mockMvc.perform(get(RUTA + "/versiones/" + versionId + "/exportacion").with(administrador()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.temas[0].intencionesAdicionales[0]").value("PRODUCTO"))
+            .andExpect(jsonPath("$.temas[0].intencionesAdicionales[1]").value("FAQ_GENERAL"));
+    }
+
+    @Test
+    void importar_conYSinIntenciones_lasPasaAlServicio() throws Exception {
+        when(baseConocimientoAdminService.importarEnCandidata(any())).thenReturn(List.of(temaDePrueba()));
+        String conIntenciones = TEMA_JSON.replace("\"tipoRespuesta\"",
+            "\"intencionesAdicionales\": [\"PRODUCTO\"],\n  \"tipoRespuesta\"");
+
+        mockMvc.perform(put(RUTA + "/borrador/importacion").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"temas\": [" + conIntenciones + ", " + TEMA_JSON.replace("Como pujar", "Otro") + "]}"))
+            .andExpect(status().isOk());
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TemaIntercambio>> captor = ArgumentCaptor.forClass(List.class);
+        verify(baseConocimientoAdminService).importarEnCandidata(captor.capture());
+        assertEquals(List.of(Categoria.PRODUCTO), captor.getValue().get(0).intencionesAdicionales());
+        assertNull(captor.getValue().get(1).intencionesAdicionales(), "un archivo anterior a 1.6.0 no las trae");
+    }
+
+    // ------------------------------------------- 1.6.0: errores con motivo
+
+    @Test
+    void agregarTema_duplicado_devuelve409ConMotivoTemaDuplicado() throws Exception {
+        when(baseConocimientoAdminService.agregarTema(any())).thenThrow(new TemaDuplicadoException(
+            "El titulo 'como pujar' es el mismo que el del tema 'Como pujar' de la version candidata."));
+
+        mockMvc.perform(post(RUTA + "/borrador/temas").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(TEMA_JSON))
+            .andExpect(status().isConflict())
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString("application/problem+json")))
+            .andExpect(jsonPath("$.motivo").value("TEMA_DUPLICADO"))
+            .andExpect(jsonPath("$.title").value("Tema duplicado"))
+            .andExpect(jsonPath("$.detail").value(containsString("'Como pujar'")))
+            .andExpect(jsonPath("$.instance").value(RUTA + "/borrador/temas"));
+    }
+
+    @Test
+    void importar_conMasDeQuinientosTemas_devuelve413ConMotivo() throws Exception {
+        when(baseConocimientoAdminService.importarEnCandidata(any()))
+            .thenThrow(ImportacionDemasiadoGrandeException.porTemas(501));
+
+        mockMvc.perform(put(RUTA + "/borrador/importacion").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"temas\": [" + TEMA_JSON + "]}"))
+            .andExpect(status().isContentTooLarge())
+            .andExpect(jsonPath("$.motivo").value("IMPORTACION_DEMASIADO_GRANDE"))
+            .andExpect(jsonPath("$.detail").value(containsString("501 temas")));
+    }
+
+    // El archivo de mas de 8 MiB no se lee: lo corta LimiteDelArchivoDeImportacion
+    // con el mismo cuerpo, despues de Spring Security.
+    @Test
+    void importar_conMasDeOchoMegas_devuelve413SinLlegarAlServicio() throws Exception {
+        byte[] enorme = new byte[(int) ImportacionDemasiadoGrandeException.MAXIMO_DE_BYTES + 1];
+
+        mockMvc.perform(put(RUTA + "/borrador/importacion").with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(enorme))
+            .andExpect(status().isContentTooLarge())
+            .andExpect(header().string(HttpHeaders.CONTENT_TYPE, containsString("application/problem+json")))
+            .andExpect(jsonPath("$.motivo").value("IMPORTACION_DEMASIADO_GRANDE"));
+
+        verifyNoInteractions(baseConocimientoAdminService);
+    }
+
+    // Quien no es administrador recibe su 403 antes de que se mire el cuerpo.
+    @Test
+    void importar_conMasDeOchoMegasSinSerAdministrador_devuelve403() throws Exception {
+        byte[] enorme = new byte[(int) ImportacionDemasiadoGrandeException.MAXIMO_DE_BYTES + 1];
+
+        mockMvc.perform(put(RUTA + "/borrador/importacion").with(conRol("ROLE_JUGADOR"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(enorme))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void eliminarTema_conCambioConcurrente_devuelve409ConMotivo() throws Exception {
+        UUID temaId = UUID.randomUUID();
+        doThrow(new CambioConcurrenteException()).when(baseConocimientoAdminService).eliminarTema(temaId);
+
+        mockMvc.perform(delete(RUTA + "/borrador/temas/" + temaId).with(administrador()))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("CAMBIO_CONCURRENTE"))
+            .andExpect(jsonPath("$.title").value("Cambio simultaneo"));
+    }
+
+    // Un fallo de concurrencia de la base (la revision leida ya no esta) es el
+    // mismo 409, con el texto fijo: nunca el SQL ni el nombre de la entidad.
+    @Test
+    void editarTema_conBloqueoOptimistaFallido_devuelve409SinDetallesInternos() throws Exception {
+        UUID temaId = UUID.randomUUID();
+        when(baseConocimientoAdminService.editarTema(eq(temaId), any())).thenThrow(
+            new ObjectOptimisticLockingFailureException(VersionBaseConocimiento.class, UUID.randomUUID()));
+
+        mockMvc.perform(put(RUTA + "/borrador/temas/" + temaId).with(administrador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(TEMA_JSON))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.motivo").value("CAMBIO_CONCURRENTE"))
+            .andExpect(jsonPath("$.detail").value(CambioConcurrenteException.MENSAJE));
     }
 
     // ------------------------------------------------------------- ayudas

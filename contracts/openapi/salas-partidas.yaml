@@ -171,7 +171,19 @@ info:
       fuera de combate; si su bando se queda sin nadie en pie, gana el otro
       con la regla de siempre y la apuesta se liquida igual que con el ultimo
       golpe. Idempotente. El ganador nunca lo manda el cliente.
-  version: 1.10.0
+
+    Cambios 1.11.0 (§7.3.4, ficha administrativa del usuario — SA-3), aditivos:
+
+    - Nueva `GET /partidas/jugadores/{idJugador}` (`partidasDeJugador`): el
+      historial de partidas de una cuenta, con la misma forma que
+      `misPartidas` y el resultado desde el punto de vista de esa cuenta.
+    - Nueva `GET /partidas/jugadores/{idJugador}/estadisticas`
+      (`estadisticasDeJugador`): partidas terminadas, victorias, derrotas,
+      empates, en curso, el reparto por modalidad y la fecha de la ultima.
+    - Las dos son solo de Administrador y Super Administrador: son las unicas
+      rutas donde el jugador sale de la ruta y no del token. Un jugador o un
+      moderador reciben 403.
+  version: 1.11.0
   contact:
     name: Grupo 6 — Tiempo real, comunidad y plataforma
   license:
@@ -899,6 +911,75 @@ paths:
         '401':
           $ref: '#/components/responses/NoAutenticado'
 
+  # ---------------------------------------------------------------------------
+  # 1.11.0 (SA-3) — Historial y estadisticas de una cuenta, para su ficha
+  # administrativa (§7.3.4)
+  # ---------------------------------------------------------------------------
+  /partidas/jugadores/{idJugador}:
+    get:
+      tags: [Partidas]
+      summary: Historial de partidas de una cuenta (1.11.0, administracion)
+      description: |
+        Las partidas en las que jugo la cuenta `idJugador`, de la mas reciente
+        a la mas antigua, con el resultado desde su punto de vista. Misma forma
+        y mismos limites de pagina que `misPartidas`. Solo Administrador y
+        Super Administrador (§7.3.4, «estadisticas de juego y actividad» de la
+        ficha administrativa).
+      operationId: partidasDeJugador
+      parameters:
+        - $ref: '#/components/parameters/IdJugador'
+        - name: pagina
+          in: query
+          description: Numero de pagina, base 0
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: tamano
+          in: query
+          description: Elementos por pagina. El valor de diseno es 16.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 16 }
+      responses:
+        '200':
+          description: Pagina del historial de la cuenta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginaDePartidas'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: Quien pregunta no es Administrador ni Super Administrador
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
+  /partidas/jugadores/{idJugador}/estadisticas:
+    get:
+      tags: [Partidas]
+      summary: Estadisticas de juego de una cuenta (1.11.0, administracion)
+      description: |
+        El recuento de las partidas de la cuenta `idJugador`: terminadas
+        (victorias, derrotas y empates desde su punto de vista), en curso, el
+        reparto por modalidad y cuando empezo la mas reciente. Una cuenta que
+        nunca jugo devuelve ceros y `ultimaPartidaEn` nulo, no un 404. Se
+        cuentan como mucho mil partidas; si hay mas, `parcial` va a `true`.
+        Solo Administrador y Super Administrador.
+      operationId: estadisticasDeJugador
+      parameters:
+        - $ref: '#/components/parameters/IdJugador'
+      responses:
+        '200':
+          description: Estadisticas de la cuenta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EstadisticasDeJugador'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          description: Quien pregunta no es Administrador ni Super Administrador
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/ProblemDetail' }
+
   /mensajes-directos/conversaciones:
     get:
       tags: [Mensajes]
@@ -1134,6 +1215,12 @@ components:
       in: path
       required: true
       description: Identificador de la sala
+      schema: { type: string, format: uuid }
+    IdJugador:
+      name: idJugador
+      in: path
+      required: true
+      description: '`uid` de la cuenta (el publico de ms-identidad).'
       schema: { type: string, format: uuid }
 
   responses:
@@ -1771,6 +1858,43 @@ components:
         tamano: { type: integer }
         totalElementos: { type: integer }
         totalPaginas: { type: integer }
+
+    EstadisticasPorModalidad:
+      type: object
+      description: Las partidas terminadas de una modalidad (1.11.0).
+      required: [jugadas, victorias, derrotas, empates]
+      properties:
+        jugadas: { type: integer, minimum: 0 }
+        victorias: { type: integer, minimum: 0 }
+        derrotas: { type: integer, minimum: 0 }
+        empates: { type: integer, minimum: 0 }
+
+    EstadisticasDeJugador:
+      type: object
+      description: |
+        Estadisticas de juego de una cuenta (1.11.0). `jugadas` son las
+        partidas terminadas (victorias + derrotas + empates); las que siguen en
+        curso van en `enCurso`. `porModalidad` solo trae las modalidades en las
+        que la cuenta termino alguna partida.
+      required: [idJugador, jugadas, victorias, derrotas, empates, enCurso, porModalidad, parcial]
+      properties:
+        idJugador: { type: string, format: uuid }
+        jugadas: { type: integer, minimum: 0 }
+        victorias: { type: integer, minimum: 0 }
+        derrotas: { type: integer, minimum: 0 }
+        empates: { type: integer, minimum: 0 }
+        enCurso: { type: integer, minimum: 0 }
+        porModalidad:
+          type: object
+          propertyNames: { $ref: '#/components/schemas/Modalidad' }
+          additionalProperties: { $ref: '#/components/schemas/EstadisticasPorModalidad' }
+        ultimaPartidaEn:
+          type: [string, 'null']
+          format: date-time
+          description: Cuando empezo la partida mas reciente; nulo si nunca jugo.
+        parcial:
+          type: boolean
+          description: '`true` si la cuenta tiene mas de mil partidas y no se contaron todas.'
 
     VerificacionHeroe:
       type: object

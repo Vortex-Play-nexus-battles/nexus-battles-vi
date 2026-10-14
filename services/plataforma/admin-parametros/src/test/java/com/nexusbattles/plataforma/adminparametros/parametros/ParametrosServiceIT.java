@@ -39,6 +39,9 @@ class ParametrosServiceIT {
     @MockitoBean
     private Auditoria auditoria;
 
+    @Autowired
+    private VersionRepository versiones;
+
     @Test
     @DisplayName("el catalogo trae los editables de las decisiones y los inalterables del Charter, en orden")
     void catalogo() {
@@ -48,7 +51,9 @@ class ParametrosServiceIT {
         ParametrosService.Vigente dias = servicio.obtener("torneos.dias-entre-torneos");
         assertThat(dias.parametro().inalterable()).isTrue();
         assertThat(dias.valor()).isEqualTo("91");
-        assertThat(servicio.obtener("metricas.umbral-sanciones-por-dia").valor()).as("sin decision del PO").isNull();
+        // D-25: la cifra de sanciones ya es del PO (V6); la de reportes sigue sin decision.
+        assertThat(servicio.obtener("metricas.umbral-sanciones-por-dia").valor()).as("decision del PO").isEqualTo("3");
+        assertThat(servicio.obtener("metricas.umbral-reportes-por-dia").valor()).as("sin decision del PO").isNull();
         assertThat(servicio.obtener("salas.apuestas.si-gana-la-maquina").parametro().opcionesComoLista())
                 .containsExactly("LIBERAR", "CONSUMIR");
         assertThatThrownBy(() -> servicio.obtener("no.existe"))
@@ -102,5 +107,20 @@ class ParametrosServiceIT {
         ParametrosService.Vigente vacio = servicio.cambiar(ADMIN, "chat.mensajes-por-minuto", new ParametrosService.Cambio("20", "limite", null));
         assertThat(vacio.valor()).isEqualTo("20");
         assertThat(servicio.cambiar(ADMIN, "chat.mensajes-por-minuto", new ParametrosService.Cambio(null, "sin limite otra vez", null)).valor()).isNull();
+    }
+
+    @Test
+    @DisplayName("SA-5: la version guarda la IP de quien cambio y queda pendiente para la bitacora central (V7)")
+    void versionComoColaDeAuditoria() {
+        String clave = "chat.historial.tamano";
+        servicio.cambiar(ADMIN, clave, new ParametrosService.Cambio("120", "Historial mas largo", null), "203.0.113.9");
+
+        Version ultima = servicio.historial(ADMIN, clave).get(0);
+        assertThat(ultima.ipOrigen()).isEqualTo("203.0.113.9");
+        assertThat(ultima.auditadoEn()).isNull();
+        assertThat(ultima.intentosDeAuditoria()).isZero();
+        assertThat(versiones.porAuditar(java.time.OffsetDateTime.now().plusMinutes(1),
+                org.springframework.data.domain.PageRequest.of(0, 50)))
+                .extracting(Version::id).contains(ultima.id());
     }
 }

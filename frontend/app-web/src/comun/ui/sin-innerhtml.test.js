@@ -149,6 +149,11 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * propios) y el distintivo «Va ganando»/«Ganadora», texto fijo elegido por
  * el estado, sin ningún dato del servidor dentro.
  *
+ * MOTION-3 (HU-UX-003) — las cuatro de `pujas.js` bajan 26 líneas:
+ * `resaltarPrecioDe()` (el acuse del importe que acaba de cambiar por el
+ * canal) y su llamada entran ARRIBA de `render()`. Revisadas: las cuatro
+ * plantillas iguales, sin una interpolación nueva.
+ *
  * PLAYER-07b — la de `publicar-subasta.js` bajó tres líneas: dos `import`
  * (el catálogo de productos y `nombre-de-producto.js`) y la dependencia
  * `consultarProducto` entran ARRIBA de la plantilla. Revisada: sigue sin una
@@ -156,10 +161,18 @@ const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
  * respuesta» con su botón «Reintentar», y el nombre del producto sigue
  * entrando después por `textContent` (y por `new Option`, que tampoco
  * interpreta marcado).
+ *
+ * SA-7 (direcciones limpias) — la de `publicar-subasta.js` baja una línea (el
+ * `import` de `urlDeLogin`) y las cuatro de `pujas.js`, cuatro (el `import` de
+ * `urlDeVista` y el enlace de compartir, que ya no es relativo a la página).
+ * Revisadas: plantillas iguales. Dentro del índice de «Mis subastas» los
+ * enlaces a cada sección llevan ahora la ruta de la página delante del ancla
+ * (`${aqui}#seccion-…`): `aqui` es `location.pathname + search` pasado por
+ * `esc()`, empieza siempre por «/» y no puede abrir otro esquema.
  */
 const REVISADOS = new Map([
   ['contenido/productos/productos.js:159', 'plantilla() devuelve marcado fijo, sin datos'],
-  ['cuentas/publicar-subasta.js:111', 'plantilla fija del formulario, sin interpolación'],
+  ['cuentas/publicar-subasta.js:112', 'plantilla fija del formulario, sin interpolación'],
   ['cuentas/tienda.js:247', 'plantilla fija; el color pasó a data-tipo en UX-R2.8'],
 
   ['cuentas/tienda.js:537', 'cadena literal fija del carrito vacío'],
@@ -169,15 +182,15 @@ const REVISADOS = new Map([
       'nombre a la variable (fila -> nodo, porque «fila» pasó a ser el modelo ' +
       'que devuelve el adaptador) y la movio 78 lineas; la plantilla es la misma.',
   ],
-  ['cuentas/pujas.js:2797', 'plantilla fija del estado de carga'],
-  ['cuentas/pujas.js:2815', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
+  ['cuentas/pujas.js:2827', 'plantilla fija del estado de carga'],
+  ['cuentas/pujas.js:2845', 'estado de error: el único dato va por esc() (UX-R2.8c)'],
   [
-    'cuentas/pujas.js:2841',
+    'cuentas/pujas.js:2871',
     'estado vacío (B8): texto fijo más la alerta (mensaje por esc()) y los pendientes ' +
       'de recoger (nombre, id y fecha por esc(); cifras por formatearCreditos)',
   ],
   [
-    'cuentas/pujas.js:2883',
+    'cuentas/pujas.js:2913',
     'DELIBERADO y SANEADO (UX-R2.8c): las 20 interpolaciones con datos del ' +
       'servidor pasan por esc(); pujas.test.js lo comprueba con cargas reales. ' +
       'La estructura (2.297 líneas de plantilla) se mueve en UX-R2.10.',

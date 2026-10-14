@@ -3,6 +3,7 @@ import { jest } from '@jest/globals';
 import {
   crearBanner,
   editarBanner,
+  historialDeBanner,
   listarBanners,
   listarVigentes,
   retirarBanner,
@@ -38,6 +39,24 @@ test('crea, edita y retira mediante el contrato HTTP', async () => {
     'PUT',
     'DELETE',
   ]);
+});
+
+test('SA-18: el retiro lleva su motivo en la consulta y el historial se pide por su ruta', async () => {
+  const fetchImpl = jest.fn().mockResolvedValueOnce(respuesta(null, 204));
+  await retirarBanner('b 1', { motivo: '  Evento & cancelado ', fetchImpl });
+  expect(fetchImpl).toHaveBeenCalledWith('/api/v1/banners/b%201?motivo=Evento%20%26%20cancelado', {
+    method: 'DELETE',
+  });
+
+  fetchImpl.mockResolvedValueOnce(respuesta([{ id: 'op-1', tipo: 'ALTA_BANNER' }]));
+  await expect(historialDeBanner('b-1', { fetchImpl })).resolves.toEqual([
+    { id: 'op-1', tipo: 'ALTA_BANNER' },
+  ]);
+  expect(fetchImpl).toHaveBeenLastCalledWith('/api/v1/banners/b-1/historial', { method: 'GET' });
+
+  fetchImpl.mockResolvedValueOnce(respuesta(null, 204));
+  await retirarBanner('b-1', { motivo: '   ', fetchImpl });
+  expect(fetchImpl).toHaveBeenLastCalledWith('/api/v1/banners/b-1', { method: 'DELETE' });
 });
 
 test('RF-NOT-002: la home pide los vigentes a la ruta pública del contrato', async () => {

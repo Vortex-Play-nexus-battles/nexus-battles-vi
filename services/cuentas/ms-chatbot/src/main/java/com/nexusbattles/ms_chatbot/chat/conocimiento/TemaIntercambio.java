@@ -16,9 +16,13 @@ import java.util.List;
 // exportar siempre viene; al importar es opcional (sin clave, el tema se
 // trata como nuevo). Conservarla es lo que permite que un tema exportado y
 // vuelto a importar siga contando como el mismo en las analiticas.
+//
+// 1.6.0: 'intencionesAdicionales' siempre viene al exportar (lista vacia si no
+// tiene); un archivo anterior a 1.6.0, sin el campo, se importa igual.
 public record TemaIntercambio(
     @Size(max = 80) String clave,
     @NotNull Categoria categoria,
+    List<Categoria> intencionesAdicionales,
     @NotNull TipoRespuesta tipoRespuesta,
     @NotBlank @Size(max = 150) String titulo,
     @NotEmpty List<@NotBlank @Size(max = 200) String> variantesEs,
@@ -33,6 +37,7 @@ public record TemaIntercambio(
         return new TemaIntercambio(
             tema.getClave(),
             tema.getCategoria(),
+            tema.getIntencionesAdicionales(),
             tema.getTipoRespuesta(),
             tema.getTitulo(),
             VariantesDePregunta.separar(tema.getPalabrasClaveEs()),

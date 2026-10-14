@@ -77,6 +77,11 @@ test.describe('Panel de usuarios de la consola (HU-USR-008)', () => {
     const pagina = await activas.json();
     expect(pagina.contenido.length).toBeGreaterThan(0);
     expect(pagina.contenido.every((c) => c.estado === 'ACTIVO')).toBe(true);
+    // SA-21: las fechas llevan su zona; sin ella un navegador las leía como
+    // hora suya (cinco horas adelantadas en Colombia con el servidor en UTC).
+    const conRegistro = pagina.contenido.find((c) => c.creadoEn);
+    expect(conRegistro?.creadoEn).toMatch(/(?:Z|[+-]\d{2}:\d{2})$/);
+    expect(Math.abs(Date.parse(conRegistro.creadoEn) - Date.now())).toBeLessThan(400 * 86_400_000);
 
     const administradores = await (
       await api.get('/api/v1/admin/jugadores?rol=ADMINISTRADOR&size=100', como(admin))
@@ -105,7 +110,9 @@ test.describe('Panel de usuarios de la consola (HU-USR-008)', () => {
     const csv = (await r.body()).toString('utf8');
     expect(csv.charCodeAt(0)).toBe(0xfeff);
     const lineas = csv.slice(1).split('\r\n');
-    expect(lineas[0]).toBe('Apodo,Correo,Rol,Estado,Registro,Última entrada');
+    expect(lineas[0]).toBe(
+      'Apodo,Correo,Rol,Estado,Registro (hora de Colombia),Última entrada (hora de Colombia)',
+    );
     expect(csv).toContain(`"${ADMIN}"`);
     expect(csv).not.toMatch(/\$2[aby]\$/);
   });

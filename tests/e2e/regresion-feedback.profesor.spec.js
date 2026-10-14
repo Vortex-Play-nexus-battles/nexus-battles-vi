@@ -402,10 +402,10 @@ test.describe('PR-F · el feedback del 4-oct, con cuentas nuevas', () => {
         await expect(page).toHaveURL(/\/login\?/);
         const destino = new URL(page.url());
         expect(destino.pathname).toBe('/login');
-        expect(destino.searchParams.get('volver')).toMatch(/tienda\.html$/);
+        expect(destino.searchParams.get('volver')).toMatch(/^\/tienda$|tienda\.html$/);
         return (
           `/ → 200 sin redirección; ${total} productos reales con precio en créditos y sin ` +
-          '«Añadir»; ficha pública; «Entra para comprar» → /login?volver=…tienda.html'
+          '«Añadir»; ficha pública; «Entra para comprar» → /login?volver=/tienda'
         );
       });
 

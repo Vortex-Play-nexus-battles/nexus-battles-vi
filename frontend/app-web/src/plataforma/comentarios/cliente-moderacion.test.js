@@ -23,8 +23,10 @@ import {
   hayReportesPendientes,
   consultarCola,
   consultarDetalle,
+  contextoDelComentario,
   historialDelAutor,
   imagenParaModeracion,
+  productoDelCatalogo,
   reportarComentario,
   resolverComentario,
   resolverEnLote,
@@ -338,14 +340,22 @@ describe('la tabla de acciones', () => {
     expect(ACCIONES_INTERNAS).toEqual(['MARCAR', 'DESMARCAR']);
   });
 
-  test('las categorias son las seis del contrato, sin inventos', () => {
+  test('las categorias son las seis del contrato, en el orden y con el texto de §7.3.3', () => {
     expect(CATEGORIAS.map((c) => c.valor)).toEqual([
+      'SPAM',
       'CONTENIDO_OFENSIVO',
       'ACOSO',
-      'SPAM',
       'INFORMACION_FALSA',
       'CONTENIDO_INAPROPIADO',
       'VIOLACION_DE_DERECHOS',
+    ]);
+    expect(CATEGORIAS.map((c) => c.etiqueta)).toEqual([
+      'Spam o publicidad no solicitada',
+      'Contenido ofensivo o abusivo',
+      'Acoso o intimidación',
+      'Información falsa o engañosa',
+      'Contenido inapropiado o NSFW',
+      'Violación de derechos de autor',
     ]);
   });
 });
@@ -578,5 +588,39 @@ describe('resolverEnLote (1.10.1)', () => {
   test('C11b: la confirmación de ELIMINAR es la palabra exacta del contrato', () => {
     expect(CONFIRMACION_DE_ELIMINAR).toBe('ELIMINAR');
     expect(MOTIVO_MODERACION.CONFIRMACION_REQUERIDA).toBe('CONFIRMACION_REQUERIDA');
+  });
+});
+
+describe('SA-16: el comentario en su contexto y el nombre de su producto', () => {
+  test('el contexto cuelga del comentario en la cola de moderacion, con cuantos a cada lado', async () => {
+    const cuerpo = { comentarioId: 'c/1', anteriores: [], posteriores: [], totalEnElHilo: 1 };
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(cuerpo));
+
+    await expect(contextoDelComentario('c/1', { alrededor: 4 }, { fetchImpl })).resolves.toEqual(
+      cuerpo,
+    );
+    const [url, opciones] = fetchImpl.mock.calls[0];
+    expect(url).toBe('/api/v1/comentarios/moderacion/c%2F1/contexto?alrededor=4');
+    expect(opciones.method).toBe('GET');
+
+    await contextoDelComentario('c-2', undefined, { fetchImpl });
+    expect(fetchImpl.mock.calls[1][0]).toContain('alrededor=3');
+  });
+
+  test('el producto se lee del catalogo publico por su id', async () => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta({ id: 'p 1', nombre: 'Espada' }));
+    await expect(productoDelCatalogo('p 1', { fetchImpl })).resolves.toEqual({
+      id: 'p 1',
+      nombre: 'Espada',
+    });
+    expect(fetchImpl.mock.calls[0][0]).toBe('/api/v1/productos/p%201');
+  });
+
+  test.each([404, 503])('un %i sale como ErrorDeApi con su estado', async (status) => {
+    const fetchImpl = jest.fn().mockResolvedValue(respuesta(null, { ok: false, status }));
+    await expect(contextoDelComentario('c-1', {}, { fetchImpl })).rejects.toMatchObject({
+      estado: status,
+    });
+    await expect(productoDelCatalogo('p-1', { fetchImpl })).rejects.toBeInstanceOf(ErrorDeApi);
   });
 });

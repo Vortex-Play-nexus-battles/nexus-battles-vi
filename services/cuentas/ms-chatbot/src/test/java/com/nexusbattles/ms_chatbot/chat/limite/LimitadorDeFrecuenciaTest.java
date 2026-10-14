@@ -34,7 +34,7 @@ class LimitadorDeFrecuenciaTest {
 
     @Test
     void dejaPasarHastaElLimiteYElSiguienteRecibeCuantoEsperar() {
-        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(3, 2, 100, reloj);
+        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(3, 5, 2, 100, reloj);
         for (int i = 0; i < 3; i++) {
             limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:a");
         }
@@ -46,7 +46,7 @@ class LimitadorDeFrecuenciaTest {
 
     @Test
     void cadaClaveYCadaReglaLlevaSuPropiaCuenta() {
-        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(1, 1, 100, reloj);
+        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(1, 5, 1, 100, reloj);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:a");
         assertThatCode(() -> limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:b")).doesNotThrowAnyException();
         assertThatCode(() -> limitador.exigir(LimitadorDeFrecuencia.Regla.SESIONES_POR_ORIGEN, "usuario:a"))
@@ -57,7 +57,7 @@ class LimitadorDeFrecuenciaTest {
 
     @Test
     void laVentanaSeReiniciaAlMinutoYElBarridoQuitaLasVencidas() {
-        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(1, 1, 100, reloj);
+        LimitadorDeFrecuencia limitador = new LimitadorDeFrecuencia(1, 5, 1, 100, reloj);
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:a");
         limitador.exigir(LimitadorDeFrecuencia.Regla.MENSAJES, "usuario:b");
         assertThat(limitador.clavesVivas()).isEqualTo(2);

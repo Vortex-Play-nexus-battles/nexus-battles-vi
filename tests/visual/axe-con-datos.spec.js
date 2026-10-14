@@ -43,6 +43,7 @@ import { textoSinContrasteSobreAtmosfera } from './contraste-atmosfera.js';
 import { simularCanal } from './canal-simulado.js';
 import { ESCENARIOS } from './escenarios-poblados.js';
 import { inyectarSesion } from './identidad.js';
+import { sinMovimiento } from './movimiento.js';
 
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
 const GRAVES = new Set(['serious', 'critical']);
@@ -65,6 +66,7 @@ for (const escenario of ESCENARIOS) {
       });
       try {
         await inyectarSesion(contexto, escenario.sesion());
+        await sinMovimiento(contexto);
         const pagina = await contexto.newPage();
 
         for (const [patron, respuesta] of escenario.rutas) {

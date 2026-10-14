@@ -17,6 +17,7 @@ import nexus.api.SolicitudCrearProducto;
 import nexus.api.SolicitudModificarProducto;
 import nexus.aplicacion.ModificarProductoServicio;
 import nexus.aplicacion.ProductoMapper;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
 import nexus.dominio.TipoProducto;
@@ -159,7 +160,7 @@ class RegistroCambiosCatalogoAspectoTest {
                 productos,
                 respaldos,
                 mapper,
-                validator);
+                validator, mock(RegistroDeOperaciones.class));
         AspectJProxyFactory fabrica = new AspectJProxyFactory(servicio);
         fabrica.addAspect(aspecto);
         ModificarProductoServicio proxy = fabrica.getProxy();

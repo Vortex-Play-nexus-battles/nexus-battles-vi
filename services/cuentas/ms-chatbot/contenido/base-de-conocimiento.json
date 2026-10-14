@@ -1,0 +1,2627 @@
+{
+  "descripcion": "Base de conocimiento completa del chatbot tras la revisión final del 7.4 (V11, V15, V16 y V18): los 62 temas en el formato de importación del panel (bloque «temas», PUT /chatbot/admin/base-conocimiento/borrador/importacion, que REEMPLAZA la candidata entera) y sus casos de evaluación. Las migraciones V11, V15, V16 y V18 ya la aplican en producción; este archivo sirve para revisarla y para restaurarla en una candidata.",
+  "temas": [
+    {
+      "clave": "heroes-disponibles",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Héroes disponibles",
+      "variantesEs": [
+        "heroes",
+        "personajes",
+        "que heroes hay",
+        "tipos de heroe",
+        "cuantos tipos de heroe hay",
+        "lista de heroes",
+        "clases de personaje",
+        "guerrero tanque",
+        "guerrero armas",
+        "mago fuego",
+        "mago hielo",
+        "picaro veneno",
+        "picaro machete",
+        "chaman",
+        "medico"
+      ],
+      "variantesEn": [
+        "heroes",
+        "characters",
+        "hero types",
+        "which heroes are there",
+        "hero list",
+        "character classes",
+        "tank warrior",
+        "weapons warrior",
+        "fire mage",
+        "ice mage",
+        "poison rogue",
+        "shaman",
+        "medic"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI tiene 8 tipos de héroe: Guerrero Tanque (mucha resistencia y poco ataque), Guerrero Armas (el mayor daño, poca defensa), Mago Fuego (daño elemental alto), Mago Hielo (debilita al rival), Pícaro Veneno (afecta las habilidades y la precisión del rival), Pícaro Machete (heridas letales), y Chamán y Médico (sanan a su equipo, pero no atacan). En «Mi inventario», pestaña «Héroes», ves «Mis héroes» y los «Héroes del Nexo»; los que aún no tienes se consiguen en la «Tienda».",
+      "respuestaEn": "There are 8 hero types (names as shown in the game): «Guerrero Tanque» (tank, very tough), «Guerrero Armas» (highest damage, low defense), «Mago Fuego» (high elemental damage), «Mago Hielo» (weakens the opponent), «Pícaro Veneno» (hurts the opponent's skills and accuracy), «Pícaro Machete» (lethal wounds), and «Chamán» and «Médico» (they heal their team but don't attack). See them in «Mi inventario» (My inventory), «Héroes» tab: «Mis héroes» are yours and «Héroes del Nexo» lists them all; the ones you don't have yet are in the «Tienda» (Store).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "estadisticas-y-nivel",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Estadísticas y nivel de un héroe",
+      "variantesEs": [
+        "estadisticas",
+        "nivel",
+        "subir de nivel",
+        "como subo de nivel",
+        "nivel maximo",
+        "experiencia para subir de nivel",
+        "puntos de experiencia",
+        "como gano experiencia",
+        "poder",
+        "vida",
+        "defensa",
+        "ataque",
+        "daño",
+        "stats del heroe"
+      ],
+      "variantesEn": [
+        "stats",
+        "level",
+        "level up",
+        "how do i level up",
+        "max level",
+        "experience points",
+        "how to gain experience",
+        "power",
+        "health",
+        "defense",
+        "attack",
+        "damage"
+      ],
+      "respuestaEs": "Cada héroe empieza en nivel 1 y puede llegar al 8; el nivel multiplica sus estadísticas. Poder: se gasta en acciones especiales y recuperas 2 al empezar cada turno. Vida: si llega a 0, el héroe cae. Ataque: tu tirada para acertar; el golpe entra si supera la defensa del rival. Defensa: lo que el rival debe superar para acertarte. Daño: lo que quitas al acertar. La experiencia se gana por cada enemigo derrotado en las misiones; las batallas en línea no dan experiencia. Pasar del nivel N al siguiente pide 100 × 1,2^(N−1) puntos. Tu nivel y tu progreso se ven en «Mi inventario».",
+      "respuestaEn": "Every hero starts at level 1 and can reach level 8; level multiplies its stats. Power: spent on special actions; you recover 2 at the start of each turn. Health: at 0 the hero falls. Attack: your roll to hit; the hit lands if it beats the opponent's defense. Defense: what the opponent must beat to hit you. Damage: what you deal on a hit. Experience comes from each enemy defeated in missions; online battles give no experience. Going from level N to the next takes 100 × 1.2^(N−1) points. Your level and progress are shown in «Mi inventario» (My inventory).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "armas-armaduras-items",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Armas, armaduras e ítems",
+      "variantesEs": [
+        "armas",
+        "armaduras",
+        "items",
+        "piezas de armadura",
+        "cuantas ranuras hay",
+        "que puede llevar un heroe",
+        "casco",
+        "escudo",
+        "que hace un objeto",
+        "efectos de las armas",
+        "ficha de un arma",
+        "que armas hay"
+      ],
+      "variantesEn": [
+        "weapons",
+        "armor",
+        "items",
+        "gear slots",
+        "how many weapons can i carry",
+        "helmet",
+        "shield",
+        "what does an item do",
+        "item effects",
+        "item details"
+      ],
+      "respuestaEs": "Un héroe lleva hasta 2 armas, 2 ítems y 6 piezas de armadura, una por parte: casco, pecho, brazaletes, guantes, pantalón y zapatos. Cada pieza mejora sus estadísticas o le da efectos en combate, como más crítico o evasión. Pulsa un objeto en «Mi inventario» o en la «Tienda» para ver su ficha con sus efectos. En una batalla cuenta el equipo que llevaba tu héroe al entrar a la sala, y un héroe «En misión» no cambia de equipo hasta volver.",
+      "respuestaEn": "A hero carries up to 2 weapons, 2 items and 6 armor pieces, one per slot: helmet, chest, bracers, gloves, pants and shoes. Each piece improves its stats or adds combat effects, such as more critical hits or evasion. Tap an item in «Mi inventario» (My inventory) or the «Tienda» (Store) to see its details. In a battle, what counts is the gear your hero had when you entered the room, and a hero «En misión» (on a mission) keeps its gear until it returns.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "habilidades-epicas",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Habilidades épicas",
+      "variantesEs": [
+        "epicas",
+        "epica",
+        "habilidades epicas",
+        "habilidad epica",
+        "master",
+        "enemigo master",
+        "como consigo una epica",
+        "donde consigo epicas",
+        "que es un master",
+        "usar una epica",
+        "comprar epicas"
+      ],
+      "variantesEn": [
+        "epic",
+        "epics",
+        "epic abilities",
+        "epic ability",
+        "master enemy",
+        "how to get an epic",
+        "what is a master",
+        "use an epic",
+        "buy epics"
+      ],
+      "respuestaEs": "Las habilidades épicas no gastan poder, pero después de usar una esperas 2 turnos para repetirla. Se ganan al derrotar a un Máster, un enemigo especial que aparece al azar solo en las misiones, dos niveles por encima de tu héroe (máximo nivel 8); el premio de un torneo también puede incluir una. No se venden en la tienda. Hay una por cada tipo de héroe: da un efecto general a cualquier héroe y uno potenciado al de su tipo; las del Chamán y el Médico solo sirven a su tipo. No se equipan: en las batallas tu héroe puede usar las épicas de tu inventario.",
+      "respuestaEn": "Epic abilities don't cost power, but after using one you wait 2 turns to use it again. You get them by defeating a Master, a special enemy that appears at random only in missions, two levels above your hero (level 8 at most); a tournament prize can also include one. They aren't sold in the store. There's one per hero type: it gives a general effect to any hero and a boosted one to its own type; the «Chamán» and «Médico» epics only work for their type. They aren't equipped: in battles your hero can use the epics in your inventory.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "combate-por-turnos",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo funciona el combate por turnos",
+      "variantesEs": [
+        "combate",
+        "turnos",
+        "combate por turnos",
+        "como funciona el combate",
+        "como es una batalla",
+        "orden de turnos",
+        "cuantas acciones por turno",
+        "quien gana una partida",
+        "empate",
+        "como pelear",
+        "mecanica de combate",
+        "reglas del combate"
+      ],
+      "variantesEn": [
+        "combat",
+        "turns",
+        "turn based combat",
+        "how does combat work",
+        "turn order",
+        "how many actions per turn",
+        "who wins a match",
+        "draw",
+        "how to fight",
+        "combat rules"
+      ],
+      "respuestaEs": "Así funciona un combate: 1) Al empezar se sortea el orden de turnos y se mantiene hasta el final. 2) Al iniciar tu turno recuperas 2 de poder y eliges una sola acción: tu acción básica (atacar, o sanar si es Chamán o Médico), una acción especial que pagas con poder o una épica. 3) Si atacas, tu tirada de ataque debe superar la defensa del rival y la tabla de efectos decide si hay daño normal, crítico o ninguno. 4) Las reglas son las mismas contra otro jugador o contra la IA. 5) Gana el último héroe o equipo en pie; si no queda nadie, es empate.",
+      "respuestaEn": "This is how combat works: 1) At the start the turn order is drawn at random and kept until the end. 2) At the start of your turn you recover 2 power and choose one action: your basic action (attack, or heal if it's a «Chamán» or «Médico»), a special action paid with power, or an epic. 3) When you attack, your attack roll must beat the opponent's defense and the effects table decides whether there's normal damage, a critical hit or nothing. 4) The rules are the same against another player or the AI. 5) The last hero or team standing wins; if nobody is left, it's a draw.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "efectos-aleatorios",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Sistema de efectos aleatorios en combate",
+      "variantesEs": [
+        "efectos aleatorios",
+        "tabla de efectos",
+        "probabilidad de daño",
+        "critico",
+        "golpe critico",
+        "esquivar",
+        "evadir el golpe",
+        "como se calcula el daño",
+        "por que falle el golpe",
+        "sin efecto",
+        "8000 posibilidades"
+      ],
+      "variantesEn": [
+        "random effects",
+        "effects table",
+        "damage chance",
+        "critical hit",
+        "dodge",
+        "evade",
+        "how is damage calculated",
+        "why did i miss"
+      ],
+      "respuestaEs": "Cuando tu ataque supera la defensa del rival, el resultado sale de una tabla de 8000 filas: causar daño, daño crítico, evadir el golpe, resistirlo, escapar o no causar efecto. La fila se elige con un índice aleatorio de distribución normal, así que el porcentaje de filas de cada héroe no es exactamente su probabilidad: por ejemplo, el Guerrero Armas tiene el 60 % de sus filas en «causar daño». Las armas, armaduras, ítems y épicas con bonos de crítico o de evasión mejoran tus resultados.",
+      "respuestaEn": "When your attack beats the opponent's defense, the result comes from an 8000-row table: deal damage, critical damage, evade the hit, resist it, escape it, or no effect. The row is picked with a normally distributed random index, so each hero's share of rows isn't exactly its probability: for example, the «Guerrero Armas» (Weapons Warrior) has 60% of its rows on dealing damage. Weapons, armor, items and epics with critical or evasion bonuses improve your results.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "modo-batalla",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Modo Batalla (JcJ y cooperativo)",
+      "variantesEs": [
+        "batalla",
+        "jugar online",
+        "modos de juego",
+        "modalidades de batalla",
+        "jugador contra jugador",
+        "duelo",
+        "jugar contra la maquina",
+        "hasta seis jugadores",
+        "jugar en equipo",
+        "modo cooperativo",
+        "jcj",
+        "pvp",
+        "formas de jugar",
+        "de que formas puedo jugar",
+        "formas de juego",
+        "modos para jugar"
+      ],
+      "variantesEn": [
+        "battle",
+        "play online",
+        "game modes",
+        "player versus player",
+        "duel",
+        "play against the computer",
+        "up to six participants",
+        "team battle",
+        "cooperative mode",
+        "pvp",
+        "ways to play",
+        "how can i play against others"
+      ],
+      "respuestaEs": "En «Jugar online» hay tres modos: 1 contra 1; Solo, contra un rival de la IA; y Hasta seis, de 2 a 6 participantes, todos contra todos o en equipos de 2 o 3 que se forman por orden de entrada, con cupos para la IA si quieres. Puedes poner créditos en juego y hacer la sala privada para que solo entren con invitación. En equipo nunca puedes atacar a un compañero, y gana el equipo que quede en pie.",
+      "respuestaEn": "«Jugar online» (Play online) has three modes: «1 contra 1» (1 vs 1); «Solo», against an AI opponent; and «Hasta seis» (up to six), with 2 to 6 participants, free-for-all or in teams of 2 or 3 formed by order of entry, with AI slots if you want. You can put credits at stake and make the room private so only invited players join. In a team you can never attack a teammate, and the team left standing wins.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "completar-mision",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo completar una misión (modo JcE)",
+      "variantesEs": [
+        "mision",
+        "como hago una mision",
+        "como juego una mision",
+        "iniciar mision",
+        "empezar una mision",
+        "jugador contra entorno",
+        "jce",
+        "pve",
+        "rotaciones de habilidades",
+        "estrategia de la mision",
+        "enviar heroe a mision",
+        "cancelar mision",
+        "comprobar estrategia"
+      ],
+      "variantesEn": [
+        "mission",
+        "how to play a mission",
+        "start a mission",
+        "pve",
+        "player versus environment",
+        "mission strategy",
+        "skill rotations",
+        "cancel a mission",
+        "send hero on a mission"
+      ],
+      "respuestaEs": "Para jugar una misión: 1) En «Misiones», pestaña «Tablón», elige una disponible y pulsa «Iniciar misión». 2) Elige tu héroe: debe ser tuyo, estar libre y llevar al menos un arma, una armadura o un ítem; un Chamán o un Médico no pueden ir solos. 3) Revisa sus estadísticas y ordena hasta 3 rotaciones de habilidades con prioridad Alta, Media y Baja: en la misión la IA lo dirige con ese orden. 4) Pulsa «Comprobar estrategia». 5) Confirma con «Iniciar misión»: mientras dure, tu héroe queda «En misión» y no puede jugar en línea ni en torneos ni cambiar de equipo. 6) Síguela en «En curso» y, al terminar, mira el reporte en «Historial». Si la cancelas con «Cancelar misión», pierdes sus recompensas. Durante la misión puede aparecer un Máster.",
+      "respuestaEn": "To play a mission: 1) In «Misiones» (Missions), «Tablón» (Board) tab, pick an available one and press «Iniciar misión» (Start mission). 2) Choose your hero: it must be yours, free and carry at least one weapon, armor piece or item; a «Chamán» or «Médico» can't go alone. 3) Check its stats and order up to 3 skill rotations with «Alta», «Media» and «Baja» priority: in the mission the AI follows that order. 4) Press «Comprobar estrategia» (Check strategy). 5) Confirm with «Iniciar misión»: while it lasts your hero is «En misión» and can't play online, in tournaments or change gear. 6) Follow it in «En curso» (In progress) and check the report in «Historial» (History). If you cancel it with «Cancelar misión», you lose its rewards. A Master may appear during the mission.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "torneo",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Cómo funciona el Torneo",
+      "variantesEs": [
+        "torneo",
+        "como funciona el torneo",
+        "reglas del torneo",
+        "arbol del torneo",
+        "llave de ganadores",
+        "llave de segunda oportunidad",
+        "premio del torneo",
+        "transmision del torneo",
+        "ver el torneo en vivo",
+        "competencia"
+      ],
+      "variantesEn": [
+        "tournament",
+        "how does the tournament work",
+        "tournament rules",
+        "tournament bracket",
+        "tournament prize",
+        "tournament stream",
+        "watch the tournament live",
+        "competition"
+      ],
+      "respuestaEs": "Los torneos los crea la administración y se abren por temporadas. Se juegan en equipos de 2 jugadores, y cada encuentro es tu equipo contra otro. El árbol es de 8 equipos: si pierdes pasas a la «Llave de segunda oportunidad» y a la segunda derrota quedas eliminado; los cupos vacíos los ocupan equipos de la IA. La inscripción se paga en créditos (puede ser gratis), y el premio de cada integrante del equipo campeón, en créditos y una épica, aparece en la página del torneo. En «Torneo» sigues el árbol y con «Actualizar resultados» ves los últimos, pero los encuentros no se transmiten en video.",
+      "respuestaEn": "Tournaments are created by admins and open by seasons. They're played in teams of 2, each match being your team against another. The bracket has 8 teams: if you lose you move to the «Llave de segunda oportunidad» (second-chance bracket) and a second loss knocks you out; AI teams fill empty slots. The entry fee is paid in credits (it can be free), and each champion member's prize, credits and an epic, is shown on the tournament page. In «Torneo» (Tournament) you follow the bracket and «Actualizar resultados» (refresh results) shows the latest; matches aren't streamed on video.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "crear-cuenta",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo crear una cuenta",
+      "variantesEs": [
+        "registrarme",
+        "crear cuenta",
+        "crear una cuenta",
+        "registro",
+        "como me registro",
+        "nueva cuenta",
+        "quiero registrarme",
+        "abrir una cuenta",
+        "darme de alta",
+        "requisitos del apodo",
+        "requisitos de la contraseña"
+      ],
+      "variantesEn": [
+        "register",
+        "sign up",
+        "create account",
+        "create an account",
+        "new account",
+        "how do i register",
+        "password requirements",
+        "nickname rules",
+        "open an account"
+      ],
+      "respuestaEs": "Para crear tu cuenta: 1) En la pantalla de entrada pulsa «Crear cuenta». 2) Escribe tus nombres, tus apellidos, un apodo y tu correo. El apodo debe ser único y no puede tener palabras ofensivas ni nombres de celebridades, políticos, dirigentes o marcas. 3) Elige una contraseña de más de 8 caracteres con mayúscula, minúscula, número y símbolo, y repítela; la foto de avatar es opcional. 4) Pulsa «Crear cuenta» y revisa tu correo: te llega un código de 8 caracteres. 5) Escríbelo en «Confirma tu correo» y pulsa «Confirmar». 6) Entra con «Entrar al Nexo»: en tu primer ingreso preparamos tus créditos de bienvenida y tu héroe inicial.",
+      "respuestaEn": "To create your account: 1) On the entry screen press «Crear cuenta» (Create account). 2) Enter your first names, last names, a nickname and your email. The nickname must be unique and can't contain offensive words or names of celebrities, politicians, leaders or brands. 3) Choose a password longer than 8 characters with uppercase, lowercase, a number and a symbol, and repeat it; the avatar photo is optional. 4) Press «Crear cuenta» and check your email: you'll get an 8-character code. 5) Enter it in «Confirma tu correo» (Confirm your email) and press «Confirmar». 6) Sign in with «Entrar al Nexo»: on your first sign-in we set up your welcome credits and starting hero.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "recuperar-contrasena",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Recuperar mi contraseña",
+      "variantesEs": [
+        "olvide mi contraseña",
+        "recuperar contraseña",
+        "restablecer contraseña",
+        "no recuerdo mi contraseña",
+        "olvide mi clave",
+        "recuperar mi cuenta",
+        "perdi mi contraseña",
+        "no me acuerdo de la contraseña",
+        "codigo para recuperar la contraseña",
+        "enviar codigo",
+        "resetear contraseña",
+        "olvide la contraseña",
+        "como recupero mi contraseña"
+      ],
+      "variantesEn": [
+        "forgot password",
+        "forgot my password",
+        "reset password",
+        "recover account",
+        "lost my password",
+        "password recovery",
+        "cant remember my password"
+      ],
+      "respuestaEs": "Para recuperar tu contraseña: 1) En la pantalla de entrada pulsa «¿Olvidaste tu contraseña?», escribe tu correo y pulsa «Enviar código». 2) Busca el código en tu correo, también en la carpeta de no deseado. 3) En «Restablecer contraseña» (desde el enlace del correo o con «Ya tengo un código») escribe tu correo y el código, y pulsa «Continuar». 4) Si configuraste preguntas de seguridad, respóndelas. 5) Escribe la nueva contraseña (más de 8 caracteres, con mayúscula, minúscula, número y símbolo), repítela y pulsa «Guardar contraseña». Tus sesiones abiertas se cierran. Si tu cuenta aún no está confirmada, primero confirma tu correo.",
+      "respuestaEn": "To recover your password: 1) On the entry screen press «¿Olvidaste tu contraseña?» (Forgot your password?), enter your email and press «Enviar código» (Send code). 2) Look for the code in your email, including the spam folder. 3) In «Restablecer contraseña» (Reset password), from the email link or «Ya tengo un código» (I already have a code), enter your email and the code and press «Continuar». 4) If you set up security questions, answer them. 5) Enter the new password (more than 8 characters, with uppercase, lowercase, a number and a symbol), repeat it and press «Guardar contraseña» (Save password). Your open sessions are closed. If your account isn't confirmed yet, confirm your email first.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "mi-cuenta",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Gestionar mi cuenta y mi perfil",
+      "variantesEs": [
+        "mi cuenta",
+        "mi perfil",
+        "editar perfil",
+        "configuracion de cuenta",
+        "datos personales",
+        "cambiar mis datos",
+        "cambiar avatar",
+        "foto de perfil",
+        "ajustes de la cuenta",
+        "pestañas de mi cuenta",
+        "que hay en mi cuenta",
+        "cambiar mi avatar",
+        "mi avatar"
+      ],
+      "variantesEn": [
+        "my account",
+        "my profile",
+        "edit profile",
+        "account settings",
+        "change avatar",
+        "profile picture",
+        "personal data",
+        "what is in my account"
+      ],
+      "respuestaEs": "En «Mi Cuenta» tienes seis pestañas: «Resumen» (tus créditos y el estado de tu cuenta), «Estadísticas» (tus batallas y tus misiones), «Perfil» (nombres, apellidos, apodo, preferencias y avatar), «Seguridad» (cambiar contraseña, preguntas de seguridad y verificación en dos pasos), «Historial» (movimientos de créditos y pagos en dinero real) y «Privacidad» (descargar tus datos o cerrar tu cuenta). Por ahora no hay logros ni suscripciones, y no se guardan tarjetas.",
+      "respuestaEn": "«Mi Cuenta» (My Account) has six tabs: «Resumen» (Summary: your credits and account status), «Estadísticas» (Statistics: your battles and missions), «Perfil» (Profile: names, nickname, preferences and avatar), «Seguridad» (Security: change password, security questions and two-step verification), «Historial» (History: credit movements and real-money payments) and «Privacidad» (Privacy: download your data or close your account). There are no achievements or subscriptions yet, and cards are not stored.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "publicar-subasta",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo publicar un producto en subasta",
+      "variantesEs": [
+        "subasta",
+        "quiero vender algo",
+        "publicar subasta",
+        "publicar en subasta",
+        "vender un objeto",
+        "vender un producto",
+        "poner algo en venta",
+        "comision de subasta",
+        "duracion de la subasta",
+        "precio minimo",
+        "precio de compra inmediata",
+        "cuanto cuesta publicar"
+      ],
+      "variantesEn": [
+        "auction",
+        "sell something",
+        "list an item",
+        "sell an item",
+        "auction fee",
+        "auction duration",
+        "minimum price",
+        "buy now price"
+      ],
+      "respuestaEs": "Para subastar un objeto: 1) En «Subasta» pulsa «Publicar subasta». 2) En «Producto de tu inventario» elige el objeto: debe ser tuyo, no estar equipado ni en misión, y no puede ser premium. 3) Elige la duración: 24 horas (comisión de 1 crédito) o 48 horas (3 créditos). 4) Escribe el precio inicial o mínimo y, si quieres, un precio de compra inmediata, que debe ser mayor que el mínimo. 5) Marca la casilla de confirmación y pulsa «Confirmar y publicar». La comisión se cobra al publicar, se venda o no, y el objeto queda bloqueado mientras dure la subasta.",
+      "respuestaEn": "To auction an item: 1) In «Subasta» (Auction) press «Publicar subasta» (Publish auction). 2) In «Producto de tu inventario» pick the item: it must be yours, not equipped or on a mission, and it can't be premium. 3) Choose the duration: 24 hours (1-credit fee) or 48 hours (3 credits). 4) Enter the starting or minimum price and, if you want, a buy-now price, which must be higher than the minimum. 5) Tick the confirmation box and press «Confirmar y publicar» (Confirm and publish). The fee is charged when you publish, whether it sells or not, and the item stays locked while the auction runs.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "pujar-o-comprar",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo pujar o comprar en una subasta",
+      "variantesEs": [
+        "pujar",
+        "como pujo",
+        "hacer una oferta",
+        "ofertar",
+        "comprar en subasta",
+        "compra inmediata",
+        "compra directa",
+        "comprarla ya",
+        "incremento minimo",
+        "me superaron",
+        "creditos retenidos",
+        "hago una puja"
+      ],
+      "variantesEn": [
+        "bid",
+        "bidding",
+        "how do i bid",
+        "place a bid",
+        "buy now",
+        "instant buy",
+        "minimum increment",
+        "outbid",
+        "held credits"
+      ],
+      "respuestaEs": "Para pujar o comprar: 1) En «Subasta» busca el objeto y pulsa «Ver subasta». 2) Para pujar escribe tu oferta y pulsa «Pujar». La primera puja debe llegar al precio mínimo y las siguientes deben superar la oferta actual al menos en el incremento mínimo que muestra la subasta. Tus créditos quedan retenidos y se liberan si alguien te supera. 3) Si hay «Compra directa», pulsa «Comprarla ya» y confirma: el objeto pasa a tu inventario al instante y la subasta se cierra. Esa opción desaparece cuando una puja alcanza su precio. No puedes pujar en tus propias subastas.",
+      "respuestaEn": "To bid or buy: 1) In «Subasta» (Auction) find the item and press «Ver subasta» (View auction). 2) To bid, enter your offer and press «Pujar» (Bid). The first bid must reach the minimum price, and later bids must beat the current offer by at least the minimum increment shown in the auction. Your credits are held and released if someone outbids you. 3) If there's «Compra directa» (direct purchase), press «Comprarla ya» (Buy it now) and confirm: the item goes to your inventory instantly and the auction closes. That option disappears once a bid reaches its price. You can't bid on your own auctions.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "creditos",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Créditos y moneda del juego",
+      "variantesEs": [
+        "creditos",
+        "moneda del juego",
+        "como consigo creditos",
+        "para que sirven los creditos",
+        "dinero del juego",
+        "saldo de creditos",
+        "creditos del nexo",
+        "monedas",
+        "donde veo mis creditos",
+        "como ganar creditos"
+      ],
+      "variantesEn": [
+        "credits",
+        "game currency",
+        "how do i get credits",
+        "earn credits",
+        "what are credits for",
+        "virtual currency",
+        "credit balance",
+        "coins",
+        "where can i see my credits"
+      ],
+      "respuestaEs": "Los créditos son la moneda del juego y no se cambian por dinero real. Los ganas con el bono de bienvenida, en las batallas (2 por ganar un 1 contra 1, 4 por ganar una partida de más de dos y 1 por participar), al completar misiones, con premios de torneo y vendiendo en «Subasta». Sirven para pujar y publicar subastas, ponerlos en juego en una sala, inscribirte en torneos y comprar en la «Tienda» con «Créditos del Nexo». Tu saldo y tus movimientos están en «Mi Cuenta», pestañas «Resumen» e «Historial».",
+      "respuestaEn": "Credits are the game's currency and can't be exchanged for real money. You earn them with the welcome bonus, in battles (2 for winning a 1 vs 1, 4 for winning a match with more than two, and 1 for taking part), by completing missions, with tournament prizes and by selling in «Subasta» (Auction). Use them to bid and publish auctions, put them at stake in a room, enter tournaments and buy in the «Tienda» (Store) with «Créditos del Nexo». Your balance and movements are in «Mi Cuenta» (My Account), «Resumen» and «Historial» tabs.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "problema-tecnico",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "CONTEXTUAL",
+      "titulo": "Problema técnico general",
+      "variantesEs": [
+        "no puedo entrar",
+        "error",
+        "problema tecnico",
+        "no funciona",
+        "bug",
+        "fallo",
+        "no carga",
+        "se cayo la pagina",
+        "pantalla en blanco",
+        "me sale un error",
+        "no me deja entrar",
+        "algo anda mal",
+        "no puedo iniciar sesion"
+      ],
+      "variantesEn": [
+        "cannot log in",
+        "error",
+        "technical problem",
+        "not working",
+        "bug",
+        "page not loading",
+        "blank screen",
+        "something is wrong",
+        "is not loading",
+        "won't load",
+        "doesn't load",
+        "does not load",
+        "game won't load",
+        "stuck loading",
+        "not loading"
+      ],
+      "respuestaEs": "Cuéntame qué falla, en qué pantalla estás y qué mensaje ves. Si no puedes entrar: con «Falta confirmar tu correo», escribe el código que te enviamos; con «Cuenta bloqueada temporalmente», espera unos minutos o recupera tu contraseña; con «Tu cuenta está suspendida», verás hasta cuándo dura. Si una pantalla no carga, recárgala y vuelve a intentarlo en unos minutos. Si no logro resolverlo, inicia sesión y pulsa «Soporte» para hablar con una persona del equipo.",
+      "respuestaEn": "Tell me what's failing, which screen you're on and what message you see. If you can't sign in: with «Falta confirmar tu correo» (email not confirmed), enter the code we sent you; with «Cuenta bloqueada temporalmente» (temporarily locked), wait a few minutes or recover your password; with «Tu cuenta está suspendida» (suspended), you'll see until when. If a screen doesn't load, reload it and try again in a few minutes. If I can't solve it, sign in and press «Soporte» (Support) to talk to a person from the team.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "sanciones",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Sistema de sanciones",
+      "variantesEs": [
+        "sancion",
+        "baneo",
+        "suspension",
+        "me suspendieron",
+        "me banearon",
+        "advertencia",
+        "por que me sancionaron",
+        "causales de sancion",
+        "tipos de sancion"
+      ],
+      "variantesEn": [
+        "sanction",
+        "ban",
+        "banned",
+        "suspension",
+        "suspended",
+        "warning",
+        "why was i banned"
+      ],
+      "respuestaEs": "Las sanciones son graduales: una advertencia, que no limita tu acceso; una suspensión temporal de horas, días o semanas, en la que no puedes entrar pero tu inventario y tu progreso se conservan; y el baneo definitivo, que inhabilita la cuenta. Se sanciona el lenguaje ofensivo o abusivo en comentarios o chat, el acoso a otros jugadores, el fraude o la manipulación del sistema, las trampas o el software no autorizado, la suplantación de identidad y el incumplimiento de las políticas del servicio. Te avisamos en la campana y por correo, y tu historial está en «Mis sanciones».",
+      "respuestaEn": "Sanctions are gradual: a warning, which doesn't limit your access; a temporary suspension of hours, days or weeks, during which you can't sign in but your inventory and progress are kept; and a permanent ban, which disables the account. Sanctionable behavior includes offensive or abusive language in comments or chat, harassing other players, fraud or manipulating the system, cheating or unauthorized software, identity impersonation and breaking the service policies. We notify you in the bell and by email, and your record is in «Mis sanciones» (My sanctions).",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "apelar-sancion",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo apelar una sanción",
+      "variantesEs": [
+        "apelar",
+        "apelacion",
+        "como apelo una sancion",
+        "apelar una sancion",
+        "recurrir una sancion",
+        "no estoy de acuerdo con mi sancion",
+        "mis apelaciones",
+        "enviar apelacion",
+        "plazo para apelar",
+        "quitar una sancion",
+        "como apelo",
+        "apelar una suspension",
+        "apelar un baneo",
+        "apelar sin iniciar sesion",
+        "me banearon como apelo",
+        "apelar esta sancion"
+      ],
+      "variantesEn": [
+        "appeal",
+        "how to appeal",
+        "appeal a sanction",
+        "appeal a ban",
+        "dispute a suspension",
+        "appeal deadline",
+        "appeal a suspension",
+        "appeal without signing in",
+        "i was banned how do i appeal"
+      ],
+      "respuestaEs": "Toda sanción se puede apelar dentro del plazo que te indica la pantalla, y no puede haber dos apelaciones abiertas de la misma sanción. 1) Con una advertencia puedes entrar: abre el menú de tu apodo, entra a «Mis sanciones» y, en la sanción, pulsa «Apelar» (solo aparece dentro del plazo); escribe tus razones en «Tu argumento» y pulsa «Enviar apelación». 2) Con una suspensión o un baneo vigentes no puedes entrar, pero sí apelar: en la pantalla de entrada escribe tu «Correo electrónico» y tu «Contraseña» y, en el aviso de la sanción, pulsa «Apelar esta sanción». 3) Ahí ves la sanción y hasta cuándo puedes apelarla; escribe «Por qué crees que la sanción no corresponde» y pulsa «Enviar apelación». 4) Un panel de moderadores y administradores la revisa y responde en un plazo de 15 días hábiles: la sanción se mantiene, se reduce o se revierte. La decisión te llega al correo y, con sesión, también la ves en «Mis apelaciones».",
+      "respuestaEn": "Every sanction can be appealed within the deadline shown on screen, and there can't be two open appeals for the same sanction. 1) With a warning you can sign in: open your nickname menu, go to «Mis sanciones» (My sanctions) and, on the sanction, press «Apelar» (Appeal; it only shows up within the deadline); write your reasons in «Tu argumento» (Your argument) and press «Enviar apelación» (Send appeal). 2) With an active suspension or ban you can't sign in, but you can still appeal: on the sign-in screen enter your «Correo electrónico» (email) and «Contraseña» (password) and, in the sanction notice, press «Apelar esta sanción» (Appeal this sanction). 3) There you see the sanction and until when you can appeal it; fill in «Por qué crees que la sanción no corresponde» (Why you think the sanction is wrong) and press «Enviar apelación» (Send appeal). 4) A panel of moderators and administrators reviews it and replies within 15 business days: the sanction is upheld, reduced or reverted. The decision reaches your email and, when signed in, you also see it in «Mis apelaciones» (My appeals).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "saludo",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Saludo",
+      "variantesEs": [
+        "hola",
+        "buenas",
+        "saludos",
+        "buenos dias",
+        "buenas tardes",
+        "buenas noches",
+        "que tal",
+        "holi",
+        "hey"
+      ],
+      "variantesEn": [
+        "hello",
+        "hi",
+        "hey",
+        "good morning",
+        "good afternoon",
+        "good evening",
+        "greetings"
+      ],
+      "respuestaEs": "¡Hola! Soy el asistente de THE NEXUS BATTLES VI. Puedo ayudarte con héroes y objetos, combate, misiones, torneos, subastas y tienda, tu cuenta o un problema técnico. Si iniciaste sesión, también puedo consultar tu inventario, tus subastas, tus notificaciones, tus misiones, tus torneos y tus créditos. ¿En qué te ayudo?",
+      "respuestaEn": "Hello! I'm the THE NEXUS BATTLES VI assistant. I can help you with heroes and items, combat, missions, tournaments, auctions and the store, your account or a technical problem. If you're signed in, I can also check your inventory, auctions, notifications, missions, tournaments and credits. How can I help?",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "despedida",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Despedida",
+      "variantesEs": [
+        "adios",
+        "chao",
+        "hasta luego",
+        "gracias",
+        "nos vemos",
+        "muchas gracias",
+        "hasta pronto",
+        "me voy",
+        "eso es todo"
+      ],
+      "variantesEn": [
+        "bye",
+        "goodbye",
+        "thanks",
+        "thank you",
+        "see you",
+        "see you later",
+        "that is all"
+      ],
+      "respuestaEs": "¡Hasta pronto! Que tengas una gran partida en THE NEXUS BATTLES VI. Si necesitas algo más, aquí estaré.",
+      "respuestaEn": "See you soon! Have a great match in THE NEXUS BATTLES VI. If you need anything else, I'll be here.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "que-es-el-juego",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Qué es THE NEXUS BATTLES VI",
+      "variantesEs": [
+        "de que trata el juego",
+        "que es nexus battles",
+        "descripcion del juego",
+        "sobre el juego",
+        "de que trata",
+        "que tipo de juego es",
+        "que es este juego",
+        "como es el juego",
+        "que puedo hacer en el juego"
+      ],
+      "variantesEn": [
+        "what is this game",
+        "about the game",
+        "game description",
+        "what is nexus battles",
+        "what kind of game is it",
+        "what can i do in the game"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI «Return of the Warriors» es un juego de rol por turnos que se juega en el navegador. Reúnes héroes y los equipas con armas, armaduras e ítems; los envías a misiones contra el entorno, combates contra otros jugadores o contra la IA en «Jugar online», compites por equipos en «Torneo» y comercias en «Subasta» y en la «Tienda». Así ganas créditos, experiencia, objetos y habilidades épicas.",
+      "respuestaEn": "THE NEXUS BATTLES VI «Return of the Warriors» is a turn-based role-playing game you play in the browser. You collect heroes and equip them with weapons, armor and items; you send them on missions, fight other players or the AI in «Jugar online» (Play online), compete in teams in «Torneo» (Tournament) and trade in «Subasta» (Auction) and the «Tienda» (Store). That's how you earn credits, experience, items and epic abilities.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "guia-nuevos-jugadores",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Guía para nuevos jugadores",
+      "variantesEs": [
+        "soy nuevo",
+        "nuevo jugador",
+        "guia para principiantes",
+        "como empiezo",
+        "por donde empiezo",
+        "primeros pasos",
+        "acabo de empezar",
+        "principiante",
+        "tutorial",
+        "que hago primero",
+        "como empiezo a jugar"
+      ],
+      "variantesEn": [
+        "new player",
+        "beginner guide",
+        "how do i start",
+        "getting started",
+        "first steps",
+        "tutorial",
+        "what do i do first",
+        "im new"
+      ],
+      "respuestaEs": "Bienvenido a THE NEXUS BATTLES VI. Para empezar: 1) Crea tu cuenta y confirma tu correo con el código que te enviamos; al entrar por primera vez recibes créditos de bienvenida y un héroe equipado. 2) Revisa «Mi inventario»: ahí están tus héroes y objetos, con buscador. 3) Mejora el equipo de tu héroe desde su carta en la pestaña «Héroes»: hasta 2 armas, 2 ítems y 6 piezas de armadura. 4) En «Misiones» empieza por la primera de la pestaña «Historia»; las demás se desbloquean en orden. También puedes jugar en «Jugar online». 5) Usa tus créditos en la «Tienda», en «Subasta» o en «Torneo». Si tienes dudas, pregúntame o pulsa «Soporte».",
+      "respuestaEn": "Welcome to THE NEXUS BATTLES VI. To get started: 1) Create your account and confirm your email with the code we send you; on your first sign-in you get welcome credits and an equipped hero. 2) Check «Mi inventario» (My inventory): your heroes and items are there, with a search box. 3) Improve your hero's gear from its card in the «Héroes» tab: up to 2 weapons, 2 items and 6 armor pieces. 4) In «Misiones» (Missions) start with the first one in the «Historia» (Story) tab; the rest unlock in order. You can also play in «Jugar online» (Play online). 5) Use your credits in the «Tienda» (Store), «Subasta» (Auction) or «Torneo» (Tournament). If you have questions, ask me or press «Soporte» (Support).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "completar-mazo",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Equipar a tu héroe («mazo completo»)",
+      "variantesEs": [
+        "mazo",
+        "armar mazo",
+        "completar mazo",
+        "mazo completo",
+        "mazo incompleto",
+        "completar su mazo",
+        "deck",
+        "equipar heroe",
+        "como equipo a mi heroe",
+        "equipamiento",
+        "preparar heroe",
+        "equipar armas",
+        "heroe sin equipo",
+        "no tienes un heroe equipado"
+      ],
+      "variantesEn": [
+        "deck",
+        "build deck",
+        "complete deck",
+        "incomplete deck",
+        "equip my hero",
+        "equip hero",
+        "equipment",
+        "prepare my hero",
+        "hero without gear"
+      ],
+      "respuestaEs": "En THE NEXUS BATTLES VI no se arman mazos de cartas: el «mazo» de tu héroe es su equipamiento. Para equiparlo: 1) Abre «Mi inventario», pestaña «Héroes». 2) En la carta de tu héroe pulsa «Equiparlo» o «Equipamiento». 3) Pulsa una ranura y elige el objeto: hay 2 para armas, 2 para ítems y 6 para armadura (casco, pecho, brazaletes, guantes, pantalón y zapatos). 4) Para salir a una misión o entrar a una sala basta con que lleve al menos un arma, una armadura o un ítem; si no, la misión te pide completar su mazo y la sala dice «No tienes un héroe equipado». Las épicas no se equipan, lo que está en subasta no se puede equipar y un héroe «En misión» no cambia de equipo hasta volver.",
+      "respuestaEn": "In THE NEXUS BATTLES VI there are no card decks: your hero's «deck» is its gear. To equip it: 1) Open «Mi inventario» (My inventory), «Héroes» tab. 2) On your hero's card press «Equiparlo» (Equip it) or «Equipamiento» (Gear). 3) Press a slot and pick the item: there are 2 weapon slots, 2 item slots and 6 armor slots (helmet, chest, bracers, gloves, pants and shoes). 4) To go on a mission or enter a room, at least one weapon, armor piece or item is enough; otherwise the mission asks you to complete its «mazo» (deck) and the room says «No tienes un héroe equipado» (you have no equipped hero). Epics aren't equipped, items in an auction can't be equipped, and a hero «En misión» keeps its gear until it returns.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "estrategias-basicas",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "SUGERENCIA_PROACTIVA",
+      "titulo": "Estrategias básicas de combate",
+      "variantesEs": [
+        "estrategia",
+        "estrategias",
+        "consejos de combate",
+        "tips de combate",
+        "como ganar un combate",
+        "como mejorar en combate",
+        "tacticas",
+        "consejos para pelear",
+        "que me recomiendas para ganar"
+      ],
+      "variantesEn": [
+        "strategy",
+        "strategies",
+        "combat tips",
+        "how to win a fight",
+        "tactics",
+        "fighting advice"
+      ],
+      "respuestaEs": "Algunas estrategias básicas: prepara el equipo antes de entrar a la sala, porque el combate usa el que tu héroe llevaba al entrar. Aprovecha el papel de cada héroe: el Guerrero Tanque aguanta, el Guerrero Armas y el Mago Fuego ponen el daño, el Mago Hielo y el Pícaro Veneno debilitan al rival, y el Chamán y el Médico sostienen al equipo. Busca equipo con bonos de crítico o evasión. Administra el poder: recuperas 2 por turno y, si no te alcanza, se juega tu acción básica; las épicas no gastan poder. En las misiones ordena bien tus rotaciones: la IA las sigue y salta las que no pueda usar.",
+      "respuestaEn": "Some basic strategies: set up your gear before entering the room, since combat uses what your hero had on when you entered. Use each hero's role: the «Guerrero Tanque» holds the line, the «Guerrero Armas» and «Mago Fuego» deal damage, the «Mago Hielo» and «Pícaro Veneno» weaken the opponent, and the «Chamán» and «Médico» support the team. Look for gear with critical or evasion bonuses. Manage your power: you recover 2 per turn and, if it's not enough, your basic action is played; epics use no power. In missions, order your rotations well: the AI follows them and skips any it can't use.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "sinergias-equipo",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Sinergias y combinaciones de equipo",
+      "variantesEs": [
+        "sinergia",
+        "sinergias",
+        "combinaciones",
+        "combinar heroes",
+        "que heroes combinan",
+        "mejor equipo",
+        "formar equipo",
+        "armar un equipo",
+        "composicion de equipo"
+      ],
+      "variantesEn": [
+        "synergy",
+        "synergies",
+        "combos",
+        "hero combinations",
+        "best team",
+        "team composition"
+      ],
+      "respuestaEs": "En «Jugar online», el modo Hasta seis permite equipos de 2 o 3 que se forman por orden de entrada, y en equipo tus ataques nunca dañan a un compañero. Combinaciones que aprovechan el papel de cada héroe: un Guerrero Tanque que aguante mientras un Mago Fuego o un Guerrero Armas ponen el daño; un Mago Hielo que debilite al rival y un Pícaro Veneno que le baje la precisión; y un Chamán o un Médico que mantengan con vida al equipo. Las épicas también suman: la mayoría da un efecto general a cualquier héroe y uno potenciado al de su tipo.",
+      "respuestaEn": "In «Jugar online» (Play online), the «Hasta seis» mode allows teams of 2 or 3 formed by order of entry, and in a team your attacks never harm a teammate. Combinations that use each hero's role: a «Guerrero Tanque» holding on while a «Mago Fuego» or «Guerrero Armas» deals the damage; a «Mago Hielo» weakening the opponent and a «Pícaro Veneno» lowering its accuracy; and a «Chamán» or «Médico» keeping the team alive. Epics help too: most give a general effect to any hero and a boosted one to their own type.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "consejos-objetos",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "SUGERENCIA_PROACTIVA",
+      "titulo": "Consejos para organizar tus objetos",
+      "variantesEs": [
+        "consejos de inventario",
+        "organizar inventario",
+        "tips de inventario",
+        "ordenar el inventario",
+        "objeto bloqueado",
+        "producto bloqueado",
+        "no puedo eliminar un objeto",
+        "por que no puedo usar un objeto",
+        "eliminar un objeto",
+        "buscar en el inventario",
+        "no puedo eliminar"
+      ],
+      "variantesEn": [
+        "inventory tips",
+        "organize inventory",
+        "locked item",
+        "cannot delete item",
+        "delete an item",
+        "search the inventory"
+      ],
+      "respuestaEs": "Algunos consejos para tu inventario: usa «Buscar en tu inventario» (nombre, efecto, habilidad o tipo, desde 4 letras) en vez de recorrer todas las páginas, y pulsa cualquier objeto para ver su ficha. Fíjate en las marcas: un héroe «En misión» o un objeto publicado en subasta no se puede equipar, cambiar ni eliminar hasta que vuelva o se cierre la subasta, y lo que llevas equipado no se puede eliminar ni subastar. Lo que ya no uses puedes eliminarlo o publicarlo en «Subasta». Lo que ganas en misiones, cofres o compras llega solo a tu inventario; los créditos, a tu saldo.",
+      "respuestaEn": "Some tips for your inventory: use «Buscar en tu inventario» (search by name, effect, skill or type, from 4 letters) instead of paging through everything, and tap any item to see its details. Watch the markers: a hero «En misión» (on a mission) or an item listed in an auction can't be equipped, changed or deleted until it returns or the auction closes, and equipped items can't be deleted or auctioned. Anything you no longer use can be deleted or listed in «Subasta» (Auction). What you win in missions, chests or purchases arrives in your inventory automatically; credits go to your balance.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "derrota-del-heroe",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Qué pierdes al ser derrotado",
+      "variantesEs": [
+        "si me derrotan",
+        "heroe derrotado",
+        "que pierdo si pierdo",
+        "si pierdo un combate",
+        "perder equipo",
+        "me quitan objetos",
+        "pierdo mis objetos",
+        "que pasa si pierdo",
+        "perder la apuesta",
+        "pierdo mi heroe",
+        "si pierdo una batalla"
+      ],
+      "variantesEn": [
+        "hero defeated",
+        "what do i lose",
+        "lose my gear",
+        "if i lose a fight",
+        "what happens if i lose",
+        "lose my bet"
+      ],
+      "respuestaEs": "Perder un combate no te quita héroes ni objetos: tu equipo y tu inventario siguen intactos. En una batalla en línea, si gana otro jugador pierdes los créditos que pusiste en juego (en un empate o en una partida por equipos se devuelven) y aun así recibes 1 crédito por participar. Si fallas una misión no recibes créditos ni botín, pero tu héroe conserva la experiencia de los enemigos que alcanzó a derrotar.",
+      "respuestaEn": "Losing a fight never takes heroes or items: your gear and inventory stay intact. In an online battle, if another player wins you lose the credits you put at stake (on a draw or in a team match they're returned), and you still get 1 credit for taking part. If you fail a mission you get no credits or loot, but your hero keeps the experience from the enemies it managed to defeat.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "tipos-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Tipos de misiones: Historia, Desafío y Exploración",
+      "variantesEs": [
+        "tipos de misiones",
+        "misiones de historia",
+        "misiones de desafio",
+        "misiones de exploracion",
+        "desafio",
+        "exploracion",
+        "campaña",
+        "intentos limitados",
+        "categorias de misiones",
+        "que misiones hay",
+        "clases de misiones"
+      ],
+      "variantesEn": [
+        "mission types",
+        "story missions",
+        "challenge missions",
+        "exploration missions",
+        "campaign",
+        "limited attempts",
+        "mission categories"
+      ],
+      "respuestaEs": "El tablón de «Misiones» tiene tres pestañas. «Historia»: se desbloquean en orden, se pueden repetir y la primera vez que completas cada una recibes un bono extra. «Desafío»: tienen intentos limitados por día o por semana. «Exploración»: duran de 24 a 72 horas y tienen varios encuentros. Hoy todas las misiones publicadas son de «Historia». Puedes filtrar por dificultad, estado y duración.",
+      "respuestaEn": "The «Misiones» (Missions) board has three tabs. «Historia» (Story): they unlock in order, can be replayed, and the first time you complete each one you get an extra bonus. «Desafío» (Challenge): limited attempts per day or per week. «Exploración» (Exploration): they last 24 to 72 hours and have several encounters. Right now all published missions are «Historia» missions. You can filter by difficulty, status and duration.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "recompensas-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Recompensas de las misiones",
+      "variantesEs": [
+        "recompensas de las misiones",
+        "recompensa de mision",
+        "que gano en una mision",
+        "botin",
+        "premios de mision",
+        "cuanta experiencia",
+        "experiencia por enemigo",
+        "reporte de la mision",
+        "que pasa si fallo una mision",
+        "bono de primera vez",
+        "que recompensas dan las misiones"
+      ],
+      "variantesEn": [
+        "mission rewards",
+        "mission reward",
+        "what do i earn in a mission",
+        "loot",
+        "experience per enemy",
+        "how much experience",
+        "mission report",
+        "failed mission",
+        "rewards for missions"
+      ],
+      "respuestaEs": "Al completar una misión recibes sus créditos (más un bono la primera vez y bonos por objetivos cumplidos), su botín garantizado y el que salga por sorteo, y la épica del Máster si lo derrotaste. La experiencia viene de cada enemigo derrotado: 10 × 1,2^(1d8), donde 1d8 es un dado de ocho caras; completar la misión no suma experiencia extra por ahora. Si la misión falla no hay créditos ni botín, pero tu héroe conserva esa experiencia; si la cancelas, lo pierdes todo. Los objetos llegan a tu inventario, los créditos a tu saldo, y todo queda en el reporte de la misión.",
+      "respuestaEn": "When you complete a mission you get its credits (plus a first-time bonus and bonuses for objectives met), its guaranteed loot and any random loot, and the Master's epic if you defeated it. Experience comes from each defeated enemy: 10 × 1.2^(1d8), where 1d8 is an eight-sided die; completing the mission gives no extra experience for now. If the mission fails there are no credits or loot, but your hero keeps that experience; if you cancel it, you lose everything. Items go to your inventory, credits to your balance, and it's all in the mission report.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "dificultades-de-misiones",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Niveles de dificultad de las misiones",
+      "variantesEs": [
+        "dificultad",
+        "dificultades",
+        "niveles de dificultad",
+        "heroico",
+        "legendario",
+        "mitico",
+        "desbloquear dificultad",
+        "modo dificil",
+        "escalones de dificultad",
+        "nivel recomendado",
+        "dificultad de la mision"
+      ],
+      "variantesEn": [
+        "difficulty",
+        "difficulty levels",
+        "heroic",
+        "legendary",
+        "mythic",
+        "hard mode",
+        "recommended level"
+      ],
+      "respuestaEs": "Cada misión muestra en el tablón su dificultad (Fácil, Normal, Difícil o Extremo) y su nivel recomendado, y puedes filtrar por dificultad. Hoy todas se juegan en el escalón Normal: los escalones Heroico (enemigos con 50 % más de estadísticas) y Legendario (100 % más) todavía no se pueden elegir desde el juego, y Mítico no está disponible. Si una misión te cuesta, sube de nivel a tu héroe o mejora su equipo.",
+      "respuestaEn": "Each mission shows on the board its difficulty («Fácil», «Normal», «Difícil» or «Extremo») and its recommended level, and you can filter by difficulty. Right now every mission is played on the Normal tier: the Heroic (enemies with 50% more stats) and Legendary (100% more) tiers can't be chosen in the game yet, and Mythic isn't available. If a mission is too hard, level up your hero or improve its gear.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "logros-titulos-insignias",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Logros, títulos e insignias",
+      "variantesEs": [
+        "logros",
+        "logro",
+        "titulos",
+        "insignias",
+        "medallas",
+        "hazañas",
+        "trofeos",
+        "compartir un logro",
+        "coleccion de epicas"
+      ],
+      "variantesEn": [
+        "achievements",
+        "achievement",
+        "titles",
+        "badges",
+        "trophies",
+        "medals",
+        "share an achievement"
+      ],
+      "respuestaEs": "Por ahora el juego no tiene logros, títulos ni insignias que ganar. Lo que sí puedes consultar: en «Mi Cuenta», pestaña «Estadísticas», tus batallas y tus misiones (cumplidas, fallidas y épicas obtenidas), y en «Misiones», pestaña «Historial», tus mejores tiempos, las épicas de Máster y tu avance en la historia. En el «Chat» puedes contar lo que lograste con «Compartir un logro de misión».",
+      "respuestaEn": "For now the game has no achievements, titles or badges to earn. What you can check: in «Mi Cuenta» (My Account), «Estadísticas» (Statistics) tab, your battles and missions (completed, failed and epics obtained), and in «Misiones» (Missions), «Historial» (History) tab, your best times, Master epics and story progress. In the «Chat» you can tell others what you achieved with «Compartir un logro de misión» (share a mission achievement).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "precios-y-disponibilidad",
+      "categoria": "PRODUCTO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Precios y disponibilidad de productos",
+      "variantesEs": [
+        "precio",
+        "precios",
+        "cuanto cuesta",
+        "disponibilidad",
+        "esta disponible",
+        "descuentos",
+        "promociones",
+        "en que moneda",
+        "pesos colombianos",
+        "dolares o euros",
+        "producto premium",
+        "producto suspendido",
+        "tienda"
+      ],
+      "variantesEn": [
+        "price",
+        "prices",
+        "how much does it cost",
+        "availability",
+        "discounts",
+        "promotions",
+        "currency",
+        "premium products",
+        "store"
+      ],
+      "respuestaEs": "Cada producto de la «Tienda» muestra su precio y puedes pagarlo con «Créditos del Nexo» o con «Pago simulado» (dinero real); los premium solo se venden con dinero real y algunos productos solo con créditos. En «Moneda» eliges COP, USD o EUR: las que aún no están disponibles salen desactivadas. Busca por nombre, tipo, habilidad o precio, y en «Filtros y orden» filtra por tipo, rango de precio o «Solo en promoción»; las promociones muestran su descuento. Lo que venden otros jugadores está en «Subasta», en créditos. Un producto suspendido no se puede comprar, pero quien ya lo tiene lo conserva.",
+      "respuestaEn": "Each «Tienda» (Store) product shows its price; pay with «Créditos del Nexo» (game credits) or «Pago simulado» (simulated real-money payment). Premium products are sold only for real money and some only for credits. In «Moneda» (Currency) pick COP, USD or EUR; unavailable ones appear disabled. Search by name, type, skill or price, and in «Filtros y orden» (Filters and sorting) filter by type, price range or «Solo en promoción» (on sale only); sales show their discount. Other players' items are in «Subasta» (Auction), for credits. A suspended product can't be bought, but owners keep it.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "requisitos-del-sistema",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Requisitos del sistema",
+      "variantesEs": [
+        "requisitos del sistema",
+        "requisitos minimos",
+        "que necesito para jugar",
+        "navegador",
+        "se puede jugar en celular",
+        "descargar el juego",
+        "instalar",
+        "compatible",
+        "javascript"
+      ],
+      "variantesEn": [
+        "system requirements",
+        "minimum requirements",
+        "browser",
+        "download the game",
+        "install",
+        "play on mobile",
+        "what do i need to play"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI se juega en el navegador web: no hace falta instalar nada, solo internet y un navegador actualizado con JavaScript activado. La interfaz se adapta al tamaño de tu pantalla, también en el celular. Las misiones avanzan solas, así que puedes cerrar el navegador y ver el resultado después.",
+      "respuestaEn": "THE NEXUS BATTLES VI is played in the web browser: there's nothing to install, you only need internet and an up-to-date browser with JavaScript enabled. The interface adapts to your screen size, phones included. Missions keep going on their own, so you can close the browser and check the result later.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "mantenimiento-y-actualizaciones",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Mantenimiento y actualizaciones",
+      "variantesEs": [
+        "mantenimiento",
+        "actualizacion",
+        "actualizaciones",
+        "servidor caido",
+        "el juego esta caido",
+        "parche",
+        "novedades",
+        "nueva version",
+        "sin conexion",
+        "se perdio la conexion"
+      ],
+      "variantesEn": [
+        "maintenance",
+        "update",
+        "updates",
+        "server down",
+        "patch",
+        "new version",
+        "no connection",
+        "connection lost"
+      ],
+      "respuestaEs": "Si el juego no carga o una sección falla, espera unos minutos y recarga la página. Si pierdes la conexión verás «Sin conexión»: lo que hagas en ese momento no llega al juego, y al volver la red las pantallas se ponen al día solas. Cuando el equipo actualiza un producto, el cambio también se ve en los que ya tienen los jugadores, y antes se guarda un respaldo para revertirlo si algo falla. Si el problema sigue, inicia sesión y pulsa «Soporte» para contarnos qué ves.",
+      "respuestaEn": "If the game doesn't load or a section fails, wait a few minutes and reload the page. If you lose your connection you'll see «Sin conexión» (No connection): what you do then doesn't reach the game, and when the network comes back the screens catch up on their own. When the team updates a product, the change also shows on the ones players already own, and a backup is saved first so it can be reverted if something fails. If the problem continues, sign in and press «Soporte» (Support) to tell us what you see.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "hablar-con-soporte",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Hablar con soporte humano",
+      "variantesEs": [
+        "hablar con soporte",
+        "soporte humano",
+        "hablar con una persona",
+        "agente humano",
+        "abrir un ticket",
+        "ticket",
+        "contactar soporte",
+        "atencion al cliente",
+        "quiero hablar con alguien",
+        "solicitud de soporte",
+        "soporte",
+        "hablo con un humano"
+      ],
+      "variantesEn": [
+        "talk to support",
+        "human support",
+        "talk to a person",
+        "open a ticket",
+        "contact support",
+        "customer service",
+        "support"
+      ],
+      "respuestaEs": "Para hablar con una persona del equipo: 1) Inicia sesión: las solicitudes de soporte son para jugadores registrados. 2) En la ventana del asistente pulsa «Soporte», o «Hablar con soporte» cuando no entiendo tu pregunta. 3) Elige el «Tema», escribe el «Asunto» y cuéntanos en «Qué pasa» (no escribas contraseñas ni datos de tarjetas). 4) Pulsa «Enviar solicitud»: solo puedes tener una solicitud abierta a la vez. 5) Revisa «Tus solicitudes» en esa misma pantalla: ahí verás si está abierta, en revisión, respondida o cerrada, y la respuesta de soporte.",
+      "respuestaEn": "To talk to a person from the team: 1) Sign in: support requests are for registered players. 2) In the assistant window press «Soporte» (Support), or «Hablar con soporte» (Talk to support) when I don't understand your question. 3) Choose the «Tema» (Topic), write the «Asunto» (Subject) and tell us in «Qué pasa» (What's happening); don't write passwords or card details. 4) Press «Enviar solicitud» (Send request): you can only have one open request at a time. 5) Check «Tus solicitudes» (Your requests) on that same screen: you'll see whether it's open, in review, answered or closed, and the support reply.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "crear-sala-de-batalla",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo crear una sala de batalla",
+      "variantesEs": [
+        "crear sala",
+        "crear una sala",
+        "crear sala de batalla",
+        "como creo una sala",
+        "abrir una sala",
+        "sala privada",
+        "codigo de la sala",
+        "invitar a un amigo",
+        "invitar jugador",
+        "iniciar combate",
+        "configurar una partida",
+        "poner creditos en juego",
+        "cancelar sala"
+      ],
+      "variantesEn": [
+        "create room",
+        "create a room",
+        "create a battle room",
+        "how do i create a room",
+        "private room",
+        "room code",
+        "invite a friend",
+        "invite player",
+        "start combat",
+        "set up a match"
+      ],
+      "respuestaEs": "Para crear una sala: 1) En «Jugar online» pulsa «Crear sala». 2) Elige la «Modalidad de juego»: 1 contra 1, Solo (contra un rival de la IA) o Hasta seis. 3) Indica el «Número de participantes» y la «Recompensa en créditos» que pones en juego; puede ser 0. 4) En Hasta seis elige cuántos «Héroes controlados por la IA» entran y si juegan en «Equipos» de 2 o 3. 5) Marca «Sala privada» si quieres que solo entren con invitación y pulsa «Crear sala». 6) Pulsa «Entrar a la sala». Si es privada, comparte el código con «Copiar código»; también puedes usar «Invitar jugador». Cuando haya al menos 2 participantes, contando a la IA, pulsa «Iniciar combate». Si te arrepientes, usa «Cancelar sala».",
+      "respuestaEn": "To create a room: 1) In «Jugar online» (Play online) press «Crear sala» (Create room). 2) Choose the «Modalidad de juego» (Game mode): «1 contra 1», «Solo» (against an AI opponent) or «Hasta seis» (up to six). 3) Set the «Número de participantes» (number of participants) and the «Recompensa en créditos» (credits at stake); it can be 0. 4) In «Hasta seis» choose how many «Héroes controlados por la IA» (AI heroes) join and whether they play in «Equipos» (teams) of 2 or 3. 5) Tick «Sala privada» (private room) if only invited players should join, and press «Crear sala». 6) Press «Entrar a la sala» (Enter the room). If it's private, share the code with «Copiar código» (Copy code); you can also use «Invitar jugador» (Invite player). When there are at least 2 participants, AI included, press «Iniciar combate» (Start combat). If you change your mind, use «Cancelar sala» (Cancel room).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "unirse-a-una-sala",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo entrar a una sala de batalla",
+      "variantesEs": [
+        "unirme a una sala",
+        "entrar a una sala",
+        "como entro a una partida",
+        "unirme a una partida",
+        "buscar partida",
+        "salas abiertas",
+        "codigo de invitacion",
+        "entrar con el codigo",
+        "tu heroe esta en otra partida",
+        "salir de la sala",
+        "verificacion de heroe",
+        "entrar a una sala privada"
+      ],
+      "variantesEn": [
+        "join a room",
+        "join a match",
+        "enter a room",
+        "find a match",
+        "open rooms",
+        "invitation code",
+        "enter with a code",
+        "leave the room",
+        "hero verification",
+        "enter a private room"
+      ],
+      "respuestaEs": "Para entrar a una sala: 1) En «Jugar online» filtra por «Modalidad» y «Estado» y pulsa la sala que quieras; las llenas no se pueden abrir. 2) Si es privada, escribe el «Código de invitación» y pulsa «Entrar con el código». 3) El juego revisa tu héroe: toma uno tuyo que esté libre y lleve al menos un arma, una armadura o un ítem. Si ves «No tienes un héroe equipado», equipa uno en «Mi inventario». 4) Pulsa «Entrar a la sala»: si la sala pone créditos en juego, se apartan de tu saldo y te los devuelven si sales antes de empezar. 5) Espera a que el anfitrión pulse «Iniciar combate»; si quieres irte, usa «Salir de la sala».",
+      "respuestaEn": "To join a room: 1) In «Jugar online» (Play online) filter by «Modalidad» (mode) and «Estado» (status) and press the room you want; full rooms can't be opened. 2) If it's private, enter the «Código de invitación» (invitation code) and press «Entrar con el código» (Enter with the code). 3) The game checks your hero: it takes one of yours that's free and carries at least one weapon, armor piece or item. If you see «No tienes un héroe equipado» (no equipped hero), equip one in «Mi inventario». 4) Press «Entrar a la sala» (Enter the room): if the room puts credits at stake, they're set aside from your balance and returned if you leave before it starts. 5) Wait for the host to press «Iniciar combate» (Start combat); to leave, use «Salir de la sala» (Leave the room).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "inscribirse-en-torneo",
+      "categoria": "MODALIDAD_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo inscribirte en un torneo",
+      "variantesEs": [
+        "inscribirme en un torneo",
+        "inscribirse en un torneo",
+        "como entro a un torneo",
+        "registrar equipo",
+        "equipo de torneo",
+        "inscribir un equipo",
+        "compañero de torneo",
+        "costo de inscripcion",
+        "jugar un torneo",
+        "crear sala del encuentro",
+        "unirme a un torneo",
+        "como me inscribo",
+        "inscribirme a un torneo",
+        "equipo para el torneo"
+      ],
+      "variantesEn": [
+        "join a tournament",
+        "enroll in a tournament",
+        "tournament registration",
+        "register a team",
+        "tournament team",
+        "tournament teammate",
+        "entry fee",
+        "play a tournament"
+      ],
+      "respuestaEs": "Los torneos se juegan en equipos de 2, así que necesitas un compañero: 1) En «Torneo» abre uno con inscripciones abiertas con «Ver torneo». 2) En «Registrar mi equipo» escribe el «Nombre del equipo», busca a «Tu compañero» por su apodo, elige el «Emblema del equipo» y pulsa «Registrar equipo». 3) Pulsa «Inscribir»: el botón dice cuántos créditos cuesta y los paga quien inscribe. Tu equipo ocupa una posición en el árbol. 4) Al cerrarse las inscripciones verás a tu rival en «Tu torneo». 5) Cuando tu encuentro esté listo, pulsa «Crear sala del encuentro» y jueguen con sus héroes equipados. Con una sanción activa no se puede inscribir el equipo.",
+      "respuestaEn": "Tournaments are played in teams of 2, so you need a teammate: 1) In «Torneo» (Tournament) open one with registration open via «Ver torneo» (View tournament). 2) In «Registrar mi equipo» (Register my team) enter the «Nombre del equipo» (team name), find «Tu compañero» (your teammate) by nickname, pick the «Emblema del equipo» (team emblem) and press «Registrar equipo». 3) Press «Inscribir» (Enroll): the button shows the cost in credits, paid by whoever enrolls. Your team takes a position in the bracket. 4) When registration closes you'll see your opponent in «Tu torneo» (Your tournament). 5) When your match is ready, press «Crear sala del encuentro» (Create match room) and play with your equipped heroes. A team can't enroll while a member has an active sanction.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "comprar-en-la-tienda",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo comprar en la tienda (créditos o pago simulado)",
+      "variantesEs": [
+        "comprar en la tienda",
+        "como compro",
+        "como compro un heroe",
+        "carrito",
+        "añadir al carrito",
+        "pagar con creditos",
+        "pago simulado",
+        "pagar con tarjeta",
+        "mis compras",
+        "comprar con dinero real",
+        "metodos de pago",
+        "como pago"
+      ],
+      "variantesEn": [
+        "buy in the store",
+        "how do i buy",
+        "buy a hero",
+        "shopping cart",
+        "add to cart",
+        "pay with credits",
+        "simulated payment",
+        "pay by card",
+        "my purchases",
+        "payment methods",
+        "buy something"
+      ],
+      "respuestaEs": "Para comprar: 1) Abre la «Tienda» con el icono del carrito en la barra superior o desde el menú de tu apodo; necesitas haber iniciado sesión. 2) En el producto pulsa «Añadir al carrito». 3) En el carrito revisa el total y pulsa «Pagar». 4) En «¿Cómo quieres pagar?» elige «Créditos del Nexo», que te muestra tu saldo, el precio y cómo queda tu saldo, o «Pago simulado», con tarjeta en la pasarela simulada. 5) Pulsa «Confirmar compra» o «Confirmar pago». Los productos llegan a tu inventario en unos minutos y puedes seguir el pedido en «Mis compras»; con el pago simulado también te llega un correo de confirmación.",
+      "respuestaEn": "To buy: 1) Open the «Tienda» (Store) with the cart icon in the top bar or from your nickname menu; you need to be signed in. 2) On the product press «Añadir al carrito» (Add to cart). 3) In the cart check the total and press «Pagar» (Pay). 4) In «¿Cómo quieres pagar?» (How do you want to pay?) choose «Créditos del Nexo» (game credits), which shows your balance, the price and your balance afterwards, or «Pago simulado» (simulated payment) with a card on the simulated gateway. 5) Press «Confirmar compra» or «Confirmar pago» (Confirm). Products reach your inventory within minutes and you can follow the order in «Mis compras» (My purchases); with the simulated payment you also get a confirmation email.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "verificar-correo",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "No me llegó el código para confirmar mi correo",
+      "variantesEs": [
+        "no me llego el codigo",
+        "codigo de verificacion",
+        "confirmar mi correo",
+        "confirmar correo",
+        "verificar correo",
+        "reenviar codigo",
+        "no me llega el correo",
+        "falta confirmar tu correo",
+        "cuenta no verificada",
+        "activar mi cuenta",
+        "el codigo no sirve",
+        "codigo vencido"
+      ],
+      "variantesEn": [
+        "verification code",
+        "did not get the code",
+        "confirm my email",
+        "verify email",
+        "resend code",
+        "email not arriving",
+        "account not verified",
+        "activate my account",
+        "code expired"
+      ],
+      "respuestaEs": "Tu cuenta se activa cuando confirmas tu correo: 1) Busca el correo del juego, también en la carpeta de correo no deseado. 2) En «Confirma tu correo» escribe tu correo y el código de 8 caracteres (da igual mayúsculas o minúsculas) y pulsa «Confirmar»; si abres el enlace del correo, esos datos se llenan solos. 3) Si no te llegó o ya no sirve, pulsa «Reenviar código»: el anterior deja de valer. 4) Si intentas entrar sin confirmar verás «Falta confirmar tu correo», con los botones «Confirmar mi correo» y «Enviarme un código nuevo». Después de confirmar, entra con «Entrar al Nexo».",
+      "respuestaEn": "Your account is activated when you confirm your email: 1) Look for the game's email, including the spam folder. 2) In «Confirma tu correo» (Confirm your email) enter your email and the 8-character code (case doesn't matter) and press «Confirmar»; if you open the link in the email, those fields fill in for you. 3) If it didn't arrive or no longer works, press «Reenviar código» (Resend code): the previous one stops working. 4) If you try to sign in without confirming you'll see «Falta confirmar tu correo» (email not confirmed), with the buttons «Confirmar mi correo» and «Enviarme un código nuevo» (send me a new code). After confirming, sign in with «Entrar al Nexo».",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "cuenta-bloqueada",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Cuenta bloqueada por intentos fallidos",
+      "variantesEs": [
+        "cuenta bloqueada",
+        "cuenta bloqueada temporalmente",
+        "demasiados intentos",
+        "intentos fallidos",
+        "me bloquearon la cuenta",
+        "bloqueo de la cuenta",
+        "escribi mal la contraseña",
+        "contraseña incorrecta",
+        "mi cuenta esta bloqueada"
+      ],
+      "variantesEn": [
+        "account locked",
+        "locked out",
+        "too many attempts",
+        "failed attempts",
+        "wrong password",
+        "temporarily locked",
+        "account is locked"
+      ],
+      "respuestaEs": "Si escribes mal la contraseña varias veces seguidas verás «Cuenta bloqueada temporalmente». Es una protección: espera unos minutos y vuelve a intentarlo, o pulsa «Recuperar mi contraseña» y cámbiala con el código que te llega al correo; al hacerlo se desbloquea el ingreso. Los códigos equivocados de la verificación en dos pasos también cuentan como intentos. Si lo que ves es «Tu cuenta está suspendida» o «Esta cuenta está inhabilitada de forma definitiva», no es un bloqueo: es una sanción.",
+      "respuestaEn": "If you enter the wrong password several times in a row you'll see «Cuenta bloqueada temporalmente» (account temporarily locked). It's a protection: wait a few minutes and try again, or press «Recuperar mi contraseña» (Recover my password) and change it with the code sent to your email; doing so unlocks sign-in. Wrong two-step verification codes also count as attempts. If what you see is «Tu cuenta está suspendida» or «Esta cuenta está inhabilitada de forma definitiva», it isn't a lock: it's a sanction.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "sesion-terminada",
+      "categoria": "SOPORTE_TECNICO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Mi sesión se cerró sola",
+      "variantesEs": [
+        "se cerro mi sesion",
+        "mi sesion termino",
+        "tu sesion termino",
+        "me saco del juego",
+        "cuanto dura la sesion",
+        "cerrar sesion",
+        "sesion expirada",
+        "por que me pide entrar otra vez",
+        "me desconecto",
+        "salir del juego"
+      ],
+      "variantesEn": [
+        "session expired",
+        "logged out",
+        "my session ended",
+        "kicked out",
+        "how long does a session last",
+        "log out",
+        "sign out"
+      ],
+      "respuestaEs": "Por seguridad la sesión dura un tiempo limitado: cuando vence verás «Tu sesión terminó», y al entrar de nuevo te llevamos a donde estabas. También se cierra al recuperar tu contraseña, si cambia tu rol o si cierras sesión en otra pestaña; y al cambiar tu contraseña desde «Mi Cuenta» se cierran tus otras sesiones. Las cuentas de moderación y administración se cierran además tras unos minutos sin actividad. Para salir tú mismo usa «Cerrar sesión» en el menú de tu apodo.",
+      "respuestaEn": "For security a session lasts a limited time: when it expires you'll see «Tu sesión terminó» (your session ended), and when you sign in again we take you back where you were. It also ends when you recover your password, if your role changes or if you sign out in another tab; changing your password in «Mi Cuenta» closes your other sessions. Moderation and administration accounts also close after a few minutes of inactivity. To leave yourself, use «Cerrar sesión» (Sign out) in your nickname menu.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "verificacion-en-dos-pasos",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Verificación en dos pasos de tu cuenta",
+      "variantesEs": [
+        "verificacion en dos pasos",
+        "doble factor",
+        "segundo factor",
+        "autenticacion de dos factores",
+        "dos factores",
+        "aplicacion de autenticacion",
+        "codigos de recuperacion",
+        "activar verificacion en dos pasos",
+        "desactivar verificacion en dos pasos",
+        "perdi mi aplicacion de autenticacion"
+      ],
+      "variantesEn": [
+        "two step verification",
+        "two factor authentication",
+        "2fa",
+        "authenticator app",
+        "recovery codes",
+        "enable two step verification",
+        "disable two step verification"
+      ],
+      "respuestaEs": "La verificación en dos pasos te pide, además de tu contraseña, un código de 6 dígitos de una aplicación de autenticación de tu teléfono. Para activarla: 1) En «Mi Cuenta», pestaña «Seguridad», ve a «Verificación en dos pasos» y pulsa «Activar». 2) Agrega en tu aplicación la clave que te mostramos. 3) Escribe el «Código que muestra tu aplicación» y pulsa «Activar». 4) Guarda tus códigos de recuperación: solo se muestran una vez. Al entrar, escribe el código de la aplicación o pulsa «Usar un código de recuperación». Para quitarla pulsa «Desactivar» con tu contraseña actual y un código. En las cuentas de moderación y administración es obligatoria.",
+      "respuestaEn": "Two-step verification asks, besides your password, for a 6-digit code from an authenticator app on your phone. To turn it on: 1) In «Mi Cuenta» (My Account), «Seguridad» (Security) tab, go to «Verificación en dos pasos» and press «Activar» (Activate). 2) Add the key we show you to your app. 3) Enter the «Código que muestra tu aplicación» (code shown in your app) and press «Activar». 4) Save your recovery codes: they're shown only once. When signing in, enter the app code or press «Usar un código de recuperación» (use a recovery code). To remove it press «Desactivar» (Deactivate) with your current password and a code. It's mandatory for moderation and administration accounts.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "preguntas-de-seguridad",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Preguntas de seguridad de tu cuenta",
+      "variantesEs": [
+        "preguntas de seguridad",
+        "pregunta de seguridad",
+        "configurar preguntas",
+        "configurar preguntas de seguridad",
+        "cambiar preguntas de seguridad",
+        "para que sirven las preguntas de seguridad",
+        "respuestas de seguridad"
+      ],
+      "variantesEn": [
+        "security questions",
+        "security question",
+        "set up security questions",
+        "change security questions",
+        "security answers",
+        "what are security questions for"
+      ],
+      "respuestaEs": "Las preguntas de seguridad sirven, junto con el código del correo, para recuperar tu cuenta. Son opcionales y las escribes tú. Para configurarlas: 1) En «Mi Cuenta», pestaña «Seguridad», ve a «Preguntas de seguridad» y pulsa «Configurar preguntas». 2) Escribe dos preguntas con sus respuestas; si quieres, añade otra con «Añadir una tercera pregunta». 3) Escribe tu «Contraseña actual» y pulsa «Guardar preguntas». Las respuestas no distinguen mayúsculas ni tildes: elige preguntas cuya respuesta solo sepas tú y no cambie con el tiempo.",
+      "respuestaEn": "Security questions are used, together with the email code, to recover your account. They're optional and you write them yourself. To set them up: 1) In «Mi Cuenta» (My Account), «Seguridad» (Security) tab, go to «Preguntas de seguridad» and press «Configurar preguntas» (Set up questions). 2) Write two questions with their answers; if you want, add another with «Añadir una tercera pregunta» (add a third question). 3) Enter your «Contraseña actual» (current password) and press «Guardar preguntas» (Save questions). Answers ignore case and accents: choose questions only you can answer and whose answer won't change over time.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "cambiar-contrasena",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo cambiar tu clave en Mi Cuenta",
+      "variantesEs": [
+        "cambiar contraseña",
+        "cambiar mi contraseña",
+        "cambiar la contraseña",
+        "cambiar clave",
+        "cambiar mi clave",
+        "nueva contraseña",
+        "actualizar contraseña",
+        "modificar contraseña",
+        "cambio mi contraseña",
+        "cambio la contraseña"
+      ],
+      "variantesEn": [
+        "change password",
+        "change my password",
+        "update password",
+        "new password",
+        "how do i change my password",
+        "modify password"
+      ],
+      "respuestaEs": "Para cambiar tu contraseña con la sesión abierta: 1) Entra a «Mi Cuenta», pestaña «Seguridad». 2) En «Cambiar contraseña» escribe tu «Contraseña actual». 3) Escribe la «Nueva contraseña» (más de 8 caracteres, con mayúscula, minúscula, número y símbolo) y repítela en «Repetir la nueva». 4) Pulsa «Cambiar contraseña». Tu sesión en este navegador se renueva y las demás se cierran. Si no recuerdas la contraseña actual, usa «¿Olvidaste tu contraseña?» en la pantalla de entrada.",
+      "respuestaEn": "To change your password while signed in: 1) Go to «Mi Cuenta» (My Account), «Seguridad» (Security) tab. 2) In «Cambiar contraseña» (Change password) enter your «Contraseña actual» (current password). 3) Enter the «Nueva contraseña» (new password: more than 8 characters, with uppercase, lowercase, a number and a symbol) and repeat it in «Repetir la nueva». 4) Press «Cambiar contraseña». Your session in this browser is renewed and the others are closed. If you don't remember your current password, use «¿Olvidaste tu contraseña?» on the entry screen.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "cambiar-apodo",
+      "categoria": "CUENTA_Y_REGISTRO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cambiar tu apodo en tu perfil",
+      "variantesEs": [
+        "cambiar apodo",
+        "cambiar mi apodo",
+        "cambiar nombre de usuario",
+        "nuevo apodo",
+        "editar apodo",
+        "cambiar nick",
+        "cambiar mi nick",
+        "apodo no permitido",
+        "apodo en uso",
+        "puedo cambiar mi apodo",
+        "cambio mi apodo"
+      ],
+      "variantesEn": [
+        "change nickname",
+        "change my nickname",
+        "change username",
+        "new nickname",
+        "nickname taken",
+        "nickname not allowed"
+      ],
+      "respuestaEs": "Sí puedes cambiar tu apodo: 1) En «Mi Cuenta», pestaña «Perfil», escribe el nuevo en «Apodo». 2) Pulsa «Guardar cambios». 3) Confirma con «Cambiar apodo». Debe ser único y pasar el filtro de palabras: sin términos ofensivos ni nombres de celebridades, políticos, dirigentes o marcas. Es el nombre con el que te ven en las salas, el chat y los comentarios, y tu sesión sigue abierta después del cambio.",
+      "respuestaEn": "Yes, you can change your nickname: 1) In «Mi Cuenta» (My Account), «Perfil» (Profile) tab, type the new one in «Apodo» (Nickname). 2) Press «Guardar cambios» (Save changes). 3) Confirm with «Cambiar apodo» (Change nickname). It must be unique and pass the word filter: no offensive terms or names of celebrities, politicians, leaders or brands. It's the name others see in rooms, chat and comments, and your session stays open after the change.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "normas-de-conducta",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Normas de conducta y filtro de palabras",
+      "variantesEs": [
+        "normas",
+        "normas de conducta",
+        "reglas de convivencia",
+        "terminos y condiciones",
+        "politicas de uso",
+        "palabras prohibidas",
+        "lista negra",
+        "que no puedo escribir",
+        "mensaje bloqueado",
+        "por que bloquearon mi mensaje",
+        "reglas del chat",
+        "que palabras no puedo usar",
+        "prohibidas en el chat"
+      ],
+      "variantesEn": [
+        "rules",
+        "code of conduct",
+        "terms of service",
+        "usage policy",
+        "banned words",
+        "blacklist",
+        "message blocked",
+        "chat rules"
+      ],
+      "respuestaEs": "Un filtro automático revisa apodos, nombres de equipo, el chat, los mensajes privados y los comentarios, y rechaza términos ofensivos o nombres de celebridades, políticos, dirigentes o marcas. El chat también rechaza mensajes enviados muy seguidos o muy repetitivos. Los comentarios tienen hasta 2000 caracteres; si el filtro los señala quedan en revisión, y puedes «Reportar» los de otros para que los revise un moderador. Faltar a las normas (lenguaje ofensivo, acoso, fraude, trampas o suplantación de identidad) lleva a advertencias, suspensiones o baneo.",
+      "respuestaEn": "An automatic filter checks nicknames, team names, chat, private messages and comments, and rejects offensive terms or names of celebrities, politicians, leaders or brands. The chat also rejects messages sent too quickly or that are too repetitive. Comments can have up to 2000 characters; if the filter flags one it goes to review, and you can «Reportar» (Report) other players' comments so a moderator checks them. Breaking the rules (offensive language, harassment, fraud, cheating or impersonation) leads to warnings, suspensions or a ban.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "privacidad-y-datos",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Tus datos y cerrar tu cuenta",
+      "variantesEs": [
+        "mis datos",
+        "descargar mis datos",
+        "privacidad",
+        "cerrar mi cuenta",
+        "borrar mi cuenta",
+        "eliminar mi cuenta",
+        "derecho al olvido",
+        "que datos guardan",
+        "proteccion de datos",
+        "borrar mis datos",
+        "darme de baja",
+        "borrar conversacion",
+        "borro mi cuenta",
+        "elimino mi cuenta"
+      ],
+      "variantesEn": [
+        "my data",
+        "download my data",
+        "privacy",
+        "close my account",
+        "delete my account",
+        "right to be forgotten",
+        "what data do you keep",
+        "delete my data",
+        "delete chat history"
+      ],
+      "respuestaEs": "En «Mi Cuenta», pestaña «Privacidad»: 1) En «Tus datos» ves lo que guardamos de ti, con «Descargar mis datos (JSON)» y «Reporte para imprimir o guardar en PDF». 2) Para cerrar tu cuenta, en «Cerrar mi cuenta» pulsa «Solicitar el cierre de mi cuenta»; antes no puedes tener subastas activas ni pujas vigentes. 3) Escribe tu «Contraseña actual» y pulsa «Programar el cierre»: la pantalla te dice cuándo ocurrirá y puedes anularlo con «Cancelar solicitud». 4) Al cerrarse se borran tu correo, tus nombres, tu foto, tus preferencias y tus preguntas de seguridad, y tu apodo pasa a un alias anónimo; los movimientos de créditos, pagos, compras y la auditoría se conservan. Para borrar esta conversación usa «Borrar conversación».",
+      "respuestaEn": "In «Mi Cuenta» (My Account), «Privacidad» (Privacy) tab: 1) «Tus datos» (Your data) shows what we keep about you, with «Descargar mis datos (JSON)» (download) and «Reporte para imprimir o guardar en PDF» (printable report). 2) To close your account, in «Cerrar mi cuenta» press «Solicitar el cierre de mi cuenta» (request closure); you can't have active auctions or active bids. 3) Enter your «Contraseña actual» (current password) and press «Programar el cierre» (schedule closure): the screen shows when it will happen and you can undo it with «Cancelar solicitud». 4) Then your email, names, photo, preferences and security questions are deleted and your nickname becomes an anonymous alias; credit movements, payments, purchases and the audit log are kept. To delete this chat use «Borrar conversación» (Delete conversation).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "cancelar-subasta",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo cancelar una subasta",
+      "variantesEs": [
+        "cancelar subasta",
+        "cancelar una subasta",
+        "cancelar mi subasta",
+        "retirar una subasta",
+        "quitar mi subasta",
+        "penalizacion por cancelar",
+        "anular una subasta",
+        "como cancelo",
+        "cancelo mi subasta",
+        "cancelo una subasta"
+      ],
+      "variantesEn": [
+        "cancel auction",
+        "cancel an auction",
+        "cancel my auction",
+        "withdraw an auction",
+        "cancellation penalty",
+        "remove my auction",
+        "how do i cancel"
+      ],
+      "respuestaEs": "Puedes cancelar una subasta tuya mientras nadie haya pujado y falten más de 6 horas para el cierre: 1) Abre tu subasta desde «Subasta» con «Ver subasta», o búscala en la pestaña «Mis subastas». 2) Pulsa «Cancelar subasta» y confirma con «Cancelar la subasta». Pagas una penalización del 50 % de la comisión de publicación, el objeto vuelve libre a tu inventario y se desactivan las pujas automáticas que hubiera. Si el botón aparece apagado, debajo verás el motivo.",
+      "respuestaEn": "You can cancel one of your auctions as long as nobody has bid and there are more than 6 hours left: 1) Open your auction from «Subasta» (Auction) with «Ver subasta», or find it in the «Mis subastas» (My auctions) tab. 2) Press «Cancelar subasta» (Cancel auction) and confirm with «Cancelar la subasta». You pay a penalty of 50% of the publishing fee, the item goes back to your inventory unlocked and any automatic bids are turned off. If the button is greyed out, the reason is shown below it.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "puja-automatica",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Puja automática en una subasta",
+      "variantesEs": [
+        "puja automatica",
+        "tope de puja automatica",
+        "activar puja automatica",
+        "desactivar puja automatica",
+        "autopuja",
+        "oferta automatica"
+      ],
+      "variantesEn": [
+        "automatic bid",
+        "auto bid",
+        "autobid",
+        "maximum bid",
+        "bid cap",
+        "set an automatic bid"
+      ],
+      "respuestaEs": "La puja automática oferta por ti hasta el tope que elijas, respetando el incremento mínimo y el tiempo entre pujas. Para usarla: 1) Abre la subasta en «Subasta» con «Ver subasta». 2) En «Puja automática con tope máximo» escribe tu «Tope de puja automática». 3) Pulsa «Activar». Para quitarla pulsa «Desactivar». Si tu puja automática se detiene o alguien compra la subasta de inmediato, te llega un aviso a tus notificaciones.",
+      "respuestaEn": "An automatic bid offers for you up to the cap you choose, respecting the minimum increment and the time between bids. To use it: 1) Open the auction in «Subasta» (Auction) with «Ver subasta». 2) In «Puja automática con tope máximo» (automatic bid with maximum cap) enter your «Tope de puja automática» (cap). 3) Press «Activar» (Activate). To remove it press «Desactivar» (Deactivate). If your automatic bid stops or someone buys the auction instantly, you get a notification.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "recoger-subasta-ganada",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Recoger lo que ganaste en una subasta",
+      "variantesEs": [
+        "recoger",
+        "recoger lo que gane",
+        "recoger subasta",
+        "pendientes de recoger",
+        "gane una subasta",
+        "subasta ganada",
+        "como recibo lo que gane",
+        "donde esta lo que gane",
+        "plazo para recoger",
+        "recoger todo",
+        "no veo el objeto que gane",
+        "objeto ganado",
+        "recojo lo que gane",
+        "no me llego lo que gane"
+      ],
+      "variantesEn": [
+        "claim",
+        "claim my item",
+        "collect auction",
+        "won an auction",
+        "auction won",
+        "pending pickup",
+        "where is the item i won",
+        "where is my item"
+      ],
+      "respuestaEs": "Si ganas una subasta cuando se cierra, el objeto queda pendiente de recoger: 1) En «Subasta» abre una publicación con «Ver subasta» y ve a la pestaña «Mis subastas». 2) En «Pendientes de recoger» pulsa «Recoger» en cada objeto o «Recoger todo». Tienes 7 días para recogerlo. Si lo compraste con «Comprarla ya», no hace falta: pasa a tu inventario al instante. Una hora antes de que cierren las subastas en las que participas te llega un aviso.",
+      "respuestaEn": "If you win an auction when it closes, the item is pending pickup: 1) In «Subasta» (Auction) open any listing with «Ver subasta» and go to the «Mis subastas» (My auctions) tab. 2) In «Pendientes de recoger» (pending pickup) press «Recoger» (Collect) on each item or «Recoger todo» (Collect all). You have 7 days to collect it. If you bought it with «Comprarla ya» (Buy it now), there's nothing to do: it goes to your inventory instantly. You get a notice one hour before the auctions you take part in close.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "limites-de-subastas",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Límites de subastas y pujas",
+      "variantesEs": [
+        "limites de subastas",
+        "cuantas subastas puedo publicar",
+        "maximo de subastas",
+        "cuantas pujas activas",
+        "maximo de pujas",
+        "tiempo entre pujas",
+        "tope de subastas",
+        "por que no puedo publicar",
+        "en mis propias subastas"
+      ],
+      "variantesEn": [
+        "auction limits",
+        "how many auctions can i list",
+        "maximum auctions",
+        "how many bids",
+        "time between bids",
+        "why cant i bid",
+        "bid on my own auction"
+      ],
+      "respuestaEs": "Para mantener el mercado justo hay topes: un máximo de subastas publicadas a la vez por jugador, un máximo de pujas activas y un tiempo mínimo entre dos pujas tuyas en la misma subasta. Los valores los fija la administración y la subasta te avisa cuando te acercas a un tope; si tienes que esperar, el botón «Pujar» te dice cuántos segundos faltan. Además, no puedes pujar en tus propias subastas, la compra inmediata debe ser mayor que el precio mínimo, y no se pueden subastar productos premium o suspendidos, objetos equipados ni héroes en misión.",
+      "respuestaEn": "To keep the market fair there are caps: a maximum number of auctions each player can have published at once, a maximum of active bids and a minimum time between two of your bids on the same auction. The values are set by the administration, and the auction warns you when you're near a cap; if you have to wait, the «Pujar» (Bid) button tells you how many seconds are left. Also, you can't bid on your own auctions, the buy-now price must be higher than the minimum, and premium or suspended products, equipped items and heroes on a mission can't be auctioned.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "acciones-y-poder",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Acciones especiales y poder en combate",
+      "variantesEs": [
+        "acciones especiales",
+        "habilidades del heroe",
+        "poder del heroe",
+        "puntos de poder",
+        "como recupero poder",
+        "cuanto poder",
+        "turnos de carga",
+        "recarga de habilidades",
+        "desbloquear habilidades",
+        "acciones por nivel",
+        "ataque basico",
+        "sanar",
+        "poder en combate",
+        "como funciona el poder"
+      ],
+      "variantesEn": [
+        "special actions",
+        "hero skills",
+        "power points",
+        "how do i recover power",
+        "charge turns",
+        "skill cooldown",
+        "unlock skills",
+        "basic attack",
+        "heal"
+      ],
+      "respuestaEs": "Cada tipo de héroe tiene 3 acciones especiales: la primera desde el nivel 1, la segunda desde el 4 y la tercera desde el 8. Cuestan poder y, después de usar una, debes esperar 1 turno para repetirla; las épicas no cuestan poder, pero esperan 2 turnos. Recuperas 2 de poder al empezar cada turno, y si no te alcanza para la acción elegida se juega tu acción básica con su valor base. La acción básica no cuesta poder: los demás atacan y el Chamán y el Médico sanan. En «Mi inventario», con «Ver ficha», ves las acciones de tu héroe, su costo y cuáles aún no aprendió.",
+      "respuestaEn": "Each hero type has 3 special actions: the first from level 1, the second from level 4 and the third from level 8. They cost power and, after using one, you wait 1 turn to repeat it; epics cost no power but wait 2 turns. You recover 2 power at the start of each turn, and if you lack enough for the chosen action, your basic action is played at its base value. The basic action costs no power: most heroes attack, while the «Chamán» and «Médico» heal. In «Mi inventario» (My inventory), «Ver ficha» (View sheet) shows your hero's actions, their cost and which ones it hasn't learned yet.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "recompensas-de-batalla",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Recompensas de las batallas en línea",
+      "variantesEs": [
+        "recompensas de batalla",
+        "recompensa por ganar",
+        "cuantos creditos da una batalla",
+        "que gano en una batalla",
+        "premio por ganar",
+        "apuesta",
+        "apostar creditos",
+        "creditos en juego",
+        "que pasa con mi apuesta",
+        "creditos por participar",
+        "cuantos creditos gano"
+      ],
+      "variantesEn": [
+        "battle rewards",
+        "reward for winning",
+        "how many credits per battle",
+        "what do i win in a battle",
+        "bet",
+        "stake credits",
+        "credits for taking part"
+      ],
+      "respuestaEs": "Al terminar una batalla en «Jugar online» recibes créditos: 2 si ganas un 1 contra 1, 4 si ganas tú o tu equipo una partida de más de dos, y 1 por participar si no ganas. Si la sala ponía créditos en juego, el ganador se lleva lo que pusieron los demás; en un empate o en una partida por equipos se devuelve a cada uno lo suyo. Las batallas no dan experiencia, y cada 20 créditos que ganas en victorias suman para un cofre. Lo verás todo en el resumen al final del combate.",
+      "respuestaEn": "When a battle in «Jugar online» (Play online) ends you get credits: 2 if you win a 1 vs 1, 4 if you or your team win a match with more than two, and 1 for taking part if you don't win. If the room had credits at stake, the winner takes what the others put in; on a draw or in a team match everyone gets their own back. Battles give no experience, and every 20 credits you earn from wins count towards a chest. You'll see it all in the summary at the end of the combat.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "cofres",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Cofres de recompensa",
+      "variantesEs": [
+        "cofre",
+        "cofres",
+        "mis cofres",
+        "como gano un cofre",
+        "que trae un cofre",
+        "cofres por semana",
+        "cofre de recompensa",
+        "abrir cofre"
+      ],
+      "variantesEn": [
+        "chest",
+        "chests",
+        "my chests",
+        "how do i get a chest",
+        "what is in a chest",
+        "reward chest",
+        "open chest"
+      ],
+      "respuestaEs": "Cada vez que acumulas 20 créditos ganados en victorias de batalla recibes un cofre; los créditos por participar no cuentan. Puedes recibir como máximo 2 cofres por semana. Cada cofre trae una recompensa al azar que llega sola a tu inventario. Los ves en «Mis cofres», en el menú de tu apodo.",
+      "respuestaEn": "Every time you collect 20 credits earned from battle wins you get a chest; credits for taking part don't count. You can get at most 2 chests per week. Each chest holds a random reward that goes straight to your inventory. You'll find them in «Mis cofres» (My chests), in your nickname menu.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "mensajes-privados",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Mensajes privados y chat",
+      "variantesEs": [
+        "mensajes privados",
+        "mensaje privado",
+        "escribirle a un jugador",
+        "chat general",
+        "chat",
+        "bloquear jugador",
+        "desbloquear jugador",
+        "buscar jugador",
+        "hablar con otro jugador",
+        "chatear",
+        "bloqueo a un jugador"
+      ],
+      "variantesEn": [
+        "private messages",
+        "private message",
+        "message a player",
+        "general chat",
+        "chat",
+        "block player",
+        "unblock player",
+        "find a player",
+        "talk to another player",
+        "block a player"
+      ],
+      "respuestaEs": "En «Chat» (el icono de la barra superior o el menú de tu apodo) tienes dos pestañas: «Chat general», para hablar con todos, y «Mensajes privados». Para escribirle a alguien: 1) Abre «Mensajes privados» y pulsa «Buscar jugador». 2) Escribe su apodo y pulsa «Escribir». 3) Envía tu mensaje. Si alguien te molesta, pulsa «Bloquear»: ninguno de los dos podrá escribirse por privado hasta que pulses «Desbloquear», y el historial se conserva. Los mensajes pasan por el filtro de palabras.",
+      "respuestaEn": "In «Chat» (the icon in the top bar or your nickname menu) there are two tabs: «Chat general» (general chat), to talk with everyone, and «Mensajes privados» (private messages). To write to someone: 1) Open «Mensajes privados» and press «Buscar jugador» (Find player). 2) Type their nickname and press «Escribir» (Write). 3) Send your message. If someone bothers you, press «Bloquear» (Block): neither of you can message the other privately until you press «Desbloquear» (Unblock), and the history is kept. Messages go through the word filter.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "notificaciones",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Cómo funcionan las notificaciones",
+      "variantesEs": [
+        "notificaciones",
+        "notificacion",
+        "avisos",
+        "campana",
+        "marcar como leida",
+        "marcar todas como leidas",
+        "no me llegan avisos",
+        "como funcionan las notificaciones",
+        "bandeja de avisos"
+      ],
+      "variantesEn": [
+        "notifications",
+        "notification",
+        "alerts",
+        "bell",
+        "mark as read",
+        "mark all as read",
+        "how do notifications work"
+      ],
+      "respuestaEs": "Tus avisos llegan a la campana de la barra superior, que muestra cuántos tienes sin leer, en todas tus sesiones abiertas a la vez. Al pulsarla ves tu «Bandeja» con los avisos de tus partidas, subastas y pujas, torneos, misiones y sanciones. Usa «Marcar como leída» o «Marcar todas como leídas». Algunos avisos, como las sanciones o el final de una misión, también te llegan por correo.",
+      "respuestaEn": "Your notices arrive at the bell in the top bar, which shows how many are unread, in all your open sessions at once. Pressing it opens your «Bandeja» (Inbox) with notices about your matches, auctions and bids, tournaments, missions and sanctions. Use «Marcar como leída» (Mark as read) or «Marcar todas como leídas» (Mark all as read). Some notices, such as sanctions or the end of a mission, also reach you by email.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "comentarios-y-calificaciones",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Comentar y calificar productos",
+      "variantesEs": [
+        "comentarios",
+        "comentar",
+        "calificar",
+        "calificacion",
+        "estrellas",
+        "opiniones",
+        "dejar una opinion",
+        "calificar un producto",
+        "eliminar mi comentario",
+        "publicar opinion",
+        "reseñas",
+        "reportar un comentario",
+        "como reporto"
+      ],
+      "variantesEn": [
+        "comments",
+        "comment",
+        "rate",
+        "rating",
+        "stars",
+        "reviews",
+        "leave a review",
+        "rate a product",
+        "delete my comment",
+        "report a comment"
+      ],
+      "respuestaEs": "En el detalle de un producto (en la «Tienda», en «Subasta» o en la ficha de «Mi inventario») están sus opiniones. 1) Para calificarlo elige de 1 a 5 estrellas y pulsa «Calificar»: solo se puede una vez por producto y no se cambia. 2) Para opinar escribe tu comentario, adjunta imágenes si quieres y pulsa «Publicar opinión»; tiene hasta 2000 caracteres. 3) Puedes eliminar tus comentarios con «Eliminar» y publicar otros cuando quieras. Si el filtro automático señala tu texto, queda en revisión. Si un comentario de otro te parece inapropiado, pulsa «Reportar».",
+      "respuestaEn": "A product's detail (in the «Tienda» (Store), «Subasta» (Auction) or its sheet in «Mi inventario») shows its reviews. 1) To rate it choose 1 to 5 stars and press «Calificar» (Rate): you can only rate a product once and it can't be changed. 2) To review it, write your comment, attach images if you want and press «Publicar opinión» (Post review); up to 2000 characters. 3) You can delete your comments with «Eliminar» (Delete) and post others whenever you like. If the automatic filter flags your text, it goes to review. If someone else's comment seems inappropriate, press «Reportar» (Report).",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "preferencias-del-asistente",
+      "categoria": "FAQ_GENERAL",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Preferencias del asistente",
+      "variantesEs": [
+        "preferencias",
+        "idioma",
+        "cambiar idioma",
+        "responde en ingles",
+        "hablas ingles",
+        "nivel de detalle",
+        "respuestas mas cortas",
+        "respuestas mas detalladas",
+        "preferencias del asistente",
+        "habla en español",
+        "responderme en ingles",
+        "responder en ingles"
+      ],
+      "variantesEn": [
+        "preferences",
+        "language",
+        "change language",
+        "answer in english",
+        "do you speak english",
+        "detail level",
+        "shorter answers",
+        "more detailed answers",
+        "assistant preferences",
+        "answer in spanish"
+      ],
+      "respuestaEs": "Puedes elegir cómo te respondo: 1) En esta ventana pulsa «Preferencias». 2) En «Idioma de las respuestas» elige «Automático: el de mi pregunta», «Español» o «Inglés»; si un tema no está en inglés, te respondo en español. 3) En «Nivel de detalle» elige «Breve», «Normal» o «Detallado», que añade temas relacionados; las guías paso a paso siempre muestran todos sus pasos. 4) Pulsa «Guardar preferencias». Si iniciaste sesión, las recuerdo en todos tus dispositivos.",
+      "respuestaEn": "You can choose how I answer: 1) In this window press «Preferencias» (Preferences). 2) In «Idioma de las respuestas» (answer language) choose «Automático: el de mi pregunta» (same as your question), «Español» or «Inglés» (English); if a topic isn't available in English, I answer in Spanish. 3) In «Nivel de detalle» (detail level) choose «Breve» (brief), «Normal» or «Detallado» (detailed, adds related topics); step-by-step guides always show all their steps. 4) Press «Guardar preferencias» (Save preferences). If you're signed in, I remember them on all your devices.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "reglas-del-juego",
+      "categoria": "MECANICA_JUEGO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Reglas básicas del juego",
+      "variantesEs": [
+        "reglas del juego",
+        "cuales son las reglas",
+        "cuales son las reglas del juego",
+        "reglas basicas",
+        "reglas generales",
+        "como se juega",
+        "como se juega a nexus battles",
+        "explicame las reglas",
+        "normas del juego",
+        "reglas para jugar"
+      ],
+      "variantesEn": [
+        "game rules",
+        "rules of the game",
+        "what are the rules",
+        "what are the game rules",
+        "basic rules",
+        "how do you play",
+        "how do you play this game",
+        "how is the game played",
+        "explain the rules"
+      ],
+      "respuestaEs": "Las reglas básicas de THE NEXUS BATTLES VI: 1) Juegas con héroes que equipas en «Mi inventario» con armas, armaduras e ítems; para salir a una misión o entrar a una sala, tu héroe debe llevar al menos uno de ellos. 2) El combate es por turnos: el orden se sortea al empezar y se mantiene; en tu turno recuperas 2 de poder y eliges una sola acción: la básica, una especial que pagas con poder o una épica. 3) Para dañar, tu tirada de ataque debe superar la defensa del rival; gana el último héroe o equipo en pie y, si no queda nadie, es empate. 4) Las reglas son las mismas contra otro jugador o contra la IA: en «Jugar online» (1 contra 1, Solo o Hasta seis), en las misiones de «Misiones» y en los torneos, que se juegan en equipos de 2. 5) Perder no te quita héroes ni objetos; en una batalla en línea, si gana otro jugador, sí pierdes los créditos que pusiste en juego. 6) Las normas de conducta prohíben el lenguaje ofensivo, el acoso, el fraude, las trampas y la suplantación de identidad.",
+      "respuestaEn": "The basic rules of THE NEXUS BATTLES VI: 1) You play with heroes you equip in «Mi inventario» (My inventory) with weapons, armor and items; to go on a mission or join a room, your hero must carry at least one of them. 2) Combat is turn-based: the order is drawn at the start and kept; on your turn you recover 2 power and choose a single action: the basic one, a special one you pay with power, or an epic. 3) To deal damage, your attack roll must beat the opponent's defense; the last hero or team standing wins and, if nobody is left, it's a draw. 4) The rules are the same against another player or against the AI: in «Jugar online» (Play online: 1 contra 1, Solo or Hasta seis), in the missions of «Misiones» (Missions) and in tournaments, which are played in teams of 2. 5) Losing never takes heroes or items; in an online battle, if another player wins, you do lose the credits you put at stake. 6) The code of conduct forbids offensive language, harassment, fraud, cheating and impersonation.",
+      "prioridad": 0,
+      "activo": true
+    },
+    {
+      "clave": "terminos-del-servicio",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Términos del servicio y reglas de uso",
+      "variantesEs": [
+        "terminos de servicio",
+        "terminos del servicio",
+        "terminos y condiciones",
+        "condiciones de uso",
+        "condiciones del servicio",
+        "reglas de uso",
+        "politica de uso del juego",
+        "que reglas de uso tiene el juego",
+        "donde estan los terminos"
+      ],
+      "variantesEn": [
+        "terms of service",
+        "terms and conditions",
+        "terms of use",
+        "conditions of use",
+        "user agreement"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI no publica hoy un documento de términos y condiciones aparte: lo que rige el uso del juego son sus reglas dentro de la aplicación. Son las normas de conducta (el filtro de palabras y lo que no se permite en apodos, chat y comentarios); las sanciones, con sus ocho causales: lenguaje ofensivo o abusivo, acoso, fraude o manipulación del sistema, trampas o software no autorizado, suplantación de identidad, violación de las políticas de privacidad, incumplimiento de los términos del servicio y terminación de la relación legal; cómo apelarlas, y lo que puedes hacer con tus datos en «Mi Cuenta» › «Privacidad». Los créditos del juego no se cambian por dinero real.",
+      "respuestaEn": "THE NEXUS BATTLES VI doesn't publish a separate terms-and-conditions document today: use of the game is governed by its rules inside the app. They are the code of conduct (the word filter and what isn't allowed in nicknames, chat and comments); sanctions, with their eight grounds: offensive or abusive language, harassment, fraud or system manipulation, cheating or unauthorized software, identity theft, privacy-policy violations, breach of the terms of service and termination of the legal relationship; how to appeal them; and what you can do with your data in «Mi Cuenta» › «Privacidad» (My Account › Privacy). Game credits can't be exchanged for real money.",
+      "prioridad": 1,
+      "activo": true
+    },
+    {
+      "clave": "como-funciona-la-subasta",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo funciona la Subasta",
+      "variantesEs": [
+        "como funciona la subasta",
+        "como funcionan las subastas",
+        "que es la subasta",
+        "explicame la subasta",
+        "como funciona el mercado entre jugadores",
+        "como se compra y se vende entre jugadores",
+        "reglas de la subasta"
+      ],
+      "variantesEn": [
+        "how do auctions work",
+        "how does the auction work",
+        "what is the auction",
+        "explain the auction",
+        "auction rules"
+      ],
+      "respuestaEs": "La «Subasta» es el mercado entre jugadores y todo se paga con créditos: 1) Vender: en «Publicar subasta» eliges un objeto tuyo que no esté equipado ni en misión y que no sea premium, la duración (24 horas por 1 crédito de comisión o 48 horas por 3) y el precio mínimo y, si quieres, un precio de compra inmediata. 2) Comprar: en «Ver subasta» pujas desde el precio mínimo y después superando la oferta actual al menos en el incremento mínimo; tus créditos quedan retenidos y se liberan si alguien te supera. Con «Comprarla ya» te la llevas al instante. 3) La puja automática oferta por ti hasta el tope que elijas. 4) Cuando la subasta cierra, quien ganó recoge el objeto en «Mis subastas» › «Pendientes de recoger»; tiene 7 días. 5) Puedes cancelar una subasta tuya sin pujas si faltan más de 6 horas para el cierre, pagando el 50 % de la comisión. Hay topes de subastas y de pujas que fija la administración, y no puedes pujar en tus propias subastas.",
+      "respuestaEn": "The «Subasta» (Auction) is the player-to-player market and everything is paid in credits: 1) Selling: in «Publicar subasta» (Publish auction) you pick an item of yours that isn't equipped, on a mission or premium, the duration (24 hours for a 1-credit fee or 48 hours for 3) and the minimum price and, optionally, a buy-now price. 2) Buying: in «Ver subasta» (View auction) you bid from the minimum price and then above the current offer by at least the minimum increment; your credits are held and released if someone outbids you. With «Comprarla ya» (Buy it now) you get it instantly. 3) Automatic bidding bids for you up to the cap you choose. 4) When the auction closes, the winner collects the item in «Mis subastas» › «Pendientes de recoger» (My auctions › Pending pickup) within 7 days. 5) You can cancel your own auction with no bids if more than 6 hours remain before it closes, paying 50% of the fee. There are auction and bid caps set by the administration, and you can't bid on your own auctions.",
+      "prioridad": 0,
+      "activo": true
+    }
+  ],
+  "casos": [
+    {
+      "pregunta": "que personajes puedo usar en el juego",
+      "temaClaveEsperada": "heroes-disponibles"
+    },
+    {
+      "pregunta": "what heroes can I play with",
+      "temaClaveEsperada": "heroes-disponibles"
+    },
+    {
+      "pregunta": "como subo de nivel a mi heroe",
+      "temaClaveEsperada": "estadisticas-y-nivel"
+    },
+    {
+      "pregunta": "how does leveling up work",
+      "temaClaveEsperada": "estadisticas-y-nivel"
+    },
+    {
+      "pregunta": "que armas y armaduras puede llevar un heroe",
+      "temaClaveEsperada": "armas-armaduras-items"
+    },
+    {
+      "pregunta": "how many weapons can a hero carry",
+      "temaClaveEsperada": "armas-armaduras-items"
+    },
+    {
+      "pregunta": "como consigo una habilidad epica",
+      "temaClaveEsperada": "habilidades-epicas"
+    },
+    {
+      "pregunta": "how do I get an epic ability",
+      "temaClaveEsperada": "habilidades-epicas"
+    },
+    {
+      "pregunta": "como funcionan los turnos en un combate",
+      "temaClaveEsperada": "combate-por-turnos"
+    },
+    {
+      "pregunta": "how does turn based combat work",
+      "temaClaveEsperada": "combate-por-turnos"
+    },
+    {
+      "pregunta": "como se calcula el daño critico",
+      "temaClaveEsperada": "efectos-aleatorios"
+    },
+    {
+      "pregunta": "how is critical damage calculated",
+      "temaClaveEsperada": "efectos-aleatorios"
+    },
+    {
+      "pregunta": "que modos de juego hay en jugar online",
+      "temaClaveEsperada": "modo-batalla"
+    },
+    {
+      "pregunta": "what game modes are there",
+      "temaClaveEsperada": "modo-batalla"
+    },
+    {
+      "pregunta": "como envio a mi heroe a una mision",
+      "temaClaveEsperada": "completar-mision"
+    },
+    {
+      "pregunta": "how do I start a mission",
+      "temaClaveEsperada": "completar-mision"
+    },
+    {
+      "pregunta": "como funciona el arbol del torneo",
+      "temaClaveEsperada": "torneo"
+    },
+    {
+      "pregunta": "how does the tournament bracket work",
+      "temaClaveEsperada": "torneo"
+    },
+    {
+      "pregunta": "quiero crear una cuenta nueva",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "how do I sign up",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "olvide la contraseña como la recupero",
+      "temaClaveEsperada": "recuperar-contrasena"
+    },
+    {
+      "pregunta": "I forgot my password",
+      "temaClaveEsperada": "recuperar-contrasena"
+    },
+    {
+      "pregunta": "que puedo hacer en mi cuenta",
+      "temaClaveEsperada": "mi-cuenta"
+    },
+    {
+      "pregunta": "what can I do in my account",
+      "temaClaveEsperada": "mi-cuenta"
+    },
+    {
+      "pregunta": "como pongo un objeto en subasta",
+      "temaClaveEsperada": "publicar-subasta"
+    },
+    {
+      "pregunta": "how do I list an item for auction",
+      "temaClaveEsperada": "publicar-subasta"
+    },
+    {
+      "pregunta": "como hago una puja en una subasta",
+      "temaClaveEsperada": "pujar-o-comprar"
+    },
+    {
+      "pregunta": "how do I place a bid",
+      "temaClaveEsperada": "pujar-o-comprar"
+    },
+    {
+      "pregunta": "como consigo mas creditos",
+      "temaClaveEsperada": "creditos"
+    },
+    {
+      "pregunta": "how do I earn credits",
+      "temaClaveEsperada": "creditos"
+    },
+    {
+      "pregunta": "me sale un error y la pagina no carga",
+      "temaClaveEsperada": "problema-tecnico"
+    },
+    {
+      "pregunta": "the page is not loading",
+      "temaClaveEsperada": "problema-tecnico"
+    },
+    {
+      "pregunta": "por que me suspendieron la cuenta",
+      "temaClaveEsperada": "sanciones"
+    },
+    {
+      "pregunta": "why was I banned",
+      "temaClaveEsperada": "sanciones"
+    },
+    {
+      "pregunta": "como apelo la suspension de mi cuenta",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "how do I appeal a ban",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "hola buenas tardes",
+      "temaClaveEsperada": "saludo"
+    },
+    {
+      "pregunta": "hello there",
+      "temaClaveEsperada": "saludo"
+    },
+    {
+      "pregunta": "muchas gracias chao",
+      "temaClaveEsperada": "despedida"
+    },
+    {
+      "pregunta": "thanks bye",
+      "temaClaveEsperada": "despedida"
+    },
+    {
+      "pregunta": "de que se trata este juego",
+      "temaClaveEsperada": "que-es-el-juego"
+    },
+    {
+      "pregunta": "what is this game about",
+      "temaClaveEsperada": "que-es-el-juego"
+    },
+    {
+      "pregunta": "soy nuevo en el juego que hago primero",
+      "temaClaveEsperada": "guia-nuevos-jugadores"
+    },
+    {
+      "pregunta": "I am a new player where do I start",
+      "temaClaveEsperada": "guia-nuevos-jugadores"
+    },
+    {
+      "pregunta": "me dice que debo completar su mazo",
+      "temaClaveEsperada": "completar-mazo"
+    },
+    {
+      "pregunta": "how do I equip my hero",
+      "temaClaveEsperada": "completar-mazo"
+    },
+    {
+      "pregunta": "que estrategias me recomiendas para ganar un combate",
+      "temaClaveEsperada": "estrategias-basicas"
+    },
+    {
+      "pregunta": "give me some combat tips",
+      "temaClaveEsperada": "estrategias-basicas"
+    },
+    {
+      "pregunta": "que heroes combinan bien en un equipo",
+      "temaClaveEsperada": "sinergias-equipo"
+    },
+    {
+      "pregunta": "what is the best team composition",
+      "temaClaveEsperada": "sinergias-equipo"
+    },
+    {
+      "pregunta": "por que no puedo eliminar este objeto",
+      "temaClaveEsperada": "consejos-objetos"
+    },
+    {
+      "pregunta": "any inventory tips",
+      "temaClaveEsperada": "consejos-objetos"
+    },
+    {
+      "pregunta": "que pasa si pierdo una batalla",
+      "temaClaveEsperada": "derrota-del-heroe"
+    },
+    {
+      "pregunta": "what do I lose if I lose a fight",
+      "temaClaveEsperada": "derrota-del-heroe"
+    },
+    {
+      "pregunta": "que clases de misiones existen",
+      "temaClaveEsperada": "tipos-de-misiones"
+    },
+    {
+      "pregunta": "what mission types are there",
+      "temaClaveEsperada": "tipos-de-misiones"
+    },
+    {
+      "pregunta": "que recompensas me dan al terminar una mision",
+      "temaClaveEsperada": "recompensas-de-misiones"
+    },
+    {
+      "pregunta": "what rewards do missions give",
+      "temaClaveEsperada": "recompensas-de-misiones"
+    },
+    {
+      "pregunta": "como desbloqueo la dificultad heroico",
+      "temaClaveEsperada": "dificultades-de-misiones"
+    },
+    {
+      "pregunta": "what difficulty levels are there",
+      "temaClaveEsperada": "dificultades-de-misiones"
+    },
+    {
+      "pregunta": "como gano insignias y titulos",
+      "temaClaveEsperada": "logros-titulos-insignias"
+    },
+    {
+      "pregunta": "are there achievements in the game",
+      "temaClaveEsperada": "logros-titulos-insignias"
+    },
+    {
+      "pregunta": "cuanto cuesta un heroe en la tienda",
+      "temaClaveEsperada": "precios-y-disponibilidad"
+    },
+    {
+      "pregunta": "are there discounts in the store",
+      "temaClaveEsperada": "precios-y-disponibilidad"
+    },
+    {
+      "pregunta": "tengo que instalar algo para jugar",
+      "temaClaveEsperada": "requisitos-del-sistema"
+    },
+    {
+      "pregunta": "what are the system requirements",
+      "temaClaveEsperada": "requisitos-del-sistema"
+    },
+    {
+      "pregunta": "el servidor esta caido",
+      "temaClaveEsperada": "mantenimiento-y-actualizaciones"
+    },
+    {
+      "pregunta": "is the server down",
+      "temaClaveEsperada": "mantenimiento-y-actualizaciones"
+    },
+    {
+      "pregunta": "quiero hablar con una persona de soporte",
+      "temaClaveEsperada": "hablar-con-soporte"
+    },
+    {
+      "pregunta": "how do I contact support",
+      "temaClaveEsperada": "hablar-con-soporte"
+    },
+    {
+      "pregunta": "como creo una sala privada para jugar con un amigo",
+      "temaClaveEsperada": "crear-sala-de-batalla"
+    },
+    {
+      "pregunta": "how do I create a battle room",
+      "temaClaveEsperada": "crear-sala-de-batalla"
+    },
+    {
+      "pregunta": "como entro a una sala con codigo de invitacion",
+      "temaClaveEsperada": "unirse-a-una-sala"
+    },
+    {
+      "pregunta": "how do I join a room",
+      "temaClaveEsperada": "unirse-a-una-sala"
+    },
+    {
+      "pregunta": "como me inscribo en un torneo con un amigo",
+      "temaClaveEsperada": "inscribirse-en-torneo"
+    },
+    {
+      "pregunta": "how do I join a tournament",
+      "temaClaveEsperada": "inscribirse-en-torneo"
+    },
+    {
+      "pregunta": "como pago con creditos en la tienda",
+      "temaClaveEsperada": "comprar-en-la-tienda"
+    },
+    {
+      "pregunta": "how do I buy something in the store",
+      "temaClaveEsperada": "comprar-en-la-tienda"
+    },
+    {
+      "pregunta": "no me llego el codigo de verificacion al correo",
+      "temaClaveEsperada": "verificar-correo"
+    },
+    {
+      "pregunta": "I didn't get the verification code",
+      "temaClaveEsperada": "verificar-correo"
+    },
+    {
+      "pregunta": "mi cuenta esta bloqueada por demasiados intentos",
+      "temaClaveEsperada": "cuenta-bloqueada"
+    },
+    {
+      "pregunta": "my account is locked",
+      "temaClaveEsperada": "cuenta-bloqueada"
+    },
+    {
+      "pregunta": "por que se cerro mi sesion",
+      "temaClaveEsperada": "sesion-terminada"
+    },
+    {
+      "pregunta": "why was I logged out",
+      "temaClaveEsperada": "sesion-terminada"
+    },
+    {
+      "pregunta": "como activo la verificacion en dos pasos",
+      "temaClaveEsperada": "verificacion-en-dos-pasos"
+    },
+    {
+      "pregunta": "how do I enable two factor authentication",
+      "temaClaveEsperada": "verificacion-en-dos-pasos"
+    },
+    {
+      "pregunta": "como configuro mis preguntas de seguridad",
+      "temaClaveEsperada": "preguntas-de-seguridad"
+    },
+    {
+      "pregunta": "how do I set up security questions",
+      "temaClaveEsperada": "preguntas-de-seguridad"
+    },
+    {
+      "pregunta": "quiero cambiar mi contraseña",
+      "temaClaveEsperada": "cambiar-contrasena"
+    },
+    {
+      "pregunta": "how do I change my password",
+      "temaClaveEsperada": "cambiar-contrasena"
+    },
+    {
+      "pregunta": "puedo cambiar mi apodo",
+      "temaClaveEsperada": "cambiar-apodo"
+    },
+    {
+      "pregunta": "can I change my nickname",
+      "temaClaveEsperada": "cambiar-apodo"
+    },
+    {
+      "pregunta": "que palabras estan prohibidas en el chat",
+      "temaClaveEsperada": "normas-de-conducta"
+    },
+    {
+      "pregunta": "what are the chat rules",
+      "temaClaveEsperada": "normas-de-conducta"
+    },
+    {
+      "pregunta": "quiero eliminar mi cuenta",
+      "temaClaveEsperada": "privacidad-y-datos"
+    },
+    {
+      "pregunta": "how do I download my data",
+      "temaClaveEsperada": "privacidad-y-datos"
+    },
+    {
+      "pregunta": "como cancelo mi subasta",
+      "temaClaveEsperada": "cancelar-subasta"
+    },
+    {
+      "pregunta": "how do I cancel an auction",
+      "temaClaveEsperada": "cancelar-subasta"
+    },
+    {
+      "pregunta": "como funciona la puja automatica",
+      "temaClaveEsperada": "puja-automatica"
+    },
+    {
+      "pregunta": "how do I set an automatic bid",
+      "temaClaveEsperada": "puja-automatica"
+    },
+    {
+      "pregunta": "gane una subasta y no me llega el objeto",
+      "temaClaveEsperada": "recoger-subasta-ganada"
+    },
+    {
+      "pregunta": "I won an auction where is my item",
+      "temaClaveEsperada": "recoger-subasta-ganada"
+    },
+    {
+      "pregunta": "cuantas subastas puedo publicar al mismo tiempo",
+      "temaClaveEsperada": "limites-de-subastas"
+    },
+    {
+      "pregunta": "how many auctions can I list at once",
+      "temaClaveEsperada": "limites-de-subastas"
+    },
+    {
+      "pregunta": "como recupero poder en un combate",
+      "temaClaveEsperada": "acciones-y-poder"
+    },
+    {
+      "pregunta": "how do special actions work",
+      "temaClaveEsperada": "acciones-y-poder"
+    },
+    {
+      "pregunta": "cuantos creditos gano si gano una batalla",
+      "temaClaveEsperada": "recompensas-de-batalla"
+    },
+    {
+      "pregunta": "what are the battle rewards",
+      "temaClaveEsperada": "recompensas-de-batalla"
+    },
+    {
+      "pregunta": "como consigo un cofre",
+      "temaClaveEsperada": "cofres"
+    },
+    {
+      "pregunta": "what is in a chest",
+      "temaClaveEsperada": "cofres"
+    },
+    {
+      "pregunta": "como le escribo un mensaje privado a otro jugador",
+      "temaClaveEsperada": "mensajes-privados"
+    },
+    {
+      "pregunta": "how do I block a player",
+      "temaClaveEsperada": "mensajes-privados"
+    },
+    {
+      "pregunta": "como marco las notificaciones como leidas",
+      "temaClaveEsperada": "notificaciones"
+    },
+    {
+      "pregunta": "how do notifications work",
+      "temaClaveEsperada": "notificaciones"
+    },
+    {
+      "pregunta": "como califico un producto con estrellas",
+      "temaClaveEsperada": "comentarios-y-calificaciones"
+    },
+    {
+      "pregunta": "how do I leave a review",
+      "temaClaveEsperada": "comentarios-y-calificaciones"
+    },
+    {
+      "pregunta": "puedes responderme en ingles",
+      "temaClaveEsperada": "preferencias-del-asistente"
+    },
+    {
+      "pregunta": "can you answer in English",
+      "temaClaveEsperada": "preferencias-del-asistente"
+    },
+    {
+      "pregunta": "¿Cuáles son las reglas del juego?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "¿Cómo se juega?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "Explícame las reglas",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "What are the game rules?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "How do you play this game?",
+      "temaClaveEsperada": "reglas-del-juego"
+    },
+    {
+      "pregunta": "¿Puedo apelar si me banearon?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "estoy suspendido, ¿cómo apelo?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "Can I appeal a ban without signing in?",
+      "temaClaveEsperada": "apelar-sancion"
+    },
+    {
+      "pregunta": "como me registor",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "quiero crear una cuneta",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "olvide mi contrasña",
+      "temaClaveEsperada": "recuperar-contrasena"
+    },
+    {
+      "pregunta": "¿Cómo funcionan las subastas?",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "como funsionan las subatsas",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "How do auctions work?",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "como publico una subasat",
+      "temaClaveEsperada": "publicar-subasta"
+    },
+    {
+      "pregunta": "¿Cuáles son los términos de servicio?",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "cuales son los terminos de servisio",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "What are the terms of service?",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "¿de qué formas puedo jugar contra otros?",
+      "temaClaveEsperada": "modo-batalla"
+    },
+    {
+      "pregunta": "The game won't load, what should I do?",
+      "temaClaveEsperada": "problema-tecnico"
+    },
+    {
+      "pregunta": "el jeugo no carga",
+      "temaClaveEsperada": "problema-tecnico"
+    }
+  ]
+}

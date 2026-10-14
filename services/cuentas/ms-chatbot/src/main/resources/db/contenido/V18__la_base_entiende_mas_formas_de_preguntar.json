@@ -1,0 +1,138 @@
+{
+  "descripcion": "V18 (revision final del 7.4, segunda auditoria): la base entiende mas formas de preguntar. Dos temas nuevos que la base no tenia (terminos del servicio y como funciona la subasta, resumen de lo ya verificado en V11), variantes que faltaban (otras formas de preguntar por los modos de juego y por un juego que no carga, en ingles) y casos de evaluacion con erratas. Un tema nuevo solo se crea si su clave no existe; una variante solo se suma si falta.",
+  "temasNuevos": [
+    {
+      "clave": "terminos-del-servicio",
+      "categoria": "POLITICAS_Y_TERMINOS",
+      "tipoRespuesta": "DIRECTA",
+      "titulo": "Términos del servicio y reglas de uso",
+      "prioridad": 1,
+      "variantesEs": [
+        "terminos de servicio",
+        "terminos del servicio",
+        "terminos y condiciones",
+        "condiciones de uso",
+        "condiciones del servicio",
+        "reglas de uso",
+        "politica de uso del juego",
+        "que reglas de uso tiene el juego",
+        "donde estan los terminos"
+      ],
+      "variantesEn": [
+        "terms of service",
+        "terms and conditions",
+        "terms of use",
+        "conditions of use",
+        "user agreement"
+      ],
+      "respuestaEs": "THE NEXUS BATTLES VI no publica hoy un documento de términos y condiciones aparte: lo que rige el uso del juego son sus reglas dentro de la aplicación. Son las normas de conducta (el filtro de palabras y lo que no se permite en apodos, chat y comentarios); las sanciones, con sus ocho causales: lenguaje ofensivo o abusivo, acoso, fraude o manipulación del sistema, trampas o software no autorizado, suplantación de identidad, violación de las políticas de privacidad, incumplimiento de los términos del servicio y terminación de la relación legal; cómo apelarlas, y lo que puedes hacer con tus datos en «Mi Cuenta» › «Privacidad». Los créditos del juego no se cambian por dinero real.",
+      "respuestaEn": "THE NEXUS BATTLES VI doesn't publish a separate terms-and-conditions document today: use of the game is governed by its rules inside the app. They are the code of conduct (the word filter and what isn't allowed in nicknames, chat and comments); sanctions, with their eight grounds: offensive or abusive language, harassment, fraud or system manipulation, cheating or unauthorized software, identity theft, privacy-policy violations, breach of the terms of service and termination of the legal relationship; how to appeal them; and what you can do with your data in «Mi Cuenta» › «Privacidad» (My Account › Privacy). Game credits can't be exchanged for real money."
+    },
+    {
+      "clave": "como-funciona-la-subasta",
+      "categoria": "SUBASTA_Y_COMERCIO",
+      "tipoRespuesta": "PASO_A_PASO",
+      "titulo": "Cómo funciona la Subasta",
+      "prioridad": 0,
+      "variantesEs": [
+        "como funciona la subasta",
+        "como funcionan las subastas",
+        "que es la subasta",
+        "explicame la subasta",
+        "como funciona el mercado entre jugadores",
+        "como se compra y se vende entre jugadores",
+        "reglas de la subasta"
+      ],
+      "variantesEn": [
+        "how do auctions work",
+        "how does the auction work",
+        "what is the auction",
+        "explain the auction",
+        "auction rules"
+      ],
+      "respuestaEs": "La «Subasta» es el mercado entre jugadores y todo se paga con créditos: 1) Vender: en «Publicar subasta» eliges un objeto tuyo que no esté equipado ni en misión y que no sea premium, la duración (24 horas por 1 crédito de comisión o 48 horas por 3) y el precio mínimo y, si quieres, un precio de compra inmediata. 2) Comprar: en «Ver subasta» pujas desde el precio mínimo y después superando la oferta actual al menos en el incremento mínimo; tus créditos quedan retenidos y se liberan si alguien te supera. Con «Comprarla ya» te la llevas al instante. 3) La puja automática oferta por ti hasta el tope que elijas. 4) Cuando la subasta cierra, quien ganó recoge el objeto en «Mis subastas» › «Pendientes de recoger»; tiene 7 días. 5) Puedes cancelar una subasta tuya sin pujas si faltan más de 6 horas para el cierre, pagando el 50 % de la comisión. Hay topes de subastas y de pujas que fija la administración, y no puedes pujar en tus propias subastas.",
+      "respuestaEn": "The «Subasta» (Auction) is the player-to-player market and everything is paid in credits: 1) Selling: in «Publicar subasta» (Publish auction) you pick an item of yours that isn't equipped, on a mission or premium, the duration (24 hours for a 1-credit fee or 48 hours for 3) and the minimum price and, optionally, a buy-now price. 2) Buying: in «Ver subasta» (View auction) you bid from the minimum price and then above the current offer by at least the minimum increment; your credits are held and released if someone outbids you. With «Comprarla ya» (Buy it now) you get it instantly. 3) Automatic bidding bids for you up to the cap you choose. 4) When the auction closes, the winner collects the item in «Mis subastas» › «Pendientes de recoger» (My auctions › Pending pickup) within 7 days. 5) You can cancel your own auction with no bids if more than 6 hours remain before it closes, paying 50% of the fee. There are auction and bid caps set by the administration, and you can't bid on your own auctions."
+    }
+  ],
+  "variantesNuevas": [
+    {
+      "clave": "modo-batalla",
+      "es": [
+        "formas de jugar",
+        "de que formas puedo jugar",
+        "formas de juego",
+        "modos para jugar"
+      ],
+      "en": [
+        "ways to play",
+        "how can i play against others"
+      ]
+    },
+    {
+      "clave": "problema-tecnico",
+      "es": [],
+      "en": [
+        "won't load",
+        "doesn't load",
+        "does not load",
+        "game won't load",
+        "stuck loading",
+        "not loading"
+      ]
+    }
+  ],
+  "casos": [
+    {
+      "pregunta": "como me registor",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "quiero crear una cuneta",
+      "temaClaveEsperada": "crear-cuenta"
+    },
+    {
+      "pregunta": "olvide mi contrasña",
+      "temaClaveEsperada": "recuperar-contrasena"
+    },
+    {
+      "pregunta": "¿Cómo funcionan las subastas?",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "como funsionan las subatsas",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "How do auctions work?",
+      "temaClaveEsperada": "como-funciona-la-subasta"
+    },
+    {
+      "pregunta": "como publico una subasat",
+      "temaClaveEsperada": "publicar-subasta"
+    },
+    {
+      "pregunta": "¿Cuáles son los términos de servicio?",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "cuales son los terminos de servisio",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "What are the terms of service?",
+      "temaClaveEsperada": "terminos-del-servicio"
+    },
+    {
+      "pregunta": "¿de qué formas puedo jugar contra otros?",
+      "temaClaveEsperada": "modo-batalla"
+    },
+    {
+      "pregunta": "The game won't load, what should I do?",
+      "temaClaveEsperada": "problema-tecnico"
+    },
+    {
+      "pregunta": "el jeugo no carga",
+      "temaClaveEsperada": "problema-tecnico"
+    }
+  ]
+}

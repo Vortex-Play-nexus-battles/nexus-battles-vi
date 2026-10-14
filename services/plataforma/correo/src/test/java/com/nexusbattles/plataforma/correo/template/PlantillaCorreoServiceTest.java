@@ -345,6 +345,41 @@ class PlantillaCorreoServiceTest {
                 .contains("15 días hábiles")
                 .doesNotContain("Resultado:")
                 .doesNotContain("�");
+        // SA-4: la suspension cierra la sesion; se apela desde la entrada.
+        assertThat(html.replaceAll("\\s+", " "))
+                .contains("desde la pantalla de entrada: escribe tu correo y tu contraseña y elige «Apelar esta sanción».")
+                .doesNotContain("Mis sanciones");
+    }
+
+    @Test
+    void laAdvertenciaSeApelaDesdeMisSanciones() {
+        // SA-4: quien conserva el acceso apela desde su cuenta.
+        String html = service.renderizar("email/sancion", Map.of(
+                        "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Spam en el chat",
+                        "apelableHasta", "25/10/2026 a las 23:59 (GMT-05:00)"))
+                .replaceAll("\\s+", " ");
+
+        assertThat(html)
+                .contains("desde «Mis sanciones», en el menú de tu cuenta.")
+                .doesNotContain("pantalla de entrada");
+    }
+
+    @Test
+    void laCausalYLaPoliticaVanJuntoAlMotivoCuandoLlegan() {
+        // 1.6.0 (SA-4): 7.3.7 pide las referencias a las politicas violadas.
+        String html = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Insulto en el chat de la sala",
+                "causal", "Uso de lenguaje ofensivo o abusivo en comentarios o chat",
+                "politica", "Normas de convivencia 2.1"));
+
+        assertThat(html)
+                .contains("Causal: <strong>Uso de lenguaje ofensivo o abusivo en comentarios o chat</strong>")
+                .contains("Motivo: <strong>Insulto en el chat de la sala</strong>")
+                .contains("Política: <strong>Normas de convivencia 2.1</strong>");
+
+        String sinElla = service.renderizar("email/sancion", Map.of(
+                "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Insulto en el chat de la sala"));
+        assertThat(sinElla).doesNotContain("Causal:").doesNotContain("Política:");
     }
 
     @Test
@@ -457,5 +492,19 @@ class PlantillaCorreoServiceTest {
                 .contains("Paquete de créditos x500")
                 .contains("23/09/2026 a las 10:15")
                 .doesNotContain("�");
+    }
+
+    @Test
+    void laConfirmacionDeCierreDiceQueSeEliminoCuandoYQueSeConserva() {
+        String html = service.renderizar("email/cierre-cuenta",
+                Map.of("apodo", "Ana", "fechaHora", "14/10/2026 a las 09:30 (GMT-05:00)"));
+
+        assertThat(html)
+                .contains("Tu cuenta fue eliminada")
+                .contains("Hola, <span>Ana</span>")
+                .contains("Eliminación completada: <strong>14/10/2026 a las 09:30 (GMT-05:00)</strong>")
+                .contains("registros financieros y de auditoría")
+                .contains("sin ningún dato que permita identificarte")
+                .doesNotContain("Comentario de Thymeleaf");
     }
 }

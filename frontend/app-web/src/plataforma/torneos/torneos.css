@@ -650,10 +650,13 @@
   }
 }
 
-/* El hito de ahora late, despacio. Quien pide menos movimiento no lo ve. */
+/* El hito de ahora late dos veces al aparecer y se queda con su halo quieto
+   (MOTION-3: un latido infinito deja de significar «ahora» al minuto; el
+   halo dorado y el borde ya dicen cuál es). Quien pide menos movimiento no
+   lo ve latir. */
 @media (prefers-reduced-motion: no-preference) {
   .torneo-ruta__hito[data-estado='actual'] .torneo-ruta__marca {
-    animation: torneo-hito-actual 2.4s var(--curva-estandar) infinite;
+    animation: torneo-hito-actual 1.2s var(--curva-estandar) 2;
   }
 }
 

@@ -20,6 +20,12 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
     implementation project(':shared:libs:plataforma-seguridad')
 
+    // 7.4.9 «WebSocket para comunicacion en tiempo real» (contracts/websocket/
+    // chatbot.yaml 1.0.0): STOMP sobre WebSocket nativo con el broker simple en
+    // memoria, igual que ms-subastas. Trae spring-websocket y spring-messaging;
+    // los mensajes se convierten con el mismo Jackson 3 que la API REST.
+    implementation 'org.springframework.boot:spring-boot-starter-websocket'
+
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
@@ -39,6 +45,11 @@ dependencies {
     // Para probar endpoints protegidos por el resource server sin levantar
     // un ms-identidad real (mockear el JWT decodificado).
     testImplementation 'org.springframework.security:spring-security-test'
+
+    // 7.4.9: el canal STOMP se prueba con tokens RS256 firmados de verdad y su
+    // JWKS servido por HTTP (EmisorDeTokensDePrueba), como el de ms-subastas:
+    // el CONNECT pasa por el mismo decodificador que la API.
+    testImplementation testFixtures(project(':shared:libs:plataforma-seguridad'))
 }
 
 // Este servicio sí va a tener pruebas desde el primer commit, así que activa

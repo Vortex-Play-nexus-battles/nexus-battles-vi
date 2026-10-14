@@ -32,7 +32,11 @@ info:
   # creditos si. Un premium sigue vendiendose solo en dinero real: no se
   # convierte a creditos. Campos opcionales nuevos y campos que admiten null:
   # nada desaparece ni se vuelve obligatorio en una peticion; sube la menor.
-  version: 1.7.0
+  # 1.8.0 (SA-13, §7.2.1 y §7.2.2): cada producto de la vitrina dice si es
+  # premium (de pago en moneda real, no subastable) y si esta en estado UNICO
+  # del catalogo, para que la tienda los identifique. Dos campos opcionales
+  # nuevos en la respuesta: sube la menor.
+  version: 1.8.0
   description: >
     Contrato de lo que ms-ecommerce publica hoy (bloque de identidad/seguridad,
     #441): la vitrina paginada del catalogo y el carrito del jugador. No existia
@@ -1231,6 +1235,18 @@ components:
           description: >
             RF-CAR-005. (1.4.0) Con sesion de usuario, true si el producto esta
             en su lista de deseos. Sin sesion, false.
+        premium:
+          type: boolean
+          description: >
+            (1.8.0, §7.2.2) true si es un producto de pago en moneda real: se
+            vende solo en dinero real y no se puede subastar. La tienda lo
+            identifica con su distintivo.
+        unico:
+          type: boolean
+          description: >
+            (1.8.0, §7.2.1) true si el catalogo lo tiene en estado UNICO. Se
+            vende igual que uno activo; la tienda lo identifica con su
+            distintivo.
     PaginaDeVitrina:
       description: >
         El Page de Spring Data tal cual lo serializa el controlador. Se declara

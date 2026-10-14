@@ -309,7 +309,7 @@ async function bloqueDeHeroe(fetchImpl, alReintentar) {
     return estadoVacio({
       titulo: 'No tienes un héroe equipado',
       detalle: 'Sin héroe equipado no puedes entrar a una batalla.',
-      accion: { texto: 'Ir al inventario', href: '../contenido/inventario/inventario.html' },
+      accion: { texto: 'Ir a Mi inventario', href: '../contenido/inventario/inventario.html' },
     });
   }
 

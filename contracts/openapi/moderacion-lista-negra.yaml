@@ -97,7 +97,15 @@ info:
     detalle. El resto exige rol MODERADOR, ADMINISTRADOR o SUPER_ADMINISTRADOR
     (jerarquia de roles: el Super Administrador puede todo lo del
     Administrador).
-  version: 2.1.0
+
+    **2.2.0 (§7.3.5, auditoria central — SA-5), aditivo:** `TerminoRequest`
+    admite `motivo` (opcional, hasta 500 caracteres) y `DELETE` admite
+    `?motivo=`. El motivo no se guarda con el termino: va, con quien actuo,
+    desde que direccion, como estaba y como quedo, a la bitacora central de
+    ms-cumplimiento. Sin motivo, la entrada lleva uno descriptivo («Alta en
+    la lista negra», «Edición…», «Baja…»). Un motivo de mas de 500
+    caracteres es 400.
+  version: 2.2.0
 servers:
   - url: http://localhost:8086/api/v1
     description: Entorno local de desarrollo
@@ -263,6 +271,15 @@ paths:
         - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/Termino'
+        - name: motivo
+          in: query
+          required: false
+          description: |
+            2.2.0 — por que se quita, para la bitacora central (§7.3.5). Hasta
+            500 caracteres; mas, 400.
+          schema:
+            type: string
+            maxLength: 500
       responses:
         '204':
           description: Termino eliminado
@@ -384,6 +401,12 @@ components:
         activo:
           type: boolean
           default: true
+        motivo:
+          type: string
+          maxLength: 500
+          description: |
+            2.2.0 — por que se da de alta o se cambia, para la bitacora central
+            (§7.3.5). No se guarda con el termino ni vuelve en la respuesta.
 
     TerminoResponse:
       type: object

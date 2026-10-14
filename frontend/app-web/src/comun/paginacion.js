@@ -72,16 +72,36 @@ export function calcularVentana(paginaActual, totalPaginas, maximo = CASILLAS_VI
  *   - `casillas` baja el número de casillas visibles (nunca por encima de
  *     diez): en un teléfono, diez casillas de 44 px no caben en una fila.
  *
+ * Revisión final del módulo Inventario (13-oct) — dos ajustes más, también
+ * opcionales, para cumplir §7.1 al pie de la letra («si hay una página, aparece
+ * la casilla uno (1) … si hay más páginas a la izquierda, aparece una flecha a
+ * la izquierda **para mostrar las opciones ocultas**»):
+ *
+ *   - `unaPagina: 'visible'` pinta la casilla «1» cuando hay una sola página
+ *     (por omisión, `'oculta'`, el control no se ve: así lo esperan las otras
+ *     vistas que lo usan).
+ *   - `flechas: 'revelan-ocultas'`: como `'si-hay-ocultas'`, las flechas solo
+ *     aparecen si hay páginas ocultas a su lado, pero al pulsarlas llevan a la
+ *     **primera página oculta** de ese lado, no a la contigua. La ventana se
+ *     recentra sobre ella y las opciones ocultas quedan a la vista en una sola
+ *     pulsación (con ±1, desde la página 25 hacían falta cinco para ver la 15).
+ *
  * @param {{paginaActual: number, totalPaginas: number}} estado
  * @param {(pagina: number) => void} alCambiarPagina
- * @param {{etiqueta?: string, flechas?: 'si-hay-ocultas'|'siempre', casillas?: number}} [opciones]
+ * @param {{etiqueta?: string, flechas?: 'si-hay-ocultas'|'siempre'|'revelan-ocultas',
+ *   casillas?: number, unaPagina?: 'oculta'|'visible'}} [opciones]
  *   `etiqueta` es el nombre accesible del control
  * @returns {HTMLElement} nav listo para insertar; oculto si no hay que paginar
  */
 export function construirPaginacion(
   { paginaActual, totalPaginas },
   alCambiarPagina,
-  { etiqueta = 'Paginación', flechas = 'si-hay-ocultas', casillas = CASILLAS_VISIBLES } = {},
+  {
+    etiqueta = 'Paginación',
+    flechas = 'si-hay-ocultas',
+    casillas = CASILLAS_VISIBLES,
+    unaPagina = 'oculta',
+  } = {},
 ) {
   if (!Number.isInteger(totalPaginas) || totalPaginas < 0) {
     throw new RangeError(
@@ -106,8 +126,10 @@ export function construirPaginacion(
   control.setAttribute('aria-label', etiqueta);
 
   // Una sola pagina no se pagina. Se devuelve el nodo oculto en lugar de null
-  // para que el llamador lo inserte una vez y solo cambie su contenido.
-  if (totalPaginas <= 1) {
+  // para que el llamador lo inserte una vez y solo cambie su contenido. Con
+  // `unaPagina: 'visible'` (§7.1) la casilla «1» se ve igual; sin paginas
+  // (vista vacia) nunca.
+  if (totalPaginas === 0 || (totalPaginas === 1 && unaPagina !== 'visible')) {
     control.hidden = true;
     return control;
   }
@@ -124,12 +146,21 @@ export function construirPaginacion(
   const maximo = Math.min(Math.max(Math.trunc(Number(casillas)) || 1, 1), CASILLAS_VISIBLES);
   const { inicio, fin } = calcularVentana(paginaActual, totalPaginas, maximo);
   const siempre = flechas === 'siempre';
+  const revelan = flechas === 'revelan-ocultas';
 
   if (inicio > 0 || siempre) {
+    // `revelan-ocultas`: la flecha lleva a la ultima pagina oculta de la
+    // izquierda (la inmediatamente anterior a la ventana), que al recentrarse
+    // deja a la vista las que estaban escondidas.
+    const destino = revelan ? inicio - 1 : paginaActual - 1;
     paginas.appendChild(
-      construirFlecha('anterior', '‹', 'Página anterior', () => alCambiarPagina(paginaActual - 1), {
-        apagada: paginaActual === 0,
-      }),
+      construirFlecha(
+        'anterior',
+        '‹',
+        revelan ? `Mostrar páginas anteriores (ir a la ${destino + 1})` : 'Página anterior',
+        () => alCambiarPagina(destino),
+        { apagada: paginaActual === 0 },
+      ),
     );
   }
 
@@ -138,12 +169,13 @@ export function construirPaginacion(
   }
 
   if (fin < totalPaginas || siempre) {
+    const destino = revelan ? fin : paginaActual + 1;
     paginas.appendChild(
       construirFlecha(
         'siguiente',
         '›',
-        'Página siguiente',
-        () => alCambiarPagina(paginaActual + 1),
+        revelan ? `Mostrar páginas siguientes (ir a la ${destino + 1})` : 'Página siguiente',
+        () => alCambiarPagina(destino),
         { apagada: paginaActual + 1 >= totalPaginas },
       ),
     );

@@ -19,6 +19,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 import { test, expect, request as apiRequest } from '@playwright/test';
 
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const CLAVE = 'Contrasena-E2E-2026';
@@ -45,6 +46,10 @@ const CAMPOS_PUBLICOS = new Set([
   'esPropio',
   'enListaDeseos',
   'precioCreditos',
+  // SA-13 (ecommerce-carrito.yaml 1.8.0, §7.2.1 y §7.2.2): que es una pieza
+  // única y que se paga en moneda real se le dice al jugador en la tienda.
+  'unico',
+  'premium',
 ]);
 
 test.describe('F6 — la portada pública con la tienda', () => {
@@ -120,6 +125,7 @@ test.describe('F6 — la portada pública con la tienda', () => {
       await expect(page.locator('[data-zona="acciones-sin-sesion"]')).toBeVisible();
       await expect(page.locator('[data-zona="acciones-con-sesion"]')).toBeHidden();
 
+      await conLaPaginaQuieta(page);
       const axe = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
       const graves = axe.violations.filter((v) => GRAVES.has(v.impact ?? ''));
       expect(graves.map((v) => `${v.id}: ${v.help}`)).toEqual([]);
@@ -134,7 +140,8 @@ test.describe('F6 — la portada pública con la tienda', () => {
       await expect(page).toHaveURL(/\/login\?/);
       const destino = new URL(page.url());
       expect(destino.pathname).toBe('/login');
-      expect(destino.searchParams.get('volver')).toMatch(/tienda\.html$/);
+      // SA-7 — la vuelta es la dirección limpia de la tienda detrás del borde.
+      expect(destino.searchParams.get('volver')).toMatch(/^\/tienda$|tienda\.html$/);
       await expect(page.locator('#formLogin')).toBeVisible();
     } finally {
       await contexto.close();

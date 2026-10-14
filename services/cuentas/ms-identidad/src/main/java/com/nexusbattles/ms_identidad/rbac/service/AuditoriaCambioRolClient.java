@@ -1,5 +1,6 @@
 package com.nexusbattles.ms_identidad.rbac.service;
 
+import com.nexusbattles.ms_identidad.auditoria.client.AuditoriaNoDisponibleException;
 import com.nexusbattles.ms_identidad.auth.servicio.CredencialPropia;
 import com.nexusbattles.ms_identidad.rbac.model.Role;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,27 +58,50 @@ public class AuditoriaCambioRolClient {
         Role rolAnterior,
         Role nuevoRol,
         String ipOrigen) {
+        registrarCambioRol(administradorId, usuarioAfectadoId.toString(), rolAnterior, nuevoRol, null, ipOrigen);
+    }
+
+    /**
+     * Como el anterior, con la cuenta afectada por su {@code uid} (el mismo
+     * identificador que el resto de la auditoria) y el motivo que escribio el
+     * Super Administrador (7.3.5: «motivo o justificacion de la accion»).
+     *
+     * @throws AuditoriaNoDisponibleException si ms-cumplimiento no lo registra (503)
+     */
+    public void registrarCambioRol(
+        String administradorId,
+        String afectado,
+        Role rolAnterior,
+        Role nuevoRol,
+        String motivo,
+        String ipOrigen) {
 
         Map<String, String> solicitud = Map.of(
             "tipoAccion", "CAMBIO_ROL",
             "administradorId", administradorId,
-            "afectado", usuarioAfectadoId.toString(),
+            "afectado", afectado,
             "valorAnterior", rolAnterior.name(),
             "valorNuevo", nuevoRol.name(),
-            "motivo", "Asignación administrativa de rol",
-            "ipOrigen", ipOrigen
+            "motivo", motivo == null || motivo.isBlank() ? "Asignación administrativa de rol" : motivo.strip(),
+            "ipOrigen", ipOrigen == null || ipOrigen.isBlank() ? "DESCONOCIDA" : ipOrigen
         );
 
-        ResponseEntity<Void> respuesta = restClient.post()
-            .uri(urlAuditoria)
-            .contentType(MediaType.APPLICATION_JSON)
-            .body(solicitud)
-            .retrieve()
-            .toBodilessEntity();
+        ResponseEntity<Void> respuesta;
+        try {
+            respuesta = restClient.post()
+                .uri(urlAuditoria)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(solicitud)
+                .retrieve()
+                .toBodilessEntity();
+        } catch (RuntimeException sinRespuesta) {
+            throw new AuditoriaNoDisponibleException(
+                "No se cambió el rol: el registro de auditoría no respondió. Inténtalo de nuevo en unos segundos.");
+        }
 
         if (respuesta.getStatusCode() != HttpStatus.CREATED) {
-            throw new IllegalStateException(
-                "La auditoría del cambio de rol no pudo registrarse."
+            throw new AuditoriaNoDisponibleException(
+                "No se cambió el rol: el registro de auditoría no lo aceptó."
             );
         }
     }

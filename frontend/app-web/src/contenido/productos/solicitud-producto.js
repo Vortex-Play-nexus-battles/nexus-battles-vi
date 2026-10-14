@@ -13,6 +13,9 @@ export const PROTOTIPOS = [
 ];
 export const PARTES_ARMADURA = ['CASCO', 'PECHO', 'GUANTES', 'BRAZALETES', 'PANTALON', 'ZAPATOS'];
 
+/** SA-13 (§7.2.1): con qué disponibilidad nace un producto; suspender va después. */
+export const ESTADOS_INICIALES = ['ACTIVO', 'UNICO'];
+
 function control(formulario, nombre) {
   const encontrados = [...formulario.querySelectorAll(`[name="${nombre}"]`)];
   const encontrado = encontrados.find((candidato) => !candidato.disabled) || encontrados[0];
@@ -171,6 +174,15 @@ export function construirSolicitudProducto(formulario) {
     tiraje: tiraje(formulario),
     premium,
   };
+  // SA-13 (productos.yaml 1.11.0, §7.2.1): sin elegir, nace activo; «único»
+  // se pide. Un formulario sin el campo (los de antes) sigue igual.
+  const estado = formulario.querySelector('[name="estado"]')?.value;
+  if (estado && estado !== 'ACTIVO') {
+    if (!ESTADOS_INICIALES.includes(estado)) {
+      throw new Error('La disponibilidad elegida no está permitida.');
+    }
+    solicitud.estado = estado;
+  }
 
   if (premium) {
     solicitud.precioMonedaReal = numero(

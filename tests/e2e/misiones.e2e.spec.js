@@ -41,6 +41,7 @@ import { AxeBuilder } from '@axe-core/playwright';
 
 import { correosPara } from './ayudantes/correo.js';
 import { sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import { conLaPaginaQuieta } from './ayudantes/movimiento.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const NORMAS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'];
@@ -81,8 +82,12 @@ async function conSesion(page, jugadora) {
   );
 }
 
-/** axe sobre lo que se ve ahora mismo: sin hallazgos graves. */
+/** axe sobre lo que se ve, con la página quieta: sin hallazgos graves. */
 async function sinBarrerasGraves(page, donde) {
+  // Las tarjetas del tablón entran con un fundido escalonado (MOTION-3); axe
+  // mide el contraste con la opacidad del instante, así que se espera a que
+  // termine antes de medir.
+  await conLaPaginaQuieta(page);
   const resultado = await new AxeBuilder({ page }).withTags(NORMAS).analyze();
   const graves = resultado.violations.filter((v) => GRAVES.has(v.impact));
   expect(
@@ -355,9 +360,10 @@ test.describe('Misiones y progresión persistida (B9, §7.8)', () => {
     await page.goto(`${BORDE}${VISTA}#historial`);
     const fila = page.locator('.mision-historial__tabla tbody tr', { hasText: PRUEBA.nombre });
     await expect(fila).toBeVisible({ timeout: 20_000 });
+    // SA-7 — detrás del borde el enlace muestra la dirección limpia del tablón.
     await expect(fila.getByRole('link', { name: /Ver el reporte/ })).toHaveAttribute(
       'href',
-      `misiones.html?reporte=${ejecucionId}`,
+      new RegExp(`/misiones\\?reporte=${ejecucionId}$`),
     );
   });
 

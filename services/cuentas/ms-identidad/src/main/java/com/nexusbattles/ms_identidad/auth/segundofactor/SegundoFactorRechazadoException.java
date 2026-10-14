@@ -26,6 +26,8 @@ public class SegundoFactorRechazadoException extends RuntimeException {
         DESAFIO_INVALIDO("desafio-invalido", "La verificación caducó", 401),
         CONTRASENA_INCORRECTA("contrasena-actual-incorrecta", "La contraseña actual es incorrecta", 422),
         CUENTA_BLOQUEADA("cuenta-bloqueada", "Cuenta bloqueada temporalmente", 423),
+        /** 7.3.9: para los roles administrativos el segundo factor no se puede quitar. */
+        OBLIGATORIO("segundo-factor-obligatorio", "Obligatorio para tu rol", 409),
         DATOS_INVALIDOS("datos-invalidos", "Datos inválidos", 400);
 
         private final String tipo;
