@@ -254,6 +254,9 @@ handshake, revisión de la entrada, lista negra, motores, caché, guardado). Nad
   vence deja de ser un jugador, como en la API). La respuesta lleva `id-correlacion` y
   `traceparent` (regla 5: cada pregunta abre su traza). Se responde en un hilo virtual por
   pregunta, con **2 en vuelo por conexión** como mucho (la siguiente, 429).
+- **Tamaño**: un mensaje WebSocket de más de 16 640 caracteres (el mínimo que fija Spring para
+  STOMP) cierra la conexión; una pregunta de 4000 cabe de sobra y la ventana manda por HTTP lo
+  que, codificado en JSON, pasaría de 16 000.
 - **Soporte en vivo**: `TicketSoporteAdminService.atender` publica `TicketActualizado` y, tras el
   commit, `AvisosDeSoporte` lo manda al `uid` del dueño (todas sus conexiones, nadie más).
 - **Una sola instancia.** El broker es el simple de Spring, en memoria: conexiones,
