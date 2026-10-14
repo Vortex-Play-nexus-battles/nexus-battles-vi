@@ -13,7 +13,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 /**
- * Epica unica (inventario 1.7.0): al entregar una epica que el jugador ya
+ * Epica unica (inventario 1.9.0): al entregar una epica que el jugador ya
  * tiene, el inventario responde 201 con la epica en {@code yaTenia}. Misiones
  * lo lee para poder decirselo al jugador; un inventario anterior, que no trae
  * el campo, se lee como «nada que ya tuviera».

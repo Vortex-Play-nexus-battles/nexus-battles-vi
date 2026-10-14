@@ -163,7 +163,7 @@ DELETE /api/v1/inventario/heroes/{heroeId}/equipamiento/{elementoId}
   parte de la armadura sigue viniendo de la peticion. Las reglas de dos armas,
   seis partes y dos items no dependen de esto.
 
-## Una epica no se tiene dos veces (1.7.0)
+## Una epica no se tiene dos veces (1.9.0)
 
 `POST /api/v1/inventario/entregas` no entrega una epica que el jugador ya tiene
 (un elemento `EPICA` con ese `productoId`): la entrega se completa igual, sin esa
