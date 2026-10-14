@@ -58,7 +58,8 @@ async function conSesion(page, sesion) {
 
 /** Espera a que un panel de la ficha haya cargado con datos, sin aviso de fallo. */
 async function panelCargado(page, id) {
-  const panel = page.locator(`[data-panel="${id}"]`);
+  // El panel, no la pestaña: la pestaña «Sanciones» y su panel comparten nombre.
+  const panel = page.locator(`.panel-admin[data-panel="${id}"]`);
   await expect(panel).toBeVisible();
   await expect(panel.locator('.panel-admin__estado').first()).toHaveAttribute(
     'data-estado',
