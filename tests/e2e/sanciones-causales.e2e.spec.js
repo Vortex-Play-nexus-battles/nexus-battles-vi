@@ -16,6 +16,13 @@
  *   4. el baneo es definitivo: levantarlo a mano es 409
  *      `baneo-solo-por-apelacion`, tambien para el Super Administrador, y
  *      sigue restringiendo.
+ *   5. la cuenta baneada apela SIN SESION (ms-identidad-auth 2.4.0): el 403
+ *      del login trae un codigo de un solo uso que no sirve como token; con
+ *      el ve su baneo, apela una vez y el panel la ve; con otro login ve su
+ *      apelacion en revision y no puede abrir otra.
+ *   6. la vista: el login ofrece «Apelar esta sancion» y enseña la apelacion
+ *      en revision, sin copy tecnico.
+ *   7. el panel revierte el baneo en apelacion y la cuenta vuelve a entrar.
  *
  * Cuentas nuevas en cada corrida: la del baneo queda inhabilitada y no se
  * puede reutilizar, y la de la apelacion no debe chocar con las de
@@ -24,7 +31,11 @@
 
 import { test, expect, request as apiRequest } from '@playwright/test';
 
-import { cuentaAdministrativaDeRol, sesionDe as sesionDelBanco } from './ayudantes/cuentas.js';
+import {
+  cuentaAdministrativaDeRol,
+  iniciarSesion,
+  sesionDe as sesionDelBanco,
+} from './ayudantes/cuentas.js';
 
 const BORDE = process.env.E2E_BORDE ?? 'http://localhost:8099';
 const MODERADORA = process.env.E2E_MODERADORA ?? 'moderadora_e2e';
@@ -54,6 +65,28 @@ test.describe('Causales, listado y plazos de las sanciones (SA-4, §7.3.2)', () 
   let apelante;
   let baneada;
   let advertencia;
+  let baneo;
+  let apelacionDelBaneo;
+
+  const PROBLEMA = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json, application/problem+json',
+  };
+
+  /** El login de la cuenta baneada, cuando identidad ya recibio la proyeccion del baneo. */
+  async function loginBaneado() {
+    let ultimo = null;
+    await expect
+      .poll(
+        async () => {
+          ultimo = await iniciarSesion(api, baneada.email, CLAVE);
+          return ultimo.tipo;
+        },
+        { timeout: 20000, intervals: [500, 1000, 2000] },
+      )
+      .toBe('cuenta-baneada');
+    return ultimo;
+  }
 
   async function emitir(quien, cuerpo) {
     return api.post('/api/v1/sanciones', { headers: conToken(quien.token), data: cuerpo });
@@ -201,7 +234,7 @@ test.describe('Causales, listado y plazos de las sanciones (SA-4, §7.3.2)', () 
       confirmacion: true,
     });
     expect(r.status(), await r.text()).toBe(201);
-    const baneo = await r.json();
+    baneo = await r.json();
     expect(baneo.causal).toBe('FRAUDE');
 
     const quienes = [admin];
@@ -225,5 +258,106 @@ test.describe('Causales, listado y plazos de las sanciones (SA-4, §7.3.2)', () 
     expect(
       await idsDelListado({ usuarioId: baneada.claims.uid, tipo: 'BANEO', estado: 'VIGENTE' }),
     ).toEqual([baneo.id]);
+  });
+  test('5 · la cuenta baneada apela sin sesion: ve su baneo, apela una vez y el panel la ve', async () => {
+    const rechazo = await loginBaneado();
+    const codigo = rechazo.cuerpo?.apelacion?.codigo;
+    expect(codigo, 'con la contrasena correcta, el 403 trae el codigo para apelar').toBeTruthy();
+    expect(rechazo.cuerpo.token).toBeUndefined();
+
+    // El codigo no es una credencial: ninguna ruta con sesion lo acepta.
+    const comoToken = await api.get(`/api/v1/sanciones/usuarios/${baneada.claims.uid}`, {
+      headers: conToken(codigo),
+    });
+    expect(comoToken.status(), 'el codigo no abre nada mas').toBe(401);
+
+    const consulta = await api.post('/api/v1/auth/apelacion/consulta', {
+      headers: PROBLEMA,
+      data: { codigo },
+    });
+    expect(consulta.status(), await consulta.text()).toBe(200);
+    const estado = await consulta.json();
+    expect(estado.sancion).toMatchObject({ id: baneo.id, tipo: 'BANEO', causal: 'FRAUDE' });
+    expect(estado.sancion.emitidaPor, 'quien emitio no se le dice').toBeUndefined();
+    expect(estado.puedeApelar).toBe(true);
+
+    const cuerpo = {
+      codigo,
+      sancionId: baneo.id,
+      argumento: 'Mi hermano uso mi cuenta en otra sesion; yo no dupliqué nada',
+    };
+    const apelar = await api.post('/api/v1/auth/apelacion', { headers: PROBLEMA, data: cuerpo });
+    expect(apelar.status(), await apelar.text()).toBe(201);
+    apelacionDelBaneo = await apelar.json();
+    expect(apelacionDelBaneo.estado).toBe('PENDIENTE');
+    expect(Date.parse(apelacionDelBaneo.decisionAntesDe)).toBeGreaterThan(Date.now() + 18 * DIA);
+
+    const otraVez = await api.post('/api/v1/auth/apelacion', { headers: PROBLEMA, data: cuerpo });
+    expect(otraVez.status(), 'el codigo se gasta al apelar').toBe(401);
+
+    const panel = await api.get('/api/v1/apelaciones', { headers: conToken(moderadora.token) });
+    expect(panel.status()).toBe(200);
+    expect((await panel.json()).map((a) => a.id)).toContain(apelacionDelBaneo.id);
+
+    // Otro login, otro codigo: ve su apelacion en revision y no puede abrir otra.
+    const segundo = await loginBaneado();
+    const despues = await api.post('/api/v1/auth/apelacion/consulta', {
+      headers: PROBLEMA,
+      data: { codigo: segundo.cuerpo.apelacion.codigo },
+    });
+    expect(await despues.json()).toMatchObject({
+      puedeApelar: false,
+      motivoNoApelable: 'APELACION_ABIERTA',
+      apelacion: { id: apelacionDelBaneo.id, estado: 'PENDIENTE', vencida: false },
+    });
+  });
+
+  test('6 · la vista: el login ofrece apelar y enseña la apelacion en revision', async ({
+    page,
+  }) => {
+    // Que la proyeccion del baneo ya llego lo dejo dicho la prueba anterior.
+    await page.goto(`${BORDE}/login`);
+    await page.fill('#email', baneada.email);
+    await page.fill('#password', CLAVE);
+    await page.click('#botonEnviar');
+
+    await expect(page.locator('[data-zona="rechazo"]')).toContainText(
+      'inhabilitada de forma definitiva',
+    );
+    await page.click('[data-accion="apelar-sancion"]');
+
+    const apelacion = page.locator('[data-zona="apelacion"]');
+    await expect(apelacion).toBeVisible();
+    await expect(page.locator('[data-zona="sancion-apelada"]')).toContainText(
+      'Intentos de fraude o manipulación del sistema',
+    );
+    await expect(page.locator('[data-zona="aviso-apelacion"]')).toContainText(
+      'Tu apelación está en revisión',
+    );
+    await expect(page.locator('#formApelacion')).toBeHidden();
+    await expect(apelacion).not.toContainText('/api/');
+    await expect(apelacion).not.toContainText('HTTP');
+    // Sin sesion: nada quedo guardado en la pestaña.
+    expect(await page.evaluate(() => sessionStorage.getItem('nexus.token'))).toBeNull();
+
+    await page.click('[data-accion="volver-desde-apelacion"]');
+    await expect(page.locator('#formLogin')).toBeVisible();
+  });
+
+  test('7 · el panel revierte el baneo en apelacion y la cuenta vuelve a entrar', async () => {
+    const r = await api.post(`/api/v1/apelaciones/${apelacionDelBaneo.id}/resolucion`, {
+      headers: conToken(admin.token),
+      data: { decision: 'REVERTIDA', motivo: 'Se comprobó el acceso de un tercero a la cuenta' },
+    });
+    expect(r.status(), await r.text()).toBe(200);
+    expect((await r.json()).estado).toBe('REVERTIDA');
+
+    await expect
+      .poll(async () => (await iniciarSesion(api, baneada.email, CLAVE)).estado, {
+        timeout: 30000,
+        intervals: [1000, 2000],
+        message: 'revertido en apelacion, el baneo deja de impedir la entrada',
+      })
+      .toBe(200);
   });
 });

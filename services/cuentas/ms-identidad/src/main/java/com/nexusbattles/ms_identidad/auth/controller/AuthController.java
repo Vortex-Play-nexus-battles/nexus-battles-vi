@@ -13,6 +13,7 @@ import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException;
 import com.nexusbattles.ms_identidad.auth.exception.RegistroRechazadoException.Motivo;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.auth.repository.UsuarioRepository;
+import com.nexusbattles.ms_identidad.auth.segundofactor.DesafioEmitido;
 import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRechazadoException;
 import com.nexusbattles.ms_identidad.auth.segundofactor.SegundoFactorRequeridoException;
 import com.nexusbattles.ms_identidad.auth.service.LoginService;
@@ -31,6 +32,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 
@@ -112,13 +114,17 @@ public class AuthController {
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-no-verificada"),
                 "Correo sin verificar", e.getMessage(), null);
         } catch (CuentaBaneadaException e) {
+            // SA-4: con el codigo para apelar sin sesion, si se emitio.
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-baneada"),
-                "Cuenta baneada", e.getMessage(), null);
+                "Cuenta baneada", e.getMessage(), null, conApelacion(new LinkedHashMap<>(), e.getApelacion()));
         } catch (CuentaSuspendidaException e) {
             // 7.3.2: el fin de la suspension viaja aparte para el contador visible.
+            Map<String, Object> extras = new LinkedHashMap<>();
+            if (e.getHasta() != null) {
+                extras.put("suspendidoHasta", e.getHasta().toInstant().toString());
+            }
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-suspendida"),
-                "Cuenta suspendida", e.getMessage(), null,
-                e.getHasta() == null ? Map.of() : Map.of("suspendidoHasta", e.getHasta().toInstant().toString()));
+                "Cuenta suspendida", e.getMessage(), null, conApelacion(extras, e.getApelacion()));
         } catch (CuentaInactivaException e) {
             return rechazo(request, HttpStatus.FORBIDDEN, URI.create(TIPOS + "cuenta-inactiva"),
                 "Cuenta inactiva", e.getMessage(), null);
@@ -199,6 +205,22 @@ public class AuthController {
         }
         extras.forEach(problema::setProperty);
         return ResponseEntity.status(estado).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(problema);
+    }
+
+    /**
+     * SA-4 (ms-identidad-auth.yaml 2.4.0): el codigo para apelar sin sesion
+     * viaja como {@code apelacion: {codigo, expiraEn}}, solo en problem
+     * details. Es lo unico que una cuenta suspendida o baneada puede hacer
+     * desde aqui, y solo con la contrasena correcta.
+     */
+    public static Map<String, Object> conApelacion(Map<String, Object> extras, DesafioEmitido apelacion) {
+        if (apelacion != null) {
+            Map<String, Object> codigo = new LinkedHashMap<>();
+            codigo.put("codigo", apelacion.valor());
+            codigo.put("expiraEn", apelacion.expiraEn().toString());
+            extras.put("apelacion", codigo);
+        }
+        return extras;
     }
 
     static boolean pideProblemDetails(HttpServletRequest request) {

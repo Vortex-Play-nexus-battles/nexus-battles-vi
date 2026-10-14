@@ -105,6 +105,11 @@ comprobar GET  /api/v1/auth/segundo-factor \
                                            "identidad GET /api/v1/auth/segundo-factor"
 comprobar POST /api/v1/auth/login/segundo-factor \
                                            "identidad POST /api/v1/auth/login/segundo-factor"
+# SA-4 — la apelacion sin sesion de una cuenta suspendida o baneada, tambien
+# de ms-identidad por /auth.
+comprobar POST /api/v1/auth/apelacion/consulta \
+                                           "identidad POST /api/v1/auth/apelacion/consulta"
+comprobar POST /api/v1/auth/apelacion      "identidad POST /api/v1/auth/apelacion"
 comprobar GET  /api/v1/perfiles/yo         "identidad GET /api/v1/perfiles/yo"
 comprobar GET  /api/v1/rbac/roles          "identidad GET /api/v1/rbac/roles"
 comprobar GET  /api/v1/admin/usuarios      "identidad GET /api/v1/admin/usuarios"
@@ -613,6 +618,9 @@ limitada  POST /api/v1/auth/restablecer/solicitar             25  0 2
 # login no lleva `$`): probar codigos de 6 cifras desde internet tiene el
 # mismo cupo que probar contrasenas, ademas del bloqueo de la cuenta.
 limitada  POST /api/v1/auth/login/segundo-factor              25  0 2
+# SA-4 — la apelacion sin sesion se abre con el codigo del login: mismo cupo.
+limitada  POST /api/v1/auth/apelacion/consulta                25  0 2
+limitada  POST /api/v1/auth/apelacion                         25  0 2
 # escritura: zona propia, asi que el login agotado no la toca.
 limitada  POST /api/v1/products/p-1/comments                  80 60 1
 limitada  POST /api/v1/products/p-1/rating                    25  0 1

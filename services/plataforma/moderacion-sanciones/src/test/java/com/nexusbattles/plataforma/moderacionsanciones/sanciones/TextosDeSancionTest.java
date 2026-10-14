@@ -58,7 +58,7 @@ class TextosDeSancionTest {
         }
 
         @Test
-        @DisplayName("suspension: hasta cuando, que se conserva, y sin prometer una pantalla que no puede abrir")
+        @DisplayName("suspension: hasta cuando, que se conserva, y que se apela desde la entrada (no tiene sesion)")
         void suspension() {
             Sancion s = sancion(Sancion.Tipo.SUSPENSION, Causal.ACOSO, null);
 
@@ -68,7 +68,8 @@ class TextosDeSancionTest {
                     .startsWith("Causal: Acoso a otros jugadores. Motivo: Insultó")
                     .contains("No podrás entrar hasta el 19 de octubre de 2026, 4:02 p. m.; tu inventario y tu "
                             + "progreso se mantienen intactos.")
-                    .contains("Puedes apelar hasta el 15 de noviembre de 2026, 4:02 p. m.;")
+                    .contains("Puedes apelar hasta el 15 de noviembre de 2026, 4:02 p. m. desde la pantalla de "
+                            + "entrada: escribe tu correo y tu contraseña y elige «Apelar esta sanción»; el panel")
                     .doesNotContain("Política:")
                     .doesNotContain("Mis sanciones");
         }
@@ -83,6 +84,7 @@ class TextosDeSancionTest {
                     .contains("Causal: Intentos de fraude o manipulación del sistema.")
                     .contains("Política: Reglamento de juego limpio.")
                     .contains("Pierdes el acceso a todos los servicios y tu inventario queda congelado.")
+                    .contains("desde la pantalla de entrada")
                     .endsWith("el panel te responderá en un plazo de 15 días hábiles.");
         }
 

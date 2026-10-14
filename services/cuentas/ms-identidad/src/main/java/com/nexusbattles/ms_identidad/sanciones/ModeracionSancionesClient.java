@@ -124,6 +124,61 @@ public class ModeracionSancionesClient {
                 .body(SancionActiva.class));
     }
 
+    /**
+     * SA-4 — la sancion que impide entrar, tal como la ve quien la tiene: sin
+     * quien la emitio. Forma {@code SancionQueImpideEntrar} de
+     * moderacion-sanciones-consulta.yaml 1.5.0.
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SancionQueImpideEntrar(UUID id, String tipo, String causal, String motivo, String politica,
+                                         OffsetDateTime emitidaEn, OffsetDateTime vigenteHasta) {
+    }
+
+    /** SA-4 — una apelacion, sin quien la resolvio. Forma {@code ApelacionSinSesion} (consulta 1.5.0). */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record ApelacionDeLaCuenta(UUID id, UUID sancionId, String estado, String argumento,
+                                      OffsetDateTime creadaEn, OffsetDateTime decisionAntesDe, boolean vencida,
+                                      String decisionMotivo, OffsetDateTime resueltaEn,
+                                      OffsetDateTime nuevaVigencia) {
+    }
+
+    /** SA-4 — {@code EstadoDeApelacionSinSesion} de moderacion-sanciones-consulta.yaml 1.5.0. */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record EstadoDeApelacion(SancionQueImpideEntrar sancion, OffsetDateTime apelableHasta,
+                                    boolean puedeApelar, String motivoNoApelable, ApelacionDeLaCuenta apelacion) {
+    }
+
+    /**
+     * SA-4 — {@code GET /internal/sanciones/usuarios/{uid}/apelacion}, con la
+     * credencial de servicio de ms-identidad: moderacion solo atiende esa ruta
+     * a este servicio.
+     */
+    public EstadoDeApelacion estadoDeApelacion(UUID usuarioId) {
+        return llamar(() -> http.get()
+                .uri(base + "/internal/sanciones/usuarios/{usuarioId}/apelacion", usuarioId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + credencial.portador())
+                .retrieve()
+                .body(EstadoDeApelacion.class));
+    }
+
+    /**
+     * SA-4 — {@code POST /internal/sanciones/usuarios/{uid}/apelaciones}: la
+     * apelacion de una cuenta sin sesion, presentada en su nombre con la
+     * credencial de servicio. Sin reintentos, por lo mismo que la emision.
+     */
+    public ApelacionDeLaCuenta apelarSinSesion(UUID usuarioId, UUID sancionId, String argumento) {
+        Map<String, Object> cuerpo = new LinkedHashMap<>();
+        cuerpo.put("sancionId", sancionId);
+        cuerpo.put("argumento", argumento);
+        return llamar(() -> http.post()
+                .uri(base + "/internal/sanciones/usuarios/{usuarioId}/apelaciones", usuarioId)
+                .header(HttpHeaders.AUTHORIZATION, "Bearer " + credencial.portador())
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(cuerpo)
+                .retrieve()
+                .body(ApelacionDeLaCuenta.class));
+    }
+
     /** {@code POST /sanciones/{sancionId}/levantamiento} con el token de quien actua. */
     public Sancion levantar(String autorizacion, UUID sancionId, String motivo) {
         return llamar(() -> http.post()

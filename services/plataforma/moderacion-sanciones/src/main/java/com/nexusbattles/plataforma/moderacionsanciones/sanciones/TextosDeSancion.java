@@ -70,12 +70,12 @@ final class TextosDeSancion {
             case BANEO -> "Pierdes el acceso a todos los servicios y tu inventario queda congelado.";
         });
         cuerpo.append(" Puedes apelar hasta el ").append(fecha(apelableHasta));
-        if (sancion.tipo() == Sancion.Tipo.ADVERTENCIA) {
-            // Solo quien conserva el acceso llega a «Mis sanciones»: la
-            // suspension y el baneo cierran la sesion, y no se promete una
-            // puerta que no puede abrir.
-            cuerpo.append(" desde «Mis sanciones», en el menú de tu cuenta");
-        }
+        // Solo quien conserva el acceso llega a «Mis sanciones». La suspension
+        // y el baneo cierran la sesion: se apela desde la entrada, con la
+        // contrasena (ms-identidad-auth 2.4.0, apelacion sin sesion).
+        cuerpo.append(sancion.tipo() == Sancion.Tipo.ADVERTENCIA
+                ? " desde «Mis sanciones», en el menú de tu cuenta"
+                : " desde la pantalla de entrada: escribe tu correo y tu contraseña y elige «Apelar esta sanción»");
         cuerpo.append("; el panel te responderá en un plazo de ").append(PlazoDeDecision.DIAS_HABILES)
                 .append(" días hábiles.");
         return cuerpo.toString();

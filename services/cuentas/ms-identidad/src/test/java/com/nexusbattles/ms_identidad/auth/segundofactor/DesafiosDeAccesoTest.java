@@ -191,4 +191,46 @@ class DesafiosDeAccesoTest {
                 .isEqualTo(Motivo.DESAFIO_INVALIDO);
         verifyNoInteractions(repositorio);
     }
+
+    @Test
+    @DisplayName("SA-4: el codigo de apelacion es opaco, se guarda resumido con su version y vive 30 minutos")
+    void codigoDeApelacion() {
+        Usuario usuario = cuenta("JUGADOR");
+        ArgumentCaptor<DesafioDeAcceso> guardado = ArgumentCaptor.forClass(DesafioDeAcceso.class);
+
+        DesafioEmitido emitido = desafios.paraApelar(usuario).orElseThrow();
+
+        verify(repositorio).borrarGastadosDe(7L, Proposito.APELAR, LocalDateTime.ofInstant(AHORA, ZoneOffset.UTC));
+        verify(repositorio).save(guardado.capture());
+        assertThat(emitido.proposito()).isEqualTo(Proposito.APELAR);
+        assertThat(emitido.valor()).hasSize(43).doesNotContain(".");
+        assertThat(emitido.expiraEn()).isEqualTo(AHORA.plusSeconds(30 * 60));
+        assertThat(guardado.getValue().getProposito()).isEqualTo(Proposito.APELAR);
+        assertThat(guardado.getValue().getTokenHash()).isEqualTo(DesafiosDeAcceso.resumen(emitido.valor()))
+                .isNotEqualTo(emitido.valor());
+        assertThat(guardado.getValue().getVersionToken()).isEqualTo(3);
+        assertThat(guardado.getValue().getExpiraEn())
+                .isEqualTo(LocalDateTime.ofInstant(AHORA, ZoneOffset.UTC).plusMinutes(30));
+        assertThat(emitido.toString()).doesNotContain(emitido.valor());
+    }
+
+    @Test
+    @DisplayName("SA-4: un codigo de apelacion no sirve como desafio del segundo paso, ni al reves")
+    void propositosSeparados() {
+        DesafioDeAcceso apelar = new DesafioDeAcceso(7L, DesafiosDeAcceso.resumen("valor"), Proposito.APELAR, 3,
+                LocalDateTime.ofInstant(AHORA, ZoneOffset.UTC), LocalDateTime.ofInstant(AHORA, ZoneOffset.UTC)
+                        .plusMinutes(30));
+        when(repositorio.bloquearPorResumen(DesafiosDeAcceso.resumen("valor"))).thenReturn(Optional.of(apelar));
+
+        assertThat(motivoDe(() -> desafios.vigente("valor", Proposito.VERIFICAR))).isEqualTo(Motivo.DESAFIO_INVALIDO);
+        assertThat(desafios.vigente("valor", Proposito.APELAR)).isSameAs(apelar);
+    }
+
+    @Test
+    @DisplayName("SA-4: sin cuenta guardada no hay codigo")
+    void sinCuenta() {
+        assertThat(desafios.paraApelar(null)).isEmpty();
+        assertThat(desafios.paraApelar(new Usuario())).isEmpty();
+        verifyNoInteractions(repositorio);
+    }
 }

@@ -38,6 +38,9 @@ import java.nio.charset.StandardCharsets;
  *       {@code ConsultaSancionActivaService}) o quien modera.</li>
  *   <li>{@code GET /sanciones/metricas}: publica, solo cuentas sin
  *       identificadores (HU-MET-001).</li>
+ *   <li>{@code /internal/**} (SA-4): solo un token de servicio; la
+ *       apelacion sin sesion exige ademas {@code azp} = ms-identidad
+ *       ({@code ApelacionSinSesionController}).</li>
  *   <li>el resto de {@code /sanciones} y {@code /apelaciones}: cualquier
  *       usuario autenticado; quien puede emitir, resolver, levantar o ver a
  *       otros lo decide {@code SancionesService} por el rol. Un token de
@@ -99,6 +102,10 @@ public class SecurityConfig {
                 // identificadores; los lee metricas-plataforma, que no lleva
                 // credencial de servicio.
                 .requestMatchers(HttpMethod.GET, "/api/v1/sanciones/metricas").permitAll()
+                // SA-4: la apelacion de una cuenta sin sesion la presenta
+                // ms-identidad con su credencial de servicio; el controlador
+                // comprueba ademas que el azp sea ms-identidad.
+                .requestMatchers("/api/v1/internal/**").hasRole(JerarquiaDeRoles.SERVICIO)
                 .requestMatchers("/api/v1/sanciones/**", "/api/v1/apelaciones/**")
                 .hasAnyRole(JerarquiaDeRoles.JUGADOR, JerarquiaDeRoles.MODERADOR)
                 .anyRequest().authenticated());

@@ -345,6 +345,23 @@ class PlantillaCorreoServiceTest {
                 .contains("15 días hábiles")
                 .doesNotContain("Resultado:")
                 .doesNotContain("�");
+        // SA-4: la suspension cierra la sesion; se apela desde la entrada.
+        assertThat(html.replaceAll("\\s+", " "))
+                .contains("desde la pantalla de entrada: escribe tu correo y tu contraseña y elige «Apelar esta sanción».")
+                .doesNotContain("Mis sanciones");
+    }
+
+    @Test
+    void laAdvertenciaSeApelaDesdeMisSanciones() {
+        // SA-4: quien conserva el acceso apela desde su cuenta.
+        String html = service.renderizar("email/sancion", Map.of(
+                        "apodo", "ElGuerrero", "tipo", "ADVERTENCIA", "motivo", "Spam en el chat",
+                        "apelableHasta", "25/10/2026 a las 23:59 (GMT-05:00)"))
+                .replaceAll("\\s+", " ");
+
+        assertThat(html)
+                .contains("desde «Mis sanciones», en el menú de tu cuenta.")
+                .doesNotContain("pantalla de entrada");
     }
 
     @Test
