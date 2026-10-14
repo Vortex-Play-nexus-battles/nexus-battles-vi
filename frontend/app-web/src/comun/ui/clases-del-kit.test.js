@@ -192,7 +192,9 @@ test('ninguna ficha de sombra se usa como color de contorno (UX-R2.8d)', () => {
  * Una de treinta y dos; por eso esto es una prueba y no una revisión.
  */
 test('toda vista carga el kit en el orden que el propio kit exige', () => {
-  const ORDEN = ['tokens.css', 'base.css', 'componentes.css'];
+  // HU-UX-002 — `fondos.css` es opcional (solo las vistas con escena) y va
+  // detrás de los componentes: pisa el fondo del body y de `.combate__campo`.
+  const ORDEN = ['tokens.css', 'base.css', 'componentes.css', 'fondos.css'];
   const fallos = [];
 
   for (const ruta of archivos(SRC, '.html')) {

@@ -35,13 +35,24 @@
  * siga (por ejemplo, editar y despues aprobar). MARCAR y DESMARCAR son una
  * nota interna: el autor no recibe aviso, y la pantalla lo dice.
  *
+ * <h2>Por que se retuvo (HU-COM-007 CA-01)</h2>
+ *
+ * Lo que el filtro automatico retuvo trae su deteccion (comentarios.yaml
+ * 1.10.0): la tarjeta y el detalle dicen que reglas de la lista negra
+ * coincidieron, por su id, con la categoria y el motivo; o que la lista negra
+ * no respondio y se retuvo por precaucion. Lo que llego por reportes no la trae.
+ *
  * Nada se pinta con innerHTML: el texto de un comentario reportado es
  * exactamente el contenido del que hay que desconfiar.
  */
 
+import { nombreDeCategoriaDeTermino } from '../../comun/ui/admin/nombres.js';
 import { destinoVisible, urlDeVista } from '../../comun/acceso.js';
 import { h, vaciar } from '../../comun/ui/dom.js';
 import { pintarAviso, limpiarAviso } from '../../comun/ui/aviso.js';
+import { conCarga } from '../../comun/ui/boton.js';
+import { confirmarCritico } from '../../comun/ui/dialogo.js';
+import { urlDeLogin } from '../../comun/sesion.js';
 import {
   pintarEstado,
   estadoVacio,
@@ -56,12 +67,19 @@ import {
   consultarCola,
   hayReportesPendientes,
   consultarDetalle,
+  contextoDelComentario,
   historialDelAutor,
   imagenParaModeracion,
+  productoDelCatalogo,
   resolverComentario,
+  resolverEnLote,
+  ACCIONES_EN_LOTE,
   ACCIONES_INTERNAS,
   ACCIONES_SIN_CAMBIO_DE_ESTADO,
+  CATEGORIAS,
+  CONFIRMACION_DE_ELIMINAR,
   FILTROS_DE_COLA,
+  FILTROS_DE_PRIORIDAD,
   MOTIVO_MAXIMO,
   MOTIVO_MINIMO,
   MOTIVO_MODERACION,
@@ -70,6 +88,64 @@ import {
 
 /** Cuantas entradas se piden de una vez. El servicio recorta a 100. */
 const TAMANO = 20;
+
+/** Comentarios del hilo a cada lado del que se modera (comentarios.yaml 1.17.0 admite 1..10). */
+export const ALREDEDOR = 3;
+
+/**
+ * SA-16 — el nombre de cada producto, pedido una vez aunque el detalle y el
+ * historial del autor pregunten muchas veces. El catálogo que no contesta o
+ * no conoce el producto deja el nombre en `null` (y se vuelve a preguntar la
+ * próxima vez): la vista dice que no está disponible, nunca pinta su id.
+ *
+ * @param {(productoId: string) => Promise<object>} consultar `GET /productos/{id}`
+ * @returns {(productoId: string) => Promise<string|null>}
+ */
+export function nombresDeProductos(consultar) {
+  const pedidos = new Map();
+  return (productoId) => {
+    const clave = String(productoId ?? '');
+    if (!clave) {
+      return Promise.resolve(null);
+    }
+    if (!pedidos.has(clave)) {
+      pedidos.set(
+        clave,
+        Promise.resolve()
+          .then(() => consultar(clave))
+          .then((producto) =>
+            typeof producto?.nombre === 'string' && producto.nombre.trim()
+              ? producto.nombre.trim()
+              : null,
+          )
+          .catch(() => {
+            pedidos.delete(clave);
+            return null;
+          }),
+      );
+    }
+    return pedidos.get(clave);
+  };
+}
+
+/**
+ * «Producto: Espada de Vorn» en cuanto el catálogo lo dice; mientras tanto,
+ * «Producto: …». Sin quien lo pregunte no se pinta: nunca el id.
+ *
+ * @param {string} productoId
+ * @param {((productoId: string) => Promise<string|null>)|null} nombreDeProducto
+ * @returns {HTMLElement|null}
+ */
+function lineaDelProducto(productoId, nombreDeProducto) {
+  if (!nombreDeProducto || !productoId) {
+    return null;
+  }
+  const linea = h('span', { clase: 't-meta', datos: { campo: 'producto' }, texto: 'Producto: …' });
+  void nombreDeProducto(productoId).then((nombre) => {
+    linea.textContent = nombre ? `Producto: ${nombre}` : 'Producto: no disponible en el catálogo';
+  });
+  return linea;
+}
 
 /**
  * Mensajes por `motivo` del problem detail. Nunca se compara el texto del
@@ -106,19 +182,24 @@ export const RESULTADO_DE_ACCION = Object.freeze({
  * siempre), si esta marcado para seguimiento y si moderacion edito su texto.
  *
  * @param {object} comentario `ComentarioResponse` de moderacion
- * @param {{conEstado?: boolean, prioridadElevada?: boolean}} [opciones] `conEstado`: pintar
- *   tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo `true` pinta el
- *   distintivo. Viene de la entrada de la cola, no del comentario: el detalle no la trae.
+ * @param {{conEstado?: boolean, prioridadElevada?: boolean, atributo?: string}} [opciones]
+ *   `conEstado`: pintar tambien EN_REVISION; `prioridadElevada` (comentarios.yaml 1.6.0): solo
+ *   `true` pinta el distintivo. Viene de la entrada de la cola, no del comentario: el detalle no
+ *   la trae. `atributo` (SA-16): el `data-*` que nombra cada distintivo; la conversación del
+ *   contexto usa `dato` para no repetir los `data-campo` del comentario que se revisa.
  * @returns {HTMLElement[]}
  */
-export function distintivosDe(comentario, { conEstado = false, prioridadElevada = false } = {}) {
+export function distintivosDe(
+  comentario,
+  { conEstado = false, prioridadElevada = false, atributo = 'campo' } = {},
+) {
   const lista = [];
   if (prioridadElevada === true) {
     // Con texto y no solo con color: el tono ambar no basta para quien no lo distingue.
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'prioridad' },
+        datos: { [atributo]: 'prioridad' },
         texto: 'Prioridad elevada',
       }),
     );
@@ -127,7 +208,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo',
-        datos: { campo: 'estado' },
+        datos: { [atributo]: 'estado' },
         texto: ESTADO_LEGIBLE[comentario?.estado] ?? comentario?.estado ?? '',
       }),
     );
@@ -136,7 +217,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--aviso',
-        datos: { campo: 'marcado' },
+        datos: { [atributo]: 'marcado' },
         texto: 'Marcado para seguimiento',
       }),
     );
@@ -145,7 +226,7 @@ export function distintivosDe(comentario, { conEstado = false, prioridadElevada 
     lista.push(
       h('span', {
         clase: 'distintivo distintivo--moderador',
-        datos: { campo: 'editado' },
+        datos: { [atributo]: 'editado' },
         texto: 'Editado por moderación',
       }),
     );
@@ -174,16 +255,155 @@ export function enlazadorDeFicha(rol) {
 }
 
 /**
+ * SA-16 — la página pública del producto con su hilo de comentarios
+ * (`/comentar?producto=…`), donde el moderador ve lo que vio quien reportó.
+ *
+ * @param {string} productoId
+ * @returns {string|null}
+ */
+export function enlaceDelProducto(productoId) {
+  const base = urlDeVista('publicar-comentario');
+  if (!base || !productoId) {
+    return null;
+  }
+  const destino = new URL(base);
+  destino.searchParams.set('producto', productoId);
+  return destino.href;
+}
+
+/** «Regla 7», «Reglas 7, 9»; o que la lista negra no dijo cual. */
+function textoDeReglas(reglas) {
+  if (reglas.length === 0) {
+    return 'La lista negra no indicó qué término coincidió';
+  }
+  // SA-4 — el número de la regla es un identificador interno: a quien modera
+  // le sirve cuántos términos coincidieron y de qué categoría, no su id.
+  return reglas.length === 1
+    ? 'Coincidió con un término de la lista negra'
+    : `Coincidió con ${reglas.length} términos de la lista negra`;
+}
+
+/**
+ * HU-COM-007 CA-01 (comentarios.yaml 1.10.0) — por que el filtro automatico
+ * retuvo el comentario: cuantos terminos de la lista negra coincidieron (el
+ * termino nunca llega y su id no le dice nada a quien modera), con la
+ * categoria y el motivo generico. Si la
+ * lista negra no respondio, se dice eso y nada mas: el motivo tecnico no le
+ * sirve al moderador.
+ *
+ * @param {object} deteccion `DeteccionAutomatica` del contrato
+ * @returns {HTMLElement[]}
+ */
+function lineasDeDeteccion(deteccion) {
+  if (deteccion.servicioNoDisponible === true) {
+    return [
+      h('p', {
+        clase: 't-meta',
+        datos: { campo: 'deteccion-sin-servicio' },
+        texto: 'La lista negra no respondió; retenido por precaución',
+      }),
+    ];
+  }
+  const reglas = Array.isArray(deteccion.reglas) ? deteccion.reglas : [];
+  return [
+    h('p', {
+      clase: 't-meta fila fila--envuelta',
+      hijos: [
+        h('span', { datos: { campo: 'deteccion-reglas' }, texto: textoDeReglas(reglas) }),
+        deteccion.categoria
+          ? h('span', {
+              clase: 'distintivo',
+              datos: { campo: 'deteccion-categoria' },
+              texto: nombreDeCategoriaDeTermino(deteccion.categoria),
+            })
+          : null,
+      ],
+    }),
+    deteccion.motivo
+      ? h('p', { clase: 't-meta', datos: { campo: 'deteccion-motivo' }, texto: deteccion.motivo })
+      : null,
+  ].filter(Boolean);
+}
+
+/**
+ * SA-4 — la dirección para sancionar al autor de un comentario desde su
+ * detalle: la consola de sanciones con la cuenta ya elegida y el comentario
+ * ligado a la sanción. `null` si este rol no puede abrir la consola.
+ *
+ * @param {string|null} rol
+ * @returns {((autorId: string, comentarioId: string) => string)|null}
+ */
+export function enlazadorDeSancion(rol) {
+  if (!destinoVisible('sanciones-admin', { autenticado: true, rol })) {
+    return null;
+  }
+  return (autorId, comentarioId) => {
+    const destino = new URL(urlDeVista('sanciones-admin'));
+    destino.searchParams.set('usuario', autorId);
+    if (comentarioId) {
+      destino.searchParams.set('comentario', comentarioId);
+    }
+    return destino.href;
+  };
+}
+
+/** El nombre de una categoría de reporte (§7.3.3); una desconocida, humanizada. */
+function nombreDeCategoria(categoria) {
+  const conocida = CATEGORIAS.find((c) => c.valor === categoria);
+  if (conocida) {
+    return conocida.etiqueta;
+  }
+  const texto = String(categoria ?? '')
+    .replaceAll('_', ' ')
+    .toLowerCase();
+  return texto ? texto.charAt(0).toUpperCase() + texto.slice(1) : 'Sin categoría';
+}
+
+/**
  * Una entrada de la cola, como tarjeta pulsable.
  *
  * @param {object} entrada `EntradaDeCola` del contrato
  * @param {(id: string) => void} alAbrir
- * @param {{hrefDeFicha?: ((autorId: string) => string)|null}} [opciones] HU-USR-010:
- *   con él, «Ver ficha» junto al autor
+ * @param {{hrefDeFicha?: ((autorId: string) => string)|null, seleccionable?: boolean,
+ *          seleccionada?: boolean, alCambiarSeleccion?: ((marcada: boolean) => void)|null}} [opciones]
+ *   HU-USR-010: con `hrefDeFicha`, «Ver ficha» junto al autor. HU-COM-005 (decisión en
+ *   lote): con `seleccionable`, una casilla para elegir el comentario; sin ella, la
+ *   tarjeta es la de siempre.
  * @returns {HTMLElement}
  */
-export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) {
+export function tarjetaDeEntrada(
+  entrada,
+  alAbrir,
+  {
+    hrefDeFicha = null,
+    seleccionable = false,
+    seleccionada = false,
+    alCambiarSeleccion = null,
+  } = {},
+) {
   const comentario = entrada.comentario ?? {};
+  let casillaDeSeleccion = null;
+  if (seleccionable) {
+    const entradaDeCasilla = h('input', {
+      clase: 'casilla__entrada',
+      datos: { accion: 'seleccionar' },
+      atributos: {
+        type: 'checkbox',
+        'aria-label': `Seleccionar el comentario de ${comentario.apodoAutor || 'su autor'}`,
+      },
+    });
+    entradaDeCasilla.checked = seleccionada;
+    // `click` y no `change`: cubre el ratón, la barra espaciadora y la etiqueta, y
+    // además salta en una tarjeta que aún no está en el documento, donde un
+    // checkbox cambia de valor pero no emite `change`.
+    entradaDeCasilla.addEventListener('click', () =>
+      alCambiarSeleccion?.(entradaDeCasilla.checked),
+    );
+    casillaDeSeleccion = h('label', {
+      clase: 'casilla',
+      hijos: [entradaDeCasilla, h('span', { clase: 'casilla__etiqueta', texto: 'Seleccionar' })],
+    });
+  }
   const fichaDelAutor =
     hrefDeFicha && typeof comentario.autorId === 'string' && comentario.autorId
       ? h('a', {
@@ -201,6 +421,17 @@ export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) 
       h('span', { clase: 'distintivo', texto: `${nombre.replaceAll('_', ' ')}: ${cuantos}` }),
     );
   const reportes = entrada.reportes ?? 0;
+  // HU-COM-007 CA-01: solo lo que retuvo el filtro trae deteccion.
+  const deteccion = entrada.deteccion
+    ? h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: [
+          h('p', { clase: 'tarjeta__meta', texto: 'Detección automática' }),
+          ...lineasDeDeteccion(entrada.deteccion),
+        ],
+      })
+    : null;
 
   const articulo = h('article', {
     clase: 'tarjeta pila pila--compacta',
@@ -214,6 +445,7 @@ export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) 
     h('div', {
       clase: 'fila fila--envuelta',
       hijos: [
+        casillaDeSeleccion,
         h('span', {
           clase: 'tarjeta__titulo',
           datos: { campo: 'apodo' },
@@ -238,6 +470,7 @@ export function tarjetaDeEntrada(entrada, alAbrir, { hrefDeFicha = null } = {}) 
       ],
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
+    ...(deteccion ? [deteccion] : []),
     h('div', { clase: 'fila fila--envuelta', hijos: categorias }),
     h('div', {
       clase: 'fila',
@@ -324,7 +557,7 @@ function lineaDelHistorial(asiento) {
 }
 
 /** Un comentario del autor en su historial: texto, fecha, producto y estado con palabras. */
-function itemDelHistorial(item, comentarioAbiertoId) {
+function itemDelHistorial(item, comentarioAbiertoId, nombreDeProducto = null) {
   return h('li', {
     clase: 'pila pila--compacta',
     datos: { comentarioId: item.id ?? '' },
@@ -339,12 +572,9 @@ function itemDelHistorial(item, comentarioAbiertoId) {
             datos: { campo: 'fecha' },
             texto: fechaHora(item.fechaPublicacion),
           }),
-          // El contrato solo trae el identificador del producto, no su nombre.
-          h('span', {
-            clase: 't-meta',
-            datos: { campo: 'producto' },
-            texto: `Producto: ${item.productoId ?? ''}`,
-          }),
+          // SA-16: el contrato trae el identificador del producto; se dice su
+          // nombre, que es lo que la moderación reconoce.
+          lineaDelProducto(item.productoId, nombreDeProducto),
           item.id === comentarioAbiertoId
             ? h('span', {
                 clase: 't-meta',
@@ -372,7 +602,7 @@ function itemDelHistorial(item, comentarioAbiertoId) {
  * @param {(autorId: string, paginacion: {pagina: number}) => Promise<object>} cargar
  * @returns {HTMLElement}
  */
-function seccionHistorialDelAutor(comentario, cargar) {
+function seccionHistorialDelAutor(comentario, cargar, nombreDeProducto = null) {
   let pagina = 0;
   let pintados = 0;
   let total = 0;
@@ -456,7 +686,7 @@ function seccionHistorialDelAutor(comentario, cargar) {
         lista = h('ol', { clase: 'pila pila--compacta', datos: { zona: 'historial-autor-lista' } });
         cuerpo.append(lista);
       }
-      lista.append(...items.map((item) => itemDelHistorial(item, comentario.id)));
+      lista.append(...items.map((item) => itemDelHistorial(item, comentario.id, nombreDeProducto)));
       pintados += items.length;
       pagina = paginaPedida + 1;
     } catch (error) {
@@ -482,6 +712,143 @@ function seccionHistorialDelAutor(comentario, cargar) {
   });
 }
 
+/** Cuánto del hilo se ve: todo, o los más cercanos de cuántos hay. */
+function resumenDelHilo(total, vistos) {
+  if (total <= 1) {
+    return 'Es el único comentario del producto.';
+  }
+  if (total > vistos) {
+    return `El hilo del producto tiene ${total} comentarios; estos son los ${vistos} más cercanos a este.`;
+  }
+  return `El hilo completo del producto: ${total} comentarios.`;
+}
+
+/**
+ * Un comentario de la conversación: quién, cuándo, su estado y su texto. El
+ * que se modera va marcado (`aria-current`) para leerlo en su sitio. Sus datos
+ * van en `data-dato` y no en `data-campo`: el comentario que se revisa ya
+ * tiene los suyos en el detalle, y dos `data-campo="marcado"` en el mismo
+ * panel no se distinguirían.
+ *
+ * @param {object} item `ItemDelContexto` (comentarios.yaml 1.17.0) o el comentario abierto
+ * @param {boolean} esEste
+ */
+function itemDelContexto(item, esEste) {
+  return h('li', {
+    clase: 'contexto-hilo__comentario',
+    datos: { comentarioId: item.id ?? '' },
+    atributos: esEste ? { 'aria-current': 'true' } : {},
+    hijos: [
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('strong', { texto: item.apodoAutor || 'Alguien' }),
+          h('span', {
+            clase: 't-meta',
+            datos: { dato: 'fecha' },
+            texto: item.fechaPublicacion ? fechaHora(item.fechaPublicacion) : '',
+          }),
+          ...distintivosDe(item, { conEstado: true, atributo: 'dato' }),
+          esEste
+            ? h('span', {
+                clase: 'distintivo distintivo--en-juego',
+                datos: { dato: 'este' },
+                texto: 'El comentario que estás revisando',
+              })
+            : null,
+        ],
+      }),
+      h('p', { clase: 't-cuerpo', datos: { dato: 'texto' }, texto: item.texto ?? '' }),
+    ],
+  });
+}
+
+/**
+ * SA-16 — §7.3.8 «Vista previa del comentario en contexto»: el producto del
+ * comentario, con su página, y la conversación en la que estaba (los que lo
+ * rodean en el hilo, en cualquier estado), con el comentario en su sitio. Se
+ * pide al abrir el detalle: son pocos. Si falla, esta parte lo dice y el
+ * resto del detalle sigue operativo.
+ *
+ * @param {object} comentario el comentario abierto
+ * @param {{cargarContexto: ((comentarioId: string) => Promise<object>)|null,
+ *          nombreDeProducto: ((productoId: string) => Promise<string|null>)|null,
+ *          hrefDelProducto: ((productoId: string) => string|null)|null}} fuentes
+ * @returns {HTMLElement}
+ */
+function seccionDelContexto(comentario, { cargarContexto, nombreDeProducto, hrefDelProducto }) {
+  const producto = lineaDelProducto(comentario.productoId, nombreDeProducto);
+  const href = comentario.productoId ? (hrefDelProducto?.(comentario.productoId) ?? null) : null;
+  const cabecera = h('p', {
+    clase: 'fila fila--envuelta',
+    hijos: [
+      producto,
+      href
+        ? h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Ver el producto y su hilo',
+            atributos: { href },
+            datos: { accion: 'ver-producto' },
+          })
+        : null,
+    ],
+  });
+  const estado = h('div', { datos: { zona: 'contexto-estado' } });
+  const aviso = h('div', { datos: { zona: 'contexto-aviso' }, atributos: { hidden: true } });
+  const cuerpo = h('div', { clase: 'pila pila--compacta' });
+
+  async function pedir() {
+    limpiarAviso(aviso);
+    vaciar(cuerpo);
+    pintarEstado(estado, estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' }));
+    try {
+      const contexto = await cargarContexto(comentario.id);
+      vaciar(estado);
+      const anteriores = Array.isArray(contexto?.anteriores) ? contexto.anteriores : [];
+      const posteriores = Array.isArray(contexto?.posteriores) ? contexto.posteriores : [];
+      const vistos = anteriores.length + posteriores.length + 1;
+      const total = Number.isFinite(contexto?.totalEnElHilo) ? contexto.totalEnElHilo : vistos;
+      cuerpo.append(
+        h('p', {
+          clase: 't-meta',
+          datos: { campo: 'resumen-del-hilo' },
+          texto: resumenDelHilo(total, vistos),
+        }),
+        h('ol', {
+          clase: 'contexto-hilo',
+          datos: { zona: 'contexto-hilo' },
+          hijos: [
+            ...anteriores.map((item) => itemDelContexto(item, false)),
+            itemDelContexto(comentario, true),
+            ...posteriores.map((item) => itemDelContexto(item, false)),
+          ],
+        }),
+      );
+    } catch (error) {
+      vaciar(estado);
+      const estadoHttp = error?.estado;
+      const sinCambio = [401, 403, 404].includes(estadoHttp);
+      pintarAviso(aviso, {
+        tono: sinCambio ? 'advertencia' : 'error',
+        titulo: 'No se pudo cargar la conversación',
+        detalle: error?.detalle ?? respaldoPorEstado(estadoHttp),
+        accion: sinCambio
+          ? null
+          : { texto: 'Reintentar', nombre: 'reintentar', alPulsar: () => void pedir() },
+      });
+    }
+  }
+
+  if (cargarContexto && comentario.id) {
+    void pedir();
+  }
+  return h('div', {
+    clase: 'pila pila--compacta',
+    datos: { zona: 'contexto' },
+    hijos: [h('h3', { texto: 'En su contexto' }), cabecera, estado, aviso, cuerpo],
+  });
+}
+
 /** La pista del motivo: a quien le llega depende de la accion. */
 function pistaDelMotivo(accion) {
   return ACCIONES_INTERNAS.includes(accion)
@@ -490,8 +857,8 @@ function pistaDelMotivo(accion) {
 }
 
 /**
- * El detalle: el comentario, sus imagenes, sus reportes, su historial y la
- * decision.
+ * El detalle: el comentario, sus imagenes, por que lo retuvo el filtro si fue
+ * el (HU-COM-007), sus reportes, su historial y la decision.
  *
  * @param {object} detalle `DetalleDeModeracionResponse` del contrato
  * @param {(decision: {accion: string, motivo: string, textoNuevo?: string}) => void} alDecidir
@@ -511,6 +878,10 @@ export function panelDeDetalle(
     crearUrl = (blob) => globalThis.URL?.createObjectURL?.(blob) ?? '',
     prioridadElevada = false,
     cargarHistorialDelAutor = null,
+    hrefDeSancion = null,
+    cargarContexto = null,
+    nombreDeProducto = null,
+    hrefDelProducto = null,
   } = {},
 ) {
   const comentario = detalle.comentario ?? {};
@@ -527,9 +898,45 @@ export function panelDeDetalle(
     }),
     h('p', { clase: 't-cuerpo', datos: { campo: 'texto' }, texto: comentario.texto ?? '' }),
   );
+  // SA-4 — de la decisión sobre el comentario a la sanción de su autor, sin
+  // copiar su identificador: la consola abre con la cuenta y el comentario.
+  if (hrefDeSancion) {
+    panel.append(
+      h('p', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('a', {
+            clase: 'boton boton--contorno boton--pequeno',
+            texto: 'Sancionar al autor',
+            atributos: { href: hrefDeSancion },
+            datos: { accion: 'sancionar-autor' },
+          }),
+        ],
+      }),
+    );
+  }
   const imagenes = imagenesDelComentario(comentario, { cargarImagen, crearUrl });
   if (imagenes) {
     panel.append(h('h3', { texto: 'Imágenes' }), imagenes);
+  }
+
+  // -------------------------------------------- en su contexto (SA-16, 7.3.8)
+  if (cargarContexto || nombreDeProducto || hrefDelProducto) {
+    panel.append(
+      seccionDelContexto(comentario, { cargarContexto, nombreDeProducto, hrefDelProducto }),
+    );
+  }
+
+  // ------------------------------------------- deteccion automatica (HU-COM-007)
+  if (detalle.deteccion) {
+    panel.append(
+      h('h3', { texto: 'Detección automática' }),
+      h('div', {
+        clase: 'pila pila--compacta',
+        datos: { zona: 'deteccion' },
+        hijos: lineasDeDeteccion(detalle.deteccion),
+      }),
+    );
   }
 
   // --------------------------------------------------------------- reportes
@@ -542,7 +949,8 @@ export function panelDeDetalle(
       hijos: reportes.map((r) =>
         h('li', {
           clase: 't-meta',
-          texto: `${String(r.categoria ?? '').replaceAll('_', ' ')} · ${fechaHora(r.fecha)}${
+          // SA-4 — la categoría con su nombre de §7.3.3, no la constante.
+          texto: `${nombreDeCategoria(r.categoria)} · ${fechaHora(r.fecha)}${
             r.descripcion ? ` · ${r.descripcion}` : ''
           }`,
         }),
@@ -569,7 +977,7 @@ export function panelDeDetalle(
 
   // ---------------------------------------------------- historial del autor
   if (cargarHistorialDelAutor && typeof comentario.autorId === 'string' && comentario.autorId) {
-    panel.append(seccionHistorialDelAutor(comentario, cargarHistorialDelAutor));
+    panel.append(seccionHistorialDelAutor(comentario, cargarHistorialDelAutor, nombreDeProducto));
   }
 
   // --------------------------------------------------------------- decision
@@ -698,6 +1106,290 @@ export function panelDeDetalle(
   return panel;
 }
 
+// ----------------------------------------------------- decision en lote
+// HU-COM-005 (#519), comentarios.yaml 1.10.1. El servicio es atomico: o se
+// resuelven todos los comentarios del lote o no cambia ninguno.
+
+/** El titulo del aviso de exito de un lote, por accion. */
+export const RESULTADO_DE_LOTE = Object.freeze({
+  APROBAR: 'Comentarios aprobados',
+  OCULTAR: 'Comentarios ocultados',
+  ELIMINAR: 'Comentarios eliminados',
+  RESTAURAR: 'Comentarios restaurados',
+  MARCAR: 'Comentarios marcados para seguimiento',
+  DESMARCAR: 'Marca de seguimiento retirada de los comentarios',
+});
+
+/** Como se nombra, en una lista, un comentario que la cola ya no tiene delante. */
+const SIN_NOMBRE = 'un comentario que ya no está en la cola';
+
+/** Cuanto del texto de un comentario se enseña para distinguirlo de otro del mismo autor. */
+const LARGO_DEL_EXTRACTO = 40;
+
+/** Autor y comienzo del texto: lo que la persona reconoce, nunca un identificador. */
+function nombreDeEntrada(entrada) {
+  const comentario = entrada?.comentario ?? {};
+  const texto = String(comentario.texto ?? '').trim();
+  const extracto =
+    texto.length > LARGO_DEL_EXTRACTO ? `${texto.slice(0, LARGO_DEL_EXTRACTO).trimEnd()}…` : texto;
+  const autor = comentario.apodoAutor || 'Un jugador';
+  return extracto ? `${autor} · «${extracto}»` : autor;
+}
+
+/**
+ * Que decir ante el rechazo de un lote. Se decide por `estado` y `motivo`, nunca
+ * por el texto del servidor: el `detail` de este contrato lleva identificadores y
+ * nombres de enum, y puede traer una cifra. Es una funcion pura: devuelve QUE
+ * mostrar y la vista decide COMO (el aviso, la lista, la recarga, el foco).
+ *
+ * @param {{estado?: number, motivo?: string|null, comentarioIds?: string[]}|unknown} error
+ * @param {(id: string) => string|null} [nombrePorId] nombre legible de un comentario de
+ *   la cola, o `null` si ya no esta
+ * @returns {{tono: 'error'|'advertencia'|'info', titulo: string, detalle: string,
+ *   afectados: string[], quitar: string[], recargar: boolean, apagarBarra: boolean,
+ *   accion: {texto: string, nombre: 'iniciar-sesion'|'actualizar-cola'}|null}}
+ */
+export function mensajeDelLote(error, nombrePorId = () => null) {
+  const estado = error?.estado;
+  const ids = Array.isArray(error?.comentarioIds) ? error.comentarioIds : [];
+  const base = {
+    afectados: [],
+    quitar: [],
+    recargar: false,
+    apagarBarra: false,
+    accion: null,
+  };
+
+  if (estado === 400 && error?.motivo === MOTIVO_MODERACION.CONFIRMACION_REQUERIDA) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Falta la confirmación',
+      detalle: `Escribe ${CONFIRMACION_DE_ELIMINAR} tal cual para eliminar varios comentarios. No se cambió nada.`,
+    };
+  }
+  if (estado === 400) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Revisa la selección y el motivo',
+      detalle: 'No se cambió nada.',
+    };
+  }
+  if (estado === 401) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Tu sesión ya no es válida',
+      detalle: 'Vuelve a entrar para aplicar la decisión. Tu selección y tu motivo siguen aquí.',
+      accion: { texto: 'Iniciar sesión', nombre: 'iniciar-sesion' },
+    };
+  }
+  if (estado === 403) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Tu cuenta no puede resolver comentarios',
+      detalle: 'La decisión no se aplicó.',
+      apagarBarra: true,
+    };
+  }
+  if (estado === 404) {
+    return {
+      ...base,
+      tono: 'info',
+      titulo: 'Algunos comentarios ya no están',
+      detalle: 'No se cambió ningún comentario del lote.',
+      afectados: ids.map((id) => nombrePorId(id) ?? SIN_NOMBRE),
+      quitar: ids,
+      recargar: true,
+    };
+  }
+  if (estado === 409) {
+    return {
+      ...base,
+      tono: 'advertencia',
+      titulo: 'Otro moderador se adelantó',
+      detalle:
+        'Estos comentarios ya no admiten esa decisión y no se cambió ninguno del lote. Se actualiza la cola.',
+      afectados: ids.map((id) => nombrePorId(id) ?? SIN_NOMBRE),
+      quitar: ids,
+      recargar: true,
+    };
+  }
+  // Red caida o fallo del servidor: no se sabe si la decision llego a aplicarse,
+  // asi que no se promete que no cambio nada.
+  return {
+    ...base,
+    tono: 'error',
+    titulo: 'No se pudo aplicar la decisión',
+    detalle: 'Actualiza la cola para ver cómo quedó antes de volver a intentarlo.',
+    accion: { texto: 'Actualizar la cola', nombre: 'actualizar-cola' },
+  };
+}
+
+/**
+ * Lo que se dice del aviso a los autores tras un lote. El aviso es fail-open
+ * (HU-DIS-003): la decision vale aunque el aviso no salga, y callarlo dejaria al
+ * moderador creyendo que los autores se enteraron.
+ *
+ * @param {string} accion
+ * @param {Array<{autorNotificado?: boolean}>} resultados
+ * @returns {string}
+ */
+function detalleDelAviso(accion, resultados) {
+  if (ACCIONES_INTERNAS.includes(accion)) {
+    return 'Es una nota interna: los autores no reciben aviso. Queda en el historial.';
+  }
+  const sinAviso = resultados.filter((r) => r?.autorNotificado !== true).length;
+  if (sinAviso === 0) {
+    return 'Se avisó a los autores con el motivo.';
+  }
+  if (sinAviso === resultados.length) {
+    return 'La decisión quedó registrada, pero el aviso a los autores no salió.';
+  }
+  return 'La decisión quedó registrada, pero el aviso no salió para algunos autores.';
+}
+
+/**
+ * La barra del lote: seleccion de la pagina, contador, decision y motivo. Se
+ * construye una vez; `montarModeracion` la mantiene al dia.
+ *
+ * @returns {{elemento: HTMLElement, maestra: HTMLInputElement, limpiar: HTMLButtonElement,
+ *   contador: HTMLElement, nota: HTMLElement, formulario: HTMLFormElement,
+ *   accion: HTMLSelectElement, motivo: HTMLTextAreaElement, pista: HTMLElement,
+ *   ayuda: HTMLElement, aplicar: HTMLButtonElement}}
+ */
+function construirBarraDeLote() {
+  const maestra = h('input', {
+    clase: 'casilla__entrada',
+    datos: { accion: 'seleccionar-pagina' },
+    atributos: { type: 'checkbox' },
+  });
+  const limpiar = h('button', {
+    clase: 'boton boton--secundario boton--pequeno',
+    texto: 'Limpiar selección',
+    datos: { accion: 'limpiar-seleccion' },
+    atributos: { type: 'button', disabled: true },
+  });
+  const contador = h('p', {
+    clase: 't-meta',
+    datos: { zona: 'contador-lote' },
+    atributos: { role: 'status', 'aria-live': 'polite' },
+  });
+  const nota = h('p', {
+    clase: 't-meta',
+    texto:
+      'La cola tiene más comentarios de los que ves; la decisión solo alcanza a los que seleccionaste.',
+    datos: { zona: 'nota-lote' },
+    atributos: { hidden: true },
+  });
+
+  const accion = h('select', {
+    clase: 'desplegable__control',
+    atributos: { id: 'accion-lote', name: 'accion' },
+    hijos: ACCIONES_EN_LOTE.map((a) =>
+      h('option', { texto: a.etiqueta, atributos: { value: a.valor } }),
+    ),
+  });
+  const motivo = h('textarea', {
+    clase: 'campo__control',
+    atributos: {
+      id: 'motivo-lote',
+      name: 'motivo',
+      rows: 2,
+      maxlength: MOTIVO_MAXIMO,
+      'aria-describedby': 'motivo-lote-pista',
+    },
+  });
+  const pista = h('p', { clase: 'campo__pista', atributos: { id: 'motivo-lote-pista' } });
+  const ayuda = h('p', {
+    clase: 'campo__pista',
+    texto: 'Elige al menos un comentario y escribe un motivo para aplicar la decisión.',
+    atributos: { id: 'aplicar-lote-ayuda' },
+  });
+  const aplicar = h('button', {
+    clase: 'boton boton--primario',
+    texto: 'Aplicar a los seleccionados',
+    datos: { accion: 'aplicar-lote' },
+    atributos: { type: 'submit', disabled: true, 'aria-describedby': 'aplicar-lote-ayuda' },
+  });
+
+  const formulario = h('form', {
+    clase: 'pila pila--compacta',
+    datos: { zona: 'decision-lote' },
+    atributos: { novalidate: true },
+    hijos: [
+      h('div', {
+        clase: 'campo',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: 'Decisión para los seleccionados',
+            atributos: { for: 'accion-lote' },
+          }),
+          accion,
+        ],
+      }),
+      h('div', {
+        clase: 'campo campo--area',
+        hijos: [
+          h('label', {
+            clase: 'campo__etiqueta',
+            texto: 'Motivo',
+            atributos: { for: 'motivo-lote' },
+          }),
+          motivo,
+          pista,
+        ],
+      }),
+      ayuda,
+      h('div', { clase: 'fila', hijos: [aplicar] }),
+    ],
+  });
+
+  const elemento = h('section', {
+    clase: 'pila pila--compacta',
+    atributos: { 'aria-labelledby': 'titulo-lote' },
+    hijos: [
+      h('h3', { texto: 'Decisión en lote', atributos: { id: 'titulo-lote' } }),
+      h('div', {
+        clase: 'fila fila--envuelta',
+        hijos: [
+          h('label', {
+            // `casilla--caja`: esta etiqueta queda suelta sobre la atmósfera oscura
+            // y con el color de texto del kit no tiene contraste suficiente; la caja
+            // le da superficie y borde. La de cada tarjeta no lo necesita: va dentro de ella.
+            clase: 'casilla casilla--caja',
+            hijos: [
+              maestra,
+              h('span', { clase: 'casilla__etiqueta', texto: 'Seleccionar los de esta página' }),
+            ],
+          }),
+          limpiar,
+          contador,
+        ],
+      }),
+      nota,
+      formulario,
+    ],
+  });
+
+  return {
+    elemento,
+    maestra,
+    limpiar,
+    contador,
+    nota,
+    formulario,
+    accion,
+    motivo,
+    pista,
+    ayuda,
+    aplicar,
+  };
+}
+
 /**
  * El filtro de la cola que esta elegido.
  *
@@ -709,10 +1401,84 @@ function filtroElegido(filtro) {
 }
 
 /**
+ * El filtro de prioridad que esta elegido (1.10.0); sin el control, «Todas».
+ *
+ * @param {HTMLSelectElement|null} filtro
+ * @returns {{valor: string, etiqueta: string, prioridadElevada: boolean|null}}
+ */
+function prioridadElegida(filtro) {
+  return FILTROS_DE_PRIORIDAD.find((f) => f.valor === filtro?.value) ?? FILTROS_DE_PRIORIDAD[0];
+}
+
+/**
+ * Anade las opciones de un select que el HTML trae solo con «Todas». Si ya trae
+ * mas, no las duplica: montar dos veces la vista no debe repetir la lista.
+ *
+ * @param {HTMLSelectElement|null} select
+ * @param {Array<{valor: string, etiqueta: string}>} opciones
+ */
+function llenarOpciones(select, opciones) {
+  if (!select || select.options.length > 1) {
+    return;
+  }
+  select.append(
+    ...opciones.map(({ valor, etiqueta }) =>
+      h('option', { texto: etiqueta, atributos: { value: valor } }),
+    ),
+  );
+}
+
+/**
+ * La cola vacia porque los filtros no coinciden con nada. NO es una cola sin
+ * trabajo ni un error: no dice que no haya nada pendiente, ni da ninguna
+ * explicacion de por que, y ofrece quitar los filtros.
+ *
+ * @param {{categoria: string|null, prioridadElevada: boolean|null}} filtros
+ * @param {() => void} alQuitar
+ * @returns {HTMLElement}
+ */
+function vacioPorFiltros({ categoria, prioridadElevada }, alQuitar) {
+  const soloPrioridad = prioridadElevada === true && !categoria;
+  return estadoVacio({
+    titulo: 'Ningún comentario coincide con los filtros',
+    detalle: soloPrioridad
+      ? 'En este momento ningún comentario de la cola tiene prioridad elevada.'
+      : 'Prueba con otros filtros o quítalos para ver todo lo pendiente.',
+    accion: { texto: 'Quitar filtros', nombre: 'quitar-filtros', alPulsar: alQuitar },
+  });
+}
+
+/**
+ * El estado vacio de la cola, segun por que esta vacia. «Marcado» elige que cola
+ * se mira y tiene sus propios vacios; solo categoria y prioridad son filtros que
+ * pueden dejarla sin nada, y con ellos manda el mensaje de los filtros.
+ *
+ * @param {{marcado: boolean|null, categoria: string|null, prioridadElevada: boolean|null}} elegido
+ * @param {() => void} alQuitarFiltros
+ * @returns {HTMLElement}
+ */
+function vacioDeLaCola({ marcado, categoria, prioridadElevada }, alQuitarFiltros) {
+  if (categoria !== null || prioridadElevada !== null) {
+    return vacioPorFiltros({ categoria, prioridadElevada }, alQuitarFiltros);
+  }
+  if (marcado === true) {
+    return estadoVacio({
+      titulo: 'No hay comentarios marcados para seguimiento',
+      detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
+    });
+  }
+  return estadoVacio({
+    titulo: 'No hay comentarios esperando revisión',
+    detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
+  });
+}
+
+/**
  * Monta la vista completa.
  *
  * @param {HTMLElement} raiz elemento con las zonas `cola`, `detalle` y `aviso`
- *   (y, si lo trae, el filtro `[data-zona="filtro"]`)
+ *   (y, si los trae, los filtros `[data-zona="filtro"]`, `"filtro-categoria"` y
+ *   `"filtro-prioridad"`; los dos ultimos traen solo «Todas» y la vista anade el resto)
  * @param {{api?: object, productoId?: string|null, crearUrl?: (blob: Blob) => string,
  *          rol?: string|null}} [opciones]
  *   `api` se inyecta en las pruebas; por omision es el cliente HTTP real. `rol`
@@ -724,21 +1490,261 @@ export function montarModeracion(
   { api = null, productoId = null, crearUrl, rol = null } = {},
 ) {
   const hrefDeFicha = enlazadorDeFicha(rol);
+  const sancionDe = enlazadorDeSancion(rol);
   const cliente = {
     consultarCola,
     consultarDetalle,
     resolverComentario,
     imagenParaModeracion,
     historialDelAutor,
+    resolverEnLote,
+    contextoDelComentario,
+    productoDelCatalogo,
     ...(api ?? {}),
   };
+  // SA-16: un nombre por producto en toda la sesión de moderación.
+  const nombreDeProducto = nombresDeProductos((id) => cliente.productoDelCatalogo(id));
   const zonaCola = raiz.querySelector('[data-zona="cola"]');
   const zonaDetalle = raiz.querySelector('[data-zona="detalle-contenedor"]');
   const zonaAviso = raiz.querySelector('[data-zona="aviso"]');
   const filtro = raiz.querySelector('[data-zona="filtro"]');
+  // 1.10.0: categoria de reporte y prioridad. Se combinan con `filtro` (marcado).
+  const filtroCategoria = raiz.querySelector('[data-zona="filtro-categoria"]');
+  const filtroPrioridad = raiz.querySelector('[data-zona="filtro-prioridad"]');
+  llenarOpciones(filtroCategoria, CATEGORIAS);
+  llenarOpciones(filtroPrioridad, FILTROS_DE_PRIORIDAD.slice(1));
+  // Cada recarga lleva un numero: la respuesta de una anterior que llega tarde no
+  // pinta la cola (con tres filtros y el teclado, los cambios seguidos son normales).
+  let generacion = 0;
   // El detalle no trae `prioridadElevada`: se recuerda de la entrada de la
   // cola desde la que se abrio. `recargar` lo rehace antes de reabrir.
   const prioridadPorComentario = new Map();
+
+  // ------------------------------------------------------- decision en lote
+  // Sin la zona `lote` en el HTML la vista funciona como siempre: sin casillas.
+  const lote = raiz.querySelector('[data-zona="lote"]');
+  const barra = lote ? construirBarraDeLote() : null;
+  /** Los comentarios elegidos. Siempre un subconjunto de los que hay en pantalla. */
+  const seleccion = new Set();
+  /** Las entradas de la cola que se ven, por id y en el orden de la cola. */
+  let entradasPorId = new Map();
+  /**
+   * `enVuelo`: mientras hay un envio (o su confirmacion) en curso no se acepta otro.
+   * `apagada`: un 403, la cuenta no puede decidir; la barra se apaga hasta recargar
+   * la pagina. Es un objeto y no dos variables porque se escribe despues de un
+   * `await` (la regla `require-atomic-updates` lo exige asi).
+   */
+  const bloqueo = { enVuelo: false, apagada: false };
+  if (lote && barra) {
+    lote.hidden = true;
+    lote.append(barra.elemento);
+  }
+
+  /** Se escribe desde aqui y no despues de un `await`: `require-atomic-updates`. */
+  function marcarEnvio(enCurso) {
+    bloqueo.enVuelo = enCurso;
+  }
+
+  /** Pone al dia todo lo que depende de la seleccion: contador, casillas y botones. */
+  function actualizarBarra() {
+    if (!barra) {
+      return;
+    }
+    const elegidos = seleccion.size;
+    const visibles = entradasPorId.size;
+    const bloqueada = bloqueo.enVuelo || bloqueo.apagada;
+    const completa = elegidos > 0 && barra.motivo.value.trim().length >= MOTIVO_MINIMO;
+
+    if (elegidos === 0) {
+      barra.contador.textContent = 'Ninguno seleccionado';
+    } else if (elegidos === 1) {
+      barra.contador.textContent = '1 seleccionado';
+    } else {
+      barra.contador.textContent = `${elegidos} seleccionados`;
+    }
+    barra.maestra.checked = visibles > 0 && elegidos === visibles;
+    barra.maestra.indeterminate = elegidos > 0 && elegidos < visibles;
+    barra.maestra.disabled = bloqueada;
+    barra.limpiar.disabled = bloqueada || elegidos === 0;
+    barra.accion.disabled = bloqueada;
+    barra.motivo.disabled = bloqueada;
+    barra.pista.textContent = pistaDelMotivo(barra.accion.value);
+    barra.aplicar.disabled = bloqueada || !completa;
+    barra.ayuda.hidden = bloqueada || completa;
+    for (const caja of zonaCola.querySelectorAll('input[data-accion="seleccionar"]')) {
+      caja.checked = seleccion.has(caja.closest('article')?.dataset.comentarioId);
+      caja.disabled = bloqueada;
+    }
+  }
+
+  function cambiarSeleccion(comentarioId, marcada) {
+    if (marcada) {
+      seleccion.add(comentarioId);
+    } else {
+      seleccion.delete(comentarioId);
+    }
+    actualizarBarra();
+  }
+
+  function limpiarSeleccion() {
+    seleccion.clear();
+    actualizarBarra();
+  }
+
+  /** Muestra la barra (hay cola) con la nota de «hay mas de lo que ves», si toca. */
+  function mostrarLote(cola) {
+    if (!lote || !barra) {
+      return;
+    }
+    const total = typeof cola.total === 'number' ? cola.total : entradasPorId.size;
+    barra.nota.hidden = total <= entradasPorId.size;
+    lote.hidden = false;
+    actualizarBarra();
+  }
+
+  /** Tras un lote el trabajo sigue en la casilla maestra; sin cola, en el aviso. */
+  function enfocarTrasElLote() {
+    if (lote && barra && !lote.hidden && !barra.maestra.disabled) {
+      barra.maestra.focus();
+      return;
+    }
+    zonaAviso.setAttribute('tabindex', '-1');
+    zonaAviso.focus();
+  }
+
+  const AL_PULSAR_DEL_AVISO = {
+    'iniciar-sesion': () =>
+      globalThis.location.assign(
+        urlDeLogin({ volver: `${globalThis.location.pathname}${globalThis.location.search}` }),
+      ),
+    'actualizar-cola': () => {
+      // `recargar` pinta sus propios fallos: no rechaza.
+      recargar();
+    },
+  };
+
+  /** Pinta el rechazo de un lote y deja la pantalla lista para corregir o reintentar. */
+  async function rechazarLote(error, nombrePorId) {
+    const mensaje = mensajeDelLote(error, nombrePorId);
+    pintarAviso(zonaAviso, {
+      tono: mensaje.tono,
+      titulo: mensaje.titulo,
+      detalle: mensaje.detalle,
+      accion: mensaje.accion
+        ? { ...mensaje.accion, alPulsar: AL_PULSAR_DEL_AVISO[mensaje.accion.nombre] }
+        : null,
+    });
+    if (mensaje.afectados.length > 0) {
+      zonaAviso.append(
+        h('ul', {
+          clase: 'pila pila--compacta',
+          datos: { zona: 'afectados' },
+          hijos: mensaje.afectados.map((texto) => h('li', { clase: 't-meta', texto })),
+        }),
+      );
+    }
+    if (mensaje.apagarBarra) {
+      bloqueo.apagada = true;
+    }
+    for (const id of mensaje.quitar) {
+      seleccion.delete(id);
+    }
+    if (mensaje.recargar) {
+      // La lista de afectados ya esta en el aviso: sobrevive a la recarga.
+      await recargar({ conservarAviso: true });
+    } else {
+      actualizarBarra();
+    }
+  }
+
+  /** «Aplicar»: confirma si es ELIMINAR, manda el lote y cuenta que paso. */
+  async function aplicarLote() {
+    if (!barra || bloqueo.enVuelo || bloqueo.apagada) {
+      return;
+    }
+    const ids = [...entradasPorId.keys()].filter((id) => seleccion.has(id));
+    const motivo = barra.motivo.value.trim();
+    const accion = barra.accion.value;
+    if (ids.length === 0 || motivo.length < MOTIVO_MINIMO) {
+      return;
+    }
+
+    marcarEnvio(true);
+    limpiarAviso(zonaAviso);
+    if (accion === 'ELIMINAR') {
+      // §7.3.9: eliminar en masa pide escribir la palabra, no solo pulsar.
+      const confirmado = await confirmarCritico({
+        titulo: 'Eliminar los comentarios seleccionados',
+        mensaje: `Vas a eliminar ${ids.length === 1 ? '1 comentario' : `${ids.length} comentarios`}.`,
+        consecuencias: [
+          'Eliminar es definitivo: no se puede deshacer.',
+          'Los autores reciben aviso con el motivo.',
+          'Si alguno ya no admite la decisión, no se elimina ninguno.',
+        ],
+        palabra: CONFIRMACION_DE_ELIMINAR,
+        textoConfirmar: 'Eliminar',
+      });
+      if (!confirmado) {
+        marcarEnvio(false);
+        return;
+      }
+    }
+
+    // Los nombres se toman ANTES de recargar: tras un 409 la cola ya no trae
+    // a los afectados y la lista tiene que decir de quien eran.
+    const antes = new Map(entradasPorId);
+    const nombrePorId = (id) => (antes.has(id) ? nombreDeEntrada(antes.get(id)) : null);
+
+    conCarga(barra.aplicar, true, 'Aplicando…');
+    actualizarBarra();
+    let resultado;
+    try {
+      resultado = await cliente.resolverEnLote({
+        comentarioIds: ids,
+        accion,
+        motivo,
+        // A ELIMINAR se le manda la constante del contrato, no lo tecleado.
+        ...(accion === 'ELIMINAR' ? { confirmacion: CONFIRMACION_DE_ELIMINAR } : {}),
+      });
+    } catch (error) {
+      marcarEnvio(false);
+      conCarga(barra.aplicar, false);
+      await rechazarLote(error, nombrePorId);
+      return;
+    }
+
+    marcarEnvio(false);
+    conCarga(barra.aplicar, false);
+    pintarAviso(zonaAviso, {
+      tono: 'exito',
+      titulo: RESULTADO_DE_LOTE[accion] ?? 'Decisión aplicada',
+      detalle: detalleDelAviso(accion, resultado?.resultados ?? []),
+    });
+    seleccion.clear();
+    barra.motivo.value = '';
+    await recargar({ conservarAviso: true });
+    enfocarTrasElLote();
+  }
+
+  if (barra) {
+    barra.maestra.addEventListener('change', () => {
+      seleccion.clear();
+      if (barra.maestra.checked) {
+        for (const id of entradasPorId.keys()) {
+          seleccion.add(id);
+        }
+      }
+      actualizarBarra();
+    });
+    barra.limpiar.addEventListener('click', limpiarSeleccion);
+    barra.motivo.addEventListener('input', actualizarBarra);
+    barra.accion.addEventListener('change', actualizarBarra);
+    barra.formulario.addEventListener('submit', (evento) => {
+      evento.preventDefault();
+      void aplicarLote();
+    });
+    actualizarBarra();
+  }
 
   function problema(error) {
     const explicacion = EXPLICACION[error?.motivo];
@@ -766,40 +1772,76 @@ export function montarModeracion(
       limpiarAviso(zonaAviso);
     }
     vaciar(zonaDetalle);
+    // La barra del lote se esconde mientras se recarga: decidir sobre una cola
+    // que se esta cambiando es decidir a ciegas. Vuelve si hay cola que mostrar.
+    if (lote) {
+      lote.hidden = true;
+    }
     pintarEstado(zonaCola, estadoDeCarga({ filas: 3, etiqueta: 'Cargando la cola…' }));
     const elegido = filtroElegido(filtro);
+    const categoria = filtroCategoria?.value || null;
+    const soloPrioridad = prioridadElegida(filtroPrioridad).prioridadElevada;
+    const miRecarga = ++generacion;
     try {
       const cola = await cliente.consultarCola({
         productoId,
         marcado: elegido.marcado,
+        categoria,
+        prioridadElevada: soloPrioridad,
         tamano: TAMANO,
       });
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       prioridadPorComentario.clear();
-      for (const { comentario, prioridadElevada } of cola.entradas ?? []) {
+      entradasPorId = new Map();
+      for (const entrada of cola.entradas ?? []) {
+        const { comentario, prioridadElevada } = entrada;
         prioridadPorComentario.set(comentario?.id, prioridadElevada === true);
+        if (comentario?.id) {
+          entradasPorId.set(comentario.id, entrada);
+        }
+      }
+      // Solo se decide sobre lo que se ve: lo que ya no esta en la cola sale de la seleccion.
+      for (const id of [...seleccion]) {
+        if (!entradasPorId.has(id)) {
+          seleccion.delete(id);
+        }
       }
       if ((cola.entradas ?? []).length === 0) {
         // Cola vacia NO es un error: es la respuesta correcta cuando no hay
         // nada pendiente. Por eso estado vacio y no estado de error.
         pintarEstado(
           zonaCola,
-          elegido.marcado === true
-            ? estadoVacio({
-                titulo: 'No hay comentarios marcados para seguimiento',
-                detalle: 'Cuando marques uno desde su detalle, aparecerá aquí.',
-              })
-            : estadoVacio({
-                titulo: 'No hay comentarios esperando revisión',
-                detalle: 'Cuando alguien reporte uno, aparecerá aquí.',
-              }),
+          vacioDeLaCola(
+            { marcado: elegido.marcado, categoria, prioridadElevada: soloPrioridad },
+            quitarFiltros,
+          ),
         );
+        actualizarBarra();
         return;
       }
       for (const entrada of cola.entradas) {
-        zonaCola.append(tarjetaDeEntrada(entrada, (id) => abrir(id), { hrefDeFicha }));
+        const id = entrada.comentario?.id;
+        zonaCola.append(
+          tarjetaDeEntrada(entrada, (abierto) => abrir(abierto), {
+            hrefDeFicha,
+            ...(barra
+              ? {
+                  seleccionable: true,
+                  seleccionada: seleccion.has(id),
+                  alCambiarSeleccion: (marcada) => cambiarSeleccion(id, marcada),
+                }
+              : {}),
+          }),
+        );
       }
+      mostrarLote(cola);
     } catch (error) {
+      if (miRecarga !== generacion) {
+        return;
+      }
       vaciar(zonaCola);
       // UX-R4.3 — el reintento solo cuando reintentar puede servir de algo.
       // Un 403 no se arregla pulsando otra vez: el permiso no va a cambiar
@@ -836,7 +1878,14 @@ export function montarModeracion(
           cargarImagen: (id) => cliente.imagenParaModeracion(id),
           cargarHistorialDelAutor: (autorId, paginacion) =>
             cliente.historialDelAutor(autorId, paginacion),
+          cargarContexto: (id) => cliente.contextoDelComentario(id, { alrededor: ALREDEDOR }),
+          nombreDeProducto,
+          hrefDelProducto: enlaceDelProducto,
           prioridadElevada: prioridadPorComentario.get(comentarioId) === true,
+          hrefDeSancion:
+            sancionDe && detalle.comentario?.autorId
+              ? sancionDe(detalle.comentario.autorId, comentarioId)
+              : null,
           ...(crearUrl ? { crearUrl } : {}),
         }),
       );
@@ -883,7 +1932,34 @@ export function montarModeracion(
     }
   }
 
-  filtro?.addEventListener('change', () => recargar());
+  /**
+   * «Quitar filtros»: categoria y prioridad vuelven a «Todas». «Mostrar» no se
+   * toca. El foco pasa al primer filtro antes de recargar, porque el boton que
+   * se acaba de pulsar desaparece con la recarga.
+   */
+  function quitarFiltros() {
+    limpiarSeleccion();
+    if (filtroCategoria) {
+      filtroCategoria.value = '';
+    }
+    if (filtroPrioridad) {
+      filtroPrioridad.value = FILTROS_DE_PRIORIDAD[0].valor;
+    }
+    (filtroCategoria ?? filtroPrioridad)?.focus();
+    void recargar();
+  }
+
+  // Cambiar de filtro cambia lo que se ve: la seleccion no puede sobrevivirle, o
+  // la decision alcanzaria comentarios que el moderador ya no tiene delante.
+  const alCambiarFiltro = () => {
+    limpiarSeleccion();
+    return recargar();
+  };
+  filtro?.addEventListener('change', alCambiarFiltro);
+  filtroCategoria?.addEventListener('change', alCambiarFiltro);
+  filtroPrioridad?.addEventListener('change', alCambiarFiltro);
   recargar();
-  return { recargar };
+  // SA-4 — `abrir` lo usa el historial de moderación: «Abrir» lleva el
+  // comentario al panel de revisión de esta misma pantalla.
+  return { recargar, abrir };
 }

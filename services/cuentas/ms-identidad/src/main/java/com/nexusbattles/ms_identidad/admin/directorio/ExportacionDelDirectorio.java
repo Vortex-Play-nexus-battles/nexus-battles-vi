@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
 import java.util.List;
@@ -43,7 +45,16 @@ import java.util.Objects;
 @Component
 public class ExportacionDelDirectorio {
 
-    static final String CABECERA = "Apodo,Correo,Rol,Estado,Registro,Última entrada";
+    /**
+     * SA-21: las dos fechas en hora de Colombia, la del juego, y dicho en la
+     * cabecera: sin zona, una hora del servidor (UTC) se leia cinco horas
+     * adelantada.
+     */
+    static final String CABECERA =
+            "Apodo,Correo,Rol,Estado,Registro (hora de Colombia),Última entrada (hora de Colombia)";
+
+    /** La hora del juego, la de quien administra (como los correos y la consola). */
+    static final ZoneId HORA_DE_COLOMBIA = ZoneId.of("America/Bogota");
 
     /** Marca de orden de bytes: sin ella una hoja de calculo lee mal las tildes. */
     private static final String BOM = "\uFEFF";
@@ -115,15 +126,17 @@ public class ExportacionDelDirectorio {
         if (cuentas.getTotalElements() > maximoFilas) {
             throw new ExportacionDemasiadoGrandeException(cuentas.getTotalElements(), maximoFilas);
         }
-        String nombre = "directorio-de-cuentas-" + EN_EL_NOMBRE.format(LocalDateTime.now(reloj)) + ".csv";
-        return new Exportacion(nombre, csv(cuentas.getContent()).getBytes(StandardCharsets.UTF_8),
+        String nombre = "directorio-de-cuentas-"
+                + EN_EL_NOMBRE.format(LocalDateTime.now(reloj.withZone(HORA_DE_COLOMBIA))) + ".csv";
+        return new Exportacion(nombre, csv(cuentas.getContent(), reloj.getZone()).getBytes(StandardCharsets.UTF_8),
                 cuentas.getNumberOfElements());
     }
 
-    static String csv(List<Usuario> cuentas) {
+    /** @param zonaDelServidor la del reloj con el que se escribieron las marcas */
+    static String csv(List<Usuario> cuentas, ZoneId zonaDelServidor) {
         StringBuilder salida = new StringBuilder(BOM).append(CABECERA).append(FIN_DE_LINEA);
         for (Usuario cuenta : cuentas) {
-            AdminUsuarioDirectorioResponse fila = AdminUsuarioDirectorioResponse.desde(cuenta);
+            AdminUsuarioDirectorioResponse fila = AdminUsuarioDirectorioResponse.desde(cuenta, zonaDelServidor);
             // El estado como lo pinta la tabla: BLOQUEADA si hay un bloqueo
             // temporal vigente; si no, el estado con el nombre del contrato.
             String estado = fila.bloqueada() ? "BLOQUEADA" : EstadoCuenta.normalizado(fila.estado());
@@ -153,8 +166,8 @@ public class ExportacionDelDirectorio {
         return '"' + seguro.replace("\"", "\"\"") + '"';
     }
 
-    /** Fecha y hora del reloj del servicio; vacia si no la hay (nunca una inventada). */
-    private static String fecha(LocalDateTime instante) {
-        return instante == null ? "" : FECHA.format(instante);
+    /** Fecha y hora en hora de Colombia; vacia si no la hay (nunca una inventada). */
+    private static String fecha(OffsetDateTime instante) {
+        return instante == null ? "" : FECHA.format(instante.atZoneSameInstant(HORA_DE_COLOMBIA));
     }
 }

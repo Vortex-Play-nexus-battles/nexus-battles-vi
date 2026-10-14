@@ -575,4 +575,71 @@ class SegundoFactorServiceTest {
         assertThat(SegundoFactorService.afectado(sinUid)).isEqualTo("usuario-7");
         assertThat(SegundoFactorService.afectado(ana())).isEqualTo(UID.toString());
     }
+
+    // ------------------------------------------ obligatorio para administradores
+
+    @Nested
+    @DisplayName("obligatorio para los roles administrativos (7.3.9)")
+    class Obligatorio {
+
+        private SegundoFactorService obligatorio() {
+            return servicioCon(cifrado, new PoliticaDeSegundoFactor("MODERADOR,ADMINISTRADOR,SUPER_ADMINISTRADOR", 5,
+                    10, "Nexus Battles VI"));
+        }
+
+        @Test
+        @DisplayName("un administrador no puede desactivarlo: ni se comprueba la clave ni se borra nada")
+        void noSeDesactiva() {
+            SegundoFactorService servicioObligatorio = obligatorio();
+
+            assertThat(motivoDe(() -> servicioObligatorio.desactivar(ana(),
+                    new DesactivarSegundoFactorRequest(CLAVE, codigoDeAhora(), null), "10.0.0.2")))
+                    .isEqualTo(Motivo.OBLIGATORIO);
+            verifyNoInteractions(segundos, codigos, desafios, intentosFallidos, eventos);
+        }
+
+        @Test
+        @DisplayName("un jugador si puede desactivarlo aunque la politica lo exija a los administradores")
+        void jugadorSiDesactiva() {
+            SegundoFactorService servicioObligatorio = obligatorio();
+            Usuario jugador = ana();
+            jugador.getRol().setNombre("JUGADOR");
+            when(segundos.findById(7L)).thenReturn(Optional.of(activo()));
+            when(segundos.registrarPaso(7L, PASO)).thenReturn(1);
+
+            servicioObligatorio.desactivar(jugador, new DesactivarSegundoFactorRequest(CLAVE, codigoDeAhora(), null),
+                    "10.0.0.2");
+
+            verify(segundos).borrarDe(7L);
+        }
+    }
+
+    @Nested
+    @DisplayName("restablecimiento por un Super Administrador")
+    class RestablecimientoPorAdministracion {
+
+        @Test
+        @DisplayName("borra secreto, codigos y desafios, dice si estaba activo y lo deja en la auditoria")
+        void restablece() {
+            when(segundos.existsByUsuarioIdAndActivoTrue(7L)).thenReturn(true);
+
+            boolean estabaActivo = servicio.restablecerPorAdministracion(ana(), "10.0.0.9");
+
+            assertThat(estabaActivo).isTrue();
+            verify(segundos).borrarDe(7L);
+            verify(codigos).borrarDe(7L);
+            verify(desafios).borrarDe(7L);
+            verify(eventos).publishEvent(new CambioDeSegundoFactor(UID.toString(),
+                    Cambio.RESTABLECIDO_POR_ADMINISTRACION, null, "10.0.0.9"));
+        }
+
+        @Test
+        @DisplayName("sin segundo factor activo tambien limpia un enrolamiento a medias")
+        void sinActivo() {
+            when(segundos.existsByUsuarioIdAndActivoTrue(7L)).thenReturn(false);
+
+            assertThat(servicio.restablecerPorAdministracion(ana(), "10.0.0.9")).isFalse();
+            verify(segundos).borrarDe(7L);
+        }
+    }
 }

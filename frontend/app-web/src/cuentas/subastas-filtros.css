@@ -12,107 +12,219 @@
 
 .subastas-contenido {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  /* PLAYER-07b — 260 y no 220: con el título del panel y dos columnas en
+     «Tipo de producto» y «Rareza», 220 partía «Legendaria» en dos líneas. */
+  grid-template-columns: 260px minmax(0, 1fr);
   gap: var(--e-5);
   align-items: start;
 }
 
 @media (max-width: 899px) {
   .subastas-contenido {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* --- El panel plegado (UX-R4.8) ---------------------------------------
- * A una columna el panel se apila encima de los resultados, y son unos
- * 1.400 px de filtros antes de la primera subasta. Se pliega para que el
- * mercado se vea al entrar. En ancho no se pliega nada: el resumen se
- * esconde y `subastas.js` lo deja abierto. */
-
-.subastas-filtros__resumen {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--e-2);
-  min-height: 44px;
-  padding: var(--e-2) var(--e-4);
-  border: 1px solid var(--borde-int);
-  border-radius: var(--radio);
-  background: var(--superficie);
-  font-family: var(--fuente-titulo);
-  font-weight: 600;
-  color: var(--texto);
-  cursor: pointer;
-  list-style: none;
+/* PLAYER-07b — la paginación es lo último de la página, y el botón flotante
+   del asistente (56 px, a 24 px del borde) tapaba su flecha «Página
+   siguiente». El kit deja ese hueco en `main` (UXC-9, componentes.css); esta
+   vista se monta en un `div`, así que se le deja aquí. */
+body:has(.chatbot-flotante) #raiz-subastas {
+  padding-bottom: calc(var(--e-6) + 56px + var(--e-4));
 }
 
-/* Safari dibuja su propio triangulo por fuera de `list-style`. */
-.subastas-filtros__resumen::-webkit-details-marker {
+/* =======================================================================
+   PLAYER-07b (punto 26) — el panel de filtros, aparte de los resultados
+   -----------------------------------------------------------------------
+   «La barra de búsqueda izquierda toca scrolear toda la página para buscar
+   los filtros; debería ser un contenedor por aparte».
+
+   - Escritorio: una columna `sticky` que se queda a la vista mientras se
+     recorren los resultados. Si sus grupos no caben en la pantalla, se
+     desplaza ELLA (el cuerpo del panel), con la cabecera y «Limpiar filtros»
+     siempre a la vista. Si caben, no hay barra: no se crea un segundo
+     desplazamiento que no hace falta.
+   - Teléfono: el panel no ocupa sitio en la página. El botón «Filtros» lo
+     abre como cajón lateral (diálogo modal, ver `subastas.js`).
+
+   Sustituye al `<details>` de UX-R4.8, que resolvía el teléfono pero dejaba
+   el escritorio igual: veinticinco controles en la columna, que se iban hacia
+   arriba con la página.
+   ======================================================================= */
+
+.mercado__filtros {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  background: var(--superficie);
+  box-shadow: var(--sombra-1);
+}
+
+.mercado__filtros-cabecera {
+  display: flex;
+  align-items: center;
+  gap: var(--e-2);
+  padding: var(--e-3) var(--e-4);
+  border-bottom: 1px solid var(--borde-tenue);
+  /* La energía del Nexo, como el filo de las tarjetas del kit. */
+  background:
+    var(--energia) top left / 100% 3px no-repeat,
+    var(--superficie);
+}
+
+.mercado__filtros-icono {
+  color: var(--primaria);
+}
+
+.mercado__filtros-rotulo {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--e-2);
+  min-width: 0;
+}
+
+.mercado__filtros-titulo {
+  margin: 0;
+  font-family: var(--t-subtitulo-familia);
+  font-size: var(--t-subtitulo-tam);
+  font-weight: 700;
+  line-height: var(--t-subtitulo-alto);
+  color: var(--texto);
+}
+
+.mercado__filtros-activos {
+  margin: 0;
+  font-size: var(--t-meta-tam);
+  font-weight: 600;
+  color: var(--primaria);
+}
+
+.mercado__filtros-cuerpo {
+  min-height: 0;
+}
+
+/* La equis y «Ver resultados» son del cajón: en la columna de escritorio no
+   hay nada que cerrar. */
+.mercado__cerrar-filtros,
+.mercado__filtros-pie {
   display: none;
 }
 
-/* El indicador es del kit y gira al abrir, para que se vea que hay mas. */
-.subastas-filtros__resumen::after {
-  content: '';
-  width: 10px;
-  height: 10px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg) translate(-2px, -2px);
-  transition: transform var(--transicion, 150ms ease);
-}
-
-.subastas-filtros__plegable[open] > .subastas-filtros__resumen::after {
-  transform: rotate(225deg) translate(-2px, -2px);
-}
-
-.subastas-filtros__resumen:focus-visible {
-  outline: var(--foco-grosor) solid var(--interaccion-foco-anillo);
-  outline-offset: 2px;
-}
-
-/* El panel abierto se separa de su resumen. */
-.subastas-filtros__plegable[open] > .subastas-filtros {
-  margin-top: var(--e-3);
-}
-
 @media (min-width: 900px) {
-  .subastas-filtros__resumen {
+  .mercado__filtros {
+    position: sticky;
+    top: var(--e-4);
+    max-height: calc(100vh - var(--e-4) * 2);
+  }
+
+  .mercado__filtros-cuerpo {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    scrollbar-width: thin;
+  }
+
+  /* El botón «Filtros» y el velo son del cajón del teléfono. */
+  .mercado__abrir-filtros,
+  .mercado__velo {
+    display: none;
+  }
+}
+
+@media (max-width: 899px) {
+  /* Cerrado no ocupa sitio, ni lo recorre el tabulador. */
+  .mercado__filtros:not([data-cajon='abierto']) {
     display: none;
   }
 
-  .subastas-filtros__plegable[open] > .subastas-filtros {
-    margin-top: 0;
+  .mercado__filtros[data-cajon='abierto'] {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: calc(var(--capa-modal) + 1);
+    width: min(380px, calc(100vw - var(--e-8)));
+    border-width: 0 1px 0 0;
+    border-radius: 0 var(--radio) var(--radio) 0;
+    box-shadow: var(--sombra-4);
+  }
+
+  .mercado__filtros-cuerpo {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    /* Dentro del cajón, llegar al final de los filtros no mueve la página de
+       atrás (que además está bloqueada mientras el cajón está abierto). */
+    overscroll-behavior: contain;
+  }
+
+  .mercado__cerrar-filtros {
+    display: inline-flex;
+  }
+
+  .mercado__filtros-pie {
+    display: block;
+    padding: var(--e-3) var(--e-4);
+    border-top: 1px solid var(--borde-tenue);
+  }
+
+  .mercado__ver-resultados {
+    width: 100%;
+  }
+
+  .mercado__velo {
+    position: fixed;
+    inset: 0;
+    z-index: var(--capa-modal);
+    background: var(--interaccion-velo-modal);
   }
 }
 
-/* --- El panel en si --------------------------------------------------- */
+/* --- El formulario de filtros ----------------------------------------- */
 
 .subastas-filtros {
   display: flex;
   flex-direction: column;
-  gap: var(--e-4);
-  padding: var(--e-4);
-  border: 1px solid var(--borde);
-  border-radius: var(--radio);
-  background: var(--superficie);
+  padding: var(--e-2) var(--e-4) var(--e-4);
 }
 
+/* PLAYER-07b — cada grupo con su título a la vista y separado del anterior.
+   La leyenda flota (deja de ser la «leyenda pintada» del fieldset, que se
+   monta encima del borde) para que el separador vaya por encima del título y
+   no a través de él. */
 .subastas-filtros__grupo {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: var(--e-3) 0;
   border: none;
+  border-top: 1px solid var(--borde-tenue);
+}
+
+.subastas-filtros__grupo:first-child {
+  border-top: none;
+}
+
+/* Las opciones cortas en dos columnas: el panel mide la mitad de alto. */
+.subastas-filtros__grupo:has(input[name='tipoProducto']),
+.subastas-filtros__grupo:has(input[name='rareza']),
+.subastas-filtros__grupo:has(input[name='metodoPago']) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--e-2);
 }
 
 .subastas-filtros__leyenda {
-  padding: 0 0 var(--e-2);
+  float: left;
+  grid-column: 1 / -1;
+  width: 100%;
+  padding: 0 0 var(--e-1);
   font-family: var(--fuente-titulo);
-  font-size: var(--t-meta-tam);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--texto-2);
+  font-size: var(--t-cuerpo-tam);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--texto);
 }
 
 /* UX-R2.9 — la etiqueta ES el objetivo tactil: `<label>` reenvia el clic al
@@ -123,14 +235,20 @@
   display: flex;
   align-items: center;
   gap: var(--e-2);
+  min-width: 0;
   min-height: var(--objetivo-tactil);
   padding: var(--e-1) 0;
   font-size: var(--t-cuerpo-tam);
+  line-height: var(--t-etiqueta-alto);
   color: var(--texto);
   cursor: pointer;
 }
 
 .subastas-filtros__opcion input {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin: 0;
   accent-color: var(--primaria-relleno);
 }
 
@@ -154,6 +272,7 @@
 
 .subastas-filtros__etiqueta-precio {
   font-size: var(--t-meta-tam);
+  font-weight: 600;
   color: var(--texto-2);
 }
 
@@ -175,17 +294,39 @@
   box-shadow: var(--anillo-foco);
 }
 
+/* PLAYER-07b — «Limpiar filtros» se queda abajo, a la vista, mientras el
+   cuerpo del panel se desplaza: con veinticinco opciones estaba al final de
+   todo. El halo del color de la superficie tapa lo que pasa por debajo, y un
+   degradado encima dice que la lista sigue (el margen de arriba es el sitio
+   del degradado: si todo cabe, cae sobre el hueco y no tapa nada). */
 .subastas-filtros__limpiar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  width: 100%;
   min-height: var(--boton-mediano);
+  margin-top: var(--e-8);
   padding: 0 var(--e-3);
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
   background: var(--superficie);
+  box-shadow: 0 0 0 var(--e-2) var(--superficie);
   color: var(--texto);
   font-family: var(--t-etiqueta-familia);
   font-size: var(--t-etiqueta-tam);
   font-weight: var(--t-etiqueta-peso);
   cursor: pointer;
+}
+
+.subastas-filtros__limpiar::before {
+  content: '';
+  position: absolute;
+  right: calc(var(--e-2) * -1);
+  bottom: calc(100% + var(--e-2));
+  left: calc(var(--e-2) * -1);
+  height: var(--e-6);
+  background: linear-gradient(transparent, var(--superficie));
+  pointer-events: none;
 }
 
 .subastas-filtros__limpiar:hover {
@@ -195,7 +336,9 @@
 
 .subastas-filtros__limpiar:focus-visible {
   outline: none;
-  box-shadow: var(--anillo-foco);
+  box-shadow:
+    0 0 0 var(--e-2) var(--superficie),
+    var(--anillo-foco);
 }
 
 /* =======================================================================
@@ -204,8 +347,8 @@
    contextual» en base.css). Son variables de contexto que apuntan a tokens,
    no una copia de la paleta: componen con el alto contraste.
    ======================================================================= */
-.subastas-filtros,
-.subastas-filtros__resumen {
+.mercado__filtros,
+.subastas-filtros {
   --tinta: var(--texto);
   --tinta-2: var(--texto-2);
   --tinta-3: var(--texto-3);

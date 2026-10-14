@@ -8,6 +8,18 @@ public class AsignarRolRequest {
     @NotNull
     private Role nuevoRol;
 
+    /** 7.3.5 — la justificacion que queda en la auditoria (rbac.yaml 2.0.0; opcional para no romper a nadie). */
+    @jakarta.validation.constraints.Size(max = 500)
+    private String motivo;
+
+    public String getMotivo() {
+        return motivo;
+    }
+
+    public void setMotivo(String motivo) {
+        this.motivo = motivo;
+    }
+
     public Role getNuevoRol() {
         return nuevoRol;
     }

@@ -15,7 +15,7 @@
     <main class="pagina consola pila" data-vista="crear-cuenta-admin">
       <header class="encabezado-pagina">
         <div>
-          <p class="t-etiqueta">Administracion</p>
+          <p class="t-etiqueta">Administración</p>
           <h1>Crear cuenta administrativa</h1>
           <p class="t-meta">
             Cuentas con rol de Moderador o Administrador. Solo un Super Administrador puede
@@ -44,15 +44,18 @@
           <div>
             <h2 class="tarjeta__titulo">Nueva cuenta administrativa</h2>
             <p class="t-meta">
-              La cuenta nace inactiva: la activación y el segundo factor los resuelve el flujo de
-              seguridad del sistema.
+              Nadie elige la contraseña por la persona: le llega un correo para activar su cuenta y
+              crearla ella misma. En su primer inicio de sesión configura la verificación en dos
+              pasos, obligatoria para los roles administrativos.
             </p>
           </div>
         </div>
 
-        <!-- G1 — la contraseña nunca en la dirección: `method="post"` y el botón
+        <!-- G1 — nada del formulario en la dirección: `method="post"` y el botón
              desactivado hasta que crear-cuenta-admin.js escucha `submit`
-             (comun/ui/formulario-seguro.js). -->
+             (comun/ui/formulario-seguro.js). 7.3.9: sin campo de contraseña;
+             ms-identidad nunca la usó (la cuenta nace INACTIVO y se activa con
+             el código del correo). -->
         <form id="form-crear-cuenta" class="pila" method="post">
           <div class="rejilla-formulario">
             <div class="campo">
@@ -92,7 +95,7 @@
             </div>
 
             <div class="campo">
-              <label class="campo__etiqueta" for="email">Correo electronico</label>
+              <label class="campo__etiqueta" for="email">Correo electrónico</label>
               <input
                 class="campo__control"
                 id="email"
@@ -101,20 +104,6 @@
                 autocomplete="email"
                 required
               />
-            </div>
-
-            <div class="campo">
-              <label class="campo__etiqueta" for="password">Contraseña</label>
-              <input
-                class="campo__control"
-                id="password"
-                name="password"
-                type="password"
-                minlength="9"
-                autocomplete="new-password"
-                required
-              />
-              <p class="campo__pista">Al menos 9 caracteres.</p>
             </div>
 
             <div class="campo">
@@ -139,8 +128,8 @@
             </div>
           </div>
 
-          <section class="pila pila--ajustada">
-            <h3 class="t-etiqueta">Permisos asociados</h3>
+          <section class="pila pila--ajustada" aria-labelledby="titulo-permisos">
+            <h3 class="t-etiqueta" id="titulo-permisos">Lo que podrá hacer con este rol</h3>
             <div id="permisos" class="fila fila--envuelta"></div>
           </section>
 
@@ -182,8 +171,9 @@
         <p id="resultado-texto"></p>
         <div class="aviso aviso--info">
           <div class="aviso__cuerpo">
-            La cuenta queda sujeta al proceso de activación, autenticación y segundo factor definido
-            por el sistema.
+            Hasta que la persona active su cuenta aparece como Inactiva en el directorio. Si el
+            correo no le llega, desde su ficha puedes enviarle de nuevo el restablecimiento de
+            contraseña.
           </div>
         </div>
         <div class="acciones">

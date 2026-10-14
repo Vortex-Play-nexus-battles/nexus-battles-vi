@@ -1,8 +1,10 @@
 package nexus.inventario.api;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -93,15 +95,15 @@ class SeguridadDelInventarioTest {
     @DisplayName("un jugador es quien dice su token: el propietario es su identificador estable (uid), no el apodo ni la cabecera")
     void elJugadorEsElDelToken() throws Exception {
         UUID uid = UUID.randomUUID();
-        when(consulta.consultar(eq(uid.toString()), anyInt())).thenReturn(paginaVacia());
+        when(consulta.consultar(eq(uid.toString()), anyInt(), isNull())).thenReturn(paginaVacia());
 
         mvc.perform(get(VITRINA)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeJugador("lyra_roja", uid))
                         .header("X-User-Name", "jugador-suplantado"))
                 .andExpect(status().isOk());
 
-        verify(consulta).consultar(uid.toString(), 0);
-        verify(consulta, never()).consultar(eq("lyra_roja"), anyInt());
+        verify(consulta).consultar(uid.toString(), 0, null);
+        verify(consulta, never()).consultar(eq("lyra_roja"), anyInt(), any());
     }
 
     @Test
@@ -215,14 +217,14 @@ class SeguridadDelInventarioTest {
     @Test
     @DisplayName("un servicio con credencial actua por el jugador que declara en X-User-Name (ADR-001)")
     void elServicioDeclaraAlJugador() throws Exception {
-        when(consulta.consultar(eq("anfitriona_e2e"), anyInt())).thenReturn(paginaVacia());
+        when(consulta.consultar(eq("anfitriona_e2e"), anyInt(), isNull())).thenReturn(paginaVacia());
 
         mvc.perform(get(VITRINA)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + EMISOR.tokenDeServicio("salas-partidas"))
                         .header("X-User-Name", "anfitriona_e2e"))
                 .andExpect(status().isOk());
 
-        verify(consulta).consultar("anfitriona_e2e", 0);
+        verify(consulta).consultar("anfitriona_e2e", 0, null);
     }
 
     @Test

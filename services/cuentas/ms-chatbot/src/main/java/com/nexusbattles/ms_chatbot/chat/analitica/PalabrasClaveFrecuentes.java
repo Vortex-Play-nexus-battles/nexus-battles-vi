@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.analitica;
 
 import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.PalabraClave;
+import com.nexusbattles.ms_chatbot.chat.analitica.AnaliticaChatbot.TendenciaDePalabra;
 import com.nexusbattles.ms_chatbot.chat.texto.NormalizadorTexto;
 
 import java.util.Comparator;
@@ -45,6 +46,16 @@ final class PalabrasClaveFrecuentes {
     }
 
     static List<PalabraClave> contar(List<RegistroDeTexto> preguntas, int cuantas) {
+        return contar(preguntas, List.of(), cuantas);
+    }
+
+    // 1.7.0 (7.4.7 «palabras clave y tendencias»): con las preguntas del
+    // periodo anterior de la misma duracion, cada palabra dice si sube, baja,
+    // se queda igual o es nueva. Del periodo anterior solo se cuenta cuantas
+    // preguntas la contenian: no hace falta que la usaran dos conversaciones,
+    // porque ahi no se muestra ninguna palabra, solo una cifra.
+    static List<PalabraClave> contar(List<RegistroDeTexto> preguntas, List<RegistroDeTexto> anteriores,
+                                     int cuantas) {
         Map<String, Integer> preguntasPorPalabra = new HashMap<>();
         Map<String, Set<UUID>> conversacionesPorPalabra = new HashMap<>();
 
@@ -55,10 +66,21 @@ final class PalabrasClaveFrecuentes {
                     .add(pregunta.conversacionId());
             }
         }
+        Map<String, Integer> antes = new HashMap<>();
+        for (RegistroDeTexto pregunta : anteriores) {
+            for (String palabra : palabrasDe(pregunta.contenido())) {
+                antes.merge(palabra, 1, Integer::sum);
+            }
+        }
 
         return preguntasPorPalabra.entrySet().stream()
             .filter(e -> conversacionesPorPalabra.get(e.getKey()).size() >= MINIMO_DE_CONVERSACIONES)
-            .map(e -> new PalabraClave(e.getKey(), e.getValue(), conversacionesPorPalabra.get(e.getKey()).size()))
+            .map(e -> {
+                long ahora = e.getValue();
+                long anterior = antes.getOrDefault(e.getKey(), 0);
+                return new PalabraClave(e.getKey(), ahora, conversacionesPorPalabra.get(e.getKey()).size(), anterior,
+                    TendenciaDePalabra.de(ahora, anterior));
+            })
             .sorted(Comparator.comparingLong(PalabraClave::preguntas).reversed()
                 .thenComparing(PalabraClave::palabra))
             .limit(cuantas)

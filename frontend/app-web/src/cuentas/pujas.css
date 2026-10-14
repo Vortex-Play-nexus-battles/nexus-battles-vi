@@ -300,7 +300,9 @@ body {
 .tiempo-urgente {
   color: var(--error) !important;
   font-weight: 700;
-  animation: pulso-urgente 1s infinite alternate;
+  /* MOTION-3: tres pulsos al volverse urgente, no para siempre; el rojo y
+     el peso siguen diciendo la urgencia. */
+  animation: pulso-urgente 1s 3 alternate;
 }
 
 @keyframes pulso-urgente {
@@ -1370,7 +1372,8 @@ body {
    segundos de cerrar, y el laboratorio fotografia el estado degradado, donde
    no hay ninguna subasta. */
 .animacion-latido {
-  animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  /* MOTION-3: tres latidos, no infinitos. */
+  animation: latido 1s cubic-bezier(0.4, 0, 0.2, 1) 3;
 }
 
 /* El boton urgente se distingue por su halo, no por perder el color del
@@ -1571,12 +1574,18 @@ body {
 
 /* =======================================================================
    Aviso Cruzado en Vivo (Toast en esquina inferior derecha)
+   -----------------------------------------------------------------------
+   #506 — es un aviso de esta vista: va en `--capa-aviso-de-vista`, bajo el
+   asistente y bajo los modales (con 1100 tapaba entero el botón del
+   asistente y quedaba incluso sobre el modal de compra de esta misma vista).
+   Y se apoya encima del botón, como la ventana del asistente, en vez de
+   debajo: sus acciones caían justo donde está el botón.
    ======================================================================= */
 .toast-cruzado-flotante {
   position: fixed;
-  bottom: 24px;
+  bottom: calc(var(--e-6) + 56px + var(--e-3));
   right: 24px;
-  z-index: 1100;
+  z-index: var(--capa-aviso-de-vista);
   width: 380px;
   max-width: calc(100vw - 32px);
   background: var(--superficie);

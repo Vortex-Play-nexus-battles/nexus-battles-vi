@@ -72,6 +72,31 @@ export function consultaDeTickets({ estado = null, pagina = 0, tamano = 20 } = {
 }
 
 /**
+ * Parámetros de las preguntas sin respuesta (ms-chatbot.yaml 1.7.0): el
+ * período (sin fechas, el servicio usa los últimos 30 días), el estado y la
+ * página.
+ *
+ * @param {{desde?: string|null, hasta?: string|null, estado?: string|null,
+ *          pagina?: number, tamano?: number}} filtro
+ * @returns {string} con `?` delante
+ */
+export function consultaDeBrechas({
+  desde = null,
+  hasta = null,
+  estado = null,
+  pagina = 0,
+  tamano = 16,
+} = {}) {
+  const parametros = new URLSearchParams(consultaDePeriodo({ desde, hasta }).slice(1));
+  if (estado) {
+    parametros.set('estado', estado);
+  }
+  parametros.set('pagina', String(pagina));
+  parametros.set('tamano', String(tamano));
+  return `?${parametros.toString()}`;
+}
+
+/**
  * @param {{fetch?: typeof fetch, almacenLocal?: Storage|null,
  *          sesion?: () => {token: string|null}}} [opciones]
  */
@@ -165,6 +190,11 @@ export function crearClientePanelChatbot({
       json('PUT', `${BASE_CONOCIMIENTO}/casos-evaluacion/${encodeURIComponent(casoId)}`, datos),
     eliminarCaso: (casoId) =>
       json('DELETE', `${BASE_CONOCIMIENTO}/casos-evaluacion/${encodeURIComponent(casoId)}`),
+
+    // --- Preguntas sin respuesta (ms-chatbot.yaml 1.7.0, 7.4.5)
+    listarBrechas: (filtro = {}) => json('GET', `${PANEL}/brechas${consultaDeBrechas(filtro)}`),
+    cambiarEstadoDeBrecha: (brechaId, estado) =>
+      json('PATCH', `${PANEL}/brechas/${encodeURIComponent(brechaId)}`, { estado }),
 
     // --- Soporte: solicitudes de los jugadores (ms-chatbot.yaml 1.3.0)
     listarTickets: ({ estado = null, pagina = 0, tamano = 20 } = {}) =>

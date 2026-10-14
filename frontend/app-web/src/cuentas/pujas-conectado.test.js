@@ -645,6 +645,30 @@ describe('canal en vivo (HU-SUB-011 publica, esta pantalla escucha)', () => {
     ctrl.destruir();
   });
 
+  test('MOTION-3 · tras releer, el importe de la subasta que cambió se acusa una vez', async () => {
+    const caja = document.createElement('div');
+    document.body.append(caja);
+    const falso = canalFalso();
+    const { api } = apiQueCuenta([SUBASTA]);
+    const ctrl = new ControladorSubastas({
+      contenedor: caja,
+      api,
+      urlCanal: 'ws://x/ws-subastas',
+      conectarCanal: async () => falso.cliente,
+    });
+    await ctrl.iniciar();
+    expect(ctrl.alLlegarActualizacion({ id: 's1', oferta: 150 })).toBe(true);
+    await new Promise((resolver) => setTimeout(resolver, 0));
+    const reloj = caja.querySelector('[data-tiempo-subasta="s1"]');
+    const importe = reloj?.closest('.tarjeta-finanzas')?.querySelector('.monto-destacado');
+    expect(importe).not.toBeNull();
+    expect(importe.classList.contains('acuse--puja')).toBe(true);
+    // Un id que no está en pantalla no acusa nada ni rompe.
+    expect(ctrl.resaltarPrecioDe('no-existe')).toBeNull();
+    ctrl.destruir();
+    caja.remove();
+  });
+
   test('un cambio en una subasta que no tengo no relee nada', async () => {
     const caja = document.createElement('div');
     const falso = canalFalso();

@@ -11,6 +11,11 @@
  * Un tema es: su intención (categoría), las variantes de pregunta con las que
  * un jugador lo pediría, la respuesta, y una prioridad para desempatar.
  *
+ * ms-chatbot.yaml 1.6.0 (7.4.10): la misma respuesta puede atender otras
+ * intenciones además de su categoría («También responde a», hasta 5). Un
+ * título repetido en la candidata, un archivo demasiado grande o un cambio
+ * hecho a la vez por otro administrador llegan con su `motivo` y se explican.
+ *
  * @module cuentas/panel-chatbot-base
  */
 
@@ -27,7 +32,7 @@ import {
 } from '../comun/ui/estado-vista.js';
 import { fechaHora, numero } from '../comun/ui/formato.js';
 import { encabezadoDeSeccion } from '../comun/ui/pagina.js';
-import { textoDeErrorDelPanel } from './panel-chatbot-analiticas.js';
+import { fraseDeErrorDelPanel, textoDeErrorDelPanel } from './panel-chatbot-errores.js';
 
 /** Categorías del contrato (`Categoria`), con su nombre para leer. */
 export const CATEGORIAS = Object.freeze({
@@ -56,6 +61,63 @@ export const ESTADOS_DE_VERSION = Object.freeze({
   RETIRADA: { texto: 'Retirada', variante: 'no-disponible' },
 });
 
+/** Cuántas intenciones puede atender un tema además de su categoría (1.6.0). */
+export const MAXIMO_DE_INTENCIONES_ADICIONALES = 5;
+
+/** 409 `CAMBIO_CONCURRENTE` (1.6.0): otro administrador cambió las versiones a la vez. */
+export const TEXTO_CAMBIO_CONCURRENTE =
+  'Otro administrador cambió la base de conocimiento al mismo tiempo. Se muestra el estado actual: revísalo y vuelve a intentarlo.';
+
+/**
+ * @param {unknown} error
+ * @returns {boolean} si el servicio respondió 409 `CAMBIO_CONCURRENTE`
+ */
+export function esCambioConcurrente(error) {
+  return error?.problema?.motivo === 'CAMBIO_CONCURRENTE';
+}
+
+/**
+ * Texto de un fallo de esta pestaña: por el `motivo` (ms-chatbot.yaml
+ * 1.6.0), luego por el estado. 1.7.0: lo que no es propio de la base dice
+ * qué falló (`queFallo`), no «No se pudieron cargar las analíticas»; y un 409
+ * sin motivo puede traer su propia explicación (`siConflicto`), como «ya hay
+ * una candidata» al crearla.
+ *
+ * @param {{estado?: number, detalle?: string|null,
+ *          problema?: {motivo?: string}|null}} error
+ * @param {{siRechazado?: string, queFallo?: string, siConflicto?: string|null}|string} [opciones]
+ *   `siRechazado`: texto de un 400 que no trae detalle (antes de 1.7.0 era el
+ *   segundo argumento, y una cadena se sigue leyendo así)
+ * @returns {string}
+ */
+export function textoDeErrorDeLaBase(error, opciones = {}) {
+  const {
+    siRechazado = 'El servicio rechazó los datos.',
+    queFallo = 'No se pudo completar la acción',
+    siConflicto = null,
+  } = typeof opciones === 'string' ? { siRechazado: opciones } : opciones;
+  const motivo = error?.problema?.motivo;
+  if (motivo === 'TEMA_DUPLICADO') {
+    return error.detalle ?? 'Ya hay un tema con ese título en la candidata.';
+  }
+  if (motivo === 'CAMBIO_CONCURRENTE') {
+    return TEXTO_CAMBIO_CONCURRENTE;
+  }
+  if (motivo === 'IMPORTACION_DEMASIADO_GRANDE' || error?.estado === 413) {
+    // El 413 del borde (más de 10 MB) llega sin cuerpo del servicio.
+    return (
+      error.detalle ?? 'El archivo es demasiado grande: se importan como máximo 500 temas y 8 MB.'
+    );
+  }
+  if (error?.estado === 400) {
+    return error.detalle ?? siRechazado;
+  }
+  if (error?.estado === 409 && siConflicto) {
+    return siConflicto;
+  }
+  return fraseDeErrorDelPanel(error, queFallo);
+}
+
 /**
  * Variantes escritas una por línea → lista limpia.
  *
@@ -77,7 +139,12 @@ export function variantesDesdeTexto(texto) {
  * partiría en dos sin que el administrador lo note (el servicio también la
  * rechaza, pero es mejor decirlo antes de enviar).
  *
- * @param {{titulo: string, variantesEs: string[], variantesEn: string[],
+ * Desde 1.6.0 también las intenciones adicionales: como mucho
+ * {@link MAXIMO_DE_INTENCIONES_ADICIONALES} y nunca la categoría principal
+ * (el servicio responde 400 en los dos casos).
+ *
+ * @param {{titulo: string, categoria?: string, intencionesAdicionales?: string[],
+ *          variantesEs: string[], variantesEn: string[],
  *          respuestaEs: string, prioridad: number}} datos
  * @returns {Record<string, string>}
  */
@@ -85,6 +152,13 @@ export function erroresDelTema(datos) {
   const errores = {};
   if (!datos.titulo.trim()) {
     errores.titulo = 'Escribe un título.';
+  }
+  const intenciones = datos.intencionesAdicionales ?? [];
+  if (intenciones.length > MAXIMO_DE_INTENCIONES_ADICIONALES) {
+    errores.intencionesAdicionales = `Marca como máximo ${MAXIMO_DE_INTENCIONES_ADICIONALES} intenciones además de la principal.`;
+  } else if (intenciones.includes(datos.categoria)) {
+    errores.intencionesAdicionales =
+      'La intención principal ya la atiende: no la marques también aquí.';
   }
   if (datos.variantesEs.length === 0) {
     errores.variantesEs = 'Escribe al menos una variante en español.';
@@ -148,6 +222,88 @@ function selector({ nombre, etiqueta, opciones, valor }) {
     valor,
     opciones: Object.entries(opciones).map(([clave, texto]) => ({ valor: clave, texto })),
   });
+}
+
+let gruposDeIntenciones = 0;
+
+/**
+ * Casillas «También responde a» (ms-chatbot.yaml 1.6.0): otras intenciones
+ * que atiende la misma respuesta, con los nombres de {@link CATEGORIAS}. La
+ * de la categoría principal se desactiva, y se desmarca, mientras lo sea.
+ *
+ * @param {{principal: string, marcadas?: string[]}} opciones
+ * @returns {{elemento: HTMLElement, leer: () => string[],
+ *           cambiarPrincipal: (categoria: string) => void,
+ *           marcarError: (motivo: string|null) => void}}
+ */
+export function casillasDeIntenciones({ principal, marcadas = [] }) {
+  gruposDeIntenciones += 1;
+  const idPista = `intenciones-${gruposDeIntenciones}-pista`;
+  const idError = `intenciones-${gruposDeIntenciones}-error`;
+
+  const casillas = Object.entries(CATEGORIAS).map(([valor, texto]) => {
+    const entrada = h('input', {
+      clase: 'casilla__entrada',
+      atributos: { type: 'checkbox', name: 'intencionesAdicionales', value: valor },
+    });
+    entrada.checked = marcadas.includes(valor);
+    const etiqueta = h('label', {
+      clase: 'casilla',
+      hijos: [entrada, h('span', { clase: 'casilla__etiqueta', texto })],
+    });
+    return { valor, entrada, etiqueta };
+  });
+  const pista = h('p', {
+    clase: 'campo__pista',
+    texto: `Otras intenciones que atiende la misma respuesta, hasta ${MAXIMO_DE_INTENCIONES_ADICIONALES}. La principal es la de arriba.`,
+    atributos: { id: idPista },
+  });
+  const error = h('p', { clase: 'campo__error', atributos: { id: idError, hidden: true } });
+  const elemento = h('fieldset', {
+    clase: 'campo panel-chatbot__intenciones',
+    datos: { campo: 'intencionesAdicionales' },
+    atributos: { 'aria-describedby': idPista },
+    hijos: [
+      h('legend', { clase: 'campo__etiqueta', texto: 'También responde a' }),
+      h('div', { clase: 'panel-chatbot__casillas', hijos: casillas.map((c) => c.etiqueta) }),
+      pista,
+      error,
+    ],
+  });
+
+  function cambiarPrincipal(categoria) {
+    for (const casilla of casillas) {
+      const esLaPrincipal = casilla.valor === categoria;
+      casilla.entrada.disabled = esLaPrincipal;
+      if (esLaPrincipal) {
+        casilla.entrada.checked = false;
+      }
+    }
+  }
+  cambiarPrincipal(principal);
+
+  return {
+    elemento,
+    leer: () => casillas.filter((c) => c.entrada.checked).map((c) => c.valor),
+    cambiarPrincipal,
+    marcarError(motivo) {
+      elemento.classList.toggle('campo--invalido', Boolean(motivo));
+      error.textContent = motivo ?? '';
+      error.hidden = !motivo;
+      elemento.setAttribute('aria-describedby', motivo ? `${idPista} ${idError}` : idPista);
+    },
+  };
+}
+
+/**
+ * Nombres legibles de las intenciones adicionales de un tema, en el orden del
+ * contrato.
+ *
+ * @param {string[]|undefined} intenciones
+ * @returns {string[]}
+ */
+export function nombresDeIntenciones(intenciones) {
+  return (intenciones ?? []).map((intencion) => CATEGORIAS[intencion] ?? intencion);
 }
 
 /**
@@ -229,10 +385,22 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
     });
     const aviso = h('p', { clase: 'campo__error', atributos: { role: 'alert', hidden: true } });
 
+    // 1.6.0: «También responde a», justo debajo de la intención principal.
+    const intenciones = casillasDeIntenciones({
+      principal: campos.categoria.control.value,
+      marcadas: tema?.intencionesAdicionales ?? [],
+    });
+    campos.categoria.control.addEventListener('change', () =>
+      intenciones.cambiarPrincipal(campos.categoria.control.value),
+    );
+    const elementos = Object.entries(campos).flatMap(([nombre, control]) =>
+      nombre === 'categoria' ? [control.elemento, intenciones.elemento] : [control.elemento],
+    );
+
     const formulario = h('form', {
       clase: 'pila panel-chatbot__formulario-tema',
       atributos: { novalidate: true },
-      hijos: [...Object.values(campos).map((c) => c.elemento), casilla, aviso],
+      hijos: [...elementos, casilla, aviso],
     });
 
     const cancelar = h('button', {
@@ -260,6 +428,7 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
       return {
         titulo: campos.titulo.control.value.trim(),
         categoria: campos.categoria.control.value,
+        intencionesAdicionales: intenciones.leer(),
         tipoRespuesta: campos.tipoRespuesta.control.value,
         variantesEs: variantesDesdeTexto(campos.variantesEs.control.value),
         variantesEn: variantesDesdeTexto(campos.variantesEn.control.value),
@@ -281,6 +450,7 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
       for (const [nombre, control] of Object.entries(campos)) {
         control.marcarError(errores[nombre] ?? null);
       }
+      intenciones.marcarError(errores.intencionesAdicionales ?? null);
       if (Object.keys(errores).length > 0) {
         mostrarAviso('Revisa los campos marcados.');
         return;
@@ -293,10 +463,13 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
         resolver(true);
       } catch (error) {
         conCarga(aceptar, false);
+        // 400 (con su motivo), 409 TEMA_DUPLICADO (dice con qué tema
+        // choca) o 409 CAMBIO_CONCURRENTE: el diálogo sigue abierto.
         mostrarAviso(
-          error?.estado === 400
-            ? (error.detalle ?? 'El servicio rechazó los datos del tema.')
-            : textoDeErrorDelPanel(error).titulo,
+          textoDeErrorDeLaBase(error, {
+            siRechazado: 'El servicio rechazó los datos del tema.',
+            queFallo: 'No se pudo guardar el tema',
+          }),
         );
       }
     }
@@ -362,7 +535,10 @@ export function montarBaseConocimiento(
     } catch (error) {
       pintarEstado(
         zonaCandidata,
-        estadoDeError({ ...textoDeErrorDelPanel(error), alReintentar: () => cargar() }),
+        estadoDeError({
+          ...textoDeErrorDelPanel(error, 'No se pudo cargar la base de conocimiento'),
+          alReintentar: () => cargar(),
+        }),
       );
     }
   }
@@ -386,7 +562,7 @@ export function montarBaseConocimiento(
         try {
           descargarArchivo(await cliente.exportarVersion(version.id));
         } catch (error) {
-          avisar(textoDeErrorDelPanel(error).titulo);
+          avisar(fraseDeErrorDelPanel(error, `No se pudo exportar la versión ${version.numero}`));
         } finally {
           conCarga(exportar, false);
         }
@@ -451,7 +627,11 @@ export function montarBaseConocimiento(
       try {
         await cliente.crearCandidata(descripcion.control.value.trim());
       } catch (error) {
-        problema = textoDeErrorDelPanel(error).titulo;
+        problema = textoDeErrorDeLaBase(error, {
+          queFallo: 'No se pudo crear la candidata',
+          siConflicto:
+            'No se pudo crear la candidata: ya hay una, o no hay una versión en producción de la cual partir. Se muestra el estado actual.',
+        });
       }
       // Tanto si se creó como si otro administrador se adelantó (409), lo
       // que hay que mostrar es el estado real.
@@ -529,7 +709,11 @@ export function montarBaseConocimiento(
       try {
         await cliente.descartarCandidata();
       } catch (error) {
-        problema = textoDeErrorDelPanel(error).titulo;
+        problema = textoDeErrorDeLaBase(error, {
+          queFallo: 'No se pudo descartar la candidata',
+          siConflicto:
+            'No se pudo descartar la candidata: ya no hay una. Se muestra el estado actual.',
+        });
       }
       await recargarYAvisar(problema);
     });
@@ -589,7 +773,9 @@ export function montarBaseConocimiento(
         try {
           await cliente.eliminarTema(tema.id);
         } catch (error) {
-          problema = textoDeErrorDelPanel(error).titulo;
+          problema = textoDeErrorDeLaBase(error, {
+            queFallo: `No se pudo eliminar «${tema.titulo}»`,
+          });
         }
         await recargarYAvisar(problema);
       });
@@ -603,7 +789,18 @@ export function montarBaseConocimiento(
               h('p', { clase: 't-meta', texto: (tema.variantesEs ?? []).join(' · ') }),
             ],
           }),
-          h('td', { texto: CATEGORIAS[tema.categoria] ?? tema.categoria }),
+          h('td', {
+            hijos: [
+              h('p', { clase: 't-cuerpo', texto: CATEGORIAS[tema.categoria] ?? tema.categoria }),
+              // 1.6.0: las demás intenciones que atiende la misma respuesta.
+              tema.intencionesAdicionales?.length
+                ? h('p', {
+                    clase: 't-meta',
+                    texto: `También: ${nombresDeIntenciones(tema.intencionesAdicionales).join(' · ')}`,
+                  })
+                : null,
+            ],
+          }),
           h('td', { texto: numero(tema.prioridad) }),
           h('td', {
             hijos: [
@@ -657,10 +854,12 @@ export function montarBaseConocimiento(
       const importados = await cliente.importarTemas(datos);
       resultado = `Se importaron ${importados.length} temas.`;
     } catch (error) {
-      resultado =
-        error?.estado === 400
-          ? (error.detalle ?? 'El archivo tiene temas que el servicio no acepta.')
-          : textoDeErrorDelPanel(error).titulo;
+      // 1.6.0: también 409 TEMA_DUPLICADO (dos temas del archivo con el
+      // mismo título) y 413 (más de 500 temas o de 8 MB). No se escribió nada.
+      resultado = textoDeErrorDeLaBase(error, {
+        siRechazado: 'El archivo tiene temas que el servicio no acepta.',
+        queFallo: 'No se pudo importar el archivo',
+      });
     }
     await recargarYAvisar(resultado);
   }

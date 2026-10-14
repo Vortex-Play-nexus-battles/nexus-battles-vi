@@ -27,6 +27,7 @@ import { iconoHtml } from '../comun/ui/icono.js';
 import { esc } from '../comun/ui/escapar.js';
 import { nombreDelTipo } from '../comun/ui/formato.js';
 import { urlDeLogin } from '../comun/sesion.js';
+import { urlDeVista } from '../comun/acceso.js';
 import { acusar } from '../comun/ui/acuse.js';
 import { textoDeError } from '../comun/ui/texto-de-fallo.js';
 import { confirmar } from '../comun/ui/dialogo.js';
@@ -2000,8 +2001,11 @@ export class ControladorSubastas {
     if (!sub) {
       return false;
     }
-    const base = globalThis.location?.href ?? 'http://localhost/';
-    const enlace = new URL(`./pujas.html?id=${encodeURIComponent(sub.id)}`, base).href;
+    // SA-7 — el enlace que se comparte es la dirección pública de la subasta
+    // (`/subastas/pujar?id=…` detrás del borde), no una ruta relativa a la
+    // URL actual: desde `/subastas/pujar` esa ruta apuntaba a una página que
+    // no existe.
+    const enlace = new URL(`?id=${encodeURIComponent(sub.id)}`, urlDeVista('pujas')).href;
     const boton = this.contenedor?.querySelector('#btn-compartir');
     const navegador = globalThis.navigator;
     try {
@@ -2309,6 +2313,10 @@ export class ControladorSubastas {
     // participación después de releer (el mensaje del canal no lo dice).
     const ibaGanando = this.participaciones.get(actualizada.id)?.ganando;
     this.recargar().then(() => {
+      // MOTION-3 — el precio que acaba de cambiar se resalta una vez (el
+      // acuse de UX-R2.10, como una puja propia): entre veinte cifras, el ojo
+      // va a la que se movio. Nada mueve la tabla entera.
+      this.resaltarPrecioDe(actualizada.id);
       if (ibaGanando && !esLaQueMiro) {
         return this.intentar(() => this.api?.miParticipacion(actualizada.id)).then((p) => {
           if (p) {
@@ -2320,6 +2328,28 @@ export class ControladorSubastas {
       return undefined;
     });
     return true;
+  }
+
+  /**
+   * El importe de una subasta recien actualizada, acusado (MOTION-3). En la
+   * lista, la cifra de su tarjeta; en el detalle, el precio actual.
+   *
+   * @param {string} idSubasta
+   * @returns {HTMLElement|null} lo acusado
+   */
+  resaltarPrecioDe(idSubasta) {
+    const raiz = this.contenedor ?? document;
+    const enDetalle =
+      this.vista === 'detalle' && idSubasta === this.subastaActivaId
+        ? raiz.querySelector('.precio-actual')
+        : null;
+    const reloj = raiz.querySelector(`[data-tiempo-subasta="${idSubasta}"]`);
+    const enLista = reloj?.closest('.tarjeta-finanzas')?.querySelector('.monto-destacado') ?? null;
+    const objetivo = enDetalle ?? enLista;
+    if (objetivo instanceof HTMLElement) {
+      acusar(objetivo, { tipo: 'puja' });
+    }
+    return objetivo;
   }
 
   cerrarCanalEnVivo() {
@@ -3386,17 +3416,21 @@ export class ControladorSubastas {
     }
     const cuantas = (lista) =>
       Array.isArray(lista) ? ` <span class="cifra">(${lista.length})</span>` : '';
+    // SA-7 — servida en su dirección limpia, la página lleva un <base> hacia
+    // su carpeta y un «#seccion» suelto se resolvería contra ella (otra
+    // página). El ancla va con la ruta de ESTA página.
+    const aqui = esc(`${globalThis.location?.pathname ?? ''}${globalThis.location?.search ?? ''}`);
     const enlaces = [
-      `<a class="indice-mis-subastas__enlace" href="#seccion-pujas">Donde pujas <span class="cifra">(${pujando})</span></a>`,
+      `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-pujas">Donde pujas <span class="cifra">(${pujando})</span></a>`,
       this.pendientes.length
-        ? `<a class="indice-mis-subastas__enlace" href="#seccion-pendientes">Pendientes de recoger <span class="cifra">(${this.pendientes.length})</span></a>`
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-pendientes">Pendientes de recoger <span class="cifra">(${this.pendientes.length})</span></a>`
         : '',
-      `<a class="indice-mis-subastas__enlace" href="#seccion-publicaciones">Tus publicaciones${cuantas(this.panel.publicadas)}</a>`,
+      `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-publicaciones">Tus publicaciones${cuantas(this.panel.publicadas)}</a>`,
       this.panelDisponible('misSeguidas')
-        ? `<a class="indice-mis-subastas__enlace" href="#seccion-seguidas">Siguiendo${cuantas(this.panel.seguidas)}</a>`
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-seguidas">Siguiendo${cuantas(this.panel.seguidas)}</a>`
         : '',
       this.panelDisponible('miHistorial')
-        ? '<a class="indice-mis-subastas__enlace" href="#seccion-historial">Historial</a>'
+        ? `<a class="indice-mis-subastas__enlace" href="${aqui}#seccion-historial">Historial</a>`
         : '',
     ];
     return `

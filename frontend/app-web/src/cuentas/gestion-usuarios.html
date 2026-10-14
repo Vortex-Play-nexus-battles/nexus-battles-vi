@@ -17,12 +17,19 @@
         <div>
           <p class="t-etiqueta">Administración</p>
           <h1>Gestión de usuarios</h1>
-          <p class="t-meta">
-            Perfil, rol, estado de la cuenta y restablecimiento de contraseña. Cada acción exige el
-            permiso correspondiente; las que no tienes no aparecen habilitadas.
-          </p>
+          <p class="t-meta">Busca una cuenta y gestiona su perfil, su rol y su estado.</p>
         </div>
         <div class="encabezado-pagina__acciones">
+          <!-- SA-3 — §7.3.2: solo el Super Administrador crea cuentas de
+               Moderador y Administrador; la matriz del servidor decide si
+               se ve (`CREAR_ADMIN_MODERADOR`). -->
+          <a
+            class="boton boton--primario"
+            href="./crear-cuenta-admin.html"
+            data-has-permission="CREAR_ADMIN_MODERADOR"
+            data-accion="crear-cuenta-admin"
+            >Crear cuenta administrativa</a
+          >
           <button type="button" id="btn-volver" class="boton boton--secundario">Volver</button>
         </div>
       </header>
@@ -63,23 +70,24 @@
             <div>
               <h2 class="tarjeta__titulo">Buscar usuario</h2>
               <p class="t-meta">
-                Pulsa «Gestionar» en el directorio de Control integral o escribe el identificador de
-                la cuenta.
+                Escribe el apodo, el correo, el nombre o el ID de la cuenta y elige la cuenta entre
+                los resultados.
               </p>
             </div>
           </div>
 
-          <form id="form-buscar-usuario" class="fila fila--fin" novalidate>
+          <form id="form-buscar-usuario" class="fila fila--fin" role="search" novalidate>
             <div class="campo">
-              <label class="campo__etiqueta" for="usuario-id">ID del usuario</label>
+              <label class="campo__etiqueta" for="usuario-id">Buscar cuenta</label>
               <input
                 class="campo__control"
-                type="number"
+                type="search"
                 id="usuario-id"
-                name="usuario-id"
-                min="1"
+                name="buscar"
                 required
-                placeholder="Ej. 15"
+                autocomplete="off"
+                enterkeyhint="search"
+                placeholder="Apodo, correo, nombre o ID"
               />
             </div>
             <button type="submit" id="btn-buscar" class="boton boton--primario">Buscar</button>
@@ -92,11 +100,23 @@
             role="alert"
             aria-live="assertive"
           ></div>
+
+          <div id="resultados-busqueda" class="pila pila--compacta" hidden aria-live="polite"></div>
         </section>
 
         <div id="panel-usuario" class="pila" hidden>
           <section class="tarjeta pila pila--compacta">
-            <h2 class="tarjeta__titulo">Usuario seleccionado</h2>
+            <div class="encabezado-seccion">
+              <h2 class="tarjeta__titulo">Usuario seleccionado</h2>
+              <a
+                id="enlace-ficha-usuario"
+                class="boton boton--secundario boton--pequeno"
+                href="../plataforma/moderacion-sanciones/ficha-usuario.html"
+                data-accion="ver-ficha"
+                hidden
+                >Ver la ficha completa</a
+              >
+            </div>
             <dl class="tarjeta__datos">
               <div>
                 <dt>ID</dt>
@@ -125,7 +145,7 @@
             <div class="encabezado-seccion">
               <div>
                 <h2 class="tarjeta__titulo">Rol del usuario</h2>
-                <p class="t-meta">Asigna uno de los roles válidos del sistema.</p>
+                <p class="t-meta">Al cambiarlo, sus sesiones abiertas se cierran.</p>
               </div>
             </div>
 
@@ -158,7 +178,7 @@
             <div class="encabezado-seccion">
               <div>
                 <h2 class="tarjeta__titulo">Perfil</h2>
-                <p class="t-meta">Modifica la información básica del usuario.</p>
+                <p class="t-meta">Nombre, apellidos, apodo y preferencias de la cuenta.</p>
               </div>
             </div>
 
@@ -275,8 +295,8 @@
                   aria-describedby="pista-motivo-sancion"
                 ></textarea>
                 <p class="campo__pista" id="pista-motivo-sancion">
-                  Opcional. Queda en el registro de la sanción; si lo dejas vacío, se anota que vino
-                  de este panel.
+                  Obligatorio para suspender o banear. Queda en el historial de la sanción y en el
+                  aviso que recibe la cuenta; si no lo escribes aquí, se pide al confirmar.
                 </p>
               </div>
             </div>
@@ -314,8 +334,9 @@
               <div>
                 <h2 class="tarjeta__titulo">Seguridad</h2>
                 <p class="t-meta">
-                  El restablecimiento se envía al correo del usuario. Ni tú ni el sistema ven la
-                  contraseña nueva.
+                  El restablecimiento de la contraseña se envía al correo de la cuenta: ni tú ni el
+                  sistema ven la contraseña nueva. La verificación en dos pasos solo la restablece
+                  un Super Administrador, con motivo.
                 </p>
               </div>
             </div>
@@ -329,28 +350,14 @@
               >
                 Restablecer contraseña
               </button>
-            </div>
-          </section>
-
-          <!-- UXC-9 — §7.3.4 pide una ficha con actividad, transacciones,
-               comentarios, reportes e inventario. La administración de
-               cuentas (`UsuarioAdministrado`) no los publica: se dice, y se
-               dice dónde está lo que sí existe. -->
-          <section class="tarjeta pila pila--compacta" data-zona="ficha-pendiente">
-            <div class="encabezado-seccion">
-              <div>
-                <h2 class="tarjeta__titulo">Lo que esta ficha aún no muestra</h2>
-                <p class="t-meta">
-                  Actividad, transacciones, comentarios, reportes e inventario de la cuenta: la
-                  administración de cuentas todavía no los publica. La última entrada de cada cuenta
-                  está en el directorio de Control integral, y desde allí se abren sus sanciones.
-                </p>
-              </div>
-            </div>
-            <div class="tarjeta__acciones">
-              <a class="boton boton--secundario" href="../plataforma/consola/control-integral.html">
-                Ir a Control integral
-              </a>
+              <button
+                type="button"
+                id="btn-restablecer-segundo-factor"
+                class="boton boton--secundario"
+                data-has-permission="RESTABLECER_SEGUNDO_FACTOR"
+              >
+                Restablecer verificación en dos pasos
+              </button>
             </div>
           </section>
         </div>

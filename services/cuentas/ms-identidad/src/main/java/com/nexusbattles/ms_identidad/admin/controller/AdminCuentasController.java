@@ -1,7 +1,9 @@
 package com.nexusbattles.ms_identidad.admin.controller;
 
 import com.nexusbattles.ms_identidad.admin.dto.CrearCuentaAdminRequest;
+import com.nexusbattles.ms_identidad.admin.dto.CuentaAdministrativaCreadaResponse;
 import com.nexusbattles.ms_identidad.admin.service.AdminCuentaService;
+import com.nexusbattles.ms_identidad.auth.codigos.Problemas;
 import com.nexusbattles.ms_identidad.auth.model.Usuario;
 import com.nexusbattles.ms_identidad.rbac.model.Action;
 import com.nexusbattles.ms_identidad.rbac.security.RequirePermission;
@@ -29,9 +31,11 @@ public class AdminCuentasController {
             String administradorId = (String) request.getAttribute("usuarioActual");
             String ipOrigen = obtenerIpReal(request);
             Usuario usuarioCreado = adminCuentaService.crearCuentaAdministrativa(datos, administradorId, ipOrigen);
-            return ResponseEntity.status(HttpStatus.CREATED).body(usuarioCreado);
+            return ResponseEntity.status(HttpStatus.CREATED).body(CuentaAdministrativaCreadaResponse.de(usuarioCreado));
         } catch (IllegalArgumentException e) {
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(e.getMessage());
+            // Regla 4: problem details como en el resto de la API (antes, texto plano).
+            return Problemas.de(HttpStatus.BAD_REQUEST, "datos-invalidos", "No se pudo crear la cuenta",
+                e.getMessage(), request.getRequestURI());
         }
     }
 

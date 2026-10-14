@@ -13,6 +13,32 @@ inventario persistido y muestra el resultado en la cuadrícula.
 exige cuatro caracteres, conserva los estados de carga, éxito, vacío y error,
 y permite limpiar el criterio para volver al inventario completo.
 
+## Revisión final del módulo (13-oct) — §7.1 del Documento Oficial
+
+- **Paginación del servidor por pestaña.** Desde `inventario.yaml` 1.7.0 cada
+  vitrina pide solo su página de dieciséis:
+  `GET /api/v1/inventario/elementos?pagina=N&categoria=HEROES|OBJETOS`. Si el
+  servidor ignora la categoría (uno anterior durante un despliegue) se nota en
+  la primera respuesta y la vista vuelve a reunir el inventario y paginarlo aquí
+  (`paginaDeCategoria` en `inventario.js`), aprovechando esa misma respuesta.
+- **Control de §7.1.** Con una sola página se ve la casilla «1»; las flechas solo
+  aparecen si hay páginas ocultas a su lado y, al pulsarlas, llevan a la primera
+  página oculta de ese lado (`construirPaginacion(..., { unaPagina: 'visible',
+flechas: 'revelan-ocultas' })`). «Mis héroes» tiene su propio control.
+- **Búsqueda sobre información relevante.** El servidor busca (≥ 4 letras) en el
+  nombre propio, el tipo y la parte, y en lo que dice el catálogo: nombre,
+  descripción, efectos, habilidades y ficha del prototipo. `?busqueda=texto`
+  abre la vista con la búsqueda hecha.
+- **Detalle.** Un clic en la tarjeta (o en la carta del héroe) abre la ficha; el
+  botón «Ver detalle»/«Ver ficha» es el camino del teclado y recibe el foco al
+  cerrar. La ficha añade «En tu inventario» (cómo lo llamas y su estado), atrapa
+  el foco y lleva su botón de cerrar dentro del diálogo.
+- **Equipamiento coherente.** Lo que lleva otro héroe (`equipadoEn`, 1.7.0) se
+  ofrece apagado y diciendo quién lo lleva, en vez de dejar que el servicio
+  responda 409.
+- Pruebas: `revision-71.aceptacion.spec.js` (Chromium, incluye axe sin hallazgos
+  serios ni críticos), `paginacion-inventario.test.js`, `ficha-producto.dialogo.test.js`.
+
 ## Alcance actual
 
 **Cuadricula de referencia**:
@@ -54,6 +80,20 @@ y permite limpiar el criterio para volver al inventario completo.
 
 El `.feature` vive junto a la prueba a proposito: los criterios de aceptacion
 **son** las pruebas, y tenerlos al lado hace visible cualquier divergencia.
+
+### Evidencia de los criterios de HU-INV-005
+
+| Criterio                                              | Prueba automatica                                                                                                                         | Resultado local (2026-09-30) |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| El heroe lleva como maximo dos armas.                 | `EquipamientoHeroeTest.limiteDeArmas`, `EquipamientoApiTest.rechazarTerceraArma` y el rechazo verificado en `vitrina.aceptacion.spec.js`. | Verde                        |
+| Las seis partes de armadura ocupan ranuras distintas. | `EquipamientoHeroeTest.seisRanurasDeArmadura`, `EquipamientoHeroeTest.ranuraDeArmaduraUnica` y `equipamiento-inventario.test.js`.         | Verde                        |
+| El heroe lleva como maximo dos items.                 | `EquipamientoHeroeTest.limiteDeItems` y la representacion de las diez ranuras en `equipamiento-inventario.test.js`.                       | Verde                        |
+| Desequipar libera la ranura para otro elemento.       | `EquipamientoHeroeTest.desequiparLiberaRanura` y el flujo real de equipar y desequipar en `vitrina.aceptacion.spec.js`.                   | Verde                        |
+
+Las pruebas de navegador siguen el flujo actual: abrir una ranura, elegir el
+objeto en el dialogo y pulsar la ranura ocupada para desequiparlo. Tambien
+comprueban que un rechazo conserva el equipo y se explica sin mostrar el
+codigo HTTP.
 
 ## Medidas verificadas a 1360 x 768
 

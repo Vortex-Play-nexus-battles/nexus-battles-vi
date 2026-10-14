@@ -12,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.PositiveOrZero;
+import nexus.dominio.EstadoProducto;
 import nexus.dominio.ParteArmadura;
 import nexus.dominio.TipoProducto;
 import jakarta.validation.constraints.Pattern;
@@ -84,11 +85,52 @@ public record SolicitudCrearProducto(
 
         // B4 (contrato 1.4.0): opcional, para cualquier tipo de producto.
         @Valid
-        SolicitudPromocion promocion) {
+        SolicitudPromocion promocion,
+
+        // SA-13 (contrato 1.11.0, §7.2.1 «estado de disponibilidad
+        // (activo/único/suspendido)»): opcional; sin el, el producto nace
+        // ACTIVO. Nunca SUSPENDIDO: suspender tiene su propia operacion.
+        EstadoProducto estado) {
 
         /** El constructor canonico es el que usa Jackson, aunque haya otros. */
         @JsonCreator
         public SolicitudCrearProducto {
+        }
+
+        /** La forma anterior a SA-13, sin estado inicial: nace ACTIVO. */
+        public SolicitudCrearProducto(
+                        String nombre,
+                        String imagen,
+                        String descripcion,
+                        TipoProducto tipo,
+                        Integer tiraje,
+                        Integer precioCreditos,
+                        BigDecimal precioMonedaReal,
+                        Boolean premium,
+                        String prototipo,
+                        String heroe,
+                        Integer costoPoder,
+                        BigDecimal multiplicadorNivel,
+                        Integer turnosCarga,
+                        Integer turnosRecarga,
+                        String efectoGeneral,
+                        String efectoPotenciado,
+                        Integer defensa,
+                        ParteArmadura parte,
+                        String efecto,
+                        Integer poderDeAtaque,
+                        BigDecimal tasaDeCaida,
+                        SolicitudPromocion promocion) {
+                this(nombre, imagen, descripcion, tipo, tiraje, precioCreditos, precioMonedaReal,
+                        premium, prototipo, heroe, costoPoder, multiplicadorNivel, turnosCarga,
+                        turnosRecarga, efectoGeneral, efectoPotenciado, defensa, parte, efecto,
+                        poderDeAtaque, tasaDeCaida, promocion, null);
+        }
+
+        /** SA-13: un producto nuevo nace activo o único, nunca suspendido. */
+        @AssertTrue(message = "Un producto nuevo nace activo o único: para suspenderlo, créalo y suspéndelo después")
+        public boolean isEstadoInicialValido() {
+                return estado != EstadoProducto.SUSPENDIDO;
         }
 
         /** La forma anterior a B4, sin promocion (semilla, fusion y pruebas previas). */

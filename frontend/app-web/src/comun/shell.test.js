@@ -251,10 +251,21 @@ describe('armazón de jugador', () => {
       'Tienda',
       'Chat',
       'Mis sanciones',
+      'Centro de ayuda',
       'Cerrar sesión',
     ]);
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
     expect(menu.hidden).toBe(true);
+  });
+
+  // ms-chatbot.yaml 1.8.0 — el centro de ayuda, desde el menú de la cuenta.
+  test('el menú de cuenta lleva al centro de ayuda', () => {
+    conSesion();
+    const { elemento } = montar({ vista: 'home' });
+    const ayuda = [...elemento.querySelectorAll('[role="menuitem"]')].find(
+      (opcion) => opcion.textContent === 'Centro de ayuda',
+    );
+    expect(ayuda.href).toMatch(/cuentas\/ayuda\.html$/);
   });
 
   /*

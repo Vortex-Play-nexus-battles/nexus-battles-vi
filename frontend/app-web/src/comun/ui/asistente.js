@@ -77,14 +77,19 @@ function contenidoDelLanzador() {
 }
 
 /**
- * Crea la ventana real. Se importa bajo demanda; las pruebas inyectan otra.
+ * Crea la ventana real, con el canal en tiempo real del asistente (7.4.9,
+ * `canal-chatbot.js`; se abre cuando la ventana carga la conversación). Se
+ * importa bajo demanda; las pruebas inyectan otra.
  *
  * @returns {Promise<{alternar: (desde?: HTMLElement) => void, abierta: () => boolean,
  *                    elemento: HTMLElement}>}
  */
 async function crearVentanaPorOmision() {
-  const { crearVentanaChatbot } = await import('./ventana-chatbot.js');
-  return crearVentanaChatbot();
+  const [{ crearVentanaChatbot }, { crearCanalChatbot }] = await Promise.all([
+    import('./ventana-chatbot.js'),
+    import('../canal-chatbot.js'),
+  ]);
+  return crearVentanaChatbot({ canal: crearCanalChatbot() });
 }
 
 /**

@@ -1,16 +1,34 @@
 /**
  * Tablero de metricas tecnicas (HU-MET-004) y de usuarios y moderacion
- * (HU-MET-001), sobre contracts/openapi/metricas-plataforma.yaml 1.5.0.
+ * (HU-MET-001 y el panel principal de §7.3.8), sobre
+ * contracts/openapi/metricas-plataforma.yaml 1.11.0.
  *
  * **No calcula nada.** Alertas, brechas y agregados vienen del servicio; esta
- * pantalla los pinta y los deja exportar (CA-02 de las dos historias).
+ * pantalla los pinta y los deja exportar (CA-02 de las dos historias). Lo
+ * unico que hace con una serie por dia es poner a cero los dias que el
+ * servicio no publica (un dia sin sanciones no sale en `porDia`), para que el
+ * grafico no junte dos dias separados.
  * Sigue `shared/ui-kit/MAPEO-ERRORES.md`: se decide por `type`, nunca por el
  * texto.
  */
 
 import { baseDeApi, ErrorDeMetricas } from './cliente-metricas.js';
+import { actualizacionPeriodica } from '../../comun/ui/admin/actualizacion.js';
+import { distintivoDeEstado } from '../../comun/ui/admin/estado.js';
+import { nombreDelServicio } from '../../comun/ui/admin/servicios.js';
+import { encabezadoDePagina } from '../../comun/ui/pagina.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
-import { nodo } from '../../comun/ui/dom.js';
+import { h, nodo } from '../../comun/ui/dom.js';
+import { fecha as fechaLocal, fechaHora, numero } from '../../comun/ui/formato.js';
+import { graficoDeBarras } from '../../comun/ui/admin/grafico.js';
+import { rejillaDeIndicadores, tarjetaDeIndicador } from '../../comun/ui/admin/indicador.js';
+import { tablaDeDatos } from '../../comun/ui/admin/tabla-de-datos.js';
+import { diaCompleto, diaCorto, serieDiaria } from '../../comun/ui/admin/fechas.js';
+import { NOMBRE_DE_CATEGORIA_DE_REPORTE } from '../../comun/ui/admin/nombres.js';
+import {
+  fraseDeNoDisponible,
+  pintarAlertasDeModeracion,
+} from '../../comun/ui/admin/alertas-de-moderacion.js';
 
 async function pedir(
   ruta,
@@ -51,14 +69,17 @@ export const api = {
 
 /* ---- Presentación (puro, probado) ---- */
 
-/** @returns {string} porcentaje legible o «n/d» */
+/** Lo que se lee donde el servicio no dio la cifra. */
+const SIN_DATO = 'Sin dato';
+
+/** @returns {string} porcentaje legible o «Sin dato» */
 export function porcentaje(fraccion) {
-  return typeof fraccion === 'number' ? `${Math.round(fraccion * 100)} %` : 'n/d';
+  return typeof fraccion === 'number' ? `${Math.round(fraccion * 100)} %` : SIN_DATO;
 }
 
-/** @returns {string} milisegundos redondeados o «n/d» */
+/** @returns {string} milisegundos redondeados o «Sin dato» */
 export function ms(valor) {
-  return typeof valor === 'number' ? `${Math.round(valor)} ms` : 'n/d';
+  return typeof valor === 'number' ? `${numero(Math.round(valor))} ms` : SIN_DATO;
 }
 
 /**
@@ -72,7 +93,9 @@ export function filaDe(metricas, umbrales) {
     cpu: porcentaje(metricas.cpu),
     cpuEnAlerta: typeof metricas.cpu === 'number' && metricas.cpu > umbrales.cpu,
     memoria:
-      typeof metricas.memoriaMb === 'number' ? `${Math.round(metricas.memoriaMb)} MB` : 'n/d',
+      typeof metricas.memoriaMb === 'number'
+        ? `${numero(Math.round(metricas.memoriaMb))} MB`
+        : SIN_DATO,
     peticiones: String(metricas.peticiones ?? 0),
     promedio: ms(metricas.promedioMs),
     maximo: ms(metricas.maximoMs),
@@ -81,16 +104,29 @@ export function filaDe(metricas, umbrales) {
     errores: String(metricas.errores5xx ?? 0),
     tasaDeError:
       typeof metricas.tasaDeError === 'number'
-        ? `${(metricas.tasaDeError * 100).toFixed(2)} %`
-        : 'n/d',
+        ? `${numero(metricas.tasaDeError * 100, 2)} %`
+        : SIN_DATO,
   };
+}
+
+/** «1 sanción», «4 sanciones». */
+function cuantas(cantidad, singular, plural) {
+  const n = Number.isFinite(cantidad) ? cantidad : 0;
+  return `${numero(n)} ${n === 1 ? singular : plural}`;
 }
 
 /** Resumen de una linea del tablero de moderacion. */
 export function resumenDeModeracion(tablero) {
   const s = tablero.sanciones;
   const tipos = s.porTipo ?? {};
-  return `${s.total} sanciones (${tipos.ADVERTENCIA ?? 0} advertencias, ${tipos.SUSPENSION ?? 0} suspensiones, ${tipos.BANEO ?? 0} baneos) · ${s.moderadoresActivos} moderadores activos · ${s.revertidas} revertidas`;
+  return (
+    `${cuantas(s.total, 'sanción', 'sanciones')}: ` +
+    `${cuantas(tipos.ADVERTENCIA ?? 0, 'advertencia', 'advertencias')}, ` +
+    `${cuantas(tipos.SUSPENSION ?? 0, 'suspensión', 'suspensiones')} y ` +
+    `${cuantas(tipos.BANEO ?? 0, 'baneo', 'baneos')} · ` +
+    `${cuantas(s.moderadoresActivos, 'moderador sancionó', 'moderadores sancionaron')} · ` +
+    `${cuantas(s.revertidas, 'revertida', 'revertidas')}`
+  );
 }
 
 /**
@@ -99,67 +135,327 @@ export function resumenDeModeracion(tablero) {
  */
 export function resumenDeCuentas(cuentas) {
   const e = cuentas.porEstado ?? {};
-  return `${cuentas.total} cuentas (${e.ACTIVO ?? 0} activas, ${e.SUSPENDIDO ?? 0} suspendidas, ${e.BANEADO ?? 0} baneadas, ${e.PENDIENTE_VERIFICACION ?? 0} sin verificar, ${e.INACTIVO ?? 0} inactivas) · ${cuentas.registros?.total ?? 0} altas en el periodo`;
+  return (
+    `${cuantas(cuentas.total, 'cuenta', 'cuentas')} ahora: ` +
+    `${numero(e.ACTIVO ?? 0)} activas, ${numero(e.SUSPENDIDO ?? 0)} suspendidas, ` +
+    `${numero(e.BANEADO ?? 0)} baneadas, ${numero(e.PENDIENTE_VERIFICACION ?? 0)} sin verificar ` +
+    `y ${numero(e.INACTIVO ?? 0)} pendientes de activar · ` +
+    `${cuantas(cuentas.registros?.total ?? 0, 'cuenta nueva', 'cuentas nuevas')} en el periodo`
+  );
+}
+
+/** Un numero publicado o null: nunca un 0 que nadie dio. */
+function cifra(valor) {
+  return typeof valor === 'number' && Number.isFinite(valor) ? valor : null;
+}
+
+/** Todas las apelaciones del periodo, sumando sus estados. */
+function apelacionesDelPeriodo(apelaciones) {
+  return Object.values(apelaciones ?? {})
+    .map(cifra)
+    .reduce((suma, n) => suma + (n ?? 0), 0);
+}
+
+/**
+ * Las cifras de arriba del tablero de moderacion. Lo que no llego (cuentas o
+ * reportes) sale como «sin dato», nunca como cero.
+ */
+export function indicadoresDeModeracion(tablero) {
+  const s = tablero.sanciones ?? {};
+  const reportes = tablero.reportes ?? null;
+  const cuentas = tablero.registroDeUsuarios ?? null;
+  const pendientes = cifra(s.apelaciones?.PENDIENTE);
+  return rejillaDeIndicadores(
+    [
+      tarjetaDeIndicador({
+        etiqueta: 'Sanciones',
+        valor: cifra(s.total),
+        detalle: `${cuantas(s.moderadoresActivos, 'moderador', 'moderadores')} · ${cuantas(
+          s.revertidas,
+          'revertida',
+          'revertidas',
+        )}`,
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Reportes de comentarios',
+        valor: cifra(reportes?.total),
+        detalle: reportes
+          ? `${cuantas(reportes.comentariosReportados, 'comentario', 'comentarios')} · ${cuantas(
+              reportes.reportantes,
+              'persona',
+              'personas',
+            )}`
+          : 'No disponible ahora',
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Apelaciones pendientes',
+        valor: pendientes,
+        tono: pendientes > 0 ? 'advertencia' : null,
+        detalle: `de ${cuantas(apelacionesDelPeriodo(s.apelaciones), 'apelación', 'apelaciones')} del periodo`,
+      }),
+      tarjetaDeIndicador({
+        etiqueta: 'Cuentas nuevas',
+        valor: cifra(cuentas?.registros?.total),
+        detalle: cuentas ? 'registradas en el periodo' : 'No disponible ahora',
+      }),
+    ],
+    { zona: 'indicadores-moderacion' },
+  );
+}
+
+/** Una serie por dia, con los dias vacios a cero, como grafico de barras. */
+function graficoPorDia({ titulo, desde, hasta, porDia, valor, unidad, zona }) {
+  const grafico = graficoDeBarras({
+    titulo: `${titulo} · del ${fechaLocal(desde)} al ${fechaLocal(hasta)}`,
+    datos: serieDiaria(desde, hasta, porDia, valor).map((dia) => ({
+      etiqueta: diaCorto(dia.fecha),
+      valor: dia.valor,
+    })),
+    unidad,
+    columnaEtiqueta: 'Día',
+  });
+  grafico.dataset.zona = zona;
+  return grafico;
+}
+
+/** Los reportes del periodo por categoria, en el orden de §7.3.3. */
+export function tablaDeCategorias(reportes) {
+  const porCategoria = reportes?.porCategoria ?? {};
+  return tablaDeDatos({
+    titulo: 'Reportes por categoría',
+    claveDeFila: (fila) => fila.categoria,
+    columnas: [
+      { clave: 'nombre', titulo: 'Categoría', principal: true },
+      { clave: 'reportes', titulo: 'Reportes', tipo: 'numero' },
+    ],
+    filas: Object.entries(NOMBRE_DE_CATEGORIA_DE_REPORTE).map(([categoria, nombre]) => ({
+      categoria,
+      nombre,
+      reportes: cifra(porCategoria[categoria]) ?? 0,
+    })),
+  });
+}
+
+/**
+ * Pinta el tablero de moderacion en su zona: periodo, cifras, alertas, lo que
+ * no se pudo leer, las tres series por dia y los reportes por categoria.
+ *
+ * @param {HTMLElement} zona
+ * @param {object} tablero lo que publica `GET /moderacion` (1.11.0)
+ */
+export function pintarModeracion(zona, tablero) {
+  const s = tablero.sanciones;
+  zona.replaceChildren();
+  zona.append(
+    h('p', {
+      clase: 't-meta',
+      datos: { zona: 'periodo-consultado' },
+      texto: `Del ${fechaLocal(s.desde)} al ${fechaLocal(s.hasta)}`,
+    }),
+    indicadoresDeModeracion(tablero),
+    h('p', {
+      clase: 't-cuerpo',
+      datos: { zona: 'resumen-moderacion' },
+      texto: resumenDeModeracion(tablero),
+    }),
+  );
+
+  zona.append(h('h3', { texto: 'Alertas' }), ...pintarAlertasDeModeracion(tablero));
+
+  const faltas = Array.isArray(tablero.noDisponibles) ? tablero.noDisponibles : [];
+  if (faltas.length > 0) {
+    zona.append(
+      h('ul', {
+        clase: 'pila pila--ajustada',
+        datos: { zona: 'no-disponibles' },
+        hijos: faltas.map((falta) =>
+          h('li', { clase: 'aviso aviso--info', texto: fraseDeNoDisponible(falta) }),
+        ),
+      }),
+    );
+  }
+
+  const graficos = [
+    graficoPorDia({
+      titulo: 'Sanciones por día',
+      desde: s.desde,
+      hasta: s.hasta,
+      porDia: s.porDia,
+      valor: (d) => cifra(d.emitidas) ?? 0,
+      unidad: 'sanciones',
+      zona: 'por-dia',
+    }),
+  ];
+  if (tablero.reportes) {
+    graficos.push(
+      graficoPorDia({
+        titulo: 'Reportes por día',
+        desde: tablero.reportes.desde ?? s.desde,
+        hasta: tablero.reportes.hasta ?? s.hasta,
+        porDia: tablero.reportes.porDia,
+        valor: (d) => cifra(d.reportes) ?? 0,
+        unidad: 'reportes',
+        zona: 'reportes-por-dia',
+      }),
+    );
+  }
+  zona.append(h('div', { clase: 'rejilla-graficos-admin', hijos: graficos }));
+  if (tablero.reportes) {
+    const categorias = tablaDeCategorias(tablero.reportes);
+    categorias.dataset.zona = 'reportes-por-categoria';
+    zona.append(categorias);
+  }
+
+  // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las
+  // dio, no se pinta ningun numero (ni un 0 que nadie dio): se dice que no
+  // estan, con su motivo arriba (CA-03), y lo de moderacion sigue completo.
+  zona.append(h('h3', { texto: 'Usuarios' }));
+  const cuentas = tablero.registroDeUsuarios;
+  if (!cuentas) {
+    zona.append(
+      h('p', {
+        clase: 't-meta',
+        datos: { zona: 'usuarios-no-disponibles' },
+        texto: 'Cuentas por estado y cuentas nuevas por día: no disponibles ahora.',
+      }),
+    );
+    return;
+  }
+  zona.append(
+    h('p', {
+      clase: 't-cuerpo',
+      datos: { zona: 'resumen-usuarios' },
+      texto: resumenDeCuentas(cuentas),
+    }),
+  );
+  const altas = graficoDeBarras({
+    titulo: `Cuentas nuevas por día · del ${diaCompleto(cuentas.registros?.desde)} al ${diaCompleto(
+      cuentas.registros?.hasta,
+    )}`,
+    datos: (cuentas.registros?.porDia ?? []).map((d) => ({
+      etiqueta: diaCorto(d.fecha),
+      valor: cifra(d.cuentas),
+    })),
+    unidad: 'cuentas nuevas',
+    columnaEtiqueta: 'Día',
+  });
+  altas.dataset.zona = 'altas-por-dia';
+  zona.append(altas);
 }
 
 /* ---- DOM ---- */
 
-function celda(texto, enAlerta = false) {
-  const td = nodo('td', enAlerta ? 'celda--alerta' : undefined, texto);
-  if (enAlerta) {
-    td.dataset.alerta = 'true';
+/** Una cifra en alerta, marcada para quien no distingue el color. */
+function enAlerta(texto, alerta) {
+  if (!alerta) {
+    return texto;
   }
-  return td;
+  const marca = distintivoDeEstado({ texto, tono: 'advertencia' });
+  marca.dataset.alerta = 'true';
+  return marca;
 }
 
+/**
+ * SA-8 (punto 24) — la tabla técnica con el componente de la consola: cada
+ * servicio por su nombre, las cifras alineadas a la derecha y lo que supera
+ * un umbral marcado. Un servicio que no se pudo medir lo dice en su fila, sin
+ * el motivo técnico de la conexión.
+ */
 export function tablaTecnica(tablero) {
-  const tabla = nodo('table', 'tabla');
-  tabla.dataset.zona = 'tabla-tecnica';
-  const cabecera = nodo('thead');
-  const fila = nodo('tr');
-  ['Servicio', 'CPU', 'Memoria', 'Peticiones', 'Media', 'Maxima', 'Errores 5xx', 'Tasa'].forEach(
-    (t) => fila.appendChild(nodo('th', undefined, t)),
-  );
-  cabecera.appendChild(fila);
-  tabla.appendChild(cabecera);
-  const cuerpo = nodo('tbody');
-  tablero.servicios.forEach((m) => {
-    const f = filaDe(m, tablero.umbrales);
-    const tr = nodo('tr');
-    tr.dataset.servicio = f.servicio;
-    if (f.brecha) {
-      tr.dataset.brecha = 'true';
-      tr.appendChild(celda(f.servicio));
-      const td = celda(`Brecha de observabilidad: ${f.brecha}`, true);
-      td.colSpan = 7;
-      tr.appendChild(td);
-    } else {
-      tr.append(
-        celda(f.servicio),
-        celda(f.cpu, f.cpuEnAlerta),
-        celda(f.memoria),
-        celda(f.peticiones),
-        celda(f.promedio),
-        celda(f.maximo, f.maximoEnAlerta),
-        celda(f.errores),
-        celda(f.tasaDeError),
-      );
-    }
-    cuerpo.appendChild(tr);
+  const filas = tablero.servicios.map((m) => ({ ...filaDe(m, tablero.umbrales), origen: m }));
+  const sinMedir = (f, valor) => (f.brecha ? null : valor);
+  const tabla = tablaDeDatos({
+    titulo: 'Consumo y errores por servicio',
+    resumen: `${numero(filas.length)} ${filas.length === 1 ? 'servicio' : 'servicios'}`,
+    claveDeFila: (f) => f.servicio,
+    columnas: [
+      {
+        clave: 'servicio',
+        titulo: 'Servicio',
+        principal: true,
+        valor: (f) =>
+          f.brecha
+            ? h('span', {
+                clase: 'celda-doble',
+                datos: { brecha: 'true' },
+                hijos: [
+                  h('span', { texto: nombreDelServicio(f.servicio) }),
+                  h('span', { clase: 't-meta', texto: 'No se pudo medir en esta ronda' }),
+                ],
+              })
+            : nombreDelServicio(f.servicio),
+      },
+      {
+        clave: 'cpu',
+        titulo: 'Procesador',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, enAlerta(f.cpu, f.cpuEnAlerta)),
+      },
+      { clave: 'memoria', titulo: 'Memoria', tipo: 'numero', valor: (f) => sinMedir(f, f.memoria) },
+      {
+        clave: 'peticiones',
+        titulo: 'Peticiones',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, numero(Number(f.origen.peticiones) || 0)),
+      },
+      {
+        clave: 'promedio',
+        titulo: 'Tiempo medio',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, f.promedio),
+      },
+      {
+        clave: 'maximo',
+        titulo: 'Tiempo máximo',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, enAlerta(f.maximo, f.maximoEnAlerta)),
+      },
+      {
+        clave: 'errores',
+        titulo: 'Errores del servidor',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, numero(Number(f.origen.errores5xx) || 0)),
+      },
+      {
+        clave: 'tasa',
+        titulo: 'Tasa de error',
+        tipo: 'numero',
+        valor: (f) => sinMedir(f, f.tasaDeError),
+      },
+    ],
+    filas,
   });
-  tabla.appendChild(cuerpo);
+  tabla.dataset.zona = 'tabla-tecnica';
   return tabla;
 }
 
+/** Qué mide cada alerta, en palabras. */
+const NOMBRE_DE_METRICA = Object.freeze({
+  cpu: 'Procesador',
+  latencia: 'Tiempo de respuesta',
+  disponibilidad: 'Disponibilidad',
+});
+
+/** «Salas y partidas · Procesador: uso de procesador 91 % por encima del 75 %». */
+export function textoDeAlerta(alerta) {
+  if (typeof alerta === 'string') {
+    return alerta;
+  }
+  const detalle = String(alerta?.detalle ?? '');
+  return `${nombreDelServicio(alerta?.servicio)} · ${NOMBRE_DE_METRICA[alerta?.metrica] ?? 'Alerta'}: ${detalle}`;
+}
+
 function listaDeAlertas(alertas, vacio) {
+  if (alertas.length === 0) {
+    // Sin alertas no hay lista: se dice que todo está dentro de sus umbrales.
+    const bien = nodo('p', 'aviso aviso--exito', vacio);
+    bien.dataset.zona = 'alertas';
+    return bien;
+  }
   const ul = nodo('ul', 'pila pila--ajustada');
   ul.dataset.zona = 'alertas';
-  if (alertas.length === 0) {
-    ul.appendChild(nodo('li', 't-meta', vacio));
-  }
   alertas.forEach((a) => {
-    const texto = typeof a === 'string' ? a : `${a.servicio} [${a.metrica}]: ${a.detalle}`;
-    ul.appendChild(nodo('li', 'aviso aviso--advertencia', texto));
+    ul.appendChild(nodo('li', 'aviso aviso--advertencia', textoDeAlerta(a)));
   });
   return ul;
 }
@@ -204,7 +500,9 @@ function pintarError(zona, error, { informe, alReintentar = null } = { informe: 
  * Monta la vista: zonas `[data-zona="tecnicas"]`, `[data-zona="moderacion"]`,
  * formulario `[data-zona="periodo"]` y botones `[data-accion]`.
  */
-export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
+export function montarTableroTecnico(raiz, { fetchImpl, descargar, actualizarSola = true } = {}) {
+  const zonaEncabezado = raiz.querySelector('[data-zona="encabezado"]');
+  const zonaControl = raiz.querySelector('[data-zona="control-tecnicas"]');
   const zonaTecnicas = raiz.querySelector('[data-zona="tecnicas"]');
   const zonaModeracion = raiz.querySelector('[data-zona="moderacion"]');
   const formPeriodo = raiz.querySelector('[data-zona="periodo"]');
@@ -221,111 +519,67 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
   let ultimaModeracion = null;
 
   async function cargarTecnicas() {
-    zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Recolectando métricas de los servicios…'));
+    // La primera vez se dice que se está midiendo; después, lo último bueno
+    // se queda a la vista mientras llega lo nuevo.
+    if (!zonaTecnicas.querySelector('[data-zona="tabla-tecnica"]')) {
+      zonaTecnicas.replaceChildren(nodo('p', 't-meta', 'Midiendo los servicios…'));
+    }
     try {
-      ultimoTecnico = await api.tecnicas(fetchImpl);
+      const tablero = await api.tecnicas(fetchImpl);
+      ultimoTecnico = tablero;
       zonaTecnicas.replaceChildren();
+      const umbrales = tablero.umbrales ?? {};
       zonaTecnicas.appendChild(
         nodo(
           'p',
           't-meta',
-          `Generado ${new Date(ultimoTecnico.generadoEn).toLocaleString('es-CO')} · umbrales: CPU ${porcentaje(ultimoTecnico.umbrales.cpu)}, latencia ${ultimoTecnico.umbrales.latenciaMs} ms, disponibilidad ${ultimoTecnico.umbrales.disponibilidadPorcentaje} %`,
+          `Medido el ${fechaHora(ultimoTecnico.generadoEn)} · Umbrales: procesador ${porcentaje(umbrales.cpu)}, tiempo de respuesta ${numero(umbrales.latenciaMs)} ms, disponibilidad ${numero(umbrales.disponibilidadPorcentaje, 2)} %`,
         ),
       );
       zonaTecnicas.appendChild(tablaTecnica(ultimoTecnico));
-      if (ultimoTecnico.brechas.length > 0) {
+      const sinMedir = ultimoTecnico.servicios.filter((m) => m.brecha);
+      if (sinMedir.length > 0) {
         const brechas = nodo(
           'p',
           'aviso aviso--advertencia',
-          `Brechas de observabilidad (${ultimoTecnico.brechas.length}): ${ultimoTecnico.brechas.join('; ')}`,
+          `No se pudo medir ${sinMedir.length === 1 ? 'un servicio' : `${sinMedir.length} servicios`} en esta ronda: ${sinMedir.map((m) => nombreDelServicio(m.servicio)).join(', ')}.`,
         );
         brechas.dataset.zona = 'brechas';
         zonaTecnicas.appendChild(brechas);
       }
       zonaTecnicas.appendChild(nodo('h3', undefined, 'Alertas'));
       zonaTecnicas.appendChild(
-        listaDeAlertas(ultimoTecnico.alertas, 'Sin alertas sobre los umbrales.'),
+        listaDeAlertas(ultimoTecnico.alertas, 'Ningún servicio supera sus umbrales.'),
       );
+      return true;
     } catch (error) {
       pintarError(zonaTecnicas, error, {
         informe: 'las métricas técnicas',
         alReintentar: () => cargarTecnicas(),
       });
+      return false;
     }
   }
+
+  const actualizacion = actualizacionPeriodica({
+    nombre: 'las métricas técnicas',
+    cadaMs: 60_000,
+    automatica: actualizarSola,
+    cargar: cargarTecnicas,
+  });
+  zonaControl?.replaceChildren(actualizacion.elemento);
+  zonaEncabezado?.replaceChildren(
+    encabezadoDePagina({
+      titulo: 'Tablero técnico',
+      descripcion: 'Consumo, tráfico y errores de cada servicio, y la actividad de moderación.',
+    }),
+  );
 
   async function cargarModeracion(desde, hasta) {
     zonaModeracion.replaceChildren(nodo('p', 't-meta', 'Consultando moderación…'));
     try {
       ultimaModeracion = await api.moderacion(desde, hasta, fetchImpl);
-      zonaModeracion.replaceChildren();
-      const s = ultimaModeracion.sanciones;
-      zonaModeracion.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          `Periodo ${new Date(s.desde).toLocaleDateString('es-CO')} – ${new Date(s.hasta).toLocaleDateString('es-CO')}`,
-        ),
-      );
-      const resumen = nodo('p', 't-cuerpo', resumenDeModeracion(ultimaModeracion));
-      resumen.dataset.zona = 'resumen-moderacion';
-      zonaModeracion.appendChild(resumen);
-      const dias = nodo('ul', 'pila pila--ajustada');
-      dias.dataset.zona = 'por-dia';
-      if ((s.porDia ?? []).length === 0) {
-        dias.appendChild(nodo('li', 't-meta', 'Sin sanciones en el periodo.'));
-      }
-      (s.porDia ?? []).forEach((d) =>
-        dias.appendChild(nodo('li', undefined, `${d.fecha}: ${d.emitidas}`)),
-      );
-      zonaModeracion.appendChild(dias);
-      const ap = s.apelaciones ?? {};
-      zonaModeracion.appendChild(
-        nodo(
-          'p',
-          't-meta',
-          `Apelaciones: ${ap.PENDIENTE ?? 0} pendientes, ${ap.MANTENIDA ?? 0} mantenidas, ${ap.REDUCIDA ?? 0} reducidas, ${ap.REVERTIDA ?? 0} revertidas`,
-        ),
-      );
-      // Cuentas por estado y altas por dia (ms-identidad). Si identidad no las dio, no se pinta
-      // ningun numero (ni un 0 que nadie dio): se dice que no estan, el motivo real viene en
-      // `pendientes` (CA-03) y lo de moderacion sigue completo.
-      const cuentas = ultimaModeracion.registroDeUsuarios;
-      zonaModeracion.appendChild(nodo('h3', undefined, 'Usuarios'));
-      if (!cuentas) {
-        const sinCuentas = nodo(
-          'p',
-          't-meta',
-          'Cuentas por estado y altas por día: no disponibles. El motivo está abajo, en «Pendiente».',
-        );
-        sinCuentas.dataset.zona = 'usuarios-no-disponibles';
-        zonaModeracion.appendChild(sinCuentas);
-      } else {
-        const resumenCuentas = nodo('p', 't-cuerpo', resumenDeCuentas(cuentas));
-        resumenCuentas.dataset.zona = 'resumen-usuarios';
-        zonaModeracion.appendChild(resumenCuentas);
-        const altas = nodo('ul', 'pila pila--ajustada');
-        altas.dataset.zona = 'altas-por-dia';
-        (cuentas.registros?.porDia ?? []).forEach((d) =>
-          altas.appendChild(nodo('li', undefined, `${d.fecha}: ${d.cuentas}`)),
-        );
-        zonaModeracion.appendChild(altas);
-      }
-      zonaModeracion.appendChild(nodo('h3', undefined, 'Alertas'));
-      zonaModeracion.appendChild(
-        listaDeAlertas(
-          ultimaModeracion.alertas,
-          ultimaModeracion.alertasConfiguradas
-            ? 'Sin alertas: ningún día llega al umbral.'
-            : 'Sin umbral configurado: se publican los conteos, pero no se evalúa ninguna alerta.',
-        ),
-      );
-      const pendientes = nodo('ul', 'pila pila--ajustada');
-      pendientes.dataset.zona = 'pendientes';
-      (ultimaModeracion.pendientes ?? []).forEach((p) =>
-        pendientes.appendChild(nodo('li', 't-meta', `Pendiente: ${p}`)),
-      );
-      zonaModeracion.appendChild(pendientes);
+      pintarModeracion(zonaModeracion, ultimaModeracion);
     } catch (error) {
       pintarError(zonaModeracion, error, {
         informe: 'la actividad de usuarios y moderación',
@@ -334,9 +588,6 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
     }
   }
 
-  raiz
-    .querySelector('[data-accion="recargar-tecnicas"]')
-    ?.addEventListener('click', () => cargarTecnicas());
   raiz.querySelector('[data-accion="exportar-tecnicas"]')?.addEventListener('click', async () => {
     try {
       const texto = await api.tecnicasTexto(fetchImpl);
@@ -365,7 +616,11 @@ export function montarTableroTecnico(raiz, { fetchImpl, descargar } = {}) {
     );
   });
 
-  cargarTecnicas();
+  if (zonaControl) {
+    actualizacion.actualizar();
+  } else {
+    cargarTecnicas();
+  }
   cargarModeracion(null, null);
-  return { cargarTecnicas, cargarModeracion };
+  return { cargarTecnicas, cargarModeracion, actualizacion };
 }

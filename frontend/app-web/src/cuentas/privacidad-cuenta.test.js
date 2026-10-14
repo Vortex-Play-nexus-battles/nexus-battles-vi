@@ -145,6 +145,32 @@ function respuestasCompletas() {
     },
     '/api/v1/mensajes-directos/conversaciones': [],
     '/api/v1/chat/historial': [],
+    // SA-14 (comentarios.yaml 1.16.0): los propios, en todos sus estados.
+    '/api/v1/comentarios/mios': {
+      autorId: UID,
+      apodoAutor: 'ada',
+      comentarios: [
+        {
+          id: 'c2',
+          productoId: 'espada',
+          texto: 'No me gustó el filo',
+          fechaPublicacion: '2026-10-02T10:00:00Z',
+          estado: 'OCULTO',
+          editado: false,
+        },
+        {
+          id: 'c1',
+          productoId: 'espada',
+          texto: 'Muy buena espada',
+          fechaPublicacion: '2026-10-01T10:00:00Z',
+          estado: 'PUBLICADO',
+          editado: true,
+        },
+      ],
+      total: 2,
+      pagina: 0,
+      tamano: 100,
+    },
   };
 }
 
@@ -188,10 +214,30 @@ describe('consolidar', () => {
     expect(consolidado.bloques.map((b) => b.id)).toEqual(FUENTES.map((f) => f.id));
     const pedidas = fetchImpl.mock.calls.map(([url]) => String(url).split('?')[0]);
     expect(new Set(pedidas)).toEqual(new Set(Object.keys(respuestasCompletas())));
-    for (const b of consolidado.bloques.filter((x) => x.id !== 'comentarios')) {
+    for (const b of consolidado.bloques) {
       expect([b.id, b.estado]).toEqual([b.id, ESTADOS_DEL_BLOQUE.COMPLETO]);
     }
-    expect(bloque(consolidado, 'comentarios').estado).toBe(ESTADOS_DEL_BLOQUE.SIN_CONSULTA);
+  });
+
+  test('SA-14: los comentarios propios entran con su estado en palabras (§7.3.6)', async () => {
+    const consolidado = await consolidarDatos({
+      sesion: SESION,
+      fetchImpl: fetchFalso(),
+      ahora: AHORA,
+    });
+
+    const comentarios = bloque(consolidado, 'comentarios');
+    expect(comentarios.estado).toBe(ESTADOS_DEL_BLOQUE.COMPLETO);
+    expect(Object.fromEntries(comentarios.resumen.map((d) => [d.etiqueta, d.valor]))).toEqual({
+      Comentarios: '2',
+      Publicados: '1',
+    });
+    const [tabla] = comentarios.detalle;
+    expect(tabla.columnas).toEqual(['Comentario', 'Producto', 'Estado', 'Publicado']);
+    expect(tabla.filas[0]).toEqual(
+      expect.arrayContaining(['No me gustó el filo', 'espada', 'Oculto por moderación']),
+    );
+    expect(tabla.filas[1]).toEqual(expect.arrayContaining(['Muy buena espada', 'Publicado']));
   });
 
   test('cada bloque dice qué datos hay y para qué se usan', async () => {
@@ -242,13 +288,13 @@ describe('consolidar', () => {
     expect(subastas.estado).toBe(ESTADOS_DEL_BLOQUE.NO_DISPONIBLE);
     expect(subastas.motivo).toContain('No pudimos consultar «Tus subastas y pujas»');
     expect(bloque(consolidado, 'perfil').estado).toBe(ESTADOS_DEL_BLOQUE.COMPLETO);
-    expect(bloquesIncompletos(consolidado).map((b) => b.id)).toEqual(['subastas', 'comentarios']);
+    expect(bloquesIncompletos(consolidado).map((b) => b.id)).toEqual(['subastas']);
 
     const frase = fraseDelResumen(consolidado);
     expect(frase).toContain(
       'Consulta parcial: no pudimos consultar «Tus subastas y pujas»; el resto está completo.',
     );
-    expect(frase).toContain('«Tus comentarios» todavía no se puede reunir aquí.');
+    expect(frase).not.toContain('todavía no se puede reunir');
   });
 
   test('sin fallos, la frase no habla de consulta parcial', async () => {
@@ -259,11 +305,12 @@ describe('consolidar', () => {
     });
 
     const frase = fraseDelResumen(consolidado);
-    expect(frase).toMatch(/^Reunimos tus datos de 15 módulos\./);
+    // SA-14: los comentarios ya se consultan, así que cuentan como módulo.
+    expect(frase).toMatch(/^Reunimos tus datos de 16 módulos\./);
     expect(frase).not.toContain('Consulta parcial');
   });
 
-  test('una red caída tampoco rompe el portal: todo no disponible menos lo que no se consulta', async () => {
+  test('una red caída tampoco rompe el portal: todo queda no disponible', async () => {
     const consolidado = await consolidarDatos({
       sesion: SESION,
       fetchImpl: jest.fn(() => Promise.reject(new TypeError('Failed to fetch'))),
@@ -272,7 +319,7 @@ describe('consolidar', () => {
 
     expect(
       consolidado.bloques.filter((b) => b.estado === ESTADOS_DEL_BLOQUE.NO_DISPONIBLE),
-    ).toHaveLength(15);
+    ).toHaveLength(FUENTES.length);
   });
 });
 
@@ -354,8 +401,8 @@ describe('exportación JSON (RF-PRV-006)', () => {
     expect(json.completo).toBe(false);
     expect(json.modulosIncompletos).toEqual([
       expect.objectContaining({ modulo: 'asistente', estado: 'no-disponible' }),
-      expect.objectContaining({ modulo: 'comentarios', estado: 'sin-consulta' }),
     ]);
+    expect(json.modulos.comentarios.datos.elementos).toHaveLength(2);
     expect(json.modulos.perfil.datos.email).toBe('ada@upb.edu.co');
     expect(json.modulos.perfil.finalidad).toContain('correo');
     expect(json.modulos.inventario.datos.elementos).toHaveLength(1);
@@ -441,10 +488,10 @@ describe('la sección «Tus datos»', () => {
     expect(perfil.dataset.estado).toBe('completo');
     expect(perfil.textContent).toContain('Para qué se usa:');
     expect(perfil.textContent).toContain('ada@upb.edu.co');
-    expect(
-      zona('bloques-portal').querySelector('[data-fuente="comentarios"]').textContent,
-    ).toContain('todavía no ofrece una consulta');
-    expect(zona('resumen-portal').textContent).toMatch(/^Reunimos tus datos de 15 módulos\./);
+    expect(zona('bloques-portal').querySelector('[data-fuente="comentarios"]').dataset.estado).toBe(
+      'completo',
+    );
+    expect(zona('resumen-portal').textContent).toMatch(/^Reunimos tus datos de 16 módulos\./);
   });
 
   test('con un módulo caído avisa de la consulta parcial y deja volver a consultar', async () => {
@@ -490,9 +537,8 @@ describe('la sección «Tus datos»', () => {
     expect(reporte.hidden).toBe(false);
     expect(reporte.querySelector('h1').textContent).toBe('Tus datos en The Nexus Battles VI');
     expect(reporte.querySelectorAll('.reporte-privacidad__bloque')).toHaveLength(FUENTES.length);
-    expect(reporte.textContent).toContain(
-      'Este reporte está incompleto: Tus comentarios (sin consulta).',
-    );
+    expect(reporte.textContent).not.toContain('Este reporte está incompleto');
+    expect(reporte.textContent).toContain('Muy buena espada');
 
     window.dispatchEvent(new Event('afterprint'));
     expect(document.body.classList.contains('imprimiendo-privacidad')).toBe(false);

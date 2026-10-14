@@ -19,9 +19,9 @@ import java.util.UUID;
  *
  * <table>
  *   <caption>Salidas por evento</caption>
- *   <tr><th>evento</th><th>aviso</th><th>proyeccion</th><th>correo</th></tr>
- *   <tr><td>emision de advertencia</td><td>si</td><td>no (no restringe)</td><td>ADVERTENCIA</td></tr>
- *   <tr><td>emision de suspension o baneo</td><td>si</td><td>si</td><td>SUSPENSION / BANEO</td></tr>
+ *   <tr><th>evento</th><th>aviso</th><th>proyeccion</th><th>correo</th><th>historial (SA-3)</th></tr>
+ *   <tr><td>emision de advertencia</td><td>si</td><td>no (no restringe)</td><td>ADVERTENCIA</td><td>si</td></tr>
+ *   <tr><td>emision de suspension o baneo</td><td>si</td><td>si</td><td>SUSPENSION / BANEO</td><td>si</td></tr>
  *   <tr><td>apelacion revertida o reducida</td><td>si</td><td>si, si la sancion restringia</td>
  *       <td>APELACION_RESUELTA</td></tr>
  *   <tr><td>apelacion mantenida</td><td>si</td><td>no (nada cambia)</td><td>APELACION_RESUELTA</td></tr>
@@ -53,6 +53,10 @@ public class SalidasDeSancion {
         }
         salidas.save(SalidaPendiente.de(CanalDeSalida.CORREO, EventoDeSancion.EMISION, sancion.usuarioId(),
                 sancion.id(), null, clave, ahora));
+        // SA-3: toda emision, tambien la advertencia, cambia el historial de la
+        // cuenta, y el directorio de identidad filtra por el.
+        salidas.save(SalidaPendiente.de(CanalDeSalida.HISTORIAL, EventoDeSancion.EMISION, sancion.usuarioId(),
+                sancion.id(), null, clave + "-historial", ahora));
     }
 
     /** Decision del panel sobre una apelacion. */
@@ -68,6 +72,17 @@ public class SalidasDeSancion {
         }
         salidas.save(SalidaPendiente.de(CanalDeSalida.CORREO, EventoDeSancion.APELACION_RESUELTA,
                 sancion.usuarioId(), sancion.id(), apelacion.id(), clave, ahora));
+    }
+
+    /**
+     * SA-4: la apelacion llego. Solo el aviso en la aplicacion, con la fecha
+     * limite del panel: no cambia el acceso ni el historial, y correo.yaml no
+     * tiene tipo para ella.
+     */
+    public void apelacionRecibida(Apelacion apelacion, Sancion sancion, String tituloDelAviso,
+                                  String cuerpoDelAviso, OffsetDateTime ahora) {
+        aviso(sancion, "APELACION_RECIBIDA", tituloDelAviso, cuerpoDelAviso,
+                "apelacion-" + apelacion.id() + "-recibida", ahora);
     }
 
     /** Levantamiento de una sancion vigente por un administrador (1.1.0). */

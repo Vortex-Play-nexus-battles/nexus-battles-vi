@@ -68,6 +68,13 @@ public class Mensaje {
     @Column(name = "tiempo_respuesta_ms")
     private Integer tiempoRespuestaMs;
 
+    // ms-chatbot.yaml 1.7.0 (V13): como termino la respuesta del bot, dicho
+    // por el motor que la genero. null en los mensajes del usuario y en las
+    // respuestas anteriores a V13 (que no cuentan en la tasa de resolucion).
+    @Enumerated(EnumType.STRING)
+    @Column(length = 30)
+    private ResultadoDeRespuesta resultado;
+
     // ms-chatbot.yaml 1.3.4 (V7): pasos, enlaces, tarjetas, respuestas rapidas
     // y oferta de soporte humano de una respuesta del bot. null si no hay.
     @Convert(converter = RespuestaEnriquecidaConverter.class)
@@ -95,14 +102,29 @@ public class Mensaje {
     // asistida), si se escalo y cuanto tardo en generarse.
     public void registrarDatosDeRespuesta(String temaClave, Categoria categoria, boolean escalado,
                                           int tiempoRespuestaMs) {
+        registrarDatosDeRespuesta(temaClave, categoria, escalado, tiempoRespuestaMs, null);
+    }
+
+    // 1.7.0: con el resultado que dio el motor (null si no lo dijo: esa
+    // respuesta no cuenta en la tasa de resolucion, ni a favor ni en contra).
+    public void registrarDatosDeRespuesta(String temaClave, Categoria categoria, boolean escalado,
+                                          int tiempoRespuestaMs, ResultadoDeRespuesta resultado) {
         this.temaClave = temaClave;
         this.categoria = categoria;
         this.escalado = escalado;
         this.tiempoRespuestaMs = tiempoRespuestaMs;
+        this.resultado = resultado;
     }
 
     // 1.3.4: la respuesta enriquecida del bot; una vacia no se guarda.
     public void registrarEnriquecido(RespuestaEnriquecida nuevo) {
         this.enriquecido = nuevo == null || nuevo.estaVacia() ? null : nuevo;
+    }
+
+    // 1.12.0 (RF-CHA-007): lo que se le dice al final de una respuesta que no
+    // resolvio nada, sobre la solicitud de soporte que se abrio por ella.
+    public void completarRespuesta(String contenidoCompleto, RespuestaEnriquecida conSolicitud) {
+        this.contenido = contenidoCompleto;
+        registrarEnriquecido(conSolicitud);
     }
 }

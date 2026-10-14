@@ -288,7 +288,7 @@ test.describe('R18/B1 - activacion del jugador nuevo', () => {
       true,
     );
     expect(estado.activo).toBe(false);
-    // D-09: lo exige solo un rol administrativo, y la obligatoriedad viene apagada.
+    // D-09 y 7.3.9: obligatorio solo para los roles administrativos; un jugador elige.
     expect(estado.obligatorio).toBe(false);
   });
 

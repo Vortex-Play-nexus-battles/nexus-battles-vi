@@ -6,20 +6,41 @@
 
 .subastas-busqueda {
   position: relative;
-  margin-bottom: var(--e-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--e-1);
+}
+
+/* PLAYER-07b — la lupa dentro del campo, como en la barra de la aplicación.
+   Es adorno: el nombre del campo lo da su etiqueta visible. */
+.subastas-busqueda__caja {
+  position: relative;
+}
+
+.subastas-busqueda__icono {
+  position: absolute;
+  top: 50%;
+  left: var(--e-3);
+  color: var(--texto-2);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .subastas-busqueda__campo {
   box-sizing: border-box;
   width: 100%;
   min-height: var(--campo-alto);
-  padding: 0 var(--e-4);
+  padding: 0 var(--e-4) 0 calc(var(--e-3) + var(--icono-chico) + var(--e-2));
   border: 1px solid var(--borde-int);
   border-radius: var(--radio);
   background: var(--superficie);
   color: var(--texto);
   font: inherit;
   font-size: var(--t-cuerpo-tam);
+}
+
+.subastas-busqueda__campo::placeholder {
+  color: var(--texto-3);
 }
 
 .subastas-busqueda__campo:focus-visible {
@@ -49,6 +70,7 @@
 .subastas-busqueda__sugerencia {
   display: block;
   width: 100%;
+  min-height: var(--objetivo-tactil);
   padding: var(--e-2) var(--e-3);
   border: none;
   border-radius: var(--radio-chico);

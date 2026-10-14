@@ -69,6 +69,12 @@ class ContratoDeBannersTest {
         private static final Set<String> FECHAS =
                 Set.of("publicarDesde", "vigenteHasta", "creadoEn", "modificadoEn");
 
+        /**
+         * SA-18 (1.12.0): quien publico y quien toco por ultima vez. Opcionales:
+         * los banners anteriores no los tienen y el servicio no serializa nulos.
+         */
+        private static final Set<String> OPCIONALES = Set.of("creadoPor", "modificadoPor");
+
         private static final Pattern PROPIEDAD = Pattern.compile("^properties\\.([^.\\[]+)\\..*$");
         private static final Pattern OBLIGATORIO = Pattern.compile("^required\\[\\d+]$");
 
@@ -131,14 +137,20 @@ class ContratoDeBannersTest {
                         }
                 });
 
+                Set<String> componentes = new TreeSet<>(Arrays.stream(RespuestaBanner.class.getRecordComponents())
+                        .map(componente -> componente.getName())
+                        .toList());
+                Set<String> siempre = new TreeSet<>(componentes);
+                siempre.removeAll(OPCIONALES);
+                assertThat(declarados)
+                        .as("cada campo que puede salir del servicio esta declarado en el contrato")
+                        .isEqualTo(componentes);
                 assertThat(serializados)
-                        .as("cada campo que sale del servicio esta declarado en el contrato")
-                        .isEqualTo(declarados);
+                        .as("un banner sin autores (anterior a SA-18) sale con todo lo obligatorio y nada mas")
+                        .isEqualTo(siempre);
                 assertThat(obligatorios)
                         .as("el contrato exige todos los campos que el servicio siempre envia")
-                        .isEqualTo(new TreeSet<>(Arrays.stream(RespuestaBanner.class.getRecordComponents())
-                                .map(componente -> componente.getName())
-                                .toList()));
+                        .isEqualTo(siempre);
                 for (String campo : FECHAS) {
                         assertThat(esquema.get("properties." + campo + ".format"))
                                 .as("%s se declara como date-time", campo)
@@ -146,6 +158,42 @@ class ContratoDeBannersTest {
                         assertThat(Instant.parse(primero.get(campo).asString()))
                                 .as("%s viaja como instante ISO-8601", campo)
                                 .isNotNull();
+                }
+        }
+
+        @Test
+        @DisplayName("SA-18: con autores, salen creadoPor y modificadoPor, declarados como texto opcional")
+        void conAutores() throws Exception {
+                Instant ahora = Instant.now();
+                when(repositorio
+                        .findByRetiradoFalseAndPublicarDesdeLessThanEqualAndVigenteHastaGreaterThanOrderByPublicarDesdeDesc(
+                                any(Instant.class),
+                                any(Instant.class)))
+                        .thenReturn(List.of(new Banner(
+                                "banner-2",
+                                "Evento especial",
+                                ahora.minusSeconds(60),
+                                ahora.plusSeconds(3600),
+                                false,
+                                ahora.minusSeconds(120),
+                                ahora.minusSeconds(30),
+                                "uid-ana",
+                                "uid-luis")));
+
+                String cuerpo = mvc.perform(get("/api/v1/banners/vigentes"))
+                        .andExpect(status().isOk())
+                        .andReturn()
+                        .getResponse()
+                        .getContentAsString(StandardCharsets.UTF_8);
+                JsonNode primero = JsonMapper.builder().build().readTree(cuerpo).get(0);
+
+                assertThat(primero.get("creadoPor").asString()).isEqualTo("uid-ana");
+                assertThat(primero.get("modificadoPor").asString()).isEqualTo("uid-luis");
+                Map<String, String> esquema = esquema("Banner");
+                for (String campo : OPCIONALES) {
+                        assertThat(esquema.get("properties." + campo + ".type"))
+                                .as("%s se declara como texto", campo)
+                                .isEqualTo("string");
                 }
         }
 

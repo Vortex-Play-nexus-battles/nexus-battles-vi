@@ -37,6 +37,7 @@ import com.nexusbattles.plataforma.comentarios.Comentario;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios;
 import com.nexusbattles.plataforma.comentarios.HiloDeComentarios.MotivoDeRechazo;
 import com.nexusbattles.plataforma.comentarios.ResumenDeCalificaciones;
+import com.nexusbattles.plataforma.comentarios.SolicitudDePublicacion;
 import com.nexusbattles.plataforma.comentarios.catalogo.CatalogoNoDisponible;
 import com.nexusbattles.plataforma.comentarios.catalogo.ProductoInexistente;
 import com.nexusbattles.plataforma.comentarios.seguridad.SecurityConfig;
@@ -248,6 +249,18 @@ class ComentariosControllerTest {
         mvc.perform(publicarComoLyra())
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/imagenes-no-validas"));
+    }
+
+    @Test
+    @DisplayName("un texto de mas de 2000 caracteres responde 400 texto-demasiado-largo (1.11.0)")
+    void textoDemasiadoLargoResponde400() throws Exception {
+        when(servicio.publicar(eq("espada-del-alba"), anyString(), anyString(), anyString(), any(), any()))
+                .thenThrow(new SolicitudDePublicacion.TextoDemasiadoLargo(2001));
+
+        mvc.perform(publicarComoLyra())
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.type").value("https://nexusbattles.local/errores/texto-demasiado-largo"))
+                .andExpect(jsonPath("$.title").value("Tu comentario es demasiado largo"));
     }
 
     @Test

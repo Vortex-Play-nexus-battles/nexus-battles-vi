@@ -1,7 +1,8 @@
 /* =======================================================================
    Base — normalizacion y tipografia
    Depende de tokens.css. Cargar siempre en este orden:
-     tokens.css -> base.css -> componentes.css -> css de la vista
+     tokens.css -> base.css -> componentes.css [-> fondos.css] -> css de la vista
+   (fondos.css solo en las vistas con fondo ilustrado, HU-UX-002)
    ======================================================================= */
 
 *,
@@ -271,3 +272,14 @@ a:hover { color: var(--tinta-enlace-hover); }
   white-space: nowrap;
   border: 0;
 }
+
+/* --- Transicion entre paginas — MOTION-1 / MOTION-4 ------------------- */
+/* MOTION-1 declaro aqui `@view-transition { navigation: auto }` para fundir
+   una pagina con la siguiente (cada vista es un documento). MOTION-4 lo
+   retira: cuando Chrome salta una transicion entre documentos —navegacion
+   rapida, pestaña oculta, pagina que tarda en pintar— rechaza las promesas
+   del ViewTransition y lo deja como error no capturado («Transition was
+   skipped») en cada pagina. La prueba del profesor (tests/e2e) trata todo
+   error de pagina como fallo, y un fundido de 200 ms no vale un error de
+   consola por navegacion. Dentro de una misma pagina sigue disponible
+   `transicionDePagina()` de motion.js, que si gestiona sus promesas.      */

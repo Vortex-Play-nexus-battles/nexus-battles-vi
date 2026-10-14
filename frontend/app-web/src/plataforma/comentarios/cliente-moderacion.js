@@ -17,25 +17,30 @@
  * y el borde lo enruta a otro servicio. Cambiarlo aqui a la ruta «bonita»
  * rompe la vista en el navegador aunque las pruebas sigan verdes.
  *
+ * Contrato 1.10.0 (HU-COM-005): la cola acepta ademas `categoria` y
+ * `prioridadElevada` como filtros opcionales.
+ *
  * Los errores salen como {@link ErrorDeApi} —el mismo de
  * `cliente-comentarios.js`— para que la vista decida por `motivo` y nunca
  * comparando textos (`shared/ui-kit/MAPEO-ERRORES.md`).
  */
 
+import { NOMBRE_DE_CATEGORIA_DE_REPORTE } from '../../comun/ui/admin/nombres.js';
 import { fetchWithHttpErrorInterceptor } from '../../comun/interceptors/http-error.interceptor.js';
 import { ErrorDeApi, baseDeApi, rutaDeComentarios, urlDeImagen } from './cliente-comentarios.js';
 
 export { ErrorDeApi };
 
-/** Categorias de reporte del contrato, en el orden en que se ofrecen. */
-export const CATEGORIAS = Object.freeze([
-  { valor: 'CONTENIDO_OFENSIVO', etiqueta: 'Contenido ofensivo' },
-  { valor: 'ACOSO', etiqueta: 'Acoso a otra persona' },
-  { valor: 'SPAM', etiqueta: 'Spam o publicidad' },
-  { valor: 'INFORMACION_FALSA', etiqueta: 'Información falsa' },
-  { valor: 'CONTENIDO_INAPROPIADO', etiqueta: 'Contenido inapropiado' },
-  { valor: 'VIOLACION_DE_DERECHOS', etiqueta: 'Violación de derechos' },
-]);
+/**
+ * Categorias de reporte del contrato, en el orden y con el texto de §7.3.3
+ * «Categorías de reporte» (SA-4, informe de revisión: «Violación de
+ * derechos» a secas no decía de qué derechos).
+ */
+export const CATEGORIAS = Object.freeze(
+  Object.entries(NOMBRE_DE_CATEGORIA_DE_REPORTE).map(([valor, etiqueta]) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
 
 /** Los estados desde los que se edita y se marca: todos menos ELIMINADO (1.5.0). */
 const NO_TERMINALES = Object.freeze(['PUBLICADO', 'EN_REVISION', 'OCULTO']);
@@ -129,7 +134,22 @@ export const MOTIVO_MODERACION = Object.freeze({
   REPORTE_INVALIDO: 'REPORTE_INVALIDO',
   LIMITE_DE_REPORTES: 'LIMITE_DE_REPORTES',
   TRANSICION_INVALIDA: 'TRANSICION_INVALIDA',
+  // comentarios.yaml 1.10.0: ELIMINAR en lote sin la confirmacion exacta (400).
+  CONFIRMACION_REQUERIDA: 'CONFIRMACION_REQUERIDA',
 });
+
+/**
+ * Las acciones que valen en lote (`AccionDeLote`, comentarios.yaml 1.10.0): las
+ * de `ACCIONES` menos EDITAR, que necesita un texto distinto por comentario.
+ */
+export const ACCIONES_EN_LOTE = Object.freeze(
+  ACCIONES.filter((a) => a.valor !== 'EDITAR').map(({ valor, etiqueta }) =>
+    Object.freeze({ valor, etiqueta }),
+  ),
+);
+
+/** Valor exacto de `confirmacion` que exige ELIMINAR en lote (7.3.9, contrato 1.10.0). */
+export const CONFIRMACION_DE_ELIMINAR = 'ELIMINAR';
 
 /** Largos del contrato (`DecisionRequest`). */
 export const MOTIVO_MINIMO = 3;
@@ -146,6 +166,16 @@ export const FILTROS_DE_COLA = Object.freeze([
   { valor: 'en-revision', etiqueta: 'Pendientes de revisión', marcado: null },
   { valor: 'marcados', etiqueta: 'Marcados para seguimiento', marcado: true },
   { valor: 'sin-marcar', etiqueta: 'Pendientes sin marcar', marcado: false },
+]);
+
+/**
+ * Que prioridad mirar en la cola (`prioridadElevada`, 1.10.0): todas, solo las de
+ * prioridad elevada o solo las demas. `prioridadElevada: null` no viaja.
+ */
+export const FILTROS_DE_PRIORIDAD = Object.freeze([
+  { valor: 'todas', etiqueta: 'Todas', prioridadElevada: null },
+  { valor: 'elevada', etiqueta: 'Solo prioridad elevada', prioridadElevada: true },
+  { valor: 'sin-elevada', etiqueta: 'Sin prioridad elevada', prioridadElevada: false },
 ]);
 
 /**
@@ -177,12 +207,20 @@ async function cuerpoDelProblema(respuesta) {
   }
 }
 
-async function pedir(url, opciones, fetchImpl) {
+/**
+ * @param {string} url
+ * @param {object} opciones
+ * @param {Function} fetchImpl
+ * @param {new (problema: object|null, estado: number) => ErrorDeApi} [FabricaDeError] el
+ *   error que se lanza ante un rechazo; por omision {@link ErrorDeApi}, asi que
+ *   quien no la pasa se comporta como siempre
+ */
+async function pedir(url, opciones, fetchImpl, FabricaDeError = ErrorDeApi) {
   const respuesta = await fetchImpl(url, opciones);
   if (respuesta.ok) {
     return respuesta.status === 204 ? null : respuesta.json();
   }
-  throw new ErrorDeApi(await cuerpoDelProblema(respuesta), respuesta.status);
+  throw new FabricaDeError(await cuerpoDelProblema(respuesta), respuesta.status);
 }
 
 /**
@@ -222,14 +260,24 @@ export async function reportarComentario(
  * Vacia es `200` con lista vacia, no un 404: no tener trabajo pendiente es
  * una respuesta correcta, y la vista lo pinta como tal.
  *
- * @param {{productoId?: string|null, marcado?: boolean|null, pagina?: number, tamano?: number}} [filtro]
+ * @param {{productoId?: string|null, marcado?: boolean|null, categoria?: string|null,
+ *   prioridadElevada?: boolean|null, pagina?: number, tamano?: number}} [filtro]
  *   `marcado` (1.5.0): `true` la lista de seguimiento, `false` los en revision
  *   sin marcar; `null` no viaja y el servicio da la cola de siempre.
+ *   `categoria` y `prioridadElevada` (1.10.0) filtran ademas: «Todas» llega aqui como
+ *   `null` o `''` y no genera parametro. El servicio decide si una categoria existe.
  * @param {{fetchImpl?: Function}} [opciones]
  * @returns {Promise<{entradas: object[], total: number, pagina: number, tamano: number}>}
  */
 export async function consultarCola(
-  { productoId = null, marcado = null, pagina = 0, tamano = 20 } = {},
+  {
+    productoId = null,
+    marcado = null,
+    categoria = null,
+    prioridadElevada = null,
+    pagina = 0,
+    tamano = 20,
+  } = {},
   { fetchImpl = fetchWithHttpErrorInterceptor } = {},
 ) {
   const parametros = new URLSearchParams({ pagina: String(pagina), tamano: String(tamano) });
@@ -238,6 +286,12 @@ export async function consultarCola(
   }
   if (marcado === true || marcado === false) {
     parametros.set('marcado', String(marcado));
+  }
+  if (typeof categoria === 'string' && categoria !== '') {
+    parametros.set('categoria', categoria);
+  }
+  if (prioridadElevada === true || prioridadElevada === false) {
+    parametros.set('prioridadElevada', String(prioridadElevada));
   }
   return pedir(
     `${rutaDeModeracion()}?${parametros}`,
@@ -260,6 +314,48 @@ export async function consultarDetalle(
 ) {
   return pedir(
     `${rutaDeModeracion()}/${encodeURIComponent(comentarioId)}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * El comentario en su contexto — comentarios.yaml 1.17.0 (SA-16, §7.3.8
+ * «Vista previa del comentario en contexto»): los que lo rodean en el hilo de
+ * su producto, a cada lado y en cualquier estado.
+ *
+ * @param {string} comentarioId
+ * @param {{alrededor?: number}} [consulta]
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} `ContextoDelComentario`
+ */
+export async function contextoDelComentario(
+  comentarioId,
+  { alrededor = 3 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams({ alrededor: String(alrededor) });
+  return pedir(
+    `${rutaDeModeracion()}/${encodeURIComponent(comentarioId)}/contexto?${parametros}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
+ * El producto de un comentario en el catálogo (productos.yaml, lectura
+ * pública): su nombre para que la moderación lo reconozca, nunca su id.
+ *
+ * @param {string} productoId
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<object>} `Producto`
+ */
+export async function productoDelCatalogo(
+  productoId,
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  return pedir(
+    `${baseDeApi()}/api/v1/productos/${encodeURIComponent(productoId)}`,
     { method: 'GET', headers: { Accept: 'application/json' } },
     fetchImpl,
   );
@@ -292,6 +388,36 @@ export async function historialDelAutor(
 }
 
 /**
+ * El historico de toda la moderacion — §7.3.3 (SA-4, comentarios.yaml 1.14.0):
+ * las decisiones de la mas reciente a la mas antigua, con su comentario.
+ *
+ * @param {{accion?: string|null, moderador?: string|null, desde?: string|null,
+ *   hasta?: string|null, pagina?: number, tamano?: number}} [filtros] fechas ISO-8601
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<{contenido: object[], pagina: number, tamano: number, total: number,
+ *   totalPaginas: number}>}
+ * @throws {ErrorDeApi} 400 filtro invalido, 401 sin sesion, 403 si el rol no modera
+ */
+export async function historialDeModeracion(
+  { accion = null, moderador = null, desde = null, hasta = null, pagina = 0, tamano = 16 } = {},
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const parametros = new URLSearchParams();
+  for (const [clave, valor] of Object.entries({ accion, moderador, desde, hasta })) {
+    if (valor) {
+      parametros.set(clave, String(valor));
+    }
+  }
+  parametros.set('pagina', String(pagina));
+  parametros.set('tamano', String(tamano));
+  return pedir(
+    `${rutaDeModeracion()}/historial?${parametros}`,
+    { method: 'GET', headers: { Accept: 'application/json' } },
+    fetchImpl,
+  );
+}
+
+/**
  * La decision — RF-COM-008. El motivo es obligatorio, incluida APROBAR: no se
  * archiva nada sin decir por que. Con EDITAR viaja ademas `textoNuevo`, el
  * texto que queda visible (1.5.0); en las demas acciones no se manda.
@@ -318,6 +444,82 @@ export async function resolverComentario(
       body: JSON.stringify(decision),
     },
     fetchImpl,
+  );
+}
+
+/**
+ * El rechazo de la decision en lote: un {@link ErrorDeApi} que ademas dice que
+ * comentarios lo causaron (`comentarioIds` del problem detail: en el 404 los que
+ * no existen, en el 409 los que no admiten la accion), en el orden en que los
+ * dio el servicio.
+ *
+ * Es una subclase y no un cambio en `ErrorDeApi` porque ese error lo comparten
+ * otras vistas, que no necesitan la lista. Del problema solo se leen textos:
+ * lo demas que traiga `comentarioIds` se ignora.
+ */
+export class ErrorDeLote extends ErrorDeApi {
+  /**
+   * @param {{comentarioIds?: unknown}|null} problema
+   * @param {number} estado
+   */
+  constructor(problema, estado) {
+    super(problema, estado);
+    const ids = problema?.comentarioIds;
+    /** @type {string[]} */
+    this.comentarioIds = Array.isArray(ids) ? ids.filter((id) => typeof id === 'string') : [];
+  }
+}
+
+/**
+ * @typedef {object} DecisionEnLote
+ * @property {string[]} comentarioIds
+ * @property {string} accion una de {@link ACCIONES_EN_LOTE}
+ * @property {string} motivo
+ * @property {string} [confirmacion] solo cuenta con ELIMINAR: {@link CONFIRMACION_DE_ELIMINAR}
+ *
+ * @typedef {object} ItemDeDecisionEnLote
+ * @property {string} comentarioId
+ * @property {object} asiento
+ * @property {boolean} [autorNotificado] `false` no invalida la decision
+ *
+ * @typedef {object} ResultadoDelLote
+ * @property {string} accion
+ * @property {number} total
+ * @property {ItemDeDecisionEnLote[]} resultados
+ */
+
+/**
+ * La misma decision para varios comentarios a la vez, atomica — RF-COM-008,
+ * comentarios.yaml 1.10.1: o se resuelven todos o no cambia ninguno. Solo roles
+ * de moderacion.
+ *
+ * Quien firma sale del token, no de aqui: aunque `decision` traiga otros campos,
+ * el cuerpo lleva solo los ids, la accion, el motivo y, con ELIMINAR, la
+ * confirmacion. No se validan topes ni largos: los exige el servicio.
+ *
+ * @param {DecisionEnLote} decision
+ * @param {{fetchImpl?: Function}} [opciones]
+ * @returns {Promise<ResultadoDelLote>}
+ * @throws {ErrorDeLote} 400 (entrada o `CONFIRMACION_REQUERIDA`), 401, 403, 404 y 409
+ *   con `comentarioIds`
+ */
+export async function resolverEnLote(
+  { comentarioIds, accion, motivo, confirmacion },
+  { fetchImpl = fetchWithHttpErrorInterceptor } = {},
+) {
+  const cuerpo = { comentarioIds, accion, motivo };
+  if (accion === 'ELIMINAR') {
+    cuerpo.confirmacion = confirmacion;
+  }
+  return pedir(
+    `${rutaDeModeracion()}/decisiones-en-lote`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(cuerpo),
+    },
+    fetchImpl,
+    ErrorDeLote,
   );
 }
 

@@ -8,6 +8,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -25,6 +26,10 @@ import java.util.UUID;
 //
 // ms-chatbot.yaml 1.3.8: una candidata se puede programar para publicarse
 // sola (DespliegueProgramadoTarea).
+//
+// ms-chatbot.yaml 1.6.0: las transiciones se hacen en fila (BloqueoDeVersiones)
+// y cada UPDATE lleva la `revision` leida (bloqueo optimista), asi que nunca
+// quedan dos versiones en PRODUCCION ni una escrita con datos viejos.
 @Entity
 @Table(name = "versiones_base_conocimiento")
 @Getter
@@ -62,6 +67,15 @@ public class VersionBaseConocimiento {
     // evaluacion; null si no ocurrio (o si se volvio a programar).
     @Column(name = "programacion_rechazada_en")
     private Instant programacionRechazadaEn;
+
+    // 1.6.0 (V12): marca de concurrencia optimista. Hibernate la sube en cada
+    // UPDATE y lo hace con `WHERE revision = :leida`: si otra transaccion
+    // cambio la fila despues de leerla, la escritura falla (409
+    // CAMBIO_CONCURRENTE) en vez de pisar ese cambio. `revision` y no
+    // `version`: esta fila ya ES una version.
+    @Version
+    @Column(nullable = false)
+    private long revision;
 
     // Toda version nace como candidata (BORRADOR): nunca se crea una
     // directamente en produccion, siempre pasa por la evaluacion.

@@ -27,3 +27,35 @@
   font-weight: var(--t-cuerpo-peso-enfasis);
   overflow-wrap: anywhere;
 }
+
+/* SA-3 — «rol y permisos asignados» (§7.3.4): una lista con su marca, en
+   columnas cuando hay sitio. */
+.ficha-usuario__permisos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
+  gap: var(--e-2) var(--e-3);
+  margin: var(--e-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ficha-usuario__permisos li {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--e-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ficha-usuario__permiso-icono {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.125rem;
+  color: var(--exito);
+}
+
+/* Las pestañas de la ficha van sobre la atmósfera, como el título. */
+.ficha-usuario > .consola-integral__seccion {
+  margin-block-start: var(--e-3);
+}

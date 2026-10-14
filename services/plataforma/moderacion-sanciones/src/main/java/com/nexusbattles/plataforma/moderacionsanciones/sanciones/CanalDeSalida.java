@@ -10,5 +10,11 @@ public enum CanalDeSalida {
     PROYECCION,
 
     /** El correo del jugador, por el servicio de correo (plantilla corporativa). */
-    CORREO
+    CORREO,
+
+    /**
+     * SA-3 (§7.3.4): el resumen del historial de sanciones de la cuenta en
+     * ms-identidad (historial-sanciones), para filtrar el directorio.
+     */
+    HISTORIAL
 }

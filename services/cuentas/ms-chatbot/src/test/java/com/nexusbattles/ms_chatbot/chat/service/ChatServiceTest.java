@@ -1,8 +1,11 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.EnlaceInterno;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.VistaDelChat;
+import com.nexusbattles.ms_chatbot.chat.entrada.InyeccionDetectada;
+import com.nexusbattles.ms_chatbot.chat.entrada.RevisionDeEntrada;
 import com.nexusbattles.ms_chatbot.chat.identidad.IdentidadDelChat;
 import com.nexusbattles.ms_chatbot.chat.identidad.SesionAnonima;
 import com.nexusbattles.ms_chatbot.chat.limite.LimitadorDeFrecuencia;
@@ -10,6 +13,7 @@ import com.nexusbattles.ms_chatbot.chat.limite.LimiteDeFrecuenciaExcedido;
 import com.nexusbattles.ms_chatbot.chat.model.Conversacion;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ContenidoBloqueado;
 import com.nexusbattles.ms_chatbot.chat.moderacion.ModeracionDeContenido;
 import com.nexusbattles.ms_chatbot.chat.motor.MotorRespuestas;
@@ -20,8 +24,10 @@ import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
 import com.nexusbattles.ms_chatbot.chat.preferencias.NivelDeDetalle;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.preferencias.PreferenciasService;
+import com.nexusbattles.ms_chatbot.chat.privacidad.RedactorDeDatosSensibles;
 import com.nexusbattles.ms_chatbot.chat.repository.ConversacionRepository;
 import com.nexusbattles.ms_chatbot.chat.repository.MensajeRepository;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,12 +42,14 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -74,6 +82,12 @@ class ChatServiceTest {
     private RegistroDeConversaciones registro;
     @Mock
     private PreferenciasService preferenciasService;
+    @Mock
+    private com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo consultaDeCatalogo;
+    @Mock
+    private com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica navegacionPublica;
+    @Mock
+    private com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService soporte;
 
     private ChatService chatService;
 
@@ -85,7 +99,9 @@ class ChatServiceTest {
     @BeforeEach
     void configurar() {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
-            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService);
+            motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
+            new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()), consultaDeCatalogo,
+            navegacionPublica, soporte);
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -94,7 +110,7 @@ class ChatServiceTest {
                 ResultadoMotor resultado = inv.getArgument(5);
                 Mensaje bot = new Mensaje(mock(Conversacion.class), Remitente.BOT, inv.getArgument(4), null);
                 bot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
-                    resultado.requiereEscalamiento(), inv.getArgument(6));
+                    resultado.requiereEscalamiento(), inv.getArgument(6), resultado.resultado());
                 return bot;
             });
     }
@@ -111,7 +127,62 @@ class ChatServiceTest {
         verify(moderacion).verificar("Hola");
         verify(registro).guardarIntercambio(eq(visitante), eq("Hola"), any(), any(), eq("Respuesta de prueba"), any(), anyInt());
         assertEquals(Remitente.BOT, respuesta.getRemitente());
-        verifyNoInteractions(motorConsultasAsistidas);
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+    }
+
+    // 1.4.0 (7.4.8): la contrasena y la tarjeta no llegan a la lista negra, ni
+    // a los motores, ni a la brecha, ni a la base; la respuesta avisa que se taparon.
+    @Test
+    void enviarMensaje_conDatosSensibles_soloCirculaElTextoRedactadoYSeAvisa() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro.", List.of()));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante,
+            "mi contraseña es Hunter2! y mi tarjeta 4111 1111 1111 1111 no funciona", null);
+
+        org.mockito.ArgumentCaptor<String> pregunta = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(moderacion).verificar(pregunta.capture());
+        String redactada = pregunta.getValue();
+        assertFalse(redactada.contains("Hunter2!"));
+        assertFalse(redactada.contains("4111 1111 1111 1111"));
+        verify(motorRespuestas).generarRespuesta(redactada);
+        verify(brechaConocimientoService).registrarEscalamiento(redactada);
+        verify(registro).guardarIntercambio(eq(visitante), eq(redactada), any(), any(), anyString(), any(), anyInt());
+        assertTrue(respuesta.getContenido().startsWith(ChatService.AVISO_DATO_TAPADO));
+    }
+
+    // 1.4.0 (7.4.8): un intento de inyeccion no se modera, no se responde ni se guarda.
+    @Test
+    void enviarMensaje_conInyeccion_noProcesaNiGuardaNada() {
+        assertThrows(InyeccionDetectada.class,
+            () -> chatService.enviarMensaje(usuario, "' OR '1'='1", null));
+
+        verifyNoInteractions(moderacion, motorRespuestas, motorConsultasAsistidas, registro, brechaConocimientoService);
+    }
+
+    // 1.4.0 (7.4.8): tambien cuenta lo que escribe cada direccion, sumando sus sesiones.
+    @Test
+    void enviarMensaje_conOrigen_limitaTambienPorDireccion() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
+
+        chatService.enviarMensaje(visitante, "Hola", null, null, "203.0.113.7");
+
+        verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES, visitante.claveDeLimite());
+        verify(limitador).exigir(LimitadorDeFrecuencia.Regla.MENSAJES_POR_ORIGEN, "203.0.113.7");
+    }
+
+    // Un mensaje que solo traia caracteres de control no llega a ningun lado.
+    @Test
+    void enviarMensaje_soloCaracteresDeControl_responde400SinGuardar() {
+        org.springframework.web.server.ResponseStatusException error = assertThrows(
+            org.springframework.web.server.ResponseStatusException.class,
+            () -> chatService.enviarMensaje(visitante, "\u0000\u200B", null));
+
+        assertEquals(400, error.getStatusCode().value());
+        verifyNoInteractions(moderacion, motorRespuestas, registro);
     }
 
     // 7.4.8: un mensaje bloqueado por la lista negra no se procesa ni se guarda.
@@ -146,8 +217,63 @@ class ChatServiceTest {
 
         chatService.enviarMensaje(visitante, "cual es mi inventario", null);
 
-        verifyNoInteractions(motorConsultasAsistidas);
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
         verify(motorRespuestas).generarRespuesta("cual es mi inventario");
+    }
+
+    // 1.11.0 (7.4.4, 7.4.8): si el clasificador dice que el visitante pide
+    // algo de su cuenta, se le dice que hace falta una sesion, con los
+    // enlaces para entrar o crear cuenta. Ni consulta en vivo, ni base, ni
+    // pregunta sin respuesta, ni oferta de soporte.
+    @Test
+    void visitanteQuePideDatosDeSuCuenta_recibeQueHaceFaltaUnaSesion() {
+        registroDevuelveLaRespuesta();
+        when(motorConsultasAsistidas.pideDatosDeSuCuenta("mis ultimas transacciones")).thenReturn(true);
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "mis ultimas transacciones", null);
+
+        assertEquals(ChatService.SIN_SESION, respuesta.getContenido());
+        assertEquals(ResultadoDeRespuesta.TEMA, respuesta.getResultado());
+        ResultadoMotor guardado = resultadoGuardado();
+        assertThat(guardado.enriquecido().enlaces()).extracting(EnlaceInterno::destino)
+            .containsExactly("login", "registro");
+        assertThat(guardado.enriquecido().ofrecerSoporteHumano()).isFalse();
+        assertThat(guardado.requiereEscalamiento()).isFalse();
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
+        verifyNoInteractions(motorRespuestas, brechaConocimientoService, consultaDeCatalogo, navegacionPublica);
+    }
+
+    private ResultadoMotor resultadoGuardado() {
+        org.mockito.ArgumentCaptor<ResultadoMotor> resultado = org.mockito.ArgumentCaptor.forClass(ResultadoMotor.class);
+        verify(registro).guardarIntercambio(any(), anyString(), any(), any(), anyString(), resultado.capture(),
+            anyInt());
+        return resultado.getValue();
+    }
+
+    @Test
+    void visitanteQuePideDatosDeSuCuentaEnIngles_recibeLaRespuestaEnIngles() {
+        registroDevuelveLaRespuesta();
+        when(motorConsultasAsistidas.pideDatosDeSuCuenta("show me my notifications")).thenReturn(true);
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "show me my notifications", null);
+
+        assertEquals(ChatService.SIN_SESION_EN, respuesta.getContenido());
+        assertThat(resultadoGuardado().enriquecido().enlaces()).extracting(EnlaceInterno::texto)
+            .containsExactly("Go to Entrar", "Go to Crear cuenta");
+    }
+
+    // 1.11.0: la navegacion publica responde antes que el catalogo y la base.
+    @Test
+    void navegacionPublica_respondeAntesQueElCatalogoYLaBase() {
+        registroDevuelveLaRespuesta();
+        when(navegacionPublica.responder("llevame a la tienda", false, IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Aquí tienes la «Tienda».", null, TipoRespuesta.DIRECTA)
+                .conResultado(ResultadoDeRespuesta.NAVEGACION)));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "llevame a la tienda", null);
+
+        assertEquals("Aquí tienes la «Tienda».", respuesta.getContenido());
+        verifyNoInteractions(motorRespuestas, consultaDeCatalogo, brechaConocimientoService);
     }
 
     // El motor asistido recibe el token y el uid del PROPIO usuario (ADR-001):
@@ -155,7 +281,8 @@ class ChatServiceTest {
     @Test
     void usuarioAutenticadoConRespuestaDelMotorAsistido_noConsultaMotorRespuestas() {
         registroDevuelveLaRespuesta();
-        when(motorConsultasAsistidas.generarRespuesta("cual es mi inventario", "token-de-prueba", UID.toString()))
+        when(motorConsultasAsistidas.generarRespuesta("cual es mi inventario", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.AUTOMATICO))
             .thenReturn(Optional.of(ResultadoMotor.deTema("Tienes 3 elementos en tu inventario.", null, TipoRespuesta.CONTEXTUAL)));
 
         Mensaje respuesta = chatService.enviarMensaje(usuario, "cual es mi inventario", null);
@@ -167,7 +294,8 @@ class ChatServiceTest {
     @Test
     void usuarioAutenticadoSinIntencionDeCuenta_caeEnLaBaseDeConocimiento() {
         registroDevuelveLaRespuesta();
-        when(motorConsultasAsistidas.generarRespuesta(anyString(), anyString(), anyString())).thenReturn(Optional.empty());
+        when(motorConsultasAsistidas.generarRespuesta(anyString(), anyString(), anyString(), any()))
+            .thenReturn(Optional.empty());
         when(motorRespuestas.generarRespuesta(anyString()))
             .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
 
@@ -186,7 +314,7 @@ class ChatServiceTest {
 
         chatService.enviarMensaje(IdentidadDelChat.usuario(UID, null), "hola", null);
 
-        verifyNoInteractions(motorConsultasAsistidas);
+        verify(motorConsultasAsistidas, never()).generarRespuesta(any(), any(), any(), any());
     }
 
     // Dos primeros mensajes simultaneos: el segundo choca con el indice unico
@@ -202,6 +330,162 @@ class ChatServiceTest {
 
         assertEquals(bot, chatService.enviarMensaje(visitante, "Hola", null));
         verify(registro, times(2)).guardarIntercambio(any(), anyString(), any(), any(), anyString(), any(), anyInt());
+    }
+
+    // --- 1.12.0 (7.4.3, RF-CHA-007): la solicitud de soporte se abre sola -----
+
+    private void registroCompletaLaRespuesta() {
+        when(registro.completarRespuesta(any(), anyString(), any())).thenAnswer(inv -> {
+            Mensaje bot = inv.getArgument(0);
+            bot.completarRespuesta(inv.getArgument(1), inv.getArgument(2));
+            return bot;
+        });
+    }
+
+    private static com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte solicitud(String uid) {
+        return com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporte.abrir(uid, Categoria.FAQ_GENERAL,
+            "Sin respuesta del asistente: algo raro", "Le pregunté al asistente: «algo raro» y no la entendió.",
+            List.of(), Instant.parse("2026-10-14T10:00:00Z"));
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_abreLaSolicitudYLoDiceConUnBotonAElla() {
+        registroDevuelveLaRespuesta();
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro de haber entendido tu consulta.", List.of()));
+        var ticket = solicitud(UID.toString());
+        when(soporte.alNoResolver(usuario, null))
+            .thenReturn(Optional.of(new com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService
+                .SolicitudAutomatica(ticket, true)));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "algo raro", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_ABIERTA));
+        assertEquals(ticket.getAsunto(), respuesta.getEnriquecido().solicitud().asunto());
+        assertEquals("ABIERTO", respuesta.getEnriquecido().solicitud().estado());
+        assertTrue(respuesta.getEnriquecido().solicitud().nueva());
+        // Despues de guardar el intercambio: la solicitud lleva esta pregunta.
+        var orden = org.mockito.Mockito.inOrder(registro, soporte);
+        orden.verify(registro).guardarIntercambio(any(), anyString(), any(), any(), anyString(), any(), anyInt());
+        orden.verify(soporte).alNoResolver(usuario, null);
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_aUnVisitanteLeDiceQueLaVeMientrasDureSuSesion() {
+        registroDevuelveLaRespuesta();
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro de haber entendido tu consulta.", List.of()));
+        when(soporte.alNoResolver(visitante, null))
+            .thenReturn(Optional.of(new com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService
+                .SolicitudAutomatica(solicitud(visitante.claveDeConversacion()), true)));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "algo raro", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_ABIERTA_VISITANTE));
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_conUnaAbiertaSumaLaPreguntaEnSuIdioma() {
+        registroDevuelveLaRespuesta();
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("I'm not sure.", List.of()).enIngles(true));
+        when(soporte.alNoResolver(usuario, null))
+            .thenReturn(Optional.of(new com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService
+                .SolicitudAutomatica(solicitud(UID.toString()), false)));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "something weird", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_SUMADA_EN));
+        assertTrue(!respuesta.getEnriquecido().solicitud().nueva());
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_siNoSePuedeAbrirLoDiceYOfreceOtroCamino() {
+        registroDevuelveLaRespuesta();
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro de haber entendido tu consulta.", List.of()));
+        when(soporte.alNoResolver(usuario, null)).thenThrow(new IllegalStateException("lista negra caida"));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "algo raro", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_FALLIDA));
+        assertNull(respuesta.getEnriquecido() == null ? null : respuesta.getEnriquecido().solicitud());
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_conservaLoEnriquecidoYLeSumaLaSolicitud() {
+        // Lo que ya traia la respuesta (la oferta de soporte, el enlace al
+        // centro de ayuda) se queda; la solicitud se anade.
+        RespuestaEnriquecida conAyuda = new RespuestaEnriquecida(List.of(),
+            List.of(new EnlaceInterno("Ver el centro de ayuda", "ayuda")), List.of(), List.of("¿Cómo me registro?"),
+            true);
+        when(registro.guardarIntercambio(any(), anyString(), any(), any(), anyString(), any(), anyInt()))
+            .thenAnswer(inv -> {
+                ResultadoMotor resultado = inv.getArgument(5);
+                Mensaje bot = new Mensaje(mock(Conversacion.class), Remitente.BOT, inv.getArgument(4), null);
+                bot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
+                    resultado.requiereEscalamiento(), inv.getArgument(6), resultado.resultado());
+                bot.registrarEnriquecido(conAyuda);
+                return bot;
+            });
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("I'm not sure.", List.of()).enIngles(true));
+        when(soporte.alNoResolver(usuario, null))
+            .thenReturn(Optional.of(new com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService
+                .SolicitudAutomatica(solicitud(UID.toString()), true)));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "something weird", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_ABIERTA_EN));
+        assertEquals(conAyuda.enlaces(), respuesta.getEnriquecido().enlaces());
+        assertEquals(conAyuda.respuestasRapidas(), respuesta.getEnriquecido().respuestasRapidas());
+        assertTrue(respuesta.getEnriquecido().ofrecerSoporteHumano());
+        assertTrue(respuesta.getEnriquecido().solicitud().nueva());
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_aUnVisitanteEnInglesLeDiceLoMismoEnIngles() {
+        registroDevuelveLaRespuesta();
+        registroCompletaLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("I'm not sure.", List.of()).enIngles(true));
+        when(soporte.alNoResolver(visitante, null))
+            .thenReturn(Optional.of(new com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService
+                .SolicitudAutomatica(solicitud(visitante.claveDeConversacion()), true)));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "something weird", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.SOLICITUD_ABIERTA_VISITANTE_EN));
+    }
+
+    @Test
+    void enviarMensaje_sinRespuesta_sinNingunaPreguntaQueEnviarNoCambiaLaRespuesta() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro de haber entendido tu consulta.", List.of()));
+        when(soporte.alNoResolver(usuario, null)).thenReturn(Optional.empty());
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "algo raro", null);
+
+        assertEquals("No estoy seguro de haber entendido tu consulta.", respuesta.getContenido());
+        verify(registro, never()).completarRespuesta(any(), anyString(), any());
+    }
+
+    @Test
+    void enviarMensaje_conRespuesta_noAbreNingunaSolicitud() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("Respuesta de prueba", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
+
+        chatService.enviarMensaje(usuario, "Hola", null);
+
+        verifyNoInteractions(soporte);
+        verify(registro, never()).completarRespuesta(any(), anyString(), any());
     }
 
     // HU-CHA-011: una pregunta que MotorRespuestas escala es una "pregunta
@@ -386,6 +670,227 @@ class ChatServiceTest {
 
         assertEquals("Short.", respuesta.getContenido());
         verify(motorRespuestas, never()).generarRespuesta(anyString());
+    }
+
+    // 1.5.0: las consultas en vivo responden en el idioma preferido, y las
+    // preferencias se leen una sola vez por mensaje.
+    @Test
+    void usuarioConPreferenciaEnIngles_laConsultaEnVivoLaRecibeYSeLeeUnaVez() {
+        registroDevuelveLaRespuesta();
+        when(preferenciasService.de(usuario))
+            .thenReturn(new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL));
+        when(motorConsultasAsistidas.generarRespuesta("que tengo en mi inventario", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.EN))
+            .thenReturn(Optional.empty());
+        when(motorRespuestas.generarRespuesta(eq("que tengo en mi inventario"), any(), any()))
+            .thenReturn(ResultadoMotor.deTema("Inventory.", Categoria.FAQ_GENERAL, TipoRespuesta.DIRECTA));
+
+        chatService.enviarMensaje(usuario, "que tengo en mi inventario", null);
+
+        verify(preferenciasService, times(1)).de(usuario);
+    }
+
+    // 1.5.0 (7.4.8 + 7.4.2): el aviso de un dato tapado va en el idioma de la respuesta.
+    @Test
+    void enviarMensaje_conDatoSensibleYRespuestaEnIngles_avisaEnIngles() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("To log in...", Categoria.CUENTA_Y_REGISTRO, TipoRespuesta.DIRECTA)
+                .enIngles(true));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "my password is Hunter2! how do I log in", null);
+
+        assertTrue(respuesta.getContenido().startsWith(ChatService.AVISO_DATO_TAPADO_EN));
+        assertFalse(respuesta.getContenido().contains("Hunter2"));
+    }
+
+    @Test
+    void enviarMensaje_escaladoEnIngles_anadeLasPreguntasRelacionadasEnIngles() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.escalado("I'm not sure.", List.of("Registro")).enIngles(true));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "how do I fly", null);
+
+        assertTrue(respuesta.getContenido().endsWith(ChatService.RELACIONADAS_EN + "Registro."));
+    }
+
+    // ---- 1.5.0: seguimiento de la respuesta anterior (gestion de dialogo) ----
+
+    private Mensaje respuestaAnteriorDelBot(String temaClave) {
+        Mensaje anterior = new Mensaje(mock(Conversacion.class), Remitente.BOT, "Respuesta anterior", null);
+        anterior.registrarDatosDeRespuesta(temaClave, temaClave == null ? null : Categoria.CUENTA_Y_REGISTRO,
+            false, 12);
+        return anterior;
+    }
+
+    private void laRespuestaAnteriorFue(IdentidadDelChat identidad, String temaClave) {
+        when(mensajeRepository.findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(
+            identidad.claveDeConversacion(), Remitente.BOT))
+            .thenReturn(Optional.of(respuestaAnteriorDelBot(temaClave)));
+    }
+
+    @Test
+    void seguimiento_masDetalle_respondeElTemaAnteriorConDetalleSinBuscarOtraVez() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(visitante, "crear-cuenta");
+        when(motorRespuestas.responderTema("crear-cuenta",
+            new PreferenciasDeRespuesta(IdiomaPreferido.AUTOMATICO, NivelDeDetalle.DETALLADO), false))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Todo el detalle.", Categoria.CUENTA_Y_REGISTRO,
+                TipoRespuesta.PASO_A_PASO, "crear-cuenta")));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "Más detalle, por favor", null);
+
+        assertEquals("Todo el detalle.", respuesta.getContenido());
+        assertEquals("crear-cuenta", respuesta.getTemaClave());
+        // 1.7.0: el tema anterior, otra vez: resuelve.
+        assertEquals(ResultadoDeRespuesta.TEMA, respuesta.getResultado());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+        verifyNoInteractions(brechaConocimientoService);
+    }
+
+    @Test
+    void seguimiento_enIngles_respondeElTemaAnteriorEnIngles() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(usuario, "crear-cuenta");
+        when(motorRespuestas.responderTema("crear-cuenta",
+            new PreferenciasDeRespuesta(IdiomaPreferido.EN, NivelDeDetalle.NORMAL), true))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("To create your account...", Categoria.CUENTA_Y_REGISTRO,
+                TipoRespuesta.PASO_A_PASO, "crear-cuenta").enIngles(true)));
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "in english please", null);
+
+        assertEquals("To create your account...", respuesta.getContenido());
+        verifyNoInteractions(motorConsultasAsistidas);
+    }
+
+    @Test
+    void seguimiento_enEspanolYRepetir_usanLasPreferenciasQueTocan() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(visitante, "crear-cuenta");
+        when(motorRespuestas.responderTema(eq("crear-cuenta"), any(), anyBoolean()))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Otra vez.", Categoria.CUENTA_Y_REGISTRO,
+                TipoRespuesta.DIRECTA, "crear-cuenta")));
+
+        chatService.enviarMensaje(visitante, "en español", null);
+        chatService.enviarMensaje(visitante, "repítelo", null);
+
+        verify(motorRespuestas).responderTema("crear-cuenta",
+            new PreferenciasDeRespuesta(IdiomaPreferido.ES, NivelDeDetalle.NORMAL), false);
+        verify(motorRespuestas).responderTema("crear-cuenta", PreferenciasDeRespuesta.POR_DEFECTO, false);
+    }
+
+    // «No me sirvio» cuenta como escalamiento (se ofrece soporte) pero no es
+    // una pregunta sin cubrir: no va a las brechas de conocimiento.
+    @Test
+    void seguimiento_noMeSirvio_ofreceSoporteYNoRegistraBrecha() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(visitante, "crear-cuenta");
+        RespuestaEnriquecida conSoporte = new RespuestaEnriquecida(List.of(), List.of(), List.of(),
+            List.of("Recuperar mi contraseña"), true);
+        when(motorRespuestas.relacionadosCon("crear-cuenta", ChatService.NO_SIRVIO, false))
+            .thenReturn(Optional.of(new ResultadoMotor(ChatService.NO_SIRVIO, Categoria.CUENTA_Y_REGISTRO,
+                TipoRespuesta.CONTEXTUAL, true, List.of(), null, conSoporte, false)));
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "no me sirvió", null);
+
+        assertEquals(ChatService.NO_SIRVIO, respuesta.getContenido());
+        assertTrue(respuesta.getEscalado());
+        // 1.7.0: se guarda que no le sirvio, aunque el motor no lo dijera.
+        assertEquals(ResultadoDeRespuesta.NO_SIRVIO, respuesta.getResultado());
+        verifyNoInteractions(brechaConocimientoService);
+    }
+
+    @Test
+    void seguimiento_noEntendiTrasUnEscalamiento_ofreceSoporteEnSuIdioma() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(visitante, null);
+
+        Mensaje respuesta = chatService.enviarMensaje(visitante, "I don't understand", null);
+
+        assertEquals(ChatService.NO_SIRVIO_EN, respuesta.getContenido());
+        assertTrue(respuesta.getEscalado());
+        assertEquals(ResultadoDeRespuesta.NO_SIRVIO, respuesta.getResultado());
+        verify(registro).guardarIntercambio(any(), anyString(), any(), any(), anyString(),
+            org.mockito.ArgumentMatchers.argThat(r -> r.enriquecido().ofrecerSoporteHumano()), anyInt());
+        verifyNoInteractions(motorRespuestas, brechaConocimientoService);
+    }
+
+    // Tras una consulta en vivo (sin tema de la base) no se adivina: se pide
+    // la pregunta completa, y no se consulta nada en nombre del jugador.
+    @Test
+    void seguimiento_trasUnaConsultaEnVivo_pideLaPreguntaCompleta() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(usuario, null);
+
+        Mensaje respuesta = chatService.enviarMensaje(usuario, "repite", null);
+
+        assertEquals(ChatService.SIN_TEMA_ANTERIOR, respuesta.getContenido());
+        assertFalse(respuesta.getEscalado());
+        // 1.7.0: pedir la pregunta completa no resuelve nada.
+        assertEquals(ResultadoDeRespuesta.PIDE_REFORMULAR, respuesta.getResultado());
+        verifyNoInteractions(motorRespuestas, motorConsultasAsistidas, brechaConocimientoService);
+    }
+
+    @Test
+    void seguimiento_conElTemaAnteriorYaRetirado_pideLaPreguntaCompletaEnSuIdioma() {
+        registroDevuelveLaRespuesta();
+        laRespuestaAnteriorFue(visitante, "tema-retirado");
+        when(motorRespuestas.responderTema(eq("tema-retirado"), any(), anyBoolean())).thenReturn(Optional.empty());
+
+        assertEquals(ChatService.SIN_TEMA_ANTERIOR_EN,
+            chatService.enviarMensaje(visitante, "tell me more", null).getContenido());
+    }
+
+    // Sin respuesta anterior (primer mensaje o historial limpio), la frase es
+    // una pregunta mas.
+    @Test
+    void seguimiento_sinRespuestaAnterior_sigueElCaminoNormal() {
+        registroDevuelveLaRespuesta();
+        when(mensajeRepository.findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(
+            visitante.claveDeConversacion(), Remitente.BOT)).thenReturn(Optional.empty());
+        when(motorRespuestas.generarRespuesta("más detalle"))
+            .thenReturn(ResultadoMotor.escalado("No estoy seguro.", List.of()));
+
+        chatService.enviarMensaje(visitante, "más detalle", null);
+
+        verify(motorRespuestas).generarRespuesta("más detalle");
+        verify(motorRespuestas, never()).responderTema(any(), any(), anyBoolean());
+    }
+
+    // Una pregunta nueva que empieza como un seguimiento no lo es.
+    @Test
+    void preguntaNuevaQueEmpiezaComoSeguimiento_noBuscaLaRespuestaAnterior() {
+        registroDevuelveLaRespuesta();
+        when(motorRespuestas.generarRespuesta(anyString()))
+            .thenReturn(ResultadoMotor.deTema("Para publicar...", Categoria.SUBASTA_Y_COMERCIO, TipoRespuesta.PASO_A_PASO,
+                "publicar-subasta"));
+
+        chatService.enviarMensaje(visitante, "explícame mejor cómo publicar una subasta", null);
+        chatService.enviarMensaje(visitante, "quiero jugar de nuevo", null);
+
+        verify(mensajeRepository, never())
+            .findFirstByConversacionIdentificadorSesionAndRemitenteOrderByFechaEnvioDesc(anyString(), any());
+    }
+
+    // 1.10.0: el catalogo de hoy responde antes que la base, para visitantes y
+    // jugadores; la consulta en vivo de la propia cuenta va antes que el catalogo.
+    @Test
+    void elCatalogoRespondeAntesQueLaBaseYDespuesDeLaCuentaPropia() {
+        registroDevuelveLaRespuesta();
+        when(consultaDeCatalogo.responder("cuanto cuesta el orbe", IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("«Orbe» cuesta 90 créditos.", Categoria.PRODUCTO,
+                TipoRespuesta.CONTEXTUAL)));
+
+        assertEquals("«Orbe» cuesta 90 créditos.",
+            chatService.enviarMensaje(visitante, "cuanto cuesta el orbe", null).getContenido());
+        verify(motorRespuestas, never()).generarRespuesta(anyString());
+
+        when(motorConsultasAsistidas.generarRespuesta("busca orbe en mi inventario", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("1 resultado.", null, TipoRespuesta.CONTEXTUAL)));
+        chatService.enviarMensaje(usuario, "busca orbe en mi inventario", null);
+        verify(consultaDeCatalogo, never()).responder(eq("busca orbe en mi inventario"), any());
     }
 
     // Si la lectura falla, se responde igual, con las de por defecto.

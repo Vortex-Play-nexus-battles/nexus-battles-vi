@@ -40,8 +40,9 @@ public class RegistroDeConversaciones {
         mensajeRepository.save(new Mensaje(conversacion, Remitente.USUARIO, contenido, adjuntoUrl, recibido));
 
         Mensaje respuestaBot = new Mensaje(conversacion, Remitente.BOT, textoRespuesta, null);
+        // 1.7.0: con el resultado que dio el motor, para la tasa de resolucion.
         respuestaBot.registrarDatosDeRespuesta(resultado.temaClave(), resultado.categoria(),
-            resultado.requiereEscalamiento(), tiempoRespuestaMs);
+            resultado.requiereEscalamiento(), tiempoRespuestaMs, resultado.resultado());
         respuestaBot.registrarEnriquecido(resultado.enriquecido());
         mensajeRepository.save(respuestaBot);
 
@@ -49,6 +50,17 @@ public class RegistroDeConversaciones {
             sesiones.renovar(identidad.sesion());
         }
         return respuestaBot;
+    }
+
+    // 1.12.0 (RF-CHA-007): la respuesta ya guardada, con lo que se le dice
+    // sobre la solicitud de soporte que se abrio por ella. Transaccion corta y
+    // propia: la solicitud se abrio entre medias, fuera de esta.
+    @Transactional
+    public Mensaje completarRespuesta(Mensaje respuesta, String contenidoCompleto,
+                                      com.nexusbattles.ms_chatbot.chat.enriquecido.RespuestaEnriquecida enriquecido) {
+        Mensaje guardada = mensajeRepository.findById(respuesta.getId()).orElse(respuesta);
+        guardada.completarRespuesta(contenidoCompleto, enriquecido);
+        return mensajeRepository.save(guardada);
     }
 
     // La conversacion de esta identidad, o una nueva. Defensa en profundidad:

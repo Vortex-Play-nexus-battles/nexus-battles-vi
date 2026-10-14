@@ -13,10 +13,13 @@ import java.math.BigDecimal;
 import java.util.UUID;
 
 import nexus.api.SolicitudCrearProducto;
+import nexus.auditoria.RegistroDeOperaciones;
 import nexus.dominio.EstadoProducto;
 import nexus.dominio.Producto;
+import nexus.dominio.RespaldoProducto;
 import nexus.dominio.TipoProducto;
 import nexus.persistencia.ProductoRepository;
+import nexus.persistencia.RespaldoProductoRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
@@ -27,6 +30,7 @@ class CrearProductoServicioTest {
         @DisplayName("crea un producto activo con UUID, version, fechas y lo guarda")
         void creaYGuardaProducto() {
                 ProductoRepository repositorio = mock(ProductoRepository.class);
+                RespaldoProductoRepository respaldos = mock(RespaldoProductoRepository.class);
 
                 when(repositorio.insert(any(Producto.class)))
                         .thenAnswer(invocacion ->
@@ -35,7 +39,8 @@ class CrearProductoServicioTest {
                 CrearProductoServicio servicio =
                         new CrearProductoServicio(
                                 repositorio,
-                                Mappers.getMapper(ProductoMapper.class));
+                                Mappers.getMapper(ProductoMapper.class),
+                                respaldos, mock(RegistroDeOperaciones.class));
 
                 SolicitudCrearProducto solicitud = new SolicitudCrearProducto(
                         "Espada solar",
@@ -83,6 +88,33 @@ class CrearProductoServicioTest {
                 // B4: insert y no save: con @Version, un save de un documento nuevo
                 // con version 1 se leeria como la edicion de uno que no existe.
                 verify(repositorio).insert(producto);
+                verify(respaldos).save(any(RespaldoProducto.class));
                 assertEquals(nexus.dominio.OrigenProducto.ADMINISTRACION, producto.origen());
+        }
+
+        @Test
+        @DisplayName("SA-13: el alta puede nacer UNICO (§7.2.1); sin estado, ACTIVO; suspendido no es un estado inicial")
+        void estadoInicial() {
+                ProductoRepository repositorio = mock(ProductoRepository.class);
+                when(repositorio.insert(any(Producto.class)))
+                        .thenAnswer(invocacion -> invocacion.getArgument(0, Producto.class));
+                CrearProductoServicio servicio = new CrearProductoServicio(
+                        repositorio, Mappers.getMapper(ProductoMapper.class), mock(RespaldoProductoRepository.class), mock(RegistroDeOperaciones.class));
+
+                Producto unico = servicio.crear(arma(EstadoProducto.UNICO), "admin");
+                Producto activo = servicio.crear(arma(null), "admin");
+
+                assertEquals(EstadoProducto.UNICO, unico.estado());
+                assertEquals(EstadoProducto.ACTIVO, activo.estado());
+                assertTrue(arma(EstadoProducto.UNICO).isEstadoInicialValido());
+                assertTrue(arma(null).isEstadoInicialValido());
+                assertFalse(arma(EstadoProducto.SUSPENDIDO).isEstadoInicialValido());
+        }
+
+        private static SolicitudCrearProducto arma(EstadoProducto estado) {
+                return new SolicitudCrearProducto("Corona del Nexo", "productos/corona.webp",
+                        "Edicion unica para probar el estado inicial", TipoProducto.ARMA, 1, 900, null, false,
+                        null, null, null, null, null, null, null, null, null, null, null, 30,
+                        new BigDecimal("5"), null, estado);
         }
 }
