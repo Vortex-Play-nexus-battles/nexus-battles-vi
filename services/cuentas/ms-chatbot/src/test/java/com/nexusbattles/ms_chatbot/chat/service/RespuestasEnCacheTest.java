@@ -105,6 +105,7 @@ class RespuestasEnCacheTest {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motor, motorConsultasAsistidas,
             brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
             new RevisionDeEntrada(new RedactorDeDatosSensibles(), metricas), consultaDeCatalogo,
+            org.mockito.Mockito.mock(com.nexusbattles.ms_chatbot.chat.consultas.ConsultaDeSubastas.class),
             new com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica(),
             org.mockito.Mockito.mock(com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService.class));
         lenient().when(preferenciasService.efectivasDe(any())).thenReturn(PreferenciasDeRespuesta.POR_DEFECTO);

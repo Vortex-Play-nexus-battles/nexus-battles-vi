@@ -4,10 +4,12 @@ import com.nexusbattles.ms_chatbot.chat.consultas.IntencionDeConsulta.Dominio;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiPublicacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MisionActivaDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.ParticipacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
@@ -23,6 +25,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -153,6 +158,8 @@ public class MotorConsultasAsistidas {
     private static final int TORNEOS_A_REVISAR = 3;
     private static final int MOVIMIENTOS_A_MOSTRAR = 5;
     private static final int MISIONES_A_MOSTRAR = 3;
+    /** 1.16.0 — cuantas subastas suyas (pujas y publicaciones) van en tarjetas. */
+    static final int SUBASTAS_A_MOSTRAR = 5;
     private static final int ELEMENTOS_A_NOMBRAR = 5;
 
     // 7.4.11 «latencia < 2 segundos»: lo que el informe de actividad espera, en
@@ -251,7 +258,11 @@ public class MotorConsultasAsistidas {
         if (IntencionDeConsulta.consultaSuInventario(mensaje)) {
             return Optional.of(Dominio.INVENTARIO);
         }
-        if (contieneAlguna(mensaje, PALABRAS_SUBASTAS) || IntencionDeConsulta.consultaSus(mensaje, Dominio.SUBASTAS)) {
+        // 1.16.0: «¿cuántas subastas hay?» o «muéstrame las subastas activas»
+        // preguntan por lo que hay (dato publico, ConsultaDeSubastas), no por
+        // lo suyo, aunque traigan «cuántas» o «muéstrame».
+        if ((contieneAlguna(mensaje, PALABRAS_SUBASTAS) || IntencionDeConsulta.consultaSus(mensaje, Dominio.SUBASTAS))
+            && !ConsultaDeSubastas.pideLoQueHay(mensaje)) {
             return Optional.of(Dominio.SUBASTAS);
         }
         if (contieneAlguna(mensaje, PALABRAS_NOTIFICACIONES)
@@ -348,12 +359,60 @@ public class MotorConsultasAsistidas {
         }
     }
 
+    // 1.16.0 (7.4.4 «estado de productos en la subasta»): el resumen de
+    // siempre y, en tarjetas, cada subasta abierta en la que puja y cada una
+    // que publico, las que cierran antes primero. Las tres consultas van a la
+    // vez y se espera como mucho PLAZO_DEL_INFORME: sin el resumen, «no
+    // disponible»; sin el detalle, el resumen y donde verlo.
     private ResultadoMotor consultarSubastas(String tokenBearer, TextosDeConsultas t) {
+        ExecutorService hilos = Executors.newVirtualThreadPerTaskExecutor();
         try {
-            return consultado(textoSubastas(subastasClient.consultarMiResumen(tokenBearer), t), "subastas", t);
-        } catch (RestClientException excepcion) {
-            return noDisponible(t.subastasNoDisponibles(), t);
+            Future<MiResumenDto> resumen = hilos.submit(() -> subastasClient.consultarMiResumen(tokenBearer));
+            Future<List<ParticipacionDto>> pujas = hilos.submit(() -> subastasClient.misParticipaciones(tokenBearer));
+            Future<List<MiPublicacionDto>> publicadas =
+                hilos.submit(() -> subastasClient.misPublicacionesActivas(tokenBearer));
+            long limite = System.nanoTime() + PLAZO_DEL_INFORME.toNanos();
+            Optional<MiResumenDto> delResumen = esperar(resumen, limite);
+            if (delResumen.isEmpty()) {
+                return noDisponible(t.subastasNoDisponibles(), t);
+            }
+            Optional<List<ParticipacionDto>> susPujas = esperar(pujas, limite);
+            Optional<List<MiPublicacionDto>> susPublicaciones = esperar(publicadas, limite);
+            String texto = textoSubastas(delResumen.get(), t);
+            if (susPujas.isEmpty() || susPublicaciones.isEmpty()) {
+                return consultado(texto + t.sinDetalleDeMisSubastas(), "subastas", t);
+            }
+            List<ParticipacionDto> abiertas = susPujas.get().stream()
+                .filter(ParticipacionDto::activa)
+                .toList();
+            List<MiPublicacionDto> propias = susPublicaciones.get();
+            texto += t.detalleDeMisSubastas(abiertas.size(), propias.size());
+            List<TarjetaInformativa> tarjetas = tarjetasDeSubastas(abiertas, propias, t);
+            return ResultadoMotor.deTema(texto, null, TipoRespuesta.CONTEXTUAL)
+                .conEnriquecido(Enriquecedor.conTarjetas(tarjetas, "subastas", t.ingles()))
+                .enIngles(t.ingles())
+                .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+        } finally {
+            hilos.shutdownNow();
         }
+    }
+
+    // Las que cierran antes primero, sus pujas y sus publicaciones juntas.
+    private static List<TarjetaInformativa> tarjetasDeSubastas(List<ParticipacionDto> pujas,
+                                                               List<MiPublicacionDto> publicadas,
+                                                               TextosDeConsultas t) {
+        record Tarjeta(Instant fin, TarjetaInformativa tarjeta) {
+        }
+        List<Tarjeta> todas = new ArrayList<>();
+        pujas.forEach(p -> todas.add(new Tarjeta(p.fechaFin(),
+            new TarjetaInformativa(p.nombreProducto(), t.tarjetaDePuja(p), null))));
+        publicadas.forEach(p -> todas.add(new Tarjeta(p.fechaFin(),
+            new TarjetaInformativa(p.nombreProducto(), t.tarjetaDePublicacion(p), null))));
+        return todas.stream()
+            .sorted(Comparator.comparing(Tarjeta::fin, Comparator.nullsLast(Comparator.naturalOrder())))
+            .limit(SUBASTAS_A_MOSTRAR)
+            .map(Tarjeta::tarjeta)
+            .toList();
     }
 
     private ResultadoMotor consultarNotificaciones(String tokenBearer, String uid, TextosDeConsultas t) {
@@ -442,7 +501,7 @@ public class MotorConsultasAsistidas {
     }
 
     // La parte, o vacio si fallo o no llego a tiempo.
-    private static Optional<String> esperar(Future<String> parte, long limiteNanos) {
+    private static <T> Optional<T> esperar(Future<T> parte, long limiteNanos) {
         try {
             long queda = Math.max(0, limiteNanos - System.nanoTime());
             return Optional.ofNullable(parte.get(queda, TimeUnit.NANOSECONDS));

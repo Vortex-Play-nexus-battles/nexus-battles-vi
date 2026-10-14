@@ -62,6 +62,9 @@ openapi: 3.1.0
 #               experiencia: el asistente propone, por lo que la persona ya
 #               pregunto y por donde esta, y su nivel de detalle automatico
 #               sigue a su experiencia con el asistente
+#   7.4.4 (1.16.0) estado de productos en la subasta: lo que hay ahora en la
+#               subasta, para todos, y cada subasta abierta en la que el
+#               jugador puja o que publico
 #   7.4 (1.3.0) lo que faltaba del modulo 7.4: tickets y soporte humano
 #               (RF-CHA-007, RF-ADM-004), sugerencias y autocompletado,
 #               respuestas enriquecidas sin imagenes, vista del jugador y
@@ -135,7 +138,9 @@ openapi: 3.1.0
 # DEPENDENCIAS SALIENTES (HU-CHA-008, B11)
 #
 # Con un usuario autenticado, `POST /chat/mensajes` puede consultar
-# inventario (`inventario.yaml`), subastas (`ms-subastas-pujas.yaml`),
+# inventario (`inventario.yaml`), subastas (`ms-subastas-pujas.yaml`: resumen
+# y, desde 1.16.0, `GET /mis-pujas`; `ms-subastas-panel.yaml`, desde 1.16.0,
+# `GET /mis-subastas/publicadas?estado=ACTIVA`),
 # notificaciones (`notificaciones.yaml`) y sus movimientos de creditos
 # (`creditos.yaml`, `GET /creditos/{uid}/movimientos`) y sus misiones en curso
 # (`misiones.yaml` 1.0.0, `GET /api/v1/misiones/en-curso`, desde 1.3.0),
@@ -146,7 +151,9 @@ openapi: 3.1.0
 # chatbot NUNCA usa una credencial de servicio para leer datos de un jugador.
 # Los torneos se consultan como dato publico (`torneos.yaml`, `GET /torneos`),
 # y desde 1.10.0, para visitantes y jugadores, el catalogo de productos
-# (`productos.yaml`, `GET /api/v1/productos`, sin credencial).
+# (`productos.yaml`, `GET /api/v1/productos`, sin credencial), y desde 1.16.0
+# lo que hay en la subasta (`ms-subastas-listado.yaml`, `GET /api/v1/subastas`,
+# sin credencial: nada del vendedor).
 # Todo el texto del usuario pasa antes por la lista negra
 # (`moderacion-lista-negra.yaml` 2.0.0, contexto CHAT_GENERAL). Todas las
 # llamadas tienen tiempo de espera y ninguna ocurre dentro de una transaccion.
@@ -156,7 +163,7 @@ openapi: 3.1.0
 
 info:
   title: Nexus Battles VI — Chatbot de soporte
-  version: 1.15.0
+  version: 1.16.0
   description: |
     Chat de soporte 24/7 para visitantes y jugadores: respuestas desde una
     base de conocimiento, consultas en vivo sobre la propia cuenta,
@@ -166,6 +173,28 @@ info:
 
     Errores en formato problem details (regla 4), con el `ProblemDetail`
     estandar de Spring; los de 1.2.0 traen ademas `motivo`.
+
+    ### 1.16.0 — 7.4.4: estado de productos en la subasta
+
+    Compatible: ninguna operacion ni forma cambia; cambia lo que responde
+    `POST /chat/mensajes`.
+
+    * **Lo que hay ahora en la subasta, para todos** (§7.4.4 «acceso a
+      informacion en tiempo real: estado de productos en la subasta»).
+      «¿Que hay ahora en la subasta?», «¿cuantas subastas hay?» o «what's on
+      auction?» responden cuantas hay abiertas y, en tarjetas, las que cierran
+      antes, con su oferta vigente, sus pujas, su cierre y su compra
+      inmediata; «¿hay espadas en subasta?» o «¿como va la subasta del
+      Hacha…?», las de ese producto (por su nombre o su tipo, sin tildes, en
+      plural y con un error de tecleo). Sale del listado publico de
+      ms-subastas, sin credencial: nada del vendedor. Las reglas y los
+      procedimientos («¿como funciona?», «¿cuanto cuesta publicar?») los sigue
+      respondiendo la base.
+    * **Lo suyo, una por una.** «¿Como van mis subastas?» ademas del resumen
+      trae, en tarjetas, cada subasta abierta en la que puja (vas ganando, te
+      superaron, tu puja automatica) y cada una que publico, las que cierran
+      antes primero, con el token del propio jugador. Si el detalle no llega
+      a tiempo, el resumen y donde verlo.
 
     ### 1.15.0 — 7.4.3 y 7.4.5: sugerencias para ti y detalle segun la experiencia
 
@@ -846,6 +875,8 @@ paths:
         1b. Desde 1.11.0, para todos: ir a una seccion publica («llevame a
            la subasta», «ir al centro de ayuda»); las que piden sesion, a un
            visitante se le dice que entre.
+        1c. Desde 1.16.0, para todos: lo que hay ahora en la subasta, del
+           listado publico de ms-subastas (`ms-subastas-listado.yaml`).
         2. Desde 1.10.0, para todos: si pregunta por los productos que se
            venden, por el precio o por la ficha de un producto del catalogo,
            se responde con el catalogo publico de hoy (`productos.yaml`).

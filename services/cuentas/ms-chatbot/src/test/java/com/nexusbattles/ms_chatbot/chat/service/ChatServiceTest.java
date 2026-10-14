@@ -85,6 +85,8 @@ class ChatServiceTest {
     @Mock
     private com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo consultaDeCatalogo;
     @Mock
+    private com.nexusbattles.ms_chatbot.chat.consultas.ConsultaDeSubastas consultaDeSubastas;
+    @Mock
     private com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica navegacionPublica;
     @Mock
     private com.nexusbattles.ms_chatbot.chat.soporte.TicketSoporteService soporte;
@@ -101,7 +103,7 @@ class ChatServiceTest {
         chatService = new ChatService(conversacionRepository, mensajeRepository, motorRespuestas,
             motorConsultasAsistidas, brechaConocimientoService, limitador, moderacion, registro, preferenciasService,
             new RevisionDeEntrada(new RedactorDeDatosSensibles(), new SimpleMeterRegistry()), consultaDeCatalogo,
-            navegacionPublica, soporte);
+            consultaDeSubastas, navegacionPublica, soporte);
     }
 
     private void registroDevuelveLaRespuesta() {
@@ -891,6 +893,28 @@ class ChatServiceTest {
             .thenReturn(Optional.of(ResultadoMotor.deTema("1 resultado.", null, TipoRespuesta.CONTEXTUAL)));
         chatService.enviarMensaje(usuario, "busca orbe en mi inventario", null);
         verify(consultaDeCatalogo, never()).responder(eq("busca orbe en mi inventario"), any());
+    }
+
+    // 1.16.0 (7.4.4): lo que hay ahora en la subasta responde antes que el
+    // catalogo y la base, para visitantes y jugadores; lo suyo va antes.
+    @Test
+    void laSubastaRespondeAntesQueElCatalogoYLaBaseYDespuesDeLaCuentaPropia() {
+        registroDevuelveLaRespuesta();
+        when(consultaDeSubastas.responder("que hay en la subasta", IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Hay 2 subasta(s) abierta(s) ahora.",
+                Categoria.SUBASTA_Y_COMERCIO, TipoRespuesta.CONTEXTUAL)
+                .conResultado(ResultadoDeRespuesta.CONSULTA_EN_VIVO)));
+
+        assertEquals("Hay 2 subasta(s) abierta(s) ahora.",
+            chatService.enviarMensaje(visitante, "que hay en la subasta", null).getContenido());
+        verifyNoInteractions(motorRespuestas, consultaDeCatalogo, brechaConocimientoService);
+
+        when(motorConsultasAsistidas.generarRespuesta("como van mis subastas", "token-de-prueba", UID.toString(),
+            IdiomaPreferido.AUTOMATICO))
+            .thenReturn(Optional.of(ResultadoMotor.deTema("Vas ganando 1 subasta(s).", null,
+                TipoRespuesta.CONTEXTUAL)));
+        chatService.enviarMensaje(usuario, "como van mis subastas", null);
+        verify(consultaDeSubastas, never()).responder(eq("como van mis subastas"), any());
     }
 
     // Si la lectura falla, se responde igual, con las de por defecto.

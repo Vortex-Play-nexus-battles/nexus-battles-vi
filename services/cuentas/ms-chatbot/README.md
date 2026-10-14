@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.15.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.16.0 (compatible con 1.1.0) · `contracts/websocket/chatbot.yaml` 1.2.0 (canal en tiempo real, 7.4.9)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V20) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -502,12 +502,13 @@ propio token; el chatbot no tiene credencial de servicio.
 |---|---|---|
 | Inventario | inventario `GET /api/v1/inventario/elementos` | token del jugador |
 | Búsqueda en el inventario (1.5.0) | inventario `GET /api/v1/inventario/elementos/busqueda` | token del jugador |
-| Subastas | ms-subastas `GET /mis-pujas/resumen` | token del jugador |
+| Subastas | ms-subastas `GET /mis-pujas/resumen`; desde 1.16.0 también `GET /mis-pujas` y `GET /mis-subastas/publicadas?estado=ACTIVA` | token del jugador |
 | Notificaciones | notificaciones `GET /users/{uid}/notifications` | token del jugador |
 | Movimientos de créditos (B11) | ms-finanzas `GET /creditos/{uid}/movimientos` | token del jugador |
 | Torneos en curso y mi equipo (B11) | torneos `GET /torneos`, `GET /torneos/{id}` | ninguna (dato público) |
 | Misiones en curso (1.3.0) | misiones `GET /api/v1/misiones/en-curso` | token del jugador |
 | Catálogo de productos (1.10.0, también visitantes) | productos `GET /api/v1/productos` | ninguna (dato público) |
+| Lo que hay en la subasta (1.16.0, también visitantes) | ms-subastas `GET /api/v1/subastas?ordenarPor=TIEMPO_RESTANTE` | ninguna (dato público) |
 
 **Cómo se reconoce (1.11.0).** El inventario, las subastas, las notificaciones, las
 transacciones y las misiones se reconocen igual (`IntencionDeConsulta`): habla de ese tema,
@@ -521,6 +522,19 @@ una sesión, con enlaces a «Entrar» y «Crear cuenta»: no se consulta nada ni
 pregunta sin respuesta. **Navegación pública** (`NavegacionPublica`, para todos): «llévame a la
 subasta», «ir al centro de ayuda», «take me to the store»… con el enlace a la vista; la tienda,
 el chat general y «Jugar online» piden sesión, y a un visitante se le dice que entre.
+
+**La subasta (1.16.0, §7.4.4 «estado de productos en la subasta»).** «¿Cómo van mis
+subastas?» trae, además del resumen, una tarjeta por cada subasta abierta en la que puja (vas
+ganando, te superaron, tu puja automática) y por cada una que publicó, las que cierran antes
+primero (cinco como mucho); las tres consultas van a la vez con el mismo plazo que el informe,
+y sin el detalle se da el resumen y dónde verlo. `ConsultaDeSubastas`, para todos: «¿qué hay
+ahora en la subasta?», «¿cuántas subastas hay?», «what's on auction?» dicen cuántas hay
+abiertas y las cinco que cierran antes; «¿hay espadas en subasta?», «¿cómo va la subasta del
+Hacha…?», las de ese producto, por su nombre o su tipo, sin tildes, en plural y con un error de
+tecleo, entre las 100 que cierran antes (si hay más abiertas, con la búsqueda del propio
+listado). Del listado público: nada del vendedor. Las reglas y los procedimientos («¿cómo
+funciona?», «¿cuánto cuesta publicar?», «¿puedo cancelar…?») los sigue respondiendo la base,
+y lo suyo («mis», «tengo») va con su token.
 
 «Busca espada en mi inventario», «¿tengo alguna poción en mi inventario?» o «search my
 inventory for a sword» usan la búsqueda real (criterio de 4 letras o más, como pide el

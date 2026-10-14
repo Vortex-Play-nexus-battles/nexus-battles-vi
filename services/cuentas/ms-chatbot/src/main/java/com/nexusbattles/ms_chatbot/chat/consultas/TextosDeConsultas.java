@@ -1,5 +1,10 @@
 package com.nexusbattles.ms_chatbot.chat.consultas;
 
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiPublicacionDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.ParticipacionDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.SubastaActivaDto;
+
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -97,6 +102,11 @@ final class TextosDeConsultas {
         return noDisponible("tus subastas", "your auctions");
     }
 
+    /** 1.16.0 — el listado publico de la subasta. */
+    String subastaNoDisponible() {
+        return noDisponible("la subasta", "the auction");
+    }
+
     String notificacionesNoDisponibles() {
         return noDisponible("tus notificaciones", "your notifications");
     }
@@ -151,17 +161,133 @@ final class TextosDeConsultas {
 
     // ---- Subastas -----------------------------------------------------------
 
+    // 1.16.0: los importes como los escribe una persona («300», no «300.00»).
     String subastas(Object ganando, Object retenidos, Object saldo) {
         String texto = elegir(
-            "Vas ganando " + ganando + " subasta(s) en este momento, con " + retenidos
+            "Vas ganando " + ganando + " subasta(s) en este momento, con " + creditos(retenidos)
                 + " créditos retenidos en pujas activas.",
-            "You're winning " + ganando + " auction(s) right now, with " + retenidos
+            "You're winning " + ganando + " auction(s) right now, with " + creditos(retenidos)
                 + " credits held in active bids.");
         if (saldo != null) {
-            texto += elegir(" Tu saldo disponible es de " + saldo + " créditos.",
-                " Your available balance is " + saldo + " credits.");
+            texto += elegir(" Tu saldo disponible es de " + creditos(saldo) + " créditos.",
+                " Your available balance is " + creditos(saldo) + " credits.");
         }
         return texto;
+    }
+
+    // 1.16.0 (7.4.4 «estado de productos en la subasta») — cada subasta abierta
+    // en la que puja o que publico, en tarjetas.
+    String detalleDeMisSubastas(int pujando, int publicadas) {
+        if (pujando == 0 && publicadas == 0) {
+            return elegir(" No tienes pujas ni subastas publicadas que sigan abiertas.",
+                " You have no bids or listings in auctions that are still open.");
+        }
+        return elegir(" Pujas en " + pujando + " subasta(s) abierta(s) y tienes " + publicadas
+                + " publicada(s); las que cierran antes, abajo.",
+            " You're bidding in " + pujando + " open auction(s) and have " + publicadas
+                + " listing(s) of your own; the ones closing soonest are below.");
+    }
+
+    String sinDetalleDeMisSubastas() {
+        return elegir(" No pude traer el detalle de cada una: lo ves en «Subasta», en «Mis subastas».",
+            " I couldn't get the details of each one: you can see them in «Subasta» (Auction), «Mis subastas» "
+                + "(My auctions).");
+    }
+
+    String tarjetaDePuja(ParticipacionDto puja) {
+        String estado = switch (puja.estado() == null ? "" : puja.estado()) {
+            case "GANANDO" -> elegir("Vas ganando con " + creditos(puja.tuMejorPuja()) + " créditos",
+                "You're winning with " + creditos(puja.tuMejorPuja()) + " credits");
+            case "SUPERADA" -> elegir("Te superaron: la oferta vigente es " + creditos(puja.ofertaVigente())
+                    + " y tu mejor puja, " + creditos(puja.tuMejorPuja()),
+                "You've been outbid: the current offer is " + creditos(puja.ofertaVigente()) + " and your best bid, "
+                    + creditos(puja.tuMejorPuja()));
+            case "AUTOMATICA" -> elegir("Tu puja automática aún no ha pujado; la oferta vigente es "
+                    + creditos(puja.ofertaVigente()),
+                "Your automatic bid hasn't bid yet; the current offer is " + creditos(puja.ofertaVigente()));
+            default -> elegir("Oferta vigente: " + creditos(puja.ofertaVigente()),
+                "Current offer: " + creditos(puja.ofertaVigente()));
+        };
+        return estado + " · " + pujas(puja.cantidadPujas()) + " · " + cierraEl(puja.fechaFin()) + ".";
+    }
+
+    String tarjetaDePublicacion(MiPublicacionDto publicacion) {
+        return elegir("Tu subasta: oferta vigente " + creditos(publicacion.ofertaVigente()) + " créditos",
+            "Your auction: current offer " + creditos(publicacion.ofertaVigente()) + " credits")
+            + " · " + pujas(publicacion.cantidadPujas()) + " · " + cierraEl(publicacion.fechaFin()) + ".";
+    }
+
+    // ---- La subasta: lo que hay ahora (1.16.0, publico) -------------------------
+
+    String subastasAbiertas(long total, String lista) {
+        return elegir("Hay " + total + " subasta(s) abierta(s) ahora. Las que cierran antes: " + lista + ".",
+            "There are " + total + " open auction(s) right now. Closing soonest: " + lista + ".");
+    }
+
+    String sinSubastasAbiertas() {
+        return elegir("Ahora no hay ninguna subasta abierta. Puedes publicar una en «Subasta», con «Publicar "
+                + "subasta».",
+            "There are no open auctions right now. You can list one in «Subasta» (Auction), with «Publicar "
+                + "subasta» (List an auction).");
+    }
+
+    String subastasDe(String buscado, int cuantas, String lista) {
+        return elegir("Hay " + cuantas + " subasta(s) abierta(s) de «" + buscado + "»: " + lista + ".",
+            "There are " + cuantas + " open auction(s) for «" + buscado + "»: " + lista + ".");
+    }
+
+    String ningunaDe(String buscado, long abiertas) {
+        if (abiertas == 0) {
+            return elegir("Ahora no hay subastas abiertas de «" + buscado + "»; de hecho, no hay ninguna abierta.",
+                "There are no open auctions for «" + buscado + "» right now; in fact, there are none open.");
+        }
+        return elegir("Ahora no hay subastas abiertas de «" + buscado + "». Hay " + abiertas
+                + " abierta(s) de otros productos.",
+            "There are no open auctions for «" + buscado + "» right now. There are " + abiertas
+                + " open auction(s) for other products.");
+    }
+
+    String enLista(SubastaActivaDto subasta) {
+        return "«" + subasta.nombreProducto() + "» (" + elegir("oferta vigente ", "current offer ")
+            + creditos(subasta.ofertaVigente()) + ", " + pujas(subasta.cantidadPujas()) + ", "
+            + cierraEl(subasta.fechaFin()) + ")";
+    }
+
+    String tarjetaDeSubasta(SubastaActivaDto subasta) {
+        String texto = elegir("Oferta vigente: " + creditos(subasta.ofertaVigente()) + " créditos",
+            "Current offer: " + creditos(subasta.ofertaVigente()) + " credits")
+            + " · " + pujas(subasta.cantidadPujas()) + " · " + cierraEl(subasta.fechaFin());
+        if (subasta.precioCompraInmediata() != null) {
+            texto += elegir(" · compra inmediata: " + creditos(subasta.precioCompraInmediata()) + " créditos",
+                " · buy now: " + creditos(subasta.precioCompraInmediata()) + " credits");
+        }
+        return texto + ".";
+    }
+
+    private String pujas(Integer cantidad) {
+        int n = cantidad == null ? 0 : cantidad;
+        return elegir(n + " puja(s)", n + " bid(s)");
+    }
+
+    private String cierraEl(Instant fin) {
+        if (fin == null) {
+            return elegir("sin fecha de cierre", "no closing date");
+        }
+        return elegir("cierra el " + FIN_ES.format(fin), "closes on " + FIN_EN.format(fin) + " (Colombia time)");
+    }
+
+    // Un importe como lo escribe una persona: «120», no «120.00». Lo que no es
+    // un numero se dice tal cual; lo que falta, como guion.
+    static String creditos(Object importe) {
+        if (importe == null) {
+            return "—";
+        }
+        try {
+            BigDecimal valor = importe instanceof BigDecimal decimal ? decimal : new BigDecimal(importe.toString().strip());
+            return valor.stripTrailingZeros().toPlainString();
+        } catch (NumberFormatException noEsNumero) {
+            return importe.toString();
+        }
     }
 
     // ---- Notificaciones -------------------------------------------------------

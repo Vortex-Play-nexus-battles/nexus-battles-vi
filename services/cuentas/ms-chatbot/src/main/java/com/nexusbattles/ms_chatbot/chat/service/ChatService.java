@@ -1,6 +1,7 @@
 package com.nexusbattles.ms_chatbot.chat.service;
 
 import com.nexusbattles.ms_chatbot.chat.catalogo.ConsultaDeCatalogo;
+import com.nexusbattles.ms_chatbot.chat.consultas.ConsultaDeSubastas;
 import com.nexusbattles.ms_chatbot.chat.consultas.MotorConsultasAsistidas;
 import com.nexusbattles.ms_chatbot.chat.consultas.NavegacionPublica;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.Enriquecedor;
@@ -128,6 +129,7 @@ public class ChatService {
     private final MotorRespuestas motorRespuestas;
     private final MotorConsultasAsistidas motorConsultasAsistidas;
     private final ConsultaDeCatalogo consultaDeCatalogo;
+    private final ConsultaDeSubastas consultaDeSubastas;
     private final NavegacionPublica navegacionPublica;
     private final BrechaConocimientoService brechaConocimientoService;
     private final LimitadorDeFrecuencia limitador;
@@ -142,8 +144,8 @@ public class ChatService {
                        BrechaConocimientoService brechaConocimientoService, LimitadorDeFrecuencia limitador,
                        ModeracionDeContenido moderacion, RegistroDeConversaciones registro,
                        PreferenciasService preferenciasService, RevisionDeEntrada revision,
-                       ConsultaDeCatalogo consultaDeCatalogo, NavegacionPublica navegacionPublica,
-                       TicketSoporteService soporte) {
+                       ConsultaDeCatalogo consultaDeCatalogo, ConsultaDeSubastas consultaDeSubastas,
+                       NavegacionPublica navegacionPublica, TicketSoporteService soporte) {
         this.conversacionRepository = conversacionRepository;
         this.mensajeRepository = mensajeRepository;
         this.motorRespuestas = motorRespuestas;
@@ -155,6 +157,7 @@ public class ChatService {
         this.preferenciasService = preferenciasService;
         this.revision = revision;
         this.consultaDeCatalogo = consultaDeCatalogo;
+        this.consultaDeSubastas = consultaDeSubastas;
         this.navegacionPublica = navegacionPublica;
         this.soporte = soporte;
     }
@@ -296,6 +299,12 @@ public class ChatService {
         Optional<ResultadoMotor> navegacion = navegacionPublica.responder(contenido, conSesion, preferencias.idioma());
         if (navegacion.isPresent()) {
             return new Generada(navegacion.get(), false);
+        }
+        // 1.16.0 (7.4.4): lo que hay ahora en la subasta (dato publico), para
+        // visitantes y jugadores. Lo suyo ya lo respondio el motor de arriba.
+        Optional<ResultadoMotor> subasta = consultaDeSubastas.responder(contenido, preferencias.idioma());
+        if (subasta.isPresent()) {
+            return new Generada(subasta.get(), false);
         }
         // 1.10.0: el catalogo de hoy (dato publico), para visitantes y jugadores.
         Optional<ResultadoMotor> catalogo = consultaDeCatalogo.responder(contenido, preferencias.idioma());
