@@ -183,7 +183,28 @@ public final class Enriquecedor {
                                                 boolean ingles) {
         List<String> pasos = tema.getTipoRespuesta() == TipoRespuesta.PASO_A_PASO ? pasosDe(texto) : List.of();
         List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
-        return new RespuestaEnriquecida(pasos, enlaces, List.of(), relacionadosCon(tema, temas), false);
+        return new RespuestaEnriquecida(pasos, enlaces, List.of(), relacionadosCon(tema, temas, ingles), false);
+    }
+
+    /** 1.15.0: el boton que pide la respuesta entera; «más detalle» es un seguimiento (1.5.0). */
+    public static final String MAS_DETALLE_ES = "Más detalle";
+    public static final String MAS_DETALLE_EN = "More detail";
+
+    /**
+     * 1.15.0 (7.4.5, D-CHA-13): una respuesta recortada (nivel BREVE) lleva
+     * delante el boton «Más detalle», que la da entera en un clic; detras, las
+     * relacionadas que quepan.
+     */
+    public static RespuestaEnriquecida conMasDetalle(RespuestaEnriquecida respuesta, boolean ingles) {
+        String boton = ingles ? MAS_DETALLE_EN : MAS_DETALLE_ES;
+        List<String> rapidas = new ArrayList<>(MAXIMO_DE_RAPIDAS);
+        rapidas.add(boton);
+        respuesta.respuestasRapidas().stream()
+            .filter(rapida -> !boton.equals(rapida))
+            .limit(MAXIMO_DE_RAPIDAS - 1L)
+            .forEach(rapidas::add);
+        return new RespuestaEnriquecida(respuesta.pasos(), respuesta.enlaces(), respuesta.tarjetas(), rapidas,
+            respuesta.ofrecerSoporteHumano(), respuesta.solicitud());
     }
 
     /**
@@ -207,7 +228,7 @@ public final class Enriquecedor {
         Set<String> rapidas = new LinkedHashSet<>(sugeridos == null ? List.of() : sugeridos);
         Categoria deLaVista = vista == null ? null : vista.categoria();
         if (deLaVista != null && rapidas.size() < MAXIMO_DE_RAPIDAS) {
-            rapidas.addAll(titulosDe(temas, deLaVista, Set.of(), MAXIMO_DE_RAPIDAS));
+            rapidas.addAll(titulosDe(temas, deLaVista, Set.of(), MAXIMO_DE_RAPIDAS, ingles));
         }
         List<String> limitadas = rapidas.stream().limit(MAXIMO_DE_RAPIDAS).toList();
         Set<String> destinos = new LinkedHashSet<>();
@@ -230,7 +251,7 @@ public final class Enriquecedor {
                                                     boolean ingles) {
         List<EnlaceInterno> enlaces = new ArrayList<>(destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList());
         enlaces.add(enlaceAlCentroDeAyuda(tema.getCategoria(), ingles));
-        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), relacionadosCon(tema, temas), true);
+        return new RespuestaEnriquecida(List.of(), enlaces, List.of(), relacionadosCon(tema, temas, ingles), true);
     }
 
     /**
@@ -260,13 +281,19 @@ public final class Enriquecedor {
      * orden del enum.
      */
     static List<String> relacionadosCon(TemaConocimiento tema, List<TemaConocimiento> temas) {
+        return relacionadosCon(tema, temas, false);
+    }
+
+    /** 1.17.0 (7.4.2): con el titulo en el idioma de la respuesta (el de siempre si no hay en ingles). */
+    static List<String> relacionadosCon(TemaConocimiento tema, List<TemaConocimiento> temas, boolean ingles) {
         Set<String> excluidas = Set.of(tema.getClave());
-        Set<String> titulos = new LinkedHashSet<>(titulosDe(temas, tema.getCategoria(), excluidas, MAXIMO_DE_RAPIDAS));
+        Set<String> titulos = new LinkedHashSet<>(titulosDe(temas, tema.getCategoria(), excluidas, MAXIMO_DE_RAPIDAS,
+            ingles));
         for (Categoria intencion : tema.getIntencionesAdicionales()) {
             if (titulos.size() >= MAXIMO_DE_RAPIDAS) {
                 break;
             }
-            titulos.addAll(titulosDe(temas, intencion, excluidas, MAXIMO_DE_RAPIDAS));
+            titulos.addAll(titulosDe(temas, intencion, excluidas, MAXIMO_DE_RAPIDAS, ingles));
         }
         return titulos.stream().limit(MAXIMO_DE_RAPIDAS).toList();
     }
@@ -284,9 +311,10 @@ public final class Enriquecedor {
             true);
     }
 
+    // 1.17.0: el titulo puede ser el de ingles.
     private static Optional<TemaConocimiento> temaConTitulo(List<TemaConocimiento> temas, String titulo) {
         return temas == null ? Optional.empty()
-            : temas.stream().filter(t -> titulo.equals(t.getTitulo())).findFirst();
+            : temas.stream().filter(t -> titulo.equals(t.getTitulo()) || titulo.equals(t.getTituloEn())).findFirst();
     }
 
     /** Solo un enlace a una seccion (navegacion y consultas asistidas). */
@@ -355,7 +383,7 @@ public final class Enriquecedor {
     // 1.6.0: un tema es de la categoria si es la suya o una de sus
     // intenciones adicionales.
     private static List<String> titulosDe(List<TemaConocimiento> temas, Categoria categoria, Set<String> excluidas,
-                                          int cuantos) {
+                                          int cuantos, boolean ingles) {
         if (temas == null || categoria == null) {
             return List.of();
         }
@@ -369,7 +397,7 @@ public final class Enriquecedor {
         return candidatos.stream()
             .sorted(Comparator.comparingInt(TemaConocimiento::getPrioridad).reversed()
                 .thenComparing(TemaConocimiento::getTitulo))
-            .map(TemaConocimiento::getTitulo)
+            .map(tema -> tema.titulo(ingles))
             .limit(cuantos)
             .toList();
     }

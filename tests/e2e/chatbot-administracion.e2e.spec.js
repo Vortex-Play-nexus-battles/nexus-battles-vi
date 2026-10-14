@@ -28,6 +28,8 @@ const VISTA_PANEL = '/consola/asistente';
 
 const TEMA = {
   titulo: `Torneo relámpago Ópalo ${SUFIJO}`,
+  // 1.17.0 (§7.4.2): el que ve quien conversa en inglés.
+  tituloEn: `Opal lightning tournament ${SUFIJO}`,
   variantes: [`torneo relampago opalo ${SUFIJO}`, `que es el torneo relampago opalo ${SUFIJO}`],
   variantesEn: [`opal lightning tournament ${SUFIJO}`],
   respuesta: `El torneo relámpago Ópalo ${SUFIJO} es un evento de prueba del banco: se juega en «Torneo».`,
@@ -101,6 +103,7 @@ test.describe('Asistente · administración (§7.4.7, §7.4.10)', () => {
     const dialogo = page.locator('[role="dialog"]');
     await expect(dialogo).toBeVisible();
     await dialogo.locator('input[name="titulo"]').fill(TEMA.titulo);
+    await dialogo.locator('input[name="tituloEn"]').fill(TEMA.tituloEn);
     await dialogo.locator('select[name="categoria"]').selectOption('MODALIDAD_JUEGO');
     await dialogo.locator('textarea[name="variantesEs"]').fill(TEMA.variantes.join('\n'));
     await dialogo.locator('textarea[name="variantesEn"]').fill(TEMA.variantesEn.join('\n'));
@@ -116,6 +119,7 @@ test.describe('Asistente · administración (§7.4.7, §7.4.10)', () => {
     expect(respuestaDelTema.status(), await respuestaDelTema.text()).toBe(201);
     await expect(dialogo).toBeHidden();
     await expect(page.getByText(TEMA.titulo).first()).toBeVisible();
+    await expect(page.getByText(`En inglés: ${TEMA.tituloEn}`)).toBeVisible();
 
     // Lo guardado: variantes e intención adicional, en la candidata.
     const temas = await api.get('/api/v1/chatbot/admin/base-conocimiento/borrador/temas', {
@@ -127,6 +131,7 @@ test.describe('Asistente · administración (§7.4.7, §7.4.10)', () => {
     expect(nuevo.categoria).toBe('MODALIDAD_JUEGO');
     expect(nuevo.intencionesAdicionales).toEqual(['FAQ_GENERAL']);
     expect(nuevo.variantesEs).toEqual(TEMA.variantes);
+    expect(nuevo.tituloEn).toBe(TEMA.tituloEn);
 
     // Antes de publicar, producción no lo sabe.
     const visitante = `visitante-e2e-adm-${SUFIJO}`;
@@ -168,6 +173,12 @@ test.describe('Asistente · administración (§7.4.7, §7.4.10)', () => {
       data: { contenido: `what is the opal lightning tournament ${SUFIJO}` },
     });
     expect((await enIngles.json()).contenido).toContain(TEMA.respuestaEn);
+    // Su título en inglés, tal cual (lo que se pulsa en una pregunta relacionada), también.
+    const porTitulo = await api.post('/api/v1/chat/mensajes', {
+      headers: { 'X-Id-Sesion-Anonima': `${visitante}-titulo` },
+      data: { contenido: TEMA.tituloEn },
+    });
+    expect((await porTitulo.json()).contenido).toContain(TEMA.respuestaEn);
   });
 
   test('sin token de administración no hay panel: 401 sin sesión, 403 para un jugador', async () => {

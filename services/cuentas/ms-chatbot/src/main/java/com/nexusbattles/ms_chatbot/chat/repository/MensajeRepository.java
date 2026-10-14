@@ -6,12 +6,14 @@ import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.analitica.RegistroDeTexto;
 import com.nexusbattles.ms_chatbot.chat.model.Mensaje;
 import com.nexusbattles.ms_chatbot.chat.model.Remitente;
+import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,6 +59,30 @@ public interface MensajeRepository extends JpaRepository<Mensaje, UUID> {
     // respuesta del bot cuente como su pregunta.
     Optional<Mensaje> findFirstByConversacionIdAndRemitenteAndFechaEnvioLessThanEqualOrderByFechaEnvioDesc(
         UUID conversacionId, Remitente remitente, Instant fechaEnvio);
+
+    // 1.15.0 (7.4.5, D-CHA-13): cuantas preguntas de esta persona resolvio ya
+    // el asistente, en su propia conversacion. Es su experiencia con el
+    // asistente: con ella se elige el nivel de detalle automatico.
+    long countByConversacionIdentificadorSesionAndRemitenteAndResultadoIn(String identificadorSesion,
+                                                                          Remitente remitente,
+                                                                          Collection<ResultadoDeRespuesta> resultados);
+
+    // 1.15.0 (7.4.3 «sugerencias proactivas», D-CHA-14): los temas de la base
+    // que le respondieron a esta persona, del mas reciente al mas antiguo (con
+    // repetidos: se quitan al usarlos). Solo su conversacion: la clave sale de
+    // su identidad verificada.
+    @Query("""
+        select m.temaClave from Mensaje m
+        where m.conversacion.identificadorSesion = :clave
+          and m.remitente = :remitente
+          and m.resultado = :resultado
+          and m.temaClave is not null
+        order by m.fechaEnvio desc, m.id desc
+        """)
+    List<String> temasQueLeRespondieron(@Param("clave") String identificadorSesion,
+                                        @Param("remitente") Remitente remitente,
+                                        @Param("resultado") ResultadoDeRespuesta resultado,
+                                        Pageable limite);
 
     // 1.5.0 (seguimiento del dialogo): la ultima respuesta del bot en esta
     // conversacion; «mas detalle» o «en ingles» se refieren a ella. Solo la

@@ -3,13 +3,16 @@ package com.nexusbattles.ms_chatbot.chat.consultas;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.AvisoDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.BandejaResponseDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.ElementoInventarioDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiPublicacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MiResumenDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.MisionActivaDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaInventarioDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.PaginaMovimientosDto;
+import com.nexusbattles.ms_chatbot.chat.consultas.dto.ParticipacionDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoDetalleDto;
 import com.nexusbattles.ms_chatbot.chat.consultas.dto.TorneoResumenDto;
 import com.nexusbattles.ms_chatbot.chat.enriquecido.EnlaceInterno;
+import com.nexusbattles.ms_chatbot.chat.enriquecido.TarjetaInformativa;
 import com.nexusbattles.ms_chatbot.chat.model.ResultadoDeRespuesta;
 import com.nexusbattles.ms_chatbot.chat.motor.ResultadoMotor;
 import com.nexusbattles.ms_chatbot.chat.preferencias.IdiomaPreferido;
@@ -83,7 +86,79 @@ class MotorConsultasAsistidasTest {
         Optional<ResultadoMotor> resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID);
 
         assertThat(resultado).isPresent();
-        assertThat(resultado.get().texto()).contains("2 subasta(s)").contains("300.00");
+        assertThat(resultado.get().texto()).contains("2 subasta(s)").contains("con 150 créditos retenidos")
+            .contains("Tu saldo disponible es de 300 créditos.");
+    }
+
+    // 1.16.0 (7.4.4 «estado de productos en la subasta»): cada subasta abierta
+    // en la que puja y cada una que publico, las que cierran antes primero.
+    @Test
+    void susSubastasTraenCadaUnaAbiertaEnTarjetasLasQueCierranAntesPrimero() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("120.00", "380.00", 1));
+        when(subastasClient.misParticipaciones(TOKEN)).thenReturn(List.of(
+            new ParticipacionDto("Orbe de manos ardientes", "ACTIVA", "SUPERADA", "60.00", "75.00", 4,
+                Instant.parse("2026-10-16T02:00:00Z")),
+            new ParticipacionDto("Hacha del Norte", "ACTIVA", "GANANDO", "120.00", "120.00", 2,
+                Instant.parse("2026-10-15T17:30:00Z")),
+            new ParticipacionDto("Arco viejo", "ADJUDICADA", "GANADA", "40.00", "40.00", 1,
+                Instant.parse("2026-10-01T10:00:00Z")),
+            new ParticipacionDto("Daga", "ACTIVA", "AUTOMATICA", null, "15.00", 0, null)));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of(
+            new MiPublicacionDto("Escudo de roble", "ACTIVA", "80.00", 3, Instant.parse("2026-10-15T20:00:00Z"))));
+
+        ResultadoMotor resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto())
+            .startsWith("Vas ganando 1 subasta(s) en este momento, con 120 créditos retenidos en pujas activas.")
+            .contains("Pujas en 3 subasta(s) abierta(s) y tienes 1 publicada(s); las que cierran antes, abajo.");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+        // La cerrada (adjudicada) no sale; la que no tiene fecha, al final.
+        assertThat(resultado.enriquecido().tarjetas()).extracting(TarjetaInformativa::titulo)
+            .containsExactly("Hacha del Norte", "Escudo de roble", "Orbe de manos ardientes", "Daga");
+        assertThat(resultado.enriquecido().tarjetas()).extracting(TarjetaInformativa::texto).containsExactly(
+            "Vas ganando con 120 créditos · 2 puja(s) · cierra el 15/10 a las 12:30.",
+            "Tu subasta: oferta vigente 80 créditos · 3 puja(s) · cierra el 15/10 a las 15:00.",
+            "Te superaron: la oferta vigente es 75 y tu mejor puja, 60 · 4 puja(s) · cierra el 15/10 a las 21:00.",
+            "Tu puja automática aún no ha pujado; la oferta vigente es 15 · 0 puja(s) · sin fecha de cierre.");
+        assertThat(resultado.enriquecido().enlaces()).extracting(EnlaceInterno::destino).containsExactly("subastas");
+    }
+
+    @Test
+    void susSubastasEnInglesYSinNingunaAbierta() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0", null, 0));
+        when(subastasClient.misParticipaciones(TOKEN)).thenReturn(List.of(new ParticipacionDto("Arco", "CANCELADA",
+            "CERRADA", "10", "10", 1, Instant.parse("2026-10-01T10:00:00Z"))));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of());
+
+        ResultadoMotor resultado = motor.generarRespuesta("how are my auctions", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto()).isEqualTo("You're winning 0 auction(s) right now, with 0 credits held in "
+            + "active bids. You have no bids or listings in auctions that are still open.");
+        assertThat(resultado.enriquecido().tarjetas()).isEmpty();
+    }
+
+    @Test
+    void sinElDetalleDeSusSubastasDaElResumenYDondeVerlas() {
+        when(subastasClient.consultarMiResumen(TOKEN)).thenReturn(new MiResumenDto("0.00", "10.00", 0));
+        when(subastasClient.misParticipaciones(TOKEN)).thenThrow(new ResourceAccessException("caido"));
+        when(subastasClient.misPublicacionesActivas(TOKEN)).thenReturn(List.of());
+
+        ResultadoMotor resultado = motor.generarRespuesta("como van mis subastas", TOKEN, UID).orElseThrow();
+
+        assertThat(resultado.texto()).endsWith("No pude traer el detalle de cada una: lo ves en «Subasta», en «Mis "
+            + "subastas».");
+        assertThat(resultado.resultado()).isEqualTo(ResultadoDeRespuesta.CONSULTA_EN_VIVO);
+        assertThat(resultado.enriquecido().tarjetas()).isEmpty();
+    }
+
+    // 1.16.0: «¿cuántas subastas hay?» pregunta por lo que hay (ConsultaDeSubastas), no por lo suyo.
+    @Test
+    void cuantasSubastasHayNoEsUnaConsultaDeLoSuyo() {
+        assertThat(motor.generarRespuesta("cuantas subastas hay", TOKEN, UID)).isEmpty();
+        assertThat(motor.generarRespuesta("muestrame las subastas activas", TOKEN, UID)).isEmpty();
+        assertThat(motor.pideDatosDeSuCuenta("¿Cuántas subastas hay?")).isFalse();
+        assertThat(motor.pideDatosDeSuCuenta("¿Cuántas subastas tengo?")).isTrue();
+        verifyNoInteractions(subastasClient);
     }
 
     @Test

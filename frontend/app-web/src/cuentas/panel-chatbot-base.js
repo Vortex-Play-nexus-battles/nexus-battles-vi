@@ -143,8 +143,11 @@ export function variantesDesdeTexto(texto) {
  * {@link MAXIMO_DE_INTENCIONES_ADICIONALES} y nunca la categoría principal
  * (el servicio responde 400 en los dos casos).
  *
- * @param {{titulo: string, categoria?: string, intencionesAdicionales?: string[],
- *          variantesEs: string[], variantesEn: string[],
+ * 1.17.0 (§7.4.2): el título en inglés es opcional, pero no puede ser el
+ * mismo que el de español (para eso, se deja vacío).
+ *
+ * @param {{titulo: string, tituloEn?: string|null, categoria?: string,
+ *          intencionesAdicionales?: string[], variantesEs: string[], variantesEn: string[],
  *          respuestaEs: string, prioridad: number}} datos
  * @returns {Record<string, string>}
  */
@@ -152,6 +155,9 @@ export function erroresDelTema(datos) {
   const errores = {};
   if (!datos.titulo.trim()) {
     errores.titulo = 'Escribe un título.';
+  }
+  if (datos.tituloEn && datos.tituloEn.trim().toLowerCase() === datos.titulo.trim().toLowerCase()) {
+    errores.tituloEn = 'Es el mismo título en español: déjalo vacío si no tiene otro en inglés.';
   }
   const intenciones = datos.intencionesAdicionales ?? [];
   if (intenciones.length > MAXIMO_DE_INTENCIONES_ADICIONALES) {
@@ -325,6 +331,14 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
         requerido: true,
         atributos: { maxlength: 150 },
       }),
+      // 1.17.0 (§7.4.2): el que ve quien conversa en inglés.
+      tituloEn: campo({
+        nombre: 'tituloEn',
+        etiqueta: 'Título en inglés (opcional)',
+        pista: 'Es el que ve quien conversa en inglés en las preguntas relacionadas.',
+        valor: tema?.tituloEn ?? '',
+        atributos: { maxlength: 150 },
+      }),
       categoria: selector({
         nombre: 'categoria',
         etiqueta: 'Intención (categoría)',
@@ -427,6 +441,7 @@ export function editarTemaEnDialogo({ titulo, tema = null, guardar }) {
     function leer() {
       return {
         titulo: campos.titulo.control.value.trim(),
+        tituloEn: campos.tituloEn.control.value.trim() || null,
         categoria: campos.categoria.control.value,
         intencionesAdicionales: intenciones.leer(),
         tipoRespuesta: campos.tipoRespuesta.control.value,
@@ -786,6 +801,12 @@ export function montarBaseConocimiento(
           h('td', {
             hijos: [
               h('p', { clase: 't-cuerpo', texto: tema.titulo }),
+              // 1.17.0: el de inglés, o que aún no lo tiene.
+              h('p', {
+                clase: 't-meta',
+                texto: tema.tituloEn ? `En inglés: ${tema.tituloEn}` : 'Sin título en inglés',
+                datos: { tituloEn: tema.tituloEn ? 'si' : 'no' },
+              }),
               h('p', { clase: 't-meta', texto: (tema.variantesEs ?? []).join(' · ') }),
             ],
           }),

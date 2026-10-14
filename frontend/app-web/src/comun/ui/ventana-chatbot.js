@@ -17,12 +17,20 @@
  * - calificar cada respuesta del bot (útil / no útil, con comentario opcional);
  * - respuestas enriquecidas: pasos, enlaces a secciones del sitio, tarjetas,
  *   botones de respuesta rápida y «Hablar con soporte» (`enriquecido-chatbot.js`);
- *   cada mensaje manda la sección donde está el jugador (`vista`);
+ *   cada mensaje manda la sección donde está el jugador (`vista`). Desde
+ *   ms-chatbot.yaml 1.12.0, si no pudo responder, la solicitud de soporte ya
+ *   viene abierta y su aviso lleva a «Tus solicitudes» («Ver solicitud»);
  * - preguntas rápidas, temas frecuentes y autocompletado mientras se escribe
  *   (`sugerencias-chatbot.js`), sacados de lo que el asistente sabe responder;
+ * - 1.15.0 (§7.4.3 «sugerencias proactivas») — al cargar la conversación, el
+ *   asistente propone «Quizá te interese» por lo que esa persona ya le
+ *   preguntó, por la sección donde está o, si aún no preguntó nada, de lo más
+ *   consultado, y dice por qué. Es del navegador: no entra en el historial y
+ *   se va con la siguiente pregunta, como la bienvenida;
  * - «Soporte»: abrir una solicitud de soporte humano y ver las propias
- *   (`soporte-chatbot.js`); el visitante recibe cómo conseguirlo: entrar
- *   (volviendo a esta página) o crear una cuenta;
+ *   (`soporte-chatbot.js`). Desde 1.12.0 también el visitante: las ve
+ *   mientras dure su sesión, y se le ofrece entrar (volviendo a esta página)
+ *   o crear una cuenta;
  * - «Preferencias» (7.4.5): el idioma de las respuestas y el nivel de detalle,
  *   guardados en el servidor (`preferencias-chatbot.js`);
  * - UXC-9 (§7.4, RNF-DIS-002): minimizarla a su barra de título sin perder la
@@ -43,8 +51,9 @@
  * - el lector de pantalla oye quién habla («Tú:», «Asistente:») y la
  *   conversación es una región `role="log"`;
  * - las acciones de la cabecera se parten en dos filas si no caben;
- * - un visitante que pide soporte humano recibe cómo conseguirlo (entrar con
- *   vuelta a esta página, o crear una cuenta), no un callejón sin salida.
+ * - un visitante que pide soporte humano no se queda en un callejón sin
+ *   salida: desde 1.12.0 la abre como cualquiera, y además puede entrar (con
+ *   vuelta a esta página) o crear una cuenta.
  *
  * 7.4.9 — con un `canal` (`../canal-chatbot.js`, lo pasa `asistente.js`), las
  * preguntas van por el canal en tiempo real mientras está abierto y por HTTP
@@ -66,10 +75,16 @@ import { h, vaciar } from './dom.js';
 import { introAntesDePasos, pintarEnriquecido, vistaDelChat } from './enriquecido-chatbot.js';
 import { estadoDeCarga } from './estado-vista.js';
 import { fechaHora } from './formato.js';
+import { icono } from './icono.js';
 import { crearPanelPreferencias } from './preferencias-chatbot.js';
 import { pintarEstadoDelCanal } from './reconexion.js';
 import { crearPanelSoporte } from './soporte-chatbot.js';
-import { conectarAutocompletado, crearPreguntasRapidas } from './sugerencias-chatbot.js';
+import {
+  CUANTAS,
+  conectarAutocompletado,
+  contenidoParaTi,
+  crearPreguntasRapidas,
+} from './sugerencias-chatbot.js';
 
 /** Destino del chat general de jugadores, relativo a `src/comun/ui/`. */
 const CHAT_GENERAL = '../../plataforma/salas-partidas/chat.html';
@@ -166,6 +181,8 @@ export const TEXTOS = Object.freeze({
   etiquetaMensaje: 'Tu pregunta',
   enviar: 'Enviar',
   enviando: 'Enviando…',
+  // 1.14.0 (§7.4.6) — el clip de la caja de texto.
+  adjuntarCaptura: 'Adjuntar una captura de pantalla para soporte',
   verCaptura: 'Ver captura adjunta',
   anteriores: 'Ver mensajes anteriores',
   cargandoAnteriores: 'Cargando mensajes anteriores…',
@@ -274,6 +291,8 @@ export function crearVentanaChatbot({
   let cargada = false;
   let enviando = false;
   let devolverFocoA = null;
+  // 1.15.0 — cada «Quizá te interese» pedido; una respuesta vieja se ignora.
+  let turnoParaTi = 0;
 
   // #506 — tras un 429, «Enviar» espera lo que dijo el servidor.
   let enEspera = false;
@@ -410,6 +429,20 @@ export function crearVentanaChatbot({
     texto: TEXTOS.enviar,
     atributos: { type: 'submit' },
   });
+  // ms-chatbot.yaml 1.14.0 (§7.4.6 y RF-CHA-002 «opción de adjuntar capturas
+  // de pantalla»): las capturas son para soporte técnico y van en la
+  // solicitud, no en la conversación (el asistente no lee imágenes). El clip
+  // lleva a «Soporte», al sitio donde se adjunta, con su aviso de privacidad.
+  const botonCaptura = h('button', {
+    clase: 'boton boton--icono boton--secundario chatbot-ventana__captura',
+    atributos: {
+      type: 'button',
+      'aria-label': TEXTOS.adjuntarCaptura,
+      title: TEXTOS.adjuntarCaptura,
+    },
+    datos: { accion: 'adjuntar-captura' },
+    hijos: [icono('imagen', { clase: 'icono', etiqueta: null })],
+  });
 
   // Preguntas rápidas y autocompletado. El autocompletado se conecta aquí,
   // antes del manejador de Enter de más abajo, para que Enter elija la
@@ -429,7 +462,7 @@ export function crearVentanaChatbot({
       rapidas.elemento,
       h('div', {
         clase: 'chatbot-ventana__fila chatbot-ventana__fila--entrada',
-        hijos: [autocompletado.elemento, entrada, botonEnviar],
+        hijos: [autocompletado.elemento, entrada, botonCaptura, botonEnviar],
       }),
     ],
   });
@@ -497,6 +530,52 @@ export function crearVentanaChatbot({
     registro.querySelector('[data-bienvenida]')?.remove();
   }
 
+  // 1.15.0 (§7.4.3) — «Quizá te interese», al final de la conversación. Si
+  // el servicio no responde, simplemente no sale: el chat sigue igual.
+  async function proponer() {
+    olvidarParaTi();
+    const este = turnoParaTi;
+    const donde = vista();
+    let sugerencias = [];
+    try {
+      sugerencias =
+        (await cliente.sugerenciasParaTi(
+          donde ? { vista: donde, limite: CUANTAS.paraTi } : { limite: CUANTAS.paraTi },
+        )) ?? [];
+    } catch {
+      sugerencias = [];
+    }
+    pintarParaTi(este, sugerencias);
+  }
+
+  // Fuera de `proponer`: lo que se toca después de un `await` vive aparte
+  // (regla require-atomic-updates de ESLint). Si mientras tanto se preguntó
+  // algo, se recargó o se borró la conversación, ya no corresponde.
+  function pintarParaTi(este, sugerencias) {
+    if (este !== turnoParaTi || enviando || !cargada) {
+      return;
+    }
+    const contenido = contenidoParaTi(sugerencias, { alElegir: enviarSugerencia });
+    if (!contenido) {
+      return;
+    }
+    registro.append(
+      h('li', {
+        clase: 'chatbot-ventana__mensaje chatbot-ventana__mensaje--bot',
+        datos: { proactiva: '' },
+        hijos: [quienHabla(true), contenido],
+      }),
+    );
+    // Como cualquier mensaje nuevo del asistente: a la vista.
+    registro.scrollTop = registro.scrollHeight;
+  }
+
+  // Lo propuesto se va (y lo que esté por llegar ya no se pinta).
+  function olvidarParaTi() {
+    turnoParaTi += 1;
+    registro.querySelector('[data-proactiva]')?.remove();
+  }
+
   /**
    * @param {{id?: string|null, remitente: string, contenido: string,
    *          adjuntoUrl?: string|null, fechaEnvio?: string|null}} mensaje
@@ -529,6 +608,8 @@ export function crearVentanaChatbot({
     const parteEnriquecida = pintarEnriquecido(enriquecido, {
       alPreguntar: enviarSugerencia,
       alPedirSoporte: () => mostrarSoporte(true),
+      // 1.12.0 — la solicitud ya está abierta: «Soporte» la enseña en «Tus solicitudes».
+      alVerSolicitud: () => mostrarSoporte(true),
       // #506 — un enlace a una vista que esta sesión no puede ver no se pinta.
       visible: (destino) => destinoVisible(destino, sesion() ?? null),
     });
@@ -783,6 +864,7 @@ export function crearVentanaChatbot({
   async function cargarHistorial() {
     limpiarAviso();
     reiniciarPaginas();
+    olvidarParaTi();
     vaciar(registro);
     const cargando = estadoDeCarga({ filas: 2, etiqueta: 'Cargando la conversación…' });
     registro.append(h('li', { clase: 'chatbot-ventana__cargando', hijos: [cargando] }));
@@ -807,6 +889,7 @@ export function crearVentanaChatbot({
       cargada = true;
       habilitarFormulario(true);
       rapidas.cargar();
+      proponer();
       recuperarFoco();
       // 7.4.9 — el canal se abre cuando el asistente ya respondió por HTTP.
       canal?.abrir();
@@ -947,6 +1030,7 @@ export function crearVentanaChatbot({
     // #506 — la pregunta se pinta ya, antes de que llegue la respuesta, con
     // «escribiendo…» debajo; la caja queda libre para la siguiente.
     quitarBienvenida();
+    olvidarParaTi();
     const pregunta = crearBurbuja({
       remitente: 'USUARIO',
       contenido,
@@ -1039,6 +1123,8 @@ export function crearVentanaChatbot({
       vaciar(registro);
       limpiarAviso();
       pintarBienvenida();
+      // Sin historial, lo que se propone vuelve a ser lo de quien empieza.
+      proponer();
     } catch (error) {
       mostrarAviso(error?.noDisponible ? error : TEXTOS.errorAlBorrar);
     }
@@ -1060,11 +1146,24 @@ export function crearVentanaChatbot({
   botonBorrar.addEventListener('click', borrarConversacion);
   botonAnteriores.addEventListener('click', cargarAnteriores);
   // Scroll infinito: al llegar arriba se piden los anteriores.
+  // Si la conversación cambia de alto (la píldora del canal, un aviso, el
+  // tamaño de la ventana) mientras se leía lo último, lo último sigue a la
+  // vista. Quien subió a leer mensajes anteriores no salta.
+  let alFinalDeLaConversacion = true;
   registro.addEventListener('scroll', () => {
+    alFinalDeLaConversacion =
+      registro.scrollHeight - registro.scrollTop - registro.clientHeight <= UMBRAL_DE_ANTERIORES;
     if (registro.scrollTop <= UMBRAL_DE_ANTERIORES && hayAnteriores && !cargandoAnteriores) {
       cargarAnteriores();
     }
   });
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => {
+      if (alFinalDeLaConversacion) {
+        registro.scrollTop = registro.scrollHeight;
+      }
+    }).observe(registro);
+  }
   botonCerrar.addEventListener('click', () => cerrar());
 
   // -------------------------------------------------------------- soporte
@@ -1081,7 +1180,12 @@ export function crearVentanaChatbot({
     formulario.hidden = si;
   }
 
-  function mostrarSoporte(si) {
+  /**
+   * @param {boolean} si
+   * @param {{captura?: boolean}} [opciones] `captura`: se abrió con el clip
+   *   (1.14.0), así que el foco va a donde se adjunta una captura
+   */
+  function mostrarSoporte(si, { captura = false } = {}) {
     if (si) {
       ocultarPreferencias();
     }
@@ -1093,7 +1197,9 @@ export function crearVentanaChatbot({
       panelSoporte.elemento.hidden = true;
     }
     botonSoporte.setAttribute('aria-expanded', String(si));
-    if (si) {
+    if (si && captura) {
+      panelSoporte.enfocarCaptura();
+    } else if (si) {
       panelSoporte.enfocar();
     } else {
       enfocarDentro();
@@ -1101,6 +1207,7 @@ export function crearVentanaChatbot({
   }
 
   botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+  botonCaptura.addEventListener('click', () => mostrarSoporte(true, { captura: true }));
 
   // ms-chatbot.yaml 1.8.0 — si alguna respuesta de esta conversación ofreció
   // soporte (no entendió, o «no me sirvió»), «Soporte» ofrece crear la

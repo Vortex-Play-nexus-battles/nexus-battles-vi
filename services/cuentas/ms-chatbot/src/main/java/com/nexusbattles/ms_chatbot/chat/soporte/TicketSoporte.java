@@ -96,6 +96,23 @@ public class TicketSoporte {
     }
 
     /**
+     * 1.12.0 (7.4.3, RF-CHA-007): otra pregunta que el asistente no resolvio
+     * mientras esta solicitud sigue abierta. Se suma a su contexto en vez de
+     * abrir otra (solo hay una abierta por persona); como al abrirla, se
+     * quedan los {@value #MAXIMO_DE_CONTEXTO} mensajes mas recientes.
+     */
+    public void sumarAlContexto(List<MensajeDeContexto> nuevos, Instant ahora) {
+        if (nuevos == null || nuevos.isEmpty()) {
+            return;
+        }
+        contexto.addAll(nuevos);
+        while (contexto.size() > MAXIMO_DE_CONTEXTO) {
+            contexto.remove(0);
+        }
+        this.actualizadoEn = ahora;
+    }
+
+    /**
      * Aplica lo que manda el administrador (PATCH). Solo cambia lo que no es
      * null; {@code desasignar} en true borra la asignacion.
      *
