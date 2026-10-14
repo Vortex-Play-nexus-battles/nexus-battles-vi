@@ -174,6 +174,8 @@ info:
     * **Informe de actividad en paralelo** (7.4.11): sus cinco partes se
       piden a la vez y se espera como mucho 1,7 s en total; la que no llega
       se dice no disponible y el resto se entrega.
+    * **`ProblemDetail.motivo`** nombra por fin OTRO_TICKET_ABIERTO (1.3.9) e
+      INYECCION_DETECTADA (1.4.0), que las respuestas ya traian.
 
     ### 1.4.0 — 7.4.8: privacidad, inyeccion e identidad (revision final)
 
@@ -790,8 +792,8 @@ paths:
       description: |
         Solo para jugadores con sesion: el ticket queda a nombre del `uid`
         del token. A un visitante se le responde 401 (`motivo`
-        SESION_REQUERIDA) y la ventana le ofrece iniciar sesion o el chat
-        general.
+        SESION_REQUERIDA) y la ventana le explica que necesita una cuenta y
+        le ofrece iniciar sesion o crear una.
 
         El servidor guarda con el ticket el contexto de la conversacion
         actual (los ultimos mensajes, ya redactados: sin contrasenas,
@@ -2003,11 +2005,14 @@ components:
         motivo:
           type: string
           enum: [LIMITE_DE_FRECUENCIA, CONTENIDO_BLOQUEADO, MODERACION_NO_DISPONIBLE,
-                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA]
+                 SESION_REQUERIDA, TICKET_ABIERTO, TRANSICION_NO_PERMITIDA,
+                 OTRO_TICKET_ABIERTO, INYECCION_DETECTADA]
           description: |
             1.2.0. Solo en los errores nuevos de /chat/**. 1.3.0 agrega los de
             los tickets: SESION_REQUERIDA, TICKET_ABIERTO y
-            TRANSICION_NO_PERMITIDA.
+            TRANSICION_NO_PERMITIDA. 1.3.9: OTRO_TICKET_ABIERTO. 1.4.0:
+            INYECCION_DETECTADA. (1.5.0 completa esta lista, que no los
+            nombraba aunque las respuestas ya los traian.)
 
     SesionAnonima:
       type: object
