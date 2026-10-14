@@ -1,6 +1,6 @@
 # ms-chatbot (7.4 — Chatbot de soporte)
 
-**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.7.0 (compatible con 1.1.0)
+**Contrato:** `contracts/openapi/ms-chatbot.yaml` 1.8.0 (compatible con 1.1.0)
 **Stack:** Java 21 · Spring Boot 4.1 · Gradle · PostgreSQL propio (`chatbot-db`, esquema `chatbot`, Flyway V1–V13) · resource server de ms-identidad · puerto 8094, context-path `/api/v1`
 **Historias:** HU-CHA-001 (chat 24/7), HU-CHA-004 (motor de reglas), HU-CHA-008 (consultas asistidas), HU-CHA-011 (calificación y brechas), HU-CHA-012 (panel de administración); endurecimiento B11.
 
@@ -162,6 +162,64 @@ que soporte no está.
 preguntas, 7 respuestas con resultado, 3 resueltas) y comprueba cada cifra, el CSV, el esquema
 de V13, la lista y el cambio de estado de las brechas (con la reapertura) y que un jugador
 recibe 403.
+
+## Soporte desde la conversación y centro de ayuda (1.8.0)
+
+§7.4.3 «escalamiento a agente humano con contexto de la conversación» y «enlaces a
+documentación relevante». Sin migración: no hace falta nada nuevo en la base (sigue V13).
+
+**`POST /chat/tickets/desde-conversacion`** — la solicitud en un clic. Solo jugadores (un
+visitante recibe 401 `SESION_REQUERIDA`). La conversación es la de la identidad verificada
+(`claveDeConversacion`, que sale del `uid` del token); el cuerpo (`vista`, `comentario` ≤ 2000,
+los dos opcionales) no elige de quién es.
+
+- **Pregunta** (`PreguntaParaSoporte`): la última que el asistente no resolvió, buscando desde
+  el final. Si no la entendió (`ESCALADO`), la pregunta de justo antes; si «no le sirvió»
+  (`NO_SIRVIO`), la que respondió la respuesta anterior a ese «no me sirvió», no el «no me
+  sirvió». Las respuestas anteriores a V13 cuentan por la marca `escalado`. Si nada quedó sin
+  resolver, la última pregunta (no un «más detalle» ni un «en inglés»). Sin ninguna, 409
+  `SIN_CONVERSACION`. Ya está redactada: se guardó así.
+- **Categoría**: la del tema de esa respuesta; si no hubo tema, la de `vista`; si tampoco,
+  `FAQ_GENERAL`.
+- **Asunto** «Sin respuesta del asistente: <pregunta>» (150 como mucho, con «…» si se corta) y
+  **mensaje** «Le pregunté al asistente: «…» y no la entendió.» (o «y su respuesta no me
+  sirvió.»), más el comentario. Si no cabe en 2000, se recorta la pregunta, nunca el
+  comentario.
+- Después, **las mismas reglas que `POST /chat/tickets`** (`TicketSoporteService`): límite de
+  frecuencia, revisión (422 `INYECCION_DETECTADA`, redacción), lista negra (422/503), una
+  abierta a la vez (409 `TICKET_ABIERTO`) y el contexto redactado. `abrir` sigue leyendo la
+  conversación solo si el ticket se va a guardar.
+
+En la ventana: si alguna respuesta de la conversación ofreció soporte, «Hablar con soporte»
+(el del mensaje o el de la cabecera) muestra «Crear solicitud con esta conversación» encima
+del formulario, que sigue igual. Un clic la crea, lo confirma y la solicitud aparece en «Tus
+solicitudes».
+
+**`GET /chat/ayuda`** — el centro de ayuda (`frontend/app-web/src/cuentas/ayuda.html`, vista
+pública `ayuda`, en el menú de la cuenta). Los temas activos de la versión **en producción**,
+sin los de cortesía, por categoría en el orden de `Categoria` y dentro de cada una por
+prioridad y título: título, respuesta en español e inglés y pasos (los de los temas paso a
+paso, como en el chat). Nada interno (clave, variantes, prioridad, versión).
+`Cache-Control: public, max-age=300` (Spring Security no pisa un `Cache-Control` que ya trae la
+respuesta).
+
+**Enlace «Ver el centro de ayuda»** (`Enriquecedor`): al no entender una pregunta, tras un «no
+me sirvió» y en la oferta de soporte sola, con `destino` `ayuda` y, si se sabe la categoría
+(la de la vista al escalar, la del tema tras un «no me sirvió»), `ancla`
+`categoria-<categoría>`: es el mismo `ancla` que trae cada grupo de `GET /chat/ayuda`
+(`Enriquecedor.anclaDe`). `EnlaceInterno.ancla` no se escribe si no hay, así que los enlaces
+de siempre se guardan y se mandan igual.
+
+**Borde**: nada que cambiar. `/api/v1/(chat|chatbot)` ya va al servicio; el `POST` nuevo cuenta
+en la zona de escritura (la expresión `POST /api/v1/chat/(mensajes|sesiones|tickets)` no se
+ancla al final), y `GET /chat/ayuda`, como toda lectura, no tiene límite en el borde: es
+barata, igual para todos y se puede guardar en caché.
+
+`SoporteDesdeLaConversacionYAyudaIT`: con PostgreSQL real, dos jugadores con su propia
+pregunta (redactada: la tarjeta no llega a la base), el 409 de la segunda, la que se ve en «Tus
+solicitudes», el «no me sirvió» con su categoría, el 401 del visitante y el 409
+`SIN_CONVERSACION`; y el centro de ayuda solo con lo activo en producción, sin campos internos y
+con su `Cache-Control`.
 
 ## Diálogo (1.5.0)
 
@@ -334,4 +392,6 @@ bloqueado, restricción de espacios de claves; `BaseDeConocimientoFielAlJuegoIT`
 con producción, candidata y respuestas guardadas; `BaseDeConocimientoEnProduccionIT`: los
 139 casos de evaluación contra la base publicada; `GestionDeLaBaseDeConocimientoIT` y
 `TransicionesDeVersionIT`: V12 y la gestión de la base de 1.6.0; `AprendizajeYAnaliticasIT`:
-V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0). JaCoCo ≥ 80 %.
+V13, preguntas sin respuesta y fórmulas del tablero de 1.7.0;
+`SoporteDesdeLaConversacionYAyudaIT`: la solicitud desde la conversación y el centro de ayuda
+de 1.8.0). JaCoCo ≥ 80 %.

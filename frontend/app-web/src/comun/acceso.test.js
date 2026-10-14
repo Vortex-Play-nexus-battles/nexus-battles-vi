@@ -126,7 +126,10 @@ describe('la matriz cubre lo que hay en disco', () => {
     // B1 — `verificar-cuenta` entra: la usa quien todavía no puede iniciar
     // sesión, porque su correo está sin confirmar. F6 — `portada` entra: es
     // la raíz pública con la tienda, para quien aún no tiene cuenta.
+    // 1.8.0 — `ayuda` entra: el centro de ayuda es lo que el asistente sabe
+    // responder, y el asistente atiende también a quien no tiene cuenta.
     expect(publicas).toEqual([
+      'ayuda',
       'login',
       'portada',
       'pujas',

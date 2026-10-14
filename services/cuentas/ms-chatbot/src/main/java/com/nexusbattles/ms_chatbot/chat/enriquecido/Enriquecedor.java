@@ -10,6 +10,7 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -29,6 +30,9 @@ import java.util.regex.Pattern;
 //     categoria y las adicionales), y los relacionados de un tema salen de
 //     todas las suyas, primero los de su categoria;
 //   * soporte humano: se ofrece siempre que la consulta se escala.
+//   * centro de ayuda (1.8.0): al escalar y tras un «no me sirvio», ademas
+//     del enlace a la seccion, «Ver el centro de ayuda» abierto en la
+//     categoria de la pregunta cuando se sabe cual es.
 //
 // Sin estado: lo usan MotorRespuestas y MotorConsultasAsistidas.
 public final class Enriquecedor {
@@ -37,6 +41,10 @@ public final class Enriquecedor {
     static final int MAXIMO_DE_PASOS = 20;
     static final int LARGO_MAXIMO_DE_PASO = 500;
     static final int MAXIMO_DE_ENLACES_AL_ESCALAR = 2;
+
+    /** 1.8.0: la vista del centro de ayuda en la matriz de acceso del frontend. */
+    public static final String DESTINO_AYUDA = "ayuda";
+    static final String TEXTO_AYUDA = "Ver el centro de ayuda";
 
     /** Temas de cortesia: no se ofrecen como pregunta (nadie necesita un boton para decir "hola"). */
     public static final Set<String> TITULOS_DE_CORTESIA = Set.of("saludo", "despedida");
@@ -66,7 +74,9 @@ public final class Enriquecedor {
         Map.entry("batallas", "Jugar online"),
         Map.entry("crear-sala", "Crear sala"),
         Map.entry("chat", "Chat"),
-        Map.entry("notificaciones", "Notificaciones")
+        Map.entry("notificaciones", "Notificaciones"),
+        // 1.8.0: publica, como el resto de la ayuda.
+        Map.entry(DESTINO_AYUDA, "Centro de ayuda")
     );
 
     // 1.5.0 — la seccion de cada tema de la base, por su clave (V11).
@@ -198,20 +208,43 @@ public final class Enriquecedor {
         for (String titulo : limitadas) {
             temaConTitulo(temas, titulo).flatMap(Enriquecedor::destinoDe).ifPresent(destinos::add);
         }
-        List<EnlaceInterno> enlaces = destinos.stream().limit(MAXIMO_DE_ENLACES_AL_ESCALAR)
+        List<EnlaceInterno> enlaces = new ArrayList<>(destinos.stream().limit(MAXIMO_DE_ENLACES_AL_ESCALAR)
             .map(destino -> enlaceA(destino, ingles))
-            .toList();
+            .toList());
+        enlaces.add(enlaceAlCentroDeAyuda(deLaVista, ingles));
         return new RespuestaEnriquecida(List.of(), enlaces, List.of(), limitadas, true);
     }
 
     /**
      * 1.5.0 — «no me sirvió»: otras preguntas del mismo tema, el enlace a su
-     * sección y la oferta de soporte humano.
+     * sección y la oferta de soporte humano. 1.8.0: y el centro de ayuda en
+     * la categoría del tema.
      */
     public static RespuestaEnriquecida paraNoSirvio(TemaConocimiento tema, List<TemaConocimiento> temas,
                                                     boolean ingles) {
-        List<EnlaceInterno> enlaces = destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList();
+        List<EnlaceInterno> enlaces = new ArrayList<>(destinoDe(tema).map(d -> enlaceA(d, ingles)).stream().toList());
+        enlaces.add(enlaceAlCentroDeAyuda(tema.getCategoria(), ingles));
         return new RespuestaEnriquecida(List.of(), enlaces, List.of(), relacionadosCon(tema, temas), true);
+    }
+
+    /**
+     * 1.8.0 — «Ver el centro de ayuda», abierto en la categoría si se sabe
+     * cuál es (sin categoría, al principio). En inglés, como los demás
+     * enlaces, «Go to» y la etiqueta que ve el jugador.
+     */
+    public static EnlaceInterno enlaceAlCentroDeAyuda(Categoria categoria, boolean ingles) {
+        String texto = ingles ? "Go to " + NOMBRE_DE_DESTINO.get(DESTINO_AYUDA) : TEXTO_AYUDA;
+        return new EnlaceInterno(texto, DESTINO_AYUDA, categoria == null ? null : anclaDe(categoria));
+    }
+
+    /**
+     * 1.8.0 — el fragmento de una categoría en el centro de ayuda:
+     * {@code categoria-} y su nombre en minúsculas con guiones
+     * ({@code CUENTA_Y_REGISTRO} → {@code categoria-cuenta-y-registro}). Lo
+     * usan el enlace y {@code GET /chat/ayuda}, así que siempre coinciden.
+     */
+    public static String anclaDe(Categoria categoria) {
+        return "categoria-" + categoria.name().toLowerCase(Locale.ROOT).replace('_', '-');
     }
 
     /**
@@ -232,9 +265,17 @@ public final class Enriquecedor {
         return titulos.stream().limit(MAXIMO_DE_RAPIDAS).toList();
     }
 
-    /** Solo la oferta de soporte humano (1.5.0, «no me sirvió» sin tema anterior). */
+    /**
+     * La oferta de soporte humano (1.5.0, «no me sirvió» sin tema anterior).
+     * 1.8.0: con el centro de ayuda, sin categoría (no hay tema del que salga).
+     */
     public static RespuestaEnriquecida soloSoporte() {
-        return new RespuestaEnriquecida(List.of(), List.of(), List.of(), List.of(), true);
+        return soloSoporte(false);
+    }
+
+    public static RespuestaEnriquecida soloSoporte(boolean ingles) {
+        return new RespuestaEnriquecida(List.of(), List.of(enlaceAlCentroDeAyuda(null, ingles)), List.of(), List.of(),
+            true);
     }
 
     private static Optional<TemaConocimiento> temaConTitulo(List<TemaConocimiento> temas, String titulo) {
@@ -271,8 +312,8 @@ public final class Enriquecedor {
         return new EnlaceInterno((ingles ? "Go to " : "Ir a ") + nombre, destino);
     }
 
-    /** Los pasos "1) ... 2) ..." de un texto; vacia si no hay al menos dos. */
-    static List<String> pasosDe(String texto) {
+    /** Los pasos "1) ... 2) ..." de un texto; vacia si no hay al menos dos. 1.8.0: publico (centro de ayuda). */
+    public static List<String> pasosDe(String texto) {
         if (texto == null || texto.isBlank()) {
             return List.of();
         }

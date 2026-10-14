@@ -3040,6 +3040,16 @@ button.tarjeta--partida:disabled {
   gap: var(--e-2);
 }
 
+/* ms-chatbot.yaml 1.8.0 — «Crear solicitud con esta conversación», encima
+   del formulario, que sigue debajo para quien prefiere escribirla. */
+.chatbot-soporte__desde-conversacion {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--e-1);
+  margin: var(--e-2) 0;
+}
+
 .chatbot-soporte__formulario {
   display: flex;
   flex-direction: column;

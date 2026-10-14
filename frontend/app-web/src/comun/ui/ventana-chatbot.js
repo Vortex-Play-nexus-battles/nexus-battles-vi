@@ -818,7 +818,7 @@ export function crearVentanaChatbot({
     formulario.hidden = si;
     if (si) {
       limpiarAviso();
-      panelSoporte.abrir();
+      panelSoporte.abrir({ conConversacion: hayPreguntaSinResolver(), vista: vista() });
     } else {
       panelSoporte.elemento.hidden = true;
     }
@@ -831,6 +831,13 @@ export function crearVentanaChatbot({
   }
 
   botonSoporte.addEventListener('click', () => mostrarSoporte(!soporteAbierto()));
+
+  // ms-chatbot.yaml 1.8.0 — si alguna respuesta de esta conversación ofreció
+  // soporte (no entendió, o «no me sirvió»), «Soporte» ofrece crear la
+  // solicitud con ella en un clic.
+  function hayPreguntaSinResolver() {
+    return registro.querySelector('[data-accion="ofrecer-soporte"]') !== null;
+  }
 
   // ---------------------------------------------------------- preferencias
 
