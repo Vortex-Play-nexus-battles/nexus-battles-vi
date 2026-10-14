@@ -415,6 +415,9 @@ test.describe('Ventana del asistente (#506)', () => {
         aviso.className = 'toast-cruzado-flotante';
         aviso.textContent = '¡Te superaron en otra subasta!';
         aviso.style.bottom = abajo;
+        // Sin la animación de entrada, que lo empieza 30 px más abajo: se
+        // mide dónde se queda, no un fotograma de camino.
+        aviso.style.animation = 'none';
         document.body.append(aviso);
       }
     });
